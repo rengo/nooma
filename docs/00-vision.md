@@ -64,7 +64,9 @@ audit). Two surfaces, one brain.
 ## Distribution model
 
 - **Open source**, downloadable binary, self-hosted. The user downloads the binary, runs
-  `nooma init`, and has a brain running on their machine / Raspberry / home server.
+  `nooma init`, and has a brain running on their own machine or home server. Minimum hardware
+  is an open product decision, due before the first public release
+  ([ADR-0001](adr/0001-sqlite-driver.md)).
 - **License**: AGPL-3.0 (see [ADR-0004](adr/0004-license.md)). It protects against a third
   party building a closed SaaS on top, without bothering the individual user.
 - The same binary anticipates a future **multi-tenant mode** (`--multi-tenant`) for an

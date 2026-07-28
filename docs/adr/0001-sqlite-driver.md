@@ -43,11 +43,19 @@ The spike is accepted only if it meets ALL of these criteria:
 | 3 | Operational PRAGMAs | `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout` |
 | 4 | `VACUUM INTO` and `PRAGMA integrity_check` | Work on a vault with WAL open |
 | 5 | Cross-compilation without a C toolchain | `linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64` |
-| 6 | Hybrid recall latency (top-20 vec + top-20 FTS + fusion) | p95 < 100 ms over 10,000 units, on a Raspberry Pi 4 or equivalent |
+| 6 | Hybrid recall latency (top-20 vec + top-20 FTS + fusion) | p95 < 100 ms over 10,000 units, on the reference machine below |
 | 7 | Capture write throughput | ≥ 50 units/s sustained with embedding + FTS sync |
 
-Criterion 6 uses modest hardware on purpose: the design contemplates running on a Raspberry.
-Measuring on a development laptop hides the problem until fixing it is expensive.
+**Reference machine for criterion 6.** An earlier draft specified a Raspberry Pi 4. That
+target is dropped: it was inherited from an early sketch and Nooma is not designed for
+single-board hardware. The threshold is measured on a contemporary desktop or server CPU,
+and the run records the exact machine so the number can be compared across runs.
+
+The minimum supported hardware is deliberately **not decided here** — it is a product
+decision, not a driver decision. But it has a deadline: it must be settled **before M6**,
+because a self-hosted binary cannot ship without telling people what it needs to run. Until
+then, criterion 6 is a relative measure — a regression detector — not an absolute guarantee
+for any particular machine.
 
 **If the spike fails**, the fallback is `mattn/go-sqlite3` with per-platform releases via CI
 (goreleaser + zig cc), and the public promise changes from *"cross-compile it yourself

@@ -25,6 +25,11 @@ An amendment never rewrites the original text — the original stays readable as
 parts included, with the correction below it. If the decision itself changes, supersede
 instead.
 
+**Editorial changes are not amendments.** Fixing a typo, a broken link, formatting, or an
+illustrative example that no longer reflects the product does not need ceremony: edit it. The
+immutability rule protects the decision and its reasoning from drifting, not the prose from
+being corrected. If an edit changes what a reader would conclude, it is not editorial.
+
 Without this mechanism the immutability rule has no way to fix a factual error, which forces
 either leaving the error in place or inflating a supersede. Both are worse.
 

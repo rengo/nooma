@@ -14,14 +14,14 @@ memory — probably the most sensitive file on their machine.
 One owner per vault. No users, no roles, no organization. Any auth system carrying those
 notions would be invented complexity.
 
-But the "I run it on the Raspberry in the living room and open it from my phone" case will be
-**common**, not exotic. And there, binding to localhost stops being enough.
+But the "I run it on the home server in the living room and open it from my phone" case will
+be **common**, not exotic. And there, binding to localhost stops being enough.
 
 ## Options evaluated
 
 | Option | Pro | Con |
 |---|---|---|
-| Bind to `127.0.0.1` only | Zero config, zero friction | Does not cover the LAN/Raspberry case, which is common. Users end up binding `0.0.0.0` with no protection |
+| Bind to `127.0.0.1` only | Zero config, zero friction | Does not cover the LAN / home-server case, which is common. Users end up binding `0.0.0.0` with no protection |
 | Token always required | Uniform | Absurd friction for `localhost` on your own machine |
 | Localhost bind by default + mandatory token if exposed | Covers both cases with the safe default | Two paths to test |
 | Users + sessions + roles | "Complete" | Complexity with no owner: there is never more than one user per vault |
