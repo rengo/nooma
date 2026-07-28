@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ncruces/go-sqlite3/driver"
 
@@ -54,6 +55,28 @@ func TestFTS5MissingWithoutRegistration(t *testing.T) {
 // TestFTS5AvailableAcrossPoolConnections is belt-and-braces evidence for D2:
 // fts5 registration is not a first-connection-only guarantee, and the pool
 // really does open more than one connection under concurrent use.
+//
+// This is made deterministic rather than a race against scheduling. Firing
+// `goroutines` calls to v.Check in a loop with no synchronization (the
+// original shape of this test) only forces database/sql to open a second
+// connection if two requests happen to be in flight at the same instant —
+// on a throttled CI runner, each single fast round trip can easily finish
+// before the next goroutine even asks the pool for a connection, so the
+// pool never needs more than one and the assertion below fails for a
+// reason that has nothing to do with D2. Two changes close that gap:
+//
+//  1. A barrier (ready/start) holds every goroutine at the starting line
+//     so all of them request a connection at (as close to) the same
+//     instant as the scheduler allows, instead of trickling in one at a
+//     time; each then hammers v.Check in a loop instead of calling it
+//     once, widening the window in which they can all be observed
+//     in flight together.
+//  2. Stats().OpenConnections is polled for its peak *during* that burst,
+//     not read once after wg.Wait(): connections handed back to the pool
+//     stay open until Go's database/sql default idle-connection ceiling
+//     (2) evicts the excess, so reading Stats after every goroutine has
+//     already finished races against how much of that eviction already
+//     happened by the time this goroutine gets scheduled again.
 func TestFTS5AvailableAcrossPoolConnections(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "vault.db")
@@ -62,18 +85,46 @@ func TestFTS5AvailableAcrossPoolConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlite.Open(%q) = _, %v, want nil error", dbPath, err)
 	}
-	defer v.Close()
+	defer v.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	const goroutines = 8
-	var wg sync.WaitGroup
+	const burst = 300 * time.Millisecond
+
+	start := make(chan struct{})
+	stop := make(chan struct{})
+	var ready, wg sync.WaitGroup
+	ready.Add(goroutines)
+	wg.Add(goroutines)
 	errs := make([]error, goroutines)
 	for i := range goroutines {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = v.Check(ctx)
+			ready.Done()
+			<-start
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if err := v.Check(ctx); err != nil {
+					errs[i] = err
+					return
+				}
+			}
 		}(i)
 	}
+	ready.Wait()
+	close(start)
+
+	var peak int
+	deadline := time.Now().Add(burst)
+	for time.Now().Before(deadline) {
+		if got := v.Stats().OpenConnections; got > peak {
+			peak = got
+		}
+	}
+	close(stop)
 	wg.Wait()
 
 	for i, err := range errs {
@@ -82,7 +133,7 @@ func TestFTS5AvailableAcrossPoolConnections(t *testing.T) {
 		}
 	}
 
-	if got := v.Stats().OpenConnections; got <= 1 {
-		t.Errorf("v.Stats().OpenConnections = %d, want more than 1 (belt-and-braces pooling evidence for D2, not the guarantee itself)", got)
+	if peak <= 1 {
+		t.Errorf("peak v.Stats().OpenConnections during the burst = %d, want more than 1 (belt-and-braces pooling evidence for D2, not the guarantee itself)", peak)
 	}
 }
