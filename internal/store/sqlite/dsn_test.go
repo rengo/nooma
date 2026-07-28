@@ -3,6 +3,7 @@ package sqlite
 import (
 	"errors"
 	"net/url"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -33,7 +34,7 @@ import (
 // it is never reached and silently "passes" by never running at all — the
 // prior shape of this test had exactly that dead assertion.
 func TestBuildDSN(t *testing.T) {
-	dsn, err := buildDSN("/tmp/vault.db")
+	dsn, err := buildDSN("/tmp/vault.db", posixStyle)
 	if err != nil {
 		t.Fatalf("buildDSN(%q) = _, %v, want nil error", "/tmp/vault.db", err)
 	}
@@ -75,70 +76,151 @@ func TestBuildDSN(t *testing.T) {
 // test exists to catch (see the _txlock history above): a plausible-
 // looking DSN string can still be silently wrong about which file it
 // opens.
+//
+// This table is deliberately split by pathStyle rather than guessing the
+// style from each path's own shape (see pathStyle's doc comment in dsn.go
+// for why bidirectional shape-guessing is the residual defect this table
+// exists to close). The POSIX/Windows-shaped cases below are run against
+// EACH style explicitly, so the table proves both:
+//   - that a style recognizes its own absolute shape, and
+//   - that a style does NOT recognize the other style's shape as absolute
+//     — "C:/data/vault.db" and `C:\data\vault.db` are valid *relative*
+//     POSIX paths (a backslash is an ordinary filename byte, and a
+//     directory can be named "C:"; measured on this repo's own runner:
+//     `mkdir -p 'C:'/data && echo ok > 'C:'/data/vault.db` works) and MUST
+//     be rejected, not silently rewritten to an absolute path outside the
+//     caller's intended directory.
 func TestBuildDSNAbsolutePathHandling(t *testing.T) {
 	tests := []struct {
 		name     string
+		style    pathStyle
 		path     string
 		wantErr  bool
 		wantPath string
 	}{
 		{
-			name:     "posix absolute path",
+			name:     "posix: leading slash is absolute",
+			style:    posixStyle,
 			path:     "/home/pablo/vault.db",
 			wantPath: "/home/pablo/vault.db",
 		},
 		{
-			name:    "relative path is rejected, not silently misrouted",
+			name:    "posix: bare relative path is rejected, not silently misrouted",
+			style:   posixStyle,
 			path:    "relvault.db",
 			wantErr: true,
 		},
 		{
-			name:    "dot-relative path is rejected, not silently misrouted",
+			name:    "posix: dot-relative path is rejected, not silently misrouted",
+			style:   posixStyle,
 			path:    "./data/vault.db",
 			wantErr: true,
 		},
 		{
-			name: "windows drive-letter absolute path becomes a valid file-absolute URI",
-			path: `C:\Users\pablo\vault.db`,
+			// Regression coverage: watched RED against the pre-fix buildDSN,
+			// which guessed absoluteness from the string's shape regardless
+			// of style and accepted this as absolute.
+			name:    "posix: forward-slash windows-drive-shaped path is relative, not absolute",
+			style:   posixStyle,
+			path:    "C:/data/vault.db",
+			wantErr: true,
+		},
+		{
+			// Same regression, backslash variant.
+			name:    "posix: backslash windows-drive-shaped path is relative, not absolute",
+			style:   posixStyle,
+			path:    `C:\data\vault.db`,
+			wantErr: true,
+		},
+		{
+			name:     "posix: path containing a space, '?' and '#' is preserved exactly",
+			style:    posixStyle,
+			path:     "/home/pa blo/my?weird#vault.db",
+			wantPath: "/home/pa blo/my?weird#vault.db",
+		},
+		{
+			name:  "windows: backslash drive-letter path becomes a valid file-absolute URI",
+			style: windowsStyle,
+			path:  `C:\Users\pablo\vault.db`,
 			// RFC 8089's "file-absolute" form: forward slashes, and a
 			// leading "/" ahead of the drive letter. Runnable on Linux —
-			// this does not depend on the host OS's own path semantics.
+			// this does not depend on the host OS's own path semantics,
+			// because style is injected, never guessed from the runner.
 			wantPath: "/C:/Users/pablo/vault.db",
 		},
 		{
-			name:     "path containing a space, '?' and '#'",
-			path:     "/tmp/my vault #1?share/nooma.db",
-			wantPath: "/tmp/my vault #1?share/nooma.db",
+			name:     "windows: forward-slash drive-letter path becomes a valid file-absolute URI",
+			style:    windowsStyle,
+			path:     "C:/Users/pablo/vault.db",
+			wantPath: "/C:/Users/pablo/vault.db",
+		},
+		{
+			name:    "windows: bare relative filename is rejected, not silently misrouted",
+			style:   windowsStyle,
+			path:    "vault.db",
+			wantErr: true,
+		},
+		{
+			name:    "windows: driveless relative path is rejected, not silently misrouted",
+			style:   windowsStyle,
+			path:    `data\vault.db`,
+			wantErr: true,
+		},
+		{
+			name:     "windows: path containing a space, '?' and '#' is preserved exactly",
+			style:    windowsStyle,
+			path:     `C:\Users\pablo\my vault #1?share.db`,
+			wantPath: "/C:/Users/pablo/my vault #1?share.db",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dsn, err := buildDSN(tt.path)
+			dsn, err := buildDSN(tt.path, tt.style)
 
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("buildDSN(%q) = %q, nil, want a non-nil error", tt.path, dsn)
+					t.Fatalf("buildDSN(%q, %v) = %q, nil, want a non-nil error", tt.path, tt.style, dsn)
 				}
 				if !errors.Is(err, ErrRelativeDBPath) {
-					t.Errorf("buildDSN(%q) error = %v, want it to wrap ErrRelativeDBPath", tt.path, err)
+					t.Errorf("buildDSN(%q, %v) error = %v, want it to wrap ErrRelativeDBPath", tt.path, tt.style, err)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("buildDSN(%q) = _, %v, want nil error", tt.path, err)
+				t.Fatalf("buildDSN(%q, %v) = _, %v, want nil error", tt.path, tt.style, err)
 			}
 
 			u, perr := url.Parse(dsn)
 			if perr != nil {
-				t.Fatalf("url.Parse(buildDSN(%q)) = _, %v, want a valid URI", tt.path, perr)
+				t.Fatalf("url.Parse(buildDSN(%q, %v)) = _, %v, want a valid URI", tt.path, tt.style, perr)
 			}
 			if u.Host != "" {
-				t.Errorf("buildDSN(%q) produced a URI with host %q, want an empty host (a non-empty host means the path was misrouted into the URI authority)", tt.path, u.Host)
+				t.Errorf("buildDSN(%q, %v) produced a URI with host %q, want an empty host (a non-empty host means the path was misrouted into the URI authority)", tt.path, tt.style, u.Host)
 			}
 			if u.Path != tt.wantPath {
-				t.Errorf("buildDSN(%q) produced a URI with path %q, want %q", tt.path, u.Path, tt.wantPath)
+				t.Errorf("buildDSN(%q, %v) produced a URI with path %q, want %q", tt.path, tt.style, u.Path, tt.wantPath)
 			}
 		})
+	}
+}
+
+// TestPathStyleForGOOS asserts the one place production resolves pathStyle
+// from the real environment (pathStyle's doc comment in dsn.go): windows
+// maps to windowsStyle, and every other GOOS maps to posixStyle. This is
+// checked against the CONSTANT runtime.GOOS this test binary was actually
+// built for, not a simulated value — pathStyleForGOOS takes no parameter on
+// purpose (nothing else in this package should call it with an assumed
+// GOOS), so this test proves the mapping rule, not a specific branch.
+func TestPathStyleForGOOS(t *testing.T) {
+	got := pathStyleForGOOS()
+
+	want := posixStyle
+	if runtime.GOOS == "windows" {
+		want = windowsStyle
+	}
+
+	if got != want {
+		t.Errorf("pathStyleForGOOS() = %v, want %v for runtime.GOOS = %q", got, want, runtime.GOOS)
 	}
 }

@@ -113,6 +113,54 @@ only transactions are migrations, so the cost is zero. It is revisited with D2's
 The DSN is built with `net/url` escaping, never with string concatenation — a vault path with a
 space, a `?` or a `#` would otherwise be silently truncated or reinterpreted as query parameters.
 
+**Absoluteness and the "file:" URI path are decided by an injected `pathStyle`, not guessed from
+the string's shape (post-merge fix, superseding an earlier version of this same PR's `buildDSN`).**
+The PR 2 remediation round that hardened `buildDSN` against a relative path first shipped a
+bidirectional pattern-match: it recognized BOTH a leading `/` (POSIX-absolute) AND a Windows
+drive-letter prefix (`^[A-Za-z]:[\\/]`), regardless of which platform the binary was built for, so
+that the same test suite could prove the Windows branch on this repo's Linux-only CI. That
+reasoning about testability was correct, but the mechanism was not: on POSIX a backslash is an
+ordinary filename byte and a directory can legitimately be named `C:` (measured on this repo's own
+runner — `mkdir -p 'C:'/data && echo ok > 'C:'/data/vault.db` succeeds), so `C:/data/vault.db` and
+`C:\data\vault.db` are valid *relative* POSIX paths. The bidirectional regex accepted both as
+absolute and silently rewrote them to `/C:/data/vault.db` — the same class of defect the relative-
+path rejection above was written to close, just narrower: a path is opened that the caller did not
+name, with no error anywhere.
+
+The fix follows this codebase's own precedent for "a decision depends on the environment, and both
+branches must stay unit-testable": `internal/core` never calls `time.Now()` — the current instant
+arrives through the `Clock` port (`internal/ports/clock.go`), read once per operation, so a fake
+clock can drive either branch of any time-dependent decision from any machine. `dsn.go` applies the
+same shape to the operating system's path grammar. `pathStyle` is a two-value unexported type
+(`posixStyle`, `windowsStyle`); `buildDSN(dbPath string, style pathStyle) (string, error)` takes it
+as a plain parameter and never inspects `dbPath`'s shape to guess it. Production resolves the style
+in exactly one named place, `pathStyleForGOOS()` (mapping `runtime.GOOS == "windows"` to
+`windowsStyle` and everything else to `posixStyle`), the same way `brain/` reads `ports.Clock`
+exactly once per operation — a reader auditing "where does the environment enter this decision" has
+one place to look. `Open`'s exported signature is unchanged: the style is resolved internally and is
+not a caller concern. `dsn_test.go` now drives BOTH styles directly by constructing them, including
+the regression case (`posixStyle` + a Windows-drive-shaped path MUST be rejected), from a single
+Linux test binary — injection, unlike pattern-guessing, cannot let one style's shape leak into the
+other style's verdict.
+
+Under `windowsStyle`, only the drive-letter form (`C:\...` or `C:/...`) is treated as absolute. A
+bare leading `/` or `\` is deliberately NOT accepted: Go's own `filepath.IsAbs` rejects it too on
+windows (it is "rooted" but names no volume), and this function only recognizes shapes it can also
+turn into a correct `file:` URI. A UNC path (`\\server\share\...`) is also not recognized — it does
+not match the drive-letter pattern, so it is rejected via the same `ErrRelativeDBPath` path as any
+other unrecognized shape. That is deliberate: a UNC share is a valid absolute Windows path, but this
+store does not support network-share vaults, and representing one correctly needs a `file:` URI with
+a host component (`file://server/share/...`), a different shape than every other DSN this function
+builds (always an empty authority). Rejecting the shape outright is preferred over silently building
+a URI whose host or path would not mean what the caller intended.
+
+**Rejected — bidirectional shape guessing (the mechanism above superseded).** Matching both POSIX
+and Windows absolute shapes in one function, independent of which platform is asking, is ambiguous
+by construction: any pattern permissive enough to recognize a genuine Windows path also accepts
+POSIX-relative paths that merely happen to look like one, and vice versa in principle. It also
+diffuses "where does the OS enter this decision" across every call site that happens to pass a
+path through it, instead of concentrating it in one place the way the Clock port does for time.
+
 ### D4 — Two migrations, one transaction each, `user_version` re-read inside the transaction
 
 **Decision.** Forward-only migrations named `NNNN_snake_case.sql`, contiguous from `0001`.

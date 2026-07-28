@@ -58,7 +58,7 @@ func TestOpenTxlockIsImmediate(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "vault.db")
 	ctx := context.Background()
 
-	dsn, err := buildDSN(dbPath)
+	dsn, err := buildDSN(dbPath, pathStyleForGOOS())
 	if err != nil {
 		t.Fatalf("buildDSN(%q) = _, %v, want nil error", dbPath, err)
 	}
