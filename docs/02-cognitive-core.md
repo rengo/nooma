@@ -114,6 +114,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      brings down the whole classification.
 2. **hybrid recall**: top-K by vector similarity + top-K by FTS, fused. Same mechanism serves
    both answering a `recall` and finding connection candidates.
+   - **One model per search.** Vector similarity is only defined between embeddings produced by
+     the same model. A vault can hold two models at once while a reindex is in progress, so
+     every vector search filters by model, and vectors from two models are never compared or
+     fused. See [ADR-0003](adr/0003-embeddings.md),
+     [ADR-0012](adr/0012-vector-proximity-search.md).
 3. **dedup/relation judge** (LLM): against the recall candidates it decides
    `new | duplicate | related` — and if `related`, with what strength/confidence (subject to
    the thresholds in §4).

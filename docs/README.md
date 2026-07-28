@@ -28,8 +28,9 @@ left to drift silently.
 
 Foundation. No code yet.
 
-Decisions D1–D10 are closed as ADRs (see the board in `04-decisions.md`). One remains in
-`Proposed`: **ADR-0001** (SQLite driver), which closes with the M0 spike — the first coding
-task of the project. Nothing else in M0 starts before it.
+Decisions D1–D10 are closed as ADRs (see the board in `04-decisions.md`). **ADR-0001** (SQLite
+driver) was the last to close, accepted after the M0 spike measured `ncruces/go-sqlite3`
+against the alternatives (see ADR-0012, which replaced the `sqlite-vec` assumption). No code
+exists yet.
 
 An accepted ADR **is never edited**: if the decision changes, a new ADR supersedes it.

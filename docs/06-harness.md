@@ -42,7 +42,12 @@ nooma/
 │   ├── scheduler/          # in-process cron, boot catch-up (ADR-0009)
 │   └── config/             # yml + .env, vault resolution
 ├── docs/
+├── test/
+│   ├── conformance/        # L2: doc-02 invariants, no build tag
+│   ├── integration/        # L3: migrations, FTS5, transactions, lockfile (tag: integration)
+│   └── e2e/                # L4: the compiled binary end to end (tag: e2e)
 ├── testdata/               # golden sets and fixtures
+├── scripts/                # verification scripts invoked by make targets
 └── .github/workflows/
 ```
 
@@ -183,7 +188,7 @@ Initial extraction:
 | I18 | `event_at`, `created_at`, and `due_at` are never interchanged | §1 |
 | I19 | A challenger must beat the incumbent by more than `hysteresis_margin` | §3 |
 | I20 | One active insight per metric; the previous one becomes `superseded` | §12, doc 03 |
-| I21 | Every vector search filters on `model`; embeddings from two models never compare | ADR-0003, ADR-0012 |
+| I21 | Every vector search filters on `model`; embeddings from two models never compare | §5 |
 
 Three of these are better verified with a structural test than a behavioral one:
 
