@@ -91,7 +91,7 @@ automated gate.
 
 ## PR 2 — Driver + connection opener (~250 lines)
 
-- [ ] **2.1** [setup, not TDD] Add `github.com/ncruces/go-sqlite3` v0.35.x to `go.mod`; create
+- [x] **2.1** [setup, not TDD] Add `github.com/ncruces/go-sqlite3` v0.35.x to `go.mod`; create
       `internal/store/sqlite/doc.go` (package contract: "opens a vault, migrates it, reads no
       domain row" per D1) and `test/integration/doc.go` (untagged marker so the L3 directory is
       never tag-only, mirroring R7.2's rule for `test/conformance/`).
