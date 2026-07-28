@@ -125,7 +125,7 @@ automated gate.
       so `internal/store/sqlite` has its full file set from PR 2).
       Verify: `go build ./...`.
       Requirement: supports R3.6 (consumed in PR 3).
-- [ ] **2.6** Add the `sqlite-containment` depguard rule to `.golangci.yml` (design §7.2): deny
+- [x] **2.6** Add the `sqlite-containment` depguard rule to `.golangci.yml` (design §7.2): deny
       `github.com/ncruces/go-sqlite3` and `database/sql` for `$all` except `internal/store/**` and
       `test/integration/**`.
       Verify: run `make lint` **first**, in isolation, to confirm the `$all` + `!glob` combination

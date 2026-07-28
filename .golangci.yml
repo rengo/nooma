@@ -53,6 +53,22 @@ linters:
             - pkg: os
               desc: "core must not touch the environment or filesystem — docs/06-harness.md §1"
 
+        # The store's scope boundary, mechanically enforced (design D7/§7.2):
+        # only internal/store/** may open a vault, and test/integration/**
+        # is a recorded exception — its job is to disprove what only SQLite
+        # can disprove, including the control test that must open a
+        # connection without the opener's own guarantees.
+        sqlite-containment:
+          files:
+            - $all
+            - "!**/internal/store/**"
+            - "!**/test/integration/**"
+          deny:
+            - pkg: github.com/ncruces/go-sqlite3
+              desc: "only internal/store opens a vault; FTS5 is opt-in per connection — docs/03-data-model.md"
+            - pkg: database/sql
+              desc: "only internal/store speaks SQL — docs/06-harness.md §1"
+
     # The clock as a port. Scoped to internal/core by the exclusion rule below:
     # adapters legitimately read the real clock, generate ids and read the env.
     forbidigo:
