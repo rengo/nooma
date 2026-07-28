@@ -140,6 +140,93 @@ automated gate.
       job's own run on this PR.
       Requirement: R5.3, R8 gate table row "L3 tests".
 
+**Follow-up work below (2.8–2.14) landed after 2.1–2.7 were first checked off**, either as a
+post-hoc bug fix caught before the PR was opened, or as remediation from a pre-PR four-lens
+review. Recorded here per CLAUDE.md non-negotiable #4 — a test is not real if the plan that was
+supposed to schedule it doesn't know it exists.
+
+- [x] **2.8** [bugfix, TDD] Write `TestOpenTxlockIsImmediate` (L3, white-box,
+      `internal/store/sqlite/txlock_integration_test.go`, tag `integration`) — a genuine
+      lock-contention regression test for `_txlock=immediate`, confirmed RED against the
+      pre-fix `buildDSN` (which folded `_txlock` into a `_pragma` value — silently a no-op,
+      `_txlock` is not a PRAGMA) and GREEN after `dsn.go` sends it as its own top-level DSN
+      parameter.
+      Placement exception (recorded, not silent): this test lives inside package `sqlite`, not
+      `test/integration/`, because it must call the real unexported `buildDSN` directly — a
+      `test/integration` test would have to reconstruct the DSN by hand, which would pass
+      unconditionally regardless of what `buildDSN` actually returns and could never have caught
+      the historical bug. Same placement rationale as 2.9 below.
+      Requirement: R2.1 (transaction-mode half).
+- [x] **2.9** [TDD] Write `TestBuildDSNAbsolutePathHandling` (L1, `dsn_test.go`) + fix `buildDSN`
+      to reject a non-absolute `dbPath` with `ErrRelativeDBPath` instead of silently building a
+      `file:` URI whose authority component swallows the path's first segment
+      (`url.URL{Path: p}.String()`'s structural quirk when `p` does not start with `/`) — a
+      relative or `./`-prefixed path previously opened a different, unintended file with no
+      error anywhere.
+      RED: `TestBuildDSNAbsolutePathHandling`'s relative/`./`-prefixed cases pass against the
+      unfixed `buildDSN` (wrong: they open the wrong file silently) and the Windows-drive-letter
+      case fails `url.Parse` outright (`invalid port`).
+      GREEN: `make test` — `buildDSN` now returns `(string, error)`; absolute POSIX and Windows
+      drive-letter paths build a correct `file:///...` URI with an empty authority (verified by
+      re-parsing the produced DSN, not by asserting on the raw string); relative paths are
+      rejected.
+      Requirement: safe-defaults-are-structural (CLAUDE.md non-negotiable #7), R2.3.
+- [x] **2.10** [TDD] Write `TestOpenPRAGMAsReadBack` (L3, white-box,
+      `internal/store/sqlite/pragma_integration_test.go`) — reads `PRAGMA foreign_keys` and
+      `PRAGMA busy_timeout` back from a connection `Open` itself produced, reached through the
+      package's own unexported `db` field, closing residual risk R12 (design §4.4) without
+      needing PR 3/4's migrated schema. See spec.md R2.1 and design.md §4.4 for the corrected
+      proof chain — design §4.4 previously (and incorrectly) described this as proven by an
+      FK-violation test, which needs tables that do not exist until PR 4 (see PR 4 task 4.3
+      below).
+      RED: compile error until `pragma_integration_test.go` exists; the read-back values
+      themselves already pass against 2.4's implementation (this task adds observation, not new
+      behavior).
+      GREEN: `make test-integration`.
+      Requirement: R2.1, risk R12 (closed).
+- [x] **2.11** [TDD] Write `TestOpenCorruptVaultNamesThePath`
+      (`test/integration/corrupt_vault_test.go`) + wrap `Open`'s errors with the vault path and
+      what was being attempted (`open.go`); fix stale doc comments in `open.go`/`errors.go` that
+      claimed `Open` already migrates the vault (it does not until PR 3).
+      RED: opening a garbage-bytes file returns the driver's bare error
+      (`sqlite3: invalid _pragma: sqlite3: file is not a database`) with no path and no context.
+      GREEN: `make test-integration` — the error now names the vault path.
+      Requirement: docs/06-harness.md's own stated concern ("fails late and far from the cause").
+- [x] **2.12** [TDD] Restructure `TestBuildDSN`'s two independent assertions (PRAGMA-set presence,
+      `_txlock` not folded into `_pragma`) into subtests instead of chaining a second check behind
+      a `t.Fatalf` — the prior shape made the second check unreachable (`t.Fatalf` calls
+      `runtime.Goexit`), a dead assertion that could never have failed even if the bug it named
+      recurred. Also drop the PRAGMA-ordering assertion (incidental string layout with no
+      behavior riding on it — presence, not order, is what design D3 requires); presence is kept.
+      Requirement: test-quality, no spec requirement (regression-proofing an existing test).
+- [x] **2.13** [TDD] Make `TestFTS5AvailableAcrossPoolConnections` deterministic: replace the
+      fire-8-goroutines-and-hope shape (a race against scheduling — a fast CI runner can serve
+      all 8 `Check` calls from a single pooled connection with no contention at all) with a
+      start barrier plus polling `Stats().OpenConnections` for its peak during a bounded burst,
+      instead of reading it once after every goroutine has already finished and possibly been
+      evicted back down to Go's default idle-connection ceiling.
+      Requirement: R2.2 (pooling evidence for D2) — same requirement, hardened test.
+- [x] **2.14** [gate fix] Wire `run.build-tags: [integration]` into `.golangci.yml` — without it,
+      `golangci-lint run` / `make lint` never see any `//go:build integration` file, silently
+      exempting `test/integration/**` and `internal/store/sqlite/*_integration_test.go` from
+      `errcheck`, `staticcheck`, `unused`, `ineffassign`, `govet` **and** `depguard`, despite
+      docs/06-harness.md §6's "a PR that violates the dependency rule never reaches review"
+      promise. Fix the 7 real `errcheck` violations this exposed (unchecked `Close()` in
+      `defer`). Also enable `nolintlint` (require-explanation, require-specific) so a bare
+      `//nolint:depguard`/`//nolint:errcheck` can never bypass a gate with zero trail — it
+      immediately caught one pre-existing unexplained `//nolint:errcheck` in this same PR.
+      Verify: `golangci-lint run --build-tags integration ./...` went from 7 issues to 0 after
+      the fixes; probed live by temporarily introducing an unused-variable violation in a tagged
+      file, confirming `make lint` fails on it, then reverting (output recorded in the PR body).
+      Requirement: docs/06-harness.md §6 gate table, row "golangci-lint" (updated in this PR to
+      state build-tag coverage explicitly).
+- [x] **2.15** [build fix] Add `-shuffle=on` to `test-integration` in the `Makefile`, matching
+      `test`'s existing `-race -shuffle=on` — PR 2 is what makes L3 a CI gate for the first time,
+      so this is the first PR where the omission mattered.
+      Requirement: consistency with the `test` target, no numbered spec requirement.
+- [x] Verify: `make check`, `golangci-lint run --build-tags integration ./...` (0 issues),
+      `make test-integration` after `go clean -testcache`.
+
 ---
 
 ## PR 3 — Migration runner + `0001` + schema golden (~380 lines — watch the 400 ceiling)
@@ -251,6 +338,20 @@ Depends on PR 3.
       by design §12).
       GREEN: `make test` (L2 gate) and `make test-integration` (golden regeneration parity).
       Requirement: R4.3, R9.1, R9.2; residual risk R10 (F1).
+- [ ] **4.3** [TDD] Write `TestOpenForeignKeysRejectViolation` (L3, `test/integration/`) — the
+      FK-violation behavioral test design §4.4 originally described as PR 2's proof of
+      `foreign_keys=on`, deferred here because it needs a real foreign-key relationship to
+      violate, and no migrated schema exists until `0002` (this PR) lands. PR 2 instead closed
+      that gap with `TestOpenPRAGMAsReadBack` (white-box PRAGMA read-back, task 2.10) — this task
+      adds the behavioral proof design §4.4 originally wanted, now that it is actually possible.
+      RED: insert a row that violates one of `0002`'s foreign keys (e.g. `unit_embeddings` or
+      `measurements` against a non-existent `units.id`) against a vault opened by `sqlite.Open`
+      and observe it succeeds — `foreign_keys` defaults to off per SQLite connection, so an
+      opener that forgot to request it would let this through silently.
+      GREEN: after confirming the violation is rejected (`FOREIGN KEY constraint failed`) against
+      a vault opened normally through `sqlite.Open`.
+      Requirement: R2.1 (behavioral half, closing design §4.4's original intent); spec.md R2.1
+      "Note on scope".
 - [ ] Verify (whole PR): `make test`, `make test-integration`.
 
 ---
@@ -406,13 +507,13 @@ PRs 2/3/5 (see 7.5's note).
 | PR | Est. changed lines | 400-line budget risk | Notes |
 |---|---|---|---|
 | 1 | ~15 | Low | Docs only |
-| 2 | ~250 | Low | |
+| 2 | **~750** (▲ over the ~250 baseline: a post-hoc `_txlock` bug fix, task 2.8, plus tasks 2.9–2.15 remediating a pre-PR four-lens review — the BLOCKER absolute-path fix, the PRAGMA-provenance gap, error-context wrapping, a lint-gate blind spot, and three test-quality fixes) | **`size:exception` — owner-accepted** | Owner decision: fix every finding in this single PR rather than dropping scope or re-splitting an already-implemented PR. Documented here, not hidden |
 | 3 | ~380 (300 + 80 ▲ for the store-API golden, task 3.6) | **High** | Design's own designated split point is task 3.6 (store-API golden) — independent of the migration runner, move it to its own chained link if the diff crosses 400 |
-| 4 | ~330 | Medium | |
+| 4 | ~345 (330 + ~15 for task 4.3, the FK-violation test deferred from PR 2 — see task 2.10's note) | Medium | |
 | 5 | ~200 | Low | |
 | 6 | ~230 (restored — Conflict C2 resolved in favour of spec.md; types, loader and `format_example.json` back in scope) | Low | |
 | 7 | ~150 | Low | |
-| **Total** | **~1,555** | — | `go.sum` (PR 2) excluded from the human-review budget; the schema golden dumps (PRs 3–4) are **not** excluded — their diff is the point of the gate |
+| **Total** | **~2,070** | — | `go.sum` (PR 2) excluded from the human-review budget; the schema golden dumps (PRs 3–4) are **not** excluded — their diff is the point of the gate |
 
 - **Chained PRs recommended: Yes** (already the resolved delivery strategy for this change).
 - **Decision needed before apply: Yes** — specifically whether PR 3 preemptively splits off
@@ -420,6 +521,10 @@ PRs 2/3/5 (see 7.5's note).
   planned and splits only if the running diff actually crosses 400 lines. Recommend the latter:
   monitor PR 3's diff at the 3.5/3.6 boundary and split there if needed, per design §12's own
   guidance.
+- **PR 2 crossed the ceiling after the fact**: it left `sdd-apply` at ~531 lines (already over
+  400) before this review; the review's own remediation adds more on top. The owner explicitly
+  chose `size:exception` over re-splitting a PR that was already implemented and reviewed as one
+  unit, rather than dropping any finding to stay under budget.
 
 ---
 
@@ -432,7 +537,7 @@ PRs 2/3/5 (see 7.5's note).
 | R13 — the schema golden is coupled to whichever SQLite version `ncruces` ships | Bounded by the shadow-table exclusion rule and keeping the SQLite version out of the golden file | 3.5 |
 | R10 / F1 — `units.rowid` is unstable across `VACUUM`, `units_fts` is keyed on it | Recorded as a one-line note in `docs/03-data-model.md`'s Search section, zero-cost in this change | 4.2 |
 | R2 (proposal) — a "fails to compile" gate can pass for the wrong reason | Closed by `scripts/pending-red.sh` failure-mode 2 (compiler error must name an expected symbol) | 5.5 |
-| R12 (design) — `TestOpenAppliesPragmas` cannot read a per-connection PRAGMA from outside the pool | `journal_mode` asserted directly (file property), `foreign_keys` asserted behaviorally through an FK violation | 2.4 |
+| R12 (design) — `TestOpenAppliesPragmas` cannot read a per-connection PRAGMA from outside the pool | **Closed** — `journal_mode` asserted directly (file property) by `TestOpenAppliesPragmas`; `foreign_keys`/`busy_timeout` asserted by real observation in the white-box `TestOpenPRAGMAsReadBack`, not an FK violation (that behavioral test needed a migrated schema that did not exist yet — see task 4.3) | 2.10 (closed), 4.3 (the behavioral test design §4.4 originally wanted) |
 
 ---
 
@@ -443,7 +548,7 @@ Requirement groups → PR, consistent with `spec.md` §16:
 | Requirement group | PR |
 |---|---|
 | §1 Driver dependency | 2 |
-| §2 Connection opener | 2 |
+| §2 Connection opener | 2 (R2.1's PRAGMA presence + white-box read-back), 4 (R2.1's FK-violation behavioral half, task 4.3) |
 | §3 Migrations | 3, 4 |
 | §4 Schema golden | 3, 4 |
 | §5 Four test levels | 2, 3, 4, 6 |
