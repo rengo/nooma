@@ -7,6 +7,18 @@ version: "2"
 
 run:
   timeout: 5m
+  # Without this, golangci-lint only ever sees the untagged L1/L2 tree:
+  # every //go:build integration file (test/integration/**,
+  # internal/store/sqlite/*_integration_test.go) is invisible to
+  # errcheck, staticcheck, unused, ineffassign, govet AND depguard,
+  # silently exempting them from docs/06-harness.md §6's "the lint does
+  # not pass" promise. `golangci-lint run --build-tags integration ./...`
+  # confirms the gap; wiring it here (config, not a CLI flag) is what
+  # makes `make lint` / CI's plain `golangci-lint run` pick it up too.
+  # A future PR adding //go:build e2e or pendingimpl files must extend
+  # this list, or the same gap reopens for that tag.
+  build-tags:
+    - integration
 
 linters:
   default: standard
@@ -16,10 +28,19 @@ linters:
     - errcheck
     - govet
     - ineffassign
+    - nolintlint
     - staticcheck
     - unused
 
   settings:
+    # A bare //nolint:depguard would defeat sqlite-containment/core-purity
+    # with zero friction and no reviewable trail. Requiring an explanation
+    # on every nolint directive (any linter, not just depguard) makes a
+    # bypass a visible, commented decision instead of a silent one.
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
     # The dependency rule: internal/core is the brain and knows nothing about
     # storage, transport, models or channels. It takes data and returns decisions.
     depguard:

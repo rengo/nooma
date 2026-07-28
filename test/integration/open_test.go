@@ -24,7 +24,7 @@ func TestFTS5RegisteredOnEveryConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlite.Open(%q) = _, %v, want nil error", dbPath, err)
 	}
-	defer v.Close()
+	defer v.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	if err := v.Check(ctx); err != nil {
 		t.Errorf("v.Check() = %v, want nil (fts5 must be registered on this connection)", err)
@@ -42,7 +42,7 @@ func TestFTS5MissingWithoutRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("driver.Open(%q) = _, %v, want nil error", dbPath, err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	_, err = db.ExecContext(context.Background(),
 		`CREATE VIRTUAL TABLE temp.nooma_fts5_probe USING fts5(c)`)

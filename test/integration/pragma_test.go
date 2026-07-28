@@ -39,13 +39,13 @@ func TestOpenAppliesPragmas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlite.Open(%q) = _, %v, want nil error", dbPath, err)
 	}
-	defer v.Close()
+	defer v.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	raw, err := sql.Open("sqlite3", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open(%q) = _, %v, want nil error", dbPath, err)
 	}
-	defer raw.Close()
+	defer raw.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	var journalMode string
 	if err := raw.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil {
