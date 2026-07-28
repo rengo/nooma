@@ -376,14 +376,28 @@ Three L3 assertions, and the second is the one that matters:
 
 ### 4.4 PRAGMA verification
 
-`TestOpenAppliesPragmas` (L3) reads back `journal_mode`, `foreign_keys` and `busy_timeout` through
-a raw connection opened by the test on the same file — because `foreign_keys` and `busy_timeout`
-are **per connection**, the test must assert them on a connection the *opener* produced, not on its
-own. The seam: the test asserts `journal_mode` (a file property) on its own raw connection, and
-asserts the per-connection PRAGMAs by observing behaviour through the vault — an FK violation
-against the migrated schema must be rejected. Proposal §6 records the red as
-`journal_mode = delete, foreign_keys = 0`, which is exactly what a DSN missing its `_pragma`
-parameters produces.
+**Revised in PR 2** (see spec.md R2.1's "Note on scope"): this section originally described the
+`foreign_keys`/`busy_timeout` mitigation as an FK-violation test run "against the migrated
+schema." No migrated schema exists until PR 3/4 create tables with foreign keys, so that
+behavioral test cannot be written here — it is now a separate PR 4 task with its own stated red
+(`tasks.md`), not this PR's proof.
+
+What PR 2 actually proves, in two L3 tests, because `journal_mode`, `foreign_keys` and
+`busy_timeout` cannot all be observed the same way:
+
+- `TestOpenAppliesPragmas` (`test/integration/pragma_test.go`) reads back `journal_mode` through a
+  raw connection the test opens itself on the same file — valid because `journal_mode=wal` is a
+  persistent property of the database file, not the connection.
+- `TestOpenPRAGMAsReadBack` (`internal/store/sqlite/pragma_integration_test.go`, white-box) reads
+  back `foreign_keys` and `busy_timeout` from a connection `Open` itself produced, reached through
+  the package's own unexported `db` field. `foreign_keys` and `busy_timeout` are per-connection, so
+  observing them from outside the pool (as `test/integration` would have to) proves nothing about
+  the connections `Open` actually handed out; this test lives inside `internal/store/sqlite`
+  specifically so it can reach a real one, the same placement rationale as
+  `txlock_integration_test.go`.
+
+Proposal §6 records the red as `journal_mode = delete, foreign_keys = 0`, which is exactly what a
+DSN missing its `_pragma` parameters produces.
 
 ---
 
@@ -1094,7 +1108,7 @@ Carried from the proposal where still open, plus what this design added.
 | **R9** | **§8.5**: the gate cannot detect M0 naming the anchor symbols differently — it stays silently green | Mitigated by anchor-package comments and by automatic detection of package renames. Residual risk accepted and recorded |
 | **R10** | **F1**: `units.rowid` is unstable across `VACUUM` while `units_fts` is keyed on it | Not fixed here. Recorded in doc 03 by PR 4; recommended for an ADR before `nooma export` lands |
 | **R11** | depguard's `$all` + `!glob` combination in `sqlite-containment` (§7.2) is written from the documented behaviour, not from a run — `golangci-lint` is not on `PATH` in the design environment | Must be confirmed with `make lint` on the first commit of PR 2. If the combination does not match, the fallback is a positive `files` list of the packages that may not import the driver |
-| **R12** | `TestOpenAppliesPragmas` cannot read a per-connection PRAGMA from outside the pool (§4.4) | Designed around: `journal_mode` is asserted directly, `foreign_keys` is asserted behaviourally through an FK violation. Stated so nobody "simplifies" it into a test that asserts the wrong connection |
+| **R12** | `TestOpenAppliesPragmas` cannot read a per-connection PRAGMA from outside the pool (§4.4) | **Closed in PR 2**, not just designed around: `journal_mode` is asserted directly by `TestOpenAppliesPragmas`; `foreign_keys`/`busy_timeout` are asserted by real observation in `TestOpenPRAGMAsReadBack` (white-box, `internal/store/sqlite`), not an FK violation — that behavioral test needs a migrated schema and is a separate PR 4 task |
 | **R13** | The golden is coupled to whichever SQLite version `ncruces` ships | Bounded by the shadow-table exclusion rule (§6.2) and by keeping the version out of the golden file. A driver bump that changes stored DDL text will show as a `ddl.golden` diff — which is the correct place for it to show |
 
 ## 14. Verification

@@ -22,7 +22,7 @@ test: ## L1 (pure) + L2 (conformance)
 
 .PHONY: test-integration
 test-integration: ## L3 — a real temporary SQLite vault
-	go test -race -tags integration ./test/integration/...
+	go test -race -shuffle=on -tags integration ./internal/store/sqlite/... ./test/integration/...
 
 .PHONY: test-e2e
 test-e2e: ## L4 — the compiled binary

@@ -57,6 +57,16 @@ These are not decisions and have no ADR, but they must not be forgotten:
 - **Naive user backup** — copying the folder with the process alive and WAL open.
   `nooma export` (with `VACUUM INTO`) is the blessed path: document it early and checkpoint
   the WAL often.
+- **A crash, `SIGKILL`, or power loss leaves `-wal` and `-shm` behind with no live process.**
+  A backup script that globs `*.db` and nothing else silently drops every transaction that
+  still lives only in the WAL file — the vault looks backed up and is quietly missing recent
+  writes. Any backup path (naive or `nooma export`) must carry the `-wal`/`-shm` siblings, or
+  checkpoint first.
+- **WAL requires working shared-memory locking**, which is unreliable on network filesystems
+  and some FUSE/cloud-sync mounts (SQLite documents this as a **corruption** risk, not an
+  error it can detect and refuse). Nooma's stated vision — "I take my brain with me = I copy
+  the folder" — makes a synced folder (Dropbox, cloud-sync drives, network shares) a plausible
+  place a user puts a vault, so this is a real, not theoretical, risk for this project.
 - **Synchronous `classify` latency** with a slow local provider: chat capture must acknowledge
   receipt quickly even if processing takes longer. This is a channel adapter requirement, not
   a core one.

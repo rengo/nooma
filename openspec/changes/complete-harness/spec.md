@@ -42,8 +42,27 @@ cross-compilation matrix (§8) builds for non-native GOOS/GOARCH without a C too
 **MUST**: opening a vault connection sets `journal_mode=WAL`, `foreign_keys=ON`, and a
 `busy_timeout` greater than zero, per `docs/03-data-model.md` Conventions.
 
-**Verified by**: L3 test that opens a connection against a temporary vault and reads back
-`PRAGMA journal_mode`, `PRAGMA foreign_keys`, `PRAGMA busy_timeout`.
+**Verified by**: two L3 tests, because `journal_mode` and the other two PRAGMAs cannot be
+observed the same way — `journal_mode` is a persistent property of the database file,
+while `foreign_keys` and `busy_timeout` are per-connection.
+
+- `TestOpenAppliesPragmas` (`test/integration/`) opens a *second*, independent connection
+  to the same vault file and reads `PRAGMA journal_mode` back from it — valid because
+  `journal_mode=wal` persists in the file itself.
+- `TestOpenPRAGMAsReadBack` (white-box, `internal/store/sqlite/`, PR 2) reads `PRAGMA
+  foreign_keys` and `PRAGMA busy_timeout` back from a connection `Open` itself produced,
+  reached through the package's own unexported handle — real observation, not a DSN-string
+  assertion. It lives inside `internal/store/sqlite` rather than `test/integration/`
+  specifically because `Vault` exposes no query surface (design D7), so reading a
+  per-connection PRAGMA off a connection `Open` produced is only possible from inside the
+  package.
+
+**Note on scope**: an earlier version of this requirement's design note (design.md §4.4)
+described the `foreign_keys` mitigation as an FK-violation test "against the migrated
+schema." No migrated schema exists until PR 3/4 (the migration runner and its tables), so
+that behavioral test cannot be written in PR 2 — it is a separate, later requirement
+(tracked as a PR 4 task in `tasks.md`), not a substitute for this one. R2.1 itself is fully
+proven in PR 2 by the two tests above, without needing the migrated schema.
 
 **Scenario**:
 - GIVEN an empty temporary directory

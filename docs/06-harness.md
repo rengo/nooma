@@ -241,7 +241,7 @@ All of the following runs on every PR and blocks the merge:
 
 | Gate | What it verifies |
 |---|---|
-| `golangci-lint` | Includes `depguard` and `forbidigo` — §1 and §2 are not optional |
+| `golangci-lint` | Includes `depguard` and `forbidigo` — §1 and §2 are not optional. Runs against every build-tagged file too (`.golangci.yml`'s `run.build-tags`), not only the default untagged build — a linter that only ever sees L1/L2 code would silently exempt `test/integration/**` and any future `e2e`/`pendingimpl` file from every rule in this table |
 | `go vet` | — |
 | L1 + L2 tests with `-race` | The core and the invariants |
 | L3 tests with `-race` | Migrations and store against real SQLite |
