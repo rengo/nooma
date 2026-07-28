@@ -41,6 +41,17 @@ Load them with the `Skill` tool when their trigger applies:
 Skills are a **pre-gate**: they keep you from reaching the gate. The CI gate is what
 guarantees. If a rule can be an automated gate, it is a gate — not a skill.
 
+## Workflow
+
+`main` is protected by a GitHub ruleset: direct pushes are rejected for everyone, with no
+bypass. Every change goes through a branch and a PR — one PR per step of
+`docs/06-harness.md` §9, or per work unit thereafter.
+
+Run `make check` before opening the PR; it runs exactly what CI runs.
+
+Skills that cover the details: `work-unit-commits` (how to slice commits), `branch-pr`
+(opening the PR), `chained-pr` (splitting when it exceeds 400 lines).
+
 ## Conventions
 
 - Conventional commits. One commit = one reviewable unit of work (change + tests + doc).

@@ -74,13 +74,33 @@ A PR that violates the dependency rule never reaches review: the lint does not p
 
 ## 2. The clock is a port
 
-**No function in `core/` calls `time.Now()`.** The current instant arrives as a parameter or
-through the `Clock` port. Same for UUID generation (`IDGen`) and any source of randomness.
+**No function in `core/` calls `time.Now()`.** The current instant arrives as a plain
+parameter. Same for identifiers and any source of randomness.
 
 ```go
+// internal/ports
 type Clock interface { Now() time.Time }
 type IDGen interface { New() string }
 ```
+
+**`core/` does not import `ports` either.** The ports are consumed by `brain/`, which reads
+the clock **once** at the start of an operation and passes the resulting `time.Time` down into
+the core:
+
+```go
+// brain/ reads the clock once...
+now := s.clock.Now()
+// ...and core decides as a pure function of its arguments
+decision := prospection.EvaluateTrigger(trigger, now, thresholds)
+```
+
+This is stricter than "inject a Clock" and better for two reasons. A core function is a pure
+function of its arguments, with nothing to stub. And one decision gets exactly **one** instant:
+a core that held a `Clock` could call `Now()` twice mid-decision and compare two different
+"nows" — a real bug class that this rule makes unrepresentable.
+
+The `depguard` allow-list enforces it: `internal/core/**` may import the standard library and
+its own packages, nothing else.
 
 This is **not** a style preference. Look at how much of Nooma's behavior is a function of time:
 

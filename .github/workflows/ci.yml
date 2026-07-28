@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+
+jobs:
+  # Enforces docs/06-harness.md §1 (dependency rule) and §2 (the clock as a port).
+  # Without this job those sections are prose.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+      - name: go vet
+        run: go vet ./...
+
+  # L1 (pure) and L2 (conformance) from docs/06-harness.md §3. Both are untagged,
+  # so a plain `go test ./...` runs exactly these two and nothing else.
+  test:
+    name: test (L1 + L2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test -race -shuffle=on ./...
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+
+# Gates from docs/06-harness.md §6 that are NOT enforced yet, and what they wait on:
+#
+#   L3 integration (-tags integration)  -> waits on the store package (ADR-0001 spike)
+#   internal/core coverage floor >= 90% -> waits on core having any statements
+#   schema golden                       -> waits on the embedded migrations
+#   templ generate leaves a clean tree  -> waits on the UI (M4, ADR-0008)
+#   docs<->code sync label check        -> waits on internal/core existing in a PR diff
+#   cross-compilation matrix            -> blocked on ADR-0001 closing
+#
+# They are listed rather than silently absent: a CI file that looks complete but
+# enforces half the harness is worse than one that says which half.
