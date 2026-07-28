@@ -21,16 +21,17 @@ import (
 // SQLite's own defaults on any newly opened connection regardless of what
 // a *different* connection (or DSN) requested.
 //
-// foreign_keys and busy_timeout are proven instead by TestBuildDSN (L1, in
-// internal/store/sqlite): design D7's scope boundary gives Vault no query
-// surface, so there is no way for this package to read a per-connection
-// PRAGMA off a connection Open produced (residual risk R12). TestBuildDSN
-// proves Open requests exactly the PRAGMA set D3 specifies; the ground
-// truth this design was verified against (driver.go) establishes that the
-// driver honours every "_pragma=" directive in a DSN at sqlite3_open time
-// on every connection opened with it. Composed, that is sound end-to-end
-// proof of R2.1 without inventing a query method that would widen the
-// frozen store surface (design §7.3) ahead of schedule.
+// foreign_keys and busy_timeout are proven instead by
+// TestOpenPRAGMAsReadBack (L3, white-box, in internal/store/sqlite):
+// design D7's scope boundary gives Vault no query surface from outside its
+// own package, so this package cannot read a per-connection PRAGMA off a
+// connection Open produced without widening the frozen store surface
+// (design §7.3) ahead of schedule. TestOpenPRAGMAsReadBack lives inside
+// package sqlite instead, where it can reach Vault's unexported db field
+// and read the PRAGMAs back from a real connection Open itself opened —
+// genuine observation, not the DSN-string composition this comment
+// previously relied on (residual risk R12 in design.md, now closed; see
+// spec.md R2.1's "Verified by" for the current, corrected proof chain).
 func TestOpenAppliesPragmas(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "vault.db")
