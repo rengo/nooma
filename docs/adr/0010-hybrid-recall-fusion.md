@@ -8,17 +8,17 @@
 
 ## Context
 
-Hybrid recall produces two ranked lists: top-K by vector similarity (sqlite-vec) and top-K
-lexical (FTS5). They must be fused into a single ordered list.
+Hybrid recall produces two ranked lists: top-K by vector similarity and top-K lexical (FTS5).
+They must be fused into a single ordered list.
 
 This is not an implementation detail: this mechanism feeds **three** different things in the
 brain — answering a `recall`, finding dedup/relation candidates during capture, and finding
 candidate pairs during the consolidation `connect` phase. A bias here propagates into the
 entire relation graph.
 
-The underlying technical problem: the two scores **are not comparable**. Cosine distance lives
-in [0, 2]; FTS5's `bm25()` returns negative values with no fixed bound that depend on the
-corpus. Adding them raw means nothing.
+The underlying technical problem: the two scores **are not comparable**. Cosine similarity
+lives in [-1, 1]; FTS5's `bm25()` returns negative values with no fixed bound that depend on
+the corpus. Adding them raw means nothing.
 
 ## Options evaluated
 

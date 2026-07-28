@@ -60,3 +60,33 @@ table**, not a bulk `UPDATE`. `reindex` is a schema operation, not a data operat
 Pure-Go ONNX maturing enough to run a MiniLM/BGE small in-process with acceptable latency. It
 would be the only option satisfying *self-contained* and *private* at the same time, and would
 justify a new ADR.
+
+---
+
+## Amendment — 2026-07-28
+
+The decision stands: `EmbeddingProvider` as a first-class interface, Ollama and cloud in v1,
+and the three invariants about recording the model and requiring an explicit `nooma reindex`.
+
+### Correction: reindex is not a schema operation
+
+The Decision section says the `vec0` virtual table fixes its dimension at `CREATE`, so
+reindexing to a different dimension means recreating the table, making `reindex` a schema
+operation rather than a data operation.
+
+That was true of sqlite-vec. [ADR-0012](0012-vector-proximity-search.md) dropped sqlite-vec:
+embeddings are now an ordinary `BLOB` column with `model` and `dim` alongside them, per row.
+
+The consequences invert:
+
+- Dimension is **per-row data**, not table structure. Nothing needs recreating.
+- `reindex` becomes an ordinary `UPDATE` loop — which makes it **resumable and incremental**
+  for free, satisfying the requirement already stated under "What it costs" that it must not
+  be all-or-nothing.
+- A vault can briefly hold rows from two models mid-reindex. Invariant (2) — never mix
+  embeddings from different models — therefore moves from being enforced by the schema to
+  being enforced by the query: **searches filter on `model`**, and reindex is complete when no
+  row carries the old one.
+
+That last point is the one worth watching. Invariant (2) used to be guaranteed by construction
+and is now a rule the code has to keep. It belongs in the conformance suite.

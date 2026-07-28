@@ -52,7 +52,7 @@ order, with no correspondence to anything.
 
 | ADR | Decision | Status | Blocks |
 |---|---|---|---|
-| [0001](0001-sqlite-driver.md) | SQLite driver and cross-compilation | Proposed | M0 |
+| [0001](0001-sqlite-driver.md) | SQLite driver and cross-compilation | Accepted | M0 |
 | [0002](0002-default-llm-preset.md) | Default LLM preset | Accepted | M1 |
 | [0003](0003-embeddings.md) | Embedding generation | Accepted | M1 |
 | [0004](0004-license.md) | Project license (AGPL-3.0) | Accepted (amended 2026-07-28) | Public release |
@@ -63,6 +63,7 @@ order, with no correspondence to anything.
 | [0009](0009-scheduler-downtime.md) | Scheduler semantics under downtime | Accepted | M2 |
 | [0010](0010-hybrid-recall-fusion.md) | Hybrid recall fusion | Accepted | M1 |
 | [0011](0011-contributor-licensing.md) | Contributor licensing: no CLA, with a deadline | Accepted | Public release |
+| [0012](0012-vector-proximity-search.md) | Vector proximity search: brute force in Go | Accepted | M1 |
 
 ## Template
 

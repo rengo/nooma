@@ -1,10 +1,12 @@
 # ADR-0001 — SQLite driver and the cross-compilation promise
 
-- **Status**: Proposed — conditional on the M0 spike
+- **Status**: Accepted — spike run 2026-07-28, results at the end of this document
 - **Date**: 2026-07-27
 - **Supersedes**: —
 - **Superseded by**: —
 - **Enables**: M0 (and with it, everything else)
+- **Related**: [ADR-0012](0012-vector-proximity-search.md) — the vector search decision this
+  one wrongly assumed
 
 ## Context
 
@@ -85,3 +87,67 @@ its weak point is precisely the non-negotiable requirement.
 - Any spike criterion not met.
 - In production: a p95 recall degrading more than 3× against the spike benchmark at real
   volumes, or a corruption bug attributable to the wasm layer.
+
+---
+
+## Spike results — 2026-07-28
+
+Branch `spike/adr-0001-sqlite-driver`, commit `da6a22f`, never merged. Full measurements and
+the reproduction commands are in `spike/RESULTS.md` on that branch.
+
+**Decision: `ncruces/go-sqlite3` is accepted, at its current version.**
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | Vectors stored, KNN correct over 10k at dim 768 | **PASS** (see below — the mechanism changed) |
+| 2 | FTS5 in sync through triggers, 1,000 mixed ops | **PASS** |
+| 3 | `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout` | **PASS** |
+| 4 | `VACUUM INTO` + `integrity_check` with WAL open | **PASS** |
+| 5 | Cross-compilation with no C toolchain | **PASS** — 6/6 targets, `statically linked` |
+| 6 | Hybrid recall p95 < 100 ms over 10k units | **PASS** — p95 17.85 ms |
+| 7 | Write throughput ≥ 50 units/s | **PASS** — 2,817 units/s |
+
+### A premise in the Context section was wrong
+
+This document opens by asserting that *"sqlite-vec is not optional in this design"*. The spike
+proved otherwise, and that is the most valuable thing it produced.
+
+sqlite-vec only compiles against `ncruces` v0.21.3 (December 2024) and older. The driver
+stopped running SQLite as a swappable WebAssembly blob and now machine-translates it to Go
+with `wasm2go`, so the `sqlite3.Binary` hook that sqlite-vec depends on no longer exists.
+Adopting it would have meant freezing the entire storage layer 20 months in the past,
+including SQLite itself at 3.47.0.
+
+Replacing it with a brute-force dot product in Go — vectors as ordinary `BLOB`s, an in-memory
+index, roughly forty lines — measured **faster on current software** than the pinned
+combination measured on stale software:
+
+| | v0.21.3 + sqlite-vec | v0.35.2 + brute force |
+|---|---|---|
+| SQLite | 3.47.0 | **3.53.3** |
+| Recall p95 | 21.72 ms | **17.85 ms** |
+| Write throughput | 1,296 units/s | **2,817 units/s** |
+
+That is a separate decision from the driver, and it gets its own record:
+[ADR-0012](0012-vector-proximity-search.md). This ADR should never have folded it into
+criterion 1.
+
+### Two implementation facts the criteria did not ask for
+
+- **FTS5 is opt-in per connection**, not compiled in: `ext/fts5.Register(db)`. The store must
+  register it on **every** connection it opens. One that skips it fails with
+  `no such module: fts5` only when an FTS query runs — late, and far from the cause. This
+  needs an integration test, not a code comment.
+- **Loadable extensions moved rather than disappeared.** `sqlite3.ExtensionInit(db, mod.New,
+  mod.DylinkInfo)` is how the driver's own FTS5 works, so sqlite-vec is not permanently out of
+  reach — it would need porting to that mechanism instead of shipping a `.wasm`.
+
+### Cost accepted
+
+The binary grows from ~9 MB to **16 MB**: `wasm2go` emits considerably more Go than the
+previous wasm runtime carried. Still one static file, still no toolchain, and recorded here
+rather than discovered at release time.
+
+### What this unblocks
+
+The release CI pipeline and the cross-compilation matrix can now be designed. M0 starts.
