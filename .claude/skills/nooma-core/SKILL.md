@@ -14,11 +14,13 @@ creating a new package under `internal/`, or before adding a port in `internal/p
 
 ## Hard Rules
 
-1. `internal/core/**` must not import `internal/store`, `internal/providers`,
-   `internal/httpapi`, `database/sql`, `net/http`, or any external dependency that is not pure
-   computation stdlib.
-2. `internal/core/**` must not call `time.Now`, `time.Since`, `rand.*`, `uuid.New`, or
-   `os.Getenv`. The current instant arrives through the `Clock` port; IDs through `IDGen`.
+1. `internal/core/**` may import the standard library and its own packages, and nothing else —
+   not `internal/store`, not `internal/providers`, not `internal/ports`, no external
+   dependency. The `depguard` allow-list enforces this.
+2. `internal/core/**` must not call `time.Now`, `time.Since`, `time.Until`, `rand.*`,
+   `uuid.*`, or `os.Getenv`. The current instant and generated ids arrive as plain parameters.
+   `brain/` reads `ports.Clock` **once** per operation and passes the `time.Time` down, so one
+   decision sees exactly one instant.
 3. The user's timezone is a parameter. Never read it from the operating system inside `core`.
 4. Every behavioral number is a named constant in exactly one place and appears in the
    calibration table of `docs/02-cognitive-core.md` §13. No literals buried in functions.

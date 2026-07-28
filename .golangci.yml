@@ -1,0 +1,90 @@
+# golangci-lint configuration.
+#
+# This file is where docs/06-harness.md §1 (the dependency rule) and §2 (the clock
+# as a port) stop being prose and become enforcement. A rule a machine does not
+# execute is not a rule, it is an intention.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - depguard
+    - forbidigo
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+  settings:
+    # The dependency rule: internal/core is the brain and knows nothing about
+    # storage, transport, models or channels. It takes data and returns decisions.
+    depguard:
+      rules:
+        core-purity:
+          files:
+            - "**/internal/core/**"
+          # No allow entry beyond the standard library and core's own packages,
+          # so any external dependency is rejected by default rather than by
+          # remembering to deny it.
+          allow:
+            - $gostd
+            - github.com/rengo/nooma/internal/core
+          deny:
+            - pkg: github.com/rengo/nooma/internal/store
+              desc: "core must not know about persistence — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/providers
+              desc: "core must not call models — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/channels
+              desc: "core must not know about channels — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/httpapi
+              desc: "core must not know about transport — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/ui
+              desc: "core must not know about rendering — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/scheduler
+              desc: "core must not schedule; it decides — docs/06-harness.md §1"
+            - pkg: database/sql
+              desc: "core must not touch a database — docs/06-harness.md §1"
+            - pkg: net/http
+              desc: "core must not speak HTTP — docs/06-harness.md §1"
+            - pkg: os
+              desc: "core must not touch the environment or filesystem — docs/06-harness.md §1"
+
+    # The clock as a port. Scoped to internal/core by the exclusion rule below:
+    # adapters legitimately read the real clock, generate ids and read the env.
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: "take the current instant through the ports.Clock port — docs/06-harness.md §2"
+        - pattern: '^time\.Since$'
+          msg: "derive elapsed time from a ports.Clock reading — docs/06-harness.md §2"
+        - pattern: '^time\.Until$'
+          msg: "derive remaining time from a ports.Clock reading — docs/06-harness.md §2"
+        - pattern: '^rand\.'
+          msg: "core decisions must be deterministic — docs/06-harness.md §2"
+        - pattern: '^uuid\.'
+          msg: "take identifiers through the ports.IDGen port — docs/06-harness.md §2"
+        - pattern: '^os\.Getenv$'
+          msg: "configuration reaches the core as a parameter — docs/06-harness.md §2"
+
+  exclusions:
+    generated: lax
+    rules:
+      # forbidigo applies only inside the cognitive core. Everywhere else, reading
+      # the real clock is exactly what an adapter is for.
+      - linters:
+          - forbidigo
+        path-except: internal/core/
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/rengo/nooma
