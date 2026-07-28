@@ -507,13 +507,13 @@ PRs 2/3/5 (see 7.5's note).
 | PR | Est. changed lines | 400-line budget risk | Notes |
 |---|---|---|---|
 | 1 | ~15 | Low | Docs only |
-| 2 | **~750** (▲ over the ~250 baseline: a post-hoc `_txlock` bug fix, task 2.8, plus tasks 2.9–2.15 remediating a pre-PR four-lens review — the BLOCKER absolute-path fix, the PRAGMA-provenance gap, error-context wrapping, a lint-gate blind spot, and three test-quality fixes) | **`size:exception` — owner-accepted** | Owner decision: fix every finding in this single PR rather than dropping scope or re-splitting an already-implemented PR. Documented here, not hidden |
+| 2 | **~1,056 measured** (`git diff --numstat main...HEAD`, excluding `go.sum`: ~862 code — `_txlock` fix task 2.8 plus tasks 2.9–2.15 remediating a pre-PR four-lens review — + ~184 in this same branch's `spec.md`/`design.md`/`tasks.md` corrections + ~10 in `docs/04-decisions.md`) | **`size:exception` — owner-accepted** | Owner decision: fix every finding in this single PR rather than dropping scope or re-splitting an already-implemented PR. Documented here, not hidden. Superseded the ~750 pre-measurement estimate |
 | 3 | ~380 (300 + 80 ▲ for the store-API golden, task 3.6) | **High** | Design's own designated split point is task 3.6 (store-API golden) — independent of the migration runner, move it to its own chained link if the diff crosses 400 |
 | 4 | ~345 (330 + ~15 for task 4.3, the FK-violation test deferred from PR 2 — see task 2.10's note) | Medium | |
 | 5 | ~200 | Low | |
 | 6 | ~230 (restored — Conflict C2 resolved in favour of spec.md; types, loader and `format_example.json` back in scope) | Low | |
 | 7 | ~150 | Low | |
-| **Total** | **~2,070** | — | `go.sum` (PR 2) excluded from the human-review budget; the schema golden dumps (PRs 3–4) are **not** excluded — their diff is the point of the gate |
+| **Total** | **~2,376** (PR 2 now measured, not estimated) | — | `go.sum` (PR 2) excluded from the human-review budget; the schema golden dumps (PRs 3–4) are **not** excluded — their diff is the point of the gate |
 
 - **Chained PRs recommended: Yes** (already the resolved delivery strategy for this change).
 - **Decision needed before apply: Yes** — specifically whether PR 3 preemptively splits off
