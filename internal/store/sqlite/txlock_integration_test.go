@@ -58,12 +58,15 @@ func TestOpenTxlockIsImmediate(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "vault.db")
 	ctx := context.Background()
 
-	dsn := buildDSN(dbPath)
+	dsn, err := buildDSN(dbPath)
+	if err != nil {
+		t.Fatalf("buildDSN(%q) = _, %v, want nil error", dbPath, err)
+	}
 	dbA, err := driver.Open(dsn)
 	if err != nil {
 		t.Fatalf("driver.Open(%q) = _, %v, want nil error", dsn, err)
 	}
-	defer dbA.Close()
+	defer dbA.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	txA, err := dbA.BeginTx(ctx, nil)
 	if err != nil {
@@ -85,14 +88,14 @@ func TestOpenTxlockIsImmediate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("driver.Open(%q) = _, %v, want nil error", dsnB, err)
 	}
-	defer dbB.Close()
+	defer dbB.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
 	start := time.Now()
 	txB, err := dbB.BeginTx(ctx, nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
-		txB.Rollback() //nolint:errcheck
+		txB.Rollback() //nolint:errcheck // best-effort cleanup, the test already fails via t.Fatalf below
 		t.Fatalf("connB.BeginTx() succeeded in %v while connA's transaction (built from buildDSN's own DSN) was still open, want SQLITE_BUSY — connA's BEGIN did not take the write lock, so buildDSN's _txlock is not in effect as \"immediate\"", elapsed)
 	}
 	if elapsed > 2*time.Second {

@@ -3,36 +3,50 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
 	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
 
-// Vault is an open SQLite database file, migrated to the schema this binary
-// carries. It reads and writes no domain row: the handle below is
-// unexported and this package exports no way to run arbitrary SQL against
-// it. See docs/06-harness.md §1.
+// Vault is an open SQLite database file with the operational PRAGMAs
+// applied and FTS5 registered on every connection (design D2/D3). It reads
+// and writes no domain row: the handle below is unexported and this
+// package exports no way to run arbitrary SQL against it. See
+// docs/06-harness.md §1.
+//
+// Vault does not yet guarantee the file is migrated to the schema this
+// binary carries — the migration runner lands in PR 3 of this same change
+// (openspec/changes/complete-harness). Until then, Open only opens the
+// connection pool and pings it.
 type Vault struct {
 	db   *sql.DB
 	path string
 }
 
-// Open opens dbPath, applies the operational PRAGMAs, registers FTS5 on
-// every connection, and migrates the vault forward. Resolving where dbPath
-// lives is the caller's job — this function accepts a path and resolves
-// nothing else (design D2/D3, spec R2.3).
+// Open opens dbPath, applies the operational PRAGMAs, and registers FTS5
+// on every connection (design D2/D3, spec R2.3). Resolving where dbPath
+// lives is the caller's job — this function accepts an absolute path and
+// resolves nothing else.
+//
+// Open does not yet migrate the vault forward: that is PR 3 of this same
+// change (openspec/changes/complete-harness) — the next reader extending
+// this function with migration logic should not assume it already runs.
 func Open(ctx context.Context, dbPath string) (*Vault, error) {
-	dsn := buildDSN(dbPath)
+	dsn, err := buildDSN(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open vault %q: %w", dbPath, err)
+	}
 
 	db, err := driver.Open(dsn, initConn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open vault %q: %w", dbPath, err)
 	}
 
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, err
+		return nil, fmt.Errorf("open vault %q: ping: %w", dbPath, errors.Join(err, db.Close()))
 	}
 
 	return &Vault{db: db, path: dbPath}, nil
