@@ -9,7 +9,7 @@
 ## Context
 
 This is a **new** problem created by Nooma's topology, and it does not exist in an always-on
-service: the binary runs on a laptop that closes, on a Raspberry that reboots, on a machine
+service: the binary runs on a laptop that closes, on a home server that reboots, on a machine
 that is powered off over the weekend.
 
 Questions that must be answered before writing the scheduler:
