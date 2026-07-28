@@ -1,0 +1,29 @@
+# Binaries
+/nooma
+/dist/
+*.exe
+
+# Vaults — never commit someone's brain
+*.nooma/
+*.db
+*.db-wal
+*.db-shm
+*.noomabundle
+nooma.lock
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Go
+*.test
+*.out
+/coverage.*
+
+# Tooling
+.DS_Store
+
+# Local agent tooling — generated, contains absolute paths to the machine
+.atl/
+.claude/settings.local.json

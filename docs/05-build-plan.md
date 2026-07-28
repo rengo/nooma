@@ -1,0 +1,95 @@
+# 05 — Build plan (v1)
+
+Milestone order. Each one ends in something **runnable and demonstrable**, with tests.
+Cross-cutting rule: the cognitive core is pure services behind interfaces (repos, providers,
+channels) — unit tests touch neither SQLite nor the network; integration tests do (against a
+real temporary vault). See [`06-harness.md`](06-harness.md).
+
+## M0 — Skeleton: binary + vault
+
+Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver).
+
+- ADR-0001 spike: driver + sqlite-vec + FTS5 working in a test `main`, cross-compilation
+  verified against the promised targets. THIS spike closes ADR-0001 — before anything else
+  gets written.
+- Go repo layout (`cmd/nooma`, `internal/...`), config loader (yml + .env), vault resolution
+  (arg → env → portable → home), single-writer lockfile.
+- Embedded migrations + `PRAGMA user_version`; creates the complete schema from
+  [`03-data-model.md`](03-data-model.md).
+- CLI: `init` (minimal wizard), `serve` (HTTP hello + UI placeholder), `status`, `version`,
+  `doctor` (config + integrity_check).
+- **Demo**: `nooma init && nooma serve` on Linux/macOS/Windows/ARM.
+
+## M1 — Capture and recall
+
+Prior decisions: **[ADR-0002](adr/0002-default-llm-preset.md)** (LLM preset),
+**[ADR-0003](adr/0003-embeddings.md)** (embeddings),
+**[ADR-0005](adr/0005-v1-scope.md)** (scope),
+**[ADR-0010](adr/0010-hybrid-recall-fusion.md)** (fusion).
+
+- `LLMProvider` / `EmbeddingProvider` interfaces + implementations (anthropic, openai, ollama).
+  `tasks:` config routing task → provider.
+- Capture pipeline: classify (the complete taxonomy from
+  [`02-cognitive-core.md`](02-cognitive-core.md) §5, with per-field degradation to null), unit
+  persistence, embedding + FTS sync.
+- Hybrid recall (RRF) + dedup/relation judge with persist/surface thresholds.
+- In-place correction edits + signal.
+- HTTP API: capture, recall, read-only units.
+- **Demo**: capture via API/CLI, ask "what do you know about X?" and get a real recall.
+
+## M2 — Sleep and weight
+
+Prior decisions: **[ADR-0009](adr/0009-scheduler-downtime.md)** (downtime).
+
+- `effective_weight` + priority + the two focuses + hysteresis (pure functions, HEAVILY tested).
+- In-process scheduler (cron + boot catch-up per ADR-0009).
+- Nightly consolidation: the 8 phases in order, each individually invocable
+  (`nooma consolidate`). `decision_log` in every phase with an effect.
+- **Demo**: a vault with simulated weeks of data — cold things get archived, related things get
+  connected, beliefs get derived; the decision_log tells the story.
+
+## M3 — The mouth: Telegram + prospection
+
+Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel).
+
+- Telegram adapter (channel interface, `allowed_chat_ids`).
+- Triggers: armed at capture (dated events, recurring ones), due scan, digest with cadence +
+  `current_state` gates, interruptive push ≥ 0.7 + quiet hours.
+- Ephemeral timers end to end (arm, list, cancel, fire with rephrasing).
+- Conversational check-ins: goal nudge, uncertain relation confirmation, state ("feeling
+  loaded?"), task check-in — the orthogonal classify fields from §5.
+- **Demo**: "remind me in 15 min about X" over Telegram, and a real morning digest.
+
+## M4 — The mirror: complete UI
+
+Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
+**[ADR-0008](adr/0008-ui-stack.md)** (UI stack).
+
+- All the views from [`01-architecture.md`](01-architecture.md) Layer 2: today/focus, capture,
+  graph (with edge curation), beliefs (edit/delete → signals), activity, admin.
+- Auth token when bind ≠ localhost.
+- **Demo**: a fully usable product without touching the terminal.
+
+## M5 — The learner
+
+- `learning_signals` emitted from ALL surfaces (chat + UI).
+- The `learn` pass: per-type relation thresholds + goal cadence with cooldown.
+- Natural-language summary (UI + API) of what was learned, correctable.
+- **Demo**: reject 6 `same_topic` connections → the threshold rises and the decision_log
+  explains it.
+
+## M6 — Release polish
+
+Prior decisions: **[ADR-0004](adr/0004-license.md)** (license).
+
+- `nooma export` / `import` (.noomabundle), complete `doctor` (providers, hardware, channels),
+  embedding `reindex`.
+- Goreleaser / multi-platform binary CI, public README, license.
+- **Demo**: installable release used by a stranger without help.
+
+## After v1
+
+Multi-format perception + measurements + tracking UI (v2) → voice transcription →
+multi-tenant mode → extra channels. None of this constrains the v1 design: the seams are
+already there (perception door with shape-based routing, `measurements` in the schema,
+channel = adapter).
