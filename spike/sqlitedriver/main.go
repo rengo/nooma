@@ -1,9 +1,10 @@
-// Spike for ADR-0001: can ncruces/go-sqlite3 (cgo-free) carry sqlite-vec and FTS5
-// well enough to be Nooma's storage engine?
+// Spike for ADR-0001, second run: ncruces/go-sqlite3 at its CURRENT version, with no
+// sqlite-vec, and vector proximity done by brute force in Go.
 //
-// THROWAWAY CODE. This branch is never merged. Its output is a decision recorded
-// in docs/adr/0001-sqlite-driver.md, not code that ships. No error handling
-// discipline, no tests, no dependency rule — it exists to produce numbers.
+// The first run measured v0.21.3 + sqlite-vec and found the combination only compiles
+// pinned to late 2024. This run measures the configuration actually being accepted.
+//
+// THROWAWAY CODE. This branch is never merged.
 package main
 
 import (
@@ -17,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/asg017/sqlite-vec-go-bindings/ncruces"
 	"github.com/ncruces/go-sqlite3"
+	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
 
 const (
-	dim      = 768 // nomic-embed-text, the Ollama default from ADR-0003
+	dim      = 768
 	units    = 10_000
 	queries  = 200
 	rrfK     = 60
@@ -48,19 +49,24 @@ func main() {
 	dir, err := os.MkdirTemp("", "nooma-spike-*")
 	must(err)
 	defer os.RemoveAll(dir)
-	vault := filepath.Join(dir, "nooma.db")
 
-	db, err := sqlite3.Open("file:" + vault)
+	db, err := sqlite3.Open("file:" + filepath.Join(dir, "nooma.db"))
 	must(err)
 	defer db.Close()
 
+	// FTS5 is opt-in in this driver: registered per connection, not compiled in.
+	must(fts5.Register(db))
+
+	fmt.Printf("driver: ncruces/go-sqlite3, no sqlite-vec\n")
+	fmt.Printf("sqlite: %s\n\n", scalar(db, `select sqlite_version()`))
+
 	criterion3(db)
 	schema(db)
-	corpus := seed(db)
-	criterion1(db)
+	seed(db)
+	idx := criterion1(db)
 	criterion2(db)
 	criterion4(db, dir)
-	criterion67(db, corpus)
+	criterion67(db, idx)
 
 	report()
 }
@@ -72,17 +78,18 @@ func criterion3(db *sqlite3.Conn) {
 	must(db.Exec(`PRAGMA foreign_keys = ON`))
 	must(db.BusyTimeout(5 * time.Second))
 
-	journal := scalar(db, `PRAGMA journal_mode`)
-	fk := scalar(db, `PRAGMA foreign_keys`)
-
-	ok := journal == "wal" && fk == "1"
-	check(3, "operational PRAGMAs", ok, "journal_mode=%s foreign_keys=%s busy_timeout=5s", journal, fk)
+	journal, fk := scalar(db, `PRAGMA journal_mode`), scalar(db, `PRAGMA foreign_keys`)
+	check(3, "operational PRAGMAs", journal == "wal" && fk == "1",
+		"journal_mode=%s foreign_keys=%s busy_timeout=5s", journal, fk)
 }
 
 // ------------------------------------------------------------------- schema
 
+// Note the difference from the first run: embeddings are a plain table with a BLOB
+// column. No virtual table, no extension. Everything needed to store them is present
+// in every SQLite build ever compiled.
 func schema(db *sqlite3.Conn) {
-	must(db.Exec(fmt.Sprintf(`
+	must(db.Exec(`
 		CREATE TABLE units (
 		  id              TEXT PRIMARY KEY,
 		  type            TEXT NOT NULL,
@@ -93,6 +100,13 @@ func schema(db *sqlite3.Conn) {
 		  created_at      TEXT NOT NULL
 		);
 		CREATE INDEX idx_units_status_touched ON units(status, last_touched_at);
+
+		CREATE TABLE unit_embeddings (
+		  unit_id   TEXT PRIMARY KEY REFERENCES units(id) ON DELETE CASCADE,
+		  model     TEXT NOT NULL,
+		  dim       INTEGER NOT NULL,
+		  embedding BLOB NOT NULL
+		);
 
 		CREATE VIRTUAL TABLE units_fts USING fts5(content, content='units', content_rowid='rowid');
 
@@ -106,9 +120,7 @@ func schema(db *sqlite3.Conn) {
 		  INSERT INTO units_fts(units_fts, rowid, content) VALUES('delete', old.rowid, old.content);
 		  INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);
 		END;
-
-		CREATE VIRTUAL TABLE unit_embeddings USING vec0(unit_id TEXT PRIMARY KEY, embedding FLOAT[%d]);
-	`, dim)))
+	`))
 }
 
 // -------------------------------------------------------------------- corpus
@@ -117,33 +129,28 @@ var vocab = strings.Fields(`brain memory vault decay weight relation trigger con
 	nudge belief energy focus capture recall insight loop pattern signal threshold digest
 	telegram schedule archive resurface graph confidence timer prospection glass box`)
 
-func seed(db *sqlite3.Conn) [][]float32 {
-	rng := rand.New(rand.NewSource(42)) // deterministic: the spike must be reproducible
-	corpus := make([][]float32, 0, units)
-
+func seed(db *sqlite3.Conn) {
+	rng := rand.New(rand.NewSource(42))
 	must(db.Exec(`BEGIN`))
 	insUnit, _, err := db.Prepare(`INSERT INTO units(id,type,content,last_touched_at,created_at) VALUES (?,?,?,?,?)`)
 	must(err)
-	insVec, _, err := db.Prepare(`INSERT INTO unit_embeddings(unit_id, embedding) VALUES (?,?)`)
+	insVec, _, err := db.Prepare(`INSERT INTO unit_embeddings(unit_id,model,dim,embedding) VALUES (?,?,?,?)`)
 	must(err)
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for i := range units {
 		id := fmt.Sprintf("unit-%05d", i)
-		text := sentence(rng)
-		vec := randomVector(rng)
-		corpus = append(corpus, vec)
-
-		bindAll(insUnit, id, "knowledge", text, now, now)
+		bindText(insUnit, id, "knowledge", sentence(rng), now, now)
 		mustStep(insUnit)
-		bindAll(insVec, id)
-		must(insVec.BindBlob(2, serialize(vec)))
+
+		bindText(insVec, id, "nomic-embed-text")
+		must(insVec.BindInt(3, dim))
+		must(insVec.BindBlob(4, serialize(randomVector(rng))))
 		mustStep(insVec)
 	}
 	insUnit.Close()
 	insVec.Close()
 	must(db.Exec(`COMMIT`))
-	return corpus
 }
 
 func sentence(rng *rand.Rand) string {
@@ -176,29 +183,79 @@ func serialize(v []float32) []byte {
 	return b
 }
 
-// ---------------------------------------------------------------- criterion 1
-
-func criterion1(db *sqlite3.Conn) {
-	count := scalar(db, `SELECT count(*) FROM unit_embeddings`)
-	rng := rand.New(rand.NewSource(7))
-	hits := knn(db, randomVector(rng), topK)
-	ok := count == fmt.Sprint(units) && len(hits) == topK
-	check(1, "sqlite-vec loads, vec0 answers KNN", ok,
-		"%s vectors of dim %d stored, KNN returned %d neighbours", count, dim, len(hits))
+func deserialize(b []byte) []float32 {
+	v := make([]float32, len(b)/4)
+	for i := range v {
+		v[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:]))
+	}
+	return v
 }
 
-func knn(db *sqlite3.Conn, q []float32, k int) []string {
-	stmt, _, err := db.Prepare(`SELECT unit_id FROM unit_embeddings WHERE embedding MATCH ? AND k = ?`)
+// ---------------------------------------------------------------- criterion 1
+
+// index is the whole vector store: ids and their normalized vectors, resident in RAM.
+type index struct {
+	ids  []string
+	vecs [][]float32
+}
+
+// load is a cost the sqlite-vec path does not pay: every vector has to be read out of
+// SQLite and deserialized at startup. On a large vault this is the number that hurts,
+// so it gets measured rather than assumed.
+func load(db *sqlite3.Conn) (index, time.Duration) {
+	start := time.Now()
+	stmt, _, err := db.Prepare(`SELECT unit_id, embedding FROM unit_embeddings`)
 	must(err)
 	defer stmt.Close()
-	must(stmt.BindBlob(1, serialize(q)))
-	must(stmt.BindInt(2, k))
 
-	var out []string
+	var idx index
 	for stmt.Step() {
-		out = append(out, stmt.ColumnText(0))
+		idx.ids = append(idx.ids, stmt.ColumnText(0))
+		idx.vecs = append(idx.vecs, deserialize(stmt.ColumnRawBlob(1)))
 	}
 	must(stmt.Err())
+	return idx, time.Since(start)
+}
+
+func criterion1(db *sqlite3.Conn) index {
+	idx, elapsed := load(db)
+
+	// Correctness, not just speed: a vector must be its own nearest neighbour.
+	probe := 4242
+	hits := idx.knn(idx.vecs[probe], topK)
+	selfFound := len(hits) > 0 && hits[0] == idx.ids[probe]
+
+	ok := len(idx.ids) == units && len(hits) == topK && selfFound
+	check(1, "vectors stored in SQLite, brute-force KNN in Go", ok,
+		"%d vectors of dim %d; index loaded in %v (%s RAM); KNN returned %d, self-match=%v",
+		len(idx.ids), dim, round(elapsed), human(len(idx.ids)*dim*4), len(hits), selfFound)
+	return idx
+}
+
+// knn is the entire vector search. Vectors are unit-normalized, so cosine similarity is
+// a dot product and top-K is a selection over the scored slice.
+func (idx index) knn(q []float32, k int) []string {
+	type hit struct {
+		i   int
+		sim float32
+	}
+	hits := make([]hit, len(idx.vecs))
+	for i, v := range idx.vecs {
+		var s float32
+		for j := range q {
+			s += q[j] * v[j]
+		}
+		hits[i] = hit{i, s}
+	}
+	sort.Slice(hits, func(a, b int) bool { return hits[a].sim > hits[b].sim })
+
+	if k > len(hits) {
+		k = len(hits)
+	}
+	out := make([]string, k)
+	for i := range out {
+		out[i] = idx.ids[hits[i].i]
+	}
 	return out
 }
 
@@ -210,10 +267,9 @@ func criterion2(db *sqlite3.Conn) {
 	for i := range ftsOps {
 		switch i % 3 {
 		case 0:
-			id := fmt.Sprintf("extra-%05d", i)
 			must(db.Exec(fmt.Sprintf(
-				`INSERT INTO units(id,type,content,last_touched_at,created_at) VALUES ('%s','task','%s','t','t')`,
-				id, sentence(rng))))
+				`INSERT INTO units(id,type,content,last_touched_at,created_at) VALUES ('extra-%05d','task','%s','t','t')`,
+				i, sentence(rng))))
 		case 1:
 			must(db.Exec(fmt.Sprintf(
 				`UPDATE units SET content='%s' WHERE id='unit-%05d'`, sentence(rng), rng.Intn(units))))
@@ -223,27 +279,22 @@ func criterion2(db *sqlite3.Conn) {
 	}
 	must(db.Exec(`COMMIT`))
 
-	// 'integrity-check' rebuilds nothing; it reports whether the index matches the table.
 	err := db.Exec(`INSERT INTO units_fts(units_fts) VALUES('integrity-check')`)
-	inSync := err == nil
+	nUnits, nFts := scalar(db, `SELECT count(*) FROM units`), scalar(db, `SELECT count(*) FROM units_fts`)
 
-	nUnits := scalar(db, `SELECT count(*) FROM units`)
-	nFts := scalar(db, `SELECT count(*) FROM units_fts`)
-	ok := inSync && nUnits == nFts
 	detail := fmt.Sprintf("%d mixed ops; units=%s fts=%s; integrity-check", ftsOps, nUnits, nFts)
-	if inSync {
+	if err == nil {
 		detail += " clean"
 	} else {
 		detail += fmt.Sprintf(" FAILED: %v", err)
 	}
-	check(2, "FTS5 stays in sync through triggers", ok, "%s", detail)
+	check(2, "FTS5 stays in sync through triggers", err == nil && nUnits == nFts, "%s", detail)
 }
 
 // ---------------------------------------------------------------- criterion 4
 
 func criterion4(db *sqlite3.Conn, dir string) {
 	integrity := scalar(db, `PRAGMA integrity_check`)
-
 	backup := filepath.Join(dir, "backup.db")
 	errVacuum := db.Exec(fmt.Sprintf(`VACUUM INTO '%s'`, backup))
 
@@ -251,69 +302,60 @@ func criterion4(db *sqlite3.Conn, dir string) {
 	if fi, err := os.Stat(backup); err == nil {
 		size = fi.Size()
 	}
-	// The backup must be a usable vault, not just a file that exists.
 	readable := false
 	if bdb, err := sqlite3.Open("file:" + backup); err == nil {
-		readable = scalar(bdb, `SELECT count(*) FROM units`) != ""
+		readable = scalar(bdb, `SELECT count(*) FROM unit_embeddings`) != ""
 		bdb.Close()
 	}
 
-	ok := integrity == "ok" && errVacuum == nil && readable
-	check(4, "VACUUM INTO and integrity_check with WAL open", ok,
+	check(4, "VACUUM INTO and integrity_check with WAL open",
+		integrity == "ok" && errVacuum == nil && readable,
 		"integrity_check=%s; backup %d KB, reopened and readable=%v", integrity, size/1024, readable)
 }
 
 // ------------------------------------------------------------- criteria 6 & 7
 
-func criterion67(db *sqlite3.Conn, corpus [][]float32) {
+func criterion67(db *sqlite3.Conn, idx index) {
 	rng := rand.New(rand.NewSource(1234))
 
-	// --- 6: hybrid recall latency
 	lat := make([]time.Duration, 0, queries)
 	for range queries {
-		q := corpus[rng.Intn(len(corpus))]
+		q := idx.vecs[rng.Intn(len(idx.vecs))]
 		term := vocab[rng.Intn(len(vocab))]
 		start := time.Now()
-		vecHits := knn(db, q, topK)
-		ftsHits := fts(db, term, topK)
-		_ = rrf(vecHits, ftsHits)
+		_ = rrf(idx.knn(q, topK), fts(db, term, topK))
 		lat = append(lat, time.Since(start))
 	}
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
-	p50 := lat[len(lat)*50/100]
-	p95 := lat[len(lat)*95/100]
-	p99 := lat[len(lat)*99/100]
+	p50, p95, p99 := lat[len(lat)*50/100], lat[len(lat)*95/100], lat[len(lat)*99/100]
 
 	check(6, "hybrid recall p95 < 100ms over 10k units", p95 < 100*time.Millisecond,
 		"p50=%v p95=%v p99=%v over %d queries", round(p50), round(p95), round(p99), queries)
 
-	// --- 7: write throughput (DB path only; embedding generation is provider latency)
 	insUnit, _, err := db.Prepare(`INSERT INTO units(id,type,content,last_touched_at,created_at) VALUES (?,?,?,?,?)`)
 	must(err)
 	defer insUnit.Close()
-	insVec, _, err := db.Prepare(`INSERT INTO unit_embeddings(unit_id, embedding) VALUES (?,?)`)
+	insVec, _, err := db.Prepare(`INSERT INTO unit_embeddings(unit_id,model,dim,embedding) VALUES (?,?,?,?)`)
 	must(err)
 	defer insVec.Close()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	start := time.Now()
 	for i := range writeOps {
-		// One transaction per capture: a capture is a user-facing event, not a batch.
 		must(db.Exec(`BEGIN`))
 		id := fmt.Sprintf("w-%05d", i)
-		bindAll(insUnit, id, "task", sentence(rng), now, now)
+		bindText(insUnit, id, "task", sentence(rng), now, now)
 		mustStep(insUnit)
-		bindAll(insVec, id)
-		must(insVec.BindBlob(2, serialize(randomVector(rng))))
+		bindText(insVec, id, "nomic-embed-text")
+		must(insVec.BindInt(3, dim))
+		must(insVec.BindBlob(4, serialize(randomVector(rng))))
 		mustStep(insVec)
 		must(db.Exec(`COMMIT`))
 	}
-	elapsed := time.Since(start)
-	rate := float64(writeOps) / elapsed.Seconds()
+	rate := float64(writeOps) / time.Since(start).Seconds()
 
 	check(7, "write throughput >= 50 units/s", rate >= 50,
-		"%.0f units/s (%d captures in %v, one transaction each, unit+vector+FTS)",
-		rate, writeOps, round(elapsed))
+		"%.0f units/s (%d captures, one transaction each, unit+vector+FTS)", rate, writeOps)
 }
 
 func fts(db *sqlite3.Conn, term string, k int) []string {
@@ -332,8 +374,6 @@ func fts(db *sqlite3.Conn, term string, k int) []string {
 	return out
 }
 
-// rrf is the fusion from ADR-0010, here only to make the latency measurement honest:
-// the real recall path pays for fusion too.
 func rrf(lists ...[]string) []string {
 	score := map[string]float64{}
 	for _, l := range lists {
@@ -352,8 +392,8 @@ func rrf(lists ...[]string) []string {
 // -------------------------------------------------------------------- report
 
 func report() {
-	fmt.Printf("\nADR-0001 spike — ncruces/go-sqlite3 + sqlite-vec\n")
-	fmt.Printf("%s\n", strings.Repeat("=", 78))
+	fmt.Printf("\nADR-0001 spike (run 2) — ncruces current, brute-force vectors\n")
+	fmt.Println(strings.Repeat("=", 78))
 	failed := 0
 	for _, r := range results {
 		mark := "PASS"
@@ -363,7 +403,7 @@ func report() {
 		}
 		fmt.Printf("[%s] criterion %d — %s\n         %s\n", mark, r.n, r.name, r.detail)
 	}
-	fmt.Printf("%s\n", strings.Repeat("=", 78))
+	fmt.Println(strings.Repeat("=", 78))
 	fmt.Printf("%d/%d measured criteria passed (5 is a separate cross-compilation check)\n",
 		len(results)-failed, len(results))
 }
@@ -380,7 +420,7 @@ func scalar(db *sqlite3.Conn, q string) string {
 	return ""
 }
 
-func bindAll(stmt *sqlite3.Stmt, vals ...string) {
+func bindText(stmt *sqlite3.Stmt, vals ...string) {
 	must(stmt.Reset())
 	for i, v := range vals {
 		must(stmt.BindText(i+1, v))
@@ -392,7 +432,14 @@ func mustStep(stmt *sqlite3.Stmt) {
 	must(stmt.Err())
 }
 
-func round(d time.Duration) time.Duration { return d.Round(time.Microsecond * 10) }
+func human(b int) string {
+	if b > 1<<20 {
+		return fmt.Sprintf("%.0f MB", float64(b)/(1<<20))
+	}
+	return fmt.Sprintf("%.0f KB", float64(b)/(1<<10))
+}
+
+func round(d time.Duration) time.Duration { return d.Round(10 * time.Microsecond) }
 
 func must(err error) {
 	if err != nil {

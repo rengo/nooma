@@ -4,11 +4,21 @@ Run on 2026-07-28. **This branch is never merged.** Its output is the decision r
 `docs/adr/0001-sqlite-driver.md`; the code here exists only to produce these numbers and to
 let anyone reproduce them.
 
+The spike ran **twice**, because the first run changed what was worth measuring:
+
+| | Configuration | Outcome |
+|---|---|---|
+| **Run 1** | `ncruces` v0.21.3 + sqlite-vec | Works, but only pinned to late 2024 |
+| **Run 2** | `ncruces` v0.35.2, no sqlite-vec, brute-force vectors in Go | Better on every axis, on current software |
+
+**Run 2 is the configuration being accepted.** Run 1 is kept because it is the evidence for
+why sqlite-vec was dropped, not just an earlier draft.
+
 Reproduce with:
 
 ```bash
-go run ./spike/sqlitedriver   # the seven criteria
-go run ./spike/bruteforce     # the side question: is sqlite-vec needed at all?
+go run ./spike/sqlitedriver   # the seven criteria, run 2 configuration
+go run ./spike/bruteforce     # brute-force scaling curve
 ```
 
 ## Hardware
@@ -112,13 +122,78 @@ extrapolation puts it far past acceptable.
 Brute force is comfortable to roughly **50k units**, which is years of a single person's
 capture at any plausible rate.
 
+---
+
+# Run 2 — `ncruces` v0.35.2, no sqlite-vec
+
+The configuration being accepted. Vectors are stored as `BLOB` in an ordinary table and
+proximity search is a dot product over an in-memory index.
+
+| Component | Version |
+|---|---|
+| `ncruces/go-sqlite3` | **v0.35.2** (2026-07-06) |
+| SQLite (translated) | **3.53.3** |
+| sqlite-vec | not used |
+
+## Results
+
+| # | Criterion | Result | Measurement |
+|---|---|---|---|
+| 1 | Vectors stored, KNN correct | **PASS** | 10,000 vectors dim 768; index loads in **41.98 ms** (29 MB RAM); self-match correct |
+| 2 | FTS5 in sync through triggers | **PASS** | 1,000 mixed ops; `units`=10,001, `units_fts`=10,001; `integrity-check` clean |
+| 3 | Operational PRAGMAs | **PASS** | `journal_mode=wal`, `foreign_keys=1`, `busy_timeout=5s` |
+| 4 | `VACUUM INTO` + `integrity_check` | **PASS** | `integrity_check=ok`; 42 MB backup reopened and readable |
+| 5 | Cross-compilation, no C toolchain | **PASS** | 6/6 targets, `statically linked` |
+| 6 | Hybrid recall p95 < 100 ms | **PASS** | p50 13.61 ms, **p95 17.85 ms**, p99 21.64 ms |
+| 7 | Write throughput ≥ 50 units/s | **PASS** | **2,817 units/s** |
+
+## Run 1 vs run 2
+
+| | Run 1 (pinned + sqlite-vec) | Run 2 (current + brute force) |
+|---|---|---|
+| SQLite | 3.47.0 (Oct 2024) | **3.53.3** |
+| Driver age | 20 months stale | current |
+| Recall p95 | 21.72 ms | **17.85 ms** |
+| Write throughput | 1,296 units/s | **2,817 units/s** |
+| Binary size | ~9 MB | 16 MB |
+| Extra dependency | sqlite-vec | none |
+
+Dropping sqlite-vec made the system **faster, more current, and simpler**, at the cost of a
+larger binary and vectors resident in RAM.
+
+## Two findings that matter for implementation
+
+**FTS5 is opt-in and per connection.** In v0.35 it is not compiled into the SQLite build; it
+is registered as an extension:
+
+```go
+import "github.com/ncruces/go-sqlite3/ext/fts5"
+must(fts5.Register(db))
+```
+
+The store must register it on **every connection it opens**, not once at startup. A
+connection that skips it fails with `no such module: fts5` only when an FTS query runs —
+late, and far from the cause.
+
+**Loadable extensions are not dead, they moved.** v0.35 exposes
+`sqlite3.ExtensionInit(db, mod.New, mod.DylinkInfo)`, which is how its own FTS5 package
+works. sqlite-vec is therefore not permanently out of reach — it would need porting to that
+mechanism rather than shipping a `.wasm`. That door stays open if brute force is ever
+outgrown.
+
+## Binary size
+
+9 MB → 16 MB. `wasm2go` emits substantially more Go than the previous wasm runtime carried.
+Still a single static file, still no toolchain, but worth recording rather than discovering
+at release time.
+
 ## What this leaves open
 
-The measured criteria pass, but two things are unresolved and neither is a number:
+1. **Minimum supported hardware is undecided.** The Raspberry Pi 4 target was dropped as a
+   product decision; the replacement floor is due before M6. Until then criterion 6 is a
+   regression detector against a recorded machine, not an absolute guarantee.
+2. **Brute force has a ceiling.** Comfortable to roughly 50k units; beyond that, the index
+   both slows down and stays resident. The recall interface must hide the implementation so
+   this can be replaced without touching the core.
 
-1. **Criterion 6 is unmet on target hardware**, with a projection that it fails.
-2. **The sqlite-vec path is pinned 20 months back with no clear upstream route forward.**
-   ADR-0001's criteria never asked "is this maintainable", which is a gap in the criteria
-   themselves rather than a property of the driver.
-
-The decision belongs in the ADR, not here.
+The decisions belong in the ADRs, not here.
