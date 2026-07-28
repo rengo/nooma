@@ -98,7 +98,7 @@ automated gate.
       Verify: `go build ./...` succeeds; `go.sum` gains the driver's hashes (excluded from the
       human-review line budget per proposal §5).
       Requirement: R1.1, R1.2.
-- [ ] **2.2** [TDD] Write `TestFTS5RegisteredOnEveryConnection` and `TestFTS5MissingWithoutRegistration`
+- [x] **2.2** [TDD] Write `TestFTS5RegisteredOnEveryConnection` and `TestFTS5MissingWithoutRegistration`
       (control, design §4.3) in `test/integration/open_test.go` (tag `integration`).
       RED: compile error `undefined: sqlite.Open` — the package exists (2.1's `doc.go`) but `Open`
       does not.
@@ -108,12 +108,12 @@ automated gate.
       `Vault.Close()`, `Vault.Path()`.
       GREEN: `make test-integration`.
       Requirement: R2.2, R2.3.
-- [ ] **2.3** [TDD] Write `TestFTS5AvailableAcrossPoolConnections` (belt-and-braces, design §4.3).
+- [x] **2.3** [TDD] Write `TestFTS5AvailableAcrossPoolConnections` (belt-and-braces, design §4.3).
       RED: compile error `undefined: (*Vault).Stats`.
       Implement: `Vault.Stats() sql.DBStats`.
       GREEN: `make test-integration`.
       Requirement: R2.2 (pooling evidence for D2).
-- [ ] **2.4** [TDD] Write `TestOpenAppliesPragmas` (L3).
+- [x] **2.4** [TDD] Write `TestOpenAppliesPragmas` (L3).
       RED: assertion failure — `journal_mode = delete`, `foreign_keys = 0` (2.2's bare DSN carries
       no `_pragma` parameters yet, per proposal §6's recorded red).
       Implement: `buildDSN` (D3) — `net/url`-escaped `file:` DSN, PRAGMAs in order
