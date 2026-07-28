@@ -5,15 +5,17 @@
 | Piece | Choice | Notes |
 |---|---|---|
 | Language | Go | Cross-compiles to Linux/macOS/Windows/ARM, no runtime, goroutines for the scheduler |
-| Storage | SQLite (WAL) | One file per vault. ACID transactions |
-| Vectors | sqlite-vec | Embeddings in the same DB (`vec0` virtual table) |
+| Storage | SQLite (WAL) via `ncruces/go-sqlite3` | One file per vault. ACID transactions. No cgo ([ADR-0001](adr/0001-sqlite-driver.md)) |
+| Vectors | `BLOB` + brute-force dot product in Go | No extension; proximity search is ~40 lines ([ADR-0012](adr/0012-vector-proximity-search.md)) |
 | Full-text | FTS5 | Hybrid search (lexical + semantic) with no extra infrastructure |
 | Jobs | Goroutines + in-process scheduler | Internal cron. No external queues, no Redis |
 | UI | Served by the same binary | SSR + htmx as the base (see [ADR-0008](adr/0008-ui-stack.md)) |
 | LLM | Per-provider interfaces | Anthropic, OpenAI, Ollama, whisper.cpp — configured per task |
 
 Explicitly discarded: libSQL/Turso (a fork, a dependency with no gain), Rust (pays iteration
-speed for performance this project does not need), external queues.
+speed for performance this project does not need), external queues, and **sqlite-vec** — it
+only compiles against a driver version frozen in 2024, and a brute-force scan measured faster
+at target scale ([ADR-0012](adr/0012-vector-proximity-search.md)).
 
 ## The binary and the vault
 

@@ -12,7 +12,7 @@ These documents are the basis for development. Read them in order:
 | [00-vision.md](00-vision.md) | What Nooma is, principles, positioning, license |
 | [01-architecture.md](01-architecture.md) | Binary + vault, three layers, CLI, config, channels, providers |
 | [02-cognitive-core.md](02-cognitive-core.md) | **The canonical specification of the brain** — stack-independent invariants |
-| [03-data-model.md](03-data-model.md) | Complete SQLite schema (sqlite-vec + FTS5), conventions |
+| [03-data-model.md](03-data-model.md) | Complete SQLite schema (embeddings + FTS5), conventions |
 | [04-decisions.md](04-decisions.md) | Status board for decisions D1–D10 |
 | [05-build-plan.md](05-build-plan.md) | Milestone order for v1 |
 | [06-harness.md](06-harness.md) | How it gets built: layout, tests, CI gates |

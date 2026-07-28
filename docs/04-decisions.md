@@ -10,7 +10,7 @@ No argumentation is duplicated here. Reasoning kept in two places desynchronizes
 
 | # | Decision | ADR | Status | Blocks |
 |---|---|---|---|---|
-| D1 | SQLite driver and cross-compilation | [0001](adr/0001-sqlite-driver.md) | **Proposed** — pending the spike | M0 |
+| D1 | SQLite driver and cross-compilation | [0001](adr/0001-sqlite-driver.md) | Accepted — spike run 2026-07-28 | M0 |
 | D2 | Default LLM preset | [0002](adr/0002-default-llm-preset.md) | Accepted | M1 |
 | D3 | Embedding generation | [0003](adr/0003-embeddings.md) | Accepted | M1 |
 | D4 | License: AGPL-3.0 | [0004](adr/0004-license.md) | Accepted (amended 2026-07-28) | Public release |
@@ -23,15 +23,25 @@ No argumentation is duplicated here. Reasoning kept in two places desynchronizes
 
 ## What is still open
 
-**ADR-0001 (SQLite driver)** — the only one left, and it does not close by discussion: it
-closes by measurement. The spike is the first coding task of the project and has seven
-explicit acceptance criteria in the ADR. Until it runs, M0 does not start and the release CI
-cannot be designed.
+**Nothing.** D1–D10 are all closed. ADR-0001 was the last one and it closed by measurement on
+2026-07-28, not by discussion.
+
+Two open items live outside this board:
+
+- **Minimum supported hardware** — a product decision, due before M6
+  ([ADR-0001](adr/0001-sqlite-driver.md)). A self-hosted binary cannot ship without stating
+  what it needs to run.
+- **A contributor CLA** — deliberately not adopted, with the deadline recorded
+  ([ADR-0011](adr/0011-contributor-licensing.md)).
 
 ## New decisions
 
 Any later architectural decision is a new ADR numbered from 0011, with no correspondence to
 this board. This document does not grow: D1–D10 is a closed set.
+
+Already added: [0011](adr/0011-contributor-licensing.md) (contributor licensing) and
+[0012](adr/0012-vector-proximity-search.md) (vector proximity search — a decision ADR-0001
+assumed rather than made, which the spike forced into the open).
 
 ## Known risks
 

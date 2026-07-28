@@ -137,8 +137,9 @@ where it still proves something real.**
   is no global coverage floor — global coverage is a metric you satisfy by writing useless
   getter tests.
 - **L2** is the level this project needs and almost no project has. See §4.
-- **L3** verifies what only SQLite can disprove: migrations, `vec0`, FTS5 synchronization,
-  transactions, the single-writer lockfile. Each test starts from an empty temporary vault.
+- **L3** verifies what only SQLite can disprove: migrations, FTS5 registration and
+  synchronization, transactions, the single-writer lockfile. Each test starts from an empty
+  temporary vault.
 - **L4** compiles the binary and walks the user path: `nooma init`, `nooma serve`, a capture
   via API, a recall, `nooma doctor`, `nooma export`.
 
@@ -182,6 +183,7 @@ Initial extraction:
 | I18 | `event_at`, `created_at`, and `due_at` are never interchanged | §1 |
 | I19 | A challenger must beat the incumbent by more than `hysteresis_margin` | §3 |
 | I20 | One active insight per metric; the previous one becomes `superseded` | §12, doc 03 |
+| I21 | Every vector search filters on `model`; embeddings from two models never compare | ADR-0003, ADR-0012 |
 
 Three of these are better verified with a structural test than a behavioral one:
 

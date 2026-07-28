@@ -7,11 +7,11 @@ real temporary vault). See [`06-harness.md`](06-harness.md).
 
 ## M0 — Skeleton: binary + vault
 
-Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver).
+Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver, closed
+2026-07-28), **[ADR-0012](adr/0012-vector-proximity-search.md)** (vector search).
 
-- ADR-0001 spike: driver + sqlite-vec + FTS5 working in a test `main`, cross-compilation
-  verified against the promised targets. THIS spike closes ADR-0001 — before anything else
-  gets written.
+- ~~ADR-0001 spike~~ — **done**. `ncruces/go-sqlite3` accepted, sqlite-vec dropped, vector
+  proximity is a brute-force dot product in Go.
 - Go repo layout (`cmd/nooma`, `internal/...`), config loader (yml + .env), vault resolution
   (arg → env → portable → home), single-writer lockfile.
 - Embedded migrations + `PRAGMA user_version`; creates the complete schema from

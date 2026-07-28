@@ -198,14 +198,19 @@ CREATE TABLE config (
 (Cron schedules live in `nooma.yml`, not in the DB: they are operational config, not brain
 state.)
 
-## Search: sqlite-vec + FTS5
+## Search: embeddings + FTS5
 
 ```sql
--- Embeddings: sqlite-vec virtual table, 1:1 with units by rowid-mapping or id column
-CREATE VIRTUAL TABLE unit_embeddings USING vec0(
-  unit_id   TEXT PRIMARY KEY,
-  embedding FLOAT[<DIM>]          -- DIM depends on the embedding model (ADR-0003)
+-- Embeddings: an ordinary table. No virtual table, no extension.
+-- Proximity search is a dot product in Go over an in-memory index (ADR-0012).
+CREATE TABLE unit_embeddings (
+  unit_id   TEXT PRIMARY KEY REFERENCES units(id) ON DELETE CASCADE,
+  model     TEXT NOT NULL,       -- e.g. 'nomic-embed-text'
+  dim       INTEGER NOT NULL,    -- redundant with the blob length, and worth the redundancy
+  embedding BLOB NOT NULL,       -- dim × float32, little-endian, L2-normalized on write
+  created_at TEXT NOT NULL
 );
+CREATE INDEX idx_unit_embeddings_model ON unit_embeddings(model);
 
 -- Lexical: FTS5 synchronized with units.content via triggers
 CREATE VIRTUAL TABLE units_fts USING fts5(
@@ -213,12 +218,30 @@ CREATE VIRTUAL TABLE units_fts USING fts5(
 );
 ```
 
-- **The vault records the embedding model** (name + dimension) in metadata. If the user changes
-  embedding model, the whole vault must be re-embedded (`nooma reindex` — an explicit command,
-  with progress). Never mix embeddings from different models in the same table.
+- **Vectors are L2-normalized before storage.** Cosine similarity is then a plain dot product,
+  which is what makes the brute-force search cheap enough to need no index (ADR-0012).
+- **The vault records the embedding model per row**, not in global metadata. If the user
+  changes model, the whole vault must be re-embedded (`nooma reindex` — an explicit command,
+  with progress). Because dimension is data rather than schema, reindex is a resumable
+  `UPDATE` loop rather than a table rebuild.
+- **Never mix models in a search.** A vault can briefly hold two models mid-reindex, so
+  **every search filters on `model`**. This used to be guaranteed by the schema; it is now a
+  rule the code must keep, which is why it belongs in the conformance suite.
 - `incomplete` units have NO embedding (it is generated on promotion).
 - **Hybrid recall**: top-K vector + top-K FTS5, fused with Reciprocal Rank Fusion —
   see [ADR-0010](adr/0010-hybrid-recall-fusion.md).
+
+### FTS5 is opt-in per connection
+
+The driver does not compile FTS5 in; it is registered as an extension on each connection:
+
+```go
+import "github.com/ncruces/go-sqlite3/ext/fts5"
+fts5.Register(conn)   // on EVERY connection the store opens
+```
+
+A connection that skips it fails with `no such module: fts5` only when an FTS query runs —
+late, and far from the cause. This belongs in an L3 integration test, not a code comment.
 
 ## Operational properties of the vault
 
