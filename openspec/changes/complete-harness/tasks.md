@@ -120,7 +120,7 @@ automated gate.
       `busy_timeout=5000`, `journal_mode=wal`, `foreign_keys=on`, `_txlock=immediate`.
       GREEN: `make test-integration`.
       Requirement: R2.1.
-- [ ] **2.5** [structural] Add `errors.go` declaring `VersionError{VaultVersion, BinaryVersion int}`
+- [x] **2.5** [structural] Add `errors.go` declaring `VersionError{VaultVersion, BinaryVersion int}`
       and its `Error() string` (used starting PR 3's runner; declared now per D1's package layout
       so `internal/store/sqlite` has its full file set from PR 2).
       Verify: `go build ./...`.
