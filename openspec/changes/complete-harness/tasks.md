@@ -134,7 +134,7 @@ automated gate.
       as documented, fall back to a positive `files:` allow-list of every non-store package instead.
       Then `make check`.
       Requirement: R12.1, R12.2 (import layer), risk R11.
-- [ ] **2.7** [CI wiring] Add `.github/workflows/ci.yml` `integration` job, step 1: `make
+- [x] **2.7** [CI wiring] Add `.github/workflows/ci.yml` `integration` job, step 1: `make
       test-integration`.
       Verify: outside the 5-command allowlist (CI workflow config, see C3) — confirmed by the
       job's own run on this PR.

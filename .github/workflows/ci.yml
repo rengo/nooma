@@ -55,9 +55,22 @@ jobs:
           go-version-file: go.mod
       - run: go build ./...
 
+  # L3 from docs/06-harness.md §3: a real, empty temporary SQLite vault. The
+  # schema-golden regeneration-diff step (docs/06-harness.md §6, R4.4) lands
+  # in this same job in PR 3, once the embedded migrations exist.
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: L3 tests
+        run: make test-integration
+
 # Gates from docs/06-harness.md §6 that are NOT enforced yet, and what they wait on:
 #
-#   L3 integration (-tags integration)  -> waits on the store package (ADR-0001 spike)
 #   internal/core coverage floor >= 90% -> waits on core having any statements
 #   schema golden                       -> waits on the embedded migrations
 #   templ generate leaves a clean tree  -> waits on the UI (M4, ADR-0008)
