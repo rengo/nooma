@@ -839,7 +839,7 @@ on them and does not touch their files.
 Independent for code purposes; task 7.5's own verification has a soft ordering dependency on
 PRs 2/3/5 (see 7.5's note).
 
-- [ ] **7.1** [probe-verified, no go-test red/green] `scripts/core-coverage.sh` (R8.1) — sums
+- [x] **7.1** [probe-verified, no go-test red/green] `scripts/core-coverage.sh` (R8.1) — sums
       statement counts from `coverage.out` directly (each non-header line is `file:from,to
       numStmt count`), not from `go tool cover -func` output; prints the explicit vacuity log
       line and exits 0 when total statements == 0, else enforces the ≥90% floor.
@@ -849,13 +849,13 @@ PRs 2/3/5 (see 7.5's note).
       locally (point `-coverpkg` at a throwaway low-coverage package) to confirm the script fails
       as expected, then revert before committing.
       Requirement: R8.1.
-- [ ] **7.2** [CI wiring] `.github/workflows/ci.yml` `coverage` job (`sh
+- [x] **7.2** [CI wiring] `.github/workflows/ci.yml` `coverage` job (`sh
       scripts/core-coverage.sh`).
       Verify: outside the 5-command allowlist (see C3) — confirmed by the job's own run.
       Requirement: R8.1 gate; R8.2 (no PR in this chain touches `internal/core/**`, so the gate —
       once active — cannot self-block; a consistency check on this change's own scope, not a new
       mechanism).
-- [ ] **7.3** [CI wiring] `.github/workflows/docs-sync.yml` — `pull_request` with
+- [x] **7.3** [CI wiring] `.github/workflows/docs-sync.yml` — `pull_request` with
       `types: [opened, synchronize, reopened, labeled, unlabeled]`; diffs against
       `github.base_ref`; requires the `no-spec-change` label on any PR touching
       `internal/core/**` without a matching `docs/02-cognitive-core.md` change.
@@ -863,13 +863,13 @@ PRs 2/3/5 (see 7.5's note).
       deliberate probe PR (proposal §4.7) should demonstrate a core-only change gets blocked
       without the label; record it in the PR body.
       Requirement: R8.2.
-- [ ] **7.4** [CI wiring] `.github/workflows/main.yml` `cross-compile` job — matrix over
+- [x] **7.4** [CI wiring] `.github/workflows/main.yml` `cross-compile` job — matrix over
       `linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64`, `CGO_ENABLED=0`,
       `go build ./...`.
       Verify: outside the 5-command allowlist (see C3) — confirmed by the job's own run. This is
       the direct payoff of ADR-0001 (pure-Go/wasm driver, no C toolchain needed).
       Requirement: R1.2; R8 gate table row "Cross-compilation matrix".
-- [ ] **7.5** [mechanical, D12] Fix the `Makefile`'s `check` target comment (stop claiming "runs
+- [x] **7.5** [mechanical, D12] Fix the `Makefile`'s `check` target comment (stop claiming "runs
       everything CI runs" — it does not, once PRs 2/3/5/7's jobs exist) and add
       `check-all: check test-integration pending-red cover`.
       Verify: `make check` and `make check-all` both exit 0. **Note**: `check-all` genuinely
@@ -983,3 +983,46 @@ Non-requirements (spec §13): no task above schedules vault-path resolution, the
 the single-writer lockfile, any CLI command beyond `version`, any repository/query/domain type,
 the vector index/search implementation, the `templ generate` gate, driver benchmarks as a
 permanent job, or populating `cases/` with real corpus data.
+
+---
+
+## PR 7 completion note (slice 7, the last of this change)
+
+All five tasks landed. `docs/06-harness.md` §6's gate table is now fully wired: `ci.yml` runs
+`lint`, `test`, `build`, `integration`, `pending-red` and `coverage` on every PR;
+`docs-sync.yml` runs `spec-sync` on every PR plus label events; `main.yml` runs `e2e` and
+`cross-compile` on push to `main`. The two rows still deferred are `templ generate` (waits on
+the UI, M4/ADR-0008) and driver benchmarks (ADR-0001's spike lives on an unmerged branch by
+design).
+
+**Definition of Done (§8), verified against the repository rather than against these
+checkboxes** — all eight points satisfied:
+
+1. `go build ./...` succeeds with no extra tools installed.
+2. An `internal/store` import inside `internal/core` fails the lint. Probed with a deliberate
+   violation; `depguard` rejected it.
+3. A `time.Now()` inside `internal/core` fails the lint. Probed; `forbidigo` rejected it.
+4. All four levels run with their tags: L1+L2 (`make test`), L3 (`make test-integration`),
+   L4 (`make test-e2e`), plus the `pendingimpl` gate (`make pending-red`).
+5. One conformance test per structural invariant: I13 untagged and green (its migration exists);
+   I01, I03 and I21 `pendingimpl`-tagged and red by design, with the gate asserting they fail to
+   compile for the expected reason. This is the point doc 06 calls "the one usually skipped".
+6. CI runs every §6 gate not explicitly deferred, per the table above.
+7. Migrations apply from scratch and the schema golden matches `03-data-model.md` —
+   `TestHarness_SchemaMatchesDoc03` passes and `make schema-golden` regenerates to a clean tree.
+8. `LICENSE` is AGPL-3.0 (ADR-0004).
+
+**Two things this change did NOT close, both outside its scope and both recorded for the owner:**
+
+- `repos/rengo/nooma/rulesets/19863542` has no `required_status_checks` rule, so none of the
+  gates above actually block a merge yet. Every gate in this change is currently advisory at the
+  platform level. `make check-all` is the only real enforcement until that ruleset changes.
+- The `VACUUM`/`units.rowid` hazard (design finding F1): `units_fts` is keyed on an implicit
+  rowid that SQLite may renumber, and ADR-0001 criterion 4 commits `nooma export` to
+  `VACUUM INTO`. Measured as latent — three independent probes found rowids preserved — and
+  recorded in doc 03. An ADR is recommended before `nooma export` lands.
+
+**Estimate accuracy, closing the loop on this file's own recalibration**: PR 7 was forecast at
+~150 lines and its recalibrated band was ~630-1140. It landed well under both, because it is
+almost entirely CI configuration — the one slice where the original per-PR estimate was closer
+than the recalibration. Docs and config estimate accurately; code does not.
