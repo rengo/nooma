@@ -7,5 +7,6 @@
     "structured_data": {"due_at": "2026-07-30"},
     "weight": 1.0,
     "decay_rate": 0.01
-  }
+  },
+  "llm_case_id": "classify-remind-me-tomorrow"
 }

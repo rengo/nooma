@@ -26,7 +26,7 @@ CREATE TABLE units (
   content            TEXT NOT NULL,
   status             TEXT NOT NULL DEFAULT 'pool',  -- pool|archived|superseded|incomplete
   weight             REAL NOT NULL DEFAULT 1.0,
-  weight_decay_rate  REAL NOT NULL DEFAULT 0.01,
+  weight_decay_rate  REAL NOT NULL DEFAULT 0.01,  -- aka decay_rate in doc 02 §2's formula and the classify golden set
   last_touched_at    TEXT NOT NULL,
   structured_data    TEXT,                       -- JSON
   source             TEXT NOT NULL DEFAULT 'chat',
