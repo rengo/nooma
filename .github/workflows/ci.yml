@@ -88,12 +88,40 @@ jobs:
           go-version-file: go.mod
       - run: make pending-red
 
+  # docs/06-harness.md §3's hard floor: >= 90% statement coverage on
+  # internal/core/**, and no global floor, because a global number is satisfied
+  # by writing useless getter tests. spec.md R8.1.
+  #
+  # Armed and currently vacuous: internal/core has no statements yet, so the
+  # script passes because there is nothing to measure. It says so explicitly
+  # rather than printing a bare OK — a green badge earned by an empty package
+  # and one earned by a well-covered package must not look the same.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: sh scripts/core-coverage.sh
+
 # Gates from docs/06-harness.md §6 that are NOT enforced yet, and what they wait on:
 #
-#   internal/core coverage floor >= 90% -> waits on core having any statements
 #   templ generate leaves a clean tree  -> waits on the UI (M4, ADR-0008)
-#   docs<->code sync label check        -> waits on internal/core existing in a PR diff
-#   cross-compilation matrix            -> blocked on ADR-0001 closing
+#   driver benchmarks                   -> ADR-0001's spike lives on an unmerged
+#                                          branch by design; no gate re-runs it
 #
 # They are listed rather than silently absent: a CI file that looks complete but
 # enforces half the harness is worse than one that says which half.
+#
+# Two more §6 gates exist and ARE enforced — just not in this file:
+#
+#   docs<->code sync           -> docs-sync.yml, because it needs `pull_request`
+#                                  label events (`labeled`, `unlabeled`), which
+#                                  this file's `pull_request` trigger does not
+#                                  listen for.
+#   cross-compilation matrix   -> main.yml, on push to main only, next to the L4
+#                                  job. ADR-0001 (pure-Go/wasm driver) is
+#                                  Accepted; this is its direct payoff, not
+#                                  blocked on it.

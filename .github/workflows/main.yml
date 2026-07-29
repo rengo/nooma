@@ -36,6 +36,49 @@ jobs:
           go-version-file: go.mod
       - run: make test-e2e
 
-# cross-compile (docs/06-harness.md §6, the ADR-0001 pure-Go payoff) is not
-# wired here yet — deferred to its own task (openspec/changes/complete-harness
-# PR 7, task 7.4).
+  # docs/06-harness.md §6's cross-compilation matrix, and the direct payoff of
+  # ADR-0001: the driver is pure Go/wasm, so every target below builds with
+  # CGO_ENABLED=0 and no C toolchain anywhere. spec.md R1.2.
+  #
+  # What this proves and what it does not: it proves the code *builds*
+  # everywhere, not that it *works* everywhere. Slice 2 of this change shipped a
+  # bug where buildDSN's absoluteness check pattern-matched BOTH POSIX and
+  # Windows path shapes regardless of the platform the binary was built for: on
+  # POSIX, a Windows-shaped path like "C:/data/vault.db" was wrongly accepted as
+  # absolute and silently rewritten to "/C:/data/vault.db" — a *parseable but
+  # wrong* DSN that opens a file nobody named, with no error anywhere (fixed in
+  # commit 213ef73). A matrix like this one would have compiled that code on
+  # every platform without complaint. The bug was found by a manual, empirical
+  # probe during review, not by a pre-existing unit test — the regression case
+  # (posixStyle rejecting a Windows-drive-shaped path) was added as part of the
+  # fix, not before it. (A second, unparseable-DSN defect in the same area was
+  # caught and fixed inside this same PR's own review, before it ever reached
+  # main — see dsn.go's history for both.) Cross-compilation catches build-tag
+  # and syscall mistakes; platform *behavior* needs a test that names the
+  # platform.
+  cross-compile:
+    name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./...

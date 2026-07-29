@@ -1,0 +1,73 @@
+name: docs-sync
+
+# CLAUDE.md non-negotiable #1, mechanized for the brain's behavior:
+# "docs/02-cognitive-core.md governs. If the code and that doc diverge, either
+# the code gets fixed or the doc gets updated in the same PR. Never left to
+# drift silently."
+#
+# This job blocks a PR that changes internal/core/** without also changing
+# docs/02-cognitive-core.md, unless the PR carries the `no-spec-change` label.
+# The classification logic lives in scripts/docs-sync.sh, not inline here, so
+# it is testable without GitHub Actions (test/harness/docs_sync_test.go).
+#
+# Honest limitation, stated here rather than discovered later: a label-based
+# escape hatch is only as strong as the discipline applied to it. Anyone with
+# write access can add `no-spec-change` and make this gate disappear. What it
+# buys is not prevention — it is that skipping the doc becomes a visible,
+# attributable act on the PR instead of an omission nobody notices. The gates
+# that structurally cannot be bypassed are the lint rules (§1, §2) and the
+# goldens; this one is a prompt, and it is documented as one.
+#
+# `labeled` and `unlabeled` are in the trigger list on purpose: without them,
+# adding the label leaves the failed check stuck red and the PR unmergeable.
+# `edited` is in the trigger list for the same reason applied to the base
+# branch instead of the label list: retargeting a PR's base does not, on its
+# own, re-run a check that already reported a verdict, and a stale verdict
+# would stand as green (or red) against a diff it never actually saw.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  spec-sync:
+    name: docs<->code sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The diff is computed against the base branch, so its tip must be
+          # fetched. fetch-depth: 0 is the simple, robust choice; this repo is
+          # small enough that a full clone costs nothing worth optimizing.
+          fetch-depth: 0
+
+      - name: core changed without a doc-02 change
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -eu
+
+          if [ -z "${BASE_REF}" ]; then
+            echo "FAIL: github.base_ref is empty — this gate needs a base branch to diff against."
+            exit 1
+          fi
+
+          if ! changed=$(git diff --name-only "origin/${BASE_REF}"...HEAD 2>&1); then
+            echo "FAIL: could not compute the diff against origin/${BASE_REF}."
+            echo "The base branch may have been deleted, renamed, or force-pushed since this"
+            echo "PR opened. Retarget the PR to a branch that still exists, or push a new"
+            echo "commit, to re-run this check."
+            echo
+            echo "git's own error:"
+            printf '%s\n' "$changed"
+            exit 1
+          fi
+
+          printf '%s\n' "$changed" | sh scripts/docs-sync.sh "$LABELS"
