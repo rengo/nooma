@@ -27,6 +27,14 @@ const violatingUnitEmbeddingInsert = `INSERT INTO unit_embeddings (unit_id, mode
 // Vault exposes no query surface (design D7), so a test needing to observe
 // a per-connection PRAGMA's effect from test/integration must open its own
 // connection with the same pragmas, not reach into Vault's unexported *sql.DB.
+//
+// Shared by every file in this package that needs the same reconstructed
+// DSN (this file and migrate_test.go's TestVaultNewerThanBinaryRefusesToOpen)
+// so the pragma string has exactly one definition. It used to be duplicated
+// byte-for-byte in both files — same package, no boundary reason for two
+// copies — which meant a future change to sqlite.Open's pragma set could
+// update one copy and leave the other silently reconstructing something
+// `Open` no longer does (four-lens pre-PR review, slice 4a).
 func pragmaDSN(dbPath string) string {
 	return "file:" + dbPath + "?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)&_pragma=busy_timeout(5000)&_txlock=immediate"
 }

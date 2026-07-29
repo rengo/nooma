@@ -138,8 +138,11 @@ func TestVaultNewerThanBinaryRefusesToOpen(t *testing.T) {
 	// connection using the store's own PRAGMA set (so this step itself
 	// changes only the version header field, not the journal mode).
 	const futureVersion = 999
-	raw, err := sql.Open("sqlite3",
-		"file:"+dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)&_pragma=busy_timeout(5000)&_txlock=immediate")
+	// pragmaDSN (foreign_key_test.go, same package) reconstructs sqlite.Open's
+	// exact pragma set — shared rather than duplicated inline (slice-4a
+	// four-lens pre-PR review): this file used to hand-build the same
+	// byte-identical DSN string here.
+	raw, err := sql.Open("sqlite3", pragmaDSN(dbPath))
 	if err != nil {
 		t.Fatalf("sql.Open(%q) = _, %v, want nil error", dbPath, err)
 	}
@@ -242,5 +245,112 @@ func TestMigrationsAreEmbeddedNotReadFromDisk(t *testing.T) {
 		if strings.HasSuffix(e.Name(), ".sql") {
 			t.Errorf("%q contains a .sql file (%s) after Open — nothing should ever write one there", dir, e.Name())
 		}
+	}
+}
+
+// TestMigrateAppliesOnlyPendingMigrations asserts R3.4: a vault already at an
+// intermediate version applies only the migrations after that version, in
+// order, and never re-runs one already applied.
+//
+// Every existing test in this file starts a vault at user_version = 0 (a
+// brand-new file, TestMigrateFromScratchSetsUserVersion) or already at the
+// target (TestMigrateIsIdempotent) — the `0 < current < target` case in
+// migrateMigrations' skip loop (`if m.Version <= current { continue }`,
+// internal/store/sqlite/migrate.go) was never exercised by any test until
+// this one, and it only became reachable at all once 0002 published a
+// second migration in this same change (four-lens pre-PR review, slice 4a,
+// BLOCKER finding 1). A regression here — `<` instead of `<=`, or comparing
+// against the wrong variable — would either re-run 0001 loudly (a
+// "table already exists" failure) or silently skip 0002 while Open still
+// reports success, leaving a vault the binary believes is fully migrated but
+// is not.
+//
+// The pre-seed below applies ONLY 0001_core_tables.sql directly, by reading
+// it from its real file on disk (test/integration is a separate package
+// from internal/store/sqlite and migrationFS is unexported — design D7's
+// scope boundary — so this reads the same published file sqlite.Open itself
+// embeds, not a private copy of its content).
+//
+// Two mutations were actually tried against the skip condition, and they
+// behave differently — worth recording both, not just the one that produced
+// the expected red:
+//
+//   - "m.Version <= current" -> "m.Version < current" does NOT turn this
+//     test red. applyMigration re-reads user_version INSIDE its own
+//     transaction and independently checks "current >= m.Version" before
+//     doing any work (design D4's race guard, added by the PR-3 review's
+//     finding 2 fix) — that second, stricter check silently absorbs this
+//     particular bug: the transaction opens, observes 0001 is already
+//     applied, and rolls back doing nothing. Genuine defense in depth, not a
+//     gap this test needs to plug.
+//
+//   - "m.Version <= current" -> "m.Version <= target" DOES turn this test
+//     red — this is the "compares against the wrong version" danger the
+//     BLOCKER finding named, and nothing else in migrateMigrations/
+//     applyMigration catches it, because the outer loop then never calls
+//     applyMigration for 0002 at all. RED, watched (verbatim):
+//
+//     migrate_test.go:326: PRAGMA user_version after reopening a vault seeded at version 1 = 1, want 2 (only 0002 should have applied)
+//     migrate_test.go:335: sqlite_master lookup for learning_signals (a 0002-only table) = sql: no rows in result set, want it to be found (0002 must have run)
+//
+//     — exactly R3.4's "silently skip 0002 while reporting success" failure
+//     mode, the more dangerous of the two the finding described. Reverting
+//     to "m.Version <= current" makes this test pass again.
+func TestMigrateAppliesOnlyPendingMigrations(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "vault.db")
+
+	migration0001, err := os.ReadFile("../../internal/store/sqlite/migrations/0001_core_tables.sql")
+	if err != nil {
+		t.Fatalf("os.ReadFile(0001_core_tables.sql) = _, %v, want nil error", err)
+	}
+
+	seed, err := sql.Open("sqlite3", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open(%q) [seed] = _, %v, want nil error", dbPath, err)
+	}
+	// ExecContext must be called with zero arguments: with arguments the
+	// driver falls back to Prepare, which rejects a trailing statement, and
+	// 0001 is many statements (same constraint applyMigration itself
+	// observes in migrate.go).
+	if _, err := seed.ExecContext(ctx, string(migration0001)); err != nil {
+		t.Fatalf("apply 0001_core_tables.sql directly [seed] = %v, want nil error", err)
+	}
+	if _, err := seed.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+		t.Fatalf("seed PRAGMA user_version = 1 = %v, want nil error", err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatalf("seed.Close() = %v, want nil error", err)
+	}
+
+	// Reopen through the store — this is the incremental path under test.
+	v, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("sqlite.Open(%q) [reopen at intermediate version] = _, %v, want nil error", dbPath, err)
+	}
+	defer v.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
+
+	raw, err := sql.Open("sqlite3", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open(%q) = _, %v, want nil error", dbPath, err)
+	}
+	defer raw.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
+
+	var userVersion int
+	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
+		t.Fatalf("PRAGMA user_version: %v", err)
+	}
+	const wantVersion = 2
+	if userVersion != wantVersion {
+		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (only 0002 should have applied)", userVersion, wantVersion)
+	}
+
+	// Prove 0002 actually ran — not just that the version counter moved —
+	// by checking one of the tables only 0002 creates exists.
+	var name string
+	err = raw.QueryRowContext(ctx,
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='learning_signals'").Scan(&name)
+	if err != nil {
+		t.Errorf("sqlite_master lookup for learning_signals (a 0002-only table) = %v, want it to be found (0002 must have run)", err)
 	}
 }
