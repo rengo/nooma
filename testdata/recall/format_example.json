@@ -1,0 +1,21 @@
+{
+  "id": "espresso-descale",
+  "units": [
+    {
+      "id": "unit-001",
+      "type": "knowledge",
+      "content": "The espresso machine's descale cycle takes about 25 minutes."
+    },
+    {
+      "id": "unit-002",
+      "type": "task",
+      "content": "Buy descaling solution for the espresso machine."
+    }
+  ],
+  "queries": [
+    {
+      "query": "how long does descaling take",
+      "expected_unit_ids": ["unit-001", "unit-002"]
+    }
+  ]
+}
