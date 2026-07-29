@@ -622,7 +622,7 @@ migration test each run with `-count=10`, zero failures.
 Depends on PR 1 (I21 anchor) and PR 4 (untagged `test/conformance/` package already exists, so
 adding tagged files never leaves the package tag-only).
 
-- [ ] **5.1** [pending, red-only in this chain] Write
+- [x] **5.1** [pending, red-only in this chain] Write
       `test/conformance/i01_focus_never_persisted_test.go` (`//go:build pendingimpl`), identifier
       `TestI01_FocusIsNeverAPersistedStatus`, anchored to `unit.Status`/`unit.AllStatuses` (R6.1).
       RED: compile error `undefined: unit.Status` (and/or `unit.AllStatuses`) — this **is** the
@@ -633,23 +633,23 @@ adding tagged files never leaves the package tag-only).
       Also add the anchor comment to `internal/core/unit/doc.go`, naming the pending symbol and
       pointing at `pending_symbols.txt` (design §8.5 mitigation 2; residual risk R9).
       Requirement: R6.1, R6.4.
-- [ ] **5.2** [pending, red-only] Write `test/conformance/i03_units_never_deleted_test.go`,
+- [x] **5.2** [pending, red-only] Write `test/conformance/i03_units_never_deleted_test.go`,
       identifier `TestI03_UnitsAreNeverDeleted`, anchored to `ports.UnitRepo`.
       RED: compile error `undefined: ports.UnitRepo`.
       Anchor comment in `internal/ports/doc.go`.
       Requirement: R6.1, R6.4.
-- [ ] **5.3** [pending, red-only] Write
+- [x] **5.3** [pending, red-only] Write
       `test/conformance/i21_vector_search_filters_on_model_test.go`, identifier
       `TestI21_VectorSearchFiltersOnModel`, anchored to `recall.VectorQuery`/`recall.VectorIndex`.
       RED: compile error `undefined: recall.VectorQuery` (and/or `recall.VectorIndex`).
       Anchor comment in `internal/core/recall/doc.go`. Requires PR 1's doc-02 §5 "one model per
       search" wording to already exist (conceptual dependency the test's own comment references).
       Requirement: R6.2, R6.4.
-- [ ] **5.4** [scaffold] `test/conformance/pending_symbols.txt` — five lines: `unit.Status`,
+- [x] **5.4** [scaffold] `test/conformance/pending_symbols.txt` — five lines: `unit.Status`,
       `unit.AllStatuses`, `ports.UnitRepo`, `recall.VectorQuery`, `recall.VectorIndex`.
       Verify: consumed by 5.5's script; no standalone command.
       Requirement: R7.1.
-- [ ] **5.5** [TDD — the gate itself, self-verifying] `scripts/pending-red.sh` (both failure
+- [x] **5.5** [TDD — the gate itself, self-verifying] `scripts/pending-red.sh` (both failure
       modes, design §8.2) + `make pending-red` target + `.github/workflows/ci.yml`
       `pending-red` job.
       RED before this task: no gate exists — 5.1–5.3's compile failures are unverified by CI.
@@ -665,6 +665,86 @@ adding tagged files never leaves the package tag-only).
       committing.
       Requirement: R7.1, R7.2, R7.3; risk R2 (closed by failure-mode 2); risk R9 (self-dismantling,
       not self-updating — mitigated, not eliminated, by 5.1–5.3's anchor comments).
+
+### PR 5 complete (2026-07-29), branch `test/pending-red-conformance` off up-to-date `main` (PRs #4–#11 merged)
+
+**Finding, corrected against evidence**: the naive reading of task 5.5's self-test — "stub one
+missing symbol" — does not by itself reach Scenario A. Because I01/I03/I21 anchor to five symbols
+across three independent files, resolving only `unit.Status`/`unit.AllStatuses` still leaves
+`ports.UnitRepo`, `recall.VectorQuery` and `recall.VectorIndex` undefined, so the package still
+fails to compile — the script correctly reports **Scenario B** (`expected the compiler to report
+'undefined: unit.Status'. It did not.`), not Scenario A. Reaching genuine Scenario A requires
+stubbing all five anchors at once. Both are recorded below, verbatim, since the partial-stub
+result is itself a real and useful confirmation that the gate distinguishes "some symbols
+resolved" from "the whole package now compiles."
+
+**Self-test, watched (both probes reverted before committing, `git status` confirmed clean after
+each)**:
+
+- **(a) Scenario A — all five anchors stubbed** (`unit.Status`/`unit.AllStatuses` in
+  `internal/core/unit`, `ports.UnitRepo` in `internal/ports`, `recall.VectorQuery`/
+  `recall.VectorIndex` in `internal/core/recall`, each a minimal throwaway type/func in a
+  temporary file): `make pending-red` → `FAIL: ./test/conformance/ compiles under -tags
+  pendingimpl. The anchor symbols now exist. Promote I01/I03/I21 into the untagged L2 suite
+  (docs/06-harness.md §4) and drop the pendingimpl tag, in the same PR that created them.`
+  `sh scripts/pending-red.sh` itself exits 1; `make pending-red` reports it as exit 2 (make's
+  own convention for a failed recipe), corrected from an earlier revision of this record that
+  said "exit 2" without noting the wrapping.
+- **(b) Scenario B — unrelated syntax typo** (a stray `{{{` after
+  `TestI01_FocusIsNeverAPersistedStatus`'s opening brace): `make pending-red` →
+  `FAIL: expected the compiler to report 'undefined: unit.Status'. It did not.` (and the same for
+  the other four symbols) followed by the raw compiler output
+  (`expected '(', found scanGoTreeForFocusStatusLiteral`), distinct from (a)'s message. Same
+  exit-code note as (a): script exits 1, `make pending-red` reports 2.
+- **(a-partial) Scenario B, the naive reading** — stubbing only `unit.Status`/`unit.AllStatuses`:
+  also Scenario B (`expected the compiler to report 'undefined: unit.Status'. It did not.` twice,
+  once per resolved symbol), with the raw compiler output still showing the three unresolved
+  anchors. Recorded because it is the literal instruction as written, and its result (not Scenario
+  A) is itself the correct, informative behavior for a gate anchored to five independent symbols.
+
+**A real authoring bug this self-test caught**: the first draft of `i01_focus_never_persisted_test.go`
+only referenced `unit.AllStatuses()` and never `unit.Status` as a bare identifier, so the compiler
+never emitted `undefined: unit.Status` on its own — only `undefined: unit.AllStatuses`. Fixed by
+adding an explicit `var zero unit.Status` check (kind must be string) as its own subtest, so the
+file's RED names both of its anchored symbols independently of each other, per
+`pending_symbols.txt`.
+
+**Verification, all green (verbatim exit codes)**: `make check` exit 0; `go build ./...` exit 0;
+`golangci-lint run --build-tags integration ./...` → "0 issues.", exit 0; `golangci-lint run
+--build-tags pendingimpl ./...` → 1 typecheck issue (the five `undefined:` errors above,
+surfaced as a single `# github.com/rengo/nooma/test/conformance [...]` typecheck failure), exit 1
+— expected and by design (design §8.6: "running the linter with the tag would make it report the
+undefined symbols as errors, which is the state we are deliberately in"); `.golangci.yml`'s
+`run.build-tags` intentionally lists only `integration`, not `pendingimpl`, so this never runs as
+part of `make lint`/`make check`/CI's plain `golangci-lint run` — only `make pending-red` (via `go
+test -c`) ever compiles these files, and only to confirm they fail. `go clean -testcache && make
+test-integration` → both packages `ok`, exit 0. `make pending-red` exit 0 (Scenario C). `make
+schema-golden && git diff --exit-code -- testdata/schema` exit 0 (no drift). `make store-api-golden
+&& git diff --exit-code -- testdata/schema` exit 0 (no drift).
+
+**Measured `git diff --numstat main...HEAD`, excluding `go.sum`**: 481 additions / 0 deletions =
+481 review lines, no golden files touched. Over the 400-line soft ceiling — reported plainly
+rather than hidden, consistent with every other code-bearing PR in this change (PR2=1056,
+PR3=2269, PR4a=1249, PR4b=1077). Not split further: `pending_symbols.txt`, the three pendingimpl
+tests, the three anchor-comment edits, and `scripts/pending-red.sh` (with its `make`/CI wiring)
+are one indivisible, mutually-referential story — the gate script's own correctness depends on the
+exact symbol set the three tests anchor to, and `pending_symbols.txt` is meaningless without both.
+Two commits on `test/pending-red-conformance`: `1718a6e` (5.1–5.4, the three tests + anchors +
+symbol list) and `7863627` (5.5, the gate itself). Not pushed, no PR opened, per instructions.
+Owner decision needed: accept `size:exception`, or direct a split.
+
+### PR 5 review-fix pass (2026-07-29), same branch, 3 more commits
+
+A three-lens pre-PR review of this slice found 1 CRITICAL, 5 WARNING and 3 SUGGESTION findings,
+all fixed on the same branch: `ff62d4c` (`scripts/pending-red.sh`'s symbol match hardened to
+exact identifiers, both directions — see engram `nooma/pending-red-unanchored-match`), `2eb444a`
+(shared `scanGoTree` helper for I01/I03, I01's scan-scope comment brought to I03's honesty
+level), `dd4ec73` (docs: `docs/06-harness.md` §6, `.golangci.yml`, `Makefile`/`CLAUDE.md`,
+`spec.md` R6.2 + I21 test, and this file's own exit-code record, all corrected). `make
+check-all` (task 7.5) was deliberately NOT built here — out of scope per instructions (PR 7);
+only the false claims about today's `make check` were fixed. Full verification re-run green
+after the fixes; `git diff --numstat` for the fix-up alone: 161 additions / 105 deletions = 266
+lines, under the 400-line ceiling on its own. Not pushed, no PR opened.
 
 ---
 

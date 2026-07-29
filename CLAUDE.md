@@ -47,7 +47,11 @@ guarantees. If a rule can be an automated gate, it is a gate — not a skill.
 bypass. Every change goes through a branch and a PR — one PR per step of
 `docs/06-harness.md` §9, or per work unit thereafter.
 
-Run `make check` before opening the PR; it runs exactly what CI runs.
+Run `make check` before opening the PR. It is the fast loop (lint, L1/L2 tests, build), not
+full CI parity — CI also runs `make test-integration` and `make pending-red`, plus the
+coverage floor (`docs/06-harness.md` §6). Run those too before opening the PR; a `make
+check-all` target that folds them into one command is tracked as a harness task, not yet
+wired up.
 
 Skills that cover the details: `work-unit-commits` (how to slice commits), `branch-pr`
 (opening the PR), `chained-pr` (splitting when it exceeds 400 lines).

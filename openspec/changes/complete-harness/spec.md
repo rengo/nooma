@@ -376,6 +376,13 @@ assertion failure and not a vacuous pass. (Owner decision, not reopened — `doc
 type that will perform model-filtered similarity search) and fails to compile for the same
 reason as I01/I03.
 
+**Necessary but not sufficient**: once promoted, I21's reflection check proves the invariant is
+*expressible* — that `VectorQuery` carries a model and `VectorIndex` is keyed by one — not that
+every call site actually honours it. An implementation could add `VectorIndex.Model` and still
+ship a `Search()` that ignores it; I21 alone would not catch that. The behavioural proof (a
+search against a model-A index rejects or ignores a model-B query) is a separate, non-pending
+requirement that arrives with M1's real vector search implementation, not with this change.
+
 ### R6.3 — I13 is real, not pending
 
 **MUST**: the I13 test is untagged and reads the embedded migration SQL text (from

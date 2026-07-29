@@ -241,7 +241,7 @@ All of the following runs on every PR and blocks the merge:
 
 | Gate | What it verifies |
 |---|---|
-| `golangci-lint` | Includes `depguard` and `forbidigo` — §1 and §2 are not optional. Runs against every build-tagged file too (`.golangci.yml`'s `run.build-tags`), not only the default untagged build — a linter that only ever sees L1/L2 code would silently exempt `test/integration/**` and any future `e2e`/`pendingimpl` file from every rule in this table |
+| `golangci-lint` | Includes `depguard` and `forbidigo` — §1 and §2 are not optional. Runs against every build-tagged file too (`.golangci.yml`'s `run.build-tags`), not only the default untagged build — a linter that only ever sees L1/L2 code would silently exempt `test/integration/**` and any future `e2e` file from every rule in this table. `pendingimpl`-tagged files (`test/conformance/`) are a deliberate exception, not an oversight: they anchor to symbols that do not exist yet, so linting them would report those as permanent errors. They stay out of `run.build-tags` and are gated instead by `make pending-red` (§8 point 5), which asserts they fail to compile for the right reason |
 | `go vet` | — |
 | L1 + L2 tests with `-race` | The core and the invariants |
 | L3 tests with `-race` | Migrations and store against real SQLite |

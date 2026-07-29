@@ -1,7 +1,8 @@
 # Local development targets.
 #
-# These run exactly what CI runs. Local/CI drift is how a green machine and a red
-# laptop start disagreeing about whether the code is fine.
+# `check` is the fast loop, not full CI parity — see its own comment below. Full
+# parity with the blocking CI jobs is `make check-all` (docs/06-harness.md §9.2,
+# design D12), tracked as its own task and not yet wired up in this Makefile.
 
 GOLANGCI_LINT_VERSION := v2.12.2
 GOBIN := $(shell go env GOPATH)/bin
@@ -9,7 +10,7 @@ GOBIN := $(shell go env GOPATH)/bin
 .DEFAULT_GOAL := check
 
 .PHONY: check
-check: lint test build ## Run everything CI runs
+check: lint test build ## The fast loop: lint + L1/L2 tests + build — NOT full CI parity, see make check-all
 
 .PHONY: lint
 lint: $(GOBIN)/golangci-lint ## Dependency rule + clock port + standard linters
@@ -44,6 +45,10 @@ cover: ## Coverage of the cognitive core only — see docs/06-harness.md §3
 .PHONY: store-api-golden
 store-api-golden: ## Regenerate testdata/schema/store_api.golden — the exported-API golden (design §7.3, §9.2)
 	go test ./test/conformance/ -run TestHarness_StoreAPIUnchanged -update
+
+.PHONY: pending-red
+pending-red: ## docs/06-harness.md §8 point 5 — test/conformance's pendingimpl tests must fail to compile, for the expected reason
+	sh scripts/pending-red.sh
 
 .PHONY: tools
 tools: $(GOBIN)/golangci-lint ## Install pinned development tools
