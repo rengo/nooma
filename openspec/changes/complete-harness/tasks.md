@@ -409,57 +409,120 @@ not hidden.
 
 ## PR 4 — `0002` + doc-03 gate + I13 (~330 lines)
 
-Depends on PR 3.
+Depends on PR 3. **Split into two links** (recalibrated review-workload forecast put the whole
+PR at ~1,450–2,620 review lines): **4a** (this note's scope: tasks 4.1 and 4.3, plus the two
+items originally assigned to 4.2 that cannot wait — golden regeneration and the doc-03 DDL gap
+closure) landed first, on branch `feat/schema-learning-and-search` from an up-to-date `main`
+(PRs #4–#8 merged); **4b** (task 4.2 proper: `ParseMarkdown`/`Diff` and
+`TestHarness_SchemaMatchesDoc03`) is deferred to its own PR/session.
 
-- [ ] **4.1** [TDD] Write `TestI13_LearningSignalHasNoFKToTarget` (L2, untagged,
-      `i13_learning_signal_test.go`).
-      RED: assertion failure — `learning_signals` is not found in the embedded migrations at all
-      (`0002` doesn't exist yet).
-      Implement: `migrations/0002_learning_and_search.sql` — doc 03's *Learning*, *Measurements*,
-      *System config*, *Search* sections: `learning_signals` (`target_id` with **no**
-      `REFERENCES` clause — this is I13's own invariant), `learning_state`,
-      `relation_thresholds`, `calibration`, `measurements`, `config`, `unit_embeddings`,
-      `units_fts`, plus the FTS5 sync triggers (insert/update/delete-archival paths touching
-      `content` — R9.1) and every doc-03 index for this section.
-      GREEN: `make test` — I13 passes because `target_id` genuinely carries no FK (D10 guard: the
-      test first asserts `learning_signals` was found before asserting the FK property).
+- [x] **4.1** [TDD] Write `TestI13_LearningSignalHasNoFKToTarget` (L2, untagged,
+      `test/conformance/i13_learning_signal_test.go`).
+      RED (observed verbatim): `i13_learning_signal_test.go:117: learning_signals is not found in
+      the embedded migrations — I13 has nothing to check yet` — confirmed against a real absence
+      of `0002` (the file was moved aside, not merely imagined) before it existed, then restored.
+      Implemented: `migrations/0002_learning_and_search.sql` — doc 03's *Learning*, *Measurements*,
+      *System config*, *Search* sections, reproduced exactly (byte-for-byte per statement, same
+      convention as `0001`): `learning_signals` (`target_id` with **no** `REFERENCES` clause —
+      I13's own invariant), `learning_state`, `relation_thresholds`, `calibration`,
+      `measurements`, `config`, `unit_embeddings`, `units_fts`, plus the FTS5 sync triggers
+      (`units_fts_ai`/`_au`/`_ad`, R9.1) and every doc-03 index for this section. The I13 test
+      itself reads migration SQL directly from disk (design D1's own "I13 reads migration files
+      from disk," not through `internal/store/sqlite`'s exported surface, which exposes no way to
+      read a migration's SQL — design D7's scope boundary), depth-counting parens to extract
+      `learning_signals`'s body rather than a single fragile regex.
+      GREEN: `make test` — confirmed.
       Requirement: R3.8 (0002 half), R6.3, R6.4, R9.1.
+      **Collateral, done in the same PR because 4a also had to (see below)**: three existing PR-3
+      tests hardcoded `wantVersion = 1` / `BinaryVersion != 1` on the (then-true) assumption that
+      only `0001` was published — `test/integration/migrate_test.go` (3 assertions),
+      `test/integration/concurrent_open_test.go`, and
+      `internal/store/sqlite/migrate_test.go`'s `TestParseMigrationsRealEmbeddedSet` (strengthened
+      to assert exactly versions `1..2`, matching design §5.1's own stated final expectation for
+      that test). These are corrections to a fact that changed (R3.8: exactly two migrations now
+      published), not weakenings — the invariant each test proves is unchanged.
+      **Real bug found and fixed, not part of 4.1's own scope but blocking it**:
+      `test/integration/schema_golden_test.go`'s `dumpSchema` applied
+      `schema.IsShadowTable` to every object regardless of `Kind`. `0002`'s own FTS5 sync triggers
+      (`units_fts_ai`/`_ad`/`_au`) collide with the shadow-table prefix rule (`"<vt>_" + suffix`
+      for `vt = "units_fts"`) — a naming collision design §6.2 never anticipated because every
+      worked example there (`units_fts_data`/`_idx`/`_docsize`/`_config`) also happens to be a
+      table. Without a `Kind == table` guard on the call site, the golden silently dropped 0002's
+      real triggers, which would have made task 4.2's own described RED stage (b) impossible to
+      reach (the golden would never contain the triggers to compare against doc 03 in the first
+      place). Fixed by restricting the exclusion to `r.Kind == schema.KindTable`, recorded in a
+      code comment at the call site — `schema.IsShadowTable` itself is unchanged, still a pure
+      name-prefix check.
+      **Also done in the same PR (assigned here per the owner's slice-4a/4b split, not to 4.2)**:
+      regenerated both schema goldens (`make schema-golden`) — see the "4a note" below for the
+      full reviewed diff — and edited `docs/03-data-model.md`'s Search section to add the FTS5
+      sync-trigger DDL plus the one-line `units.rowid`/`VACUUM` note (design finding F1 / residual
+      risk R10). These two items were originally written into 4.2's task text, but the recalibrated
+      forecast moved them into 4a since they are direct, unavoidable consequences of `0002` landing
+      (CI's `make schema-golden && git diff --exit-code` step would fail the moment `0002` merges
+      without the regeneration; non-negotiable #1 requires the doc DDL land in the same PR as the
+      migration that creates it, not a later one).
 - [ ] **4.2** [TDD] Write `TestHarness_SchemaMatchesDoc03` (L2, `schema_doc_test.go`) + finish
       `test/support/schema.ParseMarkdown`/`.Diff` (fence extraction, string-aware comment
       stripping, trigger-aware statement splitting, column parsing — design §6.4, with its own
       L1 table-driven tests per §6.6 landing in the same commit).
-      RED, two stages (both real, both worth recording in the PR body):
-        (a) before 4.1's `0002` SQL exists: doc 03 already declares the *Learning/Measurements/
-            Search* objects (doc 03 predates this change) that the golden — still 0001-only —
-            does not: "declared in doc 03 but absent from the schema: [8 objects]" (matches
-            proposal §6's recorded red).
-        (b) after 4.1 lands (0002 SQL + regenerated golden) but before this task's doc edit: the
-            mismatch flips to "present in the schema but not declared in doc 03: trigger
-            units_fts_ai/au/ad" — the R9.1/R9.2 FTS-trigger-DDL gap (matches design §6.5's
-            illustrative failure output verbatim).
-      Implement: regenerate both schema goldens (`make schema-golden`, now that `0002` exists);
-      edit `docs/03-data-model.md`'s Search section to add the FTS5 sync-trigger DDL, verbatim or
-      structurally equivalent to what `0002` commits (R9.2) — **in the same PR**; add, at zero
-      extra gate cost, the one-line note that `units.rowid` is not stable across `VACUUM` and the
-      FTS index must be rebuilt afterward (design finding F1 / residual risk R10, assigned to PR 4
-      by design §12).
-      GREEN: `make test` (L2 gate) and `make test-integration` (golden regeneration parity).
-      Requirement: R4.3, R9.1, R9.2; residual risk R10 (F1).
-- [ ] **4.3** [TDD] Write `TestOpenForeignKeysRejectViolation` (L3, `test/integration/`) — the
+      **Stale-red warning for whoever implements this task**: the RED this task originally
+      predicted no longer fires as written. Stage (a) ("declared in doc 03 but absent from the
+      schema") is now moot — 4a already regenerated both goldens against the real `0002`. Stage
+      (b) ("present in the schema but not declared in doc 03: trigger units_fts_ai/au/ad") is ALSO
+      now moot — 4a already closed the R9.1/R9.2 doc-03 DDL gap in the same PR that published
+      `0002`, per the owner's explicit instruction not to ship known drift on purpose just to
+      preserve a predicted red. Derive this task's actual RED empirically (most likely: the golden
+      and doc 03 already agree, so the first real red for `TestHarness_SchemaMatchesDoc03` needs a
+      deliberately introduced synthetic mismatch, or the test needs to be written against
+      `ParseMarkdown`/`Diff` not existing yet — a compile error — rather than an assertion
+      mismatch) — do not follow the two-stage RED text above literally.
+      Implement: `ParseMarkdown`/`Diff` only (the golden regeneration and doc-03 DDL edit this
+      task's text originally described are DONE, in PR 4a).
+      GREEN: `make test` (L2 gate).
+      Requirement: R4.3; R9.1/R9.2 verification (the doc-03 gate becomes what continuously proves
+      4a's edit stays true); residual risk R10 (F1) verification.
+- [x] **4.3** [TDD] Write `TestOpenForeignKeysRejectViolation` (L3, `test/integration/foreign_key_test.go`) — the
       FK-violation behavioral test design §4.4 originally described as PR 2's proof of
       `foreign_keys=on`, deferred here because it needs a real foreign-key relationship to
       violate, and no migrated schema exists until `0002` (this PR) lands. PR 2 instead closed
       that gap with `TestOpenPRAGMAsReadBack` (white-box PRAGMA read-back, task 2.10) — this task
       adds the behavioral proof design §4.4 originally wanted, now that it is actually possible.
-      RED: insert a row that violates one of `0002`'s foreign keys (e.g. `unit_embeddings` or
-      `measurements` against a non-existent `units.id`) against a vault opened by `sqlite.Open`
-      and observe it succeeds — `foreign_keys` defaults to off per SQLite connection, so an
-      opener that forgot to request it would let this through silently.
-      GREEN: after confirming the violation is rejected (`FOREIGN KEY constraint failed`) against
-      a vault opened normally through `sqlite.Open`.
+      **Finding, corrected against evidence**: this task's own RED description ("`foreign_keys`
+      defaults to off per SQLite connection, so an opener that forgot to request it would let this
+      through silently") is **false for this driver**. A probe against a completely fresh,
+      never-migrated file opened with a bare `file:` DSN carrying no `_pragma` at all reads
+      `PRAGMA foreign_keys` back as `1`, not `0`. Root cause, verified in the vendored source, not
+      assumed: `github.com/ncruces/go-sqlite3-wasm/v3@v3.2.35303/build/sqlite_opt.h:23` defines
+      `SQLITE_DEFAULT_FOREIGN_KEYS 1` — a compile-time default in the WASM SQLite build ADR-0001
+      chose, applying to every connection this driver opens regardless of DSN pragmas. There is no
+      "forgot to request it" state to fall into with this driver. `sqlite.Open` still explicitly
+      requests `foreign_keys=on` (correctly — this should not depend on an undocumented compile
+      default), so the test's actual RED was reproduced differently and is recorded verbatim in
+      `foreign_key_test.go`'s doc comments: temporarily dropping `REFERENCES units(id) ON DELETE
+      CASCADE` from `unit_embeddings.unit_id` in `0002` made the test fail exactly as expected
+      (insert succeeds where a FK violation was wanted), reverted before committing. The control
+      test (`TestForeignKeysExplicitlyDisabledAcceptsViolation`) explicitly overrides the compiled
+      default with `_pragma=foreign_keys(off)` (confirmed by a second probe to actually read back
+      `0`) rather than relying on a bare DSN, so it stays genuinely meaningful.
+      GREEN: confirmed — the violation is rejected with `FOREIGN KEY constraint failed` against a
+      vault's pragma set reconstructed to match `sqlite.Open`'s own (`Vault` exposes no query
+      surface — design D7 — so `test/integration` cannot reach `Open`'s real `*sql.DB` directly;
+      same package-boundary constraint already recorded for `TestMigrateFromScratchSetsUserVersion`).
       Requirement: R2.1 (behavioral half, closing design §4.4's original intent); spec.md R2.1
-      "Note on scope".
+      "Note on scope". **Flagged for spec.md/design.md correction** (not edited here — this is an
+      apply-phase discovery, not a rewrite of a planning artifact already reviewed): R2.1's "Note
+      on scope" and design §4.4 should stop describing "foreign_keys defaults to off" as this
+      driver's behavior; it is a compile-time default this specific WASM SQLite build enables.
 - [ ] Verify (whole PR): `make test`, `make test-integration`.
+
+### PR 4a note: schema golden diff, reviewed
+
+`make schema-golden`'s diff against `main` adds every table/column/index declared in `0002`
+(`calibration`, `config`, `learning_signals`, `learning_state`, `measurements`,
+`relation_thresholds`, `unit_embeddings`, `units_fts`) plus the three FTS5 sync triggers
+(`units_fts_ai`/`_ad`/`_au`), and nothing else — `schema_version` bumps from `1` to `2`. This is
+exactly what R3.8/R9.1 predict; no unexpected object appears or disappears.
 
 ---
 
