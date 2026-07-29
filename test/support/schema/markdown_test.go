@@ -174,6 +174,65 @@ func TestParseMarkdownMultilinePartialIndex(t *testing.T) {
 	}
 }
 
+// TestClassifyStatement is the direct table test four-lens pre-PR review
+// finding 4 asked for: classifyStatement's CREATE VIEW case was exercised
+// by zero tests — markdown_test.go had no case for it, and
+// docs/03-data-model.md declares no view today, so ParseMarkdown's own gate
+// never reached it either. A typo in the "VIEW" string comparison would
+// compile and pass everything silently until doc 03 gained a view. This
+// test covers every recognized shape directly, not just through
+// end-to-end ParseMarkdown fixtures.
+func TestClassifyStatement(t *testing.T) {
+	tests := []struct {
+		name     string
+		stmt     string
+		wantKind Kind
+		wantName string
+		wantOK   bool
+	}{
+		{name: "table", stmt: "CREATE TABLE units (id TEXT)", wantKind: KindTable, wantName: "units", wantOK: true},
+		{name: "virtual table", stmt: "CREATE VIRTUAL TABLE units_fts USING fts5(content)", wantKind: KindVirtualTable, wantName: "units_fts", wantOK: true},
+		{name: "index", stmt: "CREATE INDEX idx_units_status ON units(status)", wantKind: KindIndex, wantName: "idx_units_status", wantOK: true},
+		{name: "unique index", stmt: "CREATE UNIQUE INDEX idx_units_unique ON units(status)", wantKind: KindUniqueIndex, wantName: "idx_units_unique", wantOK: true},
+		{name: "trigger", stmt: "CREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN\n  SELECT 1;\nEND", wantKind: KindTrigger, wantName: "units_fts_ai", wantOK: true},
+		{name: "view — the shape zero prior tests reached", stmt: "CREATE VIEW active_units AS SELECT * FROM units WHERE status = 'active'", wantKind: KindView, wantName: "active_units", wantOK: true},
+		{name: "unclassifiable shape", stmt: "CREATE FOREIGN TABLE not_a_real_sqlite_object (id TEXT)", wantOK: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotKind, gotName, gotOK := classifyStatement(tt.stmt)
+			if gotOK != tt.wantOK {
+				t.Fatalf("classifyStatement(%q) ok = %v, want %v", tt.stmt, gotOK, tt.wantOK)
+			}
+			if tt.wantOK && (gotKind != tt.wantKind || gotName != tt.wantName) {
+				t.Errorf("classifyStatement(%q) = (%q, %q), want (%q, %q)", tt.stmt, gotKind, gotName, tt.wantKind, tt.wantName)
+			}
+		})
+	}
+}
+
+// TestParseMarkdownFenceTagIsCaseSensitiveIsDeliberate locks in four-lens
+// pre-PR review finding 7's first suggestion: fenceStartPattern is
+// case-sensitive, unlike every other pattern in this file. Design §6.4
+// step 1 says "exactly `sql`", so a ```SQL``` fence is invisible on
+// purpose — this test exists so a future change to that behavior is a
+// deliberate, reviewed decision, not an accidental regex tweak.
+func TestParseMarkdownFenceTagIsCaseSensitiveIsDeliberate(t *testing.T) {
+	md := []byte("```SQL\n" +
+		"CREATE TABLE units (id TEXT);\n" +
+		"```\n",
+	)
+
+	got, err := ParseMarkdown(md)
+	if err != nil {
+		t.Fatalf("ParseMarkdown(...) = _, %v, want nil error", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ParseMarkdown(...) = %#v, want zero objects (a ```SQL``` fence's tag case does not match ```sql``` exactly)", got)
+	}
+}
+
 // TestParseMarkdownErrorsOnUnclassifiableCreateStatement is the trap-avoidance
 // test this task's brief demanded explicitly: ParseMarkdown must never
 // silently skip a statement it cannot understand. A statement that begins
@@ -194,6 +253,146 @@ func TestParseMarkdownErrorsOnUnclassifiableCreateStatement(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "CREATE FOREIGN TABLE") {
 		t.Errorf("ParseMarkdown(...) error = %q, want it to name the unparsed statement", err.Error())
+	}
+}
+
+// TestStringQuoteTransition is the direct table test four-lens pre-PR
+// review finding 5 asked for: tracking whether the scan is inside a
+// single-quoted string, and honoring two consecutive single quotes as the
+// escape for one literal quote character inside it, was previously
+// hand-rolled twice (stripLineComments, rune-based; maskStrings,
+// byte-based), each exercised only end-to-end through ParseMarkdown.
+// stringQuoteTransition extracts that one shared transition so both
+// callers use the same logic and a future string-edge-case fix lands once,
+// not twice.
+func TestStringQuoteTransition(t *testing.T) {
+	tests := []struct {
+		name         string
+		s            string
+		i            int
+		inString     bool
+		wantNext     bool
+		wantConsumed bool
+		wantContent  bool
+	}{
+		{name: "opening quote is not content", s: "'x'", i: 0, inString: false, wantNext: true, wantConsumed: false, wantContent: false},
+		{name: "regular char outside a string is not content", s: "a", i: 0, inString: false, wantNext: false, wantConsumed: false, wantContent: false},
+		{name: "char inside a string is content", s: "ab'", i: 0, inString: true, wantNext: true, wantConsumed: false, wantContent: true},
+		{name: "newline inside a string is not masked as content", s: "\n'", i: 0, inString: true, wantNext: true, wantConsumed: false, wantContent: false},
+		{name: "closing quote is not content and exits the string", s: "'", i: 0, inString: true, wantNext: false, wantConsumed: false, wantContent: false},
+		{name: "escape stays inside the string and consumes both quotes as content", s: "''x", i: 0, inString: true, wantNext: true, wantConsumed: true, wantContent: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotNext, gotConsumed, gotContent := stringQuoteTransition(tt.s, tt.i, tt.inString)
+			if gotNext != tt.wantNext || gotConsumed != tt.wantConsumed || gotContent != tt.wantContent {
+				t.Errorf("stringQuoteTransition(%q, %d, %v) = (%v, %v, %v), want (%v, %v, %v)",
+					tt.s, tt.i, tt.inString, gotNext, gotConsumed, gotContent, tt.wantNext, tt.wantConsumed, tt.wantContent)
+			}
+		})
+	}
+}
+
+// TestParseMarkdownBlockCommentsAreStringAware is four-lens pre-PR review
+// finding 3: only "--" line comments and single-quoted strings were
+// string-aware; "/* ... */" block comments were never stripped at all,
+// which produced three distinct wrong-answer consequences against
+// synthetic table bodies (reproduced verbatim against the pre-fix code
+// before this test was added: a phantom column, an early-truncated column
+// list, and a misleading "no parenthesized body" error) — each one
+// misattributes the failure to a doc/schema disagreement instead of to the
+// parser. docs/03-data-model.md has zero "/* */" today, so this was latent,
+// not yet observed in a real gate failure.
+func TestParseMarkdownBlockCommentsAreStringAware(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+		want []Object
+	}{
+		{
+			name: "a comma inside a block comment is not a column separator",
+			md: "```sql\n" +
+				"CREATE TABLE t (\n" +
+				"  id TEXT /* note: a, b */\n" +
+				");\n" +
+				"```\n",
+			want: []Object{{Kind: KindTable, Name: "t", Columns: []string{"id"}}},
+		},
+		{
+			name: "a stray ')' inside a block comment does not truncate the column list",
+			md: "```sql\n" +
+				"CREATE TABLE t (\n" +
+				"  id TEXT, /* oops ) */ name TEXT\n" +
+				");\n" +
+				"```\n",
+			want: []Object{{Kind: KindTable, Name: "t", Columns: []string{"id", "name"}}},
+		},
+		{
+			name: "a ';' inside a block comment does not truncate the statement",
+			md: "```sql\n" +
+				"CREATE TABLE t (\n" +
+				"  id TEXT /* deprecated; do not use */\n" +
+				");\n" +
+				"```\n",
+			want: []Object{{Kind: KindTable, Name: "t", Columns: []string{"id"}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseMarkdown([]byte(tt.md))
+			if err != nil {
+				t.Fatalf("ParseMarkdown(...) = _, %v, want nil error", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseMarkdown(...) = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseMarkdownErrorsOnMergedCreateStatements is the four-lens pre-PR
+// review's CRITICAL finding 1: a missing ";" between two CREATE statements
+// makes statementRanges treat them as ONE range, so classifyStatement
+// matches only the FIRST CREATE and extractBody closes on the FIRST
+// balanced paren group — everything after, including a whole well-formed
+// CREATE statement, silently vanishes with a nil error. ParseMarkdown's own
+// doc comment promises it "never silently drops a statement it does not
+// understand"; a merged range like this must be a loud, named error instead
+// of quietly returning only the first object.
+func TestParseMarkdownErrorsOnMergedCreateStatements(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+	}{
+		{
+			name: "two CREATEs missing one separator",
+			md: "```sql\n" +
+				"CREATE TABLE foo (id TEXT)\n" +
+				"CREATE TABLE bar (id TEXT);\n" +
+				"```\n",
+		},
+		{
+			name: "three CREATEs missing two separators",
+			md: "```sql\n" +
+				"CREATE TABLE foo (id TEXT)\n" +
+				"CREATE TABLE bar (id TEXT)\n" +
+				"CREATE TABLE baz (id TEXT);\n" +
+				"```\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseMarkdown([]byte(tt.md))
+			if err == nil {
+				t.Fatal("ParseMarkdown(...) = _, nil, want a non-nil error naming the merged statements")
+			}
+			if !strings.Contains(err.Error(), "CREATE TABLE foo") {
+				t.Errorf("ParseMarkdown(...) error = %q, want it to name the offending merged text", err.Error())
+			}
+		})
 	}
 }
 

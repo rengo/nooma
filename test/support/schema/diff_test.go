@@ -102,6 +102,30 @@ func TestDiffDoesNotCompareColumnsForIndexOrTrigger(t *testing.T) {
 	}
 }
 
+// TestDiffReportsDuplicateDeclarationInDoc is four-lens pre-PR review
+// finding 2: Diff's doc-side map is keyed by (Kind, Name), so if
+// docs/03-data-model.md declares the same object twice with different
+// columns, the first declaration is silently overwritten and all evidence
+// of the disagreement disappears — verified before this fix: doc =
+// [units{id}, units{id,extra}], golden = [units{id,extra}] produced zero
+// differences. A duplicate (Kind, Name) in the doc side must be a loud,
+// explicit reported difference instead.
+func TestDiffReportsDuplicateDeclarationInDoc(t *testing.T) {
+	doc := []Object{
+		{Kind: KindTable, Name: "units", Columns: []string{"id"}},
+		{Kind: KindTable, Name: "units", Columns: []string{"id", "extra"}},
+	}
+	golden := []Object{
+		{Kind: KindTable, Name: "units", Columns: []string{"id", "extra"}},
+	}
+
+	got := Diff(doc, golden)
+	want := []Difference{{DiffKind: DiffDuplicateInDoc, Kind: KindTable, Name: "units"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Diff(...) = %#v, want %#v", got, want)
+	}
+}
+
 // TestDiffOrdersDeterministically asserts Diff's output order does not
 // depend on Go's randomized map iteration: MissingFromSchema before
 // UndeclaredInDoc before ColumnMismatch, each group sorted by (kind rank,

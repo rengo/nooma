@@ -3,7 +3,6 @@ package schema
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -11,6 +10,12 @@ import (
 // info string is exactly "sql" (design §6.4 step 1) — a fence with any
 // other info string (docs/03-data-model.md's own ```go``` fts5.Register
 // snippet) is not SQL and must never be scanned for CREATE statements.
+//
+// Deliberately case-sensitive, unlike every other pattern in this file
+// (all `(?is)`): design §6.4 step 1 says "exactly `sql`", and Markdown
+// fence info strings are conventionally lowercase. A ```SQL``` fence is
+// therefore invisible to this parser on purpose (zero objects, no error) —
+// TestParseMarkdownFenceTagIsCaseSensitiveIsDeliberate locks this in.
 var fenceStartPattern = regexp.MustCompile("^```sql\\s*$")
 
 // fenceEndPattern recognizes a closing fence line: three backticks and
@@ -26,10 +31,14 @@ var fenceEndPattern = regexp.MustCompile("^```\\s*$")
 // silent skip (this task's own trap-avoidance requirement).
 var createStatementPattern = regexp.MustCompile(`(?is)^\s*CREATE\b`)
 
-// createNamePattern is design §6.4 step 5's exact regex: case- and
-// newline-insensitive, because docs/03-data-model.md writes
-// "CREATE UNIQUE INDEX idx_units_unique_active_insight" with its ON clause
-// on the next line.
+// createNamePattern is design §6.4 step 5's exact regex: case-insensitive
+// (the `i` flag) so a lowercase or mixed-case CREATE keyword still matches.
+// The `s` flag is not doing newline-tolerance work here — this pattern
+// contains no "." for it to change the meaning of, and `\s` already
+// matches "\n" in Go's regexp without it. What actually lets this match
+// span docs/03-data-model.md's "CREATE UNIQUE INDEX
+// idx_units_unique_active_insight" with its ON clause on the next line is
+// that every whitespace token here is `\s`, not ".".
 var createNamePattern = regexp.MustCompile(
 	`(?is)^\s*CREATE\s+(TABLE|VIRTUAL\s+TABLE|UNIQUE\s+INDEX|INDEX|TRIGGER|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`,
 )
@@ -56,6 +65,44 @@ var constraintKeywords = map[string]bool{
 // name at the start of an already-trimmed fragment.
 var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*`)
 
+// createKeywordPattern finds bare CREATE keyword occurrences, scanned over
+// mask-ed text (string content already replaced with 'x') so a "CREATE"
+// appearing inside a string literal's data is invisible to it — used by
+// topLevelCreateCount to detect two statements a missing ";" merged into
+// one range.
+var createKeywordPattern = regexp.MustCompile(`(?i)\bCREATE\b`)
+
+// topLevelCreateCount returns how many CREATE keyword occurrences in mask
+// sit at paren-depth 0. A well-formed single statement has exactly one (or
+// zero, for a non-CREATE sample query). More than one means statementRanges
+// failed to split two or more real statements apart — the missing ";"
+// merge ParseMarkdown must detect and reject rather than silently keeping
+// only the first object and dropping the rest (four-lens pre-PR review,
+// CRITICAL finding 1).
+func topLevelCreateCount(mask string) int {
+	matches := createKeywordPattern.FindAllStringIndex(mask, -1)
+	matchIdx := 0
+	depth := 0
+	count := 0
+	for i := 0; i < len(mask); i++ {
+		for matchIdx < len(matches) && matches[matchIdx][0] == i {
+			if depth == 0 {
+				count++
+			}
+			matchIdx++
+		}
+		switch mask[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return count
+}
+
 // ParseMarkdown parses every CREATE TABLE, CREATE VIRTUAL TABLE, CREATE
 // INDEX, CREATE UNIQUE INDEX, CREATE TRIGGER and CREATE VIEW statement out
 // of docs/03-data-model.md's fenced ```sql``` blocks (design §6.4), the
@@ -77,7 +124,7 @@ func ParseMarkdown(md []byte) ([]Object, error) {
 	var objs []Object
 
 	for _, fence := range extractSQLFences(md) {
-		stripped := stripLineComments(fence)
+		stripped := stripComments(fence)
 		mask := maskStrings(stripped)
 
 		for _, r := range statementRanges(mask) {
@@ -86,6 +133,23 @@ func ParseMarkdown(md []byte) ([]Object, error) {
 			trimmed := strings.TrimSpace(stmt)
 			if trimmed == "" {
 				continue
+			}
+			if n := topLevelCreateCount(stmtMask); n > 1 {
+				// statementRanges failed to split two (or more) real
+				// statements apart — a missing ";" between them merged
+				// them into one range, and classifyStatement/extractBody
+				// would silently keep only the FIRST CREATE and drop
+				// everything after it, exactly the false-assurance
+				// failure mode this function's own doc comment says must
+				// never happen (four-lens pre-PR review, CRITICAL
+				// finding 1). A statement range with more than one
+				// top-level CREATE is malformed input, not a parseable
+				// object: fail loudly instead of guessing which one to
+				// keep.
+				return nil, fmt.Errorf(
+					"schema.ParseMarkdown: statement range contains %d top-level CREATE statements with no separating %q between them, cannot classify as one object: %q",
+					n, ";", oneLine(trimmed),
+				)
 			}
 			if !createStatementPattern.MatchString(trimmed) {
 				// Not a CREATE statement at all — a sample query added
@@ -153,44 +217,92 @@ func extractSQLFences(md []byte) []string {
 	return fences
 }
 
-// stripLineComments removes a "--" and everything after it to end of line,
-// string-aware (design §6.4 step 2): a "--" inside a single-quoted string
-// literal is data, never a comment start. Two consecutive single quotes are
-// the escape for a literal quote character inside a string.
-func stripLineComments(sql string) string {
-	var b strings.Builder
-	runes := []rune(sql)
-	inString := false
-
-	for i := 0; i < len(runes); i++ {
-		c := runes[i]
-		if inString {
-			b.WriteRune(c)
-			if c == '\'' {
-				if i+1 < len(runes) && runes[i+1] == '\'' {
-					b.WriteRune(runes[i+1])
-					i++
-					continue
-				}
-				inString = false
-			}
-			continue
-		}
+// stringQuoteTransition is the single string-tracking state machine every
+// structural scan in this file needs: it reports whether the scan is
+// inside a single-quoted string literal, and honors two consecutive single
+// quotes as the escape for one literal quote character inside a string
+// (design §6.4 step 2) — extracted once so stripComments and maskStrings
+// share it instead of each hand-rolling their own copy (one rune-based, one
+// byte-based; four-lens pre-PR review finding 5). s[i] is the byte being
+// processed and inString is the state BEFORE processing it.
+//
+// It returns:
+//   - next: the state AFTER processing s[i] (and s[i+1] when consumed is
+//     true)
+//   - consumed: true when s[i] and s[i+1] are the two consecutive single
+//     quotes that make up one escape pair, which the caller must treat as
+//     one unit, advancing its loop index by an extra 1 instead of the
+//     usual 1
+//   - content: true when s[i] is itself part of the string's INTERIOR
+//     content (not an opening/closing delimiter quote and not a raw
+//     newline) — the exact set of positions maskStrings replaces with 'x'.
+func stringQuoteTransition(s string, i int, inString bool) (next, consumed, content bool) {
+	c := s[i]
+	if inString {
 		if c == '\'' {
-			inString = true
-			b.WriteRune(c)
-			continue
+			if i+1 < len(s) && s[i+1] == '\'' {
+				return true, true, true
+			}
+			return false, false, false
 		}
-		if c == '-' && i+1 < len(runes) && runes[i+1] == '-' {
-			for i < len(runes) && runes[i] != '\n' {
+		return true, false, c != '\n'
+	}
+	if c == '\'' {
+		return true, false, false
+	}
+	return false, false, false
+}
+
+// stripComments removes "--" line comments and "/* ... */" block comments,
+// string-aware (design §6.4 step 2, block comments added by four-lens
+// pre-PR review finding 3): a comment marker inside a single-quoted string
+// literal is data, never a comment start. A block comment is replaced by a
+// single space (not simply deleted) so it cannot glue two adjacent tokens
+// together; its content — including any ";", "(", ")" or "," it happens to
+// contain — is discarded entirely, so it can never corrupt statement
+// splitting, paren-depth counting or comma splitting downstream.
+func stripComments(sql string) string {
+	var b strings.Builder
+	inString := false
+	inBlock := false
+	n := len(sql)
+
+	for i := 0; i < n; i++ {
+		c := sql[i]
+
+		if inBlock {
+			if c == '*' && i+1 < n && sql[i+1] == '/' {
+				inBlock = false
 				i++
 			}
-			if i < len(runes) {
-				b.WriteRune('\n')
-			}
 			continue
 		}
-		b.WriteRune(c)
+
+		if !inString {
+			if c == '/' && i+1 < n && sql[i+1] == '*' {
+				inBlock = true
+				i++
+				b.WriteByte(' ')
+				continue
+			}
+			if c == '-' && i+1 < n && sql[i+1] == '-' {
+				for i < n && sql[i] != '\n' {
+					i++
+				}
+				if i < n {
+					b.WriteByte('\n')
+				}
+				continue
+			}
+		}
+
+		next, consumed, _ := stringQuoteTransition(sql, i, inString)
+		b.WriteByte(c)
+		if consumed {
+			b.WriteByte(sql[i+1])
+			i++
+		}
+		inString = next
 	}
 	return b.String()
 }
@@ -201,31 +313,20 @@ func stripLineComments(sql string) string {
 // scan (statement splitting, paren-depth counting, comma splitting,
 // BEGIN/END detection) so a semicolon, parenthesis, comma or bare keyword
 // that happens to appear inside string data is invisible to them — the
-// same string-awareness stripLineComments already applies to "--".
+// same string-awareness stripComments already applies to "--" and "/* */".
 func maskStrings(sql string) []byte {
 	mask := []byte(sql)
 	inString := false
 	for i := 0; i < len(mask); i++ {
-		c := mask[i]
-		if inString {
-			if c == '\'' {
-				if i+1 < len(mask) && mask[i+1] == '\'' {
-					mask[i] = 'x'
-					mask[i+1] = 'x'
-					i++
-					continue
-				}
-				inString = false
-				continue
+		next, consumed, content := stringQuoteTransition(sql, i, inString)
+		if content {
+			mask[i] = 'x'
+			if consumed {
+				mask[i+1] = 'x'
+				i++
 			}
-			if c != '\n' {
-				mask[i] = 'x'
-			}
-			continue
 		}
-		if c == '\'' {
-			inString = true
-		}
+		inString = next
 	}
 	return mask
 }
@@ -402,156 +503,4 @@ func firstWord(s string) string {
 // naming an unparsed statement stays on one readable line.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
-}
-
-// DifferenceKind names which of design §6.5's three disagreement shapes a
-// Difference reports.
-type DifferenceKind string
-
-const (
-	// DiffMissingFromSchema: declared in doc 03 but absent from the golden.
-	DiffMissingFromSchema DifferenceKind = "missing_from_schema"
-	// DiffUndeclaredInDoc: present in the golden but not declared in doc 03
-	// — this is the assertion that forces the FTS trigger DDL into doc 03
-	// (proposal §4.2, R9.2).
-	DiffUndeclaredInDoc DifferenceKind = "undeclared_in_doc"
-	// DiffColumnMismatch: a table or virtual_table present on both sides
-	// whose column sets differ.
-	DiffColumnMismatch DifferenceKind = "column_mismatch"
-)
-
-// Difference is one disagreement Diff found between docs/03-data-model.md's
-// declared objects and the schema golden (design §6.5). OnlyInDoc and
-// OnlyInSchema are populated only for DiffColumnMismatch.
-type Difference struct {
-	DiffKind     DifferenceKind
-	Kind         Kind
-	Name         string
-	OnlyInDoc    []string
-	OnlyInSchema []string
-}
-
-// objectKey identifies an Object by (Kind, Name) — the pair design §6.5
-// says must match ("every object declared in doc 03 exists in the golden,
-// with the same kind").
-type objectKey struct {
-	Kind Kind
-	Name string
-}
-
-// Diff compares doc (ParseMarkdown's output) against golden (ParseGolden's
-// output), asserting exactly what design §6.5 says this L2 gate asserts —
-// no more:
-//
-//   - every object declared in doc 03 exists in the golden, with the same
-//     kind (DiffMissingFromSchema otherwise);
-//   - every object in the golden is declared in doc 03 (DiffUndeclaredInDoc
-//     otherwise);
-//   - for table and virtual_table objects present on both sides, the
-//     column SETS are equal (DiffColumnMismatch otherwise, both directions).
-//
-// It deliberately never compares types, NOT NULL, defaults, FK clauses,
-// index columns, index predicates or trigger bodies (design §6.5's
-// explicit non-assertion list) — all of that is ddl.golden's job, reviewed
-// as a diff. Diff never mutates doc or golden. The returned slice is
-// sorted deterministically (DiffKind, then kind rank, then name) so a
-// caller's rendered report never depends on Go's randomized map iteration
-// order.
-func Diff(doc, golden []Object) []Difference {
-	docByKey := make(map[objectKey]Object, len(doc))
-	for _, o := range doc {
-		docByKey[objectKey{o.Kind, o.Name}] = o
-	}
-	goldenByKey := make(map[objectKey]Object, len(golden))
-	for _, o := range golden {
-		goldenByKey[objectKey{o.Kind, o.Name}] = o
-	}
-
-	var diffs []Difference
-
-	for _, o := range doc {
-		if _, ok := goldenByKey[objectKey{o.Kind, o.Name}]; !ok {
-			diffs = append(diffs, Difference{DiffKind: DiffMissingFromSchema, Kind: o.Kind, Name: o.Name})
-		}
-	}
-	for _, o := range golden {
-		if _, ok := docByKey[objectKey{o.Kind, o.Name}]; !ok {
-			diffs = append(diffs, Difference{DiffKind: DiffUndeclaredInDoc, Kind: o.Kind, Name: o.Name})
-		}
-	}
-	for key, docObj := range docByKey {
-		if docObj.Kind != KindTable && docObj.Kind != KindVirtualTable {
-			continue
-		}
-		goldenObj, ok := goldenByKey[key]
-		if !ok {
-			continue // already reported as DiffMissingFromSchema above
-		}
-		onlyInDoc, onlyInSchema := columnSetDiff(docObj.Columns, goldenObj.Columns)
-		if len(onlyInDoc) > 0 || len(onlyInSchema) > 0 {
-			diffs = append(diffs, Difference{
-				DiffKind:     DiffColumnMismatch,
-				Kind:         docObj.Kind,
-				Name:         docObj.Name,
-				OnlyInDoc:    onlyInDoc,
-				OnlyInSchema: onlyInSchema,
-			})
-		}
-	}
-
-	sortDifferences(diffs)
-	return diffs
-}
-
-// columnSetDiff returns the set difference in both directions, each sorted
-// for a deterministic report.
-func columnSetDiff(docCols, goldenCols []string) (onlyInDoc, onlyInSchema []string) {
-	inGolden := make(map[string]bool, len(goldenCols))
-	for _, c := range goldenCols {
-		inGolden[c] = true
-	}
-	inDoc := make(map[string]bool, len(docCols))
-	for _, c := range docCols {
-		inDoc[c] = true
-	}
-	for _, c := range docCols {
-		if !inGolden[c] {
-			onlyInDoc = append(onlyInDoc, c)
-		}
-	}
-	for _, c := range goldenCols {
-		if !inDoc[c] {
-			onlyInSchema = append(onlyInSchema, c)
-		}
-	}
-	sort.Strings(onlyInDoc)
-	sort.Strings(onlyInSchema)
-	return onlyInDoc, onlyInSchema
-}
-
-// sortDifferences orders diffs by (DiffKind precedence, kind rank, name) so
-// Diff's output never depends on map iteration order.
-func sortDifferences(diffs []Difference) {
-	sort.Slice(diffs, func(i, j int) bool {
-		if diffs[i].DiffKind != diffs[j].DiffKind {
-			return diffKindOrder(diffs[i].DiffKind) < diffKindOrder(diffs[j].DiffKind)
-		}
-		if diffs[i].Kind != diffs[j].Kind {
-			return Rank(diffs[i].Kind) < Rank(diffs[j].Kind)
-		}
-		return diffs[i].Name < diffs[j].Name
-	})
-}
-
-func diffKindOrder(k DifferenceKind) int {
-	switch k {
-	case DiffMissingFromSchema:
-		return 0
-	case DiffUndeclaredInDoc:
-		return 1
-	case DiffColumnMismatch:
-		return 2
-	default:
-		return 3
-	}
 }
