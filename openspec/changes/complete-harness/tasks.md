@@ -303,7 +303,7 @@ Depends on PR 2 (`sqlite.Open` must exist).
       Requirement: R4.1, R4.2, R4.4, R4.5, R3.8 (0001-only golden at this stage). Residual risk
       R13 noted here (golden coupled to `ncruces`'s SQLite version) — bounded by the shadow-table
       exclusion rule and by keeping the SQLite version out of the golden file, per design §6.2.
-- [ ] **3.6** [TDD, ▲ design delta over the proposal] Write `TestHarness_StoreAPIUnchanged` (L2,
+- [x] **3.6** [TDD, ▲ design delta over the proposal] Write `TestHarness_StoreAPIUnchanged` (L2,
       `test/conformance/store_api_test.go`) — owner-approved as the mechanism that makes the
       §3.1 scope boundary machine-checkable.
       RED: `testdata/schema/store_api.golden` does not exist / does not match the actual walked
@@ -317,6 +317,14 @@ Depends on PR 2 (`sqlite.Open` must exist).
       Requirement: R12.1, R12.2 (§7.3, the third and mechanized layer of the scope boundary).
       **Split point**: if this PR's diff approaches or crosses 400 lines, move this task alone to
       its own chained PR/commit — it is independent of the migration runner (design §12).
+      **Shipped as its own PR** (branch `test/store-api-golden`, branched from `main` after PR #7
+      merged): the golden was generated from the REAL exported surface, which does not include
+      `SchemaVersion` — that method is specified in design §4.1/§7.3 but was never implemented.
+      It was not added here just to make the design's sentence true; `design.md` §4.1/§7.3 were
+      corrected to describe the surface as it is, noting `SchemaVersion` as a plausible future
+      addition (M0's `nooma doctor` is the likely first consumer). When someone adds it, this
+      golden goes red and forces that widening through review — the mechanism working, not a
+      defect. The GREEN line above therefore lists an expected surface that is now superseded.
 - [x] **3.7** [CI wiring] Add `.github/workflows/ci.yml` `integration` job, step 2: `make
       schema-golden && git diff --exit-code -- testdata/schema`.
       Verify: outside the 5-command allowlist (see C3) — confirmed by the job's own run.

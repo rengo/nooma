@@ -360,7 +360,6 @@ func Open(ctx context.Context, dbPath string) (*Vault, error)
 
 func (v *Vault) Close() error
 func (v *Vault) Path() string
-func (v *Vault) SchemaVersion(ctx context.Context) (int, error)   // PRAGMA user_version
 func (v *Vault) Check(ctx context.Context) error                  // connection self-check, §4.3
 func (v *Vault) Stats() sql.DBStats                               // pool counters, D2
 
@@ -371,6 +370,17 @@ type VersionError struct{ VaultVersion, BinaryVersion int }
 
 That list is the whole surface, and it is frozen by `testdata/schema/store_api.golden` (§7.3).
 None of it can read or write a domain row.
+
+**Correction (task 3.6, store-API golden implementation)**: an earlier version of this section
+and §7.3 both listed `func (v *Vault) SchemaVersion(ctx context.Context) (int, error) // PRAGMA
+user_version` as part of this surface. It was never implemented and is not scheduled by any task
+in this change — a golden's job is to record the surface as it actually is, not as a design draft
+once described it, so `store_api.golden` was generated from, and this section now describes, the
+real exported surface. `SchemaVersion` is a plausible *future* addition (M0's `nooma doctor` is
+the likely first consumer, since it needs to report the vault's schema version without going
+through `Check`'s FTS5 probe), but adding it is a conscious, reviewed decision for whoever needs
+it — at which point `TestHarness_StoreAPIUnchanged` (§7.3) goes red and forces exactly that
+review. That is the golden working as intended, not a gap.
 
 ### 4.2 Why a connection without FTS5 is unrepresentable
 
@@ -757,16 +767,23 @@ against `testdata/schema/store_api.golden`:
 ```
 # nooma store API golden — regenerate with `make store-api-golden`.
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
-internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: func (*Vault) Check(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Close() error
 internal/store/sqlite: func (*Vault) Path() string
-internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
+internal/store/sqlite: func (*VersionError) Error() string
+internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError
-internal/store/sqlite: func (*VersionError) Error() string
 ```
+
+(Sorted lexicographically by the full line — that is what the implementation actually does; the
+list above is copy-pasted from the committed golden, not hand-ordered.) **This block no longer
+lists `SchemaVersion`**: an earlier draft of this design (and §4.1) included it as part of the
+frozen surface, but it was never implemented. Task 3.6's implementation generated this golden
+from the real, verified exported surface of `internal/store/sqlite` rather than hand-writing a
+golden containing a method that does not exist — see §4.1's correction note for the reasoning and
+why adding `SchemaVersion` later is a deliberate, gate-enforced decision rather than an oversight.
 
 This is the only piece of the design that goes beyond the proposal's eight in-scope items, and it
 is proposed for a specific reason: it is the **only** mechanism that makes "anaemic" a property a
