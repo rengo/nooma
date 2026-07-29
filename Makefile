@@ -41,6 +41,10 @@ cover: ## Coverage of the cognitive core only — see docs/06-harness.md §3
 	go test -coverprofile=coverage.out -coverpkg=./internal/core/... ./internal/core/...
 	go tool cover -func=coverage.out | tail -1
 
+.PHONY: store-api-golden
+store-api-golden: ## Regenerate testdata/schema/store_api.golden — the exported-API golden (design §7.3, §9.2)
+	go test ./test/conformance/ -run TestHarness_StoreAPIUnchanged -update
+
 .PHONY: tools
 tools: $(GOBIN)/golangci-lint ## Install pinned development tools
 
