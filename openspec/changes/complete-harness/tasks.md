@@ -603,27 +603,64 @@ PRs 2/3/5 (see 7.5's note).
 
 ## Review Workload Forecast
 
-| PR | Est. changed lines | 400-line budget risk | Notes |
+**Recalibrated after PRs 1–3 shipped.** The original per-PR numbers were authored before any
+code existed and proved to be low by a wide margin. They are kept below as `orig.` so the miss
+stays visible instead of being quietly overwritten.
+
+### What the first three PRs actually measured
+
+| PR | orig. est. | after `sdd-apply` | after review remediation | impl. factor | total factor |
+|---|---|---|---|---|---|
+| 1 (docs only) | ~15 | 15 | 15 | 1.0x | 1.0x |
+| 2 | ~250 | 531 | **1,056** | 2.1x | 4.2x |
+| 3 (tasks 3.1–3.5, 3.7) | ~300 | 1,301 | **2,271** | 4.3x | 7.6x |
+
+Two distinct effects compound, and they are worth separating because they have different fixes:
+
+1. **The implementation itself is underestimated 2–4x.** A task list can name the files and the
+   tests; it cannot see how much code the tests need until they are written. Estimating lines
+   before writing the first failing test is guessing.
+2. **Review remediation roughly doubles the result again.** Both PRs went through a four-lens
+   pre-PR review that found real defects (PR 2: one blocker, two criticals; PR 3: one blocker,
+   two criticals) while every gate was green. Fixing them is not scope creep — it is the cost of
+   the work being correct, and it was not budgeted at all.
+
+Docs-only work estimates accurately (PR 1 landed exactly on its number). Code does not.
+
+### Forecast for the remaining PRs
+
+The band below applies the measured 4.2x–7.6x total factor. Two data points is a thin basis, so
+these are a range, not a number — and they exist to prevent the ceiling decision from being a
+surprise, not to be defended.
+
+| PR | orig. est. | recalibrated band | 400-line budget risk |
 |---|---|---|---|
-| 1 | ~15 | Low | Docs only |
-| 2 | **~1,056 measured** (`git diff --numstat main...HEAD`, excluding `go.sum`: ~862 code — `_txlock` fix task 2.8 plus tasks 2.9–2.15 remediating a pre-PR four-lens review — + ~184 in this same branch's `spec.md`/`design.md`/`tasks.md` corrections + ~10 in `docs/04-decisions.md`) | **`size:exception` — owner-accepted** | Owner decision: fix every finding in this single PR rather than dropping scope or re-splitting an already-implemented PR. Documented here, not hidden. Superseded the ~750 pre-measurement estimate |
-| 3 | ~380 (300 + 80 ▲ for the store-API golden, task 3.6) | **High** | Design's own designated split point is task 3.6 (store-API golden) — independent of the migration runner, move it to its own chained link if the diff crosses 400 |
-| 4 | ~345 (330 + ~15 for task 4.3, the FK-violation test deferred from PR 2 — see task 2.10's note) | Medium | |
-| 5 | ~200 | Low | |
-| 6 | ~230 (restored — Conflict C2 resolved in favour of spec.md; types, loader and `format_example.json` back in scope) | Low | |
-| 7 | ~150 | Low | |
-| **Total** | **~2,376** (PR 2 now measured, not estimated) | — | `go.sum` (PR 2) excluded from the human-review budget; the schema golden dumps (PRs 3–4) are **not** excluded — their diff is the point of the gate |
+| 3b (task 3.6, store-API golden — split out of PR 3) | ~80 | ~340–610 | **`size:exception` likely** |
+| 4 | ~345 (330 + ~15 for task 4.3, the FK-violation test deferred from PR 2) | ~1,450–2,620 | **`size:exception` expected** |
+| 5 | ~200 | ~840–1,520 | **`size:exception` expected** |
+| 6 | ~230 (types, loader and `format_example.json` in scope per Conflict C2) | ~970–1,750 | **`size:exception` expected** |
+| 7 | ~150 | ~630–1,140 | **`size:exception` likely** |
+| **Remaining total** | **~1,005** | **~4,230–7,640** | — |
+
+Measured so far across PRs 1–3: **3,342** review lines. Whole-change projection: **~7,600–11,000**,
+against the original ~2,376 estimate.
+
+`go.sum` is excluded from the human-review budget. The schema golden dumps (PRs 3–4) are **not**
+excluded — their diff is the point of the gate.
+
+### What this means for the ceiling
 
 - **Chained PRs recommended: Yes** (already the resolved delivery strategy for this change).
-- **Decision needed before apply: Yes** — specifically whether PR 3 preemptively splits off
-  task 3.6 (store-API golden) into its own chained link, or whether `sdd-apply` authors PR 3 as
-  planned and splits only if the running diff actually crosses 400 lines. Recommend the latter:
-  monitor PR 3's diff at the 3.5/3.6 boundary and split there if needed, per design §12's own
-  guidance.
-- **PR 2 crossed the ceiling after the fact**: it left `sdd-apply` at ~531 lines (already over
-  400) before this review; the review's own remediation adds more on top. The owner explicitly
-  chose `size:exception` over re-splitting a PR that was already implemented and reviewed as one
-  unit, rather than dropping any finding to stay under budget.
+- **The 400-line soft ceiling is not going to hold for any remaining code PR.** That is now a
+  measured expectation, not a risk. Every remaining PR should either be planned as two or more
+  links from the start, or carry an explicit, documented `size:exception` — decided before
+  `sdd-apply` runs, not discovered after.
+- **PRs 2 and 3 both crossed the ceiling after the fact.** In each case the owner chose
+  `size:exception` over re-splitting an already-implemented and already-reviewed unit, rather
+  than dropping a finding to stay under budget. Recorded here rather than hidden.
+- **The pre-PR four-lens review is not optional overhead.** It has found a blocker in each of the
+  two code PRs so far, both with every gate green, and one of them (PR 3's WAL-conversion race)
+  had already shipped to `main` inside PR 2 and survived that PR's own review. Budget for it.
 
 ---
 
