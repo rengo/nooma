@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // migrationFS embeds every published migration file. No migration is ever
@@ -44,15 +45,81 @@ var transactionControlPattern = regexp.MustCompile(
 // version (design §5.1).
 var userVersionPattern = regexp.MustCompile(`(?is)PRAGMA\s+user_version\b`)
 
+// stripSQLComments removes "--" line comments and "/* */" block comments
+// from sql, string-aware (a "--" or "/*" inside a quoted string literal is
+// data, not a comment; SQL's doubled-quote escape for an embedded quote
+// mark is honored), before validateMigrationSQL scans for reserved words
+// (slice-3 review finding 4). Comments are migration authors' prose: a
+// comment that merely
+// mentions "COMMIT", "BEGIN" or "user_version" in plain English is not the
+// runner-ownership violation the scan exists to catch — 0002's FTS5
+// synchronization triggers need comments that discuss transactions.
+//
+// This does not need doc-03's ParseMarkdown-grade statement splitting
+// (design §6.4): validateMigrationSQL only needs the reserved words gone
+// before its regexes run, not a parsed statement list, so a single
+// string-aware pass is enough and keeps this function independent of that
+// package (which is stdlib-only for an unrelated reason — no SQLite
+// driver, not no string parsing).
+func stripSQLComments(sqlText string) string {
+	var b strings.Builder
+	runes := []rune(sqlText)
+	inString := false
+
+	for i := 0; i < len(runes); i++ {
+		c := runes[i]
+
+		if inString {
+			b.WriteRune(c)
+			if c == '\'' {
+				if i+1 < len(runes) && runes[i+1] == '\'' {
+					// '' escapes an embedded quote; consume both without
+					// leaving the string.
+					b.WriteRune(runes[i+1])
+					i++
+					continue
+				}
+				inString = false
+			}
+			continue
+		}
+
+		switch {
+		case c == '\'':
+			inString = true
+			b.WriteRune(c)
+		case c == '-' && i+1 < len(runes) && runes[i+1] == '-':
+			for i < len(runes) && runes[i] != '\n' {
+				i++
+			}
+			if i < len(runes) {
+				b.WriteRune('\n') // keep line structure so positions/messages stay sane
+			}
+		case c == '/' && i+1 < len(runes) && runes[i+1] == '*':
+			i += 2
+			for i+1 < len(runes) && (runes[i] != '*' || runes[i+1] != '/') {
+				i++
+			}
+			i++ // land on the closing '/'
+		default:
+			b.WriteRune(c)
+		}
+	}
+
+	return b.String()
+}
+
 // validateMigrationSQL rejects the constructs design §5.1 reserves for the
 // runner itself: COMMIT, ROLLBACK, BEGIN used as a transaction verb (the
 // BEGIN...END pair inside a CREATE TRIGGER body is legal and must pass),
-// and PRAGMA user_version.
-func validateMigrationSQL(name, sql string) error {
-	if transactionControlPattern.MatchString(sql) {
+// and PRAGMA user_version. Comments are stripped first (slice-3 review
+// finding 4) so a migration's prose is never mistaken for a violation.
+func validateMigrationSQL(name, body string) error {
+	scan := stripSQLComments(body)
+	if transactionControlPattern.MatchString(scan) {
 		return fmt.Errorf("migration %q must not manage its own transaction (COMMIT/ROLLBACK/BEGIN <mode> is reserved for the runner)", name)
 	}
-	if userVersionPattern.MatchString(sql) {
+	if userVersionPattern.MatchString(scan) {
 		return fmt.Errorf("migration %q must not set PRAGMA user_version (reserved for the runner)", name)
 	}
 	return nil

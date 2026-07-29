@@ -188,3 +188,88 @@ func TestValidateMigrationSQLOwnershipRules(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateMigrationSQLIgnoresComments is slice-3 review finding 4:
+// validateMigrationSQL scanned raw SQL text with no comment stripping, so a
+// migration whose PROSE happened to mention a reserved word failed
+// validation for a reason that has nothing to do with what the migration
+// actually does. This blocks slice 4's 0002_learning_and_search, whose FTS5
+// synchronization triggers need comments that discuss transactions in
+// plain English.
+//
+// Measured on the code before this fix, verbatim:
+//
+//	comment containing COMMIT        -> err=migration "0002_x.sql" must not manage its own transaction
+//	comment containing BEGIN         -> err=migration "0002_x.sql" must not manage its own transaction
+//	comment containing user_version  -> err=migration "0002_x.sql" must not set PRAGMA user_version
+//	clean control                    -> err=<nil>
+func TestValidateMigrationSQLIgnoresComments(t *testing.T) {
+	tests := []struct {
+		name    string
+		sql     string
+		wantErr bool
+	}{
+		{
+			name:    "line comment mentioning COMMIT is not a violation",
+			sql:     "-- This trigger must COMMIT cleanly once SQLite finishes it.\nCREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantErr: false,
+		},
+		{
+			name:    "line comment mentioning BEGIN is not a violation",
+			sql:     "-- BEGIN a mental model: this table starts the learning pipeline.\nCREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantErr: false,
+		},
+		{
+			name:    "line comment mentioning PRAGMA user_version is not a violation",
+			sql:     "-- The runner bumps PRAGMA user_version after this file applies.\nCREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantErr: false,
+		},
+		{
+			name:    "block comment mentioning COMMIT is not a violation",
+			sql:     "/* Notes: this migration's DDL is committed as one unit by the runner. */\nCREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantErr: false,
+		},
+		{
+			name:    "block comment spanning multiple lines mentioning BEGIN/ROLLBACK",
+			sql:     "/*\n * BEGIN reading here: a failed statement causes an implicit ROLLBACK.\n */\nCREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantErr: false,
+		},
+		{
+			name:    "a real transaction-control statement is still rejected even inside a migration with an unrelated comment",
+			sql:     "-- plain DDL below\nCREATE TABLE units (id TEXT PRIMARY KEY);\nCOMMIT;",
+			wantErr: true,
+		},
+		{
+			name:    "a real PRAGMA user_version statement is still rejected",
+			sql:     "-- version bookkeeping is the runner's job\nPRAGMA user_version = 3;",
+			wantErr: true,
+		},
+		{
+			name:    "a real BEGIN transaction verb is still rejected even with an unrelated line comment above it",
+			sql:     "-- start of file\nBEGIN;\nCREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantErr: true,
+		},
+		{
+			name:    "the trigger BEGIN...END carve-out still passes with a comment mentioning COMMIT nearby",
+			sql:     "-- fires after insert, must not need its own COMMIT\nCREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN\n  INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);\nEND;",
+			wantErr: false,
+		},
+		{
+			name:    "a string literal containing '--' is data, not a comment, and must not hide a real violation",
+			sql:     "CREATE TABLE units (id TEXT PRIMARY KEY, note TEXT DEFAULT '-- not a comment');\nCOMMIT;",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMigrationSQL("0002_x.sql", tt.sql)
+			if tt.wantErr && err == nil {
+				t.Fatal("validateMigrationSQL(...) = nil, want a non-nil error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("validateMigrationSQL(...) = %v, want nil error", err)
+			}
+		})
+	}
+}
