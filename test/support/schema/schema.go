@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -43,6 +44,91 @@ var kindRank = map[Kind]int{
 	KindUniqueIndex:  3,
 	KindTrigger:      4,
 	KindView:         5,
+}
+
+// Rank returns k's position in the golden's total order — table <
+// virtual_table < index < unique_index < trigger < view (design §6.2). An
+// unrecognized Kind sorts last.
+//
+// Exported so every consumer of this ordering — Sort/Marshal here, and the
+// L3 golden-generation test in test/integration/schema_golden_test.go —
+// reads it from the SAME map instead of each maintaining its own copy
+// (slice-3 review finding 7: the two copies agreed today, but nothing kept
+// them agreeing once a future migration added a Kind only one of them
+// knew about — a silently different sort order between structure.golden
+// and ddl.golden is exactly the un-reviewable golden diff the gate exists
+// to prevent).
+func Rank(k Kind) int {
+	if r, ok := kindRank[k]; ok {
+		return r
+	}
+	return len(kindRank)
+}
+
+// createPrefixPattern recognizes the CREATE statement shapes sqlite_master
+// can hold, case- and whitespace-insensitive, with an optional TEMP /
+// TEMPORARY qualifier (design §6.2). It anchors on the CREATE ... <kind>
+// prefix only and does not need to know what follows: "CREATE TABLE IF NOT
+// EXISTS foo (...)" matches on "CREATE TABLE" exactly the same way
+// "CREATE TABLE foo (...)" does, because \b already ends the match at the
+// word boundary after TABLE regardless of what comes next.
+var createPrefixPattern = regexp.MustCompile(
+	`(?is)^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?(VIRTUAL\s+TABLE|UNIQUE\s+INDEX|TABLE|INDEX|TRIGGER|VIEW)\b`,
+)
+
+// Classify reads a schema object's Kind off the normalized DDL prefix
+// (design §6.2), not off sqlite_master.type alone — that column cannot
+// distinguish a virtual table from an ordinary one, or a unique index from
+// a plain one. ok is false when createSQL's prefix does not match any
+// recognized CREATE shape (the caller is expected to treat that as an
+// unclassified-object error — moved here, with its own direct table tests,
+// per slice-3 review finding 3: this regex previously had zero direct
+// tests and was only exercised end-to-end through the single fixture
+// 0001_core_tables.sql happens to produce).
+func Classify(createSQL string) (Kind, bool) {
+	m := createPrefixPattern.FindStringSubmatch(createSQL)
+	if m == nil {
+		return "", false
+	}
+	switch strings.ToUpper(strings.Join(strings.Fields(m[1]), " ")) {
+	case "TABLE":
+		return KindTable, true
+	case "VIRTUAL TABLE":
+		return KindVirtualTable, true
+	case "INDEX":
+		return KindIndex, true
+	case "UNIQUE INDEX":
+		return KindUniqueIndex, true
+	case "TRIGGER":
+		return KindTrigger, true
+	case "VIEW":
+		return KindView, true
+	default:
+		return "", false
+	}
+}
+
+// IsShadowTable reports whether name is an FTS5 shadow table of one of the
+// virtual tables in virtualTables: "<vt>_data", "<vt>_idx", "<vt>_docsize",
+// "<vt>_config" and similar "<vt>_<suffix>" forms (design §6.2).
+func IsShadowTable(name string, virtualTables map[string]bool) bool {
+	for vt := range virtualTables {
+		if strings.HasPrefix(name, vt+"_") {
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizeDDL implements ddl.golden's per-statement normalization (design
+// §6.3): trim trailing whitespace per line, trim the whole statement, and
+// end it with a single ";".
+func NormalizeDDL(raw string) string {
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")) + ";"
 }
 
 // Object is one schema object's structural projection: its kind, name,

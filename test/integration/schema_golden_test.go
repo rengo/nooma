@@ -8,7 +8,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -38,50 +37,20 @@ type sqliteMasterRow struct {
 	SQL  string
 }
 
-var createPrefixPattern = regexp.MustCompile(`(?is)^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?(VIRTUAL\s+TABLE|UNIQUE\s+INDEX|TABLE|INDEX|TRIGGER|VIEW)\b`)
-
-// classify reads the Kind off the normalized DDL prefix (design §6.2), not
-// off sqlite_master.type alone — that column cannot distinguish a virtual
-// table from an ordinary one, or a unique index from a plain one.
-func classify(createSQL string) (schema.Kind, bool) {
-	m := createPrefixPattern.FindStringSubmatch(createSQL)
-	if m == nil {
-		return "", false
-	}
-	switch strings.ToUpper(strings.Join(strings.Fields(m[1]), " ")) {
-	case "TABLE":
-		return schema.KindTable, true
-	case "VIRTUAL TABLE":
-		return schema.KindVirtualTable, true
-	case "INDEX":
-		return schema.KindIndex, true
-	case "UNIQUE INDEX":
-		return schema.KindUniqueIndex, true
-	case "TRIGGER":
-		return schema.KindTrigger, true
-	case "VIEW":
-		return schema.KindView, true
-	default:
-		return "", false
-	}
-}
-
-// isShadowTable reports whether name is an FTS5 shadow table of one of the
-// virtual tables in vts: "<vt>_data", "<vt>_idx", "<vt>_docsize",
-// "<vt>_config" and similar "<vt>_<suffix>" forms (design §6.2).
-func isShadowTable(name string, vts map[string]bool) bool {
-	for vt := range vts {
-		if strings.HasPrefix(name, vt+"_") {
-			return true
-		}
-	}
-	return false
-}
-
 // dumpSchema applies design §6.2/§6.3's shared exclusion rules to a raw
 // sqlite_master dump: drop rows with no sql (auto-created objects like
 // sqlite_autoindex_*), drop sqlite_-prefixed bookkeeping, and drop FTS5
 // shadow tables.
+//
+// This function stays here, in the L3 test file, rather than moving to
+// test/support/schema alongside schema.Classify/IsShadowTable: it needs a
+// live *sql.DB connection, and test/support/schema is deliberately
+// stdlib-only (design D1/§6.4) so the L2 gate that will eventually import
+// it links no SQLite driver. The pure classification/normalization logic
+// it calls (schema.Classify, schema.IsShadowTable) DOES live there, with
+// its own direct table tests — moved out of this file per slice-3 review
+// finding 3, which found that logic exercised only end-to-end through this
+// one whole-pipeline comparison.
 func dumpSchema(ctx context.Context, db *sql.DB) ([]sqliteMasterRow, error) {
 	rows, err := db.QueryContext(ctx, `SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name`)
 	if err != nil {
@@ -99,7 +68,7 @@ func dumpSchema(ctx context.Context, db *sql.DB) ([]sqliteMasterRow, error) {
 		if strings.HasPrefix(name, "sqlite_") {
 			continue
 		}
-		kind, ok := classify(createSQL)
+		kind, ok := schema.Classify(createSQL)
 		if !ok {
 			return nil, &unclassifiedObjectError{name: name, sql: createSQL}
 		}
@@ -114,7 +83,7 @@ func dumpSchema(ctx context.Context, db *sql.DB) ([]sqliteMasterRow, error) {
 
 	filtered := all[:0]
 	for _, r := range all {
-		if isShadowTable(r.Name, virtualTables) {
+		if schema.IsShadowTable(r.Name, virtualTables) {
 			continue
 		}
 		filtered = append(filtered, r)
@@ -154,35 +123,17 @@ func tableColumns(ctx context.Context, db *sql.DB, name string) ([]string, error
 	return cols, rows.Err()
 }
 
-// normalizeDDL implements ddl.golden's per-statement normalization (design
-// §6.3): trim trailing whitespace per line, trim the whole statement, and
-// end it with a single ";".
-func normalizeDDL(raw string) string {
-	lines := strings.Split(raw, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t")
-	}
-	return strings.TrimSpace(strings.Join(lines, "\n")) + ";"
-}
-
-var kindRankOrder = []schema.Kind{
-	schema.KindTable, schema.KindVirtualTable, schema.KindIndex,
-	schema.KindUniqueIndex, schema.KindTrigger, schema.KindView,
-}
-
-func kindRank(k schema.Kind) int {
-	for i, want := range kindRankOrder {
-		if k == want {
-			return i
-		}
-	}
-	return len(kindRankOrder)
-}
-
+// sortRows orders rows the same way schema.Sort orders Objects — by
+// (kind rank, name) — reading the rank from schema.Rank, the single
+// exported source of truth for the ordering (slice-3 review finding 7:
+// this file used to keep its own independent copy of the rank table,
+// which agreed with test/support/schema's today but had nothing keeping
+// it that way once a future migration added a Kind only one of them knew
+// about).
 func sortRows(rows []sqliteMasterRow) {
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].Kind != rows[j].Kind {
-			return kindRank(rows[i].Kind) < kindRank(rows[j].Kind)
+			return schema.Rank(rows[i].Kind) < schema.Rank(rows[j].Kind)
 		}
 		return rows[i].Name < rows[j].Name
 	})
@@ -244,7 +195,7 @@ func TestSchemaGolden(t *testing.T) {
 			obj.Columns = cols
 		}
 		objs = append(objs, obj)
-		ddlParts = append(ddlParts, normalizeDDL(r.SQL))
+		ddlParts = append(ddlParts, schema.NormalizeDDL(r.SQL))
 	}
 
 	structureGolden := schema.Marshal(objs, schemaVersion)

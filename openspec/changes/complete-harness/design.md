@@ -545,6 +545,22 @@ to `COMMIT`. Recorded here so the first person who hits it does not conclude the
 `make schema-golden && git diff --exit-code -- testdata/schema`, the same shape as the
 `templ generate` gate doc 06 §6 already describes: the gate is "regenerating changes nothing".
 
+**Package placement, corrected by the slice-3 review (finding 3).** `dumpSchema` — steps 2/3 above —
+needs `database/sql`, so it stays in `test/integration/schema_golden_test.go`, consistent with D1's
+"`FromSQLite` deliberately does not live [in `test/support/schema`]" (§6.4). But the classification
+and normalization logic step 4 actually runs — reading a `Kind` off a DDL prefix (`Classify`),
+recognizing an FTS5 shadow table (`IsShadowTable`), and the DDL golden's per-statement
+normalization (`NormalizeDDL`) — is pure: no SQLite handle needed. It originally lived in the same
+`_test.go` file as `dumpSchema` and was exercised only end-to-end, through one whole-pipeline
+comparison against the single fixture `0001_core_tables.sql` happens to produce; a regression in
+`Classify`'s regex for any schema shape not present in that one migration (a `CREATE VIEW`, a
+`CREATE TABLE IF NOT EXISTS`) would not have gone red until that shape landed in a real migration.
+It now lives in `test/support/schema` (package `schema`), stdlib-only like the rest of that
+package, next to `Marshal`/`ParseGolden`, with its own direct table tests. The kind-rank table is
+likewise exported as `schema.Rank`, closing a second, independent copy that
+`test/integration/schema_golden_test.go` used to keep (`sortRows`'s `kindRank`/`kindRankOrder`) —
+see finding 7's note in §6.2.
+
 ### 6.2 Normalization rules — `structure.golden`
 
 **What is extracted.** For every row of `sqlite_master`:
@@ -562,6 +578,10 @@ to `COMMIT`. Recorded here so the first person who hits it does not conclude the
 `table < virtual_table < index < unique_index < trigger < view`. Columns **by name**, not by
 ordinal: column order is not what the doc-03 comparison is about, and the ordinal order is
 preserved in `ddl.golden` anyway. So both properties are covered and neither gate is fragile.
+This rank table has exactly one source of truth: `schema.Rank` in `test/support/schema`, used by
+both `structure.golden`'s own `Sort` and `ddl.golden`'s row ordering in
+`test/integration/schema_golden_test.go` (corrected by the slice-3 review, finding 7 — the two
+sides used to keep independent copies that merely happened to agree).
 
 **The format.** Two-space indent, one object or column per line, `\n` endings:
 

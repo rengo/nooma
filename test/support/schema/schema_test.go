@@ -85,3 +85,189 @@ func TestParseGoldenSkipsCommentsAndBlankLines(t *testing.T) {
 		t.Errorf("ParseGolden(...) = %#v, want %#v", got, want)
 	}
 }
+
+// TestClassify is the direct table test slice-3 review finding 3 asked
+// for: Classify previously had zero direct tests and was only exercised
+// end-to-end through one whole-pipeline comparison against the single
+// fixture 0001_core_tables.sql happens to produce — a regression in this
+// regex for any schema shape not present there today (a CREATE VIEW, a
+// CREATE TABLE IF NOT EXISTS) would not have gone red until that shape
+// landed in a real migration.
+func TestClassify(t *testing.T) {
+	tests := []struct {
+		name      string
+		createSQL string
+		wantKind  Kind
+		wantOK    bool
+	}{
+		{
+			name:      "table",
+			createSQL: "CREATE TABLE units (id TEXT PRIMARY KEY);",
+			wantKind:  KindTable,
+			wantOK:    true,
+		},
+		{
+			name:      "virtual table",
+			createSQL: "CREATE VIRTUAL TABLE units_fts USING fts5(content);",
+			wantKind:  KindVirtualTable,
+			wantOK:    true,
+		},
+		{
+			name:      "index",
+			createSQL: "CREATE INDEX idx_units_status_touched ON units (status, touched_at);",
+			wantKind:  KindIndex,
+			wantOK:    true,
+		},
+		{
+			name:      "unique index",
+			createSQL: "CREATE UNIQUE INDEX idx_units_unique_active_insight ON units (content) WHERE status = 'active';",
+			wantKind:  KindUniqueIndex,
+			wantOK:    true,
+		},
+		{
+			name:      "trigger",
+			createSQL: "CREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN\n  SELECT 1;\nEND;",
+			wantKind:  KindTrigger,
+			wantOK:    true,
+		},
+		{
+			name:      "view — the dead branch every prior test skipped",
+			createSQL: "CREATE VIEW active_units AS SELECT * FROM units WHERE status = 'active';",
+			wantKind:  KindView,
+			wantOK:    true,
+		},
+		{
+			name:      "CREATE TABLE IF NOT EXISTS",
+			createSQL: "CREATE TABLE IF NOT EXISTS units (id TEXT PRIMARY KEY);",
+			wantKind:  KindTable,
+			wantOK:    true,
+		},
+		{
+			name:      "lowercase CREATE keyword",
+			createSQL: "create table units (id text primary key);",
+			wantKind:  KindTable,
+			wantOK:    true,
+		},
+		{
+			name:      "mixed case and extra whitespace between CREATE and TABLE",
+			createSQL: "CrEaTe   \n  TABLE units (id TEXT PRIMARY KEY);",
+			wantKind:  KindTable,
+			wantOK:    true,
+		},
+		{
+			name:      "TEMP qualifier",
+			createSQL: "CREATE TEMP TABLE scratch (id TEXT);",
+			wantKind:  KindTable,
+			wantOK:    true,
+		},
+		{
+			name:      "TEMPORARY qualifier",
+			createSQL: "CREATE TEMPORARY TABLE scratch (id TEXT);",
+			wantKind:  KindTable,
+			wantOK:    true,
+		},
+		{
+			name:      "unclassifiable — the shape that must reach unclassifiedObjectError upstream",
+			createSQL: "CREATE FOREIGN TABLE not_a_real_sqlite_object (id TEXT);",
+			wantOK:    false,
+		},
+		{
+			name:      "not a CREATE statement at all",
+			createSQL: "SELECT 1;",
+			wantOK:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotKind, gotOK := Classify(tt.createSQL)
+			if gotOK != tt.wantOK {
+				t.Fatalf("Classify(%q) ok = %v, want %v", tt.createSQL, gotOK, tt.wantOK)
+			}
+			if tt.wantOK && gotKind != tt.wantKind {
+				t.Errorf("Classify(%q) kind = %q, want %q", tt.createSQL, gotKind, tt.wantKind)
+			}
+		})
+	}
+}
+
+// TestIsShadowTable covers design §6.2's FTS5 shadow-table exclusion rule:
+// collect the virtual-table name set first, then drop any object named
+// "<vt>_<suffix>".
+func TestIsShadowTable(t *testing.T) {
+	virtualTables := map[string]bool{"units_fts": true}
+
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "units_fts_data", want: true},
+		{name: "units_fts_idx", want: true},
+		{name: "units_fts_docsize", want: true},
+		{name: "units_fts_config", want: true},
+		{name: "units_fts", want: false}, // the virtual table itself, not its shadow
+		{name: "units", want: false},     // an ordinary table sharing a prefix character, not a shadow
+		{name: "unrelated_table", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsShadowTable(tt.name, virtualTables); got != tt.want {
+				t.Errorf("IsShadowTable(%q, ...) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeDDL covers ddl.golden's minimal normalization (design §6.3).
+// The inputs deliberately never carry their own trailing ";", the same
+// shape sqlite_master.sql actually has (SQLite stores a CREATE statement's
+// original text without its terminating semicolon) — NormalizeDDL's job is
+// to append exactly one, not to deduplicate a semicolon nothing upstream
+// of it ever produces.
+func TestNormalizeDDL(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "trailing whitespace per line is trimmed",
+			raw:  "CREATE TABLE units (   \n  id TEXT   \n)  ",
+			want: "CREATE TABLE units (\n  id TEXT\n);",
+		},
+		{
+			name: "a statement gets its terminating semicolon appended",
+			raw:  "CREATE TABLE units (id TEXT)",
+			want: "CREATE TABLE units (id TEXT);",
+		},
+		{
+			name: "leading and trailing blank lines are trimmed",
+			raw:  "\n\nCREATE TABLE units (id TEXT)\n\n",
+			want: "CREATE TABLE units (id TEXT);",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeDDL(tt.raw); got != tt.want {
+				t.Errorf("NormalizeDDL(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRank asserts the single exported ordering (slice-3 review finding 7)
+// matches design §6.2: table < virtual_table < index < unique_index <
+// trigger < view, and an unrecognized Kind sorts last.
+func TestRank(t *testing.T) {
+	order := []Kind{KindTable, KindVirtualTable, KindIndex, KindUniqueIndex, KindTrigger, KindView}
+	for i := 1; i < len(order); i++ {
+		if Rank(order[i-1]) >= Rank(order[i]) {
+			t.Errorf("Rank(%q) = %d, want it strictly less than Rank(%q) = %d", order[i-1], Rank(order[i-1]), order[i], Rank(order[i]))
+		}
+	}
+	if got, want := Rank(Kind("bogus")), len(order); got != want {
+		t.Errorf("Rank(%q) = %d, want %d (unrecognized kinds sort last)", "bogus", got, want)
+	}
+}
