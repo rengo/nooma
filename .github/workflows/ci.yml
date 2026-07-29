@@ -112,10 +112,16 @@ jobs:
 #   driver benchmarks                   -> ADR-0001's spike lives on an unmerged
 #                                          branch by design; no gate re-runs it
 #
-# The docs<->code sync label check lives in its own workflow (docs-sync.yml)
-# because it needs `pull_request` label events, which this file does not listen
-# for.
-#   cross-compilation matrix            -> blocked on ADR-0001 closing
-#
 # They are listed rather than silently absent: a CI file that looks complete but
 # enforces half the harness is worse than one that says which half.
+#
+# Two more §6 gates exist and ARE enforced — just not in this file:
+#
+#   docs<->code sync           -> docs-sync.yml, because it needs `pull_request`
+#                                  label events (`labeled`, `unlabeled`), which
+#                                  this file's `pull_request` trigger does not
+#                                  listen for.
+#   cross-compilation matrix   -> main.yml, on push to main only, next to the L4
+#                                  job. ADR-0001 (pure-Go/wasm driver) is
+#                                  Accepted; this is its direct payoff, not
+#                                  blocked on it.
