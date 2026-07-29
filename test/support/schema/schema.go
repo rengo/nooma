@@ -108,9 +108,32 @@ func Classify(createSQL string) (Kind, bool) {
 	}
 }
 
-// IsShadowTable reports whether name is an FTS5 shadow table of one of the
-// virtual tables in virtualTables: "<vt>_data", "<vt>_idx", "<vt>_docsize",
-// "<vt>_config" and similar "<vt>_<suffix>" forms (design §6.2).
+// IsShadowTable reports whether name matches the shape of an FTS5 shadow
+// table of one of the virtual tables in virtualTables: "<vt>_data",
+// "<vt>_idx", "<vt>_docsize", "<vt>_config" and similar "<vt>_<suffix>"
+// forms (design §6.2).
+//
+// This is a bare name-prefix check. It does NOT look at the candidate
+// object's Kind, so it also returns true for a table, trigger, index, or
+// view that merely happens to be named "<vt>_<something>" — for example a
+// virtual table units_fts and a same-migration trigger named
+// units_fts_ai both collide with this prefix rule, even though only the
+// former is an FTS5 shadow object. Every caller MUST gate on
+// Kind == KindTable before trusting a true result here (dumpSchema in
+// test/integration/schema_golden_test.go does this); this function does
+// not and cannot do that gating itself, because it is never given a Kind
+// to gate on. Discovered when 0002_learning_and_search.sql's FTS5 sync
+// triggers (units_fts_ai/_ad/_au) were silently dropped from both schema
+// goldens by a call site that had not yet added that guard (four-lens
+// pre-PR review, slice 4a).
+//
+// Residual gap, left as-is rather than fixed here because the fix is not
+// obviously cheap or correct: this prefix check does not verify the
+// suffix is one of FTS5's own known shadow suffixes ("_data", "_idx",
+// "_docsize", "_config"). A future ordinary table named
+// "units_fts_history" would still be silently dropped from both goldens,
+// Kind guard or not, because that guard only rules out non-table objects —
+// it does not validate the suffix.
 func IsShadowTable(name string, virtualTables map[string]bool) bool {
 	for vt := range virtualTables {
 		if strings.HasPrefix(name, vt+"_") {
