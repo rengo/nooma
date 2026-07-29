@@ -45,6 +45,10 @@ cover: ## Coverage of the cognitive core only — see docs/06-harness.md §3
 store-api-golden: ## Regenerate testdata/schema/store_api.golden — the exported-API golden (design §7.3, §9.2)
 	go test ./test/conformance/ -run TestHarness_StoreAPIUnchanged -update
 
+.PHONY: pending-red
+pending-red: ## docs/06-harness.md §8 point 5 — test/conformance's pendingimpl tests must fail to compile, for the expected reason
+	sh scripts/pending-red.sh
+
 .PHONY: tools
 tools: $(GOBIN)/golangci-lint ## Install pinned development tools
 
