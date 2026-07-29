@@ -524,6 +524,59 @@ closure) landed first, on branch `feat/schema-learning-and-search` from an up-to
 (`units_fts_ai`/`_ad`/`_au`), and nothing else — `schema_version` bumps from `1` to `2`. This is
 exactly what R3.8/R9.1 predict; no unexpected object appears or disappears.
 
+**Standing gap until 4b lands**: task 4.2 (`test/support/schema.ParseMarkdown`/`.Diff`,
+`TestHarness_SchemaMatchesDoc03`) is the *only* automated gate that continuously checks
+`docs/03-data-model.md` against the real schema — it does not exist yet. Until 4b lands, the
+byte-for-byte statement agreement between `0002_learning_and_search.sql` and doc 03's Learning/
+Measurements/System config/Search sections (confirmed once, by hand and by a one-off script-diff,
+during 4a) rests on review alone, not on a CI gate. A doc 03 edit that silently drifts from the
+schema between now and 4b would not be caught automatically.
+
+### PR 4a review remediation (four-lens pre-PR review, owner-accepted `size:exception`)
+
+The owner decided to fix every finding in this PR rather than drop scope or defer, per the same
+pattern already used for PR 3's remediation above. Branch `feat/schema-learning-and-search`, on
+top of the 7 commits already recorded for 4a (`953c49e`..`2a23b63`). Not pushed, no PR opened.
+
+| # | Finding | Fixed in |
+|---|---|---|
+| 1 | BLOCKER — R3.4's incremental path (`0 < current < target`) had no test | `test/integration/migrate_test.go` (`TestMigrateAppliesOnlyPendingMigrations`) |
+| 2 | CRITICAL — the FTS5 sync triggers had zero behavioral (runtime) coverage | `test/integration/fts5_search_test.go` (four new L3 tests); `spec.md` R9.1 gained a "Verified by" clause (it had none) |
+| 3 | CRITICAL — the schema golden gate is blind to bugs in its own generator | `test/integration/schema_golden_anchor_test.go` (hand-written anchor list, independent of `dumpSchema`/`Classify`/`IsShadowTable`); `test/support/schema/schema.go`'s `IsShadowTable` doc comment now states its Kind-blind contract and the unchecked-suffix residual gap; `test/support/schema/schema_test.go`'s `TestIsShadowTable` gained the trigger-collision and partial-index cases |
+| 4 | WARNING — the trigger comments explained the what, not the why | `internal/store/sqlite/migrations/0002_learning_and_search.sql` and `docs/03-data-model.md` both gained the FTS5 delete-command-syntax note, the delete-then-insert/no-UPDATE-path note, and the archival-stays-indexed-on-purpose note (with the rowid-correspondence reasoning for why excluding rows at index time would be a bug, not an optimization) |
+| 5 | WARNING — `ON DELETE CASCADE` reach on `units`, non-negotiable #6 | Recorded as residual risk R14 below (no code/schema change — that is a design/ADR decision, not an apply-phase one) and in Engram `nooma/units-cascade-delete-latent-risk` |
+| 6 | WARNING — `VACUUM`/rowid hazard, now with `measurements` too | `docs/03-data-model.md`'s existing note and `design.md`'s R10 risk row both gained the empirical result (rowids preserved, not renumbered, across the Go driver/`sqlite3` CLI/Python — plus a fourth independent probe run during this remediation) alongside the still-real theoretical hazard |
+| 7 | WARNING — duplicated PRAGMA DSN string | `test/integration/migrate_test.go`'s `TestVaultNewerThanBinaryRefusesToOpen` now calls `foreign_key_test.go`'s `pragmaDSN` instead of hand-building the same string a second time |
+| 8 | SUGGESTION — `IsShadowTable`'s Kind-blind contract lived only in the caller | Folded into finding 3's fix above (same doc comment) |
+| 9 | Also recorded | This section's own "Standing gap until 4b lands" note above (doc-03↔schema automated gate still deferred to 4b) |
+
+**Watched REDs (verbatim)** — full detail in each test file's doc comment:
+
+- Finding 1 (incremental migration): mutating the outer skip loop from `if m.Version <= current`
+  to `if m.Version <= target` (a "compares against the wrong variable" bug) —
+  `migrate_test.go:326: PRAGMA user_version after reopening a vault seeded at version 1 = 1, want 2`.
+  A second mutation tried first (`<` instead of `<=`) did **not** reproduce a red: `applyMigration`
+  already re-checks `current >= m.Version` inside its own transaction (design D4's race guard,
+  added by the PR-3 review), which silently absorbs that specific bug. Recorded as a genuine
+  defense-in-depth discovery, not hidden.
+- Finding 2 (FTS5 triggers): dropping `units_fts_ai` —
+  `fts5_search_test.go:111: units_fts MATCH "aardvark" count = 0, want 1`. Dropping `units_fts_au`
+  and `units_fts_ad` were also probed and each failed only its own corresponding test, confirmed
+  and reverted.
+- Finding 3 (golden blindness): reverting `dumpSchema`'s `r.Kind == schema.KindTable` guard and
+  running `make schema-golden` drops the three FTS5 triggers from `structure.golden` — the new
+  anchor test then fails
+  (`schema_golden_anchor_test.go: structure.golden is missing required line "trigger units_fts_ai"`)
+  while `TestSchemaGolden` itself still PASSES against that same self-consistent, wrong golden —
+  reproducing exactly the blindness this finding describes.
+
+**Verification, all green (verbatim exit codes)**: `make check` exit 0; `golangci-lint run
+--build-tags integration ./...` → "0 issues.", exit 0; `go clean -testcache && make
+test-integration` → both packages `ok`, exit 0; `make schema-golden && git diff --exit-code --
+testdata/schema` exit 0 (no golden drift from this remediation batch); `make store-api-golden &&
+git diff --exit-code -- testdata/schema` exit 0; the four new FTS5 tests and the new incremental
+migration test each run with `-count=10`, zero failures.
+
 ---
 
 ## PR 5 — Pending-red conformance (I01, I03, I21) (~200 lines)
@@ -745,6 +798,7 @@ excluded — their diff is the point of the gate.
 | R10 / F1 — `units.rowid` is unstable across `VACUUM`, `units_fts` is keyed on it | Recorded as a one-line note in `docs/03-data-model.md`'s Search section, zero-cost in this change | 4.2 |
 | R2 (proposal) — a "fails to compile" gate can pass for the wrong reason | Closed by `scripts/pending-red.sh` failure-mode 2 (compiler error must name an expected symbol) | 5.5 |
 | R12 (design) — `TestOpenAppliesPragmas` cannot read a per-connection PRAGMA from outside the pool | **Closed** — `journal_mode` asserted directly (file property) by `TestOpenAppliesPragmas`; `foreign_keys`/`busy_timeout` asserted by real observation in the white-box `TestOpenPRAGMAsReadBack`, not an FK violation (that behavioral test needed a migrated schema that did not exist yet — see task 4.3) | 2.10 (closed), 4.3 (the behavioral test design §4.4 originally wanted) |
+| **R14 (new, four-lens pre-PR review of slice 4a)** — `0002` widens `ON DELETE CASCADE`/`SET NULL` reach (`unit_embeddings.unit_id` CASCADE, `measurements.ref_unit_id` SET NULL), consistent with `0001` and straight from doc 03, not invented by this change. `rg "DELETE FROM"` finds zero occurrences in `internal/` or `test/` today, so this is **latent, not exercised** — but a raw `DELETE FROM units` already cascades if any future code path ever issues one, and CLAUDE.md non-negotiable #6 ("nothing is deleted in the vault") plus #7 ("safe defaults are structural, not warnings") both bear on that gap. **Not fixed here on purpose**: adding a blocking trigger or changing the schema is a design decision needing its own ADR (doc 03 governs the schema; this apply phase does not reopen it). Flagged so an ADR or a defensive DB-level guard is evaluated **before** any code path gains delete capability on `units` — today it costs nothing because nothing deletes. | Recorded here and in Engram (`nooma/units-cascade-delete-latent-risk`); no code or schema change in this change | none yet — pre-M0 flag for whoever adds the first delete-capable code path |
 
 ---
 
