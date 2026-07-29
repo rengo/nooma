@@ -3,12 +3,24 @@
 # Two entry points, and the difference matters:
 #
 #   make check      the fast loop — lint, L1/L2, build. Seconds. Run it constantly.
-#   make check-all  every gate CI blocks on. Slower. Run it before opening a PR.
+#   make check-all  every gate CI blocks on that a Makefile CAN run locally.
+#                   Slower. Run it before opening a PR.
 #
 # `check` is deliberately NOT full CI parity: it skips L3 (a real SQLite vault),
-# the pending-red gate and the coverage floor, all of which cost real time. What
-# it must never do is *claim* parity — an earlier version of this comment did,
-# and a review caught it. If you add a blocking CI job, add it to `check-all`.
+# the schema-golden regeneration-diff check, the pending-red gate and the
+# coverage floor, all of which cost real time. What it must never do is *claim*
+# parity — an earlier version of this comment did, and a review caught it. If
+# you add a blocking CI job, add it to `check-all` too — unless it needs PR
+# metadata a Makefile cannot produce (see the note below).
+#
+# One CI gate `check-all` deliberately cannot cover: docs-sync.yml's
+# docs<->code sync check. It decides on pull request metadata (the base
+# branch, the PR's label list) that only exists once a PR is open on GitHub —
+# a local `make` run has neither. Its classification logic is still testable
+# locally: scripts/docs-sync.sh takes a changed-file list and a labels JSON
+# string as plain inputs, covered by test/harness/docs_sync_test.go.
+# "Every gate CI blocks on" therefore means every gate below — `check-all`
+# does not claim docs-sync, and CLAUDE.md's Workflow section says so too.
 
 GOLANGCI_LINT_VERSION := v2.12.2
 GOBIN := $(shell go env GOPATH)/bin
@@ -19,7 +31,7 @@ GOBIN := $(shell go env GOPATH)/bin
 check: lint test build ## The fast loop: lint + L1/L2 tests + build — NOT full CI parity, see check-all
 
 .PHONY: check-all
-check-all: check test-integration pending-red cover ## Every gate CI blocks on — run before opening a PR
+check-all: check test-integration schema-golden-clean pending-red cover ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
 
 .PHONY: lint
 lint: $(GOBIN)/golangci-lint ## Dependency rule + clock port + standard linters
@@ -41,6 +53,10 @@ test-e2e: ## L4 — the compiled binary
 .PHONY: schema-golden
 schema-golden: ## Regenerate testdata/schema/{structure,ddl}.golden from the embedded migrations
 	go test -tags integration ./test/integration/ -run TestSchemaGolden -update
+
+.PHONY: schema-golden-clean
+schema-golden-clean: schema-golden ## Fail if regenerating the schema golden leaves a dirty tree — mirrors the second half of ci.yml's integration job
+	git diff --exit-code -- testdata/schema
 
 .PHONY: build
 build: ## Compile every package
