@@ -252,7 +252,10 @@ All of the following runs on every PR and blocks the merge:
 
 **Schema golden** deserves a note: it is the gate that stops the real schema from drifting away
 from [`03-data-model.md`](03-data-model.md). A migration that changes a table without updating
-the dump fails CI, and the dump's diff is what gets reviewed in the PR.
+the dump fails CI, and the dump's diff is what gets reviewed in the PR. The committed dump lives
+at `testdata/schema/structure.golden` (the structural projection compared against doc 03) and
+`testdata/schema/ddl.golden` (the raw, normalized DDL, self-diff only); `make schema-golden`
+regenerates both from the embedded migrations.
 
 **docs↔code sync**: the README already declares the rule ("either the code gets fixed or the
 doc gets updated in the same PR"). The executable version: a PR touching `internal/core/**`
