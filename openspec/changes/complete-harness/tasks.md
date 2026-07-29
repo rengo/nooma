@@ -754,7 +754,13 @@ Independent. See Conflict C2 (resolved in favour of spec.md) — types, loader a
 `format_example.json` are in scope; design D11 and this PR were corrected to match spec.md's
 R10.1–R10.4.
 
-- [ ] **6.1** [TDD] Write `TestHarness_GoldenSetFormatsDeclared` (L2,
+**Split into two links** (recalibrated review-workload forecast put the whole PR at
+~970–1,750 review lines): **6a** (tasks 6.1 and 6.2 — the golden-set formats and their loader)
+landed first, on branch `test/golden-set-formats` from an up-to-date `main` (PRs #4–#12 merged);
+**6b** (tasks 6.3 and 6.4 — the L4 e2e skeleton and its CI job) is deferred to its own PR/session.
+They are independent of each other: 6a needs no binary, and 6b needs none of 6a's fixtures.
+
+- [x] **6.1** [TDD] Write `TestHarness_GoldenSetFormatsDeclared` (L2,
       `test/conformance/golden_sets_test.go`).
       RED: `testdata/recall/`, `testdata/classify/`, `testdata/llm/` do not exist (D10 guard: the
       test first asserts it found three directories before asserting anything about their
@@ -769,7 +775,7 @@ R10.1–R10.4.
       GREEN: `make test` — three directories found, each `format.md` has a non-empty fenced json
       block, each has a `format_example.json` sibling of `cases/`, each has a `cases/` directory.
       Requirement: R10.1, R10.2, R10.4.
-- [ ] **6.2** [TDD] Write `TestGoldenSetFormatExamples` (L1, `test/support/goldenset/loader_test.go`).
+- [x] **6.2** [TDD] Write `TestGoldenSetFormatExamples` (L1, `test/support/goldenset/loader_test.go`).
       RED: `undefined: goldenset.Load` — compile error, package `test/support/goldenset` does not
       exist yet.
       Implement: `test/support/goldenset/types.go` defines `RecallExample`, `ClassifyExample` and
@@ -781,6 +787,50 @@ R10.1–R10.4.
       added, undocumented field returns an error.
       GREEN: `make test`.
       Requirement: R10.3.
+- [x] **6.2b** [TDD] Close the residual doc↔code drift gap 6a's own apply-progress flagged: nothing
+      validated each `format.md`'s fenced ` ```json ` example against the Go type it documents
+      (`format_example.json` was checked, `format.md` itself was not). Added
+      `test/support/goldenset/markdown.go`'s `ExtractJSONFence` (L1, own tests in
+      `markdown_test.go`) — a loud error, never a silent skip, on zero, more than one, or an
+      unterminated ` ```json ` fence, mirroring `test/support/schema/markdown.go`'s
+      `topLevelCreateCount` guard. `loader.go` gained `DecodeStrict(data []byte, v any) error`,
+      the exact decoder configuration `Load` now delegates to, so both the file-based and the
+      in-memory path share one `DisallowUnknownFields` rule. `TestHarness_GoldenSetFormatMatchesType`
+      (L2, `test/conformance/golden_sets_test.go`, mirroring `TestHarness_SchemaMatchesDoc03`)
+      decodes each format.md's fence into its matching `RecallExample`/`ClassifyExample`/`LLMExample`.
+      RED (by construction, both reverted): an undocumented field added to
+      `testdata/recall/format.md`'s fence failed naming that field; `Model` removed from
+      `LLMExample` failed the `llm` subtest for the same reason (unknown field, from the other
+      direction).
+      GREEN: all three formats agree with their Go types today — no divergence found, nothing to
+      fix on either side.
+      Requirement: R10.2, R10.3.
+- [x] **6.2c** [TDD] Three-lens pre-PR review remediation on 6a/6.2b (same branch, no new PR):
+      fixed the reintroduced ad hoc fence regexp (routed `assertFormatMDDeclaresShape` through
+      `ExtractJSONFence`, one parser instead of two); made `ExtractJSONFence` ignore fences inside
+      HTML comments (surfaces as the existing zero-fence error); added a `Validator` interface
+      called from `DecodeStrict` after decode, so a missing/`null` "Required: yes" field is
+      rejected — a gutted `{}` fence now fails the same drift gate that used to pass it;
+      `ClassifyExpected.Weight`/`DecayRate` became `*float64` to tell absent/`null` apart from a
+      legitimate zero; added `RecallUnit.Status` (required) so the recall corpus can express I02's
+      exclusion of non-`pool` units, with the example carrying a `superseded` unit that must never
+      appear in `expected_unit_ids`; added `ClassifyExample.LLMCaseID`, a structural link to a
+      `testdata/llm/` recording, proven by `TestClassifyExampleLinksToLLMExample`; added
+      `LLMExample.Error`, mutually exclusive with `Response`, for provider-failure fixtures;
+      pinned nested-unknown-field rejection; fixed a dead doc cross-reference and the
+      `decay_rate`/`weight_decay_rate` naming gap; added "What makes a good case" guidance to
+      recall/llm format.md.
+      RED, verbatim, all reverted: two-fence real `format.md` failed in both
+      `TestHarness_GoldenSetFormatsDeclared` and `TestHarness_GoldenSetFormatMatchesType`; a gutted
+      `{}` fence failed `TestHarness_GoldenSetFormatMatchesType` naming `id`; a commented-out fence
+      surfaced the zero-fence error in both tests.
+      GREEN: `make check`, `golangci-lint run --build-tags integration ./...` (0 issues),
+      `test-integration`, `pending-red`, `schema-golden`/`store-api-golden` (both stable).
+      Owner-accepted `size:exception` (documented, not hidden): whole-branch
+      `git diff --numstat main...HEAD` excluding `go.sum` is 898 (pre-6.2c) + this remediation's own
+      diff, well over the 400-line soft ceiling — kept as one branch per owner decision rather than
+      split, since 6a/6.2b/6.2c form one tightly-coupled golden-set-format work stream.
+      Requirement: R10.2, R10.3 (re-verified), plus the newly-added I02 expressiveness gap.
 - [ ] **6.3** [TDD] Write `TestBinaryReportsVersion` (L4, `test/e2e/version_test.go`) +
       `test/e2e/doc.go` (untagged marker).
       RED: `go test -tags e2e ./test/e2e/...` — no such package.
