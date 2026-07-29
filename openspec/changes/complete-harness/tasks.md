@@ -390,10 +390,12 @@ concurrency/mechanism regression tests each run 10-15 times with zero failures.
 excluding `go.sum`, no golden files touched): 1013 additions / 92 deletions = 1105 lines.
 
 **Measured for the whole PR** (`main...HEAD`, i.e. `3.1-3.5+3.7` plus this remediation batch,
-excluding `go.sum`): 2376 additions / 37 deletions = 2413 total; golden-only
-(`testdata/schema/*`) = 181 lines; **review-line total (excluding `go.sum` and goldens) = 2232**.
-This PR is submitted as `size:exception` per the owner's explicit decision — scope was not
-dropped and the overage is not hidden.
+excluding `go.sum`, INCLUDING this note's own commit — the true final number, not the
+snapshot-before-writing-it that a self-referential count would otherwise leave stale): 2413
+additions / 37 deletions = 2450 total; golden-only (`testdata/schema/*`) = 181 lines;
+**review-line total (excluding `go.sum` and goldens) = 2269**. This PR is submitted as
+`size:exception` per the owner's explicit decision — scope was not dropped and the overage is
+not hidden.
 
 ---
 
