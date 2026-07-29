@@ -36,6 +36,40 @@ jobs:
           go-version-file: go.mod
       - run: make test-e2e
 
-# cross-compile (docs/06-harness.md §6, the ADR-0001 pure-Go payoff) is not
-# wired here yet — deferred to its own task (openspec/changes/complete-harness
-# PR 7, task 7.4).
+  # docs/06-harness.md §6's cross-compilation matrix, and the direct payoff of
+  # ADR-0001: the driver is pure Go/wasm, so every target below builds with
+  # CGO_ENABLED=0 and no C toolchain anywhere. spec.md R1.2.
+  #
+  # What this proves and what it does not: it proves the code *builds*
+  # everywhere, not that it *works* everywhere. Slice 2 of this change shipped a
+  # bug where buildDSN produced an unparseable DSN for every Windows absolute
+  # path — a matrix like this one would have compiled it happily. That bug was
+  # caught by a unit test that constructed a Windows-shaped path and asserted on
+  # the parsed URI. Cross-compilation catches build-tag and syscall mistakes;
+  # platform *behavior* needs a test that names the platform.
+  cross-compile:
+    name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./...

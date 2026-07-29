@@ -88,11 +88,33 @@ jobs:
           go-version-file: go.mod
       - run: make pending-red
 
+  # docs/06-harness.md §3's hard floor: >= 90% statement coverage on
+  # internal/core/**, and no global floor, because a global number is satisfied
+  # by writing useless getter tests. spec.md R8.1.
+  #
+  # Armed and currently vacuous: internal/core has no statements yet, so the
+  # script passes because there is nothing to measure. It says so explicitly
+  # rather than printing a bare OK — a green badge earned by an empty package
+  # and one earned by a well-covered package must not look the same.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: sh scripts/core-coverage.sh
+
 # Gates from docs/06-harness.md §6 that are NOT enforced yet, and what they wait on:
 #
-#   internal/core coverage floor >= 90% -> waits on core having any statements
 #   templ generate leaves a clean tree  -> waits on the UI (M4, ADR-0008)
-#   docs<->code sync label check        -> waits on internal/core existing in a PR diff
+#   driver benchmarks                   -> ADR-0001's spike lives on an unmerged
+#                                          branch by design; no gate re-runs it
+#
+# The docs<->code sync label check lives in its own workflow (docs-sync.yml)
+# because it needs `pull_request` label events, which this file does not listen
+# for.
 #   cross-compilation matrix            -> blocked on ADR-0001 closing
 #
 # They are listed rather than silently absent: a CI file that looks complete but
