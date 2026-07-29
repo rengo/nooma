@@ -15,8 +15,13 @@ run:
   # not pass" promise. `golangci-lint run --build-tags integration ./...`
   # confirms the gap; wiring it here (config, not a CLI flag) is what
   # makes `make lint` / CI's plain `golangci-lint run` pick it up too.
-  # A future PR adding //go:build e2e or pendingimpl files must extend
-  # this list, or the same gap reopens for that tag.
+  # A future PR adding //go:build e2e files must extend this list, or the
+  # same gap reopens for that tag. pendingimpl files (test/conformance/) are
+  # a deliberate exception: they anchor to symbols that do not exist yet, so
+  # linting them here would report those as permanent errors. They are
+  # gated instead by `make pending-red` (scripts/pending-red.sh), which
+  # confirms they fail to compile for the right reason — do not add
+  # pendingimpl here.
   build-tags:
     - integration
 

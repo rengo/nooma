@@ -36,7 +36,11 @@ import (
 // Promotion: the PR that adds recall.VectorQuery and recall.VectorIndex
 // must, in the SAME PR, drop the pendingimpl tag from this file, move it
 // into the untagged L2 suite, and remove both lines from
-// pending_symbols.txt (design §8.3/§8.5, spec R7.3).
+// pending_symbols.txt (design §8.3/§8.5, spec R7.3). Promoting this test is
+// necessary but not sufficient (spec R6.2): it proves the invariant is
+// expressible, not enforced, so that same PR still needs its own,
+// non-pending test for the actual filtering behaviour before I21 can be
+// considered closed.
 //
 // Honest limitation (design §8.4, stated so a future reader does not
 // over-trust this test): reflection proves the invariant is *expressible* —

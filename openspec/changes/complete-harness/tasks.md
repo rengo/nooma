@@ -686,12 +686,16 @@ each)**:
   `recall.VectorIndex` in `internal/core/recall`, each a minimal throwaway type/func in a
   temporary file): `make pending-red` → `FAIL: ./test/conformance/ compiles under -tags
   pendingimpl. The anchor symbols now exist. Promote I01/I03/I21 into the untagged L2 suite
-  (docs/06-harness.md §4) and drop the pendingimpl tag, in the same PR that created them.` exit 2.
+  (docs/06-harness.md §4) and drop the pendingimpl tag, in the same PR that created them.`
+  `sh scripts/pending-red.sh` itself exits 1; `make pending-red` reports it as exit 2 (make's
+  own convention for a failed recipe), corrected from an earlier revision of this record that
+  said "exit 2" without noting the wrapping.
 - **(b) Scenario B — unrelated syntax typo** (a stray `{{{` after
   `TestI01_FocusIsNeverAPersistedStatus`'s opening brace): `make pending-red` →
   `FAIL: expected the compiler to report 'undefined: unit.Status'. It did not.` (and the same for
   the other four symbols) followed by the raw compiler output
-  (`expected '(', found scanGoTreeForFocusStatusLiteral`), distinct from (a)'s message. exit 2.
+  (`expected '(', found scanGoTreeForFocusStatusLiteral`), distinct from (a)'s message. Same
+  exit-code note as (a): script exits 1, `make pending-red` reports 2.
 - **(a-partial) Scenario B, the naive reading** — stubbing only `unit.Status`/`unit.AllStatuses`:
   also Scenario B (`expected the compiler to report 'undefined: unit.Status'. It did not.` twice,
   once per resolved symbol), with the raw compiler output still showing the three unresolved
