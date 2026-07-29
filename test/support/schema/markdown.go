@@ -56,6 +56,44 @@ var constraintKeywords = map[string]bool{
 // name at the start of an already-trimmed fragment.
 var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*`)
 
+// createKeywordPattern finds bare CREATE keyword occurrences, scanned over
+// mask-ed text (string content already replaced with 'x') so a "CREATE"
+// appearing inside a string literal's data is invisible to it — used by
+// topLevelCreateCount to detect two statements a missing ";" merged into
+// one range.
+var createKeywordPattern = regexp.MustCompile(`(?i)\bCREATE\b`)
+
+// topLevelCreateCount returns how many CREATE keyword occurrences in mask
+// sit at paren-depth 0. A well-formed single statement has exactly one (or
+// zero, for a non-CREATE sample query). More than one means statementRanges
+// failed to split two or more real statements apart — the missing ";"
+// merge ParseMarkdown must detect and reject rather than silently keeping
+// only the first object and dropping the rest (four-lens pre-PR review,
+// CRITICAL finding 1).
+func topLevelCreateCount(mask string) int {
+	matches := createKeywordPattern.FindAllStringIndex(mask, -1)
+	matchIdx := 0
+	depth := 0
+	count := 0
+	for i := 0; i < len(mask); i++ {
+		for matchIdx < len(matches) && matches[matchIdx][0] == i {
+			if depth == 0 {
+				count++
+			}
+			matchIdx++
+		}
+		switch mask[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return count
+}
+
 // ParseMarkdown parses every CREATE TABLE, CREATE VIRTUAL TABLE, CREATE
 // INDEX, CREATE UNIQUE INDEX, CREATE TRIGGER and CREATE VIEW statement out
 // of docs/03-data-model.md's fenced ```sql``` blocks (design §6.4), the
@@ -86,6 +124,23 @@ func ParseMarkdown(md []byte) ([]Object, error) {
 			trimmed := strings.TrimSpace(stmt)
 			if trimmed == "" {
 				continue
+			}
+			if n := topLevelCreateCount(stmtMask); n > 1 {
+				// statementRanges failed to split two (or more) real
+				// statements apart — a missing ";" between them merged
+				// them into one range, and classifyStatement/extractBody
+				// would silently keep only the FIRST CREATE and drop
+				// everything after it, exactly the false-assurance
+				// failure mode this function's own doc comment says must
+				// never happen (four-lens pre-PR review, CRITICAL
+				// finding 1). A statement range with more than one
+				// top-level CREATE is malformed input, not a parseable
+				// object: fail loudly instead of guessing which one to
+				// keep.
+				return nil, fmt.Errorf(
+					"schema.ParseMarkdown: statement range contains %d top-level CREATE statements with no separating %q between them, cannot classify as one object: %q",
+					n, ";", oneLine(trimmed),
+				)
 			}
 			if !createStatementPattern.MatchString(trimmed) {
 				// Not a CREATE statement at all — a sample query added

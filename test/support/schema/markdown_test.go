@@ -197,6 +197,50 @@ func TestParseMarkdownErrorsOnUnclassifiableCreateStatement(t *testing.T) {
 	}
 }
 
+// TestParseMarkdownErrorsOnMergedCreateStatements is the four-lens pre-PR
+// review's CRITICAL finding 1: a missing ";" between two CREATE statements
+// makes statementRanges treat them as ONE range, so classifyStatement
+// matches only the FIRST CREATE and extractBody closes on the FIRST
+// balanced paren group — everything after, including a whole well-formed
+// CREATE statement, silently vanishes with a nil error. ParseMarkdown's own
+// doc comment promises it "never silently drops a statement it does not
+// understand"; a merged range like this must be a loud, named error instead
+// of quietly returning only the first object.
+func TestParseMarkdownErrorsOnMergedCreateStatements(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+	}{
+		{
+			name: "two CREATEs missing one separator",
+			md: "```sql\n" +
+				"CREATE TABLE foo (id TEXT)\n" +
+				"CREATE TABLE bar (id TEXT);\n" +
+				"```\n",
+		},
+		{
+			name: "three CREATEs missing two separators",
+			md: "```sql\n" +
+				"CREATE TABLE foo (id TEXT)\n" +
+				"CREATE TABLE bar (id TEXT)\n" +
+				"CREATE TABLE baz (id TEXT);\n" +
+				"```\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseMarkdown([]byte(tt.md))
+			if err == nil {
+				t.Fatal("ParseMarkdown(...) = _, nil, want a non-nil error naming the merged statements")
+			}
+			if !strings.Contains(err.Error(), "CREATE TABLE foo") {
+				t.Errorf("ParseMarkdown(...) error = %q, want it to name the offending merged text", err.Error())
+			}
+		})
+	}
+}
+
 // TestParseMarkdownTrailingStatementWithoutSemicolonStillErrors closes a
 // narrower version of the same silent-drop risk: a fenced block's final
 // statement missing its terminating ";" (a doc-authoring mistake) must
