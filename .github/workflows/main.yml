@@ -1,0 +1,41 @@
+name: main
+
+# docs/06-harness.md §6: "What does not run on every PR: L4 (e2e), driver
+# benchmarks, and the cross-compilation matrix. Those run on merge to the
+# main branch and before release." This file is that trigger, kept
+# deliberately separate from ci.yml (which runs on every pull_request).
+#
+# Consequence, written down rather than left implicit: a job that only runs
+# after a merge to main cannot block the merge that broke it. A commit that
+# breaks `nooma version`'s output shape reaches main green (ci.yml has no L4
+# job) and only turns this workflow red afterward — someone has to notice
+# and follow up with a fix commit. That is a deliberate cost/latency
+# tradeoff for a level that compiles the real binary (L4 is comparatively
+# slow and, once the CLI grows, its own kind of flaky), not an oversight.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # L4 from docs/06-harness.md §3: compiles the real nooma binary and runs
+  # it as a subprocess. See test/e2e/doc.go and test/e2e/version_test.go.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: make test-e2e
+
+# cross-compile (docs/06-harness.md §6, the ADR-0001 pure-Go payoff) is not
+# wired here yet — deferred to its own task (openspec/changes/complete-harness
+# PR 7, task 7.4).
