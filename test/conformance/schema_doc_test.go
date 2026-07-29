@@ -67,6 +67,8 @@ func formatSchemaDiff(diffs []schema.Difference) string {
 	b.WriteString("schema does not match docs/03-data-model.md:\n")
 	for _, d := range diffs {
 		switch d.DiffKind {
+		case schema.DiffDuplicateInDoc:
+			fmt.Fprintf(&b, "  doc 03 declares the same object twice: %s %s\n", d.Kind, d.Name)
 		case schema.DiffMissingFromSchema:
 			fmt.Fprintf(&b, "  declared in doc 03 but absent from the schema: %s %s\n", d.Kind, d.Name)
 		case schema.DiffUndeclaredInDoc:
@@ -119,6 +121,9 @@ func TestSchemaDocAnchorsExpectedObjectCount(t *testing.T) {
 		got[string(o.Kind)+" "+o.Name] = true
 	}
 
+	// When you add a CREATE statement to docs/03-data-model.md, add its
+	// object line here too — that is the whole point of this anchor.
+	//
 	// Hand-written, not generated: every object docs/03-data-model.md's
 	// fenced ```sql``` blocks declare today, kept as one flat list (not
 	// derived from anything schema.ParseMarkdown itself computes) so
