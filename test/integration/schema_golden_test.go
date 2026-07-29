@@ -83,7 +83,20 @@ func dumpSchema(ctx context.Context, db *sql.DB) ([]sqliteMasterRow, error) {
 
 	filtered := all[:0]
 	for _, r := range all {
-		if schema.IsShadowTable(r.Name, virtualTables) {
+		// The shadow-table exclusion is restricted to Kind == table,
+		// discovered while wiring 0002_learning_and_search.sql (design §6.2
+		// never said this explicitly, because every worked example in that
+		// section — units_fts_data, units_fts_idx, units_fts_docsize,
+		// units_fts_config — happens to also be a table). schema.IsShadowTable
+		// itself is a pure name-prefix check ("<vt>_<suffix>"); nothing in
+		// its contract distinguishes kind. 0002 names its FTS5 sync triggers
+		// units_fts_ai/units_fts_ad/units_fts_au (design §6.5's own
+		// illustrative failure output lists them as real, comparable
+		// objects), which collide with that exact prefix — without this
+		// Kind guard, the real triggers R9.1 requires would be silently
+		// dropped from both goldens, and the doc-03 gate (a later task)
+		// would never see them to compare against docs/03-data-model.md.
+		if r.Kind == schema.KindTable && schema.IsShadowTable(r.Name, virtualTables) {
 			continue
 		}
 		filtered = append(filtered, r)
