@@ -174,6 +174,65 @@ func TestParseMarkdownMultilinePartialIndex(t *testing.T) {
 	}
 }
 
+// TestClassifyStatement is the direct table test four-lens pre-PR review
+// finding 4 asked for: classifyStatement's CREATE VIEW case was exercised
+// by zero tests — markdown_test.go had no case for it, and
+// docs/03-data-model.md declares no view today, so ParseMarkdown's own gate
+// never reached it either. A typo in the "VIEW" string comparison would
+// compile and pass everything silently until doc 03 gained a view. This
+// test covers every recognized shape directly, not just through
+// end-to-end ParseMarkdown fixtures.
+func TestClassifyStatement(t *testing.T) {
+	tests := []struct {
+		name     string
+		stmt     string
+		wantKind Kind
+		wantName string
+		wantOK   bool
+	}{
+		{name: "table", stmt: "CREATE TABLE units (id TEXT)", wantKind: KindTable, wantName: "units", wantOK: true},
+		{name: "virtual table", stmt: "CREATE VIRTUAL TABLE units_fts USING fts5(content)", wantKind: KindVirtualTable, wantName: "units_fts", wantOK: true},
+		{name: "index", stmt: "CREATE INDEX idx_units_status ON units(status)", wantKind: KindIndex, wantName: "idx_units_status", wantOK: true},
+		{name: "unique index", stmt: "CREATE UNIQUE INDEX idx_units_unique ON units(status)", wantKind: KindUniqueIndex, wantName: "idx_units_unique", wantOK: true},
+		{name: "trigger", stmt: "CREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN\n  SELECT 1;\nEND", wantKind: KindTrigger, wantName: "units_fts_ai", wantOK: true},
+		{name: "view — the shape zero prior tests reached", stmt: "CREATE VIEW active_units AS SELECT * FROM units WHERE status = 'active'", wantKind: KindView, wantName: "active_units", wantOK: true},
+		{name: "unclassifiable shape", stmt: "CREATE FOREIGN TABLE not_a_real_sqlite_object (id TEXT)", wantOK: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotKind, gotName, gotOK := classifyStatement(tt.stmt)
+			if gotOK != tt.wantOK {
+				t.Fatalf("classifyStatement(%q) ok = %v, want %v", tt.stmt, gotOK, tt.wantOK)
+			}
+			if tt.wantOK && (gotKind != tt.wantKind || gotName != tt.wantName) {
+				t.Errorf("classifyStatement(%q) = (%q, %q), want (%q, %q)", tt.stmt, gotKind, gotName, tt.wantKind, tt.wantName)
+			}
+		})
+	}
+}
+
+// TestParseMarkdownFenceTagIsCaseSensitiveIsDeliberate locks in four-lens
+// pre-PR review finding 7's first suggestion: fenceStartPattern is
+// case-sensitive, unlike every other pattern in this file. Design §6.4
+// step 1 says "exactly `sql`", so a ```SQL``` fence is invisible on
+// purpose — this test exists so a future change to that behavior is a
+// deliberate, reviewed decision, not an accidental regex tweak.
+func TestParseMarkdownFenceTagIsCaseSensitiveIsDeliberate(t *testing.T) {
+	md := []byte("```SQL\n" +
+		"CREATE TABLE units (id TEXT);\n" +
+		"```\n",
+	)
+
+	got, err := ParseMarkdown(md)
+	if err != nil {
+		t.Fatalf("ParseMarkdown(...) = _, %v, want nil error", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ParseMarkdown(...) = %#v, want zero objects (a ```SQL``` fence's tag case does not match ```sql``` exactly)", got)
+	}
+}
+
 // TestParseMarkdownErrorsOnUnclassifiableCreateStatement is the trap-avoidance
 // test this task's brief demanded explicitly: ParseMarkdown must never
 // silently skip a statement it cannot understand. A statement that begins

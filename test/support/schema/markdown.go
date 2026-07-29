@@ -11,6 +11,12 @@ import (
 // info string is exactly "sql" (design §6.4 step 1) — a fence with any
 // other info string (docs/03-data-model.md's own ```go``` fts5.Register
 // snippet) is not SQL and must never be scanned for CREATE statements.
+//
+// Deliberately case-sensitive, unlike every other pattern in this file
+// (all `(?is)`): design §6.4 step 1 says "exactly `sql`", and Markdown
+// fence info strings are conventionally lowercase. A ```SQL``` fence is
+// therefore invisible to this parser on purpose (zero objects, no error) —
+// TestParseMarkdownFenceTagIsCaseSensitiveIsDeliberate locks this in.
 var fenceStartPattern = regexp.MustCompile("^```sql\\s*$")
 
 // fenceEndPattern recognizes a closing fence line: three backticks and
@@ -26,10 +32,14 @@ var fenceEndPattern = regexp.MustCompile("^```\\s*$")
 // silent skip (this task's own trap-avoidance requirement).
 var createStatementPattern = regexp.MustCompile(`(?is)^\s*CREATE\b`)
 
-// createNamePattern is design §6.4 step 5's exact regex: case- and
-// newline-insensitive, because docs/03-data-model.md writes
-// "CREATE UNIQUE INDEX idx_units_unique_active_insight" with its ON clause
-// on the next line.
+// createNamePattern is design §6.4 step 5's exact regex: case-insensitive
+// (the `i` flag) so a lowercase or mixed-case CREATE keyword still matches.
+// The `s` flag is not doing newline-tolerance work here — this pattern
+// contains no "." for it to change the meaning of, and `\s` already
+// matches "\n" in Go's regexp without it. What actually lets this match
+// span docs/03-data-model.md's "CREATE UNIQUE INDEX
+// idx_units_unique_active_insight" with its ON clause on the next line is
+// that every whitespace token here is `\s`, not ".".
 var createNamePattern = regexp.MustCompile(
 	`(?is)^\s*CREATE\s+(TABLE|VIRTUAL\s+TABLE|UNIQUE\s+INDEX|INDEX|TRIGGER|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`,
 )
