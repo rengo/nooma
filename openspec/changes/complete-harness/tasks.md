@@ -358,6 +358,43 @@ the migration runner that produces the schema it dumps) and splitting them would
 that doesn't build or pass on its own — unlike 3.6, which genuinely is independent. Owner decision
 needed: accept `size:exception` for 3.1-3.5+3.7 as submitted, or direct a different split.
 
+### PR 3 review remediation (2026-07-29): all 8 findings from a four-lens pre-PR review fixed in this PR
+
+The owner decided to fix everything in this PR rather than drop scope or defer findings,
+accepting a documented `size:exception` on top of the one already recorded above. Branch
+`feat/migration-runner`, 6 new commits on top of `db4ee2e` (`3.1-3.5+3.7`'s own commits), not
+pushed, no PR opened.
+
+| # | Finding | Fixed in |
+|---|---|---|
+| 1 | BLOCKER — concurrent `Open()` on a brand-new vault failed 60-80% of the time (WAL-conversion race, not covered by `busy_timeout`) | `internal/store/sqlite/open.go` (`openFirstConnection`, bounded retry on transient `SQLITE_BUSY`), `test/integration/concurrent_open_test.go`, `design.md` §5.3 row corrected |
+| 2 | CRITICAL — the cross-version race could bypass `VersionError` (R3.6) | `internal/store/sqlite/migrate.go` (`migrate`/`migrateMigrations` split, `target` threaded into `applyMigration`, `current > target` checked before the per-migration guard), `internal/store/sqlite/migrate_race_integration_test.go` |
+| 3 | CRITICAL — schema classification logic (`classify`/`isShadowTable`/`normalizeDDL`) lived in a test file with no direct tests | Moved to `test/support/schema` as `Classify`/`IsShadowTable`/`NormalizeDDL`, direct table tests added, `design.md` §6.1/§6.4 updated |
+| 4 | WARNING — the migration validator rejected migrations because of their comments | `internal/store/sqlite/migrate.go` (`stripSQLComments`, string-aware `--`/`/* */` stripping before the reserved-word scan), `internal/store/sqlite/migrate_test.go` |
+| 5 | WARNING — `TestMigrateIsIdempotent` proved an outcome, not the mechanism (R3.5) | `internal/store/sqlite/migrate_no_op_integration_test.go` (authorizer-based `BEGIN` count, proven to catch the regression via two temporary probes) |
+| 6 | WARNING — R3.1 had no test | `test/integration/migrate_test.go` (`TestMigrationsAreEmbeddedNotReadFromDisk`) |
+| 7 | WARNING — the kind-ranking rule was defined twice | Exported as `schema.Rank`, both sides now read the single definition (same commit as finding 3) |
+| 8 | SUGGESTIONS | All four applied: `docs/06-harness.md` states the golden path; `test/integration/doc.go` forward-references `schema_golden_test.go`; `TestVaultNewerThanBinaryRefusesToOpen` now also asserts no `-wal`/`-shm` sidecar; `migrate_test.go`'s hand-built DSN documented as a genuine package-boundary constraint, not fixed |
+
+Two of these (findings 1 and 2) are genuine production-code defects that a green CI had not
+caught — recorded with root cause and evidence in Engram under
+`nooma/slice3-concurrency-defects` for anyone auditing why the test suite passed before this PR
+despite them.
+
+**Verification, all green**: `make check`; `golangci-lint run --build-tags integration ./...` = 0
+issues; `go clean -testcache && make test-integration`; `make schema-golden && git diff
+--exit-code -- testdata/schema` = clean (no golden drift from this batch); the three new
+concurrency/mechanism regression tests each run 10-15 times with zero failures.
+
+**Measured `git diff --numstat` for this review-remediation batch alone** (`db4ee2e..HEAD`,
+excluding `go.sum`, no golden files touched): 1013 additions / 92 deletions = 1105 lines.
+
+**Measured for the whole PR** (`main...HEAD`, i.e. `3.1-3.5+3.7` plus this remediation batch,
+excluding `go.sum`): 2376 additions / 37 deletions = 2413 total; golden-only
+(`testdata/schema/*`) = 181 lines; **review-line total (excluding `go.sum` and goldens) = 2232**.
+This PR is submitted as `size:exception` per the owner's explicit decision — scope was not
+dropped and the overage is not hidden.
+
 ---
 
 ## PR 4 — `0002` + doc-03 gate + I13 (~330 lines)
