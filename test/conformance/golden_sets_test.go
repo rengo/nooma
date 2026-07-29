@@ -2,18 +2,14 @@ package conformance
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/rengo/nooma/test/support/goldenset"
 )
-
-// fencedJSONBlock matches a fenced ```json ... ``` block in a format.md,
-// capturing only its body (spec R10.2/R10.3).
-var fencedJSONBlock = regexp.MustCompile("(?s)```json\\n(.*?)\\n```")
 
 // goldenSetDirs are the three golden-set directories docs/06-harness.md §5
 // and spec R10.1 require — empty of real cases in this change, since
@@ -123,46 +119,112 @@ func TestHarness_GoldenSetFormatMatchesType(t *testing.T) {
 // "classify" only — that its preamble (the text before that fence) states
 // up front that the eventual corpus must include deliberately broken
 // cases, since those are what prove I14 (spec R10.2, docs/06-harness.md §5).
+// It delegates to validateFormatMDShape so the check itself is directly
+// testable without a *testing.T (TestValidateFormatMDShape_RejectsTwoFences).
 func assertFormatMDDeclaresShape(t *testing.T, dir, name string) {
 	t.Helper()
+	if err := validateFormatMDShape(dir, name); err != nil {
+		t.Fatal(err)
+	}
+}
 
+// validateFormatMDShape is the pure check assertFormatMDDeclaresShape runs:
+// it routes fence extraction through goldenset.ExtractJSONFence — the SAME
+// fence parser TestHarness_GoldenSetFormatMatchesType uses — rather than a
+// second, independently-configured one. Two fence parsers in the same file
+// could silently drift (four-lens pre-PR review, CRITICAL finding 1): the
+// original ad hoc `fencedJSONBlock` regexp used `FindSubmatch`, which
+// silently picked the FIRST of two fences instead of erroring — exactly the
+// trap ExtractJSONFence was written to close, reintroduced a few lines away
+// from its own fix.
+func validateFormatMDShape(dir, name string) error {
 	path := filepath.Join(dir, "format.md")
 	content, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
-	match := fencedJSONBlock.FindSubmatch(content)
-	if match == nil {
-		t.Fatalf("%s has no fenced ```json block", path)
+	fence, err := goldenset.ExtractJSONFence(content)
+	if err != nil {
+		return fmt.Errorf("goldenset.ExtractJSONFence(%s) = _, %w, want nil error", path, err)
 	}
-	body := strings.TrimSpace(string(match[1]))
+	body := strings.TrimSpace(string(fence))
 	if body == "" {
-		t.Fatalf("%s's fenced json block is empty", path)
+		return fmt.Errorf("%s's fenced json block is empty", path)
 	}
 	var v any
 	if err := json.Unmarshal([]byte(body), &v); err != nil {
-		t.Fatalf("%s's fenced json block is not valid JSON: %v", path, err)
+		return fmt.Errorf("%s's fenced json block is not valid JSON: %w", path, err)
 	}
 
 	if name != "classify" {
-		return
+		return nil
 	}
 
+	// The three-phrase check below is a LITERAL-SUBSTRING PROXY for a
+	// documentation commitment (spec R10.2), not a semantic check (four-lens
+	// pre-PR review, WARNING finding 8): it fails on a faithful rewording
+	// that avoids these exact words (e.g. "an intentionally malformed
+	// payload" instead of "wrong type"), and it would pass if the three
+	// phrases appeared in an unrelated sentence that never actually commits
+	// to shipping broken cases. No general mechanized replacement was found
+	// that verifies the SEMANTIC commitment without either (a) requiring an
+	// LLM judge at test time, which CLAUDE.md non-negotiable #5 forbids, or
+	// (b) hand-encoding a slightly larger set of literal synonyms that is
+	// still a proxy, just a wider one. This check is kept as a cheap
+	// tripwire against the preamble being deleted or never written, not as
+	// proof the preamble's prose is faithful to spec R10.2.
 	fenceIdx := strings.Index(string(content), "```json")
 	if fenceIdx < 0 {
-		t.Fatalf("%s: fenced json block not found for the up-front check", path)
+		return fmt.Errorf("%s: fenced json block not found for the up-front check", path)
 	}
 	preamble := strings.ToLower(string(content[:fenceIdx]))
+	var missing []string
 	for _, phrase := range []string{"truncated", "wrong type", "unknown enum"} {
 		if !strings.Contains(preamble, phrase) {
-			t.Errorf(
-				"%s's preamble (the text before the fenced json block) does not mention %q — "+
-					"R10.2 requires stating up front that the corpus must include deliberately "+
-					"broken cases, because those are what prove I14",
-				path, phrase,
-			)
+			missing = append(missing, phrase)
 		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf(
+			"%s's preamble (the text before the fenced json block) does not mention %v — "+
+				"R10.2 requires stating up front that the corpus must include deliberately "+
+				"broken cases, because those are what prove I14",
+			path, missing,
+		)
+	}
+	return nil
+}
+
+// TestValidateFormatMDShape_RejectsTwoFences proves validateFormatMDShape —
+// the check TestHarness_GoldenSetFormatsDeclared runs per directory via
+// assertFormatMDDeclaresShape — now fails loudly on a format.md with two
+// fenced ```json``` blocks, instead of silently validating whichever one
+// came first (four-lens pre-PR review, CRITICAL finding 1). Before this
+// fix, the ad hoc `fencedJSONBlock` regexp's `FindSubmatch` silently picked
+// the first fence and this same scenario passed green.
+func TestValidateFormatMDShape_RejectsTwoFences(t *testing.T) {
+	dir := t.TempDir()
+	twoFences := "# doc\n\n" +
+		"```json\n" +
+		"{\"a\": 1}\n" +
+		"```\n\n" +
+		"```json\n" +
+		"{\"b\": 2}\n" +
+		"```\n"
+	if err := os.WriteFile(filepath.Join(dir, "format.md"), []byte(twoFences), 0o644); err != nil {
+		t.Fatalf("write format.md: %v", err)
+	}
+
+	err := validateFormatMDShape(dir, "recall")
+	if err == nil {
+		t.Fatal(
+			"validateFormatMDShape(...) = nil, want an error — a format.md with two ```json``` " +
+				"fences must never be silently validated against whichever one came first",
+		)
+	}
+	if !strings.Contains(err.Error(), "found 2 fenced") {
+		t.Fatalf("validateFormatMDShape(...) error = %v, want it to mention the ambiguous fence count", err)
 	}
 }
 
