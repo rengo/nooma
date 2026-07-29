@@ -733,6 +733,19 @@ Two commits on `test/pending-red-conformance`: `1718a6e` (5.1–5.4, the three t
 symbol list) and `7863627` (5.5, the gate itself). Not pushed, no PR opened, per instructions.
 Owner decision needed: accept `size:exception`, or direct a split.
 
+### PR 5 review-fix pass (2026-07-29), same branch, 3 more commits
+
+A three-lens pre-PR review of this slice found 1 CRITICAL, 5 WARNING and 3 SUGGESTION findings,
+all fixed on the same branch: `ff62d4c` (`scripts/pending-red.sh`'s symbol match hardened to
+exact identifiers, both directions — see engram `nooma/pending-red-unanchored-match`), `2eb444a`
+(shared `scanGoTree` helper for I01/I03, I01's scan-scope comment brought to I03's honesty
+level), `dd4ec73` (docs: `docs/06-harness.md` §6, `.golangci.yml`, `Makefile`/`CLAUDE.md`,
+`spec.md` R6.2 + I21 test, and this file's own exit-code record, all corrected). `make
+check-all` (task 7.5) was deliberately NOT built here — out of scope per instructions (PR 7);
+only the false claims about today's `make check` were fixed. Full verification re-run green
+after the fixes; `git diff --numstat` for the fix-up alone: 161 additions / 105 deletions = 266
+lines, under the 400-line ceiling on its own. Not pushed, no PR opened.
+
 ---
 
 ## PR 6 — Golden-set formats + L4 skeleton (~230 lines)
