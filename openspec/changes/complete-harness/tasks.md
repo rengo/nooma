@@ -462,7 +462,7 @@ closure) landed first, on branch `feat/schema-learning-and-search` from an up-to
       (CI's `make schema-golden && git diff --exit-code` step would fail the moment `0002` merges
       without the regeneration; non-negotiable #1 requires the doc DDL land in the same PR as the
       migration that creates it, not a later one).
-- [ ] **4.2** [TDD] Write `TestHarness_SchemaMatchesDoc03` (L2, `schema_doc_test.go`) + finish
+- [x] **4.2** [TDD] Write `TestHarness_SchemaMatchesDoc03` (L2, `schema_doc_test.go`) + finish
       `test/support/schema.ParseMarkdown`/`.Diff` (fence extraction, string-aware comment
       stripping, trigger-aware statement splitting, column parsing — design §6.4, with its own
       L1 table-driven tests per §6.6 landing in the same commit).
@@ -514,7 +514,7 @@ closure) landed first, on branch `feat/schema-learning-and-search` from an up-to
       apply-phase discovery, not a rewrite of a planning artifact already reviewed): R2.1's "Note
       on scope" and design §4.4 should stop describing "foreign_keys defaults to off" as this
       driver's behavior; it is a compile-time default this specific WASM SQLite build enables.
-- [ ] Verify (whole PR): `make test`, `make test-integration`.
+- [x] Verify (whole PR): `make test`, `make test-integration`.
 
 ### PR 4a note: schema golden diff, reviewed
 
@@ -531,6 +531,44 @@ byte-for-byte statement agreement between `0002_learning_and_search.sql` and doc
 Measurements/System config/Search sections (confirmed once, by hand and by a one-off script-diff,
 during 4a) rests on review alone, not on a CI gate. A doc 03 edit that silently drifts from the
 schema between now and 4b would not be caught automatically.
+
+### PR 4b (2026-07-29): task 4.2 closes the standing gap above — branch `feat/schema-doc-gate`
+
+Stacked on `feat/schema-learning-and-search` (4a, open as PR #9, not yet merged). 1 commit
+(`9c5d6c5`), not pushed, no PR opened.
+
+**The stale-red warning above was correct**: both predicted RED stages were already moot before
+this task started. The actual, empirically observed RED was a compile error —
+`undefined: schema.Diff` / `undefined: schema.Difference` — from `go vet ./...` against the L1
+(`markdown_test.go`, `diff_test.go`) and L2 (`schema_doc_test.go`) tests written first. After
+implementing `ParseMarkdown`/`Diff`, both `TestHarness_SchemaMatchesDoc03` and the new
+`TestSchemaDocAnchorsExpectedObjectCount` anchor test (this task's own "anchor the parser outside
+itself" requirement, mirroring `test/integration/schema_golden_anchor_test.go`'s precedent) PASSED
+on the first run — confirming doc 03 and the schema golden already agree, exactly as predicted.
+
+**Three probes, watched red then reverted** (full detail in the apply-progress engram entry):
+(1) added a synthetic doc-03-only index — gate failed `declared in doc 03 but absent from the
+schema: index idx_decision_log_synthetic_probe`; (2) removed the `units_fts_ad` trigger from doc
+03 — gate failed `present in the schema but not declared in doc 03: trigger units_fts_ad`; (3) fed
+`ParseMarkdown` a `CREATE FOREIGN TABLE` shape — it returned a named, loud error rather than
+silently dropping the statement. Both doc-03 mutations were reverted; `git status --porcelain
+docs/03-data-model.md` confirmed clean before committing.
+
+**Verification, all green (verbatim exit codes)**: `make check` exit 0; `golangci-lint run
+--build-tags integration ./...` → "0 issues.", exit 0; `go clean -testcache && make
+test-integration` → both packages `ok`, exit 0; `make schema-golden && git diff --exit-code --
+testdata/schema` exit 0 (no drift — this task did not regenerate anything, as instructed); `make
+store-api-golden && git diff --exit-code -- testdata/schema` exit 0.
+
+**Measured `git diff --numstat feat/schema-learning-and-search...HEAD`, excluding `go.sum`**: 1075
+insertions / 2 deletions = 1077 review lines, no golden files touched. Over the 400-line soft
+ceiling, reported plainly rather than hidden — consistent with every other code-bearing PR in this
+change (PR2=1056, PR3=2269, PR4a=1249). Not split further: `ParseMarkdown`, `Diff`, their L1 tests,
+and the L2 gate that consumes them are one indivisible story (design §6.6 makes the parser's own
+tests non-optional, and the L2 gate cannot exist without the parser it calls). Owner decision
+needed: accept `size:exception`, or direct a split.
+
+PR 4 (4.1, 4.2, 4.3) is now fully complete.
 
 ### PR 4a review remediation (four-lens pre-PR review, owner-accepted `size:exception`)
 
