@@ -781,17 +781,56 @@ R10.1–R10.4.
       added, undocumented field returns an error.
       GREEN: `make test`.
       Requirement: R10.3.
-- [ ] **6.3** [TDD] Write `TestBinaryReportsVersion` (L4, `test/e2e/version_test.go`) +
+- [x] **6.3** [TDD] Write `TestBinaryReportsVersion` (L4, `test/e2e/version_test.go`) +
       `test/e2e/doc.go` (untagged marker).
       RED: `go test -tags e2e ./test/e2e/...` — no such package.
       Implement: `go build -buildvcs=false -o <tmp>/nooma ./cmd/nooma`, run `nooma version`,
       assert output matches `^nooma \S+ \(\S+\)\n$`.
       GREEN: `make test-e2e`.
       Requirement: R5.4, R11.1.
-- [ ] **6.4** [CI wiring] `.github/workflows/main.yml` `e2e` job (`make test-e2e`, push-to-`main`
+- [x] **6.4** [CI wiring] `.github/workflows/main.yml` `e2e` job (`make test-e2e`, push-to-`main`
       only, per doc 06 §6 — not on every PR).
       Verify: outside the 5-command allowlist (see C3) — confirmed by the job's own run on merge.
       Requirement: R5.4 gate table row.
+
+### PR 6b (2026-07-29): tasks 6.3/6.4 — branch `test/e2e-skeleton`, off up-to-date `main`
+
+Implemented independently of 6a (golden-set formats, a separate open PR on another branch):
+`test/e2e/{doc.go,version_test.go}` and `.github/workflows/main.yml`'s `e2e` job only. Did not
+touch `testdata/{recall,classify,llm}/` or `test/support/goldenset/` (6a's scope). Also extended
+`.golangci.yml`'s `run.build-tags` to include `e2e`, per that file's own comment mandating it for
+the first PR adding `//go:build e2e` files — confirmed necessary: `golangci-lint run` (no CLI
+flags) reported the same "0 issues" whether or not `e2e` was in the list only because there were
+no lint violations in the tagged file to expose the gap; the gap is real (an untagged run never
+opens `test/e2e/*_test.go` at all) and closing it is what `--build-tags e2e` vs. plain `run`
+cannot substitute for.
+
+**RED, verbatim**: `go test -tags e2e ./test/e2e/...` → `pattern ./test/e2e/...: lstat
+./test/e2e/: no such file or directory`, `FAIL	./test/e2e/... [setup failed]`, exit 1.
+
+**GREEN**: `go test -tags e2e ./test/e2e/... -v` → `--- PASS: TestBinaryReportsVersion`, exit 0;
+`make test-e2e` exit 0.
+
+**Required probe, watched then reverted**: temporarily changed `cmd/nooma/main.go`'s
+`buildString` to drop the revision and parentheses (`return fmt.Sprintf("nooma %s", version)`).
+`make test-e2e` failed: `version_test.go:56: nooma version output = "nooma dev\n", want shape
+^nooma \S+ \(\S+\)\n$`. Reverted; `git diff -- cmd/nooma/main.go` empty before committing.
+
+**Full verification, all green (verbatim exit codes)**: `make check` exit 0; `go build ./...`
+exit 0; `golangci-lint run --build-tags integration ./...` → "0 issues.", exit 0; `golangci-lint
+run --build-tags e2e ./...` → "0 issues.", exit 0; `make test-e2e` exit 0; `go clean -testcache
+&& make test-integration` → both packages `ok`, exit 0; `make pending-red` exit 0 (Scenario C
+unchanged); `make schema-golden && git diff --exit-code -- testdata/schema` exit 0 (no drift);
+`make store-api-golden && git diff --exit-code -- testdata/schema` exit 0 (no drift); `git
+status` clean, every probe reverted.
+
+**Measured `git diff --numstat main...HEAD`, excluding `go.sum`**: see apply-progress engram
+entry for the exact figure — small, well under the 400-line ceiling (one new test package plus
+one new workflow file and a two-line `.golangci.yml` config addition).
+
+Tasks 6.1/6.2 remain `[ ]` in this file as checked out from `main` — they are done on the
+separate `test/golden-set-formats` branch (6a), not yet merged here; this branch does not depend
+on them and does not touch their files.
 
 ---
 
