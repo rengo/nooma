@@ -257,10 +257,10 @@ supposed to schedule it doesn't know it exists.
 
 Depends on PR 2 (`sqlite.Open` must exist).
 
-- [ ] **3.1** [setup] Add `test/conformance/doc.go` (untagged marker, package contract) — lands
+- [x] **3.1** [setup] Add `test/conformance/doc.go` (untagged marker, package contract) — lands
       here so `test/conformance/` is never tag-only ahead of PR 5's `pendingimpl` files (R7.2).
       Verify: `go build ./...`.
-- [ ] **3.2** [TDD] Write `TestMigrateFromScratchSetsUserVersion` (L3, `migrate_test.go`).
+- [x] **3.2** [TDD] Write `TestMigrateFromScratchSetsUserVersion` (L3, `migrate_test.go`).
       RED (see Conflict C1 — this is the design-accurate red, not the proposal's literal wording):
       runtime assertion failure — `PRAGMA user_version` reads `0` after `Open` on a fresh vault,
       because no migration logic runs yet.
@@ -272,7 +272,7 @@ Depends on PR 2 (`sqlite.Open` must exist).
       unconditionally, wired into `Open` after PRAGMA setup.
       GREEN: `make test-integration` — `user_version == 1` (only `0001` published at this stage).
       Requirement: R3.1, R3.2, R3.3, R3.7, R3.8 (0001 half).
-- [ ] **3.3** [TDD] Write `TestMigrateIsIdempotent` (L3).
+- [x] **3.3** [TDD] Write `TestMigrateIsIdempotent` (L3).
       RED: second `Open` on an already-migrated vault re-runs `0001` unconditionally (3.2's
       minimal implementation has no version guard) and fails on `table units already exists`.
       Implement: the full state-matrix algorithm (design §5.2/§5.3, D4) — read
@@ -281,7 +281,7 @@ Depends on PR 2 (`sqlite.Open` must exist).
       transaction (D4's race guard).
       GREEN: `make test-integration`.
       Requirement: R3.4, R3.5.
-- [ ] **3.4** [TDD] Write `TestVaultNewerThanBinaryRefusesToOpen` (L3) — R3.6's downgrade-refusal
+- [x] **3.4** [TDD] Write `TestVaultNewerThanBinaryRefusesToOpen` (L3) — R3.6's downgrade-refusal
       scenario. Not named explicitly in proposal §6's table; added here because spec R3.6 requires
       the behavior and design §5.3's state matrix already designs for it.
       RED: assertion failure — nothing in 3.2/3.3's algorithm yet checks `current > target`.
@@ -289,7 +289,7 @@ Depends on PR 2 (`sqlite.Open` must exist).
       any transaction opens, so a downgrade attempt modifies nothing.
       GREEN: `make test-integration` — error is `*VersionError`, vault file unmodified.
       Requirement: R3.6.
-- [ ] **3.5** [TDD] Write `TestSchemaGolden` (L3, `schema_golden_test.go`) + the
+- [x] **3.5** [TDD] Write `TestSchemaGolden` (L3, `schema_golden_test.go`) + the
       `test/support/schema` package (`Kind`, `Object`, `Marshal`, `ParseGolden` — stdlib only;
       `ParseMarkdown`/`Diff` land in PR 4 when the doc-03 side is needed; `FromSQLite` stays in the
       L3 test file per D1, since it needs `database/sql`).
@@ -317,10 +317,85 @@ Depends on PR 2 (`sqlite.Open` must exist).
       Requirement: R12.1, R12.2 (§7.3, the third and mechanized layer of the scope boundary).
       **Split point**: if this PR's diff approaches or crosses 400 lines, move this task alone to
       its own chained PR/commit — it is independent of the migration runner (design §12).
-- [ ] **3.7** [CI wiring] Add `.github/workflows/ci.yml` `integration` job, step 2: `make
+- [x] **3.7** [CI wiring] Add `.github/workflows/ci.yml` `integration` job, step 2: `make
       schema-golden && git diff --exit-code -- testdata/schema`.
       Verify: outside the 5-command allowlist (see C3) — confirmed by the job's own run.
       Requirement: R4.4 gate.
+      Landed ahead of 3.6 (out of numeric order): 3.6 (store-API golden) is being split into its
+      own chained PR (see the note below this PR's task list) because the running diff for
+      3.1-3.5 alone already crossed the 400-line ceiling before 3.6 was even started; 3.7 is
+      cheap CI wiring for the gate 3.1-3.5 already built and belongs with them, not with 3.6.
+
+### PR 3 line-budget finding: the ~380-line forecast was wrong, measured before 3.6 even started
+
+`git diff main --numstat`, excluding `go.sum`, after 3.1-3.5 and 3.7 (3.6 not yet started):
+~1,220 review lines (code + tests + CI wiring) plus ~181 lines of committed golden fixtures
+(`testdata/schema/{structure,ddl}.golden`, stated separately per the same convention PR 2's
+measurement used) — against this file's own ~380-line forecast for the **whole** PR including
+3.6. The overage is real and is reported here rather than absorbed silently:
+
+- `migrate.go` (227) + `migrate_test.go` in `internal/store/sqlite` (190, L1 table-driven tests
+  for `parseMigrations`/`validateMigrationSQL` — not explicitly scheduled by name in 3.2/3.3's
+  task text, but written test-first per strict-TDD discipline for genuinely new parsing/validation
+  logic) + `migrations/0001_core_tables.sql` (102) account for ~519 lines.
+- `test/integration/migrate_test.go` (165) covers 3.2-3.4's three L3 tests.
+- `test/integration/schema_golden_test.go` (278) + `test/support/schema/{schema,schema_test}.go`
+  (138 + 87) account for ~503 lines for task 3.5 alone — heavier than its design-estimated share,
+  because the L3 test carries its own sqlite_master classification/normalization logic (design
+  explicitly keeps `FromSQLite`-shaped code out of the stdlib-only `schema` package, §6.4), plus
+  L1 round-trip tests for `Marshal`/`ParseGolden`.
+
+None of this is scope creep — every line traces to a task's explicit "Implement" text or to
+strict-TDD discipline applied to new logic the task introduced — but the **estimate** was wrong
+by roughly 3x for 3.1-3.5+3.7 alone, before 3.6's own ~80-line forecast is even added. Per this
+phase's own instructions, task 3.6 (`TestHarness_StoreAPIUnchanged`) is deliberately **not**
+implemented in this PR: it is independent of the migration runner (design §12's designated split
+point) and is deferred to its own chained PR. This PR (3.1-3.5, 3.7) is submitted as its own
+`size:exception` — the alternative (further splitting 3.1-3.5, e.g. separating the schema-golden
+support package from the migration runner) was considered and rejected here because 3.1-3.5 are
+strictly sequential within a single migration-and-golden story (schema golden can't exist without
+the migration runner that produces the schema it dumps) and splitting them would produce a PR
+that doesn't build or pass on its own — unlike 3.6, which genuinely is independent. Owner decision
+needed: accept `size:exception` for 3.1-3.5+3.7 as submitted, or direct a different split.
+
+### PR 3 review remediation (2026-07-29): all 8 findings from a four-lens pre-PR review fixed in this PR
+
+The owner decided to fix everything in this PR rather than drop scope or defer findings,
+accepting a documented `size:exception` on top of the one already recorded above. Branch
+`feat/migration-runner`, 6 new commits on top of `db4ee2e` (`3.1-3.5+3.7`'s own commits), not
+pushed, no PR opened.
+
+| # | Finding | Fixed in |
+|---|---|---|
+| 1 | BLOCKER — concurrent `Open()` on a brand-new vault failed 60-80% of the time (WAL-conversion race, not covered by `busy_timeout`) | `internal/store/sqlite/open.go` (`openFirstConnection`, bounded retry on transient `SQLITE_BUSY`), `test/integration/concurrent_open_test.go`, `design.md` §5.3 row corrected |
+| 2 | CRITICAL — the cross-version race could bypass `VersionError` (R3.6) | `internal/store/sqlite/migrate.go` (`migrate`/`migrateMigrations` split, `target` threaded into `applyMigration`, `current > target` checked before the per-migration guard), `internal/store/sqlite/migrate_race_integration_test.go` |
+| 3 | CRITICAL — schema classification logic (`classify`/`isShadowTable`/`normalizeDDL`) lived in a test file with no direct tests | Moved to `test/support/schema` as `Classify`/`IsShadowTable`/`NormalizeDDL`, direct table tests added, `design.md` §6.1/§6.4 updated |
+| 4 | WARNING — the migration validator rejected migrations because of their comments | `internal/store/sqlite/migrate.go` (`stripSQLComments`, string-aware `--`/`/* */` stripping before the reserved-word scan), `internal/store/sqlite/migrate_test.go` |
+| 5 | WARNING — `TestMigrateIsIdempotent` proved an outcome, not the mechanism (R3.5) | `internal/store/sqlite/migrate_no_op_integration_test.go` (authorizer-based `BEGIN` count, proven to catch the regression via two temporary probes) |
+| 6 | WARNING — R3.1 had no test | `test/integration/migrate_test.go` (`TestMigrationsAreEmbeddedNotReadFromDisk`) |
+| 7 | WARNING — the kind-ranking rule was defined twice | Exported as `schema.Rank`, both sides now read the single definition (same commit as finding 3) |
+| 8 | SUGGESTIONS | All four applied: `docs/06-harness.md` states the golden path; `test/integration/doc.go` forward-references `schema_golden_test.go`; `TestVaultNewerThanBinaryRefusesToOpen` now also asserts no `-wal`/`-shm` sidecar; `migrate_test.go`'s hand-built DSN documented as a genuine package-boundary constraint, not fixed |
+
+Two of these (findings 1 and 2) are genuine production-code defects that a green CI had not
+caught — recorded with root cause and evidence in Engram under
+`nooma/slice3-concurrency-defects` for anyone auditing why the test suite passed before this PR
+despite them.
+
+**Verification, all green**: `make check`; `golangci-lint run --build-tags integration ./...` = 0
+issues; `go clean -testcache && make test-integration`; `make schema-golden && git diff
+--exit-code -- testdata/schema` = clean (no golden drift from this batch); the three new
+concurrency/mechanism regression tests each run 10-15 times with zero failures.
+
+**Measured `git diff --numstat` for this review-remediation batch alone** (`db4ee2e..HEAD`,
+excluding `go.sum`, no golden files touched): 1013 additions / 92 deletions = 1105 lines.
+
+**Measured for the whole PR** (`main...HEAD`, i.e. `3.1-3.5+3.7` plus this remediation batch,
+excluding `go.sum`, INCLUDING this note's own commit — the true final number, not the
+snapshot-before-writing-it that a self-referential count would otherwise leave stale): 2413
+additions / 37 deletions = 2450 total; golden-only (`testdata/schema/*`) = 181 lines;
+**review-line total (excluding `go.sum` and goldens) = 2269**. This PR is submitted as
+`size:exception` per the owner's explicit decision — scope was not dropped and the overage is
+not hidden.
 
 ---
 
@@ -528,27 +603,64 @@ PRs 2/3/5 (see 7.5's note).
 
 ## Review Workload Forecast
 
-| PR | Est. changed lines | 400-line budget risk | Notes |
+**Recalibrated after PRs 1–3 shipped.** The original per-PR numbers were authored before any
+code existed and proved to be low by a wide margin. They are kept below as `orig.` so the miss
+stays visible instead of being quietly overwritten.
+
+### What the first three PRs actually measured
+
+| PR | orig. est. | after `sdd-apply` | after review remediation | impl. factor | total factor |
+|---|---|---|---|---|---|
+| 1 (docs only) | ~15 | 15 | 15 | 1.0x | 1.0x |
+| 2 | ~250 | 531 | **1,056** | 2.1x | 4.2x |
+| 3 (tasks 3.1–3.5, 3.7) | ~300 | 1,301 | **2,271** | 4.3x | 7.6x |
+
+Two distinct effects compound, and they are worth separating because they have different fixes:
+
+1. **The implementation itself is underestimated 2–4x.** A task list can name the files and the
+   tests; it cannot see how much code the tests need until they are written. Estimating lines
+   before writing the first failing test is guessing.
+2. **Review remediation roughly doubles the result again.** Both PRs went through a four-lens
+   pre-PR review that found real defects (PR 2: one blocker, two criticals; PR 3: one blocker,
+   two criticals) while every gate was green. Fixing them is not scope creep — it is the cost of
+   the work being correct, and it was not budgeted at all.
+
+Docs-only work estimates accurately (PR 1 landed exactly on its number). Code does not.
+
+### Forecast for the remaining PRs
+
+The band below applies the measured 4.2x–7.6x total factor. Two data points is a thin basis, so
+these are a range, not a number — and they exist to prevent the ceiling decision from being a
+surprise, not to be defended.
+
+| PR | orig. est. | recalibrated band | 400-line budget risk |
 |---|---|---|---|
-| 1 | ~15 | Low | Docs only |
-| 2 | **~1,056 measured** (`git diff --numstat main...HEAD`, excluding `go.sum`: ~862 code — `_txlock` fix task 2.8 plus tasks 2.9–2.15 remediating a pre-PR four-lens review — + ~184 in this same branch's `spec.md`/`design.md`/`tasks.md` corrections + ~10 in `docs/04-decisions.md`) | **`size:exception` — owner-accepted** | Owner decision: fix every finding in this single PR rather than dropping scope or re-splitting an already-implemented PR. Documented here, not hidden. Superseded the ~750 pre-measurement estimate |
-| 3 | ~380 (300 + 80 ▲ for the store-API golden, task 3.6) | **High** | Design's own designated split point is task 3.6 (store-API golden) — independent of the migration runner, move it to its own chained link if the diff crosses 400 |
-| 4 | ~345 (330 + ~15 for task 4.3, the FK-violation test deferred from PR 2 — see task 2.10's note) | Medium | |
-| 5 | ~200 | Low | |
-| 6 | ~230 (restored — Conflict C2 resolved in favour of spec.md; types, loader and `format_example.json` back in scope) | Low | |
-| 7 | ~150 | Low | |
-| **Total** | **~2,376** (PR 2 now measured, not estimated) | — | `go.sum` (PR 2) excluded from the human-review budget; the schema golden dumps (PRs 3–4) are **not** excluded — their diff is the point of the gate |
+| 3b (task 3.6, store-API golden — split out of PR 3) | ~80 | ~340–610 | **`size:exception` likely** |
+| 4 | ~345 (330 + ~15 for task 4.3, the FK-violation test deferred from PR 2) | ~1,450–2,620 | **`size:exception` expected** |
+| 5 | ~200 | ~840–1,520 | **`size:exception` expected** |
+| 6 | ~230 (types, loader and `format_example.json` in scope per Conflict C2) | ~970–1,750 | **`size:exception` expected** |
+| 7 | ~150 | ~630–1,140 | **`size:exception` likely** |
+| **Remaining total** | **~1,005** | **~4,230–7,640** | — |
+
+Measured so far across PRs 1–3: **3,342** review lines. Whole-change projection: **~7,600–11,000**,
+against the original ~2,376 estimate.
+
+`go.sum` is excluded from the human-review budget. The schema golden dumps (PRs 3–4) are **not**
+excluded — their diff is the point of the gate.
+
+### What this means for the ceiling
 
 - **Chained PRs recommended: Yes** (already the resolved delivery strategy for this change).
-- **Decision needed before apply: Yes** — specifically whether PR 3 preemptively splits off
-  task 3.6 (store-API golden) into its own chained link, or whether `sdd-apply` authors PR 3 as
-  planned and splits only if the running diff actually crosses 400 lines. Recommend the latter:
-  monitor PR 3's diff at the 3.5/3.6 boundary and split there if needed, per design §12's own
-  guidance.
-- **PR 2 crossed the ceiling after the fact**: it left `sdd-apply` at ~531 lines (already over
-  400) before this review; the review's own remediation adds more on top. The owner explicitly
-  chose `size:exception` over re-splitting a PR that was already implemented and reviewed as one
-  unit, rather than dropping any finding to stay under budget.
+- **The 400-line soft ceiling is not going to hold for any remaining code PR.** That is now a
+  measured expectation, not a risk. Every remaining PR should either be planned as two or more
+  links from the start, or carry an explicit, documented `size:exception` — decided before
+  `sdd-apply` runs, not discovered after.
+- **PRs 2 and 3 both crossed the ceiling after the fact.** In each case the owner chose
+  `size:exception` over re-splitting an already-implemented and already-reviewed unit, rather
+  than dropping a finding to stay under budget. Recorded here rather than hidden.
+- **The pre-PR four-lens review is not optional overhead.** It has found a blocker in each of the
+  two code PRs so far, both with every gate green, and one of them (PR 3's WAL-conversion race)
+  had already shipped to `main` inside PR 2 and survived that PR's own review. Budget for it.
 
 ---
 

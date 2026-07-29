@@ -512,7 +512,8 @@ leaves the vault at the previous version with no partial objects.
 | Partially migrated | 1 | Applies 2 only. `0001` is not re-run |
 | Already current | 2 | No transaction is opened. `Open` is a read |
 | Ahead of the binary | 3+ | `*VersionError`. Refuses. No transaction, no write, no `Close` side effect. Message names both numbers and says nothing was modified |
-| Two processes racing | 0 / 0 | The loser blocks on `BEGIN IMMEDIATE`, then observes the winner's version and skips. Both `Open` calls succeed; the schema is applied once |
+| Two processes racing, both already past first connection | 0 / 0 | The loser blocks on `BEGIN IMMEDIATE`, then observes the winner's version and skips. Both `Open` calls succeed; the schema is applied once |
+| Two processes racing their FIRST connection to a brand-new file | n/a (file does not exist yet) | **Corrected by the slice-3 review, finding 1** — this row was originally written as "both `Open` calls succeed" and was FALSE as stated: it silently assumed the migration runner's race (the row above) was the only race in play. It is not. Converting a brand-new file to WAL mode for the first time (`buildDSN`'s `journal_mode(wal)` PRAGMA, D3) needs SQLite to hold the file exclusively for that one-time conversion, and — unlike an ordinary page-lock wait — this specific exclusivity check is not covered by `busy_timeout`, because `busy_timeout` only ever governs waiting on an *already-open* connection; there is no connection yet for it to apply to. Measured: 8 concurrent `sqlite.Open` calls on a vault that does not exist yet failed this way 60-80% of the time before the opener's fix, with an error surfacing from `sqlite3_open`'s own PRAGMA batch, nowhere near `migrate()`. What makes the corrected row true: `Open` retries its *entire* first-connection sequence (never just the failed PRAGMA — a connection whose open sequence failed is closed and unusable) a bounded number of times with a short backoff, but only for this exact transient SQLITE_BUSY condition; a genuinely corrupt vault file fails a different SQLite error code entirely and is never retried. See `internal/store/sqlite/open.go`'s `openFirstConnection` and `test/integration/concurrent_open_test.go`'s regression test |
 
 The downgrade case is the one where being wrong corrupts a real person's vault, so it is checked
 before anything else and it opens nothing.
@@ -544,6 +545,22 @@ to `COMMIT`. Recorded here so the first person who hits it does not conclude the
 `make schema-golden && git diff --exit-code -- testdata/schema`, the same shape as the
 `templ generate` gate doc 06 §6 already describes: the gate is "regenerating changes nothing".
 
+**Package placement, corrected by the slice-3 review (finding 3).** `dumpSchema` — steps 2/3 above —
+needs `database/sql`, so it stays in `test/integration/schema_golden_test.go`, consistent with D1's
+"`FromSQLite` deliberately does not live [in `test/support/schema`]" (§6.4). But the classification
+and normalization logic step 4 actually runs — reading a `Kind` off a DDL prefix (`Classify`),
+recognizing an FTS5 shadow table (`IsShadowTable`), and the DDL golden's per-statement
+normalization (`NormalizeDDL`) — is pure: no SQLite handle needed. It originally lived in the same
+`_test.go` file as `dumpSchema` and was exercised only end-to-end, through one whole-pipeline
+comparison against the single fixture `0001_core_tables.sql` happens to produce; a regression in
+`Classify`'s regex for any schema shape not present in that one migration (a `CREATE VIEW`, a
+`CREATE TABLE IF NOT EXISTS`) would not have gone red until that shape landed in a real migration.
+It now lives in `test/support/schema` (package `schema`), stdlib-only like the rest of that
+package, next to `Marshal`/`ParseGolden`, with its own direct table tests. The kind-rank table is
+likewise exported as `schema.Rank`, closing a second, independent copy that
+`test/integration/schema_golden_test.go` used to keep (`sortRows`'s `kindRank`/`kindRankOrder`) —
+see finding 7's note in §6.2.
+
 ### 6.2 Normalization rules — `structure.golden`
 
 **What is extracted.** For every row of `sqlite_master`:
@@ -561,6 +578,10 @@ to `COMMIT`. Recorded here so the first person who hits it does not conclude the
 `table < virtual_table < index < unique_index < trigger < view`. Columns **by name**, not by
 ordinal: column order is not what the doc-03 comparison is about, and the ordinal order is
 preserved in `ddl.golden` anyway. So both properties are covered and neither gate is fragile.
+This rank table has exactly one source of truth: `schema.Rank` in `test/support/schema`, used by
+both `structure.golden`'s own `Sort` and `ddl.golden`'s row ordering in
+`test/integration/schema_golden_test.go` (corrected by the slice-3 review, finding 7 — the two
+sides used to keep independent copies that merely happened to agree).
 
 **The format.** Two-space indent, one object or column per line, `\n` endings:
 

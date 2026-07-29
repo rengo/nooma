@@ -28,6 +28,10 @@ test-integration: ## L3 — a real temporary SQLite vault
 test-e2e: ## L4 — the compiled binary
 	go test -tags e2e ./test/e2e/...
 
+.PHONY: schema-golden
+schema-golden: ## Regenerate testdata/schema/{structure,ddl}.golden from the embedded migrations
+	go test -tags integration ./test/integration/ -run TestSchemaGolden -update
+
 .PHONY: build
 build: ## Compile every package
 	go build ./...
