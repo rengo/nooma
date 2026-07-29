@@ -2,8 +2,9 @@
 // database schema (design D1/§6.4, openspec/changes/complete-harness):
 // Kind and Object describe one object's shape, Marshal/ParseGolden
 // serialize and read back testdata/schema/structure.golden. ParseMarkdown
-// and Diff — the docs/03-data-model.md side of the comparison — land in a
-// later PR of this same change, once the doc-03 gate needs them.
+// and Diff (markdown.go) are the docs/03-data-model.md side of the
+// comparison, consumed by test/conformance's TestHarness_SchemaMatchesDoc03
+// (R4.3).
 //
 // This package deliberately imports nothing beyond the standard library
 // (design §3): FromSQLite, which needs database/sql, stays in the L3 test
