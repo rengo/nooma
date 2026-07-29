@@ -55,6 +55,28 @@ func TestExtractJSONFence(t *testing.T) {
 				"{\"id\": \"unterminated\"}\n",
 			wantErr: "unterminated ```json fence",
 		},
+		{
+			name: "a fence entirely inside an HTML comment is invisible, surfacing as the zero-fence error",
+			md: "# doc\n\n" +
+				"<!--\n" +
+				"```json\n" +
+				"{\"id\": \"commented-out\"}\n" +
+				"```\n" +
+				"-->\n",
+			wantErr: "found 0 fenced ```json blocks",
+		},
+		{
+			name: "a commented-out fence does not count toward the ambiguous-fence-count error when a live fence exists",
+			md: "<!--\n" +
+				"```json\n" +
+				"{\"id\": \"commented-out\"}\n" +
+				"```\n" +
+				"-->\n\n" +
+				"```json\n" +
+				"{\"id\": \"live\"}\n" +
+				"```\n",
+			want: `{"id": "live"}`,
+		},
 	}
 
 	for _, tt := range tests {
