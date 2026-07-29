@@ -216,8 +216,26 @@ CREATE INDEX idx_unit_embeddings_model ON unit_embeddings(model);
 CREATE VIRTUAL TABLE units_fts USING fts5(
   content, content='units', content_rowid='rowid'
 );
+
+-- Sync triggers: keep units_fts current with units.content. External-content
+-- FTS5 tables are not maintained automatically — this is that maintenance.
+CREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN
+  INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+CREATE TRIGGER units_fts_ad AFTER DELETE ON units BEGIN
+  INSERT INTO units_fts(units_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+END;
+CREATE TRIGGER units_fts_au AFTER UPDATE ON units BEGIN
+  INSERT INTO units_fts(units_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+  INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
 ```
 
+- **`units.rowid` is not stable across `VACUUM`** (SQLite may renumber rowids for a table
+  without an `INTEGER PRIMARY KEY`, which `units` is not), and `units_fts` is keyed on it
+  (`content_rowid='rowid'`). A vacuum — including `nooma export`'s `VACUUM INTO` — must be
+  followed by `INSERT INTO units_fts(units_fts) VALUES('rebuild')`, or the FTS index can point
+  at the wrong rows.
 - **Vectors are L2-normalized before storage.** Cosine similarity is then a plain dot product,
   which is what makes the brute-force search cheap enough to need no index (ADR-0012).
 - **The vault records the embedding model per row**, not in global metadata. If the user
