@@ -88,6 +88,33 @@ CREATE VIRTUAL TABLE units_fts USING fts5(
 -- Sync triggers: keep units_fts current with units.content. External-content
 -- FTS5 tables are not maintained automatically (docs/03-data-model.md's own
 -- "Search" section states this in prose; this is its DDL, R9.1/R9.2).
+--
+-- The literal string 'delete' as the first value in an INSERT INTO
+-- units_fts(...) below is FTS5's own documented special-command syntax for
+-- removing one row from an EXTERNAL-CONTENT table (units_fts is declared
+-- content='units': it stores no content of its own, so an ordinary DELETE
+-- statement against it does not apply). Read as a plain INSERT it looks
+-- like nonsense; it is not one.
+--
+-- units_fts_au issues a delete-then-insert pair, never an UPDATE, because
+-- external-content FTS5 tables have no UPDATE path at all — that
+-- restriction is exactly why there are three triggers here and not one.
+--
+-- Archival is an UPDATE (units.status -> 'archived'), never a DELETE
+-- (CLAUDE.md non-negotiable #6), so units_fts_au fires on archival too and
+-- re-indexes the SAME content at the SAME rowid: an archived unit STAYS in
+-- units_fts. That is correct, not a leak — docs/02-cognitive-core.md's
+-- units are "cold, weight ~= 0" once archived, NOT excluded from read
+-- surfaces; only superseded/incomplete units are excluded, and doc 02
+-- prescribes doing that positively (status = 'pool') AT QUERY TIME, never
+-- at index time.
+--
+-- Do NOT "optimize" any of these three triggers to skip
+-- superseded/incomplete rows. units_fts is content='units',
+-- content_rowid='rowid': it MUST mirror units row-for-row. A trigger that
+-- silently skipped some units rows would break that rowid correspondence,
+-- and FTS5 would then return rowids that either do not resolve to any
+-- units row or resolve to the WRONG one.
 CREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN
   INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);
 END;
