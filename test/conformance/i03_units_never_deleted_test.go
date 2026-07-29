@@ -9,7 +9,6 @@
 package conformance
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -70,58 +69,21 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 
 	t.Run("tree scan for DELETE FROM units", func(t *testing.T) {
 		repoRoot := repoRootFromCaller(t)
+		report := func(path string, lineNum int, line string) {
+			t.Errorf(
+				"%s:%d: %q — no code path outside the migrations may emit "+
+					"DELETE FROM units (docs/02-cognitive-core.md §1, CLAUDE.md "+
+					"non-negotiable #6)",
+				path, lineNum, strings.TrimSpace(line),
+			)
+		}
 
-		scanned := scanGoTreeForUnitsDelete(t, filepath.Join(repoRoot, "internal"))
-		scanned += scanGoTreeForUnitsDelete(t, filepath.Join(repoRoot, "cmd"))
+		scanned := scanGoTree(t, filepath.Join(repoRoot, "internal"), containsUnitsDeleteStatement, report)
+		scanned += scanGoTree(t, filepath.Join(repoRoot, "cmd"), containsUnitsDeleteStatement, report)
 		if scanned == 0 {
 			t.Fatal("scanned zero .go files under internal/ and cmd/ — D10's guard: nothing to check yet")
 		}
 	})
-}
-
-// scanGoTreeForUnitsDelete walks root for .go files and reports, via
-// t.Errorf, any line containing a "DELETE FROM units" statement (case
-// insensitive), taking care not to match a different table that merely
-// shares the "units" prefix (e.g. "DELETE FROM units_fts", which is a
-// distinct, legitimate FTS5 shadow table — see containsUnitsDeleteStatement).
-// It returns the number of .go files scanned, so the caller can apply D10's
-// non-empty-corpus guard.
-func scanGoTreeForUnitsDelete(t *testing.T, root string) (scanned int) {
-	t.Helper()
-
-	if _, err := os.Stat(root); os.IsNotExist(err) {
-		return 0
-	}
-
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		scanned++
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		for i, line := range strings.Split(string(content), "\n") {
-			if containsUnitsDeleteStatement(line) {
-				t.Errorf(
-					"%s:%d: %q — no code path outside the migrations may emit "+
-						"DELETE FROM units (docs/02-cognitive-core.md §1, CLAUDE.md "+
-						"non-negotiable #6)",
-					path, i+1, strings.TrimSpace(line),
-				)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk %s: %v", root, err)
-	}
-	return scanned
 }
 
 // containsUnitsDeleteStatement reports whether line contains the exact

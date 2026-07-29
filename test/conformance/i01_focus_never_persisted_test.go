@@ -10,7 +10,6 @@
 package conformance
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -49,7 +48,8 @@ import (
 //     line-based heuristic (like i13_learning_signal_test.go's migration
 //     scan), not a type-checked one — deliberately, so it needs no import
 //     of go/ast to reason about a status literal it does not yet know the
-//     shape of.
+//     shape of. Go source only: migrations are .sql, embedded via
+//     go:embed, and are naturally outside this scan (design D1).
 //
 // Both checks apply design D10's non-empty-corpus guard: assert a non-empty
 // corpus was found before asserting anything about its content, so a moved
@@ -85,54 +85,26 @@ func TestI01_FocusIsNeverAPersistedStatus(t *testing.T) {
 
 	t.Run("tree scan", func(t *testing.T) {
 		repoRoot := repoRootFromCaller(t)
+		report := func(path string, lineNum int, line string) {
+			t.Errorf(
+				"%s:%d: %q — status='focus' must never be a persisted value "+
+					"(docs/02-cognitive-core.md §3: focus is a computed view, not a stored status)",
+				path, lineNum, strings.TrimSpace(line),
+			)
+		}
 
-		scanned := scanGoTreeForFocusStatusLiteral(t, filepath.Join(repoRoot, "internal"))
-		scanned += scanGoTreeForFocusStatusLiteral(t, filepath.Join(repoRoot, "cmd"))
+		scanned := scanGoTree(t, filepath.Join(repoRoot, "internal"), isFocusStatusLiteral, report)
+		scanned += scanGoTree(t, filepath.Join(repoRoot, "cmd"), isFocusStatusLiteral, report)
 		if scanned == 0 {
 			t.Fatal("scanned zero .go files under internal/ and cmd/ — D10's guard: nothing to check yet")
 		}
 	})
 }
 
-// scanGoTreeForFocusStatusLiteral walks root for .go files and reports, via
-// t.Errorf, any line that carries both the literal "focus" and the
-// substring "Status" — a coarse proxy for "a Status field or constant is
-// being set to focus", per docs/06-harness.md §4's own framing. It returns
-// the number of .go files scanned, so the caller can apply D10's
-// non-empty-corpus guard.
-func scanGoTreeForFocusStatusLiteral(t *testing.T, root string) (scanned int) {
-	t.Helper()
-
-	if _, err := os.Stat(root); os.IsNotExist(err) {
-		return 0
-	}
-
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		scanned++
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		for i, line := range strings.Split(string(content), "\n") {
-			if strings.Contains(line, `"focus"`) && strings.Contains(line, "Status") {
-				t.Errorf(
-					"%s:%d: %q — status='focus' must never be a persisted value "+
-						"(docs/02-cognitive-core.md §3: focus is a computed view, not a stored status)",
-					path, i+1, strings.TrimSpace(line),
-				)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk %s: %v", root, err)
-	}
-	return scanned
+// isFocusStatusLiteral reports whether line carries both the literal
+// "focus" and the substring "Status" — a coarse proxy for "a Status field
+// or constant is being set to focus", per docs/06-harness.md §4's own
+// framing.
+func isFocusStatusLiteral(line string) bool {
+	return strings.Contains(line, `"focus"`) && strings.Contains(line, "Status")
 }
