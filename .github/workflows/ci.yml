@@ -55,9 +55,11 @@ jobs:
           go-version-file: go.mod
       - run: go build ./...
 
-  # L3 from docs/06-harness.md §3: a real, empty temporary SQLite vault. The
-  # schema-golden regeneration-diff step (docs/06-harness.md §6, R4.4) lands
-  # in this same job in PR 3, once the embedded migrations exist.
+  # L3 from docs/06-harness.md §3: a real, empty temporary SQLite vault, plus
+  # the schema-golden regeneration-diff gate (docs/06-harness.md §6, R4.4):
+  # regenerating the golden from the current embedded migrations must change
+  # nothing, the same shape as the `templ generate` gate this file's trailing
+  # comment still describes as deferred.
   integration:
     name: integration
     runs-on: ubuntu-latest
@@ -68,11 +70,12 @@ jobs:
           go-version-file: go.mod
       - name: L3 tests
         run: make test-integration
+      - name: schema golden regenerates to a clean tree
+        run: make schema-golden && git diff --exit-code -- testdata/schema
 
 # Gates from docs/06-harness.md §6 that are NOT enforced yet, and what they wait on:
 #
 #   internal/core coverage floor >= 90% -> waits on core having any statements
-#   schema golden                       -> waits on the embedded migrations
 #   templ generate leaves a clean tree  -> waits on the UI (M4, ADR-0008)
 #   docs<->code sync label check        -> waits on internal/core existing in a PR diff
 #   cross-compilation matrix            -> blocked on ADR-0001 closing
