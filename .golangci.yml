@@ -8,22 +8,23 @@ version: "2"
 run:
   timeout: 5m
   # Without this, golangci-lint only ever sees the untagged L1/L2 tree:
-  # every //go:build integration file (test/integration/**,
-  # internal/store/sqlite/*_integration_test.go) is invisible to
-  # errcheck, staticcheck, unused, ineffassign, govet AND depguard,
-  # silently exempting them from docs/06-harness.md §6's "the lint does
-  # not pass" promise. `golangci-lint run --build-tags integration ./...`
-  # confirms the gap; wiring it here (config, not a CLI flag) is what
-  # makes `make lint` / CI's plain `golangci-lint run` pick it up too.
-  # A future PR adding //go:build e2e files must extend this list, or the
-  # same gap reopens for that tag. pendingimpl files (test/conformance/) are
-  # a deliberate exception: they anchor to symbols that do not exist yet, so
-  # linting them here would report those as permanent errors. They are
-  # gated instead by `make pending-red` (scripts/pending-red.sh), which
-  # confirms they fail to compile for the right reason — do not add
-  # pendingimpl here.
+  # every //go:build integration or //go:build e2e file
+  # (test/integration/**, internal/store/sqlite/*_integration_test.go,
+  # test/e2e/**) is invisible to errcheck, staticcheck, unused, ineffassign,
+  # govet AND depguard, silently exempting them from docs/06-harness.md §6's
+  # "the lint does not pass" promise. `golangci-lint run --build-tags
+  # integration,e2e ./...` confirms the gap; wiring it here (config, not a
+  # CLI flag) is what makes `make lint` / CI's plain `golangci-lint run`
+  # pick it up too. A future PR adding a new build tag under test/ must
+  # extend this list the same way, or the same gap reopens for that tag.
+  # pendingimpl files (test/conformance/) are a deliberate exception: they
+  # anchor to symbols that do not exist yet, so linting them here would
+  # report those as permanent errors. They are gated instead by `make
+  # pending-red` (scripts/pending-red.sh), which confirms they fail to
+  # compile for the right reason — do not add pendingimpl here.
   build-tags:
     - integration
+    - e2e
 
 linters:
   default: standard
