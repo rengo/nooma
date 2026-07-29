@@ -754,7 +754,13 @@ Independent. See Conflict C2 (resolved in favour of spec.md) — types, loader a
 `format_example.json` are in scope; design D11 and this PR were corrected to match spec.md's
 R10.1–R10.4.
 
-- [ ] **6.1** [TDD] Write `TestHarness_GoldenSetFormatsDeclared` (L2,
+**Split into two links** (recalibrated review-workload forecast put the whole PR at
+~970–1,750 review lines): **6a** (tasks 6.1 and 6.2 — the golden-set formats and their loader)
+landed first, on branch `test/golden-set-formats` from an up-to-date `main` (PRs #4–#12 merged);
+**6b** (tasks 6.3 and 6.4 — the L4 e2e skeleton and its CI job) is deferred to its own PR/session.
+They are independent of each other: 6a needs no binary, and 6b needs none of 6a's fixtures.
+
+- [x] **6.1** [TDD] Write `TestHarness_GoldenSetFormatsDeclared` (L2,
       `test/conformance/golden_sets_test.go`).
       RED: `testdata/recall/`, `testdata/classify/`, `testdata/llm/` do not exist (D10 guard: the
       test first asserts it found three directories before asserting anything about their
@@ -769,7 +775,7 @@ R10.1–R10.4.
       GREEN: `make test` — three directories found, each `format.md` has a non-empty fenced json
       block, each has a `format_example.json` sibling of `cases/`, each has a `cases/` directory.
       Requirement: R10.1, R10.2, R10.4.
-- [ ] **6.2** [TDD] Write `TestGoldenSetFormatExamples` (L1, `test/support/goldenset/loader_test.go`).
+- [x] **6.2** [TDD] Write `TestGoldenSetFormatExamples` (L1, `test/support/goldenset/loader_test.go`).
       RED: `undefined: goldenset.Load` — compile error, package `test/support/goldenset` does not
       exist yet.
       Implement: `test/support/goldenset/types.go` defines `RecallExample`, `ClassifyExample` and
