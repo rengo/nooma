@@ -1,0 +1,102 @@
+-- Core tables. See docs/03-data-model.md "Core tables" section — this file
+-- must reproduce that section exactly (spec R3.8, the schema golden R4.3
+-- compares the two). Published: never edit this file again, write 0002
+-- instead (CLAUDE.md §7 conventions, non-negotiable in spirit).
+
+CREATE TABLE units (
+  id                 TEXT PRIMARY KEY,
+  type               TEXT NOT NULL,              -- task|mental_load|event|knowledge|procedural|emotional|list|structured_ref|insight
+  content            TEXT NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'pool',  -- pool|archived|superseded|incomplete
+  weight             REAL NOT NULL DEFAULT 1.0,
+  weight_decay_rate  REAL NOT NULL DEFAULT 0.01,
+  last_touched_at    TEXT NOT NULL,
+  structured_data    TEXT,                       -- JSON
+  source             TEXT NOT NULL DEFAULT 'chat',
+  event_at           TEXT,
+  due_at             TEXT,
+  confidence         REAL,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL
+);
+CREATE INDEX idx_units_status_touched ON units(status, last_touched_at);
+
+-- "one active insight per metric" — partial unique index over JSON expressions
+CREATE UNIQUE INDEX idx_units_unique_active_insight
+  ON units(type, json_extract(structured_data,'$.domain'),
+                 json_extract(structured_data,'$.metricKey'))
+  WHERE status = 'pool' AND type = 'insight';
+
+CREATE TABLE relations (
+  id            TEXT PRIMARY KEY,
+  from_unit_id  TEXT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  to_unit_id    TEXT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  type          TEXT NOT NULL,
+  strength      REAL NOT NULL DEFAULT 0.5,
+  confidence    REAL NOT NULL DEFAULT 0.5,
+  created_by    TEXT NOT NULL DEFAULT 'system',  -- system|consolidation|user
+  created_at    TEXT NOT NULL,
+  UNIQUE (from_unit_id, to_unit_id, type)
+);
+
+CREATE TABLE triggers (
+  id                TEXT PRIMARY KEY,
+  unit_id           TEXT REFERENCES units(id) ON DELETE CASCADE,  -- NULL for pattern_based
+  kind              TEXT NOT NULL,               -- time_based|event_based|pattern_based
+  status            TEXT NOT NULL DEFAULT 'armed', -- armed|fired|dismissed|expired
+  condition         TEXT,                        -- JSON (event/pattern)
+  interrupt_level   REAL,                        -- 0–1, persisted (auditable)
+  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days…)
+  fire_at           TEXT,
+  fired_at          TEXT,
+  surfaced_at       TEXT,                        -- NULL = pending delivery
+  responded_at      TEXT,
+  resolution        TEXT,                        -- engaged|declined|self_healed
+  recurrence_rule   TEXT,                        -- yearly|monthly|NULL
+  recurrence_anchor TEXT,                        -- JSON {month, day}
+  created_at        TEXT NOT NULL
+);
+CREATE INDEX idx_triggers_status_fire ON triggers(status, fire_at);
+
+CREATE TABLE timers (                            -- ephemeral: NEVER units
+  id            TEXT PRIMARY KEY,
+  fire_at       TEXT NOT NULL,
+  action_text   TEXT,                            -- NULL = generic nudge
+  rendered_text TEXT,                            -- LLM rephrasing at fire time
+  status        TEXT NOT NULL DEFAULT 'pending', -- pending|fired|cancelled
+  created_at    TEXT NOT NULL,
+  fired_at      TEXT,
+  surfaced_at   TEXT
+);
+
+CREATE TABLE self_beliefs (
+  id                 TEXT PRIMARY KEY,
+  facet              TEXT NOT NULL,              -- identity|value|goal|social|preference
+  topic_key          TEXT NOT NULL UNIQUE,       -- derived: 'derived/{facet}/{key}'
+  content            TEXT NOT NULL,
+  metadata           TEXT,                       -- JSON
+  confidence         REAL NOT NULL DEFAULT 0.5,
+  origin             TEXT NOT NULL DEFAULT 'user_stated', -- seed|derived|user_stated
+  source_unit_id     TEXT REFERENCES units(id) ON DELETE SET NULL,
+  status             TEXT NOT NULL DEFAULT 'active',
+  last_reinforced_at TEXT NOT NULL,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL
+);
+
+CREATE TABLE current_state (
+  id          TEXT PRIMARY KEY,
+  energy      REAL,                              -- 0–1
+  mood        TEXT,
+  active      INTEGER NOT NULL DEFAULT 1,
+  recorded_at TEXT NOT NULL
+);
+
+CREATE TABLE decision_log (
+  id          TEXT PRIMARY KEY,
+  action      TEXT NOT NULL,                     -- e.g. 'capture.classify', 'consolidation.archive'
+  rationale   TEXT NOT NULL,
+  context     TEXT NOT NULL DEFAULT '{}',        -- JSON
+  occurred_at TEXT NOT NULL
+);
+CREATE INDEX idx_decision_log_occurred ON decision_log(occurred_at);

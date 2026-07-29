@@ -11,29 +11,24 @@ import (
 	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
 
-// Vault is an open SQLite database file with the operational PRAGMAs
-// applied and FTS5 registered on every connection (design D2/D3). It reads
-// and writes no domain row: the handle below is unexported and this
-// package exports no way to run arbitrary SQL against it. See
-// docs/06-harness.md §1.
-//
-// Vault does not yet guarantee the file is migrated to the schema this
-// binary carries — the migration runner lands in PR 3 of this same change
-// (openspec/changes/complete-harness). Until then, Open only opens the
-// connection pool and pings it.
+// Vault is an open SQLite database file, migrated to the schema this
+// binary carries, with the operational PRAGMAs applied and FTS5 registered
+// on every connection (design D1/D2/D3). It reads and writes no domain
+// row: the handle below is unexported and this package exports no way to
+// run arbitrary SQL against it. See docs/06-harness.md §1.
 type Vault struct {
 	db   *sql.DB
 	path string
 }
 
-// Open opens dbPath, applies the operational PRAGMAs, and registers FTS5
-// on every connection (design D2/D3, spec R2.3). Resolving where dbPath
-// lives is the caller's job — this function accepts an absolute path and
-// resolves nothing else.
+// Open opens dbPath, applies the operational PRAGMAs, registers FTS5 on
+// every connection, and migrates the vault forward to the schema this
+// binary carries (design D2/D3/D4, spec R2.3, R3.3-R3.6). Resolving where
+// dbPath lives is the caller's job — this function accepts an absolute
+// path and resolves nothing else.
 //
-// Open does not yet migrate the vault forward: that is PR 3 of this same
-// change (openspec/changes/complete-harness) — the next reader extending
-// this function with migration logic should not assume it already runs.
+// If the vault is newer than this binary knows how to migrate, Open
+// returns a *VersionError having modified nothing.
 func Open(ctx context.Context, dbPath string) (*Vault, error) {
 	dsn, err := buildDSN(dbPath, pathStyleForGOOS())
 	if err != nil {
@@ -47,6 +42,10 @@ func Open(ctx context.Context, dbPath string) (*Vault, error) {
 
 	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("open vault %q: ping: %w", dbPath, errors.Join(err, db.Close()))
+	}
+
+	if err := migrate(ctx, db); err != nil {
+		return nil, fmt.Errorf("open vault %q: migrate: %w", dbPath, errors.Join(err, db.Close()))
 	}
 
 	return &Vault{db: db, path: dbPath}, nil
