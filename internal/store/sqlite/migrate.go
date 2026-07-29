@@ -127,7 +127,20 @@ func readUserVersion(ctx context.Context, q interface {
 }
 
 // migrate applies every pending embedded migration to db, following design
-// §5.2's state matrix (D4):
+// §5.2's state matrix (D4). It is a thin wrapper over migrateMigrations
+// (below) that supplies the real embedded migration set — split out so a
+// test can drive the algorithm with a synthetic, truncated set instead
+// (slice-3 review finding 2).
+func migrate(ctx context.Context, db *sql.DB) error {
+	migrations, err := parseMigrations(migrationFS)
+	if err != nil {
+		return fmt.Errorf("parse embedded migrations: %w", err)
+	}
+	return migrateMigrations(ctx, db, migrations)
+}
+
+// migrateMigrations runs design §5.2's state matrix against an
+// already-parsed, already-validated migration set:
 //
 //   - current > target: the vault is newer than this binary knows how to
 //     migrate. Returns *VersionError having opened no transaction and
@@ -138,12 +151,13 @@ func readUserVersion(ctx context.Context, q interface {
 //     applying (design D4) — this is what makes two racing processes safe
 //     without the single-writer lockfile, which does not exist yet (that
 //     is M0's job).
-func migrate(ctx context.Context, db *sql.DB) error {
-	migrations, err := parseMigrations(migrationFS)
-	if err != nil {
-		return fmt.Errorf("parse embedded migrations: %w", err)
-	}
-
+//
+// Split out from migrate so a test can drive it directly with a synthetic,
+// truncated migration set — simulating an older binary (a smaller target)
+// racing a newer one (a larger target) against the same vault, without
+// needing two real compiled binaries (design §5.3's "ahead of the binary"
+// row; spec R3.6; slice-3 review finding 2).
+func migrateMigrations(ctx context.Context, db *sql.DB, migrations []migration) error {
 	target := 0
 	for _, m := range migrations {
 		if m.Version > target {
@@ -167,7 +181,7 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		if m.Version <= current {
 			continue
 		}
-		if err := applyMigration(ctx, db, m); err != nil {
+		if err := applyMigration(ctx, db, m, target); err != nil {
 			return err
 		}
 	}
@@ -182,7 +196,26 @@ func migrate(ctx context.Context, db *sql.DB) error {
 // any transaction, but only the winner of BEGIN IMMEDIATE's write lock sees
 // its own commit — the loser re-reads user_version after acquiring the
 // lock, observes the winner's work, and skips.
-func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
+//
+// target is this binary's OWN highest embedded migration version — NOT
+// necessarily the vault's final destination. It is re-checked here, inside
+// the transaction, because the outer current > target fast path in
+// migrateMigrations only catches a vault that was ALREADY ahead at the
+// moment it read current; it cannot catch a vault that races ahead WHILE
+// this binary is waiting for the write lock (slice-3 review finding 2,
+// confirmed 3/3 by the reviewer: an old binary with target=1 and a new
+// binary with target=2 open the same fresh vault; the old one reads
+// current=0 and decides to apply migration 1; the new one wins the lock
+// first and applies BOTH 1 and 2, leaving user_version=2; the old one then
+// enters this function, re-reads current=2 inside its own transaction, and
+// — with only the old `current >= m.Version` guard — evaluated 2 >= 1,
+// concluded "already applied, skip", and returned nil, handing back a
+// working *Vault over a schema this binary has never seen). The fix is the
+// check immediately below: current > target is evaluated FIRST, before the
+// "already applied this one" guard, so racing past this binary's own
+// target is always caught, no matter which migration was in flight when it
+// happened.
+func applyMigration(ctx context.Context, db *sql.DB, m migration, target int) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("apply migration %q: begin: %w", m.Name, err)
@@ -193,9 +226,17 @@ func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
 	if err != nil {
 		return fmt.Errorf("apply migration %q: %w", m.Name, err)
 	}
+	if current > target {
+		// Another process — necessarily a newer binary with a longer
+		// migration set — won the write lock while this one waited, and
+		// carried the vault past this binary's own target. Forward-only
+		// means refusing here, not silently skipping (spec R3.6).
+		return &VersionError{VaultVersion: current, BinaryVersion: target}
+	}
 	if current >= m.Version {
-		// Another process already applied this migration while this one
-		// waited for the write lock. Nothing to do.
+		// Another process already applied this migration — and nothing
+		// past this binary's own target — while this one waited for the
+		// write lock. Nothing to do.
 		return nil
 	}
 	if current != m.Version-1 {
