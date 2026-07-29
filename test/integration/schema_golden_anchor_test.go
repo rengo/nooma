@@ -59,38 +59,57 @@ func TestSchemaGoldenAnchorsExpectedObjects(t *testing.T) {
 		t.Fatalf("os.ReadFile(%q) = _, %v, want nil error", structureGoldenPath, err)
 	}
 
-	lines := make(map[string]bool)
+	// objectLines holds only the object-declaration lines (one per schema
+	// object: "table foo", "trigger bar", ...) — column lines ("  column
+	// ..."), the header comments and the schema_version line are not
+	// objects and must not be compared against the required list below.
+	objectLines := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(golden)))
 	for scanner.Scan() {
-		lines[strings.TrimSpace(scanner.Text())] = true
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "":
+		case strings.HasPrefix(trimmed, "#"):
+		case strings.HasPrefix(trimmed, "schema_version "):
+		case strings.HasPrefix(line, "  column "):
+		default:
+			objectLines[trimmed] = true
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("scan %q: %v", structureGoldenPath, err)
 	}
 
-	// Hand-written, not generated: every table 0001_core_tables.sql and
-	// 0002_learning_and_search.sql create, the virtual table, and — the
-	// whole point of this test — the three FTS5 sync triggers R9.1
-	// requires. Kept as one flat list (not derived from schema.Kind
-	// constants) so nothing here shares code with the thing being guarded
-	// against.
+	// When you add a CREATE statement to a migration that changes this
+	// golden, add its object line here too — exact set equality (both
+	// directions) below means an object added to the golden without a
+	// matching update here fails this test instead of silently passing.
 	required := []string{
 		// 0001_core_tables.sql
 		"table units",
+		"index idx_units_status_touched",
+		"unique_index idx_units_unique_active_insight",
 		"table relations",
 		"table triggers",
+		"index idx_triggers_status_fire",
 		"table timers",
 		"table self_beliefs",
 		"table current_state",
 		"table decision_log",
+		"index idx_decision_log_occurred",
 		// 0002_learning_and_search.sql
 		"table learning_signals",
+		"index idx_learning_signals_occurred",
 		"table learning_state",
 		"table relation_thresholds",
 		"table calibration",
 		"table measurements",
+		"index idx_measurements_metric",
+		"index idx_measurements_ref_unit",
 		"table config",
 		"table unit_embeddings",
+		"index idx_unit_embeddings_model",
 		"virtual_table units_fts",
 		// The three FTS5 sync triggers (R9.1) — the exact objects the
 		// slice-4a review found silently dropped by an unguarded
@@ -100,9 +119,28 @@ func TestSchemaGoldenAnchorsExpectedObjects(t *testing.T) {
 		"trigger units_fts_au",
 	}
 
+	requiredSet := make(map[string]bool, len(required))
 	for _, want := range required {
-		if !lines[want] {
+		requiredSet[want] = true
+		if !objectLines[want] {
 			t.Errorf("%s is missing required line %q — the golden's own generator dropped it (see schema_golden_test.go's dumpSchema Kind guard)", structureGoldenPath, want)
 		}
+	}
+
+	// The direction slice-4a's version of this test did not check: an
+	// object PRESENT in the golden but ABSENT from this hand-written list.
+	// Membership alone would silently pass if an object were added to the
+	// golden without updating required above — exactly the gap
+	// TestSchemaDocAnchorsExpectedObjectCount (slice 4b,
+	// test/conformance/schema_doc_test.go) closed on the doc-03 side (four-
+	// lens pre-PR review finding 6: bring 4a's anchor up to the same
+	// standard).
+	for got := range objectLines {
+		if !requiredSet[got] {
+			t.Errorf("%s declares object %q which is not in this test's hand-written required list — add it here (or confirm the addition is intentional)", structureGoldenPath, got)
+		}
+	}
+	if len(objectLines) != len(required) {
+		t.Errorf("%s declares %d objects, but this test's hand-written required list has %d — update the list to match", structureGoldenPath, len(objectLines), len(required))
 	}
 }
