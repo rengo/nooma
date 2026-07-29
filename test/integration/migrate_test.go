@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -36,6 +37,20 @@ func TestMigrateFromScratchSetsUserVersion(t *testing.T) {
 	}
 	defer v.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
 
+	// "file:"+dbPath is a hand-built DSN, not routed through buildDSN's
+	// path-style abstraction (internal/store/sqlite/dsn.go) — noted rather
+	// than silently left, per the slice-3 review's suggestion 4. This is a
+	// real package-boundary constraint, not an oversight: buildDSN is
+	// unexported, and test/integration is a separate package by design
+	// (design D7's containment layers — Vault's exported surface is meant
+	// to stay frozen and reviewer-auditable via store_api.golden, task
+	// 3.6). Exporting buildDSN purely so a black-box test could reach it
+	// would widen that surface ahead of schedule. This particular read-back
+	// only ever needs a plain absolute POSIX path (t.TempDir() never
+	// returns a Windows-shaped one on this repo's own CI), so the gap costs
+	// nothing here; a test that specifically needed to exercise
+	// buildDSN's Windows branch already lives inside package sqlite itself
+	// (dsn_test.go), where it can call buildDSN directly.
 	raw, err := sql.Open("sqlite3", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open(%q) = _, %v, want nil error", dbPath, err)
@@ -161,5 +176,71 @@ func TestVaultNewerThanBinaryRefusesToOpen(t *testing.T) {
 	}
 	if string(before) != string(after) {
 		t.Error("the vault file changed after a refused open, want it byte-for-byte unmodified")
+	}
+
+	// Belt-and-braces (suggestion in the slice-3 review): under WAL,
+	// writes can land in the "-wal" sidecar rather than the main file, so
+	// a byte-for-byte comparison of dbPath alone cannot rule out a write
+	// landing there instead. A refused open must leave no sidecar either.
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(dbPath + suffix); err == nil {
+			t.Errorf("%s exists after a refused open, want no WAL sidecar left behind", dbPath+suffix)
+		} else if !os.IsNotExist(err) {
+			t.Errorf("os.Stat(%q) = %v, want either nil (sidecar exists, itself a failure above) or a not-exist error", dbPath+suffix, err)
+		}
+	}
+}
+
+// TestMigrationsAreEmbeddedNotReadFromDisk asserts R3.1: migration SQL is
+// embedded into the binary via go:embed and is never read from the
+// filesystem at runtime. Proven by opening a vault whose own directory
+// contains zero .sql files (and still contains zero afterward) and
+// confirming migrations apply anyway — if parseMigrations ever read from
+// disk instead of the embed, this would fail with "no such file or
+// directory" or apply nothing.
+func TestMigrationsAreEmbeddedNotReadFromDisk(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "vault.db")
+
+	entriesBefore, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("os.ReadDir(%q) = _, %v, want nil error", dir, err)
+	}
+	for _, e := range entriesBefore {
+		if strings.HasSuffix(e.Name(), ".sql") {
+			t.Fatalf("test setup invariant violated: %q already contains a .sql file (%s)", dir, e.Name())
+		}
+	}
+
+	v, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("sqlite.Open(%q) = _, %v, want nil error", dbPath, err)
+	}
+	defer v.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
+
+	raw, err := sql.Open("sqlite3", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open(%q) = _, %v, want nil error", dbPath, err)
+	}
+	defer raw.Close() //nolint:errcheck // best-effort cleanup, the assertions below already ran
+
+	var userVersion int
+	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
+		t.Fatalf("PRAGMA user_version: %v", err)
+	}
+	const wantVersion = 1
+	if userVersion != wantVersion {
+		t.Errorf("PRAGMA user_version = %d, want %d (migrations must apply even with no .sql file anywhere on disk)", userVersion, wantVersion)
+	}
+
+	entriesAfter, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("os.ReadDir(%q) [after] = _, %v, want nil error", dir, err)
+	}
+	for _, e := range entriesAfter {
+		if strings.HasSuffix(e.Name(), ".sql") {
+			t.Errorf("%q contains a .sql file (%s) after Open — nothing should ever write one there", dir, e.Name())
+		}
 	}
 }
