@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/rengo/nooma/test/support/goldenset"
 )
 
 // fencedJSONBlock matches a fenced ```json ... ``` block in a format.md,
@@ -53,6 +55,65 @@ func TestHarness_GoldenSetFormatsDeclared(t *testing.T) {
 			assertFormatMDDeclaresShape(t, dir, name)
 			assertFormatExampleIsSiblingOfCases(t, dir)
 			assertCasesDirIsEmpty(t, dir)
+		})
+	}
+}
+
+// formatToType maps each golden-set directory name to a constructor for the
+// exact Go type test/support/goldenset declares for it (types.go) — the
+// pairing TestHarness_GoldenSetFormatMatchesType proves format.md's fenced
+// example still agrees with.
+var formatToType = map[string]func() any{
+	"recall":   func() any { return &goldenset.RecallExample{} },
+	"classify": func() any { return &goldenset.ClassifyExample{} },
+	"llm":      func() any { return &goldenset.LLMExample{} },
+}
+
+// TestHarness_GoldenSetFormatMatchesType proves each format.md's fenced
+// ```json``` example — the shape a future author reads before writing the
+// first real case — still decodes into the exact Go type
+// test/support/goldenset declares for it (spec R10.2/R10.3), through the
+// same decoder configuration Load applies to real cases
+// (goldenset.DecodeStrict, json.Decoder.DisallowUnknownFields).
+//
+// Without this gate, format.md's prose and the Go type it describes could
+// drift silently: TestGoldenSetFormatExamples above only checks
+// format_example.json, a sibling fixture that is never regenerated from
+// format.md's own fenced block, so a stale format.md would keep passing
+// every other test in this change while quietly documenting a shape the
+// loader no longer accepts — exactly the doc-vs-code drift this repo has
+// been bitten by before (docs/03-data-model.md's own comparison,
+// TestHarness_SchemaMatchesDoc03, is the precedent this test mirrors).
+func TestHarness_GoldenSetFormatMatchesType(t *testing.T) {
+	repoRoot := repoRootFromCaller(t)
+
+	for _, name := range goldenSetDirs {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(repoRoot, "testdata", name, "format.md")
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+
+			fence, err := goldenset.ExtractJSONFence(content)
+			if err != nil {
+				t.Fatalf("goldenset.ExtractJSONFence(%s) = _, %v, want nil error", path, err)
+			}
+
+			newValue, ok := formatToType[name]
+			if !ok {
+				t.Fatalf("no Go type registered in formatToType for golden-set directory %q", name)
+			}
+
+			v := newValue()
+			if err := goldenset.DecodeStrict(fence, v); err != nil {
+				t.Errorf(
+					"%s's fenced ```json``` example does not decode into goldenset's Go type for %q: %v — "+
+						"either format.md documents a field the type does not have, or the type has "+
+						"a field format.md never mentions; fix whichever side is wrong",
+					path, name, err,
+				)
+			}
 		})
 	}
 }

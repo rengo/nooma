@@ -787,6 +787,24 @@ They are independent of each other: 6a needs no binary, and 6b needs none of 6a'
       added, undocumented field returns an error.
       GREEN: `make test`.
       Requirement: R10.3.
+- [x] **6.2b** [TDD] Close the residual doc↔code drift gap 6a's own apply-progress flagged: nothing
+      validated each `format.md`'s fenced ` ```json ` example against the Go type it documents
+      (`format_example.json` was checked, `format.md` itself was not). Added
+      `test/support/goldenset/markdown.go`'s `ExtractJSONFence` (L1, own tests in
+      `markdown_test.go`) — a loud error, never a silent skip, on zero, more than one, or an
+      unterminated ` ```json ` fence, mirroring `test/support/schema/markdown.go`'s
+      `topLevelCreateCount` guard. `loader.go` gained `DecodeStrict(data []byte, v any) error`,
+      the exact decoder configuration `Load` now delegates to, so both the file-based and the
+      in-memory path share one `DisallowUnknownFields` rule. `TestHarness_GoldenSetFormatMatchesType`
+      (L2, `test/conformance/golden_sets_test.go`, mirroring `TestHarness_SchemaMatchesDoc03`)
+      decodes each format.md's fence into its matching `RecallExample`/`ClassifyExample`/`LLMExample`.
+      RED (by construction, both reverted): an undocumented field added to
+      `testdata/recall/format.md`'s fence failed naming that field; `Model` removed from
+      `LLMExample` failed the `llm` subtest for the same reason (unknown field, from the other
+      direction).
+      GREEN: all three formats agree with their Go types today — no divergence found, nothing to
+      fix on either side.
+      Requirement: R10.2, R10.3.
 - [ ] **6.3** [TDD] Write `TestBinaryReportsVersion` (L4, `test/e2e/version_test.go`) +
       `test/e2e/doc.go` (untagged marker).
       RED: `go test -tags e2e ./test/e2e/...` — no such package.
