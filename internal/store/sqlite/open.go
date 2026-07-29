@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
@@ -35,13 +36,9 @@ func Open(ctx context.Context, dbPath string) (*Vault, error) {
 		return nil, fmt.Errorf("open vault %q: %w", dbPath, err)
 	}
 
-	db, err := driver.Open(dsn, initConn)
+	db, err := openFirstConnection(ctx, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open vault %q: %w", dbPath, err)
-	}
-
-	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("open vault %q: ping: %w", dbPath, errors.Join(err, db.Close()))
 	}
 
 	if err := migrate(ctx, db); err != nil {
@@ -49,6 +46,119 @@ func Open(ctx context.Context, dbPath string) (*Vault, error) {
 	}
 
 	return &Vault{db: db, path: dbPath}, nil
+}
+
+// firstConnectionBusyRetries bounds how many times openFirstConnection
+// retries a first connection whose only failure was a transient
+// SQLITE_BUSY (slice-3 review finding 1).
+//
+// Why this exists, measured rather than assumed: converting a brand-new
+// database file to WAL mode for the first time (buildDSN's
+// journal_mode(wal) PRAGMA, design D3) requires SQLite to hold the file
+// exclusively for that one-time conversion. Unlike an ordinary page-lock
+// wait, this exclusivity check is NOT retried through the connection's own
+// busy_timeout — there is no open connection yet for a busy handler to
+// apply to — so it fails SQLITE_BUSY almost instantly, far below any
+// busy_timeout budget, whenever two processes' first connections race to
+// convert the same fresh file (measured: 8 concurrent sqlite.Open calls on
+// a vault that does not exist yet fail this way 60-80% of the time before
+// this fix). The fix retries the connection's ENTIRE opening sequence
+// (never just the failed PRAGMA — a connection that failed sqlite3_open's
+// PRAGMA batch is closed and unusable) a bounded number of times with a
+// short backoff, and ONLY for this specific transient condition: a
+// genuinely corrupt vault file fails with a different SQLite error code
+// entirely (CORRUPT/NOTADB, never BUSY) and is never retried — it still
+// fails immediately and loudly (TestOpenCorruptVaultNamesThePath).
+//
+// 20 attempts * up to ~50ms backoff comfortably stays under busy_timeout's
+// own 5s (design D3): if the condition somehow never clears in that
+// window, something is genuinely wrong and the loop must give up rather
+// than hide it.
+const firstConnectionBusyRetries = 20
+
+// firstConnectionBusyBackoff returns the delay before retry number attempt
+// (0-indexed): a short, linearly increasing backoff capped at 50ms, so the
+// total budget across all firstConnectionBusyRetries attempts stays well
+// under busy_timeout's 5s.
+func firstConnectionBusyBackoff(attempt int) time.Duration {
+	const step = 5 * time.Millisecond
+	const maxBackoff = 50 * time.Millisecond
+	d := time.Duration(attempt+1) * step
+	if d > maxBackoff {
+		return maxBackoff
+	}
+	return d
+}
+
+// openFirstConnection opens dsn and pings it, retrying a bounded number of
+// times when the failure is transient SQLITE_BUSY (see
+// firstConnectionBusyRetries's doc comment for why). Each attempt is a
+// fresh *sql.DB: a connection whose opening sequence failed is closed by
+// the driver and cannot be reused.
+func openFirstConnection(ctx context.Context, dsn string) (*sql.DB, error) {
+	var lastErr error
+	for attempt := 0; attempt < firstConnectionBusyRetries; attempt++ {
+		db, err := driver.Open(dsn, initConn)
+		if err != nil {
+			return nil, err
+		}
+
+		pingErr := db.PingContext(ctx)
+		if pingErr == nil {
+			return db, nil
+		}
+		closeErr := db.Close()
+		lastErr = errors.Join(pingErr, closeErr)
+
+		if !isTransientBusy(pingErr) {
+			return nil, fmt.Errorf("ping: %w", lastErr)
+		}
+
+		if attempt == firstConnectionBusyRetries-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("ping: %w", errors.Join(ctx.Err(), lastErr))
+		case <-time.After(firstConnectionBusyBackoff(attempt)):
+		}
+	}
+
+	// This is the opacity this project already flagged once on slice 2
+	// ("fails late and far from the cause") recurring through a different
+	// door: the wrapped error chain still says "invalid _pragma" three
+	// layers down, but the sentence a human reads first must say what
+	// actually happened.
+	return nil, fmt.Errorf(
+		"ping: gave up after %d attempts waiting for exclusive access to convert a brand-new vault file to WAL mode (another process was racing the same first-time conversion): %w",
+		firstConnectionBusyRetries, lastErr,
+	)
+}
+
+// sqliteErrorCoder is implemented by both *sqlite3.Error (returned when the
+// driver has extra context — a message, a syntax-error offset, a wrapped
+// OS error) and sqlite3.ExtendedErrorCode (returned instead when it does
+// not, which is exactly what a bare SQLITE_BUSY on a fresh connection's
+// PRAGMA batch produces — verified against errorFor's own source: it falls
+// back to a bare error-code value whenever the driver has nothing else to
+// add, and matching against *sqlite3.Error alone silently misses this
+// case). Declared as an interface rather than checked type-by-type so this
+// keeps working if a code path starts wrapping a *sqlite3.Error instead of
+// a bare code, or vice versa.
+type sqliteErrorCoder interface {
+	Code() sqlite3.ErrorCode
+}
+
+// isTransientBusy reports whether err is SQLite's transient "database is
+// locked" condition (SQLITE_BUSY) — as opposed to a genuinely corrupt vault
+// file, which fails with an entirely different SQLite error code (CORRUPT
+// or NOTADB) and must never be retried, only surfaced immediately.
+func isTransientBusy(err error) bool {
+	var coder sqliteErrorCoder
+	if !errors.As(err, &coder) {
+		return false
+	}
+	return coder.Code() == sqlite3.BUSY
 }
 
 // initConn runs on every connection the pool creates (verified against the
