@@ -64,6 +64,26 @@ that behavioral test cannot be written in PR 2 — it is a separate, later requi
 (tracked as a PR 4 task in `tasks.md`), not a substitute for this one. R2.1 itself is fully
 proven in PR 2 by the two tests above, without needing the migrated schema.
 
+**Note on the driver's own default**, because it changes what a test here can prove:
+upstream SQLite defaults `foreign_keys` to OFF, but this driver does not. Its WASM build
+compiles `SQLITE_DEFAULT_FOREIGN_KEYS 1`
+(`ncruces/go-sqlite3-wasm/v3@v3.2.35303/build/sqlite_opt.h:23`), so a bare `file:` DSN with
+no `_pragma` at all already reads `PRAGMA foreign_keys` back as `1` — verified in the
+vendored source and empirically against a fresh vault. Two consequences:
+
+- **This MUST is still real.** The store requests `foreign_keys=on` explicitly rather than
+  inheriting it, because a vendored compile flag is not a contract this project controls;
+  a driver upgrade could change it without any signal here.
+- **A test whose red assumes the default is off cannot fail**, and would be a mirror test
+  in the same family as the DSN-string assertion this change already had to remove. Any
+  test proving this requirement must construct the negative case deliberately — an explicit
+  `_pragma=foreign_keys(off)` control, or dropping the `REFERENCES` clause from the schema
+  under test — and must be watched failing that way.
+
+This corrects a claim carried in design §4.4 and in `tasks.md`'s task 4.3 that
+`foreign_keys` "defaults to off per SQLite connection". It was true of SQLite in general and
+false of the build ADR-0001 selected.
+
 **Scenario**:
 - GIVEN an empty temporary directory
 - WHEN the store opens a connection to a vault file inside it
@@ -487,6 +507,16 @@ here as a numbered PR plan.)
 triggers" but as of the start of this change contains no trigger DDL. `0002_learning_and_search.sql`
 MUST define the triggers that keep `units_fts` synchronized with `units.content` (at minimum:
 insert, update, and delete/archival paths that touch `content`).
+
+**Verified by**: L3 behavioral tests (`test/integration/fts5_search_test.go`) against a real,
+migrated vault — not just the schema golden's structural proof that the trigger DDL text was
+written. At minimum: inserting a `units` row makes its content findable via `units_fts MATCH`
+(`units_fts_ai`); updating `units.content` makes the new content findable and the old content
+not (`units_fts_au`, delete-then-insert — external-content FTS5 tables have no UPDATE path); a
+`DELETE` removes the row from the index (`units_fts_ad`); and archiving a unit — an `UPDATE` of
+`units.status`, never a `DELETE` (CLAUDE.md non-negotiable #6) — leaves it exactly as findable
+as before, at the same rowid, because archived units are not excluded from read surfaces
+(`docs/02-cognitive-core.md`).
 
 ### R9.2 — Doc 03 gains the DDL in the same PR
 

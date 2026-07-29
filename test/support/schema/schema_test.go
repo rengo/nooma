@@ -194,6 +194,16 @@ func TestClassify(t *testing.T) {
 // TestIsShadowTable covers design §6.2's FTS5 shadow-table exclusion rule:
 // collect the virtual-table name set first, then drop any object named
 // "<vt>_<suffix>".
+//
+// The units_fts_ai/_ad/_au cases below are the regression this test was
+// missing before the four-lens pre-PR review of slice 4a: 0002 names its
+// FTS5 sync TRIGGERS with exactly the "<vt>_<suffix>" shape this function
+// matches, so IsShadowTable(name, ...) is true for them too — same as any
+// real shadow table. That is not a bug in IsShadowTable itself (see its own
+// doc comment): the function only ever promised a name-prefix match, never a
+// Kind check. It is why every caller must additionally gate on
+// Kind == KindTable, and it is exactly the shape that silently dropped
+// 0002's real triggers from both schema goldens until that guard existed.
 func TestIsShadowTable(t *testing.T) {
 	virtualTables := map[string]bool{"units_fts": true}
 
@@ -208,6 +218,18 @@ func TestIsShadowTable(t *testing.T) {
 		{name: "units_fts", want: false}, // the virtual table itself, not its shadow
 		{name: "units", want: false},     // an ordinary table sharing a prefix character, not a shadow
 		{name: "unrelated_table", want: false},
+		// Regression cases (0002_learning_and_search.sql): triggers, not
+		// tables, that collide with the "<vt>_<suffix>" prefix rule.
+		// IsShadowTable correctly (per its own contract) still reports
+		// true here — the caller is what must gate on Kind == KindTable,
+		// not this function.
+		{name: "units_fts_ai", want: true},
+		{name: "units_fts_ad", want: true},
+		{name: "units_fts_au", want: true},
+		// A partial (WHERE-qualified) unique index sharing no prefix with
+		// any virtual table: an ordinary object shape 0001/0002 introduced,
+		// unaffected by the shadow-table rule either way.
+		{name: "idx_units_unique_active_insight", want: false},
 	}
 
 	for _, tt := range tests {

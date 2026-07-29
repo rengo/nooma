@@ -216,8 +216,62 @@ CREATE INDEX idx_unit_embeddings_model ON unit_embeddings(model);
 CREATE VIRTUAL TABLE units_fts USING fts5(
   content, content='units', content_rowid='rowid'
 );
+
+-- Sync triggers: keep units_fts current with units.content. External-content
+-- FTS5 tables are not maintained automatically — this is that maintenance.
+--
+-- The literal string 'delete' as the first value in an INSERT INTO
+-- units_fts(...) below is FTS5's own documented special-command syntax for
+-- removing one row from an external-content table (units_fts stores no
+-- content of its own, so a plain DELETE against it does not apply) — read
+-- as an ordinary insert it looks like nonsense; it is not one.
+--
+-- units_fts_au deletes then re-inserts, never UPDATEs, because
+-- external-content FTS5 tables have no UPDATE path at all — that is why
+-- there are three triggers here and not one.
+--
+-- Archival is an UPDATE (units.status -> 'archived'), never a DELETE
+-- (see "Nothing is deleted in the vault"), so units_fts_au fires on
+-- archival too and re-indexes the SAME content: an archived unit STAYS in
+-- units_fts. That is correct, not a leak — archived units are "cold,
+-- weight ~= 0", NOT excluded from read surfaces; only superseded/incomplete
+-- units are, and that exclusion is applied positively (status = 'pool') at
+-- query time, never at index time (see docs/02-cognitive-core.md).
+--
+-- These triggers must NOT skip superseded/incomplete rows to "optimize"
+-- the index: units_fts is content='units', content_rowid='rowid', so it
+-- must mirror units row-for-row, or FTS5 returns rowids that do not
+-- resolve, or resolve to the wrong unit.
+CREATE TRIGGER units_fts_ai AFTER INSERT ON units BEGIN
+  INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+CREATE TRIGGER units_fts_ad AFTER DELETE ON units BEGIN
+  INSERT INTO units_fts(units_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+END;
+CREATE TRIGGER units_fts_au AFTER UPDATE ON units BEGIN
+  INSERT INTO units_fts(units_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+  INSERT INTO units_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
 ```
 
+- **`units.rowid` is not stable across `VACUUM`** (SQLite may renumber rowids for a table
+  without an `INTEGER PRIMARY KEY`, which `units` is not), and `units_fts` is keyed on it
+  (`content_rowid='rowid'`). A vacuum — including `nooma export`'s `VACUUM INTO` — must be
+  followed by `INSERT INTO units_fts(units_fts) VALUES('rebuild')`, or the FTS index can point
+  at the wrong rows. **Measured, not just feared**: `VACUUM` and `VACUUM INTO` were probed
+  independently across multiple tools (the Go driver, the `sqlite3` CLI, and Python's `sqlite3`
+  module) with rowid gaps present (rows deleted before the vacuum), and every run preserved the
+  existing rowids rather than renumbering them. SQLite's own documentation still says a vacuum
+  "may renumber" them, so the hazard above is real in principle and this change does not rely on
+  the observed behavior continuing to hold — the rebuild step above is unconditional — but a
+  future reader deserves to know this was measured empirically, not only read off SQLite's docs.
+- **Nothing is deleted in the vault; archiving is a state transition.** `units.status` moves to
+  `'archived'` via an `UPDATE`, never a `DELETE`. Because `units_fts_au` (above) fires on every
+  `UPDATE`, an archived unit's row stays in `units_fts` — archived units are "cold, weight ~= 0",
+  not excluded from read surfaces (only `superseded`/`incomplete` units are, filtered positively
+  at query time). Excluding archived rows from the FTS index at write time would be wrong, not
+  just unnecessary: `units_fts` is `content='units', content_rowid='rowid'` and must mirror
+  `units` row-for-row, or FTS5 returns rowids that resolve to the wrong unit or to nothing.
 - **Vectors are L2-normalized before storage.** Cosine similarity is then a plain dot product,
   which is what makes the brute-force search cheap enough to need no index (ADR-0012).
 - **The vault records the embedding model per row**, not in global metadata. If the user
