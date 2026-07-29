@@ -224,6 +224,30 @@ supposed to schedule it doesn't know it exists.
       `test`'s existing `-race -shuffle=on` — PR 2 is what makes L3 a CI gate for the first time,
       so this is the first PR where the omission mattered.
       Requirement: consistency with the `test` target, no numbered spec requirement.
+- [x] **2.16** [bugfix, TDD] Replace 2.9's bidirectional shape-guessing (`isAbsoluteVaultPath`
+      recognizing BOTH POSIX and Windows-drive-letter forms regardless of build GOOS) with an
+      injected `pathStyle`, mirroring the `Clock` port (design D3 addendum). On POSIX, a backslash
+      is an ordinary filename byte and a directory can be named `C:`, so `C:/data/vault.db` and
+      `C:\data\vault.db` are valid *relative* POSIX paths — the old regex accepted both as
+      absolute and silently rewrote them to `/C:/data/vault.db`, the same defect class task 2.9
+      closed, just narrower.
+      RED (watched, verbatim): a probe test asserting `buildDSN("C:/data/vault.db")` and
+      `buildDSN("C:\data\vault.db")` return `ErrRelativeDBPath` FAILED against the pre-fix code —
+      `err=<nil> dsn=file:///C:/data/vault.db?...` for both inputs (confirmed empirically, including
+      that `mkdir -p 'C:'/data && echo ok > 'C:'/data/vault.db` creates a real directory on this
+      Linux runner, so the case is not hypothetical).
+      Implement: `pathStyle` (unexported, `posixStyle`/`windowsStyle`); `buildDSN(dbPath string,
+      style pathStyle) (string, error)` takes it as a parameter instead of guessing from `dbPath`'s
+      shape; `pathStyleForGOOS()` is the single named place production resolves it from
+      `runtime.GOOS`; `Open`'s exported signature is unchanged. `dsn_test.go`'s
+      `TestBuildDSNAbsolutePathHandling` is now a single table driven over BOTH styles explicitly
+      (including the POSIX-rejects-Windows-shape regression case), asserting on the re-parsed URI's
+      `Host`/`Path`, never the raw string; `TestPathStyleForGOOS` asserts the `runtime.GOOS`
+      mapping.
+      GREEN: `make test` — POSIX rejects Windows-shaped input, Windows accepts drive-letter forms
+      and rejects bare/driveless relative paths, both from the same Linux test binary.
+      Requirement: safe-defaults-are-structural (CLAUDE.md non-negotiable #7), R2.3 (supersedes
+      2.9's mechanism, not its requirement).
 - [x] Verify: `make check`, `golangci-lint run --build-tags integration ./...` (0 issues),
       `make test-integration` after `go clean -testcache`.
 

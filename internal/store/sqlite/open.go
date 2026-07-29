@@ -35,7 +35,7 @@ type Vault struct {
 // change (openspec/changes/complete-harness) — the next reader extending
 // this function with migration logic should not assume it already runs.
 func Open(ctx context.Context, dbPath string) (*Vault, error) {
-	dsn, err := buildDSN(dbPath)
+	dsn, err := buildDSN(dbPath, pathStyleForGOOS())
 	if err != nil {
 		return nil, fmt.Errorf("open vault %q: %w", dbPath, err)
 	}
