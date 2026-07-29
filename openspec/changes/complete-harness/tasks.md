@@ -995,6 +995,85 @@ All five tasks landed. `docs/06-harness.md` §6's gate table is now fully wired:
 the UI, M4/ADR-0008) and driver benchmarks (ADR-0001's spike lives on an unmerged branch by
 design).
 
+### PR 7 review remediation (2026-07-29): all findings from a four-lens pre-PR review fixed
+
+This slice was written by the orchestrator directly (two implementation-agent launches died to
+transient API errors), so it reached review without an independent pass. The pass that never
+happened landed as one blocker and five criticals, on 293 lines. Fixed, on the same branch, same
+PR:
+
+- **Blocker** — `scripts/core-coverage.sh` summed `numStmt` per raw profile line instead of per
+  unique range. `go test -coverpkg=X ./Y/...` writes one profile fragment per test binary, and a
+  range shared by sibling packages (internal/core's nine subpackages, near-certainly) appears
+  once per fragment. `go tool cover -func` merges these (a range counts once, covered if ANY
+  fragment covered it); the flat sum did not, double-counting shared ranges' `numStmt` and
+  under-crediting them when fragments disagree. Reproduced with real `go test -coverpkg`
+  output from two sibling packages sharing a helper (test/harness/core_coverage_test.go): the
+  merged, correct answer is 5/6 (83%, matching `go tool cover -func` exactly); the old flat sum
+  said 6/16 (37%) on the identical profile. Fixed by deduplicating on the `file:start,end` key
+  before summing. The script's own comment claiming coverage.out parsing was "more robust" than
+  `-func`'s output was also wrong on its own terms — rewritten to state what the profile format
+  actually guarantees (one line per range per fragment) and what merge rule must be applied to
+  it, instead of asserting a robustness property the script did not have.
+- **Critical** — `make check-all` ran `test-integration` but not the schema-golden
+  regeneration-diff half of `ci.yml`'s `integration` job, while the Makefile header and
+  CLAUDE.md both claimed it covered "every gate CI blocks on". Since this repo's ruleset has no
+  `required_status_checks`, `check-all` is the only real enforcement — and it could pass on a
+  migration that silently drifted the schema golden, the exact failure that gate exists to catch.
+  Fixed: `check-all` now depends on a new `schema-golden-clean` target
+  (`make schema-golden && git diff --exit-code -- testdata/schema`). The Makefile header and
+  CLAUDE.md's Workflow section were rewritten to say plainly that `check-all` cannot cover
+  `docs-sync.yml` (it needs PR metadata — base branch, label list — a Makefile run does not
+  have), instead of silently overstating "every gate" a third time. Three reviewers found this
+  independently; an earlier version of the same comment made the same mistake and a review
+  caught it then too (PR 3's `check`-vs-CI-parity comment).
+- **Critical** — neither `core-coverage.sh` nor `docs-sync.yml` had a regression test, unlike
+  `pending-red.sh`, which re-proves itself every CI run by construction. This repo's real Actions
+  history has only ever hit the vacuous-pass branch (coverage) and the no-core-change branch
+  (docs-sync) — their FAIL branches have never executed for real. Fixed:
+  `test/harness/core_coverage_test.go` (fixture-driven: 90%/89.9%/90.1% boundary, 1-of-1,
+  header-only vacuity, all-zero-not-vacuous, and the duplicate-range case above) and
+  `test/harness/docs_sync_test.go`, both untagged so they run under `make check`. Making
+  `docs-sync.yml`'s logic testable required extracting it out of inline YAML into
+  `scripts/docs-sync.sh` (changed-file list on stdin, labels JSON as `$1`), which the workflow
+  now calls instead of duplicating the logic.
+- **Warning** — the `no-spec-change` label check (`grep -q '"no-spec-change"'` over `toJSON()`
+  output) was fooled by a label literally named `foo"no-spec-change`: `toJSON` escapes the
+  embedded quote as `\"`, and the raw text still contains `"no-spec-change"` contiguously.
+  Measured: `LABELS='["foo\"no-spec-change"]'` made the grep match. Not privilege escalation
+  (creating such a label needs the same permission as applying the real one), but it defeated the
+  gate's stated goal that skipping the doc stay visible and attributable. Fixed by matching on
+  the parsed JSON array (`jq -e 'index("no-spec-change")'`) instead of the raw escaped text;
+  `scripts/docs-sync.sh` fails loudly with its own message if `jq` is unavailable rather than
+  falling back to the vulnerable grep.
+- **Warning** — `core-coverage.sh` ran `go test` twice on failure (once to detect it, once more
+  "to show the developer what happened"), so a flaky failure showed a `FAIL: could not produce`
+  banner directly above a clean, contradicting `ok` log, and doubled CI time on every real
+  failure. Fixed with the single-capture pattern `scripts/pending-red.sh` already used
+  (`out=$(...); status=$?`).
+- **Warning** — `docs-sync.yml`'s `changed=$(git diff --name-only "origin/${BASE_REF}"...HEAD)`
+  ran under `set -eu` with no guard, so a deleted/renamed base or an empty `BASE_REF` aborted with
+  git's raw `fatal: ambiguous argument` instead of any of the gate's own guidance. Fixed: an
+  explicit empty-`BASE_REF` check and a guarded `git diff` that reports the failure in the
+  script's own voice before exiting.
+- **Warning** — `docs-sync.yml`'s trigger list omitted `edited`: retargeting a PR's base branch
+  does not re-run the gate, so a stale verdict stands against a diff it never saw. Added.
+- **Suggestion** — `awk`'s default field-splitting assumes no spaces in a profile line's
+  `file:range` field. Latent (no such path exists in this repo, and Go import paths cannot
+  contain spaces) — noted explicitly in the script's own header comment rather than left an
+  unstated assumption.
+- Four false or stale claims from this slice's first pass, all corrected: this file's own PR 7
+  estimate note (see below), `ci.yml`'s trailing comment (the docs-sync note had been spliced
+  into the "not enforced yet" list, where it does not belong — docs-sync IS enforced, just in
+  another file — and the stale "cross-compilation matrix -> blocked on ADR-0001 closing" row
+  dangled after it even though ADR-0001 is `Accepted` and this very slice wires cross-compile),
+  `main.yml`'s `cross-compile` comment (misattributed the shipped bug to the unparseable-DSN
+  defect caught inside PR 2's own review — the defect that actually shipped and needed a
+  follow-up fix, commit `213ef73`, was the bidirectional-regex bug: a Windows-shaped path
+  wrongly accepted as absolute on POSIX and rewritten to a parseable-but-wrong DSN, found by a
+  manual empirical probe during review, not a pre-existing unit test — the regression case was
+  added as part of the fix), and this file's own DoD point 6 (see above).
+
 **Definition of Done (§8), verified against the repository rather than against these
 checkboxes** — all eight points satisfied:
 
@@ -1007,7 +1086,15 @@ checkboxes** — all eight points satisfied:
 5. One conformance test per structural invariant: I13 untagged and green (its migration exists);
    I01, I03 and I21 `pendingimpl`-tagged and red by design, with the gate asserting they fail to
    compile for the expected reason. This is the point doc 06 calls "the one usually skipped".
-6. CI runs every §6 gate not explicitly deferred, per the table above.
+6. Doc 06 §8 point 6's own wording, quoted rather than paraphrased (an earlier version of this
+   note paraphrased it with an invented "not explicitly deferred" qualifier that doc 06 never
+   uses — a four-lens pre-PR review of this slice caught it): "CI runs every gate in §6 and
+   blocks the merge." `ci.yml` and `main.yml` together run every §6 gate this change's own scope
+   covers. Two §6 gates are not in that scope at all — not "deferred" by anything this PR
+   decided — because this file's own Non-requirements list (§13, see Traceability below) already
+   scoped them out before PR 7 started: `templ generate` (waits on the UI, M4/ADR-0008 — there is
+   no `_templ.go` file yet for it to check) and driver benchmarks as a permanent job (ADR-0001's
+   spike stays a one-off, not a standing CI job).
 7. Migrations apply from scratch and the schema golden matches `03-data-model.md` —
    `TestHarness_SchemaMatchesDoc03` passes and `make schema-golden` regenerates to a clean tree.
 8. `LICENSE` is AGPL-3.0 (ADR-0004).
@@ -1023,6 +1110,18 @@ checkboxes** — all eight points satisfied:
   recorded in doc 03. An ADR is recommended before `nooma export` lands.
 
 **Estimate accuracy, closing the loop on this file's own recalibration**: PR 7 was forecast at
-~150 lines and its recalibrated band was ~630-1140. It landed well under both, because it is
-almost entirely CI configuration — the one slice where the original per-PR estimate was closer
-than the recalibration. Docs and config estimate accurately; code does not.
+~150 lines and its recalibrated band was ~630-1140. Its first pass landed at 293 lines — nearly
+double the original ~150 estimate, not "well under both" as an earlier version of this note
+claimed (a four-lens pre-PR review caught that too, alongside the blocker and five criticals
+listed above). "Under the recalibrated band" and "well under both" are not the same claim, and
+the second was wrong on its own terms even before review remediation is counted. That
+remediation then added real scope this line item never budgeted for on its own — two new gate
+regression tests and a script extraction (`scripts/docs-sync.sh`) PR 7's original task list did
+not anticipate needing — bringing the PR's cumulative total (measured against `test/e2e-skeleton`,
+this change's actual base) to ~910 lines: squarely inside the recalibrated ~630-1140 band, not
+under it. The recalibration band held; the specific, smaller "well under both" claim did not.
+CI configuration still estimates more accurately than core logic before review remediation is
+counted (PRs 2 and 3 missed 4-8x on implementation alone; this PR's first pass missed under 2x);
+it is review remediation, not implementation, that carried this PR from "under the original
+estimate" to "inside the recalibrated band" — consistent with the recalibration's own finding 2
+(review remediation roughly doubles the result again), not a new failure mode.
