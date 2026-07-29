@@ -197,6 +197,102 @@ func TestParseMarkdownErrorsOnUnclassifiableCreateStatement(t *testing.T) {
 	}
 }
 
+// TestStringQuoteTransition is the direct table test four-lens pre-PR
+// review finding 5 asked for: tracking whether the scan is inside a
+// single-quoted string, and honoring two consecutive single quotes as the
+// escape for one literal quote character inside it, was previously
+// hand-rolled twice (stripLineComments, rune-based; maskStrings,
+// byte-based), each exercised only end-to-end through ParseMarkdown.
+// stringQuoteTransition extracts that one shared transition so both
+// callers use the same logic and a future string-edge-case fix lands once,
+// not twice.
+func TestStringQuoteTransition(t *testing.T) {
+	tests := []struct {
+		name         string
+		s            string
+		i            int
+		inString     bool
+		wantNext     bool
+		wantConsumed bool
+		wantContent  bool
+	}{
+		{name: "opening quote is not content", s: "'x'", i: 0, inString: false, wantNext: true, wantConsumed: false, wantContent: false},
+		{name: "regular char outside a string is not content", s: "a", i: 0, inString: false, wantNext: false, wantConsumed: false, wantContent: false},
+		{name: "char inside a string is content", s: "ab'", i: 0, inString: true, wantNext: true, wantConsumed: false, wantContent: true},
+		{name: "newline inside a string is not masked as content", s: "\n'", i: 0, inString: true, wantNext: true, wantConsumed: false, wantContent: false},
+		{name: "closing quote is not content and exits the string", s: "'", i: 0, inString: true, wantNext: false, wantConsumed: false, wantContent: false},
+		{name: "escape stays inside the string and consumes both quotes as content", s: "''x", i: 0, inString: true, wantNext: true, wantConsumed: true, wantContent: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotNext, gotConsumed, gotContent := stringQuoteTransition(tt.s, tt.i, tt.inString)
+			if gotNext != tt.wantNext || gotConsumed != tt.wantConsumed || gotContent != tt.wantContent {
+				t.Errorf("stringQuoteTransition(%q, %d, %v) = (%v, %v, %v), want (%v, %v, %v)",
+					tt.s, tt.i, tt.inString, gotNext, gotConsumed, gotContent, tt.wantNext, tt.wantConsumed, tt.wantContent)
+			}
+		})
+	}
+}
+
+// TestParseMarkdownBlockCommentsAreStringAware is four-lens pre-PR review
+// finding 3: only "--" line comments and single-quoted strings were
+// string-aware; "/* ... */" block comments were never stripped at all,
+// which produced three distinct wrong-answer consequences against
+// synthetic table bodies (reproduced verbatim against the pre-fix code
+// before this test was added: a phantom column, an early-truncated column
+// list, and a misleading "no parenthesized body" error) — each one
+// misattributes the failure to a doc/schema disagreement instead of to the
+// parser. docs/03-data-model.md has zero "/* */" today, so this was latent,
+// not yet observed in a real gate failure.
+func TestParseMarkdownBlockCommentsAreStringAware(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+		want []Object
+	}{
+		{
+			name: "a comma inside a block comment is not a column separator",
+			md: "```sql\n" +
+				"CREATE TABLE t (\n" +
+				"  id TEXT /* note: a, b */\n" +
+				");\n" +
+				"```\n",
+			want: []Object{{Kind: KindTable, Name: "t", Columns: []string{"id"}}},
+		},
+		{
+			name: "a stray ')' inside a block comment does not truncate the column list",
+			md: "```sql\n" +
+				"CREATE TABLE t (\n" +
+				"  id TEXT, /* oops ) */ name TEXT\n" +
+				");\n" +
+				"```\n",
+			want: []Object{{Kind: KindTable, Name: "t", Columns: []string{"id", "name"}}},
+		},
+		{
+			name: "a ';' inside a block comment does not truncate the statement",
+			md: "```sql\n" +
+				"CREATE TABLE t (\n" +
+				"  id TEXT /* deprecated; do not use */\n" +
+				");\n" +
+				"```\n",
+			want: []Object{{Kind: KindTable, Name: "t", Columns: []string{"id"}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseMarkdown([]byte(tt.md))
+			if err != nil {
+				t.Fatalf("ParseMarkdown(...) = _, %v, want nil error", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseMarkdown(...) = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestParseMarkdownErrorsOnMergedCreateStatements is the four-lens pre-PR
 // review's CRITICAL finding 1: a missing ";" between two CREATE statements
 // makes statementRanges treat them as ONE range, so classifyStatement

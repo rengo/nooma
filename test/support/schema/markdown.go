@@ -115,7 +115,7 @@ func ParseMarkdown(md []byte) ([]Object, error) {
 	var objs []Object
 
 	for _, fence := range extractSQLFences(md) {
-		stripped := stripLineComments(fence)
+		stripped := stripComments(fence)
 		mask := maskStrings(stripped)
 
 		for _, r := range statementRanges(mask) {
@@ -208,44 +208,92 @@ func extractSQLFences(md []byte) []string {
 	return fences
 }
 
-// stripLineComments removes a "--" and everything after it to end of line,
-// string-aware (design §6.4 step 2): a "--" inside a single-quoted string
-// literal is data, never a comment start. Two consecutive single quotes are
-// the escape for a literal quote character inside a string.
-func stripLineComments(sql string) string {
-	var b strings.Builder
-	runes := []rune(sql)
-	inString := false
-
-	for i := 0; i < len(runes); i++ {
-		c := runes[i]
-		if inString {
-			b.WriteRune(c)
-			if c == '\'' {
-				if i+1 < len(runes) && runes[i+1] == '\'' {
-					b.WriteRune(runes[i+1])
-					i++
-					continue
-				}
-				inString = false
-			}
-			continue
-		}
+// stringQuoteTransition is the single string-tracking state machine every
+// structural scan in this file needs: it reports whether the scan is
+// inside a single-quoted string literal, and honors two consecutive single
+// quotes as the escape for one literal quote character inside a string
+// (design §6.4 step 2) — extracted once so stripComments and maskStrings
+// share it instead of each hand-rolling their own copy (one rune-based, one
+// byte-based; four-lens pre-PR review finding 5). s[i] is the byte being
+// processed and inString is the state BEFORE processing it.
+//
+// It returns:
+//   - next: the state AFTER processing s[i] (and s[i+1] when consumed is
+//     true)
+//   - consumed: true when s[i] and s[i+1] are the two consecutive single
+//     quotes that make up one escape pair, which the caller must treat as
+//     one unit, advancing its loop index by an extra 1 instead of the
+//     usual 1
+//   - content: true when s[i] is itself part of the string's INTERIOR
+//     content (not an opening/closing delimiter quote and not a raw
+//     newline) — the exact set of positions maskStrings replaces with 'x'.
+func stringQuoteTransition(s string, i int, inString bool) (next, consumed, content bool) {
+	c := s[i]
+	if inString {
 		if c == '\'' {
-			inString = true
-			b.WriteRune(c)
-			continue
+			if i+1 < len(s) && s[i+1] == '\'' {
+				return true, true, true
+			}
+			return false, false, false
 		}
-		if c == '-' && i+1 < len(runes) && runes[i+1] == '-' {
-			for i < len(runes) && runes[i] != '\n' {
+		return true, false, c != '\n'
+	}
+	if c == '\'' {
+		return true, false, false
+	}
+	return false, false, false
+}
+
+// stripComments removes "--" line comments and "/* ... */" block comments,
+// string-aware (design §6.4 step 2, block comments added by four-lens
+// pre-PR review finding 3): a comment marker inside a single-quoted string
+// literal is data, never a comment start. A block comment is replaced by a
+// single space (not simply deleted) so it cannot glue two adjacent tokens
+// together; its content — including any ";", "(", ")" or "," it happens to
+// contain — is discarded entirely, so it can never corrupt statement
+// splitting, paren-depth counting or comma splitting downstream.
+func stripComments(sql string) string {
+	var b strings.Builder
+	inString := false
+	inBlock := false
+	n := len(sql)
+
+	for i := 0; i < n; i++ {
+		c := sql[i]
+
+		if inBlock {
+			if c == '*' && i+1 < n && sql[i+1] == '/' {
+				inBlock = false
 				i++
 			}
-			if i < len(runes) {
-				b.WriteRune('\n')
-			}
 			continue
 		}
-		b.WriteRune(c)
+
+		if !inString {
+			if c == '/' && i+1 < n && sql[i+1] == '*' {
+				inBlock = true
+				i++
+				b.WriteByte(' ')
+				continue
+			}
+			if c == '-' && i+1 < n && sql[i+1] == '-' {
+				for i < n && sql[i] != '\n' {
+					i++
+				}
+				if i < n {
+					b.WriteByte('\n')
+				}
+				continue
+			}
+		}
+
+		next, consumed, _ := stringQuoteTransition(sql, i, inString)
+		b.WriteByte(c)
+		if consumed {
+			b.WriteByte(sql[i+1])
+			i++
+		}
+		inString = next
 	}
 	return b.String()
 }
@@ -256,31 +304,20 @@ func stripLineComments(sql string) string {
 // scan (statement splitting, paren-depth counting, comma splitting,
 // BEGIN/END detection) so a semicolon, parenthesis, comma or bare keyword
 // that happens to appear inside string data is invisible to them — the
-// same string-awareness stripLineComments already applies to "--".
+// same string-awareness stripComments already applies to "--" and "/* */".
 func maskStrings(sql string) []byte {
 	mask := []byte(sql)
 	inString := false
 	for i := 0; i < len(mask); i++ {
-		c := mask[i]
-		if inString {
-			if c == '\'' {
-				if i+1 < len(mask) && mask[i+1] == '\'' {
-					mask[i] = 'x'
-					mask[i+1] = 'x'
-					i++
-					continue
-				}
-				inString = false
-				continue
+		next, consumed, content := stringQuoteTransition(sql, i, inString)
+		if content {
+			mask[i] = 'x'
+			if consumed {
+				mask[i+1] = 'x'
+				i++
 			}
-			if c != '\n' {
-				mask[i] = 'x'
-			}
-			continue
 		}
-		if c == '\'' {
-			inString = true
-		}
+		inString = next
 	}
 	return mask
 }
