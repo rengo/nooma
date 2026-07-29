@@ -64,6 +64,26 @@ that behavioral test cannot be written in PR 2 — it is a separate, later requi
 (tracked as a PR 4 task in `tasks.md`), not a substitute for this one. R2.1 itself is fully
 proven in PR 2 by the two tests above, without needing the migrated schema.
 
+**Note on the driver's own default**, because it changes what a test here can prove:
+upstream SQLite defaults `foreign_keys` to OFF, but this driver does not. Its WASM build
+compiles `SQLITE_DEFAULT_FOREIGN_KEYS 1`
+(`ncruces/go-sqlite3-wasm/v3@v3.2.35303/build/sqlite_opt.h:23`), so a bare `file:` DSN with
+no `_pragma` at all already reads `PRAGMA foreign_keys` back as `1` — verified in the
+vendored source and empirically against a fresh vault. Two consequences:
+
+- **This MUST is still real.** The store requests `foreign_keys=on` explicitly rather than
+  inheriting it, because a vendored compile flag is not a contract this project controls;
+  a driver upgrade could change it without any signal here.
+- **A test whose red assumes the default is off cannot fail**, and would be a mirror test
+  in the same family as the DSN-string assertion this change already had to remove. Any
+  test proving this requirement must construct the negative case deliberately — an explicit
+  `_pragma=foreign_keys(off)` control, or dropping the `REFERENCES` clause from the schema
+  under test — and must be watched failing that way.
+
+This corrects a claim carried in design §4.4 and in `tasks.md`'s task 4.3 that
+`foreign_keys` "defaults to off per SQLite connection". It was true of SQLite in general and
+false of the build ADR-0001 selected.
+
 **Scenario**:
 - GIVEN an empty temporary directory
 - WHEN the store opens a connection to a vault file inside it
