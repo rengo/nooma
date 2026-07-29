@@ -508,6 +508,16 @@ triggers" but as of the start of this change contains no trigger DDL. `0002_lear
 MUST define the triggers that keep `units_fts` synchronized with `units.content` (at minimum:
 insert, update, and delete/archival paths that touch `content`).
 
+**Verified by**: L3 behavioral tests (`test/integration/fts5_search_test.go`) against a real,
+migrated vault — not just the schema golden's structural proof that the trigger DDL text was
+written. At minimum: inserting a `units` row makes its content findable via `units_fts MATCH`
+(`units_fts_ai`); updating `units.content` makes the new content findable and the old content
+not (`units_fts_au`, delete-then-insert — external-content FTS5 tables have no UPDATE path); a
+`DELETE` removes the row from the index (`units_fts_ad`); and archiving a unit — an `UPDATE` of
+`units.status`, never a `DELETE` (CLAUDE.md non-negotiable #6) — leaves it exactly as findable
+as before, at the same rowid, because archived units are not excluded from read surfaces
+(`docs/02-cognitive-core.md`).
+
 ### R9.2 — Doc 03 gains the DDL in the same PR
 
 **MUST**: `docs/03-data-model.md`'s Search section is updated, in the same PR that publishes
