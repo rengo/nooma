@@ -8,7 +8,7 @@ real temporary vault). See [`06-harness.md`](06-harness.md).
 ## M0 — Skeleton: binary + vault
 
 Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver, closed
-2026-07-28), **[ADR-0012](adr/0012-vector-proximity-search.md)** (vector search).
+2026-07-28).
 
 - ~~ADR-0001 spike~~ — **done**. `ncruces/go-sqlite3` accepted, sqlite-vec dropped, vector
   proximity is a brute-force dot product in Go.
@@ -42,7 +42,8 @@ Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver, close
 Prior decisions: **[ADR-0002](adr/0002-default-llm-preset.md)** (LLM preset),
 **[ADR-0003](adr/0003-embeddings.md)** (embeddings),
 **[ADR-0005](adr/0005-v1-scope.md)** (scope),
-**[ADR-0010](adr/0010-hybrid-recall-fusion.md)** (fusion).
+**[ADR-0010](adr/0010-hybrid-recall-fusion.md)** (fusion),
+**[ADR-0012](adr/0012-vector-proximity-search.md)** (vector proximity).
 
 - `LLMProvider` / `EmbeddingProvider` interfaces + implementations (anthropic, openai, ollama).
   `tasks:` config routing task → provider.

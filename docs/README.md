@@ -26,11 +26,17 @@ left to drift silently.
 
 ## Status
 
-Foundation. No code yet.
+M0 closed on 2026-07-30. The binary runs: `nooma init && nooma serve`, plus `status`, `doctor`
+and `version`, against a real migrated vault, on Linux and Windows — both executed in CI, not
+inferred. See [`05-build-plan.md`](05-build-plan.md) for the milestone criterion and for what
+still has build coverage only.
+
+`internal/core/` is still empty. The brain itself — capture, classification, hybrid recall — is
+M1, and that is where the invariants in [`06-harness.md`](06-harness.md) §4 start being
+enforced against real behavior instead of an empty tree.
 
 Decisions D1–D10 are closed as ADRs (see the board in `04-decisions.md`). **ADR-0001** (SQLite
 driver) was the last to close, accepted after the M0 spike measured `ncruces/go-sqlite3`
-against the alternatives (see ADR-0012, which replaced the `sqlite-vec` assumption). No code
-exists yet.
+against the alternatives (see ADR-0012, which replaced the `sqlite-vec` assumption).
 
 An accepted ADR **is never edited**: if the decision changes, a new ADR supersedes it.
