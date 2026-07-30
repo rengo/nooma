@@ -135,10 +135,19 @@ func resolveVault(arg string, env environment) (string, error) {
 func candidatesIn(dir string, env environment) ([]string, error) {
 	entries, err := env.readDir(dir)
 	if err != nil {
-		// A directory that cannot be listed is handled by the caller's own rules;
-		// at this level an unreadable or absent directory simply holds no
-		// candidates.
-		return nil, nil
+		// R6.8. A directory that does not exist holds no candidates, and that is
+		// an ordinary state: ~/.nooma is absent on a machine that has never run
+		// `nooma init`.
+		//
+		// Any *other* listing failure is fatal, and the distinction is the whole
+		// requirement. Treating a permission error as "nothing here" makes the
+		// ascent walk past the level that may hold the right vault and open a
+		// different one higher up — silently, with the user's own filesystem as
+		// the only evidence anything happened.
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("cannot list %s while looking for a vault: %w", dir, err)
 	}
 
 	var found []string
@@ -171,9 +180,43 @@ func pickExactlyOne(dir string, found []string) (string, error) {
 const ConfigFileName = "nooma.yml"
 
 // IsVault reports whether dir is a vault.
+//
+// R6.9: the config must be a file, not merely an entry that exists.
+// `mkdir nooma.yml` happens — a typo, a bad archive extraction, a botched cp — and
+// an existence-only predicate would accept it, let resolution succeed, and leave
+// the failure to surface later as a confusing read error about a path the user
+// believes is a file. The check costs one IsDir() on information Stat already
+// returned.
 func IsVault(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, ConfigFileName))
-	return err == nil
+	info, err := os.Stat(filepath.Join(dir, ConfigFileName))
+	return err == nil && !info.IsDir()
+}
+
+// DescribeVaultProblem explains, for a directory that is not a vault, what is
+// missing — the specific diagnostic spec R6.5 asks for.
+//
+// It probes the DEFAULT database path only, and that limit is real: the actual
+// path is configurable and lives in `nooma.yml`, which is the very file absent in
+// the case worth diagnosing. A vault whose database was moved elsewhere trades
+// this diagnostic away, which is an honest limitation rather than a check that
+// pretends to know something it cannot.
+func DescribeVaultProblem(dir string) string {
+	config := filepath.Join(dir, ConfigFileName)
+
+	if info, err := os.Stat(config); err == nil {
+		if info.IsDir() {
+			return fmt.Sprintf("%s is a directory, not a file; a vault's %s must be a file", config, ConfigFileName)
+		}
+		return fmt.Sprintf("%s looks like a vault", dir)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, filepath.Base(DefaultDatabasePath))); err == nil {
+		return fmt.Sprintf(
+			"%s has a %s but no %s, so it is not a usable vault — the configuration is what makes one",
+			dir, filepath.Base(DefaultDatabasePath), ConfigFileName)
+	}
+
+	return fmt.Sprintf("%s is not a vault: it has no %s", dir, ConfigFileName)
 }
 
 func absolute(path string, env environment) (string, error) {

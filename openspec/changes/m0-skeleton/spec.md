@@ -568,6 +568,48 @@ failed by the time step 4 would otherwise begin. Excluding the literal name outr
 the ascent passes over it exactly as if it were not there, and step 4 remains the only step that
 opens `~/.nooma/`.
 
+### R6.8 — A directory that cannot be listed fails resolution; it is never "zero candidates"
+
+**MUST**: when listing a directory during the ascent or at step 4 fails for any reason **other than
+the directory not existing**, resolution fails immediately, naming the directory and the underlying
+error.
+
+**MUST**: a directory that does not exist yields zero candidates and resolution continues. `~/.nooma`
+is absent on a machine that has never run `nooma init`, and that is the "no vault found, run
+`nooma init`" case rather than a failure.
+
+**MUST NOT**: an unreadable directory be treated as an empty one.
+
+**Verified by**: an L1 test that makes a directory in the ascent path unlistable (mode `0o000`) and
+asserts resolution fails naming it; plus the existing zero-candidate tests, which cover the
+does-not-exist path.
+
+**Scenario**:
+- GIVEN a working directory two levels inside a vault
+- AND an ancestor directory the process may traverse but not list
+- WHEN resolution ascends
+- THEN it fails naming that directory, rather than continuing upward
+
+**Rationale**: this is the project's dominant defect family in its natural habitat. Treating a
+permission error as "nothing here" makes the ascent walk *past* the level that may hold the right
+vault and open a different one higher up, or fall through to `~/.nooma` — silently, and with the
+user's own filesystem as the only evidence. The distinction from a missing directory matters because
+conflating the two in the other direction would make a fresh machine, where `~/.nooma` legitimately
+does not exist, report a permission problem it does not have.
+
+### R6.9 — `nooma.yml` must be a file, not merely an entry that exists
+
+**MUST**: the vault predicate of R6.5 requires `nooma.yml` to exist **and not be a directory**.
+
+**Verified by**: an L1 test with a *directory* named `nooma.yml`, asserting the containing directory
+is not treated as a vault.
+
+**Rationale**: `mkdir nooma.yml` happens — a typo, a bad archive extraction, a botched `cp`. An
+existence-only predicate accepts it, resolution succeeds, and the failure surfaces later as a
+confusing read error from the config loader about a path the user believes is a file. The check costs
+one `IsDir()` on information the predicate already has, and it moves the error to the place that can
+explain it.
+
 ---
 
 ## 7. Vault creation: `nooma init`
