@@ -23,9 +23,11 @@ at target scale ([ADR-0012](adr/0012-vector-proximity-search.md)).
 # Installed mode                      # Portable mode
 /usr/local/bin/nooma                  my-usb-drive/
 ~/.nooma/                             ├── nooma            # the executable
-├── nooma.yml                         └── pablo.nooma/     # the vault
-└── pablo.nooma/
+└── pablo.nooma/     # the vault      └── pablo.nooma/     # the vault
 ```
+
+`~/.nooma/` holds vaults; it is not itself a vault. There is no installation-level config file:
+configuration lives **inside** each vault, so a vault stays one self-contained object.
 
 ### Vault structure
 
@@ -47,10 +49,47 @@ pablo.nooma/
 
 ### Vault resolution at startup
 
-1. Explicit argument: `nooma serve ./pablo.nooma`
-2. Environment variable `$NOOMA_VAULT`
-3. Vault next to the executable (portable mode)
-4. Default: `~/.nooma/` (installed mode)
+A directory **is a vault** when it contains a `nooma.yml` that is not a directory. That is the only
+marker, because `nooma.db`'s location is configurable.
+
+1. **Explicit argument**: `nooma serve pablo.nooma` or `nooma serve /home/pablo/pablo.nooma`. The
+   path may be relative — it resolves against the working directory — or absolute. It is used as
+   given: if it is not a vault, startup fails naming that path and does **not** fall through to the
+   steps below. A typo must not silently open a different brain.
+2. **`$NOOMA_VAULT`**, with the same semantics.
+3. **An upward search from the working directory.** Starting at the working directory and walking up
+   one directory at a time to the filesystem root, each directory is tested: first *is this a vault*,
+   then *does this directory contain exactly one vault named `*.nooma*`*. The first hit wins, so the
+   nearest vault wins. There is no `$HOME` ceiling — the ascent runs to the root, like git's search
+   for `.git`.
+4. **`~/.nooma/`** (installed mode): exactly one `*.nooma` vault inside it.
+
+Portable mode needs no step of its own: on removable media the invocation is
+`cd /media/usb && ./nooma serve`, so step 3 finds the vault beside the executable because it is also
+beside the working directory. Resolution deliberately never looks at the executable's own directory —
+`os.Executable` reports the *resolved* path, so a symlinked install would search a directory the user
+never typed.
+
+For the searching steps, the candidate count is part of the contract:
+
+| Candidates found | Behavior |
+|---|---|
+| exactly one | it is the vault |
+| none | startup fails, naming the directory searched, and points at `nooma init` |
+| two or more | startup fails, listing every candidate and showing the command form that disambiguates |
+
+**The binary never chooses between candidates.** Opening the wrong brain is the worst failure this
+step can produce, and picking the alphabetically first match would make it silent.
+
+Two details that follow from the glob:
+
+- A `*.nooma` directory that is not a vault (no `nooma.yml`) is **reported**, not skipped — the error
+  names it and says what is missing.
+- The literal name `.nooma` is never a candidate, even though `*.nooma` matches it. `~/.nooma` is the
+  container, not a vault, and must never be reported as a broken one.
+
+`nooma init` with no argument creates `~/.nooma/<username>.nooma` and prints the path. It never
+writes vault contents into the working directory.
 
 ## Three layers, one process
 
@@ -104,7 +143,7 @@ messages through an interface. **Adding a channel = one new adapter, zero core c
 |---|---|
 | `nooma init` | Wizard: creates the vault, base config, LLM preset, credentials, channels |
 | `nooma serve [vault]` | Starts everything: API + UI + channels + scheduler |
-| `nooma status` | Status without starting the server (last consolidation, channels, size) |
+| `nooma status` | Status without starting the server: vault path, schema version, lock holder, size, effective config. Brain state (last consolidation, channel activity) joins it in M2, when there is brain state to report |
 | `nooma doctor` | Checks config, provider connectivity, models, permissions, hardware |
 | `nooma consolidate [vault]` | Runs consolidation once and exits (a pure subcommand, also used by the scheduler) |
 | `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
@@ -123,11 +162,13 @@ A YAML file at the root of the vault. Secrets are ALWAYS referenced by environme
 
 ```yaml
 server:
+  bind: 127.0.0.1                     # default; a non-loopback bind requires auth_token_env
   http_port: 7777
   ui: true
+  auth_token_env: NOOMA_AUTH_TOKEN    # mandatory when bind is not loopback (ADR-0007)
 
 database:
-  path: ./nooma.db
+  path: ./nooma.db                    # relative to the vault root; may not escape it
 
 # Reusable providers, shared across multiple tasks
 providers:
