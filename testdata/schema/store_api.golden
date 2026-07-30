@@ -9,3 +9,10 @@ internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, er
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError
 internal/store/sqlite: var ErrRelativeDBPath
+internal/store/vaultlock: const LockFileName
+internal/store/vaultlock: func (*InUseError) Error() string
+internal/store/vaultlock: func (*Lock) Release() error
+internal/store/vaultlock: func Acquire(vaultDir string) (*Lock, error)
+internal/store/vaultlock: func ReadHolder(vaultDir string) (pid int, held bool, err error)
+internal/store/vaultlock: type InUseError
+internal/store/vaultlock: type Lock
