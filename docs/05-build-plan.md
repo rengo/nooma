@@ -19,7 +19,18 @@ Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver, close
   [`03-data-model.md`](03-data-model.md).
 - CLI: `init` (minimal wizard), `serve` (HTTP hello + UI placeholder), `status`, `version`,
   `doctor` (config + integrity_check).
-- **Demo**: `nooma init && nooma serve` on Linux/macOS/Windows/ARM.
+- **Demo**: `nooma init && nooma serve`. **Met on Linux (2026-07-30, PRs #18–#38).** The four-platform
+  claim is dated rather than met: every target still *builds* on every PR
+  ([ADR-0013](adr/0013-cross-compile-targets.md)'s seven), but `internal/store/sqlite` does not *run*
+  on Windows — every vault it opens there fails with `CreateFile /C:`. The DSN is correct; the working
+  hypothesis is that the wasm SQLite build does not apply Windows' drive-letter fixup to a `file://`
+  URI. `darwin` shares the unix code path with Linux and has build coverage only.
+
+  M0 is therefore **complete on Linux and open on Windows**, which is a smaller and truer statement
+  than either "done" or "not done". The fix and its CI legs are one unit of work, tracked in
+  `openspec/changes/m0-skeleton/tasks.md` §7.7 with the hypothesis and the constraint that those legs
+  must be separate jobs rather than matrix legs — matrixing `integration` or `e2e` renames a
+  currently-required check, which then never posts and blocks every merge.
 
 ## M1 — Capture and recall
 
