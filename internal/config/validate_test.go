@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -182,5 +183,156 @@ func TestValidateAuthTokenForNonLoopbackBind(t *testing.T) {
 				t.Fatalf("Validate rejected a valid binding: %v", err)
 			}
 		})
+	}
+}
+
+// TestDatabasePath is spec R5.3. The escape cases are the substance: the vault is
+// one object that can be copied, moved and backed up as a unit, and a database
+// outside it breaks that guarantee silently — the breakage only surfaces when a
+// backup is restored somewhere else.
+func TestDatabasePath(t *testing.T) {
+	t.Parallel()
+
+	const vault = "/home/pablo/pablo.nooma"
+
+	cases := []struct {
+		name    string
+		path    string
+		want    string
+		wantErr string
+	}{
+		{name: "the documented default", path: "./nooma.db", want: filepath.Join(vault, "nooma.db")},
+		{name: "a bare filename", path: "nooma.db", want: filepath.Join(vault, "nooma.db")},
+		{name: "a subdirectory", path: "data/nooma.db", want: filepath.Join(vault, "data", "nooma.db")},
+		{name: "a parent escape", path: "../outside.db", wantErr: "outside the vault"},
+		{name: "a deep escape that cleans back out", path: "data/../../outside.db", wantErr: "outside the vault"},
+		{name: "an absolute path elsewhere", path: "/tmp/outside.db", wantErr: "outside the vault"},
+		{name: "an absolute path inside the vault", path: filepath.Join(vault, "nooma.db"), want: filepath.Join(vault, "nooma.db")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := decoded(t, "database:\n  path: "+tc.path+"\n")
+			got, err := cfg.DatabasePath(vault)
+
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("DatabasePath(%q) returned %q, want an error", tc.path, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error does not say the path is outside the vault:\n%v", err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("DatabasePath(%q): %v", tc.path, err)
+			}
+			if got != tc.want {
+				t.Errorf("DatabasePath(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+			if !filepath.IsAbs(got) {
+				t.Errorf("DatabasePath returned %q, which is relative; sqlite.Open rejects a relative path", got)
+			}
+		})
+	}
+}
+
+// TestValidateRejectsUndocumentedNames covers what strict decoding structurally
+// cannot: `providers` and `tasks` are maps, so their keys are user data and the
+// decoder has no schema to check them against. Validation is the only place these
+// can be caught.
+func TestValidateRejectsUndocumentedNames(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an unknown provider type", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := decoded(t, "providers:\n  p:\n    type: openai_but_not_yet\n    model: m\n")
+		err := cfg.Validate("/vault", noEnv)
+		if err == nil {
+			t.Fatal("Validate accepted an undocumented provider type")
+		}
+		if !strings.Contains(err.Error(), "openai_but_not_yet") {
+			t.Errorf("error does not name the offending type:\n%v", err)
+		}
+	})
+
+	t.Run("an unknown task name", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := decoded(t, "tasks:\n  chatt: { provider: p }\n")
+		err := cfg.Validate("/vault", noEnv)
+		if err == nil {
+			t.Fatal("Validate accepted an undocumented task name; a typo here would silently disable a brain task")
+		}
+		if !strings.Contains(err.Error(), "chatt") {
+			t.Errorf("error does not name the offending task:\n%v", err)
+		}
+	})
+
+	t.Run("every documented task name and provider type is accepted", func(t *testing.T) {
+		t.Parallel()
+
+		var b strings.Builder
+		b.WriteString("providers:\n")
+		for i, typ := range DocumentedProviderTypes {
+			b.WriteString("  p" + string(rune('a'+i)) + ":\n    type: " + typ + "\n")
+		}
+		b.WriteString("tasks:\n")
+		for _, name := range DocumentedTaskNames {
+			b.WriteString("  " + name + ": { provider: pa }\n")
+		}
+
+		if err := decoded(t, b.String()).Validate("/vault", noEnv); err != nil {
+			t.Fatalf("Validate rejected a document using only documented names — this is what keeps the lists honest: %v", err)
+		}
+	})
+}
+
+// TestValidateReportsEveryProblem is spec R5.4, and design D10 is why it holds
+// structurally rather than by discipline: the checks are a slice of values, so
+// "report everything" is the shape of the code rather than a rule somebody has to
+// remember when adding the next check.
+//
+// `nooma doctor` exists to make the binary feel cared for. A doctor that reports
+// one problem per run makes the user iterate.
+func TestValidateReportsEveryProblem(t *testing.T) {
+	t.Parallel()
+
+	cfg := decoded(t, `
+server:
+  bind: 0.0.0.0
+database:
+  path: ../outside.db
+providers:
+  p:
+    type: not_a_type
+tasks:
+  chatt: { provider: p }
+channels:
+  telegram:
+    enabled: true
+    bot_token_env: MISSING_TOKEN
+`)
+
+	err := cfg.Validate("/vault", noEnv)
+	if err == nil {
+		t.Fatal("Validate accepted a configuration with five independent problems")
+	}
+
+	for _, want := range []string{
+		"auth_token_env",    // ADR-0007: non-loopback bind, no token
+		"outside the vault", // R5.3
+		"not_a_type",        // undocumented provider type
+		"chatt",             // undocumented task name
+		"allowed_chat_ids",  // R5.1
+		"MISSING_TOKEN",     // R5.2
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the aggregate error omits %q, so the user would fix one problem and meet the next:\n%v", want, err)
+		}
 	}
 }
