@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -20,14 +21,15 @@ var vaultDirs = []string{"attachments", "derived", "logs"}
 
 // runInit creates a vault.
 //
-// The path is relative to the working directory if relative, matching every
-// other command (spec R6.4). The no-argument form and its home-location default
-// (spec R7.1b) arrive in the next slice.
+// With a path, that path is the target — relative to the working directory if
+// relative, matching every other command (spec R6.4). With no argument the target
+// is ~/.nooma/<username>.nooma (spec R7.1b).
 func runInit(args []string, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	fs.Usage = func() {
-		_, _ = fmt.Fprint(errOut, "usage: nooma init <vault>\n")
+		_, _ = fmt.Fprint(errOut, "usage: nooma init [vault]\n\n"+
+			"With no argument, creates ~/.nooma/<username>.nooma.\n")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -49,33 +51,99 @@ func runInit(args []string, out, errOut io.Writer) error {
 	return err
 }
 
-// initTarget resolves where the vault will be created.
+// initTarget resolves where the vault will be created (spec R7.1b).
 //
-// A path is required in this slice. `nooma init` with no argument gains its
-// documented default — ~/.nooma/<username>.nooma — in the next one, together
-// with the refusal that keeps that location unambiguous. Requiring the argument
-// now is an honest partial command: it does everything it claims, for the input
-// it accepts.
+// With no argument the target is ~/.nooma/<username>.nooma, not the working
+// directory, and that choice is the whole of this function's judgement. A bare
+// command that writes nooma.db, nooma.yml, .env and three directories into
+// wherever the user happens to be standing is a command that will one day be run
+// in $HOME, or in a source checkout. Creating a named directory in a known place
+// is recoverable and predictable; scattering six entries into an arbitrary cwd is
+// neither.
 func initTarget(arg string) (string, error) {
-	if arg == "" {
-		return "", fmt.Errorf("init needs a vault path, for example `nooma init pablo.nooma`")
+	if arg != "" {
+		return filepath.Abs(arg)
 	}
-	return filepath.Abs(arg)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving the home directory: %w", err)
+	}
+	container := filepath.Join(home, config.HomeVaultDir)
+
+	// A second bare init would leave two vaults in ~/.nooma, and resolution step 4
+	// requires exactly one (spec R6.2). Refusing here keeps the default location
+	// usable by refusing to make it undecidable — the alternative is a user who
+	// runs init twice and then cannot start the binary without an explicit path.
+	if entries, err := os.ReadDir(container); err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if !e.IsDir() || name == config.HomeVaultDir || !strings.HasSuffix(name, config.VaultSuffix) {
+				continue
+			}
+			if config.IsVault(filepath.Join(container, name)) {
+				return "", fmt.Errorf(
+					"%s already holds the vault %s, and a second one there would make the default location ambiguous.\n"+
+						"Pass a path explicitly, for example `nooma init ~/work.nooma`",
+					container, name)
+			}
+		}
+	}
+
+	return filepath.Join(container, username()+config.VaultSuffix), nil
+}
+
+// username is the vault's name in home mode, matching docs/01-architecture.md's
+// own `pablo.nooma` example.
+func username() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		name := u.Username
+		// On Windows this is "DOMAIN\\user", and only the last element is a legal
+		// directory name.
+		if i := strings.LastIndexAny(name, `\/`); i >= 0 {
+			name = name[i+1:]
+		}
+		if name != "" {
+			return name
+		}
+	}
+	return "nooma"
 }
 
 // createVault builds the vault in a sibling staging directory and moves it into
 // place, so a failure anywhere leaves the filesystem as it was (spec R7.4).
 //
-// The target must not exist. An existing empty directory is a legitimate target
-// too — `mkdir x.nooma && nooma init x.nooma` is a thing people do — but
-// accepting it means removing it before the rename, and removing anything
-// requires first proving it is a plain, empty directory and not a file or a
-// symlink. That guard and the case it enables land together in the next slice;
-// until then the safe subset is "the path must be free".
+// The order of the target checks IS the safety:
+//
+//  1. Lstat first, and refuse anything that is not a plain directory without
+//     touching it. os.ReadDir on a plain FILE returns an error, not an empty
+//     listing — so an emptiness check written as len(entries) == 0 without also
+//     requiring err == nil classifies a stray file as "empty", and os.Remove
+//     deletes files happily. `touch pablo.nooma && nooma init pablo.nooma` would
+//     delete it: non-negotiable #6 violated at the vault's own root. Lstat rather
+//     than Stat, so a symlink is seen as a symlink instead of as whatever it
+//     points at.
+//  2. An existing empty directory is accepted, and has to be: os.Rename refuses
+//     ANY existing directory, empty or not (Go's own Lstat guard fires before
+//     rename(2), which POSIX would have allowed), and `mkdir x.nooma && nooma
+//     init x.nooma` is a thing people do.
+//  3. A non-empty directory is refused (R7.3). An init that overwrites is a
+//     delete with better manners.
 func createVault(target string) error {
-	if _, err := os.Lstat(target); err == nil {
-		return fmt.Errorf("%s already exists; refusing to overwrite it", target)
-	} else if !os.IsNotExist(err) {
+	switch info, err := os.Lstat(target); {
+	case err == nil && info.Mode()&os.ModeSymlink != 0:
+		return fmt.Errorf("%s is a symlink; refusing to create a vault through it", target)
+	case err == nil && !info.IsDir():
+		return fmt.Errorf("%s already exists and is not a directory", target)
+	case err == nil:
+		empty, err := isEmptyDir(target)
+		if err != nil {
+			return err
+		}
+		if !empty {
+			return fmt.Errorf("%s already exists and is not empty; refusing to overwrite it", target)
+		}
+	case !os.IsNotExist(err):
 		return fmt.Errorf("inspecting %s: %w", target, err)
 	}
 
@@ -139,6 +207,14 @@ func populateVault(dir string) error {
 		return fmt.Errorf("creating the database: %w", err)
 	}
 	return vault.Close()
+}
+
+func isEmptyDir(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, fmt.Errorf("listing %s: %w", dir, err)
+	}
+	return len(entries) == 0, nil
 }
 
 // defaultConfig is the nooma.yml a new vault starts with.
