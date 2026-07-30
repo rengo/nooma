@@ -132,8 +132,14 @@ introduces it rather than after merge.
       applying — a required context that never posts is never satisfied and permanently blocks every
       merge to `main`. A matrix-aware synthetic gate is an acceptable alternative if its dependency
       on every leg is verified.
-      Verify: **outside local verification** (GitHub configuration). Confirm by opening a throwaway
-      PR and comparing the posted check names against the registered strings before merging this PR.
+      Verify: **outside local verification** (GitHub configuration). No throwaway PR is needed —
+      this slice's own PR posts the names. Push first, let the checks run, read the strings from
+      `gh pr checks`, then register them and re-read the applied ruleset to confirm.
+
+      **Done 2026-07-30 on #19**: 8 new contexts registered, not 9 — `e2e` posts a single context
+      until slice 7 matrixes it. The ruleset now holds 15. See task 7.7b, which exists because
+      matrixing that job renames its check and would otherwise leave `e2e` registered and never
+      posted.
       Requirement: R2.2.
 - [ ] **2.7** `docs/06-harness.md` §6: the sentence "what does **not** run on every PR: L4 (e2e),
       driver benchmarks, and the cross-compilation matrix" becomes false with task 2.2 — correct it
@@ -387,8 +393,27 @@ OS-dependent code.
       `make`.
       Verify: **outside local verification**; confirm on the PR's own checks.
       Requirement: R15.1; design D6, D17.
+- [ ] **7.7b** **Re-register the e2e contexts in the ruleset, in this same slice.** Matrixing the
+      e2e job renames the check it posts: today it posts one context, `e2e`, which slice 2 registered
+      as required. Adding a matrix makes GitHub post `e2e (ubuntu-latest)` and
+      `e2e (windows-latest)` instead, so the registered `e2e` context stops being produced — and a
+      required context that is never produced is never satisfied, which **permanently blocks every
+      merge to `main`**.
+
+      Order matters: push the workflow change, let the checks post, read the two real names from
+      `gh pr checks`, then replace `e2e` with them in `required_status_checks`. Do not type the names
+      from this task — read them from what the workflow produced, which is how slice 2 found this
+      trap in the first place.
+
+      After this task the ruleset holds **16** contexts (7 pre-existing + 7 cross-compile + 2 e2e),
+      not the 15 slice 2 left. Spec R2.2's "9 new contexts" is the end state across both slices, and
+      the registration happens in two steps because the second step does not exist until the job is
+      matrixed.
+      Verify: **outside local verification**; re-read the applied ruleset and confirm every context
+      matches a name the workflows actually post.
+      Requirement: R2.2.
 - [ ] **7.8** Export `ErrVaultInUse` so `cmd/nooma` can distinguish "held" from other I/O failures;
-      `make store-api-golden`. The diff must show only `ErrVaultInUse` — PR 6 already surfaced
+      `make store-api-golden`. The diff must show only `ErrVaultInUse` — slice 6 already surfaced
       `ErrRelativeDBPath`.
       Verify: `make check-all`.
       Requirement: R8.5.

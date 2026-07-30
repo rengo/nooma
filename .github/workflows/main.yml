@@ -1,18 +1,24 @@
 name: main
 
-# docs/06-harness.md §6: "What does not run on every PR: L4 (e2e), driver
-# benchmarks, and the cross-compilation matrix. Those run on merge to the
-# main branch and before release." This file is that trigger, kept
-# deliberately separate from ci.yml (which runs on every pull_request).
+# L4 (e2e) and the cross-compilation matrix. Both run on every pull request
+# and on merge to main, per ADR-0013.
 #
-# Consequence, written down rather than left implicit: a job that only runs
-# after a merge to main cannot block the merge that broke it. A commit that
-# breaks `nooma version`'s output shape reaches main green (ci.yml has no L4
-# job) and only turns this workflow red afterward — someone has to notice
-# and follow up with a fix commit. That is a deliberate cost/latency
-# tradeoff for a level that compiles the real binary (L4 is comparatively
-# slow and, once the CLI grows, its own kind of flaky), not an oversight.
+# They used to run on push to main only, and the reason they no longer do is
+# worth keeping: a job that only runs after a merge cannot block the merge that
+# broke it. A commit breaking `nooma version`'s output shape reached main green,
+# and this workflow turned red afterward — someone had to notice and follow up.
+# That was an accepted cost/latency tradeoff while the tree had no
+# platform-specific code and one e2e test.
+#
+# M0 removed the premise. The single-writer lockfile is the first genuinely
+# OS-dependent code here (`flock` on unix, `LockFileEx` on Windows, behind build
+# tags) and M0's demo claims Linux/macOS/Windows/ARM, so a Windows-only break
+# must fail on the PR that introduces it, not on main afterward.
+#
+# This file stays separate from ci.yml because these two jobs are the slow ones
+# and are matrixed; ci.yml holds the fast per-PR gates.
 on:
+  pull_request:
   push:
     branches: [main]
 
@@ -39,6 +45,16 @@ jobs:
   # docs/06-harness.md §6's cross-compilation matrix, and the direct payoff of
   # ADR-0001: the driver is pure Go/wasm, so every target below builds with
   # CGO_ENABLED=0 and no C toolchain anywhere. spec.md R1.2.
+  #
+  # The seven targets are fixed by ADR-0013, which supersedes ADR-0001's
+  # acceptance criterion 5. That criterion listed four while the same ADR's
+  # results table reported "6/6" without naming them; the spike branch's own
+  # RESULTS.md names the real six, including linux/arm and excluding
+  # windows/arm64. All seven were built from a clean checkout before ADR-0013
+  # was written — windows/arm64 is here on measurement, not on inference.
+  #
+  # `make cross-compile` builds the same seven pairs locally and is part of
+  # `make check-all`, so the pre-PR command and this job cannot drift.
   #
   # What this proves and what it does not: it proves the code *builds*
   # everywhere, not that it *works* everywhere. Slice 2 of this change shipped a
@@ -67,10 +83,16 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: linux
+            goarch: arm       # 32-bit ARM: Raspberry Pi. Verified by the ADR-0001 spike.
+          - goos: darwin
+            goarch: amd64     # Intel Macs.
           - goos: darwin
             goarch: arm64
           - goos: windows
             goarch: amd64
+          - goos: windows
+            goarch: arm64     # Windows on ARM. Added on measurement (ADR-0013).
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6

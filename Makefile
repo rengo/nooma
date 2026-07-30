@@ -7,11 +7,16 @@
 #                   Slower. Run it before opening a PR.
 #
 # `check` is deliberately NOT full CI parity: it skips L3 (a real SQLite vault),
-# the schema-golden regeneration-diff check, the pending-red gate and the
-# coverage floor, all of which cost real time. What it must never do is *claim*
+# the schema-golden regeneration-diff check, the pending-red gate, the coverage
+# floor, the seven-target cross-compile matrix and L4 (which compiles the real
+# binary), all of which cost real time. What it must never do is *claim*
 # parity — an earlier version of this comment did, and a review caught it. If
 # you add a blocking CI job, add it to `check-all` too — unless it needs PR
 # metadata a Makefile cannot produce (see the note below).
+#
+# `cross-compile` and `test-e2e` joined `check-all` when ADR-0013 moved both
+# onto the `pull_request` trigger: they became blocking gates, and the rule above
+# applies to them literally — neither needs PR metadata.
 #
 # One CI gate `check-all` deliberately cannot cover: docs-sync.yml's
 # docs<->code sync check. It decides on pull request metadata (the base
@@ -31,7 +36,7 @@ GOBIN := $(shell go env GOPATH)/bin
 check: lint test build ## The fast loop: lint + L1/L2 tests + build — NOT full CI parity, see check-all
 
 .PHONY: check-all
-check-all: check test-integration schema-golden-clean pending-red cover ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
+check-all: check test-integration schema-golden-clean pending-red cover cross-compile test-e2e ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
 
 .PHONY: lint
 lint: $(GOBIN)/golangci-lint ## Dependency rule + clock port + standard linters
@@ -61,6 +66,21 @@ schema-golden-clean: schema-golden ## Fail if regenerating the schema golden lea
 .PHONY: build
 build: ## Compile every package
 	go build ./...
+
+# The seven targets of ADR-0013, which supersedes ADR-0001's acceptance
+# criterion 5. Build-only: this proves the code compiles for a platform, never
+# that it behaves there — platform behavior needs a test that names the
+# platform (see main.yml's cross-compile comment for a bug a matrix like this
+# compiled without complaint).
+CROSS_TARGETS := linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+
+.PHONY: cross-compile
+cross-compile: ## ADR-0013's seven GOOS/GOARCH pairs — mirrors main.yml's matrix
+	@set -e; for t in $(CROSS_TARGETS); do \
+		goos=$${t%/*}; goarch=$${t#*/}; \
+		printf '%-16s' "$$t"; \
+		CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -o /dev/null ./... && echo OK; \
+	done
 
 .PHONY: cover
 cover: ## Enforce docs/06-harness.md §3's >=90% floor on internal/core — armed, currently vacuous
