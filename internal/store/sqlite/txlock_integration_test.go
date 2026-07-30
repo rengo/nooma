@@ -79,10 +79,22 @@ func TestOpenTxlockIsImmediate(t *testing.T) {
 	// top-level _txlock=immediate plus a short busy_timeout. Whether it
 	// actually contends is determined entirely by what connection A's
 	// BEGIN — built from the real production DSN — did.
+	//
+	// Independent of buildDSN's *parameters*, not of how a path becomes a
+	// URI: this line used to write dbPath straight into url.URL{Path: ...},
+	// and on Windows that is the exact misrouting buildDSN's own doc
+	// comment warns about — a path not starting with "/" is ambiguous with
+	// the authority, so `C:\Users\...` came back out as
+	// `file://C:%5CUsers%5C...` and url.Parse rejected it as an invalid
+	// port. Green on Linux, broken on Windows, for two slices. setURIPath
+	// is the one place that knows how to answer this, so this test asks it
+	// rather than re-deriving the answer and getting it wrong.
 	qB := url.Values{}
 	qB.Add("_pragma", "busy_timeout(200)")
 	qB.Set("_txlock", "immediate")
-	dsnB := (&url.URL{Scheme: "file", Path: dbPath, RawQuery: qB.Encode()}).String()
+	uB := url.URL{Scheme: "file", RawQuery: qB.Encode()}
+	setURIPath(&uB, dbPath, pathStyleForGOOS())
+	dsnB := uB.String()
 
 	dbB, err := driver.Open(dsnB)
 	if err != nil {

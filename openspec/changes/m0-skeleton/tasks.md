@@ -416,9 +416,9 @@ OS-dependent code.
       never a partial one. This is the regression guard against reintroducing a two-write form.
       Verify: `make test-integration`.
       Requirement: R8.4; design D4.
-- [ ] **7.7** ~~Add a Windows leg to the integration and e2e jobs.~~ **Attempted in slice 7b and
-      deferred.** The jobs were written, pushed, and ran. They failed, and what they found is not
-      about the lock.
+- [x] **7.7** Add a Windows leg to the integration and e2e jobs. **Attempted in slice 7b, deferred,
+      and closed in slice 7c together with the DSN fix it was blocked on.** The jobs were written,
+      pushed, and ran. They failed, and what they found is not about the lock.
 
       **`internal/store/sqlite` has never worked on Windows.** Every L3 test that opens a vault fails
       with `CreateFile /C:: The filename, directory name, or volume label syntax is incorrect`. The
@@ -441,12 +441,69 @@ OS-dependent code.
       unit tests asserting on the DSN **string**, and those tests still pass. Asserting the string a
       component produces is not the same as asserting the component works — the string was right and
       it still could not open a file.
+
+      **Root cause, confirmed against the driver's source rather than inferred.** The hypothesis
+      above was right. `buildDSN` emitted RFC 8089's `file:///C:/...`; SQLite's URI parser lives
+      inside the **wasm** module (ADR-0001), which is not a `SQLITE_OS_WIN` build and therefore never
+      applies the drive-letter fixup that strips that leading slash; the driver's VFS is Go code
+      running natively on the host and hands the resulting name to `os.OpenFile` **verbatim**
+      (`vfs/file.go`, and there is no `VolumeName`, drive-letter pattern or `filepath.FromSlash`
+      anywhere in the package). So the Windows file API received the literal `/C:`.
+
+      **The fix**: under `windowsStyle`, `setURIPath` writes the path into the URI's *opaque*
+      component — `file:C:/Users/...`, no authority, no leading slash — which the VFS opens as the
+      ordinary absolute Windows path it is. SQLite accepts it because a `file:` URI's path need not
+      be absolute, and the driver only requires the `file:` prefix to parse `_pragma` and `_txlock`.
+      The cost, recorded because it is a real regression risk: `url.URL.String()` writes `Opaque`
+      **verbatim**, so escaping stops being net/url's job and becomes this package's. A vault path
+      containing a space, `#` or `?` would otherwise truncate the DSN — exactly what design D3 chose
+      net/url to prevent. `setURIPath` escapes explicitly; SQLite percent-decodes it back.
+
+      **The bug turned out to be reproducible on Linux**, which is the part worth keeping. Because
+      `pathStyle` is an *injected parameter* rather than a guess made from the runner's `GOOS`, an L3
+      test can build the Windows-shaped DSN on any runner — and the failure appears there as
+      `lstat /C:: no such file or directory`, the same defect as `CreateFile /C:` with a different
+      error string. The two tests in `dsn_windows_style_integration_test.go` were watched RED for
+      that exact reason before the fix. The design decision that made the Windows branch *testable*
+      from Linux was written for auditability; it paid for itself as reproduction.
+
+      **What the job found once the store worked, and the finding underneath it.** The DSN fix was
+      necessary and not sufficient: with the store opening vaults, `integration (windows)` and
+      `e2e (windows)` turned up **five more defects, none of them in the store**. Every one had been
+      green on Linux since the slice that introduced it.
+
+      | Defect | Where | Why Linux never saw it |
+      |---|---|---|
+      | `url.URL{Path: dbPath}` misroutes a Windows path into the URI authority | `txlock_integration_test.go` | The test hand-rolled a DSN instead of asking `setURIPath` — the exact misrouting `buildDSN`'s own doc comment warns about, reproduced by a test that bypassed it |
+      | `strings.Contains(err, dbPath)` fails against a `%q`-quoted path | `test/integration/corrupt_vault_test.go` | `%q` escapes nothing in a POSIX path and doubles every backslash in a Windows one. The assertion was testing a property of Linux paths |
+      | `testdata/schema/*.golden` compared byte for byte against CRLF | `schema_golden_test.go` | No `.gitattributes`; Git's `core.autocrlf=true` on the Windows image rewrote bytes nobody had authored |
+      | `go build -o <tmp>/nooma` produces a non-executable | `test/e2e/version_test.go` | Windows needs `.exe`. `init_test.go`'s shared builder already handled this; the inline build R10.2 preserves did not |
+      | `os.Process.Signal(os.Interrupt)` is "not supported by windows" | `test/e2e/serve_test.go` | Windows has no POSIX signals |
+
+      Four are fixed. The fifth is a genuine platform limit and is **recorded as debt**: on Windows,
+      that `nooma serve` exits with status zero and releases the vault lock on Ctrl+C (R11.5, R8.1)
+      is **unverified**. Delivering it needs the child in its own process group plus
+      `GenerateConsoleCtrlEvent`; killing the process instead would assert nothing, because the test
+      exists to prove the exit is clean. Everything else about the lock is covered by tests that do
+      run there.
+
+      The `.gitattributes` fix is the one worth generalizing: `* text=auto eol=lf` is structural
+      (non-negotiable #7), not a note asking contributors to configure Git correctly. A gate that
+      compares bytes must not be defeatable by which platform ran `git clone`.
+
+      **R10.2 was amended in the same commit** rather than quietly edited around: it said
+      `version_test.go` "continues to pass unmodified", verified by "the existing L4 test, unedited".
+      Adding `.exe` to the build output path made that a false statement of fact, while its actual
+      intent — do not rewrite this test to make a broken `version` pass — is untouched, and the
+      requirement now says that instead. Doc and code fixed together (non-negotiable #1).
       Requirement: R15.1; design D6, D17.
-- [ ] **7.7b** ~~Register the Windows contexts.~~ **Moot until 7.7 lands**, but the finding stands and
-      must survive: matrixing either `integration` or `e2e` renames a *currently required* check,
-      which then stops posting, is never satisfied, and permanently blocks every merge to `main`.
-      Whatever slice brings the Windows legs back must add them as **separate jobs**, never as matrix
-      legs, and register the new contexts from names read off a real PR rather than typed from a plan.
+- [x] **7.7b** Register the Windows contexts. Landed with 7.7 rather than after it: the finding
+      stands and is now enforced by the jobs themselves — matrixing either `integration` or `e2e`
+      renames a *currently required* check, which then stops posting, is never satisfied, and
+      permanently blocks every merge to `main`. The Windows jobs are therefore **separate jobs**
+      (`integration-windows`, `e2e-windows`), never matrix legs, and the rule is now recorded in
+      `docs/06-harness.md` §6 where the next person will meet it. The two new contexts are added to
+      the ruleset from names read off this PR's own check list, never typed from this plan.
       Requirement: R2.2.
 - [ ] **7.8** Export `ErrVaultInUse` so `cmd/nooma` can distinguish "held" from other I/O failures;
       `make store-api-golden`. The diff must show only `ErrVaultInUse` — slice 6 already surfaced

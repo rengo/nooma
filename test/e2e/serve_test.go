@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -132,6 +133,26 @@ func TestServeHoldsTheWriteLock(t *testing.T) {
 // CLEANLY — status zero — so a supervisor does not read a normal shutdown as a
 // crash.
 func TestServeReleasesTheLockOnSignal(t *testing.T) {
+	// Not skipped because the behavior is absent on Windows — it is
+	// skipped because this harness cannot deliver the signal there.
+	// os.Process.Signal returns "not supported by windows" for anything
+	// but Kill: Windows has no POSIX signals, and a console Ctrl+C is
+	// delivered with GenerateConsoleCtrlEvent to a process GROUP, which
+	// means creating the child in its own group and calling into
+	// golang.org/x/sys/windows to raise the event. Killing it instead
+	// would assert nothing — this test exists to prove the exit is CLEAN,
+	// and a killed process never exits cleanly.
+	//
+	// What stays unverified on Windows, stated rather than implied: that
+	// `nooma serve` shuts down with status zero and releases the vault
+	// lock on Ctrl+C (spec R11.5, R8.1). Recorded as debt in tasks.md
+	// §7.7. Everything else about the lock — that it is taken, that a
+	// second serve is refused and names the holder — is covered by the
+	// tests above, which do run here.
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Process.Signal cannot deliver an interrupt to another process on windows; see the comment above for what this leaves unverified")
+	}
+
 	home, work := t.TempDir(), t.TempDir()
 	vault := initVault(t, home, work, "pablo.nooma")
 	port := freePort(t)

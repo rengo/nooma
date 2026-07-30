@@ -71,11 +71,16 @@ func TestBuildDSN(t *testing.T) {
 // against: url.URL{Path: p}.String() treats a path that does not start
 // with "/" as ambiguous with the URI authority component, silently
 // routing the path's first segment into the host instead of failing. It
-// asserts on the PARSED URI's Host and Path fields, never on the raw DSN
-// string — a string-shaped assertion is exactly the defect class this
-// test exists to catch (see the _txlock history above): a plausible-
-// looking DSN string can still be silently wrong about which file it
-// opens.
+// asserts on the PARSED URI's components, never on the raw DSN string —
+// a string-shaped assertion is exactly the defect class this test exists
+// to catch (see the _txlock history above): a plausible-looking DSN string
+// can still be silently wrong about which file it opens.
+//
+// It is still not enough on its own, and the Windows breakage proved it:
+// every case here passed while no vault could be opened on Windows at all,
+// because a URI can be correct by the RFC and still name a file this
+// driver's VFS cannot reach. The behavioral half lives in
+// dsn_windows_style_integration_test.go, which opens the file.
 //
 // This table is deliberately split by pathStyle rather than guessing the
 // style from each path's own shape (see pathStyle's doc comment in dsn.go
@@ -139,20 +144,23 @@ func TestBuildDSNAbsolutePathHandling(t *testing.T) {
 			wantPath: "/home/pa blo/my?weird#vault.db",
 		},
 		{
-			name:  "windows: backslash drive-letter path becomes a valid file-absolute URI",
+			name:  "windows: backslash drive-letter path becomes a URI this driver can open",
 			style: windowsStyle,
 			path:  `C:\Users\pablo\vault.db`,
-			// RFC 8089's "file-absolute" form: forward slashes, and a
-			// leading "/" ahead of the drive letter. Runnable on Linux —
-			// this does not depend on the host OS's own path semantics,
+			// Forward slashes, and NO leading "/" ahead of the drive
+			// letter — the opaque "file:C:/..." form, not RFC 8089's
+			// "file:///C:/...". setURIPath's doc comment owns that
+			// decision; TestBuildDSNWindowsStyleOpensTheFileItNames is
+			// what proves it opens a real file. Runnable on Linux — this
+			// does not depend on the host OS's own path semantics,
 			// because style is injected, never guessed from the runner.
-			wantPath: "/C:/Users/pablo/vault.db",
+			wantPath: "C:/Users/pablo/vault.db",
 		},
 		{
-			name:     "windows: forward-slash drive-letter path becomes a valid file-absolute URI",
+			name:     "windows: forward-slash drive-letter path becomes a URI this driver can open",
 			style:    windowsStyle,
 			path:     "C:/Users/pablo/vault.db",
-			wantPath: "/C:/Users/pablo/vault.db",
+			wantPath: "C:/Users/pablo/vault.db",
 		},
 		{
 			name:    "windows: bare relative filename is rejected, not silently misrouted",
@@ -167,10 +175,22 @@ func TestBuildDSNAbsolutePathHandling(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			// The regression guard on setURIPath's own escaping: the
+			// opaque component is written verbatim by url.URL.String(),
+			// so unlike the posix case above, net/url is NOT what keeps
+			// these characters from truncating the DSN.
 			name:     "windows: path containing a space, '?' and '#' is preserved exactly",
 			style:    windowsStyle,
 			path:     `C:\Users\pablo\my vault #1?share.db`,
-			wantPath: "/C:/Users/pablo/my vault #1?share.db",
+			wantPath: "C:/Users/pablo/my vault #1?share.db",
+		},
+		{
+			// A literal '%' must survive as a literal '%', not be read
+			// back as the start of an escape sequence. Same reason.
+			name:     "windows: path containing a literal '%' survives the round trip",
+			style:    windowsStyle,
+			path:     `C:\Users\pablo\100%\vault.db`,
+			wantPath: "C:/Users/pablo/100%/vault.db",
 		},
 	}
 
@@ -198,8 +218,29 @@ func TestBuildDSNAbsolutePathHandling(t *testing.T) {
 			if u.Host != "" {
 				t.Errorf("buildDSN(%q, %v) produced a URI with host %q, want an empty host (a non-empty host means the path was misrouted into the URI authority)", tt.path, tt.style, u.Host)
 			}
-			if u.Path != tt.wantPath {
-				t.Errorf("buildDSN(%q, %v) produced a URI with path %q, want %q", tt.path, tt.style, u.Path, tt.wantPath)
+
+			// The two styles carry the path in different URI components,
+			// by construction (setURIPath): posixStyle in Path, where
+			// net/url escapes it, and windowsStyle in Opaque, escaped by
+			// setURIPath itself. Asserting that exactly one of them is
+			// populated is what keeps a future edit from quietly filling
+			// both, or the wrong one.
+			got, gotComponent := u.Path, "path"
+			if tt.style == windowsStyle {
+				if u.Path != "" {
+					t.Errorf("buildDSN(%q, %v) produced a URI with path %q, want the windows form to leave path empty and carry the vault path in the opaque component", tt.path, tt.style, u.Path)
+				}
+				decoded, uerr := url.PathUnescape(u.Opaque)
+				if uerr != nil {
+					t.Fatalf("url.PathUnescape(%q) = _, %v, want the opaque component to be validly escaped — SQLite percent-decodes it before opening", u.Opaque, uerr)
+				}
+				got, gotComponent = decoded, "opaque"
+			} else if u.Opaque != "" {
+				t.Errorf("buildDSN(%q, %v) produced a URI with opaque %q, want the posix form to carry the vault path in the path component", tt.path, tt.style, u.Opaque)
+			}
+
+			if got != tt.wantPath {
+				t.Errorf("buildDSN(%q, %v) produced a URI whose %s component resolves to %q, want %q", tt.path, tt.style, gotComponent, got, tt.wantPath)
 			}
 		})
 	}

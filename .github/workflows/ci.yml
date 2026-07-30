@@ -72,6 +72,38 @@ jobs:
         run: make test-integration
       - name: schema golden regenerates to a clean tree
         run: make schema-golden && git diff --exit-code -- testdata/schema
+  # The same L3 suite on Windows, and the job that would have caught
+  # tasks.md §7.7 five slices before it was found: internal/store/sqlite
+  # had never worked on Windows, because cross-compilation proves the code
+  # BUILDS for a target, never that it behaves there (docs/06-harness.md
+  # §6's own sentence).
+  #
+  # A separate job, never a matrix leg on `integration` above. Matrixing a
+  # job renames the check it posts: `integration` is a required context, it
+  # would stop posting under that name, and every merge to main would block
+  # forever on a check that never arrives.
+  #
+  # It runs `go test` rather than `make test-integration`, which is the one
+  # place in this repo where a CI step restates a Makefile target instead of
+  # calling it: `make` is not on PATH on GitHub's Windows runners (measured,
+  # not assumed). Keep the two in sync by hand — the target is
+  # `test-integration`.
+  #
+  # No `-race`: the race detector needs a C toolchain on Windows, and what
+  # this job exists to prove is platform-specific file and locking behavior,
+  # which the raced Linux `integration` job above cannot see. Races are not
+  # platform-specific; that coverage is already paid for.
+  integration-windows:
+    name: integration (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: L3 tests
+        run: go test -shuffle=on -tags integration ./internal/store/sqlite/... ./test/integration/...
+
   pending-red:
     name: pending-red
     runs-on: ubuntu-latest

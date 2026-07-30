@@ -266,15 +266,22 @@ performance. But applying it is a conscious act that gets recorded, not an overs
 **L4 (e2e) and the cross-compilation matrix run on every PR too**, per
 [ADR-0013](adr/0013-cross-compile-targets.md) — the matrix across seven targets: `linux` on
 `amd64`/`arm64`/`arm`, `darwin` on `amd64`/`arm64`, `windows` on `amd64`/`arm64`. They live in
-`main.yml` rather than `ci.yml` because they are the slow, matrixed pair, and each matrix leg posts
-its own status check.
+`main.yml` rather than `ci.yml` because they are the slow jobs, and each matrix leg posts its own
+status check.
 
 What does **not** run on every PR: driver benchmarks. Those run before release.
 
 A distinction the matrix earns its keep by not blurring: cross-compilation proves the code
 **builds** for a target, never that it **behaves** there. Platform behavior needs a test that names
-the platform, which is why the e2e and integration jobs gain a `windows-latest` leg alongside the
-lockfile.
+the platform, which is why `integration (windows)` and `e2e (windows)` run the L3 and L4 suites on
+`windows-latest`. The distinction was not theoretical: `windows/amd64` cross-compiled green from
+the day the harness landed, while the SQLite store could not open a vault on Windows at all.
+
+Those two are **separate jobs, never matrix legs of the Linux ones**. Matrixing a job renames the
+check it posts, so `integration` and `e2e` — both required contexts — would stop posting under the
+names the ruleset waits for, and every merge to `main` would block on a check that never arrives.
+They also invoke `go test` directly instead of their `make` targets, because `make` is not on PATH
+on GitHub's Windows runners; the duplication is deliberate and is the only one in the workflows.
 
 ### Three layers: gates, `CLAUDE.md`, and skills
 
