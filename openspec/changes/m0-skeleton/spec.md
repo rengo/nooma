@@ -31,22 +31,30 @@ vault") remains true of both.
 - WHEN they compare them against the prose in §"Configuration"
 - THEN they find the same location for `nooma.yml`, with no third option
 
-### R1.2 — Vault resolution is stated in full, including the zero and multiple cases
+### R1.2 — Vault resolution is stated in full, including the upward search and the zero/multiple cases
 
 **MUST**: `docs/01-architecture.md` §"Vault resolution at startup" states four ordered steps and,
-for the globbing steps, what happens when the search finds zero candidates and when it finds more
-than one.
+for the globbing steps, what happens when the search finds zero usable candidates and when it
+finds more than one.
 
-**MUST**: step 3 is the current working directory — the cwd being a vault, or containing exactly
-one — and no longer "vault next to the executable". See R6.6 for why.
+**MUST**: step 3 is described as an upward search — starting at the current working directory and
+walking up one directory at a time to the filesystem root, testing whether each directory visited
+is itself a vault or contains exactly one usable `*.nooma` directory — not a single check of the
+cwd and its immediate children, and no longer "vault next to the executable". See R6.1, R6.2 and
+R6.6 for why and how.
 
-**MUST**: step 4 names a `*.nooma` directory inside `~/.nooma/`, not `~/.nooma/` itself.
+**MUST**: the document states there is no `$HOME` ceiling on the ascent — it runs to the
+filesystem root, matching the git precedent it is modeled on.
+
+**MUST**: step 4 names a `*.nooma` directory inside `~/.nooma/`, not `~/.nooma/` itself, and the
+document notes that the literal name `.nooma` is never itself treated as a step-3 candidate
+(R6.7).
 
 **MUST**: the document states that an explicit vault argument may be relative (R6.4).
 
-**Verified by**: reading the document; the four steps, the two cwd sub-steps and the three
-candidate-count outcomes are all present, and the phrase "next to the executable" no longer
-appears.
+**Verified by**: reading the document; the four steps, the upward-search description, the
+no-ceiling statement, the `.nooma`-name exclusion, and the three candidate-count outcomes are all
+present, and the phrase "next to the executable" no longer appears.
 
 ### R1.3 — The `server:` block documents `bind` and `auth_token_env`
 
@@ -74,37 +82,54 @@ between code and doc be fixed in the same PR — including when the fix is to da
 
 ## 2. CI triggers
 
-### R2.1 — L4 and the cross-compile matrix run on every pull request, across six targets
+### R2.1 — L4 and the cross-compile matrix run on every pull request, across seven targets
 
 **MUST**: the e2e job and the cross-compilation matrix job run on `pull_request`, not only on
 `push` to `main`.
 
-**MUST**: the cross-compilation matrix builds six targets — `linux`, `darwin`, `windows` ×
-`amd64`, `arm64` — per the new ADR (ADR-0013, superseding ADR-0001's acceptance criterion 5;
-`docs/adr/0001-sqlite-driver.md` is `Accepted` and is not edited).
+**MUST**: the cross-compilation matrix builds seven targets — the cartesian six, `linux`,
+`darwin`, `windows` × `amd64`, `arm64`, plus `linux/arm` — per the new ADR (ADR-0013, superseding
+ADR-0001's acceptance criterion 5; `docs/adr/0001-sqlite-driver.md` is `Accepted` and is not
+edited). See design.md D13 for why `linux/arm` is retained rather than the cartesian six alone.
 
 **Verified by**: `.github/workflows/*.yml` declare a `pull_request` trigger for both jobs and a
-six-entry matrix for cross-compile; a PR in this chain shows both as checks.
+seven-entry matrix for cross-compile; a PR in this chain shows both as checks.
 
 **Scenario**:
 - GIVEN a PR that breaks the build for `windows/arm64` only
 - WHEN CI runs on that PR
 - THEN the cross-compile job fails on that PR, before the merge, not after
 
-### R2.2 — Both jobs block the merge
+### R2.2 — Every matrix leg blocks the merge, not just "the two jobs"
 
-**MUST**: the repository ruleset's `required_status_checks` includes the two job contexts, with
-names matching the workflows exactly.
+**MUST**: the repository ruleset's `required_status_checks` includes **every context each
+matrix-generated leg posts**, not one context per job. `main.yml`'s cross-compile job templates
+its check name per matrix leg (`name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}`), so
+it posts one context per leg — **7**, matching R2.1's seven-target matrix — and the e2e job's
+`windows-latest` addition (D6) means it posts one context per OS leg — **2**. After this change
+that is **9** distinct required contexts from these two jobs, not 2.
 
-**Verified by**: reading the applied ruleset; the context strings match the `name:` values in the
-workflow files.
+**MUST NOT**: the ruleset register only two job-level names (e.g. `cross-compile` and `e2e`) when
+the workflows post per-leg names instead — a required context that never posts is never satisfied,
+which does not degrade the gate, it **permanently blocks every future merge to `main`** with no
+recovery short of editing the ruleset itself. Getting this count wrong is not a soft failure.
+
+**MUST**: alternatively, a matrix-aware mechanism may be used instead of enumerating per-leg
+context strings — for example, a single synthetic "all matrix legs succeeded" job that the other
+legs report into, registered as the one required context — provided it is verified to actually
+block on every leg's failure, not only the first to report.
+
+**Verified by**: reading the applied ruleset; either the 9 leg-specific context strings are present
+and each matches a `name:` value the workflow actually produces for that leg, or a matrix-aware
+synthetic gate is present and its dependency on every leg is verified by inspecting the workflow.
 
 **Note**: this is the only requirement in this spec that cannot be verified by a local command —
-it lives in GitHub configuration, like the existing seven contexts.
+it lives in GitHub configuration, like the existing seven contexts (unrelated to this change,
+predating it).
 
 ### R2.3 — `make cross-compile` joins `check-all`
 
-**MUST**: the Makefile gains a `cross-compile` target that builds the same six `GOOS`/`GOARCH`
+**MUST**: the Makefile gains a `cross-compile` target that builds the same seven `GOOS`/`GOARCH`
 pairs as R2.1's CI matrix, and `make check-all` includes it.
 
 **MUST NOT**: `check-all`'s own documentation (`CLAUDE.md`'s Workflow section, the `Makefile`
@@ -312,23 +337,32 @@ reports one problem per run makes the user iterate.
 
 ## 6. Vault resolution
 
-### R6.1 — Four ordered steps
+### R6.1 — Four ordered steps, the third an upward search to the filesystem root
 
 **MUST**: resolution tries, in order:
 
 1. an explicit path argument
 2. `$NOOMA_VAULT`
-3. the current working directory, in two sub-steps tried in this order:
-   - **3a** — the cwd *is* a vault (it satisfies R6.5's predicate)
-   - **3b** — the cwd *contains* exactly one `*.nooma` directory
+3. an upward search, starting at the current working directory and walking up one directory at a
+   time to the filesystem root. At each directory visited, in this order:
+   - **3a** — that directory *is* a vault (it satisfies R6.5's predicate)
+   - **3b** — that directory *contains* exactly one usable `*.nooma` directory (R6.2)
+
+   The first hit, at any level, wins — the nearest vault to the cwd wins. There is no `$HOME`
+   ceiling or other stopping point short of the filesystem root: any ceiling is a rule the user
+   would have to memorise, and the model this step follows (git's upward search from the cwd) has
+   none either.
 4. exactly one `*.nooma` directory inside `~/.nooma/`
 
-The first step that yields a vault wins, and 3a wins over 3b: if the cwd is itself a vault,
-resolution does not look inside it for another one.
+The first step that yields a vault wins. Within step 3, 3a wins over 3b at the same level: if a
+directory being visited is itself a vault, resolution does not also look inside it for another
+one. Because the ascent visits the cwd first and moves outward, the nearest vault — including the
+cwd itself — always wins over one further up the tree.
 
-**Verified by**: L1 tests driving each step in isolation with the earlier steps unavailable, plus
-precedence tests where two consecutive steps could both succeed, including a cwd that is a vault
-*and* contains a `*.nooma` directory.
+**Verified by**: L1 tests driving each step in isolation with the earlier steps unavailable;
+precedence tests where two consecutive steps, or two levels of the ascent, could both succeed,
+including a cwd that is a vault *and* contains a `*.nooma` directory, and a cwd several levels
+below a vault with no `*.nooma` directory at any intermediate level.
 
 **Scenario**:
 - GIVEN `$NOOMA_VAULT` set to a valid vault AND a `*.nooma` directory in the cwd
@@ -340,20 +374,47 @@ precedence tests where two consecutive steps could both succeed, including a cwd
 - WHEN `nooma status` runs with no argument and no `$NOOMA_VAULT`
 - THEN that directory is the vault, by step 3a
 
-### R6.2 — Steps 3b and 4: exactly one candidate, or an error
+**Scenario**:
+- GIVEN `pablo.nooma/attachments/` as the current working directory, inside a vault rooted at
+  `pablo.nooma/`
+- WHEN `nooma status` runs with no argument and no `$NOOMA_VAULT`
+- THEN `attachments/` fails both 3a and 3b (it is not a vault and contains no `*.nooma`
+  directory), the ascent moves up to `pablo.nooma/`, which passes 3a, and that is the vault — the
+  binary does not fall through to step 4 and silently open a different vault under `~/.nooma/`
 
-**MUST**: when a search directory contains exactly one `*.nooma` directory, it is the vault.
+### R6.2 — Exactly one usable candidate, or an error — evaluated at every level
 
-**MUST**: when it contains none, resolution fails with an error naming the directory searched and
-pointing at `nooma init`.
+**MUST**: "the search directory" means step 4's `~/.nooma/`, or — during step 3's ascent (R6.1) —
+whichever single directory is currently being visited. Only a `*.nooma` directory that also
+satisfies R6.5's predicate counts as a *usable* candidate; R6.7 states the one name this excludes
+outright regardless of the predicate.
 
-**MUST**: when it contains two or more, resolution fails with an error listing every candidate by
-name and showing the command form that disambiguates.
+**MUST**: when a search directory contains exactly one usable candidate, it is the vault.
 
-**MUST NOT**: resolution select a candidate when more than one exists, by any ordering.
+**MUST**: when a search directory contains two or more usable candidates, resolution fails
+immediately with an error listing every one of them by name and showing the command form that
+disambiguates. The ascent does not continue past this level looking for a cleaner level higher up.
 
-**Verified by**: L1 table tests for zero, one, two and three candidates, asserting on the error
-text for the zero and multiple cases; plus an L4 test running the binary in a directory with two
+**MUST**: when a search directory contains **zero** `*.nooma`-named entries at all, step 3's
+ascent continues to the parent directory; step 4, having no parent to ascend to, fails with an
+error naming the directory searched and pointing at `nooma init`.
+
+**MUST**: when a search directory contains one or more `*.nooma`-named entries and **none of them
+is usable** (each fails R6.5's predicate), resolution fails immediately at that level, with an
+error naming every such entry and stating what each is missing. It MUST NOT silently treat this
+level as if it had zero candidates and continue the ascent, and it MUST NOT silently pick one of
+the unusable entries. A broken candidate sitting between the cwd and a real vault further up the
+tree must be surfaced, not stepped over.
+
+**MUST NOT**: resolution select a candidate when more than one usable candidate exists, at any
+level, by any ordering.
+
+**Verified by**: L1 table tests for zero, one, two and three usable candidates at a single level,
+asserting on the error text for the zero-at-step-4 and multiple-candidate cases; an L1 test for a
+level containing one `*.nooma` entry that fails the predicate and no other entries, asserting
+resolution fails naming it and what is missing rather than ascending past it; an L1 test for a cwd
+several levels below a real vault with every intermediate level empty of `*.nooma` entries,
+asserting the ascent reaches the vault; plus an L4 test running the binary in a directory with two
 vaults.
 
 **Scenario**:
@@ -362,9 +423,19 @@ vaults.
 - THEN it exits non-zero, lists both candidates, and shows how to pass one explicitly
 - AND neither vault's database is opened
 
+**Scenario**:
+- GIVEN a cwd containing `broken.nooma/` (a directory matching `*.nooma` with no `nooma.yml`
+  inside it) and nothing else matching `*.nooma`
+- WHEN resolution runs with no argument and no `$NOOMA_VAULT`
+- THEN it fails at that level, naming `broken.nooma` and stating that `nooma.yml` is missing
+- AND it does not silently ascend past `broken.nooma` in search of a vault higher up
+
 **Rationale**: the obvious implementation picks the alphabetically first match and reports
 nothing. Opening the wrong brain is the worst failure this component can produce, and it would be
-silent.
+silent. Silently skipping a broken candidate and continuing the search is the same failure by a
+different door: it would let the ascent step over an obviously-intended vault (a typo'd
+`nooma.yml`, or a directory mid-`init`) and resolve instead against an unrelated vault further up
+the tree, without ever telling the user their intended vault has a problem.
 
 ### R6.3 — Only a directory counts as a candidate
 
@@ -403,16 +474,22 @@ design and tested. A directory that satisfies it partially (for example, `nooma.
 
 **Verified by**: L1 tests over the partial-vault cases.
 
-**Note**: this predicate does double duty — it is what step 3a tests to decide whether the cwd is
-itself a vault.
+**Note**: this predicate does double duty — it is what step 3a tests to decide whether a directory
+visited during the ascent is itself a vault.
+
+**Note**: the partial-vault diagnostic probes the *default* database location (`./nooma.db`) only
+— see design.md D8. A vault whose `database.path` is customised does not receive this specific
+diagnostic; it is reported simply as not-a-vault (missing `nooma.yml`).
 
 ### R6.6 — Resolution never consults the executable's directory
 
 **MUST NOT**: resolution look for a vault beside the `nooma` binary, at any step.
 
 **Verified by**: an L1 test asserting that a `*.nooma` directory placed beside the test binary is
-not resolved when steps 1, 2, 3 and 4 all fail; plus the absence of any `os.Executable` call in
-`internal/config`.
+not resolved when steps 1, 2, 3 and 4 all fail; plus a `forbidigo` rule in `.golangci.yml` (D16)
+that fails `make check`/CI lint if `os.Executable` appears anywhere under `internal/config/`,
+scoped additively alongside the existing `internal/core/` rule — a lint gate replacing the earlier,
+unverifiable "absence of any call" prose.
 
 **Rationale**: `docs/01-architecture.md`'s original step 3 was "vault next to the executable
 (portable mode)". It is removed, and R1.2's doc correction removes it from the document, for three
@@ -429,9 +506,41 @@ reasons:
    *resolved* path, so with `~/.local/bin/nooma -> /opt/nooma/nooma` the search directory is
    `/opt/nooma/` — a path the user never typed and has no reason to suspect.
 
+R6.1 implements reason 1 literally, not just by analogy: step 3 is git's own upward-search model —
+the cwd first, then each parent in turn, all the way to the filesystem root, with no `$HOME`
+ceiling — not a single check of the cwd and its immediate children.
+
 Portable mode loses nothing: on removable media the invocation is `cd /media/usb && ./nooma serve`,
-so step 3b already finds the vault beside the binary because it is also beside the cwd. A Windows
-double-click sets the working directory to the executable's folder, so that case is covered too.
+so step 3b already finds the vault beside the binary because it is also beside the cwd, at the
+very first level the ascent tests. A Windows double-click sets the working directory to the
+executable's folder, so that case is covered too.
+
+### R6.7 — The literal name `.nooma` is never a step-3 candidate
+
+**MUST**: during step 3's ascent, a directory entry whose full name is exactly `.nooma` (the
+glob's `*` wildcard matching an empty sequence) MUST NOT be treated as a `*.nooma` candidate,
+usable or not, at any level. It is excluded from the candidate set entirely, not merely filtered
+out as unusable.
+
+**MUST**: this exclusion applies only to the literal name `.nooma`. A name such as `pablo.nooma`
+is unaffected and is evaluated normally.
+
+**Verified by**: an L1 test with a directory named exactly `.nooma` present at a level the ascent
+passes through (for example, at `$HOME`, on the way from a cwd several levels below it up toward
+the filesystem root), asserting that level is treated as if it had zero `*.nooma` candidates — the
+ascent continues past it rather than stopping with an error about it — and that resolution
+proceeds to step 4 normally if the ascent reaches the root with nothing found.
+
+**Rationale**: Go's glob for `*.nooma` matches `.nooma` itself, because `*` matches the empty
+string. `~/.nooma/` is the container step 4 opens, not a vault — it holds vaults, it is not one,
+and it has no `nooma.yml` of its own. Without this exclusion, R6.2's "an unusable candidate must be
+surfaced, not skipped" rule would fire the moment the ascent reached `$HOME`: `.nooma` would match
+the glob, fail R6.5's predicate (no `nooma.yml` at its own root), and the ascent would stop with an
+error calling `~/.nooma` a broken vault — wrong on its own terms (it is not a vault, broken or
+otherwise), and worse, it would pre-empt step 4 from ever running, since step 3 would already have
+failed by the time step 4 would otherwise begin. Excluding the literal name outright avoids both:
+the ascent passes over it exactly as if it were not there, and step 4 remains the only step that
+opens `~/.nooma/`.
 
 ---
 
@@ -491,6 +600,51 @@ message states exactly what exists and what does not.
 **Verified by**: an L3 or L4 test injecting a failure after the directory is created but before
 migrations complete, asserting the resulting state matches one of the two allowed outcomes.
 
+### R7.5 — `init` refuses when the target exists as a non-directory
+
+**MUST**: if the target path exists and is a plain file, `init` fails without deleting or
+truncating it, naming the existing file.
+
+**MUST**: if the target path exists and is a symlink — to a file, to a directory, or dangling —
+`init` fails without deleting, following, or writing through it, naming the symlink.
+
+**MUST NOT**: `os.ReadDir` or `os.Remove` be called against the target before its type is
+confirmed to be a plain directory.
+
+**Verified by**: an L3 or L4 test creating a plain file at the target path, then running `init`
+against it, asserting the file is unmodified (same content, same modification time) and `init`
+exits non-zero naming it; and the same for a symlink pointing at an empty directory, asserting the
+real directory the symlink points to still exists afterward, unmodified, and the symlink itself is
+untouched.
+
+**Scenario**:
+- GIVEN `touch pablo.nooma` (a plain file, not a directory)
+- WHEN `nooma init pablo.nooma` runs
+- THEN it exits non-zero, the file `pablo.nooma` still exists with its original content, and no
+  vault is created
+
+**Rationale**: non-negotiable #6 ("nothing is deleted in the vault") applies one level up here, at
+the vault's own root path. `os.ReadDir` on a plain file returns an error, not an error-free empty
+listing — an emptiness check written as `len(entries) == 0` without also requiring `err == nil`
+misclassifies a stray file as "empty", and `os.Remove` would then delete it. A symlink to an empty
+directory has the same defect from the opposite direction: `os.Stat`-style emptiness checks follow
+the link and report the real directory as empty, while `os.Remove` unlinks only the symlink,
+orphaning the directory it pointed to.
+
+### R7.6 — The temporary build directory's name is collision-resistant
+
+**MUST**: the temporary directory `init` builds the vault into (D12) has a name built from the
+process PID **and** a random component — a PID alone is not sufficient, because two `init`
+invocations racing under a recycled or shared PID must not build into the same temporary
+directory.
+
+**Verified by**: reading the temporary-directory name construction; an L1 test asserting two calls
+to the name-generation function within the same process produce distinct names.
+
+**Rationale**: PID reuse is real over a long-running host, and a PID-only suffix would let two
+concurrent `init` invocations collide and corrupt each other's partial vault before either reaches
+the rename step.
+
 ---
 
 ## 8. The single-writer lock
@@ -549,31 +703,49 @@ process and would make a crash a manual-intervention event.
 
 **MUST NOT**: either command acquire the write lock, block on it, or fail because of it.
 
+**MUST**: the PID and its terminator are written to the lock file's PID region in a single write
+operation. There is no separate zeroing or truncation pass that a concurrent, lock-free
+`ReadHolder` could observe mid-sequence and report as "no holder" while the lock is genuinely
+held.
+
 **Verified by**: an L4 test running `status` and `doctor` while `serve` holds the lock, asserting
-exit status zero and that the reported holder matches the running PID.
+exit status zero and that the reported holder matches the running PID; plus an L3 test that calls
+`ReadHolder` repeatedly and concurrently with `Acquire`, asserting every observed result is either
+the previous holder's PID or the new holder's PID, and never an intermediate or empty read — a
+regression guard against a future two-write implementation.
 
 **Scenario**:
 - GIVEN `nooma serve` running and holding the lock
 - WHEN the user runs `nooma status`
 - THEN it succeeds and reports the vault as in use by that PID
 
-### R8.5 — The lock lives in `internal/store` and widens its surface deliberately
+### R8.5 — The lock lives in `internal/store` and widens its surface deliberately, after a prerequisite golden fix lands first
 
 **MUST**: the lock is implemented under `internal/store/**` (per `docs/06-harness.md` §1's
 layout, which places the lockfile there) and `testdata/schema/store_api.golden` is regenerated in
 the same PR.
 
-**MUST**: the golden-generation code that produces `store_api.golden` renders exported `var` and
-`const` declarations, not only `func`, method and `type` declarations, before that regeneration
-happens. This closes a blind spot found during review:
-`test/conformance/store_api_test.go:158-160` currently drops every non-`TYPE` `GenDecl`, so an
-exported sentinel error such as `ErrVaultInUse` — a `var` — would widen the store surface
+**MUST**: before that PR, a separate, preceding PR extends the golden-generation code that
+produces `store_api.golden` to render exported `var` and `const` declarations, not only `func`,
+method and `type` declarations, and regenerates the golden. This closes a blind spot found during
+review: `test/conformance/store_api_test.go:158-160` currently drops every non-`TYPE` `GenDecl`,
+so an exported sentinel error such as `ErrVaultInUse` — a `var` — would widen the store surface
 invisibly to the golden.
+
+**MUST**: that preceding PR's regenerated golden diff contains exactly one new thing —
+`ErrRelativeDBPath` (`internal/store/sqlite/dsn.go:15`), an exported `var` that already exists
+today and was already invisible to the golden for the same reason. It is reviewed there as the
+pre-existing symbol it is, precisely because widening the renderer surfaces every previously-blind
+`var`/`const` at once, not only the one the lock is adding.
 
 **MUST NOT**: the lock's exported surface provide any way to read or write a domain row.
 
-**Verified by**: `TestHarness_StoreAPIUnchanged` passing against a regenerated golden whose diff
-contains only the lock's declarations, including `ErrVaultInUse`, reviewed as part of that PR.
+**Verified by**: `TestHarness_StoreAPIUnchanged` passing, in two stages that must be read together
+rather than as one claim: the preceding PR's regenerated golden diff contains only
+`ErrRelativeDBPath` appearing; this PR's regenerated golden diff, applied on top of that
+already-merged PR, then contains only the lock's own declarations, including `ErrVaultInUse`. A
+single regeneration performed before the renderer-widening PR merges would show both symbols at
+once and cannot satisfy this requirement — the ordering is load-bearing, not incidental.
 
 ---
 
@@ -588,6 +760,20 @@ the loader uses (R3.2).
 **MUST**: the test fails when a key is documented but has no field, and when a field exists but is
 undocumented.
 
+**MUST**: for a map-typed configuration field (`Config.Providers`, `Config.Tasks` — `map[string]X`
+where the keys are user-chosen names, not schema), the schema side recurses into the map's *value*
+type (`Provider`, `TaskBinding`) to obtain its field names, and never treats the map's own keys as
+schema.
+
+**MUST**: for that same map-typed field, the document side **unions** the field names observed
+across every entry present in that map section of the document before comparing against the value
+type's schema. Completeness ("every field the struct has appears in the document") is evaluated
+against this union, and MUST NOT be required of any single entry — doc 01's actual `providers:`
+block has four entries using disjoint field subsets (`claude_cloud`/`claude_haiku`: `type`,
+`api_key_env`, `model`; `local_llama`: `type`, `endpoint`, `model`; `whisper_local`: `type`,
+`binary_path`, `model_path`), and no single entry contains every `Provider` field by design — a
+per-entry completeness check could never pass on this document, or any realistic one.
+
 **MUST NOT**: the gate validate values — it decodes the document and compares key schemas only,
 never checking a value's business meaning (for example, that a task's `provider` name exists in
 the declared `providers:` map). `docs/01-architecture.md`'s tasks block contains the literal
@@ -596,12 +782,21 @@ under the loader's `Strict()` rules — it would fail any validator checking tha
 it is exactly what a documentation placeholder should look like.
 
 **Verified by**: the test observed failing in both directions before it passes — once by removing
-a key from the doc, once by adding a field to the struct.
+a key from the doc, once by adding a field to the struct; plus a dedicated test case built from
+doc 01's actual heterogeneous `providers:` block, asserting the gate passes even though no single
+entry uses every `Provider` field, because the union across all four entries does.
 
 **Scenario**:
 - GIVEN a developer adds `server.read_timeout` to the config struct
 - WHEN CI runs
 - THEN the gate fails, naming the undocumented field
+
+**Scenario**:
+- GIVEN doc 01's `providers:` block, where `claude_cloud` uses `type`/`api_key_env`/`model` and
+  `local_llama` uses `type`/`endpoint`/`model` — neither entry alone covers every `Provider` field
+- WHEN the gate runs
+- THEN it passes, because the union of fields observed across all `providers:` entries covers
+  every `Provider` field, and no entry is checked for completeness on its own
 
 ### R9.2 — The extraction is strict about which block it reads
 

@@ -51,9 +51,10 @@ The change is done when:
 - [ ] `docs/01-architecture.md` no longer contradicts itself on where `nooma.yml` lives or how a
       vault is discovered.
 - [ ] `make check-all` green; L4 covers all five commands; the cross-compile matrix builds
-      linux/darwin/windows on amd64 and arm64 — 6 targets, up from today's 4 (`darwin/amd64` and
-      `windows/arm64` are new), authorized by a new ADR superseding ADR-0001's acceptance
-      criterion 5; `make cross-compile` covers the same six targets and is part of `check-all`.
+      linux/darwin/windows on amd64 and arm64 plus `linux/arm` — **7 targets**, up from today's 4
+      (`darwin/amd64`, `windows/arm64` and `linux/arm` are new), authorized by a new ADR
+      superseding ADR-0001's acceptance criterion 5; `make cross-compile` covers the same seven
+      targets and is part of `check-all`.
 - [ ] **Demo**: `nooma init && nooma serve`, walked end to end.
 
 ---
@@ -140,16 +141,22 @@ belong in the same PR. All five are settled, and the reasoning is recorded outsi
    documented anywhere in the schema. An `Accepted` ADR is never edited, so the config block is
    what gets corrected — and the config↔doc gate of §4.4 would have failed on its first run
    without it, which is that gate earning its place before it is even written.
-5. **Step 3 becomes the working directory, not the executable's directory.** The doc says "vault
-   next to the executable (portable mode)". Nothing else in the tree resolves *data* relative to
-   `argv[0]`, and no conventional CLI does either — git searches upward from the cwd, `kubectl`
-   and `docker` read `$HOME` or take a flag. Worse, it is a silent-wrong-vault generator: a stray
-   `test.nooma` in `/usr/local/bin/`, or a contributor's throwaway vault sitting beside the
-   `go build` output in the repository root, becomes the default. And it does not mean what the
-   user thinks — `os.Executable` returns the *resolved* path, so a symlinked install searches the
-   real binary's directory, which the user never typed. Portable mode loses nothing: on removable
-   media the invocation is `cd /media/usb && ./nooma serve`, so the cwd already contains the
-   vault. Spec R6.6 carries the full argument.
+5. **Step 3 becomes an upward search from the working directory, not the executable's
+   directory.** The doc said "vault next to the executable (portable mode)". Nothing else in the
+   tree resolves *data* relative to `argv[0]`, and no conventional CLI does either — git searches
+   upward from the cwd, testing each ancestor directory in turn until it finds `.git` or reaches
+   the filesystem root; `kubectl` and `docker` read `$HOME` or take a flag. Step 3 now does exactly
+   what git does: starting at the cwd, each directory visited is tested — is it itself a vault, or
+   does it contain exactly one usable `*.nooma` directory — before moving to its parent, all the
+   way to the filesystem root. There is no `$HOME` ceiling: any ceiling is one more rule the user
+   has to memorise, and git's own model has none either. Executable-relative discovery, besides not
+   doing any of this, is a silent-wrong-vault generator: a stray `test.nooma` in
+   `/usr/local/bin/`, or a contributor's throwaway vault sitting beside the `go build` output in
+   the repository root, becomes the default. And it does not mean what the user thinks —
+   `os.Executable` returns the *resolved* path, so a symlinked install searches the real binary's
+   directory, which the user never typed. Portable mode loses nothing: on removable media the
+   invocation is `cd /media/usb && ./nooma serve`, so the cwd already contains the vault, found at
+   the very first level the ascent tests. Spec R6.1, R6.2 and R6.6 carry the full argument.
 
 Points 3 and 5 are worth their weight, and they are the same point twice. The obvious
 implementation of discovery — `filepath.Glob` then `[0]` — picks the alphabetically first match
@@ -252,21 +259,26 @@ is 400 changed lines.
 | # | PR | Content | Est. lines |
 |---|---|---|---|
 | 1 | `docs/m0-vault-layout` | The five doc-01 corrections | ~140 |
-| 2 | `ci/e2e-and-cross-compile-on-pr` | Move both jobs onto `pull_request`; new ADR-0013 (superseding ADR-0001's acceptance criterion 5) expanding the cross-compile matrix from today's 4 targets to 6 (`darwin/amd64`, `windows/arm64` added); `make cross-compile` added to `check-all`; `main.yml`'s and `ci.yml`'s header comments corrected | ~150 |
+| 2 | `ci/e2e-and-cross-compile-on-pr` | Move both jobs onto `pull_request`; new ADR-0013 (superseding ADR-0001's acceptance criterion 5) expanding the cross-compile matrix from today's 4 targets to **7** (`darwin/amd64`, `windows/arm64` and `linux/arm` added); `make cross-compile` added to `check-all`; `main.yml`'s and `ci.yml`'s header comments corrected | ~160 |
 | 3 | `feat/config-schema` | The full `nooma.yml` as Go types, strict decode, `.env` (including duplicate-key and bare-`#` rejection), validation, L1 | ~400 |
-| 4 | `test/config-doc-gate` | A new section-scoped, exactly-one-or-error `yaml` extractor (modeled on `goldenset.ExtractJSONFence`, not a reuse of `schema/markdown.go`'s SQL collector) plus reflection-based key-schema comparison; the doc-01 config block as a fixture | ~250 |
-| 5 | `feat/vault-resolution` | Four-step resolution, exactly-one-or-error, L1 | ~300 |
-| 6 | `feat/vault-lock` | `nooma.lock` (acquire-before-write ordering, D4), L3 under real contention on `ubuntu-latest` **and** `windows-latest`, `ErrVaultInUse` sentinel, store-API golden extended to render exported `var`/`const` and regenerated | ~390 |
-| 7 | `feat/cli-init` | Dispatch table, `init` interactive and not (shared input struct, D15), corrected temp-dir-then-rename mechanism (D12), L4 | ~400 |
-| 8 | `feat/cli-status-doctor` | Both read-only commands, `(*Vault).IntegrityCheck`, L4 | ~400 |
-| 9 | `feat/cli-serve` | httpapi hello, `/ui` placeholder, ADR-0007 refusal, L4 | ~400 |
+| 4 | `test/config-doc-gate` | A new section-scoped, exactly-one-or-error `yaml` extractor (modeled on `goldenset.ExtractJSONFence`, not a reuse of `schema/markdown.go`'s SQL collector) plus reflection-based key-schema comparison, including the map-typed `providers`/`tasks` union rule; the doc-01 config block as a fixture | ~260 |
+| 5 | `feat/vault-resolution` | Upward-search resolution (cwd to filesystem root), exactly-one-usable-candidate-or-error at every level, the `.nooma`-name exclusion, L1; `.golangci.yml` gains a `forbidigo` rule banning `os.Executable` in `internal/config` (D16) | ~330 |
+| 6 | `fix/store-golden-var-const` | Extends `renderExportedDecl` to render exported `var`/`const` declarations (D14) and regenerates `testdata/schema/store_api.golden`; the diff surfaces exactly one thing — the pre-existing `ErrRelativeDBPath` (`internal/store/sqlite/dsn.go:15`), reviewed as pre-existing, not new | ~70 |
+| 7 | `feat/vault-lock` | `nooma.lock` (acquire-before-write ordering, D4, single `WriteAt` for the PID region), L3 under real contention on `ubuntu-latest` **and** `windows-latest` — both jobs gain their Windows leg here (D6), with an explicit `make` install step on each (D17) — `ErrVaultInUse` sentinel, store-API golden regenerated (renderer already widened by PR 6, so this diff shows only `ErrVaultInUse`) | ~360 |
+| 8 | `feat/cli-init` | Dispatch table, `init` interactive and not (shared input struct, D15), corrected temp-dir-then-rename mechanism with the `Lstat` guard for file/symlink targets and a collision-resistant temp-dir suffix (D12), L4 | ~410 |
+| 9 | `feat/cli-status-doctor` | Both read-only commands, `(*Vault).IntegrityCheck`, L4 | ~400 |
+| 10 | `feat/cli-serve` | httpapi hello, `/ui` placeholder, ADR-0007 refusal, L4 | ~400 |
 
-Dependencies: `1 → 3`, `2 → 6`, `3 → 4`, `3 → 5`, `5 → 7`, `(5,6) → 8`, `(5,6) → 9`. PRs 1 and
-2 are independent of each other and of everything else, so they go first.
+Dependencies: `1 → 3`, `3 → 4`, `3 → 5`, `5 → 8`, `2 → 7`, `6 → 7`, `(5,7) → 9`, `(5,7) → 10`.
+PR 2 also precedes every PR that adds a new L4 test — `2 → 8`, `2 → 9`, `2 → 10` — because §4.2
+argues PR 2 exists precisely so every new L4 test blocks the merge before it lands; stacking
+already merges PR 2 first in practice, which is why these three edges were previously left off the
+graph, but they are real dependencies and are stated here rather than left implicit. PRs 1 and 2
+are independent of each other and of everything else, so they go first.
 
 **On these estimates.** Step 4's retrospective measured implementation estimates 2–4x low, and
 review remediation roughly doubling that again. The numbers above are per-PR ceilings chosen to
-respect the 400-line rule, not predictions — expect PRs 3, 7, 8 and 9 to split. The split
+respect the 400-line rule, not predictions — expect PRs 3, 8, 9 and 10 to split. The split
 decision is made *before* `sdd-apply` runs on each one, per the policy adopted last change,
 never discovered afterwards.
 
@@ -293,7 +305,8 @@ a property somebody will weaken later:
 
 - `make check-all` green on every PR in the chain.
 - `make test-e2e` covers all five commands.
-- The cross-compile matrix builds `linux`, `darwin`, `windows` on `amd64` and `arm64`.
+- The cross-compile matrix builds seven targets: `linux`, `darwin`, `windows` on `amd64` and
+  `arm64` (the cartesian six), plus `linux/arm`.
 - The lock verified with a real second process, not a mock.
 - The demo run by hand: `nooma init && nooma serve`, then `nooma status` and `nooma doctor`
   against the running instance, then a second `serve` to watch it refuse.
@@ -304,7 +317,7 @@ a property somebody will weaken later:
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | Estimates 2–4x low, doubled again by review remediation | Per-PR split decided before apply; the chain above is already nine PRs, not five |
+| R1 | Estimates 2–4x low, doubled again by review remediation | Per-PR split decided before apply; the chain above is already ten PRs, not five |
 | R2 | Cross-compilation proves the lockfile *builds* on Windows, not that it *works* | **Decided** (design.md D6): the e2e (L4) job runs a `windows-latest` leg, and the L3 `integration` job — where the lock's actual contention (R8.2) and crash-recovery (R8.3) tests live — gains one too, so `LockFileEx` is genuinely exercised, not only cross-compiled |
 | R3 | The config schema decodes blocks (`providers`, `tasks`) whose semantics arrive in M1, so a shape chosen now may not survive contact | Decode and shape-check only, never interpret; the config↔doc gate makes a later change visible in one diff |
 | R4 | `init`'s interactive path is the one L4 cannot drive, so it is the one that rots | The non-interactive path is the primary contract; the wizard is a thin prompt layer over it, and that layering is a design requirement |

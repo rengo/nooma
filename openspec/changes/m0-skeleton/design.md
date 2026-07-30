@@ -27,8 +27,11 @@ was verified locally against the module cache or by running code — not asserte
 | The store-API golden walks `internal/store/**` recursively | `test/conformance/store_api_test.go:107` (the recursive `filepath.WalkDir` call; line 47, cited by an earlier draft of this design, is only where `storeDir` is computed) |
 | L4 and cross-compile run only on `push: main` today | `.github/workflows/main.yml:15-17`, and `ci.yml:120-124`'s own comment |
 | `os.Rename` fails onto an existing directory whether it is empty or non-empty | probe run locally on ext4: both cases return `file exists`; only a non-existent target succeeds. Go's `os.Rename` does an `Lstat` and returns `EEXIST` without calling `rename(2)`, even though POSIX `rename(2)` itself permits replacing an empty directory (`$(go env GOROOT)/src/os/file_unix.go`) |
-| The cross-compile matrix has 4 entries today, not 6 | `.github/workflows/main.yml` — exactly `linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64` |
-| ADR-0001 contradicts itself on the matrix size | `docs/adr/0001-sqlite-driver.md:47` lists 4 targets as acceptance criterion 5; line 106 of the same file reports "**PASS** — 6/6 targets" |
+| The cross-compile matrix has 4 entries today, not 7 (the new target count) | `.github/workflows/main.yml` — exactly `linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64` |
+| ADR-0001 contradicts itself on the matrix size, and its "PASS" line does not name the 6 | `docs/adr/0001-sqlite-driver.md:47` lists 4 targets as acceptance criterion 5; line 106 of the same file reports "**PASS** — 6/6 targets" without naming which six |
+| The spike branch's own results name six targets, and `windows/arm64` is not one of them | `git show spike/adr-0001-sqlite-driver:spike/RESULTS.md` — `linux/amd64 OK`, `linux/arm64 OK`, `linux/arm OK`, `darwin/amd64 OK`, `darwin/arm64 OK`, `windows/amd64 OK`; `windows/arm64` does not appear |
+| All seven candidate targets (the cartesian six plus `linux/arm`) build on this checkout | `GOOS=… GOARCH=… go build ./...` run locally for each of `linux/amd64`, `linux/arm64`, `linux/arm`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, `windows/arm64` — all seven succeed |
+| `docs/01-architecture.md`'s four `providers:` entries use disjoint field subsets; no entry uses every `Provider` field | reading the document: `claude_cloud`/`claude_haiku` use `type`, `api_key_env`, `model`; `local_llama` uses `type`, `endpoint`, `model`; `whisper_local` uses `type`, `binary_path`, `model_path` |
 | The store-API golden's decl walker drops every non-`TYPE` `GenDecl` | `test/conformance/store_api_test.go:158-160` — `case *ast.GenDecl: if d.Tok != token.TYPE { return nil }`; exported `var` and `const` are invisible to the golden |
 | Every job in `ci.yml` runs on `ubuntu-latest`, with no matrix | `.github/workflows/ci.yml` — `lint`, `test`, `build`, `integration`, `pending-red`, `coverage` are all `runs-on: ubuntu-latest` |
 | `(*Vault).Check` already exists and means something unrelated | `internal/store/sqlite/open.go:192` — an FTS5-registration probe, already in `testdata/schema/store_api.golden` |
@@ -154,10 +157,11 @@ range genuinely blocks other processes from reading those bytes. If the PID live
 byte is, `status` and `doctor` on Windows could not read the holder — and R8.4 requires exactly
 that. So:
 
-- the PID text is written as the first bytes of the file, bounded to the first 1024
+- the PID region is the first 1024 bytes of the file
 - the lock is taken on the single byte at **offset 1024**, beyond that region and legally beyond
   EOF on Windows
-- `ReadHolder` reads the first 1024 bytes and takes no lock at all
+- `ReadHolder` reads the first 1024 bytes, parses only up to the first NUL (or a fixed
+  terminator), and takes no lock at all
 
 **The order between the PID write and the lock acquisition is load-bearing, and it runs opposite
 to how it reads at first glance.** Neither `flock` nor `LockFileEx` protects the PID region: `flock`
@@ -172,20 +176,29 @@ So `Acquire` runs in this order:
 
 1. attempt `flock(fd, LOCK_EX|LOCK_NB)` / `LockFileEx(..., LOCKFILE_FAIL_IMMEDIATELY)` on the
    byte at offset 1024 **first**, before touching the PID region at all
-2. on success: zero/truncate the first 1024 bytes, then write the current PID — zeroing first so a
-   shorter PID (`"7"` after `"123456"`) can never leave stale trailing bytes from the previous
-   holder
+2. on success: build a fixed 1024-byte buffer holding the current PID's decimal digits followed by
+   a NUL terminator, and write the whole buffer in **one** `WriteAt(buf, 0)` call. There is no
+   separate zeroing or truncation pass: a shorter PID (`"7"` after `"123456"`) leaves stale
+   trailing bytes from the previous holder in the buffer past the terminator, and `ReadHolder`
+   simply never reads past the terminator, so those stale bytes are inert rather than needing to
+   be erased first. Collapsing this to one write closes a real gap the earlier two-step form had:
+   `ReadHolder` takes no lock and runs at any instant, so a reader landing *between* a zeroing pass
+   and the PID write would have observed a complete, self-consistent, wrong answer — "no holder" —
+   while the lock was genuinely held, breaking R8.4 in ordinary use, not a contrived race. With one
+   write, that intermediate state does not exist to be observed.
 3. on failure (lock already held): read the existing, untouched PID region and return it as the
    holder — nothing in the file is written, because nothing about the losing process is true yet
 
-The PID is truncated on release, after the lock is dropped. A stale PID with no lock held is not
-authoritative and is reported as such — the lock, not the file's existence, is the truth. The
+The PID region is cleared on release, after the lock is dropped. A stale PID with no lock held is
+not authoritative and is reported as such — the lock, not the file's existence, is the truth. The
 "acquire, then write" ordering is the whole reason a losing `Acquire` never corrupts the winner's
 PID.
 
-The PID write is a single small write (well under any platform's atomic-write guarantee for a
-short buffer), because `ReadHolder` takes no lock and could otherwise observe a torn write on a
-filesystem where a small write is not atomic — see risk #1.
+The whole PID-region write is a single `WriteAt` of a fixed-size buffer (well under any platform's
+atomic-write guarantee for a short buffer), because `ReadHolder` takes no lock and could otherwise
+observe a torn write on a filesystem where a small write is not atomic — see risk #1. An L3 test
+reads the PID region concurrently with `Acquire` specifically to catch a regression back to a
+two-write form (§8).
 
 ### D5 — `golang.org/x/sys` is promoted from indirect to direct
 
@@ -243,6 +256,13 @@ type environment struct {
 
 Production builds one from `os`; tests build one from a map and a temp dir. All of §6 becomes L1.
 
+**The upward search (R6.1) needs no new port member.** Walking from the cwd to the filesystem root
+is pure string manipulation over the value `getwd()` already returns: each step computes
+`filepath.Dir(dir)` and calls `readDir` on it, stopping when `filepath.Dir(dir) == dir` — the
+portable, string-only signal that the root has been reached on both Unix (`/`) and Windows
+(`C:\`). No new injected function is needed; the ascent is built entirely from `getwd` and
+`readDir`, called repeatedly.
+
 **There is deliberately no `executable` member.** `docs/01-architecture.md`'s original step 3 was
 "vault next to the executable"; R6.6 removes it and states the three reasons. The one that belongs
 here, because it is a fact about the standard library rather than about convention: `os.Executable`
@@ -251,15 +271,34 @@ would search `/opt/nooma/` — verified by probe, not assumed. A resolution step
 directory the user cannot predict from the command they typed is a step that will one day open the
 wrong brain. The cwd is predictable by construction: the user is standing in it.
 
-### D8 — "Is a vault" means "contains a readable `nooma.yml`"
+### D8 — "Is a vault" means "the directory contains a `nooma.yml` entry"; the partial-vault diagnostic probes only the default `./nooma.db`
 
 `nooma.db`'s location is configurable (`database.path`), so it cannot be the marker — a vault
 whose database sits in a subdirectory is still a vault. The config file is at a fixed path by the
 layout decision, which makes it the only stable marker.
 
+The predicate is existence, not readability: D7's injected `environment` exposes only `getwd`,
+`getenv`, `homeDir` and `readDir` — a directory listing, which can prove `nooma.yml` is present or
+absent but cannot exercise a permission-denied file at L1. Wording the predicate as "readable"
+would state a property nothing in this design tests. A `nooma.yml` that exists but cannot be
+opened surfaces instead as a config-load error (§3), which already has its own tests and error
+path, not as a resolution-time distinction.
+
 Consequence, and it is the desirable one: a directory with a `nooma.yml` and no database is a
 *vault with a problem*, which `doctor` reports precisely, rather than "not a vault", which sends
 the user hunting for the wrong thing.
+
+**The partial-vault diagnostic (R6.5) has a narrower scope than the predicate.** R6.5 requires a
+partial vault — its own example: `nooma.db` present, `nooma.yml` absent — to produce a specific
+error naming what is missing. Finding the configured database requires reading `database.path`
+from the very `nooma.yml` that is missing, which is circular, so the diagnostic probes exactly one
+secondary artifact instead: the *default* path, `./nooma.db`, relative to the directory being
+tested. If that default file is present alongside a missing `nooma.yml`, the error names `nooma.db`
+as found and `nooma.yml` as missing. A vault whose `database.path` was customised away from the
+default trades this specific diagnostic away — the directory is reported simply as not-a-vault
+(missing `nooma.yml`), with no comment on a database resolution has no way to find without the
+config it is missing. This is recorded as an acknowledged limitation, not fixed: an honest
+limitation beats a requirement that cannot be met without reading the file that does not exist.
 
 ### D9 — Loopback detection parses, and an unknown hostname is treated as exposed
 
@@ -297,9 +336,9 @@ the whole truth table is L1-testable.
 ### D12 — `init` writes into a temporary directory, then clears an empty target before renaming
 
 R7.3 (never overwrite) and R7.4 (no half-vault) are one problem. `init` creates
-`<target>.tmp-<n>`, builds the complete vault inside it — migrations included — and only then
-places it at the target. A failure at any point removes the temporary directory and leaves the
-filesystem as it was.
+`<target>.tmp-<pid>-<rand>`, builds the complete vault inside it — migrations included — and only
+then places it at the target. A failure at any point removes the temporary directory and leaves
+the filesystem as it was.
 
 **The original plan — "the rename is both the atomic step and the existence check" — is wrong,
 and it was wrong in the everyday case, not an edge case.** Verified locally on ext4: `os.Rename`
@@ -313,45 +352,93 @@ mechanism would have failed the primary happy-path test on day one.
 
 The corrected mechanism:
 
-1. build the complete vault in `<target>.tmp-<n>`, a sibling of the target (not in `$TMPDIR`, so
-   the eventual placement stays within one filesystem)
-2. if the target does not exist → `os.Rename(tmp, target)`
-3. if the target exists and is **empty** → `os.Remove(target)` (which succeeds only when the
-   directory is empty), then `os.Rename(tmp, target)`. The window between the two calls is safe,
-   not just small: if a concurrent `init` creates something at `target` in that window, the rename
-   fails rather than clobbering it — the race resolves to "lost the race", never to data loss
-4. if the target exists and is **non-empty** → refuse without touching it, satisfying R7.3
-5. on any failure at any step, remove the temporary directory (R7.4)
+1. build the complete vault in `<target>.tmp-<pid>-<rand>`, a sibling of the target (not in
+   `$TMPDIR`, so the eventual placement stays within one filesystem). The suffix is the process PID
+   **and** a random component, not the PID alone — a PID-only suffix is not collision-resistant
+   (a recycled PID, or two invocations sharing one by coincidence, would let two racing `init`s
+   build into the same temporary directory and corrupt each other's partial vault before either
+   reaches the rename step).
+2. `Lstat` the target first, before anything else touches it. If it exists and is **not a plain
+   directory** — a regular file, a symlink to a file, a symlink to a directory, or any other
+   non-directory type — refuse immediately, naming what exists there, without calling
+   `os.ReadDir`, `os.Remove`, or `os.Rename` on it. This guard runs before the empty/non-empty
+   branch below, so neither a plain file nor a symlink ever reaches it. Two failure modes this
+   closes, both probed directly:
+   - a plain file: `os.ReadDir` on a regular file returns an error ("not a directory"), not an
+     error-free empty listing. An emptiness check written as `len(entries) == 0` without also
+     requiring `err == nil` would misclassify an arbitrary stray file as "empty", and `os.Remove`
+     deletes plain files — so `touch pablo.nooma` followed by `nooma init pablo.nooma` would
+     **delete that file** and replace it with a vault, violating non-negotiable #6 one level up, at
+     the vault's own root path.
+   - a symlink to an empty directory: `os.ReadDir` follows the link and reports the target empty,
+     while `os.Remove` unlinks only the symlink — the check and the mutation would act on two
+     different objects, orphaning the real directory the symlink pointed to. `Lstat` (which does
+     not follow the link) sees a symlink, not a directory, and refuses before either call runs.
+3. if the target does not exist → `os.Rename(tmp, target)`
+4. if the target exists, is a plain directory (per step 2's guard), and is **empty** →
+   `os.Remove(target)` (which succeeds only when the directory is empty), then
+   `os.Rename(tmp, target)`. Two race windows here are both safe, not just small, and both because
+   the kernel re-checks the precondition rather than trusting the earlier check:
+   - between the emptiness check (`os.ReadDir` returning zero entries) and the `os.Remove` call: if
+     a concurrent process populates the directory in that window, `os.Remove` requires the
+     directory be empty *at the moment it runs* and fails loudly instead of silently deleting
+     whatever arrived between the check and the call
+   - between `os.Remove` and `os.Rename`: if a concurrent `init` creates something at `target` in
+     that window, the rename fails rather than clobbering it — the race resolves to "lost the
+     race", never to data loss
+5. if the target exists, is a plain directory, and is **non-empty** → refuse without touching it,
+   satisfying R7.3
+6. on any failure at any step, remove the temporary directory (R7.4)
 
-`os.Rename` is therefore not a single atomic check-and-act step; it is an `Lstat` guard followed
-by a kernel-atomic rename. The loser of a concurrent-`init` race may see `EEXIST` (target reappeared
-between steps 2/3's check and the rename) or `ENOTEMPTY` (target was non-empty by the time the
-kernel looked). Both mean "lost the race / a vault already exists here", and the caller treats them
-identically — neither is special-cased into a different message.
+`os.Rename` is therefore not a single atomic check-and-act step; it is an `Lstat` guard (step 2),
+followed by an existence/emptiness check (steps 3/4), followed by a kernel-atomic rename. The
+loser of a concurrent-`init` race may see `EEXIST` (target reappeared between the check and the
+rename) or `ENOTEMPTY` (target was non-empty by the time the kernel looked). Both mean "lost the
+race / a vault already exists here", and the caller treats them identically — neither is
+special-cased into a different message.
 
-### D13 — A new ADR sets the cross-compile matrix at six targets, superseding ADR-0001's criterion 5
+### D13 — A new ADR sets the cross-compile matrix at **seven** targets, superseding ADR-0001's criterion 5
 
 Verified: `.github/workflows/main.yml` has exactly 4 matrix entries (`linux/amd64`, `linux/arm64`,
 `darwin/arm64`, `windows/amd64`). `docs/adr/0001-sqlite-driver.md:47` lists those same 4 as
 acceptance criterion 5, while line 106 of the *same file* reports "**PASS** — 6/6 targets" for
-that criterion — an inconsistency inside one `Accepted` ADR, not between the ADR and the code.
+that criterion — an inconsistency inside one `Accepted` ADR, not between the ADR and the code, and
+the "PASS" line does not name which six.
 
-`ADR-0001` is `Accepted` and is never edited (`CLAUDE.md` non-negotiable #2). This is an owner
-decision, already taken: a new ADR (next free number **0013**, per `docs/adr/`'s current
-contents) supersedes ADR-0001's acceptance criterion 5, sets the matrix at six targets (`linux`,
-`darwin`, `windows` × `amd64`, `arm64`), and records the line-47-versus-line-106 inconsistency as
-the reason a new ADR is needed rather than a silent correction of the old one. Writing that ADR is
-part of the PR chain (proposal.md §5), not this design.
+The spike branch's own results file does name them: `git show
+spike/adr-0001-sqlite-driver:spike/RESULTS.md` reports `linux/amd64 OK`, `linux/arm64 OK`,
+`darwin/amd64 OK`, `darwin/arm64 OK`, `windows/amd64 OK`, `linux/arm OK` — six targets, and
+`windows/arm64` is not among them. An earlier draft of this design proposed a "cartesian six"
+(`linux`/`darwin`/`windows` × `amd64`/`arm64`) on the assumption that the ADR's unnamed "6/6" meant
+that set. It does not: the spike tested `linux/arm` (32-bit), not `windows/arm64`, so the
+cartesian-six proposal silently dropped the one target the spike actually verified while inventing
+one it had never touched — the exact defect family this design fights everywhere else, now found
+inside its own reasoning.
 
-Reasoning for six, not four: M0's own demo claims "Linux/macOS/Windows/ARM" (proposal.md §2);
-`darwin/amd64` is Intel Macs, still a real target this project claims to support, and
-`windows/arm64` is real hardware (Windows on ARM devices ship today) — neither is a target this
-project should silently drop. Cross-compilation is build-only and cheap (no C toolchain, per
-ADR-0001's own criterion 5), so the two extra targets cost a few seconds of CI time, not a new
-dependency. The spike's own results line already reported 6/6 — the new ADR is catching the
-acceptance criterion up to what was already measured and true, not inventing new scope.
+**Owner decision**: the matrix is **seven targets** — the cartesian six plus `linux/arm`. All seven
+were verified by direct local measurement on this checkout (`GOOS=… GOARCH=… go build ./...` per
+target, not inferred from the ADR's unnamed count): `linux/amd64`, `linux/arm64`, `linux/arm`,
+`darwin/amd64`, `darwin/arm64`, `windows/amd64`, `windows/arm64` all build (§1's ground-truth
+table).
 
-### D14 — The store-API golden is blind to exported `var` and `const`
+`ADR-0001` is `Accepted` and is never edited (`CLAUDE.md` non-negotiable #2). A new ADR (next free
+number **0013**, per `docs/adr/`'s current contents) supersedes ADR-0001's acceptance criterion 5,
+sets the matrix at seven targets, and records: the line-47-versus-line-106 inconsistency as the
+reason a new ADR is needed rather than a silent correction of the old one; that `windows/arm64` is
+newly verified by this design's own local measurement, not carried over from the ADR's unnamed
+"6/6"; and that `linux/arm` is retained because the spike actually verified it, and dropping a
+verified target silently is the exact failure family this project keeps fighting elsewhere in this
+design (D2, R6.2). Writing that ADR is part of the PR chain (proposal.md §5), not this design.
+
+Reasoning for seven: M0's own demo claims "Linux/macOS/Windows/ARM" (proposal.md §2) without
+specifying bitness, and a 32-bit Raspberry Pi is squarely the hardware that claim points at —
+dropping `linux/arm` would silently narrow "ARM" to 64-bit only. `darwin/amd64` is Intel Macs,
+still a real target this project claims to support, and `windows/arm64` is real hardware
+(Windows-on-ARM devices ship today) — neither is a target this project should silently drop.
+Cross-compilation is build-only and cheap (no C toolchain, per ADR-0001's own criterion 5), so the
+three extra targets over today's four cost a few seconds of CI time, not a new dependency.
+
+### D14 — The store-API golden is blind to exported `var` and `const`, and fixing it surfaces a second, pre-existing symbol
 
 Verified: `test/conformance/store_api_test.go:158-160` — `case *ast.GenDecl: if d.Tok != token.TYPE
 { return nil }`. Exported `var` and `const` declarations are silently dropped from the golden;
@@ -361,11 +448,23 @@ exported sentinel error — `ErrVaultInUse`, so `cmd/nooma` can distinguish "hel
 failures — and a sentinel error is a `var`. As written, the golden would not see it appear: a gate
 that only appears to guarantee what it claims.
 
-The remedy: extend `renderExportedDecl` to render exported `var` and `const` declarations, and
-regenerate `testdata/schema/store_api.golden`, in the same PR that adds the lock (proposal.md §5,
-PR 6). `ErrVaultInUse`'s addition is then visible in that PR's golden diff like every other
-surface widening, closing the blind spot at the exact moment it would otherwise have gone
-unnoticed.
+**The remedy cannot land bundled with the lock, because widening the renderer surfaces more than
+the lock adds.** `internal/store/sqlite/dsn.go:15` already declares `var ErrRelativeDBPath` —
+exported, predating this change, and invisible to the golden today for exactly the same reason.
+The moment `renderExportedDecl` is widened to render `var`/`const`, regenerating the golden
+surfaces **both** `ErrRelativeDBPath` and `ErrVaultInUse` in the same diff, and a reviewer looking
+at "the lock's PR" would be asked to review a pre-existing symbol they did not touch, mixed
+together with the one that is actually new — the opposite of the reviewable, single-purpose diff
+this golden exists to produce.
+
+So the renderer fix is split into its own PR, ahead of the lock: proposal.md §5, PR 6
+(`fix/store-golden-var-const`), extends `renderExportedDecl` to render exported `var` and `const`
+declarations and regenerates `testdata/schema/store_api.golden`. That PR's diff contains exactly
+one thing — `ErrRelativeDBPath` appearing — reviewed there as the pre-existing symbol it is, with
+nothing else bundled in. Only after PR 6 merges does PR 7 (`feat/vault-lock`) add `ErrVaultInUse`
+and regenerate the golden again; because the renderer is already widened by then, that second
+regeneration's diff contains only `ErrVaultInUse` — the property spec R8.5 actually needs, and
+which one combined PR could not have produced.
 
 ### D15 — `init`'s non-interactive path and its wizard share one input struct
 
@@ -377,6 +476,23 @@ creation (D12's mechanism) accepts only that struct, never flags or prompts dire
 creation therefore cannot observe which path produced its input, which is what makes "the wizard
 cannot produce a vault the non-interactive path cannot" true by construction rather than by
 convention. See §8's test matrix for the corresponding L1 row.
+
+### D16 — `os.Executable` is banned from `internal/config` by a second, additive `forbidigo` rule
+
+R6.6's `Verified by` originally rested on "the absence of any `os.Executable` call in
+`internal/config`" as unenforced prose: nothing in `.golangci.yml` scopes `forbidigo` to ban it
+there, and a behavioral test proves only that today's resolution logic ignores the executable's
+directory in one scenario — it cannot prove no such call exists anywhere in the package, so a
+future contributor adding an unrelated diagnostic could violate R6.6's letter with nothing catching
+it. Per `CLAUDE.md`: "If a rule can be an automated gate, it is a gate — not a skill."
+
+The fix: `.golangci.yml` gains a second, additive `forbidigo` pattern — `os.Executable` — scoped to
+`internal/config/` only, alongside the existing pattern(s) scoped to `internal/core/`
+(`os.Getenv`, `time.Now`). The two scopes are independent entries in the same linter config; adding
+the `internal/config` rule does not touch or widen the `internal/core` rule. This turns R6.6 into a
+compile-time-checked lint failure instead of an assertion no CI step verifies, and is recorded as
+part of PR 5 (`feat/vault-resolution`, proposal.md §5), the PR that introduces `internal/config`'s
+resolution code in the first place.
 
 ---
 
@@ -409,13 +525,16 @@ implementer wiring `doctor`'s `PRAGMA integrity_check` to the existing, unrelate
 
 Dependency rule check: nothing here imports `internal/core`, and `internal/core` gains no import.
 `sqlite-containment` is satisfied — `database/sql` stays inside `internal/store/**`, which is why
-`doctor`'s `integrity_check` must be a store method and not a query in `cmd/`. `forbidigo` scopes
-to `internal/core/` only, so `os.Getenv` and `time.Now` are legal in these packages, and D7's
-injection is for testability, not for lint.
+`doctor`'s `integrity_check` must be a store method and not a query in `cmd/`. `forbidigo`'s
+existing rule scopes `os.Getenv`/`time.Now` to `internal/core/` only, so those calls are legal in
+these packages, and D7's injection is for testability, not for lint. D16 adds a second, additive
+`forbidigo` rule scoped to `internal/config/` banning `os.Executable`, without touching or
+widening the `internal/core/` rule.
 
 Both new declarations under `internal/store/**` widen `testdata/schema/store_api.golden`, which
 is regenerated in the PRs that add them (spec R8.5, R13.5) — see D14 for a blind spot in that
-golden's coverage that the same PR must also close.
+golden's coverage, closed by a dedicated PR that precedes the lock PR (proposal.md §5, PR 6)
+rather than bundled into it.
 
 ---
 
@@ -441,7 +560,8 @@ Three notes on shapes that could have gone otherwise:
   `Strict()` cannot police the *keys*, only each value's fields — so task-name validity is checked
   by M0's validator against the seven task names doc 01 lists, and provider `type` against the
   four documented types. Unknown names are errors, consistent with R3.2's spirit where the parser
-  cannot reach.
+  cannot reach. The same map-ness affects the §6 gate's schema comparison, handled there rather
+  than here — see §6.
 - Secrets are `*_env` string fields holding variable names. There is no field anywhere that can
   hold a credential, which is what makes R4.1 structural rather than a review rule.
 - Defaults are applied after decoding, not by pre-populating the struct, so "absent" and
@@ -512,12 +632,31 @@ type via `reflect.Type` and its struct tags to obtain the field-name schema dire
 type, independent of any particular value's zero-ness, and compares that schema's key paths
 against the document's key paths.
 
+**Map-typed fields: `providers` and `tasks`.** `Config.Providers` and `Config.Tasks` are
+`map[string]Provider` / `map[string]TaskBinding`, and the map's own keys (`claude_cloud`,
+`local_llama`, `chat`, ...) are user data, not schema — reflecting over a `map[string]X` does not
+enumerate field names the way reflecting over a struct does. Treating a map as opaque here is the
+easy path and the wrong one: it would make the gate silently stop checking anything inside
+`providers.*`/`tasks.*`, the same "silently stops checking part of its input" defect family found
+nine times during `complete-harness`, now inside the gate's own input filter. So for a map-typed
+field, step 4's schema side recurses into the map's *value* type (`Provider`, `TaskBinding`) to
+obtain that type's field names — the map's own keys are never compared against anything. On the
+document side, the gate **unions** the field names observed across every entry present under that
+map section before comparing: doc 01's `providers:` block has four entries with disjoint field
+subsets (`claude_cloud`/`claude_haiku`: `type`, `api_key_env`, `model`; `local_llama`: `type`,
+`endpoint`, `model`; `whisper_local`: `type`, `binary_path`, `model_path`), and no single entry uses
+every `Provider` field — a per-entry completeness check is unsatisfiable on this document, or any
+realistic one, since different provider types legitimately need different fields. The completeness
+rule is therefore "the union across all entries of a map section", never "every entry
+individually". A dedicated test case is built from this exact `providers:` block (spec R9.1).
+
 The comparison is on key paths, not values, because the document's values are illustrative
 (`llama3.1:70b`, `123456789`) and pinning them would make the gate fail on every example edit —
 teaching contributors to weaken it, which is the failure mode `docs/06-harness.md` §4 warns about.
 
-The document's example must therefore be *complete*: every field the struct has appears in it.
-That is a constraint on doc 01, and it is the point.
+The document's example must therefore be *complete*: every field the struct has appears in it —
+directly, for a struct-typed section, or via the union across its entries, for a map-typed section
+(`providers`, `tasks`) per the note above. That is a constraint on doc 01, and it is the point.
 
 **The gate decodes and compares schemas; it MUST NOT validate.** `docs/01-architecture.md`'s
 `tasks` block contains the literal placeholder `embedding: { provider: ... }`, and `...` decodes
@@ -534,18 +673,19 @@ in review instead of merged.
 
 | Job | Today | After |
 |---|---|---|
-| e2e (L4) | `push: main` | `pull_request` + `push: main`, matrix `ubuntu-latest` + `windows-latest` (D6) |
-| cross-compile | `push: main`, 4 targets (`linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64`) | `pull_request` + `push: main`, **6 targets** — gains `darwin/amd64` and `windows/arm64` (D13) |
-| `integration` (L3) | `push`/`pull_request`, `ubuntu-latest` only | same triggers, matrix `ubuntu-latest` + `windows-latest` (D6), so R8.2/R8.3 actually run `LockFileEx` |
+| e2e (L4) | `push: main` | `pull_request` + `push: main`, matrix `ubuntu-latest` + `windows-latest` (D6); Windows leg installs `make` explicitly (D17) |
+| cross-compile | `push: main`, 4 targets (`linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64`) | `pull_request` + `push: main`, **7 targets** — gains `darwin/amd64`, `windows/arm64` and `linux/arm` (D13) |
+| `integration` (L3) | `push`/`pull_request`, `ubuntu-latest` only | same triggers, matrix `ubuntu-latest` + `windows-latest` (D6), so R8.2/R8.3 actually run `LockFileEx`; Windows leg installs `make` explicitly (D17) |
 
-The cross-compile matrix's expansion to 6 targets is not a pre-existing plan being restated: today
+The cross-compile matrix's expansion to 7 targets is not a pre-existing plan being restated: today
 it is 4 targets, verified against `.github/workflows/main.yml`, and D13 records the new ADR that
-authorizes the expansion (ADR-0001's acceptance criterion 5 said 4; its own results table on the
-same page already reported 6/6 — see §1's ground-truth table). This PR moves the trigger **and**
-expands the matrix **and** adds the new ADR, all together, because the matrix count and the ADR
-that governs it cannot be split across PRs without one contradicting the other in the interim.
+authorizes the expansion — the cartesian six plus `linux/arm`, all seven verified by direct local
+measurement, not inferred from the ADR's unnamed "6/6" (see §1's ground-truth table). This PR moves
+the trigger **and** expands the matrix **and** adds the new ADR, all together, because the matrix
+count and the ADR that governs it cannot be split across PRs without one contradicting the other in
+the interim.
 
-`make cross-compile` is added as a Makefile target covering the same six `GOOS`/`GOARCH` pairs
+`make cross-compile` is added as a Makefile target covering the same seven `GOOS`/`GOARCH` pairs
 (`GOOS=x GOARCH=y go build ./...`, no PR metadata required) and is added to `check-all`, per
 `CLAUDE.md`'s Workflow section: "if you add a blocking CI job, add it to `check-all` too — unless
 it needs PR metadata a Makefile cannot produce." Cross-compilation needs none, unlike e2e (which
@@ -563,8 +703,39 @@ CI, and `check-all` keeps its documented meaning of "every gate CI blocks on tha
 run locally" only if e2e is added. It is added, and all three comments (`main.yml`'s header,
 `ci.yml`'s line-124 comment, and `check-all`'s own doc comments) are updated in the same PR.
 
-The ruleset gains the two PR-blocking contexts (spec R2.2), which is a GitHub-side change, not a
-repository one.
+**The ruleset gains every context each matrix leg posts, not one context per job (spec R2.2).**
+`main.yml`'s cross-compile job templates its check name per matrix leg
+(`name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}`), so it posts one context per leg —
+7, matching the matrix above — and e2e's `windows-latest` addition means it posts one context per
+OS leg — 2. Registering only two job-level names when the workflows post 9 leg-specific names would
+leave the un-registered legs' contexts absent from `required_status_checks` forever, which is not a
+softer version of the gate — a required context that never posts never becomes satisfied, so it
+**permanently blocks every future merge to `main`**, recoverable only by editing the ruleset. This
+is a GitHub-side change, not a repository one, so it is applied directly, verified per R2.2's
+`Verified by`.
+
+### D17 — Windows CI legs install `make` explicitly, not by relying on what happens to be on PATH
+
+D6 adds a `windows-latest` leg to both the e2e (`main.yml`) and `integration` (`ci.yml`) jobs, each
+running `make test-e2e` / `make test-integration`. Verified against GitHub's `windows-latest`
+runner image documentation: GNU Make is not in the installed-tools list and is not on PATH. MSYS2 is
+present at `C:\msys64`, but the same documentation states it "is pre-installed on image but not
+added to PATH" — and MSYS2's base install does not necessarily ship `make` in the first place, so
+adding `usr\bin` to PATH is not a guaranteed fix, only a PATH hack that happens to work if some
+other step already put `make` there. A step that runs by luck, in CI configuration rather than
+application code, is this project's dominant defect family one layer up.
+
+So each Windows leg gains one explicit step installing `make` via Chocolatey (already available on
+the image) before its `make test-*` step runs. The tradeoff: an explicit install step costs a few
+seconds of setup per leg, paid in exchange for both legs running the *identical* make target the
+Linux legs run — preserving the CI/Makefile parity `CLAUDE.md`'s Workflow section already commits
+`check-all` to. An explicit install is chosen over a PATH edit because a PATH edit depends on an
+assumption about the image's contents this design has not verified, where an explicit install does
+not. Recorded in PR 7 (`feat/vault-lock`, proposal.md §5) — the single PR that adds both jobs'
+Windows legs together (D6), and therefore the one that adds both `make`-install steps. The
+cross-compile job needs no such step: it cross-compiles from a single host runner
+(`GOOS=x GOARCH=y go build ./...`, no C toolchain per ADR-0001 criterion 5) rather than running on
+a native `windows-latest` runner, so it never invokes `make` on Windows in the first place.
 
 ---
 
@@ -575,13 +746,16 @@ repository one.
 | Config decode, unknown/duplicate/type errors (§3) | L1 | `internal/config/` | table-driven, one case per nesting level |
 | `.env` subset and precedence (§4) | L1 | `internal/config/` | includes malformed-line rejection |
 | Validation, aggregate errors (§5) | L1 | `internal/config/` | |
-| Vault resolution: four steps, the two cwd sub-steps, three candidate counts, relative vs absolute argument (§6) | L1 | `internal/config/` | possible only because of D7 |
+| Vault resolution: four steps, the upward ascent's 3a/3b at each level, the `.nooma`-name exclusion, three candidate counts, relative vs absolute argument (§6) | L1 | `internal/config/` | possible only because of D7; includes a multi-level ascent and an unusable-candidate-not-silently-skipped case |
 | Loopback truth table (R11.3) | L1 | `internal/config/` | includes `127.0.0.1.evil`, `0127.0.0.1` |
 | Binding refusal decision (R11.2) | L1 | `internal/httpapi/` | pure function, D11 |
-| Config↔doc gate (§9) | L2 | `test/conformance/` | untagged, runs in `make test` |
+| Config↔doc gate, including the map-typed `providers`/`tasks` union case (§6, §9) | L2 | `test/conformance/` | untagged, runs in `make test`; uses doc 01's actual heterogeneous `providers:` block |
 | `init`'s wizard collects the same input struct as the non-interactive path (R7.2) | L1 | `cmd/nooma/` | asserts on the shared struct, per D15 |
+| `init` refuses on a file or symlink target (R7.5) | L3 or L4 | `test/integration/` or `test/e2e/` | asserts the file/symlink is untouched; per D12's `Lstat` guard |
+| Temp-dir name is collision-resistant across two racing `init`s (R7.6) | L1 | `cmd/nooma/` | asserts two generated names differ; per D12 |
 | Lock contention, real second process (R8.2) | L3 | `test/integration/` | precedent: `migrate_race_integration_test.go`; runs on Linux and Windows (D6) |
 | Lock survives `SIGKILL` (R8.3) | L3 | `test/integration/` | runs on Linux and Windows (D6) |
+| PID region read concurrently with `Acquire` (R8.4) | L3 | `test/integration/` | regression guard against a two-write `ReadHolder` race, per D4 |
 | `integrity_check` (R13.1) | L3 | `test/integration/` | |
 | `init` completeness, migration version (R7.1) | L3 + L4 | both | |
 | Every command's contract (§10-§13) | L4 | `test/e2e/` | runs on Linux and Windows (D6) — excludes the lock's own contention/crash tests, which stay at L3 |
@@ -597,7 +771,7 @@ say so where a future reader would otherwise wonder.
 
 | # | Risk | Position |
 |---|---|---|
-| 1 | `flock` and `LockFileEx` are unreliable over NFS and SMB; the same caveat applies to a torn read of the PID region, since `ReadHolder` takes no lock | Accepted and recorded. M0's single-writer guarantee holds for a vault on a local filesystem. A vault on a network share is outside the guarantee; a `doctor` check that detects a network filesystem is a candidate for a later milestone, not M0. The torn-read case is bounded the same way `ReadHolder` bounds the lock itself: the PID is written in a single small write (D4), so on any filesystem where that write is atomic — every local filesystem this guarantee targets — there is nothing to tear. |
+| 1 | `flock` and `LockFileEx` are unreliable over NFS and SMB; a torn read of the PID region is a separate, narrower risk since `ReadHolder` takes no lock | Accepted and recorded for the filesystem-unreliability half: M0's single-writer guarantee holds for a vault on a local filesystem, and a vault on a network share is outside it; a `doctor` check that detects a network filesystem is a candidate for a later milestone, not M0. For the torn-read half: D4 writes the entire PID region in a single `WriteAt` of a fixed-size, pre-built buffer — there is no separate zeroing pass, so there is no window in which a lock-free `ReadHolder` can observe an intermediate, self-consistent-but-wrong state ("no holder" while the lock is genuinely held). On any filesystem where that single write is atomic — every local filesystem this guarantee targets — there is nothing to tear; the L3 concurrent-read test (§8) exists to catch a regression to a two-write form, not to catch tearing itself, since a genuine tear on a non-atomic filesystem is outside this guarantee's scope, same as the network-filesystem risk above. |
 | 2 | D4's byte-offset scheme is only truly exercised on Windows | This is exactly why D6 adds a Windows e2e runner **and** a Windows leg to the L3 `integration` job — the lock's actual contention (R8.2) and crash-recovery (R8.3) tests are L3, not L4, so the e2e runner alone would not have exercised them. Without both, the scheme would be a compiling assumption on the platform it most needs verifying. |
 | 3 | `goccy` is a 14.5k-line dependency in a project that had one dependency | Accepted for D1's reasons. It is dependency-free and released this year; the alternative has not shipped since 2022-05-27. |
 | 4 | The schema decodes `providers` and `tasks` whose semantics arrive in M1 | Shape-checked, never interpreted. The §6 gate makes any later change to those shapes visible as one diff against doc 01. |
