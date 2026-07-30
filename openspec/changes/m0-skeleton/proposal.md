@@ -256,7 +256,7 @@ streams. It grows a dispatch table and per-command flag parsing.
 Chain strategy `stacked-to-main`: each PR targets `main` and merges in order. The soft ceiling
 is 400 changed lines.
 
-| # | PR | Content | Est. lines |
+| # | Slice | Content | Est. lines |
 |---|---|---|---|
 | 1 | `docs/m0-vault-layout` | The five doc-01 corrections plus doc 05's M0 bullet | ~140 |
 | 2 | `ci/e2e-and-cross-compile-on-pr` | Move both jobs onto `pull_request`; new ADR-0013 (superseding ADR-0001's acceptance criterion 5) expanding the cross-compile matrix from today's 4 targets to **7** (`darwin/amd64`, `windows/arm64` and `linux/arm` added); `make cross-compile` **and** `make test-e2e` added to `check-all` (R2.3, R2.4); `main.yml`'s and `ci.yml`'s header comments plus `CLAUDE.md`'s Workflow section and the `Makefile` header corrected | ~180 |
@@ -264,15 +264,15 @@ is 400 changed lines.
 | 4 | `test/config-doc-gate` | A new section-scoped, exactly-one-or-error `yaml` extractor (modeled on `goldenset.ExtractJSONFence`, not a reuse of `schema/markdown.go`'s SQL collector) plus reflection-based key-schema comparison, including the map-typed `providers`/`tasks` union rule; the doc-01 config block as a fixture | ~260 |
 | 5 | `feat/vault-resolution` | Upward-search resolution (cwd to filesystem root), exactly-one-usable-candidate-or-error at every level, the `.nooma`-name exclusion, a hard failure on a `readDir` error mid-ascent, `nooma.yml`-is-not-a-directory in the predicate, L1; plus an L2 tree-scan test banning `os.Executable` under `internal/config` (D16 — **not** a `forbidigo` rule; `.golangci.yml` is not touched) | ~360 |
 | 6 | `fix/store-golden-var-const` | Extends `renderExportedDecl` to render exported `var`/`const` declarations (D14) and regenerates `testdata/schema/store_api.golden`; the diff surfaces exactly one thing — the pre-existing `ErrRelativeDBPath` (`internal/store/sqlite/dsn.go:15`), reviewed as pre-existing, not new | ~70 |
-| 7 | `feat/vault-lock` | `nooma.lock` (acquire-before-write ordering, D4, single `WriteAt` for the PID region), L3 under real contention on `ubuntu-latest` **and** `windows-latest` — both jobs gain their Windows leg here (D6), with an explicit `make` install step on each (D17) — `ErrVaultInUse` sentinel, store-API golden regenerated (renderer already widened by PR 6, so this diff shows only `ErrVaultInUse`) | ~360 |
+| 7 | `feat/vault-lock` | `nooma.lock` (acquire-before-write ordering, D4, single `WriteAt` for the PID region), L3 under real contention on `ubuntu-latest` **and** `windows-latest` — both jobs gain their Windows leg here (D6), with an explicit `make` install step on each (D17) — `ErrVaultInUse` sentinel, store-API golden regenerated (renderer already widened by slice 6, so this diff shows only `ErrVaultInUse`) | ~360 |
 | 8 | `feat/cli-init` | Dispatch table, `init` interactive and not (shared input struct, D15), corrected temp-dir-then-rename mechanism with the `Lstat` guard for file/symlink targets and a collision-resistant temp-dir suffix (D12), L4 | ~410 |
 | 9 | `feat/cli-status-doctor` | Both read-only commands, `(*Vault).IntegrityCheck`, L4 | ~400 |
 | 10 | `feat/cli-serve` | httpapi hello, `/ui` placeholder, ADR-0007 refusal, L4 | ~400 |
 
 Dependencies: `1 → 3`, `3 → 4`, `3 → 5`, `5 → 8`, `2 → 7`, `6 → 7`, `(5,7) → 9`, `(5,7) → 10`.
-PR 2 also precedes every PR that adds a new L4 test — `2 → 8`, `2 → 9`, `2 → 10` — because §4.2
-argues PR 2 exists precisely so every new L4 test blocks the merge before it lands; stacking
-already merges PR 2 first in practice, which is why these three edges were previously left off the
+Slice 2 also precedes every slice that adds a new L4 test — `2 → 8`, `2 → 9`, `2 → 10` — because §4.2
+argues slice 2 exists precisely so every new L4 test blocks the merge before it lands; stacking
+already merges slice 2 first in practice, which is why these three edges were previously left off the
 graph, but they are real dependencies and are stated here rather than left implicit. PRs 1 and 2
 are independent of each other and of everything else, so they go first.
 
@@ -317,7 +317,7 @@ a property somebody will weaken later:
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | Estimates 2–4x low, doubled again by review remediation | Per-PR split decided before apply; the chain above is already ten PRs, not five |
+| R1 | Estimates 2–4x low, doubled again by review remediation | Per-slice split decided before apply; the chain above is already ten slices, not five |
 | R2 | Cross-compilation proves the lockfile *builds* on Windows, not that it *works* | **Decided** (design.md D6): the e2e (L4) job runs a `windows-latest` leg, and the L3 `integration` job — where the lock's actual contention (R8.2) and crash-recovery (R8.3) tests live — gains one too, so `LockFileEx` is genuinely exercised, not only cross-compiled |
 | R3 | The config schema decodes blocks (`providers`, `tasks`) whose semantics arrive in M1, so a shape chosen now may not survive contact | Decode and shape-check only, never interpret; the config↔doc gate makes a later change visible in one diff |
 | R4 | `init`'s interactive path is the one L4 cannot drive, so it is the one that rots | The non-interactive path is the primary contract; the wizard is a thin prompt layer over it, and that layering is a design requirement |
@@ -354,23 +354,23 @@ discoveries.
 
 | # | Item | Lands in |
 |---|---|---|
-| 1 | `docs/06-harness.md` §6 says e2e and cross-compile do not run on every PR — false after R2.1. The sentence beside it, "the full matrix depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed two build-order steps ago | **PR 2** (task 2.7) — the PR that makes the claim false, per non-negotiable #1; originally filed under PR 1 because it is a docs edit, which is the wrong grouping |
-| 2 | `docs/05-build-plan.md`'s M0 bullet still reads "arg → env → portable → home", the executable-relative model R6.6 removes | PR 1 (task 1.5) |
-| 3 | D12 calls the final rename "kernel-atomic" without qualification, but Go's own `os.Rename` doc states "on non-Unix platforms Rename is not an atomic operation" (`$(go env GOROOT)/src/os/file.go:435`), and `init`'s L4 tests run on `windows-latest`. The claim needs scoping to POSIX plus a Windows probe | PR 8 (`init`), with the probe recorded in design §1 |
+| 1 | `docs/06-harness.md` §6 says e2e and cross-compile do not run on every PR — false after R2.1. The sentence beside it, "the full matrix depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed two build-order steps ago | **slice 2** (task 2.7) — the PR that makes the claim false, per non-negotiable #1; originally filed under slice 1 because it is a docs edit, which is the wrong grouping |
+| 2 | `docs/05-build-plan.md`'s M0 bullet still reads "arg → env → portable → home", the executable-relative model R6.6 removes | slice 1 (task 1.5) |
+| 3 | D12 calls the final rename "kernel-atomic" without qualification, but Go's own `os.Rename` doc states "on non-Unix platforms Rename is not an atomic operation" (`$(go env GOROOT)/src/os/file.go:435`), and `init`'s L4 tests run on `windows-latest`. The claim needs scoping to POSIX plus a Windows probe | slice 8 (`init`), with the probe recorded in design §1 |
 | 4 | The upward search does not define what a `readDir` **error** at an intermediate level means — a directory with execute-but-not-list permission could be treated as "zero candidates, keep ascending", which is the silent-skip family. It must be a hard failure naming the directory | PR **5** (`feat/vault-resolution`), as an L1 case |
 | 5 | D8's vault predicate checks that `nooma.yml` exists, not that it is a regular file. A directory named `nooma.yml` would pass and defer a confusing error to config load. `DirEntry.IsDir()` is already available from the same `readDir` call | PR **5**, as an L1 case |
-| 6 | D12 enumerates two race windows for the empty-target branch and misses a third: two racing `init`s both calling `os.Remove(target)`, where the loser sees `ENOENT` — a different error shape from the `EEXIST`/`ENOTEMPTY` pair the design classifies | PR 8 |
+| 6 | D12 enumerates two race windows for the empty-target branch and misses a third: two racing `init`s both calling `os.Remove(target)`, where the loser sees `ENOENT` — a different error shape from the `EEXIST`/`ENOTEMPTY` pair the design classifies | slice 8 |
 | 7 | design §4 says provider `type` is validated "against the four documented types"; doc 01 has four provider *entries* but three distinct types (`anthropic` twice, `ollama`, `whisper_cpp`) | PR **3** (config schema) |
 | 8 | Two passages quote `docs/06-harness.md` §3 with wording that document does not contain ("a real second process"; "no test touches the network" — the latter is `CLAUDE.md`'s non-negotiable #5) | any PR touching design §5 or §8 |
 
 Items 4 and 5 are the two that would otherwise become real defects rather than documentation
-inaccuracies, so they carry L1 test cases rather than prose corrections, and they are named in PR 5's
+inaccuracies, so they carry L1 test cases rather than prose corrections, and they are named in slice 5's
 task list explicitly.
 
 ---
 
 ## 9. Next step
 
-`sdd-tasks` — turn the ten-PR chain into an ordered task list, with §8.1's items 4 and 5 attached to
-PR 5 as test cases, item 2 attached to PR 1's docs sweep and item 1 to PR 2, where it becomes true. Planning is otherwise closed:
+`sdd-tasks` — turn the ten-slice chain into an ordered task list, with §8.1's items 4 and 5 attached to
+slice 5 as test cases, item 2 attached to slice 1's docs sweep and item 1 to slice 2, where it becomes true. Planning is otherwise closed:
 proposal, spec and design are complete and have survived three adversarial rounds.

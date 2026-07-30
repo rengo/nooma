@@ -473,11 +473,11 @@ at "the lock's PR" would be asked to review a pre-existing symbol they did not t
 together with the one that is actually new — the opposite of the reviewable, single-purpose diff
 this golden exists to produce.
 
-So the renderer fix is split into its own PR, ahead of the lock: proposal.md §5, PR 6
+So the renderer fix is split into its own PR, ahead of the lock: proposal.md §5, slice 6
 (`fix/store-golden-var-const`), extends `renderExportedDecl` to render exported `var` and `const`
 declarations and regenerates `testdata/schema/store_api.golden`. That PR's diff contains exactly
 one thing — `ErrRelativeDBPath` appearing — reviewed there as the pre-existing symbol it is, with
-nothing else bundled in. Only after PR 6 merges does PR 7 (`feat/vault-lock`) add `ErrVaultInUse`
+nothing else bundled in. Only after slice 6 merges does slice 7 (`feat/vault-lock`) add `ErrVaultInUse`
 and regenerate the golden again; because the renderer is already widened by then, that second
 regeneration's diff contains only `ErrVaultInUse` — the property spec R8.5 actually needs, and
 which one combined PR could not have produced.
@@ -543,7 +543,7 @@ properties decide it:
 - Per D10's non-empty-corpus rule, it asserts it actually found `.go` files before asserting the
   property, so it cannot pass vacuously if the package is renamed or the walk breaks.
 
-Recorded as part of PR 5 (`feat/vault-resolution`, proposal.md §5), the PR that introduces
+Recorded as part of slice 5 (`feat/vault-resolution`, proposal.md §5), the PR that introduces
 `internal/config`'s resolution code. `.golangci.yml` is **not** modified by this change.
 
 ---
@@ -586,7 +586,7 @@ test, because a second `forbidigo` exclusion rule was measured to disable the ex
 
 Both new declarations under `internal/store/**` widen `testdata/schema/store_api.golden`, which
 is regenerated in the PRs that add them (spec R8.5, R13.5) — see D14 for a blind spot in that
-golden's coverage, closed by a dedicated PR that precedes the lock PR (proposal.md §5, PR 6)
+golden's coverage, closed by a dedicated PR that precedes the lock PR (proposal.md §5, slice 6)
 rather than bundled into it.
 
 ---
@@ -672,7 +672,7 @@ extended with section scoping and a `yaml` tag instead of JSON, not on the SQL c
 whole-document scan. Without the section scope, the extractor would currently pass by luck: doc 01
 happens to contain exactly one ```` ```yaml ```` fence today, so a whole-document scan finds one
 and passes — until the day a second ```` ```yaml ```` fence appears anywhere in the document, at
-which point the scan silently picks whichever one comes first. Proposal.md PR 4's line estimate is
+which point the scan silently picks whichever one comes first. Proposal.md slice 4's line estimate is
 re-budgeted upward accordingly (§5), since this is new extractor code, not reuse.
 
 **Correction on step 4's mechanism.** An earlier draft compared key sets by re-encoding the
@@ -765,7 +765,7 @@ line 124, "cross-compilation matrix -> main.yml, on push to main only") goes sta
 reason and is corrected in the same PR — it was found stale by the same review that caught the
 matrix-count and the `make cross-compile` gaps, not a separate follow-up.
 
-Two more stale claims live outside the workflows and are corrected in PR 1's docs sweep rather than
+Two more stale claims live outside the workflows and are corrected in slice 1's docs sweep rather than
 here, because they are prose in the docs the harness is described by:
 `docs/06-harness.md` §6 states "what does **not** run on every PR: L4 (e2e), driver benchmarks, and
 the cross-compilation matrix" — false after R2.1 — and the sentence beside it, "the full matrix
@@ -774,7 +774,7 @@ ADR-0001 closed two build-order steps ago. `docs/05-build-plan.md`'s M0 bullet s
 resolution as "arg → env → portable → home", the executable-relative model R6.6 removes.
 
 Four comments and doc passages are therefore updated across this change: `main.yml`'s header and
-`ci.yml`'s line-124 comment (this PR), and doc 06 §6 plus doc 05's M0 bullet (PR 1). `CLAUDE.md`'s
+`ci.yml`'s line-124 comment (this PR), and doc 06 §6 plus doc 05's M0 bullet (slice 1). `CLAUDE.md`'s
 Workflow section and the `Makefile` header, which both enumerate what `check-all` covers, are updated
 in this PR too, since `check-all` gains two targets here.
 
@@ -806,7 +806,7 @@ seconds of setup per leg, paid in exchange for both legs running the *identical*
 Linux legs run — preserving the CI/Makefile parity `CLAUDE.md`'s Workflow section already commits
 `check-all` to. An explicit install is chosen over a PATH edit because a PATH edit depends on an
 assumption about the image's contents this design has not verified, where an explicit install does
-not. Recorded in PR 7 (`feat/vault-lock`, proposal.md §5) — the single PR that adds both jobs'
+not. Recorded in slice 7 (`feat/vault-lock`, proposal.md §5) — the single PR that adds both jobs'
 Windows legs together (D6), and therefore the one that adds both `make`-install steps. The
 cross-compile job needs no such step: it cross-compiles from a single host runner
 (`GOOS=x GOARCH=y go build ./...`, no C toolchain per ADR-0001 criterion 5) rather than running on

@@ -2,7 +2,7 @@
 
 Implementation task list for `m0-skeleton`, derived from `spec.md` (15 sections, 68 requirements)
 and `design.md` (17 decisions). Chain strategy **`stacked-to-main`**: each PR targets `main` and
-merges in order. Tasks 5.7 and 5.8 add two more requirements during PR 5, bringing the spec to 70 —
+merges in order. Tasks 5.7 and 5.8 add two more requirements during slice 5, bringing the spec to 70 —
 see **C1**.
 
 **Strict TDD is active.** Every behavioral task states the test first and what its red looks like.
@@ -11,7 +11,7 @@ requirement rather than adjusting the assertion.
 
 Verification commands are drawn from the project's real targets: `make check`, `make check-all`,
 `make test`, `make test-integration`, `make test-e2e`, `make cover`, `make cross-compile` (new,
-PR 2), `make store-api-golden`, `make pending-red`. Tasks whose verification is a CI workflow or a
+slice 2), `make store-api-golden`, `make pending-red`. Tasks whose verification is a CI workflow or a
 GitHub-side setting are marked **outside local verification** rather than mapped to a nearby command
 that would misrepresent what actually checks them.
 
@@ -21,7 +21,7 @@ that would misrepresent what actually checks them.
 
 ### C1 — Two known-debt items have no requirement number to cite
 
-`proposal.md` §8.1 items 4 and 5 assign PR 5 two L1 test cases — a `readDir` error mid-ascent must
+`proposal.md` §8.1 items 4 and 5 assign slice 5 two L1 test cases — a `readDir` error mid-ascent must
 be a hard failure, and the vault predicate must reject a *directory* named `nooma.yml` — but neither
 behavior has a numbered requirement in `spec.md` §6. Tasks 5.7 and 5.8 below therefore create the
 requirements as part of that PR: `R6.8` and `R6.9`, written before their tests, in the same commit.
@@ -39,17 +39,17 @@ invalidating cross-references. It is cited from `R10.4` and from design §8's te
 number alone during apply; renumbering it is churn with a stale-reference risk and no reader
 benefit.
 
-### C3 — Design §1's `os.Rename` ground-truth row is ext4-only, and PR 8 must not inherit the gap
+### C3 — Design §1's `os.Rename` ground-truth row is ext4-only, and slice 8 must not inherit the gap
 
 Design §1 records the `os.Rename` probe as run "locally on ext4", and D12's race argument calls the
 final rename "kernel-atomic" without qualification. Go's own doc states the opposite for non-Unix
 platforms (`$(go env GOROOT)/src/os/file.go:435`), and `init`'s L4 tests run on `windows-latest`.
-This is `proposal.md` §8.1 item 3, assigned to PR 8: task 8.7 scopes the claim and adds the probe.
+This is `proposal.md` §8.1 item 3, assigned to slice 8: task 8.7 scopes the claim and adds the probe.
 Until then, no task may cite "atomic rename" as a safety argument on Windows.
 
 ---
 
-## PR 1 — Docs: the five doc-01 corrections plus doc 05's M0 bullet (~140 lines)
+## Slice 1 — Docs: the five doc-01 corrections plus doc 05's M0 bullet (~140 lines)
 
 Docs only. No behavioral test: `spec.md` §1's requirements are verified by reading the documents,
 which is what their own "Verified by" says. Touches no `internal/core/` path, so `docs-sync.yml`
@@ -84,17 +84,17 @@ does not fire and no `no-spec-change` label is needed.
 
 **Not in this PR, and the reason is the rule itself.** `docs/06-harness.md` §6 states that L4 and the
 cross-compilation matrix do not run on every PR. That claim becomes false — but it becomes false in
-**PR 2**, which changes the triggers. Correcting it here would leave the document wrong in the other
-direction for as long as PR 1 sits merged alone, and would link ADR-0013 before it exists. Doc and
+**Slice 2**, which changes the triggers. Correcting it here would leave the document wrong in the other
+direction for as long as slice 1 sits merged alone, and would link ADR-0013 before it exists. Doc and
 reality are fixed in the *same* PR (non-negotiable #1), so it moves to task 2.7.
 
-This was found while writing PR 1, not while planning it: the plan had filed the correction here
+This was found while writing slice 1, not while planning it: the plan had filed the correction here
 because it is a docs edit, without asking which PR makes it true. "Docs go in the docs PR" is the
 wrong grouping — the right one is "each claim lands with the change that makes it true".
 
 ---
 
-## PR 2 — CI: triggers, ADR-0013, seven targets, `check-all` parity (~180 lines)
+## Slice 2 — CI: triggers, ADR-0013, seven targets, `check-all` parity (~180 lines)
 
 Lands before any OS-dependent code, so the lockfile's Windows behavior is exercised on the PR that
 introduces it rather than after merge.
@@ -137,7 +137,7 @@ introduces it rather than after merge.
       Requirement: R2.2.
 - [ ] **2.7** `docs/06-harness.md` §6: the sentence "what does **not** run on every PR: L4 (e2e),
       driver benchmarks, and the cross-compilation matrix" becomes false with task 2.2 — correct it
-      here, in the PR that makes it false, not in PR 1. The sentence beside it, "the full matrix
+      here, in the PR that makes it false, not in slice 1. The sentence beside it, "the full matrix
       depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed
       two build-order steps ago; correct it too, and link ADR-0013, which task 2.1 creates in this
       same PR.
@@ -145,9 +145,9 @@ introduces it rather than after merge.
 
 ---
 
-## PR 3 — Config schema, strict decode, `.env`, validation (~400 lines — watch the ceiling)
+## Slice 3 — Config schema, strict decode, `.env`, validation (~400 lines — watch the ceiling)
 
-Depends on PR 1 (the schema must match doc 01 as corrected).
+Depends on slice 1 (the schema must match doc 01 as corrected).
 
 - [ ] **3.1** [setup, not TDD] `go get github.com/goccy/go-yaml@v1.19.2`; replace
       `internal/config/doc.go`'s placeholder text with the package contract.
@@ -205,9 +205,9 @@ Depends on PR 1 (the schema must match doc 01 as corrected).
 
 ---
 
-## PR 4 — The config↔doc gate (~260 lines)
+## Slice 4 — The config↔doc gate (~260 lines)
 
-Depends on PR 3.
+Depends on slice 3.
 
 - [ ] **4.1** Test first: the extractor. Synthetic documents with zero, one and two candidate
       `yaml` fences in the target section, each asserting the expected error or the single block.
@@ -246,9 +246,9 @@ Depends on PR 3.
 
 ---
 
-## PR 5 — Vault resolution (~360 lines)
+## Slice 5 — Vault resolution (~360 lines)
 
-Depends on PR 3. Closes known-debt items 4 and 5, which per **C1** means writing their requirements
+Depends on slice 3. Closes known-debt items 4 and 5, which per **C1** means writing their requirements
 first.
 
 - [ ] **5.1** Test first: `TestResolveStepPrecedence`, driving each of the four steps in isolation
@@ -314,9 +314,9 @@ first.
 
 ---
 
-## PR 6 — Widen the store-API golden to `var` and `const` (~70 lines)
+## Slice 6 — Widen the store-API golden to `var` and `const` (~70 lines)
 
-Independent of PRs 3–5; must precede PR 7. Small and deliberately alone: regenerating the golden
+Independent of PRs 3–5; must precede slice 7. Small and deliberately alone: regenerating the golden
 surfaces a pre-existing symbol, and that must be reviewable on its own rather than mixed into the
 lock's diff.
 
@@ -331,16 +331,16 @@ lock's diff.
       Requirement: R8.5.
 - [ ] **6.3** `make store-api-golden` and review the diff. It must contain exactly one addition:
       `ErrRelativeDBPath` (`internal/store/sqlite/dsn.go:15`), pre-existing and unrelated to this
-      change. Say so in the PR description — the point of this PR is that PR 7's golden diff then
+      change. Say so in the PR description — the point of this PR is that slice 7's golden diff then
       contains only `ErrVaultInUse`.
       Verify: `make check-all`; `git diff -- testdata/schema` shows one line added.
       Requirement: R8.5.
 
 ---
 
-## PR 7 — The single-writer lock (~360 lines)
+## Slice 7 — The single-writer lock (~360 lines)
 
-Depends on PR 6. Also where both CI jobs gain their Windows leg, since this is the first
+Depends on slice 6. Also where both CI jobs gain their Windows leg, since this is the first
 OS-dependent code.
 
 - [ ] **7.1** Test first: `TestSecondWriterFails` in `test/integration/` with a **real second
@@ -388,16 +388,16 @@ OS-dependent code.
       Verify: **outside local verification**; confirm on the PR's own checks.
       Requirement: R15.1; design D6, D17.
 - [ ] **7.8** Export `ErrVaultInUse` so `cmd/nooma` can distinguish "held" from other I/O failures;
-      `make store-api-golden`. The diff must show only `ErrVaultInUse` — PR 6 already surfaced
+      `make store-api-golden`. The diff must show only `ErrVaultInUse` — slice 6 already surfaced
       `ErrRelativeDBPath`.
       Verify: `make check-all`.
       Requirement: R8.5.
 
 ---
 
-## PR 8 — CLI dispatch and `nooma init` (~410 lines — expect a split)
+## Slice 8 — CLI dispatch and `nooma init` (~410 lines — expect a split)
 
-Depends on PR 5 and PR 2.
+Depends on slice 5 and slice 2.
 
 - [ ] **8.1** Test first: `TestUsageListsEveryCommand` — bare `nooma` exits zero and names exactly
       `init`, `serve`, `status`, `doctor`, `version`. Then the dispatch table over the existing
@@ -452,9 +452,9 @@ Depends on PR 5 and PR 2.
 
 ---
 
-## PR 9 — `status` and `doctor` (~400 lines — expect a split)
+## Slice 9 — `status` and `doctor` (~400 lines — expect a split)
 
-Depends on PR 5 and PR 7.
+Depends on slice 5 and slice 7.
 
 - [ ] **9.1** Test first: `status` reports the resolved vault path, the schema `user_version`, the
       lock holder if any, the database size on disk, and a config summary (bind, port, UI,
@@ -497,9 +497,9 @@ Depends on PR 5 and PR 7.
 
 ---
 
-## PR 10 — `nooma serve` (~400 lines — expect a split)
+## Slice 10 — `nooma serve` (~400 lines — expect a split)
 
-Depends on PR 5 and PR 7.
+Depends on slice 5 and slice 7.
 
 - [ ] **10.1** Test first: `decideBinding(cfg)` truth table at L1 — loopback / non-loopback ×
       token present / absent. Include the adversarial addresses: `127.0.0.1` and all of
