@@ -263,9 +263,18 @@ must also touch `docs/02-cognitive-core.md`, or carry the `no-spec-change` label
 exists because there are legitimate changes that do not alter the specification — refactors,
 performance. But applying it is a conscious act that gets recorded, not an oversight.
 
-What does **not** run on every PR: L4 (e2e), driver benchmarks, and the cross-compilation
-matrix. Those run on merge to the main branch and before release. The full matrix depends on
-ADR-0001 and cannot be designed until the spike closes.
+**L4 (e2e) and the cross-compilation matrix run on every PR too**, per
+[ADR-0013](adr/0013-cross-compile-targets.md) — the matrix across seven targets: `linux` on
+`amd64`/`arm64`/`arm`, `darwin` on `amd64`/`arm64`, `windows` on `amd64`/`arm64`. They live in
+`main.yml` rather than `ci.yml` because they are the slow, matrixed pair, and each matrix leg posts
+its own status check.
+
+What does **not** run on every PR: driver benchmarks. Those run before release.
+
+A distinction the matrix earns its keep by not blurring: cross-compilation proves the code
+**builds** for a target, never that it **behaves** there. Platform behavior needs a test that names
+the platform, which is why the e2e and integration jobs gain a `windows-latest` leg alongside the
+lockfile.
 
 ### Three layers: gates, `CLAUDE.md`, and skills
 

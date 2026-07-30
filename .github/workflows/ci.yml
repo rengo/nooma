@@ -121,7 +121,8 @@ jobs:
 #                                  label events (`labeled`, `unlabeled`), which
 #                                  this file's `pull_request` trigger does not
 #                                  listen for.
-#   cross-compilation matrix   -> main.yml, on push to main only, next to the L4
-#                                  job. ADR-0001 (pure-Go/wasm driver) is
+#   cross-compilation matrix   -> main.yml, on pull_request and on push to main,
+#                                  next to the L4 job. Seven targets per
+#                                  ADR-0013. ADR-0001 (pure-Go/wasm driver) is
 #                                  Accepted; this is its direct payoff, not
 #                                  blocked on it.

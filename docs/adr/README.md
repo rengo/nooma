@@ -64,6 +64,7 @@ order, with no correspondence to anything.
 | [0010](0010-hybrid-recall-fusion.md) | Hybrid recall fusion | Accepted | M1 |
 | [0011](0011-contributor-licensing.md) | Contributor licensing: no CLA, with a deadline | Accepted | Public release |
 | [0012](0012-vector-proximity-search.md) | Vector proximity search: brute force in Go | Accepted | M1 |
+| [0013](0013-cross-compile-targets.md) | Cross-compilation matrix: seven targets, on every PR (supersedes 0001's criterion 5) | Accepted | M0 |
 
 ## Template
 
