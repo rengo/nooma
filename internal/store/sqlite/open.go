@@ -199,6 +199,25 @@ func (v *Vault) SchemaVersion(ctx context.Context) (int, error) {
 	return version, nil
 }
 
+// IntegrityCheck runs SQLite's own PRAGMA integrity_check against the vault.
+//
+// Named explicitly rather than folded into Check, which already exists here and
+// means something unrelated — an FTS5-registration probe. Two methods called
+// Check and IntegrityCheck are clearer than one Check that grew a second job.
+//
+// Like SchemaVersion this stays inside the scope boundary: it asks SQLite whether
+// the FILE is coherent, and reads no domain row.
+func (v *Vault) IntegrityCheck(ctx context.Context) error {
+	var result string
+	if err := v.db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result); err != nil {
+		return fmt.Errorf("running integrity_check on %s: %w", v.path, err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("integrity_check on %s reported: %s", v.path, result)
+	}
+	return nil
+}
+
 // Check runs a probe that exercises the same failure mode a missing FTS5
 // registration would hit, on a connection taken from the pool (design
 // §4.3). temp. keeps it out of the vault entirely and it touches no domain
