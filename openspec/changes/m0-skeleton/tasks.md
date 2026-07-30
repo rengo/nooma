@@ -271,7 +271,19 @@ Depends on PR 3.
 
 ---
 
-## PR 5 — Vault resolution (~360 lines)
+## Slice 5 — Vault resolution (~360 estimated; 543 + ~250 actual)
+
+**The chain's first `size:exception`, taken deliberately in slice 5a (2026-07-30).** 543 review lines
+against the 400 ceiling, and unlike slices 3a–3e there was no clean cut: a resolver that handles two
+of its four steps is not shippable, and splitting it would have published a function whose documented
+contract was false for one PR, with a test asserting that lie to stay green. The exception is the
+smaller harm.
+
+The precedent is *"split unless splitting makes the result worse"*, not *"the ceiling is optional"*.
+Eight slices before this one were split rather than excepted, including one left 14 lines over rather
+than deleting the record of why the chain grew.
+
+Slice 5b carries R6.8, R6.9, the `os.Executable` tree scan and the partial-vault diagnostic.
 
 Depends on PR 3. Closes known-debt items 4 and 5, which per **C1** means writing their requirements
 first.
