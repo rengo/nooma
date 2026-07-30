@@ -181,3 +181,140 @@ func TestFreshVaultIsLoadable(t *testing.T) {
 		t.Errorf("the config points at %s, which init did not create: %v", dbPath, err)
 	}
 }
+
+// TestInitNeverOverwrites is spec R7.3, and the file case is the one that matters
+// most: os.ReadDir on a plain file returns an error rather than an empty listing,
+// so an emptiness check that ignored that error would classify a stray file as
+// empty — and os.Remove deletes plain files happily. `touch pablo.nooma` followed
+// by init would then delete it.
+func TestInitNeverOverwrites(t *testing.T) {
+	t.Run("a non-empty directory", func(t *testing.T) {
+		home, work := t.TempDir(), t.TempDir()
+		target := filepath.Join(work, "taken.nooma")
+		if err := os.MkdirAll(filepath.Join(target, "sub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, stderr, err := nooma(t, home, work, "init", target); err == nil {
+			t.Fatal("init overwrote a non-empty directory")
+		} else if !strings.Contains(stderr, "not empty") {
+			t.Errorf("the error does not say why:\n%s", stderr)
+		}
+		if _, err := os.Stat(filepath.Join(target, "sub")); err != nil {
+			t.Errorf("the existing content was disturbed: %v", err)
+		}
+	})
+
+	t.Run("a plain file", func(t *testing.T) {
+		home, work := t.TempDir(), t.TempDir()
+		target := filepath.Join(work, "decoy.nooma")
+		if err := os.WriteFile(target, []byte("not a vault"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, _, err := nooma(t, home, work, "init", target); err == nil {
+			t.Fatal("init accepted a plain file as its target")
+		}
+		content, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatalf("the file was deleted: %v", err)
+		}
+		if string(content) != "not a vault" {
+			t.Errorf("the file was modified: %q", content)
+		}
+	})
+
+	t.Run("a symlink", func(t *testing.T) {
+		home, work := t.TempDir(), t.TempDir()
+		real := filepath.Join(work, "real")
+		if err := os.MkdirAll(real, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(work, "link.nooma")
+		if err := os.Symlink(real, link); err != nil {
+			t.Skipf("symlinks unavailable here: %v", err)
+		}
+
+		if _, _, err := nooma(t, home, work, "init", link); err == nil {
+			t.Fatal("init created a vault through a symlink")
+		}
+		if _, err := os.Lstat(link); err != nil {
+			t.Errorf("the symlink was removed: %v", err)
+		}
+	})
+}
+
+// TestInitAcceptsAnExistingEmptyDirectory is the case Go's os.Rename makes
+// awkward: it refuses ANY existing directory, empty or not, because its Lstat
+// guard fires before rename(2) — which POSIX would have allowed. t.TempDir()
+// returns exactly such a directory, and so does `mkdir myvault.nooma` followed by
+// init, which is a thing people do.
+func TestInitAcceptsAnExistingEmptyDirectory(t *testing.T) {
+	home, work := t.TempDir(), t.TempDir()
+	target := filepath.Join(work, "empty.nooma")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, stderr, err := nooma(t, home, work, "init", target); err != nil {
+		t.Fatalf("init refused an existing empty directory: %v\nstderr: %s", err, stderr)
+	}
+	assertVault(t, target)
+}
+
+// TestInitWithNoArgumentUsesTheHomeLocation is spec R7.1b, and it is the case the
+// proposal's own demo depends on: `nooma init && nooma serve` from anywhere.
+//
+// It also pins what a bare init must NOT do — scatter six entries into whatever
+// directory the user happens to be standing in.
+func TestInitWithNoArgumentUsesTheHomeLocation(t *testing.T) {
+	home := t.TempDir()
+	work := t.TempDir()
+
+	stdout, stderr, err := nooma(t, home, work, "init")
+	if err != nil {
+		t.Fatalf("bare init: %v\nstderr: %s", err, stderr)
+	}
+
+	container := filepath.Join(home, ".nooma")
+	entries, err := os.ReadDir(container)
+	if err != nil {
+		t.Fatalf("bare init did not create %s: %v", container, err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one vault in %s, got %d", container, len(entries))
+	}
+
+	vault := filepath.Join(container, entries[0].Name())
+	assertVault(t, vault)
+	if !strings.HasSuffix(vault, ".nooma") {
+		t.Errorf("the created vault %s does not end in .nooma, so resolution will not find it", vault)
+	}
+	if !strings.Contains(stdout, vault) {
+		t.Errorf("bare init did not print where it created the vault:\n%s", stdout)
+	}
+
+	if left, _ := os.ReadDir(work); len(left) != 0 {
+		t.Errorf("a bare init wrote %d entries into the working directory; it must not touch the cwd", len(left))
+	}
+}
+
+// TestSecondBareInitRefuses keeps the default location decidable. Two vaults in
+// ~/.nooma would make resolution step 4 permanently ambiguous (R6.2), so init
+// refuses to create the ambiguity rather than leaving the user to discover it.
+func TestSecondBareInitRefuses(t *testing.T) {
+	home := t.TempDir()
+	work := t.TempDir()
+
+	if _, stderr, err := nooma(t, home, work, "init"); err != nil {
+		t.Fatalf("first init: %v\nstderr: %s", err, stderr)
+	}
+
+	_, stderr, err := nooma(t, home, work, "init")
+	if err == nil {
+		t.Fatal("a second bare init succeeded, leaving two vaults in the default location")
+	}
+	if !strings.Contains(stderr, "ambiguous") {
+		t.Errorf("the error does not explain why a second default vault is refused:\n%s", stderr)
+	}
+}
