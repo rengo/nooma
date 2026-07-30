@@ -612,7 +612,8 @@ Three notes on shapes that could have gone otherwise:
   (`claude_cloud`, `local_llama`) and task names (`chat`, `capture_processing`). A map means
   `Strict()` cannot police the *keys*, only each value's fields — so task-name validity is checked
   by M0's validator against the seven task names doc 01 lists, and provider `type` against the
-  four documented types. Unknown names are errors, consistent with R3.2's spirit where the parser
+  three documented types — doc 01 has four provider *entries* but three distinct `type` values,
+  because `anthropic` appears twice. Unknown names are errors, consistent with R3.2's spirit where the parser
   cannot reach. The same map-ness affects the §6 gate's schema comparison, handled there rather
   than here — see §6.
 - Secrets are `*_env` string fields holding variable names. There is no field anywhere that can

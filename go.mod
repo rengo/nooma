@@ -2,7 +2,10 @@ module github.com/rengo/nooma
 
 go 1.26.4
 
-require github.com/ncruces/go-sqlite3 v0.35.2
+require (
+	github.com/goccy/go-yaml v1.19.2
+	github.com/ncruces/go-sqlite3 v0.35.2
+)
 
 require (
 	github.com/ncruces/go-sqlite3-wasm/v3 v3.2.35303 // indirect
