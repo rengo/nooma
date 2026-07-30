@@ -15,8 +15,8 @@ name: main
 # tags) and M0's demo claims Linux/macOS/Windows/ARM, so a Windows-only break
 # must fail on the PR that introduces it, not on main afterward.
 #
-# This file stays separate from ci.yml because these two jobs are the slow ones
-# and are matrixed; ci.yml holds the fast per-PR gates.
+# This file stays separate from ci.yml because these are the slow jobs;
+# ci.yml holds the fast per-PR gates.
 on:
   pull_request:
   push:
@@ -41,6 +41,23 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make test-e2e
+
+  # L4 on Windows: the real binary, run as a subprocess, on the platform
+  # M0's demo claims. Same two constraints as ci.yml's integration-windows
+  # job, for the same reasons — a separate job rather than a matrix leg on
+  # `e2e` (matrixing renames a required check and blocks every merge), and
+  # `go test` rather than `make test-e2e` (make is not on PATH on GitHub's
+  # Windows runners). Keep in sync with the `test-e2e` target by hand.
+  e2e-windows:
+    name: e2e (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test -tags e2e ./test/e2e/...
+
   cross-compile:
     name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
