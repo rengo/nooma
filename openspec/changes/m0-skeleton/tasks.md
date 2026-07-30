@@ -151,9 +151,21 @@ introduces it rather than after merge.
 
 ---
 
-## PR 3 — Config schema, strict decode, `.env`, validation (~400 lines — watch the ceiling)
+## Slice 3 — Config schema, strict decode, `.env`, validation
 
-Depends on PR 1 (the schema must match doc 01 as corrected).
+Depends on slice 1 (the schema must match doc 01 as corrected).
+
+**Measured: it split into three.** Estimated ~400 review lines for all of slice 3; slice 3a alone
+came to **530** before trimming, 327 of them tests. That is this project's own predicted 2–4x
+underestimate, arriving on the first slice of real code. Owner decision (2026-07-30): respect the
+ceiling, do not take a `size:exception`. **The chain is twelve slices, not ten**, and every later
+estimate is the ceiling it was chosen to fit, not a forecast.
+
+| | Content | Lines |
+|---|---|---|
+| **3a** | Schema types; `Decode` rejecting unknown keys, duplicates, wrong types and malformed input; empty document accepted; absence preserved | **398** |
+| **3b** | `ApplyDefaults` + the four defaults, literal-credential rejection, `.env` parsing and precedence, no secret in any output | ~280 |
+| **3c** | Validation: Telegram `allowed_chat_ids`, unset `*_env`, `database.path` escape, aggregate errors, documented types and task names | ~300 |
 
 - [ ] **3.1** [setup, not TDD] `go get github.com/goccy/go-yaml@v1.19.2`; replace
       `internal/config/doc.go`'s placeholder text with the package contract.
