@@ -72,12 +72,6 @@ jobs:
         run: make test-integration
       - name: schema golden regenerates to a clean tree
         run: make schema-golden && git diff --exit-code -- testdata/schema
-
-  # docs/06-harness.md §8 point 5: at least one conformance test per structural
-  # invariant (I01, I03, I21), failing red because there is no implementation
-  # yet. This job proves test/conformance's pendingimpl-tagged package still
-  # fails to compile, and fails for the expected reason — design.md §8
-  # (openspec/changes/complete-harness/design.md), spec.md R7.1-R7.3.
   pending-red:
     name: pending-red
     runs-on: ubuntu-latest
