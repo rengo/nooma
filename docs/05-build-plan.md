@@ -19,18 +19,23 @@ Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver, close
   [`03-data-model.md`](03-data-model.md).
 - CLI: `init` (minimal wizard), `serve` (HTTP hello + UI placeholder), `status`, `version`,
   `doctor` (config + integrity_check).
-- **Demo**: `nooma init && nooma serve`. **Met on Linux (2026-07-30, PRs #18–#38).** The four-platform
-  claim is dated rather than met: every target still *builds* on every PR
-  ([ADR-0013](adr/0013-cross-compile-targets.md)'s seven), but `internal/store/sqlite` does not *run*
-  on Windows — every vault it opens there fails with `CreateFile /C:`. The DSN is correct; the working
-  hypothesis is that the wasm SQLite build does not apply Windows' drive-letter fixup to a `file://`
-  URI. `darwin` shares the unix code path with Linux and has build coverage only.
+- **Demo**: `nooma init && nooma serve`. **Met on Linux (2026-07-30, PRs #18–#38) and on Windows
+  (2026-07-30, PR #40).** Both are *run*, not inferred: `integration` and `e2e` execute the L3 and L4
+  suites on `ubuntu-latest`, `integration (windows)` and `e2e (windows)` execute them on
+  `windows-latest`, and all four are required checks on every PR.
 
-  M0 is therefore **complete on Linux and open on Windows**, which is a smaller and truer statement
-  than either "done" or "not done". The fix and its CI legs are one unit of work, tracked in
-  `openspec/changes/m0-skeleton/tasks.md` §7.7 with the hypothesis and the constraint that those legs
-  must be separate jobs rather than matrix legs — matrixing `integration` or `e2e` renames a
-  currently-required check, which then never posts and blocks every merge.
+  **`darwin` and every ARM target have build coverage only**, and the distinction is the one
+  [ADR-0013](adr/0013-cross-compile-targets.md)'s seven targets exist to keep visible: cross-compiling
+  proves the code *builds* for a target, never that it *behaves* there. `darwin` shares the unix code
+  path with Linux, which is a reason to expect it to work, not evidence that it does — `windows/amd64`
+  cross-compiled green from the day the harness landed while the store could not open a vault there at
+  all. Naming a runner for macOS and ARM is scheduled with the release work, not with M0.
+
+  One behavior is **unverified on Windows** and stated rather than implied: that `nooma serve` exits
+  with status zero and releases the vault lock on Ctrl+C. The test harness cannot deliver an interrupt
+  to another process there — Windows has no POSIX signals, and a console Ctrl+C needs the child in its
+  own process group plus `GenerateConsoleCtrlEvent`. Everything else about the lock is covered by tests
+  that do run there. Tracked in `openspec/changes/m0-skeleton/tasks.md` §7.7.
 
 ## M1 — Capture and recall
 
