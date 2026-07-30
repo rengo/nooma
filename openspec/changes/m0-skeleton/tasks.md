@@ -49,7 +49,7 @@ Until then, no task may cite "atomic rename" as a safety argument on Windows.
 
 ---
 
-## PR 1 — Docs: the five doc-01 corrections plus two stale claims elsewhere (~170 lines)
+## PR 1 — Docs: the five doc-01 corrections plus doc 05's M0 bullet (~140 lines)
 
 Docs only. No behavioral test: `spec.md` §1's requirements are verified by reading the documents,
 which is what their own "Verified by" says. Touches no `internal/core/` path, so `docs-sync.yml`
@@ -76,16 +76,21 @@ does not fire and no `no-spec-change` label is needed.
       consolidation, channels, size". Date the brain-state half to M2 explicitly, or reword to what
       M0 reports. Do not silently drop the claim.
       Requirement: R1.4.
-- [ ] **1.5** `docs/06-harness.md` §6: the sentence "what does **not** run on every PR: L4 (e2e),
-      driver benchmarks, and the cross-compilation matrix" is false after PR 2. Correct it. The
-      sentence beside it — "the full matrix depends on ADR-0001 and cannot be designed until the
-      spike closes" — died when ADR-0001 closed; correct it too.
-      Requirement: proposal §8.1 item 1.
-- [ ] **1.6** `docs/05-build-plan.md` M0 bullet: "vault resolution (arg → env → portable → home)"
+- [ ] **1.5** `docs/05-build-plan.md` M0 bullet: "vault resolution (arg → env → portable → home)"
       still describes the executable-relative model R6.6 removes. Rewrite to the four-step model.
       Requirement: proposal §8.1 item 2.
-- [ ] Verify: `make check` (confirms nothing outside markdown broke); read all six edits against
-      `spec.md` §1's "Verified by" clauses.
+- [ ] Verify: `make check` (confirms nothing outside markdown broke); `rg "next to the executable"
+      docs/` returns nothing; read all five edits against `spec.md` §1's "Verified by" clauses.
+
+**Not in this PR, and the reason is the rule itself.** `docs/06-harness.md` §6 states that L4 and the
+cross-compilation matrix do not run on every PR. That claim becomes false — but it becomes false in
+**PR 2**, which changes the triggers. Correcting it here would leave the document wrong in the other
+direction for as long as PR 1 sits merged alone, and would link ADR-0013 before it exists. Doc and
+reality are fixed in the *same* PR (non-negotiable #1), so it moves to task 2.7.
+
+This was found while writing PR 1, not while planning it: the plan had filed the correction here
+because it is a docs edit, without asking which PR makes it true. "Docs go in the docs PR" is the
+wrong grouping — the right one is "each claim lands with the change that makes it true".
 
 ---
 
@@ -130,6 +135,13 @@ introduces it rather than after merge.
       Verify: **outside local verification** (GitHub configuration). Confirm by opening a throwaway
       PR and comparing the posted check names against the registered strings before merging this PR.
       Requirement: R2.2.
+- [ ] **2.7** `docs/06-harness.md` §6: the sentence "what does **not** run on every PR: L4 (e2e),
+      driver benchmarks, and the cross-compilation matrix" becomes false with task 2.2 — correct it
+      here, in the PR that makes it false, not in PR 1. The sentence beside it, "the full matrix
+      depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed
+      two build-order steps ago; correct it too, and link ADR-0013, which task 2.1 creates in this
+      same PR.
+      Requirement: proposal §8.1 item 1; non-negotiable #1.
 
 ---
 
@@ -575,7 +587,7 @@ Every requirement group in `spec.md` maps to at least one task above:
 | Spec | Tasks |
 |---|---|
 | §1 doc corrections (R1.1–R1.4) | 1.1–1.4 |
-| §2 CI (R2.1–R2.4) | 2.1–2.6, 7.7 |
+| §2 CI (R2.1–R2.4) | 2.1–2.7, 7.7 |
 | §3 config schema (R3.1–R3.5) | 3.1–3.5, 3.10 |
 | §4 secrets (R4.1–R4.4) | 3.3, 3.6–3.8, 9.8 |
 | §5 validation (R5.1–R5.4) | 3.9 |
@@ -589,4 +601,4 @@ Every requirement group in `spec.md` maps to at least one task above:
 | §13 `doctor` (R13.1–R13.5) | 9.4–9.7 |
 | §14 boundaries (R14.1–R14.4) | 10.6 |
 | §15 test levels (R15.1–R15.3) | 7.7, 10.4, and every "Test first" line |
-| proposal §8.1 known debt | 1.5, 1.6, 3.10, 5.7, 5.8, 8.7 |
+| proposal §8.1 known debt | 1.5, 2.7, 3.10, 5.7, 5.8, 8.7 |

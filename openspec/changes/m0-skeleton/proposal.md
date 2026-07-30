@@ -258,7 +258,7 @@ is 400 changed lines.
 
 | # | PR | Content | Est. lines |
 |---|---|---|---|
-| 1 | `docs/m0-vault-layout` | The five doc-01 corrections | ~140 |
+| 1 | `docs/m0-vault-layout` | The five doc-01 corrections plus doc 05's M0 bullet | ~140 |
 | 2 | `ci/e2e-and-cross-compile-on-pr` | Move both jobs onto `pull_request`; new ADR-0013 (superseding ADR-0001's acceptance criterion 5) expanding the cross-compile matrix from today's 4 targets to **7** (`darwin/amd64`, `windows/arm64` and `linux/arm` added); `make cross-compile` **and** `make test-e2e` added to `check-all` (R2.3, R2.4); `main.yml`'s and `ci.yml`'s header comments plus `CLAUDE.md`'s Workflow section and the `Makefile` header corrected | ~180 |
 | 3 | `feat/config-schema` | The full `nooma.yml` as Go types, strict decode, `.env` (including duplicate-key and bare-`#` rejection), validation, L1 | ~400 |
 | 4 | `test/config-doc-gate` | A new section-scoped, exactly-one-or-error `yaml` extractor (modeled on `goldenset.ExtractJSONFence`, not a reuse of `schema/markdown.go`'s SQL collector) plus reflection-based key-schema comparison, including the map-typed `providers`/`tasks` union rule; the doc-01 config block as a fixture | ~260 |
@@ -354,8 +354,8 @@ discoveries.
 
 | # | Item | Lands in |
 |---|---|---|
-| 1 | `docs/06-harness.md` §6 says e2e and cross-compile do not run on every PR — false after R2.1. The sentence beside it, "the full matrix depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed two build-order steps ago | PR 1's docs sweep |
-| 2 | `docs/05-build-plan.md`'s M0 bullet still reads "arg → env → portable → home", the executable-relative model R6.6 removes | PR 1's docs sweep |
+| 1 | `docs/06-harness.md` §6 says e2e and cross-compile do not run on every PR — false after R2.1. The sentence beside it, "the full matrix depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed two build-order steps ago | **PR 2** (task 2.7) — the PR that makes the claim false, per non-negotiable #1; originally filed under PR 1 because it is a docs edit, which is the wrong grouping |
+| 2 | `docs/05-build-plan.md`'s M0 bullet still reads "arg → env → portable → home", the executable-relative model R6.6 removes | PR 1 (task 1.5) |
 | 3 | D12 calls the final rename "kernel-atomic" without qualification, but Go's own `os.Rename` doc states "on non-Unix platforms Rename is not an atomic operation" (`$(go env GOROOT)/src/os/file.go:435`), and `init`'s L4 tests run on `windows-latest`. The claim needs scoping to POSIX plus a Windows probe | PR 8 (`init`), with the probe recorded in design §1 |
 | 4 | The upward search does not define what a `readDir` **error** at an intermediate level means — a directory with execute-but-not-list permission could be treated as "zero candidates, keep ascending", which is the silent-skip family. It must be a hard failure naming the directory | PR **5** (`feat/vault-resolution`), as an L1 case |
 | 5 | D8's vault predicate checks that `nooma.yml` exists, not that it is a regular file. A directory named `nooma.yml` would pass and defer a confusing error to config load. `DirEntry.IsDir()` is already available from the same `readDir` call | PR **5**, as an L1 case |
@@ -372,5 +372,5 @@ task list explicitly.
 ## 9. Next step
 
 `sdd-tasks` — turn the ten-PR chain into an ordered task list, with §8.1's items 4 and 5 attached to
-PR 5 as test cases and items 1 and 2 attached to PR 1's docs sweep. Planning is otherwise closed:
+PR 5 as test cases, item 2 attached to PR 1's docs sweep and item 1 to PR 2, where it becomes true. Planning is otherwise closed:
 proposal, spec and design are complete and have survived three adversarial rounds.
