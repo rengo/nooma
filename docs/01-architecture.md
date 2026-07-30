@@ -64,11 +64,12 @@ marker, because `nooma.db`'s location is configurable.
    for `.git`.
 4. **`~/.nooma/`** (installed mode): exactly one `*.nooma` vault inside it.
 
-Portable mode needs no step of its own: on removable media the invocation is
-`cd /media/usb && ./nooma serve`, so step 3 finds the vault beside the executable because it is also
-beside the working directory. Resolution deliberately never looks at the executable's own directory —
-`os.Executable` reports the *resolved* path, so a symlinked install would search a directory the user
-never typed.
+Resolution searches three places and no others: the path it is given, the working directory and its
+ancestors, and `~/.nooma/`. Where the binary itself lives is irrelevant — the same executable on a
+USB drive, in `/usr/local/bin`, or built into a source tree resolves identically.
+
+Portable mode falls out of step 3: on removable media the invocation is
+`cd /media/usb && ./nooma serve`, and the drive is the working directory.
 
 For the searching steps, the candidate count is part of the contract:
 
@@ -79,7 +80,7 @@ For the searching steps, the candidate count is part of the contract:
 | two or more | startup fails, listing every candidate and showing the command form that disambiguates |
 
 **The binary never chooses between candidates.** Opening the wrong brain is the worst failure this
-step can produce, and picking the alphabetically first match would make it silent.
+step can produce, and it would be silent.
 
 Two details that follow from the glob:
 
