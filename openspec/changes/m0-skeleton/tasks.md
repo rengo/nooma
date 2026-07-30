@@ -166,12 +166,13 @@ estimate is the ceiling it was chosen to fit, not a forecast.
 | **3a** | Schema types; `Decode` rejecting unknown keys, duplicates, wrong types and malformed input; empty document accepted; absence preserved | **398** |
 | **3b** | `ApplyDefaults` + the four defaults, literal-credential rejection, `Summary` and the no-secret guarantee | **311** |
 | **3c** | `.env`: the strict subset, its rejections, and file-does-not-beat-environment precedence | ~320 |
-| **3d** | Validation: Telegram `allowed_chat_ids`, unset `*_env`, `database.path` escape, aggregate errors, documented types and task names | ~300 |
+| **3d** | The `Validate` framework with checks as data, plus the two ADR-driven safety checks: ADR-0007's non-loopback bind and ADR-0006's `allowed_chat_ids` | **273** |
+| **3e** | `DatabasePath` resolution and vault-escape rejection, documented provider types and task names, and the aggregate-error test that needs all six problems to exist | ~230 |
 
-Slice 3b measured **630** against its own ~280 estimate and split again by the same rule — 2.2x, on
-top of 3a's 1.3x. Slice 3 is **four** slices and the chain is **thirteen**. The pattern is now
-measured three times running, so treat any remaining estimate in this file as roughly half of what
-the work will be.
+**Every estimate in this slice was low, four times running.** 3a: 530 against ~400. 3b: 630 against
+~280. 3d: 518 against ~300. Slice 3 is **five** slices and the chain is **fourteen**. Read every
+remaining estimate in this file as roughly half the real work — that heuristic is now measured, not
+assumed, and it is more useful than adjusting one number and being wrong again.
 
 - [ ] **3.1** [setup, not TDD] `go get github.com/goccy/go-yaml@v1.19.2`; replace
       `internal/config/doc.go`'s placeholder text with the package contract.
