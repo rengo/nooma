@@ -49,6 +49,10 @@ var commands = map[string]command{
 		summary: "create a vault",
 		run:     runInit,
 	},
+	"status": {
+		summary: "report on a vault without starting it",
+		run:     runStatus,
+	},
 	"version": {
 		summary: "print the version and build information",
 		run:     runVersion,
