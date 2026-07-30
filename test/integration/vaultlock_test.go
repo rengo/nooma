@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -168,4 +169,87 @@ func TestAcquireReleaseRoundTrip(t *testing.T) {
 	if held {
 		t.Errorf("ReadHolder reports the vault held by %d after it was released", pid)
 	}
+}
+
+// TestLockSurvivesSIGKILL is spec R8.3, and it is the requirement that eliminated
+// a plain PID file: that file outlives its process, so after a kill -9 the vault
+// would be permanently unusable until somebody deleted it by hand. An OS advisory
+// lock is released by the kernel however the process dies.
+func TestLockSurvivesSIGKILL(t *testing.T) {
+	dir := vaultDir(t)
+	child := startHolder(t, dir)
+
+	if err := child.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := child.Process.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The kernel releases on process death, but not necessarily before Wait
+	// returns on every platform, so retry briefly rather than asserting once.
+	var lastErr error
+	for i := 0; i < 100; i++ {
+		lock, err := vaultlock.Acquire(dir)
+		if err == nil {
+			if err := lock.Release(); err != nil {
+				t.Fatalf("Release after reacquiring: %v", err)
+			}
+			return
+		}
+		lastErr = err
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("the vault stayed locked after its holder was killed; recovery would need manual\n"+
+		"deletion of the lock file, which spec R8.3 forbids as the documented procedure:\n%v", lastErr)
+}
+
+// TestReadHolderDuringAcquire is the regression guard for D4's single-write rule.
+//
+// An earlier design zeroed the PID region and then wrote the PID, two operations.
+// ReadHolder takes no lock and runs at any instant, so a reader landing between
+// them would have seen a complete, self-consistent, WRONG answer — "no holder" —
+// while the lock was genuinely held. One WriteAt of the full region means that
+// intermediate state does not exist to be observed.
+func TestReadHolderDuringAcquire(t *testing.T) {
+	dir := vaultDir(t)
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			pid, held, err := vaultlock.ReadHolder(dir)
+			if err != nil {
+				continue
+			}
+			if held && pid <= 0 {
+				t.Errorf("ReadHolder reported the vault held by PID %d — a partial write was observed", pid)
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < 200; i++ {
+		lock, err := vaultlock.Acquire(dir)
+		if err != nil {
+			close(stop)
+			wg.Wait()
+			t.Fatalf("Acquire in the churn loop: %v", err)
+		}
+		if err := lock.Release(); err != nil {
+			close(stop)
+			wg.Wait()
+			t.Fatalf("Release in the churn loop: %v", err)
+		}
+	}
+	close(stop)
+	wg.Wait()
 }

@@ -416,32 +416,37 @@ OS-dependent code.
       never a partial one. This is the regression guard against reintroducing a two-write form.
       Verify: `make test-integration`.
       Requirement: R8.4; design D4.
-- [ ] **7.7** Add `windows-latest` to `ci.yml`'s `integration` job matrix and to `main.yml`'s `e2e`
-      job matrix, each with an explicit `make` install step — GNU Make is **not** on PATH on
-      GitHub's Windows runners (MSYS2 is present but, per the runner-image documentation, not added
-      to PATH), so without this the Windows leg fails on a missing tool and proves nothing about
-      `LockFileEx`. Prefer the explicit install over a PATH hack that depends on MSYS2 shipping
-      `make`.
-      Verify: **outside local verification**; confirm on the PR's own checks.
+- [ ] **7.7** ~~Add a Windows leg to the integration and e2e jobs.~~ **Attempted in slice 7b and
+      deferred.** The jobs were written, pushed, and ran. They failed, and what they found is not
+      about the lock.
+
+      **`internal/store/sqlite` has never worked on Windows.** Every L3 test that opens a vault fails
+      with `CreateFile /C:: The filename, directory name, or volume label syntax is incorrect`. The
+      DSN is correct — `buildDSN` produces RFC 8089's `file:///C:/...` and `pathStyleForGOOS` selects
+      the right style — but the filename reaching the Windows file API is `/C:`. Working hypothesis:
+      `ncruces/go-sqlite3` is a wasm build, so SQLite's own URI parser does not apply the Windows
+      drive-letter fixup, because it does not believe it is on Windows.
+
+      This is `docs/06-harness.md` §6's own sentence demonstrated five slices after it was written:
+      cross-compilation proves the code builds for a target, never that it behaves there. The
+      `windows/amd64` build has been green since the harness landed.
+
+      **A gate lands with the thing it gates working**, so the Windows jobs were removed from slice 7b
+      rather than merged red or merged with `continue-on-error`, which would be a gate that cannot
+      fail. They move to a later slice together with the DSN fix, since neither is worth landing
+      without the other. Owner decision (2026-07-30): finish the commands on Linux first, then return
+      to Windows.
+
+      The reusable lesson is in how the earlier bug was verified: the previous DSN fix was checked by
+      unit tests asserting on the DSN **string**, and those tests still pass. Asserting the string a
+      component produces is not the same as asserting the component works — the string was right and
+      it still could not open a file.
       Requirement: R15.1; design D6, D17.
-- [ ] **7.7b** **Re-register the e2e contexts in the ruleset, in this same slice.** Matrixing the
-      e2e job renames the check it posts: today it posts one context, `e2e`, which slice 2 registered
-      as required. Adding a matrix makes GitHub post `e2e (ubuntu-latest)` and
-      `e2e (windows-latest)` instead, so the registered `e2e` context stops being produced — and a
-      required context that is never produced is never satisfied, which **permanently blocks every
-      merge to `main`**.
-
-      Order matters: push the workflow change, let the checks post, read the two real names from
-      `gh pr checks`, then replace `e2e` with them in `required_status_checks`. Do not type the names
-      from this task — read them from what the workflow produced, which is how slice 2 found this
-      trap in the first place.
-
-      After this task the ruleset holds **16** contexts (7 pre-existing + 7 cross-compile + 2 e2e),
-      not the 15 slice 2 left. Spec R2.2's "9 new contexts" is the end state across both slices, and
-      the registration happens in two steps because the second step does not exist until the job is
-      matrixed.
-      Verify: **outside local verification**; re-read the applied ruleset and confirm every context
-      matches a name the workflows actually post.
+- [ ] **7.7b** ~~Register the Windows contexts.~~ **Moot until 7.7 lands**, but the finding stands and
+      must survive: matrixing either `integration` or `e2e` renames a *currently required* check,
+      which then stops posting, is never satisfied, and permanently blocks every merge to `main`.
+      Whatever slice brings the Windows legs back must add them as **separate jobs**, never as matrix
+      legs, and register the new contexts from names read off a real PR rather than typed from a plan.
       Requirement: R2.2.
 - [ ] **7.8** Export `ErrVaultInUse` so `cmd/nooma` can distinguish "held" from other I/O failures;
       `make store-api-golden`. The diff must show only `ErrVaultInUse` — slice 6 already surfaced
