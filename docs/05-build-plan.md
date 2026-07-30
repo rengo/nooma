@@ -13,7 +13,8 @@ Prior decisions: **[ADR-0001](adr/0001-sqlite-driver.md)** (SQLite driver, close
 - ~~ADR-0001 spike~~ — **done**. `ncruces/go-sqlite3` accepted, sqlite-vec dropped, vector
   proximity is a brute-force dot product in Go.
 - Go repo layout (`cmd/nooma`, `internal/...`), config loader (yml + .env), vault resolution
-  (arg → env → portable → home), single-writer lockfile.
+  (arg → `$NOOMA_VAULT` → upward search from the working directory → `~/.nooma/`, see
+  [`01-architecture.md`](01-architecture.md)), single-writer lockfile.
 - Embedded migrations + `PRAGMA user_version`; creates the complete schema from
   [`03-data-model.md`](03-data-model.md).
 - CLI: `init` (minimal wizard), `serve` (HTTP hello + UI placeholder), `status`, `version`,
