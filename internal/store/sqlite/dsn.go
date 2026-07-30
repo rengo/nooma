@@ -103,21 +103,51 @@ func isAbsoluteVaultPath(p string, style pathStyle) bool {
 	}
 }
 
-// toURIPath converts an already-confirmed-absolute dbPath to the path
-// component a "file:" URI expects.
+// setURIPath writes an already-confirmed-absolute dbPath into u as the
+// "file:" URI's path, in the form THIS DRIVER can actually open under
+// style.
 //
-// Under posixStyle the path is already forward-slash-shaped (isAbsoluteVaultPath
-// guaranteed a leading "/") and needs no translation.
+// Under posixStyle the path is already forward-slash-shaped
+// (isAbsoluteVaultPath guaranteed a leading "/") and goes into u.Path,
+// where net/url escapes it.
 //
-// Under windowsStyle, backslashes become forward slashes and a leading "/"
-// is prepended ahead of the drive letter, producing the standard
-// "file:///C:/Users/..." shape (RFC 8089's file-absolute form) that SQLite
-// accepts.
-func toURIPath(dbPath string, style pathStyle) string {
+// Under windowsStyle it goes into u.Opaque, producing "file:C:/Users/..."
+// — no authority, no leading slash ahead of the drive letter. That is NOT
+// RFC 8089's file-absolute form, and the deviation is deliberate:
+//
+//   - RFC 8089 says "file:///C:/Users/...", and SQLite's own URI parser
+//     agrees — but only when SQLite is compiled for Windows. That build
+//     strips the leading slash ahead of a drive letter; other builds hand
+//     the path through unchanged.
+//   - This driver's SQLite is a wasm build (ADR-0001), so it is not a
+//     SQLITE_OS_WIN build and never applies that fixup. Its VFS, however,
+//     is Go code running natively on the host: vfs/file.go passes the name
+//     to os.OpenFile verbatim, with no drive-letter handling anywhere in
+//     the package. So "file:///C:/x" reaches the Windows file API as the
+//     literal "/C:/x" and fails — "CreateFile /C:: The filename,
+//     directory name, or volume label syntax is incorrect".
+//   - The opaque form gives that same VFS the string "C:/Users/...",
+//     which os.OpenFile accepts as the ordinary absolute Windows path it
+//     is. SQLite accepts it because a "file:" URI's path need not be
+//     absolute — sqlite.org/uri.html — and this driver only requires the
+//     "file:" prefix to parse "_pragma" and "_txlock" at all
+//     (driver/driver.go).
+//
+// Escaping becomes this function's job in that branch, and that is the
+// cost of the deviation, recorded rather than discovered later:
+// url.URL.String() escapes u.Path but writes u.Opaque verbatim, so a vault
+// path containing a space, '#' or '?' would be truncated or reinterpreted
+// as a query parameter — the exact defect design D3 chose net/url to
+// avoid. The path is therefore escaped explicitly, by round-tripping it
+// through url.URL.EscapedPath() and dropping the leading slash. SQLite
+// percent-decodes it back before opening.
+func setURIPath(u *url.URL, dbPath string, style pathStyle) {
 	if style != windowsStyle {
-		return dbPath
+		u.Path = dbPath
+		return
 	}
-	return "/" + strings.ReplaceAll(dbPath, `\`, "/")
+	slashed := "/" + strings.ReplaceAll(dbPath, `\`, "/")
+	u.Opaque = strings.TrimPrefix((&url.URL{Path: slashed}).EscapedPath(), "/")
 }
 
 // buildDSN builds the file: URI driver.Open expects from a plain,
@@ -128,6 +158,10 @@ func toURIPath(dbPath string, style pathStyle) string {
 // otherwise be silently truncated or reinterpreted as query parameters
 // (design D3) — and it carries every operational setting this store
 // requires, in the order design D3 fixes.
+//
+// The two styles put the path in different URI components, and the
+// windowsStyle one is not the RFC 8089 shape: see setURIPath, which owns
+// that decision and the escaping it makes this package responsible for.
 //
 // dbPath MUST be absolute under style. This is checked structurally, not
 // documented as a warning (CLAUDE.md non-negotiable #7): url.URL{Path: p}
@@ -179,8 +213,8 @@ func buildDSN(dbPath string, style pathStyle) (string, error) {
 
 	u := url.URL{
 		Scheme:   "file",
-		Path:     toURIPath(dbPath, style),
 		RawQuery: q.Encode(),
 	}
+	setURIPath(&u, dbPath, style)
 	return u.String(), nil
 }
