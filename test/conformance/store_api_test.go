@@ -143,9 +143,18 @@ func collectExportedSurface(t *testing.T, repoRoot, storeDir string) []string {
 
 // renderExportedDecl renders zero or more golden lines for one top-level
 // declaration: a rendered "func ..." signature for an exported function or
-// method, or "type Name" for an exported type. Unexported declarations and
-// non-type GenDecls (const, var, import) contribute nothing — the store
-// surface is its exported API, not its internals.
+// method, "type Name" for an exported type, and "var Name" / "const Name" for
+// an exported variable or constant. Unexported declarations and imports
+// contribute nothing.
+//
+// An earlier version dropped every GenDecl whose token was not TYPE, with a
+// comment claiming const and var "contribute nothing — the store surface is its
+// exported API, not its internals". That is backwards for a sentinel error.
+// internal/store/sqlite has exported ErrRelativeDBPath since the DSN work and
+// callers are expected to match on it with errors.Is; it is as much of the public
+// surface as any method, and it had never appeared in the golden. The gate whose
+// stated job is to make a widening of the store surface reviewable could only see
+// a widening that happened to be a func or a type.
 func renderExportedDecl(t *testing.T, fset *token.FileSet, decl ast.Decl) []string {
 	t.Helper()
 
@@ -156,16 +165,22 @@ func renderExportedDecl(t *testing.T, fset *token.FileSet, decl ast.Decl) []stri
 		}
 		return []string{renderFuncSignature(t, fset, d)}
 	case *ast.GenDecl:
-		if d.Tok != token.TYPE {
-			return nil
-		}
 		var out []string
 		for _, spec := range d.Specs {
-			ts, ok := spec.(*ast.TypeSpec)
-			if !ok || !ts.Name.IsExported() {
-				continue
+			switch s := spec.(type) {
+			case *ast.TypeSpec:
+				if s.Name.IsExported() {
+					out = append(out, "type "+s.Name.Name)
+				}
+			case *ast.ValueSpec:
+				// A single declaration may bind several names
+				// (`var A, B = ...`), so every name is rendered on its own line.
+				for _, name := range s.Names {
+					if name.IsExported() {
+						out = append(out, d.Tok.String()+" "+name.Name)
+					}
+				}
 			}
-			out = append(out, "type "+ts.Name.Name)
 		}
 		return out
 	default:
@@ -206,4 +221,38 @@ func stripFieldNames(fl *ast.FieldList) *ast.FieldList {
 		out.List = append(out.List, &ast.Field{Type: f.Type})
 	}
 	return out
+}
+
+// TestHarness_StoreAPIIncludesExportedSentinels pins the half of the exported
+// surface the golden was blind to.
+//
+// renderExportedDecl used to drop every GenDecl whose token was not TYPE, with a
+// comment asserting that const and var "contribute nothing — the store surface is
+// its exported API, not its internals". That is exactly backwards for a sentinel
+// error: internal/store/sqlite has exported ErrRelativeDBPath since the DSN work,
+// callers are expected to compare against it with errors.Is, and it had never
+// appeared in the golden. A widening of the store's surface was reviewable only
+// if it happened to be a func or a type.
+//
+// This test names one symbol deliberately rather than asserting "some var
+// exists": the golden's whole purpose is that a specific surface is what review
+// sees, so the assertion is specific too.
+func TestHarness_StoreAPIIncludesExportedSentinels(t *testing.T) {
+	repoRoot := repoRootFromCaller(t)
+
+	golden, err := os.ReadFile(filepath.Join(repoRoot, storeAPIGoldenPath))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+
+	const sentinel = "var ErrRelativeDBPath"
+	if !strings.Contains(string(golden), sentinel) {
+		t.Errorf(
+			"%s does not contain %q.\n"+
+				"internal/store/sqlite exports that sentinel and callers match on it with\n"+
+				"errors.Is, so it is part of the store's public surface. A golden that cannot\n"+
+				"see exported var and const declarations makes half a widening invisible to\n"+
+				"review — including the ErrVaultInUse the lock will add next.",
+			storeAPIGoldenPath, sentinel)
+	}
 }

@@ -8,3 +8,4 @@ internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError
+internal/store/sqlite: var ErrRelativeDBPath
