@@ -1,0 +1,26 @@
+# Every text file is LF in every working tree, on every platform.
+#
+# This is structural, not stylistic. `testdata/schema/*.golden` is compared
+# byte for byte against freshly generated SQL (test/integration/schema_golden_test.go),
+# and Git's own default on Windows — core.autocrlf=true, which is what
+# GitHub's windows-latest image ships — rewrites LF to CRLF on checkout.
+# That alone turned `integration (windows)` red on a schema nothing had
+# touched: the committed golden and the generated one differed only in
+# bytes no one had written.
+#
+# `text=auto eol=lf` normalizes on commit and checks out LF everywhere, so
+# a byte-comparing gate cannot be defeated by which platform cloned the
+# repo. It also keeps the shell scripts under scripts/ executable by a
+# POSIX shell after a round trip through a Windows clone.
+* text=auto eol=lf
+
+# Binary files Git must never touch. Listed explicitly rather than trusted
+# to detection, since a false positive here corrupts the file.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.db binary
+*.sqlite binary
+*.wasm binary

@@ -951,10 +951,18 @@ command is the honest answer until the command works.
 
 ### R10.2 — `version` behavior is unchanged
 
-**MUST**: `nooma version` keeps printing `nooma <version> (<revision>)` and
-`test/e2e/version_test.go` continues to pass unmodified.
+**MUST**: `nooma version` keeps printing `nooma <version> (<revision>)`, and no edit to
+`test/e2e/version_test.go` may change what it asserts.
 
-**Verified by**: the existing L4 test, unedited.
+**Verified by**: the existing L4 test, with its assertions untouched.
+
+**Amended in slice 7c**, when the test ran on Windows for the first time and could not: `go build -o`
+was writing a suffixless file, which `exec.Command` on Windows does not consider executable, so the
+test failed with "executable file not found in %PATH%" while naming a file that existed. The fix
+appends `.exe` to the *build output path*. The requirement is worded as "no edit may change what it
+asserts" rather than "unedited" because the original wording made a true statement of intent — do
+not rewrite this test to make a broken `version` pass — into a false statement of fact the moment a
+new platform was added. `versionShape` and every assertion are byte-for-byte what they were.
 
 ### R10.3 — No arguments prints usage listing the real commands
 

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"testing"
 )
 
@@ -40,7 +41,18 @@ var versionShape = regexp.MustCompile(`^nooma \S+ \(\S+\)\n$`)
 // imports. A change that would NOT make it fail: bumping the version string,
 // or any change to a package this binary does not import.
 func TestBinaryReportsVersion(t *testing.T) {
-	binPath := filepath.Join(t.TempDir(), "nooma")
+	// The ".exe" suffix is not decoration on Windows: without it the file
+	// `go build -o` writes is not an executable as far as exec.Command is
+	// concerned, and the test fails with "executable file not found in
+	// %PATH%" while naming a file that plainly exists. This is the only
+	// edit this file has taken, and R10.2 records why it is not the kind
+	// of edit R10.2 forbids: it changes where the binary is written, never
+	// what `nooma version` must print.
+	name := "nooma"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	binPath := filepath.Join(t.TempDir(), name)
 
 	build := exec.Command("go", "build", "-buildvcs=false", "-o", binPath, "./cmd/nooma")
 	build.Dir = repoRoot(t)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,7 +32,16 @@ func TestOpenCorruptVaultNamesThePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("sqlite.Open(...) on a corrupt vault file = nil error, want non-nil")
 	}
-	if !strings.Contains(err.Error(), dbPath) {
-		t.Errorf("sqlite.Open(...) error = %q, want it to mention the vault path %q", err.Error(), dbPath)
+
+	// Open quotes the path with %q, deliberately: an empty or
+	// whitespace-padded path is invisible unquoted. So the assertion looks
+	// for the QUOTED form, not the raw one. Searching for the raw path
+	// worked on Linux by coincidence — a POSIX path has nothing %q escapes
+	// — and failed on Windows, where %q doubles every backslash and
+	// `C:\Users\...` appears as `C:\\Users\\...`. The test was asserting a
+	// property of Linux paths while claiming to assert one of the message.
+	want := strconv.Quote(dbPath)
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("sqlite.Open(...) error = %q, want it to mention the vault path as %s", err.Error(), want)
 	}
 }
