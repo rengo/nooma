@@ -3,6 +3,7 @@
 internal/store/sqlite: func (*Vault) Check(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Close() error
 internal/store/sqlite: func (*Vault) Path() string
+internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)

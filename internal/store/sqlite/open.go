@@ -185,6 +185,20 @@ func (v *Vault) Stats() sql.DBStats {
 	return v.db.Stats()
 }
 
+// SchemaVersion reports the vault's PRAGMA user_version — the migration level
+// the file is at.
+//
+// It is a pragma, not a domain row, so it stays inside the scope boundary
+// testdata/schema/store_api.golden guards: this widens the store's surface with a
+// way to ask how the FILE is versioned, not with a way to read what is in it.
+func (v *Vault) SchemaVersion(ctx context.Context) (int, error) {
+	var version int
+	if err := v.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return 0, fmt.Errorf("reading user_version from %s: %w", v.path, err)
+	}
+	return version, nil
+}
+
 // Check runs a probe that exercises the same failure mode a missing FTS5
 // registration would hit, on a connection taken from the pool (design
 // §4.3). temp. keeps it out of the vault entirely and it touches no domain
