@@ -53,6 +53,10 @@ var commands = map[string]command{
 		summary: "diagnose a vault without starting it",
 		run:     runDoctor,
 	},
+	"serve": {
+		summary: "start the API and the UI",
+		run:     runServe,
+	},
 	"status": {
 		summary: "report on a vault without starting it",
 		run:     runStatus,
