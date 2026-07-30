@@ -259,10 +259,10 @@ is 400 changed lines.
 | # | PR | Content | Est. lines |
 |---|---|---|---|
 | 1 | `docs/m0-vault-layout` | The five doc-01 corrections | ~140 |
-| 2 | `ci/e2e-and-cross-compile-on-pr` | Move both jobs onto `pull_request`; new ADR-0013 (superseding ADR-0001's acceptance criterion 5) expanding the cross-compile matrix from today's 4 targets to **7** (`darwin/amd64`, `windows/arm64` and `linux/arm` added); `make cross-compile` added to `check-all`; `main.yml`'s and `ci.yml`'s header comments corrected | ~160 |
+| 2 | `ci/e2e-and-cross-compile-on-pr` | Move both jobs onto `pull_request`; new ADR-0013 (superseding ADR-0001's acceptance criterion 5) expanding the cross-compile matrix from today's 4 targets to **7** (`darwin/amd64`, `windows/arm64` and `linux/arm` added); `make cross-compile` **and** `make test-e2e` added to `check-all` (R2.3, R2.4); `main.yml`'s and `ci.yml`'s header comments plus `CLAUDE.md`'s Workflow section and the `Makefile` header corrected | ~180 |
 | 3 | `feat/config-schema` | The full `nooma.yml` as Go types, strict decode, `.env` (including duplicate-key and bare-`#` rejection), validation, L1 | ~400 |
 | 4 | `test/config-doc-gate` | A new section-scoped, exactly-one-or-error `yaml` extractor (modeled on `goldenset.ExtractJSONFence`, not a reuse of `schema/markdown.go`'s SQL collector) plus reflection-based key-schema comparison, including the map-typed `providers`/`tasks` union rule; the doc-01 config block as a fixture | ~260 |
-| 5 | `feat/vault-resolution` | Upward-search resolution (cwd to filesystem root), exactly-one-usable-candidate-or-error at every level, the `.nooma`-name exclusion, L1; `.golangci.yml` gains a `forbidigo` rule banning `os.Executable` in `internal/config` (D16) | ~330 |
+| 5 | `feat/vault-resolution` | Upward-search resolution (cwd to filesystem root), exactly-one-usable-candidate-or-error at every level, the `.nooma`-name exclusion, a hard failure on a `readDir` error mid-ascent, `nooma.yml`-is-not-a-directory in the predicate, L1; plus an L2 tree-scan test banning `os.Executable` under `internal/config` (D16 — **not** a `forbidigo` rule; `.golangci.yml` is not touched) | ~360 |
 | 6 | `fix/store-golden-var-const` | Extends `renderExportedDecl` to render exported `var`/`const` declarations (D14) and regenerates `testdata/schema/store_api.golden`; the diff surfaces exactly one thing — the pre-existing `ErrRelativeDBPath` (`internal/store/sqlite/dsn.go:15`), reviewed as pre-existing, not new | ~70 |
 | 7 | `feat/vault-lock` | `nooma.lock` (acquire-before-write ordering, D4, single `WriteAt` for the PID region), L3 under real contention on `ubuntu-latest` **and** `windows-latest` — both jobs gain their Windows leg here (D6), with an explicit `make` install step on each (D17) — `ErrVaultInUse` sentinel, store-API golden regenerated (renderer already widened by PR 6, so this diff shows only `ErrVaultInUse`) | ~360 |
 | 8 | `feat/cli-init` | Dispatch table, `init` interactive and not (shared input struct, D15), corrected temp-dir-then-rename mechanism with the `Lstat` guard for file/symlink targets and a collision-resistant temp-dir suffix (D12), L4 | ~410 |
@@ -344,10 +344,33 @@ it, while `units_fts` uses `content_rowid='rowid'` and ADR-0001 criterion 4 comm
 `VACUUM INTO`. Three probes found rowids preserved in practice, so the exposure is latent, not
 active. `export` is not an M0 command, so M0 does not resolve it.
 
+### 8.1 Known debt carried into implementation
+
+Three adversarial review rounds produced 32 remediated findings. The round-3 findings below were
+deliberately **not** remediated in the plan: each is either a one-line correction or something the
+first test in its area surfaces immediately, and a fourth review round over prose was judged to
+yield less than the first failing test. They are recorded here so that they arrive as debt, not as
+discoveries.
+
+| # | Item | Lands in |
+|---|---|---|
+| 1 | `docs/06-harness.md` §6 says e2e and cross-compile do not run on every PR — false after R2.1. The sentence beside it, "the full matrix depends on ADR-0001 and cannot be designed until the spike closes", died when ADR-0001 closed two build-order steps ago | PR 1's docs sweep |
+| 2 | `docs/05-build-plan.md`'s M0 bullet still reads "arg → env → portable → home", the executable-relative model R6.6 removes | PR 1's docs sweep |
+| 3 | D12 calls the final rename "kernel-atomic" without qualification, but Go's own `os.Rename` doc states "on non-Unix platforms Rename is not an atomic operation" (`$(go env GOROOT)/src/os/file.go:435`), and `init`'s L4 tests run on `windows-latest`. The claim needs scoping to POSIX plus a Windows probe | PR 8 (`init`), with the probe recorded in design §1 |
+| 4 | The upward search does not define what a `readDir` **error** at an intermediate level means — a directory with execute-but-not-list permission could be treated as "zero candidates, keep ascending", which is the silent-skip family. It must be a hard failure naming the directory | PR **5** (`feat/vault-resolution`), as an L1 case |
+| 5 | D8's vault predicate checks that `nooma.yml` exists, not that it is a regular file. A directory named `nooma.yml` would pass and defer a confusing error to config load. `DirEntry.IsDir()` is already available from the same `readDir` call | PR **5**, as an L1 case |
+| 6 | D12 enumerates two race windows for the empty-target branch and misses a third: two racing `init`s both calling `os.Remove(target)`, where the loser sees `ENOENT` — a different error shape from the `EEXIST`/`ENOTEMPTY` pair the design classifies | PR 8 |
+| 7 | design §4 says provider `type` is validated "against the four documented types"; doc 01 has four provider *entries* but three distinct types (`anthropic` twice, `ollama`, `whisper_cpp`) | PR **3** (config schema) |
+| 8 | Two passages quote `docs/06-harness.md` §3 with wording that document does not contain ("a real second process"; "no test touches the network" — the latter is `CLAUDE.md`'s non-negotiable #5) | any PR touching design §5 or §8 |
+
+Items 4 and 5 are the two that would otherwise become real defects rather than documentation
+inaccuracies, so they carry L1 test cases rather than prose corrections, and they are named in PR 5's
+task list explicitly.
+
 ---
 
 ## 9. Next step
 
-`sdd-spec` — turn §2's criteria and §4's properties into testable requirements with Given/When/
-Then scenarios, and `sdd-design` in parallel to settle the four open questions above (Windows
-runtime coverage, the fifth, is already decided — see R2).
+`sdd-tasks` — turn the ten-PR chain into an ordered task list, with §8.1's items 4 and 5 attached to
+PR 5 as test cases and items 1 and 2 attached to PR 1's docs sweep. Planning is otherwise closed:
+proposal, spec and design are complete and have survived three adversarial rounds.

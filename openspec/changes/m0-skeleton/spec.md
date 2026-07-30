@@ -140,9 +140,30 @@ Makefile includes `cross-compile`.
 
 **Rationale**: `CLAUDE.md`'s Workflow section: "if you add a blocking CI job, add it to
 `check-all` too — unless it needs PR metadata a Makefile cannot produce." Cross-compilation needs
-none — it is `GOOS=x GOARCH=y go build ./...` — unlike e2e (which needs a running binary and is
-already excluded from `check-all` for a documented reason) or `docs-sync.yml` (which needs PR
-labels).
+none — it is `GOOS=x GOARCH=y go build ./...` — and neither does `make test-e2e` (see R2.4), unlike
+`docs-sync.yml` (which needs PR labels).
+
+### R2.4 — `make test-e2e` joins `check-all` too
+
+**MUST**: `make check-all` includes `test-e2e` once R2.1 makes the e2e job block pull requests.
+
+**MUST**: `CLAUDE.md`'s Workflow section and the `Makefile` header are updated in the same PR to
+name both new targets, so their enumeration of what `check-all` covers stays true.
+
+**MUST NOT**: any document claim that e2e is excluded from `check-all` "for a documented reason".
+No such reason exists anywhere in the repository — `CLAUDE.md` names exactly one gate `check-all`
+cannot cover, `docs-sync.yml`, for exactly one reason, PR metadata. An earlier draft of this spec
+and of design §7 both asserted the nonexistent exclusion, and design §7 then contradicted itself
+eleven lines later by saying e2e was added.
+
+**Verified by**: `check-all`'s target list in the Makefile includes `test-e2e`; `make check-all`
+exits zero on a clean checkout.
+
+**Rationale**: `make test-e2e` already exists, needs no PR metadata, and runs locally, so
+`CLAUDE.md`'s rule applies to it literally the moment R2.1 makes it a blocking gate. It is absent
+from `check-all` today only because it did not block anything today. The cost is accepted and
+stated: `check-all` now compiles the binary and runs L4, so it gets slower. That is what
+`check-all` is for; `make check` stays the fast loop and is untouched.
 
 ---
 
@@ -486,10 +507,15 @@ diagnostic; it is reported simply as not-a-vault (missing `nooma.yml`).
 **MUST NOT**: resolution look for a vault beside the `nooma` binary, at any step.
 
 **Verified by**: an L1 test asserting that a `*.nooma` directory placed beside the test binary is
-not resolved when steps 1, 2, 3 and 4 all fail; plus a `forbidigo` rule in `.golangci.yml` (D16)
-that fails `make check`/CI lint if `os.Executable` appears anywhere under `internal/config/`,
-scoped additively alongside the existing `internal/core/` rule — a lint gate replacing the earlier,
-unverifiable "absence of any call" prose.
+not resolved when steps 1, 2, 3 and 4 all fail; plus an L2 tree-scan conformance test (D16) that
+fails if `os.Executable` is referenced by any non-test `.go` file under `internal/config/`, naming
+the file and line, and that asserts it found files to scan before asserting the property.
+
+**MUST NOT**: this requirement be enforced by adding a `forbidigo` exclusion rule to
+`.golangci.yml`. Measured against the pinned `golangci-lint v2.12.2`, `exclusions.rules` entries OR
+together, so a second rule scoped to `internal/config/` suppresses the existing `internal/core/`
+rule as well — silently disabling the clock and environment enforcement of non-negotiable #3 while
+appearing to add a gate. See design D16 for the measurement and the rejected alternatives.
 
 **Rationale**: `docs/01-architecture.md`'s original step 3 was "vault next to the executable
 (portable mode)". It is removed, and R1.2's doc correction removes it from the document, for three
@@ -559,6 +585,46 @@ exists; plus an L3 test asserting the database's `user_version` equals the migra
 - GIVEN an empty directory
 - WHEN `nooma init` runs against it
 - THEN a vault exists that `nooma status` reports on without error
+
+### R7.1b — `init`'s target argument is optional, and its default is the installed-mode location
+
+**MUST**: `init` accepts an optional target path. With a path, that path is the target, relative to
+the cwd if relative (R6.4's rule, applied identically).
+
+**MUST**: with **no** argument, the target is `~/.nooma/<username>.nooma`, where `<username>` is the
+current OS user — the installed-mode layout `docs/01-architecture.md` depicts as
+`~/.nooma/pablo.nooma/`. `init` creates `~/.nooma/` if it does not exist.
+
+**MUST**: `init` prints the absolute path of the vault it created, on success, on stdout.
+
+**MUST**: with no argument, `init` refuses when `~/.nooma/` already contains a usable vault, naming
+it and pointing at the explicit-path form.
+
+**MUST NOT**: a bare `nooma init` write vault contents into the current working directory.
+
+**Verified by**: L4 tests for all four cases — bare `init` with an empty `~/.nooma/` (creates
+`<username>.nooma` and prints its path), bare `init` with a vault already present (exits non-zero,
+names it), `init <relative-path>`, and `init <absolute-path>` — each with `$HOME` pointed at a
+temporary directory.
+
+**Scenario**:
+- GIVEN a machine with no vault anywhere
+- WHEN the user runs `nooma init && nooma serve` from any working directory
+- THEN `init` creates `~/.nooma/<username>.nooma`, prints that path
+- AND `serve` resolves it through step 4 and starts
+
+**Rationale**: this is the proposal's own demo (`nooma init && nooma serve`, §2), and until now
+nothing in this spec said what a bare `init` targets — R10.4 lists `serve`, `status` and `doctor` as
+taking an optional vault argument and omits `init` entirely, so the CLI dispatch table (D3) could
+not be built from the contract.
+
+The default is the home location rather than the cwd for one reason: a bare command that writes
+`nooma.db`, `nooma.yml`, `.env`, `attachments/`, `derived/` and `logs/` into whatever directory the
+user happens to be standing in is a command that will one day be run in `$HOME`, or in a source
+repository. Creating a named directory in a known place is recoverable and predictable; scattering
+six entries into an arbitrary cwd is neither. The refusal on an existing vault keeps step 4's
+exactly-one-or-error contract (R6.2) satisfiable — a second bare `init` would otherwise make the
+default location permanently ambiguous.
 
 ### R7.2 — `init` is non-interactive when told to be
 
@@ -859,6 +925,11 @@ and exits zero.
 
 **MUST**: `serve`, `status` and `doctor` each accept an optional vault path argument, and in its
 absence use resolution §6 identically.
+
+**MUST**: `init` also accepts an optional path argument, resolved relative to the cwd by the same
+rule, but its no-argument behavior is **not** resolution §6 — it is R7.1b's fixed default, because
+`init` creates a vault rather than finding one. Resolving a vault that does not exist yet is not a
+meaningful operation, which is why `init` is the one vault-touching command that does not share §6.
 
 **Verified by**: L4 tests running all three with an explicit path and with `$NOOMA_VAULT`.
 

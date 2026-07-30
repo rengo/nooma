@@ -176,16 +176,31 @@ So `Acquire` runs in this order:
 
 1. attempt `flock(fd, LOCK_EX|LOCK_NB)` / `LockFileEx(..., LOCKFILE_FAIL_IMMEDIATELY)` on the
    byte at offset 1024 **first**, before touching the PID region at all
-2. on success: build a fixed 1024-byte buffer holding the current PID's decimal digits followed by
-   a NUL terminator, and write the whole buffer in **one** `WriteAt(buf, 0)` call. There is no
-   separate zeroing or truncation pass: a shorter PID (`"7"` after `"123456"`) leaves stale
-   trailing bytes from the previous holder in the buffer past the terminator, and `ReadHolder`
-   simply never reads past the terminator, so those stale bytes are inert rather than needing to
-   be erased first. Collapsing this to one write closes a real gap the earlier two-step form had:
-   `ReadHolder` takes no lock and runs at any instant, so a reader landing *between* a zeroing pass
-   and the PID write would have observed a complete, self-consistent, wrong answer — "no holder" —
-   while the lock was genuinely held, breaking R8.4 in ordinary use, not a contrived race. With one
-   write, that intermediate state does not exist to be observed.
+2. on success: allocate a fresh 1024-byte buffer, write the current PID's decimal digits followed
+   by a NUL terminator into its front, and write **the whole 1024 bytes** in one `WriteAt(buf, 0)`
+   call.
+
+   The buffer is the full region, not a short prefix, and that is the point. A freshly allocated Go
+   byte slice is zero-initialised, so every byte past the terminator is written as zero and no byte
+   of a previous holder's PID can survive — `"7"` replacing `"123456"` leaves nothing behind. There
+   is no separate zeroing or truncation pass because the single full-width write *is* the zeroing.
+
+   (An earlier draft of this decision described the same write two incompatible ways — "the whole
+   buffer" and, in the next sentence, stale bytes from the previous holder surviving past the
+   terminator. Both cannot be true: a full-width write of a zero-initialised buffer leaves no stale
+   bytes, and stale bytes only survive a *short* write. The full-width form is chosen because it is
+   simpler and strictly safer, and because §8's regression test needs one unambiguous invariant to
+   assert.)
+
+   Collapsing this to one write closes a real gap the earlier two-step form had: `ReadHolder` takes
+   no lock and runs at any instant, so a reader landing *between* a zeroing pass and the PID write
+   would have observed a complete, self-consistent, wrong answer — "no holder" — while the lock was
+   genuinely held, breaking R8.4 in ordinary use, not a contrived race. With one write, that
+   intermediate state does not exist to be observed.
+
+   `ReadHolder` still stops at the first NUL rather than trusting the region to be clean. That is
+   defensive, not required by the above: it costs one loop and it means a truncated or
+   foreign-written lock file degrades to "no holder" instead of to a garbage PID.
 3. on failure (lock already held): read the existing, untouched PID region and return it as the
    holder — nothing in the file is written, because nothing about the losing process is true yet
 
@@ -194,11 +209,12 @@ not authoritative and is reported as such — the lock, not the file's existence
 "acquire, then write" ordering is the whole reason a losing `Acquire` never corrupts the winner's
 PID.
 
-The whole PID-region write is a single `WriteAt` of a fixed-size buffer (well under any platform's
-atomic-write guarantee for a short buffer), because `ReadHolder` takes no lock and could otherwise
-observe a torn write on a filesystem where a small write is not atomic — see risk #1. An L3 test
-reads the PID region concurrently with `Acquire` specifically to catch a regression back to a
-two-write form (§8).
+The PID region is written by exactly one `WriteAt` of exactly 1024 bytes, because `ReadHolder` takes
+no lock and could otherwise observe either an intermediate state between two writes or a torn write
+on a filesystem where a small write is not atomic — see risk #1. An L3 test reads the PID region
+concurrently with `Acquire` specifically to catch a regression back to a two-write form, and asserts
+that every read returns either the empty holder or the complete winning PID, never a partial one
+(§8).
 
 ### D5 — `golang.org/x/sys` is promoted from indirect to direct
 
@@ -477,22 +493,58 @@ creation therefore cannot observe which path produced its input, which is what m
 cannot produce a vault the non-interactive path cannot" true by construction rather than by
 convention. See §8's test matrix for the corresponding L1 row.
 
-### D16 — `os.Executable` is banned from `internal/config` by a second, additive `forbidigo` rule
+### D16 — `os.Executable` is banned from `internal/config` by a tree-scan conformance test, **not** by `forbidigo`
 
 R6.6's `Verified by` originally rested on "the absence of any `os.Executable` call in
-`internal/config`" as unenforced prose: nothing in `.golangci.yml` scopes `forbidigo` to ban it
-there, and a behavioral test proves only that today's resolution logic ignores the executable's
-directory in one scenario — it cannot prove no such call exists anywhere in the package, so a
-future contributor adding an unrelated diagnostic could violate R6.6's letter with nothing catching
-it. Per `CLAUDE.md`: "If a rule can be an automated gate, it is a gate — not a skill."
+`internal/config`" as unenforced prose: a behavioral test proves only that today's resolution logic
+ignores the executable's directory in one scenario — it cannot prove no such call exists anywhere in
+the package, so a future contributor adding an unrelated diagnostic could violate R6.6's letter with
+nothing catching it. Per `CLAUDE.md`: "If a rule can be an automated gate, it is a gate — not a
+skill." So it needs a gate. The question is which.
 
-The fix: `.golangci.yml` gains a second, additive `forbidigo` pattern — `os.Executable` — scoped to
-`internal/config/` only, alongside the existing pattern(s) scoped to `internal/core/`
-(`os.Getenv`, `time.Now`). The two scopes are independent entries in the same linter config; adding
-the `internal/config` rule does not touch or widen the `internal/core` rule. This turns R6.6 into a
-compile-time-checked lint failure instead of an assertion no CI step verifies, and is recorded as
-part of PR 5 (`feat/vault-resolution`, proposal.md §5), the PR that introduces `internal/config`'s
-resolution code in the first place.
+**The `forbidigo` route was tried, measured, and rejected.** An earlier draft of this decision
+specified "a second, additive `forbidigo` pattern scoped to `internal/config/`, alongside the
+existing `internal/core/` rule", asserting the two scopes were independent. That mechanism does not
+exist, and the form described is actively destructive. Two facts, both measured against this repo's
+pinned `golangci-lint v2.12.2`:
+
+1. `forbidigo`'s settings schema has **no per-pattern `path` field** — only `pattern`, `pkg`, `msg`.
+   A pattern cannot carry its own directory scope. Scoping exists only through
+   `exclusions.rules`, which excludes *an entire linter's output* for a path, not one pattern's.
+2. **`exclusions.rules` entries OR together.** With the existing rule (`linters: [forbidigo]`,
+   `path-except: internal/core/`) plus a new one (`path-except: internal/config/`), a violation in
+   either directory is excluded by the *other* rule, so neither is reported:
+
+   ```
+   two exclusion rules → 0 issues
+     os.Getenv     in internal/core   → NOT reported   ← the gate that already worked
+     os.Executable in internal/config → NOT reported
+   control, today's single rule → 1 issue, os.Getenv correctly caught
+   ```
+
+Shipping that would have silently disabled the `core-purity` clock/environment enforcement that has
+worked since the first PR — `CLAUDE.md` non-negotiable #3 — while appearing to add a gate. A
+configuration that *does* work exists (a `text:` filter on every exclusion rule, matching each
+pattern's `msg`), but it is rejected too: it requires rewriting the existing `internal/core` rule,
+and it leaves the same trap latent, because a future `forbidigo` pattern added without its own
+`text:` entry is silently excluded everywhere. A mechanism whose failure mode is "the gate quietly
+stops gating" is the wrong mechanism for a project with eleven recorded instances of exactly that
+defect.
+
+**The decision: a tree-scan conformance test in the untagged L2 suite.** It parses every non-test
+`.go` file under `internal/config/` and fails if any of them references `os.Executable`, naming the
+file and line. This project already has the pattern —
+`test/conformance/i01_focus_never_persisted_test.go` scans the tree for a forbidden literal, and
+`docs/06-harness.md` §4 calls such tests "ugly and worth gold" for precisely this case. Three
+properties decide it:
+
+- It cannot silently stop gating. A missing scan is a visibly absent test, not a passing gate.
+- It runs in `make test` and CI's test job with no new job, no new tag, and no lint-config surgery.
+- Per D10's non-empty-corpus rule, it asserts it actually found `.go` files before asserting the
+  property, so it cannot pass vacuously if the package is renamed or the walk breaks.
+
+Recorded as part of PR 5 (`feat/vault-resolution`, proposal.md §5), the PR that introduces
+`internal/config`'s resolution code. `.golangci.yml` is **not** modified by this change.
 
 ---
 
@@ -527,9 +579,10 @@ Dependency rule check: nothing here imports `internal/core`, and `internal/core`
 `sqlite-containment` is satisfied — `database/sql` stays inside `internal/store/**`, which is why
 `doctor`'s `integrity_check` must be a store method and not a query in `cmd/`. `forbidigo`'s
 existing rule scopes `os.Getenv`/`time.Now` to `internal/core/` only, so those calls are legal in
-these packages, and D7's injection is for testability, not for lint. D16 adds a second, additive
-`forbidigo` rule scoped to `internal/config/` banning `os.Executable`, without touching or
-widening the `internal/core/` rule.
+these packages, and D7's injection is for testability, not for lint. `.golangci.yml` is not modified
+by this change at all: D16 bans `os.Executable` from `internal/config/` with a tree-scan conformance
+test, because a second `forbidigo` exclusion rule was measured to disable the existing
+`internal/core/` one rather than sit beside it.
 
 Both new declarations under `internal/store/**` widen `testdata/schema/store_api.golden`, which
 is regenerated in the PRs that add them (spec R8.5, R13.5) — see D14 for a blind spot in that
@@ -688,20 +741,42 @@ the interim.
 `make cross-compile` is added as a Makefile target covering the same seven `GOOS`/`GOARCH` pairs
 (`GOOS=x GOARCH=y go build ./...`, no PR metadata required) and is added to `check-all`, per
 `CLAUDE.md`'s Workflow section: "if you add a blocking CI job, add it to `check-all` too — unless
-it needs PR metadata a Makefile cannot produce." Cross-compilation needs none, unlike e2e (which
-needs `test-e2e`, already excluded from `check-all` for the same documented reason) and unlike
-`docs-sync.yml` (which needs PR labels).
+it needs PR metadata a Makefile cannot produce."
+
+**`make test-e2e` joins `check-all` in the same PR, and this needs stating because an earlier draft
+of this section said both things.** It claimed e2e was "already excluded from `check-all` for the
+same documented reason" and then, eleven lines later, that "it is added". Only one can be true, and
+the exclusion story does not survive checking: `CLAUDE.md` names exactly one gate `check-all` cannot
+cover, `docs-sync.yml`, and gives exactly one reason, PR metadata. No document in this repository —
+not `CLAUDE.md`, not the `Makefile` header, not `docs/06-harness.md` — records any reason for
+excluding e2e. It is absent from `check-all` today only because it was not a blocking gate today.
+
+R2.1 makes it one. `make test-e2e` already exists, needs no PR metadata, and runs locally, so
+`CLAUDE.md`'s rule applies to it literally: it joins `check-all`. The cost is real and accepted —
+`check-all` now compiles the binary and runs L4, so it gets slower. That is what `check-all` is for.
+`make check` stays the fast loop and is untouched.
+
+`docs-sync.yml` remains the sole documented exception, because it genuinely needs a PR's base branch
+and label list.
 
 The `main.yml` header comment, which currently explains why these two live outside `ci.yml`, gets
 rewritten rather than left contradicting the triggers below it. **`ci.yml`'s own comment** (around
 line 124, "cross-compilation matrix -> main.yml, on push to main only") goes stale for the same
 reason and is corrected in the same PR — it was found stale by the same review that caught the
-matrix-count and the `make cross-compile` gaps, not a separate follow-up. `CLAUDE.md`'s Workflow
-section and the `Makefile` header both describe which gates `check-all` covers; `make test-e2e`
-already exists and `check-all` does not include it. That stays true — e2e now blocks the PR through
-CI, and `check-all` keeps its documented meaning of "every gate CI blocks on that a Makefile can
-run locally" only if e2e is added. It is added, and all three comments (`main.yml`'s header,
-`ci.yml`'s line-124 comment, and `check-all`'s own doc comments) are updated in the same PR.
+matrix-count and the `make cross-compile` gaps, not a separate follow-up.
+
+Two more stale claims live outside the workflows and are corrected in PR 1's docs sweep rather than
+here, because they are prose in the docs the harness is described by:
+`docs/06-harness.md` §6 states "what does **not** run on every PR: L4 (e2e), driver benchmarks, and
+the cross-compilation matrix" — false after R2.1 — and the sentence beside it, "the full matrix
+depends on ADR-0001 and cannot be designed until the spike closes", which stopped being true when
+ADR-0001 closed two build-order steps ago. `docs/05-build-plan.md`'s M0 bullet still describes vault
+resolution as "arg → env → portable → home", the executable-relative model R6.6 removes.
+
+Four comments and doc passages are therefore updated across this change: `main.yml`'s header and
+`ci.yml`'s line-124 comment (this PR), and doc 06 §6 plus doc 05's M0 bullet (PR 1). `CLAUDE.md`'s
+Workflow section and the `Makefile` header, which both enumerate what `check-all` covers, are updated
+in this PR too, since `check-all` gains two targets here.
 
 **The ruleset gains every context each matrix leg posts, not one context per job (spec R2.2).**
 `main.yml`'s cross-compile job templates its check name per matrix leg
@@ -750,6 +825,8 @@ a native `windows-latest` runner, so it never invokes `make` on Windows in the f
 | Loopback truth table (R11.3) | L1 | `internal/config/` | includes `127.0.0.1.evil`, `0127.0.0.1` |
 | Binding refusal decision (R11.2) | L1 | `internal/httpapi/` | pure function, D11 |
 | Config↔doc gate, including the map-typed `providers`/`tasks` union case (§6, §9) | L2 | `test/conformance/` | untagged, runs in `make test`; uses doc 01's actual heterogeneous `providers:` block |
+| `os.Executable` is referenced nowhere under `internal/config` (R6.6) | L2 | `test/conformance/` | tree scan per D16, **not** a lint rule; asserts a non-empty corpus first, per D10 |
+| `init`'s target default and argument handling (R7.1b) | L4 | `test/e2e/` | four cases with `$HOME` pointed at a temp dir: bare `init` creates `~/.nooma/<user>.nooma` and prints its path, bare `init` refuses when a vault already exists there, relative argument, absolute argument |
 | `init`'s wizard collects the same input struct as the non-interactive path (R7.2) | L1 | `cmd/nooma/` | asserts on the shared struct, per D15 |
 | `init` refuses on a file or symlink target (R7.5) | L3 or L4 | `test/integration/` or `test/e2e/` | asserts the file/symlink is untouched; per D12's `Lstat` guard |
 | Temp-dir name is collision-resistant across two racing `init`s (R7.6) | L1 | `cmd/nooma/` | asserts two generated names differ; per D12 |
