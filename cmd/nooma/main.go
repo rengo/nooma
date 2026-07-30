@@ -45,6 +45,10 @@ type command struct {
 // drift from reality because it is generated from here rather than written
 // alongside it.
 var commands = map[string]command{
+	"init": {
+		summary: "create a vault",
+		run:     runInit,
+	},
 	"version": {
 		summary: "print the version and build information",
 		run:     runVersion,
