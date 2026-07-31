@@ -306,7 +306,7 @@ Depends on PR 2a (same package, same file set). Still the only Phase A PR-half t
 Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches no
 `internal/core/**` file — **no doc 02 task in this PR**, per C3's resolution above.
 
-- [ ] **3.1** Test first: `test/support/repocontract/repocontract.go`'s
+- [x] **3.1** Test first: `test/support/repocontract/repocontract.go`'s
       `RunUnitRepo(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo)` — a shared contract
       suite, written and watched failing before either implementation exists (design D6's own
       ordering). Cases: `Create`/`ByID` round-trip; `Create` on a duplicate id returns
@@ -324,7 +324,7 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
       argument). This makes `repocontract.go` compile; nothing calls it yet.
       Verify: `go build ./...`; `golangci-lint run`.
       Requirement: R3.1, R3.2; design D5, D6.
-- [ ] **3.2** In the same commit as 3.1 (spec R7.2): drop the `//go:build pendingimpl` tag from
+- [x] **3.2** In the same commit as 3.1 (spec R7.2): drop the `//go:build pendingimpl` tag from
       `test/conformance/i03_units_never_deleted_test.go`; remove the line `ports.UnitRepo` from
       `test/conformance/pending_symbols.txt`; delete `internal/ports/doc.go`'s "Pending
       conformance anchor" paragraph (confirmed present, lines 9–18). **Do not** re-touch
