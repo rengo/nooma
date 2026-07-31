@@ -244,7 +244,7 @@ Depends on PR 2a (same package, same file set). Still the only Phase A PR-half t
 `internal/core/**` besides 2a — `docs/02-cognitive-core.md` §1 gains its second Phase A delta here
 (task 2.11).
 
-- [ ] **2.8** Test first: `internal/core/unit/type_test.go` — `AllTypes()` returns exactly the
+- [x] **2.8** Test first: `internal/core/unit/type_test.go` — `AllTypes()` returns exactly the
       nine values doc 02 §1 lists (`task`, `mental_load`, `event`, `knowledge`, `procedural`,
       `emotional`, `list`, `structured_ref`, `insight`), and asserts `"timer"` and
       `"recurring_reminder"` are **not** members (design D4 — those are classify *outcomes*, a
@@ -253,7 +253,7 @@ Depends on PR 2a (same package, same file set). Still the only Phase A PR-half t
       pattern repeated per D4), the nine constants, `AllTypes()`, `ParseType`, `ErrUnknownType`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R2.4; design D4.
-- [ ] **2.9** Test first: `internal/core/unit/transition_test.go` — an exhaustive table over all
+- [x] **2.9** Test first: `internal/core/unit/transition_test.go` — an exhaustive table over all
       16 ordered pairs from `AllStatuses() × AllStatuses()`, asserting `ValidateTransition` returns
       `nil` for exactly the **five** legal pairs `design.md` D3 names (`pool→archived`,
       `pool→superseded`, `archived→pool`, `incomplete→pool`, `incomplete→archived` — **per C1's
@@ -271,7 +271,7 @@ Depends on PR 2a (same package, same file set). Still the only Phase A PR-half t
       inputs).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R2.3, as resolved by C1; design D3.
-- [ ] **2.10** `internal/core/unit/unit.go`: the `Unit` struct, fixed by design §4 — nullable
+- [x] **2.10** `internal/core/unit/unit.go`: the `Unit` struct, fixed by design §4 — nullable
       columns as pointers and `json.RawMessage`, never `sql.NullX` (`database/sql` is denied inside
       `internal/core` by `depguard`); `Confidence *float64`, always `nil` in Phase A per the
       umbrella proposal §8 Q2's recommended answer, costing Phase A nothing either way. No
@@ -283,18 +283,18 @@ Depends on PR 2a (same package, same file set). Still the only Phase A PR-half t
       import).
       Requirement: design §4 (traced informally to R2's package as a whole; no independent
       spec-numbered requirement for the struct shape itself).
-- [ ] **2.11** `docs/02-cognitive-core.md` §1: add the transition table (the five pairs from 2.9)
+- [x] **2.11** `docs/02-cognitive-core.md` §1: add the transition table (the five pairs from 2.9)
       and the sentence naming `archived` as the landing status for an expired `incomplete` unit
       (design D3 — "the only status left"). State C1's resolution in one sentence here, so the next
       reader of doc 02 does not have to re-derive it from `transition.go`'s table.
       Verify: read the section; `docs-sync.yml` not locally verifiable (per spec R8.3).
       Requirement: R8.3 (this PR's share).
-- [ ] **2.12** `make cover` over the now-complete `internal/core/unit` package (status, type, unit,
+- [x] **2.12** `make cover` over the now-complete `internal/core/unit` package (status, type, unit,
       transition all present) confirms the ≥90 % floor holds with the full package, not just 2a's
       slice.
       Verify: `make cover`.
       Requirement: R8.2 (this PR's share).
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` for this PR contains no
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` for this PR contains no
       path under `internal/core/classify/`, `internal/core/recall/`, or `internal/core/relation/`
       (R9.3); confirm `tree_scan_test.go`'s tag is untouched by this PR (already untagged by 2a —
       R7.1's MUST NOT against re-touching it, restated here as a PR-boundary check).
