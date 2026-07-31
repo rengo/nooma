@@ -311,5 +311,8 @@ module):
 | `trigger_staleness_hours` | 6 |
 | `timer_staleness_hours` | 3 |
 | RRF `k` | 60 |
+| `recall_top_k` | 20 |
+| RRF vector-leg weight (`weight_vector`) | 1.0 |
+| RRF lexical-leg weight (`weight_lexical`) | 1.0 |
 
 Exact values get calibrated with real usage; the mechanisms in this document do not.

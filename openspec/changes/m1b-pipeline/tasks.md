@@ -312,7 +312,7 @@ delta here — this PR must not carry `no-spec-change` (spec R6.2).
 
 Depends on PR 8a.
 
-- [ ] **8b.1** Test first: `internal/core/recall/fuse_test.go` — `Fuse` reproduces ADR-0010's
+- [x] **8b.1** Test first: `internal/core/recall/fuse_test.go` — `Fuse` reproduces ADR-0010's
       formula by hand over a small pair of ranked id lists, including at least one id present in
       only one list (contributing a single term); the tie-break rule design D5 states (higher
       score first; on a tie, the id appearing earliest across the lists in argument order; on a
@@ -325,7 +325,25 @@ Depends on PR 8a.
       relative weight be named constants, `0010:48-49`).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R2.4, R2.5; design D5.
-- [ ] **8b.2** In the same commit as 8b.1: `internal/core/recall/tokenize_test.go` — `Tokenize`
+
+      **Done.** Observed RED verbatim before implementing (`go test -c -o /dev/null
+      ./internal/core/recall/...`): `undefined: Fuse` (x3 call sites), `undefined: RRFK` (x2),
+      `undefined: RecallTopK` (x2), `undefined: WeightVector` (x2), `undefined: WeightLexical`,
+      "too many errors" — matching the predicted symbol set exactly (the constants only appear as
+      `undefined` once the test file references them directly, via a dedicated
+      `TestFuseConstants`, rather than only baking their values into hand-computed expectations).
+      Implemented `fuse.go`: the four constants, `fuseWeight(listIndex)` mapping list 0 to
+      `WeightVector`, list 1 to `WeightLexical`, anything beyond to 1.0 (Phase B always passes
+      exactly two lists, vector first, per design's own wording), and `Fuse` via a score map + an
+      earliest-list map, sorted by (score desc, earliest-list-in-argument-order asc, lexicographic
+      asc). The tie-break fixture (`TestFuse_BreaksTiesDeterministically`) engineers two *exact*
+      float ties in one table: `x`/`y` tie because swapping two operands in a two-term float64 sum
+      is bit-identical, both reaching the lexicographic level since both first appear in list 0;
+      `z`/`w` tie because both are single-list contributions at the same rank (`RRFK+3`) in
+      different lists, resolved at the argument-order level alone (chosen names spell the opposite
+      of lexicographic order — `w` < `z` — so this case would fail if the code fell through past
+      argument-order into lexicographic instead of stopping there). `golangci-lint run`: 0 issues.
+- [x] **8b.2** In the same commit as 8b.1: `internal/core/recall/tokenize_test.go` — `Tokenize`
       splits text into the lowercase word tokens the lexical leg searches for (design D5 places
       this in `core` because it is the recall-quality decision the golden corpus pins, and it is
       pure; no spec MUST constrains the exact algorithm beyond "what words the lexical leg
@@ -334,14 +352,40 @@ Depends on PR 8a.
       Implement `internal/core/recall/tokenize.go`.
       Verify: `make test`.
       Requirement: design D5 (the lexical leg's own decision, feeding R3.3 at the store boundary).
-- [ ] **8b.3** `docs/02-cognitive-core.md` §13 gains **three** new rows — `recall_top_k`,
+
+      **Done**, same commit as 8b.1 (`04e2261`). `Tokenize` lowercases first, then splits on any
+      rune that is not a Unicode letter or digit (`strings.FieldsFunc` + `unicode.IsLetter` /
+      `unicode.IsDigit`), so punctuation is discarded and repeated separators collapse to zero
+      tokens between words. `make test` green.
+- [x] **8b.3** `docs/02-cognitive-core.md` §13 gains **three** new rows — `recall_top_k`,
       `weight_vector`, `weight_lexical` — not the four `design.md`'s own closing sentence states
       (C4 above: the fourth number, `dedup_candidate_k`, belongs to PR 11a, not this PR, and is
       closed there by task 11a.3).
       Verify: read the table; `docs-sync.yml` not locally verifiable.
       Requirement: R2.5, R2.10 (§13 half); C4's correction of design's own row count.
-- [ ] Verify (PR-level): `make check-all` (no `pending-red` target exists as of PR 8a — confirm it
+
+      **Done**, own commit (`ba34100`). Exactly three new §13 rows added, matching C4's
+      correction, not design's own uncorrected "four rows" sentence.
+- [x] Verify (PR-level): `make check-all` (no `pending-red` target exists as of PR 8a — confirm it
       is absent from this PR's own `make check-all` run too); `make cover`.
+
+      **Done.** `make check-all` fully green: lint (0 issues), vet, `-race -shuffle=on` L1/L2 (all
+      packages, including the new `TestFuse_*`/`TestTokenize` tests), build, L3 integration,
+      `TestSchemaGolden -update` clean diff (no migration touched), coverage, all seven
+      cross-compile targets, L4. `internal/core` statement coverage: **100% (77/77)** — matches
+      PR 8a's own floor, no regression; the one gap `make cover` first reported (`fuseWeight`'s
+      `default` branch, 75%, from having no test call `Fuse` with a third list) was closed by
+      adding `TestFuse_ThirdListDefaultsToWeightOne` rather than left as an untested decision.
+      `rg pending-red Makefile .github/workflows docs/06-harness.md CLAUDE.md .golangci.yml`
+      returns nothing (still true as of this PR, confirmed fresh).
+
+      `git diff --stat main`, excluding this file's own bookkeeping edit: 5 files changed, 267
+      insertions(+), 0 deletions — `fuse.go` 83, `fuse_test.go` 113, `tokenize.go` 21,
+      `tokenize_test.go` 47, `docs/02-cognitive-core.md` +3. 1.34x this PR's own ~200-line
+      ceiling, milder than PR 8a's 1.23x-on-a-380-ceiling and well under the 280-line
+      stop-and-report checkpoint; the overrun is mostly `fuse_test.go`'s own doc-comment density
+      (matching `vector_test.go`'s precedent) proving the engineered tie's exact-equality claim in
+      prose rather than asserting it silently.
 
 ---
 

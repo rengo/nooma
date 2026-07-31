@@ -533,6 +533,21 @@ produces exact float ties for symmetric cases, and `make test` runs `-shuffle=on
 lists in argument order; on a further tie, lexicographic by id.** `spec.md` §9 leaves this to
 design; an unspecified tiebreak is the bug the shuffled suite finds on a Tuesday.
 
+> **"Earliest across the lists" was ambiguous, and PR 8b's apply resolved it — recorded here
+> rather than left in a code comment.** The phrase reads two ways: compare each id's **earliest
+> list index**, or compare its full traversal position (list *and* rank within it).
+>
+> **List index only.** The alternative kills the rule it precedes: two ids that tie on score would
+> almost never also tie on full traversal position, so the third level — lexicographic — becomes
+> unreachable dead code, and the coverage floor would flag it as exactly what it is, a branch no
+> test can make a decision about.
+>
+> The implementation carries this reasoning in `fuse.go`'s doc comment, and `fuse_test.go`'s
+> fixture pins both levels separately: `x`/`y` tie on score **and** on earliest list, so only
+> lexicographic separates them; `z`/`w` tie on score and differ on earliest list, and their names
+> spell the *opposite* of lexicographic order on purpose, so an implementation that fell through
+> to the wrong level fails loudly instead of passing by coincidence.
+
 **Two new §13 knobs beyond the one the spec names, and one of them is this design's own scope.**
 
 - `recall_top_k = 20` — `spec.md` R2.5 requires the row and requires one K for both legs. 20
