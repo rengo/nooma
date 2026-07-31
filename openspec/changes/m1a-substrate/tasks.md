@@ -123,11 +123,11 @@ reading the document.
       Verify: read the tree; `git diff --name-only` for this task contains no path under
       `internal/core/classify/`.
       Requirement: R1.3.
-- [ ] **1.4** Confirm by reading, not by editing: `docs/README.md` and `CLAUDE.md` do not need a
+- [x] **1.4** Confirm by reading, not by editing: `docs/README.md` and `CLAUDE.md` do not need a
       change in this PR (both were corrected by the M0 chain before this spec was written, per
       `spec.md`'s own verification note). This task is a review check, not new code.
       Requirement: R1.4.
-- [ ] Verify: `make check`; `rg "next to the executable" docs/` unaffected (M0's own invariant,
+- [x] Verify: `make check`; `rg "next to the executable" docs/` unaffected (M0's own invariant,
       unrelated but cheap to re-confirm nothing regressed); every edit read against `spec.md` §1's
       "Verified by" clauses.
 
@@ -390,7 +390,7 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
 > land it as its own small follow-up PR (68 lines, no dependency on the fake beyond the tree it
 > scans already existing).
 
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no
       `internal/core/` path (R8.3's MUST NOT for PR 3, restated per C3).
 
 ---
@@ -453,7 +453,7 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
 > 4b) knowing it saves real lines but does not bring 4a under 330 on its own. Either way, 4.1's
 > implementation and 4.4's golden regeneration are the part that cannot shrink further.
 
-- [ ] **4.1** Test first: `internal/store/sqlite/unitrepo_integration_test.go` (`-tags
+- [x] **4.1** Test first: `internal/store/sqlite/unitrepo_integration_test.go` (`-tags
       integration`) calling `repocontract.RunUnitRepo(t, func(t *testing.T) ports.UnitRepo {
       return sqlite.NewUnitRepo(vault) })` against a real temporary migrated vault (migrations
       0001/0002 already applied — this PR adds none). **Red**: `undefined: sqlite.NewUnitRepo`.
@@ -464,7 +464,7 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
       since the contract itself was PR 3's).
       Verify: `make test-integration`.
       Requirement: R4.1; design D6.
-- [ ] **4.2** In the same test file: `TestUnitRepo_LiveByIDsFiltersPositively` — seeds one unit per
+- [x] **4.2** In the same test file: `TestUnitRepo_LiveByIDsFiltersPositively` — seeds one unit per
       status (`pool`, `archived`, `superseded`, `incomplete`) via a raw `INSERT INTO units`
       statement (bypassing the repo's own `Create`, so the fixture cannot accidentally rely on the
       repo already excluding non-`pool` rows), calls `LiveByIDs`, asserts exactly the `pool` unit
@@ -474,7 +474,7 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
       **Red**: same as 4.1 — `undefined: sqlite.NewUnitRepo` (same commit).
       Verify: `make test-integration`.
       Requirement: R4.2.
-- [ ] **4.3** No new test for the tree-scan half of I03 — `test/conformance/i03_units_never_deleted_test.go`
+- [x] **4.3** No new test for the tree-scan half of I03 — `test/conformance/i03_units_never_deleted_test.go`
       (promoted, untagged since PR 3) already scans `internal/` tree-wide and will cover this PR's
       new `.go` files automatically; this is a review check, not new code (M0's task 9.3
       precedent). Add one L3 case, `TestUnitRepo_UpdateContentDoesNotChangeRowCount`: asserts
@@ -483,7 +483,7 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
       Verify: `make test-integration`; `make test` (confirms I03's promoted scan still passes with
       the new file present).
       Requirement: R4.3.
-- [ ] **4.4** No migration file added or edited — confirm `git diff` over
+- [x] **4.4** No migration file added or edited — confirm `git diff` over
       `internal/store/sqlite/migrations/` stays empty across this PR (R4.4's MUST NOT). Run `make
       store-api-golden` and review the diff: it should contain only the exported surface this
       PR's `unitrepo.go` adds (the constructor and the concrete `UnitRepo` type name in
@@ -504,7 +504,7 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
       scratch file under `internal/store/`, confirm the scan fails, then revert.
       Requirement: design §6 test matrix ("No non-test file under `internal/store/**` references
       `time.Now`", attributed to PR 4).
-- [ ] Verify (PR-level): `make check-all`; `store_api.golden`'s diff reviewed and named in the PR
+- [x] Verify (PR-level): `make check-all`; `store_api.golden`'s diff reviewed and named in the PR
       description, following the M0 PR6 precedent of stating exactly what widened and why.
 
 ---
