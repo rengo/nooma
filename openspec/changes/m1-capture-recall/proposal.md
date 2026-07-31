@@ -90,8 +90,16 @@ covers it — but §8's open question 3a decides what the system *does* with one
 ### 3.2 In scope
 
 1. **Doc corrections that block the work** — `openai` is absent from doc 01's provider types
-   while the build plan requires an openai implementation (§4.2); `tasks.embedding` in doc 01
-   points at a literal `...`; `docs/README.md` and `CLAUDE.md` still say "no code yet".
+   while the build plan requires an openai implementation (§4.2), and `tasks.embedding` in doc 01
+   points at a literal `...`.
+
+   This item was written listing two more corrections — `docs/README.md` and `CLAUDE.md` saying
+   "no code yet" — that were **already fixed** by PRs #41 and #42 before this proposal was
+   written. The exploration that surfaced them ran before those merges, and the finding was
+   carried forward without being re-checked against the tree. Recorded rather than silently
+   edited out, because it is the same defect family this project keeps meeting: **a fact
+   inherited from an earlier stage and never re-verified at the stage that uses it.** PR 1's
+   budget below is reduced accordingly.
 2. **`internal/core/unit`** — the `Status` type, `AllStatuses`, the live-status predicate, the
    type taxonomy, and legal status transitions.
 3. **`internal/core/classify`** (new package, see §4.1) — the tolerant decoder that turns a raw
@@ -355,7 +363,7 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 
 | # | PR | Content | Est. |
 |---|---|---|---|
-| 1 | `docs/m1-preflight` | doc 01 gains `openai` and a real `tasks.embedding` provider; `docs/README.md` and `CLAUDE.md` stop saying "no code yet"; doc 06 §1's tree gains `core/classify` | ~140 |
+| 1 | `docs/m1-preflight` | doc 01 gains `openai` and a real `tasks.embedding` provider; doc 06 §1's tree gains `core/classify` | ~90 |
 | 2 | `feat/core-unit` | `unit.Status`, `AllStatuses`, live predicate, taxonomy, transitions; L1 to ≥90 %; **promote I01, untag `tree_scan_test.go`**; doc 02 §1 | ~280 |
 | 3 | `feat/ports-unitrepo` | `ports.UnitRepo` + an in-memory fake for L2; **promote I03**; doc 02 §1 | ~200 |
 | 4 | `feat/store-unitrepo` | The SQLite implementation, positive `status='pool'` filter, L3; `store_api.golden` regenerated | ~380 |
