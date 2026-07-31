@@ -121,6 +121,35 @@ covers it — but §8's open question 3a decides what the system *does* with one
     `testdata/recall/cases/` and `testdata/llm/cases/`, plus the inversion of the M0-era test
     that currently requires them to be empty (§4.6).
 13. **The `pending-red` promotion and the gate's retirement** (§4.7).
+14. **`nooma init`'s two first-class paths** — Cloud (recommended) and Ollama — replacing M0's
+    commented `providers:` placeholder with a real block, and never writing a secret: the file
+    holds `api_key_env`, the *name* of an environment variable, so a `nooma.yml` stays safe to
+    commit, share, or paste into an issue.
+15. **`nooma doctor`'s structured-JSON quality gate** — a fixed prompt set against the provider
+    configured for each task, verifying the returned JSON validates. A failure names the provider
+    unsuitable **for that task**, never in general. Its corpus is the same one feeding
+    `testdata/llm/cases/`.
+
+**Items 14 and 15 were added on 2026-07-31, after the proposal was already merged**, and how they
+were missing is the part worth keeping. Both are [ADR-0002](../../../docs/adr/0002-default-llm-preset.md)'s
+own deliverables — an ADR `Accepted` on 2026-07-27 whose Decision section names them in plain
+words. Neither appeared in any milestone's bullets, in this proposal's scope, or in any task list.
+They surfaced because the owner asked an ordinary product question — *"is using a cloud LLM
+contemplated, and would that be part of the init wizard?"* — and answering it honestly meant
+reading the ADR and then failing to find where its decision had been scheduled.
+
+**An `Accepted` ADR is not self-executing.** This project already refuses to edit one and requires
+a superseding ADR to change a decision — but nothing was checking that an accepted decision had
+somewhere to land. Doc 05's M1 section now carries both, and this is the second time an ADR-0002-
+adjacent claim has needed dating rather than defending.
+
+They belong to **Phase C** (`m1c-surface`): both are CLI surface, both need providers to exist
+first, and a wizard offering to configure a provider before any provider exists would be offering
+a promise.
+
+**Cloud is the path that must work.** Owner direction, 2026-07-31: the local-model story has
+comments pending and is deliberately not the priority — the ollama client exists and stays
+supported, but M1 is judged on the cloud path running end to end.
 
 ### 3.3 Explicit non-goals
 
