@@ -1,5 +1,7 @@
 package unit
 
+import "fmt"
+
 // Status is the unit's persisted lifecycle state — doc 02 §1 names exactly
 // four values. It is a defined string type, not an int enum: it prints as
 // itself in an error, a log line and a decision_log row, and binds to the
@@ -30,4 +32,21 @@ const (
 // defeat I01's own vocabulary check from outside this package.
 func AllStatuses() []Status {
 	return []Status{StatusPool, StatusArchived, StatusSuperseded, StatusIncomplete}
+}
+
+// ErrUnknownStatus is returned by ParseStatus when s does not name a
+// member of AllStatuses().
+var ErrUnknownStatus = fmt.Errorf("unknown unit status")
+
+// ParseStatus is the sole entry point from untrusted text — a database
+// row, a JSON body, a CLI flag — into the Status vocabulary (design D1).
+// It returns ErrUnknownStatus, naming the rejected value, for anything
+// that is not one of AllStatuses()'s members.
+func ParseStatus(s string) (Status, error) {
+	for _, want := range AllStatuses() {
+		if s == string(want) {
+			return want, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %q", ErrUnknownStatus, s)
 }
