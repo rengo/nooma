@@ -1,12 +1,4 @@
-//go:build pendingimpl
-
 // Package conformance — see test/conformance/doc.go for the package contract.
-//
-// This file is tagged pendingimpl (design.md §8, openspec/changes/complete-harness/
-// design.md) and is never compiled by the untagged build (`go build ./...`,
-// `make test`). It is compiled in isolation by `make pending-red`
-// (scripts/pending-red.sh), whose whole job is to confirm this package
-// FAILS to compile, and fails for the right reason.
 package conformance
 
 import (
@@ -24,19 +16,10 @@ import (
 // status. status='focus' must never exist as a member of the unit status
 // vocabulary.
 //
-// Anchor: unit.Status / unit.AllStatuses (internal/core/unit), spec R6.1/
-// R6.4, design.md §8.4. Neither symbol exists yet — see
-// internal/core/unit/doc.go and test/conformance/pending_symbols.txt. In
-// this chain the RED is a compile error naming both symbols
-// (`undefined: unit.Status` and/or `undefined: unit.AllStatuses`) — that
-// IS the passing state of scripts/pending-red.sh (design §8.1/§8.2, D9),
-// not a defect to fix. This test never turns green inside this change.
-//
-// Promotion: the PR that adds unit.Status and unit.AllStatuses must, in the
-// SAME PR, drop the pendingimpl tag from this file, move it into the
-// untagged L2 suite, and remove both lines from pending_symbols.txt
-// (design §8.3/§8.5, spec R7.3) — that PR is the one that trips
-// scripts/pending-red.sh's failure mode 1 ("the symbols now exist").
+// unit.Status and unit.AllStatuses (internal/core/unit) now exist —
+// promoted into the untagged L2 suite by the same PR that added them
+// (spec R7.1, design D8), per the ordering internal/core/unit/doc.go used
+// to anchor before this test's promotion removed that paragraph.
 //
 // Two independent checks, mirroring docs/06-harness.md §4's own framing
 // ("a test that fails if the literal 'focus' appears as a status value in
@@ -48,8 +31,8 @@ import (
 //     line-based heuristic (like i13_learning_signal_test.go's migration
 //     scan), not a type-checked one — deliberately, so it needs no import
 //     of go/ast to reason about a status literal it does not yet know the
-//     shape of. Go source only: migrations are .sql, embedded via
-//     go:embed, and are naturally outside this scan (design D1).
+//     shape of. Go source only: migrations are .sql files, embedded via
+//     the go:embed directive, and are naturally outside this scan (design D1).
 //
 // Both checks apply design D10's non-empty-corpus guard: assert a non-empty
 // corpus was found before asserting anything about its content, so a moved

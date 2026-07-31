@@ -134,14 +134,36 @@ reading the document.
 ---
 
 ## PR 2a — `feat/core-unit`, part 1: `Status`, `AllStatuses`, `ParseStatus`, `IsLive`, I01's
-promotion (~180 lines — design's own drawn split line, part 1 of 2)
+promotion (~180 lines estimated — **shipped at 465**, `size:exception`, owner decision
+2026-07-31)
+
+> **The estimate table needs a new row, and this is it.** 465 changed lines against a ~180
+> ceiling is **2.6×** — outside the 1.3×–2.2× band this project measured six times across M0 and
+> wrote into every artifact in this chain as its correction factor. The band was measured on M0's
+> slices, all of which were adapter or harness work. This is the first slice of **pure core code
+> with its conformance guards**, and it came in higher than the band predicts. One measurement is
+> not a new band, but it is a reason to stop treating 2.2× as the ceiling of the correction.
+>
+> Where the lines actually went: 203 of production and doc, and **262 of new test code across
+> three files** — `status_test.go`, `parse_status_test.go`, `is_live_test.go`, plus the two new L2
+> guards (`unit_status_ddl_test.go` at 51, `core_exported_decls_have_tests_test.go` at 142). The
+> guards are the part the estimate did not see: design called them "roughly 200 lines across PRs
+> 2, 3 and 4" and two of the three landed here.
+>
+> A clean split existed and was offered — `2a-core` (~272: the vocabulary, its L1 tests, I01's
+> promotion, the doc 02 delta) and `2a-guards` (~193: the two L2 guards). **Owner chose the
+> exception**: the guards exist to pin exactly what 2a introduces, and reviewing them apart from
+> the vocabulary they watch means reading both twice.
+>
+> **For the PRs still ahead**: PR 4's ~380 ceiling was already flagged high-risk with no
+> pre-drawn line. At 2.6× that is 990 lines. Draw its split before its diff exists.
 
 Depends on nothing outside this chain. This is the first PR to land a statement in
 `internal/core/`, so the ≥90 % coverage floor (`make cover`, `make check-all` only) and
 `docs-sync.yml` both fire for real for the first time. `docs/02-cognitive-core.md` §1 gains its
 first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spec R8.3).
 
-- [ ] **2.1** Test first: `internal/core/unit/status_test.go` — `Status`'s `reflect.Kind()` is
+- [x] **2.1** Test first: `internal/core/unit/status_test.go` — `Status`'s `reflect.Kind()` is
       `reflect.String`; `AllStatuses()` returns exactly `{pool, archived, superseded, incomplete}`
       as a set, `"focus"` not among them. Alongside it, an L2 guard,
       `test/conformance/unit_status_ddl_test.go` (untagged): reads migration 0001's `units.status`
@@ -157,21 +179,21 @@ first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spe
       Verify: `make test`; `golangci-lint run` (confirms `depguard`'s `core-purity` and
       `forbidigo` stay clean — the file imports nothing beyond stdlib and needs no clock).
       Requirement: R2.1; design D1.
-- [ ] **2.2** Test first: `TestParseStatus_RoundTripsAndRejectsUnknown` — every `AllStatuses()`
+- [x] **2.2** Test first: `TestParseStatus_RoundTripsAndRejectsUnknown` — every `AllStatuses()`
       member parses back to itself; an unrecognized string returns `ErrUnknownStatus` naming the
       value. **Red**: `undefined: unit.ParseStatus`.
       Implement `ParseStatus(string) (Status, error)` — the sole entry point from untrusted text
       (design D1).
       Verify: `make test`.
       Requirement: R2.1 (boundary-validity half); design D1.
-- [ ] **2.3** Test first: `TestStatus_IsLive` — a table over all four `AllStatuses()` members plus
+- [x] **2.3** Test first: `TestStatus_IsLive` — a table over all four `AllStatuses()` members plus
       a deliberately unknown `Status("bogus")` value, asserting `true` for exactly `pool`. **Red**:
       `undefined: unit.Status.IsLive` (unknown method).
       Implement `func (s Status) IsLive() bool { return s == StatusPool }` (design D2 — no clock,
       no arguments; liveness is a property of the status value, not a function of time).
       Verify: `make test`.
       Requirement: R2.2; design D2.
-- [ ] **2.4** In the **same PR** as 2.1–2.3 (spec R7.1's MUST, design D8's sequencing — the helper
+- [x] **2.4** In the **same PR** as 2.1–2.3 (spec R7.1's MUST, design D8's sequencing — the helper
       trap): drop the `//go:build pendingimpl` tag from
       `test/conformance/i01_focus_never_persisted_test.go` **and** from
       `test/conformance/tree_scan_test.go` in the same commit; remove the two lines `unit.Status`
@@ -186,13 +208,13 @@ first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spe
       (no `undefined: scanGoTree`); `golangci-lint run` reports no `unused` finding on
       `scanGoTree`.
       Requirement: R7.1.
-- [ ] **2.5** `docs/02-cognitive-core.md` §1: state the live-status predicate as the positive
+- [x] **2.5** `docs/02-cognitive-core.md` §1: state the live-status predicate as the positive
       filter it is — `IsLive()` is `status == pool`, and every read surface filters positively
       (design D2). This is the doc 02 delta that keeps this PR off `no-spec-change` (spec R8.3).
       Verify: read the section; `docs-sync.yml` cannot be verified locally (needs an open PR, per
       spec R8.3's own "Verified by" — noted, not claimed).
       Requirement: R8.3 (this PR's share).
-- [ ] **2.6** Design D9's presence-guard proxy — **no natural pre-implementation red** (see
+- [x] **2.6** Design D9's presence-guard proxy — **no natural pre-implementation red** (see
       "On the tasks with no natural red" above). Add
       `test/conformance/core_exported_decls_have_tests_test.go` (untagged L2): walks
       `internal/core/**`, and for every directory holding an exported top-level declaration,
@@ -205,13 +227,13 @@ first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spe
       one exported name (e.g. `IsLive`), confirm the guard fails naming it, then restore before
       committing.
       Requirement: design §2 D9, §6 test matrix row 3 (not itself spec-numbered).
-- [ ] **2.7** `make cover` at this point in the chain (only `status.go`, `ParseStatus`, `IsLive`
+- [x] **2.7** `make cover` at this point in the chain (only `status.go`, `ParseStatus`, `IsLive`
       exist under `internal/core/unit`) confirms the ≥90 % floor. This is the first PR where
       `scripts/core-coverage.sh` reports a real number instead of `total=0` — read its output, not
       only its exit code.
       Verify: `make cover`.
       Requirement: R8.2 (this PR's share).
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all`.
 
 ---
 
