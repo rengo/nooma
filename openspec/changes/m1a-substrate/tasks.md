@@ -473,11 +473,30 @@ Touches no `internal/core/**` file.
 
 ---
 
-## PR 6 — `feat/providers-http` (~420 lines — already over the 400 ceiling on the proposal's own
-un-adjusted estimate; flagged high risk below)
+## PR 6 — `feat/providers-http` — **SPLIT into 6a and 6b by owner decision (2026-07-31)**
 
 Depends on PR 1 (R1.1's doc-side `openai` entry must land first — design D7's load-bearing
 ordering) and PR 5 (the fake and `ports.LLMProvider`/`EmbeddingProvider` must exist).
+
+**The split, and where the line falls.** ~420 lines was already over the ceiling on the
+un-adjusted estimate, before M0's measured 1.3×–2.2× multiplier — which puts the real figure at
+550–900. Design drew no cut line here the way D3's §7 drew one for PR 2, and this document
+deliberately did not invent one. Owner decision under `delivery_strategy: ask-on-risk`:
+
+| PR | Tasks | Content | Est. ceiling |
+|---|---|---|---|
+| **6a** | 6.1, 6.3 | The three vendor `LLMProvider` clients, and `"openai"` added to `DocumentedProviderTypes` | ~230 |
+| **6b** | 6.2, 6.4, 6.5 | The `ollama` `EmbeddingProvider`, the task→provider reference check, and the absence confirmation | ~190 |
+
+The cut follows design D7's own load-bearing ordering rather than splitting on file count.
+**6.3 stays with 6.1 and that pairing is the point**: adding `"openai"` to
+`DocumentedProviderTypes` is what makes config validation *accept* `type: openai`, and the
+client is what makes that acceptance mean something. Landing the entry without the client would
+ship a config the validator welcomes and the binary cannot serve — this project's own defect
+family, where a component announces a capability it does not have.
+
+6a's dependency on PR 1 is unchanged. Both halves are independently reviewable, and 6b depends
+on 6a only through the chain, not through a symbol.
 
 - [ ] **6.1** Test first, per vendor: `internal/providers/{anthropic,openai,ollama}/client_test.go`
       — each using `httptest.Server` (an in-process loopback listener, not "the network" in
@@ -576,17 +595,19 @@ it seven, not the proposal's original six; C2 above).
 | 3 | ~200 | Low |
 | 4 | ~380 | **High** — close to the ceiling on its own stated estimate, before any underestimate multiplier |
 | 5 | ~350 | Medium |
-| 6 | ~420 | **High — already over the 400-line ceiling on the proposal's own un-adjusted estimate** |
+| 6a | ~230 | Low–medium — **split by owner decision**, see PR 6's section |
+| 6b | ~190 | Low |
 
-**Decision needed before apply: yes, for PR 6 specifically.** Unlike PR 2, design did not draw an
-explicit split line for PR 6, and this tasks artifact does not invent one unilaterally — under
-`delivery_strategy: ask-on-risk`, the split (or an accepted `size:exception`) should be decided
-before `sdd-apply` runs PR 6, not discovered mid-apply. If a split is wanted, the natural cut
-follows design D7's own load-bearing ordering: **6a** = the three vendor `LLMProvider` clients
-(task 6.1) + `"openai"` added to `DocumentedProviderTypes` (task 6.3, which must stay paired with
-the client that makes its claim true); **6b** = the `ollama` `EmbeddingProvider` implementation
-(task 6.2) + the task→provider reference check (task 6.4) + the absence confirmation (task 6.5).
-Both halves are independently reviewable and PR 6a's dependency on PR 1 is unaffected.
+**Decision needed before apply: CLOSED.** Under `delivery_strategy: ask-on-risk` this artifact
+raised PR 6 rather than inventing a cut line, and the owner decided on 2026-07-31: **split into
+6a and 6b**, along design D7's own load-bearing ordering. The split, and why task 6.3 stays
+paired with 6.1, are recorded in PR 6's section above.
+
+**The eight remaining PRs are cleared for apply.** PR 4 (~380) stays the one to watch: it is the
+only remaining entry close enough to the ceiling that the measured multiplier could push it over
+without a pre-drawn line, and unlike PR 6 nobody has drawn one. Re-check it against its own
+ceiling once its L1 tests are actually written, and split *before* the diff exists rather than
+after.
 
 **On the estimates themselves**, per this task's own governing instruction: the umbrella
 proposal's own retrospective on M0 measured its estimates low by **1.3×–2.2×, six separate
