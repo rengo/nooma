@@ -365,7 +365,7 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
       Verify: `make test` (every `repocontract.RunUnitRepo` subtest green against `memrepo`,
       `-race -shuffle=on` via `make test`'s own flags).
       Requirement: R3.1, R3.2, R3.3 (wired together).
-- [ ] **3.5** Design's own invented scope (§7 Risk #10, not spec-numbered) — **no natural
+- [x] **3.5** Design's own invented scope (§7 Risk #10, not spec-numbered) — **no natural
       pre-implementation red**: add `test/conformance/no_test_support_import_test.go` (untagged
       L2) — a tree scan over non-`_test.go` files under `internal/` and `cmd/`, failing if any
       imports `github.com/rengo/nooma/test/support/...` (the boundary `test/support` exists to
