@@ -709,6 +709,17 @@ on 6a only through the chain, not through a symbol.
 > parity with the two cloud vendors. `internal/providers/ollama/**` implements `Embed` in no
 > form here — task 6.2 (PR 6b) is where `ports.EmbeddingProvider` lands on this same package.
 
+> **PR 6b landed** (`feat/ollama-embed-config-checks`, this session, 2026-07-31), completing tasks
+> 6.2, 6.4 and 6.5 — **the last PR of Phase A**. `git diff --stat main`: 269 changed lines across
+> four files (`internal/config/validate.go` +18, `internal/config/validate_test.go` +64,
+> `internal/providers/ollama/embed.go` +71, `internal/providers/ollama/embed_test.go` +116) — well
+> under the ~190-line ceiling's 300-line stop-and-report gate, three commits on the branch (one
+> `feat(config)`, one `fix(config)` lint follow-up, one `feat(providers)`). `make check-all` green
+> in full, `make cover` (`core-coverage.sh`) OK at 100% (18/18) — this PR touches no
+> `internal/core/**`, so the floor is unaffected either way. Both predicted reds observed verbatim
+> (see tasks 6.2 and 6.4 above). Phase A is now complete: PRs 1, 2a, 2b, 3a, 3b, 4a, 4b, 5a, 5b,
+> 6a-1, 6a-2, 6a-3, 6b — every task in this document is `[x]`.
+
 - [x] **6.1** Complete — anthropic (PR #56), openai (PR #56), and ollama (`feat/provider-ollama`,
       this session) clients all implement `ports.LLMProvider` over real HTTP, each tested
       exclusively against `httptest.Server`.
@@ -723,7 +734,7 @@ on 6a only through the chain, not through a symbol.
       `ports.LLMProvider` over real HTTP to its vendor's API.
       Verify: `go test -race ./internal/providers/...` (httptest only — no real socket).
       Requirement: R6.1.
-- [ ] **6.2** Test first: `internal/providers/ollama/embed_test.go` — request/response shaping for
+- [x] **6.2** Test first: `internal/providers/ollama/embed_test.go` — request/response shaping for
       `Embed` against `httptest`, plus `var _ ports.EmbeddingProvider = (*ollama.Client)(nil)`.
       **The `ollama` client is the one that implements `EmbeddingProvider` in Phase A** — per C4's
       resolution above: doc 01's `tasks.embedding` is bound to `local_llama` (task 1.2), whose
@@ -731,6 +742,18 @@ on 6a only through the chain, not through a symbol.
       failing).
       Verify: `go test -race ./internal/providers/ollama/...`.
       Requirement: R6.2; C4's resolution of design D7's package-diagram gap.
+      **Done** (PR 6b, `feat/ollama-embed-config-checks`, 2026-07-31). Wire format verified against
+      `https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md`: `POST /api/embed`
+      (current endpoint — not the deprecated, singular `POST /api/embeddings`), request
+      `{"model", "input"}`, response `{"model", "embeddings": [[...]]}`. `embeddings` is an array
+      of vectors, one per input — the test asserts the array-of-vectors unwrap explicitly, and a
+      second test asserts an empty `embeddings` array becomes a Go error rather than an
+      `EmbedResponse` with a nil `Vector` a caller could mistake for a valid embedding. Compile-time
+      assertion lives in the test file, not `embed.go`, per this task's own instruction.
+      Predicted red observed verbatim: `internal/providers/ollama/embed_test.go:17:33: cannot use
+      (*Client)(nil) ... *Client does not implement ports.EmbeddingProvider (missing method Embed)`
+      plus three `client.Embed undefined` call-site errors. Green after implementing `embed.go`
+      (`go test -race -shuffle=on ./internal/providers/ollama/...`).
 - [x] **6.3** Test first: extend `internal/config`'s existing `TestValidate` round-trip with a
       `providers.x.type: openai` case. **Red** (a real, pre-existing failure, not invented): before
       this task, `checkProviders` rejects it — `DocumentedProviderTypes` is confirmed
@@ -743,7 +766,7 @@ on 6a only through the chain, not through a symbol.
       be false for the interval between merges).
       Verify: `go test ./internal/config/...`.
       Requirement: R6.3.
-- [ ] **6.4** Test first: `TestValidate_TaskProviderMustExist` — `tasks: {capture_processing:
+- [x] **6.4** Test first: `TestValidate_TaskProviderMustExist` — `tasks: {capture_processing:
       {provider: nonexistent_llm}}` with a `providers:` map that does not contain
       `nonexistent_llm` fails validation, naming both the task and the missing provider; the same
       task with its provider present in `providers:` passes. **Red** (pre-existing, not invented):
@@ -762,14 +785,34 @@ on 6a only through the chain, not through a symbol.
       Verify: `go test ./internal/config/...`; confirm doc 01's own example still validates
       (existing `TestValidate` case, or the config↔doc round-trip test, green).
       Requirement: R6.4.
-- [ ] **6.5** Confirm by absence: no `internal/brain/**` file exists anywhere in this chain
+      **Done** (PR 6b, `feat/ollama-embed-config-checks`, 2026-07-31). Predicted red observed
+      verbatim: `validate_test.go:321: Validate accepted a task bound to a provider that does not
+      exist in providers:`. `checkTaskProviders` added to the `checks` slice as `{"task-provider",
+      checkTaskProviders}`, iterating `c.Tasks` and checking membership in `c.Providers` — no
+      `Enabled` flag, exactly as noted above. Test includes a case decoding doc 01's own full
+      `tasks:`/`providers:` example (all seven tasks, all four referenced providers) and asserting
+      it still validates. `TestHarness_ConfigMatchesDoc01` (the config↔doc round-trip gate) does
+      not call `Validate` at all, so it was unaffected either way — confirmed by reading it.
+- [x] **6.5** Confirm by absence: no `internal/brain/**` file exists anywhere in this chain
       (R6.4's second MUST NOT — task→provider resolution at capture time is `cmd/nooma` wiring
       work for Phase B, not this PR's). Review check, not new code.
       Verify: `git diff --name-only` for the full `m1a-substrate` chain contains no
       `internal/brain/` path.
       Requirement: R6.4 (second MUST NOT), R9.1.
-- [ ] Verify (PR-level): `make check-all`; confirm `git grep` over this PR's own diff finds no test
-      opening a connection outside `httptest` (R6.1's MUST NOT, R8.4).
+      **Done** (PR 6b, `feat/ollama-embed-config-checks`, 2026-07-31). `internal/brain/doc.go`
+      exists in the tree, but `git log --oneline -1 --diff-filter=A -- internal/brain/doc.go`
+      shows it was added by `757c2f7` ("chore(repo): Go module, package layout and core ports"),
+      M0's own package skeleton, 166 commits before PR 1 (`b1c4854`) opened this chain. No PR in
+      `m1a-substrate` (PRs 1 through 6b) touches `internal/brain/**` — confirmed by
+      `git diff --name-only main` on this branch and by this chain's own PR-by-PR diffs recorded
+      in the apply-progress artifact.
+- [x] Verify (PR-level): `make check-all`; confirm `git grep` over this PR's own diff finds no test
+      opening a connection outside `httptest` (R6.1's MUST NOT, R8.4). `make check-all` green in
+      full (lint 0 issues, vet clean, L1/L2 `-race -shuffle=on`, L3 integration green, schema
+      golden clean, `pending-red` OK — two lines unchanged, `core-coverage.sh` OK 100% (18/18),
+      cross-compile matrix all 7 targets OK, `-tags e2e` ok). This PR's two new test files
+      (`validate_test.go`'s new cases, `embed_test.go`) use only `httptest.Server` and in-memory
+      YAML decoding — no test opens a connection outside `httptest`.
 
 ---
 
