@@ -301,7 +301,17 @@ Depends on PR 2a (same package, same file set). Still the only Phase A PR-half t
 
 ---
 
-## PR 3 — `feat/ports-unitrepo` (~200 lines)
+## PR 3 — split into 3a and 3b during apply (~200 lines estimated — **3a shipped at 353**, 1.77×;
+3b's own size note follows the task list)
+
+> **The estimate table needs another row.** PR 3 shipped as two merges, not one — a package
+> boundary (the port + contract suite vs. the fake + its wiring + a boundary guard), not a
+> line-count negotiation. **3a** (`feat/ports-unitrepo`, tasks 3.1–3.2, merged PR #50, `4ed182e`)
+> landed `ports.UnitRepo`, its three sentinel errors, `repocontract.RunUnitRepo`, and I03's
+> promotion with its strengthened denied-prefix set — **353 changed lines against this section's
+> own ~200-line ceiling, 1.77×**, inside the 1.3×–2.2× band this chain has now measured five
+> times. **3b** (`feat/ports-unitrepo-fake`, tasks 3.3–3.5) is this document's second half — its
+> own size note follows the task list below.
 
 Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches no
 `internal/core/**` file — **no doc 02 task in this PR**, per C3's resolution above.
@@ -336,7 +346,7 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
       Verify: `make pending-red` (reports exactly two lines remaining: `recall.VectorQuery`,
       `recall.VectorIndex`); `make check` compiles cleanly.
       Requirement: R3.1 (I03 promotion); R7.2.
-- [ ] **3.3** Test first: `test/support/memrepo/units_test.go` — `TestUnits_TwoInstancesShareNoMutableState`:
+- [x] **3.3** Test first: `test/support/memrepo/units_test.go` — `TestUnits_TwoInstancesShareNoMutableState`:
       two independently constructed fakes, a write through one is not observable through the other
       (R3.3's isolation requirement — the one property the shared contract suite does not cover,
       since it is specific to the fake's own construction, not the port's contract). **Red**:
@@ -346,7 +356,7 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
       no caller can reach the fake's interior (design D6).
       Verify: `go test -race ./test/support/memrepo/...`.
       Requirement: R3.3; design D6.
-- [ ] **3.4** In the same commit as 3.3: `test/conformance/unitrepo_memrepo_test.go` (untagged
+- [x] **3.4** In the same commit as 3.3: `test/conformance/unitrepo_memrepo_test.go` (untagged
       L2) — the first caller of 3.1's contract suite:
       `repocontract.RunUnitRepo(t, func(t *testing.T) ports.UnitRepo { return memrepo.NewUnits() })`.
       This is where the contract's every case actually runs for the first time, and where I03's
@@ -366,6 +376,20 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
       naming it, then delete the scratch file before committing.
       Requirement: design §6 test matrix ("No non-test file under `internal/` or `cmd/` imports
       `test/support/`", attributed to PR 3).
+
+> **3b's own size-discipline stop.** `git diff --stat main` after 3.3+3.4 (one commit, per 3.4's
+> own "same commit as 3.3" instruction) measured **272 changed lines** — under this session's
+> 280-line stop-and-report gate. Adding 3.5's guard (implemented, its temporary-break check run
+> and observed failing correctly, then reverted — see the apply-progress artifact for the exact
+> failure line) brought the cumulative diff to **340 changed lines against 3b's own ~200-line
+> estimate, 1.70×** — over the 280-line gate. Per this session's own instruction ("not advisory"),
+> apply stopped **before** committing 3.5: 3.3 and 3.4 are committed on `feat/ports-unitrepo-fake`;
+> 3.5's code is written, verified, and left uncommitted in the working tree, pending the owner's
+> split decision (`delivery_strategy: ask-on-risk`) — commit it into this same PR as
+> `size:exception` (340 lines is 1.70×, inside the 1.3×–2.2× band this chain keeps measuring), or
+> land it as its own small follow-up PR (68 lines, no dependency on the fake beyond the tree it
+> scans already existing).
+
 - [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no
       `internal/core/` path (R8.3's MUST NOT for PR 3, restated per C3).
 
