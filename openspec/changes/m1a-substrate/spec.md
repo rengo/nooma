@@ -152,17 +152,38 @@ traced to doc 02:
 | `pool` | `archived` | §1 ("archived (cold, weight ≈ 0)"), §2 (thermal zones), §6.2 (`archive` phase) |
 | `archived` | `pool` | §2 ("cold→warm/hot by a strong resurface") |
 | `pool` | `superseded` | §1 ("superseded (replaced insight)"), §12 (insight supersession) |
+| `incomplete` | `archived` | §1 ("expired after 24 h") + I03. See the correction below |
 
 **MUST NOT**: the function return `true` for any pair not in this table — in particular,
-`incomplete → archived`, `incomplete → superseded`, `superseded → pool` (or any other outbound
-edge from `superseded`), and any pair involving `"focus"` are all illegal.
+`incomplete → superseded`, `superseded → pool` (or any other outbound edge from `superseded`),
+and any pair involving `"focus"` are all illegal.
+
+> **Corrected against design D3 (2026-07-31), and the correction is recorded rather than
+> edited in silently.**
+>
+> This section originally listed four pairs and named `incomplete → archived` as *illegal*.
+> Design D3 reached the opposite conclusion, and its reasoning is the one that holds: doc 02
+> says an unresolved `incomplete` unit is **expired after 24 h**, the vocabulary has no
+> `expired` member, and **I03 forbids deletion** — so `archived` is the only status an expired
+> unit can land in. Inventing a fifth status would mean a new migration, a doc 03 edit and a
+> regenerated golden, for a transition M2 performs and M1 never reaches.
+>
+> Why the two artifacts disagreed is worth keeping. This section was **derived**, not read —
+> it says so above: doc 02 never enumerates a transition matrix, so the four pairs came from
+> cross-referencing §1, §2, §6 and §12. Design D3 found the fifth by asking a question this
+> derivation never asked: *where does a unit go when it expires?* An inference is only as
+> complete as the questions put to it.
+>
+> **This makes doc 02's silence load-bearing.** The governing document does not name the
+> status an expired `incomplete` unit lands in. PR 2 writes that sentence into doc 02 §1 — an
+> owner-visible change to the document that governs behavior, not a planning-artifact edit.
 
 **MUST**: `(s, s)` — a status transitioning to itself — is explicitly decided (either legal or
 not) rather than left to fall through as an untested default; this spec does not mandate which
 answer, only that the function have one and that an L1 test pin it.
 
 **Verified by**: L1 — a table test over all 16 ordered pairs from the four-member vocabulary,
-asserting the exact four-pair legal set above and rejecting every other pair, including both
+asserting the exact five-pair legal set above and rejecting every other pair, including both
 diagonal and reverse-of-listed pairs (`pool → incomplete`, `superseded → pool`, etc.).
 
 **Scenario**:
