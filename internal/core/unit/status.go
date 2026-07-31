@@ -50,3 +50,13 @@ func ParseStatus(s string) (Status, error) {
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownStatus, s)
 }
+
+// IsLive reports whether s is the one status a live read surface includes.
+// It takes no clock and no arguments — liveness is a property of the
+// status value, not a function of time (design D2). Every LIVE read
+// surface must filter positively (status == pool), never as a negation
+// list, so a status added later is excluded by default rather than
+// silently admitted (docs/02-cognitive-core.md §1).
+func (s Status) IsLive() bool {
+	return s == StatusPool
+}
