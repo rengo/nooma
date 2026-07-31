@@ -14,13 +14,20 @@ weight, structured data, provenance, and timestamps.
   measurements) and `insight` (trend derived from a metric).
 - **Status**: `pool` (active) | `archived` (cold, weight ≈ 0) | `superseded` (replaced
   insight) | `incomplete` (a capture waiting to resolve an ambiguity, e.g. a reference to a
-  person; no embedding until promoted; promoted or expired after 24 h during consolidation).
+  person; no embedding until promoted; promoted with what it has, or archived if still
+  unresolved, after 24 h during consolidation — see §6.1).
   - Hard rule: every LIVE read surface excludes `superseded` and `incomplete`. Filtering
     positively (`status = 'pool'`) excludes them for free.
   - This is `unit.Status.IsLive()` (`internal/core/unit`): `true` for exactly `pool`, defined
     as the positive test `status == pool` rather than a negation list — a negation list would
     silently admit a status added later, a positive filter excludes it for free. The predicate
     takes no clock and no arguments; liveness is a property of the status value, not of time.
+  - **Legal transitions** (`unit.ValidateTransition`, `internal/core/unit`): `pool → archived`,
+    `pool → superseded`, `archived → pool`, `incomplete → pool`, `incomplete → archived`. No
+    other pair is legal, including every self-transition (`pool → pool` would let a write
+    change nothing while still logging an effect). `incomplete → archived` is where an
+    unresolved `incomplete` unit lands when it expires: the status vocabulary has no `expired`
+    member, and nothing is ever deleted, so `archived` is the only place left for it.
 - **`event_at` vs `created_at`**: when the thing happens/happened vs when it was ingested.
   `due_at` for deadlines. Never mix them.
 - **Nothing is deleted.** Archiving is a state transition, not a removal.
