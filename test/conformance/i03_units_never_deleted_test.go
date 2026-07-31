@@ -1,11 +1,4 @@
-//go:build pendingimpl
-
 // Package conformance — see test/conformance/doc.go for the package contract.
-//
-// This file is tagged pendingimpl (design.md §8) and is never compiled by
-// the untagged build. It is compiled in isolation by `make pending-red`
-// (scripts/pending-red.sh), whose job is to confirm this package FAILS to
-// compile, and fails for the right reason.
 package conformance
 
 import (
@@ -22,31 +15,30 @@ import (
 // is a state transition, never a removal. No code path outside the
 // migrations may emit DELETE FROM units.
 //
-// Anchor: ports.UnitRepo (internal/ports), spec R6.1/R6.4, design.md §8.4.
-// The symbol does not exist yet — see internal/ports/doc.go and
-// test/conformance/pending_symbols.txt. In this chain the RED is a compile
-// error, `undefined: ports.UnitRepo` — that IS the passing state of
-// scripts/pending-red.sh (design §8.1/§8.2, D9), not a defect to fix. This
-// test never turns green inside this change.
+// ports.UnitRepo (internal/ports) now exists — promoted into the untagged
+// L2 suite by the same PR that added it (spec R7.2, design D8), per the
+// ordering internal/ports/doc.go used to anchor before this test's
+// promotion removed that paragraph. tree_scan_test.go's build tag is
+// unaffected here — PR 2a already untagged it (spec R7.1's MUST NOT
+// against re-touching it).
 //
-// Promotion: the PR that adds ports.UnitRepo must, in the SAME PR, drop the
-// pendingimpl tag from this file, move it into the untagged L2 suite, and
-// remove its line from pending_symbols.txt (design §8.3/§8.5, spec R7.3).
+// Two independent checks (design §8.4/D5):
 //
-// Two independent checks (design §8.4):
-//
-//  1. Reflection over the interface: no method named Delete*. A repository
-//     contract that never declares a delete method makes "nothing deletes a
-//     unit" a compile-time property of the port, not a discipline someone
-//     has to remember at every call site.
+//  1. Reflection over the interface: no method name begins with any of
+//     deniedMethodPrefixes. That set is {Delete, Remove, Purge, Drop,
+//     Destroy} — strengthened by this PR from {Delete} alone (design D5's
+//     own stated gap: a Delete-only check would let Purge, Remove or Drop
+//     slip past it). Strengthening a conformance test is allowed;
+//     weakening one is what docs/06-harness.md §4 forbids.
 //  2. Tree scan: no Go source file under internal/ or cmd/ issues a literal
-//     DELETE FROM units statement (migrations are .sql, embedded via
-//     go:embed, and are naturally outside this Go-source scan — design D1).
+//     DELETE FROM units statement (migrations are .sql files, embedded via
+//     the go:embed directive, and are naturally outside this Go-source
+//     scan — design D1).
 //
 // D10's non-empty-corpus guard applies to both: a zero-method interface or a
 // zero-file scan fails loudly instead of passing vacuously.
 func TestI03_UnitsAreNeverDeleted(t *testing.T) {
-	t.Run("repo declares no Delete method", func(t *testing.T) {
+	t.Run("repo declares no removal method", func(t *testing.T) {
 		repoType := reflect.TypeOf((*ports.UnitRepo)(nil)).Elem()
 		if repoType.Kind() != reflect.Interface {
 			t.Fatalf("ports.UnitRepo has kind %s, want interface", repoType.Kind())
@@ -56,13 +48,15 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 		}
 		for i := 0; i < repoType.NumMethod(); i++ {
 			name := repoType.Method(i).Name
-			if strings.HasPrefix(name, "Delete") {
-				t.Errorf(
-					"ports.UnitRepo declares %s — nothing deletes a unit "+
-						"(docs/02-cognitive-core.md §1, CLAUDE.md non-negotiable #6: "+
-						"archiving is a state transition, not a removal)",
-					name,
-				)
+			for _, prefix := range deniedMethodPrefixes {
+				if strings.HasPrefix(name, prefix) {
+					t.Errorf(
+						"ports.UnitRepo declares %s — nothing deletes a unit "+
+							"(docs/02-cognitive-core.md §1, CLAUDE.md non-negotiable #6: "+
+							"archiving is a state transition, not a removal)",
+						name,
+					)
+				}
 			}
 		}
 	})
@@ -85,6 +79,13 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 		}
 	})
 }
+
+// deniedMethodPrefixes is I03's strengthened prefix set (design D5): a
+// ports.UnitRepo method name beginning with any of these would give
+// deletion a verb to name it, defeating I03's structural guarantee. Widened
+// by this PR from {Delete} alone — a strengthening, per
+// docs/06-harness.md §4.
+var deniedMethodPrefixes = []string{"Delete", "Remove", "Purge", "Drop", "Destroy"}
 
 // containsUnitsDeleteStatement reports whether line contains the exact
 // (case-insensitive) statement "DELETE FROM units", rejecting a match whose
