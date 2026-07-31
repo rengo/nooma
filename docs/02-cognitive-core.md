@@ -17,6 +17,10 @@ weight, structured data, provenance, and timestamps.
   person; no embedding until promoted; promoted or expired after 24 h during consolidation).
   - Hard rule: every LIVE read surface excludes `superseded` and `incomplete`. Filtering
     positively (`status = 'pool'`) excludes them for free.
+  - This is `unit.Status.IsLive()` (`internal/core/unit`): `true` for exactly `pool`, defined
+    as the positive test `status == pool` rather than a negation list — a negation list would
+    silently admit a status added later, a positive filter excludes it for free. The predicate
+    takes no clock and no arguments; liveness is a property of the status value, not of time.
 - **`event_at` vs `created_at`**: when the thing happens/happened vs when it was ingested.
   `due_at` for deadlines. Never mix them.
 - **Nothing is deleted.** Archiving is a state transition, not a removal.
