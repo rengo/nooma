@@ -141,7 +141,7 @@ Depends on nothing outside this chain. This is the first PR to land a statement 
 `docs-sync.yml` both fire for real for the first time. `docs/02-cognitive-core.md` §1 gains its
 first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spec R8.3).
 
-- [ ] **2.1** Test first: `internal/core/unit/status_test.go` — `Status`'s `reflect.Kind()` is
+- [x] **2.1** Test first: `internal/core/unit/status_test.go` — `Status`'s `reflect.Kind()` is
       `reflect.String`; `AllStatuses()` returns exactly `{pool, archived, superseded, incomplete}`
       as a set, `"focus"` not among them. Alongside it, an L2 guard,
       `test/conformance/unit_status_ddl_test.go` (untagged): reads migration 0001's `units.status`
@@ -157,21 +157,21 @@ first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spe
       Verify: `make test`; `golangci-lint run` (confirms `depguard`'s `core-purity` and
       `forbidigo` stay clean — the file imports nothing beyond stdlib and needs no clock).
       Requirement: R2.1; design D1.
-- [ ] **2.2** Test first: `TestParseStatus_RoundTripsAndRejectsUnknown` — every `AllStatuses()`
+- [x] **2.2** Test first: `TestParseStatus_RoundTripsAndRejectsUnknown` — every `AllStatuses()`
       member parses back to itself; an unrecognized string returns `ErrUnknownStatus` naming the
       value. **Red**: `undefined: unit.ParseStatus`.
       Implement `ParseStatus(string) (Status, error)` — the sole entry point from untrusted text
       (design D1).
       Verify: `make test`.
       Requirement: R2.1 (boundary-validity half); design D1.
-- [ ] **2.3** Test first: `TestStatus_IsLive` — a table over all four `AllStatuses()` members plus
+- [x] **2.3** Test first: `TestStatus_IsLive` — a table over all four `AllStatuses()` members plus
       a deliberately unknown `Status("bogus")` value, asserting `true` for exactly `pool`. **Red**:
       `undefined: unit.Status.IsLive` (unknown method).
       Implement `func (s Status) IsLive() bool { return s == StatusPool }` (design D2 — no clock,
       no arguments; liveness is a property of the status value, not a function of time).
       Verify: `make test`.
       Requirement: R2.2; design D2.
-- [ ] **2.4** In the **same PR** as 2.1–2.3 (spec R7.1's MUST, design D8's sequencing — the helper
+- [x] **2.4** In the **same PR** as 2.1–2.3 (spec R7.1's MUST, design D8's sequencing — the helper
       trap): drop the `//go:build pendingimpl` tag from
       `test/conformance/i01_focus_never_persisted_test.go` **and** from
       `test/conformance/tree_scan_test.go` in the same commit; remove the two lines `unit.Status`
@@ -186,13 +186,13 @@ first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spe
       (no `undefined: scanGoTree`); `golangci-lint run` reports no `unused` finding on
       `scanGoTree`.
       Requirement: R7.1.
-- [ ] **2.5** `docs/02-cognitive-core.md` §1: state the live-status predicate as the positive
+- [x] **2.5** `docs/02-cognitive-core.md` §1: state the live-status predicate as the positive
       filter it is — `IsLive()` is `status == pool`, and every read surface filters positively
       (design D2). This is the doc 02 delta that keeps this PR off `no-spec-change` (spec R8.3).
       Verify: read the section; `docs-sync.yml` cannot be verified locally (needs an open PR, per
       spec R8.3's own "Verified by" — noted, not claimed).
       Requirement: R8.3 (this PR's share).
-- [ ] **2.6** Design D9's presence-guard proxy — **no natural pre-implementation red** (see
+- [x] **2.6** Design D9's presence-guard proxy — **no natural pre-implementation red** (see
       "On the tasks with no natural red" above). Add
       `test/conformance/core_exported_decls_have_tests_test.go` (untagged L2): walks
       `internal/core/**`, and for every directory holding an exported top-level declaration,
@@ -205,13 +205,13 @@ first real delta here (task 2.5) — the PR must not carry `no-spec-change` (spe
       one exported name (e.g. `IsLive`), confirm the guard fails naming it, then restore before
       committing.
       Requirement: design §2 D9, §6 test matrix row 3 (not itself spec-numbered).
-- [ ] **2.7** `make cover` at this point in the chain (only `status.go`, `ParseStatus`, `IsLive`
+- [x] **2.7** `make cover` at this point in the chain (only `status.go`, `ParseStatus`, `IsLive`
       exist under `internal/core/unit`) confirms the ≥90 % floor. This is the first PR where
       `scripts/core-coverage.sh` reports a real number instead of `total=0` — read its output, not
       only its exit code.
       Verify: `make cover`.
       Requirement: R8.2 (this PR's share).
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all`.
 
 ---
 
