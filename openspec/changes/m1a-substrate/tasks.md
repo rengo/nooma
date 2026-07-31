@@ -693,7 +693,25 @@ on 6a only through the chain, not through a symbol.
 > reviewed. Either way it is independently reviewable — it shares no symbol with the other two
 > vendors, only `ports.LLMProvider`.
 
-- [ ] **6.1** (partial — anthropic and openai done, ollama not started; see the stop note above)
+> **6a-3 landed** (`feat/provider-ollama`, this session, 2026-07-31), completing task 6.1.
+> `internal/providers/ollama/client.go` + `client_test.go` (195 lines, one commit). Unlike the
+> anthropic and openai clients, **ollama's wire format was verified against upstream docs
+> (`https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md`, fetched 2026-07-31)
+> rather than written from memory** — flagged as low-confidence in the prior session's own
+> notes, so it was checked rather than trusted. Speaks `POST /api/generate` with `"stream":
+> false` sent explicitly: Ollama defaults `stream` to `true`, and omitting the field returns a
+> streamed body instead of a single JSON object, which would surface as a decode error at
+> runtime rather than a request-shape failure the test would catch — the test asserts both the
+> field's presence and its value for exactly this reason. Response text comes from the
+> `response` field (not `text`, `content`, or `choices`, all of which the sibling vendors use
+> instead). No `Authorization` header: ollama is typically unauthenticated on a local endpoint,
+> so the client sends none and the test asserts the header stays empty rather than assuming
+> parity with the two cloud vendors. `internal/providers/ollama/**` implements `Embed` in no
+> form here — task 6.2 (PR 6b) is where `ports.EmbeddingProvider` lands on this same package.
+
+- [x] **6.1** Complete — anthropic (PR #56), openai (PR #56), and ollama (`feat/provider-ollama`,
+      this session) clients all implement `ports.LLMProvider` over real HTTP, each tested
+      exclusively against `httptest.Server`.
       Test first, per vendor: `internal/providers/{anthropic,openai,ollama}/client_test.go`
       — each using `httptest.Server` (an in-process loopback listener, not "the network" in
       `docs/06-harness.md` §3's sense, per design §6's own note) to assert request shaping
