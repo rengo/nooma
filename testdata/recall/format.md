@@ -8,9 +8,8 @@ It feeds all three consumers of hybrid recall — answering a `recall`,
 finding dedup candidates during capture, and finding pairs during the
 `connect` phase.
 
-`cases/` is empty in this change. Populating it with real cases is M1's
-responsibility (spec R10.1's MUST NOT); this file exists so whoever adds
-the first case does not have to guess the shape.
+`cases/` holds the corpus's real case files, once populated (spec R10.1);
+this file exists so whoever adds a case does not have to guess the shape.
 
 ## File naming convention
 
@@ -28,29 +27,39 @@ own `id` field verbatim (e.g. `id: "espresso-descale"` →
       "id": "unit-001",
       "type": "knowledge",
       "content": "The espresso machine's descale cycle takes about 25 minutes.",
-      "status": "pool"
+      "status": "pool",
+      "vector": [0.9, 0.1, 0]
     },
     {
       "id": "unit-002",
       "type": "task",
       "content": "Buy descaling solution for the espresso machine.",
-      "status": "pool"
+      "status": "pool",
+      "vector": [0.85, 0.2, 0]
     },
     {
       "id": "unit-003",
       "type": "insight",
       "content": "Descaling only needed every 6 months.",
-      "status": "superseded"
+      "status": "superseded",
+      "vector": [0.1, 0.9, 0]
     }
   ],
   "queries": [
     {
       "query": "how long does descaling take",
+      "vector": [1, 0, 0],
+      "lexical_ranking": ["unit-001", "unit-002"],
       "expected_unit_ids": ["unit-001", "unit-002"]
     }
   ]
 }
 ```
+
+`vector` and `lexical_ranking` are both optional; this example carries them
+only to illustrate the shape (see "Vector and lexical-ranking fields"
+below) — their values here are not a worked fusion example. A real
+lexical/vector disagreement case lives under `cases/`.
 
 `unit-003` is deliberately part of this example, not incidental: it shares
 the same topic and vocabulary as the query ("descaling") and would be a
@@ -68,9 +77,39 @@ appear in `expected_unit_ids` — the case I02 (`docs/02-cognitive-core.md`
 | `units[].type` | string | yes | One of `docs/03-data-model.md`'s `units.type` taxonomy: `task \| mental_load \| event \| knowledge \| procedural \| emotional \| list \| structured_ref \| insight`. Not validated by the loader — enum membership is a review-time concern, not a mechanized one (see "What the loader does and does not check" below) |
 | `units[].content` | string | yes | The unit's text content, realistic enough to exercise both vector and lexical matching |
 | `units[].status` | string | yes | `docs/03-data-model.md`'s `units.status` domain: `pool \| archived \| superseded \| incomplete`. Not validated by the loader — enum membership is a review-time concern, same as `units[].type` (see "What the loader does and does not check" below). Presence is enforced (a missing or `null` `status` is rejected); membership in the four-value domain is not |
+| `units[].vector` | array of number | no, see below | The unit's embedding vector, stated explicitly by the case author rather than computed by `fakeprovider`'s hash-based embedder — see "Vector and lexical-ranking fields" below |
 | `queries` | array of query | yes, at least 1 | The searches this case runs against `units` |
 | `queries[].query` | string | yes | The natural-language search text |
+| `queries[].vector` | array of number | no, see below | This query's embedding vector, stated the same way as `units[].vector` |
+| `queries[].lexical_ranking` | array of string | no | The ranking the real FTS5 leg is expected to produce for this query over `units`, best match first — see "Vector and lexical-ranking fields" below |
 | `queries[].expected_unit_ids` | array of string | yes, at least 1 | The expected fused order, most relevant first (ADR-0010's RRF output) |
+
+## Vector and lexical-ranking fields
+
+`vector` and `lexical_ranking` exist because neither ranking can be produced
+any other way in this corpus (design §4.2): the only embedder any test may
+use, `fakeprovider.NewEmbeddingFake`, hashes the whole input string into an
+unnormalized vector with no relationship to content, so a golden order
+pinned against it would pin FNV-1a, not recall; and the lexical leg needs
+FTS5, which needs SQLite, which is an L3 concern, not this L2 corpus's.
+
+So the case author states both rankings' inputs directly:
+
+- `units[].vector` / `queries[].vector` feed `internal/core/recall.Search`
+  (PR 8a) for real, at L2, with no database.
+- `queries[].lexical_ranking` states the ranking the real FTS5 leg is
+  expected to reproduce; it is not cross-checked against `units[].content`
+  by this package (see "What the loader does and does not check" below) —
+  `test/integration`'s L3 suite (PR 9c) is what confirms a case's stated
+  `lexical_ranking` against the real leg.
+
+Both fields are optional per case — a case with no ranking disagreement to
+author needs neither — but **once any unit in a case carries a `vector`,
+every unit and every query in that case must carry one too, and every
+vector must share one length** (`RecallExample.Validate`,
+`test/support/goldenset`). `lexical_ranking` carries no such rule: it may
+be stated for some queries and omitted for others, independently of
+`vector`.
 
 ## Cross-field constraint
 
@@ -123,6 +162,9 @@ loader but a weak regression detector for ADR-0010's fusion behavior.
   entry (`RecallExample.Validate`, `RecallUnit.Validate`,
   `RecallQuery.Validate`). A case gutted down to `{}`, or missing a single
   required field, is rejected with that field named in the error.
+- The `vector` cross-field rule above: once any unit carries one, every
+  unit and every query must carry one too, and every vector must share one
+  length (`RecallExample.validateVectors`).
 
 **Not checked**:
 
@@ -131,6 +173,10 @@ loader but a weak regression detector for ADR-0010's fusion behavior.
   review-time concern.
 - The cross-field constraint above (`expected_unit_ids` referencing a real,
   `pool` unit).
+- `queries[].lexical_ranking` against `units[].content` — the loader does
+  not run FTS5 (it is L2, not L3) and cannot confirm a stated ranking is
+  what the real lexical leg would produce; `test/integration`'s L3 suite
+  (PR 9c) is what closes that loop.
 - `Load` validates one file at a time; "one file per case" is a corpus
   convention this format.md documents, not something `Load` itself checks
   (there is no directory-listing step inside `Load`).

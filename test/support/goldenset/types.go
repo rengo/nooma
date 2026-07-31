@@ -35,8 +35,10 @@ type RecallExample struct {
 }
 
 // Validate implements Validator: id and at least one unit and one query are
-// required (spec R10.2's "Required: yes" columns), and every unit/query is
-// itself validated.
+// required (spec R10.2's "Required: yes" columns), every unit/query is
+// itself validated, and the vector cross-field rule (design §4.2) holds:
+// once any unit in this case carries a Vector, every unit and every query
+// must carry one too, and every vector must share one length.
 func (e *RecallExample) Validate() error {
 	if e.ID == "" {
 		return fmt.Errorf("id is required and must not be empty")
@@ -57,6 +59,44 @@ func (e *RecallExample) Validate() error {
 			return fmt.Errorf("queries[%d]: %w", i, err)
 		}
 	}
+	return e.validateVectors()
+}
+
+// validateVectors implements design §4.2's mechanizable cross-field check:
+// vectors are optional per case (a case with no ranking disagreement to
+// author needs none), but once any unit carries one, the check switches on
+// and every unit and every query must carry one too, all sharing one
+// dimension — the shape `internal/core/recall.Search` (PR 8a) needs to run
+// for real over this case, rather than a mismatch surfacing later as a
+// dimension error deep inside Search.
+func (e *RecallExample) validateVectors() error {
+	dim := -1
+	for _, u := range e.Units {
+		if len(u.Vector) > 0 {
+			dim = len(u.Vector)
+			break
+		}
+	}
+	if dim == -1 {
+		return nil
+	}
+
+	for i, u := range e.Units {
+		if len(u.Vector) == 0 {
+			return fmt.Errorf("units[%d]: vector is required once any unit in this case carries one", i)
+		}
+		if len(u.Vector) != dim {
+			return fmt.Errorf("units[%d]: vector has length %d, want %d (every vector in a case must share one length)", i, len(u.Vector), dim)
+		}
+	}
+	for i, q := range e.Queries {
+		if len(q.Vector) == 0 {
+			return fmt.Errorf("queries[%d]: vector is required once any unit in this case carries one", i)
+		}
+		if len(q.Vector) != dim {
+			return fmt.Errorf("queries[%d]: vector has length %d, want %d (every vector in a case must share one length)", i, len(q.Vector), dim)
+		}
+	}
 	return nil
 }
 
@@ -70,11 +110,18 @@ func (e *RecallExample) Validate() error {
 // a query semantically but must never appear in a query's
 // expected_unit_ids because it is superseded or incomplete. format.md's own
 // example carries such a unit (four-lens pre-PR review, WARNING finding 5).
+//
+// Vector is optional and, when present, stated explicitly by the case
+// author rather than computed by testdata/llm's fake embedder — whose
+// hash-based vectors cannot author a genuine lexical/vector disagreement
+// (design §4.2). See RecallExample.validateVectors for the cross-field rule
+// this field participates in.
 type RecallUnit struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Content string `json:"content"`
-	Status  string `json:"status"`
+	ID      string    `json:"id"`
+	Type    string    `json:"type"`
+	Content string    `json:"content"`
+	Status  string    `json:"status"`
+	Vector  []float32 `json:"vector,omitempty"`
 }
 
 // Validate implements the per-unit half of RecallExample.Validate.
@@ -97,9 +144,19 @@ func (u RecallUnit) Validate() error {
 // RecallQuery is one query against a RecallExample's Units and its
 // expected fused order (ADR-0010's RRF result), as a list of unit IDs,
 // most relevant first.
+//
+// Vector and LexicalRanking are both optional, stated explicitly by the
+// case author for the same reason RecallUnit.Vector is (design §4.2):
+// Vector is this query's embedding, feeding internal/core/recall.Search
+// (PR 8a) directly; LexicalRanking is the ranking the real FTS5 leg is
+// expected to produce for this query over Units, best match first — a
+// ground truth PR 9c's L3 test later confirms against the real leg, not a
+// value Load or Validate cross-checks against Units' content.
 type RecallQuery struct {
-	Query           string   `json:"query"`
-	ExpectedUnitIDs []string `json:"expected_unit_ids"`
+	Query           string    `json:"query"`
+	Vector          []float32 `json:"vector,omitempty"`
+	LexicalRanking  []string  `json:"lexical_ranking,omitempty"`
+	ExpectedUnitIDs []string  `json:"expected_unit_ids"`
 }
 
 // Validate implements the per-query half of RecallExample.Validate.
