@@ -395,10 +395,63 @@ Depends on PR 2b (the `Unit` struct 3.1's repocontract cases construct). Touches
 
 ---
 
-## PR 4 — `feat/store-unitrepo` (~380 lines — close to the 400 ceiling; flagged in the
-forecast below)
+## PR 4 — `feat/store-unitrepo` — **SPLIT into 4a and 4b, drawn 2026-07-31, before any code
+existed**
+
+> The forecast flagged PR 4 as the last high-risk entry with no pre-drawn line: ~380 against a
+> 400 ceiling, which the measured 1.3×–2.2× band puts at 500–840, and PR 2a's 2.6× outlier puts
+> near 990. PR 2a overran because its split was considered only once the diff existed. This one
+> is drawn first.
+>
+> | PR | Tasks | Content | Est. |
+> |---|---|---|---|
+> | **4a** | 4.1, 4.2, 4.3, 4.4 | The SQLite `UnitRepo`, the contract suite run at L3, the positive-filter and row-count assertions, and the `store_api.golden` regeneration | ~310 |
+> | **4b** | 4.5 | The store's clock guard — an L2 tree scan failing on `time.Now(` in non-test files under `internal/store/**` | ~70 |
+>
+> **Why the line falls there, and not somewhere more even.** Tasks 4.1, 4.2 and 4.3 share one
+> red — `undefined: sqlite.NewUnitRepo` — so they are a single commit family and no line can pass
+> between them. 4.4 is the golden regeneration that the same PR's new exported surface forces,
+> and a golden that lags its own code by one PR is a golden that briefly lies. 4.5 is an
+> independent L2 guard in the shape 3.5 and 2.6 already took, and the two previous guards came in
+> at 68 and 142 lines.
+>
+> **The fallback line, in case 4a still crosses 400.** Move 4.2 and 4.3 to 4b. They are *extra*
+> assertions beyond what the contract suite already pins, and they stay green once 4a's
+> implementation exists — so they can follow it without ever being red for the wrong reason. That
+> is a worse split, because R4.2's positive-filter proof should land with the filter it proves,
+> which is why it is the fallback and not the plan.
 
 Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
+
+> **4a's own size-discipline stop, this session (2026-07-31), before any commit.** Tasks 4.1,
+> 4.2 and 4.3 were implemented together — they share one red (`undefined: sqlite.NewUnitRepo`),
+> per this section's own "single commit family" reasoning — and all three passed, along with the
+> full `repocontract.RunUnitRepo` suite at L3, `make pending-red` (OK, unchanged), `make cover`
+> (100%, unchanged, this PR touches no `internal/core/**`), and I01's tree scan (did not trip).
+> `git diff --stat main` measured **439 changed lines** (`unitrepo.go` 273, the integration test
+> file 139, this document's own split-note bookkeeping 27) — over this session's 330-line
+> stop-and-report gate, and this is *before* task 4.4's golden regeneration is even added.
+> Per this session's own instruction ("not advisory"), apply stopped **before committing
+> anything** — no commit exists on `feat/store-unitrepo` from this session; `unitrepo.go` and
+> `unitrepo_integration_test.go` are verified, working-tree, untracked files, not deleted.
+>
+> **The fallback already drawn above was checked, not assumed.** Trimming task 4.2's
+> (`TestUnitRepo_LiveByIDsFiltersPositively`) and 4.3's
+> (`TestUnitRepo_UpdateContentDoesNotChangeRowCount`) test functions and their two helpers
+> (`seedRawUnit`, `countUnits`) out of the test file, leaving only 4.1's
+> `TestUnitRepo_Contract` plus `openTestVault`, reduces the test file from 139 to roughly 35
+> lines — a ~104-line saving. That still leaves **`unitrepo.go` at 273 lines on its own**,
+> because the production implementation is identical either way (`LiveByIDs`'s positive filter is
+> exercised by 4.1's own contract suite through `Create`, regardless of whether 4.2's raw-`INSERT`
+> fixture also exists) — so even the fallback split lands close to or over 330 once this
+> document's own bookkeeping and task 4.4's golden diff (~7 new golden lines) are added. The
+> overrun is dominated by the SQL adapter's own size, not by 4.2/4.3's extra assertions.
+>
+> **Left for the owner, not decided here**: (a) accept `size:exception` for 4a as originally
+> scoped (4.1–4.4 together, ~410–450 lines once the golden lands, inside the 1.3×–2.2× band this
+> chain keeps measuring — 439/310 is 1.42×), or (b) apply the fallback split (move 4.2 and 4.3 to
+> 4b) knowing it saves real lines but does not bring 4a under 330 on its own. Either way, 4.1's
+> implementation and 4.4's golden regeneration are the part that cannot shrink further.
 
 - [ ] **4.1** Test first: `internal/store/sqlite/unitrepo_integration_test.go` (`-tags
       integration`) calling `repocontract.RunUnitRepo(t, func(t *testing.T) ports.UnitRepo {

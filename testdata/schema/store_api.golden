@@ -1,5 +1,10 @@
 # nooma store API golden — regenerate with `make store-api-golden`.
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
+internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
+internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit) error
+internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
+internal/store/sqlite: func (*UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error
+internal/store/sqlite: func (*UnitRepo) UpdateContent(ctx context.Context, id, content string, at time.Time) error
 internal/store/sqlite: func (*Vault) Check(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Close() error
 internal/store/sqlite: func (*Vault) IntegrityCheck(ctx context.Context) error
@@ -7,7 +12,9 @@ internal/store/sqlite: func (*Vault) Path() string
 internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
+internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
+internal/store/sqlite: type UnitRepo
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError
 internal/store/sqlite: var ErrRelativeDBPath
