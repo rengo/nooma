@@ -178,7 +178,7 @@ delta here — this PR must not carry `no-spec-change` (spec R6.2).
       Makefile target (same category of gate as `docs-sync.yml`, per spec R2.9's own "Verified
       by").
       Requirement: R2.9; design D10.
-- [ ] **8a.1** Test first: `internal/core/recall/vector_test.go` — `Search` over a hand-seeded
+- [x] **8a.1** Test first: `internal/core/recall/vector_test.go` — `Search` over a hand-seeded
       `VectorIndex`, asserting the returned top-K order matches a hand-computed dot-product
       ranking; `ErrModelMismatch` when `q.Model != idx.Model`; `ErrDimMismatch` for a
       length-mismatched query vector; `ErrZeroVector` from `Normalize`. In the same file, I21's
@@ -197,7 +197,17 @@ delta here — this PR must not carry `no-spec-change` (spec R6.2).
       Verify: `make test`; `golangci-lint run` (confirms `depguard`/`forbidigo` — stdlib only, no
       clock).
       Requirement: R2.1, R2.2, R2.3; design D5, D6.
-- [ ] **8a.2** In the **same PR** as 8a.1 (spec R2.8's MUST, design D10 — no partial split): all
+
+      **Done.** Observed RED verbatim before implementing (`go test -c -o /dev/null
+      ./internal/core/recall/...`): `undefined: NewVectorIndex`, `undefined: VectorQuery`,
+      `undefined: Search`, `undefined: ErrModelMismatch`, "too many errors" (compiler cutoff) —
+      matching the predicted symbol set. Implemented `vector.go`; the I21 behavioral test
+      (`TestSearch`'s "ranks by dot product descending" case, exact-ID assertion against a
+      separately-constructed model-`b` index that scores higher and is never passed to `Search`)
+      is the `TestSearch` table in `vector_test.go`, trimmed from an earlier, more verbose draft
+      to manage this PR's size (see PR-level note below). `make test`, `golangci-lint run` both
+      green.
+- [x] **8a.2** In the **same PR** as 8a.1 (spec R2.8's MUST, design D10 — no partial split): all
       six of R2.8's numbered sub-steps land together, because there is no meaningful intermediate
       green state — a partially-retired gate is the "terminal trap" both spec and design describe.
       1. Drop `//go:build pendingimpl` from
@@ -229,20 +239,72 @@ delta here — this PR must not carry `no-spec-change` (spec R6.2).
       `test/conformance/pending_symbols.txt` deleted; `rg pending-red Makefile .github/workflows
       docs/06-harness.md CLAUDE.md .golangci.yml` returns nothing.
       Requirement: R2.8; R7.1's own scenario (both cited verbatim above).
-- [ ] **8a.3** `docs/02-cognitive-core.md` §5: prose stating the vector-leg mechanism concretely —
+
+      **Done**, all nine sub-steps in the same commit as 8a.1's implementation. Also fixed three
+      present-tense references to the retired gate this task's own list did not name, found by a
+      repo-wide `rg pending-red|pendingimpl` sweep after the nine listed edits:
+      `internal/core/recall/doc.go`'s own "Pending conformance anchor" paragraph (the exact
+      package this PR adds symbols to — left stale, it would have told a future reader a deleted
+      script still gates this package), `test/harness/doc.go`'s live comparison to
+      `scripts/pending-red.sh`, and `i01_focus_never_persisted_test.go`'s "see
+      pending_symbols.txt and pending-red.sh" pointer — reworded to past tense rather than left
+      dangling. `test/conformance/doc.go`'s general "(pendingimpl-tagged) domain symbols" phrase
+      was left alone: it describes the package's still-valid build-tag mechanism in the abstract,
+      not a specific claim about this now-retired gate. `make check-all` green with no
+      `pending-red` target anywhere in its dependency chain; `git diff --name-only` shows
+      `scripts/pending-red.sh` and `test/conformance/pending_symbols.txt` deleted; `rg pending-red
+      Makefile .github/workflows docs/06-harness.md CLAUDE.md .golangci.yml` returns nothing.
+- [x] **8a.3** `docs/02-cognitive-core.md` §5: prose stating the vector-leg mechanism concretely —
       what "one model per search" means at the `VectorQuery`/`VectorIndex` level (design's stated
       home for R2.10's §5 half; the numeric knobs land in PR 8b's own doc task, 8b.3).
       Verify: read the section; `docs-sync.yml` not locally verifiable (spec R2.10's own "Verified
       by").
       Requirement: R2.10 (§5 half).
-- [ ] **8a.4** `internal/core/recall`'s purity and coverage, for the first time this package holds
+
+      **Done.** Added a "Mechanism" bullet under §5's existing "One model per search" point,
+      naming `VectorQuery`/`VectorIndex` and the two-indexes-not-one shape.
+- [x] **8a.4** `internal/core/recall`'s purity and coverage, for the first time this package holds
       statements. `make cover` reports a real number rather than `total=0` for this package.
       Verify: `golangci-lint run`; `make cover` — read the reported number, not only the exit
       code (`m1a-substrate` task 2.7's precedent).
       Requirement: R2.10 (purity/coverage half, this PR's share).
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
+
+      **Done.** `golangci-lint run` — 0 issues (depguard/forbidigo confirm stdlib-only, no
+      clock/rand/uuid/os.Getenv). `make cover` (via `make check-all`) —
+      `internal/core` statement coverage is 98% (52/53), at or above the 90% floor.
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
       `internal/core/classify/` or `internal/core/relation/` (scope boundary, R8.2); confirm the
       removed `pending-red` target leaves no dangling reference anywhere in the tree.
+
+      **Done.** `make check-all` fully green (lint, vet, `-race -shuffle=on` L1/L2, build, L3
+      integration, schema-golden clean, coverage 98%, all seven cross-compile targets, L4). No
+      `pending-red` step appears anywhere in `check-all`'s own output — the target no longer
+      exists. `git diff --name-only main` touches no path under `internal/core/classify/` or
+      `internal/core/relation/`.
+
+      **8a.0 is NOT done by this batch — it is the owner's operator action against the GitHub
+      branch ruleset (C5), out of scope for `sdd-apply`.** It remains outstanding and MUST be
+      confirmed before this PR is allowed to merge (D10's own stated trap: this PR's diff deletes
+      the `pending-red` CI job, so an unremoved required status context blocks this PR's own
+      merge, not merely a future one).
+
+      **PR-level size note, surfaced rather than silently absorbed.** Final `git diff --stat
+      main`: 15 files changed, 298 insertions(+), 168 deletions(-) — 466 changed lines against
+      this PR's own ~380 ceiling (1.23x). 8a.1's own code+test (`vector.go` +
+      `vector_test.go`) was trimmed once already during this session (from an initial 378-line
+      draft down to 246) specifically to leave room under the ceiling, after `git diff --stat`
+      crossed the 300-line stop-and-report checkpoint on 8a.1 alone. The remainder is 8a.2's own
+      gate-retirement diff (a ten-file, mostly-deletion diff whose size the task list itself
+      states is "fixed regardless of code size") plus three additional stale-comment fixes this
+      session found and corrected (see 8a.2's own note above) that the task list did not
+      enumerate. 8a.1 and 8a.2 cannot be split into separate PRs — spec R2.8's own MUST NOT
+      forbids promoting I21 without retiring the gate in the same PR, and design D10 states the
+      same. There is therefore no valid split line to propose within this PR's own scope; the
+      1.23x overrun is inherent to what PR 8a is, matches the Review Workload Forecast's own "High
+      risk" flag (set before any code existed), and is milder than the 1.3x–2.2x band
+      `m1a-substrate` already measured repeatedly with `size:exception` (e.g. PR 5a at 1.74x).
+      Flagged here for the owner to accept as `size:exception` or split differently, per
+      `delivery_strategy: ask-on-risk` — not silently absorbed.
 
 ---
 

@@ -1,10 +1,9 @@
 // Package conformance — see test/conformance/doc.go for the package contract.
 //
-// This file carries no test of its own; it is a shared helper for I01
-// (now untagged) and I03 (still //go:build pendingimpl until PR 3
-// promotes it — additive build tags mean an untagged file compiles into
-// every build, including -tags pendingimpl, so I03's still-tagged file
-// can keep calling this shared, now-untagged helper without issue).
+// This file carries no test of its own; it is a shared helper for I01 and
+// I03, both untagged since Phase A. No file in this package carries the
+// pendingimpl build tag any longer — I21, the last anchor, was promoted in
+// m1b-pipeline PR 8a.
 package conformance
 
 import (

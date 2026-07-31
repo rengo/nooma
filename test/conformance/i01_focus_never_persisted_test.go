@@ -40,9 +40,11 @@ import (
 func TestI01_FocusIsNeverAPersistedStatus(t *testing.T) {
 	t.Run("Status is a string-kind vocabulary type", func(t *testing.T) {
 		// Referenced directly (not only through AllStatuses' return type) so
-		// this file's RED names both anchored symbols, unit.Status and
-		// unit.AllStatuses, independently of one another — see
-		// test/conformance/pending_symbols.txt and scripts/pending-red.sh.
+		// this file's RED named both anchored symbols, unit.Status and
+		// unit.AllStatuses, independently of one another, back when this
+		// test was itself pendingimpl-tagged (Phase A; both symbols have
+		// existed since, and the pending-red gate that watched this RED is
+		// now retired — m1b-pipeline PR 8a).
 		var zero unit.Status
 		if reflect.TypeOf(zero).Kind() != reflect.String {
 			t.Errorf("unit.Status has kind %s, want a string-kind vocabulary type", reflect.TypeOf(zero).Kind())

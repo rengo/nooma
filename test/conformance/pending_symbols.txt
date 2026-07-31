@@ -1,7 +1,0 @@
-# Symbols the pendingimpl conformance tests anchor to. They do not exist yet.
-# The compiler must report each one as `undefined:`; scripts/pending-red.sh checks it.
-#
-# The M0/M1 PR that creates any of these MUST, in the same PR, promote the
-# matching test into the untagged L2 suite and remove the line from this file.
-recall.VectorQuery
-recall.VectorIndex

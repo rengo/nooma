@@ -130,6 +130,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      every vector search filters by model, and vectors from two models are never compared or
      fused. See [ADR-0003](adr/0003-embeddings.md),
      [ADR-0012](adr/0012-vector-proximity-search.md).
+     - Mechanism (`internal/core/recall`): a `VectorQuery` names one model; a `VectorIndex`
+       holds embeddings for exactly that one model. A vault holding two models therefore holds
+       two `VectorIndex` values — never one index serving both — so there is no shared score
+       for two different models' embeddings to be compared through.
 3. **dedup/relation judge** (LLM): against the recall candidates it decides
    `new | duplicate | related` — and if `related`, with what strength/confidence (subject to
    the thresholds in §4).
