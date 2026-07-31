@@ -174,7 +174,7 @@ func checkTaskProviders(c *Config, _ string, _ func(string) (string, bool)) erro
 	for _, name := range sortedKeys(c.Tasks) {
 		provider := c.Tasks[name].Provider
 		if _, ok := c.Providers[provider]; !ok {
-			problems = append(problems, fmt.Errorf("tasks.%s.provider names %q, which is not present in providers:", name, provider))
+			problems = append(problems, fmt.Errorf("tasks.%s.provider names %q, which is not present in the providers map", name, provider))
 		}
 	}
 	return errors.Join(problems...)
