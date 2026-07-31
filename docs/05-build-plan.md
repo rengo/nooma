@@ -53,7 +53,21 @@ Prior decisions: **[ADR-0002](adr/0002-default-llm-preset.md)** (LLM preset),
 - Hybrid recall (RRF) + dedup/relation judge with persist/surface thresholds.
 - In-place correction edits + signal.
 - HTTP API: capture, recall, read-only units.
+- **`nooma init`'s two first-class paths** — Cloud (recommended) and Ollama — writing a real
+  `providers:` and `tasks:` block instead of the commented placeholder M0 ships, and never writing
+  a secret: the config holds `api_key_env`, the *name* of an environment variable.
+- **`nooma doctor`'s structured-JSON quality gate**: send a fixed prompt set to the provider
+  configured for each task and verify the returned JSON validates. A failure names the provider as
+  unsuitable **for that task**, never in general — a model can be excellent at chat and bad at
+  JSON, and the user has to see that difference. Its prompt corpus is the same one that feeds the
+  test golden files ([`06-harness.md`](06-harness.md) §5): written once, used twice.
 - **Demo**: capture via API/CLI, ask "what do you know about X?" and get a real recall.
+
+The last two are [ADR-0002](adr/0002-default-llm-preset.md)'s own deliverables, and they were
+missing from this list until 2026-07-31 — the ADR was `Accepted` on 2026-07-27 with no milestone
+owning either. They land in M1 because M1 is where providers become real: a wizard that offers to
+configure a provider before any provider exists would be offering a promise, and a `doctor` gate
+that grades JSON quality needs something to grade.
 
 ## M2 — Sleep and weight
 
