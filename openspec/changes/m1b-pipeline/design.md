@@ -1197,7 +1197,20 @@ proposal's five rows is the honest projection, not pessimism.
 | 11c | `feat/relation-judge` | `DecodeJudgment`, the judge call wired into capture, the `duplicate` handling; I08 at L2 | ~280 |
 
 **Dependencies**: `8a → 8b → 8c`; `7a → 7b → 7c`; `9a → 9b`, `9a → 9c`; `(7c, 9b, 9c, 10a) → 10b → 10c`;
-`11a → 11b → 11c`, and `11c → 10b`. PR 8 depends only on Phase A's PR 2, which shipped.
+`11a → 11b → 11c`, and `10b → 11c`. PR 8 depends only on Phase A's PR 2, which shipped.
+
+> **The last arrow was backwards, corrected 2026-07-31 by `sdd-tasks`.** It read `11c → 10b`,
+> which in this line's own notation means 11c lands *before* 10b — before `internal/brain` exists
+> at all. Two things in this same document say otherwise: §5's chain table lists 10a–10c ahead of
+> 11a–11c, and 11c's own content column is "the judge call **wired into capture**", which needs
+> the `captureRunner` that 10b creates.
+>
+> A one-character direction error in a dependency graph is the kind of defect that reads as
+> correct in review — the symbols are right, the PRs are right, only the order is wrong — and is
+> caught by the phase that has to *act* on it. This is the third contradiction found inside a
+> merged planning artifact this milestone, after R2.3-versus-D3 and the Phase B/C row for
+> `feat/corrections`. All three were found by the next phase, none by review of the document
+> itself.
 
 **PR 8a goes first, and the reason is D10.** It is the only PR carrying the ruleset change, and
 running it first makes the window during which `main` lacks the `pending-red` context empty —
