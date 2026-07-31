@@ -672,9 +672,21 @@ tree.
 ### R9.3 — `core/classify`, `core/recall`, and `core/relation` remain empty
 
 **MUST NOT**: this change create any file under `internal/core/classify/`,
-`internal/core/recall/`, or `internal/core/relation/` beyond what already exists today (each
-holds only a `doc.go`, verified present). R1.3 documents `core/classify`'s future location in
-doc 06's tree; it does not create the package.
+`internal/core/recall/`, or `internal/core/relation/`. R1.3 documents `core/classify`'s future
+location in doc 06's tree; it does not create the package.
+
+**Corrected 2026-07-31, by `sdd-verify` reading the tree instead of the sentence.** This
+requirement originally read "beyond what already exists today (each holds only a `doc.go`,
+verified present)". Two of the three are like that — `recall/` and `relation/` each hold a
+`doc.go`. **`classify/` does not exist at all**, and never did: R1.3 adds it to doc 06's tree
+diagram precisely *because* it is future work, and task 1.3 says in its own text not to create
+the directory.
+
+The MUST NOT was satisfied either way, which is why twelve PRs passed over this sentence without
+anyone noticing. What was wrong is narrower and worse than a wrong fact: **the phrase "verified
+present" asserted a check that had not been run.** A requirement that describes the tree
+incorrectly is a nuisance; a requirement that claims verification it did not do teaches the next
+reader to trust the next such phrase.
 
 **Verified by**: `git diff --name-only` over the full chain contains no path under those three
 directories except, if touched at all, `docs/06-harness.md` itself (R1.3).
