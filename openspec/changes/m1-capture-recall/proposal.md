@@ -408,14 +408,25 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 | 9 | `feat/store-search` | Embedding write, index load at vault open, the FTS5 query leg, the `model` filter (I21) at the storage boundary; L3 over a two-model vault | ~350 |
 | 10 | `feat/brain-capture` | The pipeline: clock once, classify, persist, embed, log (I12, I18) | ~400 |
 | 11 | `feat/relation-judge` | `core/relation` thresholds (I07, I08, I09-storage), the fallback resolved by q1, the judge call; doc 02 §4 | ~400 |
-| 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per q3c; doc 02 §5.4 | ~330 |
 
 **Phase C — the surface**
 
 | # | PR | Content | Est. |
 |---|---|---|---|
+| 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per Q3c; doc 02 §5.4 | ~330 |
 | 13 | `feat/httpapi-capture-recall` | The capture, recall and read-only units routes; L4 | ~380 |
 | 14 | `feat/cli-capture-demo` | `nooma capture`, the demo walked end to end, L4 | ~300 |
+
+> **PR 12 moved from Phase B to Phase C on 2026-07-31**, resolving a contradiction inside this
+> document. The table above listed `feat/corrections` under Phase B while §8's own closing
+> paragraph said "Q3b and Q3c shape the recall and correction surfaces (Phase C)". Both sentences
+> were written here, and they disagreed.
+>
+> **Q3c decides how a correction finds its referent, and it is still open.** A phase cannot build
+> what an unanswered question defines, so the table row was the wrong half. Surfaced by
+> `sdd-spec`, which noticed the disagreement while scoping Phase B and flagged it instead of
+> quietly picking one — the second contradiction inside a merged planning artifact this milestone
+> has produced, after `spec.md` R2.3 and `design.md` D3 disagreed on `incomplete → archived`.
 
 Dependencies: `1 → 6`, `2 → 3 → 4`, `5 → 6`, `(4,5) → 7`, `2 → 8`, `(4,8) → 9`,
 `(6,7,9) → 10`, `(8,10) → 11`, `(10,11) → 12`, `(10,11,12) → 13 → 14`. PR 1 is independent of
