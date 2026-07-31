@@ -82,9 +82,13 @@ Prior decisions: **[ADR-0009](adr/0009-scheduler-downtime.md)** (downtime).
 
 ## M3 — The mouth: Telegram + prospection
 
-Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel).
+Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel),
+**[ADR-0014](adr/0014-telegram-transport.md)** (transport).
 
-- Telegram adapter (channel interface, `allowed_chat_ids`).
+- Telegram adapter (channel interface, `allowed_chat_ids`), over **long polling** — Nooma reaches
+  Telegram and Telegram never reaches Nooma, so the channel opens no inbound port
+  ([ADR-0014](adr/0014-telegram-transport.md)). A late delivery after the process was down is a
+  normal case for the trigger work below, not an error.
 - Triggers: armed at capture (dated events, recurring ones), due scan, digest with cadence +
   `current_state` gates, interruptive push ≥ 0.7 + quiet hours.
 - Ephemeral timers end to end (arm, list, cancel, fire with rephrasing).
