@@ -181,6 +181,10 @@ providers:
     type: anthropic
     api_key_env: ANTHROPIC_API_KEY
     model: claude-haiku-4-5
+  gpt_cloud:
+    type: openai
+    api_key_env: OPENAI_API_KEY
+    model: gpt-4o
   local_llama:
     type: ollama
     endpoint: http://localhost:11434
@@ -196,7 +200,7 @@ tasks:
   capture_processing:   { provider: claude_haiku }   # classify: normalize, classify, weigh
   relation_evaluation:  { provider: claude_haiku }   # the nightly connect judge
   belief_derivation:    { provider: claude_haiku }   # self-model derivation
-  embedding:            { provider: ... }            # see ADR-0003
+  embedding:            { provider: local_llama }    # see ADR-0003
   audio_transcription:  { provider: whisper_local }
   image_description:    { provider: claude_cloud }
 
