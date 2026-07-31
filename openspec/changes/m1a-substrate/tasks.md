@@ -134,7 +134,29 @@ reading the document.
 ---
 
 ## PR 2a — `feat/core-unit`, part 1: `Status`, `AllStatuses`, `ParseStatus`, `IsLive`, I01's
-promotion (~180 lines — design's own drawn split line, part 1 of 2)
+promotion (~180 lines estimated — **shipped at 465**, `size:exception`, owner decision
+2026-07-31)
+
+> **The estimate table needs a new row, and this is it.** 465 changed lines against a ~180
+> ceiling is **2.6×** — outside the 1.3×–2.2× band this project measured six times across M0 and
+> wrote into every artifact in this chain as its correction factor. The band was measured on M0's
+> slices, all of which were adapter or harness work. This is the first slice of **pure core code
+> with its conformance guards**, and it came in higher than the band predicts. One measurement is
+> not a new band, but it is a reason to stop treating 2.2× as the ceiling of the correction.
+>
+> Where the lines actually went: 203 of production and doc, and **262 of new test code across
+> three files** — `status_test.go`, `parse_status_test.go`, `is_live_test.go`, plus the two new L2
+> guards (`unit_status_ddl_test.go` at 51, `core_exported_decls_have_tests_test.go` at 142). The
+> guards are the part the estimate did not see: design called them "roughly 200 lines across PRs
+> 2, 3 and 4" and two of the three landed here.
+>
+> A clean split existed and was offered — `2a-core` (~272: the vocabulary, its L1 tests, I01's
+> promotion, the doc 02 delta) and `2a-guards` (~193: the two L2 guards). **Owner chose the
+> exception**: the guards exist to pin exactly what 2a introduces, and reviewing them apart from
+> the vocabulary they watch means reading both twice.
+>
+> **For the PRs still ahead**: PR 4's ~380 ceiling was already flagged high-risk with no
+> pre-drawn line. At 2.6× that is 990 lines. Draw its split before its diff exists.
 
 Depends on nothing outside this chain. This is the first PR to land a statement in
 `internal/core/`, so the ≥90 % coverage floor (`make cover`, `make check-all` only) and
