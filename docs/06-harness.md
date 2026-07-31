@@ -24,6 +24,7 @@ nooma/
 ├── internal/
 │   ├── core/               # THE BRAIN. Pure functions. Zero I/O
 │   │   ├── unit/           # the unit, types, status transitions
+│   │   ├── classify/       # the classification taxonomy, tolerant decoding
 │   │   ├── weight/         # effective_weight, decay, boost, spreading
 │   │   ├── focus/          # priority, the two focuses, hysteresis
 │   │   ├── recall/         # RRF fusion

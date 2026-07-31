@@ -101,7 +101,7 @@ Docs only. Touches no `internal/core/` path, so `docs-sync.yml` does not fire an
 `no-spec-change` label is needed. No behavioral test — each requirement's own "Verified by" is
 reading the document.
 
-- [ ] **1.1** `docs/01-architecture.md`: add an `openai` provider entry to the example's
+- [x] **1.1** `docs/01-architecture.md`: add an `openai` provider entry to the example's
       `providers:` block (design D7 — "PR 1 adds an `openai` entry to doc 01's `providers:`
       block"), naming `openai` as a `type` alongside the existing `anthropic`/`ollama`/
       `whisper_cpp` entries.
@@ -109,13 +109,13 @@ reading the document.
       `TestHarness_ConfigMatchesDoc01`, the M0 config↔doc gate, still passes — an `openai` entry
       introduces no field name the existing four entries do not already use, per design D7).
       Requirement: R1.1.
-- [ ] **1.2** `docs/01-architecture.md`: replace the `nooma.yml` example's
+- [x] **1.2** `docs/01-architecture.md`: replace the `nooma.yml` example's
       `embedding: { provider: ... }` (confirmed present, line 199) with
       `embedding: { provider: local_llama }` — the only declared `providers:` entry ADR-0003 says
       can embed (design D7).
       Verify: `rg "provider: \.\.\." docs/01-architecture.md` returns nothing; `make check`.
       Requirement: R1.2.
-- [ ] **1.3** `docs/06-harness.md` §1's `internal/core/` tree diagram: add a `classify/` line
+- [x] **1.3** `docs/06-harness.md` §1's `internal/core/` tree diagram: add a `classify/` line
       alongside the existing `unit/`, `weight/`, `focus/`, `recall/`, `relation/`,
       `consolidation/`, `prospection/`, `selfmodel/`, `learning/` lines (confirmed absent today by
       reading the tree — grepped for `classify` in the file and found no hit). Do **not** create
