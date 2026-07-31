@@ -7,12 +7,12 @@
 #                   Slower. Run it before opening a PR.
 #
 # `check` is deliberately NOT full CI parity: it skips L3 (a real SQLite vault),
-# the schema-golden regeneration-diff check, the pending-red gate, the coverage
-# floor, the seven-target cross-compile matrix and L4 (which compiles the real
-# binary), all of which cost real time. What it must never do is *claim*
-# parity — an earlier version of this comment did, and a review caught it. If
-# you add a blocking CI job, add it to `check-all` too — unless it needs PR
-# metadata a Makefile cannot produce (see the note below).
+# the schema-golden regeneration-diff check, the coverage floor, the
+# seven-target cross-compile matrix and L4 (which compiles the real binary),
+# all of which cost real time. What it must never do is *claim* parity — an
+# earlier version of this comment did, and a review caught it. If you add a
+# blocking CI job, add it to `check-all` too — unless it needs PR metadata a
+# Makefile cannot produce (see the note below).
 #
 # `cross-compile` and `test-e2e` joined `check-all` when ADR-0013 moved both
 # onto the `pull_request` trigger: they became blocking gates, and the rule above
@@ -36,7 +36,7 @@ GOBIN := $(shell go env GOPATH)/bin
 check: lint test build ## The fast loop: lint + L1/L2 tests + build — NOT full CI parity, see check-all
 
 .PHONY: check-all
-check-all: check test-integration schema-golden-clean pending-red cover cross-compile test-e2e ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
+check-all: check test-integration schema-golden-clean cover cross-compile test-e2e ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
 
 .PHONY: lint
 lint: $(GOBIN)/golangci-lint ## Dependency rule + clock port + standard linters
@@ -89,10 +89,6 @@ cover: ## Enforce docs/06-harness.md §3's >=90% floor on internal/core — arme
 .PHONY: store-api-golden
 store-api-golden: ## Regenerate testdata/schema/store_api.golden — the exported-API golden (design §7.3, §9.2)
 	go test ./test/conformance/ -run TestHarness_StoreAPIUnchanged -update
-
-.PHONY: pending-red
-pending-red: ## docs/06-harness.md §8 point 5 — test/conformance's pendingimpl tests must fail to compile, for the expected reason
-	sh scripts/pending-red.sh
 
 .PHONY: tools
 tools: $(GOBIN)/golangci-lint ## Install pinned development tools

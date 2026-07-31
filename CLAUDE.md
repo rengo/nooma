@@ -54,9 +54,8 @@ Two commands, and the difference matters:
 
 - **`make check`** — the fast loop: lint, L1/L2 tests, build. Seconds. Run it constantly.
 - **`make check-all`** — every gate CI blocks on that a Makefile can run locally: adds L3, the
-  schema-golden regeneration-diff check, the pending-red gate, the `internal/core` coverage
-  floor, the seven-target cross-compile matrix (ADR-0013), and L4. **Run this before opening a
-  PR.**
+  schema-golden regeneration-diff check, the `internal/core` coverage floor, the seven-target
+  cross-compile matrix (ADR-0013), and L4. **Run this before opening a PR.**
 
 `make check` is deliberately not full CI parity, because L3, the coverage floor, the matrix and
 L4 all cost real time. If you add a blocking CI job, add it to `check-all` too — unless it needs
