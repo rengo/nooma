@@ -484,7 +484,24 @@ Both are §8 risks, not surprises.
 Each of these is a decision the owner makes. The recommendation is the proposal's reasoning, not
 a settled answer.
 
-### Q1 — What governs a relation type with no `relation_thresholds` row?
+### Q1 — What governs a relation type with no `relation_thresholds` row? **CLOSED — B.**
+
+**Owner decision, 2026-07-31: named constants in `core/relation`, plus an L2 test pinning them to
+migration 0002's SQL column defaults.** No migration, no precedence rule, no seed. Doc 02 §4 gains
+one sentence naming the fallback.
+
+The reason B beats A is the one the question was asked for: relation `type` is **open text**, so no
+seed can ever be exhaustive, and a seed leaves the unseen-type case exactly where it started. C is
+the right answer eventually — but eventually is M5, the milestone that actually tunes these knobs,
+and a global-vs-per-type precedence rule two milestones before any consumer exists is scope the
+loop does not need.
+
+The one real objection to B is that a default then has **two sources** — the Go constant and the
+SQL column `DEFAULT` — which can drift silently. That is closed by the L2 test, not argued away:
+`i13_learning_signal_test.go` already reads migration SQL text off disk, so the pattern exists and
+the cost is one test.
+
+
 
 Verified: `relation_thresholds` has column defaults (`0.3` / `0.5`) but migration 0002 **seeds no
 rows**, and `config` has **no columns** for these two thresholds. Doc 02 §4 and §13 state global
@@ -505,7 +522,25 @@ right answer eventually, but "eventually" is M5, the milestone that actually tun
 introducing a precedence rule two milestones before a consumer exists is scope the loop does not
 need. Doc 02 §4 gains one sentence naming the fallback.
 
-### Q2 — What is `units.confidence`?
+### Q2 — What is `units.confidence`? **CLOSED — C.**
+
+**Owner decision, 2026-07-31: doc 02 §12 claims the column as the perception gate's storage, and
+M1 writes NULL.** `Unit.Confidence` stays `*float64` and is never set. One sentence in doc 02, no
+schema change, no golden regenerated, no invented semantics.
+
+A was the tempting one and it is the worse failure mode. If classify occupies the column with "how
+sure the classifier was", the first real consumer — §12's `confidence < 0.4 → needs-review` gate in
+v2 — arrives to find it already meaning something else, and the migration to fix that is far more
+expensive than the sentence being written now.
+
+B was never available on this project's own terms: ADR-0005's entire argument for cutting
+perception from v1 is that **its seams are already in the schema**. Dropping one of those seams
+would refute the ADR that justified the cut.
+
+The defect was never the column. It was that doc 02 — the document that governs behavior — did not
+say what the column is for.
+
+
 
 Verified: the column exists in migration 0001 and in doc 03, with no comment on either side, and
 **doc 02 never mentions it**. `relations.confidence` and `self_beliefs.confidence` are both
@@ -527,8 +562,28 @@ and a §13 row, not just a definition.
 
 ### Q3 — Three scope boundaries
 
-**3a. Are §5.5's hooks in M1 at all?** Doc 02 presents them as step 5 of one pipeline; the build
-plan gives triggers and timers to M3 and consolidation to M2.
+**3a. Are §5.5's hooks in M1 at all? CLOSED — out entirely.**
+
+**Owner decision, 2026-07-31.** Classify still returns `timer`, `recurring_reminder` and
+`person_ref_status: ambiguous` — that is classify's contract and the golden corpus covers it. M1
+**arms nothing**, creates **no `incomplete` unit**, records the classification in `decision_log`,
+and tells the caller "not yet" in plain words.
+
+Minimal arming was rejected on the principle this project keeps returning to: **a timer armed by a
+system that cannot fire it is worse than a refusal, because it promises silently.** The user asked
+to be reminded, the system said yes, and nothing will happen. A refusal is a bad answer; a silent
+false promise is a bug the user only finds when it matters.
+
+On `incomplete` specifically: doc 02 §1 says such units are promoted or expired after 24 h **during
+consolidation**, which is M2. An `incomplete` unit created in M1 would be invisible to every read
+surface (I02) and **immortal** until M2 ships. So an ambiguous person reference produces a `pool`
+unit and a `decision_log` entry, and **I06 is honestly out of scope rather than vacuously green** —
+which is the difference between a gate that passes because it holds and one that passes because
+nothing reaches it.
+
+Doc 02 §5.5 gains a note, and the demo must not be shown a timer.
+
+
 
 - *Out entirely (recommended)*: classify still returns `timer`, `recurring_reminder` and
   `person_ref_status: ambiguous` — that is classify's contract and the golden corpus covers it —
