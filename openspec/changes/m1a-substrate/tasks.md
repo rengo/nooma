@@ -658,7 +658,43 @@ family, where a component announces a capability it does not have.
 6a's dependency on PR 1 is unchanged. Both halves are independently reviewable, and 6b depends
 on 6a only through the chain, not through a symbol.
 
-- [ ] **6.1** Test first, per vendor: `internal/providers/{anthropic,openai,ollama}/client_test.go`
+> **6a's own size-discipline stop, this session (2026-07-31), after two of three vendors.**
+> Task 6.3 landed first: `TestValidateAcceptsOpenAIProviderType` was added to
+> `internal/config/validate_test.go`, observed failing exactly as predicted —
+> `providers.gpt_cloud.type is "openai", which is not one of the documented types: anthropic,
+> ollama, whisper_cpp` — then fixed by widening `DocumentedProviderTypes` (20 changed lines,
+> committed alone). Task 6.1's anthropic client followed (213 lines: `client.go` speaking
+> Anthropic's Messages API over `httptest`, asserting both the `x-api-key`/`anthropic-version`
+> request shape and the parsed `LLMResponse`), committed separately. At that point
+> `git diff --stat main` measured 233 changed lines — under this session's 300-line
+> stop-and-report gate — so apply continued into the openai client.
+>
+> The openai client (198 lines: OpenAI's Chat Completions API, `Authorization: Bearer`, same
+> request/response-shape discipline) was committed **in the same PR as task 6.3**, not the same
+> commit — satisfying spec R6.3's "in the same PR that ships the openai client" without
+> requiring one giant commit. `git diff --stat main` after that commit measured **431 changed
+> lines against 6a's own ~230-line ceiling, 1.87×** — over the 300-line stop-and-report gate.
+> Per this session's own instruction ("not advisory"), apply stopped **before writing any
+> ollama code** — no `internal/providers/ollama/` file exists on this branch.
+>
+> **Proposed split, following this section's own "the obvious one being one PR per vendor, with
+> openai paired to task 6.3" instruction:**
+>
+> | PR | Content | Measured / estimated |
+> |---|---|---|
+> | **6a-1** `feat/providers-anthropic` | Task 6.1's anthropic slice only | 213 lines — committed on this branch (`9e37e03`) |
+> | **6a-2** `feat/providers-openai` | Task 6.1's openai slice + task 6.3 (`DocumentedProviderTypes`) — paired per spec R6.3's own MUST | 218 lines — committed on this branch (`fe35c07`, `b6f4ee1`) |
+> | **6a-3** `feat/providers-ollama` | Task 6.1's ollama slice only | ~200 lines estimated, following the same per-vendor shape — not started |
+>
+> This branch (`feat/provider-clients`) currently holds 6a-1 and 6a-2's commits together,
+> mergeable as-is or splittable into two PRs along the commit boundary already drawn
+> (`fe35c07`+`b6f4ee1` vs. `9e37e03`). 6a-3 (ollama) is left for the owner's decision: land it
+> as a third PR in this chain, or fold it back into whatever 6a becomes once 6a-1/6a-2 are
+> reviewed. Either way it is independently reviewable — it shares no symbol with the other two
+> vendors, only `ports.LLMProvider`.
+
+- [ ] **6.1** (partial — anthropic and openai done, ollama not started; see the stop note above)
+      Test first, per vendor: `internal/providers/{anthropic,openai,ollama}/client_test.go`
       — each using `httptest.Server` (an in-process loopback listener, not "the network" in
       `docs/06-harness.md` §3's sense, per design §6's own note) to assert request shaping
       (headers, body) and response parsing into `ports.LLMResponse{Text, Model}` — raw text,
@@ -677,7 +713,7 @@ on 6a only through the chain, not through a symbol.
       failing).
       Verify: `go test -race ./internal/providers/ollama/...`.
       Requirement: R6.2; C4's resolution of design D7's package-diagram gap.
-- [ ] **6.3** Test first: extend `internal/config`'s existing `TestValidate` round-trip with a
+- [x] **6.3** Test first: extend `internal/config`'s existing `TestValidate` round-trip with a
       `providers.x.type: openai` case. **Red** (a real, pre-existing failure, not invented): before
       this task, `checkProviders` rejects it — `DocumentedProviderTypes` is confirmed
       `["anthropic", "ollama", "whisper_cpp"]` (`validate.go:168`) — so the new case fails with

@@ -58,6 +58,19 @@ channels:
 	}
 }
 
+// TestValidateAcceptsOpenAIProviderType is spec R6.3, completing R1.1's
+// doc-side half from PR1: docs/01-architecture.md already documents openai as
+// a provider type (task 1.1); this asserts the Go validator agrees, in the
+// same PR that ships the client making the claim true (R6.1).
+func TestValidateAcceptsOpenAIProviderType(t *testing.T) {
+	t.Parallel()
+
+	cfg := decoded(t, "providers:\n  gpt_cloud:\n    type: openai\n    api_key_env: OPENAI_API_KEY\n    model: gpt-4o\n")
+	if err := cfg.Validate("/vault", noEnv); err != nil {
+		t.Fatalf("Validate rejected the openai provider type, which docs/01-architecture.md documents: %v", err)
+	}
+}
+
 // TestValidateTelegramRequiresAllowedChatIDs is spec R5.1 and non-negotiable #7:
 // a safe default is structural, not a warning. docs/01-architecture.md and
 // ADR-0006 both say the channel does not start without that list, and this is

@@ -163,9 +163,13 @@ func checkTasks(c *Config, _ string, _ func(string) (string, bool)) error {
 }
 
 // DocumentedProviderTypes are the provider `type` values
-// docs/01-architecture.md defines. Three, not four: the document has four
-// provider *entries* and `anthropic` appears twice.
-var DocumentedProviderTypes = []string{"anthropic", "ollama", "whisper_cpp"}
+// docs/01-architecture.md defines. Four, not five: the document has five
+// provider *entries* and `anthropic` appears twice. `openai` widens this list
+// only in the same PR as internal/providers/openai's client (design D7's
+// load-bearing ordering) — landing the name here without the client would
+// let this comment's "mirrors doc 01" claim stay true while the binary could
+// not actually serve an openai-typed provider.
+var DocumentedProviderTypes = []string{"anthropic", "openai", "ollama", "whisper_cpp"}
 
 // DocumentedTaskNames are the seven brain tasks docs/01-architecture.md binds to
 // providers.
