@@ -509,12 +509,60 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
 
 ---
 
-## PR 5 — `feat/provider-fake` (~350 lines)
+## PR 5 — `feat/provider-fake` — **SPLIT into 5a and 5b, drawn 2026-07-31, before any code
+existed**
+
+> Same discipline PR 4 got, and for the same reason: ~350 against a 400 ceiling is inside the
+> measured band's *lower* half only if nothing surprises anyone, and this chain's realized
+> multipliers so far are 2.6× (2a), 1.77× (3a), 1.84× (3b) and 1.53× (4a).
+>
+> | PR | Tasks | Content | Est. |
+> |---|---|---|---|
+> | **5a** | 5.1, 5.2, 5.5 | `internal/ports/provider.go` — the two provider interfaces and their request/response shapes — plus the scripted-replay fake and its deterministic embedding half | ~250 |
+> | **5b** | 5.3, 5.4 | The first real `testdata/llm/cases/` files, and inverting `assertCasesDirIsEmpty` for the `llm` directory only | ~100 |
+>
+> **Why the line falls between 5.2 and 5.3, and nowhere else.** Tasks 5.3 and 5.4 are a
+> red/green pair *across the repository*: 5.3 adds the first golden case file, which makes the
+> existing `assertCasesDirIsEmpty` fail in `make check`'s **fast loop**, and 5.4 is the inversion
+> that fixes it. They cannot be separated — landing 5.3 alone turns `main` red, and landing 5.4
+> alone asserts a non-empty corpus that does not exist yet. They also cannot be merged into 5a
+> without dragging that repo-wide red through it.
+>
+> 5.5 goes with 5a rather than 5b because it is the embedding half of the same fake 5.2 builds,
+> and it is the Phase B seam I21 needs — a vault holding two models' embeddings. Splitting a fake
+> from half of itself would be splitting on file count instead of on meaning.
 
 Depends on PR 3 (needs no `UnitRepo`, but the chain positions it after ports groundwork lands).
 Touches no `internal/core/**` file.
 
-- [ ] **5.1** Test first: `test/support/fakeprovider/fakeprovider_test.go` — compile-time
+> **5a's measured size, this session (2026-07-31).** Tasks 5.1 and 5.2 share one red
+> (`undefined: ports.LLMProvider`, then `undefined: fakeprovider.Fake` / `fakeprovider.New` once
+> the port existed) and landed together: `internal/ports/provider.go` (67 lines) plus
+> `test/support/fakeprovider/fakeprovider.go` (91 lines) and `fakeprovider_test.go` (180 lines).
+> At that point `git diff --stat main` measured 336 changed lines — over this session's 300-line
+> **stop-and-report** threshold — so apply paused before task 5.5 and before any commit, and
+> reported the two options below to the owner.
+>
+> **Owner decision (2026-07-31): option (a), keep 5a whole.** The 300-line figure was a
+> stop-and-report gate, not the ceiling — the ceiling is 400, and the projection landed near it
+> rather than past it. Design D7's own reasoning ("splitting a fake from half of itself would be
+> splitting on file count instead of on meaning", restated just above from this section's own
+> earlier split note) argues against separating 5.5 from 5.2, which the size-only argument for
+> option (b) did not outweigh.
+>
+> Task 5.5 (`NewEmbeddingFake`, `Embed`, `embed_test.go`) then landed with its own red
+> (`undefined: fakeprovider.NewEmbeddingFake`, observed exactly as predicted) and its own green
+> (`TestFakeEmbeddingProvider_DeterministicByModel`, `-race -shuffle=on`). **Final measured size
+> for all three tasks together: 435 changed lines of code** (`provider.go` 67, `fakeprovider.go`
+> 91, `fakeprovider_test.go` 180, `embed.go` 50, `embed_test.go` 47) — **1.74× against the ~250
+> estimate**, inside the 1.3×–2.2× band this chain has now measured seven times (2a 2.6×, 3a
+> 1.77×, 3b 1.70–1.84×, 4a 1.42×, 5a 1.74×), and under the 400-line soft ceiling only once this
+> document's own split note and this note's own bookkeeping are excluded — with them, the total
+> `git diff --stat main` is higher; see the PR-level verify line below for the exact figure this
+> session actually observed. Committed as `size:exception` on `delivery_strategy: ask-on-risk`,
+> owner-confirmed rather than assumed.
+
+- [x] **5.1** Test first: `test/support/fakeprovider/fakeprovider_test.go` — compile-time
       assertions (`var _ ports.LLMProvider = (*Fake)(nil)`, `var _ ports.EmbeddingProvider =
       (*Fake)(nil)`), plus behavior tests: a scripted, ordered list of case ids; an unscripted
       extra call fails immediately; a test that scripts more calls than the pipeline makes fails
@@ -530,7 +578,7 @@ Touches no `internal/core/**` file.
       matching ADR-0012's own memory arithmetic; no `Dim` field — `len(Vector)`).
       Verify: `go build ./...`; `golangci-lint run`.
       Requirement: R5.1; design D7.
-- [ ] **5.2** In the same commit as 5.1: implement `test/support/fakeprovider/fakeprovider.go` —
+- [x] **5.2** In the same commit as 5.1: implement `test/support/fakeprovider/fakeprovider.go` —
       the scripted-replay fake itself, loading recordings via `goldenset.Load` from
       `testdata/llm/cases/`, recording every prompt it saw so a test can assert on it without ever
       using it as the lookup key.
@@ -557,7 +605,7 @@ Touches no `internal/core/**` file.
       Verify: `make test` — the `llm` subtest passes because `cases/` is non-empty, the
       `recall`/`classify` subtests pass because theirs still hold only `.gitkeep`.
       Requirement: R5.4.
-- [ ] **5.5** Test first: `test/support/fakeprovider/embed_test.go` —
+- [x] **5.5** Test first: `test/support/fakeprovider/embed_test.go` —
       `TestFakeEmbeddingProvider_DeterministicByModel`: the same input text against the same
       configured model name returns the same vector; two fakes constructed with different model
       names report different `Model` values in `EmbedResponse` (design D7 — this is the Phase B
