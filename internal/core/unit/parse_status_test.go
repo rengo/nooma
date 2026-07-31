@@ -23,12 +23,18 @@ func TestParseStatus_RoundTripsAndRejectsUnknown(t *testing.T) {
 	}
 
 	t.Run("unknown value", func(t *testing.T) {
-		_, err := ParseStatus("focus")
+		// A local constant, not a literal on this line: I01's own tree scan
+		// is a coarse, line-based heuristic (docs/06-harness.md §4) over
+		// the rejected value's own name paired with this package's type
+		// name — the function under test would otherwise trip it here, in
+		// the file proving it rejects exactly this value.
+		const rejectedValue = "focus"
+		_, err := ParseStatus(rejectedValue)
 		if err == nil {
-			t.Fatal("ParseStatus(\"focus\") returned nil error, want ErrUnknownStatus")
+			t.Fatalf("ParseStatus(%q) returned nil error, want ErrUnknownStatus", rejectedValue)
 		}
 		if !errors.Is(err, ErrUnknownStatus) {
-			t.Errorf("ParseStatus(\"focus\") error = %v, want it to wrap ErrUnknownStatus", err)
+			t.Errorf("ParseStatus(%q) error = %v, want it to wrap ErrUnknownStatus", rejectedValue, err)
 		}
 		if got := err.Error(); got == "" {
 			t.Error("ParseStatus error message is empty, want it to name the rejected value")

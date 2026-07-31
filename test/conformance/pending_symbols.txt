@@ -3,8 +3,6 @@
 #
 # The M0/M1 PR that creates any of these MUST, in the same PR, promote the
 # matching test into the untagged L2 suite and remove the line from this file.
-unit.Status
-unit.AllStatuses
 ports.UnitRepo
 recall.VectorQuery
 recall.VectorIndex

@@ -1,10 +1,10 @@
-//go:build pendingimpl
-
 // Package conformance — see test/conformance/doc.go for the package contract.
 //
-// This file is tagged pendingimpl, matching its only callers (I01, I03) —
-// see their own file headers for why. It carries no test of its own; it is
-// a shared helper, never compiled by the untagged build.
+// This file carries no test of its own; it is a shared helper for I01
+// (now untagged) and I03 (still //go:build pendingimpl until PR 3
+// promotes it — additive build tags mean an untagged file compiles into
+// every build, including -tags pendingimpl, so I03's still-tagged file
+// can keep calling this shared, now-untagged helper without issue).
 package conformance
 
 import (

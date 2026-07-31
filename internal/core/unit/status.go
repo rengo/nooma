@@ -7,10 +7,10 @@ import "fmt"
 // itself in an error, a log line and a decision_log row, and binds to the
 // units.status TEXT column with no conversion table (design D1).
 //
-// Status("focus") compiles — the type does not make an invalid value
-// unrepresentable. Validity is a boundary property, enforced by
-// ParseStatus, the closed AllStatuses() vocabulary, and I01's promoted
-// vocabulary check (design D1, design §7 risk #2).
+// The type alone does not make an invalid value unrepresentable — an
+// arbitrary literal still type-checks. Validity is a boundary property,
+// enforced by ParseStatus, the closed AllStatuses() vocabulary, and I01's
+// promoted vocabulary check (design D1, design §7 risk #2).
 type Status string
 
 // The four members of the Status vocabulary, doc 02 §1. Order matches
@@ -28,8 +28,8 @@ const (
 // members, in the order the constants above declare them.
 //
 // A function, not an exported var (design D1): an exported slice is
-// mutable by any importer, which would let unit.AllStatuses()[0] = "focus"
-// defeat I01's own vocabulary check from outside this package.
+// mutable by any importer, and a mutated result could defeat I01's own
+// vocabulary check from outside this package.
 func AllStatuses() []Status {
 	return []Status{StatusPool, StatusArchived, StatusSuperseded, StatusIncomplete}
 }

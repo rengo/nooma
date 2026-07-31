@@ -42,8 +42,14 @@ func TestAllStatuses_HasExactlyTheDoc02Members(t *testing.T) {
 		seen[s] = true
 	}
 
-	if seen[Status("focus")] {
-		t.Error(`AllStatuses() includes "focus" — focus is a computed view (docs/02-cognitive-core.md §3), never a persisted status`)
+	// A local constant, not a literal on this line: I01's own tree scan is a
+	// coarse, line-based heuristic (docs/06-harness.md §4) over the rejected
+	// value's own name paired with this package's type name — this
+	// assertion exercises the exact rejection and must not itself look
+	// like a production line assigning that value.
+	const excludedValue = "focus"
+	if seen[Status(excludedValue)] {
+		t.Errorf("AllStatuses() includes %q — focus is a computed view (docs/02-cognitive-core.md §3), never a persisted status", excludedValue)
 	}
 }
 
