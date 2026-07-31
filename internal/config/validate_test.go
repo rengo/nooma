@@ -305,6 +305,70 @@ func TestValidateRejectsUndocumentedNames(t *testing.T) {
 	})
 }
 
+// TestValidate_TaskProviderMustExist is spec R6.4: checkTasks today validates
+// only the task name, never the provider it points at. A config binding a
+// task to a provider absent from providers: validates cleanly right now —
+// that is this test's pre-existing red, not an invented one.
+func TestValidate_TaskProviderMustExist(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a task naming a provider absent from providers: fails, naming both", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := decoded(t, "tasks:\n  capture_processing: { provider: nonexistent_llm }\n")
+		err := cfg.Validate("/vault", noEnv)
+		if err == nil {
+			t.Fatal("Validate accepted a task bound to a provider that does not exist in providers:")
+		}
+		if !strings.Contains(err.Error(), "capture_processing") {
+			t.Errorf("error does not name the task:\n%v", err)
+		}
+		if !strings.Contains(err.Error(), "nonexistent_llm") {
+			t.Errorf("error does not name the missing provider:\n%v", err)
+		}
+	})
+
+	t.Run("a task naming a provider present in providers: passes", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := decoded(t, "providers:\n  claude_cloud:\n    type: anthropic\n    model: m\ntasks:\n  chat: { provider: claude_cloud }\n")
+		if err := cfg.Validate("/vault", noEnv); err != nil {
+			t.Fatalf("Validate rejected a task whose provider exists: %v", err)
+		}
+	})
+
+	t.Run("doc 01's own example — every task's provider exists — still validates", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := decoded(t, `
+providers:
+  claude_cloud:
+    type: anthropic
+    model: claude-sonnet-4-5
+  claude_haiku:
+    type: anthropic
+    model: claude-haiku-4-5
+  local_llama:
+    type: ollama
+    model: llama3.1:70b
+  whisper_local:
+    type: whisper_cpp
+    model_path: ~/models/whisper-large-v3.bin
+tasks:
+  chat:                { provider: claude_cloud }
+  capture_processing:  { provider: claude_haiku }
+  relation_evaluation: { provider: claude_haiku }
+  belief_derivation:   { provider: claude_haiku }
+  embedding:           { provider: local_llama }
+  audio_transcription: { provider: whisper_local }
+  image_description:   { provider: claude_cloud }
+`)
+		if err := cfg.Validate("/vault", noEnv); err != nil {
+			t.Fatalf("Validate rejected doc 01's own example: %v", err)
+		}
+	})
+}
+
 // TestValidateReportsEveryProblem is spec R5.4, and design D10 is why it holds
 // structurally rather than by discipline: the checks are a slice of values, so
 // "report everything" is the shape of the code rather than a rule somebody has to

@@ -25,6 +25,7 @@ var checks = []check{
 	{"database path", checkDatabasePath},
 	{"providers", checkProviders},
 	{"tasks", checkTasks},
+	{"task-provider", checkTaskProviders},
 	{"telegram", checkTelegram},
 }
 
@@ -157,6 +158,23 @@ func checkTasks(c *Config, _ string, _ func(string) (string, bool)) error {
 	for _, name := range sortedKeys(c.Tasks) {
 		if !slices.Contains(DocumentedTaskNames, name) {
 			problems = append(problems, fmt.Errorf("tasks.%s is not a documented task; the seven are %s", name, strings.Join(DocumentedTaskNames, ", ")))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+// checkTaskProviders rejects a task bound to a provider name absent from
+// providers:. checkTasks alone cannot catch this: it validates the task's own
+// name against DocumentedTaskNames, never the provider value the task
+// points at. TaskBinding carries no Enabled field the way Telegram does —
+// every entry present in c.Tasks is enabled by presence, so there is no flag
+// to gate this check on, unlike checkTelegram.
+func checkTaskProviders(c *Config, _ string, _ func(string) (string, bool)) error {
+	var problems []error
+	for _, name := range sortedKeys(c.Tasks) {
+		provider := c.Tasks[name].Provider
+		if _, ok := c.Providers[provider]; !ok {
+			problems = append(problems, fmt.Errorf("tasks.%s.provider names %q, which is not present in the providers map", name, provider))
 		}
 	}
 	return errors.Join(problems...)
