@@ -492,7 +492,7 @@ Depends on PR 3. Adds no migration (R4.4) — the `units` table already exists.
       Verify: `make store-api-golden`; `git diff -- internal/store/sqlite/migrations/` empty;
       `git diff -- testdata/schema` reviewed and committed.
       Requirement: R4.4.
-- [ ] **4.5** Design's own invented scope (§7 Risk #10, second guard) — **no natural
+- [x] **4.5** Design's own invented scope (§7 Risk #10, second guard) — **no natural
       pre-implementation red**, per the ground-truth row confirming no non-test file under
       `internal/store/**` currently references `time.Now` (only two `_test.go` hits and two
       comments, verified by grep during design). Add
