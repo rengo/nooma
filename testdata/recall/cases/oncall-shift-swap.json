@@ -1,0 +1,42 @@
+{
+  "id": "oncall-shift-swap",
+  "units": [
+    {
+      "id": "unit-oncall-swap-request",
+      "type": "task",
+      "content": "Ping Maria on Slack to swap your on call shift for this week.",
+      "status": "pool",
+      "vector": [0.85, 0.5268, 0, 0]
+    },
+    {
+      "id": "unit-oncall-swap-handoff",
+      "type": "knowledge",
+      "content": "To hand off your on call shift, message the current on call engineer and confirm they can cover before your shift starts.",
+      "status": "pool",
+      "vector": [0.95, 0.3122, 0, 0]
+    },
+    {
+      "id": "unit-oncall-reimbursement",
+      "type": "task",
+      "content": "Submit your on call shift stipend reimbursement form to finance before the quarter ends.",
+      "status": "pool",
+      "vector": [0.05, 0, 0.9987, 0]
+    }
+  ],
+  "queries": [
+    {
+      "query": "how do I swap my on call shift",
+      "vector": [1, 0, 0, 0],
+      "lexical_ranking": [
+        "unit-oncall-swap-request",
+        "unit-oncall-reimbursement",
+        "unit-oncall-swap-handoff"
+      ],
+      "expected_unit_ids": [
+        "unit-oncall-swap-request",
+        "unit-oncall-swap-handoff",
+        "unit-oncall-reimbursement"
+      ]
+    }
+  ]
+}
