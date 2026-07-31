@@ -50,7 +50,7 @@ func TestHarness_GoldenSetFormatsDeclared(t *testing.T) {
 			dir := filepath.Join(testdataDir, name)
 			assertFormatMDDeclaresShape(t, dir, name)
 			assertFormatExampleIsSiblingOfCases(t, dir)
-			assertCasesDirIsEmpty(t, dir)
+			assertCasesDirEmptiness(t, dir, name)
 		})
 	}
 }
@@ -248,10 +248,33 @@ func assertFormatExampleIsSiblingOfCases(t *testing.T, dir string) {
 	}
 }
 
-// assertCasesDirIsEmpty checks dir/cases/ exists and holds nothing but
-// .gitkeep (spec R10.1's MUST NOT — real corpora are M1's responsibility).
-func assertCasesDirIsEmpty(t *testing.T, dir string) {
+// casesDirMustBeEmpty maps each golden-set directory name to whether its
+// cases/ subdirectory (beyond .gitkeep) is still required to hold nothing
+// (spec R5.4's MUST NOT for recall/classify — both stay empty until their
+// own populating PRs in m1b-pipeline invert them in turn) or must already
+// hold at least one real case (spec R5.4 for llm, once R5.3 lands the
+// first one). Rules-as-data (design D10's pattern, echoing M0's own D10),
+// so the asymmetry across the three directories is visible in one place
+// instead of forked inside a shared function's control flow.
+var casesDirMustBeEmpty = map[string]bool{
+	"recall":   true,
+	"classify": true,
+	"llm":      false,
+}
+
+// assertCasesDirEmptiness checks dir/cases/ against casesDirMustBeEmpty for
+// name: a directory required to be empty but holding anything beyond
+// .gitkeep fails (spec R10.1's MUST NOT — real corpora are M1's
+// responsibility), and a directory required to be non-empty but holding
+// only .gitkeep fails too (spec R5.4 — a moved or emptied-out corpus must
+// fail loudly, not pass vacuously).
+func assertCasesDirEmptiness(t *testing.T, dir, name string) {
 	t.Helper()
+
+	mustBeEmpty, ok := casesDirMustBeEmpty[name]
+	if !ok {
+		t.Fatalf("no cases/ emptiness rule registered for golden-set directory %q", name)
+	}
 
 	casesDir := filepath.Join(dir, "cases")
 	info, err := os.Stat(casesDir)
@@ -263,13 +286,26 @@ func assertCasesDirIsEmpty(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatalf("read dir %s: %v", casesDir, err)
 	}
+
+	realCases := 0
 	for _, e := range entries {
-		if e.Name() != ".gitkeep" {
+		if e.Name() == ".gitkeep" {
+			continue
+		}
+		realCases++
+		if mustBeEmpty {
 			t.Errorf(
 				"%s contains %q — this change ships an empty corpus (R10.1's MUST NOT); "+
 					"real cases are M1's responsibility",
 				casesDir, e.Name(),
 			)
 		}
+	}
+	if !mustBeEmpty && realCases == 0 {
+		t.Errorf(
+			"%s holds only .gitkeep — expected at least one real case beyond .gitkeep (R5.4); "+
+				"a moved or emptied-out corpus must fail loudly, not pass vacuously",
+			casesDir,
+		)
 	}
 }

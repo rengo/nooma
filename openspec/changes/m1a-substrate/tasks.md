@@ -584,7 +584,7 @@ Touches no `internal/core/**` file.
       using it as the lookup key.
       Verify: `go test -race ./test/support/fakeprovider/...`.
       Requirement: R5.2; design D7.
-- [ ] **5.3** Add the first real case file(s) under `testdata/llm/cases/` (currently only
+- [x] **5.3** Add the first real case file(s) under `testdata/llm/cases/` (currently only
       `.gitkeep`, confirmed): at least one `response`-only case and at least one `error`-only case,
       decodable by `goldenset.LLMExample` under `DecodeStrict` (per `testdata/llm/format.md`'s
       shape and cross-field constraint — exactly one of `response`/`error`). This is the change
@@ -596,7 +596,7 @@ Touches no `internal/core/**` file.
       continues to pass, per spec's own "Verified by"); observe `make check` go red on
       `TestHarness_GoldenSetFormatsDeclared`'s `llm` subtest before task 5.4 lands.
       Requirement: R5.3.
-- [ ] **5.4** Fix the red 5.3 created: restructure `test/conformance/golden_sets_test.go`'s
+- [x] **5.4** Fix the red 5.3 created: restructure `test/conformance/golden_sets_test.go`'s
       per-directory empty-corpus assertion so that, for `llm` specifically, it asserts `cases/`
       holds at least one entry beyond `.gitkeep` — an inversion, matching design D10's existing
       non-empty-corpus guard pattern elsewhere in the same file. `recall` and `classify` keep
@@ -614,7 +614,20 @@ Touches no `internal/core/**` file.
       implementation time).
       Verify: `go test -race ./test/support/fakeprovider/...`.
       Requirement: R6.2 (fake-side precondition), design D7.
-- [ ] Verify (PR-level): `make check-all`; confirm no test added by this PR opens a real network
+
+> **5b's measured size and observed red, this session (2026-07-31).** Two case files landed
+> under `testdata/llm/cases/` (`classify-pick-up-dry-cleaning.json`, a `response`-only case, and
+> `classify-provider-rate-limited.json`, an `error`-only case) — this PR's own red, exactly as
+> predicted: `make check` failed with `TestHarness_GoldenSetFormatsDeclared/llm` reporting both
+> new files as `"... contains %q — this change ships an empty corpus (R10.1's MUST NOT) ..."`,
+> observed before any assertion code changed. `assertCasesDirIsEmpty` was then replaced with
+> `assertCasesDirEmptiness` plus a `casesDirMustBeEmpty` rules-as-data map
+> (`recall: true, classify: true, llm: false`) so the per-directory asymmetry is data, not a
+> second control-flow branch — `recall` and `classify` keep asserting emptiness unchanged (spec
+> R5.4's MUST NOT). `make check` green afterward. Total: **57 insertions, 5 deletions across 3
+> files** — well under the ~100-line estimate, no split needed.
+
+- [x] Verify (PR-level): `make check-all`; confirm no test added by this PR opens a real network
       connection or `httptest.Server` — `internal/ports` and `test/support/fakeprovider` both stay
       free of `net/http` client usage (R5.2's MUST NOT, R8.4).
 
