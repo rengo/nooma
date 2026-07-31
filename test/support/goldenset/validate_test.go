@@ -76,3 +76,97 @@ func TestDecodeStrict_EnforcesRequiredFields(t *testing.T) {
 		})
 	}
 }
+
+// TestRecallExample_ValidateVectorCrossField proves RecallExample.Validate
+// enforces design §4.2's mechanizable cross-field rule for the vector
+// widening (spec R2.6's precondition): once any unit in a case carries a
+// vector, every unit and every query in that case must carry one too, and
+// every vector — units and queries alike — must share one length. Without
+// this check, a case author who forgets one unit's vector, or types one at
+// a different dimension than the rest, would only find out at Search time
+// (internal/core/recall, PR 8a's package), not at load time.
+func TestRecallExample_ValidateVectorCrossField(t *testing.T) {
+	unit := func(id string, vector []float32) RecallUnit {
+		return RecallUnit{ID: id, Type: "knowledge", Content: "c", Status: "pool", Vector: vector}
+	}
+	query := func(vector []float32) RecallQuery {
+		return RecallQuery{Query: "q", Vector: vector, ExpectedUnitIDs: []string{"u1"}}
+	}
+
+	tests := []struct {
+		name    string
+		example RecallExample
+		wantErr string // empty means Validate() must return nil
+	}{
+		{
+			name: "no unit carries a vector: the cross-field check does not apply",
+			example: RecallExample{
+				ID:      "x",
+				Units:   []RecallUnit{unit("u1", nil)},
+				Queries: []RecallQuery{query(nil)},
+			},
+		},
+		{
+			name: "every unit and every query carry a vector of the same length: valid",
+			example: RecallExample{
+				ID:      "x",
+				Units:   []RecallUnit{unit("u1", []float32{1, 0, 0}), unit("u2", []float32{0, 1, 0})},
+				Queries: []RecallQuery{query([]float32{1, 1, 0})},
+			},
+		},
+		{
+			name: "one unit carries a vector, a second one does not: rejected",
+			example: RecallExample{
+				ID:      "x",
+				Units:   []RecallUnit{unit("u1", []float32{1, 0, 0}), unit("u2", nil)},
+				Queries: []RecallQuery{query([]float32{1, 1, 0})},
+			},
+			wantErr: "units[1]: vector is required",
+		},
+		{
+			name: "units carry vectors, the query does not: rejected",
+			example: RecallExample{
+				ID:      "x",
+				Units:   []RecallUnit{unit("u1", []float32{1, 0, 0})},
+				Queries: []RecallQuery{query(nil)},
+			},
+			wantErr: "queries[0]: vector is required",
+		},
+		{
+			name: "a unit's vector has a different length than the rest: rejected",
+			example: RecallExample{
+				ID:      "x",
+				Units:   []RecallUnit{unit("u1", []float32{1, 0, 0}), unit("u2", []float32{1, 0})},
+				Queries: []RecallQuery{query([]float32{1, 1, 0})},
+			},
+			wantErr: "units[1]: vector has length 2, want 3",
+		},
+		{
+			name: "the query's vector has a different length than the units': rejected",
+			example: RecallExample{
+				ID:      "x",
+				Units:   []RecallUnit{unit("u1", []float32{1, 0, 0})},
+				Queries: []RecallQuery{query([]float32{1, 1})},
+			},
+			wantErr: "queries[0]: vector has length 2, want 3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.example.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Validate() = nil, want an error containing %q", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Validate() error = %q, want it to contain %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
