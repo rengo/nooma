@@ -45,6 +45,15 @@ func TestSearch(t *testing.T) {
 		{"K truncates the ranked result", idxA, VectorQuery{Model: q.Model, Vector: q.Vector, K: 2}, []string{"a3", "a1"}, nil},
 		{"model mismatch refuses (I21)", idxA, VectorQuery{Model: "model-b", Vector: []float32{1, 0}, K: 1}, nil, ErrModelMismatch},
 		{"dim mismatch refuses", idxA, VectorQuery{Model: q.Model, Vector: []float32{1, 0, 0}, K: 1}, nil, ErrDimMismatch},
+		// The two ways a caller can ask for a K the index cannot honour.
+		// Both clamp to what exists rather than erroring: asking for more
+		// than a vault holds is an ordinary early-vault situation, not a
+		// caller mistake, and returning fewer results than requested is the
+		// honest answer. Neither branch was exercised before — the coverage
+		// floor is 90% and this function sat at 92.3%, which is exactly the
+		// gap a floor lets through.
+		{"K larger than the index returns everything", idxA, VectorQuery{Model: q.Model, Vector: q.Vector, K: 99}, []string{"a3", "a1", "a2"}, nil},
+		{"K unset returns everything", idxA, VectorQuery{Model: q.Model, Vector: q.Vector}, []string{"a3", "a1", "a2"}, nil},
 	}
 
 	for _, tt := range tests {
