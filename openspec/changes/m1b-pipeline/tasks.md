@@ -393,7 +393,7 @@ Depends on PR 8a.
 
 Depends on PR 8b.
 
-- [ ] **8c.1** Test first (fixture-format widening, design §4.2 — not itself a spec MUST, but the
+- [x] **8c.1** Test first (fixture-format widening, design §4.2 — not itself a spec MUST, but the
       precondition R2.6's corpus needs to be authorable at all): `test/support/goldenset` —
       `RecallExample`/`RecallUnit`/`RecallQuery` gain `Vector []float32` per unit and `Vector`,
       `LexicalRanking []string` per query; `Validate` gains the mechanizable cross-field check (if
@@ -408,7 +408,21 @@ Depends on PR 8b.
       Verify: `go test ./test/support/goldenset/...`; `TestHarness_GoldenSetFormatMatchesType`
       green.
       Requirement: design §4.2 (fixture format, the precondition R2.6 needs).
-- [ ] **8c.2** Add real cases under `testdata/recall/cases/` (currently only `.gitkeep`, confirmed)
+
+      **Done.** Resolved the ambiguous "Red" wording as the standard compile-red this chain's own
+      precedent uses (8a/8b): wrote `TestRecallExample_ValidateVectorCrossField` in
+      `validate_test.go` first, referencing `RecallUnit.Vector`/`RecallQuery.Vector` struct fields
+      that did not yet exist. Observed RED verbatim (`go test -c -o /dev/null
+      ./test/support/goldenset/...`): `unknown field Vector in struct literal of type RecallUnit`,
+      `unknown field Vector in struct literal of type RecallQuery`. Implemented the widening:
+      `RecallUnit.Vector`, `RecallQuery.Vector`/`LexicalRanking` (all `omitempty`), and
+      `RecallExample.validateVectors()` — the mechanizable cross-field rule design §4.2 states.
+      `format.md`'s field table gained three rows and a new "Vector and lexical-ranking fields"
+      section; its fenced `Shape` example gained illustrative (not worked-example) vectors on all
+      three units and the query, so the type and the fence moved together as instructed. `go test
+      ./test/support/goldenset/...` and `TestHarness_GoldenSetFormatMatchesType` both green;
+      `golangci-lint run` 0 issues.
+- [x] **8c.2** Add real cases under `testdata/recall/cases/` (currently only `.gitkeep`, confirmed)
       satisfying `format.md`'s three named properties across the corpus: at least one distractor,
       one near-duplicate pair, one lexical/vector disagreement (the best lexical match and the
       best vector match differ) — each authored with explicit `vector`/`lexical_ranking` fields per
@@ -425,7 +439,24 @@ Depends on PR 8b.
       `make check` go red on `TestHarness_GoldenSetFormatsDeclared`'s `recall` subtest before 8c.3
       lands.
       Requirement: R2.6.
-- [ ] **8c.3** Fix the red 8c.2 created: flip `casesDirMustBeEmpty["recall"]` to `false` in
+
+      **Done.** Added `testdata/recall/cases/oncall-shift-swap.json`: 3 units, 1 query, all three
+      required properties in one case (format.md allows this — "not necessarily all three in one
+      case file"). Distractor: `unit-oncall-reimbursement` shares "on call"/"shift" vocabulary with
+      the query but is semantically unrelated (hand-computed RRF ranks it last of three). Near-dup
+      pair: `unit-oncall-swap-request`/`unit-oncall-swap-handoff`, same procedure worded
+      differently. Lexical/vector disagreement: stated `lexical_ranking` puts
+      `unit-oncall-swap-request` first (literal "swap" match); hand-computed vector `Search` (raw
+      dot product against query `[1,0,0,0]`) puts `unit-oncall-swap-handoff` first (0.95 vs 0.85) —
+      the two legs disagree on which of the pair leads. Verified `Load` accepts the file via a
+      throwaway `go run` script (scratchpad, deleted after use — no permanent "load every case"
+      test exists in this PR's scope; `assertCasesDirEmptiness` only checks presence/count, not
+      decode success). Observed RED verbatim (`go test ./test/conformance/... -run
+      TestHarness_GoldenSetFormatsDeclared`): `golden_sets_test.go:53:
+      .../testdata/recall/cases contains "oncall-shift-swap.json" — this change ships an empty
+      corpus (R10.1's MUST NOT); real cases are M1's responsibility` — `recall` subtest FAILs,
+      `classify` and `llm` subtests PASS, confirming `classify`'s guard is untouched.
+- [x] **8c.3** Fix the red 8c.2 created: flip `casesDirMustBeEmpty["recall"]` to `false` in
       `test/conformance/golden_sets_test.go`. **`classify`'s entry stays `true`, unchanged by this
       PR** — per C6 above, this is the *correct* state at this point in the chain (7c has not yet
       landed), not the "already `false` from PR7" state `spec.md` R2.7's own prose describes; the
@@ -435,7 +466,12 @@ Depends on PR 8b.
       `classify` subtest passes because `testdata/classify/cases/` genuinely still holds only
       `.gitkeep` at this point.
       Requirement: R2.7.
-- [ ] Verify (PR-level): `make check-all`.
+
+      **Done**, same commit as 8c.2 (`test(recall): populate the corpus and invert its empty-corpus
+      guard`) — landing either half alone breaks `main` or asserts a corpus that does not exist, so
+      both go in one commit. `TestHarness_GoldenSetFormatsDeclared` green across all three
+      subtests; `classify`'s map entry left untouched at `true`.
+- [x] Verify (PR-level): `make check-all`.
 
 ---
 
