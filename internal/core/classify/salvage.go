@@ -33,10 +33,12 @@ func Salvage(raw []byte) (fields map[string]json.RawMessage, truncatedAfter bool
 		if err != nil {
 			return fields, true
 		}
-		key, ok := keyTok.(string)
-		if !ok {
-			return fields, true
-		}
+		// An object key token is a string by encoding/json's own grammar:
+		// Token errors before ever returning anything else in this
+		// position, so this assertion cannot panic. Asserting with an
+		// "ok" check here would add a branch no input can take —
+		// design D11 point 3's "no unreachable arm".
+		key := keyTok.(string)
 
 		var value json.RawMessage
 		if err := dec.Decode(&value); err != nil {

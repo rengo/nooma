@@ -38,6 +38,12 @@ func TestSalvage(t *testing.T) {
 			wantTruncatedAfter: true,
 		},
 		{
+			name:               "malformed key after a later member: earlier members survive",
+			raw:                `{"a":1,x}`,
+			wantFields:         map[string]string{"a": `1`},
+			wantTruncatedAfter: true,
+		},
+		{
 			name:               "non-object payload: a bare JSON string salvages zero members",
 			raw:                `"not an object"`,
 			wantFields:         map[string]string{},
