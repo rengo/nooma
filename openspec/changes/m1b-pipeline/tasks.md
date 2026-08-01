@@ -152,6 +152,45 @@ introduce the violation the guard exists to catch, confirm the guard reports it,
 before committing — the same honesty `core-coverage.sh`'s own "armed but vacuous" wording and
 design's own D9 presence-guard doc comment already carry.
 
+### C7 — `Decode`'s signature has nowhere to put the location D2 requires. **Blocks task 7a.4.**
+
+Found by PR 7a's apply run, which stopped at its size checkpoint after tasks 7a.1 and 7a.2 and
+reported this rather than improvising a signature.
+
+`design.md` D1 fixes the entry point (`design.md:152`):
+
+```go
+func Decode(raw string) (Classification, error)   // ErrNoFieldsSalvaged only
+```
+
+One argument. And D2 (`design.md:281-282`) says of `event_at` / `due_at`:
+
+> a date-only value parses to midnight **in the instant's own location, which is passed in, never
+> read from the OS**.
+
+**Both cannot hold.** `Decode` receives no instant and no location, and `internal/core` cannot
+obtain one on its own: `forbidigo` forbids `time.Now` and `os.Getenv` inside it, and
+`time.Local` is the OS's answer by another name.
+
+**The purity rule already decides the direction** — the location must arrive as a parameter, so
+D1's signature is the half that gives. What is genuinely open is *how*, and both options are
+real:
+
+| Option | Shape | Note |
+|---|---|---|
+| **A. Pass the location** | `Decode(raw string, loc *time.Location)` | Narrowest — `Decode` gets exactly what it needs and nothing else. But a second date-adjacent need later means a third parameter |
+| **B. Pass the instant** | `Decode(raw string, at time.Time)` | `at.Location()` supplies the location, and D4's pipeline **already reads the clock once** at the entry point, so the value is in hand at the call site with no new plumbing. Wider than needed today |
+
+**Recommendation: B**, on the same reasoning D2 used to forbid reading the OS. The pipeline's one
+clock read is the project's existing answer to "where does the instant enter", and `Decode` taking
+that instant keeps one concept rather than introducing a second, location-shaped one beside it.
+A caller who has `at` cannot accidentally pass a location from somewhere else.
+
+Whichever is chosen, **`design.md` D1's signature line needs correcting at its source** — this
+note records the conflict, it does not resolve the design. Task 7a.4 must not begin until it is
+settled, because a decoder that silently used `time.Local` would pass every test written on a
+machine in the author's own timezone and be wrong everywhere else.
+
 ---
 
 ## PR 8a — `feat/core-recall-vector` (~380 lines — the ceiling design draws, not a prediction; the first PR of this chain to be watched closely, per the Review Workload Forecast below)
