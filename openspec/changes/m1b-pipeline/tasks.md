@@ -203,6 +203,70 @@ would reasonably try to delete the parameter as unused. A decoder that silently 
 would pass every test written on a machine in the author's own timezone and be wrong everywhere
 else.
 
+### C8 — PR 7a's ~330-line estimate was off by 2.6×. **Split into three stacked PRs.**
+
+Measured after 7a.3, with only 7a.4 left: `git diff --stat main` reported **557 insertions**, and
+7a.4 — the `fieldSpec` table, `decodeEnum[T]`, `Decode`, `Classification`, and their L1 table
+tests — is the heaviest of the five tasks. Projected total ~860 lines against a 400-line ceiling.
+
+The estimate was not off because the work grew. It was off because a **closed vocabulary costs
+more lines than it looks like it will**: thirteen `Kind` constants plus six orthogonal
+vocabularies is nineteen declarations, nineteen doc comments, and a completeness assertion per
+vocabulary — 362 lines of almost no branching. `chained-pr`'s ceiling protects *review minutes*,
+and low-branching declaration code spends those minutes cheaply, but 860 lines spends them anyway.
+
+**Decision: three stacked PRs to `main`**, cut where the concepts already separate rather than
+where the line count happens to land:
+
+| PR | Branch | Contents | Lines |
+|---|---|---|---|
+| 7a-i | `feat/core-classify-salvage` | 7a.1 — the truncation-tolerant reader | ~165 |
+| 7a-ii | `feat/core-classify-vocab` | 7a.2 + 7a.3 — the seven closed vocabularies | ~370 |
+| 7a-iii | `feat/core-classify-decode` | 7a.4 + 7a.5 — the decoder that consumes them | ~310 |
+
+Each stands alone: `Salvage` never mentions `Kind`, and the vocabularies never mention `Decode`.
+All three compile and pass their own tests at their own tip, which is what makes stacking to
+`main` legitimate here rather than a tracker branch — there is no intermediate state where `main`
+holds something half-integrated.
+
+**What this costs the Review Workload Forecast below**: its PR 7a row is now three rows. The
+forecast is left standing rather than rewritten, for C7's reason — a forecast edited to match the
+outcome stops being a forecast and teaches nothing about estimating the next one.
+
+### C9 — `docs-sync.yml` wants a doc 02 delta per PR; the plan scheduled one for the whole of PR 7. **Resolved: split the delta the way the code was split.**
+
+Found the only way it can be found: all three of C8's PRs opened, and all three failed
+`docs<->code sync` with the same message — *"this PR changes `internal/core/**` but not
+`docs/02-cognitive-core.md`"*.
+
+The gate fires **per pull request**. The plan scheduled R1.7's delta as task **7b.4**, one PR
+later, and R1.7 explicitly forbids the `no-spec-change` escape ("it has a genuine behavioral
+delta to document"). Both statements are right on their own. Together they mean PR 7a had no
+legal way to merge as written — and this was invisible before C8, because a single PR 7a whose
+delta arrived in 7b would have failed the same gate for the same reason. **The split did not
+cause this; it revealed it.**
+
+**Neither can the delta simply move to 7a-i wholesale**: then 7a-ii and 7a-iii touch
+`internal/core/**` with no doc 02 change of their own and fail identically. The gate is per-PR,
+so the answer has to be per-PR.
+
+**Decision: doc 02 §5.1 is written in three passes, each PR documenting the behavior it
+actually introduces** — which is what CLAUDE.md non-negotiable #1 asks for anyway ("if the code
+and that doc diverge, either the code gets fixed or the doc gets updated **in the same PR**").
+A delta landing one PR after its code is exactly the drift the rule exists to prevent.
+
+| PR | §5.1 gains |
+|---|---|
+| 7a-i | The section itself: degradation is per-field, truncation is a per-field event, and the no-fields floor |
+| 7a-ii | What an out-of-vocabulary value does, and why a closed vocabulary is what makes that detectable |
+| 7a-iii | The field-by-field table, and `absent` vs `truncated` as distinct events |
+
+**Task 7b.4 changes meaning**: it no longer writes §5.1 from nothing — it *completes* it for the
+fields 7b introduces (`ToUnit`'s priors) and verifies the section reads as one piece rather than
+three sediment layers. Its requirement trace to R1.7 is unchanged; R1.7's MUST is satisfied
+across PR 7's PRs collectively, which is what "PR7 (`core/classify`)" meant before PR 7 became
+three of them.
+
 ---
 
 ## PR 8a — `feat/core-recall-vector` (~380 lines — the ceiling design draws, not a prediction; the first PR of this chain to be watched closely, per the Review Workload Forecast below)
@@ -526,11 +590,13 @@ Depends on PR 8b.
 
 ---
 
-## PR 7a — `feat/core-classify-decode` (~330)
+## PR 7a — three stacked PRs (C8; was one PR estimated at ~330)
 
 Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`).
 
-- [ ] **7a.1** Test first: `internal/core/classify/salvage_test.go` — `Salvage` over a truncated
+### PR 7a-i — `feat/core-classify-salvage` (~165)
+
+- [x] **7a.1** Test first: `internal/core/classify/salvage_test.go` — `Salvage` over a truncated
       payload (returns every field completed before the stream ended, flags the rest
       `ReasonTruncated`), a non-object payload (returns zero completed members), and a payload
       truncated before its first value. **Red**: `undefined: classify.Salvage`.
@@ -538,6 +604,17 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       reader (design D1 — not `json.Unmarshal`, which fails a truncated document wholesale).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R1.2 (truncated-JSON shape); design D1.
+
+      **Done.** Observed RED verbatim (`go vet ./internal/core/classify/...` →
+      `undefined: Salvage`) before implementing. A follow-up fix landed in the same work unit:
+      `make cover` first reported 98% (106/108) — one branch in `Salvage` (the `keyTok.(string)`
+      `ok`-form assertion) is unreachable by `encoding/json`'s own grammar (an object key token is
+      always a string; `Token` errors first), so it was removed per design D11 point 3 ("no
+      unreachable arm") rather than tested, and the one real branch it was masking (a malformed
+      key syntax after an earlier member, e.g. `{"a":1,x}`) got its own test case. Restored to
+      100% (108/108).
+### PR 7a-ii — `feat/core-classify-vocab` (~370). Stacked on 7a-i.
+
 - [ ] **7a.2** Test first: `internal/core/classify/kind_test.go` — `AllKinds()` returns exactly the
       thirteen values `spec.md` R1.1 lists, no more, no fewer, the table asserting its own
       completeness; `Kind.UnitType()` returns `false` for the six non-persisting outcomes
@@ -554,6 +631,8 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       Implement `internal/core/classify/outcomes.go`.
       Verify: `make test`.
       Requirement: R1.1 (adjacent — the orthogonal-fields half); design D1, D11.
+### PR 7a-iii — `feat/core-classify-decode` (~310). Stacked on 7a-ii.
+
 - [ ] **7a.4** Test first: `internal/core/classify/decode_test.go` — one test per I14 shape over
       inline payload literals (not the corpus, which is L2 and PR 7c's): a wrong-typed field (e.g.
       `weight` as a JSON string) degrades only that field, every other field intact; an unknown
@@ -618,10 +697,15 @@ Depends on PR 7a.
       Implement `internal/core/classify/prompt.go`.
       Verify: `make test`.
       Requirement: R1.3 (adjacent, the prompt-construction half feeding R4.2); design D4.
-- [ ] **7b.4** `docs/02-cognitive-core.md` §5.1: the field-by-field degradation definition — for
-      each field, what "degrades to null" means (proposal §4.8's table entry for `core/classify`).
-      Verify: read the section; `docs-sync.yml` not locally verifiable.
-      Requirement: R1.7.
+- [ ] **7b.4** `docs/02-cognitive-core.md` §5.1: **complete** the field-by-field degradation
+      definition (proposal §4.8's table entry for `core/classify`). Per **C9**, §5.1 is no longer
+      written here from nothing — PR 7a-i/ii/iii each landed the part they introduced, because
+      `docs-sync.yml` fires per PR and a delta arriving one PR after its code is the drift
+      CLAUDE.md non-negotiable #1 forbids. This task adds what 7b itself introduces (`ToUnit`'s
+      priors — what a degraded `weight`/λ becomes once D3's base prior fills it) and reads the
+      finished section as one piece rather than three sediment layers.
+      Verify: read the section end to end; `docs-sync.yml` not locally verifiable.
+      Requirement: R1.7 (satisfied across PR 7's PRs collectively — see C9).
 - [ ] Verify (PR-level): `make check-all`; `make cover` (the package's coverage floor is now
       meaningful across `kind.go`, `outcomes.go`, `salvage.go`, `decode.go`, `classification.go`,
       `prior.go`, `tounit.go`, `prompt.go`).
