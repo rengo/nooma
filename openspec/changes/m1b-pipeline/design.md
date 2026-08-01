@@ -140,7 +140,7 @@ has already shipped one requirement asserting "verified present" about something
 
 ## 2. Decision record
 
-### D1 — Classify's boundary is a **salvaging** decoder: `Decode(raw string) (Classification, error)`, pure, per-field optional
+### D1 — Classify's boundary is a **salvaging** decoder: `Decode(raw string, now time.Time) (Classification, error)`, pure, per-field optional
 
 The provider port hands over raw text and nothing else (`provider.go:20-35`). I14 is therefore
 a property of those bytes, and the whole of it lives in one pure function an L1 test can hammer.
@@ -149,7 +149,7 @@ a property of those bytes, and the whole of it lives in one pure function an L1 
 `json.RawMessage` for the opaque one — and the value carries its own report of what was lost:
 
 ```go
-func Decode(raw string) (Classification, error)   // ErrNoFieldsSalvaged only
+func Decode(raw string, now time.Time) (Classification, error)   // ErrNoFieldsSalvaged only
 
 type Classification struct {
     Kind              *Kind            // the thirteen-member taxonomy — doc 02 §5
@@ -185,6 +185,16 @@ missing `"weight"` key both decode to `0.0`, indistinguishable from a case that 
 zero. `Degradations` exists because I12 requires `brain` to write a rationale into
 `decision_log`, and a decoder that discards *why* a field vanished forces the orchestrator to
 guess.
+
+**Why `now` is a parameter, and not a location.** D2 requires a date-only `event_at`/`due_at` to
+parse to midnight *in the instant's own location*, and `internal/core` cannot obtain one on its
+own — `forbidigo` denies it `time.Now` and `os.Getenv`, and `time.Local` is the OS's answer under
+another name. So the location must arrive from the caller, and the question is only what shape it
+arrives in. It arrives as the instant, because D4's pipeline **already reads the clock once** and
+hands that same `now` to `BuildPrompt` and to `ToUnit`: `Decode` takes the value the call site
+already holds, `now.Location()` supplies what the parse needs, and the pipeline keeps one concept
+where a `*time.Location` parameter would introduce a second one beside it. `Decode` reads nothing
+else from `now` — it remains pure, and an L1 test fixes the timezone by passing one.
 
 **The mechanism, and why it is not `json.Unmarshal`.** `testdata/classify/format.md:92-94`
 requires a **truncated-JSON** case in the corpus and says it is one of the three shapes that
@@ -279,8 +289,8 @@ conformance test; `docs/06-harness.md` §4's prohibition does not apply.
 Dates are `*string` in the corpus (the recorded wire text) and `*time.Time` in
 `Classification` (the parsed value), and the parse is where `ReasonBadFormat` comes from.
 Accepted formats: RFC3339, and the date-only `2006-01-02` the example already uses — a
-date-only value parses to midnight in the instant's own location, which is passed in, never
-read from the OS.
+date-only value parses to midnight in the instant's own location, which is passed in as D1's
+`now` parameter, never read from the OS.
 
 ### D3 — Missing `weight`/λ fall back to **one base prior**, pinned to migration 0001's column defaults; nine per-type numbers are not invented
 
@@ -384,7 +394,7 @@ CaptureService.Capture(in)
   now := clock.Now()                                          brain, ONCE
   ├ prompt := classify.BuildPrompt(in.Text, beliefs, now)     core/classify   pure
   ├ resp   := llm.Complete({Prompt, Task:"capture_processing"})  ports.LLMProvider
-  ├ c, err := classify.Decode(resp.Text)                      core/classify   I14
+  ├ c, err := classify.Decode(resp.Text, now)                 core/classify   I14, D1
   ├ route on c.Kind                                            brain           D9
   ├ u      := classify.ToUnit(c, ids.New(), now, priors)      core/classify   I18
   ├ units.Create(u)                        ports.UnitRepo  →  units_fts syncs by trigger

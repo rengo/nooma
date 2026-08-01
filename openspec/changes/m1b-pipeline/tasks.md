@@ -152,7 +152,7 @@ introduce the violation the guard exists to catch, confirm the guard reports it,
 before committing — the same honesty `core-coverage.sh`'s own "armed but vacuous" wording and
 design's own D9 presence-guard doc comment already carry.
 
-### C7 — `Decode`'s signature has nowhere to put the location D2 requires. **Blocks task 7a.4.**
+### C7 — `Decode`'s signature had nowhere to put the location D2 requires. **Resolved: option B. 7a.4 unblocked.**
 
 Found by PR 7a's apply run, which stopped at its size checkpoint after tasks 7a.1 and 7a.2 and
 reported this rather than improvising a signature.
@@ -186,10 +186,22 @@ clock read is the project's existing answer to "where does the instant enter", a
 that instant keeps one concept rather than introducing a second, location-shaped one beside it.
 A caller who has `at` cannot accidentally pass a location from somewhere else.
 
-Whichever is chosen, **`design.md` D1's signature line needs correcting at its source** — this
-note records the conflict, it does not resolve the design. Task 7a.4 must not begin until it is
-settled, because a decoder that silently used `time.Local` would pass every test written on a
-machine in the author's own timezone and be wrong everywhere else.
+**Resolution — B, corrected at its source in `design.md`.** The signature is now
+
+```go
+func Decode(raw string, now time.Time) (Classification, error)
+```
+
+named `now` rather than `at` for the reason that decided the option itself: D4's pipeline already
+calls that value `now` when it hands it to `BuildPrompt` and to `ToUnit`, and a third word for one
+value is a second concept wearing a disguise. `design.md` D1 now carries the signature and a
+**"Why `now` is a parameter, and not a location"** paragraph; D2's "which is passed in" names it.
+
+The conflict stays recorded above rather than being edited away, because it is the only place that
+explains why a *decoder* takes an instant at all — a reader who found only the corrected signature
+would reasonably try to delete the parameter as unused. A decoder that silently used `time.Local`
+would pass every test written on a machine in the author's own timezone and be wrong everywhere
+else.
 
 ---
 
@@ -552,11 +564,14 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       The table asserts its own completeness (design D11 point 4). **Red**: `undefined:
       classify.Decode`, `undefined: classify.Classification`, `undefined:
       classify.ErrNoFieldsSalvaged`.
-      Implement `internal/core/classify/decode.go` (the `fieldSpec` table + `decodeEnum[T]`,
-      design D11 point 1–2) and `internal/core/classify/classification.go`
-      (`Classification`, `Degradation`, `Reason`).
+      Implement `internal/core/classify/decode.go` — signature `Decode(raw string, now time.Time)
+      (Classification, error)` per D1 as C7 resolved it, the `fieldSpec` table + `decodeEnum[T]`
+      (design D11 point 1–2) — and `internal/core/classify/classification.go`
+      (`Classification`, `Degradation`, `Reason`). A date-only `event_at`/`due_at` parses to
+      midnight in `now.Location()`; `time.Local` must appear nowhere, and the test passes a `now`
+      in a fixed non-UTC location so a machine-timezone regression fails rather than hides.
       Verify: `make test`; `golangci-lint run` (confirms the decoder stays stdlib-only).
-      Requirement: R1.2; design D1, D11.
+      Requirement: R1.2; design D1, D2, D11; conflict C7.
 - [ ] **7a.5** `internal/core/classify`'s purity and partial coverage (this PR's own slice — 7b
       adds `ToUnit`/priors, the package's coverage floor is only fully meaningful once that lands,
       but this task confirms no regression at this PR's boundary).
