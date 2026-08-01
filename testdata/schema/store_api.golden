@@ -2,6 +2,7 @@
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
+internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit) error
 internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
@@ -15,9 +16,11 @@ internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, er
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func NewEmbeddingRepo(v *Vault) *EmbeddingRepo
+internal/store/sqlite: func NewSearch(v *Vault) *Search
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: type EmbeddingRepo
+internal/store/sqlite: type Search
 internal/store/sqlite: type UnitRepo
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError

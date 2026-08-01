@@ -1277,6 +1277,44 @@ Depends on PR 9a.
 
 ---
 
+### C12 — the recall corpus's `lexical_ranking` was built backwards. **Found by PR 9c. Corpus corrected.**
+
+design §4.2 predicted this exactly: *"without this, `lexical_ranking` is a number a case author
+invented; with it, it is a recording."* It was invented.
+
+Real FTS5, running the query the case states, ranks **`swap-handoff` above `reimbursement`**. The
+case claimed the reverse. bm25 balances term frequency against document length, and `handoff`
+carries "on call" and "shift" twice each — enough to beat the shorter `reimbursement` despite the
+length penalty. The case's author assumed length would win. bm25 is bm25: the corpus was wrong,
+not the query.
+
+**Correcting it exposed the real defect.** With the measured ranking, the two leading units score
+**identically** under RRF — `0.03252247` each, perfectly symmetric (one is vector-2/lexical-1, the
+other vector-1/lexical-2). The case's `expected_unit_ids` only held because the invented lexical
+ranking broke that symmetry.
+
+So the case had been assembled **backwards**: a `lexical_ranking` chosen to produce the desired
+`expected_unit_ids`, rather than measured and then followed. And a corpus case whose outcome turns
+on a tie-break does not test fusion — it tests the tie-break.
+
+**Two numbers were wrong, not one.** The case also gave `swap-handoff` a *higher* vector
+similarity (0.95) than `swap-request` (0.85), while the query asks about **swap** and
+`swap-request` is the only text containing that word. That vector was invented backwards too, and
+it is what put the two units in symmetric positions to begin with.
+
+**Fixed**: `lexical_ranking` set to what FTS5 actually returns, and `swap-handoff`'s vector
+corrected to `[0.8, 0.6, 0, 0]` — below `swap-request`'s on the query axis, for the semantic
+reason that stands independently of any score, and an exact unit norm rather than the
+1.000018 the first attempt produced. `swap-request` now leads **both** legs, so the case tests
+fusion again instead of a coin-flip.
+
+**What this cost, and what it bought.** PR 8c shipped a corpus whose central number no engine
+produced, and two conformance tests passed over it for the whole of PR 8 and 9. It was caught the
+first time something other than the case author's arithmetic read it — the same shape as C11, one
+layer up: a fixture verified only against itself is not a fixture, it is a restatement.
+
+---
+
 ## PR 9c — `feat/store-search` (~220)
 
 Depends on PR 9a. Task 9c.2 additionally needs PR 8c's corpus to exist — an implicit dependency
@@ -1286,7 +1324,7 @@ produces the `lexical_ranking` a case states"). The chain's own row order (8c be
 satisfies this in practice; noted here so the gap in the stated graph does not surprise whoever
 schedules this PR differently.
 
-- [ ] **9c.1** Test first (L3): `internal/store/sqlite/search_integration_test.go` — a vault seeded
+- [x] **9c.1** Test first (L3): `internal/store/sqlite/search_integration_test.go` — a vault seeded
       with one unit per status (all four) sharing matching vocabulary; the FTS5 leg's query
       returns only the `pool` unit's id (I02's storage half, R3.3). This is also the L3 test that
       **confirms** ADR-0010's assumption that `bm25()` returns negative values — `ORDER BY
@@ -1300,12 +1338,45 @@ schedules this PR differently.
       positive-filter assertion, that is design Risk #2 resolving in the wrong direction; fix the
       `ORDER BY` clause, do not weaken the test.
       Requirement: R3.3; design D5, Risk #2.
-- [ ] **9c.2** L3 case: the real FTS5 leg reproduces at least one PR 8c corpus case's stated
+
+      **Done, and design Risk #2 resolved in the right direction.** ADR-0010:19-22's claim that
+      `bm25()` returns negative values had never been executed — no design session had a shell.
+      It is now: `TestSearch_BM25SignConventionIsAscending` asserts the **sign directly** rather
+      than inferring it from a ranking, so a failure would have said which half was wrong, the
+      ADR's claim or the `ORDER BY` built on it. Both scores came back negative and ascending is
+      best-first, exactly as assumed. The ADR needs no amendment.
+      The shared contract passed **unmodified** against real FTS5 — unlike C11's `EmbeddingRepo`
+      contract, this one was right. Worth noting because it is the counter-example: writing a
+      contract before its second implementation is not doomed, it is just unverified until then.
+      `TestSearch_ReturnsOnlyPoolUnits` carries I02's storage half, which the shared contract
+      **cannot**: the fake has no notion of status. All four statuses are seeded with identical
+      vocabulary, so any unit returned other than the pool one came back on its status, not its
+      text.
+      Two things the task's query sketch did not specify. `SearchLexical` **returns early on zero
+      tokens** rather than reaching `MATCH`: an empty match expression is an FTS5 syntax error,
+      not an empty result. And `matchExpression` escapes double quotes by doubling them even
+      though `recall.Tokenize` yields only letters and digits — that guarantee lives in another
+      package, and a widened tokenizer would otherwise turn a user's message into a syntax error,
+      or worse, into a different query.
+- [x] **9c.2** L3 case: the real FTS5 leg reproduces at least one PR 8c corpus case's stated
       `lexical_ranking` exactly (design §4.2's closing loop — without this, `lexical_ranking` is a
       number a case author invented; with it, it is a recording).
       Verify: `make test-integration`.
       Requirement: design §4.2 (closes the loop R2.6's corpus opens).
-- [ ] Verify (PR-level): `make check-all`.
+
+      **Done — and it failed first, which is the whole point.** See **C12**: the corpus's stated
+      `lexical_ranking` was not what FTS5 produces, and correcting it exposed that the case had
+      been assembled backwards from its desired answer. The corpus was corrected, not the query:
+      bm25 is bm25.
+      The test asserts the ranking **exactly, order included**, and fails loudly if no corpus
+      query states a `lexical_ranking` at all — without that guard, deleting the field would make
+      design §4.2's loop silently open again while the test still passed.
+- [x] Verify (PR-level): `make check-all`.
+
+      **Done.** Green end to end including L3. Both corpus tests now pass **together** for the
+      first time on measured data: `TestSearch_ReproducesCorpusLexicalRanking` (the lexical leg
+      is what the case records) and `TestRecallCorpusFusesToItsExpectedRanking` (the fusion over
+      it reaches the stated answer).
 
 ---
 
