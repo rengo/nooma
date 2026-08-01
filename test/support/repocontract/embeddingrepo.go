@@ -10,19 +10,36 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
+// EmbeddingHarness is what an EmbeddingRepo implementation must offer the
+// contract so the suite can put embeddings in front of it.
+//
+// EnsureUnit exists because unit_embeddings.unit_id REFERENCES units(id) and
+// the vault opens with foreign_keys=on: over the real store, a Put for a unit
+// that does not exist is a constraint violation, while the in-memory fake has
+// no such notion. Without this hook the suite would pass at L2 and be
+// impossible to run at L3 — which is not a contract, it is a fake's opinion.
+type EmbeddingHarness interface {
+	ports.EmbeddingRepo
+
+	// EnsureUnit makes id a valid embedding target. The store inserts the
+	// row; the fake does nothing.
+	EnsureUnit(t *testing.T, id string)
+}
+
 // RunEmbeddingRepo runs the ports.EmbeddingRepo contract against a fresh
-// repository built by newRepo for every subtest. newRepo must return a
-// repository holding no embedding.
+// implementation built by newRepo for every subtest. newRepo must return one
+// holding no embedding.
 //
 // Design D6's "answered twice" rule applies here as it does to UnitRepo: the
 // in-memory fake answers this suite at L2 and internal/store/sqlite's
 // implementation answers the identical suite at L3, so the two cannot drift
 // while one lags behind the other.
-func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) ports.EmbeddingRepo) {
+func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness) {
 	t.Helper()
 
 	t.Run("Put then LoadIndex returns the embedding", func(t *testing.T) {
 		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-1")
 		ctx := context.Background()
 
 		e := fixtureEmbedding("unit-1", "model-a", []float32{1, 0, 0})
@@ -51,6 +68,7 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) ports.EmbeddingRe
 	// recall would score the same unit twice.
 	t.Run("Put upserts on unit_id", func(t *testing.T) {
 		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-1")
 		ctx := context.Background()
 
 		if err := repo.Put(ctx, fixtureEmbedding("unit-1", "model-a", []float32{1, 0, 0})); err != nil {
@@ -82,6 +100,9 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) ports.EmbeddingRe
 	// one Model field and score rows belonging to another.
 	t.Run("LoadIndex scopes to exactly the requested model", func(t *testing.T) {
 		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-1")
+		repo.EnsureUnit(t, "unit-2")
+		repo.EnsureUnit(t, "unit-3")
 		ctx := context.Background()
 
 		for _, e := range []ports.Embedding{
@@ -109,33 +130,43 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) ports.EmbeddingRe
 		}
 	})
 
-	// The same unit legitimately holds one embedding per model during a
-	// reindex, so the upsert key is (unit_id, model) rather than unit_id
-	// alone — otherwise re-embedding under a new model would delete the old
-	// index out from under a search still running against it.
-	t.Run("one unit may hold an embedding per model", func(t *testing.T) {
+	// A model change OVERWRITES the unit's row; it does not add a second
+	// one. unit_embeddings.unit_id is the primary key (migration 0002), and
+	// ADR-0003's amendment makes reindex an ordinary UPDATE loop, complete
+	// when no rows of the old model remain.
+	//
+	// This case exists because the opposite is an easy and plausible thing
+	// to build — a fake keyed on (unit_id, model) passes every other case
+	// here while being unimplementable over the real schema. That is the
+	// divergence design D6's "answered twice" rule exists to catch, and it
+	// caught exactly this one.
+	t.Run("a re-embed under a new model replaces the row", func(t *testing.T) {
 		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-1")
 		ctx := context.Background()
 
-		if err := repo.Put(ctx, fixtureEmbedding("unit-1", "model-a", []float32{1, 0, 0})); err != nil {
-			t.Fatalf("Put model-a: %v", err)
+		if err := repo.Put(ctx, fixtureEmbedding("unit-1", "model-old", []float32{1, 0, 0})); err != nil {
+			t.Fatalf("Put model-old: %v", err)
 		}
-		if err := repo.Put(ctx, fixtureEmbedding("unit-1", "model-b", []float32{0, 1, 0})); err != nil {
-			t.Fatalf("Put model-b: %v", err)
+		if err := repo.Put(ctx, fixtureEmbedding("unit-1", "model-new", []float32{0, 1, 0})); err != nil {
+			t.Fatalf("Put model-new: %v", err)
 		}
 
-		for model, want := range map[string][]float32{
-			"model-a": {1, 0, 0},
-			"model-b": {0, 1, 0},
-		} {
-			idx, err := repo.LoadIndex(ctx, model)
-			if err != nil {
-				t.Fatalf("LoadIndex(%s): %v", model, err)
-			}
-			if len(idx.IDs) != 1 || !reflect.DeepEqual(idx.Vectors[0], want) {
-				t.Errorf("LoadIndex(%s) = %v/%v, want one entry with vector %v — a Put under "+
-					"one model must not disturb the other", model, idx.IDs, idx.Vectors, want)
-			}
+		old, err := repo.LoadIndex(ctx, "model-old")
+		if err != nil {
+			t.Fatalf("LoadIndex(model-old): %v", err)
+		}
+		if len(old.IDs) != 0 {
+			t.Errorf("LoadIndex(model-old) still holds %v — a re-embed must move the unit, "+
+				"not leave a stale row a search could still return", old.IDs)
+		}
+
+		fresh, err := repo.LoadIndex(ctx, "model-new")
+		if err != nil {
+			t.Fatalf("LoadIndex(model-new): %v", err)
+		}
+		if len(fresh.IDs) != 1 || fresh.IDs[0] != "unit-1" {
+			t.Errorf("LoadIndex(model-new) = %v, want [unit-1]", fresh.IDs)
 		}
 	})
 
@@ -165,6 +196,8 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) ports.EmbeddingRe
 	// than a slice the caller assembles.
 	t.Run("the returned index is directly searchable", func(t *testing.T) {
 		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-far")
+		repo.EnsureUnit(t, "unit-near")
 		ctx := context.Background()
 
 		for _, e := range []ports.Embedding{
@@ -198,6 +231,7 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) ports.EmbeddingRe
 	// version of this bug to write and the hardest to see.
 	t.Run("stored vectors are copied, not aliased", func(t *testing.T) {
 		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-1")
 		ctx := context.Background()
 
 		vector := []float32{1, 0, 0}
