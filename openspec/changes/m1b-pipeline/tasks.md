@@ -233,6 +233,35 @@ holds something half-integrated.
 forecast is left standing rather than rewritten, for C7's reason — a forecast edited to match the
 outcome stops being a forecast and teaches nothing about estimating the next one.
 
+**Outcome — and C8 estimated 7a-iii wrong too.** 7a-i landed at 208 and 7a-ii at 375, both under
+the ceiling as planned. **7a-iii came in at 838 against C8's own ~310**, and ships with an
+explicit **`size:exception`**:
+
+| | Lines | |
+|---|---|---|
+| `decode.go` | 194 | the table, the assigners, `Decode` |
+| `classification.go` | 78 | `Classification`, `Reason`, `Degradation` |
+| `decode_test.go` | **533** | the case table |
+| `tasks.md` | 36 | |
+
+So the estimate missed for the *opposite* reason C8 diagnosed. C8 blamed declaration-heavy
+vocabulary code — true for 7a-ii. 7a-iii's excess is **test surface**: I14's claim is not "the
+field degraded" but "the field degraded and *nothing else did*", and proving that needs, per
+malformation shape, an assertion over every field that had to survive. Five shapes over thirteen
+fields is a big table no matter how tersely it is written. Only 272 lines are code.
+
+**Why no fourth link.** The cut was attempted. Dates are the natural seam — the only fields that
+read `now`, the only source of `ReasonBadFormat`, and the concept C7 settled — but lifting them
+out leaves 7a-iii at ~730, still nearly double. Any cut that actually reaches 400 has to separate
+`decode_test.go` from `decode.go`, which lands the second half of the tests *after* the code they
+verify: TDD broken in the middle, to satisfy a counter. The ceiling protects review minutes; it
+does not outrank "one commit = change + tests + doc".
+
+**The lesson for the remaining PRs in this chain**, since that is what a forecast is for: estimate
+core-package PRs from the *invariant's proof obligation*, not the implementation. A requirement
+phrased "X degrades and nothing else does" carries an N-field assertion per case by construction.
+PR 8a and 10b make claims of the same shape.
+
 ### C9 — `docs-sync.yml` wants a doc 02 delta per PR; the plan scheduled one for the whole of PR 7. **Resolved: split the delta the way the code was split.**
 
 Found the only way it can be found: all three of C8's PRs opened, and all three failed
