@@ -13,7 +13,7 @@
       "type": "knowledge",
       "content": "To hand off your on call shift, message the current on call engineer and confirm they can cover before your shift starts.",
       "status": "pool",
-      "vector": [0.95, 0.3122, 0, 0]
+      "vector": [0.8, 0.6, 0, 0]
     },
     {
       "id": "unit-oncall-reimbursement",
@@ -29,8 +29,8 @@
       "vector": [1, 0, 0, 0],
       "lexical_ranking": [
         "unit-oncall-swap-request",
-        "unit-oncall-reimbursement",
-        "unit-oncall-swap-handoff"
+        "unit-oncall-swap-handoff",
+        "unit-oncall-reimbursement"
       ],
       "expected_unit_ids": [
         "unit-oncall-swap-request",
