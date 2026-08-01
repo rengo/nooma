@@ -615,7 +615,7 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       100% (108/108).
 ### PR 7a-ii — `feat/core-classify-vocab` (~370). Stacked on 7a-i.
 
-- [ ] **7a.2** Test first: `internal/core/classify/kind_test.go` — `AllKinds()` returns exactly the
+- [x] **7a.2** Test first: `internal/core/classify/kind_test.go` — `AllKinds()` returns exactly the
       thirteen values `spec.md` R1.1 lists, no more, no fewer, the table asserting its own
       completeness; `Kind.UnitType()` returns `false` for the six non-persisting outcomes
       (`chitchat`, `out_of_scope`, `recall`, `correction`, `timer`, `recurring_reminder`). **Red**:
@@ -623,7 +623,18 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       Implement `internal/core/classify/kind.go` (design D1).
       Verify: `make test`.
       Requirement: R1.1; design D1.
-- [ ] **7a.3** Test first: `internal/core/classify/outcomes_test.go` — the six orthogonal
+      **Done.** Observed RED verbatim (`go vet ./internal/core/classify/...` →
+      `undefined: Kind`) before implementing. Verified doc 02 §5 step 1's actual taxonomy
+      against `AllKinds()` and against `spec.md` R1.1's restatement — all three (doc, spec, code)
+      agree on exactly the same thirteen values, same set. `Kind.UnitType()` implements only the
+      seven-value mapping this task states; `ParseKind` (mentioned in design.md §3's package
+      layout note for `kind.go`) was **not** added — design D11's own "no ParseX" principle
+      (stated for the six orthogonal fields, generalized here) means `decodeEnum[Kind]` matches
+      directly against `AllKinds()`, and nothing in this PR's tasks calls for a separate parse
+      entry point. Flagged as a design.md/tasks.md surface mismatch, not acted on beyond noting it
+      — an unused, untested `ParseKind` would itself violate the coverage-floor discipline this
+      chain enforces.
+- [x] **7a.3** Test first: `internal/core/classify/outcomes_test.go` — the six orthogonal
       vocabularies (`NudgeOutcome`, `RelationOutcome`, `StateOutcome`, `TaskCheckinOutcome`,
       `ListOp`, `PersonRefStatus`) each have an `AllX()` and no `ParseX` (design D11 point 2 — one
       generic `decodeEnum[T]` serves all seven enum fields). **Red**: `undefined:
