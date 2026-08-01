@@ -190,6 +190,35 @@ Two vocabularies may share a value without being the same vocabulary — `relati
 `state_outcome` both admit `confirmed`, and they diverge on `rejected` versus `denied`. A value
 belonging to *some* vocabulary is not the test; belonging to *this field's* vocabulary is.
 
+**Field by field**, then — what a degraded value becomes, and what is lost with it:
+
+| Field | Degrades to | And that means |
+|---|---|---|
+| `type` | no type | The capture has no taxonomy value, so **no unit is created from it**. Every other field still decodes; what to do about a typeless capture is a decision for the pipeline, not the decoder |
+| `normalized_content` | no content | The unit has nothing to store or embed. Recall cannot reach a unit with no content, so this is the second field whose loss is not survivable downstream |
+| `structured_data` | absent | The one field that cannot fail on shape: it is free-form by definition (§5 step 1), so any value the stream completed is valid. It is opaque to the brain and stays opaque |
+| `weight`, λ | no value | Both are required on a stored unit, so the base priors of §13 fill them. A degraded weight is not a zero weight — that distinction is why the fields are optional at the type level rather than defaulting to `0` |
+| dated fields | no date | The unit is stored undated. Nothing is armed for it (§7), because arming a trigger on a guessed date is worse than not arming one |
+| the six orthogonal fields | absent | The resolution that field carried is ignored — the pending check-in, relation or state question stays open. The capture still becomes a unit |
+
+**A date is degraded in two distinguishable ways**, and they are recorded separately: a value
+that is not text at all, and text that is not a date Nooma reads. Only two date formats are
+accepted — a full timestamp with its own zone, and a bare calendar date. A bare date has no zone
+of its own, so it becomes midnight **in the user's timezone**, which is supplied with the
+request (§5 step 1's injected context) and never read from the machine Nooma happens to run on.
+The same vault syncing between two machines in two zones must classify a date identically.
+
+**Absent and truncated are different events**, and the record says which. "The model did not
+emit this field" is a fact about the model; "the stream ended before this field arrived" is a
+fact about the transport. §9's learning loop draws opposite conclusions from them, and §11's
+audit trail would be misleading if it merged them.
+
+That distinction has a limit, stated here rather than papered over: truncation is detectable for
+the response as a whole, so a *required* field missing from a cut response is recorded as
+truncated. Which **optional** fields a cut response would have carried is unknowable — the model
+may never have intended to emit them — and Nooma does not guess. Only the required fields'
+absence is reported; an optional field's absence is the ordinary case, not a loss.
+
 ## 6. Nightly consolidation ("sleep")
 
 One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
