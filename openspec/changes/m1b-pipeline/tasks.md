@@ -731,21 +731,85 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
 
 ---
 
-## PR 7b — `feat/core-classify-unit` (~280)
+### C10 — `ToUnit` has two `unit.Unit` fields nothing tells it what to put in. **Blocks task 7b.1.**
+
+Found writing PR 7b, the same way C7 was: the signature is fixed, and two required columns have
+no source inside it.
+
+`design.md:412` fixes the entry point:
+
+```go
+func ToUnit(c Classification, id string, now time.Time, p Priors) (unit.Unit, error)
+```
+
+and states it "returns an error **only** when `c.Kind` maps to no `unit.Type`". `unit.Unit` has
+fourteen fields. Twelve have a source: `id` and `now` from the parameters, eight from the
+`Classification`, `Status` fixed to `pool`, `Confidence` fixed to `nil` (Q2). **Two do not.**
+
+**C10.1 — `Source`.** `units.source` is `TEXT NOT NULL DEFAULT 'chat'` (`0001:15`), and that
+column default never fires: `unitrepo.go:51` passes `u.Source` explicitly, so a zero-value
+`Source` persists as the empty string rather than as `'chat'`. `ToUnit` receives no channel and
+no source. Grepping `spec.md` and `design.md` for the field returns **nothing** — this is not an
+open question either document weighed, it is one neither noticed.
+
+| Option | Note |
+|---|---|
+| **A. `ToUnit` takes it** | `ToUnit(c, id, now, source, p)`. The fact belongs to the caller, the only thing that knows the channel. Widens the signature |
+| **B. `brain` sets it after** | `u := ToUnit(...); u.Source = in.Channel`. Signature untouched, but a NOT NULL column left to a caller's memory is the shape of defect this project keeps designing out |
+| **C. Default to `"chat"`** | Matches the column's own default and needs nothing. Hardcodes a channel name in `core`, and is wrong the day a capture arrives from the UI |
+
+**Recommendation: A.** D4's pipeline already holds `in` at the call site, so the value costs no
+new plumbing — the same argument that settled C7 in favour of passing the instant. B fails the
+project's own standard: a required column that depends on the caller remembering is exactly what
+`Kind.UnitType()`'s `(value, bool)` return was shaped to prevent.
+
+**C10.2 — `Content` when `normalized_content` degraded.** `units.content` is `TEXT NOT NULL`
+(`0001:9`) and `Classification.NormalizedContent` is `*string`, nil when the field degraded.
+Doc 02 §5.1 — landed in PR 7a-iii — already says losing it means "the unit has nothing to store
+or embed [...] this is the second field whose loss is not survivable downstream". But
+`design.md` says `ToUnit` errors on **one** condition, and this is not it.
+
+Persisting `Content: ""` creates a unit no recall can ever reach: FTS indexes nothing and the
+embedding is of the empty string. A row that exists and cannot be found.
+
+| Option | Note |
+|---|---|
+| **A. Second error condition** | `ToUnit` also errors on a nil `NormalizedContent`. Contradicts design.md's "only when", so that line needs correcting at its source — exactly as C7 corrected D1 |
+| **B. Persist it empty** | Honours "only when" literally. Creates unreachable rows, and §5.1 already calls this loss unsurvivable |
+
+**Recommendation: A**, correcting `design.md:412`'s "only" in the same PR. §5.1's wording was
+written before this signature was implemented; it turns out to have described a constraint
+nobody had encoded.
+
+**Task 7b.1 must not begin until both are settled.**
+
+---
+
+## PR 7b — split in three (C10 + the 400-line ceiling; was one PR estimated at ~280)
 
 Depends on PR 7a.
 
-- [ ] **7b.1** Test first: `internal/core/classify/tounit_test.go` — `ToUnit(c, id, now, priors)`
-      driven with three distinguishable instants proves `CreatedAt`/`UpdatedAt`/`LastTouchedAt` all
-      equal `now`, `EventAt` and `DueAt` are never crossed with each other or with `CreatedAt`
-      (I18); `Status` is always `unit.StatusPool`; `Confidence` is always `nil` (Q2); a
-      classification whose `Kind` maps to no `unit.Type` (via `Kind.UnitType()`'s `false` return)
-      makes `ToUnit` return an error, not a zero-value unit the caller could forget to check.
-      **Red**: `undefined: classify.ToUnit`.
-      Implement `internal/core/classify/tounit.go` (design D2, D4).
-      Verify: `make test`; `golangci-lint run`.
-      Requirement: R1.3; design D2, D4.
-- [ ] **7b.2** In the same commit: `internal/core/classify/prior_test.go` — `PriorWeight = 1.0`,
+**Why.** Two independent reasons landed together. C10 blocks `ToUnit` and nothing else, so
+holding the finished work behind it would be pure waste. And the unblocked half measured 612
+lines on its own — C8's closing lesson applied again, and again correctly: a core PR's size comes
+from its invariant's proof obligation, not its implementation.
+
+Unlike 7a-iii, this one **splits cleanly**, so there is no `size:exception` here. `prior.go` and
+`prompt.go` share no symbol, and they are two different review questions: *are these the right
+numbers* versus *does this ask the model for the right thing*.
+
+| PR | Branch | Contents | Lines |
+|---|---|---|---|
+| 7b-i | `feat/core-classify-priors` | 7b.2 — the two base priors and their migration pin | ~190 |
+| 7b-ii | `feat/core-classify-prompt` | 7b.3 — `BuildPrompt` and the timezone mechanism | ~330 |
+| 7b-iii | `feat/core-classify-tounit` | 7b.1 — `ToUnit`. **Blocked on C10** | — |
+
+Task 7b.4's doc 02 delta splits across them the way C9 requires: each PR documents what it
+introduces.
+
+### PR 7b-i — `feat/core-classify-priors` (~190)
+
+- [x] **7b.2** In the same commit: `internal/core/classify/prior_test.go` — `PriorWeight = 1.0`,
       `PriorDecayRate = 0.01` supply `ToUnit`'s fallback when `c.Weight`/`c.DecayRate` are `nil`.
       An L2 test, `test/conformance/classify_priors_ddl_test.go` (untagged), reads migration
       0001's `units.weight`/`units.weight_decay_rate` column `DEFAULT`s off disk via
@@ -758,6 +822,22 @@ Depends on PR 7a.
       Verify: `make test`.
       Requirement: (design D3's own stated shape — not itself spec-numbered; feeds R1.3's
       weight/decay-rate half via `ToUnit`).
+
+      **Done.** Observed RED verbatim (`undefined: classify.PriorWeight`) before implementing.
+      The L1 half could not be written as the task describes it — it specifies the fallback
+      "when `c.Weight`/`c.DecayRate` are `nil`", which runs through `ToUnit`, and `ToUnit` is
+      blocked on C10. So `prior_test.go` asserts what is assertable without it, and what actually
+      matters: **neither prior may be zero**. A unit born at weight 0 is indistinguishable from
+      one decayed to nothing, and a λ of 0 never decays at all — `exp(-0*Δt)` is 1 forever — so
+      §6's archiving pass can never reach it. Both are silent, both survive NOT NULL.
+      The values themselves are pinned by the L2, which was armed rather than assumed: setting
+      `PriorWeight = 2.0` was confirmed to fail with the divergence named, then reverted.
+      `TestCoreExportedDeclsHaveTests` (design D9) caught the first attempt, which had the L2 and
+      no L1 — an exported core declaration needs a test **in its own package**, and a conformance
+      test in `test/conformance/` does not satisfy that. The guard was right.
+
+### PR 7b-ii — `feat/core-classify-prompt` (~330). Stacked on 7b-i.
+
 - [ ] **7b.3** Test first: `internal/core/classify/prompt_test.go` — `BuildPrompt(text, beliefs,
       now)` renders `now.Format(...)` and `now.Location().String()` (design D4's timezone
       mechanism — the zone travels inside the clock's instant, never read from the OS inside
@@ -776,6 +856,22 @@ Depends on PR 7a.
       finished section as one piece rather than three sediment layers.
       Verify: read the section end to end; `docs-sync.yml` not locally verifiable.
       Requirement: R1.7 (satisfied across PR 7's PRs collectively — see C9).
+### PR 7b-iii — `feat/core-classify-tounit`. **Blocked on C10.**
+
+- [ ] **7b.1** Test first: `internal/core/classify/tounit_test.go` — `ToUnit(c, id, now, priors)`
+      driven with three distinguishable instants proves `CreatedAt`/`UpdatedAt`/`LastTouchedAt` all
+      equal `now`, `EventAt` and `DueAt` are never crossed with each other or with `CreatedAt`
+      (I18); `Status` is always `unit.StatusPool`; `Confidence` is always `nil` (Q2); a
+      classification whose `Kind` maps to no `unit.Type` (via `Kind.UnitType()`'s `false` return)
+      makes `ToUnit` return an error, not a zero-value unit the caller could forget to check.
+      **Red**: `undefined: classify.ToUnit`.
+      Implement `internal/core/classify/tounit.go` (design D2, D4).
+      Verify: `make test`; `golangci-lint run`.
+      Requirement: R1.3; design D2, D4.
+
+      **BLOCKED on C10** — `Source` and a degraded `Content` have no source inside the fixed
+      signature, and neither is an open question the spec weighed. Ships as PR 7b-iii once
+      settled.
 - [ ] Verify (PR-level): `make check-all`; `make cover` (the package's coverage floor is now
       meaningful across `kind.go`, `outcomes.go`, `salvage.go`, `decode.go`, `classification.go`,
       `prior.go`, `tounit.go`, `prompt.go`).

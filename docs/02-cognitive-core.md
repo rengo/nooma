@@ -197,7 +197,7 @@ belonging to *some* vocabulary is not the test; belonging to *this field's* voca
 | `type` | no type | The capture has no taxonomy value, so **no unit is created from it**. Every other field still decodes; what to do about a typeless capture is a decision for the pipeline, not the decoder |
 | `normalized_content` | no content | The unit has nothing to store or embed. Recall cannot reach a unit with no content, so this is the second field whose loss is not survivable downstream |
 | `structured_data` | absent | The one field that cannot fail on shape: it is free-form by definition (§5 step 1), so any value the stream completed is valid. It is opaque to the brain and stays opaque |
-| `weight`, λ | no value | Both are required on a stored unit, so the base priors of §13 fill them. A degraded weight is not a zero weight — that distinction is why the fields are optional at the type level rather than defaulting to `0` |
+| `weight`, λ | no value | Both are required on a stored unit, so the base priors below fill them. A degraded weight is not a zero weight — that distinction is why the fields are optional at the type level rather than defaulting to `0` |
 | dated fields | no date | The unit is stored undated. Nothing is armed for it (§7), because arming a trigger on a guessed date is worse than not arming one |
 | the six orthogonal fields | absent | The resolution that field carried is ignored — the pending check-in, relation or state question stays open. The capture still becomes a unit |
 
@@ -218,6 +218,21 @@ the response as a whole, so a *required* field missing from a cut response is re
 truncated. Which **optional** fields a cut response would have carried is unknowable — the model
 may never have intended to emit them — and Nooma does not guess. Only the required fields'
 absence is reported; an optional field's absence is the ordinary case, not a loss.
+
+**Two base priors fill a degraded weight or λ, and there are exactly two.** §2 says type orients
+the direction and the self-model personalizes the value — both of which the *model* does, through
+the prompt. So a degraded weight does not fall back to a per-type table of hand-tuned numbers:
+inventing nine of those would be inventing calibration this document never stated, in the one
+place it says the model decides.
+
+The two numbers are the ones the schema already declares as its column defaults, and they are
+pinned to it by a test that reads the migration off disk. One number, in two places that cannot
+drift apart — not two numbers that agree today. §13 carries them in the calibration table.
+
+Neither may be zero, and that is the failure worth naming: a unit born at weight 0 is
+indistinguishable from one the user ignored for months, and a λ of 0 never decays at all, so §6's
+archiving pass can never reach it. Both look like ordinary data and neither violates a NOT NULL
+constraint.
 
 ## 6. Nightly consolidation ("sleep")
 
@@ -369,6 +384,7 @@ module):
 | `weight_threshold` (archiving) | 0.5 |
 | `hysteresis_margin` (focus) | 0.05 |
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
+| Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |
 | `min_confidence_to_surface` | 0.50 |
 | `goal_stagnation_days` ⚙ | 21 |
