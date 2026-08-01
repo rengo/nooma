@@ -233,6 +233,40 @@ holds something half-integrated.
 forecast is left standing rather than rewritten, for C7's reason — a forecast edited to match the
 outcome stops being a forecast and teaches nothing about estimating the next one.
 
+### C9 — `docs-sync.yml` wants a doc 02 delta per PR; the plan scheduled one for the whole of PR 7. **Resolved: split the delta the way the code was split.**
+
+Found the only way it can be found: all three of C8's PRs opened, and all three failed
+`docs<->code sync` with the same message — *"this PR changes `internal/core/**` but not
+`docs/02-cognitive-core.md`"*.
+
+The gate fires **per pull request**. The plan scheduled R1.7's delta as task **7b.4**, one PR
+later, and R1.7 explicitly forbids the `no-spec-change` escape ("it has a genuine behavioral
+delta to document"). Both statements are right on their own. Together they mean PR 7a had no
+legal way to merge as written — and this was invisible before C8, because a single PR 7a whose
+delta arrived in 7b would have failed the same gate for the same reason. **The split did not
+cause this; it revealed it.**
+
+**Neither can the delta simply move to 7a-i wholesale**: then 7a-ii and 7a-iii touch
+`internal/core/**` with no doc 02 change of their own and fail identically. The gate is per-PR,
+so the answer has to be per-PR.
+
+**Decision: doc 02 §5.1 is written in three passes, each PR documenting the behavior it
+actually introduces** — which is what CLAUDE.md non-negotiable #1 asks for anyway ("if the code
+and that doc diverge, either the code gets fixed or the doc gets updated **in the same PR**").
+A delta landing one PR after its code is exactly the drift the rule exists to prevent.
+
+| PR | §5.1 gains |
+|---|---|
+| 7a-i | The section itself: degradation is per-field, truncation is a per-field event, and the no-fields floor |
+| 7a-ii | What an out-of-vocabulary value does, and why a closed vocabulary is what makes that detectable |
+| 7a-iii | The field-by-field table, and `absent` vs `truncated` as distinct events |
+
+**Task 7b.4 changes meaning**: it no longer writes §5.1 from nothing — it *completes* it for the
+fields 7b introduces (`ToUnit`'s priors) and verifies the section reads as one piece rather than
+three sediment layers. Its requirement trace to R1.7 is unchanged; R1.7's MUST is satisfied
+across PR 7's PRs collectively, which is what "PR7 (`core/classify`)" meant before PR 7 became
+three of them.
+
 ---
 
 ## PR 8a — `feat/core-recall-vector` (~380 lines — the ceiling design draws, not a prediction; the first PR of this chain to be watched closely, per the Review Workload Forecast below)
@@ -663,10 +697,15 @@ Depends on PR 7a.
       Implement `internal/core/classify/prompt.go`.
       Verify: `make test`.
       Requirement: R1.3 (adjacent, the prompt-construction half feeding R4.2); design D4.
-- [ ] **7b.4** `docs/02-cognitive-core.md` §5.1: the field-by-field degradation definition — for
-      each field, what "degrades to null" means (proposal §4.8's table entry for `core/classify`).
-      Verify: read the section; `docs-sync.yml` not locally verifiable.
-      Requirement: R1.7.
+- [ ] **7b.4** `docs/02-cognitive-core.md` §5.1: **complete** the field-by-field degradation
+      definition (proposal §4.8's table entry for `core/classify`). Per **C9**, §5.1 is no longer
+      written here from nothing — PR 7a-i/ii/iii each landed the part they introduced, because
+      `docs-sync.yml` fires per PR and a delta arriving one PR after its code is the drift
+      CLAUDE.md non-negotiable #1 forbids. This task adds what 7b itself introduces (`ToUnit`'s
+      priors — what a degraded `weight`/λ becomes once D3's base prior fills it) and reads the
+      finished section as one piece rather than three sediment layers.
+      Verify: read the section end to end; `docs-sync.yml` not locally verifiable.
+      Requirement: R1.7 (satisfied across PR 7's PRs collectively — see C9).
 - [ ] Verify (PR-level): `make check-all`; `make cover` (the package's coverage floor is now
       meaningful across `kind.go`, `outcomes.go`, `salvage.go`, `decode.go`, `classification.go`,
       `prior.go`, `tounit.go`, `prompt.go`).

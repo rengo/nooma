@@ -147,6 +147,29 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
 own, leaves an auditable trace, and only asks when ambiguity blocks it (e.g. two different
 "Ana"s).
 
+### 5.1 What "degrades to null" means, field by field
+
+Step 1's robustness rule above is a claim about *every* field independently. This section says
+what it means in practice, because "degrades to null" has to be true of a truncated stream, a
+wrong-typed value and an out-of-vocabulary value alike — three different failures that must not
+be allowed to collapse into "the classification failed".
+
+**A classification is never all-or-nothing.** Each field is optional at the type level and
+carries its own record of what was lost, so a capture with one broken field still produces a
+unit from the fields that survived. The record exists because §11 requires the reasoning behind
+an automatic decision to be written down: a decoder that discarded *why* a field vanished would
+force the rest of the pipeline to guess.
+
+**Truncation is a per-field event, not a per-response one.** A model whose output is cut off
+mid-sentence has still emitted complete fields before the cut. Those fields are read and kept;
+only what never arrived is missing. The rule is that a member is either read in full or treated
+as absent — a half-read value is never stored, because a plausible-looking fragment is worse
+than a recorded absence.
+
+The floor: a response from which **no** field can be read at all is not a classification with
+every field null. It is a failed classification, and it is reported as one. A payload with no
+fields has nothing to degrade.
+
 ## 6. Nightly consolidation ("sleep")
 
 One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
