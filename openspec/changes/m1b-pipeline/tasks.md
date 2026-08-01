@@ -1077,12 +1077,26 @@ Depends on PR 7b.
 
 ---
 
-## PR 9a — `feat/ports-embedding` (~280)
+## PR 9a — split in two (the 400-line ceiling; was one PR estimated at ~280)
 
 Depends on PR 8a (the `EmbeddingRepo.LoadIndex` signature returns a `recall.VectorIndex`) and
 Phase A's `repocontract` precedent.
 
-- [ ] **9a.1** Test first: a `repocontract`-shaped suite for `EmbeddingRepo` —
+**Why split.** 741 lines as one PR — C8's closing lesson again, and again for the same reason: a
+contract suite's size comes from the port's promises, not from the interface's line count. Two
+ports, seven contract cases and six, plus two fakes.
+
+Unlike 7a-iii and 7c, this one **splits cleanly**, so there is no `size:exception`.
+`EmbeddingRepo` and `LexicalSearch` share no symbol and are two unrelated review questions.
+
+| PR | Branch | Contents | Lines |
+|---|---|---|---|
+| 9a-i | `feat/ports-embedding` | 9a.1 + 9a.2 — `EmbeddingRepo`, its contract and fake | ~420 |
+| 9a-ii | `feat/ports-lexical` | 9a.3 — `LexicalSearch`, its contract and fake | ~320 |
+
+### PR 9a-i — `feat/ports-embedding` (~420)
+
+- [x] **9a.1** Test first: a `repocontract`-shaped suite for `EmbeddingRepo` —
       `Put` upserts on `unit_id` (the primary key); `LoadIndex(model)` over a two-model fixture
       returns a `VectorIndex` scoped to exactly the requested model (I21's storage precondition).
       **Red**: `undefined: ports.EmbeddingRepo`.
@@ -1090,13 +1104,39 @@ Phase A's `repocontract` precedent.
       `EmbeddingRepo{Put, LoadIndex}` (design D8).
       Verify: `go build ./...`; `golangci-lint run`.
       Requirement: R3.1, R3.2 (interface half); design D8.
-- [ ] **9a.2** Same commit: `test/support/memrepo`'s `EmbeddingRepo` fake, mutex-guarded,
+
+      **Done.** RED observed verbatim (`undefined: ports.EmbeddingRepo`) before writing the port.
+      The contract was written first and it is what fixed the port's shape: writing "Put upserts"
+      as a test forced the question the task's one-line summary left open — **upsert on what?**
+      The task says "on `unit_id` (the primary key)", but keying on `unit_id` alone would delete
+      the old model's vector the moment a reindex re-embedded a unit, out from under a search
+      still running against it. The key is **(UnitID, Model)**, and a contract case says so.
+      Two absences in the port are deliberate and documented there: no per-id read (vector search
+      scores every candidate at once, and not offering one keeps a caller from assembling an
+      index by hand and getting the model scoping wrong), and `LoadIndex` returns a
+      `recall.VectorIndex` rather than a slice, so nothing sits between the store and
+      `recall.Search` deciding what "the index for this model" means. A contract case runs
+      `recall.Search` over the loaded index to hold that.
+      An unknown model returns an **empty index carrying the requested model**, not an error —
+      a cold-start vault is ordinary, and an empty `Model` string would mismatch every query.
+- [x] **9a.2** Same commit: `test/support/memrepo`'s `EmbeddingRepo` fake, mutex-guarded,
       deep-copying on the way in and out (matching Phase A's `memrepo.Units` shape); the contract
       suite's first caller. **Red**: `undefined: memrepo.NewEmbeddings` (or the fake's chosen
       constructor name).
       Verify: `go test -race ./test/support/memrepo/...`; `make test` (the contract's every case
       runs against the fake).
       Requirement: R3.1, R3.2 (fake half).
+
+      **Done.** Seven contract cases, all green under `-race`. The fake keeps insertion order per
+      model rather than iterating a map: `recall.Search` sorts by score, but **ties would resolve
+      differently run to run**, which reads as a ranking bug rather than as the coin-flip it is.
+      Vectors are `slices.Clone`d in both directions, and a contract case proves it from both
+      sides — mutating the caller's slice after `Put`, and mutating the index `LoadIndex`
+      returned. A `[]float32` shared by reference is the easiest version of this bug to write and
+      the hardest to see.
+      Added `var _ ports.EmbeddingRepo = (*Embeddings)(nil)`, following
+      `internal/store/sqlite/unitrepo.go:33`'s precedent: a port signature change then fails in
+      the package that broke rather than in a conformance test a directory away.
 - [ ] **9a.3** Test first: `ports.LexicalSearch{SearchLexical(tokens []string, k int) ([]string,
       error)}` + its memrepo fake + contract suite (design D5, D8 — this is the port the store's
       FTS5 leg, PR 9c, implements). **Red**: `undefined: ports.LexicalSearch`.
@@ -1106,7 +1146,6 @@ Phase A's `repocontract` precedent.
 - [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
       `internal/core/**` (this PR is ports + fakes only — no `docs-sync.yml` task is forced, per
       R6.2's own MUST NOT).
-
 ---
 
 ## PR 9b — `feat/store-embedding` (~380 — the second PR of this chain to watch closely, per the
