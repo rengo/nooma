@@ -203,6 +203,36 @@ would reasonably try to delete the parameter as unused. A decoder that silently 
 would pass every test written on a machine in the author's own timezone and be wrong everywhere
 else.
 
+### C8 — PR 7a's ~330-line estimate was off by 2.6×. **Split into three stacked PRs.**
+
+Measured after 7a.3, with only 7a.4 left: `git diff --stat main` reported **557 insertions**, and
+7a.4 — the `fieldSpec` table, `decodeEnum[T]`, `Decode`, `Classification`, and their L1 table
+tests — is the heaviest of the five tasks. Projected total ~860 lines against a 400-line ceiling.
+
+The estimate was not off because the work grew. It was off because a **closed vocabulary costs
+more lines than it looks like it will**: thirteen `Kind` constants plus six orthogonal
+vocabularies is nineteen declarations, nineteen doc comments, and a completeness assertion per
+vocabulary — 362 lines of almost no branching. `chained-pr`'s ceiling protects *review minutes*,
+and low-branching declaration code spends those minutes cheaply, but 860 lines spends them anyway.
+
+**Decision: three stacked PRs to `main`**, cut where the concepts already separate rather than
+where the line count happens to land:
+
+| PR | Branch | Contents | Lines |
+|---|---|---|---|
+| 7a-i | `feat/core-classify-salvage` | 7a.1 — the truncation-tolerant reader | ~165 |
+| 7a-ii | `feat/core-classify-vocab` | 7a.2 + 7a.3 — the seven closed vocabularies | ~370 |
+| 7a-iii | `feat/core-classify-decode` | 7a.4 + 7a.5 — the decoder that consumes them | ~310 |
+
+Each stands alone: `Salvage` never mentions `Kind`, and the vocabularies never mention `Decode`.
+All three compile and pass their own tests at their own tip, which is what makes stacking to
+`main` legitimate here rather than a tracker branch — there is no intermediate state where `main`
+holds something half-integrated.
+
+**What this costs the Review Workload Forecast below**: its PR 7a row is now three rows. The
+forecast is left standing rather than rewritten, for C7's reason — a forecast edited to match the
+outcome stops being a forecast and teaches nothing about estimating the next one.
+
 ---
 
 ## PR 8a — `feat/core-recall-vector` (~380 lines — the ceiling design draws, not a prediction; the first PR of this chain to be watched closely, per the Review Workload Forecast below)
@@ -526,11 +556,13 @@ Depends on PR 8b.
 
 ---
 
-## PR 7a — `feat/core-classify-decode` (~330)
+## PR 7a — three stacked PRs (C8; was one PR estimated at ~330)
 
 Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`).
 
-- [ ] **7a.1** Test first: `internal/core/classify/salvage_test.go` — `Salvage` over a truncated
+### PR 7a-i — `feat/core-classify-salvage` (~165)
+
+- [x] **7a.1** Test first: `internal/core/classify/salvage_test.go` — `Salvage` over a truncated
       payload (returns every field completed before the stream ended, flags the rest
       `ReasonTruncated`), a non-object payload (returns zero completed members), and a payload
       truncated before its first value. **Red**: `undefined: classify.Salvage`.
@@ -538,6 +570,17 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       reader (design D1 — not `json.Unmarshal`, which fails a truncated document wholesale).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R1.2 (truncated-JSON shape); design D1.
+
+      **Done.** Observed RED verbatim (`go vet ./internal/core/classify/...` →
+      `undefined: Salvage`) before implementing. A follow-up fix landed in the same work unit:
+      `make cover` first reported 98% (106/108) — one branch in `Salvage` (the `keyTok.(string)`
+      `ok`-form assertion) is unreachable by `encoding/json`'s own grammar (an object key token is
+      always a string; `Token` errors first), so it was removed per design D11 point 3 ("no
+      unreachable arm") rather than tested, and the one real branch it was masking (a malformed
+      key syntax after an earlier member, e.g. `{"a":1,x}`) got its own test case. Restored to
+      100% (108/108).
+### PR 7a-ii — `feat/core-classify-vocab` (~370). Stacked on 7a-i.
+
 - [ ] **7a.2** Test first: `internal/core/classify/kind_test.go` — `AllKinds()` returns exactly the
       thirteen values `spec.md` R1.1 lists, no more, no fewer, the table asserting its own
       completeness; `Kind.UnitType()` returns `false` for the six non-persisting outcomes
@@ -554,6 +597,8 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       Implement `internal/core/classify/outcomes.go`.
       Verify: `make test`.
       Requirement: R1.1 (adjacent — the orthogonal-fields half); design D1, D11.
+### PR 7a-iii — `feat/core-classify-decode` (~310). Stacked on 7a-ii.
+
 - [ ] **7a.4** Test first: `internal/core/classify/decode_test.go` — one test per I14 shape over
       inline payload literals (not the corpus, which is L2 and PR 7c's): a wrong-typed field (e.g.
       `weight` as a JSON string) degrades only that field, every other field intact; an unknown
