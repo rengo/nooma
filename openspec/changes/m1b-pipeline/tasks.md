@@ -731,7 +731,7 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
 
 ---
 
-### C10 — `ToUnit` has two `unit.Unit` fields nothing tells it what to put in. **Blocks task 7b.1.**
+### C10 — `ToUnit` had two `unit.Unit` fields nothing told it what to put in. **Resolved: A and A. 7b.1 unblocked.**
 
 Found writing PR 7b, the same way C7 was: the signature is fixed, and two required columns have
 no source inside it.
@@ -781,7 +781,26 @@ embedding is of the empty string. A row that exists and cannot be found.
 written before this signature was implemented; it turns out to have described a constraint
 nobody had encoded.
 
-**Task 7b.1 must not begin until both are settled.**
+**Resolution — A and A, corrected at their source in `design.md`.**
+
+```go
+func ToUnit(c Classification, id, source string, now time.Time, p Priors) (unit.Unit, error)
+```
+
+**C10.1**: `source` is a parameter, for the same reason `now` is. The channel is known only at the
+edge that received the capture, and `core` naming one would not fail when wrong — it would record
+the wrong provenance and look correct.
+
+**C10.2**: `ToUnit` now returns an error on **two** conditions, and `design.md:412`'s "only when"
+was corrected in the same PR — exactly as C7 corrected D1. `ErrNoUnitType` and `ErrNoContent` are
+**distinct errors**, not one, because I12 has `brain` write a different `decision_log` rationale
+for each: "the model classified this as something that is not memory" and "the model gave us
+nothing to remember" are different events, and one error would collapse them into one audit line.
+
+What C10.2 really was: §5.1 called losing `normalized_content` "not survivable downstream" in PR
+7a-iii, before any signature encoded it. The doc had been describing a constraint nobody had
+written down. That is the same shape as C7 — a design statement true in prose and absent from the
+code — and it is worth noticing that both were found by *implementing*, not by review.
 
 ---
 
@@ -789,8 +808,9 @@ nobody had encoded.
 
 Depends on PR 7a.
 
-**Why.** Two independent reasons landed together. C10 blocks `ToUnit` and nothing else, so
-holding the finished work behind it would be pure waste. And the unblocked half measured 612
+**Why.** Two independent reasons landed together. C10 blocked `ToUnit` and nothing else, so
+holding the finished work behind it would have been pure waste — 7b-i and 7b-ii shipped while it
+was open, and 7b-iii followed once it was settled. And the unblocked half measured 612
 lines on its own — C8's closing lesson applied again, and again correctly: a core PR's size comes
 from its invariant's proof obligation, not its implementation.
 
@@ -802,7 +822,7 @@ numbers* versus *does this ask the model for the right thing*.
 |---|---|---|---|
 | 7b-i | `feat/core-classify-priors` | 7b.2 — the two base priors and their migration pin | ~190 |
 | 7b-ii | `feat/core-classify-prompt` | 7b.3 — `BuildPrompt` and the timezone mechanism | ~330 |
-| 7b-iii | `feat/core-classify-tounit` | 7b.1 — `ToUnit`. **Blocked on C10** | — |
+| 7b-iii | `feat/core-classify-tounit` | 7b.1 — `ToUnit`, and C10's two design corrections | ~430 |
 
 Task 7b.4's doc 02 delta splits across them the way C9 requires: each PR documents what it
 introduces.
@@ -874,15 +894,23 @@ introduces.
       Verify: read the section end to end; `docs-sync.yml` not locally verifiable.
       Requirement: R1.7 (satisfied across PR 7's PRs collectively — see C9).
 
-      **Done for 7b-i and 7b-ii's shares**, per C9's per-PR rule. 7b-i landed what a degraded
+      **Complete as of 7b-iii**, in three shares per C9's per-PR rule. 7b-i landed what a degraded
       weight/λ becomes, why there are exactly two priors, and the never-zero constraint; §13
-      gained the base-weight row it was missing. 7b-ii lands how the user's timezone reaches the
-      model without any configuration key existing, and why the prompt's vocabularies are
-      rendered from the decoder's own declarations rather than restated. 7b-iii adds `ToUnit`'s
-      share and reads the finished section as one piece.
-### PR 7b-iii — `feat/core-classify-tounit`. **Blocked on C10.**
+      gained the base-weight row it was missing. 7b-ii landed how the user's timezone reaches the
+      model without any configuration key existing, and why the prompt's vocabularies render from
+      the decoder's own declarations rather than being restated. 7b-iii lands the asymmetry
+      `ToUnit` encodes — every degradation still produces a unit **except** the two the unit
+      cannot exist without — and that provenance is the caller's fact, never the brain's.
+      Read end to end, §5.1 now runs: what degrading means, the per-field table, dates, absent vs
+      truncated, the priors, the timezone, the shared vocabularies, and what stops a capture from
+      becoming a unit at all. It reads as one argument rather than five sediment layers, which
+      was this task's actual job once C9 moved the writing earlier.
 
-- [ ] **7b.1** Test first: `internal/core/classify/tounit_test.go` — `ToUnit(c, id, now, priors)`
+---
+
+### PR 7b-iii — `feat/core-classify-tounit` (~430). Stacked on 7b-ii.
+
+- [x] **7b.1** Test first: `internal/core/classify/tounit_test.go` — `ToUnit(c, id, now, priors)`
       driven with three distinguishable instants proves `CreatedAt`/`UpdatedAt`/`LastTouchedAt` all
       equal `now`, `EventAt` and `DueAt` are never crossed with each other or with `CreatedAt`
       (I18); `Status` is always `unit.StatusPool`; `Confidence` is always `nil` (Q2); a
@@ -893,12 +921,28 @@ introduces.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R1.3; design D2, D4.
 
-      **BLOCKED on C10** — `Source` and a degraded `Content` have no source inside the fixed
-      signature, and neither is an open question the spec weighed. Ships as PR 7b-iii once
-      settled.
-- [ ] Verify (PR-level): `make check-all`; `make cover` (the package's coverage floor is now
+      **Done.** C10 settled A/A; `design.md:412`, its pipeline call site and its package-layout
+      line were all corrected in this PR. Observed RED verbatim (`undefined: Priors`) before
+      implementing.
+      The three instants are **deliberately distinguishable and none is the zero time**: a test
+      passing one instant for all three would pass against an implementation that assigned
+      `event_at` to `created_at`, which is the exact confusion I18 names.
+      Two cases the task did not list and the types demanded. A **model-supplied zero weight beats
+      the prior** — the pointer exists to tell "said zero" from "said nothing", and letting the
+      prior win would collapse the distinction the whole `*float64` shape was chosen for. And
+      **absent dates stay nil, never the zero time**: `0001-01-01` would arm a trigger (§7) two
+      thousand years in the past and sort ahead of every real date.
+      `unit.Unit` carries a `json.RawMessage`, so it is not comparable with `==`; the zero-unit
+      assertion names its fields instead, which also states the sharper claim — the caller's `id`
+      must not come back on a unit that could not be built.
+- [x] Verify (PR-level): `make check-all`; `make cover` (the package's coverage floor is now
       meaningful across `kind.go`, `outcomes.go`, `salvage.go`, `decode.go`, `classification.go`,
       `prior.go`, `tounit.go`, `prompt.go`).
+
+      **Done.** `make check-all` green end to end at each of the three tips; `make cover`
+      **100% (228/228)** at 7b-iii, which is the first point all eight files listed above exist
+      together. The earlier links report lower totals (179, 217) because the floor is measured
+      over what exists — quoting 228 on 7b-i would have been a number for files not yet written.
 
 ---
 

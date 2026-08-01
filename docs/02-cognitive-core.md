@@ -253,6 +253,23 @@ edit, and the model can never be asked for a value that would then be rejected a
 out-of-vocabulary — a failure that would look like the model misbehaving when it was the prompt
 that was stale.
 
+**Two degradations stop a capture from becoming a unit at all**, and they are the two §5.1's table
+already marks as unsurvivable. A capture with no `type` has nothing to decide from; a capture with
+no `normalized_content` has nothing to store or embed, and storing it empty would create a unit
+that exists and can never be found — the full-text index holds nothing for it and its embedding is
+of the empty string. Both are reported as failures rather than written as rows, because a capture
+that failed loudly can be retried and an unreachable row cannot even be noticed.
+
+Every other degradation still produces a unit. That asymmetry is the point: the classification
+degrades field by field, and only the two fields the unit cannot exist without are allowed to stop
+it.
+
+**Provenance is the caller's fact, never the brain's.** Which channel a capture arrived through —
+chat, the UI, anything added later — is known only at the edge that received it, and it travels
+inward as data. Nothing in the decision layer names a channel, so nothing has to be revisited when
+a new one is added; a default baked in at the centre would not fail when it was wrong, it would
+record the wrong provenance and look correct.
+
 ## 6. Nightly consolidation ("sleep")
 
 One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
