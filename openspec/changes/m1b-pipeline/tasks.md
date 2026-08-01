@@ -1077,24 +1077,10 @@ Depends on PR 7b.
 
 ---
 
-## PR 9a — split in two (the 400-line ceiling; was one PR estimated at ~280)
+## PR 9a — `feat/ports-embedding` (~280)
 
 Depends on PR 8a (the `EmbeddingRepo.LoadIndex` signature returns a `recall.VectorIndex`) and
 Phase A's `repocontract` precedent.
-
-**Why split.** 741 lines as one PR — C8's closing lesson again, and again for the same reason: a
-contract suite's size comes from the port's promises, not from the interface's line count. Two
-ports, seven contract cases and six, plus two fakes.
-
-Unlike 7a-iii and 7c, this one **splits cleanly**, so there is no `size:exception`.
-`EmbeddingRepo` and `LexicalSearch` share no symbol and are two unrelated review questions.
-
-| PR | Branch | Contents | Lines |
-|---|---|---|---|
-| 9a-i | `feat/ports-embedding` | 9a.1 + 9a.2 — `EmbeddingRepo`, its contract and fake | ~420 |
-| 9a-ii | `feat/ports-lexical` | 9a.3 — `LexicalSearch`, its contract and fake | ~320 |
-
-### PR 9a-i — `feat/ports-embedding` (~420)
 
 - [x] **9a.1** Test first: a `repocontract`-shaped suite for `EmbeddingRepo` —
       `Put` upserts on `unit_id` (the primary key); `LoadIndex(model)` over a two-model fixture
@@ -1137,15 +1123,44 @@ Unlike 7a-iii and 7c, this one **splits cleanly**, so there is no `size:exceptio
       Added `var _ ports.EmbeddingRepo = (*Embeddings)(nil)`, following
       `internal/store/sqlite/unitrepo.go:33`'s precedent: a port signature change then fails in
       the package that broke rather than in a conformance test a directory away.
-- [ ] **9a.3** Test first: `ports.LexicalSearch{SearchLexical(tokens []string, k int) ([]string,
+### PR 9a-ii — `feat/ports-lexical` (~320). Stacked on 9a-i.
+
+- [x] **9a.3** Test first: `ports.LexicalSearch{SearchLexical(tokens []string, k int) ([]string,
       error)}` + its memrepo fake + contract suite (design D5, D8 — this is the port the store's
       FTS5 leg, PR 9c, implements). **Red**: `undefined: ports.LexicalSearch`.
       Implement `internal/ports/lexicalsearch.go`.
       Verify: `go build ./...`; `go test -race ./test/support/memrepo/...`.
       Requirement: design D5 (the lexical leg's own port — feeds R3.3).
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
+
+      **Done.** The signature follows `design.md:819`, which carries `ctx`; this task's one-line
+      restatement omitted it. The design is the source, and a port whose implementation does SQL
+      needs the context every other repository port already takes.
+      Seeding needed a decision the task did not cover. `SearchLexical` alone cannot put
+      documents in front of the suite, and production **never seeds a lexical index by hand** —
+      SQLite's `units_fts` is maintained by a trigger. So seeding is not on the port: the
+      contract declares its own `repocontract.LexicalSeeder`, and the fake's `SeedLexical` takes
+      a `*testing.T` it does not use, which keeps the method out of production call paths by
+      construction rather than by comment.
+      The contract deliberately **does not pin a scoring formula**. bm25 is FTS5's, the fake's
+      token-overlap count is not, and demanding identical ordering for partial matches would
+      force the fake to reimplement bm25 or force the store to abandon it. Ranking quality is the
+      recall corpus's job at L3 (PR 9c). What it does pin: tokens are **or**-ed not and-ed (a
+      candidate generator that narrowed to units matching every token would drop the near-misses
+      fusion exists to rank), `k` bounds results, a unit matching several tokens appears **once**
+      (otherwise it gets that many chances to score in fusion), no match is not an error, and
+      **no tokens returns nothing rather than everything** — an empty query must not become a
+      whole-vault scan.
+      The fake tokenizes with `recall.Tokenize`, the same function that builds a query, so it
+      cannot be findable under words the real leg would never search for.
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
       `internal/core/**` (this PR is ports + fakes only — no `docs-sync.yml` task is forced, per
       R6.2's own MUST NOT).
+
+      **Done.** `make check-all` green end to end. Scope confirmed: `git diff --name-only` holds
+      no path under `internal/core/**`, so R6.2's MUST NOT is honoured and no doc 02 delta is
+      forced. `make cover` reports 100% (228/228), unchanged — this PR adds no `internal/core`
+      statements, which is exactly what the scope check asserts from the other direction.
+
 ---
 
 ## PR 9b — `feat/store-embedding` (~380 — the second PR of this chain to watch closely, per the
