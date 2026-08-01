@@ -644,7 +644,7 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       Requirement: R1.1 (adjacent — the orthogonal-fields half); design D1, D11.
 ### PR 7a-iii — `feat/core-classify-decode` (~310). Stacked on 7a-ii.
 
-- [ ] **7a.4** Test first: `internal/core/classify/decode_test.go` — one test per I14 shape over
+- [x] **7a.4** Test first: `internal/core/classify/decode_test.go` — one test per I14 shape over
       inline payload literals (not the corpus, which is L2 and PR 7c's): a wrong-typed field (e.g.
       `weight` as a JSON string) degrades only that field, every other field intact; an unknown
       enum value degrades only that field; the six orthogonal fields degrade independently of each
@@ -662,13 +662,43 @@ Depends on nothing outside this chain beyond Phase A PR 2 (`internal/core/unit`)
       in a fixed non-UTC location so a machine-timezone regression fails rather than hides.
       Verify: `make test`; `golangci-lint run` (confirms the decoder stays stdlib-only).
       Requirement: R1.2; design D1, D2, D11; conflict C7.
-- [ ] **7a.5** `internal/core/classify`'s purity and partial coverage (this PR's own slice — 7b
+
+      **Done.** Observed RED verbatim (`go vet ./internal/core/classify/...` →
+      `undefined: Classification`) before implementing. Two things the design left open had to be
+      decided, both flagged here rather than buried:
+
+      1. **When `ReasonAbsent` fires.** D1 lists the reason but never says which absences count.
+         Reporting all thirteen would bury the real degradations under nine optional fields nobody
+         expected. Decided: only the four `testdata/classify/format.md:51-55` marks required
+         (`type`, `normalized_content`, `weight`, `decay_rate`). An optional field's absence is
+         the ordinary case, not a loss. A truncated payload reports those four as
+         `ReasonTruncated` instead — `Salvage`'s flag is per-response, so which *optional* fields
+         a cut payload lost is genuinely unknowable, and `Decode` does not pretend otherwise.
+      2. **`decodeEnum` returns `(*T, Reason)`, not D11 point 2's literal `(*T, error)`.** The
+         caller must tell `wrong_type` from `unknown_enum`, and converting an `error` back into a
+         `Reason` needs a type assertion whose failure arm no input can reach. D11 point 3 ("no
+         unreachable arm") beats D11 point 2's signature; the generic function itself — one set
+         of arms for all seven vocabularies — is untouched.
+
+- [x] **7a.5** `internal/core/classify`'s purity and partial coverage (this PR's own slice — 7b
       adds `ToUnit`/priors, the package's coverage floor is only fully meaningful once that lands,
       but this task confirms no regression at this PR's boundary).
       Verify: `golangci-lint run`; `make cover`.
       Requirement: R1.2 (purity/coverage half, this PR's share).
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
+
+      **Done.** `golangci-lint run`: 0 issues. `make cover`: **100% (179/179)**, against a 90%
+      floor. Reaching it needed one test the first pass missed — `due_at` as a bare number, which
+      is `wrong_type` rather than `bad_format` because it never reached a layout at all. That is
+      a real model failure (dropped quotes), not a hole invented to satisfy the counter.
+      One dead constant (`requiredFields`) was caught by `unused` and removed rather than
+      silenced: the count belongs in the test that pins it, which is where it now lives.
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
       `internal/core/recall/` or `internal/core/relation/`.
+
+      **Done.** `make check-all` green end to end: L1/L2, L3 (`integration`), L4 (`e2e`), the
+      schema-golden regeneration diff, the `internal/core` coverage floor, and all seven
+      cross-compile targets (ADR-0013). Scope confirmed: the PR touches only
+      `internal/core/classify/` and this file.
 
 ---
 
