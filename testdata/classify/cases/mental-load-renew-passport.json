@@ -1,0 +1,10 @@
+{
+  "id": "mental-load-renew-passport",
+  "input": "I keep meaning to sort out the passport renewal and it's been weeks",
+  "expected": {
+    "type": "mental_load",
+    "normalized_content": "Passport renewal is pending and weighing on me",
+    "weight": 0.8,
+    "decay_rate": 0.02
+  }
+}

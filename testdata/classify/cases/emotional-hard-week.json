@@ -1,0 +1,10 @@
+{
+  "id": "emotional-hard-week",
+  "input": "This week wore me down more than I want to admit",
+  "expected": {
+    "type": "emotional",
+    "normalized_content": "This week was emotionally draining",
+    "weight": 0.9,
+    "decay_rate": 0.005
+  }
+}

@@ -950,7 +950,7 @@ introduces.
 
 Depends on PR 7b.
 
-- [ ] **7c.1** Test first (fixture-format widening, design §2 D2 — the wire shape carries
+- [x] **7c.1** Test first (fixture-format widening, design §2 D2 — the wire shape carries
       `event_at`/`due_at` as top-level, separately-named fields, `Classification` has no
       `CreatedAt`): `test/support/goldenset` — `ClassifyExpected` gains `EventAt *string`,
       `DueAt *string`, both optional; `testdata/classify/format.md`'s field table and fenced
@@ -960,7 +960,15 @@ Depends on PR 7b.
       Verify: `go test ./test/support/goldenset/...`; `TestHarness_GoldenSetFormatMatchesType`
       green.
       Requirement: design D2 (the fixture-format precondition R1.5's dated cases need).
-- [ ] **7c.2** Add real cases under `testdata/classify/cases/` (currently only `.gitkeep`,
+
+      **Done.** RED observed verbatim before widening the type: moving the date to a top-level
+      `due_at` in `format.md`'s fence made `TestHarness_GoldenSetFormatMatchesType` fail with
+      `json: unknown field "due_at"` — `DecodeStrict` is what keeps the two sides in lockstep,
+      and it is why the widening is safe rather than a reason to avoid it.
+      `EventAt`/`DueAt` are `*string`, the recorded wire text, not `*time.Time`: this type records
+      what the provider said, and a case whose date is malformed on purpose must be expressible.
+      Parsing is `Decode`'s job and its failure is the thing under test.
+- [x] **7c.2** Add real cases under `testdata/classify/cases/` (currently only `.gitkeep`,
       confirmed) covering: all thirteen taxonomy values from R1.1 (including `timer`,
       `recurring_reminder`, `chitchat`, `out_of_scope`); all three I14 shapes (truncated JSON, a
       wrong-typed field, an unknown enum value), each with `llm_case_id` naming a
@@ -974,7 +982,24 @@ Depends on PR 7b.
       "not mechanized" note) that all thirteen values and all three shapes appear across the
       corpus.
       Requirement: R1.5.
-- [ ] **7c.3** Fix the red: flip `casesDirMustBeEmpty["classify"]` to `false`. At this point in the
+
+      **Done.** Seventeen cases: one per taxonomy value (thirteen), one for
+      `person_ref_status: "ambiguous"`, and three for I14's shapes, each naming a new
+      `testdata/llm/` recording of the same defect.
+      **The corpus immediately found something the L1 tables could not.** The first truncated
+      recording was cut inside `due_at` and decoded with **no degradation at all** — because
+      `due_at` is optional, and doc 02 §5.1 says only a required field's absence is reported.
+      A cut that loses only optional fields is undetectable *by design*, so a case proving
+      `ReasonTruncated` must be cut inside `weight` or `decay_rate`. The test caught it; the
+      recording was re-cut, and `format.md` now says so, because the next person to write a
+      truncated case would have hit the same vacuous pass.
+      A second thing the corpus forced into the open: **in a backed case, `expected` describes
+      what the provider was trying to say, not what the decoder produces.** The unknown-enum case
+      makes this unavoidable — its `expected.type` holds the out-of-taxonomy value while the
+      decoder's output for that field is absent. That reading was implicit and is now written
+      down; it is also what lets `expected` carry the four required fields when the recording
+      lost some of them.
+- [x] **7c.3** Fix the red: flip `casesDirMustBeEmpty["classify"]` to `false`. At this point in the
       chain **`recall`'s entry is already `false`, from PR 8c** — this is the one direction where
       the chain's actual order (8 before 7) does match a later PR's expectation, since nothing in
       `spec.md` or `design.md` requires this PR to leave `recall` untouched in a specific state,
@@ -983,7 +1008,13 @@ Depends on PR 7b.
       Verify: `make test` — the `classify` subtest passes because `cases/` is non-empty; the
       `recall` subtest continues to pass unaffected.
       Requirement: R1.6.
-- [ ] **7c.4** L2: `test/conformance/i14_classify_field_degrades_to_null_test.go` — `Decode` driven
+
+      **Done.** All three entries are now `false`, and the map **stays** rather than collapsing
+      into a single "every corpus must be non-empty" check: its job was never only the asymmetry.
+      The other half — an emptied-out or relocated corpus must fail loudly rather than pass
+      vacuously — applies to every directory here permanently. Comment rewritten to say that,
+      since the old one described a transition that has now completed.
+- [x] **7c.4** L2: `test/conformance/i14_classify_field_degrades_to_null_test.go` — `Decode` driven
       against the real corpus, each broken case's `Reason` matching the shape its case id names.
       This is I14's invariant proof over real data, distinct from 7a.4's inline-literal L1 tables
       (design D11's L1/L2 split — the corpus tests are deliberately L2 because `depguard` denies
@@ -991,7 +1022,32 @@ Depends on PR 7b.
       inside `internal/core/classify` even as a `_test.go` file).
       Verify: `make test`.
       Requirement: R1.2 (corpus-level proof); design D11.
-- [ ] Verify (PR-level): `make check-all`.
+
+      **Done.** Each backed case declares its shape **in its own id**, so the corpus stays
+      readable as a directory listing and a case cannot quietly stop testing what its name
+      claims. The test also asserts the corpus contains all three shapes — without that,
+      deleting a case file would silently shrink what I14 is proven against while every
+      remaining subtest still passed.
+      **One test the task did not ask for**: `TestClassifyCorpusCoversEveryTaxonomyValue`
+      mechanizes what `format.md` calls "a review-time concern, not a mechanized one". That was
+      true when nothing in Go held the taxonomy; `classify.AllKinds()` now does, and
+      `docs/06-harness.md` §6's own precedence rule applies — if a rule can be an automated gate,
+      it is a gate. A reviewer counting thirteen values across seventeen files by eye is exactly
+      the check that silently stops happening. It also catches the reverse, a typo'd type the
+      loader deliberately does not reject, allowing it only in the case whose id says
+      `unknown-enum`.
+      `llm_case_id` resolving to a real file is unchecked by the loader, per `format.md`; for the
+      cases this test drives, it is checked here.
+- [x] Verify (PR-level): `make check-all`.
+
+      **Done.** Green end to end; `make cover` 100% (228/228) — unchanged, as this PR adds no
+      `internal/core` statements.
+
+      **Ships with `size:exception`**: 506 changed lines, of which **215 are JSON fixtures**
+      across 20 data files. Code and docs are 291. It does not split usefully — 7c.1 alone is
+      40 lines, and a corpus landing without the L2 that reads it is the exact failure
+      `recall_corpus_test.go`'s own doc comment names ("the corpus would otherwise have landed
+      with nothing reading it"). Applying the precedent set on 7a-iii.
 
 ---
 

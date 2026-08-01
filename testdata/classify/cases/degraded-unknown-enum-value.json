@@ -1,0 +1,11 @@
+{
+  "id": "degraded-unknown-enum-value",
+  "input": "pick up eggs and milk",
+  "expected": {
+    "type": "grocery",
+    "normalized_content": "Pick up eggs and milk",
+    "weight": 0.5,
+    "decay_rate": 0.05
+  },
+  "llm_case_id": "classify-unknown-enum-value"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "event-dentist-appointment",
+  "input": "Dentist on the 14th at 9",
+  "expected": {
+    "type": "event",
+    "normalized_content": "Dentist appointment",
+    "weight": 0.7,
+    "decay_rate": 0.04,
+    "event_at": "2026-08-14T09:00:00-03:00"
+  }
+}

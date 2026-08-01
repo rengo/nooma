@@ -249,17 +249,19 @@ func assertFormatExampleIsSiblingOfCases(t *testing.T, dir string) {
 }
 
 // casesDirMustBeEmpty maps each golden-set directory name to whether its
-// cases/ subdirectory (beyond .gitkeep) is still required to hold nothing
-// (spec R5.4's MUST NOT for classify — inverted only by its own populating
-// PR in m1b-pipeline, not yet landed at this point in the chain, per R2.7/C6)
-// or must already hold at least one real case (spec R5.4 for recall, this
-// PR's own inversion, and llm, inverted once R5.3 landed the first one).
-// Rules-as-data (design D10's pattern, echoing M0's own D10), so the
-// asymmetry across the three directories is visible in one place instead of
-// forked inside a shared function's control flow.
+// cases/ subdirectory (beyond .gitkeep) is still required to hold nothing,
+// or must already hold at least one real case.
+//
+// All three are now false, and the map stays rather than collapsing into a
+// single "every corpus must be non-empty" check. Its job was never only the
+// asymmetry: an emptied-out or relocated corpus must fail LOUDLY rather than
+// pass vacuously, and that half applies to every directory here forever.
+// The classify entry was the last true one — inverted by m1b-pipeline PR 7c,
+// the PR that populates it (spec R1.6), after recall's (PR 8c) and llm's
+// (R5.3). Rules-as-data, design D10's pattern.
 var casesDirMustBeEmpty = map[string]bool{
 	"recall":   false,
-	"classify": true,
+	"classify": false,
 	"llm":      false,
 }
 

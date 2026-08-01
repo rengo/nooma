@@ -1,0 +1,10 @@
+{
+  "id": "out-of-scope-weather",
+  "input": "what's the weather in Lisbon",
+  "expected": {
+    "type": "out_of_scope",
+    "normalized_content": "Weather query for Lisbon",
+    "weight": 0.1,
+    "decay_rate": 0.5
+  }
+}

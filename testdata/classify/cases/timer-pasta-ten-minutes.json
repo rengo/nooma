@@ -1,0 +1,13 @@
+{
+  "id": "timer-pasta-ten-minutes",
+  "input": "set a timer for 10 minutes",
+  "expected": {
+    "type": "timer",
+    "normalized_content": "Timer for 10 minutes",
+    "weight": 0.1,
+    "decay_rate": 0.5,
+    "structured_data": {
+      "duration_seconds": 600
+    }
+  }
+}

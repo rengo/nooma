@@ -1,0 +1,10 @@
+{
+  "id": "knowledge-postgres-index-types",
+  "input": "TIL that a partial index in Postgres only covers rows matching its WHERE clause",
+  "expected": {
+    "type": "knowledge",
+    "normalized_content": "A Postgres partial index only covers rows matching its WHERE clause",
+    "weight": 0.6,
+    "decay_rate": 0.01
+  }
+}
