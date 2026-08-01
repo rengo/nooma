@@ -170,6 +170,26 @@ The floor: a response from which **no** field can be read at all is not a classi
 every field null. It is a failed classification, and it is reported as one. A payload with no
 fields has nothing to degrade.
 
+**A value outside its vocabulary degrades; it is never coerced.** `type` and the six orthogonal
+fields above each name a **closed** set of values. A model that answers `type: "grocery"`, or
+`list_op: "prepend"`, has said something Nooma has no meaning for, and the honest response is to
+drop that one field — not to guess the nearest member, and not to invent a fourteenth type.
+
+This is why the vocabularies are closed in the first place. An open vocabulary would have
+nothing to detect against: every answer would be valid by construction, and a model drifting
+away from the taxonomy would look exactly like a model using it correctly. Closing the set is
+what converts "the model said something odd" from an unnoticed silent event into a recorded one.
+
+The distinction that matters here is between a value of the **wrong shape** and a value of the
+right shape that is **not a member** — a `type` recorded as a number versus a `type` recorded as
+`"grocery"`. Both degrade the field, and they are recorded as different events, because they say
+different things about the model: one is a formatting failure, the other is a vocabulary
+failure, and §9's learning loop should not confuse them.
+
+Two vocabularies may share a value without being the same vocabulary — `relation_outcome` and
+`state_outcome` both admit `confirmed`, and they diverge on `rejected` versus `denied`. A value
+belonging to *some* vocabulary is not the test; belonging to *this field's* vocabulary is.
+
 ## 6. Nightly consolidation ("sleep")
 
 One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
