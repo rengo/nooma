@@ -838,7 +838,7 @@ introduces.
 
 ### PR 7b-ii — `feat/core-classify-prompt` (~330). Stacked on 7b-i.
 
-- [ ] **7b.3** Test first: `internal/core/classify/prompt_test.go` — `BuildPrompt(text, beliefs,
+- [x] **7b.3** Test first: `internal/core/classify/prompt_test.go` — `BuildPrompt(text, beliefs,
       now)` renders `now.Format(...)` and `now.Location().String()` (design D4's timezone
       mechanism — the zone travels inside the clock's instant, never read from the OS inside
       `core`); a test `Clock` fixing a `Location` makes the assertion stable. `beliefs` is always
@@ -847,7 +847,24 @@ introduces.
       Implement `internal/core/classify/prompt.go`.
       Verify: `make test`.
       Requirement: R1.3 (adjacent, the prompt-construction half feeding R4.2); design D4.
-- [ ] **7b.4** `docs/02-cognitive-core.md` §5.1: **complete** the field-by-field degradation
+
+      **Done.** Observed RED verbatim (`undefined: BuildPrompt`) before implementing. The
+      timezone assertion is deliberately not "the prompt contains a zone name": it renders the
+      **same instant in two zones** (Buenos Aires −03:00, Kolkata +05:30) and fails if the two
+      prompts come out identical. An implementation reading the zone from anywhere but its
+      argument passes the weaker check on every machine and fails this one everywhere. Kolkata's
+      half-hour offset is deliberate too — it catches a renderer that assumes whole-hour zones.
+      A second test pins the **local** date: 01:00 UTC on the 5th is still the 4th in Buenos
+      Aires, which is exactly the window where "tomorrow" goes wrong.
+      Two things the task did not ask for and the code needed anyway. **Every vocabulary renders
+      from its own `AllX()`**, so the model can never be offered a set the decoder would reject;
+      a hand-written list drifts the first time a taxonomy value is added, and the failure would
+      look like the model misbehaving. And `orthogonalFields()` returns a **slice, not a map**,
+      because Go randomizes map iteration and a prompt that varies run to run cannot be diffed,
+      cached, or recorded as a golden case — `TestBuildPrompt_IsPure` holds that.
+      `Belief` ships unused, as design D4 intends. `TestBuildPrompt_BeliefsAreOptionalAndRendered`
+      is what keeps a permanently-nil parameter from being decorative before M2 depends on it.
+- [x] **7b.4** `docs/02-cognitive-core.md` §5.1: **complete** the field-by-field degradation
       definition (proposal §4.8's table entry for `core/classify`). Per **C9**, §5.1 is no longer
       written here from nothing — PR 7a-i/ii/iii each landed the part they introduced, because
       `docs-sync.yml` fires per PR and a delta arriving one PR after its code is the drift
@@ -856,6 +873,13 @@ introduces.
       finished section as one piece rather than three sediment layers.
       Verify: read the section end to end; `docs-sync.yml` not locally verifiable.
       Requirement: R1.7 (satisfied across PR 7's PRs collectively — see C9).
+
+      **Done for 7b-i and 7b-ii's shares**, per C9's per-PR rule. 7b-i landed what a degraded
+      weight/λ becomes, why there are exactly two priors, and the never-zero constraint; §13
+      gained the base-weight row it was missing. 7b-ii lands how the user's timezone reaches the
+      model without any configuration key existing, and why the prompt's vocabularies are
+      rendered from the decoder's own declarations rather than restated. 7b-iii adds `ToUnit`'s
+      share and reads the finished section as one piece.
 ### PR 7b-iii — `feat/core-classify-tounit`. **Blocked on C10.**
 
 - [ ] **7b.1** Test first: `internal/core/classify/tounit_test.go` — `ToUnit(c, id, now, priors)`
