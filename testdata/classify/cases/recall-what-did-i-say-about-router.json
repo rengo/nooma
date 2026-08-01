@@ -1,0 +1,10 @@
+{
+  "id": "recall-what-did-i-say-about-router",
+  "input": "what did I write down about the router?",
+  "expected": {
+    "type": "recall",
+    "normalized_content": "Retrieve notes about the router",
+    "weight": 0.1,
+    "decay_rate": 0.5
+  }
+}

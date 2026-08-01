@@ -1,0 +1,14 @@
+{
+  "id": "task-descaling-solution",
+  "input": "Remind me to buy descaling solution tomorrow",
+  "expected": {
+    "type": "task",
+    "normalized_content": "Buy descaling solution",
+    "weight": 1.0,
+    "decay_rate": 0.05,
+    "structured_data": {
+      "product": "descaling solution"
+    },
+    "due_at": "2026-08-02"
+  }
+}

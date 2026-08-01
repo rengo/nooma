@@ -1,0 +1,11 @@
+{
+  "id": "person-ref-ambiguous-ana",
+  "input": "Ana asked me to send her the contract",
+  "expected": {
+    "type": "task",
+    "normalized_content": "Send Ana the contract",
+    "weight": 0.7,
+    "decay_rate": 0.05,
+    "person_ref_status": "ambiguous"
+  }
+}

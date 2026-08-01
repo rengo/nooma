@@ -1,0 +1,10 @@
+{
+  "id": "procedural-reset-router",
+  "input": "To reset the router you hold the pin in for ten seconds while it's powered on",
+  "expected": {
+    "type": "procedural",
+    "normalized_content": "Reset the router by holding the pin for ten seconds while powered on",
+    "weight": 0.5,
+    "decay_rate": 0.01
+  }
+}

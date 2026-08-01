@@ -33,9 +33,10 @@ own `id` field verbatim (e.g. `id: "remind-me-tomorrow"` →
   "expected": {
     "type": "task",
     "normalized_content": "Buy descaling solution",
-    "structured_data": {"due_at": "2026-07-30"},
+    "structured_data": {"product": "descaling solution"},
     "weight": 1.0,
-    "decay_rate": 0.01
+    "decay_rate": 0.01,
+    "due_at": "2026-07-30"
   },
   "llm_case_id": "classify-remind-me-tomorrow"
 }
@@ -53,6 +54,8 @@ own `id` field verbatim (e.g. `id: "remind-me-tomorrow"` →
 | `expected.structured_data` | JSON value | no | Free-form structured payload — its shape varies by `expected.type` and is not fixed by a single schema in doc 02, so the loader stores it as an opaque `json.RawMessage` rather than a typed struct |
 | `expected.weight` | number | yes | Initial weight, `docs/02-cognitive-core.md` §2. Persisted as `docs/03-data-model.md`'s `weight` column (same name on both sides) |
 | `expected.decay_rate` | number | yes | Initial decay rate (λ), `docs/02-cognitive-core.md` §2's formula (line 29 names it `decay_rate`). **Persisted as `docs/03-data-model.md`'s `weight_decay_rate` column** — the two docs use different names for the same value; this golden set follows the formula's short name, not the column's. A missing or `null` value is rejected by the loader, not silently decoded to `0.0` (see "What the loader does and does not check" below) |
+| `expected.event_at` | string | no | When the thing happens or happened, as the provider wrote it — RFC3339, or the date-only `2006-01-02`. **Top-level, not inside `structured_data`**: `docs/02-cognitive-core.md` §1 says `event_at`, `created_at` and `due_at` are never interchanged (I18), and a governed column extracted from a deliberately unschema'd payload would be two sources of truth. Recorded as the raw wire string, not a parsed timestamp, so a case can carry a deliberately malformed date (see the three I14 shapes below) |
+| `expected.due_at` | string | no | The deadline, same formats and same reason as `expected.event_at`. Never a synonym for it: a task due Friday and an event happening Friday are different facts about different columns |
 | `expected.nudge_outcome` | string | no | `engaged \| declined` |
 | `expected.relation_outcome` | string | no | `confirmed \| rejected` |
 | `expected.state_outcome` | string | no | `confirmed \| denied` |
@@ -100,6 +103,23 @@ per malformed shape —
 Each of these should set `llm_case_id` to the recording that produced the
 malformed shape, so the connection between "classify received this" and
 "the provider actually said this" is explicit, not asserted informally.
+
+**In a case backed by a recording, `expected` describes what the provider
+was trying to say — not what the decoder produces from it.** The unknown-enum
+case makes this unavoidable: its `expected.type` holds the out-of-taxonomy
+value, while the decoder's actual output for that field is *absent*. The same
+reading applies to the other two shapes, and it is what lets `expected` carry
+the four required fields even when the recording lost some of them. What the
+decoder must do with the malformed bytes is asserted by
+`TestI14_ClassifyFieldDegradesToNull`, which reads the recording, not by this
+file.
+
+**A truncated recording must be cut before a *required* field**, or it proves
+nothing. `docs/02-cognitive-core.md` §5.1 is explicit that only the required
+fields' absence is reported: which optional fields a cut response would have
+carried is unknowable, so a recording truncated in the middle of `due_at`
+decodes with **no degradation at all** and the case passes vacuously. Cut it
+inside `weight` or `decay_rate` instead.
 
 ## What the loader does and does not check
 

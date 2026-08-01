@@ -216,6 +216,20 @@ func (e *ClassifyExample) Validate() error {
 // shapes, which Validate below rejects; a non-nil pointer to 0.0 means the
 // author explicitly wrote a legitimate zero, which Validate accepts.
 //
+// EventAt and DueAt are top-level and separately named, not members of
+// StructuredData, because I18 forbids the three timestamps from ever being
+// interchanged and both of these are governed NOT NULL-adjacent columns.
+// Keeping them inside the opaque payload would mean the brain reaching into
+// an explicitly unschema'd blob to extract a governed column — format.md
+// says structured_data's "shape varies by expected.type and is not fixed by
+// a single schema in doc 02" — which is the two-sources-of-truth defect this
+// project keeps naming.
+//
+// They are *string, the recorded wire text, rather than *time.Time: this
+// type records what the provider said, and a case whose date is malformed on
+// purpose (I14's bad-format shape) must be expressible here. Parsing is
+// classify.Decode's job, and its failure is the thing under test.
+//
 // docs/03-data-model.md persists DecayRate as the `weight_decay_rate`
 // column; docs/02-cognitive-core.md's decay formula (§2, line 29) uses the
 // short name `decay_rate`, which is what this field and its JSON tag
@@ -226,6 +240,8 @@ type ClassifyExpected struct {
 	StructuredData     json.RawMessage `json:"structured_data,omitempty"`
 	Weight             *float64        `json:"weight"`
 	DecayRate          *float64        `json:"decay_rate"`
+	EventAt            *string         `json:"event_at,omitempty"`
+	DueAt              *string         `json:"due_at,omitempty"`
 	NudgeOutcome       string          `json:"nudge_outcome,omitempty"`
 	RelationOutcome    string          `json:"relation_outcome,omitempty"`
 	StateOutcome       string          `json:"state_outcome,omitempty"`

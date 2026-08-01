@@ -1,0 +1,10 @@
+{
+  "id": "chitchat-good-morning",
+  "input": "morning!",
+  "expected": {
+    "type": "chitchat",
+    "normalized_content": "Greeting",
+    "weight": 0.1,
+    "decay_rate": 0.5
+  }
+}
