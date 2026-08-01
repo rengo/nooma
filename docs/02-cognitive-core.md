@@ -234,6 +234,25 @@ indistinguishable from one the user ignored for months, and a λ of 0 never deca
 archiving pass can never reach it. Both look like ordinary data and neither violates a NOT NULL
 constraint.
 
+**The user's timezone reaches the model inside the instant, never from the environment.** §5
+step 1 injects the local date and zone so the model can resolve "tomorrow" and "on Friday", and
+the brain is forbidden from reading either from the machine it runs on. Both travel inside the
+single timestamp the pipeline reads once per capture: its calendar date is the local date, its
+location is the user's zone.
+
+This is why there is no timezone setting anywhere in Nooma's configuration. Adding one would
+create a second source of truth for a fact the timestamp already carries, and the two would
+disagree the first time either changed. The known limit: a vault hosted for a user in a zone
+other than the process's would need this revisited — which is multi-tenancy, deliberately out of
+scope for v1.
+
+**The vocabularies the model is offered are the same ones the decoder accepts.** The prompt does
+not restate the taxonomy in prose; it renders each closed set from the same declaration the
+decoder matches against. A value added to a vocabulary therefore reaches the model with no second
+edit, and the model can never be asked for a value that would then be rejected as
+out-of-vocabulary — a failure that would look like the model misbehaving when it was the prompt
+that was stale.
+
 ## 6. Nightly consolidation ("sleep")
 
 One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
