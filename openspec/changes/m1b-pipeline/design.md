@@ -396,7 +396,7 @@ CaptureService.Capture(in)
   ├ resp   := llm.Complete({Prompt, Task:"capture_processing"})  ports.LLMProvider
   ├ c, err := classify.Decode(resp.Text, now)                 core/classify   I14, D1
   ├ route on c.Kind                                            brain           D9
-  ├ u      := classify.ToUnit(c, ids.New(), now, priors)      core/classify   I18
+  ├ u      := classify.ToUnit(c, ids.New(), in.Channel, now, priors)  core/classify  I18
   ├ units.Create(u)                        ports.UnitRepo  →  units_fts syncs by trigger
   ├ ev     := embed.Embed({u.Content})                        ports.EmbeddingProvider
   ├ embeds.Put({u.ID, ev.Model, ev.Vector, now})              ports.EmbeddingRepo   D8
@@ -409,11 +409,29 @@ CaptureService.Capture(in)
   └ log.Record(...) at every step with an effect              ports.DecisionLog    I12
 ```
 
-`classify.ToUnit(c Classification, id string, now time.Time, p Priors) (unit.Unit, error)` is
-pure and is where I18 lands: `CreatedAt = UpdatedAt = LastTouchedAt = now`, `EventAt = c.EventAt`,
-`DueAt = c.DueAt`, `Status = unit.StatusPool`, `Confidence = nil` (Q2), `Weight`/`WeightDecayRate`
-from `c` or from D3's priors. It returns an error only when `c.Kind` maps to no `unit.Type`, so
-the caller cannot forget to check.
+`classify.ToUnit(c Classification, id, source string, now time.Time, p Priors) (unit.Unit, error)`
+is pure and is where I18 lands: `CreatedAt = UpdatedAt = LastTouchedAt = now`,
+`EventAt = c.EventAt`, `DueAt = c.DueAt`, `Status = unit.StatusPool`, `Confidence = nil` (Q2),
+`Weight`/`WeightDecayRate` from `c` or from D3's priors.
+
+**`source` is a parameter for the same reason `now` is** (C10.1). `units.source` is
+`NOT NULL DEFAULT 'chat'`, but the column default never fires — `unitrepo.go:51` passes the field
+explicitly, so a zero value persists as `""`, not as `'chat'`. The channel is the caller's fact
+and `core` must not name it: hardcoding `"chat"` here would be silently wrong the day a capture
+arrives from the UI, and it would not fail, it would lie. D4's pipeline already holds `in` at the
+call site, so the value costs no new plumbing.
+
+**It returns an error on exactly two conditions** (C10.2 corrected this line; it previously said
+"only when `c.Kind` maps to no `unit.Type`"):
+
+1. `c.Kind` maps to no `unit.Type` — there is no unit to build.
+2. `c.NormalizedContent` is nil — `units.content` is `NOT NULL`, and persisting `""` would create
+   a unit no recall can ever reach: FTS indexes nothing and the embedding is of the empty string.
+   A row that exists and cannot be found is worse than a capture that failed loudly. Doc 02 §5.1
+   already called this loss "not survivable downstream" before the signature encoded it.
+
+Both are returned as errors rather than zero values so the caller cannot forget to check — the
+same shape as `Kind.UnitType()`'s `(value, bool)`.
 
 **Two properties the scripted fake gives for free**, worth naming so tests are written to expect
 them. One capture makes **two** `Complete` calls, so a test scripts two case ids; and the judge
@@ -1065,7 +1083,7 @@ internal/core/classify/               NEW package — pure, stdlib only         
   decode.go         Decode, the fieldSpec table, decodeEnum[T]                   D1, D11
   classification.go Classification, Degradation, Reason
   prior.go          PriorWeight, PriorDecayRate                                  D3
-  tounit.go         ToUnit(c, id, now, priors) (unit.Unit, error)                D4, I18
+  tounit.go         ToUnit(c, id, source, now, priors) (unit.Unit, error)        D4, I18
   prompt.go         BuildPrompt(text, beliefs, now) string; Belief
   *_test.go         L1 tables over inline payload literals — the floor's numerator
       imports: encoding/json, errors, fmt, strings, time, internal/core/unit
