@@ -1163,12 +1163,54 @@ Phase A's `repocontract` precedent.
 
 ---
 
+### C11 — PR 9a's `EmbeddingRepo` contract had two cases the real schema forbids. **Found by PR 9b. Fixed here.**
+
+Found the only way it could be: by writing the second implementation. PR 9a shipped the contract
+and the in-memory fake together, both green, and **both wrong in the same two places** — because
+one author wrote both, and the fake enforces nothing the schema enforces.
+
+**C11.1 — a second row per unit.** The contract carried a case named *"one unit may hold an
+embedding per model"*, and the fake keyed on `(unit_id, model)` to satisfy it. `unit_embeddings`
+declares `unit_id TEXT PRIMARY KEY` (`0002:75`). **One unit, one row.** The store could never
+have passed it.
+
+The reasoning behind the bad case came from doc 02 §5's "a vault can hold two models at once
+while a reindex is in progress", read as *one unit holding two vectors*. ADR-0003's amendment
+says otherwise and says it plainly: reindex is "an ordinary `UPDATE` loop", resumable and
+incremental, "complete when no rows of the old model remain". `design.md:836` is more direct
+still — "`Put` upserts because `unit_id` is the primary key and M6's `reindex` must replace a
+row." Neither was read before the case was written.
+
+The replacement case, *"a re-embed under a new model replaces the row"*, asserts the opposite and
+was **armed before being trusted**: re-keying the fake on `(unit_id, model)` makes it fail with
+the stale row named.
+
+**C11.2 — every case violated a foreign key.** The contract `Put`s embeddings for `unit-1`,
+`unit-2` and so on without those units existing. `unit_embeddings.unit_id REFERENCES units(id)`
+and the vault opens `foreign_keys=on`, so every single case is a constraint violation against the
+real store and a no-op against the fake.
+
+Fixed the way `LexicalSearch` already handles the same shape of problem: the contract declares a
+`repocontract.EmbeddingHarness` with an `EnsureUnit` hook. The store inserts the row; the fake
+does nothing.
+
+**What this says about "answered twice".** D6's rule is usually described as keeping two
+implementations from drifting. That is the smaller half. The larger half is that **a contract
+answered once is not a contract — it is one implementation's opinion, written twice.** Both
+defects here were invisible while only the fake answered, and both were unmissable within minutes
+of the second implementation existing. The rule earned its keep on its first real use.
+
+**Cost of finding it late**: PR 9a merged with a wrong contract, and this PR corrects it. Cheap.
+The same two defects found after `brain` was written against the fake would not have been.
+
+---
+
 ## PR 9b — `feat/store-embedding` (~380 — the second PR of this chain to watch closely, per the
 Review Workload Forecast below)
 
 Depends on PR 9a.
 
-- [ ] **9b.1** Test first (L3, `-tags integration`):
+- [x] **9b.1** Test first (L3, `-tags integration`):
       `internal/store/sqlite/embeddingrepo_integration_test.go` — `Put` writes a row whose stored
       vector has L2 norm 1 within floating-point tolerance, `dim == len(vector)`, and round-trips
       through the little-endian `float32` codec. **Red**: `undefined: sqlite.NewEmbeddingRepo` (or
@@ -1179,7 +1221,23 @@ Depends on PR 9a.
       `unitrepo.go:14` already establishes (design D6).
       Verify: `make test-integration`.
       Requirement: R3.1; design D6.
-- [ ] **9b.2** In the same commit: `LoadIndex(model)` over a vault seeded with `unit_embeddings`
+
+      **Done.** RED observed verbatim (`undefined: sqlite.NewEmbeddingRepo`). The contract itself
+      had to be corrected first — see **C11**; this task is where PR 9a's two contract defects
+      surfaced, and correcting them was a precondition for writing the store at all.
+      The normalization test feeds a **deliberately un-normalized** vector (magnitude 5,
+      direction (3,4)/5, chosen so the normalized values are exact in binary floating point and
+      the test cannot be flaky). A repo storing raw magnitudes would return plausible-looking
+      cosine scores wrong by a constant factor per unit — nothing a ranking assertion would
+      obviously catch. It decodes the blob inline rather than through `LoadIndex`, because
+      reading bytes back with the same helper that wrote them proves only that the codec is
+      self-consistent.
+      One test beyond the task: **`dim` disagreeing with the blob length is an error.** Migration
+      0002 calls that column "redundant with the blob length, and worth the redundancy" — this is
+      where it earns that. A blob truncated by a partial write decodes into a shorter vector that
+      `recall.Search` would score against a full-length query, producing a number instead of a
+      failure. The check turns a silent wrong answer into a loud one.
+- [x] **9b.2** In the same commit: `LoadIndex(model)` over a vault seeded with `unit_embeddings`
       rows from two distinct `model` values, asserting the returned index holds only the requested
       model's rows and vector values match — I21's storage half (R3.4), and R3.2's own MUST NOT
       (no per-recall-call SQL read — the load path and the query path are distinct code paths,
@@ -1187,13 +1245,35 @@ Depends on PR 9a.
       Verify: `make test-integration`; review — no call site outside vault-open reads
       `unit_embeddings` per request.
       Requirement: R3.2, R3.4.
-- [ ] **9b.3** No migration added or edited (`unit_embeddings` already exists — confirmed,
+
+      **Done.** Seeded by raw `INSERT`, deliberately bypassing `Put`, so the fixture cannot lean
+      on `Put`'s own model scoping being correct.
+      `ORDER BY unit_id` was added beyond the task's wording: without it, `recall.Search`'s ties
+      resolve by whatever order SQLite happened to return, which reads as a ranking bug rather
+      than as the coin-flip it is. The same reasoning the fake's insertion-order slice already
+      followed.
+      R3.2's MUST NOT confirmed by review of the diff: `LoadIndex` is the only path that reads
+      `unit_embeddings`, and nothing calls it per request — the index is loaded whole and searched
+      in memory, so the query path touches no SQL.
+- [x] **9b.3** No migration added or edited (`unit_embeddings` already exists — confirmed,
       migration 0002 lines 74–81). Regenerate `testdata/schema/store_api.golden`.
       Verify: `git diff -- internal/store/sqlite/migrations/` empty; `make store-api-golden`;
       `git diff -- testdata/schema` reviewed and committed.
       Requirement: R3.5.
-- [ ] Verify (PR-level): `make check-all`; confirm every test added by this PR writes only
+
+      **Done — and confirmed rather than trusted**, the same discipline 8a.0 called for.
+      `git diff -- internal/store/sqlite/migrations/` is empty: `unit_embeddings` does already
+      exist at `0002:74-81`, exactly as the task claims. Read directly, not inherited.
+      `make store-api-golden` regenerated; the diff is **four added lines and no modified line**,
+      which is the shape R3.5 requires — the store surface widened, nothing inside Phase A's
+      existing surface moved.
+- [x] Verify (PR-level): `make check-all`; confirm every test added by this PR writes only
       fixture-derived vectors, never a real embedding call (R3.6, R6.1).
+
+      **Done.** `make check-all` green end to end, including L3 under `-tags integration`.
+      R3.6/R6.1 confirmed: every vector in this PR is a literal in the test file. No test
+      constructs an embedding provider, and none reaches the network — the L3 suite's only
+      external dependency is a temporary SQLite file under `t.TempDir()`.
 
 ---
 

@@ -11,9 +11,11 @@ import (
 // `embeddings` table of docs/03-data-model.md.
 //
 // Model is carried on every row rather than assumed globally, because a vault
-// holds two models at once while a reindex is in progress (doc 02 §5,
-// ADR-0003). Without it, the rows of an interrupted reindex would be
-// indistinguishable from the rows of the model that preceded it.
+// holds rows from two models while a reindex is in progress (doc 02 §5,
+// ADR-0003's amendment). Without it, the rows an interrupted reindex has
+// already rewritten would be indistinguishable from the ones it has not
+// reached yet — and every search filters on model precisely so the two are
+// never compared.
 //
 // At is data, like every other timestamp crossing a port: no repository
 // method reads a clock, so the instant arrives from the one the pipeline
@@ -38,11 +40,16 @@ type Embedding struct {
 // scoped to a single model, so no caller sits between the store and the
 // search deciding what "the index for this model" means.
 type EmbeddingRepo interface {
-	// Put stores e, replacing any embedding already held for the same unit
-	// under the same model. The key is (UnitID, Model), not UnitID alone:
-	// one unit legitimately holds one vector per model during a reindex, and
-	// keying on UnitID would delete the old index out from under a search
-	// still running against it.
+	// Put stores e, replacing any embedding already held for the unit. The
+	// key is UnitID alone, because unit_embeddings.unit_id is the primary
+	// key (migration 0002): one unit holds exactly one embedding, under
+	// exactly one model.
+	//
+	// A model change is an overwrite, not a second row. ADR-0003's amendment
+	// makes reindex "an ordinary UPDATE loop", resumable and incremental,
+	// complete when no rows of the old model remain. That is what "a vault
+	// can hold two models at once" means — different *units* at different
+	// points in one reindex, never one unit twice.
 	Put(ctx context.Context, e Embedding) error
 
 	// LoadIndex returns every embedding recorded under model, as an index

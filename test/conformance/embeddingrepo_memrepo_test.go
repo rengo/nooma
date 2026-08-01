@@ -4,7 +4,6 @@ package conformance
 import (
 	"testing"
 
-	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 	"github.com/rengo/nooma/test/support/repocontract"
 )
@@ -15,7 +14,7 @@ import (
 // is what stops the fake and the real store from drifting while one lags
 // behind the other.
 func TestEmbeddingRepo_MemRepo(t *testing.T) {
-	repocontract.RunEmbeddingRepo(t, func(t *testing.T) ports.EmbeddingRepo {
+	repocontract.RunEmbeddingRepo(t, func(t *testing.T) repocontract.EmbeddingHarness {
 		t.Helper()
 		return memrepo.NewEmbeddings()
 	})
