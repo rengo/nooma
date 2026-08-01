@@ -306,7 +306,7 @@ confirmed present). This PR creates `internal/core/recall/vector.go`, the last t
 `pending-red` gate in its own diff (D10). `docs/02-cognitive-core.md` §5 gains its first Phase B
 delta here — this PR must not carry `no-spec-change` (spec R6.2).
 
-- [ ] **8a.0** **Operator action, not code — must complete before this PR merges (C5, R2.9,
+- [x] **8a.0** **Operator action, not code — must complete before this PR merges (C5, R2.9,
       design D10).** Remove the `pending-red` status context from `main`'s branch ruleset's
       required status checks on GitHub. Confirm the ruleset's current required contexts first
       with `gh api repos/rengo/nooma/rulesets` and the ruleset's own id (`19863542`, per this
@@ -322,6 +322,32 @@ delta here — this PR must not carry `no-spec-change` (spec R6.2).
       Makefile target (same category of gate as `docs-sync.yml`, per spec R2.9's own "Verified
       by").
       Requirement: R2.9; design D10.
+
+      **Done — and it was a no-op, which is the outcome this task told us to check for.**
+      Confirmed against the live configuration rather than against this artifact's inherited
+      claim, exactly as the task instructs. Ruleset `19863542` (`protect-main`, active) requires
+      **sixteen** status contexts, and `pending-red` is not among them:
+
+      > build · coverage · cross-compile ×7 · docs<->code sync · e2e · e2e (windows) ·
+      > integration · integration (windows) · lint · test (L1 + L2)
+
+      Three independent confirmations that the gate was already retired before this chain
+      reached it: no `pending-red` job exists in `.github/workflows/` (only `ci.yml`,
+      `docs-sync.yml`, `main.yml`); `pending_symbols.txt` does not exist anywhere in the tree;
+      and `test/harness/doc.go:3` already calls it "the now-retired pending-red gate".
+
+      **So the inherited claim was false.** It traces to `m1a-substrate/design.md` D8 and was
+      never independently executed in either design session — `design.md` §1.2 says so plainly,
+      and writing that down is what made this checkable instead of load-bearing. The instruction
+      to verify before acting is the reason no one removed a context that was not there, or
+      worse, went looking for a job to delete and improvised when it was missing.
+
+      One more sign the premise was stale rather than merely wrong on the ruleset: this task
+      says "PR 8a's own diff deletes the `pending-red` CI job (task 8a.3)", and **8a.3 is the
+      doc 02 §5 vector-leg delta**. There is no task in 8a that deletes a CI job, because by the
+      time 8a was written there was no job left to delete.
+
+      Nothing was changed on GitHub. This note is the record the task asked for.
 - [x] **8a.1** Test first: `internal/core/recall/vector_test.go` — `Search` over a hand-seeded
       `VectorIndex`, asserting the returned top-K order matches a hand-computed dot-product
       ranking; `ErrModelMismatch` when `q.Model != idx.Model`; `ErrDimMismatch` for a
