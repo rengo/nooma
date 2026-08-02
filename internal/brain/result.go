@@ -21,16 +21,23 @@ type CaptureInput struct {
 
 // CaptureResult is what CaptureService.Capture returns on success.
 //
-// This is the first slice of PR 10b's pipeline (design D4): only the
-// ordinary path — a classification that persists a unit — is implemented
-// yet, so this type carries only what that path has to report. The later
-// slices of this same PR add to it rather than replace it: Embedded bool
-// (a captured unit may exist without an embedding — design D8, task 10b.8)
-// and Stored bool plus a Deferred value (Q3a's refusal path — task's own
-// design table assigns that to PR 10c) both land as new fields once their
-// own pipeline steps exist. Adding a field nothing sets yet would be a
-// promise this slice cannot keep.
+// This is PR 10b's second slice (design D4): the ordinary path — a
+// classification that persists a unit and is then embedded — is
+// implemented, so this type now carries both. A third slice of this same
+// PR adds to it rather than replaces it: Stored bool plus a Deferred value
+// (Q3a's refusal path — task's own design table assigns that to PR 10c)
+// lands as a new field once that pipeline step exists. Adding a field
+// nothing sets yet would be a promise this slice cannot keep.
 type CaptureResult struct {
 	// UnitID is the ID of the unit this capture persisted.
 	UnitID string
+	// Embedded reports whether this capture's embedding was written.
+	// False means the unit is persisted and lexically findable but not yet
+	// semantically searchable — design D8's accepted, named gap: a local
+	// embedding-provider or store outage degrades the index, it does not
+	// refuse the capture (doc 02 §5's product rule). A caller that cares —
+	// Phase C's HTTP route, the CLI — can tell "stored and searchable" from
+	// "stored, semantic search pending" without querying decision_log
+	// itself.
+	Embedded bool
 }

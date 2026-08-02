@@ -37,6 +37,8 @@ type Fake struct {
 	seenPrompts []string
 
 	embedModel string
+	embedErr   error
+	embedCalls int
 }
 
 var _ ports.LLMProvider = (*Fake)(nil)
