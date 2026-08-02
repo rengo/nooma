@@ -39,15 +39,19 @@ type CaptureService struct {
 
 // NewCaptureService wires a CaptureService over the ports its pipeline
 // needs. clock is read exactly once per Capture call; every other port
-// belongs to run, which never sees clock at all.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, log ports.DecisionLog, llm ports.LLMProvider) *CaptureService {
+// belongs to run, which never sees clock at all. Parameter order follows
+// design D4's own captureRunner field order (design.md:346-357), restricted
+// to the fields this slice populates.
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, log ports.DecisionLog, llm ports.LLMProvider, embed ports.EmbeddingProvider) *CaptureService {
 	return &CaptureService{
 		clock: clock,
 		run: captureRunner{
-			ids:   ids,
-			units: units,
-			log:   log,
-			llm:   llm,
+			ids:    ids,
+			units:  units,
+			embeds: embeds,
+			log:    log,
+			llm:    llm,
+			embed:  embed,
 		},
 	}
 }
@@ -65,34 +69,37 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (CaptureR
 // captureRunner does the actual work of one capture, over every port
 // CaptureService.Capture needs except the clock (design D4 Layer 1).
 //
-// This is PR 10b's first slice: the ordinary path spec R4.2 requires — an
-// LLM call, a decode, a persisted unit, one decision_log row — and nothing
-// past it. embeds, lex, rels, judge, embed and index (design D4's full
-// struct) are later slices' fields; they are not declared here at all,
-// rather than declared and left unused, because a field this slice cannot
-// populate is a promise the code does not keep.
+// This is PR 10b's second slice: the ordinary path spec R4.2 requires — an
+// LLM call, a decode, a persisted unit, one decision_log row — plus spec
+// R4.3's embedding step (design D8). lex, rels, judge and index (design
+// D4's full struct) are the third slice's fields; they are not declared
+// here at all, rather than declared and left unused, because a field this
+// slice cannot populate is a promise the code does not keep.
 type captureRunner struct {
-	ids   ports.IDGen
-	units ports.UnitRepo
-	log   ports.DecisionLog
-	llm   ports.LLMProvider // capture_processing
+	ids    ports.IDGen
+	units  ports.UnitRepo
+	embeds ports.EmbeddingRepo
+	log    ports.DecisionLog
+	llm    ports.LLMProvider // capture_processing
+	embed  ports.EmbeddingProvider
 }
 
 // at runs one capture given the instant CaptureService.Capture already
 // read. It is design.md's pipeline diagram, restricted to this slice's
-// scope (spec R4.2): classify.BuildPrompt -> llm.Complete ->
-// classify.Decode -> classify.ToUnit -> units.Create, then one
-// decision_log row naming the classification.
+// scope (spec R4.2, R4.3): classify.BuildPrompt -> llm.Complete ->
+// classify.Decode -> classify.ToUnit -> units.Create, one decision_log row
+// naming the classification, then embed.Embed -> embeds.Put (design D8's
+// persist-before-embed ordering).
 //
-// What it does not yet do, on purpose: embed the unit (task 10b.4), run
-// hybrid recall for dedup/relation candidates (10b.5), or turn a
-// classify.ToUnit error into a caller-visible refusal instead of a bare
-// error (10b.6's timer/ambiguous-person halves, out of this slice's scope —
-// design's own package table assigns CaptureResult.Deferred to PR 10c). A
-// classification that maps to no unit.Type, or that lost its content, is
-// propagated as a plain Go error today; nothing about that behavior is
-// asserted by this slice's tests, and a later slice is expected to replace
-// it with the distinguishable result Q3a's refusal requires.
+// What it does not yet do, on purpose: run hybrid recall for dedup/relation
+// candidates (10b.5), or turn a classify.ToUnit error into a caller-visible
+// refusal instead of a bare error (10b.6's timer/ambiguous-person halves,
+// out of this slice's scope — design's own package table assigns
+// CaptureResult.Deferred to PR 10c). A classification that maps to no
+// unit.Type, or that lost its content, is propagated as a plain Go error
+// today; nothing about that behavior is asserted by this slice's tests, and
+// a later slice is expected to replace it with the distinguishable result
+// Q3a's refusal requires.
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
@@ -124,7 +131,42 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, err
 	}
 
-	return CaptureResult{UnitID: u.ID}, nil
+	embedded, err := r.embedAndStore(ctx, u, now)
+	if err != nil {
+		return CaptureResult{}, err
+	}
+
+	return CaptureResult{UnitID: u.ID, Embedded: embedded}, nil
+}
+
+// embedAndStore is design D8's step past persistence (spec R4.3): embed u's
+// content and write the result, without ever turning a failure here into a
+// failure of Capture itself. u is already durable by the time this runs
+// (design D8's persist-before-embed ordering), so a local provider or store
+// outage must degrade the index, not refuse the capture — doc 02 §5's
+// product rule ("Nooma captures with what it has ... and only asks when
+// ambiguity blocks it") forbids the atomic alternative that was considered
+// and rejected.
+//
+// It returns (true, nil) once the embedding is written, or (false, nil)
+// once a failure has been recorded to decision_log as
+// ports.ActionCaptureEmbeddingFailed — the caller-visible degradation
+// design D8 names rather than hides. The only way this returns a non-nil
+// error is recordEmbeddingFailedDecision's own log write failing, which is
+// not a case design D8 discusses; it is handled the same way
+// recordClassifyDecision already handles its own log-write failure, by
+// propagating it.
+func (r captureRunner) embedAndStore(ctx context.Context, u unit.Unit, now time.Time) (bool, error) {
+	ev, err := r.embed.Embed(ctx, ports.EmbedRequest{Text: u.Content})
+	if err != nil {
+		return false, r.recordEmbeddingFailedDecision(ctx, u, now, err)
+	}
+
+	if err := r.embeds.Put(ctx, ports.Embedding{UnitID: u.ID, Model: ev.Model, Vector: ev.Vector, At: now}); err != nil {
+		return false, r.recordEmbeddingFailedDecision(ctx, u, now, err)
+	}
+
+	return true, nil
 }
 
 // recordClassifyDecision writes decision_log's account of an ordinary
@@ -158,6 +200,40 @@ func (r captureRunner) recordClassifyDecision(ctx context.Context, c classify.Cl
 	}
 	if err := r.log.Record(ctx, d); err != nil {
 		return fmt.Errorf("capture: record decision for unit %q: %w", u.ID, err)
+	}
+	return nil
+}
+
+// recordEmbeddingFailedDecision writes decision_log's account of design
+// D8's accepted gap: u is persisted, but r.embed.Embed or r.embeds.Put
+// failed. action is ports.ActionCaptureEmbeddingFailed, and cause's message
+// travels in context.error — task 10b.8's own MUST ("a capture.embedding.failed
+// decision_log row with the provider error in context").
+//
+// occurred_at is now, the same single clock read every other timestamp in
+// this capture used (spec R4.1), for the same reason recordClassifyDecision
+// uses it: a decision row timestamped separately from the capture it
+// describes would let the two disagree about when the failure actually
+// happened.
+func (r captureRunner) recordEmbeddingFailedDecision(ctx context.Context, u unit.Unit, now time.Time, cause error) error {
+	rationale := fmt.Sprintf("embedding failed for unit %q: %s — the unit is persisted and lexically findable, but not yet semantically searchable", u.ID, cause)
+	contextJSON, err := json.Marshal(struct {
+		UnitID string `json:"unit_id"`
+		Error  string `json:"error"`
+	}{UnitID: u.ID, Error: cause.Error()})
+	if err != nil {
+		return fmt.Errorf("capture: encode embedding-failed decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCaptureEmbeddingFailed,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record embedding-failed decision for unit %q: %w", u.ID, err)
 	}
 	return nil
 }

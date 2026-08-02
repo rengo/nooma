@@ -71,7 +71,8 @@ func (g *counterIDs) New() string {
 func TestCapture_ReadsClockExactlyOnce(t *testing.T) {
 	clock := &countingClock{t: t, now: time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)}
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
-	svc := brain.NewCaptureService(clock, &counterIDs{}, memrepo.NewUnits(), memrepo.NewDecisionLog(), llm)
+	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
+	svc := brain.NewCaptureService(clock, &counterIDs{}, memrepo.NewUnits(), memrepo.NewEmbeddings(), memrepo.NewDecisionLog(), llm, embed)
 
 	_, err := svc.Capture(context.Background(), brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",

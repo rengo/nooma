@@ -1548,7 +1548,7 @@ which is precisely what I12 forbids.
       unhandled deliberately rather than half-implemented.
       **`CaptureResult` carries only `UnitID`** — `Embedded` is 10b-ii's, `Deferred` is 10c's per
       design's own package table. Nothing stubbed.
-- [ ] **10b.4** Test first: a captured unit is embedded exactly once, the recorded `Model` matches
+- [x] **10b.4** Test first: a captured unit is embedded exactly once, the recorded `Model` matches
       the fake embedding provider's configured model; no embedding is written for a unit this
       pipeline does not also persist.
       Implement `embed.Embed` → `embeds.Put` → `index.Add` wiring, persist-before-embed ordering
@@ -1556,6 +1556,37 @@ which is precisely what I12 forbids.
       refuses the capture).
       Verify: `make test`.
       Requirement: R4.3; design D8.
+
+      **Done, `feat/brain-embed` (10b-ii).** RED observed verbatim: `too many arguments in call to
+      brain.NewCaptureService` (arity grew from 5 to 7 params) and `result.Embedded undefined` —
+      the constructor and result-shape RED this task's own text implied, not a discovery.
+      Implemented `captureRunner.embedAndStore`: `embed.Embed` → `embeds.Put`, called only after
+      `units.Create` and `recordClassifyDecision` already succeeded (persist-before-embed, D8). A
+      failure at either step never returns an error from `Capture` — it is recorded via
+      `recordEmbeddingFailedDecision` and reported through `CaptureResult.Embedded == false`
+      (10b.8's own mechanism; the two tasks share one code path by construction, not by accident).
+      **`index.Add` deliberately NOT implemented here.** This task's own bullet names it, but the
+      ownership line under PR 10b-iii below assigns `internal/brain/index.go` (`Index`, the
+      in-memory `VectorIndex` holder) to 10b.5, and this slice's three RED assertions (embedded
+      once, `Model` matches, no orphaned embedding) never touch an in-memory index — proving them
+      needs only `embeds.Put` and `LoadIndex` read back through `memrepo`. An `Index` type with an
+      `Add` method and no search consumer in this slice (recall is 10b.5's) would be exactly the
+      "port method whose only caller is a test" shape `m1a-substrate` D7 rejected, restated here
+      for a brain-level type instead of a port. `index.Add` is deferred to 10b.5, alongside
+      `RecallService`, where it has a real caller.
+      Extended `test/support/fakeprovider`: `NewEmbeddingFakeWithError` (scripted `Embed` failure,
+      the same "recorded, not discovered" shape `New`'s per-case `Error` field gives `Complete`)
+      and `EmbedCalls()` (a call counter — proving "embedded exactly once" needs a count, not just
+      a row; a bug calling `Embed` twice but storing only the second result would pass a
+      row-count assertion and still fail this one). Both are extensions to the shared fake, not a
+      hand-rolled test-local stub (C11's lesson: a contract or fake answered once by one author is
+      that author's opinion, not a proof — but a *counter* is not a contract case, so this does
+      not repeat C11's shape).
+      `NewCaptureService`'s new params (`embeds ports.EmbeddingRepo`, `embed
+      ports.EmbeddingProvider`) are inserted at design D4's own `captureRunner` field-order
+      positions (design.md:346-357), restricted to the fields this slice populates — a
+      deliberate choice, not the only defensible one, recorded here because the task text left it
+      open.
 - [ ] **10b.5** Test first: capture runs hybrid recall for dedup/relation candidates via the one
       RRF-fused mechanism PR 8's `core/recall` already proves at L1 — this task reuses it, does not
       reimplement it; the candidate search excludes the just-persisted unit from its own candidate
@@ -1576,13 +1607,22 @@ which is precisely what I12 forbids.
       embedding failure).
       Verify: `make test`.
       Requirement: R4.5 (behavioral half).
+
+      **`capture.embedding.failed` half done, `feat/brain-embed` (10b-ii).** Proven by
+      `TestCapture_EmbeddingProviderFailureLeavesUnitPersisted`: a scripted `Embed` failure leaves
+      exactly two `decision_log` rows (`capture.classify` + `capture.embedding.failed`), and an
+      ordinary successful capture still leaves exactly one (`TestCapture_OrdinaryClassificationPersistsAUnit`,
+      unchanged assertion, still green with `embed`/`embeds` wired in). The `capture.unit.created`
+      half and the "a recall writes none" half remain open — `capture.unit.created` is the
+      ambiguous-person case (10c's), and recall itself is 10b.5's (this slice runs no recall at
+      all). Task left unchecked; only its embedding-failure half is claimed here.
 - [ ] **10b.7** Test first: a `superseded` and an `incomplete` unit, seeded directly into the fake
       repo, are absent from recall's fused output (I02) — proving the `LiveByIDs` boundary (design
       D5's "one filter, for both legs, before fusion") holds inside the brain pipeline, not merely
       inside `sqlite.UnitRepo` itself.
       Verify: `make test`.
       Requirement: R7.1 (I02's test-level assignment); design D5.
-- [ ] **10b.8** `CaptureResult` carries `Embedded bool`; a scripted embedding-provider failure
+- [x] **10b.8** `CaptureResult` carries `Embedded bool`; a scripted embedding-provider failure
       leaves the unit persisted (`Embedded: false`), a `capture.embedding.failed` `decision_log`
       row with the provider error in `context`, and the capture call itself does not return an
       error (design D8's accepted, named gap — a half-synced unit is real, and the alternative
@@ -1590,6 +1630,23 @@ which is precisely what I12 forbids.
       product rule forbids).
       Verify: `make test`.
       Requirement: design D8 (the risk this PR must not silently avoid).
+
+      **Done, `feat/brain-embed` (10b-ii).** Proven by
+      `TestCapture_EmbeddingProviderFailureLeavesUnitPersisted`
+      (`test/conformance/capture_embed_test.go`): scripts `fakeprovider.NewEmbeddingFakeWithError`
+      to fail `Embed`, then asserts — in one test, all three MUSTs together — `Capture` returns
+      `nil` error, `CaptureResult{Embedded: false}`, `units.ByID` finds the unit, no row exists in
+      `embeddings.LoadIndex`, and `decision_log` carries `capture.embedding.failed` with
+      `context.error` equal to the scripted error's `.Error()` string verbatim.
+      **One open decision this task's text does not settle, made here:** if
+      `recordEmbeddingFailedDecision`'s own `log.Record` call fails (a *second*, independent
+      fault — the decision-log write about the embedding failure, itself failing), `Capture`
+      **does** return an error. D8 only discusses `Embed`/`Put` failing, not the audit write about
+      that failure also failing; this mirrors `recordClassifyDecision`'s existing precedent (10b.3,
+      already on `main`), which propagates its own log-write failure the same way. Not
+      independently tested this slice — no existing fake supports scripting a `DecisionLog.Record`
+      failure, and inventing one only to test a double-fault this design does not discuss would be
+      speculative coverage, not a proof of anything D8 or R4.5 require.
 - [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
       `internal/core/**` — this PR touches no core file, so `docs-sync.yml` is not forced here
       (R6.2's own MUST NOT for this specific PR); code review of every `internal/brain/` call site
