@@ -31,10 +31,15 @@ func TestCapture_EmbedsThePersistedUnitExactlyOnce(t *testing.T) {
 	units := memrepo.NewUnits()
 	decisions := memrepo.NewDecisionLog()
 	embeddings := memrepo.NewEmbeddings()
+	lexical := memrepo.NewLexical()
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, decisions, llm, embed)
+	initialIdx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
+	}
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(initialIdx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
@@ -95,9 +100,13 @@ func TestCapture_NoEmbeddingWrittenForAUnitNotPersisted(t *testing.T) {
 		t.Fatalf("seeding a colliding unit: %v", err)
 	}
 
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, decisions, llm, embed)
+	initialIdx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
+	}
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(), decisions, llm, embed, brain.NewIndex(initialIdx))
 
-	_, err := svc.Capture(ctx, brain.CaptureInput{
+	_, err = svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
 		Channel: "chat",
 	})
@@ -135,7 +144,11 @@ func TestCapture_EmbeddingProviderFailureLeavesUnitPersisted(t *testing.T) {
 	providerErr := errors.New("ollama: connection refused")
 	embed := fakeprovider.NewEmbeddingFakeWithError(embedFakeModel, providerErr)
 
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, decisions, llm, embed)
+	initialIdx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
+	}
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(), decisions, llm, embed, brain.NewIndex(initialIdx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",

@@ -1587,7 +1587,7 @@ which is precisely what I12 forbids.
       positions (design.md:346-357), restricted to the fields this slice populates — a
       deliberate choice, not the only defensible one, recorded here because the task text left it
       open.
-- [ ] **10b.5** Test first: capture runs hybrid recall for dedup/relation candidates via the one
+- [x] **10b.5** Test first: capture runs hybrid recall for dedup/relation candidates via the one
       RRF-fused mechanism PR 8's `core/recall` already proves at L1 — this task reuses it, does not
       reimplement it; the candidate search excludes the just-persisted unit from its own candidate
       list; a capture into an otherwise-empty vault makes zero LLM calls beyond the one
@@ -1599,7 +1599,52 @@ which is precisely what I12 forbids.
       MUST).
       Verify: `make test`.
       Requirement: R4.4; design D4, D5.
-- [ ] **10b.6** Test first: a capture with an effect (a normal persisted unit) leaves exactly one
+
+      **Done, `feat/brain-recall` (10b-iii).** RED observed verbatim, against `main`'s
+      pre-this-slice code, in `test/conformance/capture_recall_test.go`: `too many arguments in
+      call to brain.NewCaptureService` (arity grew 7→9), `undefined: brain.NewIndex`, and
+      `result.Candidates undefined (type brain.CaptureResult has no field or method Candidates)`.
+      Implemented `internal/brain/index.go` (`Index`: `NewIndex`, `Add`, `Snapshot`, mutex-guarded)
+      and `internal/brain/recall.go` (`RecallService.Candidates`: vector leg via `recall.Search`
+      over `Index.Snapshot()`, lexical leg via `ports.LexicalSearch.SearchLexical(recall.Tokenize(...))`,
+      both legs' self-id removed before `recall.Fuse`, fused ids resolved through
+      `ports.UnitRepo.LiveByIDs` — the one I02 boundary, D5). `captureRunner.at` calls
+      `recallCandidates` right after a successful `embedAndStore` (design D4's own step order:
+      `embeds.Put` → `index.Add(normalized)` → `recallSvc.candidates`), which is why
+      `embedAndStore`'s signature grew to also return the `ports.EmbedResponse` it already
+      computed — `recallCandidates` reuses that vector rather than asking the embedding provider a
+      second time for the same unit.
+      `TestCapture_RunsHybridRecallForCandidates` seeds three units that control each leg
+      independently (an exact-vector match findable only via the vector leg, a lexically-seeded
+      match findable only via the lexical leg, and an unseeded noise unit findable by neither), then
+      asserts the fused order against `recall.Fuse`'s own real output over the same two
+      single-candidate lists — never a hand-computed ranking (C12's lesson). The two real
+      candidates land at an exact RRF score tie (`WeightVector == WeightLexical == 1.0`, both rank
+      1 in their own leg), resolved by design D5's own tie-break rule (earliest list in argument
+      order, vector first) — this test exercises that tie-break for real, not merely a case where it
+      happens not to matter.
+      `TestCapture_EmptyVaultMakesNoExtraLLMCalls` proves design D4's own stated property
+      end-to-end: `llm` is scripted with exactly one case id, and `fakeprovider.Fake.Complete`
+      fails the test immediately on any unscripted call — so a future regression that asked PR
+      11c's not-yet-wired judge about an empty candidate list fails right here, for exactly that
+      reason, without this test itself knowing anything about a judge.
+      **`CaptureResult.Candidates []string` is this task's own open decision, resolved here**: the
+      task text names no result field, and design.md's own package table never assigns one either.
+      Without an observable output, `TestCapture_RunsHybridRecallForCandidates`'s own "Verified
+      by" text (spec R4.4: "asserting the candidate list surfaces the existing units") would have
+      nothing to assert on — the conformance suite only ever exercises `internal/brain` through
+      `CaptureService.Capture`'s public return value, never through package-internal state.
+      `RecallService.Candidates` itself returns `[]unit.Unit` (design D5: "materializes the units
+      the fused ranking needs anyway — for the response and for the judge's prompt"); `at` narrows
+      that to ids for `CaptureResult`, keeping the wider `[]unit.Unit` shape available to PR 11c's
+      judge-prompt step without a second `LiveByIDs` round trip.
+      **A `recall.Normalize` failure (`ErrZeroVector`) is treated as "skip this capture's own
+      recall", not as a capture failure** — the same degrade-not-refuse posture design D8 already
+      applies to the embedding step itself, restated here for the resident `Index`. Not
+      independently tested: `fakeprovider`'s deterministic vectors are never exactly zero, and
+      inventing a provider that returns one only to exercise this one line would be speculative
+      coverage of a case design D5/D8 do not discuss for the index step.
+- [x] **10b.6** Test first: a capture with an effect (a normal persisted unit) leaves exactly one
       relevant `decision_log` row, written by `internal/brain`; a recall (a read) writes none
       (design D9 — "there is no `recall.answered` action").
       Implement `log.Record` calls at each effectful step this PR's own pipeline reaches
@@ -1616,12 +1661,27 @@ which is precisely what I12 forbids.
       half and the "a recall writes none" half remain open — `capture.unit.created` is the
       ambiguous-person case (10c's), and recall itself is 10b.5's (this slice runs no recall at
       all). Task left unchecked; only its embedding-failure half is claimed here.
-- [ ] **10b.7** Test first: a `superseded` and an `incomplete` unit, seeded directly into the fake
+- [x] **10b.7** Test first: a `superseded` and an `incomplete` unit, seeded directly into the fake
       repo, are absent from recall's fused output (I02) — proving the `LiveByIDs` boundary (design
       D5's "one filter, for both legs, before fusion") holds inside the brain pipeline, not merely
       inside `sqlite.UnitRepo` itself.
       Verify: `make test`.
       Requirement: R7.1 (I02's test-level assignment); design D5.
+
+      **Done, `feat/brain-recall` (10b-iii).** `test/conformance/i02_recall_excludes_non_live_test.go`,
+      `TestI02_RecallExcludesSupersededAndIncomplete`: seeds a `superseded` and an `incomplete`
+      unit, each findable by BOTH legs (an exact vector match plus full lexical overlap with what
+      the new capture's own content embeds to), asserts directly against `embeddings.LoadIndex`
+      and `lexical.SearchLexical` that both legs' own fakes *do* carry the two ids unfiltered — so
+      their absence downstream cannot be a coincidence of a leg that never matched them — then
+      asserts neither id appears in `CaptureResult.Candidates`. This is provable at L2 specifically
+      *because* neither in-memory fake (`memrepo.Embeddings`/`brain.Index` for the vector leg,
+      `memrepo.Lexical` for the lexical one) has any notion of `unit.Status` at all — unlike the
+      real FTS5 leg's own "belt-and-braces" `status = 'pool'` SQL predicate (design D5,
+      `internal/store/sqlite/search_integration_test.go`'s `TestSearch_ReturnsOnlyPoolUnits`,
+      I02's storage half) — so the only mechanism left that could produce the observed exclusion
+      is `RecallService.Candidates`'s own call to `ports.UnitRepo.LiveByIDs`, reached from inside
+      `internal/brain`, not from `sqlite.UnitRepo` alone.
 - [x] **10b.8** `CaptureResult` carries `Embedded bool`; a scripted embedding-provider failure
       leaves the unit persisted (`Embedded: false`), a `capture.embedding.failed` `decision_log`
       row with the provider error in `context`, and the capture call itself does not return an
@@ -1647,18 +1707,36 @@ which is precisely what I12 forbids.
       independently tested this slice — no existing fake supports scripting a `DecisionLog.Record`
       failure, and inventing one only to test a double-fault this design does not discuss would be
       speculative coverage, not a proof of anything D8 or R4.5 require.
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` contains no path under
       `internal/core/**` — this PR touches no core file, so `docs-sync.yml` is not forced here
       (R6.2's own MUST NOT for this specific PR); code review of every `internal/brain/` call site
       for a second, independent clock read the AST guard's own honest limitation cannot catch
       (R4.1's review-property half, R4.10).
 
----
-
-## PR 10c — `feat/brain-hooks` (~200)
-
-Depends on PR 10b.
-
+      **Done — this closes PR 10b (`10b-i`/`10b-ii` already on `main`, `10b-iii` here, not yet
+      committed per this session's own instructions).** `make check-all` green in full: lint 0
+      issues, `go test -race -shuffle=on ./...` all green, `-tags integration` green, schema-golden
+      regeneration-diff clean, `internal/core` coverage 100% (228/228, untouched), the 7-target
+      cross-compile matrix OK, `-tags e2e` green. `git diff --name-only main` carries zero paths
+      under `internal/core/**` — confirmed by grep, not by inspection.
+      **R4.10 manual clock review**: `rg -n "Now\(\)|ports\.Clock" internal/brain/*.go` across
+      every file in the package (`capture.go`, `index.go`, `recall.go`, `result.go`) finds exactly
+      one `Now()` call expression in the whole package — `s.clock.Now()` inside
+      `CaptureService.Capture` — and confirms `RecallService`/`Index`/`recallCandidates` take no
+      `ports.Clock` at all. This is precisely the AST guard's own admitted blind spot (one `Now()`
+      per file is legal even across files that share one logical operation), checked by hand
+      because the guard cannot check it: this session added two new files to the package
+      (`index.go`, `recall.go`) and neither holds a clock or a second read.
+      **Ships with `size:exception`: 622 changed lines.** Not a new conflict — this is **C8**
+      confirmed a fourth time, and C8 already named the rule: estimate a core PR from its
+      invariant's proof obligation, not its implementation. Roughly 290 of those lines are two
+      conformance tests (R4.4's candidate pipeline and R7.1/I02's non-live exclusion), each with
+      its own from-scratch fixture, and ~155 are the production surface this task's scope
+      requires (`index.go`, `recall.go`).
+      Neither test's setup was trimmed to fit a budget the proof obligation does not fit. The
+      three-way split was itself the correction; a fourth slice would have to cut between
+      `RecallService` and the I02 test that proves it reaches `LiveByIDs`, which is the one seam
+      that cannot be cut — the test exists precisely to prove the wiring.
 - [ ] **10c.1** Test first: a **new** conformance test,
       `test/conformance/i04_timer_never_a_unit_test.go` (design D9 — I04 has no existing test;
       confirmed by glob, and I04 already sits in `docs/06-harness.md` §4's invariant table, so no

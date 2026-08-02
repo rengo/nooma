@@ -41,10 +41,15 @@ func TestCapture_OrdinaryClassificationPersistsAUnit(t *testing.T) {
 	units := memrepo.NewUnits()
 	decisions := memrepo.NewDecisionLog()
 	embeddings := memrepo.NewEmbeddings()
+	lexical := memrepo.NewLexical()
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, decisions, llm, embed)
+	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
+	}
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",

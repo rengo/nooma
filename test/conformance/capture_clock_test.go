@@ -72,9 +72,14 @@ func TestCapture_ReadsClockExactlyOnce(t *testing.T) {
 	clock := &countingClock{t: t, now: time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)}
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-	svc := brain.NewCaptureService(clock, &counterIDs{}, memrepo.NewUnits(), memrepo.NewEmbeddings(), memrepo.NewDecisionLog(), llm, embed)
+	embeddings := memrepo.NewEmbeddings()
+	idx, err := embeddings.LoadIndex(context.Background(), embedFakeModel)
+	if err != nil {
+		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
+	}
+	svc := brain.NewCaptureService(clock, &counterIDs{}, memrepo.NewUnits(), embeddings, memrepo.NewLexical(), memrepo.NewDecisionLog(), llm, embed, brain.NewIndex(idx))
 
-	_, err := svc.Capture(context.Background(), brain.CaptureInput{
+	_, err = svc.Capture(context.Background(), brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
 		Channel: "chat",
 	})

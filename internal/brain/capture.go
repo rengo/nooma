@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -42,16 +43,22 @@ type CaptureService struct {
 // belongs to run, which never sees clock at all. Parameter order follows
 // design D4's own captureRunner field order (design.md:346-357), restricted
 // to the fields this slice populates.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, log ports.DecisionLog, llm ports.LLMProvider, embed ports.EmbeddingProvider) *CaptureService {
+//
+// index is the in-memory Index ADR-0012 requires be loaded once at vault
+// open — NewCaptureService never builds one itself, it only holds the one
+// its caller already loaded.
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, log ports.DecisionLog, llm ports.LLMProvider, embed ports.EmbeddingProvider, index *Index) *CaptureService {
 	return &CaptureService{
 		clock: clock,
 		run: captureRunner{
 			ids:    ids,
 			units:  units,
 			embeds: embeds,
+			lex:    lex,
 			log:    log,
 			llm:    llm,
 			embed:  embed,
+			index:  index,
 		},
 	}
 }
@@ -69,37 +76,41 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (CaptureR
 // captureRunner does the actual work of one capture, over every port
 // CaptureService.Capture needs except the clock (design D4 Layer 1).
 //
-// This is PR 10b's second slice: the ordinary path spec R4.2 requires — an
-// LLM call, a decode, a persisted unit, one decision_log row — plus spec
-// R4.3's embedding step (design D8). lex, rels, judge and index (design
-// D4's full struct) are the third slice's fields; they are not declared
-// here at all, rather than declared and left unused, because a field this
-// slice cannot populate is a promise the code does not keep.
+// This is PR 10b's third slice, on top of the ordinary path (spec R4.2), the
+// embedding step (spec R4.3, design D8): hybrid recall for dedup/relation
+// candidates (spec R4.4, design D5). rels and judge (design D4's full
+// struct) are PR 11b/11c's fields; they are not declared here at all,
+// rather than declared and left unused, because a field this slice cannot
+// populate is a promise the code does not keep.
 type captureRunner struct {
 	ids    ports.IDGen
 	units  ports.UnitRepo
 	embeds ports.EmbeddingRepo
+	lex    ports.LexicalSearch
 	log    ports.DecisionLog
 	llm    ports.LLMProvider // capture_processing
 	embed  ports.EmbeddingProvider
+	index  *Index
 }
 
 // at runs one capture given the instant CaptureService.Capture already
 // read. It is design.md's pipeline diagram, restricted to this slice's
-// scope (spec R4.2, R4.3): classify.BuildPrompt -> llm.Complete ->
+// scope (spec R4.2, R4.3, R4.4): classify.BuildPrompt -> llm.Complete ->
 // classify.Decode -> classify.ToUnit -> units.Create, one decision_log row
 // naming the classification, then embed.Embed -> embeds.Put (design D8's
-// persist-before-embed ordering).
+// persist-before-embed ordering), then hybrid recall for dedup/relation
+// candidates (design D5) once that embedding exists.
 //
-// What it does not yet do, on purpose: run hybrid recall for dedup/relation
-// candidates (10b.5), or turn a classify.ToUnit error into a caller-visible
-// refusal instead of a bare error (10b.6's timer/ambiguous-person halves,
-// out of this slice's scope — design's own package table assigns
-// CaptureResult.Deferred to PR 10c). A classification that maps to no
-// unit.Type, or that lost its content, is propagated as a plain Go error
-// today; nothing about that behavior is asserted by this slice's tests, and
-// a later slice is expected to replace it with the distinguishable result
-// Q3a's refusal requires.
+// What it does not yet do, on purpose: turn a classify.ToUnit error into a
+// caller-visible refusal instead of a bare error (10b.6's
+// timer/ambiguous-person halves, out of this slice's scope — design's own
+// package table assigns CaptureResult.Deferred to PR 10c), or ask the judge
+// what to do with the candidates recall found (PR 11c's own job — this
+// slice runs recall, it does not consume its answer). A classification that
+// maps to no unit.Type, or that lost its content, is propagated as a plain
+// Go error today; nothing about that behavior is asserted by this slice's
+// tests, and a later slice is expected to replace it with the
+// distinguishable result Q3a's refusal requires.
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
@@ -131,12 +142,20 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, err
 	}
 
-	embedded, err := r.embedAndStore(ctx, u, now)
+	ev, embedded, err := r.embedAndStore(ctx, u, now)
 	if err != nil {
 		return CaptureResult{}, err
 	}
 
-	return CaptureResult{UnitID: u.ID, Embedded: embedded}, nil
+	var candidates []string
+	if embedded {
+		candidates, err = r.recallCandidates(ctx, u, ev)
+		if err != nil {
+			return CaptureResult{}, err
+		}
+	}
+
+	return CaptureResult{UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
 }
 
 // embedAndStore is design D8's step past persistence (spec R4.3): embed u's
@@ -148,25 +167,65 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 // ambiguity blocks it") forbids the atomic alternative that was considered
 // and rejected.
 //
-// It returns (true, nil) once the embedding is written, or (false, nil)
-// once a failure has been recorded to decision_log as
+// It returns (ev, true, nil) once the embedding is written — ev is what
+// recallCandidates needs next, so the pipeline never asks the embedding
+// provider for the same unit's vector twice — or (ports.EmbedResponse{},
+// false, nil) once a failure has been recorded to decision_log as
 // ports.ActionCaptureEmbeddingFailed — the caller-visible degradation
 // design D8 names rather than hides. The only way this returns a non-nil
 // error is recordEmbeddingFailedDecision's own log write failing, which is
 // not a case design D8 discusses; it is handled the same way
 // recordClassifyDecision already handles its own log-write failure, by
 // propagating it.
-func (r captureRunner) embedAndStore(ctx context.Context, u unit.Unit, now time.Time) (bool, error) {
+func (r captureRunner) embedAndStore(ctx context.Context, u unit.Unit, now time.Time) (ports.EmbedResponse, bool, error) {
 	ev, err := r.embed.Embed(ctx, ports.EmbedRequest{Text: u.Content})
 	if err != nil {
-		return false, r.recordEmbeddingFailedDecision(ctx, u, now, err)
+		return ports.EmbedResponse{}, false, r.recordEmbeddingFailedDecision(ctx, u, now, err)
 	}
 
 	if err := r.embeds.Put(ctx, ports.Embedding{UnitID: u.ID, Model: ev.Model, Vector: ev.Vector, At: now}); err != nil {
-		return false, r.recordEmbeddingFailedDecision(ctx, u, now, err)
+		return ports.EmbedResponse{}, false, r.recordEmbeddingFailedDecision(ctx, u, now, err)
 	}
 
-	return true, nil
+	return ev, true, nil
+}
+
+// recallCandidates runs design D4's hybrid-recall step (spec R4.4) for u,
+// now that its embedding ev is in hand. It normalizes ev.Vector into design
+// D4's own pipeline-diagram "normalized" (recall.Normalize — the same
+// storage-boundary obligation the SQL EmbeddingRepo already applies at
+// rest, restated here for the resident Index, which no adapter sits in
+// front of), grows the resident Index so this capture's own recall step —
+// and every capture or recall after it, before the next vault open — can
+// find u, then asks RecallService for u's candidates, excluding u itself.
+//
+// It only runs once embedAndStore has already reported success (r.at's own
+// caller): an unembedded unit has no vector to search with, and running
+// recall over an incomplete index would stack a second, silent degradation
+// on top of the one design D8 already names and accepts for the embedding
+// step alone. Nothing in this slice's tests exercises recall over a vector
+// that failed to normalize either — a zero vector (recall.ErrZeroVector) is
+// treated the same way, as a reason to skip this capture's own recall
+// rather than to fail it, but that path is not independently proven here.
+func (r captureRunner) recallCandidates(ctx context.Context, u unit.Unit, ev ports.EmbedResponse) ([]string, error) {
+	normalized, err := recall.Normalize(ev.Vector)
+	if err != nil {
+		return nil, nil
+	}
+
+	r.index.Add(u.ID, normalized)
+
+	svc := NewRecallService(r.index, r.lex, r.units)
+	cand, err := svc.Candidates(ctx, u.Content, normalized, ev.Model, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("capture: recall candidates for unit %q: %w", u.ID, err)
+	}
+
+	ids := make([]string, len(cand))
+	for i, c := range cand {
+		ids[i] = c.ID
+	}
+	return ids, nil
 }
 
 // recordClassifyDecision writes decision_log's account of an ordinary
