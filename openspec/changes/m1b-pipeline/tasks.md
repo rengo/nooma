@@ -1856,7 +1856,7 @@ Depends on PR 10b.
 
 Depends on nothing outside this chain beyond Phase A PR 2.
 
-- [ ] **11a.1** Test first: `internal/core/relation/verdict_test.go` — `Decide` over all three
+- [x] **11a.1** Test first: `internal/core/relation/verdict_test.go` — `Decide` over all three
       bands (discard, persist-uncertain, persist-asserted) plus both boundary values exactly
       (`confidence == min_confidence_to_persist` → `Uncertain`, inclusive; `confidence ==
       min_confidence_to_surface` → `Asserted`, inclusive — the band-notation reading design D7
@@ -1865,7 +1865,19 @@ Depends on nothing outside this chain beyond Phase A PR 2.
       Implement `internal/core/relation/verdict.go` (design D7).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R5.1; design D7.
-- [ ] **11a.2** In the same commit: `DefaultMinConfidenceToPersist = 0.30`,
+
+      **Done.** Both boundaries inclusive toward the higher band, per design D7 settling doc 02
+      §4's ambiguous prose: `confidence == Persist` is `Uncertain`, `confidence == Surface` is
+      `Asserted`. Armed rather than assumed — flipping the lower comparison to `<=` fails with
+      `Decide(0.3, {Persist:0.3 Surface:0.5}) = 0, want 1` on the subtest named "at the persist
+      boundary is uncertain, inclusive". Boundaries are where this kind of code is wrong, so both
+      exact values are tested, not only the bands around them.
+      `Verdict` is an `int` with `Discard` as its zero value, which is `design.md:672`'s own
+      declaration — followed rather than diverged from. Flagged for review anyway: every other
+      closed vocabulary here (`unit.Status`, `classify.Kind`, `ports.DecisionAction`) is
+      `~string`, and an `int` verdict logs as `"0"` rather than as a word if one ever reaches
+      `decision_log`'s `context`.
+- [x] **11a.2** In the same commit: `DefaultMinConfidenceToPersist = 0.30`,
       `DefaultMinConfidenceToSurface = 0.50`, `DedupCandidateK = 5`; an L2 test,
       `test/conformance/relation_thresholds_ddl_test.go`, reads migration 0002's
       `relation_thresholds` column `DEFAULT`s off disk (`migrationSQLText`/`extractTableBody`,
@@ -1877,7 +1889,18 @@ Depends on nothing outside this chain beyond Phase A PR 2.
       Implement `internal/core/relation/thresholds.go` (design D7, Q1).
       Verify: `make test`.
       Requirement: R5.2; design D7, Q1.
-- [ ] **11a.3** **Closes the gap C4 identifies above.** `docs/02-cognitive-core.md` §13 gains a
+
+      **Done, and no number was invented.** `0.30`/`0.50` trace to migration `0002:33-34` and are
+      pinned by an L2 test reading the DDL off disk — the same shape PR 7b's priors use, so the Go
+      constant and the column default cannot drift apart. `5` traces to design D7/D5's own code
+      block.
+      **A repo-wide guard caught what this task's text missed**:
+      `core_exported_decls_have_tests_test.go` (design D9's presence guard) requires every
+      exported core declaration to be named by a test **in its own package**, and this task named
+      only the L2 migration pin, which lives in `test/conformance/`. `DedupCandidateK` gained an
+      L1 test. The same thing happened to PR 7b's priors — the guard was right and the task was
+      thin, twice.
+- [x] **11a.3** **Closes the gap C4 identifies above.** `docs/02-cognitive-core.md` §13 gains a
       `dedup_candidate_k` row. `DedupCandidateK` is a behavioral number per `CLAUDE.md`
       non-negotiable #4 and the `nooma-core` skill's Hard Rule 4 ("every behavioral number is a
       named constant in exactly one place and appears in the calibration table of doc 02 §13");
@@ -1888,11 +1911,23 @@ Depends on nothing outside this chain beyond Phase A PR 2.
       Verify: read the table; `docs-sync.yml` not locally verifiable.
       Requirement: `CLAUDE.md` non-negotiable #4 / `nooma-core` Hard Rule 4 (a design gap this
       phase closes; not itself spec-numbered).
-- [ ] **11a.4** `docs/02-cognitive-core.md` §4 gains Q1's one sentence naming the fallback R5.2
+- [x] **11a.4** `docs/02-cognitive-core.md` §4 gains Q1's one sentence naming the fallback R5.2
       implements.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: R5.6.
-- [ ] Verify (PR-level): `make check-all`; `make cover` (`core/relation`'s first statements).
+
+      **Done. C4 closes here.** `design.md` claimed §13 gains four rows in PR 8b while naming only
+      three; the fourth — `dedup_candidate_k` — belongs to `core/relation` and had **no task
+      assigned anywhere in the chain**. A behavioral number with no calibration row is what
+      `nooma-core`'s Hard Rule 4 forbids. §13 now carries it, marked unmeasured and subject to
+      future calibration per design's Risk #7. All three constants this PR introduces have a §13
+      row; the other two already did.
+- [x] Verify (PR-level): `make check-all`; `make cover` (`core/relation`'s first statements).
+
+      **Done.** Green end to end; `make cover` **100% (235/235)**, up from 228 — `core/relation`'s
+      first statements move the denominator. 227 changed lines, under both the ~250 estimate and
+      the ceiling: the first PR in this chain to land inside its own budget, because a pure
+      decision function's proof obligation is small and that is what the estimate was measuring.
 
 ---
 
