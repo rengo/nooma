@@ -327,19 +327,23 @@ func (r captureRunner) recallCandidates(ctx context.Context, u unit.Unit, ev por
 // fakeprovider's unscripted-call failure enforces this for free once a test
 // scripts no relation_evaluation case).
 //
-// Two things design D4's own diagram states literally, followed here rather
-// than re-decided: `jr := judge.Complete(...)` does NOT discard its error —
-// a provider failure here propagates as a Capture error, the same posture
-// classify's own two LLM-touching steps take, even though u is already
-// durably persisted by this point (design D8's ordering). Unlike the
-// embedding step, design D7 names no accepted-gap decision_log action for a
-// judge-call failure, so this PR does not invent one — flagged in this PR's
-// own report as an open gap, not silently resolved. `j, _ :=
-// relation.DecodeJudgment(...)` DOES discard its error: a response with
-// nothing salvaged decodes to a zero Judgment, which the nil-Outcome check
-// below already treats as nothing to persist and nothing to log — the same
-// outcome an explicit error branch would produce, with no second branch to
-// maintain.
+// C14a resolved what design D4's own diagram left as an omission rather
+// than a decision: `jr := judge.Complete(...)`'s error does NOT propagate
+// as a Capture error. u is already durably persisted by this point (design
+// D8's ordering), so refusing the whole capture over a local judge-provider
+// outage would tell the user their note failed when it is safely stored —
+// the same half-synced shape design D8 already rejected for the embedding
+// step, mirrored here rather than re-argued: degrade
+// (ports.ActionCaptureDedupFailed, recordDedupFailedDecision below), store
+// no relations, return nil. The only way this branch itself returns a
+// non-nil error is recordDedupFailedDecision's own log write failing — the
+// same posture recordEmbeddingFailedDecision and recordClassifyDecision
+// already take toward their own log-write failures, by propagating them.
+// `j, _ := relation.DecodeJudgment(...)` DOES discard its error: a response
+// with nothing salvaged decodes to a zero Judgment, which the nil-Outcome
+// check below already treats as nothing to persist and nothing to log — the
+// same outcome an explicit error branch would produce, with no second
+// branch to maintain.
 //
 // This PR's own open decision, because design D7 resolves discard,
 // uncertain/asserted and duplicate but not this one: an Outcome of "new", a
@@ -357,7 +361,7 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: judgePrompt(u, candidates), Task: taskRelationEvaluation})
 	if err != nil {
-		return fmt.Errorf("capture: relation judge completion: %w", err)
+		return r.recordDedupFailedDecision(ctx, u, now, err)
 	}
 
 	j, _ := relation.DecodeJudgment(resp.Text)
@@ -620,6 +624,43 @@ func (r captureRunner) recordEmbeddingFailedDecision(ctx context.Context, u unit
 	}
 	if err := r.log.Record(ctx, d); err != nil {
 		return fmt.Errorf("capture: record embedding-failed decision for unit %q: %w", u.ID, err)
+	}
+	return nil
+}
+
+// recordDedupFailedDecision writes decision_log's account of C14a's
+// resolution: judgeRelation's own r.judge.Complete call failed. action is
+// ports.ActionCaptureDedupFailed, and cause's message travels in
+// context.error — the same shape recordEmbeddingFailedDecision already
+// gives context.unit_id and context.error for its own sibling gap.
+//
+// This degrades only the provider call. A failure of this method's own
+// r.log.Record below still propagates, exactly as
+// recordEmbeddingFailedDecision and recordClassifyDecision already do for
+// theirs — an audit trail that swallows its own write failure is not one.
+//
+// occurred_at is now, the same single clock read every other timestamp in
+// this capture used (spec R4.1), for the same reason
+// recordEmbeddingFailedDecision uses it.
+func (r captureRunner) recordDedupFailedDecision(ctx context.Context, u unit.Unit, now time.Time, cause error) error {
+	rationale := fmt.Sprintf("relation judge failed for unit %q: %s — the unit is persisted, but no relations were evaluated for it", u.ID, cause)
+	contextJSON, err := json.Marshal(struct {
+		UnitID string `json:"unit_id"`
+		Error  string `json:"error"`
+	}{UnitID: u.ID, Error: cause.Error()})
+	if err != nil {
+		return fmt.Errorf("capture: encode dedup-failed decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCaptureDedupFailed,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record dedup-failed decision for unit %q: %w", u.ID, err)
 	}
 	return nil
 }

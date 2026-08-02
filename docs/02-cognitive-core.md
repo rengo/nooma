@@ -160,6 +160,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
 3. **dedup/relation judge** (LLM): against the recall candidates it decides
    `new | duplicate | related` — and if `related`, with what strength/confidence (subject to
    the thresholds in §4).
+   - Robustness: a provider outage on this call degrades the capture rather than refusing
+     it — the unit stays stored, no relations are evaluated for it, and the outage is recorded
+     in the trail. The product rule below ("asking is the EXCEPTION") governs this the same way
+     it governs every other capture-time provider outage; this step is not a special case.
 4. **corrections**: a `correction` edits the referenced unit in place and emits a learning
    signal with the correction.
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a
