@@ -1,0 +1,8 @@
+{
+  "id": "classify-person-ref-ambiguous-ana",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "prompt": "Classify this message: \"Ana asked me to send her the contract\"",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Send Ana the contract\",\"weight\":0.7,\"decay_rate\":0.05,\"person_ref_status\":\"ambiguous\"}"
+}

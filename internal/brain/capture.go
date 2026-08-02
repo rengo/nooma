@@ -94,23 +94,33 @@ type captureRunner struct {
 }
 
 // at runs one capture given the instant CaptureService.Capture already
-// read. It is design.md's pipeline diagram, restricted to this slice's
-// scope (spec R4.2, R4.3, R4.4): classify.BuildPrompt -> llm.Complete ->
-// classify.Decode -> classify.ToUnit -> units.Create, one decision_log row
-// naming the classification, then embed.Embed -> embeds.Put (design D8's
-// persist-before-embed ordering), then hybrid recall for dedup/relation
-// candidates (design D5) once that embedding exists.
+// read. It is design.md's pipeline diagram, restricted to this PR's scope
+// (spec R4.2-R4.7): classify.BuildPrompt -> llm.Complete -> classify.Decode
+// -> route on c.Kind (design D9) -> classify.ToUnit -> units.Create, one or
+// two decision_log rows naming what happened, then embed.Embed ->
+// embeds.Put (design D8's persist-before-embed ordering), then hybrid
+// recall for dedup/relation candidates (design D5) once that embedding
+// exists.
 //
-// What it does not yet do, on purpose: turn a classify.ToUnit error into a
-// caller-visible refusal instead of a bare error (10b.6's
-// timer/ambiguous-person halves, out of this slice's scope — design's own
-// package table assigns CaptureResult.Deferred to PR 10c), or ask the judge
-// what to do with the candidates recall found (PR 11c's own job — this
-// slice runs recall, it does not consume its answer). A classification that
-// maps to no unit.Type, or that lost its content, is propagated as a plain
-// Go error today; nothing about that behavior is asserted by this slice's
-// tests, and a later slice is expected to replace it with the
-// distinguishable result Q3a's refusal requires.
+// The routing step is Q3a's refusal path (design D9): a timer or
+// recurring_reminder classification never reaches classify.ToUnit at all —
+// doc 02 §8's bold sentence ("a timer is NEVER a unit") means there is
+// nothing for ToUnit to build, so this returns before r.ids.New() is even
+// called for a unit, not after a persist attempt that is then discarded.
+// Every other classification proceeds to classify.ToUnit as before; an
+// ambiguous person reference still persists (spec R4.7 — Q3a's closed
+// reasoning: an incomplete unit would be invisible to every live read
+// surface and immortal until M2), but writes capture.unit.created instead
+// of capture.classify, plus a second row naming the unresolved reference.
+//
+// What it does not yet do, on purpose: ask the judge what to do with the
+// candidates recall found (PR 11c's own job — this PR runs recall, it does
+// not consume its answer). A classification that maps to no unit.Type for
+// any of the other four non-persisting Kind values (chitchat, out_of_scope,
+// recall, correction), or that lost its content, is still propagated as a
+// plain Go error — spec.md never asks this PR to give those a
+// distinguishable result, only timer/recurring_reminder (R4.6) and
+// ambiguous person references (R4.7).
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
@@ -126,6 +136,13 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
 	}
 
+	if deferred, isHook := timerHookRefusal(c); isHook {
+		if err := r.recordHookDeferredDecision(ctx, c, now, deferred.Kind); err != nil {
+			return CaptureResult{}, err
+		}
+		return CaptureResult{Stored: false, Deferred: &deferred}, nil
+	}
+
 	// The base priors, design D3: there are exactly two numbers, not
 	// eighteen, and both are migration 0001's own column defaults.
 	priors := classify.Priors{Weight: classify.PriorWeight, DecayRate: classify.PriorDecayRate}
@@ -138,7 +155,15 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, fmt.Errorf("capture: persist unit %q: %w", u.ID, err)
 	}
 
-	if err := r.recordClassifyDecision(ctx, c, u, now); err != nil {
+	ambiguousPersonRef := c.PersonRefStatus != nil && *c.PersonRefStatus == classify.PersonRefStatusAmbiguous
+	if ambiguousPersonRef {
+		if err := r.recordUnitCreatedDecision(ctx, c, u, now); err != nil {
+			return CaptureResult{}, err
+		}
+		if err := r.recordAmbiguousPersonRefDecision(ctx, u, now); err != nil {
+			return CaptureResult{}, err
+		}
+	} else if err := r.recordClassifyDecision(ctx, c, u, now); err != nil {
 		return CaptureResult{}, err
 	}
 
@@ -155,7 +180,35 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		}
 	}
 
-	return CaptureResult{UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
+	return CaptureResult{Stored: true, UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
+}
+
+// timerHookRefusal is design D9's routing decision, restricted to the
+// timer/recurring_reminder half of Q3a's refusal (spec R4.6): it reports
+// whether c must be refused rather than persisted, and if so, the Deferred
+// value the caller sees. It does not decide the ambiguous-person-reference
+// half (spec R4.7) — that classification still persists a unit, so it is
+// not a routing fork away from classify.ToUnit at all, only an extra
+// decision_log row after the ordinary path.
+//
+// A pure function of c, deliberately kept in internal/brain rather than
+// internal/core: design D9 assigns "route on c.Kind" to brain, and this
+// closes doc 02 §8's own bold sentence ("a timer is NEVER a unit"), not a
+// classify-time decision — classify.Kind.UnitType() already reports "no
+// unit" for six values; what brain does with that fact is orchestration.
+func timerHookRefusal(c classify.Classification) (Deferred, bool) {
+	if c.Kind == nil {
+		return Deferred{}, false
+	}
+	switch *c.Kind {
+	case classify.KindTimer, classify.KindRecurringReminder:
+		return Deferred{
+			Kind:    *c.Kind,
+			Message: "timers and recurring reminders aren't wired up yet — nothing was scheduled, and this capture was not stored.",
+		}, true
+	default:
+		return Deferred{}, false
+	}
 }
 
 // embedAndStore is design D8's step past persistence (spec R4.3): embed u's
@@ -259,6 +312,120 @@ func (r captureRunner) recordClassifyDecision(ctx context.Context, c classify.Cl
 	}
 	if err := r.log.Record(ctx, d); err != nil {
 		return fmt.Errorf("capture: record decision for unit %q: %w", u.ID, err)
+	}
+	return nil
+}
+
+// recordUnitCreatedDecision writes decision_log's account of the first of
+// the ambiguous-person-reference scenario's two decisions (spec R4.5, R4.7;
+// design D9): a unit was created despite the reference being unresolved.
+// action is ports.ActionCaptureUnitCreated, not ports.ActionCaptureClassify
+// — design.md:934 reserves capture.unit.created for exactly this two-row
+// scenario, distinguishing it from the ordinary single-row path
+// recordClassifyDecision already covers.
+//
+// occurred_at is now, the same single clock read every other timestamp in
+// this capture used (spec R4.1) — the same reason recordClassifyDecision
+// gives.
+func (r captureRunner) recordUnitCreatedDecision(ctx context.Context, c classify.Classification, u unit.Unit, now time.Time) error {
+	rationale := fmt.Sprintf("classified as %q with an ambiguous person reference, and persisted a %s unit rather than holding it", string(*c.Kind), u.Status)
+	contextJSON, err := json.Marshal(struct {
+		Kind   string `json:"kind"`
+		UnitID string `json:"unit_id"`
+		Source string `json:"source"`
+	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source})
+	if err != nil {
+		return fmt.Errorf("capture: encode unit-created decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCaptureUnitCreated,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record unit-created decision for unit %q: %w", u.ID, err)
+	}
+	return nil
+}
+
+// recordAmbiguousPersonRefDecision writes decision_log's account of the
+// second of the ambiguous-person-reference scenario's two decisions (spec
+// R4.5, R4.7; design D9): the reference itself was never resolved. action is
+// ports.ActionCaptureHookDeferred, shared with the timer/recurring_reminder
+// refusal (recordHookDeferredDecision below) — both are Q3a's "capture knows
+// what it cannot yet do, and says so" — distinguished by context.kind
+// ("ambiguous_person_ref" here, "timer"/"recurring_reminder" there).
+//
+// Unlike the timer refusal, this decision does not accompany a Stored:false
+// result — the unit u names is already persisted (spec R4.7's own MUST:
+// unit.StatusPool, never unit.StatusIncomplete), so the rationale says what
+// was deferred (disambiguation), not what was refused (the whole capture).
+func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u unit.Unit, now time.Time) error {
+	rationale := fmt.Sprintf("person reference in unit %q was ambiguous and left unresolved; the unit was stored complete rather than held, because nothing can promote an incomplete unit before M2", u.ID)
+	contextJSON, err := json.Marshal(struct {
+		Kind   string `json:"kind"`
+		UnitID string `json:"unit_id"`
+	}{Kind: "ambiguous_person_ref", UnitID: u.ID})
+	if err != nil {
+		return fmt.Errorf("capture: encode ambiguous-person-ref decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCaptureHookDeferred,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record ambiguous-person-ref decision for unit %q: %w", u.ID, err)
+	}
+	return nil
+}
+
+// recordHookDeferredDecision writes decision_log's account of Q3a's timer/
+// recurring_reminder refusal (spec R4.5, R4.6; design D9): no unit exists
+// for this decision to name, only the classification that was refused —
+// c is embedded verbatim in context.classification so the record is a
+// truthful account of what was understood, not merely of what was refused
+// (design D9's own reasoning). kind is the classification kind that
+// triggered the refusal, timerHookRefusal's own finding, passed rather than
+// re-derived so this function has one job: writing the row, not deciding
+// whether to.
+//
+// occurred_at is now, the same single clock read every other timestamp in
+// this capture used (spec R4.1) — there is no unit here to disagree with,
+// but a decision row timestamped separately from the capture that produced
+// it would still misreport when the refusal happened.
+func (r captureRunner) recordHookDeferredDecision(ctx context.Context, c classify.Classification, now time.Time, kind classify.Kind) error {
+	rationale := fmt.Sprintf("classified as %q; M1 arms no timer and cannot fire one, so nothing was scheduled", string(kind))
+	contextJSON, err := json.Marshal(struct {
+		Kind           string                  `json:"kind"`
+		Classification classify.Classification `json:"classification"`
+		Reason         string                  `json:"reason"`
+		Milestone      string                  `json:"milestone"`
+	}{
+		Kind:           string(kind),
+		Classification: c,
+		Reason:         "prospection_not_implemented",
+		Milestone:      "M3",
+	})
+	if err != nil {
+		return fmt.Errorf("capture: encode hook-deferred decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCaptureHookDeferred,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record hook-deferred decision: %w", err)
 	}
 	return nil
 }
