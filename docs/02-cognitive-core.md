@@ -114,7 +114,10 @@ the new unit is not superseded, the existing one is not revived, and neither is 
 survive, and the fact that they say the same thing is stored as an edge rather than acted on.
 
 That is deliberate. Merging is a destructive decision made from one model call, and §1's rule that
-nothing is deleted applies to content the user actually wrote. Recording the duplication keeps
+nothing is deleted applies to content the user actually wrote. This argument is about a decision the
+model makes **whole** — it infers that two units are the same, and infers that they should become
+one. It does not cover a change the **user asked for** in words: there, only the target is
+inferred, and §5 step 4 says what that costs. Recording the duplication keeps
 both texts and leaves the merge available later, to a pass that can weigh more than one judgment.
 
 **The direction of a relation is what the judge said, not a canonical form.** An edge runs from
@@ -166,6 +169,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      it governs every other capture-time provider outage; this step is not a special case.
 4. **corrections**: a `correction` edits the referenced unit in place and emits a learning
    signal with the correction.
+   - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
+     The user asked for the change, so the edit is authorised; but *which* unit it lands on is
+     inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
+     into the decision's own glass-box row separates the two: the instruction is honoured, and the
+     inference stays reversible. The row is written first — if it fails, the edit does not happen.
+   - Recording is not undoing. The previous value is retrievable; no surface offers it back until
+     the UI exists.
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a
    recurring `event` (a birthday) arms a recurring trigger; ambiguous references to people
    leave the unit `incomplete` until the disambiguation answer arrives.
