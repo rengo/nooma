@@ -42,6 +42,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 	decisions := memrepo.NewDecisionLog()
 	embeddings := memrepo.NewEmbeddings()
 	lexical := memrepo.NewLexical()
+	relations := memrepo.NewRelations()
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-person-ref-ambiguous-ana")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
@@ -49,7 +50,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Ana asked me to send her the contract",
