@@ -30,6 +30,17 @@
 GOLANGCI_LINT_VERSION := v2.12.2
 GOBIN := $(shell go env GOPATH)/bin
 
+# The version stamped into the binary, derived from the tag rather than written
+# in a file (ADR-0015): an untagged tree reports `dev`, and a tagged one cannot
+# disagree with its tag because there is no constant to forget to bump.
+#
+# Between tags `git describe` reports v0.1.0-7-gabc1234 — correct, and
+# deliberately not pretty: that is a development build, not a release. The
+# fallback matters, because `git describe --tags` fails outright when no tag
+# exists yet, which is every tree until M1.
+VERSION := $(shell git describe --tags --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X main.version=$(VERSION)
+
 .DEFAULT_GOAL := check
 
 .PHONY: check
@@ -65,7 +76,11 @@ schema-golden-clean: schema-golden ## Fail if regenerating the schema golden lea
 
 .PHONY: build
 build: ## Compile every package
-	go build ./...
+	go build -ldflags "$(LDFLAGS)" ./...
+
+.PHONY: binary
+binary: ## Build ./nooma with the version stamped in — the only target that writes an artifact
+	go build -ldflags "$(LDFLAGS)" -o nooma ./cmd/nooma
 
 # The seven targets of ADR-0013, which supersedes ADR-0001's acceptance
 # criterion 5. Build-only: this proves the code compiles for a platform, never
@@ -79,7 +94,7 @@ cross-compile: ## ADR-0013's seven GOOS/GOARCH pairs — mirrors main.yml's matr
 	@set -e; for t in $(CROSS_TARGETS); do \
 		goos=$${t%/*}; goarch=$${t#*/}; \
 		printf '%-16s' "$$t"; \
-		CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -o /dev/null ./... && echo OK; \
+		CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -ldflags "$(LDFLAGS)" -o /dev/null ./... && echo OK; \
 	done
 
 .PHONY: cover
