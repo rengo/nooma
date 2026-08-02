@@ -1,5 +1,7 @@
 # nooma store API golden — regenerate with `make store-api-golden`.
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
+internal/store/sqlite: func (*DecisionLog) Record(ctx context.Context, d ports.Decision) error
+internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Time, limit int) ([]ports.Decision, error)
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
 internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)
@@ -15,10 +17,12 @@ internal/store/sqlite: func (*Vault) Path() string
 internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
+internal/store/sqlite: func NewDecisionLog(v *Vault) *DecisionLog
 internal/store/sqlite: func NewEmbeddingRepo(v *Vault) *EmbeddingRepo
 internal/store/sqlite: func NewSearch(v *Vault) *Search
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
+internal/store/sqlite: type DecisionLog
 internal/store/sqlite: type EmbeddingRepo
 internal/store/sqlite: type Search
 internal/store/sqlite: type UnitRepo

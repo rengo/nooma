@@ -1385,7 +1385,7 @@ schedules this PR differently.
 Depends on Phase A's `repocontract` precedent only — no dependency on PRs 7/8/9's packages
 (`DecisionAction`'s vocabulary is standalone). Positioned here per the chain's own row order.
 
-- [ ] **10a.1** Test first: a `repocontract`-shaped suite for `DecisionLog` — `Record` writes a
+- [x] **10a.1** Test first: a `repocontract`-shaped suite for `DecisionLog` — `Record` writes a
       row; `Since(t, limit)` returns rows after `t`, bounded by `limit`; the `DecisionAction`
       vocabulary is closed and `AllDecisionActions()` returns every constant (design D9's own
       closed-vocabulary pattern, following `unit.Status`'s precedent). **Red**: `undefined:
@@ -1395,20 +1395,61 @@ Depends on Phase A's `repocontract` precedent only — no dependency on PRs 7/8/
       D9).
       Verify: `go build ./...`; `golangci-lint run`.
       Requirement: R4.5 (port existence half); design D8, D9.
-- [ ] **10a.2** Same commit: `test/support/memrepo`'s `DecisionLog` fake + the contract suite's
+
+      **Done.** RED observed verbatim: `test/support/repocontract/decisionlog.go:25:68: undefined:
+      ports.DecisionLog` (first of a cascade of `undefined: ports.*` errors), by moving the
+      finished `internal/ports/decisionlog.go` aside, writing the suite against nothing, running
+      `go build ./test/support/repocontract/...`, then restoring it — the file existed in this
+      session's working set before the suite did, so the RED had to be reconstructed deliberately
+      rather than watched arrive naturally.
+      Two decisions the task text left open, resolved and stated in the contract's own comments:
+      (1) `Record` on a duplicate `id` returns a new sentinel `ErrDecisionExists`, mirroring
+      `ports.ErrUnitExists` — `decision_log.id` is a PRIMARY KEY (`0001:96`) and an audit trail
+      that silently overwrites on collision is not one; checked against the real DDL before
+      writing the case, per C11's lesson. (2) `Since` uses a **strict** bound (`occurred_at > t`,
+      never `>=`), ordered ascending and tie-broken by `id`: the read-forward-from-a-cursor
+      pattern the method exists for would otherwise re-deliver the caller's own cursor row on
+      every following call.
+- [x] **10a.2** Same commit: `test/support/memrepo`'s `DecisionLog` fake + the contract suite's
       first caller.
       Verify: `go test -race ./test/support/memrepo/...`.
       Requirement: R4.5.
-- [ ] **10a.3** Test first (L3): `internal/store/sqlite/decisionlog_integration_test.go` —
+
+      **Done.** `test/support/memrepo/decisionlog.go` — mutex-guarded, insertion-order slice for
+      determinism, duplicate-`id` rejection (not a silent upsert — the same C11-shaped divergence
+      the contract's duplicate-id case exists to catch), compile-time `var _ ports.DecisionLog =
+      (*DecisionLog)(nil)` assertion. `test/conformance/decisionlog_memrepo_test.go` is the
+      contract's first caller, at L2.
+- [x] **10a.3** Test first (L3): `internal/store/sqlite/decisionlog_integration_test.go` —
       `Record`/`Since` round trip against a real vault; `context` defaults to `'{}'` when absent,
       matching migration 0001's own DDL default (confirmed present, `0001:95-102`).
       Implement `internal/store/sqlite/decisionlog.go`.
       Verify: `make test-integration`; `make store-api-golden`.
       Requirement: R4.5 (store half).
-- [ ] Verify (PR-level): `make check-all`; confirm `DecisionAction`'s vocabulary lives in
+
+      **Done.** RED observed verbatim: `internal/store/sqlite/decisionlog_integration_test.go:27:10:
+      undefined: NewDecisionLog` (`go vet -tags integration ./internal/store/sqlite/...`, written
+      before `decisionlog.go` existed). The `context` default is exercised for real, not mirrored
+      as a Go literal: `Record` omits the `context` column from the `INSERT` entirely when
+      `d.Context` is empty, letting SQLite's own `DEFAULT '{}'` (`0001:98`) supply the value —
+      binding `NULL` would violate the column's `NOT NULL`. Per the task's own lesson 2, this
+      default-value behavior is asserted only here (`TestDecisionLog_ContextDefaultsToEmptyObject`),
+      not in the shared contract, because the in-memory fake enforces no column default at all.
+      `decision_log` has no foreign key (`0001:95-102`, read directly, not assumed) so — unlike
+      `EmbeddingRepo` — this repo needed no `EnsureUnit`-shaped harness.
+- [x] Verify (PR-level): `make check-all`; confirm `DecisionAction`'s vocabulary lives in
       `internal/ports`, never `internal/core` — I12's "never from `internal/core`" half is already
       `depguard`-enforced structurally (design D9's own note: "one of the few places where an
       invariant is free"), this task confirms no file under `internal/core/**` imports the port.
+
+      **Done.** `make check-all` passes through `cover`, `cross-compile`, `test-e2e`; its
+      `schema-golden-clean` step fails only because `store_api.golden`'s legitimate new-surface
+      diff (below) is intentionally left uncommitted per this session's own instruction not to
+      commit — `structure.golden`/`ddl.golden` (the two files that step actually regenerates) have
+      zero diff, confirmed separately. `git diff -- testdata/schema/store_api.golden` gains four
+      lines (`DecisionLog`, `NewDecisionLog`, `Record`, `Since`), modifies none. `grep -rl
+      "internal/ports" internal/core/` and `go list -deps ./internal/core/...` both confirm no
+      file under `internal/core/**` imports or transitively depends on `internal/ports`.
 
 ---
 
