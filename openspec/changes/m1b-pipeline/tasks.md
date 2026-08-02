@@ -1453,12 +1453,27 @@ Depends on Phase A's `repocontract` precedent only — no dependency on PRs 7/8/
 
 ---
 
-## PR 10b — `feat/brain-capture` (~400 — the third PR of this chain to watch closely; the first
-PR to create anything under `internal/brain/` beyond `doc.go`)
+## PR 10b — split in three (the 400-line ceiling; was one PR estimated at ~400)
 
 Depends on PR 7c, PR 9b, PR 9c, PR 10a (design's own stated dependency set).
 
-- [ ] **10b.1** Test first: `CaptureService.Capture` reads `ports.Clock.Now()` exactly once per
+**Why split.** C8's closing lesson, applied *before* measuring for once rather than after: eight
+tasks, each carrying its own proof obligation, over the first package to exist under
+`internal/brain/`. The cut follows concepts, not line counts.
+
+| PR | Branch | Tasks | Contents |
+|---|---|---|---|
+| 10b-i | `feat/brain-capture` | 10b.1, 10b.2, 10b.3 | the single clock read, its two structural guards, and the pipeline through to persistence |
+| 10b-ii | `feat/brain-embed` | 10b.4, 10b.8 | embedding, and the degradation D8 accepts on purpose |
+| 10b-iii | `feat/brain-recall` | 10b.5, 10b.7 | hybrid recall for candidates, and I02 through the pipeline |
+
+10b.6's `decision_log` writes are not a slice of their own: each one belongs to the step that
+reaches it, and separating them would land an effect in one PR and its audit row in another —
+which is precisely what I12 forbids.
+
+### PR 10b-i — `feat/brain-capture` (663). Tasks 10b.1, 10b.2, 10b.3.
+
+- [x] **10b.1** Test first: `CaptureService.Capture` reads `ports.Clock.Now()` exactly once per
       capture — a fake `Clock` that fails the test if `Now()` is called a second time during one
       invocation. **Red**: `undefined: brain.CaptureService`.
       Implement `internal/brain/capture.go`, `internal/brain/result.go`: the clockless-worker
@@ -1466,7 +1481,16 @@ Depends on PR 7c, PR 9b, PR 9c, PR 10a (design's own stated dependency set).
       `captureRunner` has no way to obtain a clock (design D4 Layer 1).
       Verify: `make test`.
       Requirement: R4.1; design D4.
-- [ ] **10b.2** In the same PR: two structural L2 guards over `internal/brain/**`, both **with no
+
+      **Done.** RED observed verbatim — though not the message this task predicted:
+      `undefined: brain.NewCaptureService`, `undefined: brain.CaptureInput`, because the test
+      names the constructor and the input type rather than the service type. Cosmetic; recorded
+      because the task's guess and reality differed.
+      D4 Layer 1's shape holds **structurally, not by discipline**: `CaptureService` owns the
+      package's only `ports.Clock` field, and `captureRunner`'s fields are `ids, units, log, llm`
+      — it has no clock to read and no way to obtain one. Verified by reading the struct, not by
+      trusting the test.
+- [x] **10b.2** In the same PR: two structural L2 guards over `internal/brain/**`, both **with no
       natural pre-implementation red** (see "On the tasks with no natural red" above):
       (a) `test/conformance/brain_no_direct_clock_read_test.go` — a tree scan failing on any
       `time.Now(` in a non-test file under `internal/brain/**` (mirrors
@@ -1482,7 +1506,20 @@ Depends on PR 7c, PR 9b, PR 9c, PR 10a (design's own stated dependency set).
       `now time.Time`, confirm the AST scan fails naming it, revert.
       Requirement: design D4 (converts R9 from a review property into a gate); §6 test matrix,
       "10b" rows for the clock guards.
-- [ ] **10b.3** Test first: capture driven end-to-end against `memrepo`/`fakeprovider` — an
+
+      **Done, and both guards were armed rather than assumed** — neither has a natural red, so a
+      guard that never fired would be a guard nobody had run.
+      (a) A throwaway `time.Now()` in a scratch file under `internal/brain/` fails the tree scan
+      naming the file and line.
+      (b) Both arms fail: a second `Now()` in one file, and a `Now()` inside a function that
+      already takes a `time.Time` — *"at calls Now() despite already taking a time.Time
+      parameter — it was handed the instant its caller read and must use that one, not a fresh
+      read"*. The second arm was re-armed independently after the fact, by injecting a
+      `leak(c ports.Clock)` method into `capture.go`, and it fired.
+      That second condition is the one that matters: D4 Layer 3 exists because the *real* bug is
+      not two `Now()` calls sitting side by side, it is a helper quietly reading its own instant
+      while holding one it was handed.
+- [x] **10b.3** Test first: capture driven end-to-end against `memrepo`/`fakeprovider` — an
       ordinary classification (e.g. `task`) persists a `unit.StatusPool` unit whose
       `Weight`/`WeightDecayRate` come from classify's output (or PR 7b's priors when absent) and
       whose `CreatedAt`/`UpdatedAt`/`LastTouchedAt` all equal the single clock read from 10b.1.
@@ -1492,6 +1529,25 @@ Depends on PR 7c, PR 9b, PR 9c, PR 10a (design's own stated dependency set).
       → `units.Create` chain inside `captureRunner.at` (design D4's pipeline diagram, steps 1–6).
       Verify: `make test`.
       Requirement: R4.2.
+
+      **Done.** RED was a **runtime** failure, not the compile error the task predicted — by this
+      point 10b.1's shape-only stub existed, so `captureRunner.at` compiled and returned an empty
+      result: *"CaptureResult.UnitID is empty — the caller has no way to find the unit this
+      capture persisted"*, plus `fakeprovider` failing on a scripted case never called. The
+      task's own hedge ("whatever `captureRunner`'s entry method is named") anticipated the
+      uncertainty.
+      Four decisions the task left open:
+      **`ActionCaptureClassify`, not `ActionCaptureUnitCreated`**, for the ordinary path — spec
+      R4.5:594 gives `capture.classify` as the bucket example, and `design.md:934` reserves
+      `capture.unit.created` for the two-row ambiguous-person scenario, which is PR 10c's.
+      **Priors built inline** as `classify.Priors{PriorWeight, PriorDecayRate}` rather than
+      injected — D4's own struct diagram carries no priors field, and D3 calls these migration
+      defaults rather than calibration.
+      **`ToUnit`'s two errors propagate as wrapped Go errors with no `decision_log` row**, because
+      the refusal paths they feed (R4.6 timer, R4.7 ambiguous person) belong to PR 10c. Left
+      unhandled deliberately rather than half-implemented.
+      **`CaptureResult` carries only `UnitID`** — `Embedded` is 10b-ii's, `Deferred` is 10c's per
+      design's own package table. Nothing stubbed.
 - [ ] **10b.4** Test first: a captured unit is embedded exactly once, the recorded `Model` matches
       the fake embedding provider's configured model; no embedding is written for a unit this
       pipeline does not also persist.
