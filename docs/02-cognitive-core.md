@@ -169,6 +169,21 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      it governs every other capture-time provider outage; this step is not a special case.
 4. **corrections**: a `correction` edits the referenced unit in place and emits a learning
    signal with the correction.
+   - **Which unit it edits.** A caller holding an identifier passes it, and that identifier
+     wins — the UI and the API both have one. Chat has none, so there the referent is resolved
+     by running step 2's hybrid recall against the correction text and applying a gate over the
+     **scored** candidates: with no candidate, or with the top two closer together than
+     `correction_referent_margin`, the system asks instead of guessing. That is the product rule
+     below rather than an exception to it — an ambiguous referent is exactly the ambiguity that
+     blocks.
+     - The margin is a **ratio** between the top two scores, not a difference between them. RRF
+       compresses: at `k = 60` a candidate ranked first on both legs scores `2/61` and one
+       ranked second on both scores `2/62`, so 0.0005 separates a near-tie — while a candidate
+       present on only one leg scores `1/61`, half the first one. An absolute gap would mean
+       something different depending on how many legs contributed; a ratio does not.
+     - The gate is a pure function of the scored candidates: no LLM, no I/O, no clock. It
+       therefore needs `internal/core/recall` to expose a fusion that keeps its scores instead
+       of only its ranked identifiers.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
@@ -482,5 +497,6 @@ module):
 | RRF vector-leg weight (`weight_vector`) | 1.0 |
 | RRF lexical-leg weight (`weight_lexical`) | 1.0 |
 | `dedup_candidate_k` | 5 |
+| `correction_referent_margin` (ratio of the top two fused scores) | 1.5 |
 
 Exact values get calibrated with real usage; the mechanisms in this document do not.

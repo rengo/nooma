@@ -85,7 +85,8 @@ anything to anybody. Those are M2 and M3, and the build plan says so.
 One consequence to state before it is discovered during implementation: classify's taxonomy
 includes `timer` and `recurring_reminder`, whose hooks (`docs/02-cognitive-core.md` §5.5) belong
 to M3. M1 still classifies them — the taxonomy is classify's contract and the golden corpus
-covers it — but §8's open question 3a decides what the system *does* with one.
+covers it — but §8's Q3a decided what the system *does* with one, and the answer is nothing:
+M1 arms no hook and refuses the capture outright.
 
 ### 3.2 In scope
 
@@ -156,7 +157,8 @@ supported, but M1 is judged on the cloud path running end to end.
 - **No `effective_weight`, no priority, no focus, no hysteresis.** Classify *assigns* `weight`
   and λ; nothing reads them back through the decay formula until M2. I05 and I19 are M2.
 - **No consolidation.** None of the eight phases. `expire_incomplete` in particular is M2, which
-  is why §8's open question 3a matters for `incomplete` units.
+  is why §8's Q3a settled that M1 creates no `incomplete` unit at all — one would be
+  invisible to every read surface and immortal until M2 shipped.
 - **No triggers, no timers, no digest, no push, no quiet hours.** I04, I15, I16, I17 are M3.
 - **No self-model derivation.** Beliefs are injected into classify's prompt *if any exist*;
   nothing in M1 creates one. `derive` is M2, seeding is M4's onboarding.
@@ -177,7 +179,7 @@ supported, but M1 is judged on the cloud path running end to end.
 | I02 | Live reads exclude `superseded` and `incomplete` | §1 | In scope — every repo read filters positively on `status = 'pool'` |
 | I03 | Nothing deleted; archiving is a transition | §1 | In scope — the correction path is the first code that could plausibly emit a `DELETE`. Test promoted |
 | I07 | A relation is unique per `(from, to, type)` | §4 | In scope — the judge must upsert, not insert blindly |
-| I08 | Below `min_confidence_to_persist` → not stored | §4 | In scope — and blocked on §8 open question 1 |
+| I08 | Below `min_confidence_to_persist` → not stored | §4 | In scope — Q1 supplies the threshold when no `relation_thresholds` row exists |
 | I12 | Every automatic decision with an effect logs | §11 | In scope — classify, relation persist/discard, correction |
 | I13 | A `learning_signal` outlives its target | §9 | In scope — the first *write* into `learning_signals` |
 | I14 | A malformed classify field degrades to null | §5 | In scope — the corpus that proves it is M1's to build |
@@ -277,8 +279,8 @@ synchronization is already done.
 ADR-0010 and ADR-0012 fix the mechanism completely: two ranked lists, RRF with `k = 60`, a
 brute-force dot product over unit-normalized vectors resident in memory. Nothing here is open.
 
-What is open is the *entrance*, and §8's open question 3b decides it. What the proposal fixes
-regardless of that answer:
+What was open is the *entrance*, and §8's Q3b closed it: standalone, no classify call on the
+read path. What the proposal fixed regardless of that answer:
 
 - **One mechanism, three consumers.** Answering a recall, finding dedup candidates during
   capture, and — later — finding pairs during `connect` all call the same fusion. ADR-0010 says a
@@ -303,9 +305,10 @@ The uncertain band is *stored* by M1 and *asked about* by M3's digest. That spli
 worth stating: I09 is half-satisfied at the end of M1 and cannot be more than half-satisfied,
 because the surface that asks does not exist yet.
 
-The judge cannot be written cleanly until §8's open question 1 is answered — there is no value
-for `min_confidence_to_persist` when a relation type has no `relation_thresholds` row, and
-`relation_thresholds` ships with zero rows.
+The judge could not be written cleanly until §8's Q1 was answered — there is no value for
+`min_confidence_to_persist` when a relation type has no `relation_thresholds` row, and
+`relation_thresholds` ships with zero rows. Q1 closed on named constants in `core/relation`,
+pinned to migration 0002's column defaults by an L2 test.
 
 ### 4.6 The golden corpora, and the M0 test that expires
 
@@ -413,7 +416,7 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 
 | # | PR | Content | Est. |
 |---|---|---|---|
-| 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per Q3c; doc 02 §5 step 4 | ~330 |
+| 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per Q3c — a scored fusion in `core/recall` and the margin gate over it, plus the per-field update methods of Q3c-iii; doc 02 §5 step 4 | ~450 |
 | 13 | `feat/httpapi-capture-recall` | The capture, recall and read-only units routes; L4 | ~380 |
 | 14 | `feat/cli-capture-demo` | `nooma capture`, the demo walked end to end, L4 | ~300 |
 
@@ -422,8 +425,10 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 > paragraph said "Q3b and Q3c shape the recall and correction surfaces (Phase C)". Both sentences
 > were written here, and they disagreed.
 >
-> **Q3c decides how a correction finds its referent, and it is still open.** A phase cannot build
-> what an unanswered question defines, so the table row was the wrong half. Surfaced by
+> **Q3c decides how a correction finds its referent, and at the time it was still open.** A phase
+> cannot build what an unanswered question defines, so the table row was the wrong half. Q3c
+> closed in full on 2026-08-02, and PR 12 stayed in Phase C — the move was right for a reason
+> that outlived its cause: PR 12 depends on PRs 10 and 11, which are Phase B's last two. Surfaced by
 > `sdd-spec`, which noticed the disagreement while scoping Phase B and flagged it instead of
 > quietly picking one — the second contradiction inside a merged planning artifact this milestone
 > has produced, after `spec.md` R2.3 and `design.md` D3 disagreed on `incomplete → archived`.
@@ -609,7 +614,17 @@ Doc 02 §5.5 gains a note, and the demo must not be shown a timer.
   person reference produces a `pool` unit and a `decision_log` entry. I06 is then honestly out of
   scope rather than vacuously green.
 
-**3b. Is `/recall` standalone, or does it route through classify?**
+**3b. Is `/recall` standalone, or does it route through classify? CLOSED — standalone.**
+
+**Owner decision, 2026-08-02**, recorded late: Phase B had already built it this way.
+`internal/brain/recall.go`'s `RecallService.Candidates(ctx, content, vector, model, excludeID)`
+takes the text and its embedding and runs both legs — no classify call on the read path. The
+conformance-shaped property below (capture-`recall` and `/recall` return the same answer for the
+same text) is unbuilt, because `/recall` itself is Phase C, and it belongs to `m1c-surface`.
+
+The question stayed open in this document for one milestone-phase after the code answered it.
+That is the drift doc 02's non-negotiable exists to prevent; the proposal is not doc 02, but the
+lesson transfers — **a decision the code has already made is still a decision to write down.**
 
 - *Standalone (recommended)*: `/recall` takes a query string, embeds it, runs both legs, fuses,
   returns units. Capture's `type=recall` calls the same `brain/recall` service. One mechanism, two
@@ -624,7 +639,7 @@ Doc 02 §5.5 gains a note, and the demo must not be shown a timer.
 in place and never says which one it is.
 
 > **Owner decisions, 2026-08-02.** Q3c turned out to be **three entangled questions**, not one.
-> Two are now closed and the third — the referent itself — remains open.
+> All three are now closed.
 >
 > **3c-ii, is a wrong referent recoverable? CLOSED — yes.**
 > [ADR-0016](../../../docs/adr/0016-correction-pre-image.md): the values a correction is about to
@@ -646,14 +661,37 @@ in place and never says which one it is.
 > without it**: `UpdateContent(id, content, at)` cannot write the `event_at` that the corpus case
 > `correction-not-friday.json` — "no, the dentist is on the 15th, not the 14th" — expects.
 >
-> **3c-i, which unit? STILL OPEN.** Two findings narrow it, both verified:
-> - **The recommendation below cannot be built as written.** "A pure function over ranked
->   candidates" needs magnitudes, and `recall.Fuse` returns `[]string`, computing scores into a
->   local map it discards. Choosing it means first deciding to expose a scored fusion, which
->   touches ADR-0010's surface.
-> - **ADR-0016 makes this easier rather than answering it.** A recoverable edit can be authorised
->   by a lower confidence than an irreversible one, so the threshold is no longer entangled with
->   the destruction question.
+> **3c-i, which unit? CLOSED — scored fusion, with a margin gate over the top two.**
+>
+> An explicit `unit_id` wins wherever the caller has one. Chat has none, so there the referent
+> comes from running hybrid recall against the correction text and gating on the **ratio** of the
+> top two fused scores: below `correction_referent_margin`, the system asks rather than guessing.
+> Doc 02 §5 step 4 and §13 carry it.
+>
+> Two findings shaped the answer, both verified before it was taken:
+> - **The recommendation below could not be built as written.** "A pure function over ranked
+>   candidates" needs magnitudes, and `recall.Fuse` (`internal/core/recall/fuse.go:55`) returns
+>   `[]string`, computing scores into a local map it discards. So the decision carries a cost the
+>   question did not price: `core/recall` must expose a fusion that keeps its scores. The
+>   ranked-id fusion stays — the scored one is an addition, not a replacement, and ADR-0010's
+>   surface grows rather than changes.
+> - **The margin is a ratio, not a difference.** RRF at `k = 60` compresses hard: first-on-both-legs
+>   scores `2/61` and second-on-both scores `2/62`, so 0.0005 separates a near-tie — while
+>   present-on-one-leg scores `1/61`, half the first. An absolute gap means different things
+>   depending on how many legs contributed. This is the only part of the answer that was not in
+>   the options below, and it is the part that makes the gate work.
+>
+> Two alternatives were weighed and rejected. An **ordinal-only gate** (one candidate → correct,
+> two or more → ask) needs no scored fusion at all, but more than one candidate is the normal
+> case, so it would ask almost always — a gate that fires constantly is a refusal wearing a
+> question's clothes. **`unit_id`-only** is right for the UI and the API and useless for chat: it
+> would push correction-by-chat out of M1 and orphan the corpus case `correction-not-friday.json`,
+> which the milestone already committed to answering.
+>
+> **ADR-0016 made this easier rather than answering it.** A recoverable edit can be authorised by
+> a lower margin than an irreversible one, so the number is no longer entangled with the
+> destruction question — which is why it lands in §13 as a calibratable default rather than in an
+> ADR of its own.
 
 - *Explicit `unit_id`*: right for the UI and the API; chat has no id to send.
 - *Hybrid recall against the correction text, with an ambiguity gate (recommended)*: reuses the
@@ -665,7 +703,12 @@ in place and never says which one it is.
 - **Recommendation: recall-based, with an explicit `unit_id` override when the caller has one.**
   Doc 02 §5 step 4 gains the sentence.
 
-### Q4 — Does the classify corpus cover taxonomy values whose hooks are deferred?
+### Q4 — Does the classify corpus cover taxonomy values whose hooks are deferred? **CLOSED — yes.**
+
+**Owner decision, 2026-08-02**, recorded late for the same reason as Q3b: Phase B built it this
+way. `testdata/classify/cases/` carries `timer-pasta-ten-minutes.json` and
+`recurring-reminder-water-plants.json` among its 17 cases, and Q3a's own decision depends on the
+corpus covering exactly these — M1 arms nothing, but classify must still return them.
 
 **Recommendation: yes.** `timer`, `recurring_reminder`, `chitchat` and `out_of_scope` are part of
 classify's contract regardless of what happens downstream, and the corpus is shared with
