@@ -375,7 +375,7 @@ delta to write, which is the gate working as designed rather than a tax:
 | `core/classify` | §5.1 — what "degrades to null" means field by field |
 | `core/recall` | §5.2 and §13 — the recall entrance (q3b) and the `recall_top_k` row |
 | `core/relation` | §4 — what governs a relation type with no thresholds row (q1) |
-| corrections | §5.4 — how the referenced unit is resolved (q3c) |
+| corrections | §5 step 4 — how the referenced unit is resolved (q3c) |
 | — | §12 or elsewhere — `units.confidence` (q2) |
 
 The `no-spec-change` label exists for refactors. **No M1 core PR should need it.** If one does,
@@ -413,7 +413,7 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 
 | # | PR | Content | Est. |
 |---|---|---|---|
-| 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per Q3c; doc 02 §5.4 | ~330 |
+| 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per Q3c; doc 02 §5 step 4 | ~330 |
 | 13 | `feat/httpapi-capture-recall` | The capture, recall and read-only units routes; L4 | ~380 |
 | 14 | `feat/cli-capture-demo` | `nooma capture`, the demo walked end to end, L4 | ~300 |
 
@@ -620,7 +620,7 @@ Doc 02 §5.5 gains a note, and the demo must not be shown a timer.
 - Either way, capture-`recall` and `/recall` must return the same answer for the same text. That
   is a conformance-shaped property worth its own test.
 
-**3c. How does a correction find "the referenced unit"?** Doc 02 §5.4 says a correction edits it
+**3c. How does a correction find "the referenced unit"?** Doc 02 §5 step 4 says a correction edits it
 in place and never says which one it is.
 
 - *Explicit `unit_id`*: right for the UI and the API; chat has no id to send.
@@ -631,7 +631,7 @@ in place and never says which one it is.
 - *LLM inference over recent conversation*: needs a conversation-history concept no doc defines
   and no table stores.
 - **Recommendation: recall-based, with an explicit `unit_id` override when the caller has one.**
-  Doc 02 §5.4 gains the sentence.
+  Doc 02 §5 step 4 gains the sentence.
 
 ### Q4 — Does the classify corpus cover taxonomy values whose hooks are deferred?
 

@@ -67,6 +67,7 @@ order, with no correspondence to anything.
 | [0013](0013-cross-compile-targets.md) | Cross-compilation matrix: seven targets, on every PR (supersedes 0001's criterion 5) | Accepted | M0 |
 | [0014](0014-telegram-transport.md) | Telegram transport: long polling, never a webhook | Accepted | M3 |
 | [0015](0015-versioning-and-releases.md) | Versioning: SemVer, tags from M1, no `beta` label | Accepted | M1, M6 |
+| [0016](0016-correction-pre-image.md) | A correction records what it overwrote, before overwriting it | Accepted | M1 Phase C |
 
 ## Template
 
