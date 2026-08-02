@@ -148,6 +148,13 @@ They belong to **Phase C** (`m1c-surface`): both are CLI surface, both need prov
 first, and a wizard offering to configure a provider before any provider exists would be offering
 a promise.
 
+**And for two days that sentence was the whole schedule.** "They belong to Phase C" was written
+here on 2026-07-31; Phase C's table in §6 listed three PRs, none of them these. The paragraph above
+diagnosed an `Accepted` ADR with nowhere to land, and then this paragraph gave these two items a
+phase without giving them a row. They became **PRs 15 and 16 on 2026-08-02**, and the fix for the
+general case is the same one this section already argued for: a decision is scheduled when it is a
+row in a table something reads, not when a paragraph says where it belongs.
+
 **Cloud is the path that must work.** Owner direction, 2026-07-31: the local-model story has
 comments pending and is deliberately not the priority — the ollama client exists and stays
 supported, but M1 is judged on the cloud path running end to end.
@@ -418,7 +425,29 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 |---|---|---|---|
 | 12 | `feat/corrections` | In-place edit (I03), the `correction` signal (I13), referent resolution per Q3c — a scored fusion in `core/recall` and the margin gate over it, plus the per-field update methods of Q3c-iii; doc 02 §5 step 4 | ~450 |
 | 13 | `feat/httpapi-capture-recall` | The capture, recall and read-only units routes; L4 | ~380 |
-| 14 | `feat/cli-capture-demo` | `nooma capture`, the demo walked end to end, L4 | ~300 |
+| 14 | `feat/cli-capture-demo` | `nooma capture`, the demo walked end to end, L4 — **last in time, after 15 and 16** | ~300 |
+| 15 | `feat/init-provider-paths` | §3.2 item 14: `nooma init`'s two first-class paths, Cloud (recommended) and Ollama, writing a real `providers:` block that holds `api_key_env` and never a secret | ~300 |
+| 16 | `feat/doctor-quality-gate` | §3.2 item 15: `nooma doctor`'s structured-JSON quality gate — the fixed prompt set against each task's configured provider, a failure naming it unsuitable *for that task*, over the `testdata/llm/cases/` corpus | ~350 |
+
+> **PRs 15 and 16 were scheduled on 2026-08-02, and the gap they close is the point.** §3.2 has
+> listed both since 2026-07-31 and **no PR in any of this document's three phase tables built
+> either** — verified against all fourteen rows, and against the code: `cmd/nooma/doctor.go` has
+> existed since M0 with no quality gate, and `nooma init` has no Cloud or Ollama path at all.
+>
+> The failure shape is worth more than the fix. §3.2's own note already records that these two
+> items are [ADR-0002](../../../docs/adr/0002-default-llm-preset.md)'s deliverables, that the ADR
+> was `Accepted` on 2026-07-27, and that *"neither appeared in any milestone's bullets, in this
+> proposal's scope, or in any task list"*. That note was written — and then the items were added to
+> the scope section and to nothing else. **Writing down why something was missed is not scheduling
+> it.** An item is scheduled when it is a row in a table that something reads; §3.2 is prose that
+> nothing executes.
+>
+> They land before PR 14 because PR 14 is the demo, and the demo is what tags `v0.1.0`. A demo that
+> needs a provider configured by hand, against a provider nothing checked is fit for the task, is
+> not the milestone's exit criterion being met — it is the criterion being walked around.
+>
+> Surfaced by `sdd-spec` while scoping Phase C, which declared it as a conflict instead of
+> resolving it unilaterally, and confirmed independently before the owner decided.
 
 > **PR 12 moved from Phase B to Phase C on 2026-07-31**, resolving a contradiction inside this
 > document. The table above listed `feat/corrections` under Phase B while §8's own closing
@@ -434,13 +463,22 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 > has produced, after `spec.md` R2.3 and `design.md` D3 disagreed on `incomplete → archived`.
 
 Dependencies: `1 → 6`, `2 → 3 → 4`, `5 → 6`, `(4,5) → 7`, `2 → 8`, `(4,8) → 9`,
-`(6,7,9) → 10`, `(8,10) → 11`, `(10,11) → 12`, `(10,11,12) → 13 → 14`. PR 1 is independent of
-everything and goes first. PR 8 can land any time after PR 2.
+`(6,7,9) → 10`, `(8,10) → 11`, `(10,11) → 12`, `(10,11,12) → 13`, `6 → 15`, `(5,6) → 16`,
+`(13,15,16) → 14`. PR 1 is independent of everything and goes first. PR 8 can land any time after
+PR 2. **PR 14 is last in time despite its number** — it is the demo, and the demo is M1's exit
+criterion, so everything it walks through has to exist before it walks.
 
 **On these estimates, and on M1's size.** M0 was planned as ten PRs and shipped as twenty; six
 separate measurements put its estimates 1.3x–2.2x low. Read the table above the same way: **~4,300
 budgeted lines across 14 PRs is realistically 6,000–9,000 across 20–30.** That is two to three
 times M0 in one SDD change.
+
+> That budget was written for fourteen PRs. It is now sixteen — PRs 15 and 16 add ~650, and PR 12
+> moved from ~330 to ~450 once Q3c closed and the scored fusion it needs got priced. The multiplier
+> above is what matters here, not the base: Phase B closed with its own measurement of the same
+> effect, recorded as C8 in `m1b-pipeline/tasks.md` — **every one of its estimates was low, and the
+> two worst were 4.3x.** The lesson it drew is the one to apply to PRs 15 and 16: estimate a core PR
+> from its invariant's proof obligation, not from its implementation.
 
 This proposal's recommendation is therefore to **split M1 into three chained SDD changes along
 the phase boundaries above** — `m1a-substrate`, `m1b-pipeline`, `m1c-surface` — sharing this
@@ -729,7 +767,8 @@ B), Q3b and Q3c shape the recall and correction surfaces (Phase C). Q2 decides w
 writes `units.confidence` at all, and its recommended answer — doc 02 claims the column, M1
 writes NULL — costs Phase A nothing either way. So `m1a-substrate` can be specified, designed
 and started while the remaining four questions are still open, instead of the whole milestone
-waiting on decisions that only two of its fourteen PRs depend on.
+waiting on decisions that only two of its fourteen PRs depend on. (Fourteen at the time; PRs 15
+and 16 were scheduled on 2026-08-02.)
 
 The cost is real and accepted: three planning cycles rather than one, and a proposal that now
 lives one directory away from the specs that implement it. This document stays the single
