@@ -1737,6 +1737,13 @@ which is precisely what I12 forbids.
       three-way split was itself the correction; a fourth slice would have to cut between
       `RecallService` and the I02 test that proves it reaches `LiveByIDs`, which is the one seam
       that cannot be cut — the test exists precisely to prove the wiring.
+
+---
+
+## PR 10c — `feat/brain-hooks` (~200)
+
+Depends on PR 10b.
+
 - [ ] **10c.1** Test first: a **new** conformance test,
       `test/conformance/i04_timer_never_a_unit_test.go` (design D9 — I04 has no existing test;
       confirmed by glob, and I04 already sits in `docs/06-harness.md` §4's invariant table, so no
