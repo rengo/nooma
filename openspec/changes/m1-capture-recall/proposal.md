@@ -623,6 +623,38 @@ Doc 02 §5.5 gains a note, and the demo must not be shown a timer.
 **3c. How does a correction find "the referenced unit"?** Doc 02 §5 step 4 says a correction edits it
 in place and never says which one it is.
 
+> **Owner decisions, 2026-08-02.** Q3c turned out to be **three entangled questions**, not one.
+> Two are now closed and the third — the referent itself — remains open.
+>
+> **3c-ii, is a wrong referent recoverable? CLOSED — yes.**
+> [ADR-0016](../../../docs/adr/0016-correction-pre-image.md): the values a correction is about to
+> overwrite are written to `decision_log.context` first, and a failed audit write blocks the edit.
+> This resolved a contradiction inside doc 02 — §4 argues that inferring-and-destroying in one act
+> is forbidden, while §5 step 4 mandates an in-place edit. The distinction neither paragraph drew:
+> a duplicate is inferred **whole**, whereas a correction splits — the user says *what* to change,
+> explicitly; only *which unit* is inferred.
+>
+> **3c-iii, which columns may a correction write? CLOSED — one method per field.**
+> `ports.UnitRepo` gains `UpdateEventAt` and `UpdateDueAt` alongside the existing `UpdateContent`.
+> Not one `UpdateFields(patch)`: **I18 stays structural rather than careful.** No signature is
+> capable of writing the wrong date, which is the same shape `Kind.UnitType()`'s `(value, bool)`
+> and `LiveByIDs`'s un-parameterisable status already use — a name that says what it does, and no
+> argument that could mean something else. The cost is accepted: the port grows one method per
+> correctable field.
+>
+> This question had to be answered before the referent one, because **PR 12 was unbuildable
+> without it**: `UpdateContent(id, content, at)` cannot write the `event_at` that the corpus case
+> `correction-not-friday.json` — "no, the dentist is on the 15th, not the 14th" — expects.
+>
+> **3c-i, which unit? STILL OPEN.** Two findings narrow it, both verified:
+> - **The recommendation below cannot be built as written.** "A pure function over ranked
+>   candidates" needs magnitudes, and `recall.Fuse` returns `[]string`, computing scores into a
+>   local map it discards. Choosing it means first deciding to expose a scored fusion, which
+>   touches ADR-0010's surface.
+> - **ADR-0016 makes this easier rather than answering it.** A recoverable edit can be authorised
+>   by a lower confidence than an irreversible one, so the threshold is no longer entangled with
+>   the destruction question.
+
 - *Explicit `unit_id`*: right for the UI and the API; chat has no id to send.
 - *Hybrid recall against the correction text, with an ambiguity gate (recommended)*: reuses the
   mechanism M1 is already building, and the pick-or-ask decision is a pure function over ranked
