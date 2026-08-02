@@ -42,6 +42,7 @@ func TestCapture_OrdinaryClassificationPersistsAUnit(t *testing.T) {
 	decisions := memrepo.NewDecisionLog()
 	embeddings := memrepo.NewEmbeddings()
 	lexical := memrepo.NewLexical()
+	relations := memrepo.NewRelations()
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
@@ -49,7 +50,7 @@ func TestCapture_OrdinaryClassificationPersistsAUnit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",

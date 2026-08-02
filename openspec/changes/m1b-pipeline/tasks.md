@@ -2032,13 +2032,51 @@ Depends on PR 11a.
 
 ---
 
+### C14 — three gaps PR 11c surfaced while closing Phase B. **One resolved here; two left named.**
+
+**C14a — a judge failure has no accepted-risk action, while an embedding failure does.** D8 gave
+the embed step an explicit degradation: the unit persists, `Embedded` is false, a
+`capture.embedding.failed` row records the provider's error, and `Capture` returns nil. The judge
+step has no equivalent. D4's diagram shows its error propagating, so a **fully persisted unit can
+still make `Capture` return an error** — the same half-synced shape D8 accepted deliberately for
+embeddings, arrived at here by omission rather than by decision.
+
+Not resolved in this PR: choosing degradation over propagation is a product decision of the same
+weight as D8's, and D8 was argued from doc 02 §5's product rule before being implemented. Named so
+the asymmetry is visible rather than discovered by a user whose capture failed after being stored.
+
+**C14b — `ActionCaptureDedupJudged` is an orphan.** PR 10a declared eleven `DecisionAction`
+constants from design D9. `capture.dedup.judged` is wired by no PR in this chain, and after 11c it
+is clear why: every judgment produces exactly one of `relation.persisted`,
+`relation.discarded` or `relation.duplicate.recorded`, so a fourth row saying "a judgment
+happened" would duplicate the row that says what it decided. The vocabulary member is redundant,
+not missing its wiring. Left in place — removing it is PR 10a's scope and would change a closed
+vocabulary its own completeness test pins.
+
+**C14c — R6.2 does not list PR 11c, and the answer is not `no-spec-change`.** Spec R6.2 enumerates
+PR7, PR8 and PR11 as the core-touching PRs that must carry a doc 02 delta, and its own title reads
+"and carries no `no-spec-change`". PR 11 was split into 11a/11b/11c after that was written; 11a
+carried PR 11's delta, and 11c adds `internal/core/relation/judgment.go` with none of its own.
+
+`docs-sync.yml` fires **per PR** — that is **C9**, established earlier in this same chain — so
+"PR 11 already had its delta" does not satisfy it, and R6.2 forbids the label outright for a core
+PR. **Resolved by writing the delta**: doc 02 §4 gains what 11c actually decides and the document
+did not say — that a duplicate is *recorded rather than merged* and why, that relation direction
+is the judge's answer rather than a canonical form (a named limitation, not a design), and that a
+judgment which decided nothing writes nothing.
+
+That delta was missing because the behaviour is genuinely new: §4 described thresholds and bands,
+never what happens when the answer is `duplicate`.
+
+---
+
 ## PR 11c — `feat/relation-judge` (~280)
 
 Depends on PR 11b **and PR 10b** — per **C1**'s corrected dependency direction above (this PR
 wires the judge call into `captureRunner`, created by 10b; `design.md`'s own stated `11c → 10b`
 arrow is backwards).
 
-- [ ] **11c.1** Test first: `internal/core/relation/judgment_test.go` — `DecodeJudgment` reuses
+- [x] **11c.1** Test first: `internal/core/relation/judgment_test.go` — `DecodeJudgment` reuses
       `classify.Salvage` over a judge-shaped response (the same tolerant-decode mechanism I14
       already proves, a second consumer per design D7's "one project, two tolerant decoders that
       can disagree" reasoning against reimplementing it). **Red**: `undefined:
@@ -2050,7 +2088,7 @@ arrow is backwards).
       Verify: `make test`; `golangci-lint run` (confirms `depguard` allows `core/relation` →
       `core/classify`).
       Requirement: R5.5 (decode half); design D7.
-- [ ] **11c.2** Test first: the judge's full path — `ports.LLMProvider.Complete` with
+- [x] **11c.2** Test first: the judge's full path — `ports.LLMProvider.Complete` with
       `Task:"relation_evaluation"` (already in `internal/config.DocumentedTaskNames`, confirmed) →
       `relation.DecodeJudgment` → `relation.Decide` against the resolved `Thresholds` — driven
       through `fakeprovider`/`memrepo` end to end, asserting the persisted outcome matches the
@@ -2060,24 +2098,24 @@ arrow is backwards).
       relation.DecodeJudgment(...)`, `v := relation.Decide(...)`, `rels.Upsert(...)`).
       Verify: `make test`.
       Requirement: R5.5 (wiring half).
-- [ ] **11c.3** Test first: a candidate below `min_confidence_to_persist` leaves no `relations` row
+- [x] **11c.3** Test first: a candidate below `min_confidence_to_persist` leaves no `relations` row
       and exactly one `decision_log` row recording the discard and its rationale (I08).
       Verify: `make test`.
       Requirement: R5.4 (discard half).
-- [ ] **11c.4** Test first: a `duplicate`-outcome judgment writes a `duplicate`-typed relation from
+- [x] **11c.4** Test first: a `duplicate`-outcome judgment writes a `duplicate`-typed relation from
       the new unit to the existing one and a `decision_log` row stating plainly the duplicate was
       recorded, not merged (design D7's own resolution — neither superseding the new unit nor
       reviving the existing one is in scope; the direction is not canonicalized, an accepted,
       named risk with an M2 owner).
       Verify: `make test`.
       Requirement: R5.4 (adjacent — the `duplicate` case design D7 resolves); design D7.
-- [ ] **11c.5** Confirm: the judge is never called when the candidate list is empty — already
+- [x] **11c.5** Confirm: the judge is never called when the candidate list is empty — already
       enforced for free by `fakeprovider`'s unscripted-call failure (review check, not new code,
       per design D4's own framing); add one explicit assertion of zero `LLMProvider.Complete` calls
       beyond `capture_processing` for a capture into an otherwise-empty vault.
       Verify: `make test`.
       Requirement: design D4 (§6 test matrix, PR 11c row).
-- [ ] Verify (PR-level): `make check-all`; confirm no code in this PR canonicalizes relation
+- [x] Verify (PR-level): `make check-all`; confirm no code in this PR canonicalizes relation
       direction and no `relations.uncertain` column is added (design D7's named, accepted risks —
       an M2 concern, not this PR's).
 

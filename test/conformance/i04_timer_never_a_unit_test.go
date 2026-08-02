@@ -70,6 +70,7 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			decisions := memrepo.NewDecisionLog()
 			embeddings := memrepo.NewEmbeddings()
 			lexical := memrepo.NewLexical()
+			relations := memrepo.NewRelations()
 			llm := fakeprovider.New(t, testdataLLMCasesDir(t), tt.llmCase)
 			embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
@@ -77,7 +78,7 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
 
 			result, err := svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the fake replays by case id, not prompt text",

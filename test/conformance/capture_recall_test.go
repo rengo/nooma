@@ -37,6 +37,14 @@ import (
 // assertion-author arithmetic (the C12 mistake this suite already learned
 // from once), this test asks recall.Fuse itself, over the same two
 // single-candidate lists, what the answer is.
+//
+// PR 11c wires the relation judge behind a non-empty candidate list (design
+// D4's diagram tail), so this capture now makes a second Complete call —
+// llm is scripted with a second case id, "relation-no-match-for-dry-
+// cleaning" (outcome "new"), so the judge's own verdict never disturbs this
+// test's own assertions, which are about Candidates, not about what the
+// judge decided to do with them (that is capture_relation_judge_test.go's
+// job).
 func TestCapture_RunsHybridRecallForCandidates(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
@@ -81,9 +89,10 @@ func TestCapture_RunsHybridRecallForCandidates(t *testing.T) {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
 
-	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
+	relations := memrepo.NewRelations()
+	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning", "relation-no-match-for-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
@@ -114,15 +123,14 @@ func TestCapture_RunsHybridRecallForCandidates(t *testing.T) {
 }
 
 // TestCapture_EmptyVaultMakesNoExtraLLMCalls is design D4's own stated
-// property (task 10b.5): a capture into an otherwise-empty vault produces an
-// empty candidate list, and the judge is never called over an empty
-// candidate list. This PR wires no judge at all yet, so the property holds
-// today by construction — but this test is what keeps it holding once PR
-// 11c wires relation.DecodeJudgment in: llm is scripted with exactly one
+// property (task 10b.5, closed by task 11c.5): a capture into an otherwise-
+// empty vault produces an empty candidate list, and the judge is never
+// called over an empty candidate list. llm is scripted with exactly one
 // case id, and fakeprovider.Fake.Complete fails the test immediately on any
-// call beyond the script (fakeprovider.go:66-69), so a future regression
-// that asked the judge about nothing fails right here, for exactly this
-// reason.
+// call beyond the script (fakeprovider.go:66-69) — the implicit half of this
+// property. len(llm.SeenPrompts()) != 1 below is task 11c.5's own explicit
+// half: a direct, numeric assertion that no Complete call happened beyond
+// capture_processing, not merely the absence of a t.Fatalf.
 func TestCapture_EmptyVaultMakesNoExtraLLMCalls(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
@@ -131,6 +139,7 @@ func TestCapture_EmptyVaultMakesNoExtraLLMCalls(t *testing.T) {
 	decisions := memrepo.NewDecisionLog()
 	embeddings := memrepo.NewEmbeddings()
 	lexical := memrepo.NewLexical()
+	relations := memrepo.NewRelations()
 
 	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
 	if err != nil {
@@ -139,7 +148,7 @@ func TestCapture_EmptyVaultMakesNoExtraLLMCalls(t *testing.T) {
 
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
@@ -147,6 +156,9 @@ func TestCapture_EmptyVaultMakesNoExtraLLMCalls(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Capture error = %v, want nil", err)
+	}
+	if got := len(llm.SeenPrompts()); got != 1 {
+		t.Fatalf("llm.SeenPrompts() has %d entries, want exactly 1 (capture_processing only) — the relation judge must never be called over an empty candidate list (design D4, task 11c.5)", got)
 	}
 	if len(result.Candidates) != 0 {
 		t.Fatalf("Candidates = %v, want empty — nothing else was ever captured into this vault", result.Candidates)

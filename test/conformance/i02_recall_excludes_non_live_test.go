@@ -97,9 +97,10 @@ func TestI02_RecallExcludesSupersededAndIncomplete(t *testing.T) {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
 
+	relations := memrepo.NewRelations()
 	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, decisions, llm, embed, brain.NewIndex(idx))
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",

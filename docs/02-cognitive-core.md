@@ -108,6 +108,26 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
     so no seed could ever be exhaustive — the two defaults above come from named constants in
     `core/relation`, not a migration-seeded row.
 
+**A duplicate is recorded, not merged.** When the judge answers that a new capture duplicates an
+existing unit, the duplication becomes a **relation** between the two and nothing else happens:
+the new unit is not superseded, the existing one is not revived, and neither is edited. Both
+survive, and the fact that they say the same thing is stored as an edge rather than acted on.
+
+That is deliberate. Merging is a destructive decision made from one model call, and §1's rule that
+nothing is deleted applies to content the user actually wrote. Recording the duplication keeps
+both texts and leaves the merge available later, to a pass that can weigh more than one judgment.
+
+**The direction of a relation is what the judge said, not a canonical form.** An edge runs from
+the new unit to the one the judge named, and no ordering is imposed on the pair. Two units
+related in both directions therefore hold two rows rather than one. This is a known limitation
+rather than a design: deduplicating symmetric edges needs a rule for which direction survives, and
+that rule belongs with the consolidation pass that can see the whole graph.
+
+**A judgment that decided nothing writes nothing.** If the judge's answer is `new`, or if it
+degrades so far that the outcome, its confidence or its target is missing, no relation is stored
+and no decision is recorded. There is no effect to record — the same reason a read writes no row
+(§11).
+
 ## 5. Capture
 
 Synchronous pipeline on receiving a message (from any channel or the UI):
