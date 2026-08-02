@@ -1,0 +1,8 @@
+{
+  "id": "relation-judge-provider-outage",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "relation_evaluation",
+  "prompt": "You judge whether a new memory unit duplicates or relates to any of the candidates below.",
+  "error": "ollama: connection refused"
+}

@@ -2034,16 +2034,33 @@ Depends on PR 11a.
 
 ### C14 — three gaps PR 11c surfaced while closing Phase B. **One resolved here; two left named.**
 
-**C14a — a judge failure has no accepted-risk action, while an embedding failure does.** D8 gave
-the embed step an explicit degradation: the unit persists, `Embedded` is false, a
-`capture.embedding.failed` row records the provider's error, and `Capture` returns nil. The judge
-step has no equivalent. D4's diagram shows its error propagating, so a **fully persisted unit can
-still make `Capture` return an error** — the same half-synced shape D8 accepted deliberately for
-embeddings, arrived at here by omission rather than by decision.
+**C14a — a judge failure had no accepted-risk action, while an embedding failure did. RESOLVED
+2026-08-02: it degrades.** D8 gave the embed step an explicit degradation — the unit persists,
+`Embedded` is false, a `capture.embedding.failed` row records the provider's error, and `Capture`
+returns nil. The judge step propagated instead, so a **fully persisted unit could still make
+`Capture` return an error**: the user was told the capture failed while their note was durably
+stored, and a retry would have duplicated it. The same half-synced shape D8 accepted deliberately,
+reached here by omission.
 
-Not resolved in this PR: choosing degradation over propagation is a product decision of the same
-weight as D8's, and D8 was argued from doc 02 §5's product rule before being implemented. Named so
-the asymmetry is visible rather than discovered by a user whose capture failed after being stored.
+Resolved by mirroring D8 exactly. `ports.ActionCaptureDedupFailed` (`capture.dedup.failed`) joins
+the vocabulary as its **twelfth** member; a judge-provider outage leaves the unit persisted, stores
+no relations, writes one row carrying the provider's error, and returns nil. **Only the provider
+call degrades** — a failure of the `decision_log` write itself still propagates, exactly as
+`embedAndStore` and `recordClassifyDecision` already do. doc 02 §5's dedup/relation step gains the
+robustness statement.
+
+Armed: restoring the propagating behaviour fails with `Capture error = ollama: connection refused,
+want nil`.
+
+**A gap found while arming the vocabulary guard, and it is PR 10a's, not this one's.**
+`AllDecisionActions()`'s completeness test compares **the list** against its expectation, so
+adding a member to the list without updating the test fails loudly — confirmed, it names the
+intruder. But **declaring a constant and forgetting to add it to the list is invisible**: the
+constant exists, can be passed to `Record`, and the closed vocabulary never reports it. Found
+because an injection of mine landed half-way and the test stayed green. Not fixed here — it
+belongs with 10a's vocabulary, and fixing it means either a reflection or AST check over the
+`DecisionAction` constants, or accepting that `AllDecisionActions()` is the definition and the
+constants are merely its spelling.
 
 **C14b — `ActionCaptureDedupJudged` is an orphan.** PR 10a declared eleven `DecisionAction`
 constants from design D9. `capture.dedup.judged` is wired by no PR in this chain, and after 11c it

@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -21,13 +22,13 @@ import (
 // (design D4's diagram tail): one candidate is enough to prove it end to
 // end, and every 11c.2/11c.3/11c.4 scenario differs only in what the
 // scripted judge response says, not in how the candidate got there.
-func judgeTestFixture(t *testing.T, candidateID, judgeCaseID string) (result brain.CaptureResult, relations *memrepo.Relations, decisions *memrepo.DecisionLog) {
+func judgeTestFixture(t *testing.T, candidateID, judgeCaseID string) (result brain.CaptureResult, units *memrepo.Units, relations *memrepo.Relations, decisions *memrepo.DecisionLog) {
 	t.Helper()
 
 	ctx := context.Background()
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
 
-	units := memrepo.NewUnits()
+	units = memrepo.NewUnits()
 	decisions = memrepo.NewDecisionLog()
 	embeddings := memrepo.NewEmbeddings()
 	lexical := memrepo.NewLexical()
@@ -67,7 +68,7 @@ func judgeTestFixture(t *testing.T, candidateID, judgeCaseID string) (result bra
 	if len(result.Candidates) != 1 || result.Candidates[0] != candidateID {
 		t.Fatalf("Candidates = %v, want exactly [%q] — this test's own setup is broken, not the judge wiring under test", result.Candidates, candidateID)
 	}
-	return result, relations, decisions
+	return result, units, relations, decisions
 }
 
 // decisionRowCount is a small helper shared by this file's three tests:
@@ -97,7 +98,7 @@ func decisionRows(t *testing.T, decisions *memrepo.DecisionLog, since time.Time)
 // reachable.
 func TestCapture_RelationJudgePersistsOutcomeMatchingConfidenceBand(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, relations, decisions := judgeTestFixture(t, "cand-related", "relation-related-uncertain-band")
+	result, _, relations, decisions := judgeTestFixture(t, "cand-related", "relation-related-uncertain-band")
 
 	rels, err := relations.ByUnit(context.Background(), result.UnitID)
 	if err != nil {
@@ -150,7 +151,7 @@ func TestCapture_RelationJudgePersistsOutcomeMatchingConfidenceBand(t *testing.T
 // stated scenario value, well below the 0.30 default.
 func TestCapture_RelationJudgeDiscardsBelowMinConfidenceToPersist(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, relations, decisions := judgeTestFixture(t, "cand-discard", "relation-discard-low-confidence")
+	result, _, relations, decisions := judgeTestFixture(t, "cand-discard", "relation-discard-low-confidence")
 
 	rels, err := relations.ByUnit(context.Background(), result.UnitID)
 	if err != nil {
@@ -192,7 +193,7 @@ func TestCapture_RelationJudgeDiscardsBelowMinConfidenceToPersist(t *testing.T) 
 // discard path above.
 func TestCapture_RelationJudgeRecordsDuplicateWithoutMerging(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, relations, decisions := judgeTestFixture(t, "cand-duplicate", "relation-duplicate-high-confidence")
+	result, _, relations, decisions := judgeTestFixture(t, "cand-duplicate", "relation-duplicate-high-confidence")
 
 	rels, err := relations.ByUnit(context.Background(), result.UnitID)
 	if err != nil {
@@ -230,5 +231,66 @@ func TestCapture_RelationJudgeRecordsDuplicateWithoutMerging(t *testing.T) {
 	}
 	if !dupRow.OccurredAt.Equal(now) {
 		t.Errorf("relation.duplicate.recorded OccurredAt = %v, want the single clock read %v", dupRow.OccurredAt, now)
+	}
+}
+
+// TestCapture_RelationJudgeProviderFailureLeavesUnitPersisted is C14a's own
+// resolution, mirroring TestCapture_EmbeddingProviderFailureLeavesUnitPersisted
+// (capture_embed_test.go) for the judge step instead of the embed step: a
+// scripted r.judge.Complete failure leaves the unit persisted, stores no
+// relations, writes exactly one capture.dedup.failed decision_log row
+// carrying the provider error in its context, and Capture itself does not
+// return an error — the same posture design D8 already takes for an
+// embedding-provider outage, now taken for a judge-provider outage too
+// rather than propagating it (design D4's diagram, corrected).
+func TestCapture_RelationJudgeProviderFailureLeavesUnitPersisted(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	result, units, relations, decisions := judgeTestFixture(t, "cand-provider-outage", "relation-judge-provider-outage")
+
+	if _, err := units.ByID(context.Background(), result.UnitID); err != nil {
+		t.Fatalf("units.ByID(%q): %v — the unit must be persisted even though the relation judge failed", result.UnitID, err)
+	}
+
+	rels, err := relations.ByUnit(context.Background(), result.UnitID)
+	if err != nil {
+		t.Fatalf("relations.ByUnit(%q): %v", result.UnitID, err)
+	}
+	if len(rels) != 0 {
+		t.Fatalf("relations.ByUnit(%q) = %v, want none — a judge-provider outage must store no relations", result.UnitID, rels)
+	}
+
+	rows := decisionRows(t, decisions, now)
+	if len(rows) != 2 {
+		t.Fatalf("decision_log has %d rows, want exactly 2 (capture.classify + capture.dedup.failed): %+v", len(rows), rows)
+	}
+	var failedRow *ports.Decision
+	for i := range rows {
+		if rows[i].Action == ports.ActionCaptureDedupFailed {
+			failedRow = &rows[i]
+		}
+	}
+	if failedRow == nil {
+		t.Fatalf("no %q row found among %+v", ports.ActionCaptureDedupFailed, rows)
+	}
+	if failedRow.Rationale == "" {
+		t.Error("capture.dedup.failed Rationale is empty — doc 02 §11 requires a human-readable sentence")
+	}
+	if !failedRow.OccurredAt.Equal(now) {
+		t.Errorf("capture.dedup.failed OccurredAt = %v, want the single clock read %v", failedRow.OccurredAt, now)
+	}
+
+	var ctx struct {
+		UnitID string `json:"unit_id"`
+		Error  string `json:"error"`
+	}
+	if err := json.Unmarshal(failedRow.Context, &ctx); err != nil {
+		t.Fatalf("capture.dedup.failed Context is not valid JSON: %v (%s)", err, failedRow.Context)
+	}
+	if ctx.UnitID != result.UnitID {
+		t.Errorf("capture.dedup.failed Context.unit_id = %q, want %q", ctx.UnitID, result.UnitID)
+	}
+	const wantErr = "ollama: connection refused"
+	if ctx.Error != wantErr {
+		t.Errorf("capture.dedup.failed Context.error = %q, want the provider error %q", ctx.Error, wantErr)
 	}
 }
