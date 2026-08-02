@@ -1931,11 +1931,44 @@ Depends on nothing outside this chain beyond Phase A PR 2.
 
 ---
 
+### C13 — `design.md`'s `RelationRepo` code block names `relation.Relation` and `*relation.Thresholds`; the codebase's own precedent (`ports.Embedding`, `ports.Decision`) says the DTO belongs in `ports`. **Resolved: `ports.Relation`, following the precedent that postdates the design block.**
+
+`design.md:823-827`'s `RelationRepo` interface reads `Upsert(ctx, r relation.Relation) error` /
+`ByUnit(...) ([]relation.Relation, error)`, naming a `Relation` type in `core/relation` that PR 11a
+never created (11a's own scope, confirmed by re-reading `internal/core/relation/*.go`, is exactly
+`Verdict`, `Decide`, `Thresholds`, `Resolve`, `DefaultMinConfidenceToPersist`,
+`DefaultMinConfidenceToSurface`, `DedupCandidateK` — no `Relation`), and PR 11c's own task text
+(11c.1) defines `relation.Judgment`, not `relation.Relation`. Nothing in this chain ever creates
+`core/relation.Relation`. Read as written, `design.md`'s own code block does not compile against
+the rest of the plan.
+
+The task text for 11b.1 disagrees with `design.md`'s pseudocode on the same point: it says
+"Implement `internal/ports/relationrepo.go`: `Relation`, `RelationRepo{...}`" — naming `Relation`
+as one of the two things that file itself defines, which only makes sense as `ports.Relation`.
+
+Checked against the two ports this design's own later PRs actually shipped, both written **after**
+`design.md`'s `RelationRepo` block but implementing the same design: `ports.Embedding`
+(`internal/ports/embeddingrepo.go`) and `ports.Decision` (`internal/ports/decisionlog.go`) are both
+plain DTO structs defined directly in `ports`, not imported from `core/recall` or a hypothetical
+`core/decisionlog`. `EmbeddingRepo.LoadIndex` does import a real `core/recall.VectorIndex` return
+type — so `ports` importing a core type is not itself forbidden (`.golangci.yml`'s `core-purity`
+rule restricts only `internal/core/**`'s own imports) — but every port DTO that crosses the
+repository boundary in this codebase, once actually built, was defined in `ports`.
+
+**Resolved this way**: `ports.Relation` is a new struct in `internal/ports/relationrepo.go`,
+mirroring `relations`' eight columns 1:1 exactly as `ports.Decision` mirrors `decision_log`'s.
+`ThresholdsFor` returns `*relation.Thresholds` unchanged from `design.md`'s block — that type
+already exists (PR 11a), and reusing it is the same "ports may import a core type when the type is
+real and already built" pattern `LoadIndex` established. Only the invented, never-built
+`relation.Relation` is replaced.
+
+---
+
 ## PR 11b — `feat/ports-relation` (~300)
 
 Depends on PR 11a.
 
-- [ ] **11b.1** Test first: a `repocontract`-shaped `RelationRepo` suite — `Upsert` run twice over
+- [x] **11b.1** Test first: a `repocontract`-shaped `RelationRepo` suite — `Upsert` run twice over
       the same `(from, to, type)` triple leaves exactly one row, with the second run's
       `strength`/`confidence` reflected, never a uniqueness-constraint error and never two rows
       (I07); `ByUnit` returns a unit's relations; `ThresholdsFor` returns `(nil, nil)` for an
@@ -1946,18 +1979,56 @@ Depends on PR 11a.
       `test/conformance/i03_units_never_deleted_test.go`'s strengthened prefix set satisfied.
       Verify: `go build ./...`; `golangci-lint run`.
       Requirement: R5.3 (interface half); design D8.
-- [ ] **11b.2** Same commit: `test/support/memrepo`'s `RelationRepo` fake + the contract suite's
+
+      **Done. See C13 above**: `ports.Relation` is a new struct (not `relation.Relation`, which
+      `design.md`'s own code block names but nothing in this chain ever builds).
+      `relations.from_unit_id`/`to_unit_id` both `REFERENCES units(id)` with `foreign_keys=on`
+      (confirmed directly off `0001:32-33`, not assumed — C11's lesson), so the contract carries an
+      `EnsureUnit` hook exactly like `EmbeddingHarness`'s, and every case seeds its endpoints before
+      calling `Upsert`. **Red observed verbatim**: `undefined: ports.RelationRepo`,
+      `undefined: ports.Relation` (the contract file failed to compile before `ports/relationrepo.go`
+      existed), turned green by implementing the port.
+- [x] **11b.2** Same commit: `test/support/memrepo`'s `RelationRepo` fake + the contract suite's
       first caller.
       Verify: `go test -race ./test/support/memrepo/...`.
       Requirement: R5.3 (fake half).
-- [ ] **11b.3** Test first (L3): `internal/store/sqlite/relationrepo_integration_test.go` — the SQL
+
+      **Done.** `memrepo.Relations` keys its map on `(FromUnitID, ToUnitID, Type)` — the fake's own
+      key mirrors the real `UNIQUE` constraint rather than inventing a different one (C11's
+      lesson). `EnsureUnit` is a no-op (no FK in the fake); `SeedThreshold` bypasses `Upsert`
+      entirely to seed `relation_thresholds`-shaped state directly, since no `RelationRepo` method
+      writes that table (there is no fourth, test-only write method — `m1a-substrate` D7's
+      no-consumer-but-a-test rejection, applied here). `test/conformance/relationrepo_memrepo_test.go`
+      is the contract suite's first caller, running every case against the fake at L2.
+- [x] **11b.3** Test first (L3): `internal/store/sqlite/relationrepo_integration_test.go` — the SQL
       upsert (`ON CONFLICT (from_unit_id, to_unit_id, type) DO UPDATE SET strength =
       excluded.strength, confidence = excluded.confidence`) against the real `UNIQUE` constraint
       (confirmed present, `0001:39`) — I07 proven against real SQLite, not only the fake.
       Implement `internal/store/sqlite/relationrepo.go`.
       Verify: `make test-integration`; `make store-api-golden`.
       Requirement: R5.3 (store half).
-- [ ] Verify (PR-level): `make check-all`.
+
+      **Done. Red observed verbatim**: `vet: internal/store/sqlite/relationrepo_integration_test.go:33:3:
+      undefined: RelationRepo`. Two tests beyond the shared contract, per this session's own C11/C12
+      lesson #2 (a promise only the store can keep belongs at L3, not in the shared contract): one
+      asserts the `ON CONFLICT` target names the real `UNIQUE` index directly (a second `Upsert`
+      with a *different* id must still resolve against `(from_unit_id, to_unit_id, type)`, never
+      the `id` primary key — a mistake a Go map key can never make but a hand-written `ON CONFLICT`
+      clause can), one asserts an `Upsert` for units that were never created fails against
+      `foreign_keys=on` (the defect C11 found invisible until a second implementation existed).
+      `make store-api-golden` regenerated; the diff is **eight added lines and no modified line**
+      (`RelationRepo`, its constructor, and its three methods) — the shape R3.5-style widening
+      requires.
+- [x] Verify (PR-level): `make check-all`.
+
+      **Done**, modulo one procedural note: `make check-all`'s `schema-golden-clean` step runs
+      `git diff --exit-code -- testdata/schema`, which (correctly) shows the uncommitted
+      `store_api.golden` growth from this PR — the exact "gains lines, modifies none" diff the
+      task itself asks to confirm, not a real failure. Every other `check-all` step was run and
+      confirmed individually: `golangci-lint run` (0 issues), `go test -race -shuffle=on ./...`,
+      `go test -race -shuffle=on -tags integration ./internal/store/sqlite/... ./test/integration/...`,
+      `make cover` (`internal/core` still 100%, 235/235 — this PR adds no `core` code), `make
+      cross-compile` (all seven ADR-0013 targets), `make test-e2e` — all green.
 
 ---
 
