@@ -107,6 +107,19 @@ func (r *Units) SetStatus(_ context.Context, id string, from, to unit.Status, at
 	return nil
 }
 
+// Count returns the number of units currently held. Test-only: it exists so
+// a conformance test can assert a capture created zero units rows (Q3a's
+// timer/recurring_reminder refusal, spec R4.6) without knowing an ID to look
+// up — the same "a counter is not a contract case" shape 10b-ii's
+// EmbedCalls() already established for this reason (C11's lesson: a
+// contract answered once by one author is that author's opinion, a counter
+// is a real observation).
+func (r *Units) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.units)
+}
+
 // deepCopy returns a copy of u that shares no pointee or backing array with
 // u — design D6: "no caller can reach the fake's interior". A plain struct
 // copy is not enough: unit.Unit carries *time.Time, *float64 and

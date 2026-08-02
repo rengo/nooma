@@ -1744,7 +1744,7 @@ which is precisely what I12 forbids.
 
 Depends on PR 10b.
 
-- [ ] **10c.1** Test first: a **new** conformance test,
+- [x] **10c.1** Test first: a **new** conformance test,
       `test/conformance/i04_timer_never_a_unit_test.go` (design D9 — I04 has no existing test;
       confirmed by glob, and I04 already sits in `docs/06-harness.md` §4's invariant table, so no
       doc-06 edit is needed): a `timer` or `recurring_reminder` classification leaves zero `units`
@@ -1757,7 +1757,34 @@ Depends on PR 10b.
       §8's bold sentence, per **C3**'s resolution above, not by a still-open question).
       Verify: `make test`.
       Requirement: R4.6; design D9.
-- [ ] **10c.2** Test first: an ambiguous person reference (`person_ref_status: "ambiguous"`)
+
+      **Done, `feat/brain-hooks`.** RED observed verbatim (from the sibling 10c.2 test written in
+      the same pass, since both files share one compile unit): `test/conformance/capture_ambiguous_person_ref_test.go:61:13:
+      result.Stored undefined (type brain.CaptureResult has no field or method Stored)` —
+      `go vet ./test/conformance/...`. Implemented `timerHookRefusal(c classify.Classification)
+      (Deferred, bool)` — the `route on c.Kind` step, checked before `classify.ToUnit` is even
+      called, so a refused capture never calls `r.ids.New()` for a unit that will not exist — and
+      `recordHookDeferredDecision`, writing `context = {"kind","classification","reason":
+      "prospection_not_implemented","milestone":"M3"}` with the classification embedded verbatim
+      (design D9's own shape). `CaptureResult` gained `Stored bool` and `Deferred *Deferred`
+      (`internal/brain/result.go`); `Deferred{Kind classify.Kind, Message string}` is a new
+      exported type in the same file.
+      **`timers`/`triggers` are not independently assertable at this level, and the test says so
+      rather than pretending coverage**: grepping `internal/ports/` finds no `TimerRepo` or
+      `TriggerRepo` at all, so `captureRunner` has no port through which it could even attempt
+      either write — the property holds structurally, not by a fake this test can query. What the
+      test actually asserts is zero `units` rows, via a new test-only `memrepo.Units.Count()`
+      (the same "a counter is not a contract case" shape 10b-ii's `EmbedCalls()` established,
+      C11's lesson).
+      **`Deferred.Message`'s exact wording is this task's own open decision, resolved here**:
+      neither spec.md nor design.md fixes the string, only that it exist and read as plain words
+      ("timers and recurring reminders aren't wired up yet — nothing was scheduled, and this
+      capture was not stored.").
+      New `testdata/llm/cases/classify-timer-set-a-timer.json` and
+      `classify-recurring-reminder-water-plants.json`, both derived from the existing
+      `testdata/classify/cases/timer-pasta-ten-minutes.json` / `recurring-reminder-water-plants.json`
+      golden values (C12's lesson: no invented number) rather than freshly authored ones.
+- [x] **10c.2** Test first: an ambiguous person reference (`person_ref_status: "ambiguous"`)
       persists a `pool` unit (never `incomplete`) and writes **two** `decision_log` rows —
       `capture.unit.created` and `capture.hook.deferred` with `context.kind =
       "ambiguous_person_ref"`; the suite's own file carries a paragraph stating I06 is explicitly
@@ -1766,17 +1793,62 @@ Depends on PR 10b.
       Implement the ambiguous-reference branch alongside 10c.1's timer branch (design D9).
       Verify: `make test`; review — the file's own comment names I06 as out of scope.
       Requirement: R4.7.
-- [ ] **10c.3** `docs/02-cognitive-core.md` §5's numbered "hooks" item (item 5 inside the "Capture"
+
+      **Done, `feat/brain-hooks`.** New `test/conformance/capture_ambiguous_person_ref_test.go`,
+      `TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice` — its own doc comment carries
+      the I06-out-of-scope paragraph the task requires, rather than a bare skip. Implemented
+      `recordUnitCreatedDecision` (writes `ports.ActionCaptureUnitCreated`, not
+      `ActionCaptureClassify` — design.md:934 reserves `capture.unit.created` for exactly this
+      two-row scenario, distinct from 10b.3's ordinary single-row path) and
+      `recordAmbiguousPersonRefDecision` (writes `ports.ActionCaptureHookDeferred` with
+      `context.kind = "ambiguous_person_ref"`), both called from `captureRunner.at` in place of
+      `recordClassifyDecision` when `c.PersonRefStatus != nil &&
+      *c.PersonRefStatus == classify.PersonRefStatusAmbiguous`, after `units.Create` succeeds —
+      the unit is persisted exactly as any other Phase B capture (Q3a: `unit.StatusPool`, never
+      `unit.StatusIncomplete`).
+      **The trap the task's own prompt named was checked, not assumed**: 10b-i's ordinary path
+      (`TestCapture_OrdinaryClassificationPersistsAUnit`, `capture_pipeline_test.go`) still asserts
+      exactly one `decision_log` row and `ports.ActionCaptureClassify` — unchanged, still green,
+      because the ambiguous-person branch is a distinct `if` arm, not a rewrite of the ordinary
+      one.
+      New `testdata/llm/cases/classify-person-ref-ambiguous-ana.json`, derived from
+      `testdata/classify/cases/person-ref-ambiguous-ana.json`'s existing golden values (same C12
+      discipline as 10c.1).
+- [x] **10c.3** `docs/02-cognitive-core.md` §5's numbered "hooks" item (item 5 inside the "Capture"
       list) gains a note: M1 classifies `timer`/`recurring_reminder`/`person_ref_status: ambiguous`
       per contract but arms nothing and creates no `incomplete` unit until M3/M2 respectively.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: R4.9.
-- [ ] **10c.4** Confirm by absence, across the whole of PR 10 (10a+10b+10c): no file under
+
+      **Done.** Added an "M1 note" sub-bullet directly under item 5 (`docs/02-cognitive-core.md`
+      §5), stating the M1 scope-limit in this task's own wording. `docs-sync.yml` itself was not
+      run (it decides on PR base branch/labels that only exist once a PR is open, per this
+      change's own CLAUDE.md-documented limitation) — confirmed by reading the section only, as
+      the task's own Verify line anticipates.
+- [x] **10c.4** Confirm by absence, across the whole of PR 10 (10a+10b+10c): no file under
       `internal/httpapi/**` or a `cmd/nooma` subcommand exists on this chain (R4.8). Review check,
       not new code.
       Verify: `git diff --name-only` for the full PR 10 chain contains no such path.
       Requirement: R4.8.
-- [ ] Verify (PR-level): `make check-all`.
+
+      **Done.** `c5f1a99` is the merge commit that closed PR 9c (`feat/store-search`, #84), the
+      commit immediately preceding PR 10a's own merge — so `git diff --name-only
+      c5f1a99...HEAD -- internal/httpapi cmd/nooma` covers all of 10a+10b (already merged to
+      `main`) and returns nothing; `git status --short -- internal/httpapi cmd/nooma` covers this
+      slice's own not-yet-committed 10c work and also returns nothing. Both `internal/httpapi/`
+      and `cmd/nooma/` exist in the repository (M0), each with real content — the check is that
+      neither gained or lost a path across this chain, not that either is empty.
+- [x] Verify (PR-level): `make check-all`.
+
+      **Ships with `size:exception`: 674 changed lines** against a `~200` estimate. Not a new
+      conflict, and not "C13" — that number was never assigned, because a slice exceeding the
+      ceiling is **C8 confirmed again**, not a new finding. C8 already named the rule and the
+      remedy; `size:exception` is the mechanism.
+      Where it went: ~307 lines are two conformance tests plus three LLM fixtures, ~175 are the
+      routing and its three `decision_log` writers. The `~200` estimate counted the refusal branch
+      and nothing else — it did not count that a refusal has to be *proven* not to write four
+      different kinds of row, nor that proving it needs recorded provider responses that did not
+      exist.
 
 ---
 

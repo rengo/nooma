@@ -142,6 +142,12 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a
    recurring `event` (a birthday) arms a recurring trigger; ambiguous references to people
    leave the unit `incomplete` until the disambiguation answer arrives.
+   - **M1 note**: M1 classifies `timer`, `recurring_reminder`, and `person_ref_status:
+     ambiguous` per this contract, but arms nothing and creates no `incomplete` unit —
+     arming a timer or trigger is M3, and the `incomplete` promotion path is M2. Until
+     then, a `timer`/`recurring_reminder` capture is refused outright (no `units` row —
+     §8's "a timer is NEVER a unit"), and an ambiguous person reference persists as an
+     ordinary `pool` unit with the ambiguity logged, not held as `incomplete`.
 
 **Product rule: asking is the EXCEPTION.** Nooma captures with what it has, decides on its
 own, leaves an auditable trace, and only asks when ambiguity blocks it (e.g. two different
