@@ -104,6 +104,9 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
     (`GREATEST(current, confirmed_floor)`); rejecting deletes the relation and emits a
     `relation_reject` signal.
   - These thresholds are what the learning module tunes per user (§9).
+  - When `relation_thresholds` holds no row yet for a given type — relation type is open text,
+    so no seed could ever be exhaustive — the two defaults above come from named constants in
+    `core/relation`, not a migration-seeded row.
 
 ## 5. Capture
 
@@ -444,5 +447,6 @@ module):
 | `recall_top_k` | 20 |
 | RRF vector-leg weight (`weight_vector`) | 1.0 |
 | RRF lexical-leg weight (`weight_lexical`) | 1.0 |
+| `dedup_candidate_k` | 5 |
 
 Exact values get calibrated with real usage; the mechanisms in this document do not.
