@@ -40,6 +40,7 @@ Load them with the `Skill` tool when their trigger applies:
 |---|---|
 | `nooma-core` | Touching `internal/core/**`, `internal/brain/**`, or `internal/ports/` |
 | `nooma-testing` | Writing or changing tests, invariants, or `testdata/` |
+| `nooma-pr` | Naming a branch, opening a PR, or merging one |
 
 Skills are a **pre-gate**: they keep you from reaching the gate. The CI gate is what
 guarantees. If a rule can be an automated gate, it is a gate — not a skill.
@@ -66,8 +67,14 @@ One CI gate `check-all` cannot cover: `docs-sync.yml`'s `internal/core/` <->
 list, which only exist once a PR is open on GitHub. Its logic still ships as
 `scripts/docs-sync.sh` and is tested directly, without GitHub Actions.
 
-Skills that cover the details: `work-unit-commits` (how to slice commits), `branch-pr`
-(opening the PR), `chained-pr` (splitting when it exceeds 400 lines).
+Skills that cover the details: `nooma-pr` (branch naming, opening the PR, merging),
+`work-unit-commits` (how to slice commits), `chained-pr` (splitting when it exceeds 400 lines).
+
+`nooma-pr` lives in this repository on purpose. An earlier version of this line pointed at a
+generic `branch-pr` skill installed in one maintainer's home directory, which demanded an
+approved linked issue, `type:*` labels and a PR template — none of which exist here, and one of
+whose rules would have rejected `spike/` and `plan/` branches this repo already uses. A project
+that expects outside contributions cannot keep its PR rules outside the project.
 
 ## Conventions
 
