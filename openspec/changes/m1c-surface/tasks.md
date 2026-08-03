@@ -216,6 +216,84 @@ here per this document's instruction not to resolve a spec/schema disagreement s
 for whoever next revises `spec.md` to correct the two citations from "migration 0001" to "migration
 0002."
 
+### C5 — `test/conformance/` cannot reach an unexported symbol it does not itself declare; `12f-i`'s behavioral tests are placed as in-package white-box tests instead
+
+Design D5/D7 name `correctionRunner`, `applyWithPreImage`, `recordPreImage` and `dispatchEdits` in
+lower case throughout — a deliberate encapsulation choice (D7: "no `CorrectionService` with its own
+`ports.Clock` — it would have no caller" outside `internal/brain`), the same shape `captureRunner`
+already has. Task `12f-i.1`/`12f-i.3` both say the behavioral proof (I23's RED-first audit-failure
+test, and the pre-image-shape test) lives in `test/conformance/`.
+
+**The two do not fit together.** `test/conformance` is a separate importing package
+(`package conformance`), and Go's own visibility rule — not a project convention a design document
+could relax — makes an unexported symbol in `internal/brain` unreachable from any package that does
+not declare it itself. `captureRunner`'s own precedent survives this because every test that touches
+it goes through the exported `CaptureService.Capture`; `correctionRunner` has no equivalent exported
+entrance in this link — building one would either export `applyWithPreImage` (defeating the
+encapsulation D7 states the reason for) or require the full `.at` routing method (referent
+resolution via `RecallService.ScoredFor`, `12g`'s own job, itself blocked on `13a`, which merges
+*after* `12f-i` in this chain's own order).
+
+**Resolution: the two behavioral tests (`12f-i.1`, `12f-i.3`) are white-box, in
+`internal/brain/correction_test.go` (`package brain`), not `test/conformance/`.** This is not a
+convention this project lacks precedent for — `internal/core/**`'s own L1 suites and
+`internal/httpapi/{server,binding}_test.go` are both in-package for the identical reason (a suite
+needs to reach something the package does not export). The AST guard (`12f-i.2`) is unaffected and
+stays in `test/conformance/`: it parses source text via `go/ast`, so it needs no import of
+`internal/brain`'s unexported symbols at all — the same reason
+`brain_single_clock_read_test.go` already lives there. Both tests still satisfy L2's functional
+definition (`docs/06-harness.md` §3: "touches `core` + `brain` with fakes", no I/O, always runs) —
+only their literal directory differs from the table's typical example.
+
+### C6 — `12f-i` measured 616 lines against its own ~260 ceiling (2.37×); a Layer-2/Layer-1+3 seam was evaluated and rejected — both halves stay over budget, or strict TDD forbids the split outright
+
+`sdd-apply` measured the complete, green `12f-i` PR at 616 changed lines:
+`internal/brain/correction.go` (166), `internal/brain/correction_test.go` (189),
+`test/conformance/brain_correction_audit_before_edit_ast_test.go` (224),
+`internal/ports/decisionlog.go` (26), `test/support/memrepo/decisionlog.go` (16),
+`test/support/repocontract/decisionlog.go` (4). Two contributors this document's own ~260 estimate
+did not price: the L2 AST guard's closure-detection and statement-order logic (design's own text
+estimated `~140 lines` for a comparable guard; this one's honest-limitation requirements —
+refuse-loudly on a closure, refuse-loudly on same-statement ambiguity — measure at 224), and C5's
+own in-package test file, whose existence this document's `test/conformance/` instruction did not
+anticipate.
+
+**The candidate seam**: PR A — `internal/brain/correction.go` plus `correction_test.go` (Layers 1
+and 3, the actual functional guarantee and its behavioral proof), 355 lines. PR B — the AST guard
+alone (Layer 2), 224 lines, landing second.
+
+**Why it still fails, on two independent grounds.** First, size: PR A alone is 355 lines, 1.37× the
+same ~260 ceiling this whole link is trying to fit under — splitting off the smaller half (PR B)
+does not solve the size problem for the larger one. Second, and decisive on its own even if PR A
+were small enough: `correction.go` and `correction_test.go` cannot be separated from each other at
+all — `12c`'s own "second candidate seam" already ruled this shape out ("core-plus-doc in one PR,
+the L2 conformance corpus in a second... would merge behaviour before the conformance test that
+proves it, which strict TDD forbids"), and the same reasoning applies symmetrically to implementation
+and its own RED-first test. No smaller valid cut exists inside PR A's own scope.
+
+**Resolution: `12f-i` is unsplittable for a reason distinct from `12c`'s and `12e`'s — a size-only
+seam candidate exists (the guard is genuinely decoupled from Layers 1/3 at the code level) but does
+not clear the ceiling on either side, and joins `12c`/`12e`/`13b`/`13d` as a flagged High-risk,
+`size:exception` link.** Recorded for whoever next eyes an AST-guard PR as a size-reduction seam: a
+structurally-decoupled second file is necessary but not sufficient evidence a split is worth taking
+— check whether the *remaining* half clears the ceiling too, not only whether the two halves compile
+apart.
+
+### C7 — `correctionRunner`'s struct shipped in `12f-i` carries only the fields `applyWithPreImage`/`dispatchEdits` use, not design D7's full five-field literal
+
+Design D7's own struct literal declares `correctionRunner{units, log, signals, ids, recall}` as the
+type's converged shape across the whole `12f-i`/`12f-ii`/`12g` sequence, and task `12f-i.1`'s own
+implementation line quotes it in full. Shipping all five fields in `12f-i` fails `golangci-lint`'s
+`unused` check: `recall *RecallService` is never read anywhere in this link's scope (12g's referent
+routing is what reads it), which is a lint error, not a style note.
+
+**Resolution: `correctionRunner` grows incrementally, one field per PR that first uses it** — the
+same shape design D9 already documents for `captureRunner` ("`rels` and `judge` are this PR's own
+two additions, landing where D4's diagram places them"). `12f-i` declares `units`, `log`, `ids` only;
+`12f-ii` adds `signals` where its `signals.Record` call is written; `12g` adds `recall` where its
+referent-resolution routing reads it. No behavior changes; this is a struct-shape note for whoever
+implements `12f-ii` next, so its own diff does not need to discover this pattern from scratch.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -527,24 +605,30 @@ Depends on nothing beyond Phase A/B (independent of `12a`–`12d`).
 
 ---
 
-## PR 12f-i — `feat/brain-correction-audit` (~260, first half of the pre-split `12f`)
+## PR 12f-i — `feat/brain-correction-audit` (~260 estimate, 616 measured — 2.37×; High risk, **not
+split** — see Conflicts §C6; `size:exception` applied)
 
 Depends on (`12c`, `12d`, `12e`) all merged to `main`.
 
-- [ ] **12f-i.1** Test first (I23, the RED-first audit-failure test ADR-0016 names): `test/conformance/`
-      — a `DecisionLog` fake configured to fail `Record`, driving a correction attempt, asserting no
+- [x] **12f-i.1** Test first (I23, the RED-first audit-failure test ADR-0016 names): a `DecisionLog`
+      fake configured to fail `Record`, driving a correction attempt, asserting no
       `Update*` call reaches `ports.UnitRepo` and the target unit's stored content/dates are
       unchanged afterward. **Red**: compile failure against the not-yet-existing
       `internal/brain/correction.go`.
-      Implement `internal/brain/correction.go`: `correctionRunner{units, log, signals, ids,
-      recall}`, `applyWithPreImage` (Layer 1 — the one door; ADR-0016's ordering: `recordPreImage`
-      first, `dispatchEdits` only on success), `dispatchEdits` (a total switch over
-      `correction.Field`). Two new `ports.DecisionAction` members —
-      `ActionCorrectionApplied`, `ActionCorrectionAmbiguous` — the sanctioned R7.4 edit to
-      `internal/ports/decisionlog.go`.
+      Implement `internal/brain/correction.go`: `correctionRunner{units, log, ids}` (Conflicts §C7 —
+      `signals`/`recall` join in `12f-ii`/`12g`, where each is first read), `applyWithPreImage`
+      (Layer 1 — the one door; ADR-0016's ordering: `recordPreImage` first, `dispatchEdits` only on
+      success), `dispatchEdits` (a total switch over `correction.Field`). Two new
+      `ports.DecisionAction` members — `ActionCorrectionApplied`, `ActionCorrectionAmbiguous` — the
+      sanctioned R7.4 edit to `internal/ports/decisionlog.go`.
       Verify: `make test`.
       Requirement: R1.9; design D5 Layers 1 and 3.
-- [ ] **12f-i.2** L2 AST guard (Layer 2). **No natural pre-implementation red** — it proxies over
+      **Done: `go vet`/`go build` confirmed red with `undefined: correctionRunner` before
+      `internal/brain/correction.go` existed. Test placed as white-box
+      `internal/brain/correction_test.go` (`package brain`), not `test/conformance/` — Conflicts
+      §C5: `correctionRunner`/`applyWithPreImage` are unexported by design, and Go's own visibility
+      rule makes them unreachable from a separate importing package.**
+- [x] **12f-i.2** L2 AST guard (Layer 2). **No natural pre-implementation red** — it proxies over
       code that is already correct by construction the moment `applyWithPreImage` exists, the same
       category `m1b-pipeline` task 10b.2 established. Walks every non-test file under `internal/`
       except `internal/store/**`/`internal/ports/**`, failing if (a) any call to
@@ -556,19 +640,44 @@ Depends on (`12c`, `12d`, `12e`) all merged to `main`.
       Verify: `go test ./test/conformance/...`; the temporary-break check performed and reverted,
       recorded in the commit message.
       Requirement: design D5 Layer 2.
-- [ ] **12f-i.3** The pre-image shape: a successful correction writes exactly one `decision_log` row
+      **Done: `test/conformance/brain_correction_audit_before_edit_ast_test.go`
+      (`TestCorrectionAuditPrecedesEveryUpdate`). Two temporary-break experiments run and reverted:
+      (1) a rogue `r.units.UpdateContent(...)` call inserted inside `recordPreImage` — guard failed,
+      naming `recordPreImage calls UpdateContent outside dispatchEdits`; (2) `applyWithPreImage`'s
+      two calls swapped — guard failed, naming `dispatchEdits (statement 0) runs before
+      recordPreImage (statement 1)`. `git diff` against the reverted file was empty both times.**
+- [x] **12f-i.3** The pre-image shape: a successful correction writes exactly one `decision_log` row
       (`correction.applied`) whose `context` carries `{unit_id, fields, previous, next, referent}`
       per D5's JSON shape, `previous`/`next` keyed by column name.
       Verify: `go test ./test/conformance/...` — `context.previous` equals what `ByID` returned
       before the edit.
       Requirement: R1.9; design D5.
-- [ ] **12f-i.4** doc 02 §5 step 4 delta: ADR-0016's settled `context` JSON shape (not forced by
+      **Done: `TestApplyWithPreImage_PreImageShape` (table-driven, explicit and recall referent
+      paths), same white-box file as 12f-i.1 — see Conflicts §C5. Asserts `previous.event_at` is
+      JSON `null` for an unedited column, `next.event_at` round-trips the new value, and the
+      `referent` object's three score keys are present only on the recall path.**
+- [x] **12f-i.4** doc 02 §5 step 4 delta: ADR-0016's settled `context` JSON shape (not forced by
       `docs-sync` per R1.13, carried anyway per design's own choice — D13's row for `12f`).
       Verify: read the section; `docs-sync.yml`.
       Requirement: R1.13; design D13.
-- [ ] Verify (PR-level): `make check-all`; confirm this PR's diff to
+      **Done: `docs/02-cognitive-core.md` §5 step 4 gains the settled pre-image JSON shape, a fenced
+      example, and the null/omitted-key rules — the wording gap ADR-0016 itself left open. This PR
+      touches no `internal/core/**` file, so `docs-sync.yml` does not require this edit; it is
+      carried per R1.13's own licensed choice.**
+- [x] Verify (PR-level): `make check-all`; confirm this PR's diff to
       `internal/ports/decisionlog.go` is exactly the two new `DecisionAction` members and nothing
       else in that file changes.
+      **Done: 616 insertions / 9 deletions across 7 files (`internal/brain/correction.go` 166,
+      `internal/brain/correction_test.go` 189,
+      `test/conformance/brain_correction_audit_before_edit_ast_test.go` 224,
+      `internal/ports/decisionlog.go` +26/-9, `test/support/memrepo/decisionlog.go` +16,
+      `test/support/repocontract/decisionlog.go` +4, `docs/02-cognitive-core.md` +19 — 2.37× the
+      ~260 ceiling; see Conflicts §C6 for the seam evaluated and rejected). `make check-all` green:
+      lint 0 issues (including the `unused`-field fix in Conflicts §C7), vet, race+shuffle
+      unit+integration tests, build, `TestSchemaGolden` empty diff, `internal/core` coverage
+      100%/308/308 unaffected, seven-target cross-compile, e2e. Confirmed `internal/ports/decisionlog.go`'s
+      only change is the two new `DecisionAction` members and their doc comments/`AllDecisionActions`
+      entries.**
 
 ---
 
