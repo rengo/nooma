@@ -660,6 +660,94 @@ already carries `openai` (Phase A PR 1); no delta." Confirmed directly: `docs/01
 names provider *types* generically ("Each `type` in the yml implements the matching interface"), not
 a per-type capability table, so `openai` gaining an `Embed` method changes no line there.
 
+### C17 — `15` measured 707 changed lines against its own ~400 ceiling (1.77×); a wizard/observability seam exists (each half clears budget alone) but is not taken, following `13a`'s own declined-seam precedent rather than restructuring the fixed nineteen-link chain
+
+`sdd-apply` measured the complete, green `15` PR at 707 changed lines across six files:
+`cmd/nooma/init.go` (+205/-12, the wizard itself — `EnvVarName`, `providerChoice`,
+`renderProviders`, `bindTasks`, `promptProviderSetup`/`cloudPath`/`ollamaPath`), `cmd/nooma/init_test.go`
+(185, new — `NewEnvVarName`'s L1 table, the wizard-flow tests for both paths, the D18a-shaped
+structural-rejection test, `TestWizardPopulatedVaultDecodesAndValidates`), `cmd/nooma/tasks_test.go`
+(+23, `TestBindTasksReadsTheSharedListNotACopy` — D18a's second reader, proven the same way
+`resolveTaskProviders` already is), `test/conformance/capture_cloud_embed_test.go` (90, new — R6.3's
+L2 half, wired against the real `internal/providers/openai.Client` over `httptest`, not
+`fakeprovider`), `test/e2e/init_cloud_test.go` (182, new — R6.3's L4 half plus R4.3's own L4
+no-secret proof, both through the compiled binary), `test/e2e/init_test.go` (+22, the
+`noomaWithStdin`/`noomaCmd` refactor every scripted-wizard e2e test needs).
+
+**The candidate seam, along the same kind of boundary `13a`'s own C10 already evaluated**: PR A —
+the wizard itself and its own L1/L2 proof (`init.go`, `init_test.go`, `tasks_test.go`'s new test),
+roughly 413 lines. PR B — the observability requirements R6.3 (L2 + L4) and R4.3's L4 no-secret
+proof, which only need PR A's own shape to already exist (`test/conformance/capture_cloud_embed_test.go`,
+`test/e2e/init_cloud_test.go`, `test/e2e/init_test.go`'s helper), roughly 294 lines, based on PR A
+merged to `main`. Unlike `12f-i`'s C6 finding, both halves clear the ~400 ceiling individually here
+(PR A at 413 is only barely over on its own, and would very likely close under budget once its
+comment-to-code ratio is trimmed the way `13a`'s own comment-collapsing already brought that link's
+number down before it was recorded).
+
+**Not taken, for the same reason `13a`'s C10 gave, not a new one.** Splitting `15` into two links
+would insert a link `sdd-apply` was not asked to insert — this task list and `design.md` both fix
+the chain at nineteen ordered links, `16b`'s own dependency line already reads "depends on `15`" as
+one unit, and this prompt's own framing names this link "fourteenth of nineteen." Renumbering to
+insert a fourteenth-and-a-half link is a bigger decision than a single link's own judgment, per this
+document's own instruction: "propose a seam; do not open two PRs on your own judgment." At 1.77×
+the ceiling, this link's overrun sits inside the range this chain has already absorbed with
+`size:exception` alone — tighter than `12g` (2.68×) and `13c` (2.25×), looser than `12e` (1.57×) and
+`13a` (1.24×) only by a middling margin, not an outlier.
+
+**Recorded as an available-but-declined seam**, not a rejected one, for whoever plans a future
+revision of this chain: if `15` is ever re-cut, the wizard half and the observability half are
+genuinely independent (PR B's tests import PR A's exported symbols, `renderProviders`/`bindTasks`
+etc. are not depended on directly, only the *config shape* PR A's binary produces) and both clear
+budget alone — the only cost of splitting here, as with `13a`, is chain restructuring, not a size or
+strict-TDD obstruction the way `12c`/`12f-i`/`12f-ii` each hit. `size:exception` applied via `gh pr
+edit <n> --add-label "size:exception"`, verified stuck (see the PR record below).
+
+**Two structural notes, not conflicts**:
+
+1. **The no-secret guarantee achieved is the stronger of the two design.md/spec.md offered.**
+   `renderProviders`'s own signature is incapable of holding a raw credential value
+   (`APIKeyEnv EnvVarName`, never a plain `string`) — design D15's own framing. This PR goes one
+   step further than D15's own text ("the key value the Cloud path collects interactively goes to
+   .env through a function the yml renderer cannot reach"): `promptProviderSetup`'s whole call
+   graph never asks for a credential VALUE at all, only a path choice and an optional environment
+   variable NAME override — so there is no function anywhere in the wizard, not only
+   `renderProviders`, that could ever hold a secret. The one remaining input surface (the env-var-name
+   prompt) is proven, not merely typed-away: `TestPromptProviderSetupCloudPathNeverAcceptsAKeyValue`
+   and `TestInitCloudPathNeverWritesTheScriptedKeyValue` script a real-shaped key at that exact
+   prompt and assert it reaches neither a `providerChoice` nor `nooma.yml`. `spec.md` R4.3's own
+   "Verified by" clause names this as one of two acceptable shapes ("...or the wizard's own output
+   instructs the user to set it") — this PR takes that branch, not the "collects a value" branch
+   R4.3's own scenario prose describes first; both satisfy the same MUST.
+2. **`renderProviders` reads `tasksM1Consumes` directly for the `tasks:` block, and `bindTasks`
+   reads it for which tasks to bind at all** — D18a's own "second reader" (`serve`'s wiring is the
+   first, `13d`; `doctor`'s coverage check is the third, `16b`). Neither function restates the three
+   task names as a literal. Proven by `TestBindTasksReadsTheSharedListNotACopy`
+   (`cmd/nooma/tasks_test.go`), built the same way `TestResolveTaskProvidersReadsTheSharedListNotACopy`
+   already proves the first reader.
+
+**Break experiments, per this document's own instruction, both reverted after confirming**:
+
+1. Hardcoded `bindTasks` to a literal three-entry map instead of iterating `tasksM1Consumes` —
+   caught immediately: `TestBindTasksReadsTheSharedListNotACopy` failed with "bindTasks returned 3
+   bindings, want exactly 1 for the swapped-in list," the exact predicted message.
+2. Made `cloudPath` accept the raw scripted line as `EnvVarName` unvalidated, bypassing
+   `NewEnvVarName` — caught at both levels: `TestPromptProviderSetupCloudPathNeverAcceptsAKeyValue`
+   (L1/L2) failed reporting the pasted key reached a `providerChoice`, and
+   `TestInitCloudPathNeverWritesTheScriptedKeyValue` (L4) failed showing the literal scripted key
+   written into `nooma.yml`'s `api_key_env:` line through the compiled binary.
+
+**Size**: 707 changed lines (695 insertions, 12 deletions) against the ~400 ceiling — 1.77×.
+`size:exception` applied.
+
+**Doc delta**: none, confirmed directly against `design.md` D13's own table (§3, `15` row) — "doc
+01's `nooma init` row: already accurate per D13, no delta required." `docs/05-build-plan.md`'s own
+M1 bullet ("`nooma init`'s two first-class paths — Cloud (recommended) and Ollama — writing a real
+`providers:` and `tasks:` block instead of the commented placeholder M0 ships, and never writing a
+secret") already describes exactly what this PR builds, forward-looking language and all; nothing
+in it goes stale. `docs/01-architecture.md`'s config schema section names provider *types*
+generically, the same reasoning `17`'s own C16 entry already applied, so `15` widens no line there
+either.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1433,12 +1521,12 @@ continuity with the chain design walks, not because anything forces this slot.
 
 Depends on `17` (merged) — `6 → 17 → 15`.
 
-- [ ] **15.1** Test first: `cmd/nooma/init.go` — `NewEnvVarName(s) (EnvVarName, error)` rejecting
+- [x] **15.1** Test first: `cmd/nooma/init.go` — `NewEnvVarName(s) (EnvVarName, error)` rejecting
       real-shaped API keys (`sk-ant-api03-…`, `sk-proj-…`) and accepting real POSIX-shaped variable
       names (`^[A-Z_][A-Z0-9_]*$`).
       Verify: `make test`.
       Requirement: R4.3; design D15.
-- [ ] **15.2** Test first: `renderProviders(choices []providerChoice) string` — the yml renderer
+- [x] **15.2** Test first: `renderProviders(choices []providerChoice) string` — the yml renderer
       whose declared parameters contain no field typed to hold a raw secret
       (`providerChoice{Type, Model, APIKeyEnv EnvVarName, BaseURL}`); a wizard-flow test driving the
       Cloud path with scripted input, asserting the resulting `nooma.yml` carries two `openai`
@@ -1447,37 +1535,67 @@ Depends on `17` (merged) — `6 → 17 → 15`.
       binding**; `17` touches no `cmd/nooma` file.
       Verify: `make test`.
       Requirement: R4.1, R4.2, R6.2; design D15.
-- [ ] **15.3** Test first: the Ollama path binds the same three tasks to one `ollama` entry (or two
+- [x] **15.3** Test first: the Ollama path binds the same three tasks to one `ollama` entry (or two
       if the user names a distinct embedding model); no llama.cpp/embedded option offered
       (ADR-0002's "the embedded option is discarded").
       Verify: `make test`.
       Requirement: R4.1, R4.2.
-- [ ] **15.4** Test first: `TestFreshVaultIsLoadable` extended to a wizard-populated vault for both
+- [x] **15.4** Test first: `TestFreshVaultIsLoadable` extended to a wizard-populated vault for both
       paths — `config.Decode`/`cfg.Validate` succeed; every task the wizard binds names a provider
-      present in the `providers:` map it also wrote (`checkTaskProviders`).
+      present in the `providers:` map it also wrote (`checkTaskProviders`). **Implemented as
+      `TestWizardPopulatedVaultDecodesAndValidates` (`cmd/nooma/init_test.go`), L2, exercising the
+      wizard's own functions directly rather than the compiled binary — `TestFreshVaultIsLoadable`
+      itself (`test/e2e/init_test.go`) is unmodified and still passes unchanged, proving the skip
+      path (EOF) reproduces M0's own placeholder exactly.**
       Verify: `make test`.
       Requirement: R4.4.
-- [ ] **15.5** R6.3's L2 half — the observable-embedding property at build time: a wired pipeline
+- [x] **15.5** R6.3's L2 half — the observable-embedding property at build time: a wired pipeline
       with `tasks.embedding` bound returns `Embedded: true`; the same pipeline without it returns
-      `false` — the two are distinguishable.
+      `false` — the two are distinguishable. **Implemented as
+      `TestCapture_CloudEmbedderMakesTheDistinctionObservable`
+      (`test/conformance/capture_cloud_embed_test.go`), wired against the real
+      `internal/providers/openai.Client` over `httptest` rather than `fakeprovider.NewEmbeddingFake`
+      — proving the distinction through the actual Cloud embedder R6.2 binds, not any embedder shape.**
       Verify: `go test ./test/conformance/...`.
       Requirement: R6.3 (L2 half, per N2 — cheap once `17.2`'s `endpoint` passthrough exists).
-- [ ] **15.6** R6.3's L4 half — a wizard-written Cloud vault whose `openai` entries point at a
+- [x] **15.6** R6.3's L4 half — a wizard-written Cloud vault whose `openai` entries point at a
       loopback `httptest` server, driven through the compiled binary, leaves a `unit_embeddings`
       row. Not a duplicate of `15.5` — L2 proves the distinction is observable in the wired
-      pipeline, L4 proves it survives being wired together for real (N2).
+      pipeline, L4 proves it survives being wired together for real (N2). **Implemented as
+      `TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary`
+      (`test/e2e/init_cloud_test.go`): the wizard is driven through the compiled binary's real stdin,
+      only the `endpoint:`/`http_port:` lines are patched post-init (`patchNoomaYML`) to point at a
+      loopback `mockOpenAI` server — every other byte is the wizard's own output. Asserts
+      `outcome=stored, embedded=true` on the HTTP response rather than querying `unit_embeddings`
+      directly, which the compiled-binary black-box test has no vault-internal access to; this is
+      the same observable `TestServeCaptureAndRecallRoundTripThroughRealWiring` (`13d`) already
+      asserts for its own ollama-configured vault.**
       Verify: `go test ./test/e2e/... -tags e2e`.
       Requirement: R6.3 (L4 half; R8.1's level assignment).
-- [ ] **15.7** R4.3's structural no-secret guarantee, L4: a wizard run with a scripted key value
+- [x] **15.7** R4.3's structural no-secret guarantee, L4: a wizard run with a scripted key value
       asserts the literal key string appears nowhere in the written `nooma.yml`, while `.env`
-      carries it at `0o600`.
+      carries it at `0o600`. **Implemented as `TestInitCloudPathNeverWritesTheScriptedKeyValue`
+      (`test/e2e/init_cloud_test.go`) — see the note below on which of R4.3's own two acceptable
+      shapes this PR took: the wizard's own output instructs the user to set the value, rather than
+      collecting and writing it to `.env` itself, because `promptProviderSetup` never asks for a
+      credential VALUE anywhere in its call graph. The scripted key is fed at the ONE remaining
+      input surface (the env-var-name prompt) to prove the structural guarantee holds even against a
+      confused user pasting a credential there.**
       Verify: `go test ./test/e2e/... -tags e2e`.
       Requirement: R4.3.
-- [ ] **15.8** doc 01's `nooma init` row: already accurate per D13, no delta required.
+- [x] **15.8** doc 01's `nooma init` row: already accurate per D13, no delta required. Reviewed
+      directly: `docs/01-architecture.md`'s config schema section names provider *types* generically,
+      not per-type capabilities, so nothing there goes stale; `docs/05-build-plan.md`'s own M1 bullet
+      already describes this exact deliverable (Cloud/Ollama paths, never writing a secret) and needed
+      no edit.
       Verify: review.
       Requirement: design D13 (`15` row).
-- [ ] Verify (PR-level): `make check-all`; R4.5 confirmed by review — no test in this PR opens a
-      network connection.
+- [x] Verify (PR-level): `make check-all` — green (lint 0 issues, vet, race+shuffle unit+conformance
+      tests, L3 integration, `TestSchemaGolden` empty diff, `internal/core` coverage 100% (308/308,
+      unaffected — this link touches no `internal/core` file), seven-target cross-compile, L4 e2e).
+      R4.5 confirmed by review — no test in this PR opens a network connection (every provider-facing
+      test goes through `httptest`/`fakeprovider`). See Conflicts §C17 for the measured size
+      (707 lines, 1.77×, `size:exception` applied) and the two break experiments run and reverted.
 
 ---
 
