@@ -578,6 +578,22 @@ The candidate seam, along the same recall/units-read boundary the code itself ke
 
 **Fifth, a doc-delta confirmation, not a gap.** `design.md` D13's own table (§3, "Each PR's documentation delta is assigned up front") has no row for `13c` at all — every other core-touching or ADR-adding slice has one, `13c` has neither. Read directly: `docs/01-architecture.md:101` describes the HTTP surface only as "Exposes an HTTP API on `localhost:7777`" with no route-level promise (design.md's own §1.3 table already marks this ✎ for exactly this reason, cited by `14a`'s D13 row for the CLI table's analogous case). Confirmed by direct reading for this link specifically: no doc 01 edit is needed for `13c`, matching D13's own silence on this row rather than being an omission it missed.
 
+### C15 — `13d`: neither `design.md` nor `spec.md` names a production `ports.Clock`/`ports.IDGen` adapter anywhere in the repository — this link is the first PR that actually constructs a real `brain.CaptureService`, and had to add one; wiring is deliberately all-or-nothing across `tasksM1Consumes`'s three tasks, not a per-task degradation; and this link's own ~420 ceiling was crossed, reported per its own stop-and-report instruction, and continued as instructed.
+
+**First finding, a real gap this link had to close, not a documentation drift.** `NewCaptureService`'s first two parameters are `ports.Clock` and `ports.IDGen` (`internal/brain/capture.go`) — every test in this repository satisfies them with an inline fake (`c.now` closures in `*_test.go` files), and neither `design.md` nor `spec.md` names, anywhere, what production type serves either port. `rg` for `time.Now()`, `uuid.`, and `crypto/rand` outside `internal/core`/tests confirmed no implementation exists on `main` before this PR. This is not surprising in hindsight — M0 built no code that constructs a real `brain.CaptureService` (`internal/core/` was empty until M1, per this repository's own `CLAUDE.md` header), so nothing needed one — but it means `13d` is the first PR in this repository's history to need a real clock and a real id generator, and the design/spec silence on this point is a genuine gap in the planning documents, not a citation error like C1/C4/C9/C11 above.
+
+**Resolution: two minimal, unexported adapters in `cmd/nooma/wiring.go`, not a new package.** `systemClock` wraps `time.Now()` directly — `forbidigo`'s ban on that call applies only inside `internal/core/` (`.golangci.yml:96-119`), and `cmd/nooma` is exactly where nooma-core's own decision-gate table assigns "wiring." `uuidGen` builds a version-4 UUID over `crypto/rand` (sixteen random bytes, two bit-level fixups per RFC 4122) rather than adding a new module dependency (`go.mod` carries none today) for what `docs/03-data-model.md` already specifies as the id shape. Both are five-to-ten-line types with one method each; recorded here so whoever next revises `design.md` knows this pairing needs its own row, the same way D18a's own table names three readers for `tasksM1Consumes` but nothing in this design document ever named a fourth thing this link would have to invent outright.
+
+**Second finding, a design decision this link had to make: resolution is all-or-nothing across the three `tasksM1Consumes` tasks, never a partial wiring.** Neither `design.md` nor `spec.md` states what `serve` should do when only some of `tasksM1Consumes`' tasks are bound — an omission distinct from D18a's own stated scope ("proves the three readers agree, not that a bound provider works"). Read directly: `RecallService.ScoredFor` (`internal/brain/recall.go:120-124`) calls `s.embed.Embed(...)` with no nil guard — unlike `Candidates`, which only reads its already-supplied `vector` argument and never touches `s.embed` at all. A nil `ports.EmbeddingProvider` reaching `ScoredFor` is therefore not a degraded leg (the way an embedding-provider *outage* already degrades gracefully, `m1b` D8's own product rule) — it is a nil-interface panic on the first `/recall` request or `recall`-classified capture. `resolveTaskProviders` (`cmd/nooma/wiring.go`) therefore resolves every one of `tasksM1Consumes`' three tasks or none: an unbound task, a provider type this binary has no client for, or a provider whose type does not implement the port a task needs (an anthropic- or openai-typed `embedding` binding — `openai.Client` gains an `Embed` method only once `17` lands, confirmed directly: `rg -n "func.*Embed" internal/providers/*/*.go` shows only `ollama.Client` today) all fail the whole resolution, and `wireBrain` returns `nil, nil` rather than a partially-built pair — the existing nil-`Deps` guards (`13b`, `13c`) then answer honestly over HTTP, the identical transitional state this binary was already in before this PR, now also reachable by a genuinely unconfigured or half-configured vault rather than only by "13d has not landed." Validated by breaking (see below): a config binding only two of the three tasks was confirmed to resolve `ok=false`, not a silently partial `*brain.RecallService`.
+
+**Third, a size measurement, following this chain's own established idiom.** The complete, green `13d` PR measures 453 changed lines against its own ~420 ceiling (1.08×, the tightest overrun ratio this chain has recorded since `12f-ii`'s 1.3×): `cmd/nooma/serve.go` (+16/-9), `cmd/nooma/tasks.go` (25, new), `cmd/nooma/tasks_test.go` (98, new), `cmd/nooma/wiring.go` (171, new), `test/e2e/capture_recall_test.go` (+134/-14). No seam was evaluated separately from this document's own intro, which already priced this link as unsplittable in advance ("no natural seam exists between `serve.go`'s wiring and `tasksM1Consumes`'s first reader — the list only has meaning once wired to a reader") — confirmed rather than merely assumed once implementation was complete: `golangci-lint`'s own `unused` check rejects `cmd/nooma/tasks.go`/`wiring.go` landing in a commit before `serve.go` actually calls `wireBrain` (`systemClock`, `uuidGen` and `wireBrain` itself all report `unused` standing alone), which is the same shape `12f-i`'s C6 finding already named for a strict-TDD-forbidden split, applied here to a lint gate instead of a test-first one. **Stop-and-report checkpoint**: this link's own cumulative diff crossed roughly 300 lines partway through implementing the L4 round-trip test (`test/e2e/capture_recall_test.go`'s own size, the single largest contributor); reported here per this document's own instruction, and continued, per the same instruction, rather than paused.
+
+**Validated by breaking, both reverted, confirmed via `git diff --stat` empty afterward each time:**
+1. `serve.go`: forced `recall = nil` immediately after a successful `wireBrain` call, over a fully-configured vault — `TestServeCaptureAndRecallRoundTripThroughRealWiring`'s own `POST /recall` assertion failed with `503`, not `200`, proving the L4 test genuinely exercises real wiring rather than passing regardless of it.
+2. `wiring.go`: replaced `resolveTaskProviders`'s own `for _, task := range tasksM1Consumes` with a hardcoded literal of the same three strings — `TestResolveTaskProvidersReadsTheSharedListNotACopy` failed exactly as its own doc comment predicts, proving this link's own D18a reader test genuinely distinguishes "reads the shared list" from "happens to enumerate the same three names."
+
+**Fourth, a doc-delta confirmation, not a gap — the same finding C14's own fifth point already made for `13c`, re-confirmed directly for this link rather than assumed to carry over.** `design.md` D13's own table (§3) has no row for `13d`, matching every other link this table is silent on that touches no `internal/core/**` file (`13a`, `13c`, `12d`, `12e`, `12f-ii` — none of them core-touching in isolation, none tabulated). `docs-sync.yml`'s own header (`.github/workflows/docs-sync.yml:8`) fires only on `internal/core/**` changes, and `13d` touches none. `docs/01-architecture.md:101`'s own HTTP line — "Exposes an HTTP API on `localhost:7777`" — makes no route-level promise before this PR and needs none after it: this link wires already-mounted routes (`13b`, `13c`) to real dependencies, it adds no new route, so the one doc-01 line C14 already confirmed correct for `13c` stays correct, unwidened, for `13d` too.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1298,14 +1314,14 @@ no natural seam exists between wiring and the shared list it introduces, see int
 
 Depends on `13c`.
 
-- [ ] **13d.1** `cmd/nooma/serve.go` wires config→providers→repos→`Index`→services→token into
+- [x] **13d.1** `cmd/nooma/serve.go` wires config→providers→repos→`Index`→services→token into
       `Handler(Deps{Version, Capture, Recall, Token})` — the guarded route slice built from this
       wiring, not reconstructed per request.
       Test first: extend `13c.5`'s L4 test so it exercises `serve.go`'s real wiring rather than a
       handler test's manually-built `Deps`.
       Verify: `go test ./test/e2e/... -tags e2e`.
       Requirement: R2.8 (this PR's wiring share); design D10.
-- [ ] **13d.2** `cmd/nooma/tasks.go` (NEW): `tasksM1Consumes = []string{"capture_processing",
+- [x] **13d.2** `cmd/nooma/tasks.go` (NEW): `tasksM1Consumes = []string{"capture_processing",
       "relation_evaluation", "embedding"}` — the one list three readers share (D18a). This PR's own
       reader: `serve` resolves exactly these into `CaptureService`/`RecallService`'s ports.
       Test first: an L2 test asserting `serve`'s wiring reads `tasksM1Consumes` rather than a
@@ -1313,8 +1329,9 @@ Depends on `13c`.
       Verify: `make test`.
       Requirement: design D18a (this PR's reader; `init`'s and `doctor`'s readers land in `15` and
       `16b`).
-- [ ] Verify (PR-level): `make check-all`; L4 green. **Stop-and-report checkpoint once this PR's own
-      cumulative diff crosses roughly 300 lines.**
+- [x] Verify (PR-level): `make check-all`; L4 green. **Stop-and-report checkpoint once this PR's own
+      cumulative diff crosses roughly 300 lines.** **See Conflicts §C15: crossed at ~453 lines,
+      reported per this instruction, continued as instructed.**
 
 ---
 
