@@ -328,6 +328,25 @@ inward as data. Nothing in the decision layer names a channel, so nothing has to
 a new one is added; a default baked in at the centre would not fail when it was wrong, it would
 record the wrong provenance and look correct.
 
+### 5.2 The scored fusion — a named output of the same mechanism
+
+Step 2's hybrid recall and step 4's correction referent gate share one fusion mechanism, not
+two: Reciprocal Rank Fusion, `score(d) = Σ w_i/(k + rank_i(d))` (§5 step 2,
+[ADR-0010](adr/0010-hybrid-recall-fusion.md)). Step 2 has only ever needed the resulting order;
+step 4's gate needs the scores themselves, to compute the ratio between the top two candidates
+that decides whether the referent is unambiguous (§5 step 4). So the mechanism gains a second,
+additive output alongside its existing ranked-ids form: the same computation, keeping each
+candidate's score. The ranked-ids form is a projection of the scored one, not a second
+implementation — one place for ADR-0010's own bias to live.
+
+**Every fused score is strictly positive**, and that is load-bearing, not incidental: a
+candidate is returned only when it is present in at least one of the fused lists, and every term
+`w_i/(k + rank_i(d))` is positive whenever the list's weight `w_i` is positive (§13's
+`weight_vector` and `weight_lexical` both default to 1.0), `k = 60` is positive, and
+`rank_i(d)` is at least 1 — so a sum of one or more positive terms is positive. §5 step 4's gate
+divides the top candidate's score by the runner-up's; strict positivity is what makes that
+division always defined, for any candidate set the gate ever sees.
+
 ## 6. Nightly consolidation ("sleep")
 
 One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
