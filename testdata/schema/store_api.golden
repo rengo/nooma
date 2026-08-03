@@ -2,6 +2,7 @@
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
 internal/store/sqlite: func (*DecisionLog) Record(ctx context.Context, d ports.Decision) error
 internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Time, limit int) ([]ports.Decision, error)
+internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error)
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
 internal/store/sqlite: func (*RelationRepo) ByUnit(ctx context.Context, unitID string) ([]ports.Relation, error)

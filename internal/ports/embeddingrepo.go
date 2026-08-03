@@ -58,4 +58,26 @@ type EmbeddingRepo interface {
 	// the requested model, which is the ordinary cold-start case and which
 	// recall.Search compares against.
 	LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
+
+	// CountLiveWithoutEmbedding reports how many live units (status =
+	// 'pool') hold no embedding at all, under any model — design D18b row
+	// 2's runtime half of spec R6.3, and the units<->embeddings half of
+	// docs/03-data-model.md's own "nooma doctor runs PRAGMA integrity_check
+	// + units<->embeddings<->fts consistency" promise (the fts half stays
+	// M6's). Archived units are excluded — I02's own read-side filter,
+	// applied here to a count rather than a read, because nothing live
+	// reads an archived unit's missing vector.
+	//
+	// This is the method m1b-pipeline/design.md:790-793 deliberately did
+	// not ship: "UnembeddedLive or similar would be a port method whose
+	// only caller is a test... recorded for whoever ships doctor's
+	// consistency check." nooma doctor (spec R6.3) is that caller — one of
+	// R7.4's three sanctioned edits to an existing internal/ports file, and
+	// the last of them.
+	//
+	// Zero is the healthy answer. Above zero names a vault whose capture
+	// path stored units this repository never received a Put for — the
+	// shape a permanently-unembedded Cloud vault takes (m1c-surface's own
+	// C9 finding, D18's whole reason for existing).
+	CountLiveWithoutEmbedding(ctx context.Context) (int, error)
 }

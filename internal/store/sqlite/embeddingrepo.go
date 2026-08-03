@@ -118,6 +118,27 @@ ORDER BY unit_id`
 	return idx, nil
 }
 
+// CountLiveWithoutEmbedding implements ports.EmbeddingRepo.
+//
+// A LEFT JOIN from units to unit_embeddings, filtered to status = 'pool' —
+// design D18b row 2's own SQL shape, verbatim. unit_id IS NULL is what a
+// missing row on the right side of the join looks like; it is what makes
+// this one query rather than a count-then-count-then-subtract over two
+// round trips.
+func (r *EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error) {
+	const q = `
+SELECT COUNT(*)
+FROM units u
+LEFT JOIN unit_embeddings ue ON ue.unit_id = u.id
+WHERE u.status = 'pool' AND ue.unit_id IS NULL`
+
+	var count int
+	if err := r.db.QueryRowContext(ctx, q).Scan(&count); err != nil {
+		return 0, fmt.Errorf("counting live units without an embedding: %w", err)
+	}
+	return count, nil
+}
+
 // encodeVector renders v as dim × float32, little-endian — migration 0002's
 // stated BLOB encoding.
 func encodeVector(v []float32) []byte {

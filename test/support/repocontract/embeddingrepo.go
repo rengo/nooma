@@ -225,6 +225,48 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 		}
 	})
 
+	// D18b row 2 (spec R6.3, design D18): CountLiveWithoutEmbedding counts
+	// every EnsureUnit'd unit that never received a Put, regardless of
+	// model — a unit embedded under any model is not a gap. The fake has no
+	// notion of unit status (EnsureUnit is a no-op over the real store,
+	// present only for the foreign key; the fake's own EnsureUnit now
+	// tracks the id instead), so this case treats every ensured unit as
+	// live — archived-exclusion is an L3-only case
+	// (embeddingrepo_integration_test.go), because only a real vault's
+	// status column can express it (I02's read-side filter).
+	t.Run("CountLiveWithoutEmbedding counts every ensured unit with no embedding at all", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.EnsureUnit(t, "unit-embedded")
+		repo.EnsureUnit(t, "unit-bare")
+		ctx := context.Background()
+
+		if err := repo.Put(ctx, fixtureEmbedding("unit-embedded", "model-a", []float32{1, 0, 0})); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+
+		count, err := repo.CountLiveWithoutEmbedding(ctx)
+		if err != nil {
+			t.Fatalf("CountLiveWithoutEmbedding: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("CountLiveWithoutEmbedding = %d, want 1 (unit-bare only)", count)
+		}
+	})
+
+	// A vault (or fake) holding no units at all is the ordinary cold-start
+	// case — design D18b row 2's own "zero is the healthy answer".
+	t.Run("CountLiveWithoutEmbedding is zero when nothing has been ensured", func(t *testing.T) {
+		repo := newRepo(t)
+
+		count, err := repo.CountLiveWithoutEmbedding(context.Background())
+		if err != nil {
+			t.Fatalf("CountLiveWithoutEmbedding: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("CountLiveWithoutEmbedding = %d, want 0", count)
+		}
+	})
+
 	// Mutating what Put was handed, or what LoadIndex returned, must not
 	// reach into the repository. The precedent is memrepo.Units's own
 	// deep-copying contract; a []float32 shared by reference is the easiest
