@@ -88,17 +88,24 @@ func runServe(args []string, out, errOut io.Writer) error {
 	}
 	defer func() { _ = db.Close() }()
 
-	// Capture and Recall stay nil until 13d wires providers, repos, Index and
-	// the services themselves into this command — this PR's job is only that
-	// Handler exists and every API route it mounts is guarded (ADR-0017);
-	// wiring a real *brain.CaptureService here is 13d's own scope (design D10,
-	// design.md §6's chain table). A nil Capture reaching a live request is
-	// not a crash: captureHandler checks for it and answers 503, so this
-	// binary honestly reports "not wired yet" instead of taking the process
-	// down for the caller who did everything right.
+	// wireBrain resolves config -> providers -> repos -> Index -> services
+	// (design D10, D18a) once, here, at vault open — not reconstructed per
+	// request. Capture and Recall come back nil, with no error, whenever the
+	// vault's own tasks:/providers: cannot resolve all of tasksM1Consumes
+	// (cmd/nooma/tasks.go) — an unconfigured or half-configured vault, not a
+	// startup failure. A nil Capture or Recall reaching a live request is
+	// still not a crash: captureHandler/recallHandler/unitByIDHandler each
+	// check for it and answer 503, so this binary honestly reports "not
+	// wired yet" instead of taking the process down for the caller who did
+	// everything right.
+	capture, recall, err := wireBrain(context.Background(), db, cfg, os.LookupEnv)
+	if err != nil {
+		return fmt.Errorf("wiring the capture/recall pipeline: %w", err)
+	}
+
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Token: token}),
+		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
