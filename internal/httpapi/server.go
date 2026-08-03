@@ -26,12 +26,12 @@ type Deps struct {
 	// answers 503 rather than reaching it; a nil Capture is never a crash,
 	// on this build or any future one that leaves it unwired.
 	Capture *brain.CaptureService
-	// Recall is what POST /recall calls (spec R2.4, design D10) — nil in a
-	// caller that has not wired production dependencies yet
-	// (cmd/nooma/serve.go's own transitional state until 13d's full wiring
-	// lands), the identical shape Capture's own nil-dependency window has;
-	// recallHandler checks for nil before every call and answers 503
-	// rather than reaching it.
+	// Recall is what POST /recall, GET /units/{id} and GET /units call
+	// (spec R2.4/R2.6, design D10) — nil in a caller that has not wired
+	// production dependencies yet (cmd/nooma/serve.go's own transitional
+	// state until 13d's full wiring lands), the identical shape Capture's
+	// own nil-dependency window has; every route below checks for nil
+	// before every call and answers 503 rather than reaching it.
 	Recall *brain.RecallService
 	// Token is the bearer token requireToken checks against, or "" for "no
 	// token configured" — see ResolveToken (auth.go), the one function that
@@ -57,6 +57,8 @@ func apiRoutes(d Deps) []apiRoute {
 	return []apiRoute{
 		{pattern: "POST /capture", handler: captureHandler(d)},
 		{pattern: "POST /recall", handler: recallHandler(d)},
+		{pattern: "GET /units/{id}", handler: unitByIDHandler(d)},
+		{pattern: "GET /units", handler: unitsListHandler(d)},
 	}
 }
 

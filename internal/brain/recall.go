@@ -164,6 +164,20 @@ func (s *RecallService) ScoredFor(ctx context.Context, text string) ([]ScoredUni
 	return scoredUnits, semanticLegAvailable, nil
 }
 
+// LiveByIDs is a thin passthrough to the ports.UnitRepo already injected
+// here (D9's units field). It exists so internal/httpapi's read-only unit
+// routes (GET /units/{id}, GET /units?ids=, design D10, spec R2.6) can
+// resolve ids without internal/httpapi importing internal/ports directly —
+// design's own dependency-rule check (design.md §4, "Dependency-rule check")
+// sanctions only internal/brain, internal/core/unit and crypto/subtle for
+// that package, not internal/ports. It adds no behaviour of its own: I02's
+// positive live filter is LiveByIDs' own property, unchanged by this
+// indirection — a non-live id and an unknown id are equally absent from its
+// return value, which is what lets both answer the identical 404 upstream.
+func (s *RecallService) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error) {
+	return s.units.LiveByIDs(ctx, ids)
+}
+
 // ForText is ScoredFor with its scores dropped — the shape both entrances
 // design D9 names actually return to their own callers. A projection of
 // ScoredFor, not a second implementation, for the same reason recall.Fuse is
