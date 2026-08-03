@@ -153,6 +153,7 @@ messages through an interface. **Adding a channel = one new adapter, zero core c
 | `nooma serve [vault]` | Starts everything: API + UI + channels + scheduler |
 | `nooma status` | Status without starting the server: vault path, schema version, lock holder, size, effective config. Brain state (last consolidation, channel activity) joins it in M2, when there is brain state to report |
 | `nooma doctor` | Checks config, provider connectivity, LLM answer quality, permissions, hardware |
+| `nooma capture <text> [vault]` | Sends text to a running `nooma serve` instance's `POST /capture` over HTTP and prints the result — an HTTP client, never a second direct-vault writer; fails if no server answers |
 | `nooma consolidate [vault]` | Runs consolidation once and exits (a pure subcommand, also used by the scheduler) |
 | `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
 | `nooma export [vault]` | Packages the vault into a portable `.noomabundle` |
