@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/rengo/nooma/internal/config"
@@ -95,6 +96,39 @@ func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
 	}
 	if bindings["chat"] != "chat-entry" {
 		t.Errorf(`bindTasks["chat"] = %q, want "chat-entry" — a hardcoded copy of the original three-task list would not have bound "chat" at all`, bindings["chat"])
+	}
+}
+
+// TestCheckTaskCoverageReadsTheSharedListNotACopy is design D18a's third
+// reader (16b), made structural the same way the two tests above already
+// are for the first two: temporarily replace tasksM1Consumes with one
+// member no real path names, bind the REAL three tasks (so a hardcoded copy
+// of the original list would report every one of them satisfied) and leave
+// the swapped-in member "chat" deliberately unbound. A hardcoded copy would
+// report ok (its own three tasks are all bound); reading the var live
+// reports the swapped-in task, "chat", as unbound instead.
+func TestCheckTaskCoverageReadsTheSharedListNotACopy(t *testing.T) {
+	original := tasksM1Consumes
+	t.Cleanup(func() { tasksM1Consumes = original })
+	tasksM1Consumes = []string{"chat"}
+
+	cfg := &config.Config{
+		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
+		Tasks: map[string]config.TaskBinding{
+			"capture_processing":  {Provider: "local"},
+			"relation_evaluation": {Provider: "local"},
+			"embedding":           {Provider: "local"},
+			// "chat" — the swapped-in list's only member — deliberately
+			// left unbound.
+		},
+	}
+
+	err := checkTaskCoverage("", cfg)
+	if err == nil {
+		t.Fatal("checkTaskCoverage reported ok with the swapped-in task \"chat\" left unbound — it reads a hardcoded copy of the original three tasks instead of the package var")
+	}
+	if !strings.Contains(err.Error(), "chat") {
+		t.Errorf("error %q does not name %q, the swapped-in task", err.Error(), "chat")
 	}
 }
 
