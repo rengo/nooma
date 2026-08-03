@@ -748,6 +748,61 @@ in it goes stale. `docs/01-architecture.md`'s config schema section names provid
 generically, the same reasoning `17`'s own C16 entry already applied, so `15` widens no line there
 either.
 
+### C18 — `15`'s own `e2e (windows)` CI check failed on a real, platform-specific gap `make check-all` cannot see: `.env`'s `0600` has been meaningless on Windows since M0
+
+`TestInitCloudPathNeverWritesTheScriptedKeyValue` (`test/e2e/init_cloud_test.go`) asserted
+`.env`'s permission bits equal `0600` on every OS. `e2e (windows)` failed: `.env permissions =
+666, want 0600`. Not a flake — `make check-all` runs L4 on Linux only (`docs/06-harness.md`),
+so no local gate could have caught a Windows-only failure; `e2e (windows)`
+(`docs/05-build-plan.md` §M0's own required-check list) is the only mechanism that runs L4 on
+that OS at all. This is the second CI-only gate finding in this chain, after `12c`'s
+`docs-sync.yml` rejection (Conflicts §C2) — that one fires on PR base/labels a Makefile cannot
+see; this one fires on a runner OS a Makefile does not target. **Two different reasons, same
+lesson: a green `make check-all` proves less than it appears to, and this chain has now hit both
+kinds of gate it cannot run locally.**
+
+**What the failure exposed is real, not a test artifact.** `populateVault`
+(`cmd/nooma/init.go`) has written `.env` with `os.WriteFile(..., 0o600)` since M0
+(`docs/03-data-model.md`'s own vault-structure section). On Linux and macOS, `0600` is POSIX
+owner-only — the OS itself enforces it. **On Windows it is not**: Windows has no POSIX mode
+bits, `os.Chmod`'s effect there is limited to toggling the read-only attribute, and real file
+protection on that platform is by ACL, which `os.WriteFile`'s mode argument never touches. So
+`.env` — the file that holds an API key's actual VALUE, the one credential-adjacent artifact
+this whole link (`15`) exists to keep safe — has carried materially weaker protection on Windows
+than on Linux since the very first `nooma init` M0 shipped, five months before this PR's own
+no-secret work. Nobody looked, because nothing exercised `.env`'s permission bits on a Windows
+runner until this PR's own new L4 test did — the same shape C9 (`m1-capture-recall`) already
+named for the missing cloud embedder: a real gap surviving multiple milestones because nothing
+connected "what M0 promises" to "what actually runs on that OS."
+
+**Resolution, three parts, as instructed rather than decided unilaterally**:
+
+1. **The permission assertion is now POSIX-only** (`runtime.GOOS != "windows"`), with a comment
+   stating why: Windows has no POSIX mode bits, so asserting one there tests nothing real rather
+   than testing something that fails. The Linux/macOS assertion is unchanged and exact — `0600`,
+   not "at most 0600" or any other softening.
+2. **Every other assertion in the same test still runs on every OS**, including Windows — the
+   test's actual subject (that the scripted key value never reaches `nooma.yml`, that the
+   documented default env var name is the fallback, that `.env`'s own bytes never carry the
+   scripted key, that the wizard's stdout instructs the user to set it) is platform-independent
+   and was never in question. Only the permission-bits line was ever Windows-specific.
+3. **Documented where a user reads it**, `docs/01-architecture.md`'s own "Vault structure"
+   section (the same section the vault layout diagram lives in), in `docs/05-build-plan.md`
+   §M0's own register: state the limitation plainly, name the mechanism reason (POSIX mode bits
+   vs. ACLs), name what a Windows user who cares should do about it (set the directory's own
+   ACLs), and point at this conflict entry rather than imply coverage the test suite does not
+   have.
+
+**Not implemented, named as an owner decision rather than taken silently**: whether Windows
+should get real ACL-based protection for `.env` (e.g. via `golang.org/x/sys/windows`'s ACL
+calls), or whether `nooma init` should refuse to write a Cloud path — the one path that writes a
+credential-adjacent file at all — on Windows until that exists. Both are security-posture
+decisions that reach past this link's own scope (a wizard PR) into a platform-support
+commitment the owner has not stated anywhere in `docs/`, `spec.md`, or `design.md`. Recorded
+here rather than decided by this PR's own judgment, matching this document's own standing rule:
+"propose a seam; do not open two PRs on your own judgment" applied to a security posture instead
+of a size seam.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
