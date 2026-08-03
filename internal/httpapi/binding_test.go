@@ -18,6 +18,56 @@ func cfg(t *testing.T, document string) *config.Config {
 	return c
 }
 
+// bindTokenCase is one row of the (bind, auth_token_env, env-set?) truth
+// table ADR-0007 defines. It is a package-level type, not a literal local to
+// TestDecideBinding, so auth_test.go's TestRequireTokenNoOpOnlyOnLoopback can
+// sweep the exact same combinations (R2.10's own MUST: the middleware's
+// no-op condition and DecideBinding's refusal condition must read the same
+// fact, so bind-time and request-time can never disagree about whether a
+// token exists) — one table, two consumers, the same "single source of
+// truth" shape design D10 asks the guarded-route slice for.
+type bindTokenCase struct {
+	name     string
+	document string
+	env      map[string]string
+	wantErr  bool
+}
+
+// bindTokenTruthTable is ADR-0007's decision made into data. Every row here
+// is a case TestDecideBinding asserts against directly; every row where
+// wantErr is false is also a case TestRequireTokenNoOpOnlyOnLoopback sweeps,
+// since only combinations where DecideBinding actually succeeds are ones a
+// live request could ever reach the middleware through.
+var bindTokenTruthTable = []bindTokenCase{
+	{name: "the default bind needs no token", document: "{}\n"},
+	{name: "explicit loopback", document: "server:\n  bind: 127.0.0.1\n"},
+	{name: "anywhere in 127.0.0.0/8", document: "server:\n  bind: 127.9.9.9\n"},
+	{name: "IPv6 loopback", document: "server:\n  bind: ::1\n"},
+	{name: "the literal localhost", document: "server:\n  bind: localhost\n"},
+
+	{name: "0.0.0.0 without a token", document: "server:\n  bind: 0.0.0.0\n", wantErr: true},
+	{name: ":: without a token", document: "server:\n  bind: \"::\"\n", wantErr: true},
+	{name: "a LAN address without a token", document: "server:\n  bind: 192.168.1.10\n", wantErr: true},
+	{
+		name:     "0.0.0.0 with a token variable that is unset",
+		document: "server:\n  bind: 0.0.0.0\n  auth_token_env: NOOMA_AUTH_TOKEN\n",
+		wantErr:  true,
+	},
+	{
+		name:     "0.0.0.0 with a token variable that is set",
+		document: "server:\n  bind: 0.0.0.0\n  auth_token_env: NOOMA_AUTH_TOKEN\n",
+		env:      map[string]string{"NOOMA_AUTH_TOKEN": "s3cret"},
+	},
+
+	// A hostname that merely looks like loopback. This is the row that a
+	// substring check gets wrong, and getting it wrong means binding a public
+	// interface while believing otherwise.
+	{name: "127.0.0.1.evil is a hostname", document: "server:\n  bind: 127.0.0.1.evil\n", wantErr: true},
+	{name: "0127.0.0.1 is not an IP", document: "server:\n  bind: 0127.0.0.1\n", wantErr: true},
+	{name: "an empty bind is not loopback", document: "server:\n  bind: \"\"\n", wantErr: true},
+	{name: "localhost.attacker.example", document: "server:\n  bind: localhost.attacker.example\n", wantErr: true},
+}
+
 // TestDecideBinding is ADR-0007 made executable, and the adversarial rows are the
 // substance rather than decoration.
 //
@@ -33,42 +83,7 @@ func cfg(t *testing.T, document string) *config.Config {
 func TestDecideBinding(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name     string
-		document string
-		env      map[string]string
-		wantErr  bool
-	}{
-		{name: "the default bind needs no token", document: "{}\n"},
-		{name: "explicit loopback", document: "server:\n  bind: 127.0.0.1\n"},
-		{name: "anywhere in 127.0.0.0/8", document: "server:\n  bind: 127.9.9.9\n"},
-		{name: "IPv6 loopback", document: "server:\n  bind: ::1\n"},
-		{name: "the literal localhost", document: "server:\n  bind: localhost\n"},
-
-		{name: "0.0.0.0 without a token", document: "server:\n  bind: 0.0.0.0\n", wantErr: true},
-		{name: ":: without a token", document: "server:\n  bind: \"::\"\n", wantErr: true},
-		{name: "a LAN address without a token", document: "server:\n  bind: 192.168.1.10\n", wantErr: true},
-		{
-			name:     "0.0.0.0 with a token variable that is unset",
-			document: "server:\n  bind: 0.0.0.0\n  auth_token_env: NOOMA_AUTH_TOKEN\n",
-			wantErr:  true,
-		},
-		{
-			name:     "0.0.0.0 with a token variable that is set",
-			document: "server:\n  bind: 0.0.0.0\n  auth_token_env: NOOMA_AUTH_TOKEN\n",
-			env:      map[string]string{"NOOMA_AUTH_TOKEN": "s3cret"},
-		},
-
-		// A hostname that merely looks like loopback. This is the row that a
-		// substring check gets wrong, and getting it wrong means binding a public
-		// interface while believing otherwise.
-		{name: "127.0.0.1.evil is a hostname", document: "server:\n  bind: 127.0.0.1.evil\n", wantErr: true},
-		{name: "0127.0.0.1 is not an IP", document: "server:\n  bind: 0127.0.0.1\n", wantErr: true},
-		{name: "an empty bind is not loopback", document: "server:\n  bind: \"\"\n", wantErr: true},
-		{name: "localhost.attacker.example", document: "server:\n  bind: localhost.attacker.example\n", wantErr: true},
-	}
-
-	for _, tc := range cases {
+	for _, tc := range bindTokenTruthTable {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
