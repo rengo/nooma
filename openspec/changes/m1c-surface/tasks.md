@@ -941,6 +941,129 @@ added `1e5fe71`), both predating this chain's own `16a-i`/`16a-ii` links. Checke
 corpus as it stands today rather than assumed present: `TestCorpusCoversEveryQualityGateTask`
 asserts the coverage directly, and no case needed adding.
 
+### C21 — `16b`: design's own `embedding` degrade wording is stale against `13d`'s own fail-closed wiring, and was corrected in code before merge (C21.1); `TestDoctorMakesNoNetworkCall`'s fixture was the exact C9 shape D18b row 1 now catches; and `16b` measured 485 changed lines against its own ~330 ceiling (1.47×)
+
+**First finding: design D18b row 1's own quoted `embedding` message describes a soft degrade
+`resolveTaskProviders` (`cmd/nooma/wiring.go`, `13d`) no longer produces.** Design's table (and this
+task list's own `16b.2`) states the FAIL text for an unbound `embedding` task verbatim: *"capture
+will store units with no vector and recall will run on its lexical leg alone"* — `m1b`'s own D8
+degradation, built for a provider *outage* after wiring succeeds. But `13d`'s own conflict log
+(this document, "Second finding" under `13d`) already recorded a *different*, later decision:
+`resolveTaskProviders` resolves all three of `tasksM1Consumes` or none, because
+`RecallService.ScoredFor` has no nil guard on its own `embed` field (unlike `Candidates`). Read
+directly (`cmd/nooma/wiring.go:96-134`, confirmed): an unbound `embedding` — the exact state D18b
+row 1 flags — makes `wireBrain` return `nil, nil` for **both** `CaptureService` and
+`RecallService`, so `13b`/`13c`'s existing nil-`Deps` guards answer every `/capture` and `/recall`
+request with `503` before a unit is ever stored. Under today's wiring, capture never reaches the
+"stores with no vector" branch at all for this specific cause (a missing binding) — that branch is
+still real, but only for a runtime provider *outage* after `embedding` **is** bound, a different
+question (D18's own "fit", not "configured").
+
+**C21.1 — corrected in a post-implementation coordinator review, before merge: shipping the
+verbatim wording was the wrong call, and the instruction that produced it has changed.** The apply
+pass above initially implemented design's quoted wording verbatim for `embedding`, reasoning from
+this document's own precedent for a MUST-quoted string appearing in an artifact — flagged, not
+silently deviated from. A coordinator review caught what that reasoning missed: **a diagnostic that
+misdescribes the failure is worse than none, because the user acts on it.** A reader of "capture
+will store units with no vector and recall will run on its lexical leg alone" reasonably concludes
+their captures are landing, just without semantic search — a recall-quality problem they can defer.
+Under `13d`'s actual fail-closed `wireBrain`, nothing is captured at all: `POST /capture` and
+`POST /recall` both answer `503`. Shipping the old wording would have been this exact check —
+built specifically because a silent degradation hid a build-plan gap for two milestones — repeating
+that failure mode in its own diagnostic text.
+
+**Resolution (revised): the FAIL text is corrected in code, not shipped verbatim.** `checkTaskCoverage`
+now reports, for every unbound member of `tasksM1Consumes` (not `embedding` alone — the consequence
+does not differ by which task is missing, since `resolveTaskProviders` is all-or-nothing): *"`%s` is
+unbound — POST /capture and POST /recall will answer 503 — nothing is captured, not a degraded
+capture — until every one of tasksM1Consumes is bound."* `taskDegradation`'s per-task map (one
+sentence per task, mirroring the now-abandoned premise that the consequence differs by task) is
+removed; a single `taskCoverageConsequence` constant replaces it, since the actual mechanism —
+`wireBrain`'s all-or-nothing resolution, `13d`'s own conflict-log finding above — makes the outcome
+identical regardless of which task is the one left unbound.
+
+**Two artifacts carry the stale wording, and they are not the same kind of citation.** `design.md`
+:1377 (D18b row 1's own table) literally prescribes doctor's row-1 FAIL text as a MUST-quoted
+implementation string: *"FAIL, naming the task and what degrades — for `embedding`: 'capture will
+store units with no vector and recall will run on its lexical leg alone'."* `spec.md`:80-88 (§6's
+own introduction, motivating PR 17) uses closely matching prose to **narrate C9's history**, not to
+prescribe doctor's message: *"every capture stored, every unit came back with no vector, every
+recall ran on its lexical leg alone"* — true of the codebase *before* `13d` shipped, and still
+descriptively accurate for D18's "fit" question (a bound `embedding` provider failing at runtime),
+but no longer accurate as a description of what an *unbound* task does today, which is the state
+D18's "configured" question (R6.3, this row) asks about. Neither citation is a factual error the way
+C4's migration number was — both described the actual system correctly at the time they were
+written; `13d`'s later, separately-justified all-or-nothing decision is what moved the ground under
+them. Per this chain's own C11 precedent (`spec.md` cited `RecallService.Candidates`; the callable
+method shipped as `ForText`; design won because the code is the fact) — the code, now corrected, is
+authoritative here too. Recorded for whoever next revises either document: `design.md`:1377's table
+entry needs either correcting to the 503 consequence or re-scoping to explicitly name the
+runtime-outage case it still accurately describes; `spec.md`:80-88's narrative needs a tense/scope
+note that the *"no vector... lexical leg alone"* description no longer covers the never-bound case
+`13d` closed off, only the outage case D16/R6.1 still leaves open.
+
+**Second finding: `test/e2e/doctor_test.go`'s `TestDoctorMakesNoNetworkCall` fixture was itself the
+C9 shape.** Its `nooma.yml` configured one `ollama` provider under `providers:` with no `tasks:`
+block at all — providers configured, all three of `tasksM1Consumes` unbound — which is exactly what
+D18b row 1 exists to catch, and now correctly FAILs doctor (confirmed by running the unmodified test
+against the new code: `FAIL task coverage ... capture_processing is unbound ...`). This is not the
+new check being wrong; it is the fixture unknowingly having encoded the bug design D18 exists to
+prevent. Fixed by binding all three tasks: `capture_processing`/`relation_evaluation` to a second,
+`whisper_cpp`-typed provider entry (`buildProvider` has no client for that type, so
+`checkLLMQuality` resolves zero tasks and never dials anything — audio has no HTTP client to reach
+at all, only local), `embedding` to the original unreachable `ollama` entry (which `checkLLMQuality`
+never touches). Confirmed the fixed fixture still passes the test's own "no reachable/unreachable/
+connect/hardware" assertions.
+
+**Third, a size measurement.** The complete, green `16b` PR measures 485 changed lines against its
+own ~330 ceiling (1.47×, the widest overrun ratio this chain has recorded — up from an initial 473
+lines/1.43× before the C21.1 wording fix below added a fourth work-unit commit) — split across four
+work-unit commits: `internal/ports/embeddingrepo.go` (22), `internal/store/sqlite/embeddingrepo.go`
+(21), `internal/store/sqlite/embeddingrepo_integration_test.go` (51), `test/support/memrepo/embeddings.go`
+(41), `test/support/repocontract/embeddingrepo.go` (42), `testdata/schema/store_api.golden` (1) —
+172 lines for D18b row 2's mechanism — and `cmd/nooma/doctor.go`, `cmd/nooma/doctor_test.go`,
+`cmd/nooma/tasks_test.go` (34), `docs/03-data-model.md` (5), `test/e2e/doctor_test.go` (19) — the
+remainder for `doctor`'s own reporting of both rows plus D18a's third-reader test, including the
+C21.1 correction commit.
+
+**A candidate seam exists and was evaluated before choosing not to take it**: PR A — row 2's
+mechanism (`CountLiveWithoutEmbedding` port method, both store answers, golden) *plus*
+`checkVaultCoverage`/`vaultCoverageError` and its own test, ~230 lines. PR B — row 1
+(`checkTaskCoverage`, D18a's third reader, the `doctorOKDetail` refactor) plus the doc 03 delta and
+the e2e fixture fix, based on PR A merged, ~245 lines. Unlike `12c` (killed by `docs-sync`, neither
+half touches `internal/core/**`) and `12e` (killed by C11, row 2 already answers its own contract
+twice within itself — fake and store together, satisfying C11 on its own), **no structural
+blocker rules this split out.**
+
+**Resolution: not split, `size:exception` applied.** `16b`'s own C1 resolution (above) is a planning
+decision made before this link's own implementation began, and it is explicit: *"This slice ships
+both rows, matching design's own larger-branch estimate... which already assumed the larger
+branch."* Splitting now would reopen a decision already made with the ~330 estimate's own stated
+awareness that it was pricing a combined branch — the overrun is a measurement finding beyond even
+that acknowledged size, not evidence the planning-level combination itself was wrong. Per this
+document's own instruction ("propose a seam; do not split unilaterally"), the seam above is recorded
+for review rather than acted on unilaterally. `gh pr edit <n> --add-label "size:exception"` applied
+once the PR is open, verified stuck.
+
+**Break experiments (all three from the apply prompt, run and reverted):**
+1. Replaced `checkTaskCoverage`'s `for _, task := range tasksM1Consumes` with a hardcoded literal of
+   the same three strings — `TestCheckTaskCoverageReadsTheSharedListNotACopy` failed exactly as its
+   own doc comment predicts: the swapped-in list's only member (`"chat"`) was left unbound while the
+   hardcoded three were all bound, so the hardcoded version wrongly reported ok.
+2. Removed the `len(cfg.Providers) == 0` no-op branch entirely — `TestCheckTaskCoverageReportsOKOnAFreshVault`
+   failed immediately (a fresh, fully-empty config now reported all three tasks unbound instead of
+   `taskCoverageDetail`), **and** independently confirmed with a forced `-count=1` re-run of
+   `test/e2e/doctor_test.go`'s `TestDoctorOnAHealthyVault`, which failed with `FAIL task coverage`
+   naming all three tasks and `nooma: 1 of 8 checks failed` — proving that e2e test alone would have
+   caught this regression without the new unit test.
+3. Dropped `AND u.status = 'pool'` from `CountLiveWithoutEmbedding`'s own SQL — the L2 fake suite
+   (`test/conformance`'s `TestEmbeddingRepo_MemRepo`) stayed green, exactly as expected (the fake has
+   no notion of unit status at all), while the L3 case
+   (`TestEmbeddingRepo_CountLiveWithoutEmbeddingExcludesArchived`) failed: `CountLiveWithoutEmbedding
+   = 2, want 1` — the archived unit was wrongly counted. This is the direct proof design D6's
+   "answered twice" rule exists to produce: a contract answered only by its own fake would not have
+   caught this.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1911,21 +2034,41 @@ Depends on (`15`, `16a-ii`) both merged.
 `ports.EmbeddingRepo` edit D18b row 2 needs. This slice ships both rows, matching design's own
 larger-branch estimate.**
 
-- [ ] **16b.1** D18a's third reader and the shared-list L2 guard: `doctor`'s coverage check reads
+- [x] **16b.1** D18a's third reader and the shared-list L2 guard: `doctor`'s coverage check reads
       `tasksM1Consumes` (`13d.2`) rather than restating it; an L2 test asserting all three readers
       (`serve`'s wiring, `init`'s wizard, `doctor`'s coverage check) read the same list, and every
       member is in `config.DocumentedTaskNames`.
+      **Implemented: `checkTaskCoverage` (`cmd/nooma/doctor.go`) iterates `tasksM1Consumes` itself.
+      `TestCheckTaskCoverageReadsTheSharedListNotACopy` (`cmd/nooma/tasks_test.go`, alongside the
+      other two readers' own tests) swaps the package var and proves it — a hardcoded copy would
+      report ok (its own three tasks stay bound), reading the var live reports the swapped-in task
+      as unbound instead. `TestTasksM1ConsumesAreAllDocumented` already covers the
+      `DocumentedTaskNames` half generically.**
       Verify: `make test`.
       Requirement: design D18a.
-- [ ] **16b.2** D18b row 1 — task coverage (a pure configuration read, no provider call): a
+- [x] **16b.2** D18b row 1 — task coverage (a pure configuration read, no provider call): a
       `doctorChecks` row iterating `tasksM1Consumes` against the vault's `tasks:` bindings — no
       providers configured at all → `ok (no providers configured)`; every member bound → `ok`; a
       member unbound → **FAIL**, naming the task and what degrades (for `embedding`: "capture will
       store units with no vector and recall will run on its lexical leg alone"). Design states
       this is the row that "would have caught C9 before a single capture ran."
+      **Implemented, then corrected before merge (Conflicts §C21.1): `checkTaskCoverage` +
+      `taskCoverageDetail` (the "no providers configured" success detail, recognized via a new
+      `doctorOKDetail` interface `qualityGateDetail` now also implements — one type switch in
+      `runDoctor` instead of a second bespoke assertion) + `taskCoverageConsequence`, a single
+      shared sentence (not one per task — the consequence does not differ by which task is
+      unbound). FAIL text actually shipped: `"%s is unbound — POST /capture and POST /recall will
+      answer 503 — nothing is captured, not a degraded capture — until every one of
+      tasksM1Consumes is bound."` This deliberately does NOT match design D18b row 1's own quoted
+      `embedding` example ("capture will store units with no vector...") — that text describes a
+      degradation `13d`'s fail-closed `wireBrain` no longer produces for an unbound task; shipping
+      it verbatim would have misdescribed a total outage as a partial one. See §C21.1 for the full
+      finding and which two artifacts (`design.md`:1377, `spec.md`:80-88) still carry the stale
+      wording.**
       Verify: `make test`.
-      Requirement: design D18b row 1.
-- [ ] **16b.3** D18b row 2 — vault coverage: `ports.EmbeddingRepo` gains
+      Requirement: design D18b row 1 (consequence text corrected against `13d`'s shipped behaviour,
+      §C21.1).
+- [x] **16b.3** D18b row 2 — vault coverage: `ports.EmbeddingRepo` gains
       `CountLiveWithoutEmbedding(ctx) (int, error)` (the R7.3/R7.4-sanctioned edit); a `LEFT JOIN`
       from `units` where `status = 'pool'` and `unit_embeddings.unit_id IS NULL`. Zero → `ok`; above
       zero → **FAIL**, naming the count ("N live units have no embedding; semantic recall cannot
@@ -1933,20 +2076,39 @@ larger-branch estimate.**
       Test first: L2 against a `repocontract`-shared fake (`memrepo`'s `EmbeddingRepo` fake gains the
       count method); L3 against a real vault holding both embedded and unembedded live units,
       confirming archived units are excluded (I02's own read-side filter).
+      **Implemented as specified. `memrepo.Embeddings.EnsureUnit` stopped being a no-op — it now
+      records the id (the fake has no notion of unit status, so every ensured unit counts as live;
+      archived-exclusion is proven only at L3, since only the real schema's `status` column can
+      express it). `checkVaultCoverage` + `vaultCoverageError` (the latter split out purely so the
+      report text is testable without a real vault, mirroring `qualityGateError`'s own shape).**
       Verify: `go test ./internal/store/... -tags integration`; `go test
       ./test/support/repocontract/...`.
       Requirement: R6.3 (the runtime consistency-method half); design D18b row 2; R7.3/R7.4's
       sanctioned exception.
-- [ ] **16b.4** `make store-api-golden`; confirm no migration touched.
+- [x] **16b.4** `make store-api-golden`; confirm no migration touched.
+      **Regenerated — one new line, `internal/store/sqlite: func (*EmbeddingRepo)
+      CountLiveWithoutEmbedding(ctx context.Context) (int, error)`. `git status --porcelain
+      internal/store/sqlite/migrations/` empty.**
       Verify: `TestHarness_StoreAPIUnchanged`; empty migration diff.
       Requirement: R1.12-shaped golden-regeneration obligation, applied to this port edit.
-- [ ] **16b.5** `docs/03-data-model.md:306-307`'s promise corrected to name which half exists (units
+- [x] **16b.5** `docs/03-data-model.md:306-307`'s promise corrected to name which half exists (units
       ↔embeddings now checked; units↔fts stays M6's).
+      **Implemented — the line now reads: "`nooma doctor` runs `PRAGMA integrity_check` plus the
+      units↔embeddings half of consistency — a count of live units holding no embedding (`nooma
+      doctor`'s vault coverage row). The units↔fts half is not yet checked; it is M6's."**
       Verify: read the line.
       Requirement: design D13 (`16b` row).
-- [ ] Verify (PR-level): `make check-all`; confirm this PR's diff to
+- [x] Verify (PR-level): `make check-all`; confirm this PR's diff to
       `internal/ports/embeddingrepo.go` is exactly the one new `CountLiveWithoutEmbedding` method —
       the third and last of R7.4's three sanctioned edits — and nothing else in that file changes.
+      **Green: lint 0 issues, vet, race+shuffle unit+conformance tests, L3 integration, empty
+      `store_api.golden`/schema diff, `internal/core` coverage 100% (308/308, unaffected — this
+      link touches no `internal/core` file), seven-target cross-compile, L4 e2e (all 6
+      `test/e2e/doctor_test.go` cases green with `-count=1`, including the updated
+      `TestDoctorMakesNoNetworkCall` fixture). `git diff main..HEAD -- internal/ports/embeddingrepo.go`
+      confirmed: exactly the one new method, nothing else in that file changed. Re-run green after
+      the C21.1 wording fix. See Conflicts §C21/§C21.1 for the measured size (485 lines, 1.47×,
+      up from 473/1.43× before the fix) and all three break experiments run and reverted.**
 
 ---
 

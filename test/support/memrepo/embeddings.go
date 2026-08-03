@@ -21,6 +21,14 @@ type Embeddings struct {
 	// to run — flakiness that reads as a ranking bug.
 	order  []string
 	byUnit map[string]ports.Embedding
+
+	// liveUnits is every id EnsureUnit has registered, for
+	// CountLiveWithoutEmbedding's benefit. The fake has no notion of unit
+	// status (unlike the real store's units.status column), so every
+	// ensured unit counts as live here — archived-exclusion is proven only
+	// at L3, against a real vault
+	// (internal/store/sqlite/embeddingrepo_integration_test.go).
+	liveUnits map[string]bool
 }
 
 // Assert at compile time, following internal/store/sqlite/unitrepo.go:33's
@@ -31,14 +39,35 @@ var _ ports.EmbeddingRepo = (*Embeddings)(nil)
 // NewEmbeddings returns an empty, ready-to-use in-memory
 // ports.EmbeddingRepo. Every call returns an independent instance.
 func NewEmbeddings() *Embeddings {
-	return &Embeddings{byUnit: make(map[string]ports.Embedding)}
+	return &Embeddings{byUnit: make(map[string]ports.Embedding), liveUnits: make(map[string]bool)}
 }
 
-// EnsureUnit implements repocontract.EmbeddingHarness. It does nothing: the
-// fake enforces no foreign key, so every unit id is already a valid target.
-// The method exists so one suite can drive both implementations — see
-// repocontract.EmbeddingHarness for why the store needs it.
-func (r *Embeddings) EnsureUnit(_ *testing.T, _ string) {}
+// EnsureUnit implements repocontract.EmbeddingHarness. It enforces no
+// foreign key — every unit id is already a valid Put target over this fake
+// — but it does record id as live, so CountLiveWithoutEmbedding has
+// something to count against. The store's own EnsureUnit
+// (internal/store/sqlite/embeddingrepo_integration_test.go) inserts a real
+// row instead; see repocontract.EmbeddingHarness for why the store needs
+// the hook at all.
+func (r *Embeddings) EnsureUnit(_ *testing.T, id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.liveUnits[id] = true
+}
+
+// CountLiveWithoutEmbedding implements ports.EmbeddingRepo.
+func (r *Embeddings) CountLiveWithoutEmbedding(_ context.Context) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for id := range r.liveUnits {
+		if _, embedded := r.byUnit[id]; !embedded {
+			count++
+		}
+	}
+	return count, nil
+}
 
 // Put implements ports.EmbeddingRepo.
 func (r *Embeddings) Put(_ context.Context, e ports.Embedding) error {

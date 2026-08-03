@@ -303,5 +303,6 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
   PID). A second `nooma serve` over the same vault fails clearly, it does not corrupt.
 - **Hot backup**: `nooma export` uses `VACUUM INTO` (or SQLite's backup API) — never copy
   `nooma.db` while the process is writing with WAL open.
-- **Integrity**: `nooma doctor` runs `PRAGMA integrity_check` + units↔embeddings↔fts
-  consistency.
+- **Integrity**: `nooma doctor` runs `PRAGMA integrity_check` plus the units↔embeddings half of
+  consistency — a count of live units holding no embedding (`nooma doctor`'s vault coverage row).
+  The units↔fts half is not yet checked; it is M6's.

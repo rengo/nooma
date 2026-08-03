@@ -210,3 +210,54 @@ VALUES (?, ?, ?, ?, ?)`,
 			"the shorter vector would have been scored against full-length queries")
 	}
 }
+
+// TestEmbeddingRepo_CountLiveWithoutEmbeddingExcludesArchived is spec R6.3's
+// runtime consistency check (design D18b row 2), proven here rather than at
+// L2 because only a real vault's status column can distinguish live from
+// archived — repocontract.RunEmbeddingRepo's own fake case
+// (test/conformance/embeddingrepo_memrepo_test.go) treats every ensured
+// unit as live, since the fake has no notion of status at all.
+func TestEmbeddingRepo_CountLiveWithoutEmbeddingExcludesArchived(t *testing.T) {
+	v := openTestVault(t)
+	h := embeddingHarness{EmbeddingRepo: NewEmbeddingRepo(v), v: v}
+	ctx := context.Background()
+
+	h.EnsureUnit(t, "unit-embedded") // live, embedded — not counted
+	h.EnsureUnit(t, "unit-bare")     // live, no embedding — the one that must count
+	h.EnsureUnit(t, "unit-archived") // archived, no embedding — must NOT count
+
+	if err := h.Put(ctx, ports.Embedding{
+		UnitID: "unit-embedded", Model: "model-a", Vector: []float32{1, 0, 0}, At: embeddingFixtureTime,
+	}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := v.db.ExecContext(ctx,
+		`UPDATE units SET status = 'archived' WHERE id = ?`, "unit-archived"); err != nil {
+		t.Fatalf("archiving unit-archived: %v", err)
+	}
+
+	count, err := h.CountLiveWithoutEmbedding(ctx)
+	if err != nil {
+		t.Fatalf("CountLiveWithoutEmbedding: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("CountLiveWithoutEmbedding = %d, want 1 (unit-bare only — unit-archived must "+
+			"be excluded, I02's own read-side filter)", count)
+	}
+}
+
+// TestEmbeddingRepo_CountLiveWithoutEmbeddingIsZeroOnAFreshVault is design
+// D18b row 2's own "zero is the healthy answer" case: a freshly migrated
+// vault holds no units at all.
+func TestEmbeddingRepo_CountLiveWithoutEmbeddingIsZeroOnAFreshVault(t *testing.T) {
+	v := openTestVault(t)
+	h := embeddingHarness{EmbeddingRepo: NewEmbeddingRepo(v), v: v}
+
+	count, err := h.CountLiveWithoutEmbedding(context.Background())
+	if err != nil {
+		t.Fatalf("CountLiveWithoutEmbedding: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("CountLiveWithoutEmbedding = %d, want 0", count)
+	}
+}

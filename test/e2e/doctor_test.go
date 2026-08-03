@@ -92,11 +92,28 @@ func TestDoctorExitCodeIsUsableInAScript(t *testing.T) {
 // a decision that is still open (due before M6). A check that cannot be
 // implemented honestly is worse than an absent one, because its passing means
 // nothing.
+//
+// tasks: binds all three of tasksM1Consumes — design D18b row 1 (16b) now
+// FAILs a configured-but-partially-bound vault (the exact C9 shape), so a
+// fixture naming providers: with no tasks: at all would trip that new check
+// and fail this test for an unrelated reason. capture_processing and
+// relation_evaluation bind to a whisper_cpp-typed provider deliberately:
+// buildProvider (wiring.go) has no client for that type, so checkLLMQuality
+// resolves zero tasks and never dials anything — audio is never reachable
+// over HTTP at all, only local. embedding binds to local (the unreachable
+// ollama endpoint), which checkLLMQuality never touches — only R6.3's own
+// runtime consistency check (row 2) reads the vault, not the network.
 func TestDoctorMakesNoNetworkCall(t *testing.T) {
 	home, work := t.TempDir(), t.TempDir()
 	vault := initVault(t, home, work, "pablo.nooma")
 
-	cfg := "providers:\n  local:\n    type: ollama\n    endpoint: http://127.0.0.1:1\n    model: m\n"
+	cfg := "providers:\n" +
+		"  local:\n    type: ollama\n    endpoint: http://127.0.0.1:1\n    model: m\n" +
+		"  audio:\n    type: whisper_cpp\n    binary_path: /nonexistent\n    model_path: /nonexistent\n" +
+		"tasks:\n" +
+		"  capture_processing:\n    provider: audio\n" +
+		"  relation_evaluation:\n    provider: audio\n" +
+		"  embedding:\n    provider: local\n"
 	if err := os.WriteFile(filepath.Join(vault, "nooma.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

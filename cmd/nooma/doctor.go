@@ -42,6 +42,8 @@ var doctorChecks = []doctorCheck{
 	{"schema version", checkSchema},
 	{"bind", checkBindExposure},
 	{"llm quality", checkLLMQuality},
+	{"task coverage", checkTaskCoverage},
+	{"vault coverage", checkVaultCoverage},
 }
 
 // runDoctor diagnoses a vault without starting anything.
@@ -88,12 +90,13 @@ func runDoctor(args []string, out, errOut io.Writer) error {
 			err = check.run(vault, cfg)
 		}
 
-		// qualityGateDetail is success that still has something to say
-		// (spec R5.6) — recognized here, before the general FAIL branch,
-		// so it never counts toward failed and never prints as a problem.
-		// This is the one narrow exception to "every non-nil err is a
-		// FAIL"; every other check's err is untouched.
-		if detail, ok := err.(*qualityGateDetail); ok {
+		// doctorOKDetail marks success that still has something to say
+		// (spec R5.6's qualityGateDetail; design D18b row 1's
+		// taskCoverageDetail) — recognized here, before the general FAIL
+		// branch, so it never counts toward failed and never prints as a
+		// problem. This is the one narrow exception to "every non-nil err
+		// is a FAIL"; every other check's err is untouched.
+		if detail, ok := err.(doctorOKDetail); ok {
 			_, _ = fmt.Fprintf(out, "  ok    %-18s %s\n", check.name, detail)
 			continue
 		}
@@ -214,18 +217,27 @@ func checkLLMQuality(_ string, cfg *config.Config) error {
 	return &qualityGateDetail{tasksConfigured: len(providers)}
 }
 
+// doctorOKDetail marks a check's success that still has something to say
+// (spec R5.6's qualityGateDetail below; design D18b row 1's
+// taskCoverageDetail). Both implement error only so they can travel through
+// doctorCheck.run's existing single-return-value contract without widening
+// it for every other check (spec R5.1's own constraint) — runDoctor's own
+// loop recognizes the interface, not each concrete type, so a third such
+// check does not need a third type assertion in that loop.
+type doctorOKDetail interface {
+	error
+	doctorOK()
+}
+
 // qualityGateDetail marks a successful quality-gate run that still has
-// something to say (spec R5.6). It implements error only so it can travel
-// through doctorCheck.run's existing single-return-value contract without
-// widening that contract for the other four checks (spec R5.1's own
-// constraint, upheld here rather than reopened) — runDoctor's own loop
-// recognizes it via a type assertion, before its general FAIL branch, and
-// treats it as success with extra detail, never as a failure.
+// something to say (spec R5.6).
 type qualityGateDetail struct{ tasksConfigured int }
 
 func (d *qualityGateDetail) Error() string {
 	return fmt.Sprintf("(%d tasks configured)", d.tasksConfigured)
 }
+
+func (d *qualityGateDetail) doctorOK() {}
 
 // qualityGateProviders resolves, for each of jsonTasks, whether cfg binds a
 // provider this binary can build that implements ports.LLMProvider —
@@ -421,6 +433,102 @@ func qualityGateError(results []taskQualityResult) error {
 		return nil
 	}
 	return errors.New(strings.Join(failed, "\n"))
+}
+
+// taskCoverageConsequence is checkTaskCoverage's own FAIL wording for an
+// unbound task — one shared sentence, not one per task, because
+// resolveTaskProviders (wiring.go, 13d's own conflict-log decision) resolves
+// every member of tasksM1Consumes or none: RecallService.ScoredFor has no
+// nil guard on its own embed field, so wireBrain returns nil, nil the
+// moment ANY one of the three is unbound, and 13b's/13c's existing
+// nil-Deps guards then answer every /capture and /recall request with 503
+// — regardless of which task is the one left unbound.
+//
+// This corrects design D18b row 1's own quoted "embedding" wording
+// ("capture will store units with no vector and recall will run on its
+// lexical leg alone") — that text describes m1b's D8 degradation for a
+// provider OUTAGE after wiring already succeeded, a different question
+// (D18's own "fit") from the one this check answers ("configured"). Under
+// 13d's fail-closed wireBrain, an unbound task never reaches D8's soft
+// degradation at all: nothing is captured, not "captured without a
+// vector." Tracked in tasks.md's own C21.1 — spec.md and design.md both
+// still carry the stale wording as of this fix; this doctor row is the
+// corrected one.
+const taskCoverageConsequence = "POST /capture and POST /recall will answer 503 — nothing is captured, not a degraded capture — until every one of tasksM1Consumes is bound"
+
+// taskCoverageDetail marks checkTaskCoverage's own success-with-something-
+// to-say state (design D18b row 1's "no providers configured at all" row) —
+// see doctorOKDetail above for why this implements error.
+type taskCoverageDetail struct{}
+
+func (taskCoverageDetail) Error() string { return "(no providers configured)" }
+func (taskCoverageDetail) doctorOK()     {}
+
+// checkTaskCoverage is design D18b row 1 (spec R6.3) — a pure configuration
+// read, no provider call: it asks whether a provider is BOUND to every
+// task tasksM1Consumes names, never whether the bound provider can do the
+// job (checkLLMQuality's own question, D16 — "fit") or whether the vault's
+// units are actually embedded (checkVaultCoverage's, row 2 — "effective").
+// This is the row design D18 states "would have caught C9 before a single
+// capture ran": a fresh vault with no providers configured at all is not
+// broken (ok, with a note); a vault with SOME providers configured and one
+// of tasksM1Consumes left unbound is.
+//
+// It reads tasksM1Consumes itself, not a restated copy —
+// TestCheckTaskCoverageReadsTheSharedListNotACopy (tasks_test.go) proves it
+// the same way TestResolveTaskProvidersReadsTheSharedListNotACopy and
+// TestBindTasksReadsTheSharedListNotACopy already do for this list's other
+// two readers.
+//
+// Its honest limit, stated here per golden_sets_test.go:164-176's
+// proxy-announcement precedent: it would pass on a tasks.embedding entry
+// naming a provider type that has no embedder at all — it checks that a
+// task has *a* provider, never that the provider can embed. That is D16's
+// question (fit), not this one (configured).
+func checkTaskCoverage(_ string, cfg *config.Config) error {
+	if len(cfg.Providers) == 0 {
+		return taskCoverageDetail{}
+	}
+
+	var problems []string
+	for _, task := range tasksM1Consumes {
+		if _, bound := cfg.Tasks[task]; !bound {
+			problems = append(problems, fmt.Sprintf("%s is unbound — %s", task, taskCoverageConsequence))
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(problems, "\n"))
+}
+
+// checkVaultCoverage is design D18b row 2 (spec R6.3) — the runtime half of
+// docs/03-data-model.md's own units<->embeddings<->fts consistency promise
+// (the fts half stays M6's, doc 03's own delta). Unlike row 1, this makes
+// one SQL query rather than reading configuration: it answers "did this
+// vault actually end up with vectors" (effective), not "is something
+// bound" (configured, row 1) or "is the bound provider any good"
+// (fit, D16).
+func checkVaultCoverage(vault string, cfg *config.Config) error {
+	return withVault(vault, cfg, func(v *sqlite.Vault) error {
+		count, err := sqlite.NewEmbeddingRepo(v).CountLiveWithoutEmbedding(context.Background())
+		if err != nil {
+			return fmt.Errorf("counting live units without an embedding: %w", err)
+		}
+		return vaultCoverageError(count)
+	})
+}
+
+// vaultCoverageError is checkVaultCoverage's own decision logic, split out
+// so the report text is testable without a real vault (doctor_test.go) —
+// the same shape checkLLMQuality's qualityGateError already takes. It never
+// sees an archived unit: CountLiveWithoutEmbedding already excludes them
+// (I02's own read-side filter).
+func vaultCoverageError(count int) error {
+	if count == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d live units have no embedding; semantic recall cannot reach them", count)
 }
 
 func withVault(vault string, cfg *config.Config, fn func(*sqlite.Vault) error) error {

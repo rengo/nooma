@@ -18,12 +18,16 @@ import (
 	"github.com/rengo/nooma/testdata/llm"
 )
 
-// TestDoctorChecksGainsOneNewEntry is spec R5.1: doctorChecks gains exactly
-// one new row, following the existing {name, run} shape, and every
-// existing check keeps its own name and order — this PR is one new row in
-// an existing table, never a rewrite of runDoctor's own loop.
+// TestDoctorChecksGainsOneNewEntry is spec R5.1 (16a) and design D18b (16b):
+// doctorChecks gains new rows, following the existing {name, run} shape,
+// and every existing check keeps its own name and order — 16a added one row
+// ("llm quality"), 16b adds two more ("task coverage", "vault coverage"),
+// and none of this is a rewrite of runDoctor's own loop.
 func TestDoctorChecksGainsOneNewEntry(t *testing.T) {
-	want := []string{"configuration", "permissions", "database integrity", "schema version", "bind", "llm quality"}
+	want := []string{
+		"configuration", "permissions", "database integrity", "schema version", "bind",
+		"llm quality", "task coverage", "vault coverage",
+	}
 	if len(doctorChecks) != len(want) {
 		t.Fatalf("doctorChecks has %d entries, want %d: %v", len(doctorChecks), len(want), doctorChecks)
 	}
@@ -312,6 +316,109 @@ func TestCorpusCoversEveryQualityGateTask(t *testing.T) {
 		if !found {
 			t.Errorf("testdata/llm/cases/ has no case tagged task %q (needed for jsonTasks member %q) — spec R5.8", label, task)
 		}
+	}
+}
+
+// TestCheckTaskCoverageReportsOKOnAFreshVault is design D18b row 1's own
+// "no providers configured at all" case — the same shape 16a-ii's R5.6
+// already established, applied here to a different check. A fresh vault
+// (M0's defaultConfig(), providers:/tasks: fully commented) must report ok,
+// not FAIL, so test/e2e/doctor_test.go's TestDoctorOnAHealthyVault stays
+// green unchanged.
+func TestCheckTaskCoverageReportsOKOnAFreshVault(t *testing.T) {
+	cfg := &config.Config{} // no Providers, no Tasks
+	err := checkTaskCoverage("", cfg)
+
+	detail, ok := err.(taskCoverageDetail)
+	if !ok {
+		t.Fatalf("checkTaskCoverage on a config with no providers configured = %v (%T), want a taskCoverageDetail — a fresh vault is not broken", err, err)
+	}
+	if !strings.Contains(detail.Error(), "no providers configured") {
+		t.Errorf("report text %q does not say no providers are configured", detail.Error())
+	}
+}
+
+// TestCheckTaskCoverageReportsOKWhenEveryTaskIsBound is design D18b row 1's
+// "providers configured, every member of tasksM1Consumes bound" case.
+func TestCheckTaskCoverageReportsOKWhenEveryTaskIsBound(t *testing.T) {
+	cfg := &config.Config{
+		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
+		Tasks: map[string]config.TaskBinding{
+			"capture_processing":  {Provider: "local"},
+			"relation_evaluation": {Provider: "local"},
+			"embedding":           {Provider: "local"},
+		},
+	}
+	if err := checkTaskCoverage("", cfg); err != nil {
+		t.Errorf("checkTaskCoverage with every task bound = %v, want nil", err)
+	}
+}
+
+// TestCheckTaskCoverageCatchesAnUnboundEmbeddingTask is design D18b row 1's
+// own reason for existing: "this row is what would have caught C9 before a
+// single capture ran." A Cloud-configured vault with capture_processing and
+// relation_evaluation bound but nothing bound to embedding must FAIL,
+// naming the task and the actual consequence — asserted against the report
+// text a user actually reads (16a-i's own lesson: assert the string, not
+// only the value behind it).
+//
+// The consequence text asserted here is 13d's fail-closed one (503 on both
+// routes), not design D18b row 1's own stale quoted wording ("capture will
+// store units with no vector...", m1b D8's outage degrade) — tasks.md's
+// C21.1 records the correction; a coordinator-caught review found the
+// original wording would have told a user their captures were landing
+// without vectors when in fact nothing was being captured at all.
+func TestCheckTaskCoverageCatchesAnUnboundEmbeddingTask(t *testing.T) {
+	cfg := &config.Config{
+		Providers: map[string]config.Provider{"local": {Type: "anthropic", Model: "test-model", APIKeyEnv: "TEST_KEY"}},
+		Tasks: map[string]config.TaskBinding{
+			"capture_processing":  {Provider: "local"},
+			"relation_evaluation": {Provider: "local"},
+			// embedding deliberately left unbound — the C9 shape.
+		},
+	}
+
+	err := checkTaskCoverage("", cfg)
+	if err == nil {
+		t.Fatal("checkTaskCoverage reported ok with embedding unbound — this is the exact shape C9 shipped undetected")
+	}
+	text := err.Error()
+	if !strings.Contains(text, "embedding") {
+		t.Errorf("error %q does not name the unbound task, embedding", text)
+	}
+	if !strings.Contains(text, "503") {
+		t.Errorf("error %q does not say the actual consequence (503 on both routes) — spec R6.3/design D18b row 1, corrected per tasks.md C21.1", text)
+	}
+	if !strings.Contains(text, "POST /capture") || !strings.Contains(text, "POST /recall") {
+		t.Errorf("error %q does not name both routes that go down", text)
+	}
+	if strings.Contains(text, "no vector") || strings.Contains(text, "lexical leg") {
+		t.Errorf("error %q still carries the stale D8-degradation wording this fix removed", text)
+	}
+	if strings.Contains(text, "capture_processing") || strings.Contains(text, "relation_evaluation") {
+		t.Errorf("error %q names a bound task as if it were unbound too", text)
+	}
+}
+
+// TestVaultCoverageError is design D18b row 2's own report text (spec
+// R6.3): checkVaultCoverage's decision logic, split out so it is testable
+// without a real vault — the same shape checkLLMQuality's qualityGateError
+// already takes.
+func TestVaultCoverageError(t *testing.T) {
+	if err := vaultCoverageError(0); err != nil {
+		t.Errorf("vaultCoverageError(0) = %v, want nil — zero is the healthy answer", err)
+	}
+
+	err := vaultCoverageError(3)
+	if err == nil {
+		t.Fatal("vaultCoverageError(3) = nil, want a FAIL naming the count")
+	}
+	text := err.Error()
+	if !strings.Contains(text, "3 live units have no embedding") {
+		t.Errorf("error %q does not name the count", text)
+	}
+	if !strings.Contains(text, "semantic recall") {
+		t.Errorf("error %q does not say what breaks", text)
 	}
 }
 
