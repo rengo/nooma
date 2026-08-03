@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/rengo/nooma/internal/config"
@@ -43,7 +45,9 @@ func runInit(args []string, out, errOut io.Writer) error {
 		return err
 	}
 
-	if err := createVault(target); err != nil {
+	choices, bindings := promptProviderSetup(os.Stdin, out)
+
+	if err := createVault(target, choices, bindings); err != nil {
 		return err
 	}
 
@@ -129,7 +133,7 @@ func username() string {
 //     init x.nooma` is a thing people do.
 //  3. A non-empty directory is refused (R7.3). An init that overwrites is a
 //     delete with better manners.
-func createVault(target string) error {
+func createVault(target string, choices []providerChoice, bindings map[string]string) error {
 	switch info, err := os.Lstat(target); {
 	case err == nil && info.Mode()&os.ModeSymlink != 0:
 		return fmt.Errorf("%s is a symlink; refusing to create a vault through it", target)
@@ -161,7 +165,7 @@ func createVault(target string) error {
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 
-	if err := populateVault(staging); err != nil {
+	if err := populateVault(staging, choices, bindings); err != nil {
 		return err
 	}
 
@@ -184,14 +188,15 @@ func moveIntoPlace(staging, target string) error {
 	return nil
 }
 
-func populateVault(dir string) error {
+func populateVault(dir string, choices []providerChoice, bindings map[string]string) error {
 	for _, sub := range vaultDirs {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			return fmt.Errorf("creating %s: %w", sub, err)
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, config.ConfigFileName), []byte(defaultConfig()), 0o644); err != nil {
+	yml := defaultConfig(renderProviders(choices, bindings))
+	if err := os.WriteFile(filepath.Join(dir, config.ConfigFileName), []byte(yml), 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", config.ConfigFileName, err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(envSkeleton()), 0o600); err != nil {
@@ -217,14 +222,16 @@ func isEmptyDir(dir string) (bool, error) {
 	return len(entries) == 0, nil
 }
 
-// defaultConfig is the nooma.yml a new vault starts with.
+// defaultConfig is the nooma.yml a new vault starts with. providersSection is
+// renderProviders' own output — M0's commented placeholder when the wizard
+// was skipped, or a real providers:/tasks: block otherwise (design D15).
 //
 // TestFreshVaultIsLoadable runs `nooma init` and then loads the result through
 // the real loader, so this is not a template somebody eyeballed once: if it stops
 // decoding or stops validating, that test fails. Everything here is either a documented default restated for discoverability or
-// a commented example — a fresh vault configures no provider and enables no
-// channel, because M0 interprets neither.
-func defaultConfig() string {
+// a commented example — a fresh vault with the wizard skipped configures no
+// provider and enables no channel, because M0 interprets neither.
+func defaultConfig(providersSection string) string {
 	return `# nooma.yml — see docs/01-architecture.md for the full schema.
 #
 # Secrets are never written here. A credential is always referenced by the NAME
@@ -239,13 +246,187 @@ server:
 database:
   path: ./nooma.db     # relative to this vault; it may not point outside it
 
-# providers:           # added in M1, when nooma starts calling models
-# tasks:
-
+` + providersSection + `
 channels:
   telegram:
     enabled: false     # enabling this without allowed_chat_ids is a config error
 `
+}
+
+// EnvVarName is the NAME of an environment variable — never its value
+// (design D15, spec R4.3). It is the only credential-adjacent field
+// providerChoice carries, and it cannot hold a credential: NewEnvVarName is
+// the sole constructor, and it rejects anything not POSIX-shaped.
+type EnvVarName string
+
+// envVarNamePattern is POSIX's own shell-variable-name rule. Every
+// documented provider's real key format — "sk-ant-api03-…",
+// "sk-proj-…" — carries a lowercase letter or a hyphen, both illegal here,
+// so a real key can never survive this constructor.
+var envVarNamePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
+// NewEnvVarName rejects anything that is not a POSIX-shaped environment
+// variable name. This is spec R4.3's structural guarantee at its narrowest:
+// a caller that only ever builds an EnvVarName through this function can
+// never end up holding a key-shaped string in a field meant to name one.
+func NewEnvVarName(s string) (EnvVarName, error) {
+	if !envVarNamePattern.MatchString(s) {
+		return "", fmt.Errorf("%q is not a POSIX-shaped environment variable name (%s) — a real API key is never shaped like one, which is the point", s, envVarNamePattern.String())
+	}
+	return EnvVarName(s), nil
+}
+
+// providerChoice is one providers: entry the wizard writes. None of its
+// fields can hold a raw credential value (design D15) — APIKeyEnv names the
+// environment variable the key lives in, never the key itself.
+type providerChoice struct {
+	Name      string // the providers: map key, e.g. "openai_chat"
+	Type      string // anthropic | openai | ollama
+	Model     string
+	APIKeyEnv EnvVarName // empty for ollama
+	BaseURL   string     // ollama only; empty means the client's own default
+}
+
+// renderProviders renders the providers: and tasks: yml block. Its declared
+// parameters carry no field typed to hold a raw secret — APIKeyEnv is an
+// EnvVarName, never a plain string that could be a credential value — so
+// this function is structurally incapable of writing one into nooma.yml,
+// the guarantee spec R4.3 asks for (design D15). With no choices it
+// reproduces M0's own commented placeholder exactly, unchanged.
+func renderProviders(choices []providerChoice, bindings map[string]string) string {
+	if len(choices) == 0 {
+		return "# providers:           # added in M1, when nooma starts calling models\n# tasks:\n"
+	}
+
+	var b strings.Builder
+	b.WriteString("providers:\n")
+	for _, c := range choices {
+		fmt.Fprintf(&b, "  %s:\n    type: %s\n", c.Name, c.Type)
+		if c.APIKeyEnv != "" {
+			fmt.Fprintf(&b, "    api_key_env: %s\n", c.APIKeyEnv)
+		}
+		if c.BaseURL != "" {
+			fmt.Fprintf(&b, "    endpoint: %s\n", c.BaseURL)
+		}
+		fmt.Fprintf(&b, "    model: %s\n", c.Model)
+	}
+
+	maxLen := 0
+	for _, task := range tasksM1Consumes {
+		if len(task) > maxLen {
+			maxLen = len(task)
+		}
+	}
+	b.WriteString("\ntasks:\n")
+	for _, task := range tasksM1Consumes {
+		fmt.Fprintf(&b, "  %-*s { provider: %s }\n", maxLen+1, task+":", bindings[task])
+	}
+	return b.String()
+}
+
+// bindTasks binds every task tasksM1Consumes names to chatProvider, except
+// "embedding", which binds to embedProvider — reading the shared list
+// itself (design D18a), never a restated copy. A task added to
+// tasksM1Consumes by a future milestone is bound automatically by this same
+// loop; a hardcoded three-name map would silently keep writing three.
+// TestBindTasksReadsTheSharedListNotACopy (tasks_test.go) proves it the same
+// way wiring.go's own resolveTaskProviders is already proven — D18a's
+// second reader.
+func bindTasks(embedProvider, chatProvider string) map[string]string {
+	bindings := make(map[string]string, len(tasksM1Consumes))
+	for _, task := range tasksM1Consumes {
+		if task == "embedding" {
+			bindings[task] = embedProvider
+		} else {
+			bindings[task] = chatProvider
+		}
+	}
+	return bindings
+}
+
+// defaultOpenAIKeyEnv is the Cloud path's own default — the exact name
+// docs/01-architecture.md's example config already uses for its `gpt_cloud`
+// entry.
+const defaultOpenAIKeyEnv = "OPENAI_API_KEY"
+
+// promptProviderSetup runs nooma init's own wizard step (spec R4.1, design
+// D15): exactly two first-class paths, Cloud and Ollama, plus the option to
+// skip entirely and configure later. It never asks for a credential value —
+// the only thing it collects beyond the path choice is an environment
+// variable NAME, and NewEnvVarName's own rejection means even a user who
+// pastes a real key at that one prompt cannot make it into nooma.yml: the
+// wizard's whole call graph never holds a credential, the strongest form of
+// R4.3's structural guarantee, not only renderProviders' own signature.
+//
+// EOF — a non-interactive caller, or an e2e test supplying no stdin — reads
+// the same as an empty line: skip, reproducing M0's own commented
+// placeholder exactly, so every pre-existing test that never scripted stdin
+// keeps passing unchanged.
+func promptProviderSetup(in io.Reader, out io.Writer) ([]providerChoice, map[string]string) {
+	reader := bufio.NewReader(in)
+
+	_, _ = fmt.Fprintln(out, "Configure a model provider now?")
+	_, _ = fmt.Fprintln(out, "  1) Cloud (OpenAI) — recommended, required for embeddings")
+	_, _ = fmt.Fprintln(out, "  2) Ollama (local)")
+	_, _ = fmt.Fprint(out, "Press Enter to skip and configure this later. Choice [1/2]: ")
+
+	switch readLine(reader) {
+	case "1", "cloud", "Cloud":
+		return cloudPath(reader, out)
+	case "2", "ollama", "Ollama":
+		choices := ollamaPath()
+		return choices, bindTasks(choices[0].Name, choices[0].Name)
+	case "":
+		return nil, nil
+	default:
+		_, _ = fmt.Fprintln(out, "Not a recognized choice; skipping provider setup — edit nooma.yml directly whenever you are ready.")
+		return nil, nil
+	}
+}
+
+// cloudPath asks only for the one thing a Cloud vault might legitimately
+// need overridden: the environment variable NAME the key will be read from.
+// It never asks for the key's value (spec R4.3's own MUST NOT), and it
+// writes two openai-typed providers.model bound to different tasks — a
+// chat model is not an embedding model (design D15) — because PR 17 already
+// gives openai.Client an Embed method by the time this path is written.
+func cloudPath(reader *bufio.Reader, out io.Writer) ([]providerChoice, map[string]string) {
+	_, _ = fmt.Fprintf(out, "OpenAI API key environment variable name [%s]: ", defaultOpenAIKeyEnv)
+	keyEnv := EnvVarName(defaultOpenAIKeyEnv)
+	if line := readLine(reader); line != "" {
+		v, err := NewEnvVarName(line)
+		if err != nil {
+			_, _ = fmt.Fprintf(out, "%q is not a valid environment variable name (%v) — using %s instead.\n", line, err, defaultOpenAIKeyEnv)
+		} else {
+			keyEnv = v
+		}
+	}
+	_, _ = fmt.Fprintf(out, "Add your OpenAI API key to .env as %s= before using this vault.\n", keyEnv)
+
+	choices := []providerChoice{
+		{Name: "openai_chat", Type: "openai", Model: "gpt-4o-mini", APIKeyEnv: keyEnv},
+		{Name: "openai_embed", Type: "openai", Model: "text-embedding-3-small", APIKeyEnv: keyEnv},
+	}
+	return choices, bindTasks("openai_embed", "openai_chat")
+}
+
+// ollamaPath needs no further prompt. ADR-0002 discards the embedded
+// llama.cpp option; one local model name, bound to every task, is a
+// reasonable default a user is expected to edit directly in nooma.yml — the
+// same posture defaultConfig() already takes toward every other value it
+// writes.
+func ollamaPath() []providerChoice {
+	return []providerChoice{{Name: "ollama_local", Type: "ollama", Model: "llama3.1"}}
+}
+
+// readLine reads one line of scripted or interactive input, trimmed. EOF —
+// including an immediately-closed stdin, which is what exec.Cmd hands a
+// child process whose Stdin field was never set — returns "" rather than
+// blocking or erroring, which is what makes "no input at all" behave like
+// "the user pressed Enter" throughout this wizard.
+func readLine(reader *bufio.Reader) string {
+	line, _ := reader.ReadString('\n')
+	return strings.TrimSpace(line)
 }
 
 // envSkeleton documents the accepted format where the user edits it.

@@ -75,6 +75,29 @@ func TestResolveTaskProvidersFailsClosedWhenATaskIsUnbound(t *testing.T) {
 	}
 }
 
+// TestBindTasksReadsTheSharedListNotACopy is design D18a's second reader,
+// made structural the same way TestResolveTaskProvidersReadsTheSharedListNotACopy
+// above already is for the first: temporarily replace tasksM1Consumes with
+// one member no real path names, and confirm bindTasks (init.go's own
+// wizard helper) binds exactly that member rather than a hardcoded
+// three-name literal that would ignore the swap. Run once with the fix
+// reverted to a hardcoded map — this test fails with exactly one binding
+// missing, confirming the guard catches it.
+func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
+	original := tasksM1Consumes
+	t.Cleanup(func() { tasksM1Consumes = original })
+	tasksM1Consumes = []string{"chat"}
+
+	bindings := bindTasks("embed-entry", "chat-entry")
+
+	if len(bindings) != 1 {
+		t.Fatalf("bindTasks returned %d bindings, want exactly 1 for the swapped-in list: %+v", len(bindings), bindings)
+	}
+	if bindings["chat"] != "chat-entry" {
+		t.Errorf(`bindTasks["chat"] = %q, want "chat-entry" — a hardcoded copy of the original three-task list would not have bound "chat" at all`, bindings["chat"])
+	}
+}
+
 // TestResolveTaskProvidersFailsClosedWhenTheProviderCannotEmbed pins the
 // other real gap this function exists to catch: anthropic.Client and
 // openai.Client both implement only ports.LLMProvider today (PR 17 is what

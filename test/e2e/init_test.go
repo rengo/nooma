@@ -19,7 +19,26 @@ import (
 // nooma runs the compiled binary with $HOME pointed at a temporary directory, so
 // a bare `nooma init` cannot touch the developer's real home — and so the
 // home-mode default is exercised for real rather than mocked.
+//
+// Stdin is left unset, which Go hands the child process as an
+// immediately-closed /dev/null — the wizard's own EOF-means-skip behavior
+// (cmd/nooma/init.go's promptProviderSetup) is what keeps every test that
+// calls this function, rather than noomaWithStdin below, producing the same
+// commented-placeholder vault M0 always did.
 func nooma(t *testing.T, home, cwd string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return noomaCmd(t, home, cwd, "", args...)
+}
+
+// noomaWithStdin is nooma() with scripted input for `nooma init`'s wizard —
+// one line per prompt, ending in a newline so bufio.Reader.ReadString('\n')
+// resolves each answer instead of hanging on EOF.
+func noomaWithStdin(t *testing.T, home, cwd, stdin string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return noomaCmd(t, home, cwd, stdin, args...)
+}
+
+func noomaCmd(t *testing.T, home, cwd, stdin string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 
 	cmd := exec.Command(binaryPath(t), args...)
@@ -29,6 +48,9 @@ func nooma(t *testing.T, home, cwd string, args ...string) (stdout, stderr strin
 		"USERPROFILE="+home, // Windows
 		"NOOMA_VAULT=",      // never inherit a real one
 	)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 
 	var out, errOut strings.Builder
 	cmd.Stdout = &out
