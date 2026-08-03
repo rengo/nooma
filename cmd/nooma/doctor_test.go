@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
@@ -115,7 +117,7 @@ func TestRunLLMQualityCheck(t *testing.T) {
 				providers[task] = fakeprovider.New(t, dir, ids...)
 			}
 
-			got := runLLMQualityCheck(context.Background(), providers, tt.cases, time.Now())
+			got := runLLMQualityCheck(context.Background(), providers, tt.cases, time.Now(), qualityGateTimeout)
 			assertTaskResults(t, got, tt.want)
 		})
 	}
@@ -132,7 +134,7 @@ func TestCheckLLMQuality_SendsTheCorpusPromptVerbatimOnce(t *testing.T) {
 	c := loadCase(t, dir, "classify-pick-up-dry-cleaning")
 	fake := fakeprovider.New(t, dir, c.ID)
 
-	runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": fake}, []llm.Case{c}, time.Now())
+	runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": fake}, []llm.Case{c}, time.Now(), qualityGateTimeout)
 
 	seen := fake.SeenPrompts()
 	if len(seen) != 1 {
@@ -175,6 +177,141 @@ func TestQualityGateErrorNamesEachFailingTaskSeparately(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(text), "unsuitable") && !strings.Contains(text, "capture_processing: ") {
 		t.Errorf("error text %q reads as one collapsed verdict rather than one line per task", text)
+	}
+}
+
+// TestCheckLLMQualityReportsTheConfiguredTaskCountEvenAtZero is spec R5.6:
+// a freshly `init`ed vault (M0's defaultConfig(), which ships providers:/
+// tasks: fully commented) binds nothing, so qualityGateProviders resolves
+// an empty map and runLLMQualityCheck's own loop over jsonTasks iterates
+// zero times — a structural no-op, never a `len(tasks) == 0` branch
+// deciding pass or fail. checkLLMQuality must still report success (never
+// a FAIL, matching test/e2e/doctor_test.go's TestDoctorOnAHealthyVault),
+// and the report must state the zero count so a reader can tell "passed"
+// from "did not run".
+func TestCheckLLMQualityReportsTheConfiguredTaskCountEvenAtZero(t *testing.T) {
+	cfg := &config.Config{} // no Providers, no Tasks — the freshly-init'ed shape
+	err := checkLLMQuality("", cfg)
+
+	detail, ok := err.(*qualityGateDetail)
+	if !ok {
+		t.Fatalf("checkLLMQuality on a config with no tasks bound = %v (%T), want a *qualityGateDetail — a no-op is success, never a FAIL", err, err)
+	}
+	if detail.tasksConfigured != 0 {
+		t.Errorf("detail.tasksConfigured = %d, want 0", detail.tasksConfigured)
+	}
+	text := detail.Error()
+	if !strings.Contains(text, "0 tasks configured") {
+		t.Errorf("report text %q does not state the zero count — spec R5.6", text)
+	}
+}
+
+// TestRunLLMQualityCheckReportsATransportFailureAsUnreachable is spec R5.7:
+// a transport-level failure for one task's provider is reported as the
+// provider being unreachable — distinct in wording and in category from a
+// JSON-degradation failure — and is never folded into, or counted toward,
+// the "k of n prompts produced clean JSON" line above it (spec R5.4). A
+// model cannot be judged bad at JSON on the strength of a network (or
+// vendor status) that never delivered an answer to judge.
+//
+// classify-provider-rate-limited.json is testdata/llm/'s own recorded
+// provider-level failure (format.md's error field) — exactly the shape a
+// real provider's transport/HTTP failure surfaces as through
+// ports.LLMProvider.Complete.
+func TestRunLLMQualityCheckReportsATransportFailureAsUnreachable(t *testing.T) {
+	dir := testdataLLMCasesDir(t)
+	rateLimited := loadCase(t, dir, "classify-provider-rate-limited")
+	fake := fakeprovider.New(t, dir, rateLimited.ID)
+
+	got := runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": fake}, []llm.Case{rateLimited}, time.Now(), qualityGateTimeout)
+
+	if len(got) != 1 {
+		t.Fatalf("got %d task result(s), want 1: %+v", len(got), got)
+	}
+	result := got[0]
+	if result.unreachable == "" {
+		t.Fatalf("task result = %+v, want a transport failure reported as unreachable, not folded into the JSON-degradation count", result)
+	}
+	if !strings.Contains(strings.ToLower(result.unreachable), "unreachable") {
+		t.Errorf("unreachable text %q does not contain the word %q — doc 01's own existing category", result.unreachable, "unreachable")
+	}
+	if result.total != 0 {
+		t.Errorf("result.total = %d, want 0 — a transport failure must not be counted toward the JSON-fitness denominator (spec R5.7)", result.total)
+	}
+	if text := result.String(); strings.Contains(text, "prompts produced clean JSON") {
+		t.Errorf("report text %q reads as a JSON-fitness verdict, want it to read as unreachable only", text)
+	}
+}
+
+// blockingProvider never answers unless its own context is canceled — the
+// scripted-replay fakeprovider.Fake cannot exercise a hang, since it
+// returns immediately by construction, so this is a second, purpose-built
+// stub for TestRunLLMQualityCheckBoundsTheLiveCall alone. It still touches
+// no network (CLAUDE.md non-negotiable #5): it is pure in-process
+// select/channel logic.
+type blockingProvider struct{}
+
+func (blockingProvider) Complete(ctx context.Context, _ ports.LLMRequest) (ports.LLMResponse, error) {
+	select {
+	case <-ctx.Done():
+		return ports.LLMResponse{}, ctx.Err()
+	case <-time.After(2 * time.Second):
+		// A correct caller cancels ctx well before this fires (the test
+		// below uses a 50ms bound). This branch exists only so a
+		// regression that drops the timeout fails this test in 2s
+		// instead of hanging the whole suite.
+		return ports.LLMResponse{}, errors.New("blockingProvider: no context deadline arrived within 2s")
+	}
+}
+
+var _ ports.LLMProvider = blockingProvider{}
+
+// TestRunLLMQualityCheckBoundsTheLiveCall is spec R5.7's second MUST: the
+// live call carries a bounded timeout, so a single unreachable provider
+// cannot make nooma doctor hang. Proven by measuring wall-clock time
+// against a provider that would otherwise never return — if
+// runLLMQualityCheck forgot to bound the context it hands to Complete,
+// this test still finishes (blockingProvider's own 2s fallback), but the
+// elapsed-time assertion below fails.
+func TestRunLLMQualityCheckBoundsTheLiveCall(t *testing.T) {
+	c := llm.Case{ID: "capture-processing-blocks-forever", Task: "classify", Prompt: "p"}
+
+	start := time.Now()
+	got := runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": blockingProvider{}}, []llm.Case{c}, time.Now(), 50*time.Millisecond)
+	elapsed := time.Since(start)
+
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("runLLMQualityCheck took %s against a 50ms timeout bound — the live call is not bounded (spec R5.7)", elapsed)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d task result(s), want 1: %+v", len(got), got)
+	}
+	if got[0].unreachable == "" {
+		t.Errorf("task result = %+v, want the timed-out call reported as unreachable", got[0])
+	}
+}
+
+// TestCorpusCoversEveryQualityGateTask is spec R5.8: testdata/llm/cases/
+// holds at least one case tagged with the corpus label for every jsonTasks
+// member the gate checks — verified against the corpus as it stands today,
+// not assumed.
+func TestCorpusCoversEveryQualityGateTask(t *testing.T) {
+	cases, err := llm.Cases()
+	if err != nil {
+		t.Fatalf("llm.Cases(): %v", err)
+	}
+	for _, task := range jsonTasks {
+		label := corpusTaskLabel(task)
+		found := false
+		for _, c := range cases {
+			if c.Task == label {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("testdata/llm/cases/ has no case tagged task %q (needed for jsonTasks member %q) — spec R5.8", label, task)
+		}
 	}
 }
 
