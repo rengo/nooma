@@ -26,11 +26,15 @@ type RecallService struct {
 	index *Index
 	lex   ports.LexicalSearch
 	units ports.UnitRepo
+	embed ports.EmbeddingProvider
 }
 
 // NewRecallService wires a RecallService over the ports its two legs need.
-func NewRecallService(index *Index, lex ports.LexicalSearch, units ports.UnitRepo) *RecallService {
-	return &RecallService{index: index, lex: lex, units: units}
+// embed is design D9's addition: Candidates never needs it (its caller
+// already has a vector), but ScoredFor/ForText do, because a standalone
+// /recall query has no vector until this service embeds it.
+func NewRecallService(index *Index, lex ports.LexicalSearch, units ports.UnitRepo, embed ports.EmbeddingProvider) *RecallService {
+	return &RecallService{index: index, lex: lex, units: units, embed: embed}
 }
 
 // Candidates returns the dedup/relation candidates for a unit whose
@@ -87,4 +91,91 @@ func (s *RecallService) Candidates(ctx context.Context, content string, vector [
 		return nil, fmt.Errorf("recall: resolve live candidates: %w", err)
 	}
 	return live, nil
+}
+
+// ScoredUnit is one live candidate paired with the fused score that ranked
+// it (design D9), joined from FuseScored's own map rather than recomputed.
+type ScoredUnit struct {
+	Unit  unit.Unit
+	Score float64
+}
+
+// ScoredFor answers a raw-text recall query — design D9: capture's own
+// `type: recall` entrance and the standalone /recall route both call this
+// one method with the same `text` argument, always the raw text the caller
+// received, never classify.NormalizedContent (/recall never runs classify,
+// so a normalized-text call site would answer the same question
+// differently — I22 pins this). Unlike Candidates, it embeds text itself,
+// since /recall's caller has no vector to hand it.
+//
+// The bool reports whether the vector leg ran: an embedding-provider outage,
+// or a query that normalizes to a zero vector, degrades to the lexical leg
+// alone rather than refusing the read (`m1b`'s D8 product rule, restated for
+// the read path), and both entrances degrade identically because both call
+// this one method.
+//
+// Scores survive the live filter by a join, not a second fusion: LiveByIDs
+// returns survivors in the caller's id order, so this walks them once
+// against an id -> score map built from FuseScored.
+func (s *RecallService) ScoredFor(ctx context.Context, text string) ([]ScoredUnit, bool, error) {
+	var vectorIDs []string
+	semanticLegAvailable := false
+
+	if ev, err := s.embed.Embed(ctx, ports.EmbedRequest{Text: text}); err == nil {
+		if normalized, nerr := recall.Normalize(ev.Vector); nerr == nil {
+			scored, serr := recall.Search(s.index.Snapshot(), recall.VectorQuery{
+				Model:  ev.Model,
+				Vector: normalized,
+				K:      recall.RecallTopK,
+			})
+			if serr != nil {
+				return nil, false, fmt.Errorf("recall: vector leg: %w", serr)
+			}
+			vectorIDs = make([]string, len(scored))
+			for i, sc := range scored {
+				vectorIDs[i] = sc.ID
+			}
+			semanticLegAvailable = true
+		}
+	}
+
+	lexicalIDs, err := s.lex.SearchLexical(ctx, recall.Tokenize(text), recall.RecallTopK)
+	if err != nil {
+		return nil, false, fmt.Errorf("recall: lexical leg: %w", err)
+	}
+
+	fused := recall.FuseScored(vectorIDs, lexicalIDs)
+	ids := make([]string, len(fused))
+	scoreByID := make(map[string]float64, len(fused))
+	for i, fc := range fused {
+		ids[i] = fc.ID
+		scoreByID[fc.ID] = fc.Score
+	}
+
+	live, err := s.units.LiveByIDs(ctx, ids)
+	if err != nil {
+		return nil, false, fmt.Errorf("recall: resolve live candidates: %w", err)
+	}
+
+	scoredUnits := make([]ScoredUnit, len(live))
+	for i, u := range live {
+		scoredUnits[i] = ScoredUnit{Unit: u, Score: scoreByID[u.ID]}
+	}
+	return scoredUnits, semanticLegAvailable, nil
+}
+
+// ForText is ScoredFor with its scores dropped — the shape both entrances
+// design D9 names actually return to their own callers. A projection of
+// ScoredFor, not a second implementation, for the same reason recall.Fuse is
+// a projection of recall.FuseScored (design D1).
+func (s *RecallService) ForText(ctx context.Context, text string) ([]unit.Unit, bool, error) {
+	scored, ok, err := s.ScoredFor(ctx, text)
+	if err != nil {
+		return nil, false, err
+	}
+	units := make([]unit.Unit, len(scored))
+	for i, su := range scored {
+		units[i] = su.Unit
+	}
+	return units, ok, nil
 }

@@ -72,6 +72,7 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			judge:  judge,
 			embed:  embed,
 			index:  index,
+			recall: NewRecallService(index, lex, units, embed),
 		},
 	}
 }
@@ -104,6 +105,11 @@ type captureRunner struct {
 	judge  ports.LLMProvider // relation_evaluation
 	embed  ports.EmbeddingProvider
 	index  *Index
+	// recall is design D9's one shared RecallService instance — built once
+	// by NewCaptureService, not per capture (fixing a per-call construction
+	// this field replaces below). The correction path (12g) needs the same
+	// instance.
+	recall *RecallService
 }
 
 // at runs one capture given the instant CaptureService.Capture already
@@ -277,7 +283,9 @@ func (r captureRunner) embedAndStore(ctx context.Context, u unit.Unit, now time.
 // rest, restated here for the resident Index, which no adapter sits in
 // front of), grows the resident Index so this capture's own recall step —
 // and every capture or recall after it, before the next vault open — can
-// find u, then asks RecallService for u's candidates, excluding u itself.
+// find u, then asks r.recall — captureRunner's own one shared RecallService
+// instance (design D9), not a fresh one per capture — for u's candidates,
+// excluding u itself.
 //
 // It only runs once embedAndStore has already reported success (r.at's own
 // caller): an unembedded unit has no vector to search with, and running
@@ -302,8 +310,7 @@ func (r captureRunner) recallCandidates(ctx context.Context, u unit.Unit, ev por
 
 	r.index.Add(u.ID, normalized)
 
-	svc := NewRecallService(r.index, r.lex, r.units)
-	cand, err := svc.Candidates(ctx, u.Content, normalized, ev.Model, u.ID)
+	cand, err := r.recall.Candidates(ctx, u.Content, normalized, ev.Model, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("capture: recall candidates for unit %q: %w", u.ID, err)
 	}

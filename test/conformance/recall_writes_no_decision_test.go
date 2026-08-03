@@ -9,6 +9,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -57,7 +58,11 @@ func TestRecallWritesNoDecisionRow(t *testing.T) {
 	lex.SeedLexical(t, u.ID, u.Content)
 	index.Add(u.ID, []float32{1, 0, 0})
 
-	got, err := brain.NewRecallService(index, lex, units).
+	// embed is unused by Candidates (its caller already has a vector) but is
+	// required by NewRecallService's own signature since design D9 (ScoredFor/
+	// ForText's embedding leg).
+	embed := fakeprovider.NewEmbeddingFake("model-a")
+	got, err := brain.NewRecallService(index, lex, units, embed).
 		Candidates(ctx, u.Content, []float32{1, 0, 0}, "model-a", "")
 	if err != nil {
 		t.Fatalf("Candidates: %v", err)
