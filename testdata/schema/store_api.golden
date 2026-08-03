@@ -8,6 +8,8 @@ internal/store/sqlite: func (*RelationRepo) ByUnit(ctx context.Context, unitID s
 internal/store/sqlite: func (*RelationRepo) ThresholdsFor(ctx context.Context, relType string) (*relation.Thresholds, error)
 internal/store/sqlite: func (*RelationRepo) Upsert(ctx context.Context, rel ports.Relation) error
 internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)
+internal/store/sqlite: func (*SignalRepo) Record(ctx context.Context, s ports.Signal) error
+internal/store/sqlite: func (*SignalRepo) Since(ctx context.Context, t time.Time, limit int) ([]ports.Signal, error)
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit) error
 internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
@@ -26,12 +28,14 @@ internal/store/sqlite: func NewDecisionLog(v *Vault) *DecisionLog
 internal/store/sqlite: func NewEmbeddingRepo(v *Vault) *EmbeddingRepo
 internal/store/sqlite: func NewRelationRepo(v *Vault) *RelationRepo
 internal/store/sqlite: func NewSearch(v *Vault) *Search
+internal/store/sqlite: func NewSignalRepo(v *Vault) *SignalRepo
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: type DecisionLog
 internal/store/sqlite: type EmbeddingRepo
 internal/store/sqlite: type RelationRepo
 internal/store/sqlite: type Search
+internal/store/sqlite: type SignalRepo
 internal/store/sqlite: type UnitRepo
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError
