@@ -2,13 +2,18 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/httpapi"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
@@ -24,16 +29,21 @@ import (
 // stand-in: it drives CaptureInput.Text through the full, production
 // CaptureService.Capture pipeline (a `type: recall`-classified capture) —
 // capture.go's own Kind == classify.KindRecall branch calls this exact
-// svc.ForText(ctx, in.Text) internally. Before this PR, neither entrance
-// existed in production, and this test drove two closures shaped like each
-// future caller instead; 12g is the PR that replaces the capture-side one
-// with the real thing (13c's own /recall stub is not this PR's to touch).
-// entranceRecallRoute still mirrors 13c's own future handler — a bare query
-// string, since /recall never runs classify (spec R2.4) — over the same
-// shared RecallService and corpus. Deliberately not two unit tests that
-// happen to agree: the "diverges" subtest reproduces D9's own named failure
-// mode (a call site substituting normalized content for raw text) and shows
-// this test catches it rather than passing vacuously.
+// svc.ForText(ctx, in.Text) internally.
+//
+// entranceRecallRoute is likewise 13c's own real production entrance, not a
+// stand-in: it drives the query through httpapi.Handler's real POST /recall
+// route (internal/httpapi/recall.go's recallHandler), over an httptest
+// in-process request/response cycle — the same shape internal/httpapi's own
+// handler tests use, never a direct svc.ForText call standing in for the
+// route. Before this PR, /recall did not exist in production and this test
+// called svc.ForText directly under a comment naming this exact
+// replacement as 13c's own job; that stub is gone. I22 now proves the
+// one-mechanism property against two production entrances, not one
+// production and one lookalike. Deliberately not two unit tests that happen
+// to agree: the "diverges" subtest reproduces D9's own named failure mode
+// (a call site substituting normalized content for raw text) and shows this
+// test catches it rather than passing vacuously.
 //
 // CaptureResult carries no semantic-leg-available flag of its own (design
 // D8's struct has none for the Recalled outcome — only /recall's future
@@ -106,10 +116,40 @@ func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 		}
 		return result.Recalled, nil
 	}
-	// entranceRecallRoute mirrors 13c's own future /recall handler: a bare
-	// query string, since /recall never runs classify (spec R2.4).
+	// entranceRecallRoute is 13c's own real production /recall handler,
+	// driven over an in-process HTTP request — never a direct svc.ForText
+	// call standing in for it. httpapi.Handler is built over the exact same
+	// svc this test already wired above, so both entrances share one
+	// RecallService instance, the same way a real `nooma serve` process
+	// would (cmd/nooma/serve.go wires exactly one RecallService, 13d).
+	recallHTTPHandler := httpapi.Handler(httpapi.Deps{Recall: svc})
 	entranceRecallRoute := func(query string) ([]unit.Unit, bool, error) {
-		return svc.ForText(ctx, query)
+		body, err := json.Marshal(map[string]string{"query": query})
+		if err != nil {
+			return nil, false, err
+		}
+		req := httptest.NewRequest(http.MethodPost, "/recall", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		recallHTTPHandler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			return nil, false, errors.New("POST /recall: status " + rec.Result().Status + ": " + rec.Body.String())
+		}
+
+		var resp struct {
+			Units []struct {
+				ID string `json:"id"`
+			} `json:"units"`
+			SemanticLegAvailable bool `json:"semantic_leg_available"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			return nil, false, err
+		}
+		units := make([]unit.Unit, len(resp.Units))
+		for i, u := range resp.Units {
+			units[i] = unit.Unit{ID: u.ID}
+		}
+		return units, resp.SemanticLegAvailable, nil
 	}
 
 	gotCapture, err := entranceCapture(t, rawText)
