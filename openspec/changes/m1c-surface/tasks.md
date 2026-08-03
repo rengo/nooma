@@ -650,10 +650,10 @@ time** (files were `git add`ed first so untracked new files would show in the di
    was not stated as such in `design.md` or `spec.md`), but the finding is "the operation cannot
    corrupt data," not "no test can catch a corruption that does not exist."
 
-**Size**: 208 changed code lines (`internal/providers/openai/embed.go` 76 new, `embed_test.go` 132
-new, both insertions only) against the ~200 ceiling (1.04×) — the tightest overrun ratio this chain
-has recorded, inside `13d`'s own 1.08× precedent for "no `size:exception` needed." 266 total
-including this `tasks.md` delta (58 lines). No `size:exception` applied.
+**Size**: 212 changed code lines against the ~200 ceiling (1.06×, cumulative including the C16
+correction's own +6/-2 comment reword) — still inside `13d`'s own 1.08× precedent for "no
+`size:exception` needed," even after the mid-review correction. 287 total including this
+`tasks.md` delta (75 lines, cumulative). No `size:exception` applied.
 
 **Doc delta**: none, per `design.md` D13's own table (§3, `17` row) — "doc 01's provider list
 already carries `openai` (Phase A PR 1); no delta." Confirmed directly: `docs/01-architecture.md`
