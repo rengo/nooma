@@ -88,6 +88,16 @@ func runDoctor(args []string, out, errOut io.Writer) error {
 			err = check.run(vault, cfg)
 		}
 
+		// qualityGateDetail is success that still has something to say
+		// (spec R5.6) — recognized here, before the general FAIL branch,
+		// so it never counts toward failed and never prints as a problem.
+		// This is the one narrow exception to "every non-nil err is a
+		// FAIL"; every other check's err is untouched.
+		if detail, ok := err.(*qualityGateDetail); ok {
+			_, _ = fmt.Fprintf(out, "  ok    %-18s %s\n", check.name, detail)
+			continue
+		}
+
 		if err != nil {
 			failed++
 			_, _ = fmt.Fprintf(out, "  FAIL  %-18s %v\n", check.name, err)
@@ -172,6 +182,13 @@ func corpusTaskLabel(task string) string {
 	return task
 }
 
+// qualityGateTimeout bounds every live call the quality gate sends (spec
+// R5.7's second MUST): a provider that never answers must not make nooma
+// doctor hang. Named here, rather than left as a bare literal, so the
+// failure text below can state it — a user who sees "unreachable" should
+// also see how long doctor was willing to wait.
+const qualityGateTimeout = 10 * time.Second
+
 // checkLLMQuality is ADR-0002's structured-JSON quality gate (spec R5.1):
 // it sends testdata/llm/'s embedded corpus, once per prompt, to whichever
 // provider each of jsonTasks is bound to, and judges a task's prompts
@@ -183,7 +200,31 @@ func checkLLMQuality(_ string, cfg *config.Config) error {
 		return fmt.Errorf("loading the quality gate's prompt corpus: %w", err)
 	}
 	providers := qualityGateProviders(cfg, os.LookupEnv)
-	return qualityGateError(runLLMQualityCheck(context.Background(), providers, cases, time.Now()))
+	results := runLLMQualityCheck(context.Background(), providers, cases, time.Now(), qualityGateTimeout)
+	if err := qualityGateError(results); err != nil {
+		return err
+	}
+	// spec R5.6: the report states the configured-task count on success,
+	// zero included, so a reader can tell "passed" from "did not run" —
+	// scripts/core-coverage.sh's own "armed but vacuous" framing applied
+	// to this check. len(providers) is already zero whenever
+	// runLLMQualityCheck's own loop over jsonTasks iterated nothing above
+	// — there is no branch here deciding pass vs fail on that count, only
+	// what the success line goes on to say.
+	return &qualityGateDetail{tasksConfigured: len(providers)}
+}
+
+// qualityGateDetail marks a successful quality-gate run that still has
+// something to say (spec R5.6). It implements error only so it can travel
+// through doctorCheck.run's existing single-return-value contract without
+// widening that contract for the other four checks (spec R5.1's own
+// constraint, upheld here rather than reopened) — runDoctor's own loop
+// recognizes it via a type assertion, before its general FAIL branch, and
+// treats it as success with extra detail, never as a failure.
+type qualityGateDetail struct{ tasksConfigured int }
+
+func (d *qualityGateDetail) Error() string {
+	return fmt.Sprintf("(%d tasks configured)", d.tasksConfigured)
 }
 
 // qualityGateProviders resolves, for each of jsonTasks, whether cfg binds a
@@ -228,16 +269,29 @@ type taskQualityResult struct {
 	total    int
 	clean    int
 	failures []llmQualityFailure
+
+	// unreachable is non-empty when a transport-level failure stopped this
+	// task's own run early (spec R5.7) — set instead of, never alongside,
+	// total/clean/failures above, so a transport error is never folded
+	// into or reported alongside a JSON-fitness verdict.
+	unreachable string
 }
 
-func (r taskQualityResult) failed() bool { return r.clean < r.total }
+func (r taskQualityResult) failed() bool {
+	return r.unreachable != "" || r.clean < r.total
+}
 
-// String is one task's own failure report — spec R5.4's "k of n prompts
-// produced clean JSON" line, plus one line per failing case naming the
-// field, the reason, and the case id (R5.4 Refinement 2) — never a single
-// collapsed "bad JSON" verdict, and never folded into another task's own
-// result (spec R5.2).
+// String is one task's own report. When unreachable is set (spec R5.7) it
+// is the whole story — never a "k of n" JSON-fitness line, because a
+// transport error says nothing about whether this provider's JSON is any
+// good. Otherwise it is spec R5.4's "k of n prompts produced clean JSON"
+// line, plus one line per failing case naming the field, the reason, and
+// the case id (R5.4 Refinement 2) — never a single collapsed "bad JSON"
+// verdict, and never folded into another task's own result (spec R5.2).
 func (r taskQualityResult) String() string {
+	if r.unreachable != "" {
+		return fmt.Sprintf("%s: %s", r.task, r.unreachable)
+	}
 	report := fmt.Sprintf("%s: %d of %d prompts produced clean JSON", r.task, r.clean, r.total)
 	for _, f := range r.failures {
 		report += "\n    " + f.String()
@@ -245,15 +299,11 @@ func (r taskQualityResult) String() string {
 	return report
 }
 
-// reasonTransportError marks a Complete call that failed outright (a
-// scripted or, at runtime, a real transport error) rather than a decode
-// degradation. Link 16a-ii names this case "unreachable" distinctly from a
-// JSON-fitness verdict (spec R5.7); this half folds it into a generic
-// failure, which is as far as R5.1/R5.3/R5.4 alone ask for.
-const reasonTransportError = "transport_error"
-
 // llmQualityFailure is one case's own failed decode: the field that
-// degraded (or "(response)" when nothing decoded at all), and why.
+// degraded (or "(response)" when nothing decoded at all), and why. It
+// never carries a transport failure — spec R5.7 reports that on
+// taskQualityResult.unreachable instead, a different category with a
+// different wording.
 type llmQualityFailure struct {
 	caseID string
 	field  string
@@ -270,53 +320,69 @@ func (f llmQualityFailure) String() string {
 	kind := "formatting"
 	if f.reason == string(classify.ReasonUnknownEnum) {
 		kind = "vocabulary"
-	} else if f.reason == reasonTransportError {
-		kind = "transport"
 	}
 	return fmt.Sprintf("%s: %s failure — field %q (%s)", f.caseID, kind, f.field, f.reason)
 }
 
 // runLLMQualityCheck is the gate's own decision logic, proven at L1/L2
 // against a scripted ports.LLMProvider (doctor_test.go) — no test in this
-// codebase calls a real provider (spec R5.5). It sends each corpus case
-// matching a bound task's own corpus label exactly once (spec R5.4's
-// "never retried") and decodes the live response with the same production
-// decoder I14's own conformance suite already proves correct.
-func runLLMQualityCheck(ctx context.Context, providers map[string]ports.LLMProvider, cases []llm.Case, now time.Time) []taskQualityResult {
+// codebase calls a real provider (spec R5.5). Each bound task runs its own
+// independent evaluateTask call (spec R5.2: one task's failure never skips
+// or folds into a different task's own result).
+func runLLMQualityCheck(ctx context.Context, providers map[string]ports.LLMProvider, cases []llm.Case, now time.Time, timeout time.Duration) []taskQualityResult {
 	var results []taskQualityResult
 	for _, task := range jsonTasks {
 		provider, bound := providers[task]
 		if !bound {
 			continue
 		}
-		result := taskQualityResult{task: task}
-		label := corpusTaskLabel(task)
-		for _, c := range cases {
-			if c.Task != label {
-				continue
-			}
-			result.total++
-			if failure := evaluateCase(ctx, provider, task, c, now); failure == nil {
-				result.clean++
-			} else {
-				result.failures = append(result.failures, *failure)
-			}
-		}
-		results = append(results, result)
+		results = append(results, evaluateTask(ctx, provider, task, cases, now, timeout))
 	}
 	return results
 }
 
-// evaluateCase sends one corpus case's prompt — never its response or
-// error field, which llm.Case carries neither of (spec R5.3's MUST NOT
-// made structural) — to provider exactly once, and reports clean only when
-// the production decoder finds zero Degradation entries (spec R5.4).
-func evaluateCase(ctx context.Context, provider ports.LLMProvider, task string, c llm.Case, now time.Time) *llmQualityFailure {
-	resp, err := provider.Complete(ctx, ports.LLMRequest{Prompt: c.Prompt, Task: task})
-	if err != nil {
-		return &llmQualityFailure{caseID: c.ID, field: "(response)", reason: reasonTransportError}
+// evaluateTask sends one jsonTasks member's own corpus slice to provider,
+// one prompt at a time, each call bounded by timeout (spec R5.7's second
+// MUST: a provider that never answers must not make nooma doctor hang).
+// The first transport-level failure stops this task's own run and reports
+// it as unreachable — rather than continuing to send prompts to a
+// provider that is not answering, and rather than counting that case
+// toward the "k of n prompts produced clean JSON" line (spec R5.7's own
+// MUST: unreachable is never folded into, or reported alongside, a
+// JSON-fitness verdict).
+func evaluateTask(ctx context.Context, provider ports.LLMProvider, task string, cases []llm.Case, now time.Time, timeout time.Duration) taskQualityResult {
+	result := taskQualityResult{task: task}
+	label := corpusTaskLabel(task)
+	for _, c := range cases {
+		if c.Task != label {
+			continue
+		}
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
+		resp, err := provider.Complete(callCtx, ports.LLMRequest{Prompt: c.Prompt, Task: task})
+		cancel()
+		if err != nil {
+			result.unreachable = fmt.Sprintf("unreachable — %v (doctor waits up to %s per prompt)", err, timeout)
+			return result
+		}
+		result.total++
+		if failure := decodeCase(task, c, resp, now); failure == nil {
+			result.clean++
+		} else {
+			result.failures = append(result.failures, *failure)
+		}
 	}
+	return result
+}
 
+// decodeCase judges one corpus case's already-received response against
+// the same production decoder I14's own conformance suite already proves
+// correct — classify.Decode for capture_processing, relation.DecodeJudgment
+// for relation_evaluation — reporting clean only when zero Degradation
+// entries come back (spec R5.4). It never sees a transport failure:
+// evaluateTask only calls this once provider.Complete has already
+// returned a response — spec R5.7's own boundary between "unreachable"
+// and "unsuitable".
+func decodeCase(task string, c llm.Case, resp ports.LLMResponse, now time.Time) *llmQualityFailure {
 	var degradations []classify.Degradation
 	switch task {
 	case "capture_processing":

@@ -867,6 +867,80 @@ wording and the live call's bounded timeout (this half currently folds a transpo
 `Complete` error into a generic, undifferentiated failure — `reasonTransportError`, named but not
 yet distinguished in report text the way a JSON-fitness failure is); R5.8's corpus-coverage audit.
 
+### C20 — `16a-ii`: "states the count" read as unconditional rather than zero-only; `ports.LLMProvider.Complete` cannot distinguish transport from vendor-status errors; a success-carrying error type, not named by design.md; and `16a-ii` measured 297 changed lines against its own ~150 ceiling (1.98×)
+
+**R5.6's "even at zero" wording, read as the general case rather than a special case.** `spec.md`
+R5.6 illustrates only `llm quality: ok (0 tasks configured)` and its own "Verified by" clause asks
+for a check-decision test over a configuration with **no** `tasks:` entries — it never shows what
+the line says for a non-zero clean pass. `16a-i`'s own apply-progress note read this as "the zero
+case alone gains a parenthetical; a non-zero clean pass stays the bare `ok llm quality` line
+unchanged." Re-read against the MUST's own sentence structure — "the report states the count
+**even at zero**" — the natural reading is the opposite: the report **always** states the count,
+and the "even at zero" clause forbids exempting the zero case from that general behavior, not the
+reverse. Resolved in favor of the general reading: `checkLLMQuality`'s success path always returns
+`&qualityGateDetail{tasksConfigured: len(providers)}`, so `ok    llm quality        (0 tasks
+configured)` and (were it exercised without a live provider) `ok    llm quality        (2 tasks
+configured)` are the same code path, not a branch that treats zero specially. This is also what
+keeps R5.6's own MUST ("the no-op is structural... not a branch such as `if len(tasks) == 0`")
+satisfiable without an `if`: `len(providers)` is read once, after the loop, to build a message —
+never to decide pass/fail. No existing test names the non-zero-clean-pass wording either way, so
+this is a documented interpretation, not something a prior link's test forced.
+
+**`ports.LLMProvider.Complete` has one error return, not two.** R5.7 names three examples of
+"unreachable" — connection refused, DNS failure, a timed-out request — all genuine transport
+failures. But `internal/providers/anthropic`, `/openai`, and `/ollama`'s own `Complete`
+implementations (read before writing this link's code, not assumed) return the same
+`error` for a literal transport failure (`c.httpClient.Do` failing) and for a non-200 vendor
+response (rate limit, auth failure, model-not-found) — `anthropic/client.go:92-104`. The port
+carries no field or sentinel that would let `evaluateTask` tell the two apart. `testdata/llm/`'s
+own format.md already names this the same category — its `error` field's doc comment reads "A
+recorded provider-level failure (**timeout, HTTP error, rate limit**)" as one list, and
+`classify-provider-rate-limited.json` (an HTTP-status case, not a transport case) is what this
+link's own R5.7 test scripts. Resolved by reporting every `Complete` error as unreachable,
+without narrowing to "genuinely no TCP connection" — the shared consequence (no response body to
+judge JSON fitness against) is what R5.7's own reasoning turns on ("a network that never
+delivered the question"), and that consequence is identical whether the cause was a dead socket
+or a 429. Flagged rather than assumed, because a future provider or a future link could plausibly
+want the narrower distinction, and nothing here forecloses adding it — it would need a typed
+provider-side error this port does not have today.
+
+**A success value that implements `error`, not named by `design.md`.** R5.1's own MUST NOT ("this
+PR MUST NOT... rewrite `runDoctor`'s report loop") scopes to `16a-i`'s PR specifically, and
+`16a-i` upheld it by not touching the loop at all. R5.6 forces `16a-ii` to say more on the
+success path than `doctorCheck.run`'s existing `func(vault string, cfg *config.Config) error`
+contract has room for: the loop's own "ok" branch prints only `check.name`, no per-check detail.
+Two shapes were weighed: (a) widen `run`'s signature to `(string, error)` across all six
+`doctorChecks` entries, touching five checks that have nothing new to say; (b) a private type,
+`*qualityGateDetail`, that implements `error` so it can travel through the existing signature
+unchanged, recognized by `runDoctor`'s loop via a type assertion placed before the general FAIL
+branch. Chose (b): it is a four-line addition to the loop instead of a signature change
+propagated through `checkConfiguration`/`checkPermissions`/`checkIntegrity`/`checkSchema`/
+`checkBindExposure`, and every one of those four keeps printing exactly what it printed before —
+verified by `TestDoctorChecksGainsOneNewEntry` staying green unmodified. Named here because "a
+success value shaped like an error" is a genuine seam a reviewer could reasonably prefer done the
+other way, not a hidden trick.
+
+**Size.** 297 changed lines (`cmd/nooma/doctor.go` +110/-44, `cmd/nooma/doctor_test.go` +139/-2,
+`docs/01-architecture.md` +1/-1) against this link's own ~150 estimate — 1.98×, inside this
+chain's own established range (`16a-i` 2.05×, `13c` 2.25×, `12g` 2.68×) and, unlike every one of
+those, still well under the 400-line chained-PR threshold. **A candidate seam was considered**:
+R5.6/R5.7 (report-wording/timeout) as one PR, R5.8 (corpus-coverage audit) as a second — declined
+because R5.8 turned out to need no code at all (`testdata/llm/cases/` already carries both
+`classify` and `relation_evaluation` cases, confirmed by `TestCorpusCoversEveryQualityGateTask`
+before writing it, not after), so a second PR would carry a task list and a verify step but zero
+production diff — the same "an unplanned link is a bigger decision than one link's own judgment"
+reasoning `13a`'s C10 established and this chain has applied at every over-estimate since (`12g`
+§C12, `13c` §C14, `15` §C17, `16a-i` §C19). `size:exception` applied via `gh pr edit --add-label
+"size:exception"` and verified stuck (see PR-level verify entry below).
+
+**R5.8, closed without a code change.** `testdata/llm/cases/` already held both
+`classify-*` cases (mapping to `capture_processing` via `corpusTaskLabel`) and
+`relation_evaluation`-tagged cases — including one error-shaped case per task
+(`classify-provider-rate-limited.json`, added `9251dbf`; `relation-judge-provider-outage.json`,
+added `1e5fe71`), both predating this chain's own `16a-i`/`16a-ii` links. Checked against the
+corpus as it stands today rather than assumed present: `TestCorpusCoversEveryQualityGateTask`
+asserts the coverage directly, and no case needed adding.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1770,30 +1844,61 @@ handle the edge states correctly")
 
 Depends on `16a-i` (stacked — extends the same `doctorChecks` row's decision logic).
 
-- [ ] **16a-ii.1** Test first: a transport-level failure for one task's provider reports
+- [x] **16a-ii.1** Test first: a transport-level failure for one task's provider reports
       **unreachable**, distinct in wording/category from a JSON-degradation failure; the live call
-      is timeout-bounded.
+      is timeout-bounded. **Implemented as `taskQualityResult.unreachable` (a field distinct from
+      `total`/`clean`/`failures`, so `String()` never renders a "k of n" line alongside it) and
+      `evaluateTask` (`cmd/nooma/doctor.go`): the first `provider.Complete` error for a task stops
+      that task's own corpus loop and reports `"unreachable — %v (doctor waits up to %s per
+      prompt)"`, never incrementing `total`. Proven by
+      `TestRunLLMQualityCheckReportsATransportFailureAsUnreachable`, scripted against the existing
+      `classify-provider-rate-limited.json` corpus case. Timeout: `qualityGateTimeout = 10 *
+      time.Second`, wired via `context.WithTimeout` per call inside `evaluateTask`, proven (not just
+      reviewed) by `TestRunLLMQualityCheckBoundsTheLiveCall` against a `blockingProvider` stub that
+      would otherwise never return — see Conflicts §C20 for the break experiment.**
       Verify: `make test`; review confirming the live call is timeout-bounded.
       Requirement: R5.7.
-- [ ] **16a-ii.2** Test first: zero configured tasks (a freshly `init`ed vault) reports zero
+- [x] **16a-ii.2** Test first: zero configured tasks (a freshly `init`ed vault) reports zero
       failures with the count line stated even at zero (`ok (0 tasks configured)`); a review
       confirming the no-op is structural — the gate iterates the vault's configured `tasks:`
       bindings, no `len(tasks) == 0` branch anywhere in the check's own control flow;
       `test/e2e/doctor_test.go`'s `TestDoctorOnAHealthyVault` stays green with no change required by
-      this PR.
+      this PR. **Implemented as `qualityGateDetail` (`cmd/nooma/doctor.go`), a private type that
+      implements `error` purely so it can travel through `doctorCheck.run`'s existing
+      single-return-value contract; `checkLLMQuality`'s success path always returns
+      `&qualityGateDetail{tasksConfigured: len(providers)}` — `len(providers)` is read once, after
+      the loop, never branched on — and `runDoctor`'s loop recognizes it via a type assertion before
+      its general FAIL branch, printing `ok    llm quality        (0 tasks configured)` rather than
+      counting it as a failure. Verified live against a real `nooma init && nooma doctor` run (see
+      Conflicts §C20 for the exact printed line and the "always states the count, not just at zero"
+      reading of the MUST). `TestCheckLLMQualityReportsTheConfiguredTaskCountEvenAtZero` and
+      `test/e2e/doctor_test.go`'s existing `TestDoctorOnAHealthyVault`/`TestDoctorMakesNoNetworkCall`
+      both confirmed green, the latter two unmodified — see the break experiment in §C20 proving
+      both would have caught a `len(tasks) == 0`-shaped regression.**
       Verify: `make test`; `go test ./test/e2e/... -tags e2e` (`TestDoctorOnAHealthyVault`
       unchanged); review.
       Requirement: R5.6.
-- [ ] **16a-ii.3** R5.8: confirm `testdata/llm/cases/` holds at least one case tagged with each task
+- [x] **16a-ii.3** R5.8: confirm `testdata/llm/cases/` holds at least one case tagged with each task
       this gate checks (`capture_processing`, `relation_evaluation`) as the corpus stands at this
-      PR's own start; add any missing case.
+      PR's own start; add any missing case. **Confirmed, no case needed: both `classify-*` cases
+      (bridged to `capture_processing` via `corpusTaskLabel`) and `relation_evaluation`-tagged cases
+      already exist, including one error-shaped case per task. `TestCorpusCoversEveryQualityGateTask`
+      (`cmd/nooma/doctor_test.go`) asserts this directly against `llm.Cases()` rather than leaving it
+      to review alone — see Conflicts §C20.**
       Verify: `test/support/goldenset.Load` succeeds; review of coverage before this PR's own check
       is written against it.
       Requirement: R5.8.
-- [ ] **16a-ii.4** doc 01's `nooma doctor` row gains the quality gate as a named check.
+- [x] **16a-ii.4** doc 01's `nooma doctor` row gains the quality gate as a named check.
+      **Implemented: `docs/01-architecture.md`'s CLI table row for `nooma doctor` now reads "Checks
+      config, provider connectivity, LLM answer quality, permissions, hardware".**
       Verify: read the section.
       Requirement: design D13 (`16a` row).
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all` — green (lint 0 issues, vet, race+shuffle unit+conformance
+      tests, L3 integration, `TestSchemaGolden` empty diff, `internal/core` coverage 100% (308/308,
+      unaffected — this link touches no `internal/core` file), seven-target cross-compile, L4 e2e,
+      including `test/e2e/doctor_test.go`'s full suite re-run with `-count=1`). See Conflicts §C20
+      for the measured size (297 lines, 1.98×, `size:exception` applied) and all three break
+      experiments run and reverted.
 
 ---
 
