@@ -12,7 +12,7 @@ import (
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Five methods, and two absences that are deliberate:
+// Seven methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -46,6 +46,22 @@ type UnitRepo interface {
 	// every other column unchanged. It returns ErrUnitNotFound if no unit
 	// with id exists.
 	UpdateContent(ctx context.Context, id, content string, at time.Time) error
+
+	// UpdateEventAt rewrites id's EventAt to eventAt and UpdatedAt to at,
+	// leaving every other column — DueAt included — unchanged. It returns
+	// ErrUnitNotFound if no unit with id exists.
+	//
+	// eventAt is not nullable: a classification cannot express "the user
+	// removed the date" (design D4), so there is no producer for a
+	// clear-the-date call, and a *time.Time parameter would ship a branch
+	// with no caller.
+	UpdateEventAt(ctx context.Context, id string, eventAt, at time.Time) error
+
+	// UpdateDueAt rewrites id's DueAt to dueAt and UpdatedAt to at, leaving
+	// every other column — EventAt included — unchanged. It returns
+	// ErrUnitNotFound if no unit with id exists. See UpdateEventAt's doc
+	// comment for why dueAt is not nullable.
+	UpdateDueAt(ctx context.Context, id string, dueAt, at time.Time) error
 
 	// SetStatus moves id from status from to status to, recording at.
 	// from is an optimistic-concurrency precondition, not a validation —

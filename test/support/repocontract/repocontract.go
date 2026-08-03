@@ -146,6 +146,86 @@ func RunUnitRepo(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		}
 	})
 
+	t.Run("UpdateEventAt writes event_at and updated_at, leaving due_at and content untouched", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		u := fixtureUnit("update-event-1", unit.StatusPool)
+		existingDue := u.UpdatedAt.Add(72 * time.Hour)
+		u.DueAt = &existingDue
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Two distinguishable instants — the new event value and the audit
+		// timestamp — so a call site that swaps its own two arguments, or
+		// an implementation that writes this method's value into due_at
+		// instead of event_at, is caught: design D4's "residual risk a name
+		// cannot close" (C11's lesson — the contract, not review, decides
+		// this).
+		newEventAt := u.UpdatedAt.Add(240 * time.Hour)
+		at := u.UpdatedAt.Add(time.Hour)
+		if err := repo.UpdateEventAt(ctx, u.ID, newEventAt, at); err != nil {
+			t.Fatalf("UpdateEventAt: %v", err)
+		}
+
+		got, err := repo.ByID(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		want := u
+		want.EventAt = &newEventAt
+		want.UpdatedAt = at
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("UpdateEventAt changed more than EventAt/UpdatedAt: got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("UpdateDueAt writes due_at and updated_at, leaving event_at and content untouched — the mirror case", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		u := fixtureUnit("update-due-1", unit.StatusPool)
+		existingEvent := u.UpdatedAt.Add(72 * time.Hour)
+		u.EventAt = &existingEvent
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		newDueAt := u.UpdatedAt.Add(240 * time.Hour)
+		at := u.UpdatedAt.Add(time.Hour)
+		if err := repo.UpdateDueAt(ctx, u.ID, newDueAt, at); err != nil {
+			t.Fatalf("UpdateDueAt: %v", err)
+		}
+
+		got, err := repo.ByID(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		want := u
+		want.DueAt = &newDueAt
+		want.UpdatedAt = at
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("UpdateDueAt changed more than DueAt/UpdatedAt: got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("UpdateEventAt on a missing id returns ErrUnitNotFound", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		someInstant := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+		if err := repo.UpdateEventAt(ctx, "does-not-exist", someInstant, someInstant); !errors.Is(err, ports.ErrUnitNotFound) {
+			t.Fatalf("UpdateEventAt: got %v, want ErrUnitNotFound", err)
+		}
+	})
+
+	t.Run("UpdateDueAt on a missing id returns ErrUnitNotFound", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		someInstant := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+		if err := repo.UpdateDueAt(ctx, "does-not-exist", someInstant, someInstant); !errors.Is(err, ports.ErrUnitNotFound) {
+			t.Fatalf("UpdateDueAt: got %v, want ErrUnitNotFound", err)
+		}
+	})
+
 	t.Run("SetStatus with a mismatched from returns ErrStatusConflict", func(t *testing.T) {
 		repo := newRepo(t)
 		ctx := context.Background()

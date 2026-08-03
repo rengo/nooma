@@ -130,6 +130,30 @@ func (r *UnitRepo) UpdateContent(ctx context.Context, id, content string, at tim
 	return requireRowAffected(res, ports.ErrUnitNotFound)
 }
 
+// UpdateEventAt implements ports.UnitRepo.
+func (r *UnitRepo) UpdateEventAt(ctx context.Context, id string, eventAt, at time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE units SET event_at = ?, updated_at = ? WHERE id = ?`,
+		formatUnitTime(eventAt), formatUnitTime(at), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update unit %q event_at: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrUnitNotFound)
+}
+
+// UpdateDueAt implements ports.UnitRepo.
+func (r *UnitRepo) UpdateDueAt(ctx context.Context, id string, dueAt, at time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE units SET due_at = ?, updated_at = ? WHERE id = ?`,
+		formatUnitTime(dueAt), formatUnitTime(at), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update unit %q due_at: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrUnitNotFound)
+}
+
 // SetStatus implements ports.UnitRepo. from is an optimistic-concurrency
 // precondition, not a validation — unit.ValidateTransition already decided
 // legality (design D5).
