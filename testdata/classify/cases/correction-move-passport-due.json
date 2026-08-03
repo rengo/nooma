@@ -1,0 +1,11 @@
+{
+  "id": "correction-move-passport-due",
+  "input": "actually the passport renewal is due the 10th, not the 5th",
+  "expected": {
+    "type": "correction",
+    "normalized_content": "Passport renewal is due on the 10th, not the 5th",
+    "weight": 0.7,
+    "decay_rate": 0.04,
+    "due_at": "2026-08-10"
+  }
+}
