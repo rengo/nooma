@@ -358,9 +358,16 @@ func TestCheckTaskCoverageReportsOKWhenEveryTaskIsBound(t *testing.T) {
 // own reason for existing: "this row is what would have caught C9 before a
 // single capture ran." A Cloud-configured vault with capture_processing and
 // relation_evaluation bound but nothing bound to embedding must FAIL,
-// naming the task and what degrades — asserted against the report text a
-// user actually reads (16a-i's own lesson: assert the string, not only the
-// value behind it).
+// naming the task and the actual consequence — asserted against the report
+// text a user actually reads (16a-i's own lesson: assert the string, not
+// only the value behind it).
+//
+// The consequence text asserted here is 13d's fail-closed one (503 on both
+// routes), not design D18b row 1's own stale quoted wording ("capture will
+// store units with no vector...", m1b D8's outage degrade) — tasks.md's
+// C21.1 records the correction; a coordinator-caught review found the
+// original wording would have told a user their captures were landing
+// without vectors when in fact nothing was being captured at all.
 func TestCheckTaskCoverageCatchesAnUnboundEmbeddingTask(t *testing.T) {
 	cfg := &config.Config{
 		Providers: map[string]config.Provider{"local": {Type: "anthropic", Model: "test-model", APIKeyEnv: "TEST_KEY"}},
@@ -379,8 +386,14 @@ func TestCheckTaskCoverageCatchesAnUnboundEmbeddingTask(t *testing.T) {
 	if !strings.Contains(text, "embedding") {
 		t.Errorf("error %q does not name the unbound task, embedding", text)
 	}
-	if !strings.Contains(text, "no vector") {
-		t.Errorf("error %q does not say what degrades — spec R6.3/design D18b row 1", text)
+	if !strings.Contains(text, "503") {
+		t.Errorf("error %q does not say the actual consequence (503 on both routes) — spec R6.3/design D18b row 1, corrected per tasks.md C21.1", text)
+	}
+	if !strings.Contains(text, "POST /capture") || !strings.Contains(text, "POST /recall") {
+		t.Errorf("error %q does not name both routes that go down", text)
+	}
+	if strings.Contains(text, "no vector") || strings.Contains(text, "lexical leg") {
+		t.Errorf("error %q still carries the stale D8-degradation wording this fix removed", text)
 	}
 	if strings.Contains(text, "capture_processing") || strings.Contains(text, "relation_evaluation") {
 		t.Errorf("error %q names a bound task as if it were unbound too", text)

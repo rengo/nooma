@@ -941,7 +941,7 @@ added `1e5fe71`), both predating this chain's own `16a-i`/`16a-ii` links. Checke
 corpus as it stands today rather than assumed present: `TestCorpusCoversEveryQualityGateTask`
 asserts the coverage directly, and no case needed adding.
 
-### C21 — `16b`: design's own `embedding` degrade wording is stale against `13d`'s own fail-closed wiring; `TestDoctorMakesNoNetworkCall`'s fixture was the exact C9 shape D18b row 1 now catches; and `16b` measured 473 changed lines against its own ~330 ceiling (1.43×)
+### C21 — `16b`: design's own `embedding` degrade wording is stale against `13d`'s own fail-closed wiring, and was corrected in code before merge (C21.1); `TestDoctorMakesNoNetworkCall`'s fixture was the exact C9 shape D18b row 1 now catches; and `16b` measured 473 changed lines against its own ~330 ceiling (1.43×)
 
 **First finding: design D18b row 1's own quoted `embedding` message describes a soft degrade
 `resolveTaskProviders` (`cmd/nooma/wiring.go`, `13d`) no longer produces.** Design's table (and this
@@ -959,17 +959,48 @@ request with `503` before a unit is ever stored. Under today's wiring, capture n
 still real, but only for a runtime provider *outage* after `embedding` **is** bound, a different
 question (D18's own "fit", not "configured").
 
-**Resolution: implemented design's quoted wording verbatim for `embedding` anyway, per this
-document's own precedent for a MUST-quoted string appearing in two independent artifacts (design.md
-and this task list) — not silently rewritten. `capture_processing`/`relation_evaluation`'s own FAIL
-wording is invented for this PR (design gives no example for either), and was written to match
-`13d`'s actual fail-closed consequence rather than a "capture partially works" framing.** Flagged
-here rather than either silently deviating from a quoted spec string or silently shipping a
-description of a code path the vault can no longer reach through this cause. Recorded for whoever
-next revises `design.md`'s D18 section: the `embedding` row's own example wording predates `13d`'s
-fail-closed decision and should either be corrected to describe the runtime-outage case it still
-accurately names, or re-scoped to say plainly that an unbound task (any of the three) currently
-takes the whole capture/recall surface down, not just the one task's own leg.
+**C21.1 — corrected in a post-implementation coordinator review, before merge: shipping the
+verbatim wording was the wrong call, and the instruction that produced it has changed.** The apply
+pass above initially implemented design's quoted wording verbatim for `embedding`, reasoning from
+this document's own precedent for a MUST-quoted string appearing in an artifact — flagged, not
+silently deviated from. A coordinator review caught what that reasoning missed: **a diagnostic that
+misdescribes the failure is worse than none, because the user acts on it.** A reader of "capture
+will store units with no vector and recall will run on its lexical leg alone" reasonably concludes
+their captures are landing, just without semantic search — a recall-quality problem they can defer.
+Under `13d`'s actual fail-closed `wireBrain`, nothing is captured at all: `POST /capture` and
+`POST /recall` both answer `503`. Shipping the old wording would have been this exact check —
+built specifically because a silent degradation hid a build-plan gap for two milestones — repeating
+that failure mode in its own diagnostic text.
+
+**Resolution (revised): the FAIL text is corrected in code, not shipped verbatim.** `checkTaskCoverage`
+now reports, for every unbound member of `tasksM1Consumes` (not `embedding` alone — the consequence
+does not differ by which task is missing, since `resolveTaskProviders` is all-or-nothing): *"`%s` is
+unbound — POST /capture and POST /recall will answer 503 — nothing is captured, not a degraded
+capture — until every one of tasksM1Consumes is bound."* `taskDegradation`'s per-task map (one
+sentence per task, mirroring the now-abandoned premise that the consequence differs by task) is
+removed; a single `taskCoverageConsequence` constant replaces it, since the actual mechanism —
+`wireBrain`'s all-or-nothing resolution, `13d`'s own conflict-log finding above — makes the outcome
+identical regardless of which task is the one left unbound.
+
+**Two artifacts carry the stale wording, and they are not the same kind of citation.** `design.md`
+:1377 (D18b row 1's own table) literally prescribes doctor's row-1 FAIL text as a MUST-quoted
+implementation string: *"FAIL, naming the task and what degrades — for `embedding`: 'capture will
+store units with no vector and recall will run on its lexical leg alone'."* `spec.md`:80-88 (§6's
+own introduction, motivating PR 17) uses closely matching prose to **narrate C9's history**, not to
+prescribe doctor's message: *"every capture stored, every unit came back with no vector, every
+recall ran on its lexical leg alone"* — true of the codebase *before* `13d` shipped, and still
+descriptively accurate for D18's "fit" question (a bound `embedding` provider failing at runtime),
+but no longer accurate as a description of what an *unbound* task does today, which is the state
+D18's "configured" question (R6.3, this row) asks about. Neither citation is a factual error the way
+C4's migration number was — both described the actual system correctly at the time they were
+written; `13d`'s later, separately-justified all-or-nothing decision is what moved the ground under
+them. Per this chain's own C11 precedent (`spec.md` cited `RecallService.Candidates`; the callable
+method shipped as `ForText`; design won because the code is the fact) — the code, now corrected, is
+authoritative here too. Recorded for whoever next revises either document: `design.md`:1377's table
+entry needs either correcting to the 503 consequence or re-scoping to explicitly name the
+runtime-outage case it still accurately describes; `spec.md`:80-88's narrative needs a tense/scope
+note that the *"no vector... lexical leg alone"* description no longer covers the never-bound case
+`13d` closed off, only the outage case D16/R6.1 still leaves open.
 
 **Second finding: `test/e2e/doctor_test.go`'s `TestDoctorMakesNoNetworkCall` fixture was itself the
 C9 shape.** Its `nooma.yml` configured one `ollama` provider under `providers:` with no `tasks:`
@@ -2019,14 +2050,22 @@ larger-branch estimate.**
       member unbound → **FAIL**, naming the task and what degrades (for `embedding`: "capture will
       store units with no vector and recall will run on its lexical leg alone"). Design states
       this is the row that "would have caught C9 before a single capture ran."
-      **Implemented: `checkTaskCoverage` + `taskCoverageDetail` (the "no providers configured"
-      success detail, recognized via a new `doctorOKDetail` interface `qualityGateDetail` now also
-      implements — one type switch in `runDoctor` instead of a second bespoke assertion) +
-      `taskDegradation`, one sentence per task. See Conflicts §C21 finding 1 for the
-      `capture_processing`/`relation_evaluation` wording, which is not design's own quoted text
-      (design quotes only `embedding`'s).**
+      **Implemented, then corrected before merge (Conflicts §C21.1): `checkTaskCoverage` +
+      `taskCoverageDetail` (the "no providers configured" success detail, recognized via a new
+      `doctorOKDetail` interface `qualityGateDetail` now also implements — one type switch in
+      `runDoctor` instead of a second bespoke assertion) + `taskCoverageConsequence`, a single
+      shared sentence (not one per task — the consequence does not differ by which task is
+      unbound). FAIL text actually shipped: `"%s is unbound — POST /capture and POST /recall will
+      answer 503 — nothing is captured, not a degraded capture — until every one of
+      tasksM1Consumes is bound."` This deliberately does NOT match design D18b row 1's own quoted
+      `embedding` example ("capture will store units with no vector...") — that text describes a
+      degradation `13d`'s fail-closed `wireBrain` no longer produces for an unbound task; shipping
+      it verbatim would have misdescribed a total outage as a partial one. See §C21.1 for the full
+      finding and which two artifacts (`design.md`:1377, `spec.md`:80-88) still carry the stale
+      wording.**
       Verify: `make test`.
-      Requirement: design D18b row 1.
+      Requirement: design D18b row 1 (consequence text corrected against `13d`'s shipped behaviour,
+      §C21.1).
 - [x] **16b.3** D18b row 2 — vault coverage: `ports.EmbeddingRepo` gains
       `CountLiveWithoutEmbedding(ctx) (int, error)` (the R7.3/R7.4-sanctioned edit); a `LEFT JOIN`
       from `units` where `status = 'pool'` and `unit_embeddings.unit_id IS NULL`. Zero → `ok`; above

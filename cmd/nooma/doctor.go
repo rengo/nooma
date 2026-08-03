@@ -435,27 +435,26 @@ func qualityGateError(results []taskQualityResult) error {
 	return errors.New(strings.Join(failed, "\n"))
 }
 
-// taskDegradation names, for each tasksM1Consumes member, what breaks when
-// providers are configured but that task has no binding — design D18b row
-// 1's own "naming the task and what degrades" requirement (spec R6.3), one
-// sentence per task rather than one collapsed "some feature won't work"
-// (the same discipline qualityGateError's own per-task reporting already
-// applies to a different question, R5.2).
-var taskDegradation = map[string]string{
-	"capture_processing":  "capture cannot classify new input into a unit; every capture request will fail until capture_processing is bound",
-	"relation_evaluation": "capture cannot check a new unit against existing ones for a correction or duplicate; every capture request will fail until relation_evaluation is bound",
-	"embedding":           "capture will store units with no vector and recall will run on its lexical leg alone",
-}
-
-// taskDegradationMessage falls back to a generic sentence for a task
-// tasksM1Consumes names that taskDegradation has no wording for yet —
-// never an empty string, and never a map-miss panic.
-func taskDegradationMessage(task string) string {
-	if msg, ok := taskDegradation[task]; ok {
-		return msg
-	}
-	return "this task's provider-backed behavior will not work"
-}
+// taskCoverageConsequence is checkTaskCoverage's own FAIL wording for an
+// unbound task — one shared sentence, not one per task, because
+// resolveTaskProviders (wiring.go, 13d's own conflict-log decision) resolves
+// every member of tasksM1Consumes or none: RecallService.ScoredFor has no
+// nil guard on its own embed field, so wireBrain returns nil, nil the
+// moment ANY one of the three is unbound, and 13b's/13c's existing
+// nil-Deps guards then answer every /capture and /recall request with 503
+// — regardless of which task is the one left unbound.
+//
+// This corrects design D18b row 1's own quoted "embedding" wording
+// ("capture will store units with no vector and recall will run on its
+// lexical leg alone") — that text describes m1b's D8 degradation for a
+// provider OUTAGE after wiring already succeeded, a different question
+// (D18's own "fit") from the one this check answers ("configured"). Under
+// 13d's fail-closed wireBrain, an unbound task never reaches D8's soft
+// degradation at all: nothing is captured, not "captured without a
+// vector." Tracked in tasks.md's own C21.1 — spec.md and design.md both
+// still carry the stale wording as of this fix; this doctor row is the
+// corrected one.
+const taskCoverageConsequence = "POST /capture and POST /recall will answer 503 — nothing is captured, not a degraded capture — until every one of tasksM1Consumes is bound"
 
 // taskCoverageDetail marks checkTaskCoverage's own success-with-something-
 // to-say state (design D18b row 1's "no providers configured at all" row) —
@@ -494,7 +493,7 @@ func checkTaskCoverage(_ string, cfg *config.Config) error {
 	var problems []string
 	for _, task := range tasksM1Consumes {
 		if _, bound := cfg.Tasks[task]; !bound {
-			problems = append(problems, fmt.Sprintf("%s is unbound — %s", task, taskDegradationMessage(task)))
+			problems = append(problems, fmt.Sprintf("%s is unbound — %s", task, taskCoverageConsequence))
 		}
 	}
 	if len(problems) == 0 {
