@@ -294,6 +294,27 @@ two additions, landing where D4's diagram places them"). `12f-i` declares `units
 referent-resolution routing reads it. No behavior changes; this is a struct-shape note for whoever
 implements `12f-ii` next, so its own diff does not need to discover this pattern from scratch.
 
+### C8 — `12f-ii` measured 235 changed lines against its own ~180 ceiling (1.3×); no seam evaluated separately from `12f-i`'s own C6 finding, because the same reasoning already applies verbatim. **RESOLVED — unsplittable, `size:exception` applied.**
+
+`internal/brain/correction.go` (+79/-22) and `internal/brain/correction_test.go` (+131/-3) — 235
+lines, 2 files. Best of the chain's split ratios so far (`12c` 1.25×, `12e` 1.57×, `12f-i` 2.37×),
+but still over the ~180 estimate — `12f-ii`'s own ceiling was already the tightest of the nineteen
+links, so a small absolute overrun reads as a larger ratio than the same overrun would on a bigger
+slice.
+
+**A code/test split was considered and rejected on the identical grounds `12f-i`'s own C6 already
+established for this exact file pair**: `correction.go` (the `signals` field, `recordPreImage`'s new
+return value, `recordCorrectionSignal`, and `applyWithPreImage`'s new third statement) has no
+behavior without `correction_test.go`'s RED-first proof of it, and strict TDD (`CLAUDE.md`
+non-negotiable #4) forbids shipping the implementation and the test that proves it in separate
+commits regardless of line count — the same rule that closed `12c`'s attempted `Edit`/`PlanEdit`
+split and `12f-i`'s attempted Layer-2/Layer-1+3 split. No other seam exists inside `correction.go`
+itself: `recordCorrectionSignal` is new code with no caller until `applyWithPreImage`'s own edited
+call site reaches it, so the two cannot land as separate reviewable units either.
+
+`size:exception` applied via `gh pr edit <n> --add-label "size:exception"`, verified stuck (see the
+PR record below).
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -685,7 +706,7 @@ Depends on (`12c`, `12d`, `12e`) all merged to `main`.
 
 Depends on `12f-i` (stacked — extends `applyWithPreImage`'s own call site).
 
-- [ ] **12f-ii.1** Test first: after `12f-i`'s pre-image write and every `Update*` call have both
+- [x] **12f-ii.1** Test first: after `12f-i`'s pre-image write and every `Update*` call have both
       succeeded, `correctionRunner` calls `signals.Record` — a `learning_signals`-shaped row via
       `ports.SignalRepo` (`12e`) with `signal_type = "correction"`, `target_kind = "unit"`,
       `target_id` = the referent unit's id, `valence = negative`, `context = {unit_id, fields,
@@ -695,12 +716,12 @@ Depends on `12f-i` (stacked — extends `applyWithPreImage`'s own call site).
       compile failure — `correctionRunner` has no `signals` call site yet beyond the field itself.
       Verify: `make test`.
       Requirement: R1.10; design D6.
-- [ ] **12f-ii.2** Confirm this PR is the first in the whole `m1-capture-recall` umbrella to write
+- [x] **12f-ii.2** Confirm this PR is the first in the whole `m1-capture-recall` umbrella to write
       to `learning_signals` at all (`m1b-pipeline` R8.1's own deferral).
       Verify: review; `i13_learning_signal_test.go`'s existing DDL check stays unaffected — this PR
       exercises the write path that test's schema fact protects, not a change to the schema.
       Requirement: R1.10.
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all`.
 
 ---
 
