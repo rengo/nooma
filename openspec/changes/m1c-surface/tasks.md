@@ -1168,7 +1168,9 @@ Depends on (`12g`, `13a`).
       /capture`'s mount — never the middleware in a later PR (R2.9's own Verified-by). **Stop-and-report
       checkpoint once this PR's own cumulative diff crosses roughly 300 lines**, per the Review
       Workload Forecast below; no valid split line exists inside this PR's own scope.
-      **Done — three commits, in order:
+      **Done — PR #118 (https://github.com/rengo/nooma/pull/118, branch `feat/httpapi-capture`,
+      base `main`, NOT yet merged, `size:exception` labeled and verified stuck) — four commits, in
+      order:
       `docs(adr): ADR-0017` (99 lines, no code), `feat(httpapi): ResolveToken and the constant-time
       requireToken middleware` (auth.go/auth_test.go, the middleware unwired from any route),
       `feat(httpapi): guarded route slice, POST /capture, and the total status switch` (Handler(Deps)
