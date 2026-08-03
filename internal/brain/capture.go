@@ -200,6 +200,19 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{Outcome: OutcomeCorrected, Correction: corr}, nil
 	}
 
+	// The recall fork (spec R2.3, design D9; Conflicts §C11): a
+	// `recall`-classified capture never reaches classify.ToUnit either — it
+	// answers through the exact RecallService.ForText both entrances share
+	// (I22), searching in.Text — never c.NormalizedContent, D9's forced
+	// argument — and never persists a unit (R2.3's own MUST NOT).
+	if c.Kind != nil && *c.Kind == classify.KindRecall {
+		units, _, err := r.recall.ForText(ctx, in.Text)
+		if err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: recall: %w", err)
+		}
+		return CaptureResult{Outcome: OutcomeRecalled, Recalled: units}, nil
+	}
+
 	// The discard fork (design D8, 13a's own half of it): chitchat and
 	// out_of_scope are not memory, so they never reach classify.ToUnit at
 	// all — the same "route before ToUnit" shape timerHookRefusal already

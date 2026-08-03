@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/unit"
@@ -19,17 +20,31 @@ import (
 // exact same brain.RecallService.ForText/ScoredFor with the exact same raw
 // text, never classify.NormalizedContent (spec R2.5, Q3b).
 //
-// Neither entrance is wired into production yet (12g, 13c both merge after
-// this PR), so this pins the contract at the one place both will call into:
-// entranceCapture and entranceRecallRoute below are two call sites of the
-// exact shape each future caller will have — one reading CaptureInput.Text,
-// one taking a bare query string (/recall never runs classify, spec R2.4)
-// — over one shared RecallService and corpus. Deliberately not two unit
-// tests that happen to agree: the "diverges" subtest reproduces D9's own
-// named failure mode (a call site substituting normalized content for raw
-// text) and shows this test catches it rather than passing vacuously.
+// entranceCapture is 12g's own real capture-time recall fork, not a
+// stand-in: it drives CaptureInput.Text through the full, production
+// CaptureService.Capture pipeline (a `type: recall`-classified capture) —
+// capture.go's own Kind == classify.KindRecall branch calls this exact
+// svc.ForText(ctx, in.Text) internally. Before this PR, neither entrance
+// existed in production, and this test drove two closures shaped like each
+// future caller instead; 12g is the PR that replaces the capture-side one
+// with the real thing (13c's own /recall stub is not this PR's to touch).
+// entranceRecallRoute still mirrors 13c's own future handler — a bare query
+// string, since /recall never runs classify (spec R2.4) — over the same
+// shared RecallService and corpus. Deliberately not two unit tests that
+// happen to agree: the "diverges" subtest reproduces D9's own named failure
+// mode (a call site substituting normalized content for raw text) and shows
+// this test catches it rather than passing vacuously.
+//
+// CaptureResult carries no semantic-leg-available flag of its own (design
+// D8's struct has none for the Recalled outcome — only /recall's future
+// HTTP response renders it, D9's "rendered as semantic_leg_available"), so
+// entranceCapture is compared on ordered ids only; the "degrades
+// identically" subtest below still proves the shared-method property the
+// boolean pins, calling ForText directly with each entrance's own argument
+// shape.
 func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 	ctx := context.Background()
+	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 
 	const rawText = "how do I fix the leaky faucet"
 	// normalizedText stands in for what classify.NormalizedContent would
@@ -71,11 +86,25 @@ func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 	}
 	svc := brain.NewRecallService(brain.NewIndex(idx), lexical, units, embed)
 
-	// entranceCapture mirrors 12g's own future capture-time recall fork:
-	// it holds a CaptureInput, and design D9 forces its raw Text field into
-	// ForText, never NormalizedContent.
-	entranceCapture := func(in brain.CaptureInput) ([]unit.Unit, bool, error) {
-		return svc.ForText(ctx, in.Text)
+	// entranceCapture drives 12g's own real production Kind == KindRecall
+	// routing fork: the whole CaptureService.Capture pipeline, classified
+	// `recall` by the scripted fixture below, not a test-shaped stand-in.
+	entranceCapture := func(t *testing.T, text string) ([]unit.Unit, error) {
+		t.Helper()
+		relations := memrepo.NewRelations()
+		decisions := memrepo.NewDecisionLog()
+		signals := memrepo.NewSignals()
+		llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-recall-leaky-faucet")
+		captureEmbed := fakeprovider.NewEmbeddingFake(embedFakeModel)
+		captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, captureEmbed, brain.NewIndex(idx), signals)
+		result, err := captureSvc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "chat"})
+		if err != nil {
+			return nil, err
+		}
+		if result.Outcome != brain.OutcomeRecalled {
+			t.Fatalf("Outcome = %q, want %q", result.Outcome, brain.OutcomeRecalled)
+		}
+		return result.Recalled, nil
 	}
 	// entranceRecallRoute mirrors 13c's own future /recall handler: a bare
 	// query string, since /recall never runs classify (spec R2.4).
@@ -83,7 +112,7 @@ func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 		return svc.ForText(ctx, query)
 	}
 
-	gotCapture, semCapture, err := entranceCapture(brain.CaptureInput{Text: rawText, Channel: "chat"})
+	gotCapture, err := entranceCapture(t, rawText)
 	if err != nil {
 		t.Fatalf("entranceCapture: %v", err)
 	}
@@ -95,8 +124,8 @@ func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 	if len(gotCapture) == 0 {
 		t.Fatal("entranceCapture returned nothing — this test would pass vacuously")
 	}
-	if !semCapture || !semRoute {
-		t.Errorf("semantic_leg_available = (%v, %v), want (true, true) — the embedding provider did not fail here", semCapture, semRoute)
+	if !semRoute {
+		t.Errorf("semantic_leg_available = %v, want true — the embedding provider did not fail here", semRoute)
 	}
 	assertSameUnitOrder(t, gotCapture, gotRoute)
 
