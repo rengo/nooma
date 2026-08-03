@@ -594,6 +594,55 @@ The candidate seam, along the same recall/units-read boundary the code itself ke
 
 **Fourth, a doc-delta confirmation, not a gap — the same finding C14's own fifth point already made for `13c`, re-confirmed directly for this link rather than assumed to carry over.** `design.md` D13's own table (§3) has no row for `13d`, matching every other link this table is silent on that touches no `internal/core/**` file (`13a`, `13c`, `12d`, `12e`, `12f-ii` — none of them core-touching in isolation, none tabulated). `docs-sync.yml`'s own header (`.github/workflows/docs-sync.yml:8`) fires only on `internal/core/**` changes, and `13d` touches none. `docs/01-architecture.md:101`'s own HTTP line — "Exposes an HTTP API on `localhost:7777`" — makes no route-level promise before this PR and needs none after it: this link wires already-mounted routes (`13b`, `13c`) to real dependencies, it adds no new route, so the one doc-01 line C14 already confirmed correct for `13c` stays correct, unwidened, for `13d` too.
 
+### C16 — `17`: the double-normalization comment is the ONLY defence — proven by breaking, not assumed. A genuine new finding: single- and double-normalized vectors are bit-identical at float32 precision, so no test anywhere in this repository could ever catch the defect design D17 warns against
+
+`17` shipped exactly as D17 designs it: `internal/providers/openai/embed.go`, a fifth method-on-`Client`
+shape after `ollama/embed.go`'s precedent, `var _ ports.EmbeddingProvider = (*Client)(nil)`, no new
+`testdata/llm/` case (D17's own ruling — the corpus is JSON text, not vectors, and D16's quality gate
+would have nothing to judge). `17.2`'s `Endpoint`→`baseURL` passthrough needed no new code: `13d`
+already wired `p.Endpoint` straight into `openai.NewClient`.
+
+**Validated by breaking, all three reverted, confirmed via `git diff --stat` empty afterward each
+time** (files were `git add`ed first so untracked new files would show in the diff):
+
+1. Returned `c.model` (the requested model) instead of `parsed.Model` (the echoed one) —
+   `TestClient_EmbedSendsAuthHeaderAndReturnsEchoedModel` failed exactly as its own doc comment
+   predicts: `Model = "text-embedding-3-small-requested", want the response body's model...`.
+2. Let an empty `data` array flow through as a zero-vector `EmbedResponse` instead of erroring —
+   `TestClient_EmbedFailsWhenDataIsEmpty` failed exactly as predicted: `Embed returned a nil error
+   for an empty data array; got {Vector:[] Model:...}`.
+3. **Called `recall.Normalize` inside the client, simulating the double-normalization D17's comment
+   forbids** (the store's own `internal/store/sqlite/embeddingrepo.go` already normalizes every
+   embedding on write, unconditionally). Only this PR's own client-level test caught it — and only
+   because its fixture vector (`[0.01, -0.002, 0.3]`) is not already unit-norm, so a first
+   normalization pass visibly changes it. **A follow-up numeric check (Go, reverted, not committed)
+   confirmed something D17's prose does not state explicitly: normalizing an already-unit-norm
+   vector is bit-exact idempotent at float32 precision** — `normalize(normalize(v)) == normalize(v)`
+   to the last bit, for the fixture tried. OpenAI's `text-embedding-3-*` models are documented to
+   return unit-norm vectors already. **This means: if the real API response is already normalized
+   (the expected case) and the client normalized it again (the bug), the store's own second
+   `recall.Normalize` call downstream would produce byte-identical output to the correct
+   single-normalization path — nothing, anywhere in this repository, at any test level, could ever
+   distinguish the two.** The client-level test that caught the break in this experiment did so by
+   accident of fixture choice, not by design — it does not actually test for double-normalization,
+   it tests that `Embed` returns the raw vector unmodified, which only happens to expose a spurious
+   extra normalization when the input isn't already unit-norm. **Honest conclusion, as the prompt
+   that drove this PR asked for: D17's comment — "do not normalize... nobody 'optimizes' it back
+   in" — is the ONLY defence against this defect recurring. No test proves the absence of
+   client-side normalization; a reviewer reading the comment (and this record) is the whole
+   mitigation.** This is a genuinely new finding this link surfaced, not previously named in
+   `design.md` or `spec.md`.
+
+**Size**: 208 changed code lines (`internal/providers/openai/embed.go` 76 new, `embed_test.go` 132
+new, both insertions only) against the ~200 ceiling (1.04×) — the tightest overrun ratio this chain
+has recorded, inside `13d`'s own 1.08× precedent for "no `size:exception` needed." 266 total
+including this `tasks.md` delta (58 lines). No `size:exception` applied.
+
+**Doc delta**: none, per `design.md` D13's own table (§3, `17` row) — "doc 01's provider list
+already carries `openai` (Phase A PR 1); no delta." Confirmed directly: `docs/01-architecture.md`
+names provider *types* generically ("Each `type` in the yml implements the matching interface"), not
+a per-type capability table, so `openai` gaining an `Embed` method changes no line there.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1341,7 +1390,7 @@ Depends only on Phase A PR 6 (already shipped). **Can land at any point before `
 parallel with `12a`**, per design's own note; positioned here in the primary order for narrative
 continuity with the chain design walks, not because anything forces this slot.
 
-- [ ] **17.1** Test first: `internal/providers/openai/embed_test.go` against `httptest` — request
+- [x] **17.1** Test first: `internal/providers/openai/embed_test.go` against `httptest` — request
       path `/v1/embeddings`, `Authorization: Bearer <key>`, request body's `model`/`input`, response
       decode, **the echoed model is what is returned** (not the request's), empty `data` → error,
       non-200 → error carrying the body.
@@ -1350,12 +1399,15 @@ continuity with the chain design walks, not because anything forces this slot.
       (*Client)(nil)`.
       Verify: `make test`.
       Requirement: R6.1; design D17.
-- [ ] **17.2** A provider entry's `endpoint` reaches the client as its `baseURL` (the existing
+- [x] **17.2** A provider entry's `endpoint` reaches the client as its `baseURL` (the existing
       `config.Provider.Endpoint` field, no schema change); an empty one falls back to the provider's
       default (`https://api.openai.com`) — this is what makes R6.3's L4 form possible in `15`.
       Verify: `go test ./cmd/nooma/...`.
       Requirement: design D17 (the `Endpoint`→`baseURL` passthrough).
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` for this PR contains no
+      **Already satisfied by `13d`**: `cmd/nooma/wiring.go`'s `buildProvider` already calls
+      `openai.NewClient(p.Endpoint, apiKey, p.Model, http.DefaultClient)` — this task required no
+      new code, only re-confirming the passthrough exists and `go test ./cmd/nooma/...` stays green.
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` for this PR contains no
       path under `cmd/nooma/` (R6.2's own MUST — PR 17 touches no wizard code).
 
 ---
