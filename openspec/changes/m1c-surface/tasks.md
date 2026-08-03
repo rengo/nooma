@@ -1040,7 +1040,9 @@ Depends on (`12f-ii`, `13a`) both merged.
       lexical-match]`); reverted, `git diff --stat` empty.**
 - [x] Verify (PR-level): `make check-all`; confirm `12g` and `13a` together are the only routing
       changes to `internal/brain/capture.go`.
-      **Done — PR #<pr-number> (branch `feat/brain-correction-route`, base `main`): 1073 changed
+      **Done — PR #116 (https://github.com/rengo/nooma/pull/116, branch
+      `feat/brain-correction-route`, base `main`, NOT yet merged, `size:exception` labeled and
+      verified stuck): 1073 changed
       lines across 20 files (976 insertions, 97 deletions; 2.68× the ~400 ceiling — see Conflicts
       §C12 for the seam evaluated and not taken), `make check-all` green (lint 0 issues,
       race+shuffle unit+integration tests, build, `internal/core` coverage unaffected — no core file
