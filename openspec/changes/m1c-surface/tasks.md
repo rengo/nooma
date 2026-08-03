@@ -487,6 +487,53 @@ which is `12f-i`'s C6 shape, not `13a`'s C10 shape — two different reasons thi
 named separately for declining an evaluated seam, worth keeping distinct rather than merging into one
 generic "not split" note.
 
+### C13 — `13b`: `design.md` §5.1's wire-shape illustration predates `12g`'s shipped `Correction`/`CaptureResult.Recalled` shape, and `internal/httpapi`'s own sanctioned import list has no way to distinguish a provider failure from a store failure. Resolved by rendering what is actually available and documenting both gaps rather than silently inventing data or widening scope.
+
+Three small, related findings from implementing `13b`'s own response rendering, all resolved by
+rendering what the shipped Go types actually carry rather than the design document's own
+illustrative JSON, following this chain's established C1/C9/C10/C11/C12 pattern (a document's own
+worked example can predate a later decision that superseded it, and the later decision wins).
+
+1. **`design.md:1491-1495`'s own `corrected`/`asked` JSON examples show fields
+   (`referent`, `question`, `candidates`) that `12g`'s shipped `brain.Correction`
+   (`internal/brain/result.go`) does not carry at all** — only `UnitID`, `Fields
+   []correction.Field`, and `Ambiguous`. `spec.md` R2.1 itself does not mandate field names
+   ("This spec does not mandate the Go type, field names, or HTTP status codes"), so this is not a
+   MUST violation — `13b`'s `correctionResponse` renders exactly the three fields `Correction`
+   carries, and no more. Reading the design's illustration as binding would have meant inventing
+   response data (a fabricated `question` string, a `candidates` list) that no part of the
+   pipeline actually produces.
+2. **`design.md:1499`'s own `outcome: recalled` example shows `semantic_leg_available`; `12g`'s
+   shipped `capture.go` discards it.** `RecallService.ForText`'s second return value (design D9's
+   own degradation flag) is thrown away with `_` at the capture-time recall fork
+   (`internal/brain/capture.go`, the `classify.KindRecall` branch) — `CaptureResult.Recalled` has
+   nowhere to carry it, unlike `13c`'s own standalone `/recall` route, which calls `ForText`
+   directly and can render the flag. `13b`'s own `outcome: recalled` response therefore omits
+   `semantic_leg_available`; fixing this would mean editing `12g`'s already-merged
+   `internal/brain/capture.go` and `result.go`, which is out of `13b`'s own declared file
+   ownership (`server.go`, `auth.go`, `capture.go` under `internal/httpapi/` — design's own
+   package-layout table). Left as a named, deliberate gap for whoever next revises the capture
+   pipeline's own `CaptureResult` shape, not silently worked around here.
+3. **`design.md:948`'s own "provider failures → 502, store failures → 500" cannot be honored as
+   written.** `brain.CaptureService.Capture` returns a plain `error` with no exported way to tell
+   a provider failure (e.g. the LLM completion call itself failing) from a store failure (e.g.
+   `decision_log` or a unit write failing) at `internal/httpapi`'s own boundary — and design's own
+   dependency-rule check (`design.md:1472-1473`) sanctions exactly three imports for this package
+   this PR (`internal/brain`, `internal/core/unit`, `crypto/subtle`), not `internal/core/classify`,
+   which is the only package carrying the two sentinel errors (`ErrNoFieldsSalvaged`,
+   `ErrNoUnitType`) design's own worked examples (`design.md:886-887`) name. Two options were
+   evaluated: (a) import `classify` anyway to catch those two sentinels via `errors.Is`, defaulting
+   everything else — including a raw LLM completion failure, which neither sentinel covers — to
+   500; (b) map every `Capture` error to 500 uniformly. Chosen: **(b)**, because (a) only partially
+   honors the aspiration (the single clearest "provider failure" case, a raw completion error, still
+   falls through to 500 under either option) while adding an import design's own audit trail does
+   not list, for a security-focused PR whose central obligation (R2.9-R2.12) is unrelated to this
+   error-status nuance. 500 is also the conservative direction: it reveals less about which internal
+   layer failed than a caller-visible 502 would. Recorded as an open, named gap — `brain` exposing a
+   typed distinction between a provider outage and a store failure at its own package boundary —
+   for whoever next revises `CaptureService.Capture`'s error contract, not solved unilaterally by
+   widening `internal/httpapi`'s import list in this PR.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1057,12 +1104,15 @@ purpose** — R2.9's own MUST forbids it, see intro)
 
 Depends on (`12g`, `13a`).
 
-- [ ] **13b.1** `docs/adr/0017-http-request-auth.md` — new ADR recording the decision that every
+- [x] **13b.1** `docs/adr/0017-http-request-auth.md` — new ADR recording the decision that every
       API route requires a bearer token whenever one is configured; ADR-0007 unedited, not
       superseded; `docs/adr/README.md`'s index gains its row.
       Verify: read the ADR; the index row present.
       Requirement: R2.9.
-- [ ] **13b.2** Test first: `internal/httpapi/auth.go` — `ResolveToken(cfg, lookup) (string, bool)`,
+      **Done: `docs/adr/0017-http-request-auth.md` (99 lines) plus its `docs/adr/README.md` index
+      row. ADR-0007 confirmed unedited (`git diff origin/main -- docs/adr/0007-http-auth.md` empty
+      throughout this PR).**
+- [x] **13b.2** Test first: `internal/httpapi/auth.go` — `ResolveToken(cfg, lookup) (string, bool)`,
       reading the same `server.auth_token_env` variable `DecideBinding` reads; `requireToken(token)`
       middleware; a truth-table test sweeping the same `(bind, auth_token_env, env-set?)`
       combinations `binding_test.go` already exercises, asserting the middleware is a no-op **only**
@@ -1070,7 +1120,12 @@ Depends on (`12g`, `13a`).
       succeeds. **Red**: `undefined: httpapi.ResolveToken`, `undefined: httpapi.requireToken`.
       Verify: `make test`.
       Requirement: R2.10; design D10.
-- [ ] **13b.3** Test first: a completeness test iterating **one** declared route-table slice
+      **Done: red confirmed (`go vet` reported both undefined symbols) before `auth.go` existed.
+      `binding_test.go`'s own case table promoted to a package-level `bindTokenTruthTable` so
+      `TestRequireTokenNoOpOnlyOnLoopback` sweeps the exact combinations `TestDecideBinding`
+      already proves against — one table, two consumers, matching D10's own "one slice, two
+      consumers" shape applied to the tests themselves.**
+- [x] **13b.3** Test first: a completeness test iterating **one** declared route-table slice
       (consumed both by registration and by this test — D10's "one slice, two consumers" shape),
       asserting every entry returns 401 with no token and with a wrong token when a token is
       configured, and that both responses are **byte-identical** (R2.11's own MUST NOT against an
@@ -1078,7 +1133,10 @@ Depends on (`12g`, `13a`).
       `crypto/subtle.ConstantTimeCompare`.
       Verify: `make test`.
       Requirement: R2.11.
-- [ ] **13b.4** `Handler(Deps)` — the two muxes (open: `GET /{$}`, `GET /ui`; guarded: everything
+      **Done: `TestGuardedRoutesRequireToken` iterates `apiRoutes(d)` — the same slice `Handler`
+      registers the guarded mux from — asserting a 401 with an identical status and body for a
+      missing token and a wrong token.**
+- [x] **13b.4** `Handler(Deps)` — the two muxes (open: `GET /{$}`, `GET /ui`; guarded: everything
       else); `POST /capture` wired to `CaptureService.Capture` unchanged, mapping every
       `AllCaptureOutcomes()` member to a status code via a total switch (`stored` → 201, every other
       outcome → 200 with a body naming what happened, provider failures → 502, store failures →
@@ -1088,16 +1146,53 @@ Depends on (`12g`, `13a`).
       message (the refusal's plain-words message verbatim, R2.2), and the completeness test.
       Verify: `make test`.
       Requirement: R2.1, R2.2; design D10.
-- [ ] **13b.5** R2.12 review checkpoint: no cookie-setting or session code path exists in this PR;
+      **Done: red confirmed (`undefined: httpapi.Deps`) before `Handler(Deps)`/`capture.go` existed.
+      `TestCaptureHandler_StoresAnOrdinaryCapture` (201/stored),
+      `TestCaptureHandler_TimerRefusalSurfacesPlainWordsVerbatim` (200/deferred, the exact refusal
+      message), `TestAllCaptureOutcomesHaveAStatusMapping` (the total-switch completeness test).
+      The `provider failures → 502` half of this task's own text is not fully honored — see
+      Conflicts §C13's third finding: `brain.CaptureService.Capture` exposes no typed distinction
+      this package can read without an import design's own dependency-rule check does not list;
+      every `Capture` error renders 500.**
+- [x] **13b.5** R2.12 review checkpoint: no cookie-setting or session code path exists in this PR;
       `GET /` and `GET /ui` stay reachable without a token regardless of whether one is configured.
       Verify: review; a route test confirming both routes succeed with no `Authorization` header
       even when a token **is** configured.
       Requirement: R2.12.
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` for this PR contains
+      **Done: reviewed — `git grep -n "Set-Cookie\|http.Cookie\|session"` in this PR's own diff
+      finds nothing. `TestOpenRoutesStayOpenRegardlessOfToken` confirms `GET /` and `GET /ui` both
+      succeed with no `Authorization` header while `Deps.Token` is set, and that neither sets a
+      `Set-Cookie` header.**
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` for this PR contains
       `docs/adr/0017-http-request-auth.md` and the middleware landing together with `POST
       /capture`'s mount — never the middleware in a later PR (R2.9's own Verified-by). **Stop-and-report
       checkpoint once this PR's own cumulative diff crosses roughly 300 lines**, per the Review
       Workload Forecast below; no valid split line exists inside this PR's own scope.
+      **Done — three commits, in order:
+      `docs(adr): ADR-0017` (99 lines, no code), `feat(httpapi): ResolveToken and the constant-time
+      requireToken middleware` (auth.go/auth_test.go, the middleware unwired from any route),
+      `feat(httpapi): guarded route slice, POST /capture, and the total status switch` (Handler(Deps)
+      rewrite, apiRoutes, capture.go — POST /capture is mounted for the first time in this same
+      commit that builds the guarded mux and wraps it in requireToken; no commit in this PR's
+      history has the route reachable without the middleware already applied). `git diff
+      --name-only origin/main..HEAD` confirms `docs/adr/0017-http-request-auth.md` and
+      `internal/httpapi/{server,auth,capture}.go` all present. Measured: 937 insertions/51
+      deletions = 988 changed lines across 10 files, 2.20× the ~450 ceiling — this PR's own
+      stop-and-report checkpoint fired at roughly 300 lines and is recorded in the apply-progress
+      artifact rather than repeated here. `make check-all` green end to end: lint 0 issues, vet,
+      race+shuffle unit+integration tests, build, `TestSchemaGolden` empty diff, `internal/core`
+      coverage 100% (308/308, unaffected — no core file touched), seven-target cross-compile, e2e.
+      Validated by breaking, each reverted and confirmed via `git diff --stat` (empty after every
+      revert): (1) mounted `POST /capture` directly on the open mux, bypassing `apiRoutes`/
+      `requireToken` — `TestGuardedRoutesRequireToken` failed with `status = 400, want 401` (the
+      bypassed route reached `captureHandler` directly, hitting its JSON-decode-error path instead
+      of being intercepted); (2) made `requireToken` an unconditional no-op — three tests failed:
+      `TestRequireTokenConstantTimeAndNoDetail` (`status = 200, want 401`),
+      `TestGuardedRoutesRequireToken` (`status = 400, want 401`), and
+      `TestRequireTokenNoOpOnlyOnLoopback`'s own non-loopback row (`an unauthenticated request
+      reached the handler = true, want false`); (3) removed `OutcomeDiscarded`'s case from the
+      status switch — `TestAllCaptureOutcomesHaveAStatusMapping` failed with `has no status mapping
+      (renderCaptureResult returned status 0)` and `checked 5 outcomes, want 6`.**
 
 ---
 
