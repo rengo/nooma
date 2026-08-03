@@ -391,6 +391,102 @@ genuinely independent code paths (neither's tests import the other's production 
 clear budget alone — the only cost of splitting here is chain restructuring, not a size or
 strict-TDD obstruction the way `12c`/`12f-i`/`12f-ii` each hit.
 
+### C11 — `spec.md` R2.3/R2.4/R2.5 cite `RecallService.Candidates` for the recall Kind fork; `design.md` D9 (and `13a`'s own shipped code, and I22's own test) say `ScoredFor`/`ForText`. Resolved in design's favor. Also: `12g`'s own numbered tasks never list R2.3 at all, despite the package-layout table, `13a`'s PR-verify line, and C9's resolution all assigning it here.
+
+`spec.md` R2.3's own MUST reads: capture "instead runs the same hybrid-recall mechanism R2.4
+exposes… over the classification's text/embedding." R2.4 names the mechanism explicitly:
+`brain.RecallService.Candidates`. R2.5 repeats it: "Both paths are the same call into
+`brain.RecallService.Candidates` over the same `(content, vector, model)` inputs."
+
+**`Candidates`'s own signature makes this reading impossible for either entrance it is asked to
+serve.** `Candidates(ctx, content string, vector []float32, model string, excludeID string)
+([]unit.Unit, error)` takes an **already-embedded** vector — its caller already has one (the
+ordinary capture path's own `embedAndStore` step). Neither a `type: recall`-classified capture nor
+the standalone `/recall` route (`13c`) has a vector to hand it: a correction/recall-classified
+capture never reaches `embedAndStore` at all (R1.1/R2.3's own routing, before `ToUnit`), and
+`/recall` is standalone by design (Q3b: "no classify call on the read path," so nothing embeds a
+query before this route runs). Calling `Candidates` from either entrance would require each one to
+embed the text itself first — which is precisely `RecallService.ScoredFor`/`ForText`'s own job,
+design D9's later mechanism, built for exactly this reason: *"the argument is `in.Text`… `/recall`
+is standalone (Q3b): it never calls classify, so it has only the raw query."* `13a` already shipped
+`ScoredFor`/`ForText` against this reading, and I22's own conformance test (`13a`, revised by this
+PR per the apply prompt's own instruction) pins the "one mechanism" property against exactly these
+two methods, never `Candidates`.
+
+**Resolution: implemented per design D9/I22 — `RecallService.ForText`, not `Candidates`.** This is
+the same stale-citation pattern C1, C9 and C10 already found in this document and its siblings: an
+earlier requirement text citing a mechanism a later design decision superseded, never corrected in
+the spec itself. Flagged here per this document's own instruction not to resolve a spec/design
+disagreement silently, and left for whoever next revises `spec.md` to correct R2.3/R2.4/R2.5's own
+citations from `Candidates` to `ScoredFor`/`ForText`.
+
+**Second, smaller finding in the same area**: `12g`'s own numbered task list (`12g.1`–`12g.6`)
+never states a task for R2.3 at all — every one of its six tasks is R1.x (the correction path).
+Yet the package-layout table (`internal/brain/capture.go … + correction/recall Kind forks   12g`),
+`13a`'s own PR-verify line ("not the correction/recall `Kind` forks — those are `12g`'s"), and C9's
+own resolution text all assign the recall Kind fork to this link, not `13a`. Confirmed a genuine
+gap, not a misreading: none of `12g.1`–`12g.6`'s own MUST/Implement text mentions
+`classify.KindRecall`, `RecallService.ForText`, or R2.3 anywhere. Added as `12g.7`, implemented per
+design D9/I22 and this same conflict's resolution above — a small addition (one Kind-fork branch,
+one dedicated negative test, one I22 stub-replacement) next to `12g.1`–`12g.6`'s much larger
+correction-path surface, not a scope change to this link (the package-layout table already priced
+it here, tasks.md's own per-task breakdown simply never wrote it down).
+
+### C12 — `12g` measured 1073 changed lines against its own ~400 ceiling (2.68×, this chain's largest ratio yet); a correction/recall seam was evaluated and is not taken, for the same chain-structural reason C10 already declined one
+
+`internal/brain/correction.go` (152), `internal/brain/capture.go` (74, two hunks — the correction
+Kind fork and the recall Kind fork, plus `Stored`→`Outcome` renames both forks need),
+`internal/brain/result.go` (111, the full six-member `CaptureOutcome` reshape — needed once,
+whole, since it is one closed `iota`-shaped vocabulary, not severable per outcome),
+`test/conformance/capture_correction_referent_test.go` (365, new),
+`test/conformance/capture_correction_plan_test.go` (177, new),
+`test/conformance/capture_recall_route_test.go` (59, new),
+`test/conformance/i22_recall_one_mechanism_two_entrances_test.go` (63, stub replacement), ten
+`NewCaptureService` call-site updates for the new `signals` parameter (~20, mechanical), three
+`Stored`→`Outcome` assertion renames (~14, C7's own priced cost), four `testdata/llm/cases/*.json`
+fixtures (32) — 1073 lines across 20 files.
+
+**The candidate seam, along the same Kind-based boundary C11 already separates**: PR A — the
+correction path in full (`correction.go`, `capture.go`'s correction-Kind hunk, `result.go`'s full
+`CaptureOutcome` reshape since `OutcomeCorrected`/`OutcomeAsked` are correction-only members but the
+enum ships as one closed vocabulary, the `NewCaptureService` signal-param churn, both correction
+test files, the three `Stored`→`Outcome` renames), roughly 889 lines. PR B — the recall path alone
+(`capture.go`'s recall-Kind hunk, `capture_recall_route_test.go`, the I22 stub replacement, one
+fixture), roughly 154 lines, landing on top of PR A's already-shipped `OutcomeRecalled` member.
+
+**Why it is not taken.** PR B alone clears the ~400 ceiling easily — but PR A, the half carrying
+the actual per-task surface `12g.1`–`12g.6` describe, does not: 889 lines is still 2.2× this link's
+own ceiling, dominated by three things splitting cannot shrink: (a) four independent, TDD-paired L2
+behavioral guarantees (explicit-referent resolution, chat-path referent resolution including 12b's
+own live-filter recompute debt, edit-plan resolution, the at-most-one-`Update*` proof) each needing
+its own scenario per strict TDD (`correction.go` and its own proving tests cannot separate, the same
+rule `12c`'s and `12f-i`'s own C2/C6 findings already established for this exact file shape); (b)
+`result.go`'s `CaptureOutcome` reshape, which is one closed vocabulary that cannot ship partially
+without breaking `AllCaptureOutcomes()`'s own completeness contract for whichever half lands second;
+(c) the `NewCaptureService` signature growing a new port, rippling through every existing capture
+test regardless of which Kind branch a given test happens to exercise — the same mechanical,
+unavoidable churn `12g`'s own struct-growth (Conflicts §C7) already priced. Splitting off PR B does
+not solve PR A's own size problem, the identical shape `12f-i`'s own C6 finding already named ("size:
+PR A alone is 1.37× the same ~260 ceiling — splitting off the smaller half does not solve the size
+problem for the larger one").
+
+**Second, independent of size: this link's own numbering is fixed.** Per this link's own governing
+instruction ("propose a seam; do not open two PRs on your own judgment") and `13a`'s own C10
+precedent ("a seam that would reorder the chain's fixed 19-link sequence is not a link's call to
+make"), splitting `12g` into two links would insert a twentieth link into a chain `tasks.md` and
+`design.md` both already fix at nineteen, ordered — a bigger decision than a single link should make
+on its own judgment, the same class of obstruction C10 named for `13a`, not a size or strict-TDD wall
+the way `12c`/`12f-i`/`12f-ii` each hit.
+
+**Resolution: `12g` is unsplittable for a size reason plus a chain-structural reason together, and
+carries the chain's largest ratio yet.** `size:exception` applied via `gh pr edit <n> --add-label
+"size:exception"`, verified stuck (see the PR record above). Recorded as an *available-but-partial*
+seam for whoever next plans a revision of this chain, following `13a`'s own C10 precedent: the
+smaller half (recall) genuinely clears budget on its own, but the larger half (correction) does not,
+which is `12f-i`'s C6 shape, not `13a`'s C10 shape — two different reasons this document has now
+named separately for declining an evaluated seam, worth keeping distinct rather than merging into one
+generic "not split" note.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -847,24 +943,33 @@ before it can be written at all, so `13a` must merge first.
 
 ---
 
-## PR 12g — `feat/brain-correction-route` (~400 — at the ceiling; High risk, named explicitly by
-`design.md` as one of the rows in the estimate band)
+## PR 12g — `feat/brain-correction-route` (~400 estimate, 1073 measured — 2.68×; High risk, named
+explicitly by `design.md` as one of the rows in the estimate band; **not split** — see Conflicts
+§C12; `size:exception` applied)
 
 Depends on (`12f-ii`, `13a`) both merged.
 
-- [ ] **12g.1** Test first: R1.1 — a conformance test driving a `correction`-classified capture,
+- [x] **12g.1** Test first: R1.1 — a conformance test driving a `correction`-classified capture,
       asserting `ToUnit` is never called and `Create` is never called for it.
       Implement: capture's `Kind`-based routing fork for `correction` (mirroring
       `m1b-pipeline` R4.6's own timer-refusal fork), before `ToUnit` is ever reached.
       Verify: `make test`.
       Requirement: R1.1.
-- [ ] **12g.2** Test first: R1.5 — an explicit `unit_id` override: `CaptureInput` gains
+      **Done: `TestCapture_CorrectionChatPathReferentResolution`'s "single strong match" subtest
+      asserts `units.Count() == 1` after the correction — the same one unit seeded before it, never
+      grown by a `Create` call. `correctionRunner.at` is the routing fork's only callee, and it holds
+      no path to `classify.ToUnit` at all.**
+- [x] **12g.2** Test first: R1.5 — an explicit `unit_id` override: `CaptureInput` gains
       `ReferentID`; when non-empty and the classification is `correction`, capture uses
       `UnitRepo.ByID` directly and does **not** run recall at all (an instrumented index that fails
       the test if queried); an unknown explicit id returns an error and edits nothing.
       Verify: `make test`.
       Requirement: R1.5; design D7.
-- [ ] **12g.3** Test first: R1.6 — chat-path referent resolution: no explicit id →
+      **Done: `TestCapture_CorrectionExplicitReferentWinsWithoutRecall`, two subtests. "Recall does
+      not run" is proven by `embed.EmbedCalls() == 0` — `RecallService.ScoredFor`/`ForText` is the
+      only path left that would call `ports.EmbeddingProvider.Embed` for a correction, so an
+      instrumented count is equivalent to an instrumented index here and needs no new fake.**
+- [x] **12g.3** Test first: R1.6 — chat-path referent resolution: no explicit id →
       `RecallService.ScoredFor(ctx, in.Text)` (`13a`, raw text) → `correction.Referent` (`12b`)
       gated by `ReferentMargin`, computed over the **live** candidates only (after `LiveByIDs` — a
       `superseded` top scorer is dropped and the ratio recomputed over the survivors, I02); *ask* →
@@ -872,27 +977,78 @@ Depends on (`12f-ii`, `13a`) both merged.
       proceeds to `PlanEdit`. Includes R1.6's own two-units-ambiguous scenario.
       Verify: `make test`.
       Requirement: R1.6; design D2, D7, D9.
-- [ ] **12g.4** Test first: R1.8's orchestration half — `correctionRunner.at` calls
+      **Done: `TestCapture_CorrectionChatPathReferentResolution`, three subtests — single strong
+      match (pick), R1.6's own two-units-within-margin Scenario (ask, both units byte-identical
+      after), and 12b's own ordering debt: "dropping the archived top scorer changes the pick" —
+      an archived unit that would outscore a pool unit before the live filter is dropped by
+      `ScoredFor`'s own `LiveByIDs` join (13a), and the sole surviving live candidate is picked
+      instead. Validated by breaking: `RecallService.ScoredFor`'s `LiveByIDs` join was temporarily
+      replaced with an unfiltered `ByID` walk (bypassing the live filter entirely) — the subtest
+      failed exactly as expected, picking the archived unit (`Correction.UnitID = "archived-A"`,
+      want `"live-B"`); reverted, `git diff --stat` empty. The recomputation is real: `ScoredFor`
+      builds its `id -> score` map from the unfiltered fused ranking and only then walks
+      `LiveByIDs`' own survivors, so the ratio `correction.Referent` sees is already over the
+      survivors — this PR's `resolveReferent` never re-filters, it only converts `ScoredUnit` to
+      `recall.FusedCandidate` and calls `Referent` directly.**
+- [x] **12g.4** Test first: R1.8's orchestration half — `correctionRunner.at` calls
       `correction.PlanEdit(c)` (`12c`); a `false` result (both dates, or neither) writes
       `correction.ambiguous` and returns `OutcomeAsked`; a `true` result calls
       `applyWithPreImage(target, plan, ref, now)` (`12f-i`/`12f-ii`).
       Verify: `make test`.
       Requirement: R1.8; design D3, D7.
-- [ ] **12g.5** `CaptureOutcome`/`CaptureResult` reshaped (D8): the closed vocabulary (`Stored`,
+      **Done: `TestCapture_CorrectionPlanWritesExactlyOneField`, three subtests — content-only
+      leaves both dates unchanged, two resolved dates ask (target byte-identical), and at most one
+      `Update*` call reaches `ports.UnitRepo` per correction (a call-counting `ports.UnitRepo`
+      wrapper, since a value-only assertion cannot distinguish one correct call from two calls that
+      happen to agree). The date-only row (dates win, content stays stale) is `12g.3`'s own "single
+      strong match" subtest — not re-proven here.**
+- [x] **12g.5** `CaptureOutcome`/`CaptureResult` reshaped (D8): the closed vocabulary (`Stored`,
       `Deferred`, `Discarded`, `Recalled`, `Corrected`, `Asked`), `AllCaptureOutcomes()`. `Stored
       bool` is **replaced**, not joined — Phase B tests asserting `Stored: true/false` are edited in
       this PR to assert `Outcome` instead (assertion-renaming only, never a weakened conformance
       claim, per C7's own cost pricing).
       Verify: `make test` — full suite green, including the edited Phase B assertions.
       Requirement: design D8 (C7's resolution).
-- [ ] **12g.6** I03's correction half: a conformance test asserting a correction is an UPDATE — the
+      **Done: `internal/brain/result.go`'s `CaptureResult` carries `Outcome CaptureOutcome` in place
+      of `Stored bool`; `AllCaptureOutcomes()` returns the six-member vocabulary. Three pre-existing
+      assertions renamed, no conformance claim weakened: `i04_timer_never_a_unit_test.go`
+      (`Stored == false` → `Outcome == OutcomeDeferred`), `capture_ambiguous_person_ref_test.go`
+      (`Stored == true` → `Outcome == OutcomeStored`), `capture_orphan_actions_test.go`
+      (`Stored == true` → `Outcome == OutcomeDiscarded`).**
+- [x] **12g.6** I03's correction half: a conformance test asserting a correction is an UPDATE — the
       unit count is unchanged, the id survives, no `Create`, no `SetStatus`/`Delete*`/`Remove*`/
       `Purge*`/`Drop*`/`Destroy*`-prefixed call.
       Verify: `go test ./test/conformance/...` — the existing `i03_units_never_deleted_test.go`
       stays unchanged and green against this PR's new files.
       Requirement: R1.11.
-- [ ] Verify (PR-level): `make check-all`; confirm `12g` and `13a` together are the only routing
+      **Done: folded into `TestCapture_CorrectionChatPathReferentResolution`'s "single strong match"
+      subtest (`units.Count() == 1`, the id `dentist-real` survives and is read back directly) rather
+      than a separate file — `i03_units_never_deleted_test.go`'s own reflection/tree-scan checks are
+      structural and need no change to cover this PR's new files, confirmed green unmodified.**
+- [x] **12g.7** (not in this link's original numbered tasks — see Conflicts §C11) R2.3's own half:
+      capture's `type: recall` Kind fork, and I22's own stub-to-production replacement named by the
+      apply prompt. `RecallService.ForText(ctx, in.Text)` (never `c.NormalizedContent`, D9's forced
+      argument), returning `CaptureOutcome.Recalled` with the found units; never persists a unit.
+      Verify: `make test`.
+      Requirement: R2.3 (per Conflicts §C11, in design D9's favor over R2.3/R2.4/R2.5's own
+      `RecallService.Candidates` citation); design D9; I22.
+      **Done: `TestCapture_RecallClassificationNeverPersistsAUnit` (units.Count() == 0,
+      decision_log has 0 rows — recall is a read, I12) and `TestI22_RecallOneMechanismTwoEntrances`'s
+      own `entranceCapture`, now the real `CaptureService.Capture` pipeline rather than a stub
+      closure. Validated by breaking: the fork's `in.Text` argument was temporarily replaced with a
+      literal wrong string — I22 failed exactly as expected (`got [vector-match], want ... [vector-match
+      lexical-match]`); reverted, `git diff --stat` empty.**
+- [x] Verify (PR-level): `make check-all`; confirm `12g` and `13a` together are the only routing
       changes to `internal/brain/capture.go`.
+      **Done — PR #116 (https://github.com/rengo/nooma/pull/116, branch
+      `feat/brain-correction-route`, base `main`, NOT yet merged, `size:exception` labeled and
+      verified stuck): 1073 changed
+      lines across 20 files (976 insertions, 97 deletions; 2.68× the ~400 ceiling — see Conflicts
+      §C12 for the seam evaluated and not taken), `make check-all` green (lint 0 issues,
+      race+shuffle unit+integration tests, build, `internal/core` coverage unaffected — no core file
+      touched, seven-target cross-compile, e2e). No `docs/02-cognitive-core.md` delta: this PR
+      touches no `internal/core/**` file, and `design.md`'s D13 table assigns `12g` no row (a "no
+      core file" slice, the same class as `12f`/`13b`/`17`/`15`/`16a`/`16b`).**
 
 ---
 

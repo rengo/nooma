@@ -1,6 +1,10 @@
 package brain
 
-import "github.com/rengo/nooma/internal/core/classify"
+import (
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // CaptureInput is what a caller hands to CaptureService.Capture — the "in"
 // design D4's pipeline diagram threads through every step.
@@ -19,50 +23,78 @@ type CaptureInput struct {
 	// Channel is where this capture came from (e.g. "chat", "telegram"),
 	// and becomes the persisted unit's Source.
 	Channel string
+	// ReferentID is an optional explicit target-unit id, meaningful only
+	// when the classification resolves to classify.KindCorrection (spec
+	// R1.5, design D7). When non-empty it wins over chat-path referent
+	// resolution outright: recall does not run at all, and an id naming no
+	// existing unit fails the correction rather than falling back to
+	// recall.
+	ReferentID string
 }
 
-// CaptureResult is what CaptureService.Capture returns.
-//
-// PR 10b built the ordinary path — a classification that persists a unit,
-// is embedded, then runs hybrid recall for dedup/relation candidates. This
-// PR (10c) adds Stored and Deferred: Q3a's refusal path (spec R4.6) needs a
-// result distinguishable from an ordinary success, which a bare Go error
-// would not give it — a timer classification is not a failure, so Capture
-// returns (CaptureResult, nil) for it too, with Stored == false naming the
-// difference.
+// CaptureOutcome is the closed vocabulary of every way a capture can end —
+// design D8, replacing the prior Stored bool (C7): keeping both would give
+// one fact two sources that could disagree. AllCaptureOutcomes lets a
+// caller (13b's HTTP status mapping) build a total switch that fails loudly
+// the day a member is added without a mapping.
+type CaptureOutcome string
+
+const (
+	OutcomeStored    CaptureOutcome = "stored"    // a unit was persisted
+	OutcomeDeferred  CaptureOutcome = "deferred"  // timer / recurring_reminder — Q3a
+	OutcomeDiscarded CaptureOutcome = "discarded" // chitchat / out_of_scope
+	OutcomeRecalled  CaptureOutcome = "recalled"  // a recall, answered
+	OutcomeCorrected CaptureOutcome = "corrected" // a correction, applied
+	OutcomeAsked     CaptureOutcome = "asked"     // a correction whose referent or plan was ambiguous
+)
+
+// AllCaptureOutcomes returns a fresh slice holding every CaptureOutcome, in
+// the order the constants above declare them — a function, not an exported
+// var, for the same mutability reason ports.AllDecisionActions is one.
+func AllCaptureOutcomes() []CaptureOutcome {
+	return []CaptureOutcome{
+		OutcomeStored, OutcomeDeferred, OutcomeDiscarded,
+		OutcomeRecalled, OutcomeCorrected, OutcomeAsked,
+	}
+}
+
+// CaptureResult is what CaptureService.Capture returns — a tagged union
+// over Outcome (design D8): only the fields naming that outcome are ever
+// populated; every other field stays its zero value.
 type CaptureResult struct {
-	// Stored reports whether this capture persisted a unit at all. False
-	// only for Q3a's refusal path (a timer/recurring_reminder
-	// classification, spec R4.6): every other classification this PR
-	// handles — including an ambiguous person reference, spec R4.7 — sets
-	// this true, because a pool unit is still persisted for it. When false,
-	// UnitID/Embedded/Candidates are all their zero values: there is no
-	// unit for them to describe.
-	Stored bool
-	// UnitID is the ID of the unit this capture persisted. Empty when
-	// Stored is false.
+	// Outcome names which of the six ways this capture ended — the one
+	// field every caller switches on.
+	Outcome CaptureOutcome
+
+	// UnitID is the ID of the unit this capture persisted. Set only for
+	// Outcome == OutcomeStored.
 	UnitID string
 	// Embedded reports whether this capture's embedding was written.
 	// False means the unit is persisted and lexically findable but not yet
 	// semantically searchable — design D8's accepted, named gap: a local
 	// embedding-provider or store outage degrades the index, it does not
-	// refuse the capture (doc 02 §5's product rule). A caller that cares —
-	// Phase C's HTTP route, the CLI — can tell "stored and searchable" from
-	// "stored, semantic search pending" without querying decision_log
-	// itself.
+	// refuse the capture (doc 02 §5's product rule). Set only for
+	// Outcome == OutcomeStored.
 	Embedded bool
 	// Candidates holds the ids RecallService found for this capture's own
 	// unit, in the RRF-fused, I02-filtered order design D5 produces — the
 	// just-persisted unit's own id is never among them (spec R4.4's own
-	// MUST). Empty, never nil, when embedding did not happen (Embedded ==
-	// false: there is no vector to search with) or when recall found
-	// nothing. PR 11c is the first consumer that does anything with this
-	// list beyond observing it; today it is a caller-visible fact, not yet
-	// a decision.
+	// MUST). Set only for Outcome == OutcomeStored; empty, never nil, when
+	// embedding did not happen or recall found nothing.
 	Candidates []string
-	// Deferred is non-nil exactly when Stored is false — Q3a's refusal
-	// path, spec R4.6. Nil for every other classification this PR handles.
+
+	// Deferred names the refusal — Q3a's refusal path, spec R4.6. Set only
+	// for Outcome == OutcomeDeferred.
 	Deferred *Deferred
+
+	// Recalled holds the units RecallService.ForText found for a
+	// `recall`-classified capture (spec R2.3, design D9), in fused order.
+	// Set only for Outcome == OutcomeRecalled; never persists a unit.
+	Recalled []unit.Unit
+
+	// Correction names how a correction resolved, or why it could not. Set
+	// only for Outcome == OutcomeCorrected or Outcome == OutcomeAsked.
+	Correction *Correction
 }
 
 // Deferred is what CaptureResult carries in place of a persisted unit, when
@@ -81,4 +113,21 @@ type Deferred struct {
 	// wording: "tells the caller 'not yet' in plain words". Never a
 	// technical error message; a caller renders this directly.
 	Message string
+}
+
+// Correction is what CaptureResult carries for the Corrected and Asked
+// outcomes (design D8) — capture's own account of how a correction
+// resolved, or why it could not.
+type Correction struct {
+	// UnitID is the referent unit's id. Empty when Outcome is Asked because
+	// the referent itself could not be resolved (R1.6); set when Outcome is
+	// Asked because a referent resolved but its edit plan was ambiguous
+	// (R1.8); always set when Outcome is Corrected.
+	UnitID string
+	// Fields names the columns PlanEdit wrote, in order. Empty for Asked.
+	Fields []correction.Field
+	// Ambiguous is true for the ask-shaped outcome — captureRunner's own
+	// Kind == correction fork reads this to choose OutcomeAsked over
+	// OutcomeCorrected, rather than re-deriving it.
+	Ambiguous bool
 }

@@ -53,7 +53,7 @@ func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
 
 			result, err := svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the scripted LLM case drives the classification",
@@ -67,8 +67,8 @@ func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Capture error = %v, want nil — a discarded classification is not a failure", err)
 				}
-				if result.Stored {
-					t.Error("Stored = true, want false — a discarded classification persists no unit")
+				if result.Outcome != brain.OutcomeDiscarded {
+					t.Errorf("Outcome = %q, want %q — a discarded classification persists no unit", result.Outcome, brain.OutcomeDiscarded)
 				}
 			}
 			if got := units.Count(); got != 0 {

@@ -50,7 +50,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Ana asked me to send her the contract",
@@ -59,8 +59,8 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Capture error = %v, want nil — an ambiguous person reference still captures with what it has (doc 02 §5's product rule)", err)
 	}
-	if !result.Stored {
-		t.Error("CaptureResult.Stored = false, want true — an ambiguous person reference is an ordinary successful capture, not a refusal")
+	if result.Outcome != brain.OutcomeStored {
+		t.Errorf("CaptureResult.Outcome = %q, want %q — an ambiguous person reference is an ordinary successful capture, not a refusal", result.Outcome, brain.OutcomeStored)
 	}
 	if result.UnitID == "" {
 		t.Fatal("CaptureResult.UnitID is empty — the caller has no way to find the unit this capture persisted")
