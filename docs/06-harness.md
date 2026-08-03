@@ -192,12 +192,20 @@ Initial extraction:
 | I20 | One active insight per metric; the previous one becomes `superseded` | §12, doc 03 |
 | I21 | Every vector search filters on `model`; embeddings from two models never compare | §5 |
 | I22 | Capture's own recall entrance and the standalone `/recall` route are one mechanism, called with the same raw text, never `normalized_content` | §5 |
+| I23 | A correction's pre-image is recorded before its edit is applied; a failed audit write leaves the unit untouched | §5 step 4 |
 
-Three of these are better verified with a structural test than a behavioral one:
+Four of these are better verified with a structural test than a behavioral one:
 
 - **I01** — a test that fails if the literal `"focus"` appears as a status value in the tree.
 - **I03** — a test that fails if a `DELETE FROM units` appears outside the migrations.
 - **I13** — a test verifying the migration declares no FK on `learning_signals.target_id`.
+- **I23** — a `go/ast` test asserting `applyWithPreImage` is the only function that reaches any
+  `UnitRepo.Update*` method, and that `recordPreImage` precedes `dispatchEdits` in its statement
+  order. A behavioral test proves the ordering holds on the paths it exercises; this one proves no
+  other path exists. It also refuses to pass vacuously — it fails if it scans no files, if
+  `applyWithPreImage` is absent, or if either call is missing — and refuses to guess, failing
+  loudly when the two calls sit in one statement or inside a closure where their order cannot be
+  read.
 
 They are ugly tests and they are worth gold: they are exactly the invariants somebody will
 break without noticing eight months from now, with the best intentions.

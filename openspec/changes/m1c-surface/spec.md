@@ -381,7 +381,7 @@ table to corrections.
 
 **MUST NOT**: this signal row require the target unit to exist at write time, or be joined against
 `units` in a way that would defeat `learning_signals.target_id`'s deliberate absence of a foreign
-key — already structural in the schema (migration 0001, verified: "NO FK: the signal outlives the
+key — already structural in the schema (migration 0002, verified: "NO FK: the signal outlives the
 target's deletion"); this PR's obligation is not to defeat that structural fact with application
 logic that behaves as if the FK existed.
 
@@ -413,7 +413,7 @@ already established.
 
 **MUST NOT**: this PR add a new migration, or modify `0001_core_tables.sql` or
 `0002_learning_and_search.sql` — `learning_signals` and its no-FK `target_id` column already exist
-(migration 0001, verified above); this PR is repository methods against existing tables, not
+(migration 0002, verified above); this PR is repository methods against existing tables, not
 schema.
 
 **Verified by**: L3 — a test running a correction's `Update*` calls and `SignalRepo` write against
