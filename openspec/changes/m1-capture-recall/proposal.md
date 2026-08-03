@@ -447,7 +447,17 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 > Anthropic publishes no embeddings API, so OpenAI is the provider. PR 6 already built three HTTP
 > clients against `ports.LLMProvider`; this is the same shape against `ports.EmbeddingProvider`.
 >
+> **PR 17 comes before PR 15**, which is why the chain reads `6 → 17 → 15`. PR 15 is the wizard
+> that writes the Cloud path's `tasks:` block, and `internal/config/validate.go:177` rejects a
+> `tasks.<name>.provider` naming a provider absent from the map. So a wizard shipped before the
+> cloud embedder exists has two options and both are the bug this PR closes: write an embedding
+> binding that fails validation, or write no embedding binding at all and hand the user the
+> silently one-legged vault described above. **The wizard cannot offer a complete Cloud path before
+> a complete Cloud path exists.**
+>
 > Surfaced by `sdd-design` while reconciling against the spec, and confirmed by listing the tree.
+> The ordering edge was found one step later, by `sdd-spec` noticing this document had no edge
+> between 15 and 17 while it was deciding which PR performs the binding.
 
 > **PRs 15 and 16 were scheduled on 2026-08-02, and the gap they close is the point.** §3.2 has
 > listed both since 2026-07-31 and **no PR in any of this document's three phase tables built
@@ -484,7 +494,7 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 
 Dependencies: `1 → 6`, `2 → 3 → 4`, `5 → 6`, `(4,5) → 7`, `2 → 8`, `(4,8) → 9`,
 `(6,7,9) → 10`, `(8,10) → 11`, `(10,11) → 12`, `(10,11,12) → 13`, `6 → 15`, `(5,6) → 16`,
-`6 → 17`, `(13,15,16,17) → 14`. PR 1 is independent of everything and goes first. PR 8 can land any
+`6 → 17 → 15`, `(13,15,16,17) → 14`. PR 1 is independent of everything and goes first. PR 8 can land any
 time after PR 2. **PR 14 is last in time despite its number** — it is the demo, and the demo is M1's
 exit criterion, so everything it walks through has to exist before it walks.
 
