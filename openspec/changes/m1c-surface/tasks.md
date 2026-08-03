@@ -1064,6 +1064,69 @@ once the PR is open, verified stuck.
    "answered twice" rule exists to produce: a contract answered only by its own fake would not have
    caught this.
 
+### C22 — `14a`: the human-readable summary text is design D11's own judgment call, not a MUST-quoted string; non-2xx handling is this PR's own addition beyond what any artifact specifies; and `14a` measured 708 changed lines against its own ~350 ceiling (2.02×)
+
+**First finding: design D11 states the two failure messages nearly verbatim, and R3.1 requires "a
+human-readable summary of the response" for success without specifying its wording.** The two
+failure messages (`diagnoseUnreachable`, `cmd/nooma/capture.go`) are implemented to match D11's own
+table text closely — `"no nooma server is running for vault %s (expected at http://%s) — start one
+with 'nooma serve'"` and `"a process (pid %d) holds vault %s but nothing answered at http://%s —
+check server.bind and server.http_port in nooma.yml"` — the one deliberate addition being the
+`http://` prefix on the second message's `<addr>` placeholder (D11's table only spells it out on the
+first row), chosen for consistency rather than left to guess. The success/deferred/discarded/
+recalled rendering (`renderCaptureResponse`) has no MUST-quoted text anywhere in spec.md or
+design.md — this PR's own choice, tested directly (16a-i's own lesson: assert the rendered string).
+Recorded here so a future reviewer does not mistake `renderCaptureResponse`'s wording for a spec
+requirement the way `16b`'s C21 mistook D18b's `embedding` wording for one still in force.
+
+**Second finding: non-2xx HTTP responses (401, 400, 500) have no MUST clause in any artifact.**
+Neither R3.1 nor D11 says what `nooma capture` prints when the server answers but rejects the
+request — R3.1's own two MUSTs cover only "no server reachable" and the auth-refusal-before-sending
+case; D11's diagnosis table covers only the transport-failure rows. `runCapture` (`capture.go:80-92`)
+answers a 401 with a fixed "unauthorized" message and any other 4xx/5xx by relaying the server's own
+`{"error": "..."}` body, or a bare status-code message when the body carries none — an implementation
+completeness decision, not a requirement any artifact states, flagged per this document's own
+"MUST-quoted, flag rather than silently deviate" discipline applied to an omission instead of a
+conflict.
+
+**Third, a size measurement.** The complete, green `14a` PR measures 708 changed lines against its
+own ~350 ceiling (2.02×) — `cmd/nooma/capture.go` (235, the implementation), `cmd/nooma/capture_test.go`
+(389, L2 — dispatch, request/response shape, wildcard-dial translation, the three-way diagnosis, the
+three auth cases, and an AST guard for the MUST NOT), `test/e2e/capture_cli_test.go` (79, L4 — the
+compiled-binary round trip), `cmd/nooma/main.go` (4, the dispatch entry) and
+`docs/01-architecture.md` (1, D13's assigned delta).
+
+**A candidate seam was considered and not taken.** The only structural split available is
+implementation+L2 (`capture.go` + `capture_test.go`, 624 lines) as PR A, followed by L4+doc
+(`capture_cli_test.go` + the doc-01 row, 80 lines) as PR B once PR A merges — unlike `16b`'s C21 seam
+(two genuinely independent doctor rows), this command has no internal boundary: `runCapture` is one
+function implementing one behavior (send, diagnose, or refuse), and its own L4 test cannot compile
+against anything but the finished implementation. Splitting would turn one command's proof into two
+PRs for a taxonomy boundary (L2 vs L4) this chain has never used as a seam anywhere else, trading a
+real coordination cost for a smaller number on a soft ceiling. Per this document's own instruction
+("propose a seam; do not split unilaterally"), the option above is recorded for review rather than
+acted on. `gh pr edit <n> --add-label "size:exception"` applied once the PR is open, verified stuck.
+
+**Break experiments (all three from the apply prompt, run and reverted, `git diff --stat` confirmed
+clean after each):**
+1. Reordered `runCapture` to call `postCapture` before `captureAuthHeader`, sending with an
+   always-empty header — `TestCaptureRefusesBeforeSendingWhenAuthVariableIsUnset` failed exactly as
+   its own doc comment predicts: `requests != 0` — "the server received 1 request(s); nooma capture
+   must refuse BEFORE sending when the token is unset". The assertion is on the request count
+   reaching the fake server, not merely on an error being returned, which is what makes it catch the
+   ordering bug specifically rather than any bug that happens to also produce an error.
+2. Collapsed `diagnoseUnreachable`'s two messages into one generic `"could not reach the server at
+   %s for vault %s"` — both `TestCaptureDiagnosesNoServerRunning` and
+   `TestCaptureDiagnosesHeldButUnreachable` failed on the specific wording each expects (`"no nooma
+   server is running"` / `"nooma serve"` missing from the first; `"pid %d"` / `"nothing answered"` /
+   `"server.bind"` / `"server.http_port"` missing from the second).
+3. Removed `dialAddress`'s wildcard translation, dialing the configured `bind` literally —
+   `TestDialAddressTranslatesWildcardBinds` failed on the `0.0.0.0` and `::` cases specifically
+   (`host = "0.0.0.0", want "127.0.0.1"`), while the ordinary-host cases stayed green — a pure unit
+   test on the translation function itself, chosen over an httptest-based connectivity test because
+   OS-level dialing to `0.0.0.0` is not reliably a reproducible failure across platforms; asserting
+   the translated host directly is what makes this catcher portable.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -2117,38 +2180,60 @@ larger-branch estimate.**
 Depends on **all five** of (`13d`, `15`, `16a-ii`, `16b`, `17`) — the proposal's own `(13,15,16,17)
 → 14` line, with `13d`/`16a-ii`/`16b` standing in for their umbrella PRs' completion.
 
-- [ ] **14a.1** Test first: `cmd/nooma` gains a `capture` subcommand in `main.go`'s dispatch table
+- [x] **14a.1** Test first: `cmd/nooma` gains a `capture` subcommand in `main.go`'s dispatch table
       (following `init`/`status`/`doctor`/`serve`'s own convention); it sends `POST /capture`
       against a running `nooma serve` instance, reading `nooma.yml` only to resolve the bind address
       (no lock taken); a wildcard bind (`0.0.0.0`, `::`) dials `127.0.0.1`, never the wildcard
       literal.
       Driven against an `httptest`-backed fake server: the request/response shape.
+      **Implemented as specified: `commands["capture"]` (`main.go`), `runCapture`/`postCapture`/
+      `dialAddress` (`capture.go`). Wildcard translation pinned as a pure unit test
+      (`TestDialAddressTranslatesWildcardBinds`) rather than an httptest connectivity test — see
+      §C22's third break experiment for why.**
       Verify: `make test`.
       Requirement: R3.1 (the HTTP-client half); design D11.
-- [ ] **14a.2** Test first: the three no-server-reachable diagnoses — not held (fails); held by pid
+- [x] **14a.2** Test first: the three no-server-reachable diagnoses — not held (fails); held by pid
       N but nothing answers (fails, names the pid); either succeeds (ordinary path) — using
       `vaultlock.ReadHolder`, the same free read `status` already performs.
+      **Implemented as specified: `diagnoseUnreachable` reads `vaultlock.ReadHolder` only on the
+      failure path (never on success), and only there — the "costs nothing" property design D11
+      states.**
       Verify: `make test`.
       Requirement: R3.1 (the diagnosis half); design D11.
-- [ ] **14a.3** Test first: `httpapi.ResolveToken`'s third reader — `nooma capture` reads
+- [x] **14a.3** Test first: `httpapi.ResolveToken`'s third reader — `nooma capture` reads
       `server.auth_token_env` the same way the server does; loopback + no `auth_token_env` → no
       header; `auth_token_env` set + variable set → `Authorization: Bearer <value>`; `auth_token_env`
       set + variable **unset** → the CLI refuses **before** sending, naming the variable — never
       sends first and discovers the 401 afterward.
+      **Implemented as specified: `captureAuthHeader` calls `httpapi.ResolveToken` and is the first
+      thing `runCapture` does after loading config — before `dialAddress`/`postCapture` run at all.**
       Verify: `make test`.
       Requirement: R3.1 (the auth half); design D11.
-- [ ] **14a.4** MUST NOT check: `nooma capture` never opens the vault's database directly and never
+- [x] **14a.4** MUST NOT check: `nooma capture` never opens the vault's database directly and never
       takes (or attempts) the vault's write lock.
+      **Confirmed by review: `capture.go` imports `vaultlock` only for `ReadHolder` (the free read);
+      no call to `vaultlock.Acquire`, `sqlite.Open`, or any store package anywhere in the file. Also
+      backed by an AST guard test (`TestCaptureNeverAcquiresTheVaultLock`) for durability, the same
+      precision `test/conformance/store_no_direct_clock_read_test.go` uses for an analogous MUST
+      NOT.**
       Verify: review; confirm no call to `vaultlock.Acquire` from `cmd/nooma/capture.go`.
       Requirement: R3.1 (the MUST NOT).
-- [ ] **14a.5** L4: a compiled-binary test starting `nooma serve` against a real vault, then running
+- [x] **14a.5** L4: a compiled-binary test starting `nooma serve` against a real vault, then running
       `nooma capture "<text>"` against it, asserting a unit was persisted.
+      **Implemented as specified: `TestCaptureCLIPersistsThroughARealServer` — `nooma serve` over a
+      real vault configured against `mockOllama`, `nooma capture` run as a subprocess, persistence
+      confirmed via a subsequent `POST /recall` finding the exact content just captured.**
       Verify: `go test ./test/e2e/... -tags e2e`.
       Requirement: R3.1's Verified-by, L4 half.
-- [ ] **14a.6** doc 01's CLI table gains the `capture` row.
+- [x] **14a.6** doc 01's CLI table gains the `capture` row.
+      **Implemented as specified: `docs/01-architecture.md`'s CLI table gains `nooma capture <text>
+      [vault]`.**
       Verify: read the section.
       Requirement: design D13 (`14a` row).
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all`. **Green: lint 0 issues, vet, race+shuffle unit+conformance
+      tests, L3 integration, `TestSchemaGolden` empty diff, `internal/core` coverage 100% (308/308,
+      unaffected — this PR touches no core file), seven-target cross-compile, L4 e2e. See §C22 for
+      the size measurement (708/2.02×) and the three break experiments.**
 
 ---
 
