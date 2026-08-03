@@ -39,6 +39,21 @@ discover later:
   doc" to satisfy a line counter, which is not what the ceiling protects). Flagged High-risk
   stop-and-report instead.
 
+**A fifth slice, `12c`, joined this list in flight rather than up front — not by choice.** It
+looked splittable ahead of the other four: `design.md` §4's own package layout already lists
+`edit.go` and `plan.go` as two files, and D3's own text reads as two decisions. `sdd-apply`
+measured the unsplit PR at 501 lines (1.25× its ~400 ceiling), and a split along the `Edit`/
+`PlanEdit` seam was attempted (PRs #108/#109, `feat/core-correction-edit` +
+`feat/core-correction-plan`, both closed unmerged). `docs<->code sync` rejected `12c-i`
+(`edit.go`/`edit_test.go` alone): it touches `internal/core/**` with no `docs/02-cognitive-core.md`
+delta of its own, because `Edit` is an opaque type with three accessors and no behaviour doc 02
+governs — the delta belongs to `PlanEdit`, which decides what a correction writes. The seam
+looked clean and held structurally through `make check-all` (both halves passed `golangci-lint`,
+`TestCoreExportedDeclsHaveTests`, and the coverage floor standing alone); it was still wrong,
+caught by the one gate `make check-all` cannot run locally. See Conflicts §C2 and the Review
+Workload Forecast for the full record. `12c` now joins `13b`/`13d` as unsplittable, carrying
+`size:exception`.
+
 Nineteen merge links, in order: `12a, 12b, 12c, 12d, 12e, 12f-i, 12f-ii, 13a, 12g, 13b, 13c, 13d,
 17, 15, 16a-i, 16a-ii, 16b, 14a, 14b`.
 
@@ -103,6 +118,41 @@ for `16b`, which already assumed the larger branch. `design.md`'s own §2 C10 se
 0, and §9 are stale on this one point and need a follow-up correction from whoever next revises
 that document, per `CLAUDE.md` non-negotiable #1's spirit applied to two documents disagreeing
 rather than to doc-and-code.
+
+### C2 — `12c` looked splittable along `Edit`/`PlanEdit` (design §4's own file layout suggests it); it is not. **RESOLVED — the seam does not exist; `12c` is unsplittable, `size:exception` applied.**
+
+`sdd-apply` measured the unsplit `12c` PR at 501 changed lines against its own ~400 ceiling
+(1.25×). `design.md` §4's package layout lists `edit.go` and `plan.go` as two files under
+`internal/core/correction/`, and D3's own text reads as two decisions (the gate, the plan) — both
+readable as evidence a clean split exists at that file boundary. The coordinator directed a split
+on exactly that reading: `12c-i` (`edit.go`/`edit_test.go`, PR #108) and `12c-ii` (`plan.go` plus
+its tests, the L2 conformance corpus, and the doc 02 delta, PR #109), `12c-ii` branched from `main`
+directly rather than from `12c-i`, so neither PR's diff would show the other's code.
+
+**Both PRs passed `make check-all` standing alone** — `12c-i`'s own `TestCoreExportedDeclsHaveTests`
+and `internal/core` coverage floor held with only `edit.go`/`edit_test.go` added (100%, 300/300),
+which reads as the seam holding structurally. It was not: `12c-i` touches `internal/core/**` and
+changes no `docs/02-cognitive-core.md`, and `docs<->code sync` is the one gate `make check-all`
+cannot run locally — it decides on PR base and labels, which exist only once a PR is open on
+GitHub. `CLAUDE.md` non-negotiable #1 requires the doc to change in the same PR as the core change
+it documents; `12c-i` has no such change to make, because **`Edit` alone changes no observable
+behaviour**. An opaque type with three per-field accessors is *how* the "a correction writes
+exactly one field" guarantee is made structural, not *what* the system does — doc 02 governs
+behaviour, and `PlanEdit` is what decides which field a correction writes, which is the entire
+content of the §5 step 4 delta. Under `work-unit-commits`, a work unit is change + tests + doc;
+`12c-i` could only ever be change + tests, because its doc does not exist. A second candidate seam
+— core-plus-doc in one PR, the L2 conformance corpus in a second — fails differently: it would
+merge behaviour before the conformance test that proves it, which strict TDD (`CLAUDE.md`
+non-negotiable #4) forbids.
+
+**Resolution: `12c` is genuinely indivisible — `nooma-pr`'s own condition for `size:exception`
+("if splitting is genuinely wrong") — and joins `13b`/`13d` as an unsplittable, flagged High-risk,
+`size:exception` link.** Both split PRs (#108, #109) were closed unmerged with this reasoning in
+their closing comments; the single combined PR (this `12c` block, all tasks `[x]`) supersedes them.
+Recorded for whoever next eyes a design document's file layout as a split seam: a package listing
+two files, or a design section reading as two decisions, is necessary but not sufficient evidence
+of a valid split — the doc-delta ownership test (does each half have its own behaviour to
+document?) is what actually decides it, and `make check-all` cannot check it for you.
 
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
@@ -278,18 +328,19 @@ Depends on `12a` (imports `recall.FusedCandidate`).
 
 ---
 
-## PR 12c — `feat/core-correction-plan` (~400 — at the ceiling; High risk, see forecast)
+## PR 12c — `feat/core-correction-plan` (~400 estimate, 501 measured — 1.25×; High risk, **not
+split** — see forecast and Conflicts §C2; `size:exception` applied)
 
 Depends on `12b` (same new `core/correction` package).
 
-- [ ] **12c.1** Test first: `internal/core/correction/edit_test.go` — `AllFields()` completeness:
+- [x] **12c.1** Test first: `internal/core/correction/edit_test.go` — `AllFields()` completeness:
       for each `Field`, exactly one accessor reports true. **Red**: `undefined: correction.Field`,
       `undefined: correction.Edit`.
       Implement `edit.go`: `Field`, `FieldContent`/`FieldEventAt`/`FieldDueAt`, `AllFields()`, the
       opaque `Edit` type plus its three constructors and three accessors.
       Verify: `make test`.
       Requirement: R1.8 (the edit-plan shape); design D3.
-- [ ] **12c.2** Test first: `internal/core/correction/plan_test.go` — every row of R1.8's table
+- [x] **12c.2** Test first: `internal/core/correction/plan_test.go` — every row of R1.8's table
       (event-only, due-only, content-fallback, both-dates → ask, no-date-no-content → ask); the
       explicit scenario a date-carrying correction leaves content byte-for-byte untouched. **Red**:
       `undefined: correction.PlanEdit`.
@@ -297,22 +348,24 @@ Depends on `12b` (same new `core/correction` package).
       Verify: `make test`; `golangci-lint run` (confirm `core/correction` importing `core/classify`
       stays inside `depguard`'s allowed prefix).
       Requirement: R1.8; design D3.
-- [ ] **12c.3** L2: `test/conformance/` — `PlanEdit` over the corpus's correction cases produces the
+- [x] **12c.3** L2: `test/conformance/` — `PlanEdit` over the corpus's correction cases produces the
       field each case implies; add one new due-date correction case under
       `testdata/classify/cases/`, following `m1b-pipeline`'s own "written once, used in two places"
       discipline.
       Verify: `go test ./test/conformance/...`.
       Requirement: R1.8's own Verified-by; design §7 test matrix (`12c` row).
-- [ ] **12c.4** doc 02 §5 step 4 delta: which column a correction writes (C2/C6's closed gap), and
+- [x] **12c.4** doc 02 §5 step 4 delta: which column a correction writes (C2/C6's closed gap), and
       that two dated fields ask.
       Verify: read the section; `docs-sync.yml`.
       Requirement: design D13 (`12c` row).
-- [ ] **12c.5** Purity/coverage — ≥ 90 % for `internal/core/correction` now that it holds real
+- [x] **12c.5** Purity/coverage — ≥ 90 % for `internal/core/correction` now that it holds real
       branching logic.
       Verify: `golangci-lint run`; `make cover`.
       Requirement: R1.14.
-- [ ] Verify (PR-level): `make check-all`; confirm `depguard`/`forbidigo` clean over the whole new
-      `correction/` package.
+- [x] Verify (PR-level): `make check-all`; confirm `depguard`/`forbidigo` clean over the whole new
+      `correction/` package. **A split was attempted along the `Edit`/`PlanEdit` seam (PRs #108/#109)
+      and rejected — see the Review Workload Forecast note and Conflicts §C2. `size:exception`
+      applied instead.**
 
 ---
 
@@ -934,7 +987,7 @@ fit the 400-line soft rule, never predictions):
 |---|---|---|
 | 12a | ~320 | Low–Medium |
 | 12b | ~330 | Medium |
-| 12c | ~400 | **High** — at the ceiling before any measured multiplier |
+| 12c | ~400, 501 measured (1.25×) | **High, over the ceiling, not split, `size:exception`** — a split along the `Edit`/`PlanEdit` seam was attempted (PRs #108/#109) and rejected by `docs-sync`: `Edit` alone touches `internal/core/**` with no doc 02 delta of its own, since an opaque type with three accessors has no behaviour to document — the delta belongs entirely to `PlanEdit`. See Conflicts §C2 |
 | 12d | ~380 | **High** — the store-adapter class (BLOB-free, but two new UPDATEs plus L3) has already overrun in Phase A/B |
 | 12e | ~400 | **High** — at the ceiling; a brand-new port plus its first L3 case |
 | 12f-i | ~260 | Medium — the audit-ordering half of a pre-split High-risk parent |
@@ -952,14 +1005,18 @@ fit the 400-line soft rule, never predictions):
 | 14a | ~350 | Medium |
 | 14b | ~180 | Low |
 
-**Decision needed before apply: yes, for two links only — `13b` and `13d`.** Both sit at or over
-their own 400-line ceiling with no valid split line inside their own scope (stated above and in
-the intro), the same shape `m1b-pipeline` PR 8a landed in at 1.23× its ceiling. Report these two to
-the owner as stop-and-report checkpoints once their own cumulative diff crosses roughly 300 lines
-— the same threshold `m1a-substrate`'s PR 5a/6a and `m1b-pipeline`'s own forecast used — rather than
-pushing through to the ceiling and discovering the overrun only at PR-open time. Every other link
-is either comfortably under its ceiling or was split down to a size where the pre-split itself is
-the answer.
+**Decision needed before apply: yes, for three links — `13b`, `13d`, and, as measured rather than
+forecast, `12c`.** `13b`/`13d` sit at or over their own 400-line ceiling with no valid split line
+inside their own scope, stated above and in the intro before any code existed, the same shape
+`m1b-pipeline` PR 8a landed in at 1.23× its ceiling. `12c` reached the same place by a different
+route: its own row above did **not** originally flag it as needing this decision ("High — at the
+ceiling before any measured multiplier" was a risk flag, not an action flag); `sdd-apply` measured
+it at 501 lines and a split was attempted and rejected before landing here as `size:exception`,
+alongside `13b`/`13d`. Report all three to the owner as stop-and-report checkpoints once their own
+cumulative diff crosses roughly 300 lines — the same threshold `m1a-substrate`'s PR 5a/6a and
+`m1b-pipeline`'s own forecast used — rather than pushing through to the ceiling and discovering the
+overrun only at PR-open time. Every other link is either comfortably under its ceiling or was
+split down to a size where the pre-split itself is the answer.
 
 **On the estimates themselves.** This chain's raw total is **~6,140 budgeted lines across
 nineteen PRs** (design's own seventeen-slice total was ~6,120 — splitting `12f` and `16a` redrew
