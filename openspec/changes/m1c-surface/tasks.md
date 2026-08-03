@@ -562,6 +562,22 @@ fourth is not a documentation drift at all, and is recorded separately below.
    lands — once every `Deps` a caller builds is complete it simply becomes unreachable, and it
    stays as the structural answer to a future refactor leaving some other dependency unwired again.
 
+### C14 — `13c`: the design leaves the read-only unit routes' access mechanism unstated; `Deps.Recall` needed the same nil-guard `13b` established for `Deps.Capture`; `13c` measured 742 changed lines against its own ~330 ceiling (2.25×), a recall/units-read seam was evaluated and not taken, for the same chain-structural reason C10/C12 already declined one; and the task text's own "asserted over all four routes" undercounts this link's three read routes.
+
+**First finding, a design elaboration this link had to make, not a conflict.** Design D10's own `Deps` struct literal (design.md's D10 section) lists `Version`, `Capture`, `Recall`, `Token` — no field through which `GET /units/{id}`/`GET /units?ids=` could resolve a `ports.UnitRepo` read, and design's own dependency-rule check (design.md §4, "Dependency-rule check") sanctions only `internal/brain`, `internal/core/unit` and `crypto/subtle` for `internal/httpapi` — not `internal/ports`, so `Deps` cannot grow a `ports.UnitRepo`-typed field without violating that list. **Resolution**: `internal/brain/recall.go` gains `RecallService.LiveByIDs(ctx, ids) ([]unit.Unit, error)`, a thin passthrough to the `units ports.UnitRepo` `RecallService` already holds (D9's own field) — no new import, no new `Deps` field, and I02's positive live filter stays exactly where it already lived (`LiveByIDs`'s own contract), unchanged by the indirection. Recorded so whoever next reads design D10's struct literal does not read it as the read routes' complete access surface — it names the write-time struct, not every read the surface needs.
+
+**Second finding, applying the sibling-dependency pattern this chain's own apply-progress record (13b's own C13 finding 4) named as a template, not a one-off.** `13b`'s own post-review fix closed a nil-pointer denial of service for `d.Capture == nil` and its own record explicitly flagged: *"`13c`'s own routes, if they also depend on `Recall *brain.RecallService` being non-nil, need the SAME nil-check-and-503 treatment `13b` just established for `Capture`... this is now a proven, reusable pattern... not a one-off."* All three of this link's routes (`POST /recall`, `GET /units/{id}`, `GET /units`) check `d.Recall == nil` before every call and answer `503` with `{"error":"recall is not wired in this build"}` — matching `capture.go`'s own detail-free shape exactly. Validated by breaking: the check removed from `recallHandler`, the resulting request reproduced a nil-pointer panic inside `RecallService.ScoredFor` (called via `ForText`), reverted, `git diff --stat` empty.
+
+**Third finding, a size measurement and a declined seam, in this chain's own established idiom (C10/C12).** The complete, green `13c` PR measures 742 changed lines against its own ~330 ceiling (2.25×): `internal/brain/recall.go` (+14, the `LiveByIDs` passthrough), `internal/httpapi/recall.go` (77, new), `internal/httpapi/recall_test.go` (171, new), `internal/httpapi/units.go` (87, new), `internal/httpapi/units_test.go` (164, new), `internal/httpapi/read_routes_no_decision_test.go` (70, new), `internal/httpapi/server.go` (+20/-6, the three new route registrations and `Deps.Recall`'s doc comment), `test/conformance/i22_recall_one_mechanism_two_entrances_test.go` (+66/-20, the stub-to-real-handler replacement), `test/e2e/capture_recall_test.go` (73, new).
+
+The candidate seam, along the same recall/units-read boundary the code itself keeps independent (`units.go` imports nothing `recall.go` declares, and vice versa): PR A — `POST /recall` in full (`internal/httpapi/recall.go`, `recall_test.go`, the I22 stub replacement, the recall half of the e2e test), roughly 360 lines. PR B — the read-only unit routes (`internal/brain/recall.go`'s `LiveByIDs`, `internal/httpapi/units.go`, `units_test.go`, the units half of the e2e test), roughly 310 lines. `read_routes_no_decision_test.go` (R2.7, spanning all three routes) would need splitting along the same boundary, roughly 35 lines each.
+
+**Not taken, for the same reason C10 and C12 both already named for this exact chain.** Both candidate halves clear the ~330 ceiling roughly on their own (PR A at ~1.1×, tighter than plenty of this chain's already-shipped `size:exception` links), so unlike `12f-i`'s C6 finding this is not a "the smaller half doesn't solve the larger half's problem" case — the seam is genuinely available on size grounds alone. It is declined anyway because this link's own numbering is fixed at nineteen ordered links (`13c` sits between `13b` and `13d` in a chain both `tasks.md` and `design.md` already commit to), and per this link's own governing instruction — *"propose a seam; do not open two PRs on your own judgment"* — splitting it would insert a twentieth link into that fixed sequence, the same class of obstruction C10 and C12 both named, not a size or strict-TDD wall the way `12c`/`12f-i`/`12f-ii` each hit. `size:exception` applied via `gh pr edit <n> --add-label "size:exception"`, to be verified stuck once the PR opens.
+
+**Fourth, small finding: this link's own task text ("13c.4") says its R2.7 route test is "asserted over all four routes"; this link registers three read routes, not four.** `apiRoutes` after this PR holds `POST /capture` (a write route, correctly excluded from R2.7's own scope), `POST /recall`, `GET /units/{id}` and `GET /units` — three reads. `TestReadRoutesWriteNoDecisionLog` drives exactly those three. Not acted on beyond this record — the implementation follows spec R2.7's own "Verified by" clause (which names two routes explicitly and covers the read surface generally), not the task text's imprecise count; flagged per this document's own instruction not to resolve a documentation drift silently.
+
+**Fifth, a doc-delta confirmation, not a gap.** `design.md` D13's own table (§3, "Each PR's documentation delta is assigned up front") has no row for `13c` at all — every other core-touching or ADR-adding slice has one, `13c` has neither. Read directly: `docs/01-architecture.md:101` describes the HTTP surface only as "Exposes an HTTP API on `localhost:7777`" with no route-level promise (design.md's own §1.3 table already marks this ✎ for exactly this reason, cited by `14a`'s D13 row for the CLI table's analogous case). Confirmed by direct reading for this link specifically: no doc 01 edit is needed for `13c`, matching D13's own silence on this row rather than being an omission it missed.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1239,18 +1255,18 @@ Depends on (`12g`, `13a`).
 
 Depends on `13b`.
 
-- [ ] **13c.1** Test first: `POST /recall` — embeds the query via `ports.EmbeddingProvider` and
+- [x] **13c.1** Test first: `POST /recall` — embeds the query via `ports.EmbeddingProvider` and
       calls the same `RecallService.ForText` capture already uses (`13a`); a test asserting no LLM
       completion call occurs (`fakeprovider` configured with zero scripted `capture_processing`
       cases still succeeds) — no classify call on the read path.
       Verify: `make test`.
       Requirement: R2.4.
-- [ ] **13c.2** Test first (Q3b's conformance property, R2.5): seeding `memrepo`/`fakeprovider` with
+- [x] **13c.2** Test first (Q3b's conformance property, R2.5): seeding `memrepo`/`fakeprovider` with
       the same corpus, driving one capture classified `recall` and one standalone `POST /recall`
       over identical text, asserting the two ordered candidate-id lists are equal.
       Verify: `make test`.
       Requirement: R2.5.
-- [ ] **13c.3** `GET /units/{id}` and `GET /units?ids=a,b,c` through `LiveByIDs` (never `ByID`
+- [x] **13c.3** `GET /units/{id}` and `GET /units?ids=a,b,c` through `LiveByIDs` (never `ByID`
       exposed over HTTP); a non-`pool` unit returns the **same** 404 shape an unknown id would
       (I02); a shared unit renderer (`id`/`type`/`content`/`status`/`weight`/`event_at`/`due_at`/
       `created_at`/`updated_at` only).
@@ -1259,17 +1275,21 @@ Depends on `13b`.
       identical not-found shape an unknown id would.
       Verify: `make test`.
       Requirement: R2.6.
-- [ ] **13c.4** R2.7: a route test asserting `DecisionLog.Record` is never called for `POST /recall`
+- [x] **13c.4** R2.7: a route test asserting `DecisionLog.Record` is never called for `POST /recall`
       or `GET /units/{id}` (an instrumented fake failing the test if `Record` is invoked), asserted
-      over all four routes.
+      over all four routes. **See Conflicts §C14's fourth finding: this link registers three read
+      routes, not four — implemented over the three.**
       Verify: `make test`.
       Requirement: R2.7.
-- [ ] **13c.5** L4: `test/e2e` — at least one test starting the compiled `nooma serve` binary
+- [x] **13c.5** L4: `test/e2e` — at least one test starting the compiled `nooma serve` binary
       against a real, migrated, fixture-configured vault, posting a capture, and issuing a recall
-      that finds it.
+      that finds it. **See Conflicts §C14: `Deps.Capture`/`Deps.Recall` are still nil until `13d`'s
+      own wiring lands, so this link's own L4 test pins the honest 503 both dependencies answer
+      with in this transitional state, over the real compiled binary and a real socket — the same
+      test `13d.1`'s own task text already names as what it extends into the full round trip.**
       Verify: `go test ./test/e2e/... -tags e2e`.
       Requirement: R2.8.
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all`.
 
 ---
 
