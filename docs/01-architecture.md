@@ -46,6 +46,13 @@ pablo.nooma/
 - **`attachments/` is immutable** (source of truth); **`derived/` is recomputable** (if the
   OCR model changes, it gets regenerated).
 - From the outside, the vault is ONE object: copied, moved, and backed up as a unit.
+- **`.env` is created `0600`.** On Linux and macOS that is owner-only, verified by the test
+  suite. **On Windows it is not**, stated rather than implied: Windows has no POSIX mode bits,
+  `os.Chmod` there only toggles the read-only attribute, and file protection is by ACL instead —
+  so `.env` on Windows carries whatever protection the vault directory's own ACLs give it, not
+  owner-only by construction. A Windows user who wants that guarantee needs to set it on the
+  vault directory themselves. Present since M0; a real, platform-specific gap a Windows-run test
+  first surfaced on `15` (`openspec/changes/m1c-surface/tasks.md` §C18).
 
 ### Vault resolution at startup
 
