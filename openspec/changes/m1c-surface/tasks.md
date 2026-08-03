@@ -316,10 +316,45 @@ Depends on `12b` (same new `core/correction` package).
 
 ---
 
+**`12c` above was split in flight** (501 lines, 1.25× the ceiling). `12c-i` (PR #108) shipped
+`edit.go`/`edit_test.go`; this is the seam's second half, `PlanEdit`.
+
+## PR 12c-ii — `feat/core-correction-plan` (~341, second half of the in-flight-split `12c`)
+
+Depends on `12c-i` in substance, though branched from `main` directly per the coordinator's split
+direction (see "Merge order" above) — this PR's own checks cannot go green until `12c-i` merges.
+
+- [x] **12c-ii.1** Test first: `internal/core/correction/plan_test.go` — every row of R1.8's table
+      (event-only, due-only, content-fallback, both-dates → ask, no-date-no-content → ask); the
+      explicit scenario a date-carrying correction leaves content byte-for-byte untouched. **Red**:
+      `undefined: correction.PlanEdit`.
+      Implement `plan.go`: `PlanEdit(c classify.Classification) ([]Edit, bool)`.
+      Verify: `make test`; `golangci-lint run` (confirm `core/correction` importing `core/classify`
+      stays inside `depguard`'s allowed prefix).
+      Requirement: R1.8; design D3.
+- [x] **12c-ii.2** L2: `test/conformance/` — `PlanEdit` over the corpus's correction cases produces
+      the field each case implies; add one new due-date correction case under
+      `testdata/classify/cases/`, following `m1b-pipeline`'s own "written once, used in two places"
+      discipline.
+      Verify: `go test ./test/conformance/...`.
+      Requirement: R1.8's own Verified-by; design §7 test matrix (`12c` row).
+- [x] **12c-ii.3** doc 02 §5 step 4 delta: which column a correction writes (C2/C6's closed gap),
+      and that two dated fields ask.
+      Verify: read the section; `docs-sync.yml`.
+      Requirement: design D13 (`12c` row).
+- [x] **12c-ii.4** Purity/coverage — ≥ 90 % for `internal/core/correction` now that it holds real
+      branching logic.
+      Verify: `golangci-lint run`; `make cover`.
+      Requirement: R1.14.
+- [x] Verify (PR-level): `make check-all`; confirm `depguard`/`forbidigo` clean over the whole
+      `correction/` package.
+
+---
+
 ## PR 12d — `feat/ports-unit-fields` (~380 — High risk: the store-adapter class historically
 overran in `m1a`/`m1b`)
 
-Depends on nothing beyond Phase A (independent of `12a`–`12c` and of `12e`).
+Depends on nothing beyond Phase A (independent of `12a`–`12c-ii` and of `12e`).
 
 - [ ] **12d.1** Test first: extend the shared `repocontract` shape — `UpdateEventAt`/`UpdateDueAt`
       driven with **two distinguishable instants** (the new value vs. the audit timestamp),
@@ -380,7 +415,7 @@ Depends on nothing beyond Phase A/B (independent of `12a`–`12d`).
 
 ## PR 12f-i — `feat/brain-correction-audit` (~260, first half of the pre-split `12f`)
 
-Depends on (`12c`, `12d`, `12e`) all merged to `main`.
+Depends on (`12c-ii`, `12d`, `12e`) all merged to `main`.
 
 - [ ] **12f-i.1** Test first (I23, the RED-first audit-failure test ADR-0016 names): `test/conformance/`
       — a `DecisionLog` fake configured to fail `Record`, driving a correction attempt, asserting no
@@ -515,7 +550,7 @@ Depends on (`12f-ii`, `13a`) both merged.
       Verify: `make test`.
       Requirement: R1.6; design D2, D7, D9.
 - [ ] **12g.4** Test first: R1.8's orchestration half — `correctionRunner.at` calls
-      `correction.PlanEdit(c)` (`12c`); a `false` result (both dates, or neither) writes
+      `correction.PlanEdit(c)` (`12c-ii`); a `false` result (both dates, or neither) writes
       `correction.ambiguous` and returns `OutcomeAsked`; a `true` result calls
       `applyWithPreImage(target, plan, ref, now)` (`12f-i`/`12f-ii`).
       Verify: `make test`.
@@ -900,14 +935,15 @@ Depends on `14a`. **Last link in the chain — the demo is M1's exit criterion.*
 - **R7.1 (no network, no real LLM/embedding provider)**: every PR above whose tests touch a
   provider goes through `test/support/fakeprovider` or `httptest`; reviewed per-PR at each
   PR-level verify line, restated here because it spans the whole chain.
-- **R7.2 (only PR 12's slices touch `internal/core/**`, and only `12a`/`12b`/`12c` carry a doc 02
-  delta)**: `12d`, `12e`, `12f-i`, `12f-ii`, `12g`, and every PR 13/14/15/16/17 slice touch no
-  `internal/core/**` file — confirmed by each PR-level verify line's own scope check.
+- **R7.2 (only PR 12's slices touch `internal/core/**`, and only `12a`/`12b`/`12c-ii` carry a doc
+  02 delta)**: `12c-i` touches `internal/core/**` but carries no doc delta (`edit.go` is a pure
+  type with no invariant of its own). `12d`, `12e`, `12f-i`, `12f-ii`, `12g`, and every PR
+  13/14/15/16/17 slice touch none — confirmed by each PR-level verify line's own scope check.
 - **R7.3/R7.4 (Phase A/B surfaces modified by addition only)**: the three sanctioned edits across
   this whole chain are `unitrepo.go`'s two methods (`12d`), `decisionlog.go`'s two actions
   (`12f-i`), and `embeddingrepo.go`'s one method (`16b`, per C1's resolution) — nothing else under
-  `internal/ports/**`/`internal/core/**` (beyond `12a`/`12b`/`12c`'s additions)/`internal/store/
-  sqlite/**`/`internal/providers/**` changes.
+  `internal/ports/**`/`internal/core/**` (beyond `12a`/`12b`/`12c-i`/`12c-ii`'s additions)/
+  `internal/store/sqlite/**`/`internal/providers/**` changes.
 - **R8.2 (every test observed failing first)**: each task above states its own red; verified at
   apply time by the commit sequence.
 - **R9.1 (no undo surface, version table, or `corrects` edge)**: no task above persists a previous
@@ -934,7 +970,8 @@ fit the 400-line soft rule, never predictions):
 |---|---|---|
 | 12a | ~320 | Low–Medium |
 | 12b | ~330 | Medium |
-| 12c | ~400 | **High** — at the ceiling before any measured multiplier |
+| 12c-i | ~166 (measured, PR #108) | Low — the type alone, no branching decision |
+| 12c-ii | ~341 (measured) | Medium — `PlanEdit`'s own decision, now sized correctly after the split |
 | 12d | ~380 | **High** — the store-adapter class (BLOB-free, but two new UPDATEs plus L3) has already overrun in Phase A/B |
 | 12e | ~400 | **High** — at the ceiling; a brand-new port plus its first L3 case |
 | 12f-i | ~260 | Medium — the audit-ordering half of a pre-split High-risk parent |
@@ -952,6 +989,11 @@ fit the 400-line soft rule, never predictions):
 | 14a | ~350 | Medium |
 | 14b | ~180 | Low |
 
+**`12c` is this forecast's own miss, recorded rather than corrected quietly.** Its original row
+flagged High risk but not a stop-and-report decision, unlike `13b`/`13d` below. `sdd-apply`
+measured it at 501 lines, 1.25× the ceiling (foreseeable, inside Phase B's own band), then split
+it into the two rows above — a forecast that flags risk but not action does not prevent it.
+
 **Decision needed before apply: yes, for two links only — `13b` and `13d`.** Both sit at or over
 their own 400-line ceiling with no valid split line inside their own scope (stated above and in
 the intro), the same shape `m1b-pipeline` PR 8a landed in at 1.23× its ceiling. Report these two to
@@ -962,14 +1004,14 @@ is either comfortably under its ceiling or was split down to a size where the pr
 the answer.
 
 **On the estimates themselves.** This chain's raw total is **~6,140 budgeted lines across
-nineteen PRs** (design's own seventeen-slice total was ~6,120 — splitting `12f` and `16a` redrew
-lines, it did not add real work). Applying Phase A/B's own measured band — 1.3×–2.2×, with one
+twenty PRs** (design's own seventeen-slice total was ~6,120 — splitting `12f`, `16a`, and `12c`
+redrew lines, it did not add real work). Applying Phase A/B's own measured band — 1.3×–2.2×, with one
 outlier at 2.6× — puts the realistic range at **roughly 8,000–13,500 review lines**, consistent
 with the umbrella proposal's own framing of M1 as "two to three times M0" in total size. Every
 ceiling above is a target to design against, never a prediction — the lesson `m1b-pipeline`'s own
 C8 drew and this document tries not to repeat: **estimate a core PR from its invariant's proof
-obligation, not its implementation.** `12c`, `12e`, `12g`, `13b`, `13d`, `15` are this chain's own
-version of that band.
+obligation, not its implementation.** `12e`, `12g`, `13b`, `13d`, `15` are this chain's own version
+of that band (`12c` was too, before it split).
 
 ---
 
@@ -977,7 +1019,7 @@ version of that band.
 
 | Spec section | Requirements | Tasks |
 |---|---|---|
-| §1 Corrections (PR 12) | R1.1–R1.14 | 12a.1–12a.4, 12b.1–12b.4, 12c.1–12c.5, 12d.1–12d.3, 12e.1–12e.3, 12f-i.1–12f-i.4, 12f-ii.1–12f-ii.2, 12g.1–12g.6 |
+| §1 Corrections (PR 12) | R1.1–R1.14 | 12a.1–12a.4, 12b.1–12b.4, 12c-i.1, 12c-ii.1–12c-ii.4, 12d.1–12d.3, 12e.1–12e.3, 12f-i.1–12f-i.4, 12f-ii.1–12f-ii.2, 12g.1–12g.6 |
 | §2 HTTP surface (PR 13) | R2.1–R2.12 | 13a.1–13a.3, 13b.1–13b.5, 13c.1–13c.5, 13d.1–13d.2 |
 | §3 CLI surface (PR 14) | R3.1–R3.3 | 14a.1–14a.6, 14b.1–14b.3 |
 | §4 Provider configuration (PR 15) | R4.1–R4.5 | 15.1–15.8 |
