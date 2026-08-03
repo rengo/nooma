@@ -181,6 +181,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        ranked second on both scores `2/62`, so 0.0005 separates a near-tie — while a candidate
        present on only one leg scores `1/61`, half the first one. An absolute gap would mean
        something different depending on how many legs contributed; a ratio does not.
+     - The boundary is **inclusive**: "closer together than `correction_referent_margin`" is a
+       strict inequality on the *ask* side only, so a ratio exactly equal to the margin picks,
+       not asks. Only the top two scored candidates ever participate — a third or later
+       candidate never changes the answer.
+     - The gate runs over the **live** candidates, after archived/superseded units are dropped
+       from the recall result — never before. A ratio computed before that filter would gate
+       the surviving top candidate against a score that belonged to a unit nobody can correct,
+       and the failure is invisible: the gate just picks differently.
      - The gate is a pure function of the scored candidates: no LLM, no I/O, no clock. It
        therefore needs `internal/core/recall` to expose a fusion that keeps its scores instead
        of only its ranked identifiers.
