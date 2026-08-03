@@ -1127,9 +1127,9 @@ clean after each):**
    OS-level dialing to `0.0.0.0` is not reliably a reproducible failure across platforms; asserting
    the translated host directly is what makes this catcher portable.
 
-### C23 — `14b`: R3.2's own L4 requirement was already met by `14a`'s own test before `14b` started; the design's test matrix names the fuller four-step demo as by-hand only, not L4; and a demo query's own filler words can accidentally match the wrong capture, since `recall.Tokenize` filters no stopword
+### C23 — `14b`: R3.2's own L4 requirement was already met by `14a`'s own test before `14b` started; the design's test matrix names the fuller four-step demo as by-hand only, not L4; a demo query's own filler words can accidentally match the wrong capture, since `recall.Tokenize` filters no stopword; and this PR's own first draft of `docs/05-build-plan.md` §M1 overstated a real, narrower gap as R4.2's own exit criterion going unproven
 
-Three findings, surfaced while implementing this chain's last link, none of them a spec/design
+Four findings, surfaced while implementing this chain's last link, none of them a spec/design
 disagreement in the C1–C22 sense — recorded per this document's own instruction not to resolve
 anything silently.
 
@@ -1172,6 +1172,33 @@ contents and its own query wording were chosen to share no token with each other
 capture, so the "ask" step's outcome is decided by the query's real content, not by an accidental
 stopword collision. Recorded so the next person writing an L4 recall-driving test does not spend the
 same cycle re-deriving that this codebase's lexical leg has no stopword list.
+
+**Fourth, a self-correction caught in coordinator review, not by any gate**: this PR's own first
+draft of `docs/05-build-plan.md` §M1 stated *"This is not the wizard-configured Cloud path R4.2
+names as M1's own exit criterion... it does not exercise the Cloud provider path a real user's
+`nooma init` run would configure."* Every word of that sentence is true of `demo_test.go` read
+alone — but §M1's demo bullet is exactly what a stranger reads to decide whether to trust this
+milestone, and read alone it says R4.2's own MUST (a wizard-written Cloud vault "immediately
+usable by the capture pipeline") went unproven. **It did not.** `15`'s own
+`TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary` (`test/e2e/init_cloud_test.go`)
+already proves it at L4: it runs the wizard's Cloud path, patches only the endpoint/port the way
+design D15's own `endpoint` field exists to let a test do, then posts a capture against the
+wizard-written vault and asserts `outcome=stored, embedded=true` (`init_cloud_test.go:106-127`) —
+`spec.md:1235-1240`'s own L4 requirement that R6.3's embed property "survive being wired together
+for real, against a wizard-written vault" is exactly what that test's own assertion proves.
+
+**Resolution: the bullet is narrowed to what is actually uncovered.** The real gap is not "the
+exit criterion is unproven" — it is that **no single test walks the wizard through to the ask and
+the correction as one continuous path**: `init_cloud_test.go` proves the wizard's vault is usable
+by a capture, `demo_test.go` proves the ask and the correction, but the second starts from a
+directly-written config rather than the first test's own wizard output, so the seam between "the
+wizard wrote this" and "the demo asked and corrected it" is covered by two tests rather than one.
+Both ends of R4.2's own claim are proven at L4; only their composition into one sequence is not.
+`docs/05-build-plan.md`'s own bullet is corrected to say exactly this, naming both tests by
+function name so a reader can check the claim rather than take it. Recorded per this document's
+own C16 precedent: a note claiming a risk that does not exist is worse than no note at all — C16
+found this once already for an idempotency claim overstated by `design.md`'s own prose; this is
+the same failure mode, caught in this PR's own doc-writing step instead of in a design document.
 
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 

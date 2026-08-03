@@ -84,11 +84,15 @@ Prior decisions: **[ADR-0002](adr/0002-default-llm-preset.md)** (LLM preset),
     proves nothing about whether a real Anthropic/OpenAI/Ollama endpoint classifies well. The first
     real confirmation of that is a human running the wizard's Cloud path with a live key — the same
     limit `design.md`'s own §8 risk table already states for PR 17's wire shape.
-  - **This is not the wizard-configured Cloud path R4.2 names as M1's own exit criterion.** The
-    demo's `nooma.yml` is written directly, bypassing `nooma init`'s interactive wizard entirely —
-    the same shortcut every other L4 test since PR 13d already takes. It proves the capture/recall/
-    correction mechanism end to end; it does not exercise the Cloud provider path a real user's
-    `nooma init` run would configure.
+  - **No single test walks the wizard through to the ask and the correction as one continuous
+    path.** `TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary`
+    (`test/e2e/init_cloud_test.go`, PR 15) already proves R4.2's own MUST — a wizard-written Cloud
+    vault is "immediately usable by the capture pipeline," asserting a capture against it actually
+    stores a vector (`embedded: true`). This demo's own `TestDemoCaptureAskCorrectionEndToEnd`
+    proves the ask and the correction, but starts from a directly-written config, not the wizard's
+    own output — the same shortcut every L4 test since PR 13d already takes. Both ends of R4.2's
+    claim are proven at L4; the seam between them — a wizard-written vault feeding straight into an
+    ask and a correction — is covered by two tests, not one.
   - **`darwin` and every ARM target still have build coverage only** (ADR-0013) — unchanged from
     M0, and this milestone adds no runner for either.
   - **`.env`'s `0600` still means nothing on Windows** (present since M0, surfaced by PR 15,
