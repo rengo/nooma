@@ -594,7 +594,7 @@ The candidate seam, along the same recall/units-read boundary the code itself ke
 
 **Fourth, a doc-delta confirmation, not a gap — the same finding C14's own fifth point already made for `13c`, re-confirmed directly for this link rather than assumed to carry over.** `design.md` D13's own table (§3) has no row for `13d`, matching every other link this table is silent on that touches no `internal/core/**` file (`13a`, `13c`, `12d`, `12e`, `12f-ii` — none of them core-touching in isolation, none tabulated). `docs-sync.yml`'s own header (`.github/workflows/docs-sync.yml:8`) fires only on `internal/core/**` changes, and `13d` touches none. `docs/01-architecture.md:101`'s own HTTP line — "Exposes an HTTP API on `localhost:7777`" — makes no route-level promise before this PR and needs none after it: this link wires already-mounted routes (`13b`, `13c`) to real dependencies, it adds no new route, so the one doc-01 line C14 already confirmed correct for `13c` stays correct, unwidened, for `13d` too.
 
-### C16 — `17`: the double-normalization comment is the ONLY defence — proven by breaking, not assumed. A genuine new finding: single- and double-normalized vectors are bit-identical at float32 precision, so no test anywhere in this repository could ever catch the defect design D17 warns against
+### C16 — `17`: `recall.Normalize` is idempotent by construction, not merely "untested against double normalization" — a measurement corrected mid-review, and D17's own prose overstates the risk
 
 `17` shipped exactly as D17 designs it: `internal/providers/openai/embed.go`, a fifth method-on-`Client`
 shape after `ollama/embed.go`'s precedent, `var _ ports.EmbeddingProvider = (*Client)(nil)`, no new
@@ -611,27 +611,44 @@ time** (files were `git add`ed first so untracked new files would show in the di
 2. Let an empty `data` array flow through as a zero-vector `EmbedResponse` instead of erroring —
    `TestClient_EmbedFailsWhenDataIsEmpty` failed exactly as predicted: `Embed returned a nil error
    for an empty data array; got {Vector:[] Model:...}`.
-3. **Called `recall.Normalize` inside the client, simulating the double-normalization D17's comment
-   forbids** (the store's own `internal/store/sqlite/embeddingrepo.go` already normalizes every
-   embedding on write, unconditionally). Only this PR's own client-level test caught it — and only
-   because its fixture vector (`[0.01, -0.002, 0.3]`) is not already unit-norm, so a first
-   normalization pass visibly changes it. **A follow-up numeric check (Go, reverted, not committed)
-   confirmed something D17's prose does not state explicitly: normalizing an already-unit-norm
-   vector is bit-exact idempotent at float32 precision** — `normalize(normalize(v)) == normalize(v)`
-   to the last bit, for the fixture tried. OpenAI's `text-embedding-3-*` models are documented to
-   return unit-norm vectors already. **This means: if the real API response is already normalized
-   (the expected case) and the client normalized it again (the bug), the store's own second
-   `recall.Normalize` call downstream would produce byte-identical output to the correct
-   single-normalization path — nothing, anywhere in this repository, at any test level, could ever
-   distinguish the two.** The client-level test that caught the break in this experiment did so by
-   accident of fixture choice, not by design — it does not actually test for double-normalization,
-   it tests that `Embed` returns the raw vector unmodified, which only happens to expose a spurious
-   extra normalization when the input isn't already unit-norm. **Honest conclusion, as the prompt
-   that drove this PR asked for: D17's comment — "do not normalize... nobody 'optimizes' it back
-   in" — is the ONLY defence against this defect recurring. No test proves the absence of
-   client-side normalization; a reviewer reading the comment (and this record) is the whole
-   mitigation.** This is a genuinely new finding this link surfaced, not previously named in
-   `design.md` or `spec.md`.
+3. **Called `recall.Normalize` inside the client, simulating a double-normalization** (the store's
+   own `internal/store/sqlite/embeddingrepo.go` already normalizes every embedding on write,
+   unconditionally). This PR's own client-level test caught the change (`Vector[0] = 0.03331409,
+   want 0.01` — the fixture vector `[0.01, -0.002, 0.3]` is not itself unit-norm, so a normalizing
+   pass visibly moves it). The first version of this record stopped there and drew the wrong
+   conclusion: that the catch was "an accident of fixture choice" and that nothing could ever
+   distinguish a correctly-normalized-once vector from a double-normalized one. **That was an
+   unverified generalization from one fixture, and it was corrected during review before merge.**
+
+   **What is actually true, verified two ways.** First, algebraically: `recall.Normalize(v)` divides
+   `v` by its own L2 norm, so the result has norm 1 (up to floating-point rounding); calling
+   `Normalize` again divides that result by a norm of ~1, which changes nothing beyond rounding
+   noise — idempotence is a property of the operation itself, not of any particular input. Second,
+   empirically, because "up to rounding" needed to be measured rather than assumed given
+   `Normalize`'s float64-accumulate/float32-store mix (`vector.go:125-141`): a standalone check (Go,
+   run via `go run`, not committed) applied `Normalize` twice to 20,000 random 1536-component
+   vectors (`text-embedding-3-small`'s own dimension) with mixed sign and magnitude spanning six
+   orders of ten, plus one pathological vector spanning thirty orders of magnitude between its
+   largest and smallest component — **zero bit-level differences in every case.** `ErrZeroVector` is
+   idempotent too, by inspection: a zero vector fails on the first call and never reaches a second.
+
+   **Conclusion, corrected from the original entry: double-normalizing here is silent, but it is not
+   wrong — the stored vector is unaffected, because the operation is idempotent. There is no
+   correctness defect for any test to catch, tested or untested, because there is nothing to catch.**
+   The no-normalize rule in `embed.go` is therefore a **redundancy and single-ownership rule, not a
+   correctness guard**: its value is that a reader has exactly one place to look to know a vector is
+   unit-normalized (`internal/store/sqlite`), not that a second call anywhere else would corrupt
+   data. **`design.md` D17's own wording — "normalizing an already-normalized vector is a no-op
+   within tolerance... a truncation knob... Stated so nobody 'optimizes' the store's call away on the
+   grounds that OpenAI already returns unit vectors" reads correctly, but this PR's own first attempt
+   at a conflict-log entry pushed past D17's actual claim into "silent and wrong," which overstates
+   it. Flagging that phrase as a design-doc imprecision this measurement resolves, for whoever next
+   revises `design.md`** — not fixed here, since `17` touches no `design.md` content and the accepted
+   document is not edited mid-chain except by its own revision process. `embed.go`'s comment is
+   reworded in this PR to state the redundancy/single-ownership rationale rather than imply
+   corruption risk. This remains a genuinely new finding this link surfaced (the idempotence property
+   was not stated as such in `design.md` or `spec.md`), but the finding is "the operation cannot
+   corrupt data," not "no test can catch a corruption that does not exist."
 
 **Size**: 208 changed code lines (`internal/providers/openai/embed.go` 76 new, `embed_test.go` 132
 new, both insertions only) against the ~200 ceiling (1.04×) — the tightest overrun ratio this chain

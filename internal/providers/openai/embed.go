@@ -32,8 +32,12 @@ type embedResponse struct {
 //     no Dim field (the dimension is len(Vector)), so a truncation knob has
 //     no consumer and no §13 calibration row;
 //   - normalization — internal/store/sqlite already calls recall.Normalize
-//     at the storage boundary for every embedding (m1b D6); normalizing here
-//     too would be a silent, wrong double-normalization. Do not add it back.
+//     at the storage boundary for every embedding (m1b D6); this client
+//     leaves it there so there is exactly one place a reader looks to know
+//     the vector is unit-normalized. recall.Normalize is idempotent (a
+//     second pass divides an already-unit vector by a norm of ~1), so
+//     normalizing here too would not corrupt anything — it would just be a
+//     redundant pass over the vector with no owner. Do not add it back.
 func (c *Client) Embed(ctx context.Context, req ports.EmbedRequest) (ports.EmbedResponse, error) {
 	body, err := json.Marshal(embedRequest{
 		Model: c.model,
