@@ -1547,7 +1547,7 @@ Depends on (`12c`, `12d`, `12e`) all merged to `main`.
       recorded in the commit message.
       Requirement: design D5 Layer 2.
       **Done: `test/conformance/brain_correction_audit_before_edit_ast_test.go`
-      (`TestCorrectionAuditPrecedesEveryUpdate`). Two temporary-break experiments run and reverted:
+      (`TestI23_CorrectionAuditPrecedesEveryUpdate`). Two temporary-break experiments run and reverted:
       (1) a rogue `r.units.UpdateContent(...)` call inserted inside `recordPreImage` — guard failed,
       naming `recordPreImage calls UpdateContent outside dispatchEdits`; (2) `applyWithPreImage`'s
       two calls swapped — guard failed, naming `dispatchEdits (statement 0) runs before
