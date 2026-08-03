@@ -282,14 +282,14 @@ Depends on `12a` (imports `recall.FusedCandidate`).
 
 Depends on `12b` (same new `core/correction` package).
 
-- [ ] **12c.1** Test first: `internal/core/correction/edit_test.go` — `AllFields()` completeness:
+- [x] **12c.1** Test first: `internal/core/correction/edit_test.go` — `AllFields()` completeness:
       for each `Field`, exactly one accessor reports true. **Red**: `undefined: correction.Field`,
       `undefined: correction.Edit`.
       Implement `edit.go`: `Field`, `FieldContent`/`FieldEventAt`/`FieldDueAt`, `AllFields()`, the
       opaque `Edit` type plus its three constructors and three accessors.
       Verify: `make test`.
       Requirement: R1.8 (the edit-plan shape); design D3.
-- [ ] **12c.2** Test first: `internal/core/correction/plan_test.go` — every row of R1.8's table
+- [x] **12c.2** Test first: `internal/core/correction/plan_test.go` — every row of R1.8's table
       (event-only, due-only, content-fallback, both-dates → ask, no-date-no-content → ask); the
       explicit scenario a date-carrying correction leaves content byte-for-byte untouched. **Red**:
       `undefined: correction.PlanEdit`.
@@ -297,21 +297,21 @@ Depends on `12b` (same new `core/correction` package).
       Verify: `make test`; `golangci-lint run` (confirm `core/correction` importing `core/classify`
       stays inside `depguard`'s allowed prefix).
       Requirement: R1.8; design D3.
-- [ ] **12c.3** L2: `test/conformance/` — `PlanEdit` over the corpus's correction cases produces the
+- [x] **12c.3** L2: `test/conformance/` — `PlanEdit` over the corpus's correction cases produces the
       field each case implies; add one new due-date correction case under
       `testdata/classify/cases/`, following `m1b-pipeline`'s own "written once, used in two places"
       discipline.
       Verify: `go test ./test/conformance/...`.
       Requirement: R1.8's own Verified-by; design §7 test matrix (`12c` row).
-- [ ] **12c.4** doc 02 §5 step 4 delta: which column a correction writes (C2/C6's closed gap), and
+- [x] **12c.4** doc 02 §5 step 4 delta: which column a correction writes (C2/C6's closed gap), and
       that two dated fields ask.
       Verify: read the section; `docs-sync.yml`.
       Requirement: design D13 (`12c` row).
-- [ ] **12c.5** Purity/coverage — ≥ 90 % for `internal/core/correction` now that it holds real
+- [x] **12c.5** Purity/coverage — ≥ 90 % for `internal/core/correction` now that it holds real
       branching logic.
       Verify: `golangci-lint run`; `make cover`.
       Requirement: R1.14.
-- [ ] Verify (PR-level): `make check-all`; confirm `depguard`/`forbidigo` clean over the whole new
+- [x] Verify (PR-level): `make check-all`; confirm `depguard`/`forbidigo` clean over the whole new
       `correction/` package.
 
 ---
