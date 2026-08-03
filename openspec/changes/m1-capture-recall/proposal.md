@@ -428,6 +428,36 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 | 14 | `feat/cli-capture-demo` | `nooma capture`, the demo walked end to end, L4 — **last in time, after 15 and 16** | ~300 |
 | 15 | `feat/init-provider-paths` | §3.2 item 14: `nooma init`'s two first-class paths, Cloud (recommended) and Ollama, writing a real `providers:` block that holds `api_key_env` and never a secret | ~300 |
 | 16 | `feat/doctor-quality-gate` | §3.2 item 15: `nooma doctor`'s structured-JSON quality gate — the fixed prompt set against each task's configured provider, a failure naming it unsuitable *for that task*, over the `testdata/llm/cases/` corpus | ~350 |
+| 17 | `feat/openai-embeddings` | An OpenAI embeddings client implementing `ports.EmbeddingProvider`, in the shape PR 6's three HTTP clients already established | ~200 |
+
+> **PR 17 exists because M1's judged path could not run.** §3.2 records the owner's direction of
+> 2026-07-31 — *"Cloud is the path that must work […] M1 is judged on the cloud path running end to
+> end"* — and `internal/providers/` holds `anthropic/client.go`, `openai/client.go`,
+> `ollama/client.go` and **exactly one embedder, `ollama/embed.go`**. A vault configured for Cloud
+> had nothing to embed with: every capture would store a unit with no vector, and every recall
+> would run on its lexical leg alone.
+>
+> Nothing was broken, which is why it survived planning. `EmbeddingProvider` is a port with a real
+> implementation, `tasks:` routes per task, and D8's degradation path means a missing embedder
+> **degrades rather than fails** — the capture still succeeds. The pipeline works; it just works on
+> one leg, silently, in the exact configuration the milestone is judged on. **A degradation designed
+> for an outage was absorbing a gap in the build plan**, and a mechanism that turns a missing
+> component into a quieter product is the hardest kind of omission to see.
+>
+> Anthropic publishes no embeddings API, so OpenAI is the provider. PR 6 already built three HTTP
+> clients against `ports.LLMProvider`; this is the same shape against `ports.EmbeddingProvider`.
+>
+> **PR 17 comes before PR 15**, which is why the chain reads `6 → 17 → 15`. PR 15 is the wizard
+> that writes the Cloud path's `tasks:` block, and `internal/config/validate.go:177` rejects a
+> `tasks.<name>.provider` naming a provider absent from the map. So a wizard shipped before the
+> cloud embedder exists has two options and both are the bug this PR closes: write an embedding
+> binding that fails validation, or write no embedding binding at all and hand the user the
+> silently one-legged vault described above. **The wizard cannot offer a complete Cloud path before
+> a complete Cloud path exists.**
+>
+> Surfaced by `sdd-design` while reconciling against the spec, and confirmed by listing the tree.
+> The ordering edge was found one step later, by `sdd-spec` noticing this document had no edge
+> between 15 and 17 while it was deciding which PR performs the binding.
 
 > **PRs 15 and 16 were scheduled on 2026-08-02, and the gap they close is the point.** §3.2 has
 > listed both since 2026-07-31 and **no PR in any of this document's three phase tables built
@@ -464,17 +494,19 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 
 Dependencies: `1 → 6`, `2 → 3 → 4`, `5 → 6`, `(4,5) → 7`, `2 → 8`, `(4,8) → 9`,
 `(6,7,9) → 10`, `(8,10) → 11`, `(10,11) → 12`, `(10,11,12) → 13`, `6 → 15`, `(5,6) → 16`,
-`(13,15,16) → 14`. PR 1 is independent of everything and goes first. PR 8 can land any time after
-PR 2. **PR 14 is last in time despite its number** — it is the demo, and the demo is M1's exit
-criterion, so everything it walks through has to exist before it walks.
+`6 → 17 → 15`, `(13,15,16,17) → 14`. PR 1 is independent of everything and goes first. PR 8 can land any
+time after PR 2. **PR 14 is last in time despite its number** — it is the demo, and the demo is M1's
+exit criterion, so everything it walks through has to exist before it walks.
 
 **On these estimates, and on M1's size.** M0 was planned as ten PRs and shipped as twenty; six
 separate measurements put its estimates 1.3x–2.2x low. Read the table above the same way: **~4,300
 budgeted lines across 14 PRs is realistically 6,000–9,000 across 20–30.** That is two to three
 times M0 in one SDD change.
 
-> That budget was written for fourteen PRs. It is now sixteen — PRs 15 and 16 add ~650, and PR 12
-> moved from ~330 to ~450 once Q3c closed and the scored fusion it needs got priced. The multiplier
+> That budget was written for fourteen PRs. It is now **seventeen** — PRs 15 and 16 add ~650, PR 17
+> adds ~200, and PR 12 moved from ~330 to ~450 once Q3c closed and the scored fusion it needs got
+> priced. Three rows, ~850 lines, all of them work M1 already owed and none of them new scope. The
+> multiplier
 > above is what matters here, not the base: Phase B closed with its own measurement of the same
 > effect, recorded as C8 in `m1b-pipeline/tasks.md` — **every one of its estimates was low, and the
 > two worst were 4.3x.** The lesson it drew is the one to apply to PRs 15 and 16: estimate a core PR
