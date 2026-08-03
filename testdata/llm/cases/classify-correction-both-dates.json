@@ -1,0 +1,8 @@
+{
+  "id": "classify-correction-both-dates",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "prompt": "Classify this message: \"move it to the 15th and the due date to the 20th\"",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Moved to the 15th, due the 20th\",\"weight\":0.7,\"decay_rate\":0.04,\"event_at\":\"2026-08-15T09:00:00-03:00\",\"due_at\":\"2026-08-20T09:00:00-03:00\"}"
+}

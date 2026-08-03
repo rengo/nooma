@@ -59,7 +59,8 @@ type CaptureService struct {
 // index is the in-memory Index ADR-0012 requires be loaded once at vault
 // open — NewCaptureService never builds one itself, it only holds the one
 // its caller already loaded.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index) *CaptureService {
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo) *CaptureService {
+	sharedRecall := NewRecallService(index, lex, units, embed)
 	return &CaptureService{
 		clock: clock,
 		run: captureRunner{
@@ -73,7 +74,10 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			judge:  judge,
 			embed:  embed,
 			index:  index,
-			recall: NewRecallService(index, lex, units, embed),
+			recall: sharedRecall,
+			correction: correctionRunner{
+				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
+			},
 		},
 	}
 }
@@ -108,9 +112,13 @@ type captureRunner struct {
 	index  *Index
 	// recall is design D9's one shared RecallService instance — built once
 	// by NewCaptureService, not per capture (fixing a per-call construction
-	// this field replaces below). The correction path (12g) needs the same
-	// instance.
+	// this field replaces below). correction holds the same instance
+	// (design D7: "the correction path needs the same instance").
 	recall *RecallService
+	// correction is 12g's own clockless worker for the correction path
+	// (design D7), owned by captureRunner and built once, alongside recall,
+	// rather than per capture.
+	correction correctionRunner
 }
 
 // at runs one capture given the instant CaptureService.Capture already
@@ -138,11 +146,11 @@ type captureRunner struct {
 // judge.Complete call over the whole bounded candidate list, decoded by
 // relation.DecodeJudgment, decided by relation.Decide against the
 // candidates' type's resolved thresholds, and persisted or discarded with a
-// decision_log row naming the outcome. Design D8, this PR's own routing
-// half: chitchat/out_of_scope are discarded (above, before ToUnit); the
-// correction/recall Kind forks are 12g's, not this one's — only those two
-// still propagate as a plain Go error here, alongside a classification
-// that lost its content.
+// decision_log row naming the outcome. Design D8's full routing table:
+// chitchat/out_of_scope are discarded (13a), correction and recall each
+// fork to their own mechanism before ToUnit is ever reached (12g, below) —
+// only a classification with no Kind at all still propagates as a plain Go
+// error here.
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
@@ -171,15 +179,31 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		if err := r.recordHookDeferredDecision(ctx, c, now, deferred.Kind); err != nil {
 			return CaptureResult{}, err
 		}
-		return CaptureResult{Stored: false, Deferred: &deferred}, nil
+		return CaptureResult{Outcome: OutcomeDeferred, Deferred: &deferred}, nil
 	}
 
-	// The discard fork (design D8, this PR's own half of it): chitchat and
+	// The correction fork (design D7/D8, spec R1.1): a correction never
+	// reaches classify.ToUnit — it forks to correctionRunner.at, the whole
+	// referent-resolution/edit-plan/pre-image orchestration (12b, 12c,
+	// 12f-i, 12f-ii, 13a all converge here). An ambiguous referent or an
+	// ambiguous edit plan asks rather than edits; either way this returns
+	// before classify.ToUnit is ever reached, and r.units.Create is never
+	// called for this Kind.
+	if c.Kind != nil && *c.Kind == classify.KindCorrection {
+		corr, err := r.correction.at(ctx, in, c, now)
+		if err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
+		}
+		if corr.Ambiguous {
+			return CaptureResult{Outcome: OutcomeAsked, Correction: corr}, nil
+		}
+		return CaptureResult{Outcome: OutcomeCorrected, Correction: corr}, nil
+	}
+
+	// The discard fork (design D8, 13a's own half of it): chitchat and
 	// out_of_scope are not memory, so they never reach classify.ToUnit at
 	// all — the same "route before ToUnit" shape timerHookRefusal already
-	// established. The correction/recall Kind forks are 12g's, not this
-	// one's (12g and 13a together are the only routing changes to this
-	// method).
+	// established.
 	if c.Kind != nil && (*c.Kind == classify.KindChitchat || *c.Kind == classify.KindOutOfScope) {
 		rationale := fmt.Sprintf("classified as %q — not memory content, nothing was stored", string(*c.Kind))
 		ctxValue := struct {
@@ -188,7 +212,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureDiscarded, rationale, now, ctxValue); err != nil {
 			return CaptureResult{}, err
 		}
-		return CaptureResult{Stored: false}, nil
+		return CaptureResult{Outcome: OutcomeDiscarded}, nil
 	}
 
 	// A classification with no type at all has nothing left to decide from
@@ -253,7 +277,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		candidates[i] = cu.ID
 	}
 
-	return CaptureResult{Stored: true, UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
+	return CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
 }
 
 // timerHookRefusal is design D9's routing decision, restricted to the
@@ -570,8 +594,9 @@ func (r captureRunner) recordUnitCreatedDecision(ctx context.Context, c classify
 // what it cannot yet do, and says so" — distinguished by context.kind
 // ("ambiguous_person_ref" here, "timer"/"recurring_reminder" there).
 //
-// Unlike the timer refusal, this decision does not accompany a Stored:false
-// result — the unit u names is already persisted (spec R4.7's own MUST:
+// Unlike the timer refusal, this decision does not accompany an
+// OutcomeDeferred result — the unit u names is already persisted (spec
+// R4.7's own MUST:
 // unit.StatusPool, never unit.StatusIncomplete), so the rationale says what
 // was deferred (disambiguation), not what was refused (the whole capture).
 func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u unit.Unit, now time.Time) error {

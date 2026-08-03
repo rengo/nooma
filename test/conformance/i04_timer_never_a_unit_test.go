@@ -30,8 +30,8 @@ import (
 //     explicit non-goal),
 //   - exactly one decision_log row (capture.hook.deferred), and
 //   - a CaptureResult distinguishable from an ordinary successful capture
-//     (Stored: false, Deferred naming the refused Kind and a plain-words
-//     Message).
+//     (Outcome: OutcomeDeferred, Deferred naming the refused Kind and a
+//     plain-words Message).
 //
 // timers/triggers have no fake, and no port, at all: grepping
 // internal/ports/ finds no TimerRepo or TriggerRepo (confirmed at the time
@@ -78,7 +78,7 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx))
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
 
 			result, err := svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the fake replays by case id, not prompt text",
@@ -94,8 +94,8 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			}
 
 			// A caller-visible refusal, distinguishable from success.
-			if result.Stored {
-				t.Fatal("CaptureResult.Stored = true, want false — a timer/recurring_reminder classification is a refusal, not a success")
+			if result.Outcome != brain.OutcomeDeferred {
+				t.Fatalf("CaptureResult.Outcome = %q, want %q — a timer/recurring_reminder classification is a refusal, not a success", result.Outcome, brain.OutcomeDeferred)
 			}
 			if result.Deferred == nil {
 				t.Fatal("CaptureResult.Deferred = nil, want a non-nil Deferred naming the refusal")

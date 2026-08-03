@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -16,22 +18,18 @@ import (
 // receives now from captureRunner.at, which received it from the single
 // CaptureService.Capture clock read (design D4 Layer 1, unaffected by this
 // slice). 12f-i implemented applyWithPreImage/dispatchEdits (D5 Layers 1
-// and 3) with only units/log/ids; this PR (12f-ii) adds signals where its
-// own signals.Record call is written (recordCorrectionSignal, below).
-//
-// design D7's own struct literal lists one more field — recall
-// (*RecallService) — for the full type this package converges on by 12g,
-// added where 12g's referent-resolution routing first reads it: the same
-// incremental shape design D9 already documents for captureRunner ("rels
-// and judge are this PR's own two additions, landing where D4's diagram
-// places them"), and the shape golangci-lint's unused check requires — a
-// field nothing reads is a lint failure, not a forward-declared
-// placeholder (tasks.md Conflicts §C7).
+// and 3) with only units/log/ids; 12f-ii added signals where its own
+// signals.Record call is written (recordCorrectionSignal). This PR (12g)
+// adds recall — design D7's full five-field struct, converged — where at's
+// own referent-resolution routing first reads it (Conflicts §C7's own
+// incremental-field precedent, matching captureRunner's own "rels and judge
+// are this PR's own two additions").
 type correctionRunner struct {
 	units   ports.UnitRepo
 	log     ports.DecisionLog
 	signals ports.SignalRepo
 	ids     ports.IDGen
+	recall  *RecallService
 }
 
 // referentSource records how applyWithPreImage's caller resolved target's
@@ -45,6 +43,138 @@ type referentSource struct {
 	Score         *float64
 	RunnerUpScore *float64
 	Margin        *float64
+}
+
+// at is design D7's own orchestration entry, and the only caller
+// applyWithPreImage has left to gain: captureRunner.at's own Kind ==
+// classify.KindCorrection fork (spec R1.1). It resolves a referent — an
+// explicit in.ReferentID first (R1.5), the chat-path hybrid-recall gate
+// otherwise (R1.6) — plans the edit (correction.PlanEdit, R1.8), and
+// applies it (applyWithPreImage, R1.9/R1.10). Either resolution step can
+// ask instead of deciding: no unit is touched, one correction.ambiguous row
+// is written, and the returned *Correction carries Ambiguous == true for
+// the caller to map onto OutcomeAsked.
+func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Classification, now time.Time) (*Correction, error) {
+	target, ref, err := r.resolveReferent(ctx, in, now)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return &Correction{Ambiguous: true}, nil
+	}
+
+	plan, ok := correction.PlanEdit(c)
+	if !ok {
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason string `json:"reason"`
+			UnitID string `json:"unit_id"`
+		}{Reason: "plan_ambiguous", UnitID: target.ID}); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Ambiguous: true}, nil
+	}
+
+	if err := r.applyWithPreImage(ctx, *target, plan, ref, now); err != nil {
+		return nil, err
+	}
+
+	fields := make([]correction.Field, len(plan))
+	for i, e := range plan {
+		fields[i] = e.Field()
+	}
+	return &Correction{UnitID: target.ID, Fields: fields}, nil
+}
+
+// resolveReferent is R1.5/R1.6's own fork: in.ReferentID wins wherever it
+// is non-empty, and recall does not run at all when it does (design D7's
+// "an instrumented index that fails the test if queried proves it" —
+// r.recall.ScoredFor is simply never called on this branch). An unknown
+// explicit id is an error, never a silent fallback to recall (R1.5's own
+// MUST — a fallback would defeat the caller's explicit intent).
+//
+// Otherwise it runs r.recall.ScoredFor(ctx, in.Text) — the raw text, D9's
+// forced argument — and gates the result through correction.Referent at
+// ReferentMargin. ScoredFor's own join already resolves scores against
+// only the LIVE candidates (LiveByIDs, before the ratio is ever computed —
+// design D2/D9, closing 12b's own ordering debt): the candidate slice this
+// method hands to correction.Referent already excludes every non-live
+// scorer, so the ratio Referent computes is the ratio over the survivors,
+// never recomputed by this method itself. A nil target with a nil error
+// means the gate asked; the caller records that outcome.
+func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, now time.Time) (*unit.Unit, referentSource, error) {
+	if in.ReferentID != "" {
+		u, err := r.units.ByID(ctx, in.ReferentID)
+		if err != nil {
+			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w", in.ReferentID, err)
+		}
+		return &u, referentSource{Source: "explicit"}, nil
+	}
+
+	scored, _, err := r.recall.ScoredFor(ctx, in.Text)
+	if err != nil {
+		return nil, referentSource{}, fmt.Errorf("correction: resolve referent: %w", err)
+	}
+	cands := make([]recall.FusedCandidate, len(scored))
+	byID := make(map[string]unit.Unit, len(scored))
+	for i, su := range scored {
+		cands[i] = recall.FusedCandidate{ID: su.Unit.ID, Score: su.Score}
+		byID[su.Unit.ID] = su.Unit
+	}
+
+	id, ok := correction.Referent(cands, correction.ReferentMargin)
+	if !ok {
+		type scoredCand struct {
+			ID    string  `json:"id"`
+			Score float64 `json:"score"`
+		}
+		ctxCands := make([]scoredCand, len(cands))
+		for i, c := range cands {
+			ctxCands[i] = scoredCand{ID: c.ID, Score: c.Score}
+		}
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason     string       `json:"reason"`
+			Candidates []scoredCand `json:"candidates"`
+		}{Reason: "referent_ambiguous", Candidates: ctxCands}); err != nil {
+			return nil, referentSource{}, err
+		}
+		return nil, referentSource{}, nil
+	}
+
+	target := byID[id]
+	margin := correction.ReferentMargin
+	score := cands[0].Score
+	ref := referentSource{Source: "recall", Score: &score, Margin: &margin}
+	if len(cands) > 1 {
+		runnerUp := cands[1].Score
+		ref.RunnerUpScore = &runnerUp
+	}
+	return &target, ref, nil
+}
+
+// recordAmbiguousDecision writes design D2/D3's ask row
+// (ports.ActionCorrectionAmbiguous): a decision with no vault effect — the
+// referent gate or the edit plan asked instead of picking. Shares
+// captureRunner.recordOrphanDecision's shape (a rationale plus a context
+// value) for the same reason: neither call site has a unit or a full
+// classification to embed, only a reason and, on the referent path, the
+// candidates that made the gate ask.
+func (r correctionRunner) recordAmbiguousDecision(ctx context.Context, now time.Time, ctxValue any) error {
+	contextJSON, err := json.Marshal(ctxValue)
+	if err != nil {
+		return fmt.Errorf("correction: encode ambiguous decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCorrectionAmbiguous,
+		Rationale:  "correction could not resolve unambiguously — no unit was edited",
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("correction: record ambiguous decision: %w", err)
+	}
+	return nil
 }
 
 // applyWithPreImage is the ONLY path in this package to a ports.UnitRepo
