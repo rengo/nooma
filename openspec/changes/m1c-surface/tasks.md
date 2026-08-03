@@ -803,6 +803,70 @@ here rather than decided by this PR's own judgment, matching this document's own
 "propose a seam; do not open two PRs on your own judgment" applied to a security posture instead
 of a size seam.
 
+### C19 — `16a-i`: the corpus has to travel with the compiled binary, not just with the test tree; the mechanism that lets it do so without duplicating it sits outside `make lint`'s and `go vet ./...`'s own scan targets; and `16a-i` measured 573 changed lines against its own ~280 ceiling (2.05×)
+
+**The corpus-travel question, named rather than inherited.** `spec.md` R5.1 requires `nooma
+doctor`'s live run to send `testdata/llm/cases/`'s recorded `prompt` text to a real,
+user-configured provider. `testdata/llm/cases/` is a directory of on-disk JSON files that exist
+only in the source tree — a released binary carries none of them unless something embeds them.
+Neither `design.md`'s D16 nor `tasks.md`'s own `16a-i.1`/`16a-i.2` names this mechanism; both
+describe only the check's *decision logic*, proven at L1/L2 against `fakeprovider`. Resolved by
+adding `testdata/llm/corpus.go` (`package llm`), `//go:embed cases/*.json`, exposing only
+`id`/`task`/`prompt` — never `response`/`error` — as `Case`. This is the ONE tree that can embed
+`cases/*.json` without copying it: `//go:embed` forbids a `".."` path element, so a source file
+outside `testdata/llm/` cannot reach into it, and a copy elsewhere would reintroduce the
+duplication ADR-0002's "written once, used in two places" exists to prevent.
+
+**The cost, measured rather than assumed.** Both `go vet ./...` and golangci-lint's own default
+`exclude-dirs` list skip directories literally named `testdata` as SCAN TARGETS (Go's own
+`...`-expansion convention, and golangci-lint v2's documented default). Confirmed empirically on
+this branch: an ineffectual assignment (`probe := 1; probe = 2; _ = probe`, inside
+`testdata/llm/corpus.go`'s `Cases()`) produced `golangci-lint run ./...` → `0 issues.` — the same
+bug placed in `cmd/nooma/doctor.go` would have been caught instantly by `ineffassign`. `make
+lint` (`golangci-lint run` + `go vet ./...`, both rooted at `./...`) therefore cannot see a bug
+written directly inside this one file, the same category of gap `12c`'s `docs-sync.yml` (§C2)
+and `15`'s `e2e (windows)` (§C18) already named for this chain — a tool boundary a Makefile
+cannot reach, discovered rather than assumed. What still catches a real defect there: a genuine
+COMPILE error (an unused variable, a bad import) still fails `go build ./...`/`make build`,
+because `cmd/nooma` imports this package and the compiler must type-check every import regardless
+of scan-target rules — confirmed the same way (`declared and not used` surfaced through
+`golangci-lint run ./...`'s own typecheck pass). And `TestCasesMatchesTheSourceFiles`
+(`cmd/nooma/doctor_test.go`, itself inside a lint-visible package) proves every embedded
+`id`/`task`/`prompt` equals its source file's own fields byte for byte, so a logic bug in the
+embed step — the one category a compile check cannot catch — still fails a test `make check`
+does run.
+
+**The corpus-authorship hazard, checked against what ADR-0002 actually commits to.** ADR-0002
+says the corpus is "written once, used in two places" — but ONLY the `prompt` half travels to the
+production run; `spec.md` R5.3's own MUST NOT already forbids the gate from reading a case's
+`response`/`expected` field, precisely because those are tied to one past recording from one past
+provider and are not ground truth for a live, possibly different provider's own new answer. `Case`
+(this PR) has no field to hold `response`/`error` at all — the hazard the apply prompt asked to
+check is closed structurally, not by convention: this gate cannot compare a live answer against
+the corpus's own recorded answer, because the type it reads the corpus into cannot carry one.
+Validity is instead judged entirely by `classify.Decode`/`relation.DecodeJudgment` — decoders
+I14's own conformance suite proves correct independently of this PR — so the gate is never
+verified only against itself, the exact shape `m1b-pipeline` C11/C12 named as a defect elsewhere
+in this project.
+
+**Size.** 573 changed lines (`cmd/nooma/doctor.go` +210, `cmd/nooma/doctor_test.go` +293,
+`testdata/llm/corpus.go` +70) against this link's own ~280 estimate — 2.05×, inside this chain's
+own established range (`12e` 1.57×, `13c` 2.25×, `12g` 2.68×). **A candidate seam was evaluated**:
+`testdata/llm/corpus.go` plus its own anti-drift proof (`TestCasesMatchesTheSourceFiles`) as one
+PR, `doctor.go`'s gate decision logic plus its own table tests as a second, stacked PR. **Declined
+anyway**, following `13a`'s own C10 precedent this chain has applied repeatedly since (`12g`
+§C12, `13c` §C14, `15` §C17): the nineteen-link chain is fixed by both `spec.md` and `design.md`,
+and inserting an unplanned twentieth link is a bigger decision than one link's own judgment —
+"propose a seam; do not open two PRs on your own judgment." `size:exception` applied and
+verified stuck (see PR-level verify entry below).
+
+**Explicitly deferred to `16a-ii`, not silently pulled forward**: R5.6's exact "ok (`N` tasks
+configured)" report wording (this half already makes the zero-tasks case a structural no-op by
+iterating an empty provider map, but does not yet pin the exact string); R5.7's "unreachable"
+wording and the live call's bounded timeout (this half currently folds a transport-level
+`Complete` error into a generic, undifferentiated failure — `reasonTransportError`, named but not
+yet distinguished in report text the way a JSON-fitness failure is); R5.8's corpus-coverage audit.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -1659,22 +1723,45 @@ work at all")
 
 Depends on `13d` (merged), per `design.md`'s own dependency line.
 
-- [ ] **16a-i.1** Test first: `cmd/nooma/doctor.go`'s `doctorChecks` gains one new `{name, run}`
+- [x] **16a-i.1** Test first: `cmd/nooma/doctor.go`'s `doctorChecks` gains one new `{name, run}`
       entry; a test asserting `doctorChecks` grew by exactly one entry and every existing check's
       behavior is unchanged.
-      Verify: `make test`.
+      Implemented: `doctorChecks` gains `{"llm quality", checkLLMQuality}` as its sixth, final
+      entry. `TestDoctorChecksGainsOneNewEntry` (`cmd/nooma/doctor_test.go`) asserts the full
+      six-name slice, order included.
+      Verify: `make test` — green.
       Requirement: R5.1.
-- [ ] **16a-i.2** Test first: a table test over scripted `fakeprovider` responses — a clean pass
+- [x] **16a-i.2** Test first: a table test over scripted `fakeprovider` responses — a clean pass
       (zero degradations); a response with only an optional field absent (still a clean pass,
       Refinement 1); each I14 degradation shape (truncated, wrong-typed, unknown-enum), asserting
       the report names the field, the `Reason`, and the task (Refinement 2); one task passing and a
       different task failing reported separately (R5.2); the corpus's `prompt` field sent verbatim,
       never `response`/`expected` (R5.3); each corpus prompt sent exactly once, no retry; the
       report's `k of n` count line.
-      Verify: `make test`.
+      Implemented: `runLLMQualityCheck`/`evaluateCase`/`qualityGateProviders`/`qualityGateError`
+      (`cmd/nooma/doctor.go`), reusing `wiring.go`'s own `buildProvider`. Corpus reused via a new
+      `testdata/llm/corpus.go` embed (see Conflicts §C19 for why a new file was needed and what it
+      costs). `TestRunLLMQualityCheck` (six subtests: clean pass, optional-absent clean pass,
+      truncated, wrong-typed, unknown-enum, one-task-fails-one-passes),
+      `TestCheckLLMQuality_SendsTheCorpusPromptVerbatimOnce`,
+      `TestQualityGateErrorNamesEachFailingTaskSeparately`,
+      `TestLLMQualityFailureStringNamesTheFailureKind`, `TestCasesMatchesTheSourceFiles` — all in
+      `cmd/nooma/doctor_test.go`. The last four were added specifically because the apply prompt's
+      three break experiments found real gaps in the first pass of tests (see the PR body's own
+      break-experiment log) — R5.2's "never one collapsed verdict" and R5.4 Refinement 2's
+      formatting/vocabulary distinction were provable against typed decision-logic values but not
+      yet against the actual rendered text a user reads until these were added.
+      Verify: `make test` — green.
       Requirement: R5.2, R5.3, R5.4.
-- [ ] Verify (PR-level): `make check-all`; confirmed by review — every test for this check goes
-      through `fakeprovider`, none opens a network connection (R5.5).
+- [x] Verify (PR-level): `make check-all` — green (lint 0 issues, vet, race+shuffle unit+conformance
+      tests, L3 integration, `TestSchemaGolden` empty diff, `internal/core` coverage 100%
+      (308/308, unaffected — this link touches no `internal/core` file), seven-target
+      cross-compile, L4 e2e — `TestDoctorOnAHealthyVault`/`TestDoctorMakesNoNetworkCall` both
+      confirmed green unchanged, since a freshly `init`ed vault binds no provider and the gate is
+      a structural no-op for it). Confirmed by review: every test for this check goes through
+      `fakeprovider`, none opens a network connection (R5.5). See Conflicts §C19 for the measured
+      size (573 lines, 2.05×, `size:exception` applied) and the embed-mechanism/lint-visibility
+      finding.
 
 ---
 
