@@ -15,7 +15,7 @@ import (
 func TestHandlerServesBothSurfaces(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(Handler("test-version"))
+	srv := httptest.NewServer(Handler(Deps{Version: "test-version"}))
 	t.Cleanup(srv.Close)
 
 	for _, path := range []string{"/", "/ui"} {
@@ -45,7 +45,7 @@ func TestHandlerServesBothSurfaces(t *testing.T) {
 func TestUnknownPathIs404(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(Handler("test-version"))
+	srv := httptest.NewServer(Handler(Deps{Version: "test-version"}))
 	t.Cleanup(srv.Close)
 
 	resp, err := http.Get(srv.URL + "/does-not-exist")
@@ -66,7 +66,7 @@ func TestUnknownPathIs404(t *testing.T) {
 func TestHandlerServesDistinctSurfaces(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(Handler("test-version"))
+	srv := httptest.NewServer(Handler(Deps{Version: "test-version"}))
 	t.Cleanup(srv.Close)
 
 	api := get(t, srv.URL+"/")
@@ -99,4 +99,86 @@ func get(t *testing.T, url string) string {
 		}
 	}
 	return b.String()
+}
+
+// TestGuardedRoutesRequireToken is R2.11's own completeness test: it
+// iterates apiRoutes — the ONE declared route-table slice Handler also
+// registers from (design D10's "one slice, two consumers" shape) — and
+// asserts every entry returns 401 with no token and with a wrong token when
+// a token is configured, and that both responses are byte-identical (R2.11's
+// own MUST NOT against an oracle). A future PR adding a route to apiRoutes
+// is guarded by construction and is covered here without this test changing.
+func TestGuardedRoutesRequireToken(t *testing.T) {
+	t.Parallel()
+
+	d := Deps{Version: "test", Token: "the-real-token"}
+	h := Handler(d)
+
+	routes := apiRoutes(d)
+	if len(routes) == 0 {
+		t.Fatal("apiRoutes returned no routes — nothing for this completeness test to check")
+	}
+
+	for _, rt := range routes {
+		t.Run(rt.pattern, func(t *testing.T) {
+			t.Parallel()
+
+			method, path, ok := strings.Cut(rt.pattern, " ")
+			if !ok {
+				t.Fatalf("route pattern %q has no method prefix", rt.pattern)
+			}
+
+			doRequest := func(authHeader string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(method, path, nil)
+				if authHeader != "" {
+					req.Header.Set("Authorization", authHeader)
+				}
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				return rec
+			}
+
+			noToken := doRequest("")
+			wrongToken := doRequest("Bearer not-the-token")
+
+			if noToken.Code != http.StatusUnauthorized {
+				t.Errorf("no token: status = %d, want %d", noToken.Code, http.StatusUnauthorized)
+			}
+			if wrongToken.Code != http.StatusUnauthorized {
+				t.Errorf("wrong token: status = %d, want %d", wrongToken.Code, http.StatusUnauthorized)
+			}
+			if noToken.Code != wrongToken.Code || noToken.Body.String() != wrongToken.Body.String() {
+				t.Errorf("route %q: missing-token and wrong-token responses differ — %d %q vs %d %q",
+					rt.pattern, noToken.Code, noToken.Body.String(), wrongToken.Code, wrongToken.Body.String())
+			}
+		})
+	}
+}
+
+// TestOpenRoutesStayOpenRegardlessOfToken is R2.12's own review checkpoint,
+// made executable: GET / and GET /ui stay reachable without a token even
+// when one is configured, and neither sets a cookie — ADR-0017's scope is
+// the API's bearer-token header only, never the UI's cookie handshake
+// (ADR-0007, M4).
+func TestOpenRoutesStayOpenRegardlessOfToken(t *testing.T) {
+	t.Parallel()
+
+	h := Handler(Deps{Version: "test", Token: "the-real-token"})
+
+	for _, path := range []string{"/", "/ui"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("GET %s with a token configured and no Authorization header: status = %d, want %d", path, rec.Code, http.StatusOK)
+			}
+			if rec.Header().Get("Set-Cookie") != "" {
+				t.Errorf("GET %s set a cookie — ADR-0017's scope is the API header only, not a UI session", path)
+			}
+		})
+	}
 }
