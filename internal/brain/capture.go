@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -137,12 +138,11 @@ type captureRunner struct {
 // judge.Complete call over the whole bounded candidate list, decoded by
 // relation.DecodeJudgment, decided by relation.Decide against the
 // candidates' type's resolved thresholds, and persisted or discarded with a
-// decision_log row naming the outcome. A classification that maps to no
-// unit.Type for any of the other four non-persisting Kind values (chitchat,
-// out_of_scope, recall, correction), or that lost its content, is still
-// propagated as a plain Go error — spec.md never asks this PR to give those
-// a distinguishable result, only timer/recurring_reminder (R4.6) and
-// ambiguous person references (R4.7).
+// decision_log row naming the outcome. Design D8, this PR's own routing
+// half: chitchat/out_of_scope are discarded (above, before ToUnit); the
+// correction/recall Kind forks are 12g's, not this one's — only those two
+// still propagate as a plain Go error here, alongside a classification
+// that lost its content.
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
@@ -155,6 +155,15 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 
 	c, err := classify.Decode(resp.Text, now)
 	if err != nil {
+		if errors.Is(err, classify.ErrNoFieldsSalvaged) {
+			rationale := fmt.Sprintf("classification response could not be parsed: %s — no field was salvaged", err)
+			ctxValue := struct {
+				Error string `json:"error"`
+			}{Error: err.Error()}
+			if logErr := r.recordOrphanDecision(ctx, ports.ActionCaptureUnparseable, rationale, now, ctxValue); logErr != nil {
+				return CaptureResult{}, logErr
+			}
+		}
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
 	}
 
@@ -163,6 +172,37 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			return CaptureResult{}, err
 		}
 		return CaptureResult{Stored: false, Deferred: &deferred}, nil
+	}
+
+	// The discard fork (design D8, this PR's own half of it): chitchat and
+	// out_of_scope are not memory, so they never reach classify.ToUnit at
+	// all — the same "route before ToUnit" shape timerHookRefusal already
+	// established. The correction/recall Kind forks are 12g's, not this
+	// one's (12g and 13a together are the only routing changes to this
+	// method).
+	if c.Kind != nil && (*c.Kind == classify.KindChitchat || *c.Kind == classify.KindOutOfScope) {
+		rationale := fmt.Sprintf("classified as %q — not memory content, nothing was stored", string(*c.Kind))
+		ctxValue := struct {
+			Kind string `json:"kind"`
+		}{Kind: string(*c.Kind)}
+		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureDiscarded, rationale, now, ctxValue); err != nil {
+			return CaptureResult{}, err
+		}
+		return CaptureResult{Stored: false}, nil
+	}
+
+	// A classification with no type at all has nothing left to decide from
+	// (docs/02-cognitive-core.md §5.1's own floor) — classify.ToUnit would
+	// return ErrNoUnitType for this too, but capture.classify.unclassifiable
+	// needs its own decision_log row first (design D8).
+	if c.Kind == nil {
+		ctxValue := struct {
+			Reason string `json:"reason"`
+		}{Reason: "no_type"}
+		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureUnclassifiable, "classification carried no type — nothing was stored", now, ctxValue); err != nil {
+			return CaptureResult{}, err
+		}
+		return CaptureResult{}, fmt.Errorf("capture: build unit: %w", classify.ErrNoUnitType)
 	}
 
 	// The base priors, design D3: there are exactly two numbers, not
@@ -597,6 +637,24 @@ func (r captureRunner) recordHookDeferredDecision(ctx context.Context, c classif
 	}
 	if err := r.log.Record(ctx, d); err != nil {
 		return fmt.Errorf("capture: record hook-deferred decision: %w", err)
+	}
+	return nil
+}
+
+// recordOrphanDecision writes one of design D8's three orphan-action rows
+// this PR gives a caller — capture.discarded, capture.classify.unparseable,
+// capture.classify.unclassifiable — sharing one shape (a rationale plus a
+// context value, nothing else) unlike this file's other record* methods,
+// none of which have a unit or a full classification to embed.
+func (r captureRunner) recordOrphanDecision(ctx context.Context, action ports.DecisionAction, rationale string, now time.Time, ctxValue any) error {
+	contextJSON, err := json.Marshal(ctxValue)
+	if err != nil {
+		return fmt.Errorf("capture: encode %s decision context: %w", action, err)
+	}
+
+	d := ports.Decision{ID: r.ids.New(), Action: action, Rationale: rationale, Context: contextJSON, OccurredAt: now}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record %s decision: %w", action, err)
 	}
 	return nil
 }
