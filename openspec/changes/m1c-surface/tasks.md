@@ -1127,6 +1127,79 @@ clean after each):**
    OS-level dialing to `0.0.0.0` is not reliably a reproducible failure across platforms; asserting
    the translated host directly is what makes this catcher portable.
 
+### C23 — `14b`: R3.2's own L4 requirement was already met by `14a`'s own test before `14b` started; the design's test matrix names the fuller four-step demo as by-hand only, not L4; a demo query's own filler words can accidentally match the wrong capture, since `recall.Tokenize` filters no stopword; and this PR's own first draft of `docs/05-build-plan.md` §M1 overstated a real, narrower gap as R4.2's own exit criterion going unproven
+
+Four findings, surfaced while implementing this chain's last link, none of them a spec/design
+disagreement in the C1–C22 sense — recorded per this document's own instruction not to resolve
+anything silently.
+
+**First**: `14b.1`'s own task text is R3.2's requirement verbatim — "the demo captures via `nooma
+capture` and finds it via recall." `14a`'s own `TestCaptureCLIPersistsThroughARealServer`
+(`test/e2e/capture_cli_test.go`) already does exactly this: a CLI capture, then a `POST /recall`
+that finds it. Read literally, `14b.1` asks for coverage this chain already has. **Not treated as
+"nothing left to do."** `design.md`'s own test matrix (§7) names a different, larger shape for this
+link — *"The demo, by hand: two captures (API + CLI), one ask, one correction — and no timer"* —
+with `—`/`—` in the level and location columns, meaning that fuller sequence has no L4 assignment
+of its own anywhere in this chain until now. The genuinely missing piece was never "prove CLI
+capture persists" (done); it was "prove the composition the umbrella proposal's own success
+criterion names and no single link's own narrower test walks." `TestDemoCaptureAskCorrectionEndToEnd`
+(`test/e2e/demo_test.go`) is written to the larger shape — API capture, CLI capture, one ask, one
+correction, in sequence, on one vault — rather than duplicating `14a`'s narrower proof.
+
+**Second**: R4.2's own `MUST NOT` — *"PR 14's own L4 demo (R2.8, R3.2) depend on the Ollama path
+succeeding"* — read out of context, looks like it could forbid this new test's `nooma.yml` from
+declaring `type: ollama` at all. It does not: the clause's own subject is `nooma init`'s wizard
+Ollama *path* (PR 15's R4.1–R4.5 scope, an interactive flow this test never invokes), not a
+directly-written config fixture naming the `ollama` provider type. Every L4 test in this chain since
+`13d` (`TestServeCaptureAndRecallRoundTripThroughRealWiring`, `TestCaptureCLIPersistsThroughARealServer`)
+already takes this same reading — `writeConfig` writes a `providers:`/`tasks:` block directly,
+`nooma init`'s wizard is never invoked, and R4.5's own "no test touches a real provider" is satisfied
+by a mock HTTP server standing in for the wire shape, never by which provider `type:` string the
+fixture names. `14b`'s own new test follows the established reading rather than setting a new one.
+
+**Third, a genuine gotcha for whoever next writes a recall-driving demo query**:
+`internal/core/recall.Tokenize` (`internal/core/recall/tokenize.go`) filters no stopword — it
+splits on anything that is not a letter or digit and keeps every token, including "what", "do",
+"the". A first draft of this demo's own "ask" query, phrased close to the umbrella proposal's exact
+words ("what do you know about the dentist?"), shared the token "the" with the *other* capture's
+content ("Pick up the **the** dry cleaning") purely by coincidence of filler words, which let the
+wrong unit's lexical-leg match tie the fused ranking and put it first — caught by the test's own
+first run failing exactly at "step 3 (ask)" with both units returned in the wrong order, not by
+review. No `MUST` anywhere forbids a query and an unrelated capture sharing a common word — this is
+not a defect in `recall.Tokenize` or `SearchLexical`, both already do precisely what design specifies
+(a candidate generator, not a filter) — it is a test-authoring constraint: this demo's own capture
+contents and its own query wording were chosen to share no token with each other's unrelated
+capture, so the "ask" step's outcome is decided by the query's real content, not by an accidental
+stopword collision. Recorded so the next person writing an L4 recall-driving test does not spend the
+same cycle re-deriving that this codebase's lexical leg has no stopword list.
+
+**Fourth, a self-correction caught in coordinator review, not by any gate**: this PR's own first
+draft of `docs/05-build-plan.md` §M1 stated *"This is not the wizard-configured Cloud path R4.2
+names as M1's own exit criterion... it does not exercise the Cloud provider path a real user's
+`nooma init` run would configure."* Every word of that sentence is true of `demo_test.go` read
+alone — but §M1's demo bullet is exactly what a stranger reads to decide whether to trust this
+milestone, and read alone it says R4.2's own MUST (a wizard-written Cloud vault "immediately
+usable by the capture pipeline") went unproven. **It did not.** `15`'s own
+`TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary` (`test/e2e/init_cloud_test.go`)
+already proves it at L4: it runs the wizard's Cloud path, patches only the endpoint/port the way
+design D15's own `endpoint` field exists to let a test do, then posts a capture against the
+wizard-written vault and asserts `outcome=stored, embedded=true` (`init_cloud_test.go:106-127`) —
+`spec.md:1235-1240`'s own L4 requirement that R6.3's embed property "survive being wired together
+for real, against a wizard-written vault" is exactly what that test's own assertion proves.
+
+**Resolution: the bullet is narrowed to what is actually uncovered.** The real gap is not "the
+exit criterion is unproven" — it is that **no single test walks the wizard through to the ask and
+the correction as one continuous path**: `init_cloud_test.go` proves the wizard's vault is usable
+by a capture, `demo_test.go` proves the ask and the correction, but the second starts from a
+directly-written config rather than the first test's own wizard output, so the seam between "the
+wizard wrote this" and "the demo asked and corrected it" is covered by two tests rather than one.
+Both ends of R4.2's own claim are proven at L4; only their composition into one sequence is not.
+`docs/05-build-plan.md`'s own bullet is corrected to say exactly this, naming both tests by
+function name so a reader can check the claim rather than take it. Recorded per this document's
+own C16 precedent: a note claiming a risk that does not exist is worse than no note at all — C16
+found this once already for an idempotency claim overstated by `design.md`'s own prose; this is
+the same failure mode, caught in this PR's own doc-writing step instead of in a design document.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -2241,23 +2314,23 @@ Depends on **all five** of (`13d`, `15`, `16a-ii`, `16b`, `17`) — the proposal
 
 Depends on `14a`. **Last link in the chain — the demo is M1's exit criterion.**
 
-- [ ] **14b.1** Test first (L4): the demo captures via `nooma capture` and finds it via recall —
+- [x] **14b.1** Test first (L4): the demo captures via `nooma capture` and finds it via recall —
       either a subsequent `nooma capture` classified `recall` (reusing R2.3's routing) or the HTTP
       `/recall` route; no `nooma recall` subcommand required.
       Verify: `go test ./test/e2e/... -tags e2e`.
       Requirement: R3.2.
-- [ ] **14b.2** Review: no case in this PR's own demo script or fixture corpus asks the CLI to
+- [x] **14b.2** Review: no case in this PR's own demo script or fixture corpus asks the CLI to
       capture a `timer` or `recurring_reminder` message — Q3a's closing sentence, "the demo must not
       be shown a timer."
       Verify: review of the demo script/fixtures this PR adds.
       Requirement: R3.3.
-- [ ] **14b.3** The demo walked end to end **by hand**, not only by the L4 test above: two captures
+- [x] **14b.3** The demo walked end to end **by hand**, not only by the L4 test above: two captures
       (API + CLI), one ask, one correction — no timer. `docs/05-build-plan.md`'s M1 section closed;
       `CLAUDE.md`'s status line updated to reflect M1 closed.
       Verify: manual walkthrough, recorded in the PR description; review of the two doc updates.
       Requirement: design's own scope note — "a green suite is necessary and no longer sufficient"
       from PR 13c onward, since a compiled binary exists to point at.
-- [ ] Verify (PR-level): `make check-all`; the demo run by hand and reported in the PR body.
+- [x] Verify (PR-level): `make check-all`; the demo run by hand and reported in the PR body.
 
 ---
 

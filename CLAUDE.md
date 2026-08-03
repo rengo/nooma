@@ -3,9 +3,10 @@
 A personal digital brain: a self-contained Go binary over a portable per-user vault (a folder
 with SQLite inside). Licensed AGPL-3.0.
 
-**Status**: M0 closed (2026-07-30). The binary runs: `nooma init && nooma serve` on Linux and
-Windows, with `init`, `status`, `doctor`, `serve` and `version` working against a real migrated
-vault. `internal/core/` is still empty — the brain itself starts in M1
+**Status**: M1 closed (2026-08-03). The binary captures and recalls: `nooma init`, configure a
+provider, `nooma serve`, capture via the API and via `nooma capture`, ask a real question and get
+a real recall, correct what was captured — all against a real migrated vault, on Linux and
+Windows. `internal/core/` now holds the brain's decision logic; M2 is sleep and weight
 ([`docs/05-build-plan.md`](docs/05-build-plan.md)).
 
 ## Documentation
