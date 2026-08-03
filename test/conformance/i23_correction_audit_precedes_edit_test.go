@@ -19,7 +19,7 @@ var updateMethodNames = map[string]bool{
 	"UpdateDueAt":   true,
 }
 
-// TestCorrectionAuditPrecedesEveryUpdate is design D5 Layer 2, the AST
+// TestI23_CorrectionAuditPrecedesEveryUpdate is design D5 Layer 2, the AST
 // mechanization of ADR-0016's structural guarantee ("applyWithPreImage is
 // the ONLY path ... to a ports.UnitRepo Update* method"). It fails a
 // non-test file under internal/**, excluding internal/store/** and
@@ -50,7 +50,7 @@ var updateMethodNames = map[string]bool{
 // guess, it fails loudly naming the shape it could not read, per this PR's
 // own governing instruction to refuse rather than pass by not understanding
 // what it saw.
-func TestCorrectionAuditPrecedesEveryUpdate(t *testing.T) {
+func TestI23_CorrectionAuditPrecedesEveryUpdate(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	fset := token.NewFileSet()
 
