@@ -154,6 +154,68 @@ two files, or a design section reading as two decisions, is necessary but not su
 of a valid split — the doc-delta ownership test (does each half have its own behaviour to
 document?) is what actually decides it, and `make check-all` cannot check it for you.
 
+### C3 — `12e` measured 626 lines against its own ~400 ceiling (1.57×); a layer seam was evaluated and rejected, on different grounds than `12c`'s. **RESOLVED — unsplittable, `size:exception` applied.**
+
+`sdd-apply` measured the complete, green `12e` PR at 626 changed lines: `internal/ports/signalrepo.go`
+(133), `test/support/repocontract/signalrepo.go` (153), `test/support/memrepo/signals.go` (66),
+`test/conformance/signalrepo_memrepo_test.go` (22), `internal/store/sqlite/signalrepo.go` (186),
+`internal/store/sqlite/signalrepo_integration_test.go` (62), `testdata/schema/store_api.golden`
+(4). Per this document's own instruction ("if the diff passes ~350 changed lines and you are not
+nearly done, STOP and report"), a candidate seam was evaluated before opening the PR, not after.
+
+**The candidate seam**: PR A — `internal/ports/signalrepo.go`, the shared `repocontract.RunSignalRepo`
+suite, and `memrepo.Signals` (the L2 answer), 374 lines. PR B — `internal/store/sqlite/signalrepo.go`,
+its L3 tests, and the regenerated golden (the L3 answer), 252 lines, based on PR A merged to `main`.
+
+**Why it is not `12c`'s failure mode.** `12c`'s split failed `docs-sync.yml`, which fires only on
+`internal/core/**` changes (confirmed directly off `.github/workflows/docs-sync.yml`'s own header
+comment). Neither candidate half here touches `internal/core/**` — `12e` is a `ports`/`store` PR,
+and `design.md`'s own D13 table assigns it no documentation row (confirmed by reading the table
+directly, the same discipline `12d` used) — so the doc-delta ownership test that killed `12c`'s
+seam does not apply, and does not settle this one either way.
+
+**What actually kills this seam is C11.** `test/support/repocontract`'s own established convention
+(`decisionlog.go`'s and `12d`'s doc comments both state it: "answered twice ... in the same PR") is
+that a shared contract's fake and real-store answers land together, not sequentially — merging PR A
+alone would leave `main` with `ports.SignalRepo`'s contract answered only by `memrepo.Signals` for
+however long PR B took to follow, which is exactly the state C11 named as "that implementation's
+opinion," the same defect this design's own D6 section warns `12e` specifically to avoid ("a
+contract case whose entire justification is catching a specific mistake" applies here to the whole
+port, not one case of it — the L3 case is the one thing an in-memory fake can never prove on its
+own). A `size:exception` link that ships both halves together is not a convenience; it is what C11
+requires for a brand-new port's very first PR.
+
+**Resolution: `12e` is unsplittable for a reason distinct from `12c`'s, and joins `12c`/`13b`/`13d`
+as a flagged High-risk, `size:exception` link.** No PR was opened and closed to arrive at this
+finding, unlike `12c` — the seam was evaluated and rejected before any PR existed, per this
+document's own stop-and-report instruction. Recorded for whoever next eyes a brand-new port's
+"fake here, store there" layer boundary as a split seam: `docs-sync` is not the only gate that can
+reject an otherwise clean git split — C11's own same-PR requirement is a second, independent one,
+and it applies precisely to the shape (a new port, answered twice) this task list already flags as
+High risk for exactly that reason.
+
+### C4 — `spec.md` R1.10 and R1.12 cite `learning_signals` as living in "migration 0001"; it lives in migration 0002. A citation defect, not a scope disagreement.
+
+R1.10's own `MUST NOT` clause reads: *"already structural in the schema (migration 0001, verified:
+'NO FK: the signal outlives the target's deletion')."* R1.12's `MUST NOT` clause repeats the same
+citation: *"learning_signals and its no-FK target_id column already exist (migration 0001, verified
+above)."* Both are wrong: `learning_signals` is declared in
+`internal/store/sqlite/migrations/0002_learning_and_search.sql:8-19` — confirmed directly off the
+file, not assumed — and is absent from `0001_core_tables.sql` entirely (`rg -n "learning_signals"`
+against that file returns nothing). `docs/03-data-model.md`'s own "Learning" section places the same
+DDL under no migration number at all, so it does not disambiguate. `design.md`'s D6 section gets
+this right — it cites `"the eleven members 0002:10 enumerates"` — and this task list's own `12e.3`
+already said "migration 0002" independently, before this citation defect was noticed, which is how
+it surfaced: the two documents' migration numbers for the same table disagreed with each other.
+
+**Resolution: not acted on beyond this record.** The defect changes no code and no test — `12e.2`'s
+L3 case and `12e.3`'s "no migration touched" check both already targeted the correct file
+(`0002_learning_and_search.sql`) regardless of what R1.10/R1.12's prose said, because the
+implementation was written against the real DDL, not against the spec's citation of it. Flagged
+here per this document's instruction not to resolve a spec/schema disagreement silently, and left
+for whoever next revises `spec.md` to correct the two citations from "migration 0001" to "migration
+0002."
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -415,7 +477,7 @@ L3 case)
 
 Depends on nothing beyond Phase A/B (independent of `12a`–`12d`).
 
-- [ ] **12e.1** Test first: a `repocontract`-shared case for `ports.SignalRepo` — `AllSignalTypes()`/
+- [x] **12e.1** Test first: a `repocontract`-shared case for `ports.SignalRepo` — `AllSignalTypes()`/
       `AllValences()` closed-vocabulary completeness; `Record`/`Since` round-trip. **Red**:
       `undefined: ports.SignalRepo`, `undefined: ports.Signal`.
       Implement `internal/ports/signalrepo.go` (NEW): `SignalType` (the eleven members migration
@@ -425,18 +487,43 @@ Depends on nothing beyond Phase A/B (independent of `12a`–`12d`).
       Verify: `make test`; `golangci-lint run` (no `Delete*`-prefixed method, CLAUDE.md
       non-negotiable #6).
       Requirement: R1.10; design D6.
-- [ ] **12e.2** L3 — I13's behavioural half: `internal/store/sqlite/signalrepo.go` implements
+      **Done: `undefined: ports.SignalRepo` confirmed red for the right reason before
+      `internal/ports/signalrepo.go` existed; `undefined: memrepo.NewSignals` confirmed red for
+      the right reason before the fake existed. `TestSignalRepo_MemRepo` green (4 subtests:
+      `AllSignalTypes`, `AllValences`, round-trip, ordering+limit).**
+- [x] **12e.2** L3 — I13's behavioural half: `internal/store/sqlite/signalrepo.go` implements
       `Record`/`Since` against a real migrated vault with `foreign_keys=on`; a signal whose
       `TargetID` names a unit that was **never created** persists and reads back.
       Verify: `go test ./test/integration/... -tags integration`.
       Requirement: R1.10's Verified-by; design D6; `docs/06-harness.md` §4's I13 framing.
-- [ ] **12e.3** `make store-api-golden`; confirm no migration touched (`learning_signals` already
+      **Done: `TestSignalRepo_Contract` (the same shared suite, at L3) and
+      `TestSignalRepo_RecordSurvivesATargetThatNeverExisted` both green. The latter's own claim was
+      verified caught, not just asserted: `Record` was temporarily given an application-side check
+      rejecting an unknown `TargetID` (simulating code that would defeat I13), the test failed with
+      the expected error ("target unit ... does not exist"), then the check was reverted —
+      `git diff --stat` against the new (untracked) file showed no leftover diff, the same
+      temporary-break discipline `12d`'s transposition check used.**
+- [x] **12e.3** `make store-api-golden`; confirm no migration touched (`learning_signals` already
       exists, migration 0002).
       Verify: `TestHarness_StoreAPIUnchanged`; empty migration diff.
       Requirement: R1.12 (the `SignalRepo` half).
-- [ ] Verify (PR-level): `make check-all`; confirm `internal/ports/decisionlog.go`,
+      **Done: golden regenerated, four additions only (`SignalRepo.Record`, `SignalRepo.Since`,
+      `NewSignalRepo`, `type SignalRepo`); `git diff --stat` over
+      `internal/store/sqlite/migrations/` empty. See Conflicts §C4: `spec.md` R1.10/R1.12 cite
+      "migration 0001" for this table; the real DDL is in migration 0002, confirmed off the file.**
+- [x] Verify (PR-level): `make check-all`; confirm `internal/ports/decisionlog.go`,
       `relationrepo.go`, `provider.go`, `clock.go`, `lexicalsearch.go` are untouched by this PR
       (R7.4).
+      **Done — PR #112 (https://github.com/rengo/nooma/pull/112, branch `feat/ports-signalrepo`,
+      base `main`, NOT yet merged): 626 insertions across 7 files (1.57× the ~400 ceiling — see
+      Conflicts §C3 for the seam evaluated and rejected before opening this PR, and why it is
+      unsplittable for a reason distinct from `12c`'s), `make check-all` green (lint 0 issues,
+      race+shuffle unit+integration tests, build, `TestSchemaGolden` empty diff, `internal/core`
+      coverage 100%/308/308 unaffected, seven-target cross-compile, e2e). Confirmed untouched:
+      `internal/ports/decisionlog.go`, `relationrepo.go`, `provider.go`, `clock.go`,
+      `lexicalsearch.go`. No `docs/02-cognitive-core.md` delta: this PR touches no
+      `internal/core/**` file, and `design.md`'s D13 table assigns `12e` no documentation row
+      (confirmed by reading D13 directly).**
 
 ---
 
@@ -998,7 +1085,7 @@ fit the 400-line soft rule, never predictions):
 | 12b | ~330 | Medium |
 | 12c | ~400, 501 measured (1.25×) | **High, over the ceiling, not split, `size:exception`** — a split along the `Edit`/`PlanEdit` seam was attempted (PRs #108/#109) and rejected by `docs-sync`: `Edit` alone touches `internal/core/**` with no doc 02 delta of its own, since an opaque type with three accessors has no behaviour to document — the delta belongs entirely to `PlanEdit`. See Conflicts §C2 |
 | 12d | ~380, 153 measured (0.4×) | **High forecast, did not materialize** — two single-column `UPDATE`s reusing `UpdateContent`'s and `requireRowAffected`'s existing shape, and one contract case shared by both `memrepo` and `internal/store/sqlite` rather than one case per implementation, kept this well under its own ceiling. Recorded so a future High-risk store-adapter link is not read as "this class always overruns" — `12c`'s overrun and `12d`'s undershoot are both true at once. PR #111 |
-| 12e | ~400 | **High** — at the ceiling; a brand-new port plus its first L3 case |
+| 12e | ~400, 626 measured (1.57×) | **High, over the ceiling, not split, `size:exception`** — a layer seam (`ports`+L2 fake in one PR, `sqlite`+L3 in a second) was evaluated and rejected: unlike `12c`, `docs-sync` does not apply (no `internal/core/**` file touched, no D13 doc row), but C11's "answered twice, same PR" rule does — splitting would leave `main`'s `SignalRepo` contract answered only by the fake between the two PRs. See Conflicts §C3 |
 | 12f-i | ~260 | Medium — the audit-ordering half of a pre-split High-risk parent |
 | 12f-ii | ~180 | Low–Medium |
 | 13a | ~380 | Medium–High — the recall-embedder addition plus three orphan-action wirings |
