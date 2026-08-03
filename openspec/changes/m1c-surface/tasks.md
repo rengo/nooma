@@ -39,15 +39,25 @@ discover later:
   doc" to satisfy a line counter, which is not what the ceiling protects). Flagged High-risk
   stop-and-report instead.
 
-Nineteen merge links, in order: `12a, 12b, 12c, 12d, 12e, 12f-i, 12f-ii, 13a, 12g, 13b, 13c, 13d,
-17, 15, 16a-i, 16a-ii, 16b, 14a, 14b`.
+**`12c` was split in flight, after `sdd-apply` measured it at 501 changed lines (1.25× its own
+~400 ceiling), into `12c-i`/`12c-ii`.** Unlike `12f`/`16a` above, this split was not drawn before
+any code existed — it was caught at PR-open time, which is exactly the failure mode the
+pre-splitting discipline exists to prevent, and is recorded here rather than only in the Review
+Workload Forecast below so the chain's own link count (now twenty, not nineteen) is legible from
+the top of this document. The seam: `Edit` is the type, `PlanEdit` is what produces it, so the
+type lands first (`12c-i`, ~166 lines) and the producer builds on it (`12c-ii`, ~341 lines). Both
+land comfortably under 400. See the Review Workload Forecast for the measured numbers.
+
+Twenty merge links, in order: `12a, 12b, 12c-i, 12c-ii, 12d, 12e, 12f-i, 12f-ii, 13a, 12g, 13b,
+13c, 13d, 17, 15, 16a-i, 16a-ii, 16b, 14a, 14b`.
 
 **`docs-sync.yml` fires per pull request, not per umbrella PR-number** (`m1b-pipeline` C9's own
 lesson). `spec.md` R1.13/R7.2 say umbrella "PR 12" needs no *new* prose because doc 02 §5 step 4
-and §13 already carry Q3c's answer — but `12a`, `12b` and `12c` are three separate pull requests,
-and `design.md` D13 pre-assigns each of them (and every other core- or doc-adjacent slice) its own
-real delta so none reaches `docs-sync.yml` needing `no-spec-change`. Every task below that carries
-a doc delta cites D13's row for its own slice.
+and §13 already carry Q3c's answer — but `12a`, `12b`, `12c-i` and `12c-ii` are four separate pull
+requests, and `design.md` D13 pre-assigns each doc-adjacent slice its own real delta so none
+reaches `docs-sync.yml` needing `no-spec-change`; `12c-i` carries no doc delta at all (`edit.go`
+is a pure type with no invariant of its own), so `12c-ii` alone carries the `12c` row's delta.
+Every task below that carries a doc delta cites D13's row for its own slice.
 
 **Strict TDD is active** (`CLAUDE.md` non-negotiable #4) and **is no longer backed by a Makefile
 target** — `make pending-red` was retired in `714934e`, confirmed absent from this repository as
@@ -122,7 +132,7 @@ flag, so the skill's stated outcome ("merged branches are kept") does not hold f
 repository while that setting stays on, chained or not. Named here rather than picked silently.
 **Until the maintainer scopes `nooma-pr`'s rule (e.g., "kept, except inside a stacked-PR chain, where
 `delete_branch_on_merge` governs instead"), this task list treats the repository setting as
-authoritative for the nineteen links below**, because it is the one that makes the retarget
+authoritative for the twenty links below**, because it is the one that makes the retarget
 mechanism this chain depends on actually work, and because the setting is what the owner's own
 post-incident fix changed.
 
@@ -131,12 +141,12 @@ post-incident fix changed.
 ## Merge order and per-link verification
 
 **Order** (respecting every dependency in the Dependencies list further below; `12d`/`12e` may
-merge in either order relative to each other and to `12a`–`12c`; `17` may merge at any point before
-`15`, including in parallel with `12a`, per `design.md`'s own note — *"17 can go at any time before
-15... a parallel worktree could take it while 12a is in review"*):
+merge in either order relative to each other and to `12a`–`12c-ii`; `17` may merge at any point
+before `15`, including in parallel with `12a`, per `design.md`'s own note — *"17 can go at any time
+before 15... a parallel worktree could take it while 12a is in review"*):
 
 ```
-12a → 12b → 12c → (12d, 12e independent) → 12f-i → 12f-ii → 13a → 12g → 13b → 13c → 13d
+12a → 12b → 12c-i → 12c-ii → (12d, 12e independent) → 12f-i → 12f-ii → 13a → 12g → 13b → 13c → 13d
   → (17, anywhere before 15) → 15 → 16a-i → 16a-ii → 16b → 14a → 14b
 ```
 
@@ -147,15 +157,24 @@ trust the inherited claim that it is on; confirm it fresh, the same discipline
 setting is not mechanically re-verifiable by any Makefile target and can be changed by anyone with
 admin access between sessions.
 
-**Before opening any one of the nineteen links' PRs:** default its base to `main` whenever every
+**Before opening any one of the twenty links' PRs:** default its base to `main` whenever every
 dependency it lists is already merged — a PR based on `main` needs no retarget at all, the only
 unconditionally safe state to be in when merges happen quickly. Base a link's branch on an
 immediate predecessor's still-open branch only when this link's own code genuinely cannot compile
 without that predecessor's uncommitted-to-main state (true git stacking) — in this chain, that is
-`12a→12b→12c` (three files added to the same new `core/correction` package skeleton in immediate
-sequence) and `12f-i→12f-ii` (the second link's code calls into the first's). Every other adjacent
-pair in the order above lists a dependency that is expected to already be on `main` by the time the
-next link starts, per the Dependencies section, and should be branched from `main`.
+`12a→12b→12c-i` (three files added to the same new `core/correction` package skeleton in immediate
+sequence) and `12f-i→12f-ii` (the second link's code calls into the first's).
+
+**`12c-i→12c-ii` is a named exception to that same rule, not an application of it.**
+`plan.go`'s `PlanEdit` calls `NewEventAtEdit`/`NewDueAtEdit`/`NewContentEdit` — `12c-ii`'s code
+cannot compile against a `main` that lacks `12c-i`'s `Edit` type, the same shape that put
+`12a→12b→12c-i` under true git stacking above. The coordinator directed `12c-ii` to branch from
+`main` anyway, not from `12c-i`'s still-open branch, accepting that `12c-ii`'s own CI cannot go
+green until `12c-i` merges first — "before `12c-ii`'s checks matter." Recorded here because it
+reads as a contradiction of the paragraph above on a first pass; it is not one applied by mistake.
+Every other adjacent pair in the order above lists a dependency that is expected to already be on
+`main` by the time the next link starts, per the Dependencies section, and should be branched from
+`main`.
 
 **After every merge in this chain, not only the first:**
 
@@ -172,7 +191,7 @@ next link starts, per the Dependencies section, and should be branched from `mai
 
 **Never merge two links of this chain within the same short window without step 2 between them.**
 The 2026-08-01 incident this instruction is built to prevent: a three-link stack (the shape
-`12a→12b→12c` most resembles in this chain) merged in about three minutes, and two of the three
+`12a→12b→12c-i` most resembles in this chain) merged in about three minutes, and two of the three
 links landed in the wrong place — `#72` merged into `feat/core-classify-salvage` and `#73` into
 `feat/core-classify-vocab` instead of both reaching `main`, and `main` kept 274 of the stack's 1565
 lines. The root cause was `delete_branch_on_merge` being off, so GitHub never retargeted the
@@ -186,7 +205,8 @@ exist specifically to keep that precondition from recurring silently.
 ```
 internal/core/recall/fuse.go              + FusedCandidate, FuseScored; Fuse a projection   12a
 internal/core/correction/  (NEW)          doc.go, referent.go                               12b
-                                           edit.go, plan.go                                  12c
+                                           edit.go                                          12c-i
+                                           plan.go                                          12c-ii
 internal/ports/unitrepo.go                + UpdateEventAt, UpdateDueAt                       12d
 internal/ports/signalrepo.go  (NEW)                                                          12e
 internal/ports/decisionlog.go             + ActionCorrectionApplied/Ambiguous               12f-i
@@ -278,41 +298,21 @@ Depends on `12a` (imports `recall.FusedCandidate`).
 
 ---
 
-## PR 12c — `feat/core-correction-plan` (~400 — at the ceiling; High risk, see forecast)
+## PR 12c-i — `feat/core-correction-edit` (~166, first half of the in-flight-split `12c`: the
+`Edit` type)
 
 Depends on `12b` (same new `core/correction` package).
 
-- [ ] **12c.1** Test first: `internal/core/correction/edit_test.go` — `AllFields()` completeness:
+- [x] **12c-i.1** Test first: `internal/core/correction/edit_test.go` — `AllFields()` completeness:
       for each `Field`, exactly one accessor reports true. **Red**: `undefined: correction.Field`,
       `undefined: correction.Edit`.
       Implement `edit.go`: `Field`, `FieldContent`/`FieldEventAt`/`FieldDueAt`, `AllFields()`, the
       opaque `Edit` type plus its three constructors and three accessors.
       Verify: `make test`.
       Requirement: R1.8 (the edit-plan shape); design D3.
-- [ ] **12c.2** Test first: `internal/core/correction/plan_test.go` — every row of R1.8's table
-      (event-only, due-only, content-fallback, both-dates → ask, no-date-no-content → ask); the
-      explicit scenario a date-carrying correction leaves content byte-for-byte untouched. **Red**:
-      `undefined: correction.PlanEdit`.
-      Implement `plan.go`: `PlanEdit(c classify.Classification) ([]Edit, bool)`.
-      Verify: `make test`; `golangci-lint run` (confirm `core/correction` importing `core/classify`
-      stays inside `depguard`'s allowed prefix).
-      Requirement: R1.8; design D3.
-- [ ] **12c.3** L2: `test/conformance/` — `PlanEdit` over the corpus's correction cases produces the
-      field each case implies; add one new due-date correction case under
-      `testdata/classify/cases/`, following `m1b-pipeline`'s own "written once, used in two places"
-      discipline.
-      Verify: `go test ./test/conformance/...`.
-      Requirement: R1.8's own Verified-by; design §7 test matrix (`12c` row).
-- [ ] **12c.4** doc 02 §5 step 4 delta: which column a correction writes (C2/C6's closed gap), and
-      that two dated fields ask.
-      Verify: read the section; `docs-sync.yml`.
-      Requirement: design D13 (`12c` row).
-- [ ] **12c.5** Purity/coverage — ≥ 90 % for `internal/core/correction` now that it holds real
-      branching logic.
-      Verify: `golangci-lint run`; `make cover`.
-      Requirement: R1.14.
-- [ ] Verify (PR-level): `make check-all`; confirm `depguard`/`forbidigo` clean over the whole new
-      `correction/` package.
+- [x] Verify (PR-level): `make check-all`; confirm this PR's diff is
+      `internal/core/correction/edit.go` and `edit_test.go` only — `PlanEdit` is `12c-ii`'s job,
+      built on this type once it merges.
 
 ---
 
