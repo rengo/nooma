@@ -19,16 +19,18 @@ import (
 // as an example ('capture.classify', 0001:97).
 type DecisionAction string
 
-// The twelve members of the DecisionAction vocabulary — design D9, plus
+// The fourteen members of the DecisionAction vocabulary — design D9, plus
 // ActionCaptureDedupFailed (C14a: a judge-provider outage degrades the
 // capture the same way ActionCaptureEmbeddingFailed already does for an
 // embedding-provider outage, a decision D8 made and this one mirrors rather
-// than re-argues). Order matches design D9's own declaration for its
-// original eleven — the eight capture-time actions spec R4.5/R4.6/R4.7 and
-// Q3a's refusal name, then the three relation-judging actions design D7
-// names — with the twelfth appended after its nearest sibling,
-// ActionCaptureEmbeddingFailed, rather than reordering the eleven design D9
-// already fixed.
+// than re-argues) and, design D5, ActionCorrectionApplied/
+// ActionCorrectionAmbiguous — the sanctioned R7.4 edit to this file for
+// PR 12f-i's correction-audit slice. Order matches design D9's own
+// declaration for its original eleven — the eight capture-time actions spec
+// R4.5/R4.6/R4.7 and Q3a's refusal name, then the three relation-judging
+// actions design D7 names — with the twelfth appended after its nearest
+// sibling, ActionCaptureEmbeddingFailed, and the two correction actions
+// appended last, rather than reordering what design D9 already fixed.
 const (
 	ActionCaptureClassify           DecisionAction = "capture.classify"
 	ActionCaptureUnparseable        DecisionAction = "capture.classify.unparseable"
@@ -42,9 +44,16 @@ const (
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
 	ActionRelationDuplicateRecorded DecisionAction = "relation.duplicate.recorded"
+	// ActionCorrectionApplied carries ADR-0016's pre-image: written before
+	// the edit it describes, never after (design D5).
+	ActionCorrectionApplied DecisionAction = "correction.applied"
+	// ActionCorrectionAmbiguous records a decision with no vault effect —
+	// the referent gate or the edit plan asked instead of picking (design
+	// D2/D3, m1b D7's precedent for a discard that still explains itself).
+	ActionCorrectionAmbiguous DecisionAction = "correction.ambiguous"
 )
 
-// AllDecisionActions returns a fresh slice holding the twelve
+// AllDecisionActions returns a fresh slice holding the fourteen
 // DecisionAction vocabulary members, in the order the constants above
 // declare them.
 //
@@ -58,6 +67,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureDiscarded, ActionCaptureUnitCreated, ActionCaptureEmbeddingFailed,
 		ActionCaptureDedupFailed, ActionCaptureHookDeferred, ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
+		ActionCorrectionApplied, ActionCorrectionAmbiguous,
 	}
 }
 

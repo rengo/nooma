@@ -217,6 +217,25 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
      into the decision's own glass-box row separates the two: the instruction is honoured, and the
      inference stays reversible. The row is written first — if it fails, the edit does not happen.
+     - **The pre-image's shape**, settled by the PR that implements it, since ADR-0016 leaves its
+       exact keys open: one `correction.applied` row whose `context` carries
+       `{unit_id, fields, previous, next, referent}`, `previous`/`next` objects keyed by column
+       name (never by position, so a reader never consults a tag to know what a value means) —
+
+       ```json
+       {
+         "unit_id": "u-8f1c…",
+         "fields": ["event_at"],
+         "previous": { "event_at": "2026-08-14T09:00:00-03:00" },
+         "next":     { "event_at": "2026-08-15T09:00:00-03:00" },
+         "referent": { "source": "recall", "score": 0.0328, "runner_up_score": 0.0164, "margin": 2.0 }
+       }
+       ```
+
+       `previous.event_at` is `null` when the column was empty before the edit. `referent.source`
+       is `"recall"` or `"explicit"`; the three score keys are **omitted** on the explicit path
+       rather than written as zeros — an absent key is the truth, a zero score is a claim nobody
+       computed.
    - Recording is not undoing. The previous value is retrievable; no surface offers it back until
      the UI exists.
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a

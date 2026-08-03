@@ -20,6 +20,12 @@ type DecisionLog struct {
 	// instant.
 	order []string
 	byID  map[string]ports.Decision
+	// failRecord, when non-nil, makes every Record call return it without
+	// touching state — design D5 Layer 3's RED-first audit-failure test
+	// (I23): a correction whose pre-image write fails must leave the target
+	// unit untouched. Set via NewFailingDecisionLog, following
+	// fakeprovider.NewEmbeddingFakeWithError's own "WithError" shape.
+	failRecord error
 }
 
 // Assert at compile time, following internal/store/sqlite/unitrepo.go:33's
@@ -32,6 +38,13 @@ func NewDecisionLog() *DecisionLog {
 	return &DecisionLog{byID: make(map[string]ports.Decision)}
 }
 
+// NewFailingDecisionLog returns an in-memory ports.DecisionLog whose Record
+// always fails with err, never persisting anything — design D5 Layer 3's
+// audit-write-failure double.
+func NewFailingDecisionLog(err error) *DecisionLog {
+	return &DecisionLog{byID: make(map[string]ports.Decision), failRecord: err}
+}
+
 // Record implements ports.DecisionLog. It returns ports.ErrDecisionExists
 // on a duplicate id, mirroring decision_log.id's PRIMARY KEY (0001:96) —
 // the fake enforces this deliberately rather than silently upserting,
@@ -42,6 +55,9 @@ func (r *DecisionLog) Record(_ context.Context, d ports.Decision) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if r.failRecord != nil {
+		return r.failRecord
+	}
 	if _, exists := r.byID[d.ID]; exists {
 		return ports.ErrDecisionExists
 	}
