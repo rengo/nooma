@@ -487,12 +487,13 @@ which is `12f-i`'s C6 shape, not `13a`'s C10 shape — two different reasons thi
 named separately for declining an evaluated seam, worth keeping distinct rather than merging into one
 generic "not split" note.
 
-### C13 — `13b`: `design.md` §5.1's wire-shape illustration predates `12g`'s shipped `Correction`/`CaptureResult.Recalled` shape, and `internal/httpapi`'s own sanctioned import list has no way to distinguish a provider failure from a store failure. Resolved by rendering what is actually available and documenting both gaps rather than silently inventing data or widening scope.
+### C13 — `13b`: `design.md` §5.1's wire-shape illustration predates `12g`'s shipped `Correction`/`CaptureResult.Recalled` shape, `internal/httpapi`'s own sanctioned import list has no way to distinguish a provider failure from a store failure, and a real, live denial-of-service gap in `13b`'s own first submission — a nil `Deps.Capture` reaching an authenticated request panicked the process. The first three findings are resolved by rendering what is actually available and documenting both gaps rather than silently inventing data or widening scope; the fourth is a real defect, closed in this PR rather than deferred.
 
-Three small, related findings from implementing `13b`'s own response rendering, all resolved by
+Four small, related findings from implementing `13b`'s own response rendering, three resolved by
 rendering what the shipped Go types actually carry rather than the design document's own
 illustrative JSON, following this chain's established C1/C9/C10/C11/C12 pattern (a document's own
-worked example can predate a later decision that superseded it, and the later decision wins).
+worked example can predate a later decision that superseded it, and the later decision wins); the
+fourth is not a documentation drift at all, and is recorded separately below.
 
 1. **`design.md:1491-1495`'s own `corrected`/`asked` JSON examples show fields
    (`referent`, `question`, `candidates`) that `12g`'s shipped `brain.Correction`
@@ -533,6 +534,33 @@ worked example can predate a later decision that superseded it, and the later de
    typed distinction between a provider outage and a store failure at its own package boundary —
    for whoever next revises `CaptureService.Capture`'s error contract, not solved unilaterally by
    widening `internal/httpapi`'s import list in this PR.
+4. **A real defect, not a documentation drift: `13b`'s own first submission left an authenticated
+   request one nil pointer away from a process crash.** `cmd/nooma/serve.go` leaves `Deps.Capture`
+   nil until `13d`'s own full wiring (the same transitional state finding 3 above already names),
+   and `captureHandler`'s first submission called `d.Capture.Capture(...)` with no nil check —
+   caught in review, not by any test this PR had written, because every existing handler test
+   supplies a real `*brain.CaptureService`. On `main`, in the window between `13b` merging and
+   `13d` merging, a request that **passed** `requireToken`'s own check (this PR's entire security
+   contribution) would nil-panic the server: a live, trivial denial of service against anyone who
+   builds `main` in that window, worse than an ordinary bug because the request that triggers it is
+   the *correct* one, on a public repository. Non-negotiable #7 — safe defaults are structural, not
+   warnings — applies here exactly as it does to the auth guard itself: a code comment saying
+   "stays nil until 13d" is a warning, not a guard.
+   **Resolution, closed in this PR, not deferred to `13d`:** `captureHandler` now checks
+   `d.Capture == nil` before decoding the request body at all, and answers `503 Service
+   Unavailable` with a detail-free body (`{"error":"capture is not wired in this build"}`) — 503,
+   not 500 (nothing went wrong; this build simply does not carry the dependency yet) and not 404
+   (the route does exist). `TestCaptureHandler_UnwiredCaptureServiceReturns503` pins it; validated
+   by breaking (the check removed, the test reproduced the exact same nil-pointer panic
+   `capture.go:106` originally threw, reverted, `git diff --stat` confirmed empty). **The more
+   structural fix — `Handler` refusing to build at all over an incomplete `Deps` — was considered
+   and rejected on purpose**: it would churn `Handler`'s own signature and the guarded-mux tests
+   this PR already built and proved (`TestGuardedRoutesRequireToken`,
+   `TestOpenRoutesStayOpenRegardlessOfToken`), for a benefit small next to an honest per-request
+   503; recorded in `capture.go`'s own comment so the next reader knows the cheaper option was
+   chosen deliberately, not overlooked. The nil branch is not scheduled for removal once `13d`
+   lands — once every `Deps` a caller builds is complete it simply becomes unreachable, and it
+   stays as the structural answer to a future refactor leaving some other dependency unwired again.
 
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
@@ -1194,7 +1222,16 @@ Depends on (`12g`, `13a`).
       `TestRequireTokenNoOpOnlyOnLoopback`'s own non-loopback row (`an unauthenticated request
       reached the handler = true, want false`); (3) removed `OutcomeDiscarded`'s case from the
       status switch — `TestAllCaptureOutcomesHaveAStatusMapping` failed with `has no status mapping
-      (renderCaptureResult returned status 0)` and `checked 5 outcomes, want 6`.**
+      (renderCaptureResult returned status 0)` and `checked 5 outcomes, want 6`.
+      **Post-review fix (Conflicts §C13 finding 4): the transitional `Deps.Capture == nil` state
+      this PR's own first submission left as a code comment was a live nil-pointer-panic denial of
+      service reachable by an authenticated request — closed in this PR rather than deferred to
+      `13d`. `captureHandler` now returns `503 Service Unavailable` for a nil `Capture`, test-first
+      (`TestCaptureHandler_UnwiredCaptureServiceReturns503`, red confirmed as the exact same panic
+      `capture.go:106` originally threw); validated by breaking (the check removed, the identical
+      panic reproduced, reverted, `git diff --stat` empty). Updated measurement: 1046 changed lines
+      (995 insertions, 51 deletions) code-only, 2.32× the ~450 ceiling; `make check-all` re-run
+      green end to end after the fix.**
 
 ---
 

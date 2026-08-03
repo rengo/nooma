@@ -92,7 +92,10 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// the services themselves into this command — this PR's job is only that
 	// Handler exists and every API route it mounts is guarded (ADR-0017);
 	// wiring a real *brain.CaptureService here is 13d's own scope (design D10,
-	// design.md §6's chain table).
+	// design.md §6's chain table). A nil Capture reaching a live request is
+	// not a crash: captureHandler checks for it and answers 503, so this
+	// binary honestly reports "not wired yet" instead of taking the process
+	// down for the caller who did everything right.
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Token: token}),

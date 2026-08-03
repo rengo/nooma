@@ -116,6 +116,34 @@ func TestCaptureHandler_StoresAnOrdinaryCapture(t *testing.T) {
 	}
 }
 
+// TestCaptureHandler_UnwiredCaptureServiceReturns503 pins the fix for the
+// nil-dependency gap the coordinator caught: cmd/nooma/serve.go leaves
+// Deps.Capture nil until 13d wires providers/repos/Index/services into it.
+// An authenticated POST /capture reaching a build in that transitional state
+// must not panic the process (a live, trivial denial of service against
+// anyone building main in that window) — it must answer honestly that this
+// endpoint is not wired in this build. 503, not 500 (nothing went wrong) and
+// not 404 (the route exists), with no more detail than that.
+func TestCaptureHandler_UnwiredCaptureServiceReturns503(t *testing.T) {
+	t.Parallel()
+
+	h := Handler(Deps{Version: "test"}) // Capture is nil, deliberately.
+
+	rec := postCapture(t, h, `{"text": "irrelevant — Capture is nil, this must never reach it"}`)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v; body = %s", err, rec.Body.String())
+	}
+	if _, ok := got["error"]; !ok {
+		t.Errorf("response has no error field: %s", rec.Body.String())
+	}
+}
+
 // TestCaptureHandler_TimerRefusalSurfacesPlainWordsVerbatim is R2.2's own L2
 // test: a timer-classified message's refusal is distinguishable from every
 // other outcome and carries the refusal's plain-words message verbatim —

@@ -88,6 +88,32 @@ func renderUnit(u unit.Unit) unitResponse {
 // brain/core before renderCaptureResult ever runs.
 func captureHandler(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// d.Capture is nil whenever a caller has not wired production
+		// dependencies yet — cmd/nooma/serve.go's own transitional state
+		// until 13d's full wiring lands (providers/repos/Index/services).
+		// Without this check, an AUTHENTICATED request in that window
+		// reaches d.Capture.Capture on a nil receiver and panics the whole
+		// process: a trivial denial of service against anyone who builds
+		// main between 13b and 13d landing, and worse than an ordinary bug
+		// because the request that triggers it is the correct one. 503, not
+		// 500 (nothing went wrong — this build just does not have the
+		// dependency) and not 404 (the route exists); no more detail than
+		// that, matching every other error response this handler writes.
+		//
+		// The more structural fix — refusing to build Handler at all when
+		// Deps is incomplete — was considered and rejected here on purpose:
+		// it would churn Handler's own signature and the guarded-mux tests
+		// already proven against it, for a benefit small next to an honest
+		// per-request 503. This check is not a placeholder scheduled for
+		// removal once 13d wires the real services — once every Deps a
+		// caller builds is complete, this branch is simply unreachable, and
+		// it stays as the structural answer to "what if a future refactor
+		// leaves a dependency unwired again."
+		if d.Capture == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "capture is not wired in this build"})
+			return
+		}
+
 		var req captureRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the request body is not valid JSON"})

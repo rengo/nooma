@@ -22,8 +22,9 @@ type Deps struct {
 	// (spec R2.1's own MUST: "internal/httpapi... calls brain.CaptureService.Capture
 	// unchanged"). Nil in a caller that has not wired production dependencies
 	// yet (cmd/nooma/serve.go's own transitional state until 13d's full
-	// wiring lands) — Handler itself never dereferences it; only a request
-	// that reaches captureHandler does.
+	// wiring lands) — captureHandler checks for nil before every call and
+	// answers 503 rather than reaching it; a nil Capture is never a crash,
+	// on this build or any future one that leaves it unwired.
 	Capture *brain.CaptureService
 	// Recall is unused by this PR — POST /recall and the read-only unit
 	// routes are 13c's — carried here now because design D10's own struct
