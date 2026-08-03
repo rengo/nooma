@@ -254,7 +254,7 @@ slice with no dependency, and it unblocks both `12b` and `13a`.**
 
 Depends on `12a` (imports `recall.FusedCandidate`).
 
-- [ ] **12b.1** Test first: `internal/core/correction/referent_test.go` — zero candidates → `("",
+- [x] **12b.1** Test first: `internal/core/correction/referent_test.go` — zero candidates → `("",
       false)`; one candidate → `(id, true)`; ratios at `1.4999`, `1.5`, `1.5001` (the boundary,
       pinned inclusive on the pick side); a margin ≤ 1 documented as vacuous, not guarded; a third
       candidate that would flip the answer if it participated, asserting it does not. **Red**:
@@ -264,17 +264,17 @@ Depends on `12a` (imports `recall.FusedCandidate`).
       Verify: `make test`; `golangci-lint run` (`depguard`'s `core-purity` allows this new package
       only stdlib + the `internal/core` prefix — confirm no other import).
       Requirement: R1.3, R1.4; design D2.
-- [ ] **12b.2** `docs/06-harness.md` §1's package tree gains the `correction/` line.
+- [x] **12b.2** `docs/06-harness.md` §1's package tree gains the `correction/` line.
       Verify: read the section.
       Requirement: design D13 (`12b` row).
-- [ ] **12b.3** doc 02 §5 step 4 delta: the gate's boundary is inclusive, applied to the **live**
+- [x] **12b.3** doc 02 §5 step 4 delta: the gate's boundary is inclusive, applied to the **live**
       candidates.
       Verify: read the section; `docs-sync.yml`.
       Requirement: design D13 (`12b` row).
-- [ ] **12b.4** Purity/coverage.
+- [x] **12b.4** Purity/coverage.
       Verify: `golangci-lint run`; `make cover`.
       Requirement: R1.14.
-- [ ] Verify (PR-level): `make check-all`.
+- [x] Verify (PR-level): `make check-all`.
 
 ---
 
