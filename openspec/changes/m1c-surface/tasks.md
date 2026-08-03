@@ -941,7 +941,7 @@ added `1e5fe71`), both predating this chain's own `16a-i`/`16a-ii` links. Checke
 corpus as it stands today rather than assumed present: `TestCorpusCoversEveryQualityGateTask`
 asserts the coverage directly, and no case needed adding.
 
-### C21 — `16b`: design's own `embedding` degrade wording is stale against `13d`'s own fail-closed wiring, and was corrected in code before merge (C21.1); `TestDoctorMakesNoNetworkCall`'s fixture was the exact C9 shape D18b row 1 now catches; and `16b` measured 473 changed lines against its own ~330 ceiling (1.43×)
+### C21 — `16b`: design's own `embedding` degrade wording is stale against `13d`'s own fail-closed wiring, and was corrected in code before merge (C21.1); `TestDoctorMakesNoNetworkCall`'s fixture was the exact C9 shape D18b row 1 now catches; and `16b` measured 485 changed lines against its own ~330 ceiling (1.47×)
 
 **First finding: design D18b row 1's own quoted `embedding` message describes a soft degrade
 `resolveTaskProviders` (`cmd/nooma/wiring.go`, `13d`) no longer produces.** Design's table (and this
@@ -1015,14 +1015,16 @@ at all, only local), `embedding` to the original unreachable `ollama` entry (whi
 never touches). Confirmed the fixed fixture still passes the test's own "no reachable/unreachable/
 connect/hardware" assertions.
 
-**Third, a size measurement.** The complete, green `16b` PR measures 473 changed lines against its
-own ~330 ceiling (1.43×, the widest overrun ratio this chain has recorded) — split across two
+**Third, a size measurement.** The complete, green `16b` PR measures 485 changed lines against its
+own ~330 ceiling (1.47×, the widest overrun ratio this chain has recorded — up from an initial 473
+lines/1.43× before the C21.1 wording fix below added a fourth work-unit commit) — split across four
 work-unit commits: `internal/ports/embeddingrepo.go` (22), `internal/store/sqlite/embeddingrepo.go`
 (21), `internal/store/sqlite/embeddingrepo_integration_test.go` (51), `test/support/memrepo/embeddings.go`
 (41), `test/support/repocontract/embeddingrepo.go` (42), `testdata/schema/store_api.golden` (1) —
-172 lines for D18b row 2's mechanism — and `cmd/nooma/doctor.go` (133), `cmd/nooma/doctor_test.go`
-(104), `cmd/nooma/tasks_test.go` (34), `docs/03-data-model.md` (5), `test/e2e/doctor_test.go` (19) —
-295 lines for `doctor`'s own reporting of both rows plus D18a's third-reader test.
+172 lines for D18b row 2's mechanism — and `cmd/nooma/doctor.go`, `cmd/nooma/doctor_test.go`,
+`cmd/nooma/tasks_test.go` (34), `docs/03-data-model.md` (5), `test/e2e/doctor_test.go` (19) — the
+remainder for `doctor`'s own reporting of both rows plus D18a's third-reader test, including the
+C21.1 correction commit.
 
 **A candidate seam exists and was evaluated before choosing not to take it**: PR A — row 2's
 mechanism (`CountLiveWithoutEmbedding` port method, both store answers, golden) *plus*
@@ -2104,8 +2106,9 @@ larger-branch estimate.**
       link touches no `internal/core` file), seven-target cross-compile, L4 e2e (all 6
       `test/e2e/doctor_test.go` cases green with `-count=1`, including the updated
       `TestDoctorMakesNoNetworkCall` fixture). `git diff main..HEAD -- internal/ports/embeddingrepo.go`
-      confirmed: exactly the one new method, nothing else in that file changed. See Conflicts §C21
-      for the measured size (473 lines, 1.43×) and all three break experiments run and reverted.**
+      confirmed: exactly the one new method, nothing else in that file changed. Re-run green after
+      the C21.1 wording fix. See Conflicts §C21/§C21.1 for the measured size (485 lines, 1.47×,
+      up from 473/1.43× before the fix) and all three break experiments run and reverted.**
 
 ---
 
