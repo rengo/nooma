@@ -1,0 +1,8 @@
+{
+  "id": "classify-out-of-scope-weather",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "prompt": "Classify this message: \"what's the weather like tomorrow?\"",
+  "response": "{\"type\":\"out_of_scope\",\"normalized_content\":\"what's the weather like tomorrow?\",\"weight\":0.1,\"decay_rate\":0.5}"
+}

@@ -315,6 +315,82 @@ call site reaches it, so the two cannot land as separate reviewable units either
 `size:exception` applied via `gh pr edit <n> --add-label "size:exception"`, verified stuck (see the
 PR record below).
 
+### C9 — `13a.1`/`13a.2`'s own prose names things `13a`'s file-ownership table and PR-verify checklist both assign to `12g`. Resolved in the file table's favor; both tasks read narrower than their literal words.
+
+Two separate spots inside link `13a`'s own task block disagree with the rest of the same document.
+
+**First, `13a.2`'s own words**: "chitchat/out_of_scope classification → `OutcomeDiscarded`, one
+`capture.discarded` row." `OutcomeDiscarded` is a member of the `CaptureOutcome` closed vocabulary
+design D8 defines — and the package-layout table (line ~413) assigns `internal/brain/result.go`
+("`CaptureOutcome`, `CaptureResult` reshaped, `Correction`") to `12g` alone, never `13a`. `13a`'s own
+PR-level verify line confirms this by omission: the files it requires the diff to touch are
+`recall.go`, capture.go's discarded/unparseable/unclassifiable arms, and `docs/06-harness.md` —
+`result.go` is not among them. `12g` depends on `13a` (not the reverse), so `13a` cannot reference a
+type `12g` has not created yet.
+
+**Second, `13a.1`'s own words**: "one text driven once through `CaptureService` (classified
+`recall`) and once through `RecallService.ForText`." `13a`'s own PR-verify line says the diff touches
+"the discarded/unparseable/unclassifiable arms of `internal/brain/capture.go`'s routing fork (not the
+correction/recall `Kind` forks — those are `12g`'s)" — so the routing fork that would let a
+`recall`-classified capture reach `RecallService` through `CaptureService.Capture` itself does not
+exist until `12g` merges. The task's own stated RED — `undefined: brain.RecallService.ScoredFor`,
+`undefined: ...ForText` — is compile-only, consistent with a test that never depends on that fork.
+
+**Resolution, in the file table's favor both times, because it is the more mechanically binding
+statement** (an exhaustive file list a PR-level `Verify` step checks, versus descriptive prose):
+
+- The discard path returns `CaptureResult{Stored: false}` — the existing struct, no new field —
+  distinguishable from the timer refusal by its nil `Deferred` (that path already sets a non-nil
+  one). `12g.5`'s own task text already prices this exactly: "Phase B tests asserting `Stored:
+  true/false` are edited in this PR to assert `Outcome` instead (assertion-renaming only...)" — this
+  PR's own new discard test is one more such assertion for `12g.5` to rename, not a scope change for
+  either link.
+- I22's conformance test proves the "one mechanism" property directly against
+  `RecallService.ForText`/`ScoredFor`, through two call sites shaped exactly like each future caller
+  (one reading a `CaptureInput.Text` field, one taking a bare query string) rather than through
+  `CaptureService.Capture` itself, which cannot yet route a `recall` classification anywhere. Once
+  `12g` and `13c` wire their own real entrances, both are constrained to call this same method with
+  this same raw-text argument — the property this test pins does not change shape when they do.
+
+Recorded so whoever reads `13a.1`/`13a.2` next does not spend the same time re-deriving that the
+package-layout table and the PR-verify checklist govern over the task's own descriptive sentence.
+
+### C10 — `13a` measured 471 changed lines against its own ~380 ceiling (1.24×); a mechanism/orphan-actions seam exists but is not taken, following this chain's own `size:exception` precedent
+
+`internal/brain/recall.go` (+93/-2), `internal/brain/capture.go` (+74/-9),
+`test/conformance/i22_recall_one_mechanism_two_entrances_test.go` (168, new),
+`test/conformance/capture_orphan_actions_test.go` (93, new),
+`test/conformance/recall_writes_no_decision_test.go` (+6/-1), three `testdata/llm/cases/*.json`
+fixtures (8 each), `docs/06-harness.md` (+1) — 471 lines across nine files, comment trimming already
+applied (the `recordDiscardedDecision`/`recordUnparseableDecision`/`recordUnclassifiableDecision`
+trio was collapsed into one shared `recordOrphanDecision` helper specifically to bring this number
+down before it was recorded here).
+
+**The candidate seam, along `13a.1`/`13a.2`'s own task boundary**: PR A — the recall mechanism
+(`recall.go`'s `ScoredFor`/`ForText`, `captureRunner`'s new `recall` field and the
+`NewCaptureService`/`recallCandidates` wiring it requires, the `recall_writes_no_decision_test.go`
+signature fix, the I22 test, the `docs/06-harness.md` row), roughly 275 lines. PR B — the three
+orphan actions (`capture.go`'s discard/unparseable/unclassifiable routing forks and
+`recordOrphanDecision`, the table test, the three fixtures), roughly 196 lines. Both halves would
+clear the ~380 ceiling individually (unlike `12f-i`'s C6 finding, where the smaller half alone still
+exceeded that link's own ceiling).
+
+**Not taken.** Splitting `13a` into two links would restructure a merge chain design.md and
+`tasks.md` both already fix at nineteen ordered links — `12g` is written to depend on "`12f-ii`,
+`13a`" as one unit, and this prompt's own framing names this link "eighth of nineteen." Renumbering
+the chain to insert a tenth-and-a-half link is a bigger decision than a single link should make on
+its own judgment (per this link's own instruction: "propose a seam; do not open two PRs on your own
+judgment"). At 1.24× the ceiling, this link's overrun is inside the range this chain has already
+absorbed with `size:exception` alone — tighter than `12e` (1.57×) and `12f-i` (2.37×), looser than
+`12c` (1.25×) and `12f-ii` (1.3×) only by a hair. `size:exception` applied via `gh pr edit <n>
+--add-label "size:exception"`, verified stuck.
+
+**Recorded as an available-but-declined seam**, not a rejected one, for whoever plans the next
+revision of this chain: if `13a` is ever re-cut, the mechanism half and the orphan-actions half are
+genuinely independent code paths (neither's tests import the other's production symbols) and both
+clear budget alone — the only cost of splitting here is chain restructuring, not a size or
+strict-TDD obstruction the way `12c`/`12f-i`/`12f-ii` each hit.
+
 ### A note on merge mechanics, not a spec/design conflict — flagged because it changes what "the same PR" safely means for every link below
 
 `nooma-pr`'s own Hard Rules state: *"Merging | `gh pr merge <n> --merge`. Do not delete the
@@ -733,7 +809,7 @@ numbering, called out explicitly rather than left implicit, in the same category
 `m1b-pipeline`'s C1 already named.** `12g`'s correction-referent resolution needs `ScoredFor`
 before it can be written at all, so `13a` must merge first.
 
-- [ ] **13a.1** Test first (I22, a new invariant — register it in `docs/06-harness.md` §4 before
+- [x] **13a.1** Test first (I22, a new invariant — register it in `docs/06-harness.md` §4 before
       writing this test, per `nooma-testing`'s execution step 2): `test/conformance/` — one text
       driven once through `CaptureService` (classified `recall`) and once through
       `RecallService.ForText`, asserting the two ordered candidate-id lists are equal; a second case
@@ -748,7 +824,7 @@ before it can be written at all, so `13a` must merge first.
       capture (fixing `capture.go:305`).
       Verify: `make test`.
       Requirement: I22 (new; R8.1's L2 assignment); design D9.
-- [ ] **13a.2** Wire the three orphan actions that are this phase's job to give callers, the
+- [x] **13a.2** Wire the three orphan actions that are this phase's job to give callers, the
       discard/unparseable/unclassifiable half (D8) that belongs with recall/routing rather than
       `12g`'s correction/outcome-vocabulary work: `chitchat`/`out_of_scope` classification →
       `OutcomeDiscarded`, one `capture.discarded` row; `Decode` returning `ErrNoFieldsSalvaged` →
@@ -757,14 +833,17 @@ before it can be written at all, so `13a` must merge first.
       Verify: `make test` — a conformance test per orphan action confirming it is now called
       outside `test/support/repocontract`.
       Requirement: design D8 (the three-orphan-actions half not owned by `12g`).
-- [ ] **13a.3** `docs/06-harness.md` §4 registers I22 before its test is written — confirm task
+- [x] **13a.3** `docs/06-harness.md` §4 registers I22 before its test is written — confirm task
       13a.1 followed this order.
       Verify: read the invariant table — I22 present with its doc 02 §5 step 2 reference.
       Requirement: design D14.
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` touches only
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` touches only
       `internal/brain/recall.go`, the discarded/unparseable/unclassifiable arms of
       `internal/brain/capture.go`'s routing fork (not the correction/recall `Kind` forks — those
-      are `12g`'s), and `docs/06-harness.md`.
+      are `12g`'s), and `docs/06-harness.md`. **As measured (C10): the production surfaces match
+      exactly; the diff also touches three test files and three JSON fixtures this sentence did not
+      enumerate, which is expected — tests travel with the behavior they prove
+      (`work-unit-commits`), not a second routing surface.**
 
 ---
 
