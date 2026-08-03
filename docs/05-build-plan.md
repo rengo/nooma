@@ -61,7 +61,42 @@ Prior decisions: **[ADR-0002](adr/0002-default-llm-preset.md)** (LLM preset),
   unsuitable **for that task**, never in general — a model can be excellent at chat and bad at
   JSON, and the user has to see that difference. Its prompt corpus is the same one that feeds the
   test golden files ([`06-harness.md`](06-harness.md) §5): written once, used twice.
-- **Demo**: capture via API/CLI, ask "what do you know about X?" and get a real recall.
+- **Demo**: capture via API/CLI, ask "what do you know about X?" and get a real recall. **Met on
+  Linux and Windows (2026-08-03, PR `feat/demo`).** `TestDemoCaptureAskCorrectionEndToEnd`
+  (`test/e2e/demo_test.go`) is *run*, not inferred, by the same required checks M0's own bullet
+  above names: `e2e` on `ubuntu-latest`, `e2e (windows)` on `windows-latest`, both on every PR. It
+  walks one vault through the full sequence in the order a user would: capture through the HTTP
+  API, capture through the compiled `nooma capture` CLI, a `/recall` query phrased as the demo's
+  own question, and one correction landing on the unit the query found — the composition no single
+  link's own narrower test (13d, 14a) proves by itself. Confirmed to fail naming the specific step
+  broken, not vaguely: three break/revert experiments (the API capture's status code, the
+  `/recall` query being ignored, the correction's explicit referent being dropped) each produced a
+  failure at the exact step broken, never at an unrelated assertion. The same sequence was also
+  walked once by hand against the real compiled binary, driven by shell commands rather than test
+  code, confirming the L4 test is not the only witness.
+
+  **What this demo does not cover, stated rather than implied — the same discipline M0's own bullet
+  set:**
+  - **The provider is a scripted-replay fake, not a live model.** Both the automated test and the
+    by-hand walkthrough above point `nooma.yml` at an in-process HTTP server that returns fixed,
+    hand-written JSON per request — the same posture every other L4 test in this repository already
+    takes (non-negotiable #5). This proves the wiring, the sequencing, and the response shapes; it
+    proves nothing about whether a real Anthropic/OpenAI/Ollama endpoint classifies well. The first
+    real confirmation of that is a human running the wizard's Cloud path with a live key — the same
+    limit `design.md`'s own §8 risk table already states for PR 17's wire shape.
+  - **This is not the wizard-configured Cloud path R4.2 names as M1's own exit criterion.** The
+    demo's `nooma.yml` is written directly, bypassing `nooma init`'s interactive wizard entirely —
+    the same shortcut every other L4 test since PR 13d already takes. It proves the capture/recall/
+    correction mechanism end to end; it does not exercise the Cloud provider path a real user's
+    `nooma init` run would configure.
+  - **`darwin` and every ARM target still have build coverage only** (ADR-0013) — unchanged from
+    M0, and this milestone adds no runner for either.
+  - **`.env`'s `0600` still means nothing on Windows** (present since M0, surfaced by PR 15,
+    `docs/01-architecture.md`'s own note) — a vault holding a real credential is not
+    filesystem-protected there the way it is on Linux/macOS.
+  - **No case anywhere in this demo is a `timer` or a `recurring_reminder`** (R3.3, Q3a's own "the
+    demo must not be shown a timer") — both captures classify as `task`, by construction of the
+    fixed fake responses driving them, and the correction never changes that.
 
 The last two are [ADR-0002](adr/0002-default-llm-preset.md)'s own deliverables, and they were
 missing from this list until 2026-07-31 — the ADR was `Accepted` on 2026-07-27 with no milestone
