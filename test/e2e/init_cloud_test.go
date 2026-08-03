@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -165,8 +166,17 @@ func TestInitCloudPathNeverWritesTheScriptedKeyValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf(".env permissions = %o, want 0600", perm)
+	// 0600 is owner-only on Unix (Linux, macOS) — verified there. Windows has
+	// no POSIX mode bits: os.Chmod toggles only the read-only attribute, not
+	// an ACL, so a mode-bit assertion there tests nothing real rather than
+	// testing something that fails. This IS a real, platform-specific
+	// limitation, not a test artifact — see docs/01-architecture.md's own
+	// "Vault structure" section, stated rather than implied, the same way
+	// docs/05-build-plan.md §M0 already states its own Windows-signal gap.
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf(".env permissions = %o, want 0600", perm)
+		}
 	}
 	envBytes, err := os.ReadFile(envPath)
 	if err != nil {
