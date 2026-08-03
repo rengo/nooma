@@ -38,7 +38,8 @@ demands them describes a different repository.
 | Slicing commits | Follow `work-unit-commits` |
 | `main` advanced while the PR sat | Rebase onto `origin/main` and `git push --force-with-lease`. Do not use GitHub's "Update branch" — it injects a merge commit into the diff |
 | Another session holds the working tree | `git worktree add` before building or testing; `make check-all` runs `TestSchemaGolden -update` and will overwrite in-flight golden edits |
-| Merging | `gh pr merge <n> --merge`. Do not delete the branch — merged branches are kept |
+| Merging | `gh pr merge <n> --merge`. The repository has `delete_branch_on_merge` **on**, so the branch is deleted automatically — do not fight it, and do not pass `--delete-branch` either |
+| Merging a chained PR | Merge links in dependency order, and after each one confirm the branch was deleted **and** that the next PR's base retargeted. See below |
 
 ## Execution Steps
 
@@ -50,6 +51,28 @@ demands them describes a different repository.
 5. Re-run `make check-all` after any rebase — zero textual conflicts does not prove the combined
    tree compiles.
 6. Wait for all checks. Merge only on `mergeStateStatus: CLEAN`.
+
+## Merging a Chain
+
+**GitHub only retargets a pull request's base when the base branch is deleted.** That single fact
+is the whole reason this section exists, and it is not a footnote.
+
+On 2026-08-01 a three-link chain (#71 → #72 → #73) merged in about three minutes and **two links
+landed in the wrong place**: #72 merged into `feat/core-classify-salvage` and #73 into
+`feat/core-classify-vocab` instead of both reaching `main`. `main` kept 274 of the chain's 1565
+lines. `delete_branch_on_merge` was off, so no base was ever deleted, so nothing retargeted, and
+every merge reported success.
+
+It is on now. That makes the mechanism work — it does not make it self-verifying. After merging
+each link:
+
+1. Confirm the merged branch is gone: `git ls-remote --heads origin <branch>` returns nothing.
+2. Confirm the next link retargeted: `gh pr view <next> --json baseRefName` names `main`, not the
+   branch just merged.
+3. Only then merge the next link.
+
+A chain that merges without step 2 reproduces the incident. Speed was not the cause — three
+minutes was fast enough to look fine and fast enough to land two PRs in the wrong branch.
 
 ## Output Contract
 
