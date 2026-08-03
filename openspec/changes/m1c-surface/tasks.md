@@ -374,7 +374,7 @@ overran in `m1a`/`m1b`)
 
 Depends on nothing beyond Phase A (independent of `12a`–`12c` and of `12e`).
 
-- [ ] **12d.1** Test first: extend the shared `repocontract` shape — `UpdateEventAt`/`UpdateDueAt`
+- [x] **12d.1** Test first: extend the shared `repocontract` shape — `UpdateEventAt`/`UpdateDueAt`
       driven with **two distinguishable instants** (the new value vs. the audit timestamp),
       asserting both columns independently and catching a swapped-argument call site; `ErrUnitNotFound`
       for an unknown id. **Red**: the interface addition fails to compile against `memrepo`'s fake
@@ -385,19 +385,28 @@ Depends on nothing beyond Phase A (independent of `12a`–`12c` and of `12e`).
       fake implements both.
       Verify: `go build ./...`; `make test`.
       Requirement: R1.7; design D4.
-- [ ] **12d.2** L3: `internal/store/sqlite/unitrepo.go` implements both methods against a real
+- [x] **12d.2** L3: `internal/store/sqlite/unitrepo.go` implements both methods against a real
       migrated vault, the same two-distinguishable-instants contract case answered again in SQLite
       — C11's lesson from `m1b-pipeline` ("answered twice — `memrepo` and `internal/store/sqlite`,
       in the same PR").
       Verify: `go test ./test/integration/... -tags integration`.
       Requirement: R1.12 (this port's half); design D4.
-- [ ] **12d.3** `make store-api-golden`; confirm `git diff` over `internal/store/sqlite/migrations/`
+- [x] **12d.3** `make store-api-golden`; confirm `git diff` over `internal/store/sqlite/migrations/`
       is empty — repository methods against existing columns, no new migration.
       Verify: `TestHarness_StoreAPIUnchanged` against the regenerated golden; the empty migration
       diff.
       Requirement: R1.12.
-- [ ] Verify (PR-level): `make check-all`; confirm this PR's diff is additions to
+- [x] Verify (PR-level): `make check-all`; confirm this PR's diff is additions to
       `internal/ports/unitrepo.go` and `internal/store/sqlite/unitrepo.go` only (R7.3/R7.4).
+      **Done — PR #111 (https://github.com/rengo/nooma/pull/111, branch
+      `feat/ports-unit-fields`, base `main`, NOT yet merged): 153 insertions / 1 deletion across 5
+      files (well under the ~380 ceiling), `make check-all` green (lint 0 issues, `internal/core`
+      coverage 100%/308/308 unaffected, seven-target cross-compile, e2e). The transposition risk
+      D4 names was verified caught, not just asserted: `UpdateEventAt`'s column write was
+      temporarily swapped to `DueAt`, the new contract case failed with the expected diff, then
+      reverted before committing — the same temporary-break discipline `12f-i.2`'s AST guard
+      uses. No `docs/02-cognitive-core.md` delta: this PR touches no `internal/core/**` file, and
+      `design.md`'s D13 table assigns `12d` no documentation row.**
 
 ---
 
@@ -988,7 +997,7 @@ fit the 400-line soft rule, never predictions):
 | 12a | ~320 | Low–Medium |
 | 12b | ~330 | Medium |
 | 12c | ~400, 501 measured (1.25×) | **High, over the ceiling, not split, `size:exception`** — a split along the `Edit`/`PlanEdit` seam was attempted (PRs #108/#109) and rejected by `docs-sync`: `Edit` alone touches `internal/core/**` with no doc 02 delta of its own, since an opaque type with three accessors has no behaviour to document — the delta belongs entirely to `PlanEdit`. See Conflicts §C2 |
-| 12d | ~380 | **High** — the store-adapter class (BLOB-free, but two new UPDATEs plus L3) has already overrun in Phase A/B |
+| 12d | ~380, 153 measured (0.4×) | **High forecast, did not materialize** — two single-column `UPDATE`s reusing `UpdateContent`'s and `requireRowAffected`'s existing shape, and one contract case shared by both `memrepo` and `internal/store/sqlite` rather than one case per implementation, kept this well under its own ceiling. Recorded so a future High-risk store-adapter link is not read as "this class always overruns" — `12c`'s overrun and `12d`'s undershoot are both true at once. PR #111 |
 | 12e | ~400 | **High** — at the ceiling; a brand-new port plus its first L3 case |
 | 12f-i | ~260 | Medium — the audit-ordering half of a pre-split High-risk parent |
 | 12f-ii | ~180 | Low–Medium |
