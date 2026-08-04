@@ -443,7 +443,7 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 		candidates = candidates[:relation.DedupCandidateK]
 	}
 
-	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: judgePrompt(u, candidates), Task: taskRelationEvaluation})
+	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(u, candidates), Task: taskRelationEvaluation})
 	if err != nil {
 		return r.recordDedupFailedDecision(ctx, u, now, err)
 	}
@@ -495,7 +495,7 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 	return r.recordRelationPersistedDecision(ctx, u, rel, now)
 }
 
-// judgePrompt renders the relation-judge request body. Design D4's own
+// JudgePrompt renders the relation-judge request body. Design D4's own
 // diagram writes this request directly at the brain call site ("{...}"),
 // never as a core/relation step the way classify.BuildPrompt is for
 // capture_processing — this PR's own task list (11c.1-11c.5) assigns
@@ -503,7 +503,14 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 // in internal/brain for that literal reading, not because it could not be
 // pure: it is a pure function of u and candidates, and moving it to
 // core/relation later would be a compatible change, not a breaking one.
-func judgePrompt(u unit.Unit, candidates []unit.Unit) string {
+//
+// Exported (project/quality-gate-sends-stub-prompts) so `nooma doctor`'s
+// structured-JSON quality gate (cmd/nooma/doctor.go) can call the exact
+// function production calls to build a relation_evaluation prompt, rather
+// than sending a corpus case's own separately recorded stub — the defect
+// that made the gate fail 21 of 21 prompts against a real provider before
+// it had ever once run against one.
+func JudgePrompt(u unit.Unit, candidates []unit.Unit) string {
 	var b strings.Builder
 	b.WriteString("You judge whether a new memory unit duplicates or relates to any of the candidates below.\n")
 	b.WriteString("Answer with one JSON object and nothing else — no prose, no code fence.\n\n")

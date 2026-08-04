@@ -3,6 +3,6 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "classify",
-  "prompt": "Classify this message: \"remind me to water the plants every Sunday\"",
+  "message": "remind me to water the plants every Sunday",
   "response": "{\"type\":\"recurring_reminder\",\"normalized_content\":\"Water the plants every Sunday\",\"weight\":0.5,\"decay_rate\":0.02,\"structured_data\":{\"rrule\":\"FREQ=WEEKLY;BYDAY=SU\"}}"
 }

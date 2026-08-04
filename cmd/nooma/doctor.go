@@ -11,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/relation"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/testdata/llm"
@@ -353,6 +355,46 @@ func runLLMQualityCheck(ctx context.Context, providers map[string]ports.LLMProvi
 	return results
 }
 
+// qualityGatePrompt builds the exact live prompt production sends for c,
+// through the same builders production calls — classify.BuildPrompt for
+// capture_processing, brain.JudgePrompt for relation_evaluation — never a
+// corpus case's own separately recorded field.
+//
+// This closes the defect a live OpenAI key found before any test in this
+// codebase did (project/quality-gate-sends-stub-prompts): the gate used to
+// send c's own `prompt` field verbatim — a 60-84 byte fake-replay
+// identifier, nothing like classify's real ~1550-byte prompt — and a real
+// provider answered in prose every one of 21 times, because prose has no
+// `{` for classify.Salvage to find. Building through the real function
+// here, rather than through a second copy of its logic, means a future
+// change to BuildPrompt or JudgePrompt reaches this gate automatically:
+// there is no second prompt-construction path left to drift out of sync.
+//
+// now is cmd/nooma's own clock read (checkLLMQuality's caller), never a
+// second time.Now() inside internal/core — classify.BuildPrompt only ever
+// sees an instant passed to it as a plain argument (nooma-core: internal/core
+// reads no OS state).
+func qualityGatePrompt(task string, c llm.Case, now time.Time) string {
+	switch task {
+	case "capture_processing":
+		// beliefs is always nil here, the same way captureRunner.at passes
+		// nil (internal/brain/capture.go): nothing reads self_beliefs yet
+		// (design D4 — derive is M2, seeding is M4).
+		return classify.BuildPrompt(c.Message, nil, now)
+	case "relation_evaluation":
+		candidates := make([]unit.Unit, len(c.Candidates))
+		for i, cand := range c.Candidates {
+			candidates[i] = unit.Unit{ID: cand.ID, Content: cand.Content}
+		}
+		return brain.JudgePrompt(unit.Unit{Content: c.Message}, candidates)
+	default:
+		// jsonTasks names only the two cases above; a third would need its
+		// own real builder wired in here before it could join jsonTasks at
+		// all, not a silent fallback to raw message text.
+		return c.Message
+	}
+}
+
 // evaluateTask sends one jsonTasks member's own corpus slice to provider,
 // one prompt at a time, each call bounded by timeout (spec R5.7's second
 // MUST: a provider that never answers must not make nooma doctor hang).
@@ -370,7 +412,7 @@ func evaluateTask(ctx context.Context, provider ports.LLMProvider, task string, 
 			continue
 		}
 		callCtx, cancel := context.WithTimeout(ctx, timeout)
-		resp, err := provider.Complete(callCtx, ports.LLMRequest{Prompt: c.Prompt, Task: task})
+		resp, err := provider.Complete(callCtx, ports.LLMRequest{Prompt: qualityGatePrompt(task, c, now), Task: task})
 		cancel()
 		if err != nil {
 			result.unreachable = fmt.Sprintf("unreachable — %v (doctor waits up to %s per prompt)", err, timeout)

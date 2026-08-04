@@ -51,13 +51,13 @@ func TestDecodeStrict_EnforcesRequiredFields(t *testing.T) {
 		},
 		{
 			name:     "llm: neither response nor error set is rejected",
-			data:     `{"id":"x","provider":"p","model":"m","task":"t","prompt":"pr"}`,
+			data:     `{"id":"x","provider":"p","model":"m","task":"t","message":"msg"}`,
 			newValue: func() any { return &LLMExample{} },
 			wantErr:  "exactly one of response or error",
 		},
 		{
 			name:     "llm: both response and error set is rejected",
-			data:     `{"id":"x","provider":"p","model":"m","task":"t","prompt":"pr","response":"r","error":"timeout"}`,
+			data:     `{"id":"x","provider":"p","model":"m","task":"t","message":"msg","response":"r","error":"timeout"}`,
 			newValue: func() any { return &LLMExample{} },
 			wantErr:  "exactly one of response or error",
 		},

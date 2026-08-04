@@ -3,6 +3,6 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "classify",
-  "prompt": "Classify this message: \"Pick up the dry cleaning on Friday\"",
+  "message": "Pick up the dry cleaning on Friday",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Pick up the dry cleaning\",\"weight\":0.6,\"decay_rate\":0.1}"
 }

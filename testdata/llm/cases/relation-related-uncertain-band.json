@@ -3,6 +3,9 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "relation_evaluation",
-  "prompt": "You judge whether a new memory unit duplicates or relates to any of the candidates below.",
+  "message": "Buy dry cleaning bags for the closet",
+  "candidates": [
+    {"id": "cand-related", "content": "Pick up the dry cleaning on Friday"}
+  ],
   "response": "{\"outcome\":\"related\",\"target_unit_id\":\"cand-related\",\"type\":\"same_topic\",\"strength\":0.5,\"confidence\":0.40}"
 }

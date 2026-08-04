@@ -38,11 +38,11 @@ func TestFake_ReplaysScriptedCasesInOrder(t *testing.T) {
 	dir := t.TempDir()
 	writeCase(t, dir, goldenset.LLMExample{
 		ID: "case-a", Provider: "anthropic", Model: "claude-sonnet", Task: "classify",
-		Prompt: "recorded prompt a", Response: "response a",
+		Message: "recorded message a", Response: "response a",
 	})
 	writeCase(t, dir, goldenset.LLMExample{
 		ID: "case-b", Provider: "anthropic", Model: "claude-sonnet", Task: "classify",
-		Prompt: "recorded prompt b", Response: "response b",
+		Message: "recorded message b", Response: "response b",
 	})
 
 	f := fakeprovider.New(t, dir, "case-a", "case-b")
@@ -68,7 +68,7 @@ func TestFake_SelectsByIDNeverByPromptText(t *testing.T) {
 	dir := t.TempDir()
 	writeCase(t, dir, goldenset.LLMExample{
 		ID: "case-x", Provider: "anthropic", Model: "claude-sonnet", Task: "classify",
-		Prompt: "the prompt recorded when this case was captured", Response: "the recorded response",
+		Message: "the message recorded when this case was captured", Response: "the recorded response",
 	})
 
 	f := fakeprovider.New(t, dir, "case-x")
@@ -92,7 +92,7 @@ func TestFake_RecordedErrorSurfacesAsGoError(t *testing.T) {
 	dir := t.TempDir()
 	writeCase(t, dir, goldenset.LLMExample{
 		ID: "case-err", Provider: "anthropic", Model: "claude-sonnet", Task: "classify",
-		Prompt: "prompt", Error: "rate limited",
+		Message: "message", Error: "rate limited",
 	})
 
 	f := fakeprovider.New(t, dir, "case-err")
@@ -134,7 +134,7 @@ func TestFake_UnscriptedExtraCallFailsImmediately(t *testing.T) {
 	dir := t.TempDir()
 	writeCase(t, dir, goldenset.LLMExample{
 		ID: "case-a", Provider: "anthropic", Model: "claude-sonnet", Task: "classify",
-		Prompt: "p", Response: "r",
+		Message: "p", Response: "r",
 	})
 
 	spy := &spyT{}
@@ -157,7 +157,7 @@ func TestFake_UnderRunFailsAtCleanup(t *testing.T) {
 	dir := t.TempDir()
 	writeCase(t, dir, goldenset.LLMExample{
 		ID: "case-a", Provider: "anthropic", Model: "claude-sonnet", Task: "classify",
-		Prompt: "p", Response: "r",
+		Message: "p", Response: "r",
 	})
 
 	spy := &spyT{}

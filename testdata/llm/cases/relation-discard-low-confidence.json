@@ -3,6 +3,9 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "relation_evaluation",
-  "prompt": "You judge whether a new memory unit duplicates or relates to any of the candidates below.",
+  "message": "Thinking about repainting the kitchen this weekend",
+  "candidates": [
+    {"id": "cand-discard", "content": "Kitchen renovation ideas from last spring"}
+  ],
   "response": "{\"outcome\":\"related\",\"target_unit_id\":\"cand-discard\",\"type\":\"same_topic\",\"strength\":0.2,\"confidence\":0.10}"
 }

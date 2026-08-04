@@ -1,8 +1,14 @@
 // Package llm embeds testdata/llm/cases' recorded provider examples so
 // `nooma doctor`'s structured-JSON quality gate (ADR-0002, spec R5.1, R5.3)
-// can send the same fixed prompt set the test golden files already read
-// from disk — "written once, used in two places" (ADR-0002's own wording),
-// not a second, hand-copied corpus that could drift from this one.
+// can build the same live prompt production sends, from the same message
+// (and, for relation_evaluation, the same candidates) the test golden
+// files already read from disk — "written once, used in two places"
+// (ADR-0002's own wording), not a second, hand-copied corpus that could
+// drift from this one. See the project/quality-gate-sends-stub-prompts
+// Engram observation and openspec/changes/m1c-surface/tasks.md's Conflicts
+// §C24 for why this package no longer carries a `prompt` field: the gate
+// used to send that field's own short, fake-replay text live, and a real
+// provider answered every one of it in prose.
 //
 // This file lives inside testdata/ on purpose, not beside it: //go:embed
 // forbids a ".." path element (a source file can only embed files at or
@@ -16,9 +22,10 @@
 // file is. Mitigated two ways: this file stays to one function with no
 // branch beyond json.Unmarshal's own error path, and
 // TestCasesMatchesTheSourceFiles (cmd/nooma/doctor_test.go) proves every
-// embedded entry equals its source file's own id/task/prompt byte for
-// byte, so a real bug here still fails a test `make check` does run. See
-// tasks.md's Conflicts (link 16a-i) for the full finding.
+// embedded entry equals its source file's own id/task/message/candidates
+// byte for byte, so a real bug here still fails a test `make check` does
+// run. See tasks.md's Conflicts (link 16a-i, and its later correction
+// §C24) for the full finding.
 package llm
 
 import (
@@ -31,24 +38,34 @@ import (
 var casesFS embed.FS
 
 // Case is the one slice of a testdata/llm/ recorded example the quality
-// gate needs at runtime: which pipeline call it feeds, and the exact
-// prompt text to send. Response and Error, format.md's other two required
+// gate needs at runtime: which pipeline call it feeds, and the raw
+// message (plus, for relation_evaluation, the candidates) its real prompt
+// builder — classify.BuildPrompt or brain.JudgePrompt — renders into the
+// prompt actually sent. Response and Error, format.md's other two required
 // fields, are deliberately absent from this type — a struct that cannot
 // hold them is spec R5.3's MUST NOT ("the gate compare the live response
 // against the corpus case's own response field") made structural, the same
 // shape link 15's EnvVarName already gave "the writer is incapable of
 // receiving a secret" (cmd/nooma/init.go).
 type Case struct {
-	ID     string `json:"id"`
-	Task   string `json:"task"`
-	Prompt string `json:"prompt"`
+	ID         string      `json:"id"`
+	Task       string      `json:"task"`
+	Message    string      `json:"message"`
+	Candidates []Candidate `json:"candidates,omitempty"`
 }
 
-// Cases returns every embedded testdata/llm/cases/ example's id/task/prompt,
-// in the deterministic order fs.ReadDir already guarantees (sorted by
-// filename, and every case's filename is its own id). json.Unmarshal
-// ignores the response/error/provider/model fields those files also
-// carry — Case has no field to assign them into.
+// Candidate is one relation_evaluation candidate a Case carries — the same
+// {id, content} pair goldenset.LLMCandidate holds on disk.
+type Candidate struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
+// Cases returns every embedded testdata/llm/cases/ example's
+// id/task/message/candidates, in the deterministic order fs.ReadDir
+// already guarantees (sorted by filename, and every case's filename is
+// its own id). json.Unmarshal ignores the response/error/provider/model
+// fields those files also carry — Case has no field to assign them into.
 func Cases() ([]Case, error) {
 	entries, err := casesFS.ReadDir("cases")
 	if err != nil {

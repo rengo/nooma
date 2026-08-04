@@ -3,6 +3,9 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "relation_evaluation",
-  "prompt": "You judge whether a new memory unit duplicates or relates to any of the candidates below.",
+  "message": "Remind me to call the dentist next week",
+  "candidates": [
+    {"id": "cand-outage", "content": "Call the dentist about a cleaning"}
+  ],
   "error": "ollama: connection refused"
 }

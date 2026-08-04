@@ -852,14 +852,23 @@ PR is an addition to that table, not a new command.
 
 ### R5.1 — `doctorChecks` gains a structured-JSON quality check, sending the fixed prompt set to each task's configured provider
 
+**Revised (project/quality-gate-sends-stub-prompts; openspec Conflicts §C24)**: "sends
+`testdata/llm/cases/`'s recorded `prompt` text" below described the shape actually shipped by
+`16a-i`, and that shape is the defect this revision closes — a live OpenAI key found `checkLLMQuality`
+failing 21 of 21 prompts, every one a formatting failure, because that recorded `prompt` field was a
+60-84 byte fake-replay identifier, not classify's real ~1550-byte prompt. See R5.3 below for the
+corrected requirement.
+
 **MUST**: `cmd/nooma/doctor.go`'s `doctorChecks` slice gains one new `doctorCheck` entry (following
 the existing `{name, run}` shape verbatim) whose `run` function, for each task the vault's `tasks:`
-configuration binds, sends `testdata/llm/cases/`'s recorded `prompt` text for that task to the
-provider configured for it, and decodes the live response with the production decoder that task's
-shape already has — `classify.Decode` for `capture_processing`-tasked prompts, `relation.DecodeJudgment`
-for `relation_evaluation`-tasked prompts — ADR-0002's Decision, verbatim: "it sends a fixed set of
-classify and judge prompts to the provider configured for each task, and verifies the returned JSON
-validates against the expected schema."
+configuration binds, builds the live prompt through the same function production calls —
+`classify.BuildPrompt` for `capture_processing`, `brain.JudgePrompt` for `relation_evaluation` — from
+`testdata/llm/cases/`'s recorded `message` (and, for `relation_evaluation`, `candidates`) fields, sends
+it to the provider configured for that task, and decodes the live response with the production
+decoder that task's shape already has — `classify.Decode` for `capture_processing`-tasked prompts,
+`relation.DecodeJudgment` for `relation_evaluation`-tasked prompts — ADR-0002's Decision, verbatim:
+"it sends a fixed set of classify and judge prompts to the provider configured for each task, and
+verifies the returned JSON validates against the expected schema."
 
 **MUST NOT**: this PR introduce a new command, rewrite `runDoctor`'s report loop, or change how any
 of the five existing checks run — it is one new row in an existing table.
@@ -888,12 +897,27 @@ to pass, asserting the report names the failing task specifically and the passin
 - THEN the report shows `capture_processing` passing and `relation_evaluation` failing, naming
   `relation_evaluation` specifically — never one verdict covering both tasks
 
-### R5.3 — The gate's corpus reuses `testdata/llm/cases/`'s `prompt` field, never its `response`/`expected` field, and is provider-agnostic
+### R5.3 — The gate builds the real production prompt from the corpus's `message`/`candidates` fields, never a separately recorded prompt string, and never compares against `response`/`expected`
 
-**MUST**: the gate sends the corpus's recorded `prompt` field text as its own live request — the
-same corpus `m1b-pipeline` already built and populated for `capture_processing` and (where it
-exists) `relation_evaluation` — ADR-0002's Consequences, verbatim: "The gate's prompt corpus is the
-same one that feeds the test golden files: written once, used in two places."
+**Revised (project/quality-gate-sends-stub-prompts; openspec Conflicts §C24) — the original text
+below was the requirement that shipped the defect, kept here struck through in spirit but not in
+fact (this document does not edit an Accepted ADR's own words, only this PR's own prior
+requirement text) so the correction is traceable.** The original `prompt` field could not be both a
+stable replay key (`fakeprovider.Fake` selects by case id, never by prompt content — spec R5.2's own
+precedent for "never by matching the live prompt text") and a genuine elicitor of the recorded
+`response` — sending it live sent a stub, and a real provider answered in prose because prose is a
+perfectly reasonable reply to 60-84 bytes with no format instruction. One field could not do both
+jobs; splitting the corpus into `message` (the raw text a real builder needs) and letting the gate
+call that real builder is the fix, not a schema tweak on top of the old shape.
+
+**MUST**: the gate builds its own live request through the same function production calls —
+`classify.BuildPrompt(message, nil, now)` for a `capture_processing`-tagged case,
+`brain.JudgePrompt(unit.Unit{Content: message}, candidates)` for a `relation_evaluation`-tagged case
+— reading `message` (and, for `relation_evaluation`, `candidates`) from `testdata/llm/cases/`'s
+corpus, the same corpus `m1b-pipeline` already built and populated — ADR-0002's Consequences,
+verbatim: "The gate's prompt corpus is the same one that feeds the test golden files: written once,
+used in two places." (That claim now holds for `message`/`candidates`, not for a `prompt` field this
+corpus no longer carries — see `testdata/llm/format.md`'s own note.)
 
 **MUST NOT**: the gate compare the live response against the corpus case's own `response` field, or
 against `testdata/classify/cases/`'s `expected` field. Both are tied to one specific past recording
@@ -902,9 +926,17 @@ and are not ground truth for a *different*, live provider's own new answer — A
 provider configured for each task" means the same fixed prompts go to whichever provider is
 actually configured, not only the one that originally recorded them.
 
-**Verified by**: L1/L2 — a test asserting the check's request text equals a corpus case's `prompt`
-field verbatim, and that no assertion in the check's decision logic reads that case's `response` or
-an `expected` field from `testdata/classify/cases/`.
+**MUST NOT**: the gate send a corpus case's raw `message` (or, for `relation_evaluation`, raw
+candidate content) directly as the live request, bypassing `classify.BuildPrompt`/`brain.JudgePrompt`
+— that is exactly the shape of the original defect, one layer further in: a short, format-instruction-free
+string a real provider is free to answer in prose.
+
+**Verified by**: L1/L2 — a test asserting the check's request text equals
+`classify.BuildPrompt`'s/`brain.JudgePrompt`'s own output for the corpus case's `message`/`candidates`,
+built through the same call the test makes (so a future change to either builder is picked up
+automatically rather than compared against a stale hardcoded string); and that no assertion in the
+check's decision logic reads that case's `response` or an `expected` field from
+`testdata/classify/cases/`.
 
 ### R5.4 — Validity means zero degradations, not merely a decodable response — upheld, with two refinements
 
