@@ -101,3 +101,26 @@ func TestZoneString_NamesEachZone(t *testing.T) {
 		seen[got] = true
 	}
 }
+
+// TestZoneString_NamesAnUnknownZoneWithoutPanicking covers String's default
+// arm, which TestZoneString_NamesEachZone cannot reach because it iterates
+// only the three real members.
+//
+// The arm is not dead code waiting for a fourth zone: Zone's underlying type
+// admits any int, so a value read back from a future store, a corrupted
+// fixture, or an arithmetic slip reaches it. What matters is that such a
+// value renders as something a reader recognises as wrong rather than as
+// empty text — an empty string in a decision_log row reads as "no zone
+// recorded", which is a different and more comforting claim than "a zone
+// nothing can name".
+func TestZoneString_NamesAnUnknownZoneWithoutPanicking(t *testing.T) {
+	outside := Zone(len(AllZones()) + 1)
+
+	got := outside.String()
+	if got != "unknown" {
+		t.Errorf("Zone(%d).String() = %q, want %q", outside, got, "unknown")
+	}
+	if got == "" {
+		t.Error("Zone.String() returned empty text for an out-of-vocabulary zone; an empty name reads as 'no zone recorded' rather than as a fault")
+	}
+}
