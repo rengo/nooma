@@ -542,3 +542,34 @@ func TestResurface_NonFiniteState_RefusesRatherThanCoerces(t *testing.T) {
 		})
 	}
 }
+
+// TestResurface_EdgeStrengthAboveOne_ClampsToOne pins C13's sanitization
+// of Edge.Strength (Judgment Day round 1 on PR #140, Judge A):
+// `strength REAL NOT NULL DEFAULT 0.5` carries no CHECK
+// (0001_core_tables.sql:35), the relation judge's JSON decode validates
+// only that Strength is a number (internal/core/relation/judgment.go), and
+// internal/brain/capture.go writes it through unclamped — the same
+// "no sign, no range" LLM threat model Effective already assumes for
+// weight and decay_rate. Left unclamped, Strength: 100.0 on a single edge
+// reached Weight: 35.65, 17.8x WeightCeiling, falsifying R2.7's own
+// boundedness argument, which assumes strength <= 1 explicitly. Clamped
+// to 1, a strength of 100 must produce the exact same result as a
+// strength of 1.0 exactly — TestResurface_BoundaryTable's own "1 hop
+// strength 1.0" row.
+//
+// Red at this commit: buildAdjacency does not clamp Strength yet, so the
+// unbounded 100.0 flows straight into the gain/target arithmetic.
+func TestResurface_EdgeStrengthAboveOne_ClampsToOne(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{zeroState("n")},
+		Edges:  []Edge{{From: "a", To: "n", Strength: 100.0}},
+	}
+
+	got := mustResurface(t, n, now)
+	assertBoosts(t, got, now, []struct {
+		id     string
+		weight float64
+	}{{"n", 0.35}})
+}
