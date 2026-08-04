@@ -67,6 +67,19 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 	b.WriteString("Omit any field you are unsure of. A missing field is recoverable; " +
 		"an invented one is not.\n\n")
 
+	b.WriteString("Choosing the type\n")
+	b.WriteString("  Three of the types above are decided by what the message DOES, not by what\n")
+	b.WriteString("  it is about. Read the message as an act before you read it as a subject.\n")
+	b.WriteString("  recall       the user ASKS for something Nooma may already hold. A question\n")
+	b.WriteString("               about what Nooma knows is recall however it is worded — asking\n")
+	b.WriteString("               what you know about a topic is not knowledge about that topic.\n")
+	b.WriteString("  knowledge    the user TELLS Nooma a fact to keep.\n")
+	b.WriteString("  correction   the user ALTERS something captured earlier — a new date, a new\n")
+	b.WriteString("               value, a different detail. An imperative that moves or changes\n")
+	b.WriteString("               an existing thing corrects it; it does not create a new one.\n")
+	b.WriteString("  A recall stores nothing and is answered. Classifying a question as knowledge\n")
+	b.WriteString("  files the question away instead of answering it.\n\n")
+
 	b.WriteString("Corrections\n")
 	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")
 	b.WriteString("  If it corrects a date, resolve it against the local date above and put the\n")

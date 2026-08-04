@@ -203,3 +203,35 @@ func TestBuildPrompt_AsksACorrectionForTheCorrectedValue(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPrompt_SeparatesAskingFromTelling pins the type-selection clause.
+// Before it, the prompt named the thirteen-member vocabulary and defined no
+// member of it, so a live model classified "what do you know about X?" as
+// knowledge — it matched the word, not the act. That failure is worse than a
+// mislabel: a recall stores nothing and is answered, so the question was
+// captured as a unit instead of being answered, and the answer never came.
+//
+// The sibling failure the same clause covers: "move the passport renewal to
+// the 20th" classified as task, because an imperative reads as new work unless
+// the prompt says that moving an existing thing corrects it.
+//
+// This test proves the clause is in the prompt. It cannot prove the model
+// obeys it — no test here reaches a provider (non-negotiable #5). Only
+// `nooma doctor` against a real key measures that, and doctor's gate grades
+// decode quality, not which type came back, so even that is a human reading
+// the output.
+func TestBuildPrompt_SeparatesAskingFromTelling(t *testing.T) {
+	p := BuildPrompt("what do you know about my passport?", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC))
+
+	for _, want := range []string{
+		"what the message DOES",
+		"the user ASKS",
+		"the user TELLS",
+		"the user ALTERS",
+		"files the question away instead of answering it",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("BuildPrompt does not tell the model %q; without it a question about what Nooma knows is captured as knowledge instead of answered", want)
+		}
+	}
+}

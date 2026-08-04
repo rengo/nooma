@@ -139,6 +139,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    `structured_data` + initial weight/λ + fields resolving pending answers. Classification
    taxonomy: `task | mental_load | event | knowledge | procedural | emotional | chitchat |
    out_of_scope | recall | correction | timer | recurring_reminder | list`.
+   - `recall`, `knowledge` and `correction` are separated by **what the message does, not
+     what it is about**: `recall` asks for something already held, `knowledge` tells a fact to
+     keep, `correction` alters something captured earlier. The distinction is load-bearing
+     rather than cosmetic — a `recall` persists no unit, so classifying a question as
+     `knowledge` files the question away instead of answering it, and the user never gets an
+     answer. Symmetrically, an imperative that moves an existing thing ("move the renewal to
+     the 20th") is a `correction`, not a new `task`. The prompt states all three, because a
+     bare vocabulary list lets a model match the topic word instead of the act.
    - Injected context: active self-beliefs, local date + user timezone (to resolve "tomorrow",
      "on Friday"), open check-ins.
    - One message can resolve a check-in **and** be a capture at the same time ("yes, I
