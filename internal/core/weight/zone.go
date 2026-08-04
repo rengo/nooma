@@ -18,12 +18,21 @@ const (
 // not an exported var, for the same reason unit.AllStatuses is
 // (internal/core/unit/status.go).
 func AllZones() []Zone {
-	return nil
+	return []Zone{ZoneHot, ZoneWarm, ZoneCold}
 }
 
 // String names the zone. Every member has a distinct, lowercase name.
 func (z Zone) String() string {
-	return ""
+	switch z {
+	case ZoneHot:
+		return "hot"
+	case ZoneWarm:
+		return "warm"
+	case ZoneCold:
+		return "cold"
+	default:
+		return "unknown"
+	}
 }
 
 // ZoneOf classifies a unit's thermal zone from its status and focus
@@ -44,5 +53,11 @@ func (z Zone) String() string {
 // consolidation" — is causal history, not a determination re-derived on
 // read.
 func ZoneOf(status unit.Status, inFocus bool) Zone {
+	if status == unit.StatusPool {
+		if inFocus {
+			return ZoneHot
+		}
+		return ZoneWarm
+	}
 	return ZoneCold
 }
