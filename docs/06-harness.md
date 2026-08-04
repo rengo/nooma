@@ -193,6 +193,7 @@ Initial extraction:
 | I21 | Every vector search filters on `model`; embeddings from two models never compare | §5 |
 | I22 | Capture's own recall entrance and the standalone `/recall` route are one mechanism, called with the same raw text, never `normalized_content` | §5 |
 | I23 | A correction's pre-image is recorded before its edit is applied; a failed audit write leaves the unit untouched | §5 step 4 |
+| I24 | A weight write moves `weight` and `last_touched_at` together; neither is written alone | §2 |
 
 Four of these are better verified with a structural test than a behavioral one:
 

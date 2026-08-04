@@ -66,7 +66,31 @@ boundary further out.
 written on every read:
 
 - Persisted: `weight` (value at the last event), `last_touched_at`, `weight_decay_rate` (λ).
-- **Revive** (direct use): writes a new boosted weight and resets `last_touched_at`.
+- **Revive** (direct use): boosts **asymptotically toward a ceiling**, never additively with a
+  clamp: `weight' = e + revive_gain * (weight_ceiling - e)`, where `e` is the unit's effective
+  weight at the instant of use. **The boost applies to the effective weight at that instant,
+  never to the persisted `weight`.** Boosting the persisted value would make decay freely
+  reversible and `weight` a monotone ratchet, and this document's entire lazy-write model would
+  be decorative. The asymptotic shape is bounded by construction — **for `e < weight_ceiling`**,
+  `weight'` never reaches or exceeds `weight_ceiling` — needs no clamp, and is strictly
+  increasing in `e`. That bound is over the boost's own contribution, not over every input: when
+  `e` is already at or above `weight_ceiling`, the gain term floors at zero and `weight'` equals
+  `e` exactly, which can equal or exceed `weight_ceiling` itself if `e` already did. An additive
+  boost with a clamp collapses every unit already near the ceiling onto the same value,
+  destroying the ordering the hysteresis margin exists to protect. `last_touched_at` is always
+  reset to the instant of use, **even when `e` is already at or above `weight_ceiling`** and the
+  boost therefore raises nothing: `last_touched_at` is the vault's record of *direct* use, and a
+  direct use at the ceiling is still a real decision worth recording, not the no-effect no-write
+  case §11 describes. That write is effective-weight-neutral by construction — the pair
+  `(weight, last_touched_at)` and the pair `(e, now)` denote the same decay curve, so the
+  formula at the top of this section returns the same value at every future instant from either
+  — which is exactly why moving the clock there costs nothing observable while still recording
+  that the use happened. When `weight'` would be `NaN` or `±Inf` — `weight` or `weight_decay_rate`
+  carries no `CHECK` constraint, so a corrupted row or a future arithmetic slip could still
+  produce one — **Revive refuses to persist it** rather than coercing it to a finite number:
+  coercing to 0 would drive the unit under `weight_threshold` and archive it on the strength of a
+  read error, a destructive state transition; refusing leaves the corruption visible and
+  untouched for `doctor` or a later repair path to find (`internal/core/weight.Revive`).
 - **Resurface** (related signal): propagates a boost along the graph edges, proportional to
   each relation's `strength` (spreading activation).
 - Nightly consolidation may materialize decay in bulk (optional, an optimization — the truth
@@ -606,6 +630,8 @@ module):
 |---|---|
 | `weight_threshold` (archiving) | 0.5 |
 | `hysteresis_margin` (focus) | 0.05 |
+| `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
+| `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |

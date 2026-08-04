@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -21,16 +22,15 @@ import (
 // "accidentally persist a decayed weight" has no syntax (spec R1.3,
 // design D9).
 //
-// This is I05's structural half *started*, not finished. design D9's full
-// statement also requires that Boost — the package's only persistable
-// value — has exactly two producers, Revive and Resurface. Neither exists
-// yet: this PR ships only Effective, ZoneOf, AllZones and Zone.String, so
-// the "Boost has exactly two producers" clause is meaningless before Boost
-// exists and is deliberately not asserted here. PR 2a extends this file
-// with a one-producer check once Revive exists; PR 2b extends it again to
-// the final two-producer check once Resurface exists. A reader who diffs
-// this file against a later PR should expect it to grow, not to be
-// rewritten from scratch.
+// This is I05's structural half, extended incrementally as design D9's
+// full statement becomes assertable. design D9 requires that Boost — the
+// package's only persistable value — has exactly two producers, Revive
+// and Resurface. PR1 shipped neither, so the producer-count clause was
+// not yet assertable. This PR (2a) ships Revive, so
+// TestI05_BoostHasExactlyOneProducer asserts the one-producer state below.
+// PR 2b extends that same test to the final two-producer check once
+// Resurface exists. A reader who diffs this file against a later PR
+// should expect it to grow, not to be rewritten from scratch.
 //
 // The full I05 guarantee — "no *read path* writes decay" — needs a store
 // to prove a read path exists at all; that structural half is m2c's, once
@@ -55,6 +55,44 @@ func TestI05_WeightPackageReturnsNoUnitShapedValue(t *testing.T) {
 					name, resultType, banned,
 				)
 			}
+		}
+	}
+}
+
+// TestI05_BoostHasExactlyOneProducer proves design D9's producer-count
+// clause at the point PR 2a leaves it: weight.Boost is produced by
+// exactly one exported function, Revive. PR 2b will extend the expected
+// set to {Resurface, Revive} once Resurface exists — this test is not
+// rewritten at that point, only its "want" set grows, per this file's own
+// package-level doc comment above.
+//
+// A producer is any exported function whose result includes the literal
+// rendering "Boost" or "[]Boost" — the two shapes a bare-Boost return and
+// a slice-of-Boost return respectively print as via go/printer.
+func TestI05_BoostHasExactlyOneProducer(t *testing.T) {
+	repoRoot := repoRootFromCaller(t)
+	weightDir := filepath.Join(repoRoot, "internal", "core", "weight")
+
+	names, resultTypes := exportedFuncResultTypes(t, weightDir)
+
+	var producers []string
+	for i, name := range names {
+		for _, resultType := range resultTypes[i] {
+			if resultType == "Boost" || resultType == "[]Boost" {
+				producers = append(producers, name)
+				break
+			}
+		}
+	}
+	sort.Strings(producers)
+
+	want := []string{"Revive"}
+	if len(producers) != len(want) {
+		t.Fatalf("Boost producers = %v, want exactly %v (I05, design D9, spec R1.3)", producers, want)
+	}
+	for i := range want {
+		if producers[i] != want[i] {
+			t.Errorf("Boost producers = %v, want exactly %v (I05, design D9, spec R1.3)", producers, want)
 		}
 	}
 }
