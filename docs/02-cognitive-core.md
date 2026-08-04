@@ -133,7 +133,15 @@ written on every read:
   equality at the shipped defaults — a coincidence of the chosen numbers, not a designed
   identity, since `weight_threshold` is ⚙ recalibratable per user. This is the guarantee that
   makes it safe to run resurface on every capture: only direct use, or a strong immediate
-  neighbourhood, keeps something out of the cold. **Resurface also refuses rather than
+  neighbourhood, keeps something out of the cold. That guarantee assumes **relation strength
+  stays in its own domain, `[0, 1]`** (§4): the cycle-termination argument above depends on
+  `strength ≤ 1` explicitly, and `strength` carries the same "no sign, no range" exposure as
+  `weight` and `weight_decay_rate` — the relation judge's JSON decode validates only that it is
+  a number, and the schema's `strength` column carries no `CHECK`. Resurface clamps an edge's
+  strength to at most `1` before it reaches the gain formula, for the same reason Effective
+  sanitizes weight and decay_rate: an unclamped strength above 1 is not a stronger relation, it
+  is a corrupt one, and left unclamped it can inflate a target past `weight_ceiling` itself,
+  defeating the guarantee this paragraph states. **Resurface also refuses rather than
   coerces** when a neighbour's boosted weight would be `NaN` or `±Inf` — the same posture
   Revive takes above, and for the same reason: `Effective` does not sanitize `NaN`/`±Inf`, so a
   corrupted `Current` would otherwise flow straight into an ordinary write. Where Revive's

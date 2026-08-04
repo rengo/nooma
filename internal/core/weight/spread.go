@@ -154,10 +154,14 @@ func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []stri
 
 // buildAdjacency turns Edges into an undirected map: for every ordered
 // pair (from, to), the strongest strength seen for that pair in EITHER
-// stored direction (spec R2.5's "the strongest is used").
+// stored direction (spec R2.5's "the strongest is used"). Every strength
+// is clamped through clampStrength first, so an out-of-domain edge cannot
+// out-compete a genuine one for "strongest" by being larger than the
+// domain allows.
 func buildAdjacency(edges []Edge) map[string]map[string]float64 {
 	adjacency := make(map[string]map[string]float64)
 	add := func(from, to string, strength float64) {
+		strength = clampStrength(strength)
 		if adjacency[from] == nil {
 			adjacency[from] = make(map[string]float64)
 		}
@@ -170,6 +174,53 @@ func buildAdjacency(edges []Edge) map[string]map[string]float64 {
 		add(e.To, e.From, e.Strength)
 	}
 	return adjacency
+}
+
+// clampStrength bounds an edge's strength to relation's own upper domain
+// bound, 1, per doc 02 §4 ("strength (0-1, returned by the judge)") — the
+// same "no sign, no range" sanitization posture Effective already takes
+// toward weight and decay_rate (doc 02 §2, decay.go's own doc comment):
+// the relation judge's JSON decode (internal/core/relation/judgment.go)
+// validates only that Strength is a number, and the schema's `strength
+// REAL NOT NULL DEFAULT 0.5` column carries no CHECK
+// (0001_core_tables.sql), so core cannot vouch for it landing in [0, 1]
+// any more than it can vouch for weight or decay_rate. Left unclamped, a
+// single edge with Strength: 100.0 reaches a boosted weight 17.8x
+// WeightCeiling, falsifying R2.5's own cycle-termination argument, which
+// assumes "attenuation < 1, strength <= 1" explicitly (Resurface's own
+// doc comment above) — a strength above 1 is not a stronger relation, it
+// is a corrupt one.
+//
+// The lower bound is deliberately NOT clamped here, unlike Effective's
+// symmetric treatment of a negative weight or decay_rate: buildAdjacency's
+// own "the strongest wins" comparison (`strength > adjacency[from][to]`,
+// above) already races every strength against a Go map's zero-value
+// default, so a negative-only strength for a given pair never wins that
+// comparison and never enters the adjacency map at all — the exact
+// no-conductance outcome an explicit clamp-to-0 would also produce, and
+// verifiably so: a clampStrength that also mapped negative to 0 changes
+// nothing observable in Resurface's output, because 0 does not beat the
+// same zero default either. Adding a branch with no fixture able to tell
+// it apart from removing it would be untested code by this project's own
+// standard, not a fix (this project's own convention — a test that cannot
+// be red says so; a clamp branch that cannot be red should not exist at
+// all). If buildAdjacency's comparison ever changes to admit a negative
+// strength, this bound needs revisiting.
+//
+// NaN is deliberately NOT sanitized here either, for the same reason
+// Effective does not sanitize it: NaN > 1 is false under IEEE 754, so a
+// NaN strength passes through unclamped. It is still caught — Resurface's
+// own non-finite refusal (see Resurface's doc comment) always sees it
+// downstream, because a NaN gain propagates into a NaN target and then a
+// NaN boosted weight regardless of which input carried the NaN.
+// judgment.go, capture.go and the migration's CHECK constraint are out of
+// scope for this change (openspec/changes/m2a-weight-focus/tasks.md's
+// Conflicts, C13).
+func clampStrength(s float64) float64 {
+	if s > 1 {
+		return 1
+	}
+	return s
 }
 
 // spreadGains returns, for every node other than origin reachable within
