@@ -529,6 +529,34 @@ Mutation-verified by hand: with `sort.Strings(corrupted)` removed from `spread.g
 — this is why the fixture uses three units rather than two, and why the disclosure states the
 failure rate observed rather than claiming determinism); restored after, tree clean.
 
+
+### C17 — `Resurface`'s `refused` guard is dead code, provably, and reads as the thing protecting single-reporting.
+
+`spread.go`'s corrupt-edge sweep opens `if unitID == n.Origin || refused[unitID] { continue }`.
+The `refused` half can never decide anything:
+
+- `refused[unitID] = true` is assigned in exactly one place, inside `for unitID := range gains`.
+- Therefore `refused` is a subset of `gains`.
+- Three lines later the sweep already does `if _, reachable := gains[unitID]; reachable { continue }`.
+
+So every unit the `refused` guard would skip is skipped by the reachable guard regardless.
+Confirmed by removing `refused` from the condition and watching the full package stay green,
+including the test written specifically to exercise it.
+
+This surfaced while closing a coverage regression: a first attempt at a fixture for that guard
+passed with the guard removed, which is the signal that there was nothing there to pin. The
+branch is not merely redundant — it is **misleading**, because a reader looking for what stops a
+double-report finds `refused` first and concludes single-reporting depends on it. That is the
+same claim-wider-than-the-code family this chain keeps recording, expressed as a branch instead
+of a sentence.
+
+**Not removed here.** PR #140 is already at ~1600 changed lines across three Judgment Day rounds,
+and a code change now costs a fourth. The test's own comment names the situation so nobody reads
+a guarantee into it in the meantime. **What a later link should do**: delete the `refused` map,
+its assignment and its guard, and confirm the package stays green — the same treatment the
+mid-computation non-finite check got in C15 once entry-point validation made it unreachable, and
+the same criterion C13 used to decline the negative-strength lower clamp.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)

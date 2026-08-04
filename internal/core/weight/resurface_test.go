@@ -837,3 +837,80 @@ func TestResurface_CorruptedIsSortedByUnitID(t *testing.T) {
 		}
 	}
 }
+
+// TestResurface_RefusedUnitAlsoOnACorruptEdge_ReportedExactlyOnce pins that
+// a unit corrupt on BOTH axes — a non-finite Current and an endpoint of a
+// NaN-strength edge — appears in `corrupted` once, not twice.
+//
+// What actually enforces that is the sweep's `gains` membership check, NOT
+// the `refused` guard beside it: `refused` is only ever assigned inside the
+// loop over `gains`, so `refused` is a subset of `gains`, so anything the
+// refused guard would catch the reachable guard catches first. Verified by
+// removing the refused guard and watching this test still pass. Recorded as
+// C17; the guard is dead and this comment says so rather than letting a
+// future reader believe single-reporting rests on it.
+//
+// A duplicate is not cosmetic. `corrupted` exists so m2c can write one
+// decision_log row per corrupt unit; two rows would state the vault holds two
+// problems where it holds one, and this package's sorted order would place
+// them adjacent, reading as a repeated fault rather than a double-count.
+func TestResurface_RefusedUnitAlsoOnACorruptEdge_ReportedExactlyOnce(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{
+			{UnitID: "both", Weight: math.NaN(), DecayRate: 0, LastTouchedAt: now},
+			zeroState("healthy"),
+		},
+		Edges: []Edge{
+			{From: "a", To: "both", Strength: 1},                // healthy path: puts it in gains
+			{From: "healthy", To: "both", Strength: math.NaN()}, // corrupt edge: puts it in corruptEdges
+			{From: "a", To: "healthy", Strength: 1},
+		},
+	}
+
+	_, corrupted := Resurface(n, now)
+
+	occurrences := 0
+	for _, id := range corrupted {
+		if id == "both" {
+			occurrences++
+		}
+	}
+	if occurrences != 1 {
+		t.Errorf("corrupted = %v, want %q exactly once, got it %d times", corrupted, "both", occurrences)
+	}
+}
+
+// TestResurface_CorruptEdgeToAnUnloadedUnit_IsNotReported pins the sweep's
+// states-membership guard.
+//
+// A neighbourhood is a bounded slice of the graph: m2c will load the states
+// it intends to consider, and the relations table can name units outside that
+// set. A NaN-strength edge pointing at one of them says nothing about a unit
+// this call was ever asked to judge, so reporting it would put an id in
+// `corrupted` that the caller holds no state for and cannot act on.
+func TestResurface_CorruptEdgeToAnUnloadedUnit_IsNotReported(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{zeroState("loaded")},
+		Edges: []Edge{
+			{From: "a", To: "loaded", Strength: 1},
+			{From: "a", To: "not-loaded", Strength: math.NaN()},
+		},
+	}
+
+	got, corrupted := Resurface(n, now)
+
+	for _, id := range corrupted {
+		if id == "not-loaded" {
+			t.Errorf("corrupted = %v, want no entry for a unit this call holds no state for", corrupted)
+		}
+	}
+	if len(got) != 1 || got[0].UnitID != "loaded" {
+		t.Errorf("Resurface(...) = %+v, want the loaded neighbour boosted", got)
+	}
+}
