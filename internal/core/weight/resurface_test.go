@@ -123,6 +123,62 @@ func TestResurface_TwoHopWorkedExample(t *testing.T) {
 	}
 }
 
+// TestResurface_TwoHopDistinctStrengths_ProductNotLastEdge pins R2.5's own
+// product-across-the-path formula against a mutant that reads only the
+// path's last edge. Judgment Day round 1 on PR #140 (both judges,
+// independently, C12) found that replacing
+//
+//	nextProduct := product * strength   // correct
+//
+// with
+//
+//	nextProduct := strength             // mutant: only the last edge survives
+//
+// in spread.go's spreadGains leaves the entire suite green, because every
+// other multi-hop fixture in this file uses Strength: 1.0 on every edge —
+// where "product across the path" and "nearest edge only" are numerically
+// identical (1.0 * 1.0 == 1.0). This fixture uses distinct, non-1.0
+// strengths per edge (a→b 0.9, b→c 0.6) so the two shapes diverge:
+//
+//	correct product:        0.9 * 0.6 = 0.54
+//	last-edge-only mutant:        0.6      (a first-edge-only mutant: 0.9)
+//
+// gain(c) = 0.54 * ResurfaceAttenuation^2 = 0.54*0.25 = 0.135, target =
+// 0.135*WeightCeiling = 0.27, weight' = ReviveGain*0.27 = 0.0945 —
+// distinguishable from the last-edge-only mutant's 0.6*0.25=0.15 (weight
+// 0.105) and from a first-edge-only mutant's 0.9*0.25=0.225 (weight
+// 0.1575).
+//
+// Mutation-verified: replacing `nextProduct := product * strength` with
+// `nextProduct := strength` in spread.go's spreadGains makes this test's
+// boost[1] (c) fail (got 0.105, want 0.0945) while every other test in
+// this file — all built on strength-1.0 fixtures — stays green, matching
+// this entry's own diagnosis. Reverted after; tree clean. This is a
+// mutation-driven regression test, not a TDD red step: spreadGains's
+// product accumulation was already correct, so there is no missing-symbol
+// red available here (this project's own convention, tasks.md's intro;
+// the same disclosure C7 gave its own mutation-driven addition).
+func TestResurface_TwoHopDistinctStrengths_ProductNotLastEdge(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{zeroState("b"), zeroState("c")},
+		Edges: []Edge{
+			{From: "a", To: "b", Strength: 0.9},
+			{From: "b", To: "c", Strength: 0.6},
+		},
+	}
+
+	got := mustResurface(t, n, now)
+	assertBoosts(t, got, now, []struct {
+		id     string
+		weight float64
+	}{
+		{"b", 0.315},  // 1 hop: gain 0.9*0.5=0.45, target 0.90, 0.35*0.90
+		{"c", 0.0945}, // 2 hops: gain 0.9*0.6*0.25=0.135, target 0.27, 0.35*0.27
+	})
+}
+
 // TestResurface_CyclicGraph_TerminatesAndTakesMaxNotSum is R2.5's own
 // scenario (a source with two distinct paths to a neighbour, one gain
 // 0.20/0.12-shaped) generalized to a genuine 3-cycle a-b-c-a: b and c are
