@@ -1003,11 +1003,20 @@ C4's migration number was — both described the actual system correctly at the 
 written; `13d`'s later, separately-justified all-or-nothing decision is what moved the ground under
 them. Per this chain's own C11 precedent (`spec.md` cited `RecallService.Candidates`; the callable
 method shipped as `ForText`; design won because the code is the fact) — the code, now corrected, is
-authoritative here too. Recorded for whoever next revises either document: `design.md`:1377's table
-entry needs either correcting to the 503 consequence or re-scoping to explicitly name the
-runtime-outage case it still accurately describes; `spec.md`:80-88's narrative needs a tense/scope
-note that the *"no vector... lexical leg alone"* description no longer covers the never-bound case
-`13d` closed off, only the outage case D16/R6.1 still leaves open.
+authoritative here too. **Both documents were annotated on 2026-08-04 and this
+sub-entry is now closed.** Neither took the "correct the text" branch offered above, and the branch
+itself was the wrong offer: `openspec/README.md`'s lifecycle rule says a change directory is a
+historical record and **is not edited to match what shipped**, so rewriting `design.md`:1377's
+prescribed string would have destroyed the evidence of what was actually prescribed. C10 in that
+same document had already set the precedent — *"the evidence above is kept and the status line
+rewritten, rather than the entry being deleted"*.
+
+So both were annotated instead. `design.md`'s D18b row 1 keeps its prescribed string, now marked
+superseded inline and followed by a note giving the shipped consequence, why the prescribed one was
+wrong (outage vs unbound; *fit* vs *configured*), and why it is one shared sentence rather than one
+per task. `spec.md` §6's introduction keeps its narrative, under a scope note stating that it
+remains accurate for the outage case and no longer describes the never-bound case `13d` closed off.
+A planning document that quietly acquires the right words is the same defect this entry is about.
 
 **Second finding: `test/e2e/doctor_test.go`'s `TestDoctorMakesNoNetworkCall` fixture was itself the
 C9 shape.** Its `nooma.yml` configured one `ollama` provider under `providers:` with no `tasks:`

@@ -1374,12 +1374,34 @@ three behaviours into it would give one report line three readings.
 |---|---|
 | no providers configured at all | `ok (no providers configured)` — a fresh vault has nothing to say, and `TestDoctorOnAHealthyVault` stays green unchanged |
 | providers configured, every member of `tasksM1Consumes` bound | `ok` |
-| providers configured, a member unbound | **FAIL**, naming the task and what degrades — for `embedding`: *"capture will store units with no vector and recall will run on its lexical leg alone"* |
+| providers configured, a member unbound | **FAIL**, naming the task and what degrades — for `embedding`: *"capture will store units with no vector and recall will run on its lexical leg alone"* — **superseded during `16b`, see the note below; this row is kept as written because it is what was prescribed** |
 
 The distinction between "nothing is configured" and "something is configured and a leg is missing"
 is the whole check. A fresh vault is not broken; a Cloud vault with no embedder is, and it is broken
 in a way that never raises an error. **This row is what would have caught C9 before a single capture
 ran.**
+
+> **Superseded during `16b` — the row above prescribes a FAIL string the implementation did not
+> ship, and this note is the correction. The row is left as written, per `openspec/README.md`'s
+> lifecycle rule: a change directory is a historical record and is not edited to match what
+> shipped.** This follows C10's own precedent above — the evidence is kept and the status
+> rewritten, rather than the entry rewritten to look right in hindsight.
+>
+> What it prescribed for `embedding` — *"capture will store units with no vector and recall will
+> run on its lexical leg alone"* — describes `m1b` D8's degradation for a provider **outage** after
+> wiring already succeeded, which is D18's *fit* question. This row answers D18's *configured*
+> question. Under `13d`'s fail-closed `wireBrain`, `resolveTaskProviders` is all-or-nothing, so an
+> unbound task never reaches D8's soft degradation: nothing is captured at all, and both routes
+> answer `503`. A reader of the prescribed text would have concluded their captures were landing
+> without semantic search — a deferrable recall-quality problem — and deferred a total outage.
+> **This check exists because a silent degradation hid a build-plan gap for two milestones;
+> shipping that wording would have repeated the failure inside the check's own diagnostic.**
+>
+> The shipped consequence is also one shared sentence for every member of `tasksM1Consumes` rather
+> than one per task, because `wireBrain`'s all-or-nothing resolution makes the outcome identical
+> whichever member is missing. The authority is `cmd/nooma/doctor.go`'s `taskCoverageConsequence`;
+> `tasks.md`'s Conflicts §C21.1 filed the correction and recorded it for whoever next revised this
+> document.
 
 *Row 2 — vault coverage (one SQL count).* `ports.EmbeddingRepo` gains
 `CountLiveWithoutEmbedding(ctx) (int, error)`, a `LEFT JOIN` from `units` where `status = 'pool'`
