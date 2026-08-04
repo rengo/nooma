@@ -185,8 +185,8 @@ func TestEffective_NeverExceedsWeight_Property(t *testing.T) {
 
 	const iterations = 2000
 	for i := 0; i < iterations; i++ {
-		w := float64(splitmix64(&state)%4_000_001)/1_000_000.0 - 2.0     // [-2.0, 2.0]
-		lambda := float64(splitmix64(&state)%200_001)/1_000_000.0 - 0.1  // [-0.1, 0.1]
+		w := float64(splitmix64(&state)%4_000_001)/1_000_000.0 - 2.0    // [-2.0, 2.0]
+		lambda := float64(splitmix64(&state)%200_001)/1_000_000.0 - 0.1 // [-0.1, 0.1]
 		// offsetHours ranges over roughly [-1000h, 1000h], so both
 		// orderings of lt/now are exercised, including lt == now.
 		offsetHours := int64(splitmix64(&state)%2001) - 1000
