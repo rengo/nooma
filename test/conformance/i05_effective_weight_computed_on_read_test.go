@@ -97,6 +97,62 @@ func TestI05_BoostHasExactlyOneProducer(t *testing.T) {
 	}
 }
 
+// TestI05_NoBareFloat64WeightBypassesBoost extends I05's structural half
+// past TestI05_BoostHasExactlyOneProducer, which only proves Boost's
+// producer set is exactly {Revive}. It says nothing about a *different*
+// future exported function that computes a weight meant for persistence
+// and returns it as a bare float64 instead — sidestepping Boost, and with
+// it I24's "weight and last_touched_at move together" guarantee (spec
+// R2.1), entirely. That is C5
+// (openspec/changes/m2a-weight-focus/tasks.md): the guarantee held only
+// because no such function existed, not because anything stopped one.
+//
+// This test cannot close that gap completely. "A float64 intended for
+// persistence" is not a property go/ast can read off a signature: Effective
+// legitimately returns a bare float64 too, and R1.2 defines it that way — it
+// is a read, recomputed on every call, never a value a caller writes back.
+// Nothing about the *type* float64 distinguishes Effective's case from a
+// hypothetical bypass; only what the caller does with the result does, and
+// that is intent, not structure.
+//
+// What this test does instead: it turns a silent addition into a forced,
+// reviewable one. want is the closed list of exported functions this
+// package currently allows to return a bare float64 — today, only
+// Effective. Any new exported function returning float64 fails this test
+// until a human deliberately adds it to want, the same mechanism
+// TestI05_BoostHasExactlyOneProducer already uses for Boost's producer set.
+// Passing this test is not proof the addition is a legitimate read rather
+// than a persistence bypass — that judgment stays with whoever reviews the
+// change that edits want — but it stops the bypass C5 described from
+// landing without anyone having to notice.
+func TestI05_NoBareFloat64WeightBypassesBoost(t *testing.T) {
+	repoRoot := repoRootFromCaller(t)
+	weightDir := filepath.Join(repoRoot, "internal", "core", "weight")
+
+	names, resultTypes := exportedFuncResultTypes(t, weightDir)
+
+	var producers []string
+	for i, name := range names {
+		for _, resultType := range resultTypes[i] {
+			if resultType == "float64" {
+				producers = append(producers, name)
+				break
+			}
+		}
+	}
+	sort.Strings(producers)
+
+	want := []string{"Effective"}
+	if len(producers) != len(want) {
+		t.Fatalf("exported float64-returning functions in internal/core/weight = %v, want exactly %v — a new one must be added here deliberately, with a reviewed reason it is a read and not a persistence bypass (C5, spec R2.1)", producers, want)
+	}
+	for i := range want {
+		if producers[i] != want[i] {
+			t.Errorf("exported float64-returning functions in internal/core/weight = %v, want exactly %v (C5, spec R2.1)", producers, want)
+		}
+	}
+}
+
 // exportedFuncResultTypes parses every non-test .go file in dir and
 // returns, in parallel slices, each exported top-level function or
 // method's qualified name and the textual rendering of each of its result
