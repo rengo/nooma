@@ -867,6 +867,13 @@ wording and the live call's bounded timeout (this half currently folds a transpo
 `Complete` error into a generic, undifferentiated failure — `reasonTransportError`, named but not
 yet distinguished in report text the way a JSON-fitness failure is); R5.8's corpus-coverage audit.
 
+**Later correction — see §C24.** This entry's own "exposing only `id`/`task`/`prompt` — never
+`response`/`error` — as `Case`" was accurate for what `16a-i` shipped, and is stale against what
+this chain ships today: a live provider found the shipped `prompt` field was a fake-replay
+identifier, not a prompt, and the gate that sent it live could never pass against any real
+provider. `Case` now carries `id`/`task`/`message`/`candidates`; the anti-drift proof this entry
+describes (`TestCasesMatchesTheSourceFiles`) is unchanged in kind, only in which fields it compares.
+
 ### C20 — `16a-ii`: "states the count" read as unconditional rather than zero-only; `ports.LLMProvider.Complete` cannot distinguish transport from vendor-status errors; a success-carrying error type, not named by design.md; and `16a-ii` measured 297 changed lines against its own ~150 ceiling (1.98×)
 
 **R5.6's "even at zero" wording, read as the general case rather than a special case.** `spec.md`
@@ -1221,6 +1228,88 @@ repository while that setting stays on, chained or not. Named here rather than p
 authoritative for the nineteen links below**, because it is the one that makes the retarget
 mechanism this chain depends on actually work, and because the setting is what the owner's own
 post-incident fix changed.
+
+### C24 — post-merge: `16a-i`/`16a-ii` shipped a quality gate that could never pass against any real provider, and no test in the chain could have caught it; ADR-0002's "written once, used in two places" is corrected for the corpus's own replay-key field
+
+**Found after `main` closed M0, by a human, not by a test.** The owner ran `nooma doctor` with a
+real OpenAI key: **21 of 21 prompts failed**, every one `formatting failure — field "(response)"
+(wrong_type)`. `cmd/nooma/doctor.go:373` (as shipped by `16a-i`, §C19) sent
+`ports.LLMRequest{Prompt: c.Prompt}` — `testdata/llm/cases/`'s own `prompt` field, a 60-84 byte
+fake-replay identifier such as `Classify this message: "Pick up the dry cleaning on Friday"`.
+Nooma's real classify prompt is `classify.BuildPrompt`, ~1550 bytes, carrying the field schema,
+the date/timezone context, the vocabulary list, and "Answer with one JSON object and nothing
+else — no prose, no code fence." Sent the stub, a model answers in prose; prose has no `{`;
+`classify.Salvage` returns zero fields; `classify.Decode` returns `ErrNoFieldsSalvaged`; the gate
+reports `(response) wrong_type` for every case, always, for any provider. Confirmed directly: the
+same model sent the real `BuildPrompt` output returns clean, unfenced JSON.
+
+**Why no test in `16a-i`/`16a-ii`/`m1b-pipeline` caught it.** Every test of this gate used an
+`httptest`-backed (or, at L1/L2, `fakeprovider`-backed) stand-in replaying the corpus's own
+`response` field — so the stub answered correctly by construction. `fakeprovider.Fake` selects a
+recording strictly by case id, in script order, **never** by matching the live prompt's content
+(spec R5.2's own "never by matching the live prompt text" — true of the recorded `prompt` field
+too, which the fake never read at all). The fixture did not fail to catch the defect; it made the
+defect structurally undiscoverable, because nothing in the test path ever sent the live prompt to
+anything that could judge whether it was a reasonable question.
+
+**PR #129 (`fix/classify-salvage-tolerates-fenced-json`), stacked under this fix, is a real,
+separate defect** — a trivial prompt (`classify-fenced-response.json`'s own case) does produce a
+markdown-fenced response from at least one provider, and `Salvage` tolerating that fence is
+correct. It is not what breaks `doctor`: the curl call that first confirmed the fence hypothesis
+used a toy prompt, not `BuildPrompt`, which is the same category of error this whole finding is
+about — confirming a hypothesis against something that resembles production is the same defect as
+a fixture verified only against itself (`m1b-pipeline` C11/C12's own naming).
+
+**Resolution.** `testdata/llm/cases/*.json` gain a `message` field (the raw user message for a
+`classify`-tagged case, the new unit's content for a `relation_evaluation`-tagged one) and, for
+`relation_evaluation`, a `candidates` array (`{id, content}` pairs). `cmd/nooma/doctor.go` builds
+the live prompt through the exact functions production calls — `classify.BuildPrompt` for
+`capture_processing`, `brain.JudgePrompt` (exported from `internal/brain/capture.go`'s
+previously-unexported `judgePrompt`, since the gate lives in `cmd/nooma` and cannot reach an
+unexported symbol) for `relation_evaluation` — rather than replaying a separately recorded string.
+The old `prompt` field is removed, not kept alongside `message` as documentation: one field cannot
+be both a stable replay key and a genuine elicitor of the recorded `response`, and keeping both
+would leave exactly the two-fields-that-look-interchangeable shape that let the original defect
+hide as a plausible-looking design for over a week. `spec.md` R5.1/R5.3 are revised in place
+(this document's own R5.6 precedent for "Upheld/Revised as flagged" annotations, not a rewrite of
+history) to describe the corrected requirement; `docs/adr/0002-default-llm-preset.md` is
+**Accepted** and is not edited — this entry is the note ADR-0002 itself is not touched for.
+
+**What ADR-0002's "written once, used in two places" no longer means.** The claim was written
+believing the corpus's `prompt` field served both the live gate send and, informally, a record of
+what a real prompt looked like. It could not do the first job at all: `fakeprovider` never reads
+`prompt` for replay selection, so in the shipped code that field was written once and used in
+**one** place operationally — the live send — and that one place sent a fake identifier, not a
+prompt. `message`/`candidates` restore the "written once, used in two places" property for real:
+the same fields feed `evaluateTask`'s test-path calls (scripted, decode-behavior only) and its
+live-path call (real provider, built through the real production function) identically, because
+both paths run the exact same `qualityGatePrompt` code — the corpus's `response`/`error` fields
+keep their own existing "written once, used in two places" property unchanged (replayed by
+`fakeprovider` in pipeline tests; never sent live at all, spec R5.3's own MUST NOT). No superseding
+ADR is opened: the Decision itself ("a fixed set of classify and judge prompts... verifies the
+returned JSON validates against the expected schema") still holds: what needed correcting was one
+Consequence's account of how the corpus is shared, not the decision to gate on structured JSON at
+all.
+
+**A related, pre-existing doc/code drift, named but not fixed here (out of this fix's scope):**
+`testdata/classify/format.md` also claims its own corpus is "written once, used in two places —
+the capture pipeline tests, and the `nooma doctor` provider quality gate." That was never true of
+the shipped `16a-i` implementation either: `checkLLMQuality` reads `testdata/llm/Cases()`
+exclusively and has never read `testdata/classify/`'s corpus at all. Left for a future PR to
+reconcile (either correct that doc's claim, or genuinely share the corpus), since restructuring
+which directory the gate reads from is a larger change than the stub-prompt defect this entry
+closes.
+
+**Regression coverage added**: `TestCheckLLMQuality_SendsClassifyBuildPromptForCaptureProcessing`
+and `TestCheckLLMQuality_SendsJudgePromptForRelationEvaluation`
+(`cmd/nooma/doctor_test.go`) replace the old `TestCheckLLMQuality_SendsTheCorpusPromptVerbatimOnce`,
+which asserted the exact invariant that made this defect possible (`seen[0] != c.Prompt`). Both
+new tests assert the gate's live send equals the real builder's own output, built through the same
+call the test makes — proven to catch a reverted stub (reverting `qualityGatePrompt`'s
+`capture_processing` branch to `return c.Message` fails both the length and the "no prose"
+sub-assertions) and to track a changed `BuildPrompt` output without going stale (editing
+`BuildPrompt`'s own literal text and re-running still passes, because the test recomputes the
+comparison value through the same function).
 
 ---
 
