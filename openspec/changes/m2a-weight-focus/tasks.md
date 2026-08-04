@@ -455,6 +455,80 @@ already independently pinned reachable on the identical chain shape by
 to `return nil, nil` makes both tests fail with the expected boosts absent, confirming they are now
 genuinely red against the stub shape Judge A used; restored after, tree clean.
 
+### C15 — Judgment Day round 2 on PR #140, both judges independently: C11's refusal was bypassable by two structurally different routes, and the RED test that shipped with C11 tested only one variant of one of them. CRITICAL.
+
+Both blind judges reproduced two distinct CRITICALs, and the orchestrator confirmed both, but the
+root cause behind them is the same: `corrupted` was only populated on the path that attempts a
+boost computation (`w := e + ReviveGain*(target-e)`, tested for `NaN`/`±Inf` afterward) — a
+mid-computation check, downstream of a comparison that can skip past it before it ever runs. There
+were at least two structurally distinct ways for genuinely corrupt data never to reach that check.
+
+**Shape 1**: `Weight = +Inf` with no `DecayRate`/`Δt` underflow. `Effective` returns `+Inf`, not
+`NaN`, for this shape — `decay.go`'s own doc comment says so explicitly ("a bare weight = +Inf
+alone does not, on its own, avoid this... `weight * exp(...)` stays `+Inf`, not `NaN`"). `target`
+is always finite (`<= WeightCeiling`), and `+Inf >= target` is a perfectly valid **true**
+comparison under IEEE 754 — not the `NaN`-always-false quirk C11's refusal was built to exploit —
+so `Resurface`'s own `e >= target { continue }` branch fired before `w` was ever computed, and the
+unit vanished from both `boosts` and `corrupted`. `TestResurface_NonFiniteState_RefusesRatherThan-
+Coerces`, the RED test C11 shipped with, covers four shapes, one of them `Weight = +Inf` — but the
+one that underflows to `NaN` via a large `DecayRate`/`Δt` product, never the one `decay.go`'s own
+comment names as the variant that does not.
+
+**Shape 2**: `Edge.Strength = NaN`. `buildAdjacency`'s own "strongest wins" comparison,
+`strength > adjacency[from][to]`, is false for `NaN` against any value, including the map's own
+zero-value default, so a `NaN`-strength edge never became an adjacency key at all — not clamped,
+not sanitized, simply absent. If it was a neighbour's only edge, that neighbour was never visited
+by `spreadGains`: no boost, no `corrupted`, indistinguishable from a neighbour genuinely outside
+the graph. `clampStrength`'s own doc comment (added closing C13) claimed the opposite — "It is
+still caught — Resurface's own non-finite refusal always sees it downstream" — and this round
+verified that claim false: `gains` never reaches the unit, so the refusal check inside
+`Resurface`'s main loop, gated on `gains`, never runs for it either.
+
+**Owner ruling**: stop fixing individual shapes and fix the structure — validate inputs where they
+enter, not mid-computation after a comparison has already had the chance to skip. A `Current`'s
+`Weight`/`DecayRate` is checked for `NaN`/`±Inf` directly, before `target`/`e` are computed at all,
+for every unit `gains` reaches; this subsumes all four of `decay.go`'s own documented `NaN` shapes
+in one check, since in every one of them either `Weight` or `DecayRate` is already non-finite in
+the `Current` itself. `buildAdjacency` detects a `NaN` `Strength` explicitly, before `clampStrength`
+or its own comparison ever see it, and reports both of the edge's endpoints through a second return
+value Resurface merges into `corrupted` for whichever endpoint `gains` does not otherwise reach — a
+corrupt edge redundant with a healthy path to the same neighbour changes nothing, the same
+"strongest wins" rule R2.5 already uses. With both entry points validated, the boosted weight
+computed downstream is provably always finite (a finite `Current` combined with a finite `gain` —
+every surviving adjacency entry is in `(0, 1]` after the `NaN` interception and the existing
+`clampStrength` clamp), so the old `math.IsNaN(w) || math.IsInf(w, 0)` check on `w` is removed
+rather than kept as unreachable defense — this project's own convention against a branch no fixture
+can tell apart from its absence (`clampStrength`'s own doc comment, C13).
+
+**Closed** (this same fix round): `TestResurface_NonFiniteState_RefusesRatherThanCoerces` gains the
+fifth shape (`Weight = +Inf` alone, no underflow) `decay.go`'s comment names but C11's fixture set
+never tested. `TestResurface_EdgeStrengthNaN_UnreachableNeighbourReportedCorrupted` (both edge
+directions) and its multi-hop sibling pin shape 2; `TestResurface_EdgeStrengthNaN_RedundantWithHealthy-
+Path_StillBoosts` is the companion negative case, proving a corrupt edge with a healthy alternate
+path does not suppress or falsely flag a legitimate boost. `docs/02-cognitive-core.md` §2's
+`Resurface` paragraph, `Resurface`'s own doc comment, and `clampStrength`'s doc comment (which
+previously carried the now-falsified "still caught downstream" claim) all describe the two entry
+checks instead of the mid-computation one they replace.
+
+### C16 — Judgment Day round 2 on PR #140, both judges independently: `corrupted`'s sorting guarantee had no fixture able to fail without it.
+
+Removing `sort.Strings(corrupted)` from `spread.go`'s `Resurface` left the entire suite green —
+verified. Every fixture in `resurface_test.go` that populates `corrupted` produced exactly one
+entry, and a single-element slice is "sorted" under any definition. `corrupted` is built by ranging
+over `gains`, a Go map, so append order is genuinely randomized per run once 2+ units are refused in
+the same call — the same nondeterminism `boosts`' own sort guards against
+(`TestResurface_OutputSortedByUnitID`), left unproven on the `corrupted` side. `docs/02-cognitive-
+core.md`'s stated reason for the sort — `m2c` needs a reproducible `decision_log` order — was an
+unverified property, not a tested one.
+
+**Closed** (this same fix round): `TestResurface_CorruptedIsSortedByUnitID` refuses three units in
+one `Neighbourhood`, each reached by its own 1-hop edge, and asserts the exact alphabetical order.
+Mutation-verified by hand: with `sort.Strings(corrupted)` removed from `spread.go`,
+`go test ./internal/core/weight/ -run TestResurface_CorruptedIsSortedByUnitID -count=20` failed on
+15 of 20 runs (map iteration order is randomized per process run, not fixed, so not every run fails
+— this is why the fixture uses three units rather than two, and why the disclosure states the
+failure rate observed rather than claiming determinism); restored after, tree clean.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
