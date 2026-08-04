@@ -26,11 +26,14 @@ import (
 // full statement becomes assertable. design D9 requires that Boost — the
 // package's only persistable value — has exactly two producers, Revive
 // and Resurface. PR1 shipped neither, so the producer-count clause was
-// not yet assertable. This PR (2a) ships Revive, so
-// TestI05_BoostHasExactlyOneProducer asserts the one-producer state below.
-// PR 2b extends that same test to the final two-producer check once
-// Resurface exists. A reader who diffs this file against a later PR
-// should expect it to grow, not to be rewritten from scratch.
+// not yet assertable. PR 2a shipped Revive and asserted a one-producer
+// state (then named TestI05_BoostHasExactlyOneProducer). PR 2b ships
+// Resurface, completing the set: the same check now asserts the FINAL
+// two-producer state and is renamed TestI05_BoostHasExactlyTwoProducers
+// to say so, rather than keep a stronger, now-final guarantee under a name
+// that describes an intermediate state. A reader who diffs this file
+// against PR 2a should expect the "want" set to have grown from one
+// producer to two, and the name to have been corrected to match.
 //
 // The full I05 guarantee — "no *read path* writes decay" — needs a store
 // to prove a read path exists at all; that structural half is m2c's, once
@@ -59,17 +62,32 @@ func TestI05_WeightPackageReturnsNoUnitShapedValue(t *testing.T) {
 	}
 }
 
-// TestI05_BoostHasExactlyOneProducer proves design D9's producer-count
-// clause at the point PR 2a leaves it: weight.Boost is produced by
-// exactly one exported function, Revive. PR 2b will extend the expected
-// set to {Resurface, Revive} once Resurface exists — this test is not
-// rewritten at that point, only its "want" set grows, per this file's own
-// package-level doc comment above.
+// TestI05_BoostHasExactlyTwoProducers proves design D9's producer-count
+// clause at its FINAL state, the one spec R1.3 describes: weight.Boost is
+// produced by exactly two exported functions, Resurface and Revive, and no
+// third. PR 2a shipped only Revive and asserted a one-producer state under
+// the name TestI05_BoostHasExactlyOneProducer; this PR (2b) ships
+// Resurface, completing the set, so the test is renamed to say what it now
+// proves rather than keep a name ("ExactlyOneProducer") the code no longer
+// supports — a claim narrower or wider than what is actually checked is
+// exactly the defect this project's own review history keeps finding
+// (openspec/changes/m2a-weight-focus/tasks.md's introduction). Its body,
+// and the "want" set it checks, are what actually grows across PRs, per
+// this file's own package-level doc comment above.
+//
+// Disclosure (tasks.md's own convention, C1's lesson): this assertion is
+// trivially true the instant spread.go's Resurface stub lands (spec R2.5),
+// since a stub returning nil still has result type []Boost — go/ast sees
+// the same producer set whether Resurface is implemented or not. It is not
+// a missing-symbol TDD red step for that reason; what it proves is the
+// FINAL, closed producer set design D9 requires, and it stays a permanent
+// guard against a future third producer being added without anyone
+// noticing the API grew a new way to make a persistable value.
 //
 // A producer is any exported function whose result includes the literal
 // rendering "Boost" or "[]Boost" — the two shapes a bare-Boost return and
 // a slice-of-Boost return respectively print as via go/printer.
-func TestI05_BoostHasExactlyOneProducer(t *testing.T) {
+func TestI05_BoostHasExactlyTwoProducers(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	weightDir := filepath.Join(repoRoot, "internal", "core", "weight")
 
@@ -86,7 +104,7 @@ func TestI05_BoostHasExactlyOneProducer(t *testing.T) {
 	}
 	sort.Strings(producers)
 
-	want := []string{"Revive"}
+	want := []string{"Resurface", "Revive"}
 	if len(producers) != len(want) {
 		t.Fatalf("Boost producers = %v, want exactly %v (I05, design D9, spec R1.3)", producers, want)
 	}
