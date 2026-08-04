@@ -42,10 +42,14 @@ effective_weight = weight * exp(-decay_rate * Δt)     # Δt since last_touched_
 
 `Δt` is clamped at zero: when `now` is before `last_touched_at` — clock skew across a restart,
 a backdated import — the formula behaves as though `Δt` were 0 and returns `weight` undecayed
-rather than inverting into a value larger than what was stored.
-`effective_weight ≤ weight` holds for every input, including `decay_rate = 0`: this is a
-postcondition of the formula, not an incidental property of typical inputs
-(`internal/core/weight.Effective`).
+rather than inverting into a value larger than what was stored. `decay_rate` and `weight` are
+sanitized the same way, and for the same reason — `classify`'s LLM output validates only that
+each is a number, no sign and no range, so `core` cannot vouch for either any more than it can
+vouch for `now`: a negative `decay_rate` is treated as 0 (no decay), and a negative `weight` is
+treated as 0 (a negative weight has no meaning in this model — weight is how much something
+matters, not a signed magnitude). `effective_weight ≤ max(weight, 0)` holds for every input,
+after this sanitization, including `decay_rate ≤ 0`: this is a postcondition over the sanitized
+inputs, not a claim about whatever was passed in (`internal/core/weight.Effective`).
 
 **What is persisted changes only on discrete events**; decay is computed on read, never
 written on every read:
