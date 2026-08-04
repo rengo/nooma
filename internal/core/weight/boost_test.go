@@ -214,6 +214,80 @@ func TestRevive_AtCeiling_IsEffectiveWeightNeutral(t *testing.T) {
 	}
 }
 
+// TestRevive_BelowCeiling_PinsExactBoostFromEffectiveWeight discriminates
+// (a): a boost applied to the *effective* (decayed) weight versus the
+// *persisted* one — R2.2's entire reason for existing. Every other below-
+// ceiling fixture in this file uses DecayRate: 0 (TestRevive_
+// MatchesSpecWorkedExample, TestRevive_ConvergesGeometricallyToCeiling,
+// TestRevive_StrictlyIncreasingUnderRepetition), so e == c.Weight in all of
+// them and a mutant that boosts from c.Weight instead of e — a hybrid
+// taking the correct gain term from e but the wrong additive base from
+// c.Weight — produces the exact same number and survives undetected. This
+// fixture sets DecayRate > 0 and Δt > 0 so e is strictly below both
+// WeightCeiling and c.Weight is not used anywhere in the expected value,
+// and pins an *exact* expected Weight rather than an inequality:
+// TestRevive_NeverLowersAWeight's "got.Weight >= e" is satisfied trivially
+// by any mutant anchored on c.Weight, since c.Weight > e once decay has
+// run.
+func TestRevive_BelowCeiling_PinsExactBoostFromEffectiveWeight(t *testing.T) {
+	lastTouchedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := lastTouchedAt.AddDate(0, 0, 50)
+
+	const weight = 1.0
+	const decayRate = 0.01
+	c := Current{UnitID: "u1", Weight: weight, DecayRate: decayRate, LastTouchedAt: lastTouchedAt}
+
+	e := weight * math.Exp(-decayRate*50)
+	if e >= WeightCeiling {
+		t.Fatalf("test fixture error: effective weight %v is not strictly below WeightCeiling %v", e, WeightCeiling)
+	}
+	if math.Abs(e-weight) < 0.1 {
+		t.Fatalf("test fixture error: effective weight %v is too close to persisted weight %v to discriminate a persisted-weight mutant", e, weight)
+	}
+	want := e + ReviveGain*(WeightCeiling-e)
+
+	got, ok := Revive(c, now)
+	if !ok {
+		t.Fatalf("Revive(%+v) refused a finite input, want ok = true", c)
+	}
+	if math.Abs(got.Weight-want) > 1e-9 {
+		t.Errorf("Revive(weight=%v, decayRate=%v, Δt=50d).Weight = %v, want %v exactly (boosted from the effective weight %v, not the persisted weight %v)", weight, decayRate, got.Weight, want, e, weight)
+	}
+}
+
+// TestRevive_AtCeiling_WithPriorTimestamp_MovesLastTouchedAtToNow
+// discriminates (b): whether LastTouchedAt actually resets at or above the
+// ceiling — the exact defect the reconciliation's ruling 2 overturned.
+// Every other at-ceiling fixture in this file
+// (TestRevive_AtOrAboveCeiling_ReturnsEffectiveWeightUnchanged,
+// TestRevive_AtCeiling_IsEffectiveWeightNeutral) uses LastTouchedAt: now,
+// so Δt = 0 and "the clock moved to now" is indistinguishable from "the
+// clock was left alone" — a mutant that returns c.LastTouchedAt unchanged
+// at the ceiling would still pass every one of them. This fixture uses a
+// LastTouchedAt genuinely earlier than now and asserts the returned
+// timestamp moved.
+func TestRevive_AtCeiling_WithPriorTimestamp_MovesLastTouchedAtToNow(t *testing.T) {
+	lastTouchedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := lastTouchedAt.AddDate(0, 0, 40)
+
+	c := Current{UnitID: "u1", Weight: 5.0, DecayRate: 0.01, LastTouchedAt: lastTouchedAt}
+	e := Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
+	if e < WeightCeiling {
+		t.Fatalf("test fixture error: effective weight %v is not at or above WeightCeiling %v", e, WeightCeiling)
+	}
+
+	got, ok := Revive(c, now)
+	if !ok {
+		t.Fatalf("Revive(%+v) refused a finite input, want ok = true", c)
+	}
+	if got.LastTouchedAt == lastTouchedAt {
+		t.Errorf("Revive(%+v).LastTouchedAt = %v, want it to have moved away from the original %v — a direct use at the ceiling still resets the clock (R2.3, ruling 2)", c, got.LastTouchedAt, lastTouchedAt)
+	}
+	if got.LastTouchedAt != now {
+		t.Errorf("Revive(%+v).LastTouchedAt = %v, want %v exactly", c, got.LastTouchedAt, now)
+	}
+}
+
 // TestRevive_NonFinite_RefusesToProduceABoost proves the owner ruling on a
 // non-finite input: Revive refuses to persist the corruption rather than
 // coercing it to a finite number. Coercing a NaN or ±Inf weight to 0 would
