@@ -75,6 +75,33 @@ Prior decisions: **[ADR-0002](adr/0002-default-llm-preset.md)** (LLM preset),
   walked once by hand against the real compiled binary, driven by shell commands rather than test
   code, confirming the L4 test is not the only witness.
 
+  **Walked against a live provider on 2026-08-04, and that is what closed M1.** The bullet above
+  was true and insufficient: the L4 demo proves the wiring, the sequencing and the shapes against a
+  scripted fake, and this section already said the first real confirmation would be a human running
+  the Cloud path with a live key. That run found **four defects, none of which any test in this
+  repository could have caught**, and all four are fixed (PRs #129–#132):
+
+  1. `Salvage` rejected a markdown-fenced preamble — a shape some models return by default.
+  2. `doctor`'s quality gate sent the corpus's 60-byte fake-replay identifiers instead of the
+     1550-byte prompt production builds. **It could never have passed against any provider.**
+  3. The relation corpus's candidate ids (`cand-duplicate`, `cand-unrelated`, …) named the expected
+     answer inside the prompt. Four of five passes were the model copying a substring.
+  4. The classify prompt never told a correction to carry the corrected **value**, so a live model
+     returned no date and the correction overwrote the unit's body while leaving the wrong date.
+
+  What the live run then confirmed, on a vault created by `nooma init`'s own Cloud path with a real
+  OpenAI key: `nooma doctor` green on all eight checks including the quality gate over all 21 corpus
+  prompts; `nooma capture` storing units with vectors; `POST /recall` answering with
+  `semantic_leg_available: true`; and a correction moving `event_at` from the 14th to the 15th
+  **while leaving `content` untouched** — §5 step 4's one-field rule, observed rather than asserted.
+
+  **One honest limit, stated because it will look like a bug to whoever hits it.** The gate sends
+  each prompt exactly once, deliberately: a retry that turns a flaky provider green is worse
+  information than one honest sample. So `doctor` is not deterministic — during this verification a
+  case failed once and passed on re-run, and the message it returned was valid on three subsequent
+  hand-checks. A single isolated failure can be the model having a bad moment; the same case failing
+  twice is not.
+
   **What this demo does not cover, stated rather than implied — the same discipline M0's own bullet
   set:**
   - **The provider is a scripted-replay fake, not a live model.** Both the automated test and the
