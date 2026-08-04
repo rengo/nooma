@@ -35,15 +35,15 @@ type Boost struct {
 // weight and resets last_touched_at", made a formula (spec R2.2/R2.3,
 // design D3/F2).
 //
-// Revive always returns a write, never a bool. It boosts the *effective*
-// weight at now, never the persisted c.Weight — boosting the persisted
-// value would make decay freely reversible and c.Weight a ratchet — and
-// the boost is asymptotic: e + ReviveGain * (WeightCeiling - e), bounded by
-// construction, strictly increasing in e, with no clamp and no
-// discontinuity. An additive boost with a clamp collapses every unit above
-// the clamp onto the same value, destroying the ordering hysteresis exists
-// to protect; this shape never does (spec R2.2, the reconciliation's
-// ruling 2).
+// For every finite result, Revive returns a write and the bool is true. It
+// boosts the *effective* weight at now, never the persisted c.Weight —
+// boosting the persisted value would make decay freely reversible and
+// c.Weight a ratchet — and the boost is asymptotic: e + ReviveGain *
+// (WeightCeiling - e), bounded by construction, strictly increasing in e,
+// with no clamp and no discontinuity. An additive boost with a clamp
+// collapses every unit above the clamp onto the same value, destroying the
+// ordering hysteresis exists to protect; this shape never does (spec R2.2,
+// the reconciliation's ruling 2).
 //
 // When e is already at or above WeightCeiling, the gain term is floored at
 // zero and Revive returns Boost{c.UnitID, e, now} unchanged in weight — but
@@ -58,7 +58,10 @@ type Boost struct {
 // c.DecayRate is read only to compute e and is never modified or returned:
 // assigning λ is classify's job, and use does not make a thing decay more
 // slowly.
-func Revive(c Current, now time.Time) Boost {
+//
+// STUB — the second return value is always true. Non-finite refusal lands
+// in the next commit.
+func Revive(c Current, now time.Time) (Boost, bool) {
 	e := Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
 
 	gain := WeightCeiling - e
@@ -70,5 +73,5 @@ func Revive(c Current, now time.Time) Boost {
 		UnitID:        c.UnitID,
 		Weight:        e + ReviveGain*gain,
 		LastTouchedAt: now,
-	}
+	}, true
 }

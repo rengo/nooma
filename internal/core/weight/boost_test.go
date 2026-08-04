@@ -17,7 +17,10 @@ func TestRevive_MatchesSpecWorkedExample(t *testing.T) {
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	c := Current{UnitID: "u1", Weight: 0, DecayRate: 0, LastTouchedAt: now}
 
-	got := Revive(c, now)
+	got, ok := Revive(c, now)
+	if !ok {
+		t.Fatalf("Revive(weight=0, now) refused a finite input, want ok = true")
+	}
 	const want = 0.70
 	if math.Abs(got.Weight-want) > 1e-9 {
 		t.Errorf("Revive(weight=0, now).Weight = %v, want %v (0.35 * 2.0, spec R2.2's worked example)", got.Weight, want)
@@ -48,7 +51,10 @@ func TestRevive_ConvergesGeometricallyToCeiling(t *testing.T) {
 
 	c := Current{UnitID: "u1", Weight: e0, DecayRate: 0, LastTouchedAt: now}
 	for k := 1; k <= 6; k++ {
-		got := Revive(c, now)
+		got, ok := Revive(c, now)
+		if !ok {
+			t.Fatalf("iteration %d: Revive(...) refused a finite input, want ok = true", k)
+		}
 		want := WeightCeiling - (WeightCeiling-e0)*math.Pow(1-ReviveGain, float64(k))
 		if math.Abs(got.Weight-want) > 1e-9 {
 			t.Fatalf("iteration %d: Revive(...).Weight = %v, want %v (closed-form geometric convergence)", k, got.Weight, want)
@@ -77,7 +83,10 @@ func TestRevive_StrictlyIncreasingUnderRepetition(t *testing.T) {
 		c := Current{UnitID: "u1", Weight: e0, DecayRate: 0, LastTouchedAt: now}
 		prev := e0
 		for i := 0; i < 50; i++ {
-			got := Revive(c, now)
+			got, ok := Revive(c, now)
+			if !ok {
+				t.Fatalf("start %v, iteration %d: Revive(...) refused a finite input, want ok = true", e0, i)
+			}
 			if got.Weight <= prev {
 				t.Fatalf("start %v, iteration %d: Revive(...).Weight = %v, want strictly greater than previous %v", e0, i, got.Weight, prev)
 			}
@@ -107,7 +116,10 @@ func TestRevive_AtOrAboveCeiling_ReturnsEffectiveWeightUnchanged(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			cur := Current{UnitID: "u1", Weight: c.weight, DecayRate: 0, LastTouchedAt: now}
-			got := Revive(cur, now)
+			got, ok := Revive(cur, now)
+			if !ok {
+				t.Fatalf("Revive(weight=%v, Δt=0) refused a finite input, want ok = true", c.weight)
+			}
 			if got.Weight != c.weight {
 				t.Errorf("Revive(weight=%v, Δt=0).Weight = %v, want %v exactly (neither raised nor lowered)", c.weight, got.Weight, c.weight)
 			}
@@ -133,7 +145,10 @@ func TestRevive_NeverLowersAWeight(t *testing.T) {
 	}
 	for _, c := range cases {
 		e := Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
-		got := Revive(c, now)
+		got, ok := Revive(c, now)
+		if !ok {
+			t.Fatalf("Revive(%+v) refused a finite input, want ok = true", c)
+		}
 		if got.Weight < e {
 			t.Errorf("Revive(%+v).Weight = %v, want >= effective weight %v (a boost never lowers)", c, got.Weight, e)
 		}
@@ -141,9 +156,10 @@ func TestRevive_NeverLowersAWeight(t *testing.T) {
 }
 
 // TestRevive_AlwaysReturnsLastTouchedAtNow proves R2.3's signature-level
-// consequence directly: Revive returns a bare Boost, never a (Boost,
-// bool), and LastTouchedAt is now on every path, including the no-raise
-// ceiling case exercised separately above.
+// consequence directly: for every finite input Revive returns ok == true
+// and LastTouchedAt is now on every path, including the no-raise ceiling
+// case exercised separately above. TestRevive_NonFinite_RefusesToProduceABoost
+// below covers the one case where ok is false.
 func TestRevive_AlwaysReturnsLastTouchedAtNow(t *testing.T) {
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	lastTouchedAt := now.AddDate(0, 0, -10)
@@ -153,7 +169,10 @@ func TestRevive_AlwaysReturnsLastTouchedAtNow(t *testing.T) {
 		{UnitID: "u2", Weight: WeightCeiling, DecayRate: 0, LastTouchedAt: now},
 	}
 	for _, c := range cases {
-		got := Revive(c, now)
+		got, ok := Revive(c, now)
+		if !ok {
+			t.Fatalf("Revive(%+v) refused a finite input, want ok = true", c)
+		}
 		if got.LastTouchedAt != now {
 			t.Errorf("Revive(%+v).LastTouchedAt = %v, want %v", c, got.LastTouchedAt, now)
 		}
@@ -183,11 +202,81 @@ func TestRevive_AtCeiling_IsEffectiveWeightNeutral(t *testing.T) {
 		t.Fatalf("test fixture error: effective weight %v is not at or above WeightCeiling %v", e, WeightCeiling)
 	}
 
-	got := Revive(c, now)
+	got, ok := Revive(c, now)
+	if !ok {
+		t.Fatalf("Revive(%+v) refused a finite input, want ok = true", c)
+	}
 
 	wantAtFuture := Effective(c.Weight, c.DecayRate, c.LastTouchedAt, future)
 	gotAtFuture := Effective(got.Weight, c.DecayRate, got.LastTouchedAt, future)
 	if math.Abs(gotAtFuture-wantAtFuture) > 1e-9 {
 		t.Errorf("Effective(boosted pair, future) = %v, want %v (Effective(original pair, future)) — the ceiling write must be effective-weight-neutral", gotAtFuture, wantAtFuture)
+	}
+}
+
+// TestRevive_NonFinite_RefusesToProduceABoost proves the owner ruling on a
+// non-finite input: Revive refuses to persist the corruption rather than
+// coercing it to a finite number. Coercing a NaN or ±Inf weight to 0 would
+// drive the unit under weight_threshold and archive it — a destructive
+// state transition caused by nothing more than a read error. Refusing
+// instead leaves the corruption visible and untouched for doctor or a
+// later repair path to find, and is a genuine second false case for the
+// bool the reconciliation's ruling 2 removed — ruling 2 reasoned about the
+// ceiling edge, where a direct use always writes; it never considered a
+// non-finite input, so reintroducing the bool for this case is an addition
+// to ruling 2, not a reversal (recorded as C4,
+// openspec/changes/m2a-weight-focus/tasks.md).
+//
+// None of these four shapes is reachable through capture — encoding/json
+// cannot decode a NaN or Infinity token — but the weight and
+// weight_decay_rate columns carry no CHECK constraint, so a corrupted row
+// or a future arithmetic slip elsewhere could still produce one
+// (Effective's own doc comment enumerates the three that reach it; Weight
+// = +Inf is a fourth shape that reaches Revive without going through
+// Effective's own NaN cases at all — e is already +Inf, and gain clamps to
+// 0, not NaN).
+func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	lastTouchedAt := now.AddDate(0, 0, -10)
+
+	cases := []struct {
+		name string
+		c    Current
+		now  time.Time
+	}{
+		{
+			name: "Weight is NaN",
+			c:    Current{UnitID: "u1", Weight: math.NaN(), DecayRate: 0.01, LastTouchedAt: lastTouchedAt},
+			now:  now,
+		},
+		{
+			name: "DecayRate is NaN",
+			c:    Current{UnitID: "u2", Weight: 1.0, DecayRate: math.NaN(), LastTouchedAt: lastTouchedAt},
+			now:  now,
+		},
+		{
+			name: "Weight is +Inf",
+			c:    Current{UnitID: "u3", Weight: math.Inf(1), DecayRate: 0.01, LastTouchedAt: lastTouchedAt},
+			now:  now,
+		},
+		{
+			// DecayRate = +Inf with Δt = 0: IEEE 754 makes Inf*0 a NaN, the
+			// third reachable-looking shape Effective's own doc comment
+			// names.
+			name: "DecayRate is +Inf with Δt = 0",
+			c:    Current{UnitID: "u4", Weight: 1.0, DecayRate: math.Inf(1), LastTouchedAt: now},
+			now:  now,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := Revive(tc.c, tc.now)
+			if ok {
+				t.Fatalf("Revive(%+v) = (%+v, true), want ok = false — a non-finite result must not be persisted", tc.c, got)
+			}
+			if got != (Boost{}) {
+				t.Errorf("Revive(%+v) = %+v, want the zero-value Boost when refusing", tc.c, got)
+			}
+		})
 	}
 }
