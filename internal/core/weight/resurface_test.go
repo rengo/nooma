@@ -40,6 +40,21 @@ func TestResurfaceAttenuation_IsPinnedToItsCalibratedValue(t *testing.T) {
 	}
 }
 
+// mustResurface calls Resurface and fails the test if it reports any
+// corrupted neighbour. Every fixture in this file besides
+// TestResurface_NonFiniteState_RefusesRatherThanCoerces is built from
+// finite state on purpose, so a non-empty corrupted list there is itself a
+// bug in the fixture, or a regression in Resurface, not something to
+// silently ignore (Judgment Day round 1 on PR #140, C11).
+func mustResurface(t *testing.T, n Neighbourhood, now time.Time) []Boost {
+	t.Helper()
+	got, corrupted := Resurface(n, now)
+	if len(corrupted) != 0 {
+		t.Fatalf("Resurface(...) corrupted = %v, want none — this fixture is built from finite state only", corrupted)
+	}
+	return got
+}
+
 // assertBoosts compares got against a slice of (UnitID, Weight) pairs, in
 // order — Resurface's own contract is a slice sorted by UnitID, so an
 // out-of-order want here is itself a bug in the fixture, not tolerance.
@@ -93,7 +108,7 @@ func TestResurface_TwoHopWorkedExample(t *testing.T) {
 		},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	assertBoosts(t, got, now, []struct {
 		id     string
 		weight float64
@@ -129,7 +144,7 @@ func TestResurface_CyclicGraph_TerminatesAndTakesMaxNotSum(t *testing.T) {
 		},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	assertBoosts(t, got, now, []struct {
 		id     string
 		weight float64
@@ -159,7 +174,7 @@ func TestResurface_ChainLongerThanMaxHops_ExcludesUnitsBeyondTheLimit(t *testing
 		},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	assertBoosts(t, got, now, []struct {
 		id     string
 		weight float64
@@ -182,12 +197,12 @@ func TestResurface_UndirectedTraversal_SameResultEitherStoredDirection(t *testin
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	states := []Current{zeroState("n")}
 
-	forward := Resurface(Neighbourhood{
+	forward := mustResurface(t, Neighbourhood{
 		Origin: "a",
 		States: states,
 		Edges:  []Edge{{From: "a", To: "n", Strength: 0.8}},
 	}, now)
-	backward := Resurface(Neighbourhood{
+	backward := mustResurface(t, Neighbourhood{
 		Origin: "a",
 		States: states,
 		Edges:  []Edge{{From: "n", To: "a", Strength: 0.8}},
@@ -218,7 +233,7 @@ func TestResurface_MultipleEdgesBetweenSamePair_UsesTheStrongest(t *testing.T) {
 		},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	assertBoosts(t, got, now, []struct {
 		id     string
 		weight float64
@@ -242,7 +257,7 @@ func TestResurface_OutputSortedByUnitID(t *testing.T) {
 		},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	assertBoosts(t, got, now, []struct {
 		id     string
 		weight float64
@@ -273,7 +288,7 @@ func TestResurface_AtOrAboveTarget_EmitsNoBoost(t *testing.T) {
 				States: []Current{{UnitID: "n", Weight: tc.weight, DecayRate: 0, LastTouchedAt: now}},
 				Edges:  []Edge{{From: "a", To: "n", Strength: 1.0}},
 			}
-			got := Resurface(n, now)
+			got := mustResurface(t, n, now)
 			if len(got) != 0 {
 				t.Errorf("Resurface(weight=%v at target) = %+v, want an empty slice (R2.6 — no Boost, not a zero-delta entry)", tc.weight, got)
 			}
@@ -298,7 +313,7 @@ func TestResurface_BelowTarget_ResetsLastTouchedAtToNow(t *testing.T) {
 		Edges:  []Edge{{From: "a", To: "n", Strength: 1.0}},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	if len(got) != 1 {
 		t.Fatalf("Resurface(...) = %+v, want exactly one boost", got)
 	}
@@ -342,7 +357,7 @@ func TestResurface_DiscriminatesEffectiveFromPersistedWeight(t *testing.T) {
 	}
 	want := e + ReviveGain*(target-e)
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	if len(got) != 1 {
 		t.Fatalf("Resurface(...) = %+v, want exactly one boost", got)
 	}
@@ -377,7 +392,7 @@ func TestResurface_NeighbourWithNoMatchingState_IsSkipped(t *testing.T) {
 		},
 	}
 
-	got := Resurface(n, now)
+	got := mustResurface(t, n, now)
 	assertBoosts(t, got, now, []struct {
 		id     string
 		weight float64
@@ -400,7 +415,7 @@ func TestResurface_BoundaryTable(t *testing.T) {
 			States: []Current{zeroState("n")},
 			Edges:  []Edge{{From: "a", To: "n", Strength: 1.0}},
 		}
-		got := Resurface(n, now)
+		got := mustResurface(t, n, now)
 		assertBoosts(t, got, now, []struct {
 			id     string
 			weight float64
@@ -416,7 +431,7 @@ func TestResurface_BoundaryTable(t *testing.T) {
 				{From: "mid", To: "n", Strength: 1.0},
 			},
 		}
-		got := Resurface(n, now)
+		got := mustResurface(t, n, now)
 		var nBoost *Boost
 		for i := range got {
 			if got[i].UnitID == "n" {
@@ -437,7 +452,7 @@ func TestResurface_BoundaryTable(t *testing.T) {
 			States: []Current{zeroState("n")},
 			Edges:  []Edge{{From: "a", To: "n", Strength: 0.1}},
 		}
-		got := Resurface(n, now)
+		got := mustResurface(t, n, now)
 		assertBoosts(t, got, now, []struct {
 			id     string
 			weight float64
@@ -454,11 +469,76 @@ func TestResurface_BoundaryTable(t *testing.T) {
 				{From: "c", To: "d", Strength: 1.0},
 			},
 		}
-		got := Resurface(n, now)
+		got := mustResurface(t, n, now)
 		for _, b := range got {
 			if b.UnitID == "d" {
 				t.Errorf("Resurface(...) included %q at 3 hops, want it absent (ResurfaceMaxHops = %d)", "d", ResurfaceMaxHops)
 			}
 		}
 	})
+}
+
+// TestResurface_NonFiniteState_RefusesRatherThanCoerces pins C11's posture
+// (Judgment Day round 1 on PR #140, both judges, independently): Effective
+// deliberately does not sanitize NaN/±Inf (decay.go's own doc comment),
+// and "e >= target" is false for every comparison involving NaN under
+// IEEE 754 — so R2.6's skip branch never fires on its own, and a
+// corrupted Current flows straight into an ordinary Boost. Boost is "the
+// only shape this package lets a caller persist" (boost.go), and nothing
+// in the vault is ever deleted, so a persisted NaN would make every later
+// Effective on that unit return NaN forever.
+//
+// Mirroring Revive's own posture (boost.go's Revive doc comment, C4):
+// Resurface must refuse to emit a Boost for a corrupted neighbour rather
+// than coerce it to a finite number — coercing to 0 could drive the unit
+// under weight_threshold and archive it on the strength of a read error.
+// The refusal is reported through corrupted, Resurface's second return
+// value, not folded silently into a shorter boosts slice: a caller must
+// be able to tell "no boost because n is already at target" (R2.6, a
+// legitimate no-op) apart from "no boost because n's own state is
+// corrupt" (this refusal, which m2c should write to decision_log).
+//
+// Four reachable-looking non-finite shapes, matching decay.go's own
+// enumeration: Weight NaN; DecayRate NaN; Weight +Inf combined with a
+// DecayRate/Δt product large enough for exp(...) to underflow to exactly
+// 0.0 (+Inf * 0.0 = NaN — a bare Weight = +Inf alone stays +Inf, not NaN);
+// and DecayRate +Inf with Δt = 0, the textbook Inf*0 = NaN shape
+// (exp(-Inf*0) = exp(NaN) = NaN).
+//
+// Red at this commit: Resurface's stub always returns an empty
+// corrupted, and still appends every computed w to boosts regardless of
+// its finiteness, so this fails both assertions below.
+func TestResurface_NonFiniteState_RefusesRatherThanCoerces(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name          string
+		weight        float64
+		decayRate     float64
+		lastTouchedAt time.Time
+	}{
+		{"weight NaN", math.NaN(), 0, now},
+		{"decayRate NaN", 1.0, math.NaN(), now},
+		{"weight +Inf, decayRate*Δt underflows exp to 0", math.Inf(1), 100, now.AddDate(0, 0, -1000)},
+		{"decayRate +Inf, zero Δt", 1.0, math.Inf(1), now},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := Neighbourhood{
+				Origin: "a",
+				States: []Current{{UnitID: "n", Weight: tc.weight, DecayRate: tc.decayRate, LastTouchedAt: tc.lastTouchedAt}},
+				Edges:  []Edge{{From: "a", To: "n", Strength: 1.0}},
+			}
+
+			got, corrupted := Resurface(n, now)
+			for _, b := range got {
+				if b.UnitID == "n" {
+					t.Fatalf("Resurface(...) = %+v, persisted a Boost with weight %v for a non-finite state — want it refused, not coerced", got, b.Weight)
+				}
+			}
+			if len(corrupted) != 1 || corrupted[0] != "n" {
+				t.Errorf("Resurface(...) corrupted = %v, want exactly [\"n\"] — a corrupt neighbour must be reported, not silently dropped", corrupted)
+			}
+		})
+	}
 }

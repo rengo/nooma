@@ -85,10 +85,16 @@ const ResurfaceAttenuation = 0.5
 // clock resetting is harmless because the level it resets from is bounded
 // by graph distance.
 //
-// The returned slice is sorted by UnitID: the suite runs -shuffle=on with
-// -race (Makefile:48), any implementation here uses maps internally, and
-// m2c needs a reproducible decision_log order for the demo.
-func Resurface(n Neighbourhood, now time.Time) []Boost {
+// Both returned slices are sorted by UnitID: the suite runs -shuffle=on
+// with -race (Makefile:48), any implementation here uses maps internally,
+// and m2c needs a reproducible decision_log order for the demo.
+//
+// TODO(C11): the second return value, corrupted, is always empty as of
+// this commit. Judgment Day round 1 on PR #140 found Resurface persisted a
+// NaN Boost for a corrupted neighbour instead of refusing it, the same bug
+// C4 fixed for Revive one PR earlier — see the RED test this commit adds
+// and the following commit's fix.
+func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []string) {
 	adjacency := buildAdjacency(n.Edges)
 	gains := spreadGains(n.Origin, adjacency)
 
@@ -97,7 +103,6 @@ func Resurface(n Neighbourhood, now time.Time) []Boost {
 		states[c.UnitID] = c
 	}
 
-	var boosts []Boost
 	for unitID, gain := range gains {
 		c, ok := states[unitID]
 		if !ok {
@@ -118,7 +123,7 @@ func Resurface(n Neighbourhood, now time.Time) []Boost {
 	}
 
 	sort.Slice(boosts, func(i, j int) bool { return boosts[i].UnitID < boosts[j].UnitID })
-	return boosts
+	return boosts, corrupted
 }
 
 // buildAdjacency turns Edges into an undirected map: for every ordered
