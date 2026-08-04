@@ -87,6 +87,17 @@ worse than the product it demonstrates. §6 below specifies PR 17's client and, 
 requirement that makes this exact gap detectable if it ever recurs, rather than leaving it to a user
 wondering why search feels thin.
 
+> **Scope note, added after `13d` shipped.** The narrative above — *"every capture stored, every
+> unit came back with no vector, every recall ran on its lexical leg alone"* — was accurate of the
+> codebase at the time it was written, and remains accurate for the **outage** case: a bound
+> embedding provider that fails at runtime still degrades exactly that way (`m1b` D8, and D18's
+> *fit* question, which §6.1's client and §5's quality gate address). It no longer describes the
+> **never-bound** case. `13d`'s fail-closed `wireBrain` resolves every member of `tasksM1Consumes`
+> or none, so a vault with no embedder bound captures nothing at all: `POST /capture` and `POST
+> /recall` both answer `503`. That state is D18's *configured* question, which §6.3's `doctor` row
+> answers — see `tasks.md`'s Conflicts §C21.1 and `cmd/nooma/doctor.go`'s
+> `taskCoverageConsequence` for the shipped wording.
+
 **PR 15 and PR 16 did not exist when this spec's first revision was written.** That revision found
 proposal §3.2 items 14 and 15 (`nooma init`'s Cloud/Ollama paths, `nooma doctor`'s structured-JSON
 quality gate) asserted in prose to belong to Phase C while naming no PR in the then-three-row Phase
