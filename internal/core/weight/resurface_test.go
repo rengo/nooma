@@ -590,12 +590,26 @@ func TestResurface_BoundaryTable(t *testing.T) {
 // legitimate no-op) apart from "no boost because n's own state is
 // corrupt" (this refusal, which m2c should write to decision_log).
 //
-// Four reachable-looking non-finite shapes, matching decay.go's own
-// enumeration: Weight NaN; DecayRate NaN; Weight +Inf combined with a
+// Five reachable-looking non-finite shapes, matching decay.go's own
+// enumeration plus the one it explicitly says does NOT reach NaN through
+// Effective alone: Weight NaN; DecayRate NaN; Weight +Inf combined with a
 // DecayRate/Δt product large enough for exp(...) to underflow to exactly
-// 0.0 (+Inf * 0.0 = NaN — a bare Weight = +Inf alone stays +Inf, not NaN);
-// and DecayRate +Inf with Δt = 0, the textbook Inf*0 = NaN shape
-// (exp(-Inf*0) = exp(NaN) = NaN).
+// 0.0 (+Inf * 0.0 = NaN); DecayRate +Inf with Δt = 0, the textbook
+// Inf*0 = NaN shape (exp(-Inf*0) = exp(NaN) = NaN); and Weight +Inf ALONE,
+// with DecayRate/Δt too small to underflow exp — decay.go's own comment
+// names this shape explicitly ("a bare Weight = +Inf alone stays +Inf,
+// not NaN") but the round-1 fixture set never included it.
+//
+// Judgment Day round 2 on PR #140 (both judges, independently, C15) found
+// that last shape reaches Resurface's target/e comparison, not Effective's
+// NaN arithmetic: target is always finite (<= WeightCeiling), and
+// "+Inf >= target" is a perfectly valid TRUE comparison under IEEE 754 —
+// not the NaN quirk this file's docs otherwise invoke — so R2.6's own skip
+// branch fired before w was ever computed, and this unit vanished from
+// both boosts and corrupted instead of being refused. The round-1 fixture
+// set happened to pick only the +Inf variant that DOES underflow to NaN
+// (row 3 below), leaving row 5 — the variant decay.go's own comment names
+// as the one that does not — untested. This case closes that gap.
 //
 // Red at this commit: Resurface's stub always returns an empty
 // corrupted, and still appends every computed w to boosts regardless of
@@ -613,6 +627,7 @@ func TestResurface_NonFiniteState_RefusesRatherThanCoerces(t *testing.T) {
 		{"decayRate NaN", 1.0, math.NaN(), now},
 		{"weight +Inf, decayRate*Δt underflows exp to 0", math.Inf(1), 100, now.AddDate(0, 0, -1000)},
 		{"decayRate +Inf, zero Δt", 1.0, math.Inf(1), now},
+		{"weight +Inf alone, no underflow (Effective returns +Inf, not NaN)", math.Inf(1), 0, now},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -664,4 +679,161 @@ func TestResurface_EdgeStrengthAboveOne_ClampsToOne(t *testing.T) {
 		id     string
 		weight float64
 	}{{"n", 0.35}})
+}
+
+// TestResurface_EdgeStrengthNaN_UnreachableNeighbourReportedCorrupted pins
+// the second CRITICAL from Judgment Day round 2 on PR #140 (both judges,
+// independently, C15): buildAdjacency's own "strongest wins" comparison,
+// `strength > adjacency[from][to]`, is false for NaN against any value —
+// including the map's own zero-value default — so a NaN-strength edge
+// never became a key in the adjacency map at all. When it is a neighbour's
+// only edge, that neighbour was never visited by spreadGains: no boost, no
+// corrupted, indistinguishable from a neighbour genuinely outside the
+// graph. clampStrength's own doc comment claimed this was "still caught —
+// Resurface's own non-finite refusal always sees it downstream" — false,
+// and this fixture verifies it false: gains never contains "n", so the
+// refusal check inside Resurface's main loop, which only runs for unit ids
+// gains actually reaches, never runs for it either.
+//
+// Red at this commit: buildAdjacency silently drops the NaN-strength edge,
+// "n" is unreachable, and Resurface returns corrupted = [] instead of ["n"].
+func TestResurface_EdgeStrengthNaN_UnreachableNeighbourReportedCorrupted(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+
+	t.Run("forward direction", func(t *testing.T) {
+		n := Neighbourhood{
+			Origin: "a",
+			States: []Current{zeroState("n")},
+			Edges:  []Edge{{From: "a", To: "n", Strength: math.NaN()}},
+		}
+		got, corrupted := Resurface(n, now)
+		if len(got) != 0 {
+			t.Fatalf("Resurface(...) = %+v, want no boosts for a neighbour reached only by a NaN-strength edge", got)
+		}
+		if len(corrupted) != 1 || corrupted[0] != "n" {
+			t.Errorf("Resurface(...) corrupted = %v, want exactly [\"n\"] — a NaN-strength edge must not make its neighbour indistinguishable from unreachable-but-healthy", corrupted)
+		}
+	})
+
+	t.Run("backward direction, undirected", func(t *testing.T) {
+		n := Neighbourhood{
+			Origin: "a",
+			States: []Current{zeroState("n")},
+			Edges:  []Edge{{From: "n", To: "a", Strength: math.NaN()}},
+		}
+		got, corrupted := Resurface(n, now)
+		if len(got) != 0 {
+			t.Fatalf("Resurface(...) = %+v, want no boosts for a neighbour reached only by a NaN-strength edge", got)
+		}
+		if len(corrupted) != 1 || corrupted[0] != "n" {
+			t.Errorf("Resurface(...) corrupted = %v, want exactly [\"n\"] — traversal is undirected (R2.5), so the direction the corrupt edge was stored must not matter", corrupted)
+		}
+	})
+}
+
+// TestResurface_EdgeStrengthNaN_MultiHopUnreachableNeighbourReportedCorrupted
+// generalizes the CRITICAL 2 fixture above beyond an edge directly touching
+// the origin: a straight chain a-b-c where the only edge reaching c (b->c)
+// carries a NaN strength. b is reachable through a healthy edge and must
+// still get its ordinary boost; c must be reported corrupted rather than
+// silently absent, proving the fix is not scoped to origin-adjacent edges
+// only.
+func TestResurface_EdgeStrengthNaN_MultiHopUnreachableNeighbourReportedCorrupted(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{zeroState("b"), zeroState("c")},
+		Edges: []Edge{
+			{From: "a", To: "b", Strength: 1.0},
+			{From: "b", To: "c", Strength: math.NaN()},
+		},
+	}
+
+	got, corrupted := Resurface(n, now)
+	assertBoosts(t, got, now, []struct {
+		id     string
+		weight float64
+	}{{"b", 0.35}})
+	if len(corrupted) != 1 || corrupted[0] != "c" {
+		t.Errorf("Resurface(...) corrupted = %v, want exactly [\"c\"] — its only edge carries a NaN strength", corrupted)
+	}
+}
+
+// TestResurface_EdgeStrengthNaN_RedundantWithHealthyPath_StillBoosts
+// proves the corrupted-edge report does not over-fire: when a neighbour is
+// ALSO reachable through a genuinely healthy edge, a second, NaN-strength
+// edge between the same pair must not suppress its boost or report it as
+// corrupted — the healthy path's gain is what spreadGains finds, and the
+// corrupt edge simply never became a competing adjacency entry, the same
+// "the strongest wins, a redundant path changes nothing" rule R2.5 already
+// uses for TestResurface_MultipleEdgesBetweenSamePair_UsesTheStrongest.
+func TestResurface_EdgeStrengthNaN_RedundantWithHealthyPath_StillBoosts(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{zeroState("n")},
+		Edges: []Edge{
+			{From: "a", To: "n", Strength: 1.0},
+			{From: "a", To: "n", Strength: math.NaN()},
+		},
+	}
+
+	got, corrupted := Resurface(n, now)
+	assertBoosts(t, got, now, []struct {
+		id     string
+		weight float64
+	}{{"n", 0.35}})
+	if len(corrupted) != 0 {
+		t.Errorf("Resurface(...) corrupted = %v, want none — %q has a healthy edge too, so the redundant NaN-strength edge must not mark it corrupt", corrupted, "n")
+	}
+}
+
+// TestResurface_CorruptedIsSortedByUnitID proves corrupted's own ordering
+// guarantee — the same one boosts already carries (TestResurface_Output-
+// SortedByUnitID) — with a fixture built to actually exercise it: three
+// refused units in one Neighbourhood, each reached by its own 1-hop edge,
+// none in alphabetical insertion order.
+//
+// This guarantee was previously untested: removing sort.Strings(corrupted)
+// from spread.go left the whole suite green, because every other fixture
+// populating corrupted (TestResurface_NonFiniteState_RefusesRatherThanCoerces,
+// the NaN-edge tests above) refuses exactly one unit — a single-element
+// slice is "sorted" under any definition. corrupted is built by ranging
+// over gains, a Go map, so append order is genuinely randomized per run
+// once 2+ units are refused in the same call; this fixture's exact-order
+// assertion below fails whenever a run's random map order does not
+// happen to already be alphabetical.
+//
+// Mutation-verified: with sort.Strings(corrupted) removed from Resurface
+// in spread.go, `go test ./internal/core/weight/ -run
+// TestResurface_CorruptedIsSortedByUnitID -count=20` failed on several of
+// the 20 runs (map iteration order is randomized per run, not fixed, so
+// not every run fails) while every other test in this file stayed green;
+// restored after, tree clean.
+func TestResurface_CorruptedIsSortedByUnitID(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{
+			{UnitID: "zeta", Weight: math.NaN(), DecayRate: 0, LastTouchedAt: now},
+			{UnitID: "alpha", Weight: math.NaN(), DecayRate: 0, LastTouchedAt: now},
+			{UnitID: "mid", Weight: math.NaN(), DecayRate: 0, LastTouchedAt: now},
+		},
+		Edges: []Edge{
+			{From: "a", To: "zeta", Strength: 1.0},
+			{From: "a", To: "alpha", Strength: 1.0},
+			{From: "a", To: "mid", Strength: 1.0},
+		},
+	}
+
+	_, corrupted := Resurface(n, now)
+	want := []string{"alpha", "mid", "zeta"}
+	if len(corrupted) != len(want) {
+		t.Fatalf("Resurface(...) corrupted = %v, want %v", corrupted, want)
+	}
+	for i := range want {
+		if corrupted[i] != want[i] {
+			t.Fatalf("Resurface(...) corrupted = %v, want %v exactly (sorted by UnitID, not map iteration order)", corrupted, want)
+		}
+	}
 }
