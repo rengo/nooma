@@ -35,7 +35,40 @@ type Boost struct {
 // weight and resets last_touched_at", made a formula (spec R2.2/R2.3,
 // design D3/F2).
 //
-// STUB — returns the zero value. Implemented in the next commit.
+// Revive always returns a write, never a bool. It boosts the *effective*
+// weight at now, never the persisted c.Weight — boosting the persisted
+// value would make decay freely reversible and c.Weight a ratchet — and
+// the boost is asymptotic: e + ReviveGain * (WeightCeiling - e), bounded by
+// construction, strictly increasing in e, with no clamp and no
+// discontinuity. An additive boost with a clamp collapses every unit above
+// the clamp onto the same value, destroying the ordering hysteresis exists
+// to protect; this shape never does (spec R2.2, the reconciliation's
+// ruling 2).
+//
+// When e is already at or above WeightCeiling, the gain term is floored at
+// zero and Revive returns Boost{c.UnitID, e, now} unchanged in weight — but
+// LastTouchedAt still moves to now. That write is effective-weight-neutral
+// by construction (the pairs (c.Weight, c.LastTouchedAt) and (e, now)
+// denote the same decay curve, so Effective returns the same value at
+// every future instant either way) and is not a no-op regardless:
+// last_touched_at is the vault's record of *direct* use, and a direct use
+// at the ceiling is still a decision with a real effect worth recording —
+// doc 02 §11's "no effect, no write" does not apply to it (spec R2.3).
+//
+// c.DecayRate is read only to compute e and is never modified or returned:
+// assigning λ is classify's job, and use does not make a thing decay more
+// slowly.
 func Revive(c Current, now time.Time) Boost {
-	return Boost{}
+	e := Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
+
+	gain := WeightCeiling - e
+	if gain < 0 {
+		gain = 0
+	}
+
+	return Boost{
+		UnitID:        c.UnitID,
+		Weight:        e + ReviveGain*gain,
+		LastTouchedAt: now,
+	}
 }
