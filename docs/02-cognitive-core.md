@@ -98,8 +98,70 @@ written on every read:
   coercing to 0 would drive the unit under `weight_threshold` and archive it on the strength of a
   read error, a destructive state transition; refusing leaves the corruption visible and
   untouched for `doctor` or a later repair path to find (`internal/core/weight.Revive`).
-- **Resurface** (related signal): propagates a boost along the graph edges, proportional to
-  each relation's `strength` (spreading activation).
+- **Resurface** (related signal): F2's asymptotic boost applied to a **target that shrinks
+  with graph distance**, instead of Revive's fixed `weight_ceiling`. For every unit `v`
+  reachable from a boosted unit within `resurface_max_hops` hops: `gain(v)` is the
+  **maximum**, over every path `p` to `v` no longer than `resurface_max_hops`, of the
+  product of that path's edge strengths times `resurface_attenuation^|p|`; `target(v) =
+  gain(v) * weight_ceiling`; and the write is `weight' = e + revive_gain * (target(v) - e)`,
+  the same asymptotic shape Revive uses, only toward a lower ceiling. **The gain scales the
+  target, never the step**: scaling the step instead would let a unit merely adjacent to
+  something used daily converge on the full ceiling over repeated passes, so the
+  neighbourhood of anything hot would become permanently hot and decay would never bite.
+  A unit reachable by more than one path takes the **maximum** gain among them, never the
+  sum — one rule for combining graph evidence, so a unit's boost never depends on how many
+  redundant edges happen to connect it to the origin. Traversal is **undirected** (§4: a
+  relation's direction is what the judge said, not a canonical form) and, where two units
+  are joined by more than one edge, the strongest is used, by the same max rule. The origin
+  of a resurface pass is never itself a recipient. Propagation terminates on a cyclic
+  relation graph **by the hop bound alone**, never a runtime timeout: gain strictly
+  decreases along a path, and depth is capped.
+  **Both halves of the write rule matter together, because the first alone reads as a
+  bug**: a resurfaced unit's `last_touched_at` **is reset** to the instant of the pass —
+  `weight` is defined as the value at `last_touched_at`, so writing one without the other
+  would let the very next read re-apply the whole stale `Δt` to a value that was never true
+  at its own timestamp — **and** a unit already at or above its own target gets **no write
+  at all**, not a zero-delta entry: no weight write, no `last_touched_at` reset, no
+  `decision_log` row downstream. The second half is what stops propagation from making a
+  unit *look* directly used — most neighbours of a hot unit are already warmer than
+  propagation could make them, and their clocks are never touched — and it is safe together
+  with the reset because a resurfaced unit converges on `gain * weight_ceiling`, never on
+  `weight_ceiling` itself, so restarting its clock from a graph-distance-bounded level is
+  harmless. **At the default calibration, spreading activation alone can never lift a unit
+  above the archive threshold at maximum hop distance**: `resurface_attenuation ^
+  resurface_max_hops * weight_ceiling ≤ weight_threshold`, which happens to land as an exact
+  equality at the shipped defaults — a coincidence of the chosen numbers, not a designed
+  identity, since `weight_threshold` is ⚙ recalibratable per user. This is the guarantee that
+  makes it safe to run resurface on every capture: only direct use, or a strong immediate
+  neighbourhood, keeps something out of the cold. That guarantee assumes **relation strength
+  stays in its own domain, `[0, 1]`** (§4): the cycle-termination argument above depends on
+  `strength ≤ 1` explicitly, and `strength` carries the same "no sign, no range" exposure as
+  `weight` and `weight_decay_rate` — the relation judge's JSON decode validates only that it is
+  a number, and the schema's `strength` column carries no `CHECK`. Resurface clamps an edge's
+  strength to at most `1` before it reaches the gain formula, for the same reason Effective
+  sanitizes weight and decay_rate: an unclamped strength above 1 is not a stronger relation, it
+  is a corrupt one, and left unclamped it can inflate a target past `weight_ceiling` itself,
+  defeating the guarantee this paragraph states. **Resurface also refuses rather than
+  coerces** when a neighbour's own state, or the graph reaching it, is corrupt — the same
+  posture Revive takes above, and for the same reason: a corrupted input would otherwise flow
+  straight into an ordinary write. Where Revive's refusal has a natural home in its own return
+  value (a single unit, a bool), Resurface fans out over a whole neighbourhood: it reports each
+  refused unit's id through a second return value, `corrupted`, separate from the boosts slice,
+  so a caller can tell "no boost because the unit is already at its target" (an ordinary no-op,
+  above) apart from "no boost because the unit's own state is corrupt" — the second is an event
+  worth a `decision_log` row once `m2c` can write one, not a silent drop
+  (`internal/core/weight.Resurface`). Two structurally distinct inputs are corrupt, and each is
+  validated **where it enters**, not by inspecting the fully-computed boosted weight: a
+  `Current`'s `weight` or `weight_decay_rate` that is `NaN` or `±Inf`, checked directly before
+  the target/effective-weight comparison runs (an earlier version of this refusal instead tested
+  the computed write for non-finiteness, and missed `weight = +Inf` alone — the one shape
+  `Effective`'s own non-finite arithmetic does **not** turn into `NaN` — because that comparison
+  is a valid, ordinary `true` for `+Inf`, not the `NaN`-always-false quirk this refusal exists
+  to catch); and an edge `strength` that is `NaN`, which the graph-building step now detects and
+  reports explicitly before the edge is ever discarded, rather than letting it vanish the same
+  way an edge to a unit genuinely outside the graph would — a `NaN`-strength edge used to be
+  indistinguishable from an absent one, silently making its neighbour unreachable instead of
+  reported corrupt (`internal/core/weight.Resurface`, `internal/core/weight.buildAdjacency`).
 - Nightly consolidation may materialize decay in bulk (optional, an optimization — the truth
   is always the on-demand formula).
 
@@ -639,6 +701,8 @@ module):
 | `hysteresis_margin` (focus) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
+| `resurface_max_hops` (`internal/core/weight.ResurfaceMaxHops`) | 2 |
+| `resurface_attenuation` (`internal/core/weight.ResurfaceAttenuation`) | 0.5 |
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |
