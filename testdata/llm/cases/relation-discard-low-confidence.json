@@ -5,7 +5,7 @@
   "task": "relation_evaluation",
   "message": "Thinking about repainting the kitchen this weekend",
   "candidates": [
-    {"id": "cand-discard", "content": "Kitchen renovation ideas from last spring"}
+    {"id": "ce8d8460-dfb3-42bf-9cd0-0fc74f3dab42", "content": "Kitchen renovation ideas from last spring"}
   ],
-  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"cand-discard\",\"type\":\"same_topic\",\"strength\":0.2,\"confidence\":0.10}"
+  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"ce8d8460-dfb3-42bf-9cd0-0fc74f3dab42\",\"type\":\"same_topic\",\"strength\":0.2,\"confidence\":0.10}"
 }
