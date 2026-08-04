@@ -142,15 +142,26 @@ written on every read:
   sanitizes weight and decay_rate: an unclamped strength above 1 is not a stronger relation, it
   is a corrupt one, and left unclamped it can inflate a target past `weight_ceiling` itself,
   defeating the guarantee this paragraph states. **Resurface also refuses rather than
-  coerces** when a neighbour's boosted weight would be `NaN` or `±Inf` — the same posture
-  Revive takes above, and for the same reason: `Effective` does not sanitize `NaN`/`±Inf`, so a
-  corrupted `Current` would otherwise flow straight into an ordinary write. Where Revive's
-  refusal has a natural home in its own return value (a single unit, a bool), Resurface fans
-  out over a whole neighbourhood: it reports each refused unit's id through a second return
-  value, `corrupted`, separate from the boosts slice, so a caller can tell "no boost because the
-  unit is already at its target" (an ordinary no-op, above) apart from "no boost because the
-  unit's own state is corrupt" — the second is an event worth a `decision_log` row once `m2c`
-  can write one, not a silent drop (`internal/core/weight.Resurface`).
+  coerces** when a neighbour's own state, or the graph reaching it, is corrupt — the same
+  posture Revive takes above, and for the same reason: a corrupted input would otherwise flow
+  straight into an ordinary write. Where Revive's refusal has a natural home in its own return
+  value (a single unit, a bool), Resurface fans out over a whole neighbourhood: it reports each
+  refused unit's id through a second return value, `corrupted`, separate from the boosts slice,
+  so a caller can tell "no boost because the unit is already at its target" (an ordinary no-op,
+  above) apart from "no boost because the unit's own state is corrupt" — the second is an event
+  worth a `decision_log` row once `m2c` can write one, not a silent drop
+  (`internal/core/weight.Resurface`). Two structurally distinct inputs are corrupt, and each is
+  validated **where it enters**, not by inspecting the fully-computed boosted weight: a
+  `Current`'s `weight` or `weight_decay_rate` that is `NaN` or `±Inf`, checked directly before
+  the target/effective-weight comparison runs (an earlier version of this refusal instead tested
+  the computed write for non-finiteness, and missed `weight = +Inf` alone — the one shape
+  `Effective`'s own non-finite arithmetic does **not** turn into `NaN` — because that comparison
+  is a valid, ordinary `true` for `+Inf`, not the `NaN`-always-false quirk this refusal exists
+  to catch); and an edge `strength` that is `NaN`, which the graph-building step now detects and
+  reports explicitly before the edge is ever discarded, rather than letting it vanish the same
+  way an edge to a unit genuinely outside the graph would — a `NaN`-strength edge used to be
+  indistinguishable from an absent one, silently making its neighbour unreachable instead of
+  reported corrupt (`internal/core/weight.Resurface`, `internal/core/weight.buildAdjacency`).
 - Nightly consolidation may materialize decay in bulk (optional, an optimization — the truth
   is always the on-demand formula).
 
