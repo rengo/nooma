@@ -6,6 +6,36 @@ import (
 	"time"
 )
 
+// TestReviveGain_IsPinnedToItsCalibratedValue guards ReviveGain against a
+// wrong VALUE, independent of every shape test in this file. It exists
+// because of C7 (openspec/changes/m2a-weight-focus/tasks.md): both
+// TestRevive_BelowCeiling_PinsExactBoostFromEffectiveWeight and
+// TestRevive_ConvergesGeometricallyToCeiling compute their expectation as
+// e + ReviveGain*(WeightCeiling-e) — correct for pinning the formula's
+// shape, but structurally incapable of noticing the constant itself moved,
+// since a mutated ReviveGain flows into their "want" the same way it flows
+// into Revive's own output. Only a comparison against an independent
+// literal — not derived from ReviveGain, WeightCeiling, or Revive's own
+// expression — catches that. nooma-core hard rule 4 and doc 02 §13 name
+// revive_gain as calibratable: recalibrating it means updating both the
+// §13 row and this literal in the same PR.
+func TestReviveGain_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 0.35 // docs/02-cognitive-core.md §13, row "revive_gain"
+	if ReviveGain != want {
+		t.Errorf("ReviveGain = %v, want %v — update docs/02-cognitive-core.md §13's revive_gain row in the same change", ReviveGain, want)
+	}
+}
+
+// TestWeightCeiling_IsPinnedToItsCalibratedValue is
+// TestReviveGain_IsPinnedToItsCalibratedValue's sibling for WeightCeiling,
+// the other calibratable constant C7 found undefended on its own axis.
+func TestWeightCeiling_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 2.0 // docs/02-cognitive-core.md §13, row "weight_ceiling"
+	if WeightCeiling != want {
+		t.Errorf("WeightCeiling = %v, want %v — update docs/02-cognitive-core.md §13's weight_ceiling row in the same change", WeightCeiling, want)
+	}
+}
+
 // TestRevive_MatchesSpecWorkedExample pins R2.2's own scenario: a unit
 // decayed to an effective weight of exactly 0.0 gets a revive of exactly
 // ReviveGain * WeightCeiling = 0.35 * 2.0 = 0.70. This value is derived
