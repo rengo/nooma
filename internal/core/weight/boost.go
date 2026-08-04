@@ -9,8 +9,13 @@ import (
 // single Revive closes. Default 0.35 (doc 02 §13).
 const ReviveGain = 0.35
 
-// WeightCeiling is the asymptote Revive and Resurface both boost toward,
-// never reach, and never exceed. Default 2.0 (doc 02 §13).
+// WeightCeiling is the asymptote Revive and Resurface both boost toward:
+// for e < WeightCeiling, the boosted weight never reaches or exceeds it.
+// That bound is over the boost's own contribution, not over every input —
+// when e is already at or above WeightCeiling, Revive's gain term floors
+// at zero and the returned weight equals e exactly (see Revive's doc
+// comment), which does not lower an e that started above the ceiling
+// back down to it. Default 2.0 (doc 02 §13).
 const WeightCeiling = 2.0
 
 // Current is a unit's decay-relevant state at the instant a boost is
