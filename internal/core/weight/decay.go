@@ -1,6 +1,9 @@
 package weight
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Effective computes doc 02 §2's Ebbinghaus decay curve exactly:
 //
@@ -25,5 +28,9 @@ import "time"
 // w holds for every input, including λ = 0 and every ordering of lt and
 // now: this is a postcondition, not a comment (spec R1.2, design D1).
 func Effective(weight, decayRate float64, lastTouchedAt, now time.Time) float64 {
-	return 0
+	deltaDays := now.Sub(lastTouchedAt).Hours() / 24
+	if deltaDays < 0 {
+		deltaDays = 0
+	}
+	return weight * math.Exp(-decayRate*deltaDays)
 }
