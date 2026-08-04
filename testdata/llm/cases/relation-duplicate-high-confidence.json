@@ -5,7 +5,7 @@
   "task": "relation_evaluation",
   "message": "Pick up the dry cleaning on Friday",
   "candidates": [
-    {"id": "cand-duplicate", "content": "Pick up the dry cleaning this Friday"}
+    {"id": "d7f4da5a-d2e4-4595-afdc-ecdad45b8579", "content": "Pick up the dry cleaning this Friday"}
   ],
-  "response": "{\"outcome\":\"duplicate\",\"target_unit_id\":\"cand-duplicate\",\"strength\":0.9,\"confidence\":0.85}"
+  "response": "{\"outcome\":\"duplicate\",\"target_unit_id\":\"d7f4da5a-d2e4-4595-afdc-ecdad45b8579\",\"strength\":0.9,\"confidence\":0.85}"
 }

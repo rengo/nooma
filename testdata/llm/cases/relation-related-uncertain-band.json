@@ -5,7 +5,7 @@
   "task": "relation_evaluation",
   "message": "Buy dry cleaning bags for the closet",
   "candidates": [
-    {"id": "cand-related", "content": "Pick up the dry cleaning on Friday"}
+    {"id": "3527ca73-93c4-4688-a680-145243ce1e04", "content": "Pick up the dry cleaning on Friday"}
   ],
-  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"cand-related\",\"type\":\"same_topic\",\"strength\":0.5,\"confidence\":0.40}"
+  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"3527ca73-93c4-4688-a680-145243ce1e04\",\"type\":\"same_topic\",\"strength\":0.5,\"confidence\":0.40}"
 }

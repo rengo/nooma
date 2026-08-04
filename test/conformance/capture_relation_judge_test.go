@@ -98,7 +98,7 @@ func decisionRows(t *testing.T, decisions *memrepo.DecisionLog, since time.Time)
 // reachable.
 func TestCapture_RelationJudgePersistsOutcomeMatchingConfidenceBand(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, _, relations, decisions := judgeTestFixture(t, "cand-related", "relation-related-uncertain-band")
+	result, _, relations, decisions := judgeTestFixture(t, "3527ca73-93c4-4688-a680-145243ce1e04", "relation-related-uncertain-band")
 
 	rels, err := relations.ByUnit(context.Background(), result.UnitID)
 	if err != nil {
@@ -111,8 +111,8 @@ func TestCapture_RelationJudgePersistsOutcomeMatchingConfidenceBand(t *testing.T
 	if rel.FromUnitID != result.UnitID {
 		t.Errorf("FromUnitID = %q, want the new unit %q", rel.FromUnitID, result.UnitID)
 	}
-	if rel.ToUnitID != "cand-related" {
-		t.Errorf("ToUnitID = %q, want %q", rel.ToUnitID, "cand-related")
+	if rel.ToUnitID != "3527ca73-93c4-4688-a680-145243ce1e04" {
+		t.Errorf("ToUnitID = %q, want %q", rel.ToUnitID, "3527ca73-93c4-4688-a680-145243ce1e04")
 	}
 	if rel.Type != "same_topic" {
 		t.Errorf("Type = %q, want the judge's own %q", rel.Type, "same_topic")
@@ -151,7 +151,7 @@ func TestCapture_RelationJudgePersistsOutcomeMatchingConfidenceBand(t *testing.T
 // stated scenario value, well below the 0.30 default.
 func TestCapture_RelationJudgeDiscardsBelowMinConfidenceToPersist(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, _, relations, decisions := judgeTestFixture(t, "cand-discard", "relation-discard-low-confidence")
+	result, _, relations, decisions := judgeTestFixture(t, "ce8d8460-dfb3-42bf-9cd0-0fc74f3dab42", "relation-discard-low-confidence")
 
 	rels, err := relations.ByUnit(context.Background(), result.UnitID)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestCapture_RelationJudgeDiscardsBelowMinConfidenceToPersist(t *testing.T) 
 // discard path above.
 func TestCapture_RelationJudgeRecordsDuplicateWithoutMerging(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, _, relations, decisions := judgeTestFixture(t, "cand-duplicate", "relation-duplicate-high-confidence")
+	result, _, relations, decisions := judgeTestFixture(t, "d7f4da5a-d2e4-4595-afdc-ecdad45b8579", "relation-duplicate-high-confidence")
 
 	rels, err := relations.ByUnit(context.Background(), result.UnitID)
 	if err != nil {
@@ -206,8 +206,8 @@ func TestCapture_RelationJudgeRecordsDuplicateWithoutMerging(t *testing.T) {
 	if rel.FromUnitID != result.UnitID {
 		t.Errorf("FromUnitID = %q, want the new unit %q — design D7: the direction is the new unit -> the existing one", rel.FromUnitID, result.UnitID)
 	}
-	if rel.ToUnitID != "cand-duplicate" {
-		t.Errorf("ToUnitID = %q, want %q", rel.ToUnitID, "cand-duplicate")
+	if rel.ToUnitID != "d7f4da5a-d2e4-4595-afdc-ecdad45b8579" {
+		t.Errorf("ToUnitID = %q, want %q", rel.ToUnitID, "d7f4da5a-d2e4-4595-afdc-ecdad45b8579")
 	}
 	if rel.Type != "duplicate" {
 		t.Errorf("Type = %q, want %q", rel.Type, "duplicate")
@@ -245,7 +245,7 @@ func TestCapture_RelationJudgeRecordsDuplicateWithoutMerging(t *testing.T) {
 // rather than propagating it (design D4's diagram, corrected).
 func TestCapture_RelationJudgeProviderFailureLeavesUnitPersisted(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	result, units, relations, decisions := judgeTestFixture(t, "cand-provider-outage", "relation-judge-provider-outage")
+	result, units, relations, decisions := judgeTestFixture(t, "279d538a-8cc4-4a21-85f7-d006fb9b3980", "relation-judge-provider-outage")
 
 	if _, err := units.ByID(context.Background(), result.UnitID); err != nil {
 		t.Fatalf("units.ByID(%q): %v — the unit must be persisted even though the relation judge failed", result.UnitID, err)

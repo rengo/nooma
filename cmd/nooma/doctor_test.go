@@ -394,6 +394,54 @@ func TestCorpusCoversEveryQualityGateTask(t *testing.T) {
 	}
 }
 
+// TestRelationCandidateIDsDoNotLeakTheOutcomeVocabulary is the regression
+// test for the corpus defect a live gpt-4o-mini run found against PR #130's
+// real prompts (Engram project/relation-corpus-ids-leak-answers): every
+// relation_evaluation case's candidate carried a human-readable id built
+// from the outcome the case wanted — cand-unrelated, cand-duplicate,
+// cand-related, cand-discard, cand-outage — and one of them
+// (relation-no-match-for-dry-cleaning) failed the quality gate because the
+// model answered {"outcome":"cand-unrelated"}: it copied the candidate's
+// own id, the nearest string to "no relation" anywhere in the prompt. The
+// other four passed only because "duplicate"/"related" also happen to be
+// legal outcome values — false positives this test alone cannot detect
+// (only a live provider run can prove a case passed for the right reason).
+// What it can and does prevent is the fixture ever again spelling the
+// answer into an identifier the prompt renders: production unit ids are
+// UUIDs (brain.JudgePrompt renders whatever id a candidate unit.Unit
+// carries verbatim), and no production id ever names the classification a
+// model is being asked to produce.
+func TestRelationCandidateIDsDoNotLeakTheOutcomeVocabulary(t *testing.T) {
+	cases, err := llm.Cases()
+	if err != nil {
+		t.Fatalf("llm.Cases(): %v", err)
+	}
+
+	// outcome's own vocabulary (brain.JudgePrompt's "one of: new | duplicate
+	// | related") plus "unrelated", the obvious negation that made the
+	// original failure a vocabulary error rather than a silent false
+	// positive. Checked as a case-insensitive substring, not a whole-word
+	// match: the defect was a candidate id CONTAINING the answer, and a
+	// production id (a UUID) can never contain any of these letters-only
+	// words by construction, so this cannot false-positive against a
+	// realistic id.
+	leakedWords := []string{"new", "duplicate", "related", "unrelated"}
+
+	for _, c := range cases {
+		if c.Task != "relation_evaluation" {
+			continue
+		}
+		for _, cand := range c.Candidates {
+			id := strings.ToLower(cand.ID)
+			for _, word := range leakedWords {
+				if strings.Contains(id, word) {
+					t.Errorf("case %q candidate id %q contains outcome vocabulary word %q — a fixture id must not hint the answer it is graded against", c.ID, cand.ID, word)
+				}
+			}
+		}
+	}
+}
+
 // TestCheckTaskCoverageReportsOKOnAFreshVault is design D18b row 1's own
 // "no providers configured at all" case — the same shape 16a-ii's R5.6
 // already established, applied here to a different check. A fresh vault

@@ -5,7 +5,7 @@
   "task": "relation_evaluation",
   "message": "Pick up the dry cleaning on Friday",
   "candidates": [
-    {"id": "cand-unrelated", "content": "Notes on PostgreSQL index types"}
+    {"id": "f3391369-654c-4627-aa32-ae826fe4bae3", "content": "Notes on PostgreSQL index types"}
   ],
   "response": "{\"outcome\":\"new\"}"
 }
