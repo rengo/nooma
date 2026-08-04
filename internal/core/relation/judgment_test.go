@@ -40,6 +40,27 @@ func TestDecodeJudgment_NoFieldsSalvaged(t *testing.T) {
 	}
 }
 
+// TestDecodeJudgment_TolerantOfMarkdownFencedResponse proves the shared fix
+// (classify.Salvage, docs/02-cognitive-core.md §5.1) covers this consumer
+// too — 5 of the confirmed production failures were relation_evaluation,
+// not capture_processing, and both call sites reuse the same tolerant
+// decoder rather than each carrying its own fence-handling.
+func TestDecodeJudgment_TolerantOfMarkdownFencedResponse(t *testing.T) {
+	raw := "```json\n" + `{"outcome":"duplicate","target_unit_id":"u1","strength":0.8,"confidence":0.9}` + "\n```"
+
+	j, err := DecodeJudgment(raw)
+	if err != nil {
+		t.Fatalf("DecodeJudgment(%q) error = %v, want nil", raw, err)
+	}
+	if len(j.Degradations) != 0 {
+		t.Fatalf("DecodeJudgment(%q) degraded %v, want none — the fence is discarded preamble, "+
+			"not a malformed field", raw, j.Degradations)
+	}
+	if j.Outcome == nil || *j.Outcome != OutcomeDuplicate {
+		t.Errorf("Outcome = %v, want duplicate", j.Outcome)
+	}
+}
+
 // TestDecodeJudgment_WellFormed covers doc 02 §4 step 3's three outcomes,
 // each with the fields that outcome actually carries — "new" carries none
 // of the other four (they are meaningful only for duplicate/related, per

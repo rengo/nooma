@@ -50,6 +50,7 @@ func TestRunLLMQualityCheck(t *testing.T) {
 	truncated := load("classify-truncated-response")
 	wrongType := load("classify-wrong-typed-field")
 	unknownEnum := load("classify-unknown-enum-value")
+	fenced := load("classify-fenced-response")
 	relationClean := load("relation-duplicate-high-confidence")
 
 	tests := []struct {
@@ -96,6 +97,18 @@ func TestRunLLMQualityCheck(t *testing.T) {
 				task: "capture_processing", total: 1,
 				failures: []llmQualityFailure{{caseID: unknownEnum.ID, field: "type", reason: string(classify.ReasonUnknownEnum)}},
 			}},
+		},
+		{
+			// The production defect this test guards against: a live
+			// OpenAI key returned exactly this shape for every one of 20
+			// prompts, and the pre-fix decoder salvaged zero fields from a
+			// markdown-fenced object, reporting "(response) wrong_type" for
+			// all 20 — never a "k of n" line at all. This is the case
+			// checkLLMQuality must now grade clean.
+			name:    "clean pass through a markdown-fenced response",
+			scripts: map[string][]string{"capture_processing": {fenced.ID}},
+			cases:   []llm.Case{fenced},
+			want:    []taskQualityResult{{task: "capture_processing", total: 1, clean: 1}},
 		},
 		{
 			name: "one task fails, a different task passes — reported separately (R5.2)",

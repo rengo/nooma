@@ -237,7 +237,10 @@ pipeline tests, and the `nooma doctor` provider quality gate. Sharing the corpus
 deliberate — what we test is what we ask the user to validate on their machine.
 
 It must include deliberately broken cases: truncated JSON, a field with the wrong type, an
-unknown enum. Those are the ones that prove I14.
+unknown enum. Those are the ones that prove I14. It must also include at least one otherwise
+well-formed response wrapped in a markdown code fence — doc 02 §5.1's preamble-tolerance rule,
+confirmed against a live OpenAI key — since a fence is not one of I14's three malformed shapes: a
+fenced-but-clean object must decode with **zero** degradations, not a recorded one.
 
 ### `testdata/llm/` — recorded responses
 

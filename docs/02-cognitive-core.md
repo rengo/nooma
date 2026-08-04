@@ -275,6 +275,18 @@ The floor: a response from which **no** field can be read at all is not a classi
 every field null. It is a failed classification, and it is reported as one. A payload with no
 fields has nothing to degrade.
 
+**A response may carry a preamble around its object, and the preamble is discarded, not
+treated as a malformed field.** A model asked to answer with one JSON object and nothing else can
+still wrap that object in a markdown code fence, or add a line of its own prose before it — a live
+OpenAI model did exactly this, ignoring the prompt's own instruction, and every one of that run's
+prompts failed before this was fixed. The decoder locates the object by its first `{` and reads
+from there; everything before it is discarded unread and never inspected for meaning. A response
+is judged **by the object it carries**, not by whether that object arrived bare. When the first
+`{` the decoder finds does not open a decodable object — a stray brace inside ordinary prose, for
+instance — that is the same "nothing could be salvaged" failure a response with no object at all
+reports: the decoder does not search further for a *later*, better `{`, because guessing which
+brace is the real one would trade a loud failure for a silent, possibly wrong, classification.
+
 **A value outside its vocabulary degrades; it is never coerced.** `type` and the six orthogonal
 fields above each name a **closed** set of values. A model that answers `type: "grocery"`, or
 `list_op: "prepend"`, has said something Nooma has no meaning for, and the honest response is to

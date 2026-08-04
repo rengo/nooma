@@ -107,6 +107,37 @@ func TestDecode_NoFieldsSalvaged(t *testing.T) {
 	}
 }
 
+// TestDecode_TolerantOfMarkdownFencedResponse is the production defect this
+// change fixes, at the Decode layer: gpt-4o-mini wrapped an otherwise
+// well-formed classification in a markdown code fence — the exact shape
+// confirmed against a live OpenAI key — and the pre-fix decoder salvaged
+// zero fields from it, returning ErrNoFieldsSalvaged for every one of the
+// four required fields even though the model had answered correctly.
+// docs/02-cognitive-core.md §5.1 now says a preamble is discarded, not
+// treated as a malformed response; this proves Decode itself agrees, with
+// zero degradations for a response that carries every required field.
+func TestDecode_TolerantOfMarkdownFencedResponse(t *testing.T) {
+	raw := "```json\n" +
+		`{"type":"task","normalized_content":"Pick up the dry cleaning","weight":0.6,"decay_rate":0.1}` +
+		"\n```"
+
+	c, err := Decode(raw, testNow)
+	if err != nil {
+		t.Fatalf("Decode(%q) error = %v, want nil — a fenced but otherwise well-formed "+
+			"response must decode exactly as the bare object would", raw, err)
+	}
+	if len(c.Degradations) != 0 {
+		t.Fatalf("Decode(%q) degraded %v, want none — the fence is not a malformed field, "+
+			"it is discarded preamble", raw, c.Degradations)
+	}
+	if c.Kind == nil || *c.Kind != KindTask {
+		t.Errorf("Kind = %v, want task", c.Kind)
+	}
+	if c.NormalizedContent == nil || *c.NormalizedContent != "Pick up the dry cleaning" {
+		t.Errorf("NormalizedContent = %v, want %q", c.NormalizedContent, "Pick up the dry cleaning")
+	}
+}
+
 // TestDecode_WrongTypedFieldDegradesAlone is I14 shape 2 (spec R1.2): a field
 // carrying a JSON value of the wrong type degrades to absent, and every other
 // field is decoded exactly as the clean baseline decoded it.
