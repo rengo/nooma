@@ -1,6 +1,9 @@
 package weight
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // ReviveGain is the fraction of the remaining gap to WeightCeiling that a
 // single Revive closes. Default 0.35 (doc 02 §13).
@@ -59,8 +62,31 @@ type Boost struct {
 // assigning λ is classify's job, and use does not make a thing decay more
 // slowly.
 //
-// STUB — the second return value is always true. Non-finite refusal lands
-// in the next commit.
+// Revive returns (Boost{}, false) — refusing to produce a persistable
+// value — when c.Weight or c.DecayRate is NaN or ±Inf and that
+// non-finiteness survives into the computed weight. This is unreachable
+// through capture today: encoding/json cannot decode a NaN or Infinity
+// token. But weight and weight_decay_rate carry no CHECK constraint, so a
+// corrupted row or a future arithmetic slip elsewhere could still produce
+// one, and unlike Effective — whose NaN is a transient read result — a
+// Boost is what a caller persists (I24's structural guarantee, above).
+// Coercing that result to a finite number, 0 in particular, would be worse
+// than refusing it: a coerced 0 could drive the unit under
+// weight_threshold and archive it, a destructive state transition caused
+// by nothing more than a read error. Refusing instead leaves the
+// corruption visible and untouched, so doctor or a later repair path can
+// still find it — and since nothing in the vault is ever deleted, a
+// silently coerced value would otherwise make the corruption durable:
+// every later read of that unit would return NaN forever.
+//
+// This is a genuine second false case for the bool the reconciliation's
+// ruling 2 removed. Ruling 2 reasoned that "once a direct use always
+// writes, the bool has no false case and carrying it is a lie in the
+// type" — but that reasoning was about the ceiling edge, where a direct
+// use really does always write. A non-finite input is a different case
+// ruling 2 never considered; reintroducing the bool for it is an addition
+// to ruling 2, not a reversal (recorded as C4,
+// openspec/changes/m2a-weight-focus/tasks.md's Conflicts).
 func Revive(c Current, now time.Time) (Boost, bool) {
 	e := Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
 
@@ -69,9 +95,14 @@ func Revive(c Current, now time.Time) (Boost, bool) {
 		gain = 0
 	}
 
+	w := e + ReviveGain*gain
+	if math.IsNaN(w) || math.IsInf(w, 0) {
+		return Boost{}, false
+	}
+
 	return Boost{
 		UnitID:        c.UnitID,
-		Weight:        e + ReviveGain*gain,
+		Weight:        w,
 		LastTouchedAt: now,
 	}, true
 }
