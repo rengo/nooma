@@ -176,6 +176,51 @@ Disclosed in `design.md`, worth carrying forward so it is not forgotten: today n
 without a matching timestamp" has no write path to violate yet. The guarantee becomes load-bearing
 once `m2c` adds the repository method that actually persists a `Boost`.
 
+### C7 — the two calibration constants are defended against a wrong VALUE by exactly one test, and the test added to break a single point of failure has the same weakness on a different axis.
+
+Judgment Day round 2 on PR 2a mutated `ReviveGain` 0.35 → 0.36 and `WeightCeiling` 2.0 → 2.2 (and
+→ 2.1) directly in `boost.go`. In all three cases **9 of the 10 `TestRevive_*` tests still
+passed.** Only `TestRevive_MatchesSpecWorkedExample`, whose `want` is the independent literal
+`0.70`, catches a wrong constant.
+
+The reason is worth stating precisely, because it is not carelessness: both
+`TestRevive_BelowCeiling_PinsExactBoostFromEffectiveWeight` — **the test round 1 added specifically
+to break a single point of failure** — and `TestRevive_ConvergesGeometricallyToCeiling` compute
+their expectation as `e + ReviveGain*(WeightCeiling-e)`, re-deriving it from the **live** constants.
+That is deliberate and correct for what those tests are for: they pin the formula's *shape*, and a
+shape test that hard-codes a value has to be rewritten every time a constant is recalibrated. But
+it means they are structurally incapable of noticing that a constant moved, and the fix for "one
+test carries this invariant" reintroduced the same pattern one axis over.
+
+`nooma-core` hard rule 4 and `docs/02-cognitive-core.md` §13 treat `revive_gain` and
+`weight_ceiling` as calibratable — which is exactly the class of value a future pass is *expected*
+to change, deliberately or by accident.
+
+**What a later link should do**: keep the shape tests re-deriving from constants, and add one
+value-pinning test per calibratable constant whose expectation is an independent literal, so shape
+and calibration are guarded separately. `m2b` introduces `ResurfaceMaxHops` and
+`ResurfaceAttenuation` and will face the identical choice.
+
+### C8 — `boost.go`'s `+Inf` comment states a fifth non-finite path that does not exist as described. Fourth consecutive PR shipping a claim broader than the code.
+
+The comment says `Weight = +Inf` "reaches Revive without going through `Effective`'s own NaN cases
+at all — `e` is already `+Inf`, and `gain` clamps to 0, not NaN". A judge falsified it: with a
+`DecayRate·Δt` product large enough for `exp(-DecayRate·Δt)` to underflow to exactly `0.0` (e.g.
+`DecayRate=100`, `Δt=1000` days), `e = +Inf * 0.0 = NaN` — reached through the very route the
+comment says is not taken.
+
+**No functional defect**: the final `math.IsNaN(w) || math.IsInf(w, 0)` check refuses correctly
+either way, confirmed by two independent fuzzers. What is wrong is only the comment's account of
+*why*.
+
+Recorded here rather than fixed because the owner chose to merge PR 2a and carry it. It belongs in
+this list because of the pattern, not the severity: **this is the fourth consecutive PR in `m2a`
+to ship a stated guarantee wider than the code enforces**, and twice the over-claim was introduced
+*inside the correction meant to remove it* (PR 1's NaN qualifier, and this comment, written during
+the round-1 fix). A rule that keeps being broken while everyone agrees with it is a signal about
+the process, not about care. Whoever writes `m2b`'s comments should assume the same failure will
+recur and check for it explicitly rather than intending not to.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
