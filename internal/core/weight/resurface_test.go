@@ -327,6 +327,18 @@ func TestResurface_OutputSortedByUnitID(t *testing.T) {
 // neighbour whose effective weight already meets or exceeds its target
 // gets no Boost at all — a shorter slice, not a zero-delta entry with an
 // unchanged weight.
+//
+// Disclosure (Judgment Day round 1 on PR #140, Judge A, C14): checked out
+// at its introducing RED commit (456cbbb), against a `return nil` stub,
+// the original version of this test — `if len(got) != 0 { t.Errorf(...) }`
+// alone — was trivially green: len(nil) != 0 is false for every input, so
+// it never distinguished "correctly refused" from "did nothing at all."
+// It carried no disclosure saying so, unlike the tests in this file that
+// are legitimately unable to be red. Fixed here, rather than only
+// disclosed, by adding a companion neighbour genuinely below its own
+// target in the same Neighbourhood: a nil-returning stub now fails this
+// test because the companion's boost is absent too, so the assertion can
+// no longer pass by doing nothing.
 func TestResurface_AtOrAboveTarget_EmitsNoBoost(t *testing.T) {
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 
@@ -341,12 +353,24 @@ func TestResurface_AtOrAboveTarget_EmitsNoBoost(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			n := Neighbourhood{
 				Origin: "a",
-				States: []Current{{UnitID: "n", Weight: tc.weight, DecayRate: 0, LastTouchedAt: now}},
-				Edges:  []Edge{{From: "a", To: "n", Strength: 1.0}},
+				States: []Current{
+					{UnitID: "n", Weight: tc.weight, DecayRate: 0, LastTouchedAt: now},
+					zeroState("companion"), // below its own target — proves the call actually ran
+				},
+				Edges: []Edge{
+					{From: "a", To: "n", Strength: 1.0},
+					{From: "a", To: "companion", Strength: 1.0},
+				},
 			}
 			got := mustResurface(t, n, now)
-			if len(got) != 0 {
-				t.Errorf("Resurface(weight=%v at target) = %+v, want an empty slice (R2.6 — no Boost, not a zero-delta entry)", tc.weight, got)
+			assertBoosts(t, got, now, []struct {
+				id     string
+				weight float64
+			}{{"companion", 0.35}})
+			for _, b := range got {
+				if b.UnitID == "n" {
+					t.Errorf("Resurface(weight=%v at target) included %q, want it absent (R2.6 — no Boost, not a zero-delta entry)", tc.weight, "n")
+				}
 			}
 		})
 	}
@@ -515,6 +539,15 @@ func TestResurface_BoundaryTable(t *testing.T) {
 		}{{"n", 0.035}}) // 0.35 * 0.10
 	})
 
+	// Disclosure (Judgment Day round 1 on PR #140, Judge A, C14): the
+	// original version of this subtest only checked that "d" was absent
+	// from got — trivially satisfied by a nil-returning stub too, the same
+	// shape flaw TestResurface_AtOrAboveTarget_EmitsNoBoost carried. Fixed
+	// here with an explicit non-empty check: b and c are both already
+	// pinned reachable on the identical chain shape by
+	// TestResurface_ChainLongerThanMaxHops_ExcludesUnitsBeyondTheLimit, so
+	// requiring len(got) > 0 proves the call actually computed them rather
+	// than returning nothing.
 	t.Run("3+ hops -> unreachable", func(t *testing.T) {
 		n := Neighbourhood{
 			Origin: "a",
@@ -526,6 +559,9 @@ func TestResurface_BoundaryTable(t *testing.T) {
 			},
 		}
 		got := mustResurface(t, n, now)
+		if len(got) == 0 {
+			t.Fatalf("Resurface(...) returned no boosts at all, want at least %q and %q reachable within ResurfaceMaxHops — an empty result here would also be produced by a nil-returning stub", "b", "c")
+		}
 		for _, b := range got {
 			if b.UnitID == "d" {
 				t.Errorf("Resurface(...) included %q at 3 hops, want it absent (ResurfaceMaxHops = %d)", "d", ResurfaceMaxHops)
