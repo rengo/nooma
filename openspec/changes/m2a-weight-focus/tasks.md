@@ -121,15 +121,33 @@ every property test, not just this one.
 **Closed** (`test/close-m2a-conflicts`): `propertySeed` now derives `TestEffective_
 NeverExceedsWeight_Property`'s seed per run, logs it via `t.Logf` before the property runs, and
 accepts a `-weight-seed` flag override so a failing run reproduces exactly. The entropy source is
-the address of a freshly stack-allocated value (varies process-to-process via the Go runtime's own
-memory layout), not `time.Now`, `math/rand` or `os.Getenv` — all forbidden inside `internal/core`,
-including its `_test.go` files, by `depguard`'s `core-purity` rule and `forbidigo`.
-Mutation-verified: with `decayRate < -0.001` applied, 185/200 (92.5 %) independently-seeded runs
-caught the mutant — reliable, not merely probabilistic, over 200 samples — and 100 further runs
-against the unmutated code produced zero false positives. Reverted the mutant after measuring.
-This closes the question only for this one property test, as scoped; whether the project adopts
-the same pattern everywhere is left open, per this entry's own instruction not to decide that
-unilaterally.
+`hash/maphash.MakeSeed()` — stdlib, unbanned, and documented to return a fresh random seed per
+call — not `time.Now`, `math/rand` or `os.Getenv`, all forbidden inside `internal/core` including
+its `_test.go` files by `depguard`'s `core-purity` rule and `forbidigo`.
+
+**Corrected after Judgment Day on this PR.** The first revision hashed the address of a local
+variable, and its comment explained that process memory layout varies per run. Both judges took
+that apart independently. The mechanism worked, but not for the stated reason: `go build
+-gcflags=-m` shows the variable **escaping to the heap** — taking its address to pass through
+`fmt`'s `...any` boxes it — so the entropy was Go's allocator and scheduler jitter, an
+undocumented runtime detail, and not process layout at all. One judge disabled kernel ASLR with a
+`personality(ADDR_NO_RANDOMIZE)` syscall and the address still varied, which is reassuring and is
+precisely the problem: nothing in the language promises it will keep varying, so the guarantee
+rested on behaviour no test asserts. **A comment claiming more than the code enforces, inside the
+change written to stop this project doing exactly that** — the fifth instance in `m2a`, and see
+C8. `maphash` removes the false claim and the dependence together.
+
+Mutation-verified with `decayRate < -0.001` applied, across four independent measurements:
+**185/200, 183/200, 179/200 and 56/60** — roughly **90 %**, stated as a range because it is a
+noisy estimate of a per-run-random process, not a property of the code. Binomial σ at n=200,
+p≈0.9 is about 4, so those four are one distribution, not a regression. 100 further runs against
+unmutated code produced zero false positives. Every mutant reverted and the tree verified clean
+after measuring.
+
+This closes the question for this one property test only. Whether the project adopts per-run
+seeding everywhere is left open, per the instruction not to decide it unilaterally — but `m2b`
+introduces `ResurfaceMaxHops` and `ResurfaceAttenuation` and will face the same choice, so the
+answer is worth settling rather than re-deriving.
 
 **C3.2 — `AllZones()` documents an ordering contract nothing tests.** Its doc comment promises
 the members come back "in the order the constants above declare them".
@@ -211,6 +229,44 @@ reviewable one-line diff to the allow-list instead. Mutation-verified: a tempora
 function added to `internal/core/weight` fails the test with the offending name listed; removed
 after. This is the honest ceiling of a structural check here, stated in the test's own comment so a
 reader does not read a stronger guarantee into it than it proves.
+
+**The ceiling was narrower than that closure first admitted.** Judgment Day on this PR had both
+judges build bypasses and watch them sail through. Three shapes pass untouched, all verified by
+compiling them:
+
+```go
+type PersistWeight = float64                 // alias
+type WeightValue float64                     // defined type
+type PersistResult struct{ Value float64 }   // struct wrapper
+```
+
+The check matches `go/printer`'s **rendering** of the result type, so it sees the identifier a
+function declares, not what that identifier resolves to. The third shape is the one that matters:
+`Boost` is itself a struct wrapping a `float64`, so "a struct carrying a weight" is the pattern
+this package has taught everyone to write — a well-meaning helper returning one is a likelier
+accident than a bare `float64` ever was. Catching these needs `go/types` resolution rather than
+this file's ast-only walk, and banning float-carrying structs outright would ban `Boost`.
+
+So the guard raises the cost of the laziest bypass and nothing more, and the test's comment now
+names all three shapes instead of only conceding it "cannot judge intent". **Real enforcement is
+C6's**, when `m2c` gives I24 a write path to protect.
+
+### C9 — this debt-clearing PR committed the same TDD-disclosure lapse it was closing.
+
+Judgment Day found that C7's and C5's new tests were never watched red: checked out at their
+introducing commits, both pass immediately, because both were written against already-correct
+code. That is legitimate — a value-pinning test and a structural allow-list have no
+missing-symbol red available — but **this document's own intro (lines 26-30) requires saying so at
+the task**, and `PR 2b.3` follows that convention verbatim ("Not a missing-symbol red: … this test
+is the permanent guard against a future recalibration"). C7's and C5's closures instead wrote
+"Mutation-verified: …", which proves a test *can* fail, not that it followed red-then-green.
+
+Recording it rather than rewriting history, the same treatment C1 and C2 got — and noting the
+shape, because it is the point: **a PR whose entire purpose was closing TDD-discipline debt
+reproduced the discipline gap in its own closures.** C2 is a coverage-driven test added without a
+red step; this is a mutation-driven one. The lesson C2 already recorded did not transfer, because
+it was written as a rule about coverage reports rather than about the general case: whenever a
+test cannot be red, say so where the test is introduced.
 
 ### C6 — I24 is documented but unenforced until `m2c`, when `ports.UnitRepo` gains a weight-write method.
 

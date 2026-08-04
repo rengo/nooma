@@ -125,6 +125,28 @@ func TestI05_BoostHasExactlyOneProducer(t *testing.T) {
 // than a persistence bypass — that judgment stays with whoever reviews the
 // change that edits want — but it stops the bypass C5 described from
 // landing without anyone having to notice.
+//
+// Its ceiling, named because two blind reviewers found it and a future
+// reader deserves it stated rather than discovered: this check matches
+// go/printer's RENDERING of the result type, so it sees the identifier a
+// function declares, not the type that identifier resolves to. Three shapes
+// pass it untouched, all verified by building them:
+//
+//	type PersistWeight = float64                      // alias
+//	type WeightValue float64                          // defined type
+//	type PersistResult struct{ Value float64 }        // struct wrapper
+//
+// The third is the one to worry about. Boost is itself a struct wrapping a
+// float64, so "a struct carrying a weight" is the shape this package has
+// already taught everyone to write — a well-meaning helper returning one is
+// a far likelier accident than a bare float64. Catching these needs type
+// resolution (go/types), not the ast-only walk this file does, and banning
+// float-carrying structs outright would ban Boost.
+//
+// So this guard raises the cost of the laziest bypass and nothing more.
+// I24's real enforcement arrives in m2c, when ports.UnitRepo gains the
+// weight-write method that gives the invariant something to protect
+// (tasks.md C6).
 func TestI05_NoBareFloat64WeightBypassesBoost(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	weightDir := filepath.Join(repoRoot, "internal", "core", "weight")

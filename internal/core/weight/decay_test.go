@@ -2,8 +2,7 @@ package weight
 
 import (
 	"flag"
-	"fmt"
-	"hash/fnv"
+	"hash/maphash"
 	"math"
 	"testing"
 	"time"
@@ -191,27 +190,34 @@ var weightSeedFlag = flag.Uint64("weight-seed", 0, "override the property test's
 // while an override keeps a failing run exactly reproducible.
 //
 // internal/core may not call time.Now, math/rand, or os.Getenv
-// (docs/06-harness.md §2, nooma-core hard rule 2) — depguard's
-// core-purity rule and forbidigo both police this file, a _test.go under
-// internal/core, the same as production code. The seed instead comes from
-// the address of a freshly stack-allocated value: the Go runtime lays out
-// each process's memory somewhat differently for reasons this package
-// never asks the clock, an RNG, or the environment for directly, so the
-// address varies from run to run without this function calling any of the
-// three forbidden sources. This is weaker entropy than crypto/rand — good
-// enough to break a permanent blind spot, not a cryptographic guarantee —
-// and it is logged before the property runs, so a failure is reproducible
-// via -weight-seed regardless of why that run's address landed where it
-// did.
+// (docs/06-harness.md §2, nooma-core hard rule 2) — depguard's core-purity
+// rule and forbidigo both police this file, a _test.go under internal/core,
+// the same as production code. hash/maphash is stdlib, unbanned, and
+// purpose-built: maphash.MakeSeed returns a fresh random seed per call, a
+// documented guarantee of the package rather than a side effect of anything.
+//
+// An earlier revision of this helper hashed the address of a local variable
+// instead, on the reasoning that process memory layout varies per run. Two
+// blind reviewers took that apart. The mechanism worked, but not for the
+// stated reason: `go build -gcflags=-m` shows the variable escaping to the
+// heap (taking its address to pass through fmt's ...any boxes it), so the
+// entropy was Go's allocator and scheduler jitter — an undocumented runtime
+// detail — and not process layout at all. One reviewer disabled kernel ASLR
+// outright and the address still varied, which is reassuring and is exactly
+// the problem: nothing in the language promises it will keep varying. The
+// comment claimed more than the code could guarantee, in the very change
+// written to stop this project doing that. maphash removes both the false
+// claim and the dependence on behaviour nobody asserts against.
+//
+// The seed is logged before the property runs, so a failing run is
+// reproducible from the printed value via -weight-seed.
 func propertySeed(t *testing.T) uint64 {
 	t.Helper()
 	if *weightSeedFlag != 0 {
+		t.Logf("property seed = %d (from -weight-seed)", *weightSeedFlag)
 		return *weightSeedFlag
 	}
-	var entropy int
-	h := fnv.New64a()
-	_, _ = fmt.Fprintf(h, "%p", &entropy)
-	seed := h.Sum64()
+	seed := maphash.Bytes(maphash.MakeSeed(), nil)
 	t.Logf("property seed = %d (rerun with -args -weight-seed=%d to reproduce this exact run)", seed, seed)
 	return seed
 }
