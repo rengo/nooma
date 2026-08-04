@@ -133,7 +133,16 @@ written on every read:
   equality at the shipped defaults — a coincidence of the chosen numbers, not a designed
   identity, since `weight_threshold` is ⚙ recalibratable per user. This is the guarantee that
   makes it safe to run resurface on every capture: only direct use, or a strong immediate
-  neighbourhood, keeps something out of the cold (`internal/core/weight.Resurface`).
+  neighbourhood, keeps something out of the cold. **Resurface also refuses rather than
+  coerces** when a neighbour's boosted weight would be `NaN` or `±Inf` — the same posture
+  Revive takes above, and for the same reason: `Effective` does not sanitize `NaN`/`±Inf`, so a
+  corrupted `Current` would otherwise flow straight into an ordinary write. Where Revive's
+  refusal has a natural home in its own return value (a single unit, a bool), Resurface fans
+  out over a whole neighbourhood: it reports each refused unit's id through a second return
+  value, `corrupted`, separate from the boosts slice, so a caller can tell "no boost because the
+  unit is already at its target" (an ordinary no-op, above) apart from "no boost because the
+  unit's own state is corrupt" — the second is an event worth a `decision_log` row once `m2c`
+  can write one, not a silent drop (`internal/core/weight.Resurface`).
 - Nightly consolidation may materialize decay in bulk (optional, an optimization — the truth
   is always the on-demand formula).
 

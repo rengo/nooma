@@ -1,6 +1,7 @@
 package weight
 
 import (
+	"math"
 	"sort"
 	"time"
 )
@@ -50,6 +51,30 @@ const ResurfaceAttenuation = 0.5
 // when e_v < target(v); when e_v >= target(v) it emits nothing for v — a
 // shorter slice, never a zero-delta entry (spec R2.6).
 //
+// Resurface REFUSES rather than coerces when a neighbour's boosted weight
+// would be NaN or ±Inf, the same posture Revive takes (boost.go's own doc
+// comment, C4) and for the same reason: Effective deliberately does not
+// sanitize NaN/±Inf (decay.go), and "e_v >= target(v)" is false for every
+// comparison involving NaN under IEEE 754, so the skip branch above never
+// fires on its own — a corrupted Current would otherwise flow straight
+// into an ordinary Boost{Weight: NaN}, and since Boost is "the only shape
+// this package lets a caller persist" (boost.go) and nothing in the vault
+// is ever deleted, that NaN would make every later Effective on the unit
+// return NaN forever. Coercing to a finite number, 0 in particular, would
+// be worse than refusing: a coerced 0 could drive the unit under
+// weight_threshold and archive it on the strength of a read error.
+//
+// Unlike Revive — a single Current, where "refused" collapses naturally
+// onto a bool — Resurface fans out over a whole Neighbourhood, and a
+// caller genuinely needs to tell "no boost because v is already at or
+// above its target" (R2.6, a legitimate no-op) apart from "no boost
+// because v's own state is corrupt" (this refusal): the first needs no
+// record, the second is an event m2c should write to decision_log, not
+// silently drop. So the refusal is reported in the second return value,
+// corrupted, one entry per refused unit id, sorted the same way boosts
+// is — rather than folded into the same shorter slice R2.6 already
+// produces for its own, different reason.
+//
 // The gain scales the TARGET, never the step. Scaling the step instead —
 // e + ReviveGain*gain*(WeightCeiling-e) — would let a unit merely adjacent
 // to something used daily converge on the full ceiling: each pass closes a
@@ -88,12 +113,6 @@ const ResurfaceAttenuation = 0.5
 // Both returned slices are sorted by UnitID: the suite runs -shuffle=on
 // with -race (Makefile:48), any implementation here uses maps internally,
 // and m2c needs a reproducible decision_log order for the demo.
-//
-// TODO(C11): the second return value, corrupted, is always empty as of
-// this commit. Judgment Day round 1 on PR #140 found Resurface persisted a
-// NaN Boost for a corrupted neighbour instead of refusing it, the same bug
-// C4 fixed for Revive one PR earlier — see the RED test this commit adds
-// and the following commit's fix.
 func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []string) {
 	adjacency := buildAdjacency(n.Edges)
 	gains := spreadGains(n.Origin, adjacency)
@@ -115,14 +134,21 @@ func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []stri
 			continue
 		}
 
+		w := e + ReviveGain*(target-e)
+		if math.IsNaN(w) || math.IsInf(w, 0) {
+			corrupted = append(corrupted, unitID)
+			continue
+		}
+
 		boosts = append(boosts, Boost{
 			UnitID:        unitID,
-			Weight:        e + ReviveGain*(target-e),
+			Weight:        w,
 			LastTouchedAt: now,
 		})
 	}
 
 	sort.Slice(boosts, func(i, j int) bool { return boosts[i].UnitID < boosts[j].UnitID })
+	sort.Strings(corrupted)
 	return boosts, corrupted
 }
 
