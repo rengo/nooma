@@ -192,6 +192,17 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      - The gate is a pure function of the scored candidates: no LLM, no I/O, no clock. It
        therefore needs `internal/core/recall` to expose a fusion that keeps its scores instead
        of only its ranked identifiers.
+   - **The classification has to carry the corrected value, and the prompt has to ask for it.**
+     Everything below turns on whether the classification resolved a date, so a correction that
+     comes back with only `normalized_content` silently takes the content branch and leaves the
+     date it was correcting untouched — the worst outcome available, since it overwrites the
+     unit's body *and* fixes nothing. Observed against a live model on 2026-08-04: asked to
+     classify "no, the dentist is on the 15th, not the 14th", it returned no `event_at` at all,
+     reasoning that a correction is not an event. §5's prompt therefore states plainly that a
+     correction carries the corrected **value** rather than a description of the change, that a
+     corrected date belongs in `event_at`/`due_at` resolved against the local date, and that a
+     correction still answers every required field like any other type — that last clause is not
+     decoration: without it the model traded the required fields away for the date.
    - **Which field it writes.** A correction writes **exactly one** field of the referent unit,
      never more: `event_at` if the classification resolved it and not `due_at`; `due_at` if it
      resolved that and not `event_at`; `content` only when **neither** date resolved, as the
