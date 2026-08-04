@@ -69,7 +69,7 @@ improves as beliefs get derived.
 |---|---|
 | Hot | `status='pool'` and appears in the focus (top-N by priority) |
 | Warm | `status='pool'` but does not reach the focus |
-| Cold | `status='archived'`, `'superseded'` or `'incomplete'` (both `inFocus` values) |
+| Cold | `status='archived'` (its effective weight crossed the threshold during a consolidation), `'superseded'` or `'incomplete'` (both `inFocus` values) |
 
 Warm→cold is done by consolidation; cold→warm/hot by a strong resurface.
 
