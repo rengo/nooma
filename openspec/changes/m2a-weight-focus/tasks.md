@@ -339,6 +339,122 @@ cognitive-core.md` §2 gained the matching delta, satisfying `docs-sync.yml` for
 `internal/core/` changes. No functional change; the final `math.IsNaN(w) || math.IsInf(w, 0)` check
 was already correct either way.
 
+### C11 — Judgment Day round 1 on PR #140 (`feat/core-weight-resurface`) found `Resurface` had inherited C4's own NaN defect, one link later, without the fix. CRITICAL.
+
+Both blind judges independently reproduced the identical bug C4 (above) fixed for `Revive` one PR
+earlier: `Resurface(Neighbourhood{States: []Current{{Weight: math.NaN(), ...}}, ...}, now)` returns
+`[{UnitID: n, Weight: NaN, ...}]` — a persisted `NaN`, forever, since nothing in the vault is ever
+deleted. `Effective` deliberately does not sanitize `NaN`/`±Inf` (decay.go's own doc comment), and
+`e >= target` is false for every comparison involving `NaN` under IEEE 754, so R2.6's skip branch
+never fires and a corrupted `Current` flowed straight into an ordinary `Boost`.
+
+`Resurface` is the **second** `Boost` producer, added in the very next link of the same chain as
+`Revive` (2a → 2b), and did not inherit C4's fix. `spec.md` R2.5–R2.7 and `design.md` F3 both omit
+a non-finite MUST for `Resurface`; the 464-line `resurface_test.go` shipped with 2b.1/2b.2 contained
+no `NaN` or `Inf` fixture anywhere.
+
+**Owner ruling**: mirror `Revive`'s posture — refuse rather than coerce, for the identical reason
+C4 gives (a coerced 0 could drive the unit under `weight_threshold` and archive it on the strength
+of a read error). The **shape differs from `Revive`'s**, deliberately: `Revive` covers a single
+`Current`, where "refused" collapses naturally onto a bool; `Resurface` fans out over a whole
+`Neighbourhood`, and a caller genuinely needs to tell "no boost because `v` is already at or above
+its target" (R2.6, an ordinary no-op) apart from "no boost because `v`'s own state is corrupt" (this
+refusal) — the first needs no record, the second is an event `m2c` should write to `decision_log`,
+not silently drop. `Resurface`'s signature therefore changes from `(n, now) []Boost` to
+`(n, now) (boosts []Boost, corrupted []string)`: `corrupted` carries one unit id per refused
+neighbour, sorted the same way `boosts` is, populated by the same
+`math.IsNaN(w) || math.IsInf(w, 0)` check `Revive` already uses, applied to the fully-computed
+boosted weight rather than to `e` alone (so it also catches a `NaN` reached through the gain/target
+arithmetic, e.g. a corrupted edge strength, not only through `Effective`).
+
+**Closed** (this same fix round): `TestResurface_NonFiniteState_RefusesRatherThanCoerces` covers
+all four reachable-looking shapes decay.go's own comment enumerates (Weight NaN; DecayRate NaN;
+Weight +Inf with a DecayRate/Δt product large enough to underflow `exp` to exactly `0.0`; DecayRate
++Inf with Δt = 0) — introduced RED (`a8edd77`, against a stub `Resurface` that widened its signature
+but always returned an empty `corrupted`), then GREEN (`68f5282`, the actual
+`math.IsNaN(w) || math.IsInf(w, 0)` check). Every other fixture in `resurface_test.go` now goes
+through a `mustResurface` helper that fails the test if `corrupted` is non-empty, so a future
+regression on any *other* fixture (built from finite state on purpose) is caught too. `docs/02-
+cognitive-core.md` §2's `Resurface` paragraph gained the matching delta
+(`internal/core/weight.Resurface`), stating the refusal and the `corrupted` return explicitly, so
+this document does not read as though the hazard had only been considered for `Revive`.
+
+### C12 — Judgment Day round 1 on PR #140, both judges: `spreadGains`' product-across-the-path accumulation had a surviving mutant no fixture in `resurface_test.go` could catch.
+
+Replacing `nextProduct := product * strength` with `nextProduct := strength` in `spread.go`'s
+`spreadGains` (only the last edge on a path survives, instead of the product of every edge) leaves
+the entire suite green. Every multi-hop fixture in `resurface_test.go` used `Strength: 1.0` on every
+edge along the path, where `1.0 * 1.0 == 1.0` makes "product across the path" and "nearest edge
+only" numerically identical; the two fixtures that do vary strength are both single-hop, where a
+product of one factor cannot distinguish the two shapes either.
+
+**Closed** (this same fix round, `9f3968e`): `TestResurface_TwoHopDistinctStrengths_ProductNotLastEdge`
+uses distinct, non-1.0 strengths per edge (a→b 0.9, b→c 0.6), pinning `gain(c) = 0.9×0.6×0.5² =
+0.135` (weight 0.0945) against the last-edge-only mutant's `0.6×0.5² = 0.15` (weight 0.105) and a
+first-edge-only mutant's `0.9×0.5² = 0.225` (weight 0.1575) — three distinct values. Mutation-
+verified: the `nextProduct := strength` mutant fails exactly this test's `c` assertion (0.105 got,
+0.0945 want) with every other test in the file still green, matching this entry's own diagnosis;
+reverted after, tree clean. This is a mutation-driven regression test, not a TDD red step — the
+product accumulation in `spreadGains` was already correct, so there is no missing-symbol red
+available (this project's own convention, tasks.md's intro; the same disclosure C7 gave its own
+mutation-driven addition).
+
+### C13 — Judgment Day round 1 on PR #140, Judge A: `Edge.Strength` was unbounded, and R2.5's cycle-termination argument (and R2.7's headline guarantee) silently depended on `strength ≤ 1`.
+
+`design.md` and `spec.md` both state the cycle-termination argument as "gain is strictly decreasing
+along a path (attenuation < 1, strength ≤ 1)" — but nothing enforced the second half. `strength REAL
+NOT NULL DEFAULT 0.5` carries no `CHECK` (`0001_core_tables.sql:35`);
+`internal/core/relation/judgment.go` decodes `Strength *float64` from the relation judge's JSON with
+no range validation — the same "no sign, no range" LLM threat model that motivated `Effective`'s own
+clamps; `internal/brain/capture.go` writes it through unclamped. Verified: `Strength: 100.0` on one
+edge returns `Weight: 35.65` — 17.8× `WeightCeiling` — falsifying doc 02 §2's closing claim that
+R2.7's relation "is the guarantee that makes it safe to run resurface on every capture."
+
+**Owner ruling**: sanitize in `core`, the same posture `Effective` already takes toward LLM-supplied
+floats it cannot vouch for — a strength above 1 is not a stronger relation, it is a corrupt one.
+`judgment.go`, `capture.go` and the migration's `CHECK` constraint are explicitly out of scope for
+this fix round; if upstream validation is also warranted, that is a separate conflict for whoever
+picks it up, not implemented here.
+
+**Closed** (this same fix round): `clampStrength` in `spread.go` clamps a strength above 1 down to
+1, applied in `buildAdjacency` before any edge enters the graph. `TestResurface_EdgeStrengthAboveOne_ClampsToOne`
+pins `Strength: 100.0` to produce the identical result as `Strength: 1.0` exactly
+(`TestResurface_BoundaryTable`'s own "1 hop strength 1.0" row) — introduced RED (`38c5380`), then
+GREEN (`b3de316`).
+
+**Declined, and recorded rather than silently dropped**: the lower bound (`strength < 0`) is
+deliberately **not** clamped. `buildAdjacency`'s own "the strongest wins" comparison
+(`strength > adjacency[from][to]`) already races every strength against a Go map's zero-value
+default *before* any clamp would run, so a negative-only strength for a given pair never wins that
+comparison and never enters the adjacency graph at all — verified by hand with a fixture chaining
+two negative-strength edges (the shape that would expose a naive clamp-after-multiply bug, since two
+negatives compound into a positive product): the result is an empty adjacency graph and an empty
+`Resurface` output whether or not `clampStrength` also clamps the lower bound. No fixture
+distinguishes "clamped to 0" from "left negative" at `Resurface`'s output, so the lower bound is left
+unclamped — this project's own convention against shipping a branch no test can tell apart from its
+absence (tasks.md's intro; the same standard C9 held this PR's own closures to).
+
+### C14 — Judgment Day round 1 on PR #140, Judge A: `TestResurface_AtOrAboveTarget_EmitsNoBoost` was trivially green against a `nil`-returning stub, undisclosed. `TestResurface_BoundaryTable`'s "3+ hops" subtest carried the identical shape.
+
+Checked out at the introducing RED commit (`456cbbb`), against `spread.go`'s `return nil` stub,
+`TestResurface_AtOrAboveTarget_EmitsNoBoost`'s only assertion was `if len(got) != 0 { t.Errorf(...) }`
+— trivially true for every input, since `len(nil) != 0` is false regardless of whether `Resurface`
+ran at all. It never distinguished "correctly refused" from "did nothing at all," and carried no
+disclosure saying so, unlike the tests in this file that are legitimately unable to be red (this
+document's own intro). Judge B independently checked the disclosed set and found it accurate — this
+was the one gap. `TestResurface_BoundaryTable`'s "3+ hops → unreachable" subtest had the same shape:
+its only assertion was that `"d"` was absent from `got`, also trivially satisfied by `nil`.
+
+**Closed** (this same fix round, `f8ec813`), by fixing rather than only disclosing:
+`TestResurface_AtOrAboveTarget_EmitsNoBoost` now adds a companion neighbour genuinely below its own
+target in the same `Neighbourhood`, and asserts it IS present with its correct weight — a
+`nil`-returning stub now fails because the companion's boost is absent too. The boundary-table
+subtest now asserts `len(got) != 0` before checking `"d"`'s absence, since `"b"` and `"c"` are
+already independently pinned reachable on the identical chain shape by
+`TestResurface_ChainLongerThanMaxHops_ExcludesUnitsBeyondTheLimit`. Verified: reverting `Resurface`
+to `return nil, nil` makes both tests fail with the expected boosts absent, confirming they are now
+genuinely red against the stub shape Judge A used; restored after, tree clean.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
