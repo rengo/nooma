@@ -331,14 +331,31 @@ func TestRevive_AtCeiling_WithPriorTimestamp_MovesLastTouchedAtToNow(t *testing.
 // to ruling 2, not a reversal (recorded as C4,
 // openspec/changes/m2a-weight-focus/tasks.md).
 //
-// None of these four shapes is reachable through capture — encoding/json
+// None of these five shapes is reachable through capture — encoding/json
 // cannot decode a NaN or Infinity token — but the weight and
 // weight_decay_rate columns carry no CHECK constraint, so a corrupted row
-// or a future arithmetic slip elsewhere could still produce one
-// (Effective's own doc comment enumerates the three that reach it; Weight
-// = +Inf is a fourth shape that reaches Revive without going through
-// Effective's own NaN cases at all — e is already +Inf, and gain clamps to
-// 0, not NaN).
+// or a future arithmetic slip elsewhere could still produce one.
+//
+// "Weight is +Inf" (below) is a case worth being precise about, because an
+// earlier revision of this comment overclaimed it: for *this* fixture
+// (DecayRate small, Δt small) e = Effective(...) really is already +Inf
+// before Revive's own gain arithmetic runs — Inf * exp(-0.01*10) is still
+// Inf, gain floors at 0, and the final math.IsInf check is what refuses,
+// not a NaN. But "Weight is +Inf" is not on its own a route that avoids
+// Effective's NaN-producing arithmetic — it depends on the accompanying
+// DecayRate and Δt. "Weight is +Inf with DecayRate*Δt large enough to
+// underflow" (the fifth case) is the same Weight = +Inf shape reaching e =
+// NaN instead of e = +Inf, through exactly the multiplication inside
+// Effective (weight * exp(...)) that produces the other reachable-looking
+// shapes: when exp(-decayRate*deltaDays) underflows to exactly 0.0 (it
+// does for a large enough negative exponent — verified at DecayRate=100,
+// Δt=1000 days: math.Exp(-100000) == 0.0 exactly), +Inf * 0.0 is NaN by
+// IEEE 754, the same rule that makes DecayRate=+Inf with Δt=0 produce NaN.
+// Both are the "Inf times a zero-or-near-zero factor" case, on different
+// operands. Either way — e = +Inf or e = NaN — Revive's own
+// math.IsNaN(w) || math.IsInf(w, 0) check refuses to persist it, so there
+// is no functional gap; only the earlier comment's account of *why* was
+// too narrow.
 func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	lastTouchedAt := now.AddDate(0, 0, -10)
@@ -359,6 +376,9 @@ func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
 			now:  now,
 		},
 		{
+			// Δt = 10 days at DecayRate = 0.01 keeps exp(...) far from
+			// underflow, so e is already +Inf here, not NaN — see this
+			// function's own doc comment for why that distinction matters.
 			name: "Weight is +Inf",
 			c:    Current{UnitID: "u3", Weight: math.Inf(1), DecayRate: 0.01, LastTouchedAt: lastTouchedAt},
 			now:  now,
@@ -369,6 +389,18 @@ func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
 			// names.
 			name: "DecayRate is +Inf with Δt = 0",
 			c:    Current{UnitID: "u4", Weight: 1.0, DecayRate: math.Inf(1), LastTouchedAt: now},
+			now:  now,
+		},
+		{
+			// Weight = +Inf again, but DecayRate*Δt is now large enough for
+			// exp(-decayRate*deltaDays) to underflow to exactly 0.0, so e =
+			// Effective(...) is NaN (Inf * 0.0), not +Inf. This is the
+			// route this function's own doc comment corrects: Weight =
+			// +Inf can reach Revive as either +Inf or NaN depending on the
+			// accompanying DecayRate and Δt, not as a shape that always
+			// avoids Effective's NaN arithmetic.
+			name: "Weight is +Inf with DecayRate*Δt large enough to underflow",
+			c:    Current{UnitID: "u5", Weight: math.Inf(1), DecayRate: 100, LastTouchedAt: now.AddDate(0, 0, -1000)},
 			now:  now,
 		},
 	}

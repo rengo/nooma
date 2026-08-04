@@ -43,12 +43,18 @@ import (
 // NaN and ±Inf are deliberately NOT sanitized and NOT covered by that
 // postcondition. Every comparison against NaN is false, so both clamps above
 // silently no-op and NaN propagates to the result — which satisfies no
-// ordering, since NaN <= anything is false. Three reachable-looking shapes,
+// ordering, since NaN <= anything is false. Four reachable-looking shapes,
 // all returning NaN: weight=NaN; decayRate=NaN; decayRate=+Inf with Δt=0,
-// where IEEE 754 makes Inf*0 a NaN. None is reachable through capture —
-// encoding/json cannot decode a NaN or Infinity token — but the columns
-// carry no CHECK, so a corrupted row or an arithmetic slip elsewhere could
-// store one and this function would pass it through.
+// where IEEE 754 makes Inf*0 a NaN; and weight=+Inf with decayRate*deltaDays
+// large enough for math.Exp(-decayRate*deltaDays) to underflow to exactly
+// 0.0 (e.g. decayRate=100, deltaDays=1000), where the same Inf*0 rule
+// applies to the final multiplication instead of the exponent. weight=+Inf
+// alone does not reach NaN — for a decayRate/deltaDays pair small enough
+// that exp(...) stays away from zero, weight*exp(...) is +Inf, not NaN.
+// None of the four is reachable through capture — encoding/json cannot
+// decode a NaN or Infinity token — but the columns carry no CHECK, so a
+// corrupted row or an arithmetic slip elsewhere could store one and this
+// function would pass it through.
 //
 // The word FINITE is stated rather than the guarantee widened because an
 // earlier revision of this comment claimed the postcondition held "for every

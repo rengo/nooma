@@ -56,7 +56,14 @@ because every comparison against `NaN` is false — so `weight < 0` and `decay_r
 no-op and `NaN` propagates to the result, which satisfies no ordering at all. Nothing on the
 ingestion path can produce one: `classify` decodes through `encoding/json`, which cannot read a
 `NaN` or `Infinity` token. The exposure is the columns themselves, which carry no `CHECK`, so a
-corrupted row or a future arithmetic slip elsewhere could still store one. The guarantee above
+corrupted row or a future arithmetic slip elsewhere could still store one — including a route
+easy to miss: `weight = +Inf` combined with a `decay_rate * Δt` product large enough for
+`exp(-decay_rate * Δt)` to underflow to exactly `0.0` also reaches `NaN` (`+Inf * 0.0` is `NaN`
+under IEEE 754), the same rule that already applies to `decay_rate = +Inf` with `Δt = 0`. A bare
+`weight = +Inf` does **not**, on its own, avoid this: with a `decay_rate`/`Δt` pair too small to
+underflow the exponential, `weight * exp(...)` stays `+Inf`, not `NaN` — which shape a given
+`weight = +Inf` reaches depends on the accompanying `decay_rate` and `Δt`, not on `weight` alone.
+The guarantee above
 is stated over finite inputs rather than widened to cover a case the code does not handle,
 because an earlier revision of this very paragraph claimed the postcondition held "for every
 input" when it did not, and the correction must not reintroduce the same over-claim one
