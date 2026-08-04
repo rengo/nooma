@@ -40,6 +40,13 @@ Weight decays continuously (Ebbinghaus curve):
 effective_weight = weight * exp(-decay_rate * Δt)     # Δt since last_touched_at, in days
 ```
 
+`Δt` is clamped at zero: when `now` is before `last_touched_at` — clock skew across a restart,
+a backdated import — the formula behaves as though `Δt` were 0 and returns `weight` undecayed
+rather than inverting into a value larger than what was stored.
+`effective_weight ≤ weight` holds for every input, including `decay_rate = 0`: this is a
+postcondition of the formula, not an incidental property of typical inputs
+(`internal/core/weight.Effective`).
+
 **What is persisted changes only on discrete events**; decay is computed on read, never
 written on every read:
 
@@ -62,9 +69,19 @@ improves as beliefs get derived.
 |---|---|
 | Hot | `status='pool'` and appears in the focus (top-N by priority) |
 | Warm | `status='pool'` but does not reach the focus |
-| Cold | `status='archived'` (its effective weight crossed the threshold during a consolidation) |
+| Cold | `status='archived'`, `'superseded'` or `'incomplete'` (both `inFocus` values) |
 
 Warm→cold is done by consolidation; cold→warm/hot by a strong resurface.
+
+The zone classification is **total** over every unit status, not only `pool` and `archived`:
+`superseded` and `incomplete` also classify as Cold, regardless of focus membership. This is a
+choice, not a derivation — the zone vocabulary is about attention, and neither status is a
+candidate for attention — recorded here so it is a property a reader can check rather than a
+rule inferred from an untested arm (`internal/core/weight.ZoneOf`). For `archived`, the
+parenthetical "its effective weight crossed the threshold during a consolidation" is causal
+history, not something re-derived on read: zone classification takes no clock and no other
+input besides status and focus membership — **temperature is not a function of time**, it is a
+function of two decisions already made.
 
 ## 3. Focus — computed, NEVER persisted
 
