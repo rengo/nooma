@@ -5,13 +5,16 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/goldenset"
@@ -140,25 +143,84 @@ func TestRunLLMQualityCheck(t *testing.T) {
 	}
 }
 
-// TestCheckLLMQuality_SendsTheCorpusPromptVerbatimOnce is spec R5.3 (the
-// gate's own live request equals the corpus case's prompt field, never its
-// response/expected) and spec R5.4 ("each corpus prompt is sent once…
-// never retried"). fakeprovider's own Cleanup hook already fails this test
-// if runLLMQualityCheck asked for a second scripted case beyond the one
-// given — that is exactly what a retry would do.
-func TestCheckLLMQuality_SendsTheCorpusPromptVerbatimOnce(t *testing.T) {
+// TestCheckLLMQuality_SendsClassifyBuildPromptForCaptureProcessing is the
+// regression test for the defect this fix closes (Engram
+// project/quality-gate-sends-stub-prompts; openspec Conflicts §C24): before
+// this fix, `evaluateTask` sent a corpus case's own recorded `prompt`
+// field live — a 60-84 byte fake-replay identifier, nothing like
+// classify's real ~1550-byte prompt — and a real OpenAI key answered every
+// one of 21 such prompts in prose, because a stub carries none of
+// `classify.BuildPrompt`'s own "answer with one JSON object and nothing
+// else" instruction.
+//
+// This asserts the gate's own live request equals classify.BuildPrompt's
+// output for the case's message, built through the exact same call this
+// test makes — spec R5.3. If `evaluateTask` ever again reaches for a
+// stub (the case's own message, a hardcoded string, or anything else that
+// bypasses BuildPrompt), this test catches it: confirmed by reverting
+// `qualityGatePrompt`'s capture_processing branch to `return c.Message`
+// and re-running — it fails on both the length and the "no prose" checks
+// below, and would fail identically if it instead reached for a since-
+// removed corpus `prompt` field. Because the assertion calls
+// classify.BuildPrompt itself rather than a hardcoded string, a future
+// change to BuildPrompt's own output is picked up automatically here too —
+// confirmed by editing BuildPrompt's own literal text and re-running: this
+// test still passes, comparing the gate's send against BuildPrompt's own
+// new output, not a stale copy.
+func TestCheckLLMQuality_SendsClassifyBuildPromptForCaptureProcessing(t *testing.T) {
 	dir := testdataLLMCasesDir(t)
 	c := loadCase(t, dir, "classify-pick-up-dry-cleaning")
 	fake := fakeprovider.New(t, dir, c.ID)
+	now := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
 
-	runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": fake}, []llm.Case{c}, time.Now(), qualityGateTimeout)
+	runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": fake}, []llm.Case{c}, now, qualityGateTimeout)
 
 	seen := fake.SeenPrompts()
 	if len(seen) != 1 {
 		t.Fatalf("provider saw %d Complete call(s) for one corpus case, want exactly 1 — spec R5.4 forbids a retry", len(seen))
 	}
-	if seen[0] != c.Prompt {
-		t.Errorf("sent prompt %q, want the corpus case's own prompt field %q verbatim — spec R5.3", seen[0], c.Prompt)
+	want := classify.BuildPrompt(c.Message, nil, now)
+	if seen[0] != want {
+		t.Errorf("sent prompt %q, want classify.BuildPrompt's own output %q — spec R5.3: the gate must build the real prompt, never replay a corpus field", seen[0], want)
+	}
+	// Either check alone would have caught the original 21/21 failure: a
+	// stub prompt is short, and carries none of BuildPrompt's own
+	// JSON-only instruction.
+	if len(seen[0]) < 500 {
+		t.Errorf("sent prompt is %d bytes — too short to be classify.BuildPrompt's real output (~1550 bytes); this is the original defect's exact shape", len(seen[0]))
+	}
+	if !strings.Contains(seen[0], "no prose") {
+		t.Errorf("sent prompt %q does not carry BuildPrompt's own \"no prose, no code fence\" instruction — a stub prompt would not either", seen[0])
+	}
+}
+
+// TestCheckLLMQuality_SendsJudgePromptForRelationEvaluation is R5.3's other
+// half: a relation_evaluation case's live request must equal
+// brain.JudgePrompt's own output for the case's message and candidates,
+// built through the exact same call this test makes, for the same reason
+// TestCheckLLMQuality_SendsClassifyBuildPromptForCaptureProcessing gives.
+func TestCheckLLMQuality_SendsJudgePromptForRelationEvaluation(t *testing.T) {
+	dir := testdataLLMCasesDir(t)
+	c := loadCase(t, dir, "relation-duplicate-high-confidence")
+	if len(c.Candidates) == 0 {
+		t.Fatalf("corpus case %q carries no candidates; want at least one so this test proves something", c.ID)
+	}
+	fake := fakeprovider.New(t, dir, c.ID)
+	now := time.Now()
+
+	runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"relation_evaluation": fake}, []llm.Case{c}, now, qualityGateTimeout)
+
+	seen := fake.SeenPrompts()
+	if len(seen) != 1 {
+		t.Fatalf("provider saw %d Complete call(s) for one corpus case, want exactly 1", len(seen))
+	}
+	candidates := make([]unit.Unit, len(c.Candidates))
+	for i, cand := range c.Candidates {
+		candidates[i] = unit.Unit{ID: cand.ID, Content: cand.Content}
+	}
+	want := brain.JudgePrompt(unit.Unit{Content: c.Message}, candidates)
+	if seen[0] != want {
+		t.Errorf("sent prompt %q, want brain.JudgePrompt's own output %q — spec R5.3", seen[0], want)
 	}
 }
 
@@ -291,7 +353,7 @@ var _ ports.LLMProvider = blockingProvider{}
 // this test still finishes (blockingProvider's own 2s fallback), but the
 // elapsed-time assertion below fails.
 func TestRunLLMQualityCheckBoundsTheLiveCall(t *testing.T) {
-	c := llm.Case{ID: "capture-processing-blocks-forever", Task: "classify", Prompt: "p"}
+	c := llm.Case{ID: "capture-processing-blocks-forever", Task: "classify", Message: "p"}
 
 	start := time.Now()
 	got := runLLMQualityCheck(context.Background(), map[string]ports.LLMProvider{"capture_processing": blockingProvider{}}, []llm.Case{c}, time.Now(), 50*time.Millisecond)
@@ -457,11 +519,11 @@ func TestLLMQualityFailureStringNamesTheFailureKind(t *testing.T) {
 }
 
 // TestCasesMatchesTheSourceFiles proves the embedded corpus
-// (testdata/llm/corpus.go) carries the same id/task/prompt as the source
-// files on disk — the anti-drift check ADR-0002's "written once, used in
-// two places" actually needs: a bug in the embed step would otherwise send
-// a live provider a DIFFERENT prompt than the one the golden-set tests
-// exercise, and nothing would notice.
+// (testdata/llm/corpus.go) carries the same id/task/message/candidates as
+// the source files on disk — the anti-drift check ADR-0002's "written
+// once, used in two places" actually needs: a bug in the embed step would
+// otherwise send a live provider a prompt built from DIFFERENT inputs than
+// the ones the golden-set tests exercise, and nothing would notice.
 func TestCasesMatchesTheSourceFiles(t *testing.T) {
 	dir := testdataLLMCasesDir(t)
 	allEntries, err := os.ReadDir(dir)
@@ -497,7 +559,7 @@ func TestCasesMatchesTheSourceFiles(t *testing.T) {
 			t.Errorf("testdata/llm/cases/%s has no embedded counterpart", entry.Name())
 			continue
 		}
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("embedded case %q = %+v, want %+v (source file)", id, got, want)
 		}
 	}
@@ -530,7 +592,18 @@ func loadCase(t *testing.T, dir, id string) llm.Case {
 	if err := goldenset.Load(filepath.Join(dir, id+".json"), &ex); err != nil {
 		t.Fatalf("loading corpus case %q: %v", id, err)
 	}
-	return llm.Case{ID: ex.ID, Task: ex.Task, Prompt: ex.Prompt}
+	// nil, not an empty non-nil slice, when ex.Candidates carries nothing —
+	// matching corpus.go's own json.Unmarshal straight into llm.Case, so
+	// TestCasesMatchesTheSourceFiles's reflect.DeepEqual compares like for
+	// like on a classify-tagged case, which never carries candidates at all.
+	var candidates []llm.Candidate
+	if len(ex.Candidates) > 0 {
+		candidates = make([]llm.Candidate, len(ex.Candidates))
+		for i, cand := range ex.Candidates {
+			candidates[i] = llm.Candidate{ID: cand.ID, Content: cand.Content}
+		}
+	}
+	return llm.Case{ID: ex.ID, Task: ex.Task, Message: ex.Message, Candidates: candidates}
 }
 
 // testdataLLMCasesDir locates testdata/llm/cases from this test file's own

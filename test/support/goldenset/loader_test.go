@@ -97,7 +97,7 @@ func TestGoldenSetFormatExamples(t *testing.T) {
 					t.Fatalf("value is %T, want *LLMExample", v)
 				}
 				if ex.ID == "" || ex.Provider == "" || ex.Model == "" ||
-					ex.Task == "" || ex.Prompt == "" || ex.Response == "" {
+					ex.Task == "" || ex.Message == "" || ex.Response == "" {
 					t.Errorf("example is not fully populated: %+v", ex)
 				}
 			},

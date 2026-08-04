@@ -3,6 +3,6 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "classify",
-  "prompt": "Classify this message: \"Remind me to buy descaling solution tomorrow\"",
+  "message": "Remind me to buy descaling solution tomorrow",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Buy descaling solution\"}"
 }

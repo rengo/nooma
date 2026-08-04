@@ -3,6 +3,9 @@
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "relation_evaluation",
-  "prompt": "You judge whether a new memory unit duplicates or relates to any of the candidates below.",
+  "message": "Pick up the dry cleaning on Friday",
+  "candidates": [
+    {"id": "cand-duplicate", "content": "Pick up the dry cleaning this Friday"}
+  ],
   "response": "{\"outcome\":\"duplicate\",\"target_unit_id\":\"cand-duplicate\",\"strength\":0.9,\"confidence\":0.85}"
 }

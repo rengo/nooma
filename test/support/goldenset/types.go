@@ -283,19 +283,45 @@ type LLMExample struct {
 	Model    string `json:"model"`
 	Task     string `json:"task"`
 
-	// Prompt is the sole replay key today. It is fragile: classify's real
-	// prompt is built from active self-beliefs plus the local date and
-	// timezone (docs/02-cognitive-core.md §5), so literal prompt equality
-	// will break on any fixture drift or clock difference. Flagged here
-	// for whoever builds the fake provider (four-lens pre-PR review,
-	// SUGGESTION finding 9) — not solved by this change.
-	Prompt string `json:"prompt"`
+	// Message is the raw text the pipeline's own real prompt builder starts
+	// from — the user's message for a capture_processing case, the new
+	// unit's content for a relation_evaluation case. `nooma doctor`'s
+	// quality gate (cmd/nooma/doctor.go) builds the live prompt it actually
+	// sends from this field, through classify.BuildPrompt or
+	// brain.JudgePrompt — the exact functions production calls — rather
+	// than replaying a separately recorded prompt string. That used to be
+	// this field's job (a `prompt` field, since removed): a stub 60-84
+	// bytes long, nothing like classify's real ~1550-byte prompt, and a
+	// real provider answered it in prose every time (Engram
+	// project/quality-gate-sends-stub-prompts). One field cannot be both a
+	// stable replay key (fakeprovider.Fake selects by case id, never by
+	// prompt content — see SeenPrompts below) and a genuine elicitor of the
+	// recorded response, so this corpus no longer tries to make it be
+	// both: Message only ever feeds the real builder, and only the real
+	// builder decides what is actually sent.
+	Message string `json:"message"`
+
+	// Candidates is relation_evaluation's own second input:
+	// brain.JudgePrompt renders one line per candidate alongside Message.
+	// Always empty for a capture_processing case — a documentation
+	// convention by task, the same posture format.md already takes for
+	// other task-specific fields, not mechanized by Validate below.
+	Candidates []LLMCandidate `json:"candidates,omitempty"`
 
 	Response string `json:"response,omitempty"`
 	Error    string `json:"error,omitempty"`
 }
 
-// Validate implements Validator: id/provider/model/task/prompt are
+// LLMCandidate is one relation_evaluation recall candidate an LLMExample
+// carries — the same {id, content} pair brain.JudgePrompt renders per
+// candidate, nothing more: judgePrompt reads only a candidate unit's ID
+// and Content, never its status, weight, or any other unit.Unit field.
+type LLMCandidate struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
+// Validate implements Validator: id/provider/model/task/message are
 // required, and exactly one of Response or Error must be set.
 func (e *LLMExample) Validate() error {
 	for _, f := range [...]struct{ name, value string }{
@@ -303,7 +329,7 @@ func (e *LLMExample) Validate() error {
 		{"provider", e.Provider},
 		{"model", e.Model},
 		{"task", e.Task},
-		{"prompt", e.Prompt},
+		{"message", e.Message},
 	} {
 		if f.value == "" {
 			return fmt.Errorf("%s is required and must not be empty", f.name)

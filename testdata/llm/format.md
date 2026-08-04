@@ -8,6 +8,18 @@ dedup/relation judge (`docs/02-cognitive-core.md` §5), and — per
 ADR-0002 — the same recordings feed `nooma doctor`'s structured-JSON
 quality gate: written once, used in two places.
 
+**A case does not record a `prompt` field.** An earlier version of this
+format did, and `nooma doctor`'s live gate sent that field verbatim — a
+short, fake-replay identifier, never classify's real ~1550-byte prompt —
+which is why a real provider failed 21 of 21 prompts the first time a
+human ran `doctor` against one (see
+`openspec/changes/m1c-surface/tasks.md`'s Conflicts §C24). `message`
+(and, for a relation_evaluation case, `candidates`) below replace it: the
+gate now builds the live prompt through `classify.BuildPrompt` or
+`brain.JudgePrompt` — the same functions production calls — instead of
+replaying a separately recorded string that could drift from what those
+functions actually produce.
+
 `cases/` is empty in this change. Populating it with real recorded
 responses is M1's responsibility (spec R10.1's MUST NOT); this file exists
 so whoever adds the first case does not have to guess the shape.
@@ -26,10 +38,17 @@ own `id` field verbatim (e.g. `id: "classify-remind-me-tomorrow"` →
   "provider": "anthropic",
   "model": "claude-sonnet",
   "task": "classify",
-  "prompt": "Classify this message: \"Remind me to buy descaling solution tomorrow\"",
+  "message": "Remind me to buy descaling solution tomorrow",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Buy descaling solution\"}"
 }
 ```
+
+A relation_evaluation case also carries `candidates`, one `{id, content}` pair per recall
+candidate — e.g. `"candidates": [{"id": "cand-duplicate", "content": "Pick up the dry cleaning
+this Friday"}]` — see `testdata/llm/cases/relation-duplicate-high-confidence.json` for a full
+example. This corpus's own format-checking test
+(`TestHarness_GoldenSetFormatMatchesType`) enforces exactly one fenced example, so `candidates`
+is documented here in prose rather than as a second block.
 
 ## Fields
 
@@ -39,7 +58,8 @@ own `id` field verbatim (e.g. `id: "classify-remind-me-tomorrow"` →
 | `provider` | string | yes | The provider this response was recorded from, as configured (e.g. `anthropic`, `ollama`) |
 | `model` | string | yes | The model identifier string the provider reports |
 | `task` | string | yes | Which pipeline call this recorded response feeds, e.g. `classify` or a judge task (`docs/02-cognitive-core.md` §5's dedup/relation judge). Not a closed enum today — ADR-0002 describes "a fixed set of classify and judge prompts" without naming every judge task, so the loader does not validate `task` against a fixed list |
-| `prompt` | string | yes | The exact prompt text sent to the provider when this response was recorded. **Fragile as a replay key**: classify's real prompt is built from active self-beliefs plus the local date and timezone (`docs/02-cognitive-core.md` §5), so matching a live prompt against this field by literal string equality will break on any fixture drift or clock difference — flagged here for whoever builds the fake provider, not solved by this corpus |
+| `message` | string | yes | The raw text `nooma doctor`'s quality gate feeds to the real prompt builder — the user's message alone for a `classify`-tagged case, the new unit's content for a `relation_evaluation`-tagged case. Never the prompt itself: `cmd/nooma/doctor.go` builds the live prompt from this field through `classify.BuildPrompt` (capture_processing) or `brain.JudgePrompt` (relation_evaluation), the exact functions production calls, so a change to either builder reaches the gate automatically |
+| `candidates` | array of `{id, content}` | only for a `relation_evaluation`-tagged case | The recall candidates `brain.JudgePrompt` renders alongside `message` — one entry per candidate, `id`/`content` are the only two fields it reads. A documentation convention by task, not mechanized by the loader: a `classify`-tagged case simply omits it |
 | `response` | string | exactly one of `response`/`error` | The exact raw response text, recorded once and replayed verbatim by a fake provider — never re-sent to a real provider by a test |
 | `error` | string | exactly one of `response`/`error` | A recorded provider-level failure (timeout, HTTP error, rate limit) the fake provider must surface instead of a response. `docs/06-harness.md` §3 says providers are always served from fixtures, so a failure path can only ever be exercised from a recording like this one |
 
@@ -62,9 +82,11 @@ by design, since one recording can back more than one classify case.
 
 ## What makes a good case
 
-Real classify prompts vary with self-beliefs and the clock (see `prompt`
-above), so a corpus of only clean, well-formed responses cannot exercise
-the two things this corpus actually exists for:
+Real classify prompts vary with self-beliefs and the clock (see `message`
+above — `classify.BuildPrompt` still renders both into the live prompt,
+this corpus just no longer stores its own snapshot of the result), so a
+corpus of only clean, well-formed responses cannot exercise the two things
+this corpus actually exists for:
 
 - **A malformed response for each I14 shape** `testdata/classify/format.md`
   lists (truncated JSON, wrong type, unknown enum) — one recording per
@@ -84,15 +106,18 @@ the two things this corpus actually exists for:
 - The file is valid JSON, decodable into `goldenset.LLMExample`.
 - An unknown field anywhere in the document is rejected
   (`json.Decoder.DisallowUnknownFields`).
-- `id`, `provider`, `model`, `task` and `prompt` are present and non-empty,
-  and exactly one of `response`/`error` is set (`LLMExample.Validate`). A
-  case gutted down to `{}`, or missing a single required field, is
-  rejected with that field named in the error.
+- `id`, `provider`, `model`, `task` and `message` are present and
+  non-empty, and exactly one of `response`/`error` is set
+  (`LLMExample.Validate`). A case gutted down to `{}`, or missing a single
+  required field, is rejected with that field named in the error.
 
 **Not checked**:
 
 - `task` against ADR-0002's fixed corpus categories — a documentation
   convention, not a mechanized one.
+- `candidates` being present on a `relation_evaluation`-tagged case, or
+  absent on a `classify`-tagged one — a documentation convention by task,
+  the same posture `task` itself already takes above.
 - `Load` validates one file at a time; "one file per case" is a corpus
   convention this format.md documents, not something `Load` itself checks
   (there is no directory-listing step inside `Load`).

@@ -86,8 +86,12 @@ func (f *Fake) Complete(_ context.Context, req ports.LLMRequest) (ports.LLMRespo
 }
 
 // SeenPrompts returns every prompt Complete received, in call order. A
-// case's own recorded prompt field stays documentation, never the replay
-// key (design D7) — this is what lets a test assert on it anyway.
+// case's own recorded message (and, for relation_evaluation, candidates)
+// field never selects the replay either (design D7, project/quality-gate-
+// sends-stub-prompts) — Complete replays strictly by case id — so a caller
+// that built its own live prompt from those fields (cmd/nooma/doctor.go's
+// quality gate does exactly that) can assert here that what it built is
+// what was actually sent.
 func (f *Fake) SeenPrompts() []string {
 	return append([]string(nil), f.seenPrompts...)
 }
