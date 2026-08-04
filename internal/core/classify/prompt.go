@@ -67,6 +67,13 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 	b.WriteString("Omit any field you are unsure of. A missing field is recoverable; " +
 		"an invented one is not.\n\n")
 
+	b.WriteString("Corrections\n")
+	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")
+	b.WriteString("  If it corrects a date, resolve it against the local date above and put the\n")
+	b.WriteString("  new date in event_at or due_at — those fields are how a correction takes\n")
+	b.WriteString("  effect, and a correction that omits them changes nothing.\n")
+	b.WriteString("  A correction still answers every required field above, like any other type.\n\n")
+
 	b.WriteString("Message\n")
 	b.WriteString(text + "\n")
 

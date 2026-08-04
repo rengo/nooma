@@ -181,3 +181,25 @@ func TestBuildPrompt_IsPure(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPrompt_AsksACorrectionForTheCorrectedValue pins doc 02 §5 step 4's
+// prompt clause. It is not a wording preference: a live model asked to
+// classify "no, the dentist is on the 15th, not the 14th" returned no
+// event_at at all — it read "correction" as "not an event" — and the
+// correction path then took its content fallback, overwriting the unit's body
+// while leaving the wrong date in place. The second clause is equally
+// load-bearing: naming the date without restating the required fields made
+// the same model drop weight and decay_rate to make room.
+func TestBuildPrompt_AsksACorrectionForTheCorrectedValue(t *testing.T) {
+	p := BuildPrompt("no, the dentist is on the 15th, not the 14th", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC))
+
+	for _, want := range []string{
+		"corrected VALUE",
+		"event_at or due_at",
+		"still answers every required field",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("BuildPrompt does not tell the model %q; a correction that omits the corrected date changes nothing", want)
+		}
+	}
+}
