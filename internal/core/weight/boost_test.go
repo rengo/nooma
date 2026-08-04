@@ -280,7 +280,7 @@ func TestRevive_AtCeiling_WithPriorTimestamp_MovesLastTouchedAtToNow(t *testing.
 	if !ok {
 		t.Fatalf("Revive(%+v) refused a finite input, want ok = true", c)
 	}
-	if got.LastTouchedAt == lastTouchedAt {
+	if got.LastTouchedAt.Equal(lastTouchedAt) {
 		t.Errorf("Revive(%+v).LastTouchedAt = %v, want it to have moved away from the original %v — a direct use at the ceiling still resets the clock (R2.3, ruling 2)", c, got.LastTouchedAt, lastTouchedAt)
 	}
 	if got.LastTouchedAt != now {
