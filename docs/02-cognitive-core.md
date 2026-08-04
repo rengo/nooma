@@ -40,6 +40,28 @@ Weight decays continuously (Ebbinghaus curve):
 effective_weight = weight * exp(-decay_rate * Δt)     # Δt since last_touched_at, in days
 ```
 
+`Δt` is clamped at zero: when `now` is before `last_touched_at` — clock skew across a restart,
+a backdated import — the formula behaves as though `Δt` were 0 and returns `weight` undecayed
+rather than inverting into a value larger than what was stored. `decay_rate` and `weight` are
+sanitized the same way, and for the same reason — `classify`'s LLM output validates only that
+each is a number, no sign and no range, so `core` cannot vouch for either any more than it can
+vouch for `now`: a negative `decay_rate` is treated as 0 (no decay), and a negative `weight` is
+treated as 0 (a negative weight has no meaning in this model — weight is how much something
+matters, not a signed magnitude). `effective_weight ≤ max(weight, 0)` holds for every **finite**
+input, after this sanitization, including `decay_rate ≤ 0`: this is a postcondition over the
+sanitized inputs, not a claim about whatever was passed in (`internal/core/weight.Effective`).
+
+The word `finite` is load-bearing and was earned twice. `NaN` and `±Inf` are **not** sanitized,
+because every comparison against `NaN` is false — so `weight < 0` and `decay_rate < 0` both
+no-op and `NaN` propagates to the result, which satisfies no ordering at all. Nothing on the
+ingestion path can produce one: `classify` decodes through `encoding/json`, which cannot read a
+`NaN` or `Infinity` token. The exposure is the columns themselves, which carry no `CHECK`, so a
+corrupted row or a future arithmetic slip elsewhere could still store one. The guarantee above
+is stated over finite inputs rather than widened to cover a case the code does not handle,
+because an earlier revision of this very paragraph claimed the postcondition held "for every
+input" when it did not, and the correction must not reintroduce the same over-claim one
+boundary further out.
+
 **What is persisted changes only on discrete events**; decay is computed on read, never
 written on every read:
 
@@ -62,9 +84,19 @@ improves as beliefs get derived.
 |---|---|
 | Hot | `status='pool'` and appears in the focus (top-N by priority) |
 | Warm | `status='pool'` but does not reach the focus |
-| Cold | `status='archived'` (its effective weight crossed the threshold during a consolidation) |
+| Cold | `status='archived'` (its effective weight crossed the threshold during a consolidation), `'superseded'` or `'incomplete'` (both `inFocus` values) |
 
 Warm→cold is done by consolidation; cold→warm/hot by a strong resurface.
+
+The zone classification is **total** over every unit status, not only `pool` and `archived`:
+`superseded` and `incomplete` also classify as Cold, regardless of focus membership. This is a
+choice, not a derivation — the zone vocabulary is about attention, and neither status is a
+candidate for attention — recorded here so it is a property a reader can check rather than a
+rule inferred from an untested arm (`internal/core/weight.ZoneOf`). For `archived`, the
+parenthetical "its effective weight crossed the threshold during a consolidation" is causal
+history, not something re-derived on read: zone classification takes no clock and no other
+input besides status and focus membership — **temperature is not a function of time**, it is a
+function of two decisions already made.
 
 ## 3. Focus — computed, NEVER persisted
 
