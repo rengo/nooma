@@ -6,6 +6,36 @@ import (
 	"time"
 )
 
+// TestReviveGain_IsPinnedToItsCalibratedValue guards ReviveGain against a
+// wrong VALUE, independent of every shape test in this file. It exists
+// because of C7 (openspec/changes/m2a-weight-focus/tasks.md): both
+// TestRevive_BelowCeiling_PinsExactBoostFromEffectiveWeight and
+// TestRevive_ConvergesGeometricallyToCeiling compute their expectation as
+// e + ReviveGain*(WeightCeiling-e) — correct for pinning the formula's
+// shape, but structurally incapable of noticing the constant itself moved,
+// since a mutated ReviveGain flows into their "want" the same way it flows
+// into Revive's own output. Only a comparison against an independent
+// literal — not derived from ReviveGain, WeightCeiling, or Revive's own
+// expression — catches that. nooma-core hard rule 4 and doc 02 §13 name
+// revive_gain as calibratable: recalibrating it means updating both the
+// §13 row and this literal in the same PR.
+func TestReviveGain_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 0.35 // docs/02-cognitive-core.md §13, row "revive_gain"
+	if ReviveGain != want {
+		t.Errorf("ReviveGain = %v, want %v — update docs/02-cognitive-core.md §13's revive_gain row in the same change", ReviveGain, want)
+	}
+}
+
+// TestWeightCeiling_IsPinnedToItsCalibratedValue is
+// TestReviveGain_IsPinnedToItsCalibratedValue's sibling for WeightCeiling,
+// the other calibratable constant C7 found undefended on its own axis.
+func TestWeightCeiling_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 2.0 // docs/02-cognitive-core.md §13, row "weight_ceiling"
+	if WeightCeiling != want {
+		t.Errorf("WeightCeiling = %v, want %v — update docs/02-cognitive-core.md §13's weight_ceiling row in the same change", WeightCeiling, want)
+	}
+}
+
 // TestRevive_MatchesSpecWorkedExample pins R2.2's own scenario: a unit
 // decayed to an effective weight of exactly 0.0 gets a revive of exactly
 // ReviveGain * WeightCeiling = 0.35 * 2.0 = 0.70. This value is derived
@@ -301,14 +331,31 @@ func TestRevive_AtCeiling_WithPriorTimestamp_MovesLastTouchedAtToNow(t *testing.
 // to ruling 2, not a reversal (recorded as C4,
 // openspec/changes/m2a-weight-focus/tasks.md).
 //
-// None of these four shapes is reachable through capture — encoding/json
+// None of these five shapes is reachable through capture — encoding/json
 // cannot decode a NaN or Infinity token — but the weight and
 // weight_decay_rate columns carry no CHECK constraint, so a corrupted row
-// or a future arithmetic slip elsewhere could still produce one
-// (Effective's own doc comment enumerates the three that reach it; Weight
-// = +Inf is a fourth shape that reaches Revive without going through
-// Effective's own NaN cases at all — e is already +Inf, and gain clamps to
-// 0, not NaN).
+// or a future arithmetic slip elsewhere could still produce one.
+//
+// "Weight is +Inf" (below) is a case worth being precise about, because an
+// earlier revision of this comment overclaimed it: for *this* fixture
+// (DecayRate small, Δt small) e = Effective(...) really is already +Inf
+// before Revive's own gain arithmetic runs — Inf * exp(-0.01*10) is still
+// Inf, gain floors at 0, and the final math.IsInf check is what refuses,
+// not a NaN. But "Weight is +Inf" is not on its own a route that avoids
+// Effective's NaN-producing arithmetic — it depends on the accompanying
+// DecayRate and Δt. "Weight is +Inf with DecayRate*Δt large enough to
+// underflow" (the fifth case) is the same Weight = +Inf shape reaching e =
+// NaN instead of e = +Inf, through exactly the multiplication inside
+// Effective (weight * exp(...)) that produces the other reachable-looking
+// shapes: when exp(-decayRate*deltaDays) underflows to exactly 0.0 (it
+// does for a large enough negative exponent — verified at DecayRate=100,
+// Δt=1000 days: math.Exp(-100000) == 0.0 exactly), +Inf * 0.0 is NaN by
+// IEEE 754, the same rule that makes DecayRate=+Inf with Δt=0 produce NaN.
+// Both are the "Inf times a zero-or-near-zero factor" case, on different
+// operands. Either way — e = +Inf or e = NaN — Revive's own
+// math.IsNaN(w) || math.IsInf(w, 0) check refuses to persist it, so there
+// is no functional gap; only the earlier comment's account of *why* was
+// too narrow.
 func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	lastTouchedAt := now.AddDate(0, 0, -10)
@@ -329,6 +376,9 @@ func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
 			now:  now,
 		},
 		{
+			// Δt = 10 days at DecayRate = 0.01 keeps exp(...) far from
+			// underflow, so e is already +Inf here, not NaN — see this
+			// function's own doc comment for why that distinction matters.
 			name: "Weight is +Inf",
 			c:    Current{UnitID: "u3", Weight: math.Inf(1), DecayRate: 0.01, LastTouchedAt: lastTouchedAt},
 			now:  now,
@@ -339,6 +389,18 @@ func TestRevive_NonFinite_RefusesToProduceABoost(t *testing.T) {
 			// names.
 			name: "DecayRate is +Inf with Δt = 0",
 			c:    Current{UnitID: "u4", Weight: 1.0, DecayRate: math.Inf(1), LastTouchedAt: now},
+			now:  now,
+		},
+		{
+			// Weight = +Inf again, but DecayRate*Δt is now large enough for
+			// exp(-decayRate*deltaDays) to underflow to exactly 0.0, so e =
+			// Effective(...) is NaN (Inf * 0.0), not +Inf. This is the
+			// route this function's own doc comment corrects: Weight =
+			// +Inf can reach Revive as either +Inf or NaN depending on the
+			// accompanying DecayRate and Δt, not as a shape that always
+			// avoids Effective's NaN arithmetic.
+			name: "Weight is +Inf with DecayRate*Δt large enough to underflow",
+			c:    Current{UnitID: "u5", Weight: math.Inf(1), DecayRate: 100, LastTouchedAt: now.AddDate(0, 0, -1000)},
 			now:  now,
 		},
 	}

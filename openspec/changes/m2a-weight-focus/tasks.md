@@ -118,17 +118,67 @@ the seed should vary per run (and be printed on failure for reproduction), or wh
 generator should deliberately sample near boundaries. Whoever answers it should answer it for
 every property test, not just this one.
 
+**Closed** (`test/close-m2a-conflicts`): `propertySeed` now derives `TestEffective_
+NeverExceedsWeight_Property`'s seed per run, logs it via `t.Logf` before the property runs, and
+accepts a `-weight-seed` flag override so a failing run reproduces exactly. The entropy source is
+`hash/maphash.MakeSeed()` — stdlib, unbanned, and documented to return a fresh random seed per
+call — not `time.Now`, `math/rand` or `os.Getenv`, all forbidden inside `internal/core` including
+its `_test.go` files by `depguard`'s `core-purity` rule and `forbidigo`.
+
+**Corrected after Judgment Day on this PR.** The first revision hashed the address of a local
+variable, and its comment explained that process memory layout varies per run. Both judges took
+that apart independently. The mechanism worked, but not for the stated reason: `go build
+-gcflags=-m` shows the variable **escaping to the heap** — taking its address to pass through
+`fmt`'s `...any` boxes it — so the entropy was Go's allocator and scheduler jitter, an
+undocumented runtime detail, and not process layout at all. One judge disabled kernel ASLR with a
+`personality(ADDR_NO_RANDOMIZE)` syscall and the address still varied, which is reassuring and is
+precisely the problem: nothing in the language promises it will keep varying, so the guarantee
+rested on behaviour no test asserts. **A comment claiming more than the code enforces, inside the
+change written to stop this project doing exactly that** — the fifth instance in `m2a`, and see
+C8. `maphash` removes the false claim and the dependence together.
+
+Mutation-verified with `decayRate < -0.001` applied, across four independent measurements:
+**185/200, 183/200, 179/200 and 56/60** — roughly **90 %**, stated as a range because it is a
+noisy estimate of a per-run-random process, not a property of the code. Binomial σ at n=200,
+p≈0.9 is about 4, so those four are one distribution, not a regression. 100 further runs against
+unmutated code produced zero false positives. Every mutant reverted and the tree verified clean
+after measuring.
+
+This closes the question for this one property test only. Whether the project adopts per-run
+seeding everywhere is left open, per the instruction not to decide it unilaterally — but `m2b`
+introduces `ResurfaceMaxHops` and `ResurfaceAttenuation` and will face the same choice, so the
+answer is worth settling rather than re-deriving.
+
 **C3.2 — `AllZones()` documents an ordering contract nothing tests.** Its doc comment promises
 the members come back "in the order the constants above declare them".
 `TestAllZones_ReturnsTheThreeZones` builds a `seen` set and checks membership only; a judge
 scrambled the returned literal and the suite passed. Theoretical today — nothing outside the
 package iterates `AllZones()` — and live the moment something does so expecting hot-first order.
 
+**Closed** (`test/close-m2a-conflicts`): `TestAllZones_ReturnsTheThreeZones` now compares `got[i]`
+against `want[i]` element by element instead of only checking set membership via `seen`. Verified
+by mutation: scrambling `AllZones()`'s returned literal order now fails the test (exercised as part
+of closing C3.3 below, since fixing the order required reordering the literal itself).
+
 **C3.3 — `Zone`'s `iota` order is the reverse of `design.md` D2's own sketch.** D2 writes
 `const (ZoneCold Zone = iota; ZoneWarm; ZoneHot)`; the code ships `ZoneHot = iota`, then
 `ZoneWarm`, then `ZoneCold`. Nothing depends on the underlying `int` — no test, no caller, no
 persisted value — so this is drift, not a defect. Recorded because a reader diffing D2 against
 the code will otherwise stop and wonder which one is wrong.
+
+**Closed** (`test/close-m2a-conflicts`), reordered — outcome 1 of the three the owner offered when
+re-raising this: the code now matches `design.md` D2 (`ZoneCold Zone = iota`, then `ZoneWarm`,
+then `ZoneHot`). The deciding argument was not "match the sketch" but the zero value's meaning:
+with `ZoneHot = 0`, an unclassified or zero-valued `Zone` silently claimed to be Hot — the state a
+unit has to earn per doc 02 §2 — instead of Cold, decay's resting state and the safer default for
+something nothing has classified. `TestZone_ZeroValueIsCold` pins this now. Verified before
+reordering, not assumed: `rg` over the tree found no reference to `ZoneHot`/`ZoneWarm`/`ZoneCold`
+or any `int`-conversion of `Zone` outside `internal/core/weight`, and doc 02 §2 confirms zones are
+"emergent, not persisted" — no migration or golden file is affected. Written as a genuine two-commit
+TDD sequence: the order/zero-value tests landed first and failed against the pre-reorder code for
+the right reason, then the reorder made them green. `go build ./...` and `go test ./...` (not just
+the package) were run clean after, per the request to check the "nothing else depends on it"
+expectation rather than trust it.
 
 **A method error worth recording against the reviewers, not the code**: both round-2 judges were
 asked to perform mutation testing, and both ran against the **same working tree** concurrently.
@@ -169,6 +219,55 @@ exists in `internal/core/weight`, not because any structural check stops one fro
 Recorded per this change's own `m1c-surface/tasks.md` conflict-discipline, so a later link does
 not mistake "the test is currently green" for "the guarantee is structurally enforced."
 
+**Closed** (`test/close-m2a-conflicts`), partially, deliberately: `TestI05_NoBareFloat64WeightBypassesBoost`
+extends `exportedFuncResultTypes` with a closed allow-list of exported `float64`-returning
+functions (today `{Effective}`), mirroring `TestI05_BoostHasExactlyOneProducer`'s own mechanism for
+`Boost`'s producer set. "A `float64` intended for persistence" is not a property `go/ast` can read
+off a signature — `Effective` legitimately returns `float64` too (R1.2, a read) — so this test does
+not, and cannot, judge *intent* structurally; it converts a silent future bypass into a forced,
+reviewable one-line diff to the allow-list instead. Mutation-verified: a temporary bare-`float64`
+function added to `internal/core/weight` fails the test with the offending name listed; removed
+after. This is the honest ceiling of a structural check here, stated in the test's own comment so a
+reader does not read a stronger guarantee into it than it proves.
+
+**The ceiling was narrower than that closure first admitted.** Judgment Day on this PR had both
+judges build bypasses and watch them sail through. Three shapes pass untouched, all verified by
+compiling them:
+
+```go
+type PersistWeight = float64                 // alias
+type WeightValue float64                     // defined type
+type PersistResult struct{ Value float64 }   // struct wrapper
+```
+
+The check matches `go/printer`'s **rendering** of the result type, so it sees the identifier a
+function declares, not what that identifier resolves to. The third shape is the one that matters:
+`Boost` is itself a struct wrapping a `float64`, so "a struct carrying a weight" is the pattern
+this package has taught everyone to write — a well-meaning helper returning one is a likelier
+accident than a bare `float64` ever was. Catching these needs `go/types` resolution rather than
+this file's ast-only walk, and banning float-carrying structs outright would ban `Boost`.
+
+So the guard raises the cost of the laziest bypass and nothing more, and the test's comment now
+names all three shapes instead of only conceding it "cannot judge intent". **Real enforcement is
+C6's**, when `m2c` gives I24 a write path to protect.
+
+### C9 — this debt-clearing PR committed the same TDD-disclosure lapse it was closing.
+
+Judgment Day found that C7's and C5's new tests were never watched red: checked out at their
+introducing commits, both pass immediately, because both were written against already-correct
+code. That is legitimate — a value-pinning test and a structural allow-list have no
+missing-symbol red available — but **this document's own intro (lines 26-30) requires saying so at
+the task**, and `PR 2b.3` follows that convention verbatim ("Not a missing-symbol red: … this test
+is the permanent guard against a future recalibration"). C7's and C5's closures instead wrote
+"Mutation-verified: …", which proves a test *can* fail, not that it followed red-then-green.
+
+Recording it rather than rewriting history, the same treatment C1 and C2 got — and noting the
+shape, because it is the point: **a PR whose entire purpose was closing TDD-discipline debt
+reproduced the discipline gap in its own closures.** C2 is a coverage-driven test added without a
+red step; this is a mutation-driven one. The lesson C2 already recorded did not transfer, because
+it was written as a rule about coverage reports rather than about the general case: whenever a
+test cannot be red, say so where the test is introduced.
+
 ### C6 — I24 is documented but unenforced until `m2c`, when `ports.UnitRepo` gains a weight-write method.
 
 Disclosed in `design.md`, worth carrying forward so it is not forgotten: today nothing in
@@ -201,6 +300,14 @@ value-pinning test per calibratable constant whose expectation is an independent
 and calibration are guarded separately. `m2b` introduces `ResurfaceMaxHops` and
 `ResurfaceAttenuation` and will face the identical choice.
 
+**Closed** (`test/close-m2a-conflicts`): added `TestReviveGain_IsPinnedToItsCalibratedValue` and
+`TestWeightCeiling_IsPinnedToItsCalibratedValue`, each comparing the constant directly against an
+independent literal from `docs/02-cognitive-core.md` §13 — no formula, no shared derivation with
+any other test. Mutation-verified: `ReviveGain` 0.35 → 0.36 fails exactly its own new test plus
+`TestRevive_MatchesSpecWorkedExample`; `WeightCeiling` 2.0 → 2.2 fails exactly its own new test plus
+the same worked-example test; no other `TestRevive_*` test reacts either time, matching this entry's
+own measurement. Reverted both mutants after; tree clean.
+
 ### C8 — `boost.go`'s `+Inf` comment states a fifth non-finite path that does not exist as described. Fourth consecutive PR shipping a claim broader than the code.
 
 The comment says `Weight = +Inf` "reaches Revive without going through `Effective`'s own NaN cases
@@ -220,6 +327,17 @@ to ship a stated guarantee wider than the code enforces**, and twice the over-cl
 the round-1 fix). A rule that keeps being broken while everyone agrees with it is a signal about
 the process, not about care. Whoever writes `m2b`'s comments should assume the same failure will
 recur and check for it explicitly rather than intending not to.
+
+**Closed** (`test/close-m2a-conflicts`): the comment (on `TestRevive_NonFinite_RefusesToProduceABoost`
+in `boost_test.go` — where it actually lives, not `boost.go`) now states that `Weight = +Inf` reaches
+Revive as either `+Inf` (this test's own fixture: `DecayRate`/`Δt` too small to underflow `exp`) or
+`NaN` (a new fifth fixture added here, `DecayRate=100`, `Δt=1000` days, verified to underflow
+`math.Exp` to exactly `0.0`) depending on the accompanying `DecayRate` and `Δt` — not a route that
+categorically avoids `Effective`'s NaN arithmetic. `decay.go`'s own comment gained the same fourth
+shape for consistency (it made the identical "three reachable shapes" undercount). `docs/02-
+cognitive-core.md` §2 gained the matching delta, satisfying `docs-sync.yml` for this PR's
+`internal/core/` changes. No functional change; the final `math.IsNaN(w) || math.IsInf(w, 0)` check
+was already correct either way.
 
 ---
 

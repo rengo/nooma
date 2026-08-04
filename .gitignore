@@ -27,3 +27,6 @@ nooma.lock
 # Local agent tooling — generated, contains absolute paths to the machine
 .atl/
 .claude/settings.local.json
+
+# Scratch worktrees for review agents — never committed.
+.claude/worktrees/

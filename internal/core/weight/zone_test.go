@@ -59,22 +59,39 @@ func TestZoneOf_TotalOverStatusAndFocus(t *testing.T) {
 }
 
 // TestAllZones_ReturnsTheThreeZones proves AllZones() enumerates exactly
-// ZoneHot, ZoneWarm and ZoneCold.
+// ZoneCold, ZoneWarm and ZoneHot, IN THAT ORDER — the order its own doc
+// comment promises ("in the order the constants above declare them") and
+// design D2's declared const order. C3.2 (tasks.md) found this test's
+// membership-only check let that promise go unenforced: want was already
+// an ordered slice, which reads as though sequence were compared, but only
+// a `seen` set was checked. A judge scrambled AllZones()'s returned
+// literal and the suite passed. This version compares element by element.
 func TestAllZones_ReturnsTheThreeZones(t *testing.T) {
 	got := AllZones()
-	want := []Zone{ZoneHot, ZoneWarm, ZoneCold}
+	want := []Zone{ZoneCold, ZoneWarm, ZoneHot}
 
 	if len(got) != len(want) {
 		t.Fatalf("AllZones() has %d members, want %d: %v", len(got), len(want), got)
 	}
-	seen := make(map[Zone]bool, len(got))
-	for _, z := range got {
-		seen[z] = true
-	}
-	for _, z := range want {
-		if !seen[z] {
-			t.Errorf("AllZones() is missing %v", z)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("AllZones()[%d] = %v, want %v — AllZones() promises the constants' declared order (design D2)", i, got[i], want[i])
 		}
+	}
+}
+
+// TestZone_ZeroValueIsCold pins the meaning of Zone's zero value, per C3.3
+// (tasks.md): design D2 declares the const order Cold, Warm, Hot — the
+// shipped code had it reversed, making the zero value (an unclassified or
+// zero-initialized Zone) claim to be Hot, the state a unit has to earn,
+// rather than Cold, the resting state decay carries things toward and the
+// safer default for something nothing has classified yet. Zone is never
+// persisted (doc 02 §2, I01) — this is guarding a Go-level default, not a
+// migration or golden-file concern.
+func TestZone_ZeroValueIsCold(t *testing.T) {
+	var z Zone
+	if z != ZoneCold {
+		t.Errorf("the zero value of Zone is %v, want ZoneCold — an unclassified zone must default to the resting state, not the state a unit has to earn (design D2)", z)
 	}
 }
 

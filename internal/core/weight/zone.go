@@ -6,11 +6,15 @@ import "github.com/rengo/nooma/internal/core/unit"
 // classification of a unit's attention state.
 type Zone int
 
-// The three zones, doc 02 §2's table.
+// The three zones, doc 02 §2's table, declared in design D2's order —
+// Cold, Warm, Hot — so the zero value is ZoneCold: the resting state decay
+// carries a unit toward, and the safer default for a Zone nothing has
+// classified yet. Hot is the state a unit has to earn; the zero value must
+// not claim it for free (C3.3, openspec/changes/m2a-weight-focus/tasks.md).
 const (
-	ZoneHot Zone = iota
+	ZoneCold Zone = iota
 	ZoneWarm
-	ZoneCold
+	ZoneHot
 )
 
 // AllZones returns a fresh slice holding the three Zone vocabulary
@@ -18,7 +22,7 @@ const (
 // not an exported var, for the same reason unit.AllStatuses is
 // (internal/core/unit/status.go).
 func AllZones() []Zone {
-	return []Zone{ZoneHot, ZoneWarm, ZoneCold}
+	return []Zone{ZoneCold, ZoneWarm, ZoneHot}
 }
 
 // String names the zone. Every member has a distinct, lowercase name.
