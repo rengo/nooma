@@ -557,6 +557,65 @@ its assignment and its guard, and confirm the package stays green — the same t
 mid-computation non-finite check got in C15 once entry-point validation made it unreachable, and
 the same criterion C13 used to decline the negative-strength lower clamp.
 
+
+### C18 — a duplicate `UnitID` in `Neighbourhood.States` silently masks corruption, and which reading survives depends on slice order. Found by BOTH judges in round 3.
+
+`Resurface` builds its state map with `for _, c := range n.States { states[c.UnitID] = c }` — last write
+wins, no duplicate detection. Constructed and executed by both judges independently:
+
+```go
+States: []Current{
+    {UnitID: "n", Weight: math.NaN(), ...},  // corrupt, listed first
+    {UnitID: "n", Weight: 0, ...},           // healthy, listed second
+}
+// → boosts=[{n 0.35 …}]  corrupted=[]
+```
+
+The corrupt reading vanishes with **no signal at all** — not a refusal, not a `corrupted` entry. Reverse
+the two and it is correctly refused. So the outcome depends on the order of a slice the caller controls,
+in a function whose stated purpose this round was to make corruption impossible to confuse with health.
+
+**Why it is WARNING and not CRITICAL**, per both judges: it needs an upstream contract violation the
+schema structurally prevents — `units.id` is the primary key, so a query keyed by ids returns one row
+per id. No shipped caller can produce it, and `Resurface` has no caller at all yet.
+
+**What `m2c` must do**: it writes the first caller. Either guarantee uniqueness at the query (the natural
+outcome of a PK-keyed read) and say so where `Neighbourhood` is constructed, or have `Resurface` reject a
+duplicate id outright. Choosing silently is what this entry exists to prevent.
+
+### C19 — `Edge.Strength = +Inf` is coerced to 1 rather than refused, the only non-finite input in the package that is.
+
+`buildAdjacency` intercepts `math.IsNaN(strength)`; `clampStrength`'s `if s > 1 { return 1 }` catches
+`+Inf` first and silently maps it to a legitimate maximal edge. Verified: a `+Inf` edge produces output
+byte-identical to a genuine `Strength: 1.0` edge, with nothing in `corrupted`.
+
+It cannot produce a non-finite weight — the clamp bounds it before any arithmetic — so it clears no
+CRITICAL bar. But doc 02 §2's own text says "an unclamped strength above 1 is not a stronger relation, it
+is a corrupt one", and `+Inf` cannot come from a legitimate judge output any more than `Weight = +Inf`
+can: both need a corrupted row or an arithmetic slip elsewhere, which is the exact justification given for
+refusing those. Treating `+Inf` like `100.0` rather than like `Weight = +Inf` is an inconsistency, not a
+recorded decision. No fixture exercises `Strength = ±Inf`; the suite tests `100.0` and `NaN` only.
+
+### C20 — `corrupted` is not scoped to units reachable from `Origin`.
+
+A `NaN`-strength edge between two units with no path to `Origin` is still reported, because the sweep's
+only gates are "has a `Current`", "is not the origin", "is not in `gains`". Verified:
+`Origin: "a"`, edges `a→b` healthy and `x→y` NaN, gives `corrupted = [x y]`.
+
+This matches the code's own doc comment literally, so it is not a hidden contract violation — but §2 frames
+`corrupted` as being about *a neighbour's* state or the graph reaching it, and `Neighbourhood`'s own comment
+("every edge among them") actively invites a caller to pass every edge among the loaded states rather than
+only those within `ResurfaceMaxHops`. If `m2c` reads it that way, every pass re-reports distant corruption
+irrelevant to that origin — `decision_log` noise and misattribution, not bad data.
+
+### C21 — the origin-disconnected corrupt-edge shape is correct but has no fixture.
+
+Every `NaN`-edge fixture anchors to a node reachable from the origin. The fully disconnected component
+behaves correctly today, but a plausible future refactor scoping corruption-reporting to the origin's own
+reachable component — a natural-sounding restriction, since the rest of the function is origin-scoped —
+would silently change it and nothing would fail. Pairs with C20: whichever way that question is answered,
+the answer should be pinned by a test rather than left as the current behaviour by accident.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
