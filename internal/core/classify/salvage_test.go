@@ -11,7 +11,11 @@ import (
 // payload (zero completed members — there is nothing to salvage a member
 // from), and a payload truncated before its first value (zero completed
 // members, still flagged truncated — the boundary where a naive reader
-// either panics or reports success with nothing, design D1's floor).
+// either panics or reports success with nothing, design D1's floor). It
+// also covers preamble tolerance (docs/02-cognitive-core.md §5.1): a
+// response wrapped in a markdown code fence, prose containing a brace that
+// opens nothing decodable, and the documented, accepted limitation of
+// scanning for only the first '{'.
 func TestSalvage(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -66,6 +70,44 @@ func TestSalvage(t *testing.T) {
 			raw:                `{"type":`,
 			wantFields:         map[string]string{},
 			wantTruncatedAfter: true,
+		},
+		// The three cases below are the production defect this file was
+		// bitten by (see salvage.go's own doc comment): gpt-4o-mini wraps
+		// its answer in a markdown code fence even after being told not
+		// to, and every fixture this repository had authored until now was
+		// bare, well-formed JSON — so nothing caught it before a human ran
+		// `nooma doctor` against a live key.
+		{
+			name: "markdown-fenced object: the fence is discarded, the object decodes as if bare",
+			raw: "```json\n" +
+				`{"type":"task","normalized_content":"Pick up the dry cleaning","weight":0.6,"decay_rate":0.1}` +
+				"\n```",
+			wantFields: map[string]string{
+				"type":               `"task"`,
+				"normalized_content": `"Pick up the dry cleaning"`,
+				"weight":             `0.6`,
+				"decay_rate":         `0.1`,
+			},
+			wantTruncatedAfter: false,
+		},
+		{
+			name:               "prose containing a brace that opens nothing decodable: fails whole, not the wrong brace",
+			raw:                `here is the JSON: {see below}`,
+			wantFields:         map[string]string{},
+			wantTruncatedAfter: true,
+		},
+		// Documents a known, accepted limitation rather than leaving it
+		// undiscovered (Salvage's own doc comment): scanning for the FIRST
+		// '{' means an earlier fragment that is itself a complete,
+		// well-formed object is picked over a later, real one. No
+		// recording in this corpus has this shape; fixing it would need
+		// machinery to judge which brace is "real" that nothing observed
+		// has justified yet.
+		{
+			name:               "known limitation: an earlier, independently valid object is picked over the real one",
+			raw:                `Example: {"a":1} is not the answer. Real answer: {"type":"task"}`,
+			wantFields:         map[string]string{"a": `1`},
+			wantTruncatedAfter: false,
 		},
 	}
 
