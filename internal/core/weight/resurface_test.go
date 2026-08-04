@@ -351,6 +351,39 @@ func TestResurface_DiscriminatesEffectiveFromPersistedWeight(t *testing.T) {
 	}
 }
 
+// TestResurface_NeighbourWithNoMatchingState_IsSkipped covers a
+// Neighbourhood whose Edges reference a unit id absent from States: a
+// malformed-input shape the spec does not name a MUST for, but one
+// Resurface must not panic on, since a caller building Neighbourhood from
+// a real graph query can genuinely have an edge to a unit it did not also
+// fetch decay-relevant state for. Resurface skips it — no boost, no crash
+// — while a properly-stated neighbour on the same graph still gets one.
+//
+// Disclosure (this project's own convention, C2's own lesson): this test
+// was added AFTER the GREEN commit, driven by a core-coverage report — the
+// `if !ok { continue }` branch it exercises was already correct in the
+// implementation the RED/GREEN commits shipped, and this test proves it
+// rather than driving new behaviour. C2 flagged the earlier instance of
+// this pattern (`ab9e172`, undisclosed); this one is named as what it is
+// instead of presented as part of the red/green cycle.
+func TestResurface_NeighbourWithNoMatchingState_IsSkipped(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	n := Neighbourhood{
+		Origin: "a",
+		States: []Current{zeroState("b")}, // "ghost" is reachable but has no State entry
+		Edges: []Edge{
+			{From: "a", To: "b", Strength: 1.0},
+			{From: "a", To: "ghost", Strength: 1.0},
+		},
+	}
+
+	got := Resurface(n, now)
+	assertBoosts(t, got, now, []struct {
+		id     string
+		weight float64
+	}{{"b", 0.35}})
+}
+
 // TestResurface_BoundaryTable pins R2.5/R2.7's own boundary table exactly,
 // each row an independent fixture rather than a shared one: 1 hop at
 // strength 1.0 (target exactly WeightCeiling/2 = 1.00, doc 02 §13's base
