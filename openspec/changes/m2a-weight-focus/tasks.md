@@ -945,6 +945,103 @@ struct at all," not specifically a field spelled `now`.
 conformance test; recorded so a later link (or a fresh Judgment Day round) picks up the structural
 check rather than trusting a corrected grep a second time.
 
+### C33 — Judgment Day round 3, both judges independently: I01's "no exported function returns or embeds a `unit.Status`" check's own METHOD was the defect, not one more missing shape. **Closed by owner ruling — the go/ast-text check is replaced with a type-checked pass.**
+
+Round 1 (C-series predecessor, not separately numbered) and round 2 (the fix recorded in
+`sdd/m2a-weight-focus/apply-progress`, engram #653) each closed exactly one missing shape — a local
+struct's fields, then a type alias — by adding one more hand-maintained resolution table
+(`localNamedTypes`'s `structFields` and `aliases` maps) to a check that matched `go/printer`-rendered
+AST text against the literal substring `"unit.Status"`. Round 3 found that the whole APPROACH was
+the defect: `localNamedTypes` indexed only `*ast.StructType` declarations and `Assign`-valid aliases,
+so every defined type whose underlying kind is a slice, map, pointer, channel, func, or interface was
+invisible to it — an entire CATEGORY, confirmed by probing all six shapes
+(`type X []unit.Status`/`map[string]unit.Status`/`*unit.Status`/`chan unit.Status`/`func()
+unit.Status`/`interface{ Get() unit.Status }`) against the pre-existing check and watching every one
+pass green. A generics bypass (a generic struct instantiated with `unit.Status`) was also flagged as
+a theoretical gap the same round.
+
+**Owner ruling**: replace the go/ast-text approach entirely with a real type-checked pass over
+`go/types`' own resolved type graph, so aliases, interfaces, func types, containers and generics fall
+out by construction instead of by an enumerated list of syntax shapes someone had to think of first —
+Go's type-expression space cannot be covered by a hand-maintained list, which is why each of the three
+rounds found a new shape the previous round's fix never anticipated.
+
+**Where**: `test/conformance/i01_focus_never_persisted_test.go` — `localNamedTypes` and
+`resultTypeEmbeds` (the go/ast-text machinery both round 1 and round 2 extended) are removed
+entirely. In their place: `moduleImporter`, a ~90-line `types.Importer` scoped to this module
+(same-module imports — `internal/core/focus`'s own graph is exactly `unit`, `weight`, and three
+stdlib packages — are parsed and type-checked recursively through the same importer; every other
+import path is handed to `go/importer.Default()`, which reads precompiled stdlib export data and
+needs no network access), and `typeCanYieldWithoutConversion`, a recursive walk over `go/types`'
+`*types.Named`/`Struct`/`Slice`/`Array`/`Map`/`Pointer`/`Chan`/`Signature`/`Interface` kinds —
+including a `*types.Named`'s own `TypeArgs()` for generic instantiations — with a `visited`
+cycle guard keyed on `types.Type` for termination over a type graph that is finite but not acyclic.
+
+**Dependency choice, reported explicitly per the owner's own instruction not to slip one in**: stdlib
+`go/types` plus the hand-rolled importer above, NOT `golang.org/x/tools/go/packages`. `go.mod`/`go.sum`
+are unchanged by this fix. `x/tools/go/packages` is the more ergonomic, module-aware way to do this,
+but it is a new dependency this module does not otherwise need; the hand-rolled importer is viable
+specifically because the package under test (`internal/core/focus`) has a small, fully-known import
+graph, not because this technique would generalize to an arbitrary one — recorded so a later reader
+does not read this as "prefer a hand-rolled importer generally."
+
+**A second, real gap this round's OWN probing found and closed, not merely inherited**: the first
+draft resolved named types via `t.(*types.Named)`, which does not fire for `type X = Y` when Y is
+anything other than `unit.Status` itself — this Go toolchain (`go1.26.4`) materializes `X` as its own
+`*types.Alias` node (Go 1.22+ behavior; see `go/types.Unalias`'s own doc comment) rather than
+resolving `X` straight through to `Y`'s type object the way earlier Go versions did. Probed directly:
+`type AliasOfWrapper = wrapperStructContainingStatus; func F() AliasOfWrapper` (and the same shape one
+package away, aliasing a type declared in `internal/core/weight`) passed the first draft green, while
+`func F() wrapperStructContainingStatus` directly did not — confirmed by adding both as throwaway
+exported functions to `internal/core/focus` (and `internal/core/weight`) and watching the subtest stay
+green with them present. Fixed by calling `types.Unalias(t)` unconditionally at the top of
+`typeCanYieldWithoutConversion`, before dispatching on its kind; re-probed after the fix and both
+shapes are now caught (see the full matrix below).
+
+**Full probe matrix, as measured** (every shape added to a throwaway `internal/core/focus/zz_probe.go`
+— plus `zz_probe_crossfile.go` for the different-file case and `internal/core/weight/zz_probe_outside.go`
+for the outside-package case — run once against `TestI01_FocusIsNeverAPersistedStatus`, then all three
+files deleted; `git status --short internal/core/focus internal/core/weight` confirmed clean after):
+
+*Caught (25 of 25 intended shapes, confirmed by the subtest actually failing, for the right reason, on each):*
+direct `unit.Status` return; inline `struct{ S unit.Status }`; local named wrapper struct; two-level
+nesting; anonymous embedded field; `type X = unit.Status`; alias of a wrapper struct (the Unalias gap
+above); alias of an alias; alias declared in a different file of the same package; defined slice, map,
+pointer, channel, func type, and interface over `unit.Status`, both returned directly and as a struct
+field; a named type declared outside `internal/core/focus`, referenced directly and via a local alias;
+`**wrapper` double pointer; a generic struct instantiated with `unit.Status` directly and via a local
+alias; a multi-return function where only the second result carries it.
+
+*Correctly excluded (1 of 1):* `type StatusDefined unit.Status` (no `=`) — confirmed NOT flagged, per
+Go's own distinct-type rule.
+
+*N/A, not a real Go construct*: "a variadic result" (from this round's own task list) — Go has no
+variadic RETURN value; variadic applies only to a function's last PARAMETER, which this check does not
+and must not inspect (I01 is about result types only). Recorded rather than silently skipped.
+
+This supersedes both of round 2's recorded "confirmed NOT caught" gaps (a named type declared outside
+the directory referenced through a local alias; a second level of pointer indirection over a local
+wrapper type) — both are closed by this rewrite, verified above, not merely asserted. It also
+supersedes the go/ast-text version's entire doc-comment gap list, which the test file's own doc comment
+now states plainly rather than leaving stale.
+
+**Permanent regression fixture**: `testdata/i01_typecheck_probe/fixture.go` (a synthetic package under
+`testdata/`, so `go build ./...`/`go vet ./...`/golangci-lint/the cross-compile matrix all skip it by
+Go's own testdata convention) plus `TestI01TypecheckFixture_KnownShapes`, which runs the same
+`typeCanYieldWithoutConversion` machinery against it and pins 15 named shapes — including the
+mutually-recursive and self-referential termination cases and the alias-of-wrapper case this round's
+own probing found — so a future refactor of the check regresses in a test that runs on every `make
+check`, not only when someone re-runs a probe-and-revert matrix by hand.
+
+**Runtime cost**: the rewritten subtest costs ~0.33s (dominated by `go/importer.Default()`'s first
+stdlib export-data load), inside `test/conformance`'s existing ~1.7–1.9s total package time under
+`-race -shuffle=on` — no material change to the fast conformance loop. No new `go.mod`/`go.sum` entries.
+
+**Verification**: `make check-all` fully green after this fix — `golangci-lint run` 0 issues, `go vet`,
+L1/L2 `-race -shuffle=on` all packages, L3 (real SQLite vault, schema-golden regen diff clean),
+`internal/core` coverage 100% (509/509, floor 90%), seven-target cross-compile matrix OK, L4 `-tags
+e2e` OK.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
