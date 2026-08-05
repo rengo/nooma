@@ -1,6 +1,10 @@
 package focus
 
-import "time"
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // UrgencyLeadDays is the lead window UrgencyRamp ramps across: a unit due
 // this many days out or further scores no urgency bonus at all. Default 7
@@ -98,4 +102,60 @@ const AgeHorizonDays = 15
 func AgeRamp(createdAt, now time.Time) float64 {
 	ageDays := now.Sub(createdAt).Hours() / 24
 	return clamp(ageDays/AgeHorizonDays, 0, 1)
+}
+
+// AdjacencyWeight is Priority's contribution per unit of graph adjacency to
+// the previous focus (spec R3.7). Default 0.25 (doc 02 §13) — slightly
+// above AgeWeight, because "this is about the thing you are already
+// working on" is a stronger signal than "this has been waiting", and well
+// below UrgencyMax's ceiling, because it must never override a deadline.
+const AdjacencyWeight = 0.25
+
+// Candidate is a unit's ranking-relevant state at the instant Priority is
+// computed. Type is present only so the two focuses' membership criterion
+// (Types, PR 4a) can select over it — no term of Priority reads it (spec
+// R3.2, ruling 8). DueAt is a *time.Time: nil is not the zero time.Time
+// (I18), and UrgencyRamp treats the two differently.
+type Candidate struct {
+	ID            string
+	Type          unit.Type
+	Weight        float64
+	DecayRate     float64
+	LastTouchedAt time.Time
+	CreatedAt     time.Time
+	DueAt         *time.Time
+}
+
+// Priority computes doc 02 §3's ranking formula (spec R3.1, design §3.1,
+// the reconciliation's ruling 1): a multiplicative envelope over
+// effective_weight, not a linear weighted sum.
+//
+//	e = weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
+//	u = UrgencyRamp(c.DueAt, now)
+//	g = AgeRamp(c.CreatedAt, now)
+//	a = adjacency
+//
+//	priority = e
+//	         * (1 + (UrgencyMax-1)*u)                 // deadline: multiplicative
+//	         * (1 + AgeWeight*g + AdjacencyWeight*a)   // nudges: additive, bounded
+//
+// Every factor is >= 1, so priority >= e for every input: context can
+// promote a unit and can never demote one. Demotion is what decay is for;
+// a modifier that could demote would make the ranking depend on the
+// absence of a signal, the hardest kind of ordering to explain in the
+// glass box (doc 02 §11). Priority is monotone non-decreasing in e at
+// fixed context, and homogeneous of degree 1 in e — scaling every
+// candidate's effective weight by the same positive factor leaves the
+// ranking unchanged, which is what makes the two focuses' scores
+// comparable (design D7) and why the hysteresis margin is relative
+// (design D8).
+//
+// No term reads c.Type: type enters only as the focus-membership
+// predicate Types selects over (spec R3.2, owner ruling 8), never as a
+// number inside this formula.
+//
+// adjacency is an ordinary parameter, never package state: Priority reads
+// no package-level or global state (spec R3.8).
+func Priority(c Candidate, adjacency float64, now time.Time) float64 {
+	return 0
 }
