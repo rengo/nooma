@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 )
 
 // UrgencyLeadDays is the lead window UrgencyRamp ramps across: a unit due
@@ -157,5 +158,11 @@ type Candidate struct {
 // adjacency is an ordinary parameter, never package state: Priority reads
 // no package-level or global state (spec R3.8).
 func Priority(c Candidate, adjacency float64, now time.Time) float64 {
-	return 0
+	e := weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
+	u := UrgencyRamp(c.DueAt, now)
+	g := AgeRamp(c.CreatedAt, now)
+
+	return e *
+		(1 + (UrgencyMax-1)*u) *
+		(1 + AgeWeight*g + AdjacencyWeight*adjacency)
 }
