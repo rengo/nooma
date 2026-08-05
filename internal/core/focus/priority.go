@@ -157,7 +157,26 @@ type Candidate struct {
 //
 // adjacency is an ordinary parameter, never package state: Priority reads
 // no package-level or global state (spec R3.8).
+//
+// adjacency is clamped to [0,1] before it enters the envelope, for the same
+// reason weight.Effective clamps weight and decayRate (decay.go's own doc
+// comment): it is externally sourced — ultimately AdjacencyStrengths' max
+// over relation.strength (spec R3.7), ultimately an LLM judge's JSON output
+// (internal/core/relation/judgment.go) — validated only as a number, and the
+// schema's strength column carries no CHECK constraint, so core cannot vouch
+// for it landing in [0,1] any more than it can vouch for weight or
+// decayRate. Left unclamped, a negative adjacency lowers priority below e,
+// breaking the very MUST this function exists to guarantee (Judgment Day
+// round 1, both judges): Priority(Candidate{Weight: 1.0, DecayRate: 0,
+// LastTouchedAt: now, CreatedAt: now}, -1.0, now) returned 0.75 against
+// e = 1.0. Unlike spread.go's clampStrength — which deliberately clamps only
+// the upper bound because buildAdjacency's own map comparison already
+// neutralizes a negative strength — this clamp is symmetric: adjacency
+// multiplies directly into this envelope with no equivalent comparison to
+// fall back on, so both bounds are load-bearing here.
 func Priority(c Candidate, adjacency float64, now time.Time) float64 {
+	adjacency = clamp(adjacency, 0, 1)
+
 	e := weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
 	u := UrgencyRamp(c.DueAt, now)
 	g := AgeRamp(c.CreatedAt, now)
