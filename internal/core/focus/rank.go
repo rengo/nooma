@@ -1,6 +1,8 @@
 package focus
 
 import (
+	"math"
+	"sort"
 	"time"
 )
 
@@ -56,5 +58,51 @@ type Ranked struct {
 // finite value under an ordinary >, so it sorts to the very top with no
 // special-casing at all — see scoreKey, below, for the mechanism.
 func Rank(cs []Candidate, adjacency map[string]float64, now time.Time) []Ranked {
-	return nil
+	ranked := make([]Ranked, len(cs))
+	for i, c := range cs {
+		ranked[i] = Ranked{Candidate: c, Score: Priority(c, adjacency[c.ID], now)}
+	}
+
+	sort.Slice(ranked, func(i, j int) bool {
+		a, b := ranked[i], ranked[j]
+
+		ak, bk := scoreKey(a.Score), scoreKey(b.Score)
+		if ak != bk {
+			return ak > bk
+		}
+
+		ad, bd := a.Candidate.DueAt, b.Candidate.DueAt
+		if (ad == nil) != (bd == nil) {
+			return ad != nil
+		}
+		if ad != nil && bd != nil && !ad.Equal(*bd) {
+			return ad.Before(*bd)
+		}
+
+		return a.Candidate.ID < b.Candidate.ID
+	})
+
+	return ranked
+}
+
+// scoreKey returns score remapped to negative infinity when score is NaN —
+// the total-order-preserving key Rank's sort.Slice comparator actually
+// compares, kept distinct from the Score field Ranked reports. See Rank's
+// own doc comment above for why this mapping is Rank's decision and why
+// -Inf — not +Inf, not a panic, not an arbitrary position — is the chosen
+// image: the same conservative reading clamp already gives a corrupt
+// adjacency (mapping it to lo, no promotion), applied here to a corrupt
+// Score — it sorts as if it had nothing going for it, last rather than
+// anywhere else.
+//
+// A genuinely -Inf Score is not reachable through weight.Effective —
+// decay.go's own doc comment: a negative Weight, including -Inf, clamps to
+// 0 before the multiplication — but scoreKey does not special-case that
+// away, since Rank's contract is over any float64 Priority could someday
+// return, not only today's reachable subset.
+func scoreKey(score float64) float64 {
+	if math.IsNaN(score) {
+		return math.Inf(-1)
+	}
+	return score
 }
