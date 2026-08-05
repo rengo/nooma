@@ -140,7 +140,10 @@ type Candidate struct {
 //	         * (1 + (UrgencyMax-1)*u)                 // deadline: multiplicative
 //	         * (1 + AgeWeight*g + AdjacencyWeight*a)   // nudges: additive, bounded
 //
-// Every factor is >= 1, so priority >= e for every input: context can
+// Every factor is >= 1, so priority >= e for every FINITE Weight and
+// DecayRate (weight.Effective's own postcondition, spec R1.2 — e itself is
+// not sanitized against NaN or ±Inf, and Priority inherits that boundary
+// unchanged) once adjacency is clamped to [0,1] above: context can
 // promote a unit and can never demote one. Demotion is what decay is for;
 // a modifier that could demote would make the ranking depend on the
 // absence of a signal, the hardest kind of ordering to explain in the

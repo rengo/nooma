@@ -226,8 +226,10 @@ the moment. Under a sum, a unit whose effective weight has decayed to near zero 
 the top of the ranking by context alone — a deadline on something the brain has already
 forgotten would outrank the thing the user actually cares about, collapsing the very distinction
 this section opens with. Multiplying by the intrinsic term makes context **amplify** memory
-rather than **substitute** for it: every factor is ≥ 1, so `priority ≥ effective_weight` always,
-context can promote a unit and can never demote one, and the ranking is monotone in
+rather than **substitute** for it: every factor is ≥ 1, so `priority ≥ effective_weight` for every
+**finite** `weight` and `decay_rate` — the same restriction §2 already states for
+`effective_weight` itself, since `priority` computes it as its first step and inherits whatever it
+returns — context can promote a unit and can never demote one, and the ranking is monotone in
 `effective_weight` at fixed context. A deadline is allowed to dominate — it multiplies, with
 unbounded relative leverage up to `urgency_max` — while age and adjacency are nudges whose
 combined contribution is capped at `1 + age_weight + focus_adjacency_weight` no matter how many
