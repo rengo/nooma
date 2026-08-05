@@ -298,8 +298,12 @@ section rejects above.
   `incumbent × (1 + hysteresis_margin)`, never an absolute band, because `priority` has no fixed
   scale under the multiplicative envelope above: an absolute 0.05 would mean a 5% margin at
   priority 1.0 and a 1.25% margin at priority 4.0, damping weakest exactly where the contested
-  values are largest) to displace it from the focus. This requires remembering the previous
-  focus — in process, at the cost of one un-damped transition immediately after every restart,
+  values are largest) to displace it from the focus. `hysteresis_margin`'s stored column carries
+  no `CHECK` constraint, so a configured value outside `[0, +Inf)` — non-finite, or negative,
+  which would invert the margin's own direction — resolves to 0 (no anti-jitter protection that
+  round) rather than being trusted as-is (`internal/core/focus.ResolveMargin`, Judgment Day round
+  1). This requires remembering the previous focus — in process, at the cost of one un-damped
+  transition immediately after every restart,
   since there is no incumbent yet to compare a challenger against.
 
 ## 4. Relations

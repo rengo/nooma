@@ -96,3 +96,95 @@ func TestResolveMargin_NilFallsBackToDefault_NonNilPassesThrough(t *testing.T) {
 		t.Errorf("ResolveMargin(&0.12) = %v, want 0.12 (pass-through, not the default %v)", got, DefaultHysteresisMargin)
 	}
 }
+
+// TestResolveMargin_InvalidValuesMapToZero proves ResolveMargin is total
+// over every float64 a non-nil configured can hold, closing the gap
+// Judgment Day round 1 found (both judges, independently): margin flows
+// straight from config.hysteresis_margin (migration 0002, `REAL NOT NULL
+// DEFAULT 0.05`, no `CHECK` constraint) through ResolveMargin with zero
+// validation, unlike Score's own NaN boundary (scoreKey). Every value
+// outside [0, +Inf) — NaN, ±Inf, and any negative value, not only
+// margin <= -1 — resolves to 0, never to DefaultHysteresisMargin (this
+// function's own doc comment justifies why 0).
+func TestResolveMargin_InvalidValuesMapToZero(t *testing.T) {
+	tests := []struct {
+		name string
+		in   float64
+	}{
+		{"NaN", math.NaN()},
+		{"-1 exactly", -1},
+		{"-1 minus epsilon", -1 - 1e-9},
+		{"-2", -2},
+		{"+Inf", math.Inf(1)},
+		{"-Inf", math.Inf(-1)},
+		{"a small negative value, not only <= -1", -0.01},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			in := tc.in
+			if got := ResolveMargin(&in); got != 0 {
+				t.Errorf("ResolveMargin(&%v) = %v, want 0", tc.in, got)
+			}
+		})
+	}
+}
+
+// TestResolveMargin_ValidBoundaryValuesPassThroughUnchanged proves
+// ResolveMargin's valid domain is exactly [0, +Inf) finite: -0.0 (IEEE
+// 754: -0.0 == 0.0, never < 0), 0, and an arbitrarily large finite value
+// are not corrupted input and must pass through unchanged, not collapse
+// to 0 or to DefaultHysteresisMargin.
+func TestResolveMargin_ValidBoundaryValuesPassThroughUnchanged(t *testing.T) {
+	tests := []struct {
+		name string
+		in   float64
+	}{
+		{"negative zero", math.Copysign(0, -1)},
+		{"zero", 0},
+		{"a very large finite value", 1e300},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			in := tc.in
+			got := ResolveMargin(&in)
+			if got != tc.in {
+				t.Errorf("ResolveMargin(&%v) = %v, want %v unchanged", tc.in, got, tc.in)
+			}
+		})
+	}
+}
+
+// TestDisplaces_ResolvedInvalidMargin_NaNIncumbentStillDisplaced proves the
+// fix end to end, through the actual production door: before this fix, a
+// NaN incumbent combined with a raw config.hysteresis_margin of -1 made
+// Displaces false for every challenger (margin*(1+margin) collapsed to
+// -Inf*0 = NaN, and "x > NaN" is false under IEEE 754 for every x) — a
+// corrupted incumbent became an unbeatable permanent occupant, exactly the
+// class this function's own doc comment claims to have eliminated. Every
+// raw value below reproduces a distinct way the unvalidated margin used to
+// break the comparison; after ResolveMargin, all of them must still let a
+// legitimate, non-NaN challenger through.
+func TestDisplaces_ResolvedInvalidMargin_NaNIncumbentStillDisplaced(t *testing.T) {
+	rawMargins := []struct {
+		name string
+		raw  float64
+	}{
+		{"NaN", math.NaN()},
+		{"-1", -1},
+		{"-2", -2},
+		{"+Inf", math.Inf(1)},
+		{"-Inf", math.Inf(-1)},
+	}
+
+	for _, tc := range rawMargins {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := tc.raw
+			margin := ResolveMargin(&raw)
+			if !Displaces(0.01, math.NaN(), margin) {
+				t.Errorf("Displaces(0.01, NaN, ResolveMargin(&%v)=%v) = false, want true — a NaN incumbent must not be a permanent occupant regardless of a corrupted raw margin", tc.raw, margin)
+			}
+		})
+	}
+}

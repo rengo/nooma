@@ -199,6 +199,48 @@ func TestSelect_AgreesWithDisplaces(t *testing.T) {
 	}
 }
 
+// TestSelect_ResolvedInvalidMargin_NaNIncumbentStillDisplaced proves
+// TestSelect_AgreesWithDisplaces's guarantee holds not only for the
+// literal margin = 0.05 that test hardcodes, but for margin resolved from
+// a corrupted raw config.hysteresis_margin too — the same end-to-end
+// pipeline hysteresis_test.go's
+// TestDisplaces_ResolvedInvalidMargin_NaNIncumbentStillDisplaced proves for
+// Displaces directly, one layer up through the real caller: before this
+// fix, a raw margin of -1 made a NaN-scored incumbent an unbeatable
+// permanent occupant of Selection.Members even against a legitimate,
+// finite-scored challenger (Judgment Day round 1, both judges,
+// independently, reproduced end to end through this exact function).
+func TestSelect_ResolvedInvalidMargin_NaNIncumbentStillDisplaced(t *testing.T) {
+	rawMargins := []struct {
+		name string
+		raw  float64
+	}{
+		{"NaN", math.NaN()},
+		{"-1", -1},
+		{"-2", -2},
+		{"+Inf", math.Inf(1)},
+		{"-Inf", math.Inf(-1)},
+	}
+
+	for _, tc := range rawMargins {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := tc.raw
+			margin := ResolveMargin(&raw)
+
+			ranked := []Ranked{
+				{Candidate: Candidate{ID: "inc", Type: unit.TypeTask}, Score: math.NaN()},
+				{Candidate: Candidate{ID: "chal", Type: unit.TypeTask}, Score: 0.01},
+			}
+			previous := Selection{Kind: KindTask, Members: []string{"inc"}}
+
+			got := Select(KindTask, ranked, previous, margin, 1)
+			if len(got.Members) != 1 || got.Members[0] != "chal" {
+				t.Errorf("Select(..., ResolveMargin(&%v)=%v, 1).Members = %v, want [\"chal\"] — a NaN incumbent must not survive against a legitimate challenger regardless of a corrupted raw margin", tc.raw, margin, got.Members)
+			}
+		})
+	}
+}
+
 // TestSelect_IndependentIncumbentSets proves spec R4.7: the task focus and
 // the load focus each keep their own incumbent set, even when computed
 // from the same ranked slice in the same call sequence. "l-chal" displaces
