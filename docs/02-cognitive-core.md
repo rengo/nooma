@@ -198,8 +198,61 @@ persisted flag would create two sources of truth that desynchronize on their own
 rises with time). Invariant: `status='focus'` does not exist.
 
 ```
-priority = f(effective_weight, temporal_urgency(due_at), type, age, relation_to_active_focus)
+priority = f(effective_weight, temporal_urgency(due_at), age, relation_to_active_focus)
+           over the units the focus's type criterion already selected
 ```
+
+`type` is **not** a term of `f`. It already did its job one step earlier — the task focus and
+the load focus are two queries with different criteria over `units` (below), and `type` is the
+criterion, not a number inside the formula that ranks what the criterion selected. Reading it as
+both would count it twice: once to decide which contest a unit is in, and again to decide where
+it places in that contest. A `task` and an `event` of equal effective weight, equal urgency,
+equal age and equal adjacency **tie** on priority; the tie is broken by `due_at`, then `id`, never
+by type. Reinstating a numeric type term is **additive** — a new term with its own calibration
+rows — not a rewrite of this one.
+
+`f` is a **multiplicative envelope over `effective_weight`**, not a weighted sum of normalized
+terms:
+
+```
+priority = effective_weight
+         × (1 + (urgency_max - 1) × temporal_urgency(due_at))     # deadline: multiplicative
+         × (1 + age_weight × age + focus_adjacency_weight × relation_to_active_focus)  # nudges: additive, bounded
+```
+
+A sum makes the terms commensurable, and they are not: `effective_weight` is the intrinsic
+quantity the whole of §2 exists to maintain, and the other three are contextual modulators of
+the moment. Under a sum, a unit whose effective weight has decayed to near zero can be lifted to
+the top of the ranking by context alone — a deadline on something the brain has already
+forgotten would outrank the thing the user actually cares about, collapsing the very distinction
+this section opens with. Multiplying by the intrinsic term makes context **amplify** memory
+rather than **substitute** for it: every factor is ≥ 1, so `priority ≥ effective_weight` always,
+context can promote a unit and can never demote one, and the ranking is monotone in
+`effective_weight` at fixed context. A deadline is allowed to dominate — it multiplies, with
+unbounded relative leverage up to `urgency_max` — while age and adjacency are nudges whose
+combined contribution is capped at `1 + age_weight + focus_adjacency_weight` no matter how many
+of them fire, because a due date is a hard external constraint and the other two are not.
+
+`age` means **ANTI-STARVATION**: it rises `0 → 1` over `age_horizon_days` (15) and stays at 1
+beyond it — **the older a unit, the higher it ranks on this term** — reading `created_at`, never
+`last_touched_at`. This is the first time this document defines the word: `last_touched_at` is
+reset by use and `created_at` never is, so the two together disambiguate "has this been
+revisited since capture" from decay's own signal, which already reads `last_touched_at`. A term
+reading `last_touched_at` here would count decay a second time under a different name.
+
+Anti-starvation is **bounded and transient**, not a floor. Under the multiplicative envelope,
+the age term multiplies `effective_weight` instead of adding to it, and that shape caps how far
+it can reach: its entire lifetime leverage is `age_weight` (20 %) over `effective_weight`, it
+never grows past `age_horizon_days`, and it re-ranks only among units that still hold weight — a
+unit sitting at the archive floor gains no more power from age than a unit brand new does, and
+neither is rescued once its weight is gone. At the base decay rate, an untouched unit's priority
+genuinely **rises**, peaking at `age_horizon_days` at a few percent above its own day-zero value,
+and **declines monotonically thereafter** exactly as decay alone would, scaled by the saturated
+nudge. The lift is real but small and time-boxed: a two-week grace window of a few percent
+during which a re-ranking among live units can happen, not a mechanism that rescues anything —
+an item that has decayed under `weight_threshold` is designed to be archived (§1, §6), and only
+an additive term outside this envelope could change that, which is exactly the shape this
+section rejects above.
 
 - Weight ≠ priority: weight is intrinsic and persisted; priority is contextual to the moment
   and computed. The formula lives in the application layer (typed, testable, heavily
