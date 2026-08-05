@@ -828,6 +828,33 @@ pass the resolved value down — never the raw `*float64`. If instead it turns o
 `Displaces` from more than one site, the cheaper answer is to move the validation inside `Displaces` and
 delete `ResolveMargin`'s separate step, rather than to rely on every call site remembering.
 
+### C30 — task 4b.2's own risk brief asked to inherit `buildAdjacency`'s `math.IsNaN` guard verbatim; verified instead, and declined. **Closed by the executor, self-caught, not by Judgment Day.**
+
+Task 4b.2's brief named this PR's highest-risk question and pointed at `weight/spread.go`'s
+`buildAdjacency`: "read it and inherit it rather than rediscovering it." `buildAdjacency` DOES need an
+explicit `math.IsNaN` guard on a `NaN`-strength edge — but for a reason `AdjacencyStrengths` does not
+share: `buildAdjacency` also returns `corruptEdges`, a second value reporting which edge was corrupt so
+`Resurface`'s caller can log it to `decision_log`. Without the guard, a `NaN`-strength edge that was a
+neighbour's ONLY edge would make that neighbour invisible to `spreadGains` entirely (never becoming an
+adjacency-map key at all), and nothing would report why — the guard exists to catch that silent
+disappearance and surface it, not to fix the max computation itself.
+
+`AdjacencyStrengths`' signature (spec R3.7) is a single `map[string]float64`, with no room for an
+equivalent second return value. Checked directly rather than assumed: with the running max for each `v`
+starting at a Go map's own zero value (0.0) and only ever advancing via `strength > current`, a `NaN`
+operand fails every IEEE 754 comparison regardless of position or order, so it can never win that
+comparison — against 0.0, against a real value already recorded, or as the first edge examined. The
+result is provably identical with or without an explicit guard: verified by adding one, rerunning every
+test in `adjacency_test.go`, and confirming zero change in outcome (this project's own C13 convention —
+a branch no fixture can tell apart from removing it should not exist). Shipped without the guard;
+`adjacency.go`'s own doc comment and `adjacency_test.go`'s
+`TestAdjacencyStrengths_NaNStrengthEdge_VanishesWithoutAnExplicitGuard` record the reasoning and the
+check.
+
+Recorded because the task's own instruction, taken literally, would have added an untested-by-design
+branch to a fresh file in its very first PR — the same class this project's history keeps finding
+(C13's own precedent), just self-caught here instead of waiting for a Judgment Day round to find it.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
@@ -1291,7 +1318,7 @@ separately before treating it as a crossing at all.
 
 Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes the chain.
 
-- [ ] **4b.1** Commit 1 (RED): `internal/core/focus/adjacency_test.go` — a unit joined to a
+- [x] **4b.1** Commit 1 (RED): `internal/core/focus/adjacency_test.go` — a unit joined to a
       previous-focus member at `strength = 0.7` asserting `adjacency == 0.7`; a unit joined by two
       edges at 0.7 and 0.4 asserting `0.7`, not `1.1` (`max`, not sum); an edge stored in the
       opposite direction asserting the same result (undirected, reuses `weight.Edge`); an empty
@@ -1300,19 +1327,30 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       Stub: `func AdjacencyStrengths(previous Selection, edges []weight.Edge) map[string]float64 {
       return nil }`.
       Requirement: R3.7.
-- [ ] **4b.2** Commit 2 (GREEN): implement `AdjacencyStrengths` — `max` over edges joining `v` to
+- [x] **4b.2** Commit 2 (GREEN): implement `AdjacencyStrengths` — `max` over edges joining `v` to
       any `previous.Members` entry, undirected, 0 when `previous` is empty or `v` touches no
       member.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.7; design §3.1 (`relation_to_active_focus`).
-- [ ] **4b.3** `test/conformance/focus_margin_ddl_test.go` (new) — parse the `DEFAULT` literal off
+      **Deviation from the task's literal ask, decided and recorded as C30**: the task's own risk
+      brief says to inherit `weight/spread.go`'s `buildAdjacency` `math.IsNaN` guard "rather than
+      rediscovering it". Verified instead of copied: that guard exists to feed a SECOND return
+      value (`corruptEdges`) `AdjacencyStrengths`' fixed single-`map` signature (spec R3.7) has no
+      room for — it is not there to make the max itself correct. The max here starts each `v` at a
+      Go map's own zero value and only ever advances via `strength > current`; every IEEE 754
+      comparison against `NaN` is false in either operand position, so a `NaN`-strength edge can
+      never win that comparison, first or last. Shipped with no guard, proven by a dedicated test
+      table, and mutation-checked: adding the guard back and rerunning every test in the package
+      changed no outcome — this project's own C13 convention (a branch no fixture can tell apart
+      from removing it should not exist).
+- [x] **4b.3** `test/conformance/focus_margin_ddl_test.go` (new) — parse the `DEFAULT` literal off
       `internal/store/sqlite/migrations/0002_learning_and_search.sql:64` via `migrationSQLText`;
       assert `focus.DefaultHysteresisMargin` equals it. **Not a missing-symbol red**:
       `DefaultHysteresisMargin` already exists from 4a and already equals 0.05, matching the
       migration default — this test is the permanent pin against a future drift between the two,
       the same mechanism `relation_thresholds_ddl_test.go` already uses.
       Requirement: R4.4; design D4 (ruling 5).
-- [ ] **4b.4** `test/conformance/i01_focus_never_persisted_test.go` gains **check 3** beside its
+- [x] **4b.4** `test/conformance/i01_focus_never_persisted_test.go` gains **check 3** beside its
       existing two (not rewritten): no exported function in `core/focus` returns or embeds a
       `unit.Status`; `Selection.Members` is `[]string`; `core/focus` declares **no package-level
       `var`**. **Not a missing-symbol red**: by this point in the chain the structural guarantees
@@ -1321,31 +1359,48 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       Checks 1 (`focus` not in `unit.AllStatuses()`) and 2 (the tree scan for the literal `"focus"`
       paired with `Status`) are unchanged and were already passing vacuously since M0.
       Requirement: R4.2, R4.6; design D9 (I01 made a property of the API).
-- [ ] **4b.5** doc 02 §3 amendment (second half of owner ruling round 2 #5's sentence — the first
+- [x] **4b.5** doc 02 §3 amendment (second half of owner ruling round 2 #5's sentence — the first
       half was added in 4a): on the first ranking after a process restart, the previous focus is
       empty, so adjacency is 0 for every unit and the term vanishes entirely. Together with 4a's
       half, this is the full sentence ruling round 2 #5 owes — the proposal priced only the first.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR4 row, split across 4a/4b).
-- [ ] **4b.6** Purity/coverage: `golangci-lint run`; `make cover` — this is the last PR of the
+- [x] **4b.6** Purity/coverage: `golangci-lint run`; `make cover` — this is the last PR of the
       chain, so also confirm the ≥90% `internal/core` coverage floor holds across both `weight/`
       and `focus/` (`scripts/core-coverage.sh`, via `make check-all`).
       Requirement: `nooma-testing` hard rule 5.
-- [ ] **4b.7** Cross-cutting close-out: `rg 'now time\.Time' internal/core/weight internal/core/focus`
+      **Result**: `golangci-lint run` — 0 issues. `make cover` —
+      `internal/core` statement coverage 100% (509/509), floor 90%.
+- [x] **4b.7** Cross-cutting close-out: `rg 'now time\.Time' internal/core/weight internal/core/focus`
       enumerates every time-dependent decision this change ships; confirm the list is exactly
       `Effective`, `Revive`, `Resurface`, `UrgencyRamp`, `AgeRamp`, `Priority`, `Rank` — and that
       `Displaces`, `ResolveMargin`, `Select`, `AdjacencyStrengths`, `Types`, `AllKinds`, `ZoneOf` do
       **not** appear (each is correctly time-independent per its own requirement). Final
       `golangci-lint run` over both packages together.
       Requirement: R3.8.
-- [ ] **4b.8** §13 final count check: read `docs/02-cognitive-core.md` §13 and confirm it holds
+      **Result**: the `rg` sweep returns exactly the seven expected production functions (plus
+      three test-only helpers, `mustResurface`/`assertBoosts`/`dueAfter`/`dueIn`, all `_test.go`,
+      outside R3.8's own scope) and none of the seven excluded ones. Final
+      `golangci-lint run ./internal/core/weight/... ./internal/core/focus/...` — 0 issues.
+- [x] **4b.8** §13 final count check: read `docs/02-cognitive-core.md` §13 and confirm it holds
       **33** rows (23 + 10 new, 1 amended in place).
       Requirement: design §5.4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
+      **Result**: 33 data rows (`weight_threshold` through `correction_referent_margin`), confirmed
+      by direct count. No new row from this PR — `AdjacencyStrengths` introduces no new calibratable
+      constant, so 4b's doc 02 delta is text-only (4b.5).
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
       tests, `test/conformance/focus_margin_ddl_test.go`, `test/conformance/i01_...`,
       `docs/02-cognitive-core.md`. Confirm the full seven-PR stack, once merged, leaves
       `internal/core/weight` and `internal/core/focus` with zero `ports`, zero `store`, zero
       `brain`, zero I/O imports, and that no code in this change writes to `decision_log`.
+      **Result**: `make check-all` fully green (lint 0 issues, vet, L1/L2 `-race -shuffle=on`, L3
+      real-SQLite + schema-golden regen diff clean, `internal/core` coverage 100%/90% floor,
+      seven-target cross-compile matrix OK, L4 `-tags e2e` OK). Diff scope confirmed: exactly
+      `internal/core/focus/adjacency.go`, `internal/core/focus/adjacency_test.go`,
+      `test/conformance/focus_margin_ddl_test.go`, `test/conformance/i01_focus_never_persisted_test.go`,
+      `docs/02-cognitive-core.md`, plus this file's own bookkeeping. `rg` confirms zero `ports`,
+      `store`, or `brain` imports and zero I/O imports in either package; no code in this change
+      calls `decision_log`.
 
 ---
 
