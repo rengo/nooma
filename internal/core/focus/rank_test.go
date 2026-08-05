@@ -144,9 +144,11 @@ func TestRank_AdjacencyMissingOrNil_BehavesAsZero(t *testing.T) {
 
 // TestRank_NonFiniteScore_SortsLastWithoutBreakingTotalOrder proves the
 // decision this package takes about a non-finite Score. Priority returns
-// NaN whenever weight.Effective's own Weight or DecayRate is (decay.go's
-// own doc comment; Priority inherits that boundary unchanged, spec R3.1's
-// finite-Weight/DecayRate qualifier) — sort.Slice's comparator must stay a
+// NaN whenever weight.Effective's own Weight or DecayRate takes one of the
+// four NaN-producing shapes decay.go's own doc comment enumerates — not
+// only a literal NaN input (decay.go's own doc comment; Priority inherits
+// that boundary unchanged, spec R3.1's finite-Weight/DecayRate qualifier)
+// — sort.Slice's comparator must stay a
 // strict weak ordering regardless, since comparing raw Scores with an
 // ordinary > is inconsistent whenever exactly one side is NaN (every IEEE
 // 754 comparison against NaN is false — the identical trap clamp's own doc

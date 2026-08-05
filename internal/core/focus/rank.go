@@ -35,8 +35,12 @@ type Ranked struct {
 //  3. lexicographic by ID.
 //
 // Score can be NaN: Priority returns NaN whenever weight.Effective's own
-// Weight or DecayRate is (decay.go's own doc comment; Priority inherits
-// that boundary unchanged, spec R3.1's finite-Weight/DecayRate qualifier).
+// Weight or DecayRate takes one of the four NaN-producing shapes decay.go's
+// own doc comment enumerates — not only a literal NaN input, since a
+// finite-looking Weight = +Inf with a DecayRate large enough to underflow
+// math.Exp to exactly 0.0 reaches NaN the same way (decay.go's own doc
+// comment; Priority inherits that boundary unchanged, spec R3.1's
+// finite-Weight/DecayRate qualifier).
 // Comparing two Scores with an ordinary > is not a strict weak ordering
 // once either side can be NaN — every IEEE 754 comparison against NaN is
 // false ("NaN > x", "NaN < x" and "NaN >= x" all false, the identical trap
