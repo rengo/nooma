@@ -252,6 +252,18 @@ nudges whose combined contribution is capped at `1 + age_weight + focus_adjacenc
 matter how many of them fire, because a due date is a hard external constraint and the other two
 are not.
 
+A `priority` that is itself `NaN` — inherited from `effective_weight`'s own `NaN`-producing
+shapes (§2), since `priority` computes `effective_weight` as its first step and does not
+sanitize what it returns — cannot be ranked by an ordinary `>` any more than a raw
+`effective_weight` can: every IEEE 754 comparison against `NaN` is false, so it satisfies no
+ordering at all. For ranking purposes only, a `NaN` priority is remapped to negative infinity, so
+it sorts after every other unit in the pool, including one whose effective weight has decayed to
+zero — the same "a corrupted input contributes no promotion, never a crash, never an arbitrary
+position" posture this section already takes for a corrupt `relation_to_active_focus` above. The
+remap exists only inside the ordering: the `priority` a caller reads back for that unit is the
+literal `NaN`, never the substituted `-∞` — hiding the corruption behind a manufactured number
+would defeat the entire point of surfacing it rather than coercing it away (§11).
+
 `age` means **ANTI-STARVATION**: it rises `0 → 1` over `age_horizon_days` (15) and stays at 1
 beyond it — **the older a unit, the higher it ranks on this term** — reading `created_at`, never
 `last_touched_at`. This is the first time this document defines the word: `last_touched_at` is
