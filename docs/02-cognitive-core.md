@@ -308,7 +308,10 @@ section rejects above.
   arithmetic — a `priority` of exactly 0 is reachable, and `0 × (1 + ∞)` is `NaN`, which would
   make a corrupted incumbent permanent. This requires remembering the previous focus — in process, at the cost of one un-damped
   transition immediately after every restart,
-  since there is no incumbent yet to compare a challenger against.
+  since there is no incumbent yet to compare a challenger against. The previous focus is also
+  what `relation_to_active_focus` reads (above), so that same first ranking after a restart has
+  `previous` empty for both mechanisms at once: `relation_to_active_focus` is 0 for every unit
+  and the term vanishes entirely, not only hysteresis. Two effects from one restart, not one.
 
 ## 4. Relations
 
