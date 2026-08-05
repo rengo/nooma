@@ -34,7 +34,7 @@ demands them describes a different repository.
 
 | Situation | Action |
 |---|---|
-| Diff > 400 changed lines | Split with `chained-pr`. If splitting is genuinely wrong, add the `size:exception` label and justify it in the body |
+| Implementation + docs > 400 changed lines | Split with `chained-pr`. Test lines are counted and reported separately, not against this ceiling (`docs/06-harness.md` §7). If splitting is genuinely wrong, add the `size:exception` label and justify it in the body |
 | Slicing commits | Follow `work-unit-commits` |
 | `main` advanced while the PR sat | Rebase onto `origin/main` and `git push --force-with-lease`. Do not use GitHub's "Update branch" — it injects a merge commit into the diff |
 | Another session holds the working tree | `git worktree add` before building or testing; `make check-all` runs `TestSchemaGolden -update` and will overwrite in-flight golden edits |
@@ -76,8 +76,8 @@ minutes was fast enough to look fine and fast enough to land two PRs in the wron
 
 ## Output Contract
 
-Report the PR URL, the changed-line count against the 400 ceiling, the `make check-all` result,
-and any label applied with its reason.
+Report the PR URL, the changed-line count split into implementation + docs (against the 400
+ceiling) and test lines, the `make check-all` result, and any label applied with its reason.
 
 ## References
 

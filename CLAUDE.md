@@ -69,7 +69,8 @@ list, which only exist once a PR is open on GitHub. Its logic still ships as
 `scripts/docs-sync.sh` and is tested directly, without GitHub Actions.
 
 Skills that cover the details: `nooma-pr` (branch naming, opening the PR, merging),
-`work-unit-commits` (how to slice commits), `chained-pr` (splitting when it exceeds 400 lines).
+`work-unit-commits` (how to slice commits), `chained-pr` (splitting when implementation plus docs
+exceed 400 lines).
 
 `nooma-pr` lives in this repository on purpose. An earlier version of this line pointed at a
 generic `branch-pr` skill installed in one maintainer's home directory, which demanded an
@@ -80,7 +81,9 @@ that expects outside contributions cannot keep its PR rules outside the project.
 ## Conventions
 
 - Conventional commits. One commit = one reviewable unit of work (change + tests + doc).
-- PRs with a soft ceiling of 400 lines; above that, chained PRs.
+- PRs with a soft ceiling of 400 lines, counted as implementation plus docs — the lines a
+  reviewer must judge against the design — separately from test lines; above that, chained PRs.
+  `docs/06-harness.md` §7 carries the measurement that produced the split.
 - **Everything in the repository is in English**: code, identifiers, comments, commit messages,
   docs, skills, and UI copy. This is an AGPL project expecting community contributions.
 - A published migration is never modified: write the next one.
