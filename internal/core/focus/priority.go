@@ -96,5 +96,6 @@ const AgeHorizonDays = 15
 // recalibration of AgeHorizonDays needs no fixture edit (nooma-core hard
 // rule 4's discipline, paid off in a test rather than in production code).
 func AgeRamp(createdAt, now time.Time) float64 {
-	return 0
+	ageDays := now.Sub(createdAt).Hours() / 24
+	return clamp(ageDays/AgeHorizonDays, 0, 1)
 }

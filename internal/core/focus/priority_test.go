@@ -62,7 +62,7 @@ func TestAgeRamp_Table(t *testing.T) {
 		want float64
 	}{
 		{"captured this instant", createdAt, 0},
-		{"half the horizon", daysLater(AgeHorizonDays / 2), 0.5},
+		{"half the horizon", daysLater(AgeHorizonDays / 2.0), 0.5},
 		{"exactly the horizon", daysLater(AgeHorizonDays), 1},
 		{"twice the horizon — does not grow past 1", daysLater(2 * AgeHorizonDays), 1},
 		{"createdAt one hour after now — negative-Δt clamp", daysLater(-1.0 / 24), 0},
