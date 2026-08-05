@@ -855,6 +855,47 @@ Recorded because the task's own instruction, taken literally, would have added a
 branch to a fresh file in its very first PR — the same class this project's history keeps finding
 (C13's own precedent), just self-caught here instead of waiting for a Judgment Day round to find it.
 
+### C31 — `AdjacencyStrengths` reproduces C19's open question in a second package, closed only by an unrelated function's clamp. Found by BOTH judges in Judgment Day round 1 on PR 4b. **Recorded, not fixed — same disposition as C19/C21.**
+
+C30's own doc comment and fixtures rigorously close the `NaN` question for `AdjacencyStrengths` and
+say nothing about the sibling question the identical code shape (`strength > adjacency[v]`, run over
+an unbounded `weight.Edge.Strength`) necessarily raises:
+
+- `Strength: +Inf` **wins** the max (`+Inf > 0` is true, and nothing later ever exceeds it) and flows
+  out of the returned map raw: `adjacency["v"] = +Inf, present = true`.
+- A finite `Strength` above 1 behaves identically — raw, uncapped.
+- A negative `Strength` never wins against the running max's own zero-value baseline, so the vertex
+  is simply **absent** — read as 0 by any caller indexing the map, indistinguishable from a unit with
+  no edge to `previous.Members` at all.
+
+This is C19 verbatim — "treating `+Inf` like `100.0` rather than like `Weight = +Inf` is an
+inconsistency, not a recorded decision" — reproduced in `internal/core/focus` instead of
+`internal/core/weight`. It is harmless **today** only because of who reads the result: `Priority`
+clamps `adjacency` to `[0,1]` at its own door, and `clamp` is monotonic non-decreasing, so
+`clamp(max(s1, ..., sn)) == max(clamp(s1), ..., clamp(sn))` — bounding after `AdjacencyStrengths`'
+max or bounding before it inside `Priority` gives the identical final priority either way. That
+equivalence is now a checked, stated claim (`adjacency.go`'s own doc comment) rather than a
+coincidence relied upon silently — the same gap `Rank`'s doc comment did not close by inheriting
+Priority's clamp for free.
+
+Fixtures now pin all four cases in one table test, `TestAdjacencyStrengths_UnclampedBoundaryStrengths`
+(`+Inf`, a finite strength above 1, a negative strength, and exactly `0.0`), so a future refactor
+cannot change any of them silently — C21's own argument ("the answer should be pinned by a test
+rather than left as the current behaviour by accident") applied to `AdjacencyStrengths` rather than
+to `buildAdjacency`. The `0.0` case doubles as a mutation-testing fixture: it is the exact boundary a
+`>` → `>=` mutant in the running-max comparison flips (an unrelated but real finding, also from this
+round) — verified to kill that mutant, plus a hypothetical clamp-inside-`AdjacencyStrengths` mutant
+and a hypothetical drop-the-negative-strength-guard mutant, by introducing each temporarily and
+confirming the new fixtures fail for the right reason before reverting.
+
+**What a second consumer of `AdjacencyStrengths` must do**: a future caller that reads the returned
+map directly — without routing it through `Priority`'s clamp first — would see a raw, unbounded,
+possibly-infinite adjacency value with no guarantee at `AdjacencyStrengths`' own boundary, and would
+have to make its own decision about C19/C31 rather than inheriting `Priority`'s answer for free.
+Whoever writes that second consumer decides: bound at `AdjacencyStrengths`' own door (closing C19 and
+C31 together, for both packages, in one place), or document the same deferral again at the new call
+site. Choosing silently, a third time, is what this entry exists to prevent.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)

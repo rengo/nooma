@@ -61,6 +61,51 @@ import "github.com/rengo/nooma/internal/core/weight"
 // confirming every test in this file still passes identically with or
 // without it, this project's own C13 convention that a branch no fixture
 // can tell apart from removing it should not exist.
+//
+// The same code shape raises a sibling question NaN's own resolution does
+// not answer, and this function applies NO bound of its own to Strength —
+// neither a ceiling at 1 nor a floor at 0 — which is deliberate, not an
+// oversight (C31, reproducing weight's own open question C19 in a second
+// package):
+//
+//   - A Strength of +Inf wins the running max unconditionally (+Inf is
+//     greater than any finite current, and nothing later ever exceeds it)
+//     and flows out of the returned map raw — adjacency["v"] = +Inf,
+//     present = true — exactly as if it were a genuine, uncorrupted
+//     maximal edge.
+//   - A finite Strength above 1 behaves identically: raw, unclamped.
+//   - A negative Strength can never win against the running max's own
+//     zero-value baseline (`strength > adjacency[v]` starts comparing
+//     against a Go map's zero value, 0.0), so a unit joined ONLY by
+//     negative-strength edges is simply absent from the map — read as 0 by
+//     every caller, indistinguishable from a unit with no edge to
+//     previous.Members at all.
+//
+// This is safe ONLY because of who reads the result today: Priority
+// clamps adjacency to [0,1] at its own door (priority.go,
+// adjacency = clamp(adjacency, 0, 1)), and clamp is monotonic
+// non-decreasing, so clamp(max(s1, ..., sn)) == max(clamp(s1), ...,
+// clamp(sn)) — bounding after this function's max or bounding before it
+// gives the identical final priority either way. Deferring the bound to
+// Priority is therefore not a gap Priority merely happens to paper over;
+// it is a property of clamp that makes the two orders equivalent, stated
+// here so the equivalence is a checked claim rather than a coincidence
+// relied upon silently.
+//
+// C19 already records this exact shape as an OPEN question for
+// weight.Edge's other consumer, weight.buildAdjacency: "treating +Inf like
+// 100.0 rather than like Weight = +Inf is an inconsistency, not a recorded
+// decision." That question is NOT closed here — it is reproduced in this
+// second package and closed only by an unrelated function's pre-existing
+// clamp, a function this one does not call and has no control over. A
+// second consumer of AdjacencyStrengths that reads the returned map
+// directly, without routing it through Priority's clamp first, would see
+// a raw, unbounded, possibly-infinite adjacency value with no guarantee
+// at this function's own boundary — and would have to make its own
+// decision about C19/C31 rather than inheriting Priority's answer for
+// free. See adjacency_test.go's
+// TestAdjacencyStrengths_UnclampedBoundaryStrengths for the pinned
+// fixtures (+Inf, above 1, negative, and exactly 0.0).
 func AdjacencyStrengths(previous Selection, edges []weight.Edge) map[string]float64 {
 	adjacency := make(map[string]float64)
 	if len(previous.Members) == 0 {

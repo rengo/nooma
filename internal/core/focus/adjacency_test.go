@@ -123,3 +123,52 @@ func TestAdjacencyStrengths_NaNStrengthEdge_VanishesWithoutAnExplicitGuard(t *te
 		}
 	})
 }
+
+// TestAdjacencyStrengths_UnclampedBoundaryStrengths pins the behaviour
+// adjacency.go's own doc comment now states explicitly (C31, the sibling
+// of C19 reproduced in this package): AdjacencyStrengths applies no bound
+// of its own to Strength, deferring that entirely to Priority's own clamp
+// at its door.
+//
+//   - +Inf wins the max (+Inf > any finite current) and flows out raw,
+//     present and uncapped at 1.
+//   - A finite strength above 1 behaves identically: raw, uncapped.
+//   - A negative strength never beats the running max's zero-value
+//     baseline (`strength > adjacency[v]` starts comparing against 0.0),
+//     so the vertex is absent — exactly like
+//     TestAdjacencyStrengths_UnrelatedUnit_TouchesNoMember, not present
+//     holding a negative number.
+//   - Strength exactly 0.0 also never beats that baseline (`0.0 > 0.0` is
+//     false), so the vertex is absent too — this is the boundary the `>`
+//     vs `>=` mutant flips: `>=` would make the vertex present holding
+//     0.0 instead of absent.
+func TestAdjacencyStrengths_UnclampedBoundaryStrengths(t *testing.T) {
+	previous := Selection{Kind: KindTask, Members: []string{"member-a"}}
+
+	tests := []struct {
+		name         string
+		strength     float64
+		wantPresent  bool
+		wantStrength float64
+	}{
+		{name: "+Inf wins the max and flows out raw", strength: math.Inf(1), wantPresent: true, wantStrength: math.Inf(1)},
+		{name: "finite strength above 1 flows out raw, uncapped", strength: 2.5, wantPresent: true, wantStrength: 2.5},
+		{name: "negative strength never beats the zero-value baseline", strength: -0.3, wantPresent: false},
+		{name: "exactly 0.0 never beats the zero-value baseline (the > vs >= mutant boundary)", strength: 0.0, wantPresent: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			edges := []weight.Edge{{From: "unit-v", To: "member-a", Strength: tt.strength}}
+
+			got := AdjacencyStrengths(previous, edges)
+			v, ok := got["unit-v"]
+			if ok != tt.wantPresent {
+				t.Fatalf("adjacency[unit-v] present = %v, want %v (value seen: %v)", ok, tt.wantPresent, v)
+			}
+			if tt.wantPresent && v != tt.wantStrength {
+				t.Errorf("adjacency[unit-v] = %v, want %v", v, tt.wantStrength)
+			}
+		})
+	}
+}
