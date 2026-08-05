@@ -1016,7 +1016,7 @@ the shape a split would have taken.
 
 Depends on 3a (`Rank` uses `Candidate`/`Priority`). Second half of the pre-split priority PR.
 
-- [ ] **3b.1** Commit 1 (RED): `internal/core/focus/rank_test.go` — a total-order test; a
+- [x] **3b.1** Commit 1 (RED): `internal/core/focus/rank_test.go` — a total-order test; a
       three-level tie-break table (higher `Score` first; earlier `DueAt` first, non-nil always
       before nil; lexicographic by `ID`); determinism under `-shuffle=on -race`; a `nil` adjacency
       map behaving as all-zero.
@@ -1024,13 +1024,13 @@ Depends on 3a (`Rank` uses `Candidate`/`Priority`). Second half of the pre-split
       Stub: `type Ranked struct{ Candidate Candidate; Score float64 }`; `func Rank(cs []Candidate,
       adjacency map[string]float64, now time.Time) []Ranked { return nil }`.
       Requirement: R3.6.
-- [ ] **3b.2** Commit 2 (GREEN): implement `Rank` — call `Priority` per candidate (a nil or absent
+- [x] **3b.2** Commit 2 (GREEN): implement `Rank` — call `Priority` per candidate (a nil or absent
       adjacency entry reads as 0), sort by the three-level tie-break, mirroring
       `recall.FuseScored`'s precedent (`internal/core/recall/fuse.go:66-97`) for the same stated
       reason.
       Verify: `make test -race -shuffle=on`; `golangci-lint run`.
       Requirement: R3.6; design D6.
-- [ ] **3b.3** doc 02 §3 amendment (this PR's own, not part of PR3a's line-76 rewrite): state the
+- [x] **3b.3** doc 02 §3 amendment (this PR's own, not part of PR3a's line-76 rewrite): state the
       total-order tie-break this change adds — score, then due date (non-nil before nil), then id —
       as new content doc 02 never specified before this change. Recorded explicitly because
       `design.md`'s own PR3/PR4 delta list (§7) does not itemize a delta for `Rank` on its own —
@@ -1039,8 +1039,8 @@ Depends on 3a (`Rank` uses `Candidate`/`Priority`). Second half of the pre-split
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: R3.6 (implied doc-02 delta; this document's own addition, since the 3a/3b split
       postdates `design.md` §7's undivided PR3 framing).
-- [ ] **3b.4** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
+- [x] **3b.4** Purity/coverage: `golangci-lint run`; `make cover`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
       tests, `docs/02-cognitive-core.md`.
 
 ---
