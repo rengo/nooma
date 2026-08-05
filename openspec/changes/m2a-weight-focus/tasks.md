@@ -782,7 +782,7 @@ Depends on PR 1 (`Revive` calls `weight.Effective`). First half of the pre-split
 Depends on 2a (`Resurface` reuses `Current`, `Boost`, `ReviveGain`, `WeightCeiling`). Second half of
 the pre-split `feat/core-weight-boost`.
 
-- [ ] **2b.1** Commit 1 (RED): `internal/core/weight/resurface_test.go` — a cyclic fixture
+- [x] **2b.1** Commit 1 (RED): `internal/core/weight/resurface_test.go` — a cyclic fixture
       (A↔B↔C↔A) asserting termination and `max`-not-sum aggregation; a chain longer than
       `ResurfaceMaxHops` asserting units beyond the limit are absent; the edge stored in the
       opposite direction asserting the same result (undirected traversal); two edges between the
@@ -801,7 +801,7 @@ the pre-split `feat/core-weight-boost`.
       ResurfaceAttenuation = 0.5`; `func Resurface(n Neighbourhood, now time.Time) []Boost { return
       nil }` — compiles, assertions fail.
       Requirement: R2.5, R2.6.
-- [ ] **2b.2** Commit 2 (GREEN): implement the unexported bounded BFS in `spread.go` —
+- [x] **2b.2** Commit 2 (GREEN): implement the unexported bounded BFS in `spread.go` —
       `gain(v) = max` over paths `≤ ResurfaceMaxHops` of `(Π strength(e)) × ResurfaceAttenuation^|p|`;
       implement `Resurface` — `target(v) = gain(v) × WeightCeiling`, `e_v = Effective(...)`, emit
       `Boost{v, e_v + ReviveGain×(target(v)-e_v), now}` only when `e_v < target(v)`; sorted by
@@ -809,7 +809,7 @@ the pre-split `feat/core-weight-boost`.
       Verify: `make test -race -shuffle=on` (matching `Makefile:48`); `golangci-lint run`.
       Requirement: R2.5, R2.6; design §3.3 (gain scales the target, not the step; `max` not sum;
       undirected).
-- [ ] **2b.3** `test/conformance/weight_constant_relations_ddl_test.go` (new) — parse the `DEFAULT`
+- [x] **2b.3** `test/conformance/weight_constant_relations_ddl_test.go` (new) — parse the `DEFAULT`
       literal off `internal/store/sqlite/migrations/0002_learning_and_search.sql:63` via the
       existing `migrationSQLText` helper (`test/conformance/i13_learning_signal_test.go:24`); assert
       `weight.ReviveGain × weight.WeightCeiling > that default` (R2.4); assert
@@ -822,7 +822,7 @@ the pre-split `feat/core-weight-boost`.
       recalibration breaking either relation, not a TDD red step.
       Requirement: R2.4, R2.7; design D4 (ruling 4 — asserted against migration DDL text, not a Go
       constant `m2a` declares).
-- [ ] **2b.4** doc 02 §2 amendment: replace "propagates a boost along the graph edges" with the hop
+- [x] **2b.4** doc 02 §2 amendment: replace "propagates a boost along the graph edges" with the hop
       bound, the attenuation, the gain-scales-the-target rule, `max`-over-paths, undirected
       traversal, and cycle termination (R2.5); add **both halves** of the resurface write rule — it
       resets `last_touched_at`, and it writes only when it genuinely lifts something (R2.6 — the
@@ -830,14 +830,14 @@ the pre-split `feat/core-weight-boost`.
       cannot hold a unit above the archive threshold at maximum hop distance (R2.7).
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR2 row, resurface half).
-- [ ] **2b.5** §13: add `resurface_max_hops` (2, `weight.ResurfaceMaxHops`, chosen) and
+- [x] **2b.5** §13: add `resurface_max_hops` (2, `weight.ResurfaceMaxHops`, chosen) and
       `resurface_attenuation` (0.5, `weight.ResurfaceAttenuation`, chosen) rows. Row count: 25 → 27.
       Verify: read the section.
       Requirement: design §5.1.
-- [ ] **2b.6** Purity/coverage: `golangci-lint run` (confirm `Resurface`'s traversal terminates by
+- [x] **2b.6** Purity/coverage: `golangci-lint run` (confirm `Resurface`'s traversal terminates by
       the hop bound alone — 2b.1's cyclic fixture is the structural proof, not a runtime timeout);
       `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/weight/**`, its
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/weight/**`, its
       tests, `test/conformance/weight_constant_relations_ddl_test.go`,
       `test/conformance/i05_...`, `docs/02-cognitive-core.md`.
 
