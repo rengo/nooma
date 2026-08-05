@@ -473,10 +473,17 @@ priority = e
          × (1 + AgeWeight·g + AdjacencyWeight·a)  // nudges: additive, bounded
 ```
 
-**MUST**: `priority ≥ e` for every input. Every factor is ≥ 1, so context can promote a unit and
-can **never demote one**. Demotion is what decay is for; a modifier that could demote would make
-the ranking depend on the *absence* of a signal, the hardest kind of ordering to explain to a user
-asking "why is this not in my focus" (doc 02 §11's glass box).
+**MUST**: `priority ≥ e` for every **finite** `Weight` and `DecayRate` — the same carve-out R1.2
+already states for `e` itself, via `weight.Effective` — and for **any** `adjacency` whatsoever,
+finite or not: `adjacency` is clamped to `[0,1]` at `Priority`'s own entry point, and that clamp is
+total over every `float64` value, including `NaN` and `±Infinity`, not only the out-of-`[0,1]`
+finite ones. A two-branch clamp (`v < lo`, `v > hi`) is not total: every IEEE 754 comparison
+against `NaN` is false, so `NaN` falls through both branches unclamped, and a `NaN` `adjacency`
+used to multiply straight into the envelope, producing a `NaN` `priority` against a fully finite
+`e` — this MUST does not hold against a naive two-branch clamp. Every factor is ≥ 1, so context can
+promote a unit and can **never demote one**. Demotion is what decay is for; a modifier that could
+demote would make the ranking depend on the *absence* of a signal, the hardest kind of ordering to
+explain to a user asking "why is this not in my focus" (doc 02 §11's glass box).
 
 **MUST**: `Priority` is monotone non-decreasing in `e` at fixed context. Two units in identical
 context rank by weight. The formula never inverts doc 02 §2.

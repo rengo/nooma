@@ -616,6 +616,65 @@ reachable component — a natural-sounding restriction, since the rest of the fu
 would silently change it and nothing would fail. Pairs with C20: whichever way that question is answered,
 the answer should be pinned by a test rather than left as the current behaviour by accident.
 
+### C22 — `Priority`'s `adjacency` entered the envelope unvalidated. Found by BOTH judges in round 1. **Closed.**
+
+`Priority(Candidate{Weight: 1.0, DecayRate: 0, LastTouchedAt: now, CreatedAt: now}, -1.0, now)` returned
+`0.75` against `e = 1.0` — a direct falsification of R3.1's `priority ≥ e`. `adjacency` traces to
+`relation.strength`, an LLM-judge output with no schema `CHECK`: the same threat model that made
+`weight.Effective` clamp `weight` and `decayRate` at its own door. `Effective` clamped; `Priority` did not.
+
+Closed by clamping `adjacency` to `[0,1]` at `Priority`'s entry point, per the C15/C16 rule that validation
+belongs at the door rather than mid-computation. The property test's generator had only ever sampled
+`[0,1]`, which is why the gap was invisible; it now sweeps `[-1.0, 2.0]`.
+
+### C23 — `priority ≥ e` was asserted without the finiteness qualifier R1.2 had already needed. **Closed.**
+
+`spec.md` R3.1 (`MUST: priority ≥ e for every input`) and doc 02's `priority ≥ effective_weight always`
+were both unqualified, while `weight.Effective` deliberately does not sanitize `NaN`/`±Inf` on read paths.
+A `NaN` `Weight` therefore made both statements false. R1.2 had already had to add exactly this qualifier
+after Judgment Day caught the identical wording one link earlier (row C-c) — the unqualified form was
+reintroduced anyway.
+
+Closed by qualifying the claim to finite `Weight` and `DecayRate` in all three places that state it.
+
+### C24 — `clamp` was not total under `NaN`, so the C22 fix did not close its own class. Found by BOTH judges in round 2. **Closed.**
+
+```go
+if v < lo { return lo }
+if v > hi { return hi }
+return v
+```
+
+Every IEEE 754 comparison against `NaN` is false, so `clamp(NaN, 0, 1)` returned `NaN` and
+`Priority(c, NaN, now)` returned `NaN` against a finite `e = 1.0`. `NaN >= e` is false for every `e`: not a
+bounded demotion, a collapse of the invariant.
+
+`internal/core/weight/spread.go` had already hit, root-caused and fixed this exact defect one PR earlier
+(C15) — its own comment records that an earlier revision wrongly claimed a `NaN` strength was "still caught
+downstream". `buildAdjacency` needed an explicit `math.IsNaN` before any comparison-based logic. The C22
+fix reused a bare-comparison helper without inheriting that lesson: **the third time in this milestone that
+a fix failed to generalise to its sibling producer.**
+
+Closed by making `clamp` itself total — `math.IsNaN(v)` guarded first, mapping to `lo` — rather than
+guarding only at `Priority`'s call site, so the helper is no longer a trap for `UrgencyRamp`, `AgeRamp`, or
+any future reuse. `lo` is the correct image because it is the neutral element of every term `clamp` feeds.
+
+### C25 — a spec requirement's freeze point was ambiguous, and the two judges read it opposite ways. **Closed by owner ruling.**
+
+The C23 fix annotated `spec.md` §10 with a new row `C-e` instead of rewriting R3.1, citing rows `C-c`/`C-d`
+and `openspec/README.md`'s "after that it is a historical record". Round 2 split: one judge verified the
+precedent and called it correctly applied; the other verified the same precedent and called it *misapplied*,
+because `C-c`/`C-d` annotate the already-merged PR #137 while `C-e` was being written about the unmerged
+branch under review. The empirical argument settled it: `C-e`'s own text was already false — it claimed to
+close that half of the gap "entirely", and C24 was still open — so the rule as applied would have required a
+`C-f` for the same requirement before the PR landed once.
+
+**Owner ruling: a requirement freezes when the PR that implements it merges and is verified — not before.**
+While the implementing branch is in review its text is still mutable and is corrected in place. Closed by
+rewriting R3.1 and deleting `C-e`; `C-c`/`C-d` stand, since PR #137 had merged. `openspec/README.md`'s
+Lifecycle wording is amended separately to state that granularity, which neither judge could find written
+down.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
@@ -782,7 +841,7 @@ Depends on PR 1 (`Revive` calls `weight.Effective`). First half of the pre-split
 Depends on 2a (`Resurface` reuses `Current`, `Boost`, `ReviveGain`, `WeightCeiling`). Second half of
 the pre-split `feat/core-weight-boost`.
 
-- [ ] **2b.1** Commit 1 (RED): `internal/core/weight/resurface_test.go` — a cyclic fixture
+- [x] **2b.1** Commit 1 (RED): `internal/core/weight/resurface_test.go` — a cyclic fixture
       (A↔B↔C↔A) asserting termination and `max`-not-sum aggregation; a chain longer than
       `ResurfaceMaxHops` asserting units beyond the limit are absent; the edge stored in the
       opposite direction asserting the same result (undirected traversal); two edges between the
@@ -801,7 +860,7 @@ the pre-split `feat/core-weight-boost`.
       ResurfaceAttenuation = 0.5`; `func Resurface(n Neighbourhood, now time.Time) []Boost { return
       nil }` — compiles, assertions fail.
       Requirement: R2.5, R2.6.
-- [ ] **2b.2** Commit 2 (GREEN): implement the unexported bounded BFS in `spread.go` —
+- [x] **2b.2** Commit 2 (GREEN): implement the unexported bounded BFS in `spread.go` —
       `gain(v) = max` over paths `≤ ResurfaceMaxHops` of `(Π strength(e)) × ResurfaceAttenuation^|p|`;
       implement `Resurface` — `target(v) = gain(v) × WeightCeiling`, `e_v = Effective(...)`, emit
       `Boost{v, e_v + ReviveGain×(target(v)-e_v), now}` only when `e_v < target(v)`; sorted by
@@ -809,7 +868,7 @@ the pre-split `feat/core-weight-boost`.
       Verify: `make test -race -shuffle=on` (matching `Makefile:48`); `golangci-lint run`.
       Requirement: R2.5, R2.6; design §3.3 (gain scales the target, not the step; `max` not sum;
       undirected).
-- [ ] **2b.3** `test/conformance/weight_constant_relations_ddl_test.go` (new) — parse the `DEFAULT`
+- [x] **2b.3** `test/conformance/weight_constant_relations_ddl_test.go` (new) — parse the `DEFAULT`
       literal off `internal/store/sqlite/migrations/0002_learning_and_search.sql:63` via the
       existing `migrationSQLText` helper (`test/conformance/i13_learning_signal_test.go:24`); assert
       `weight.ReviveGain × weight.WeightCeiling > that default` (R2.4); assert
@@ -822,7 +881,7 @@ the pre-split `feat/core-weight-boost`.
       recalibration breaking either relation, not a TDD red step.
       Requirement: R2.4, R2.7; design D4 (ruling 4 — asserted against migration DDL text, not a Go
       constant `m2a` declares).
-- [ ] **2b.4** doc 02 §2 amendment: replace "propagates a boost along the graph edges" with the hop
+- [x] **2b.4** doc 02 §2 amendment: replace "propagates a boost along the graph edges" with the hop
       bound, the attenuation, the gain-scales-the-target rule, `max`-over-paths, undirected
       traversal, and cycle termination (R2.5); add **both halves** of the resurface write rule — it
       resets `last_touched_at`, and it writes only when it genuinely lifts something (R2.6 — the
@@ -830,14 +889,14 @@ the pre-split `feat/core-weight-boost`.
       cannot hold a unit above the archive threshold at maximum hop distance (R2.7).
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR2 row, resurface half).
-- [ ] **2b.5** §13: add `resurface_max_hops` (2, `weight.ResurfaceMaxHops`, chosen) and
+- [x] **2b.5** §13: add `resurface_max_hops` (2, `weight.ResurfaceMaxHops`, chosen) and
       `resurface_attenuation` (0.5, `weight.ResurfaceAttenuation`, chosen) rows. Row count: 25 → 27.
       Verify: read the section.
       Requirement: design §5.1.
-- [ ] **2b.6** Purity/coverage: `golangci-lint run` (confirm `Resurface`'s traversal terminates by
+- [x] **2b.6** Purity/coverage: `golangci-lint run` (confirm `Resurface`'s traversal terminates by
       the hop bound alone — 2b.1's cyclic fixture is the structural proof, not a runtime timeout);
       `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/weight/**`, its
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/weight/**`, its
       tests, `test/conformance/weight_constant_relations_ddl_test.go`,
       `test/conformance/i05_...`, `docs/02-cognitive-core.md`.
 
@@ -845,12 +904,16 @@ the pre-split `feat/core-weight-boost`.
 
 ## PR 3a — `feat/core-focus-priority` (~405)
 
-Depends on 2b (`Priority` calls `weight.Effective` via `Candidate`'s fields). **Sits ~5 lines over
-the 400-line ceiling by design's own estimate — inside the estimation error, not a real crossing**
-(`design.md` §8.1). Pre-drawn split line if it lands further over: `AgeRamp` plus the P1–P6 property
-set travel separately from `UrgencyRamp` and `Priority`'s envelope.
+Depends on 2b (`Priority` calls `weight.Effective` via `Candidate`'s fields). `design.md` §8.1
+estimated ~405 total lines and read that as ~5 over the ceiling — inside the estimation error, not a
+real crossing. **That framing is superseded**: the owner has since ruled that the ceiling counts
+implementation plus docs separately from test lines (`docs/06-harness.md` §7), and 3a measures 319
+implementation + docs against 685 test lines. It is comfortably inside the ceiling, not astride it.
+The pre-drawn split line — `AgeRamp` plus the P1–P6 property set travelling separately from
+`UrgencyRamp` and `Priority`'s envelope — was therefore never needed and is recorded here only as
+the shape a split would have taken.
 
-- [ ] **3a.1** Commit 1 (RED): `internal/core/focus/priority_test.go` — `UrgencyRamp` table: `nil` →
+- [x] **3a.1** Commit 1 (RED): `internal/core/focus/priority_test.go` — `UrgencyRamp` table: `nil` →
       exactly 0; `d ≥ UrgencyLeadDays` → 0; `d = 3.5` → 0.5; `d = 0` → 1; overdue by 1 day → 1;
       overdue by 1000 days → 1 (does not grow).
       **Red**: `undefined: focus.UrgencyRamp`, `undefined: focus.UrgencyLeadDays`, `undefined:
@@ -858,11 +921,11 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       Stub: `const UrgencyLeadDays = 7`; `const UrgencyMax = 3.0`; `func UrgencyRamp(dueAt
       *time.Time, now time.Time) float64 { return 0 }`.
       Requirement: R3.3.
-- [ ] **3a.2** Commit 2 (GREEN): implement `UrgencyRamp` — `d := dueAt.Sub(now).Hours()/24`;
+- [x] **3a.2** Commit 2 (GREEN): implement `UrgencyRamp` — `d := dueAt.Sub(now).Hours()/24`;
       `clamp((UrgencyLeadDays - d)/UrgencyLeadDays, 0, 1)`; `nil` → exactly 0, not the `d → ∞` limit.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.3.
-- [ ] **3a.3** Commit 1 (RED): `priority_test.go` (continued) — `AgeRamp` table at `createdAt ==
+- [x] **3a.3** Commit 1 (RED): `priority_test.go` (continued) — `AgeRamp` table at `createdAt ==
       now` (0); half the horizon (7.5 d → 0.5); exactly the horizon (15 d → 1); twice the horizon
       (30 d → still 1, not > 1); `createdAt` one hour after `now` (0, negative-Δt clamp, same rule
       as R1.2). Every fixture expressed as a **multiple of `AgeHorizonDays`**, never a literal day
@@ -872,11 +935,11 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       Stub: `const AgeWeight = 0.20`; `const AgeHorizonDays = 15`; `func AgeRamp(createdAt, now
       time.Time) float64 { return 0 }`.
       Requirement: R3.4.
-- [ ] **3a.4** Commit 2 (GREEN): implement `AgeRamp` — `ageDays := now.Sub(createdAt).Hours()/24`;
+- [x] **3a.4** Commit 2 (GREEN): implement `AgeRamp` — `ageDays := now.Sub(createdAt).Hours()/24`;
       `clamp(ageDays/AgeHorizonDays, 0, 1)`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.4; design §3.1 (owner rulings 9 and 10 — anti-starvation, horizon 15).
-- [ ] **3a.5** Commit 1 (RED): `priority_test.go` (continued) — `Candidate` and `Priority`'s full
+- [x] **3a.5** Commit 1 (RED): `priority_test.go` (continued) — `Candidate` and `Priority`'s full
       property set, all in one commit since P1–P6 are properties *of* `Priority`, not separate
       implementations: `priority ≥ e` for every input (property test); monotone non-decreasing in
       `e` at fixed context; homogeneous of degree 1 in `e` (scaling every candidate's weight by 0.5
@@ -900,14 +963,14 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       LastTouchedAt, CreatedAt time.Time; DueAt *time.Time }`; `const AdjacencyWeight = 0.25`;
       `func Priority(c Candidate, adjacency float64, now time.Time) float64 { return 0 }`.
       Requirement: R3.1, R3.2, R3.5.
-- [ ] **3a.6** Commit 2 (GREEN): implement `Priority` — `e = weight.Effective(...)`; `u =
+- [x] **3a.6** Commit 2 (GREEN): implement `Priority` — `e = weight.Effective(...)`; `u =
       UrgencyRamp(c.DueAt, now)`; `g = AgeRamp(c.CreatedAt, now)`; `a = adjacency`; `priority = e ×
       (1 + (UrgencyMax-1)·u) × (1 + AgeWeight·g + AdjacencyWeight·a)`. No term reads `c.Type`
       anywhere in the body. P1–P6 are consequences of this formula, not additional code.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.1, R3.2, R3.5; design §3.1 (ruling 1's multiplicative envelope; ruling 8's
       type removal).
-- [ ] **3a.7** doc 02 §3 amendment: rewrite line 76 from five terms to **four**, dropping `type`
+- [x] **3a.7** doc 02 §3 amendment: rewrite line 76 from five terms to **four**, dropping `type`
       (R3.2, ruling 8), as `priority = f(effective_weight, temporal_urgency(due_at), age,
       relation_to_active_focus) over the units the focus's type criterion already selected`. State
       the multiplicative envelope and why the shape is not a sum (R3.1). Define `age` as
@@ -919,7 +982,7 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       forever" — that framing is exactly what ruling 10 exists to correct.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR3 row).
-- [ ] **3a.8** §13: add `urgency_lead_days` (7, `focus.UrgencyLeadDays`, chosen — a separate row
+- [x] **3a.8** §13: add `urgency_lead_days` (7, `focus.UrgencyLeadDays`, chosen — a separate row
       from the existing `Event lead time`, also 7); `urgency_max` (3.0, `focus.UrgencyMax`,
       chosen); `age_weight` (0.20, `focus.AgeWeight`, chosen); `age_horizon_days` (**15**,
       `focus.AgeHorizonDays`, owner ruling 10); `focus_adjacency_weight` (0.25,
@@ -933,9 +996,19 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       `design.md`.
       Verify: read the section.
       Requirement: design §5.1.
-- [ ] **3a.9** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
-      tests, `docs/02-cognitive-core.md`.
+- [x] **3a.9** Purity/coverage: `golangci-lint run`; `make cover`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
+      tests, `docs/02-cognitive-core.md`. **Measured**: `make check-all` green (lint 0 issues,
+      `go vet`, L1/L2 `-race -shuffle=on`, L3 real SQLite vault, schema-golden regeneration diff
+      clean, `internal/core` coverage 100% (435/435), seven-target cross-compile matrix, L4).
+      Diff at the end of the RED/GREEN sequence was `docs/02-cognitive-core.md` plus
+      `internal/core/focus/{priority,priority_test}.go` — 809 insertions / 1 deletion, roughly
+      **double** the ~405-line estimate, matching PR 2b's own overrun pattern (measured 806 lines
+      against a ~300-line estimate). That overrun is what finally forced the ceiling question, and
+      the owner answered it rather than granting another exception: the ceiling counts
+      implementation plus docs apart from tests (`docs/06-harness.md` §7). Three Judgment Day rounds
+      then added the C22–C25 fixes. **Final: 319 implementation + docs, 685 tests — inside the
+      ceiling, no `size:exception` needed and none applied.**
 
 ---
 
@@ -974,9 +1047,12 @@ Depends on 3a (`Rank` uses `Candidate`/`Priority`). Second half of the pre-split
 
 ## PR 4a — `feat/core-focus-selection` (~400)
 
-Depends on 3b (`Select` ranks over `Ranked`). **Sits exactly on the 400-line ceiling by design's own
-estimate** — little further room inside 4a's own scope; the natural item to shed on overrun
-(`focus_margin_ddl_test.go`) is already assigned to 4b.
+Depends on 3b (`Select` ranks over `Ranked`). `design.md` §8.1 put it exactly on the 400-line
+ceiling, with little room to shed inside 4a's own scope since the natural candidate
+(`focus_margin_ddl_test.go`) is already assigned to 4b. **That reading is superseded** by the split
+ceiling (`docs/06-harness.md` §7): the ~400 estimate is a total, and on links 1 through 3a the
+implementation-plus-docs share ran between 16 % and 32 % of the total. Measure 4a's two counts
+separately before treating it as a crossing at all.
 
 - [ ] **4a.1** Commit 1 (RED): `internal/core/focus/hysteresis_test.go` (L1) **and**
       `test/conformance/i19_hysteresis_margin_test.go` (L2, named e.g.
@@ -1191,15 +1267,18 @@ there as guesses "of the same kind that were wrong before" on M1, never predicti
 | 1 | ~350 | Low–Medium — under the ceiling, not by much |
 | 2a | ~280 | Medium |
 | 2b | ~300 | Medium — carries both DDL-pinned constant relations (R2.4/R2.7); a future migration reformatting the `DEFAULT` literal would break the parse, which fails loudly at L2 (design §8 risk 14) |
-| 3a | ~405 | **High — over the ceiling by design's own estimate**, but "inside the estimation error and not a real crossing" (`design.md` §8.1). Pre-drawn split if it lands further over: `AgeRamp` + the P1–P6 property set move separately from `UrgencyRamp`/`Priority`'s envelope |
+| 3a | ~405 | **Resolved — measured 1006 total, 319 implementation + docs, 685 tests.** Double the estimate in total, and comfortably inside the ceiling once counted per `docs/06-harness.md` §7. No split, no `size:exception` |
 | 3b | ~200 | Low — carries its own small doc-02 delta (task 3b.3), flagged since `design.md` §7's undivided PR3 framing did not price it |
-| 4a | ~400 | **High — at the ceiling**; little room to shed further inside 4a's own scope, since the natural candidate (`focus_margin_ddl_test.go`) is already assigned to 4b |
+| 4a | ~400 | Medium — at the ceiling as a **total**, which `docs/06-harness.md` §7 no longer treats as the budget. Measure implementation + docs separately before calling it a crossing; little room to shed inside 4a's own scope if it genuinely is one, since the natural candidate (`focus_margin_ddl_test.go`) is already assigned to 4b |
 | 4b | ~250 | Medium — closes the chain; carries the coverage-floor and purity close-out |
 
-**Decision needed before apply: yes, for 3a and 4a** — both sit at or over the 400-line ceiling by
-design's own pre-code estimate. Report both as stop-and-report checkpoints once their own diff
-crosses roughly 300 lines, the same threshold `m1a-substrate`, `m1b-pipeline` and `m1c-surface` all
-used. Every other link is comfortably under its ceiling by design's own guess.
+**Decision needed before apply: settled for 3a, still open for 4a.** Both sat at or over the
+400-line ceiling by design's own pre-code estimate, and 3a's measured 2× overrun is what forced the
+question rather than deferring it again. The owner ruled the ceiling counts implementation plus docs
+apart from tests (`docs/06-harness.md` §7), under which 3a needed no split and no exception. 4a
+still reports as a stop-and-report checkpoint once its **implementation plus docs** crosses roughly
+300 lines — the same threshold `m1a-substrate`, `m1b-pipeline` and `m1c-surface` all used, now
+applied to the counted share rather than the total.
 
 **On the estimates themselves.** `design.md` §8.1's own total is **~2,200 lines across 7 PRs**,
 against proposal §5.1's ~1,250 across 4 — a **1.75× overrun**, which `design.md` itself states sits
