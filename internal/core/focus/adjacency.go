@@ -62,5 +62,29 @@ import "github.com/rengo/nooma/internal/core/weight"
 // without it, this project's own C13 convention that a branch no fixture
 // can tell apart from removing it should not exist.
 func AdjacencyStrengths(previous Selection, edges []weight.Edge) map[string]float64 {
-	return nil
+	adjacency := make(map[string]float64)
+	if len(previous.Members) == 0 {
+		return adjacency
+	}
+
+	member := make(map[string]bool, len(previous.Members))
+	for _, id := range previous.Members {
+		member[id] = true
+	}
+
+	consider := func(v, other string, strength float64) {
+		if !member[other] {
+			return
+		}
+		if strength > adjacency[v] {
+			adjacency[v] = strength
+		}
+	}
+
+	for _, e := range edges {
+		consider(e.To, e.From, e.Strength)
+		consider(e.From, e.To, e.Strength)
+	}
+
+	return adjacency
 }
