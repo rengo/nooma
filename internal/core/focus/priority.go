@@ -37,5 +37,23 @@ const UrgencyMax = 3.0
 // and what removes an overdue task from the focus is decay or the user,
 // not arithmetic.
 func UrgencyRamp(dueAt *time.Time, now time.Time) float64 {
-	return 0
+	if dueAt == nil {
+		return 0
+	}
+	d := dueAt.Sub(now).Hours() / 24
+	return clamp((UrgencyLeadDays-d)/UrgencyLeadDays, 0, 1)
+}
+
+// clamp restricts v to [lo, hi]. Every elapsed-time computation in this
+// package saturates rather than inverting or overshooting — the same rule
+// design D1 states once for weight.Effective's negative-Δt clamp and
+// design §3.1 restates here for AgeRamp and UrgencyRamp.
+func clamp(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
