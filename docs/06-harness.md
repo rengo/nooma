@@ -333,8 +333,10 @@ each other again.
 
 - **Commits**: conventional commits. A commit is a reviewable unit of work: the change, its
   tests, and its doc together. No "wip" or "fix tests" as separate commits.
-- **PRs**: soft ceiling of 400 changed lines. Above that, split into chained PRs. A PR nobody
-  can genuinely review is a PR that gets approved without review.
+- **PRs**: soft ceiling of 400 changed lines, counted as **implementation plus docs** — the lines
+  a reviewer must judge against the design — separately from **test** lines. Above that ceiling,
+  split into chained PRs. A PR nobody can genuinely review is a PR that gets approved without
+  review.
 - **Branches**: trunk-based, short-lived.
 - **ADRs**: every architectural decision is a new ADR. An `Accepted` ADR is never edited.
 - **Migrations**: SQL embedded with `go:embed`, versioned with `PRAGMA user_version`, applied
@@ -348,37 +350,39 @@ each other again.
   contributions; English is the entry condition, not a preference. UI internationalization is
   deferred, not ruled out.
 
+**The ceiling counts test lines apart from implementation and docs** because §7's own
+justification for it is reviewability, and in this repository test lines are not slack. Measured
+across `m2a-weight-focus`'s links:
+
+| Link | Changed lines (total) | Implementation + docs | Test lines | Impl + docs vs 400 |
+|---|---|---|---|---|
+| 1 — `feat/core-weight-decay` (#136) | 604 | 99 | 505 | 0.25× |
+| 2a — `feat/core-weight-revive` (#137) | 556 | 117 | 439 | 0.29× |
+| 2b — `feat/core-weight-resurface` (#140) | 1751 | 265 | 1486 | 0.66× |
+| 3a — `feat/core-focus-priority` | 1006 | 319 | 685 | 0.80× |
+
+Under the old total-line count, every one of these tripped the ceiling, 2b by 4.38×. Under
+implementation-plus-docs, none does — 3a comes closest, comfortably inside at 0.80×. In each
+link, the bulk is the suite proving the implementation, not the implementation: Judgment Day on
+link 1 showed a **linear** decay curve passing a fully green suite at 100 % statement coverage,
+and the response — concrete value pinning, mutation verification, boundary tables — costs test
+lines rather than lines of reasoning. Link 2b grew from 806 to 1751 across three review rounds
+that found a CRITICAL each time; link 3a's 685 test lines are what killed 13 mutants per judge
+across two independent adversarial rounds. Charging lines like these against the same 400-line
+budget as the code under review would pressure the one thing that has actually been catching
+defects here.
+
+This does **not** mean test lines are exempt from review, and a test suite can still grow too
+large to review on its own — it means the ceiling now measures what a reviewer must judge against
+the design, and a 685-line suite still has to be read, just against that bar rather than the
+implementation's.
+
 ---
 
 ## 7.1 Open questions the harness has measured but not answered
 
 These are recorded, not decided. Each carries the evidence that produced it, so the decision can
 be made from numbers rather than re-derived from scratch.
-
-### The 400-line ceiling stopped tracking review effort in `m2a`
-
-Measured across `m2a-weight-focus`'s merged links:
-
-| Link | Changed lines | vs 400 | Implementation a reviewer must judge |
-|---|---|---|---|
-| 1 — `feat/core-weight-decay` (#136) | 604 | 1.51× | 99 lines |
-| 2a — `feat/core-weight-revive` (#137) | 556 | 1.39× | 117 lines |
-| 2b — `feat/core-weight-resurface` (#140) | 1751 | 4.38× | 265 lines |
-| 3a, 4a — forecast in `tasks.md` | ~405, ~400 | at the line | — |
-
-**Five of seven links are at or over it.** In each, the bulk is the suite proving the
-implementation, not the implementation. That ratio is not slack: Judgment Day on link 1 showed a
-**linear** decay curve passing a fully green suite at 100 % statement coverage, and the response —
-concrete value pinning, mutation verification, boundary tables — costs test lines rather than
-lines of reasoning. Link 2b grew from 806 to 1751 across three review rounds that found a
-CRITICAL each time.
-
-§7's rule says the ceiling exists because "a PR nobody can genuinely review is a PR that gets
-approved without review." That reasoning is right and the proxy has drifted from it. **The open
-question is whether the ceiling should count implementation lines separately from test lines, or
-whether `m2a`'s slicing was wrong.** It should be answered before `m2b`, which carries eight
-consolidation phases. Answering it by granting one more exception per link is the failure mode,
-not the fix.
 
 ### Property-test seeding has one instance and no convention
 
