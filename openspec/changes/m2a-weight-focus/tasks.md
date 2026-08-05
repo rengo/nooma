@@ -1420,7 +1420,7 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       `golangci-lint run` over both packages together.
       Requirement: R3.8.
       **Result**: the `rg` sweep returns exactly the seven expected production functions (plus
-      three test-only helpers, `mustResurface`/`assertBoosts`/`dueAfter`/`dueIn`, all `_test.go`,
+      four test-only helpers, `mustResurface`/`assertBoosts`/`dueAfter`/`dueIn`, all `_test.go`,
       outside R3.8's own scope) and none of the seven excluded ones. Final
       `golangci-lint run ./internal/core/weight/... ./internal/core/focus/...` — 0 issues.
 - [x] **4b.8** §13 final count check: read `docs/02-cognitive-core.md` §13 and confirm it holds
