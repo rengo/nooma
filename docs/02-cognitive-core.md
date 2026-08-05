@@ -211,6 +211,18 @@ equal age and equal adjacency **tie** on priority; the tie is broken by `due_at`
 by type. Reinstating a numeric type term is **additive** — a new term with its own calibration
 rows — not a rewrite of this one.
 
+This `due_at`/`id` sequence is the ranking's entire tie-break, reached only when two units'
+priorities are exactly equal, not only the type question above. A unit with no due date sorts
+after every due unit at an equal priority, however far away that due date actually is, because
+`due_at` is compared only between two units that both carry one; when both are due-less, `id`
+decides. Priority first, then this sequence, makes the ranking a genuine total order over the
+whole pool **when every unit's `id` is unique** — the ordinary case, since `id` is `units.id`'s
+primary key and a query drawn from the table returns at most one row per `id`. Two units sharing
+an `id` is a caller error the ranking has no way to detect from the data alone: `id` is the last
+level this sequence defines, so two entries with the same `id` are indistinguishable once
+priority and `due_at` also tie, and their relative order is then left unspecified rather than
+resolved by a fourth level that does not exist.
+
 `f` is a **multiplicative envelope over `effective_weight`**, not a weighted sum of normalized
 terms:
 
@@ -239,6 +251,18 @@ multiplies, with unbounded relative leverage up to `urgency_max` — while age a
 nudges whose combined contribution is capped at `1 + age_weight + focus_adjacency_weight` no
 matter how many of them fire, because a due date is a hard external constraint and the other two
 are not.
+
+A `priority` that is itself `NaN` — inherited from `effective_weight`'s own `NaN`-producing
+shapes (§2), since `priority` computes `effective_weight` as its first step and does not
+sanitize what it returns — cannot be ranked by an ordinary `>` any more than a raw
+`effective_weight` can: every IEEE 754 comparison against `NaN` is false, so it satisfies no
+ordering at all. For ranking purposes only, a `NaN` priority is remapped to negative infinity, so
+it sorts after every other unit in the pool, including one whose effective weight has decayed to
+zero — the same "a corrupted input contributes no promotion, never a crash, never an arbitrary
+position" posture this section already takes for a corrupt `relation_to_active_focus` above. The
+remap exists only inside the ordering: the `priority` a caller reads back for that unit is the
+literal `NaN`, never the substituted `-∞` — hiding the corruption behind a manufactured number
+would defeat the entire point of surfacing it rather than coercing it away (§11).
 
 `age` means **ANTI-STARVATION**: it rises `0 → 1` over `age_horizon_days` (15) and stays at 1
 beyond it — **the older a unit, the higher it ranks on this term** — reading `created_at`, never
