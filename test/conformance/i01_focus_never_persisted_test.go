@@ -4,6 +4,7 @@ package conformance
 import (
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ import (
 // the tree"):
 //
 //  1. Vocabulary: no member of unit.AllStatuses() is "focus".
+//
 //  2. Tree scan: no Go source file under internal/ or cmd/ assigns the
 //     literal "focus" to something named Status. This is a coarse,
 //     line-based heuristic (like i13_learning_signal_test.go's migration
@@ -38,6 +40,7 @@ import (
 //     of go/ast to reason about a status literal it does not yet know the
 //     shape of. Go source only: migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this scan (design D1).
+//
 //  3. Structural, added PR 4b once a package literally named focus exists
 //     with a real corpus for the first time (spec R4.2, R4.6; design D9 —
 //     "I01 made a property of the API"): no exported function in
@@ -47,6 +50,23 @@ import (
 //     Not a missing-symbol red step — by this point in the chain the
 //     structural guarantees already hold (4a and 4b.2 ship the correct
 //     shapes) — this is the permanent proof, not a step toward one.
+//
+//     The "returns or embeds" half of that name is literal, not aspirational
+//     (Judgment Day round 1, PR 4b): the check follows an exported
+//     function's declared result type into a LOCALLY declared struct
+//     type's own field types, recursively, so
+//     `func F() struct{ S unit.Status }` and a named
+//     `type wrapper struct{ S unit.Status }` returned as `func F() wrapper`
+//     are both caught, not only a function that names unit.Status directly.
+//     Still unchecked, and left that way rather than silently: a named type
+//     declared OUTSIDE internal/core/focus (this check parses only that
+//     one directory's non-test files), and a unit.Status wrapped inside a
+//     slice, map, array, or pointer-to-pointer element rather than a bare
+//     struct field. Closing either gap needs a type-checked pass
+//     (go/types, loading the full module graph) rather than the plain
+//     go/ast parse every other check in this package already uses; this
+//     structural check stays go/ast-only like its siblings, and the two
+//     gaps are recorded here rather than assumed closed.
 //
 // All three checks apply design D10's non-empty-corpus guard: assert a
 // non-empty corpus was found before asserting anything about its content,
@@ -109,12 +129,13 @@ func TestI01_FocusIsNeverAPersistedStatus(t *testing.T) {
 				t.Fatal("internal/core/focus has zero exported functions — nothing to check (D10's non-empty-corpus guard)")
 			}
 
+			localFields := localStructFieldTypes(t, focusDir)
 			const banned = "unit.Status"
 			for i, name := range names {
 				for _, resultType := range resultTypes[i] {
-					if strings.Contains(resultType, banned) {
+					if resultTypeEmbeds(resultType, banned, localFields, map[string]bool{}) {
 						t.Errorf(
-							"%s returns %q, which contains %q — focus is a computed view "+
+							"%s returns %q, which contains or embeds %q — focus is a computed view "+
 								"(docs/02-cognitive-core.md §3), never a persisted unit.Status (I01, R4.2)",
 							name, resultType, banned,
 						)
@@ -208,4 +229,99 @@ func identNames(idents []*ast.Ident) []string {
 // framing.
 func isFocusStatusLiteral(line string) bool {
 	return strings.Contains(line, `"focus"`) && strings.Contains(line, "Status")
+}
+
+// localStructFieldTypes parses every non-test .go file in dir and returns,
+// keyed by the name of each locally declared struct type, the rendered
+// text of every one of that struct's field types (named or embedded) — so
+// a check on an exported function's declared result type can follow a
+// LOCAL named type into what it actually embeds, rather than stopping at
+// the bare identifier the way exportedFuncResultTypes' printer.Fprint
+// alone would (Judgment Day round 1, PR 4b: a function returning
+// `wrapper` where `type wrapper struct{ S unit.Status }` is declared in
+// the same directory must not pass silently just because "wrapper" itself
+// does not contain the banned substring).
+func localStructFieldTypes(t *testing.T, dir string) map[string][]string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", dir, err)
+	}
+
+	fields := make(map[string][]string)
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				st, ok := ts.Type.(*ast.StructType)
+				if !ok || st.Fields == nil {
+					continue
+				}
+
+				var fieldTypes []string
+				for _, field := range st.Fields.List {
+					var sb strings.Builder
+					if err := printer.Fprint(&sb, fset, field.Type); err != nil {
+						t.Fatalf("render field type of %s: %v", ts.Name.Name, err)
+					}
+					fieldTypes = append(fieldTypes, sb.String())
+				}
+				fields[ts.Name.Name] = fieldTypes
+			}
+		}
+	}
+	return fields
+}
+
+// resultTypeEmbeds reports whether resultType — the rendered text of an
+// exported function's declared return type — contains banned, either
+// directly or, recursively, through a LOCALLY declared struct type's own
+// field types (localFields, from localStructFieldTypes). A leading "*" is
+// stripped before a name lookup, so a pointer to a local wrapper type
+// resolves the same as the type itself. visited guards against a
+// self-referential or mutually recursive local type turning this into an
+// infinite loop.
+//
+// Known gap (recorded in TestI01_FocusIsNeverAPersistedStatus's own doc
+// comment, not silently assumed away): this only follows named types
+// declared in the same directory localFields was built from, and only
+// through a direct struct field — not through a slice, map, array, or
+// second level of pointer indirection wrapping the named type, and not
+// through a type declared in another package. Closing those needs a
+// type-checked pass (go/types), not a plain go/ast parse.
+func resultTypeEmbeds(resultType, banned string, localFields map[string][]string, visited map[string]bool) bool {
+	if strings.Contains(resultType, banned) {
+		return true
+	}
+
+	name := strings.TrimPrefix(resultType, "*")
+	if visited[name] {
+		return false
+	}
+	visited[name] = true
+
+	for _, fieldType := range localFields[name] {
+		if resultTypeEmbeds(fieldType, banned, localFields, visited) {
+			return true
+		}
+	}
+	return false
 }
