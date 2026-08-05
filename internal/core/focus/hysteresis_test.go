@@ -211,3 +211,35 @@ func TestDisplaces_ResolvedInvalidMargin_NaNIncumbentStillDisplaced(t *testing.T
 		})
 	}
 }
+
+// TestDisplaces_ResolvedInvalidMargin_ZeroIncumbentStillDisplaced covers the
+// scenario ResolveMargin's own doc comment cites as the reason +Inf is rejected
+// rather than passed through as "an extremely large margin": an incumbent Score
+// of exactly 0 is reachable — weight.Effective clamps a non-positive weight to
+// 0, and Priority's envelope factors are all >= 1 — and 0*(1+Inf) is 0*Inf,
+// which is NaN under IEEE 754. That reopens the permanent-occupant class by a
+// third route, one the NaN-incumbent table above cannot reach, since a NaN
+// incumbent goes through scoreKey to -Inf and never multiplies zero by
+// infinity. Judgment Day round 2 found the justification carried no test.
+func TestDisplaces_ResolvedInvalidMargin_ZeroIncumbentStillDisplaced(t *testing.T) {
+	rawMargins := []struct {
+		name string
+		raw  float64
+	}{
+		{"NaN", math.NaN()},
+		{"+Inf", math.Inf(1)},
+		{"-Inf", math.Inf(-1)},
+		{"-1", -1},
+		{"-2", -2},
+	}
+
+	for _, tc := range rawMargins {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := tc.raw
+			margin := ResolveMargin(&raw)
+			if !Displaces(0.01, 0, margin) {
+				t.Errorf("Displaces(0.01, 0, ResolveMargin(&%v)=%v) = false, want true — a zero-scored incumbent must not be a permanent occupant regardless of a corrupted raw margin", tc.raw, margin)
+			}
+		})
+	}
+}

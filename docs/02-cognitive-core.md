@@ -302,7 +302,11 @@ section rejects above.
   no `CHECK` constraint, so a configured value outside `[0, +Inf)` — non-finite, or negative,
   which would invert the margin's own direction — resolves to 0 (no anti-jitter protection that
   round) rather than being trusted as-is (`internal/core/focus.ResolveMargin`, Judgment Day round
-  1). This requires remembering the previous focus — in process, at the cost of one un-damped
+  1). Note that this is a deliberate discontinuity, not a limit: an arbitrarily large **finite**
+  margin passes through and makes the incumbent effectively unseatable, while `+Inf` resolves to 0
+  and protects nothing. `+Inf` is not the end of that trend, it is a value with no valid
+  arithmetic — a `priority` of exactly 0 is reachable, and `0 × (1 + ∞)` is `NaN`, which would
+  make a corrupted incumbent permanent. This requires remembering the previous focus — in process, at the cost of one un-damped
   transition immediately after every restart,
   since there is no incumbent yet to compare a challenger against.
 

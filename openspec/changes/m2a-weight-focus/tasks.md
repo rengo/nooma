@@ -808,6 +808,26 @@ defense, not the deliberate guard C7 asked for.
 mutants above now fails its own new dedicated test (in addition to whatever else already caught five of
 them); reverted every mutant after, tree clean.
 
+### C29 — `Displaces` validates nothing itself; a caller that skips `ResolveMargin` reopens the round-1 trap. Handoff to `m2c`.
+
+The round-1 CRITICAL was closed at `ResolveMargin`, which is the door `config.hysteresis_margin` crosses
+into core through — the right place, per C22/C24's rule that validation belongs at the entry point.
+`Displaces` itself still takes `margin` as a plain parameter and performs no validation, and its doc
+comment says so rather than claiming a guarantee it does not have. Judge A reproduced the consequence on
+demand: `Displaces(0.01, math.NaN(), -1)` — the raw `-1`, never passed through `ResolveMargin` — still
+returns `false`, the exact permanent-occupant trap.
+
+This is not a defect today: `ResolveMargin` is the only path from the config column into core, `rg` finds
+no other reader, and `m2c`'s wiring does not exist yet. It is recorded because the moment that wiring is
+written, "call `ResolveMargin` first" stops being obvious and becomes an unenforced convention — the same
+shape as C7's untransferred convention two entries up, and as the `clamp` lesson that did not carry from
+`weight/spread.go` to `focus/priority.go` one link earlier (C24).
+
+**What `m2c` must do**: resolve the margin exactly once, at the boundary where the config row is read, and
+pass the resolved value down — never the raw `*float64`. If instead it turns out convenient to call
+`Displaces` from more than one site, the cheaper answer is to move the validation inside `Displaces` and
+delete `ResolveMargin`'s separate step, rather than to rely on every call site remembering.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
