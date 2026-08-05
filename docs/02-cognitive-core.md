@@ -756,6 +756,11 @@ module):
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
 | `resurface_max_hops` (`internal/core/weight.ResurfaceMaxHops`) | 2 |
 | `resurface_attenuation` (`internal/core/weight.ResurfaceAttenuation`) | 0.5 |
+| `urgency_lead_days` (`internal/core/focus.UrgencyLeadDays`) | 7 — a separate knob from "Event lead time" below, despite the identical default: one is prospection's notification horizon, this is the ranking's |
+| `urgency_max` (`internal/core/focus.UrgencyMax`) | 3.0 |
+| `age_weight` (`internal/core/focus.AgeWeight`) | 0.20 |
+| `age_horizon_days` (`internal/core/focus.AgeHorizonDays`) | 15 — owner ruling 10; was 30 under ruling 9 |
+| `focus_adjacency_weight` (`internal/core/focus.AdjacencyWeight`) | 0.25 |
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |
