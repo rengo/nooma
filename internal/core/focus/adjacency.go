@@ -80,6 +80,16 @@ import "github.com/rengo/nooma/internal/core/weight"
 //     negative-strength edges is simply absent from the map — read as 0 by
 //     every caller, indistinguishable from a unit with no edge to
 //     previous.Members at all.
+//   - A Strength of exactly 0.0 behaves the identical way, for the
+//     identical reason (`0.0 > 0.0` is false against the zero-value
+//     baseline): the unit is absent from the map, not present with an
+//     explicit 0.0 value. This is the one case on this list that is NOT a
+//     corrupt or out-of-range input — a relation the judge genuinely
+//     assessed as zero relevance is a legitimate output, arguably the most
+//     common one — and yet it is indistinguishable here from a negative
+//     Strength or from no edge at all. Reading this map alone, a caller
+//     cannot tell "assessed as irrelevant" apart from "corrupt" apart from
+//     "never connected".
 //
 // This is safe ONLY because of who reads the result today: Priority
 // clamps adjacency to [0,1] at its own door (priority.go,
