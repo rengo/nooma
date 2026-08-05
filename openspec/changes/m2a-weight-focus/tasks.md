@@ -904,10 +904,14 @@ the pre-split `feat/core-weight-boost`.
 
 ## PR 3a — `feat/core-focus-priority` (~405)
 
-Depends on 2b (`Priority` calls `weight.Effective` via `Candidate`'s fields). **Sits ~5 lines over
-the 400-line ceiling by design's own estimate — inside the estimation error, not a real crossing**
-(`design.md` §8.1). Pre-drawn split line if it lands further over: `AgeRamp` plus the P1–P6 property
-set travel separately from `UrgencyRamp` and `Priority`'s envelope.
+Depends on 2b (`Priority` calls `weight.Effective` via `Candidate`'s fields). `design.md` §8.1
+estimated ~405 total lines and read that as ~5 over the ceiling — inside the estimation error, not a
+real crossing. **That framing is superseded**: the owner has since ruled that the ceiling counts
+implementation plus docs separately from test lines (`docs/06-harness.md` §7), and 3a measures 319
+implementation + docs against 685 test lines. It is comfortably inside the ceiling, not astride it.
+The pre-drawn split line — `AgeRamp` plus the P1–P6 property set travelling separately from
+`UrgencyRamp` and `Priority`'s envelope — was therefore never needed and is recorded here only as
+the shape a split would have taken.
 
 - [x] **3a.1** Commit 1 (RED): `internal/core/focus/priority_test.go` — `UrgencyRamp` table: `nil` →
       exactly 0; `d ≥ UrgencyLeadDays` → 0; `d = 3.5` → 0.5; `d = 0` → 1; overdue by 1 day → 1;
@@ -997,12 +1001,14 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       tests, `docs/02-cognitive-core.md`. **Measured**: `make check-all` green (lint 0 issues,
       `go vet`, L1/L2 `-race -shuffle=on`, L3 real SQLite vault, schema-golden regeneration diff
       clean, `internal/core` coverage 100% (435/435), seven-target cross-compile matrix, L4).
-      Diff is exactly `docs/02-cognitive-core.md`, `internal/core/focus/{priority,priority_test}.go`
-      — 3 files, 809 insertions / 1 deletion, roughly **double** the ~405-line estimate and well
-      over the 400-line ceiling — matching PR 2b's own overrun pattern (measured 806 lines against
-      a ~300-line estimate). Not self-labeled `size:exception`; flagged for the orchestrator to
-      decide (split per this section's own pre-drawn line — `AgeRamp` plus the P1-P6 property set
-      separated from `UrgencyRamp`/`Priority`'s envelope — vs `size:exception`).
+      Diff at the end of the RED/GREEN sequence was `docs/02-cognitive-core.md` plus
+      `internal/core/focus/{priority,priority_test}.go` — 809 insertions / 1 deletion, roughly
+      **double** the ~405-line estimate, matching PR 2b's own overrun pattern (measured 806 lines
+      against a ~300-line estimate). That overrun is what finally forced the ceiling question, and
+      the owner answered it rather than granting another exception: the ceiling counts
+      implementation plus docs apart from tests (`docs/06-harness.md` §7). Three Judgment Day rounds
+      then added the C22–C25 fixes. **Final: 319 implementation + docs, 685 tests — inside the
+      ceiling, no `size:exception` needed and none applied.**
 
 ---
 
@@ -1041,9 +1047,12 @@ Depends on 3a (`Rank` uses `Candidate`/`Priority`). Second half of the pre-split
 
 ## PR 4a — `feat/core-focus-selection` (~400)
 
-Depends on 3b (`Select` ranks over `Ranked`). **Sits exactly on the 400-line ceiling by design's own
-estimate** — little further room inside 4a's own scope; the natural item to shed on overrun
-(`focus_margin_ddl_test.go`) is already assigned to 4b.
+Depends on 3b (`Select` ranks over `Ranked`). `design.md` §8.1 put it exactly on the 400-line
+ceiling, with little room to shed inside 4a's own scope since the natural candidate
+(`focus_margin_ddl_test.go`) is already assigned to 4b. **That reading is superseded** by the split
+ceiling (`docs/06-harness.md` §7): the ~400 estimate is a total, and on links 1 through 3a the
+implementation-plus-docs share ran between 16 % and 32 % of the total. Measure 4a's two counts
+separately before treating it as a crossing at all.
 
 - [ ] **4a.1** Commit 1 (RED): `internal/core/focus/hysteresis_test.go` (L1) **and**
       `test/conformance/i19_hysteresis_margin_test.go` (L2, named e.g.
@@ -1258,15 +1267,18 @@ there as guesses "of the same kind that were wrong before" on M1, never predicti
 | 1 | ~350 | Low–Medium — under the ceiling, not by much |
 | 2a | ~280 | Medium |
 | 2b | ~300 | Medium — carries both DDL-pinned constant relations (R2.4/R2.7); a future migration reformatting the `DEFAULT` literal would break the parse, which fails loudly at L2 (design §8 risk 14) |
-| 3a | ~405 | **High — over the ceiling by design's own estimate**, but "inside the estimation error and not a real crossing" (`design.md` §8.1). Pre-drawn split if it lands further over: `AgeRamp` + the P1–P6 property set move separately from `UrgencyRamp`/`Priority`'s envelope |
+| 3a | ~405 | **Resolved — measured 1006 total, 319 implementation + docs, 685 tests.** Double the estimate in total, and comfortably inside the ceiling once counted per `docs/06-harness.md` §7. No split, no `size:exception` |
 | 3b | ~200 | Low — carries its own small doc-02 delta (task 3b.3), flagged since `design.md` §7's undivided PR3 framing did not price it |
-| 4a | ~400 | **High — at the ceiling**; little room to shed further inside 4a's own scope, since the natural candidate (`focus_margin_ddl_test.go`) is already assigned to 4b |
+| 4a | ~400 | Medium — at the ceiling as a **total**, which `docs/06-harness.md` §7 no longer treats as the budget. Measure implementation + docs separately before calling it a crossing; little room to shed inside 4a's own scope if it genuinely is one, since the natural candidate (`focus_margin_ddl_test.go`) is already assigned to 4b |
 | 4b | ~250 | Medium — closes the chain; carries the coverage-floor and purity close-out |
 
-**Decision needed before apply: yes, for 3a and 4a** — both sit at or over the 400-line ceiling by
-design's own pre-code estimate. Report both as stop-and-report checkpoints once their own diff
-crosses roughly 300 lines, the same threshold `m1a-substrate`, `m1b-pipeline` and `m1c-surface` all
-used. Every other link is comfortably under its ceiling by design's own guess.
+**Decision needed before apply: settled for 3a, still open for 4a.** Both sat at or over the
+400-line ceiling by design's own pre-code estimate, and 3a's measured 2× overrun is what forced the
+question rather than deferring it again. The owner ruled the ceiling counts implementation plus docs
+apart from tests (`docs/06-harness.md` §7), under which 3a needed no split and no exception. 4a
+still reports as a stop-and-report checkpoint once its **implementation plus docs** crosses roughly
+300 lines — the same threshold `m1a-substrate`, `m1b-pipeline` and `m1c-surface` all used, now
+applied to the counted share rather than the total.
 
 **On the estimates themselves.** `design.md` §8.1's own total is **~2,200 lines across 7 PRs**,
 against proposal §5.1's ~1,250 across 4 — a **1.75× overrun**, which `design.md` itself states sits
