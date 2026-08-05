@@ -132,7 +132,12 @@ func TestPriority_NeverBelowEffectiveWeight_Property(t *testing.T) {
 		lambda := float64(splitmix64(&state)%100_001) / 1_000_000.0 // [0, 0.1]
 		touchedHoursAgo := int64(splitmix64(&state) % 10_001)       // [0, 10000]h
 		ageDays := float64(splitmix64(&state)%10_001) / 100.0       // [0, 100] days
-		adjacency := float64(splitmix64(&state)%1_000_001) / 1_000_000.0
+		// [-1.0, 2.0], deliberately outside [0,1] some of the time: adjacency
+		// is an externally sourced parameter (ultimately AdjacencyStrengths'
+		// max-over-edges of relation.strength, which carries no schema CHECK)
+		// and Judgment Day round 1 found this generator previously only ever
+		// produced [0,1], leaving the out-of-domain case entirely untested.
+		adjacency := float64(splitmix64(&state)%3_000_001)/1_000_000.0 - 1.0
 
 		var dueAt *time.Time
 		if splitmix64(&state)%2 == 0 {
@@ -155,6 +160,55 @@ func TestPriority_NeverBelowEffectiveWeight_Property(t *testing.T) {
 		if got < e {
 			t.Fatalf("iteration %d: Priority(%+v, %v, now) = %v, want >= effective weight %v", i, c, adjacency, got, e)
 		}
+	}
+}
+
+// TestPriority_AdjacencyClampedToUnitInterval proves adjacency is clamped to
+// [0,1] at Priority's entry point rather than trusted as given. Judgment Day
+// round 1 falsified R3.1's "priority >= e for every input" MUST with
+// adjacency = -1.0: Priority(Candidate{Weight: 1.0, DecayRate: 0,
+// LastTouchedAt: now, CreatedAt: now}, -1.0, now) returned 0.75 against
+// e = 1.0. adjacency is an ordinary float64 parameter with no schema CHECK
+// anywhere upstream (ultimately AdjacencyStrengths' max over
+// relation.strength, spec R3.7) — the same threat model
+// weight.Effective already sanitizes weight and decayRate against, and the
+// same one spread.go's clampStrength sanitizes edge strength against (C15,
+// C16). Every out-of-domain adjacency below 0 or above 1 must clamp to
+// exactly the same result its nearest in-domain boundary (0 or 1) produces.
+func TestPriority_AdjacencyClampedToUnitInterval(t *testing.T) {
+	now := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	c := Candidate{
+		ID:            "u",
+		Weight:        1.0,
+		DecayRate:     0,
+		LastTouchedAt: now,
+		CreatedAt:     now,
+	}
+	e := weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
+
+	atLowerBound := Priority(c, 0.0, now)
+	atUpperBound := Priority(c, 1.0, now)
+
+	cases := []struct {
+		name      string
+		adjacency float64
+		want      float64
+	}{
+		{"negative adjacency clamps to the same result as 0", -1.0, atLowerBound},
+		{"deeply negative adjacency clamps to the same result as 0", -5.0, atLowerBound},
+		{"adjacency above 1 clamps to the same result as 1", 2.0, atUpperBound},
+		{"adjacency far above 1 clamps to the same result as 1", 1e6, atUpperBound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Priority(c, tc.adjacency, now)
+			if got != tc.want {
+				t.Errorf("Priority(c, %v, now) = %v, want %v (clamped)", tc.adjacency, got, tc.want)
+			}
+			if got < e {
+				t.Errorf("Priority(c, %v, now) = %v, want >= effective weight %v (spec R3.1)", tc.adjacency, got, e)
+			}
+		})
 	}
 }
 
