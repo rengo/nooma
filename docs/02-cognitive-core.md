@@ -211,6 +211,13 @@ equal age and equal adjacency **tie** on priority; the tie is broken by `due_at`
 by type. Reinstating a numeric type term is **additive** — a new term with its own calibration
 rows — not a rewrite of this one.
 
+This `due_at`/`id` sequence is the ranking's entire tie-break, reached only when two units'
+priorities are exactly equal, not only the type question above. A unit with no due date sorts
+after every due unit at an equal priority, however far away that due date actually is, because
+`due_at` is compared only between two units that both carry one; when both are due-less, `id`
+decides. Priority first, then this sequence, makes the ranking a genuine total order over the
+whole pool — no two distinct units are ever left in an unspecified relative order.
+
 `f` is a **multiplicative envelope over `effective_weight`**, not a weighted sum of normalized
 terms:
 
