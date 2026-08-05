@@ -350,6 +350,67 @@ each other again.
 
 ---
 
+## 7.1 Open questions the harness has measured but not answered
+
+These are recorded, not decided. Each carries the evidence that produced it, so the decision can
+be made from numbers rather than re-derived from scratch.
+
+### The 400-line ceiling stopped tracking review effort in `m2a`
+
+Measured across `m2a-weight-focus`'s merged links:
+
+| Link | Changed lines | vs 400 | Implementation a reviewer must judge |
+|---|---|---|---|
+| 1 — `feat/core-weight-decay` (#136) | 604 | 1.51× | 99 lines |
+| 2a — `feat/core-weight-revive` (#137) | 556 | 1.39× | 117 lines |
+| 2b — `feat/core-weight-resurface` (#140) | 1751 | 4.38× | 265 lines |
+| 3a, 4a — forecast in `tasks.md` | ~405, ~400 | at the line | — |
+
+**Five of seven links are at or over it.** In each, the bulk is the suite proving the
+implementation, not the implementation. That ratio is not slack: Judgment Day on link 1 showed a
+**linear** decay curve passing a fully green suite at 100 % statement coverage, and the response —
+concrete value pinning, mutation verification, boundary tables — costs test lines rather than
+lines of reasoning. Link 2b grew from 806 to 1751 across three review rounds that found a
+CRITICAL each time.
+
+§7's rule says the ceiling exists because "a PR nobody can genuinely review is a PR that gets
+approved without review." That reasoning is right and the proxy has drifted from it. **The open
+question is whether the ceiling should count implementation lines separately from test lines, or
+whether `m2a`'s slicing was wrong.** It should be answered before `m2b`, which carries eight
+consolidation phases. Answering it by granting one more exception per link is the failure mode,
+not the fix.
+
+### Property-test seeding has one instance and no convention
+
+`internal/core/weight/decay_test.go`'s `propertySeed` derives a per-run seed from
+`hash/maphash.MakeSeed`, logs it, and accepts a `-weight-seed` override so a failing run
+reproduces exactly. It replaced a fixed seed whose blind spot was **permanent rather than
+unlucky**: a judge narrowed a clamp to `decayRate < -0.001` and the whole suite stayed green,
+because triggering the gap needs three sampled dimensions to align in one iteration and a fixed
+seed either lands there or never does, identically on every CI run forever.
+
+Measured after the change, across four independent runs of 200/200/200/60: the mutant is caught
+**~90 %** of the time — a range, not a property of the code.
+
+`internal/core` forbids `time.Now`, `math/rand` and `os.Getenv`, in `_test.go` as much as in
+production, so `maphash` is the sanctioned source. **The open question is whether every property
+test in this repository adopts per-run seeding, or whether deliberate boundary sampling is the
+better answer where the interesting region is known.** `m2b` will write more of them.
+
+### Agent worktrees live inside the repository and interact with it
+
+`.claude/worktrees/` holds throwaway worktrees for review agents. Three incidents in one session
+traced to it: a mutation left uncommitted in the main tree after a review round; a planning
+artifact committed into a code branch; and a worktree swept into the index as a gitlink by
+`git add -A`. The path is now gitignored, and the standing rules are: **stage by explicit path,
+never `git add -A`**, and give every agent that mutates source to verify a test its own isolated
+worktree — reviewers and fix agents alike, not only reviewers.
+
+Note for anyone delegating: `.atl/` is gitignored, so a skill registry there does **not** exist
+inside an isolated worktree. `.claude/skills/` is tracked and does. Pass absolute paths.
+
+---
+
 ## 8. Definition of Done for the harness
 
 The harness is ready when, over a repo with no business logic:
