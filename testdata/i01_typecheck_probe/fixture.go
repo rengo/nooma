@@ -16,8 +16,13 @@
 // refactor of typeCanYieldWithoutConversion cannot silently regress on the
 // exact shapes Judgment Day round 3 found missing (the entire category of
 // defined slice/map/pointer/channel/func/interface types over unit.Status),
-// on cycle termination, or on the one shape that must stay unflagged forever
-// (a defined type declared without `=`).
+// the type parameter shapes round 4 found missing (a bare, uninstantiated
+// generic type parameter and its constraint's type set — single-type,
+// union, and `~T` approximation terms), on cycle termination (for both a
+// struct cycle and a type-parameter constraint cycle), or on the shapes
+// that must stay unflagged forever (a defined type declared without `=`,
+// an unconstrained `[T any]` type parameter, and a function parameter
+// carrying unit.Status).
 package i01typecheckprobe
 
 import "github.com/rengo/nooma/internal/core/unit"
@@ -126,3 +131,89 @@ func ReturnsGenericViaAlias() GenericWrapper[localAliasOfStatus] {
 // result carries unit.Status — the check must inspect every result, not only
 // the first.
 func ReturnsSecondOfTwo() (int, unit.Status) { var z unit.Status; return 0, z }
+
+// MapKeyIsStatus pins the map KEY case (Judgment Day round 4, judge B):
+// *types.Map's Key() was already checked by the existing container recursion
+// (this fixture never had a map-key-only shape to prove it), so this is
+// confirmation, not a new fix.
+type MapKeyIsStatus map[unit.Status]string
+
+func ReturnsMapKeyIsStatus() MapKeyIsStatus { return nil }
+
+// TakesStatusParamOnly pins a deliberate exclusion that was previously only
+// implicit: an exported function's PARAMETER carrying unit.Status is not a
+// violation. The structural subtest this fixture backs only ever inspects
+// sig.Results(), never sig.Params() — a parameter is what the caller
+// supplies, not what the function's own result yields. Must stay unflagged
+// even though unit.Status appears directly in this function's signature.
+func TakesStatusParamOnly(s unit.Status) bool { return true }
+
+// --- Judgment Day round 4: generic type parameters ---
+//
+// Both judges independently found that a bare, uninstantiated type
+// parameter escaped round 3's rewrite entirely: it is not a *types.Named
+// (nor any other concrete kind the pre-round-4 switch dispatched on), so it
+// fell straight through to "not flagged." The shapes below are every one
+// this round's own probe matrix ran, each pinned so a future refactor of
+// typeCanYieldWithoutConversion cannot silently reopen this finding.
+
+// typeParamStatusConstraint restricts a type parameter to exactly
+// unit.Status — judge A and judge B's own live reproduction.
+type typeParamStatusConstraint interface{ unit.Status }
+
+// ReturnsBareTypeParam returns T directly, where T's only possible binding
+// is unit.Status. Must be flagged.
+func ReturnsBareTypeParam[T typeParamStatusConstraint]() T { var z T; return z }
+
+// ReturnsNestedTypeParam nests the same constrained type parameter one level
+// inside a slice (judge A's own follow-up finding) — proving the fix
+// composes with the pre-existing container recursion rather than needing a
+// second copy of it.
+func ReturnsNestedTypeParam[T typeParamStatusConstraint]() []T { return nil }
+
+// typeParamUnionConstraint constrains T to either unit.Status or int — judge
+// B's own reproduction. Only one arm of the union is unit.Status, so this
+// proves "could yield it" reachability, the same category this check
+// already applies to interface method sets and struct fields, not merely
+// "always yields it."
+type typeParamUnionConstraint interface{ unit.Status | int }
+
+func ReturnsUnionTypeParam[T typeParamUnionConstraint]() T { var z T; return z }
+
+// typeParamApproximationConstraint is `~string`, decided and pinned here:
+// unit.Status's own underlying type IS string (see
+// TestI01_FocusIsNeverAPersistedStatus's "Status is a string-kind
+// vocabulary type" subtest), so unit.Status is a genuine member of
+// `~string`'s type set — ReturnsApproximationTypeParam[unit.Status]() is a
+// real call a caller can make, extracting a real unit.Status with zero
+// conversion syntax. Flagged on that basis: not because every
+// instantiation of T is unit.Status (most string-kind types are not), but
+// because the declared constraint's own type set includes it.
+type typeParamApproximationConstraint interface{ ~string }
+
+func ReturnsApproximationTypeParam[T typeParamApproximationConstraint]() T {
+	var z T
+	return z
+}
+
+// ReturnsUnconstrainedTypeParam is `[T any]`: any's type set is "every
+// type," carrying no information that could resolve to unit.Status
+// specifically. This is the documented `any` limit
+// (typeCanYieldWithoutConversion's own doc comment), not a gap in the
+// round-4 fix — it must stay unflagged.
+func ReturnsUnconstrainedTypeParam[T any]() T { var z T; return z }
+
+// typeParamSelfReferencingConstraint and ReturnsSelfReferencingTypeParam
+// prove termination for a type PARAMETER cycle specifically —
+// mutuallyA/mutuallyB and selfReferential above already prove it for a
+// struct cycle, but a type parameter never reaches that recursion at all
+// (it is not a *types.Named), so it needs its own, independent proof: a
+// constraint that names its own type parameter again must not hang or
+// stack-overflow, and — since neither side carries unit.Status — must
+// report false.
+type typeParamSelfReferencingConstraint[T any] interface{ ~[]T }
+
+func ReturnsSelfReferencingTypeParam[T typeParamSelfReferencingConstraint[T]]() T {
+	var z T
+	return z
+}
