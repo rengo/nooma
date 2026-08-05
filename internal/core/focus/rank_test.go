@@ -206,6 +206,47 @@ func TestRank_NonFiniteScore_SortsLastWithoutBreakingTotalOrder(t *testing.T) {
 	}
 }
 
+// TestRank_EqualDueAt_FallsThroughToID pins the tie-break's mutation-prone
+// middle level: two tied-Score candidates with an exactly equal non-nil
+// DueAt still resolve by ID, they are not left in input order. Without the
+// !ad.Equal(*bd) guard on the DueAt level, time.Time.Before returns false in
+// both directions for two equal instants, so that level would never run,
+// the ID level below it would never be reached, and sort.Slice's own
+// unstable order over the input slice would decide instead — exactly what
+// the three-level tie-break exists to prevent. No existing fixture had two
+// candidates with equal Score AND equal non-nil DueAt but different ID, so
+// removing the guard left the whole suite green (Judgment Day round 1,
+// Judge A). Two tasks due at the same instant is ordinary data, not
+// corruption.
+func TestRank_EqualDueAt_FallsThroughToID(t *testing.T) {
+	now := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+
+	tied := func(id string) Candidate {
+		return Candidate{
+			ID:            id,
+			Weight:        1.0,
+			DecayRate:     0,
+			LastTouchedAt: now,
+			CreatedAt:     now,
+			DueAt:         dueAfter(now, 20), // beyond the 7-day lead window: ramp 0
+		}
+	}
+
+	// Deliberately out of ID order, so a fall-through to input order rather
+	// than to ID would be caught.
+	cs := []Candidate{tied("z"), tied("a"), tied("m")}
+	got := Rank(cs, nil, now)
+
+	wantOrder := []string{"a", "m", "z"}
+	gotOrder := make([]string, len(got))
+	for i, r := range got {
+		gotOrder[i] = r.Candidate.ID
+	}
+	if !reflect.DeepEqual(gotOrder, wantOrder) {
+		t.Fatalf("Rank() order = %v, want %v (equal Score and equal non-nil DueAt must still resolve by ID)", gotOrder, wantOrder)
+	}
+}
+
 // TestRank_DuplicateID_BothSurviveOrderUnpinned pins Rank's actual, current
 // behaviour for the one input shape docs/02-cognitive-core.md §3 and Rank's
 // own doc comment now both say is outside the tie-break's total-order
