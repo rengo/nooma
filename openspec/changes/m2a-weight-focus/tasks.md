@@ -896,6 +896,55 @@ Whoever writes that second consumer decides: bound at `AdjacencyStrengths`' own 
 C31 together, for both packages, in one place), or document the same deferral again at the new call
 site. Choosing silently, a third time, is what this entry exists to prevent.
 
+### C32 — task 4b.7's own sweep was case-blind by construction, and could not have verified R3.8's second MUST even case-corrected. Found by judge B in Judgment Day round 2 on PR 4b.
+
+4b.7's recorded sweep, `rg 'now time\.Time' internal/core/weight internal/core/focus`, is
+case-sensitive: a struct field `Now time.Time` — the capitalisation Go's own exported-field
+convention *requires* — does not match a pattern whose literal `now` is lowercase. Verified: zero
+hits for that exact probe against a throwaway field. R3.8's second `MUST` is precisely "`now` never
+appears inside an input struct" — the sweep as recorded could not have seen a violation of it at
+all, only of the (unstated) first-letter-lowercase spelling.
+
+**Re-run, case-insensitively**: `rg -in 'now time\.Time' internal/core/weight internal/core/focus`
+returns the identical eleven hits the original case-sensitive sweep did (the same seven production
+functions plus the same four test-only helpers) — no `Now`-cased hit exists today, so the corrected
+sweep's *result* does not change. But the mechanism itself is still not sufficient to verify the
+requirement, for a second, independent reason found while re-running it: `gofmt` column-aligns a
+struct's field declarations with variable-width whitespace once the struct has a field name longer
+than `now`/`Now` (`LastTouchedAt`, `CreatedAt`, `DueAt` all do, in both `weight.Current` and
+`focus.Candidate`). Verified directly: a throwaway
+`struct{ LastTouchedAt time.Time; Now time.Time }`, run through `gofmt`, renders as
+`Now           time.Time` — multiple spaces, not one — and
+`rg -in 'now time\.Time'` (a literal single-space pattern) returns **zero** hits against it, exactly
+as the original case-sensitive form would have. A case-insensitive `rg` closes the letter-casing gap
+and does nothing for the whitespace one.
+
+**What the sweep does and does not verify, stated plainly**: it is a textual grep, with no `go/ast`
+awareness of the tree it is run against. It cannot distinguish a function *parameter* named `now`
+(what every one of its eleven hits actually is) from a struct *field* that happens to render with the
+identical text — it would catch a struct field only by coincidence, if that field's name is spelled
+in a way and aligned in a way the literal pattern happens to match, and this document's own 4b.7
+result read that coincidental match as a verification. R3.8's first `MUST` (the function-signature
+enumeration: exactly `Effective`, `Revive`, `Resurface`, `UrgencyRamp`, `AgeRamp`, `Priority`, `Rank`,
+and not the others) **is** verified by this sweep, case-corrected — a parameter list is exactly what
+`rg` is reading. R3.8's second `MUST` ("`now` never appears inside an input struct") is **not**
+verified by either form of this sweep, corrected or not; it happens to hold today (`Current` and
+`Candidate` were read field-by-field above and neither carries one), but that is inspection, not a
+mechanized check this task's citation claimed to be.
+
+**What would actually verify it**: a structural, `go/ast`-based conformance check — the same
+discipline `i01_focus_never_persisted_test.go`'s `localStructFieldTypes`/`localNamedTypes` machinery
+already applies to `unit.Status` — that parses every struct type declared in
+`internal/core/weight`/`internal/core/focus` and asserts no field, of any name, has type
+`time.Time` or `*time.Time`, except through a named field that is documented data about the unit
+(`LastTouchedAt`, `CreatedAt`, `DueAt` today) rather than the instant the decision runs. A field-name
+allow-list, not a field-name-`now` denylist, since the hazard is "the current instant living in a
+struct at all," not specifically a field spelled `now`.
+
+**Not implemented here**: this fix round is `rg` sweep correction and disclosure, not a new
+conformance test; recorded so a later link (or a fresh Judgment Day round) picks up the structural
+check rather than trusting a corrected grep a second time.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
@@ -1423,6 +1472,15 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       four test-only helpers, `mustResurface`/`assertBoosts`/`dueAfter`/`dueIn`, all `_test.go`,
       outside R3.8's own scope) and none of the seven excluded ones. Final
       `golangci-lint run ./internal/core/weight/... ./internal/core/focus/...` — 0 issues.
+      **Corrected after Judgment Day round 2 (C32)**: the recorded sweep was case-sensitive,
+      so it could never have seen a struct field spelled `Now` — Go's own exported-field
+      convention. Re-run as `rg -in 'now time\.Time' internal/core/weight internal/core/focus`;
+      identical eleven hits (no case-mismatched hit exists today). This verifies R3.8's first
+      `MUST` (the function enumeration above) but, even case-corrected, **not** its second
+      (`now` never appears inside an input struct) — a textual grep has no AST awareness and
+      cannot distinguish a parameter from a struct field; see C32 for the full argument,
+      including a second, independent whitespace-alignment reason the corrected form still
+      cannot verify it.
 - [x] **4b.8** §13 final count check: read `docs/02-cognitive-core.md` §13 and confirm it holds
       **33** rows (23 + 10 new, 1 amended in place).
       Requirement: design §5.4.
