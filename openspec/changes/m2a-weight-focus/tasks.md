@@ -850,7 +850,7 @@ the 400-line ceiling by design's own estimate — inside the estimation error, n
 (`design.md` §8.1). Pre-drawn split line if it lands further over: `AgeRamp` plus the P1–P6 property
 set travel separately from `UrgencyRamp` and `Priority`'s envelope.
 
-- [ ] **3a.1** Commit 1 (RED): `internal/core/focus/priority_test.go` — `UrgencyRamp` table: `nil` →
+- [x] **3a.1** Commit 1 (RED): `internal/core/focus/priority_test.go` — `UrgencyRamp` table: `nil` →
       exactly 0; `d ≥ UrgencyLeadDays` → 0; `d = 3.5` → 0.5; `d = 0` → 1; overdue by 1 day → 1;
       overdue by 1000 days → 1 (does not grow).
       **Red**: `undefined: focus.UrgencyRamp`, `undefined: focus.UrgencyLeadDays`, `undefined:
@@ -858,11 +858,11 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       Stub: `const UrgencyLeadDays = 7`; `const UrgencyMax = 3.0`; `func UrgencyRamp(dueAt
       *time.Time, now time.Time) float64 { return 0 }`.
       Requirement: R3.3.
-- [ ] **3a.2** Commit 2 (GREEN): implement `UrgencyRamp` — `d := dueAt.Sub(now).Hours()/24`;
+- [x] **3a.2** Commit 2 (GREEN): implement `UrgencyRamp` — `d := dueAt.Sub(now).Hours()/24`;
       `clamp((UrgencyLeadDays - d)/UrgencyLeadDays, 0, 1)`; `nil` → exactly 0, not the `d → ∞` limit.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.3.
-- [ ] **3a.3** Commit 1 (RED): `priority_test.go` (continued) — `AgeRamp` table at `createdAt ==
+- [x] **3a.3** Commit 1 (RED): `priority_test.go` (continued) — `AgeRamp` table at `createdAt ==
       now` (0); half the horizon (7.5 d → 0.5); exactly the horizon (15 d → 1); twice the horizon
       (30 d → still 1, not > 1); `createdAt` one hour after `now` (0, negative-Δt clamp, same rule
       as R1.2). Every fixture expressed as a **multiple of `AgeHorizonDays`**, never a literal day
@@ -872,11 +872,11 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       Stub: `const AgeWeight = 0.20`; `const AgeHorizonDays = 15`; `func AgeRamp(createdAt, now
       time.Time) float64 { return 0 }`.
       Requirement: R3.4.
-- [ ] **3a.4** Commit 2 (GREEN): implement `AgeRamp` — `ageDays := now.Sub(createdAt).Hours()/24`;
+- [x] **3a.4** Commit 2 (GREEN): implement `AgeRamp` — `ageDays := now.Sub(createdAt).Hours()/24`;
       `clamp(ageDays/AgeHorizonDays, 0, 1)`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.4; design §3.1 (owner rulings 9 and 10 — anti-starvation, horizon 15).
-- [ ] **3a.5** Commit 1 (RED): `priority_test.go` (continued) — `Candidate` and `Priority`'s full
+- [x] **3a.5** Commit 1 (RED): `priority_test.go` (continued) — `Candidate` and `Priority`'s full
       property set, all in one commit since P1–P6 are properties *of* `Priority`, not separate
       implementations: `priority ≥ e` for every input (property test); monotone non-decreasing in
       `e` at fixed context; homogeneous of degree 1 in `e` (scaling every candidate's weight by 0.5
@@ -900,14 +900,14 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       LastTouchedAt, CreatedAt time.Time; DueAt *time.Time }`; `const AdjacencyWeight = 0.25`;
       `func Priority(c Candidate, adjacency float64, now time.Time) float64 { return 0 }`.
       Requirement: R3.1, R3.2, R3.5.
-- [ ] **3a.6** Commit 2 (GREEN): implement `Priority` — `e = weight.Effective(...)`; `u =
+- [x] **3a.6** Commit 2 (GREEN): implement `Priority` — `e = weight.Effective(...)`; `u =
       UrgencyRamp(c.DueAt, now)`; `g = AgeRamp(c.CreatedAt, now)`; `a = adjacency`; `priority = e ×
       (1 + (UrgencyMax-1)·u) × (1 + AgeWeight·g + AdjacencyWeight·a)`. No term reads `c.Type`
       anywhere in the body. P1–P6 are consequences of this formula, not additional code.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.1, R3.2, R3.5; design §3.1 (ruling 1's multiplicative envelope; ruling 8's
       type removal).
-- [ ] **3a.7** doc 02 §3 amendment: rewrite line 76 from five terms to **four**, dropping `type`
+- [x] **3a.7** doc 02 §3 amendment: rewrite line 76 from five terms to **four**, dropping `type`
       (R3.2, ruling 8), as `priority = f(effective_weight, temporal_urgency(due_at), age,
       relation_to_active_focus) over the units the focus's type criterion already selected`. State
       the multiplicative envelope and why the shape is not a sum (R3.1). Define `age` as
@@ -919,7 +919,7 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       forever" — that framing is exactly what ruling 10 exists to correct.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR3 row).
-- [ ] **3a.8** §13: add `urgency_lead_days` (7, `focus.UrgencyLeadDays`, chosen — a separate row
+- [x] **3a.8** §13: add `urgency_lead_days` (7, `focus.UrgencyLeadDays`, chosen — a separate row
       from the existing `Event lead time`, also 7); `urgency_max` (3.0, `focus.UrgencyMax`,
       chosen); `age_weight` (0.20, `focus.AgeWeight`, chosen); `age_horizon_days` (**15**,
       `focus.AgeHorizonDays`, owner ruling 10); `focus_adjacency_weight` (0.25,
@@ -933,9 +933,17 @@ set travel separately from `UrgencyRamp` and `Priority`'s envelope.
       `design.md`.
       Verify: read the section.
       Requirement: design §5.1.
-- [ ] **3a.9** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
-      tests, `docs/02-cognitive-core.md`.
+- [x] **3a.9** Purity/coverage: `golangci-lint run`; `make cover`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
+      tests, `docs/02-cognitive-core.md`. **Measured**: `make check-all` green (lint 0 issues,
+      `go vet`, L1/L2 `-race -shuffle=on`, L3 real SQLite vault, schema-golden regeneration diff
+      clean, `internal/core` coverage 100% (435/435), seven-target cross-compile matrix, L4).
+      Diff is exactly `docs/02-cognitive-core.md`, `internal/core/focus/{priority,priority_test}.go`
+      — 3 files, 809 insertions / 1 deletion, roughly **double** the ~405-line estimate and well
+      over the 400-line ceiling — matching PR 2b's own overrun pattern (measured 806 lines against
+      a ~300-line estimate). Not self-labeled `size:exception`; flagged for the orchestrator to
+      decide (split per this section's own pre-drawn line — `AgeRamp` plus the P1-P6 property set
+      separated from `UrgencyRamp`/`Priority`'s envelope — vs `size:exception`).
 
 ---
 
