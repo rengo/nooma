@@ -57,3 +57,44 @@ func clamp(v, lo, hi float64) float64 {
 	}
 	return v
 }
+
+// AgeWeight is the maximum relative lift AgeRamp can contribute to
+// Priority — at most one fifth, so age breaks close contests and never
+// wins them (spec R3.5 P1/P2). Default 0.20 (doc 02 §13). Deliberately left
+// alone by owner ruling 10, which moved AgeHorizonDays instead precisely
+// because this constant sets P1's ceiling and P2's overturnable deficit —
+// moving it would change how much power age has, not just when it arrives.
+const AgeWeight = 0.20
+
+// AgeHorizonDays is the age, in days, at which AgeRamp saturates at 1.
+// Default 15 (owner ruling 10; it was 30 under ruling 9, and 30 was
+// rejected because at doc 02 §13's base decay rate (0.01/day) it left an
+// untouched unit's priority strictly decreasing across the entire horizon
+// — the anti-starvation promise it was chosen under was false as
+// specified. 15 puts the break-even decay rate (AgeWeight/AgeHorizonDays =
+// 0.01333/day) above the base, so the rise is genuine (spec R3.4, R3.5 P4).
+const AgeHorizonDays = 15
+
+// AgeRamp computes doc 02 §3's age term: ANTI-STARVATION, rising 0 -> 1
+// over AgeHorizonDays and never past it. Older ranks higher (spec R3.4,
+// design §3.1, owner rulings 9 and 10).
+//
+//	ageDays = now.Sub(createdAt).Hours() / 24
+//	AgeRamp = clamp(ageDays / AgeHorizonDays, 0, 1)
+//
+// The term reads created_at, never last_touched_at: last_touched_at is
+// reset by use and created_at never is, so their difference is exactly
+// "has this been revisited since capture". Reading last_touched_at here
+// would count decay's own signal a second time under a different name.
+//
+// createdAt after now — clock skew, a backdated import — clamps at 0, the
+// same negative-elapsed-time rule D1 states for Effective's Δt: a unit
+// that does not yet exist has waited no time.
+//
+// Every fixture this package's tests express AgeRamp's boundaries as a
+// multiple of AgeHorizonDays, never as a literal day count, so a future
+// recalibration of AgeHorizonDays needs no fixture edit (nooma-core hard
+// rule 4's discipline, paid off in a test rather than in production code).
+func AgeRamp(createdAt, now time.Time) float64 {
+	return 0
+}

@@ -42,3 +42,37 @@ func TestUrgencyRamp_Table(t *testing.T) {
 		})
 	}
 }
+
+// TestAgeRamp_Table proves spec R3.4's boundary table: the ramp is 0 at
+// creation, rises linearly to 1 at AgeHorizonDays and never grows past it,
+// and clamps at 0 for a createdAt after now (clock skew, a backdated
+// import). Every fixture is expressed as a multiple of AgeHorizonDays,
+// never as a literal day count, so a future recalibration of the horizon
+// needs no edit here.
+func TestAgeRamp_Table(t *testing.T) {
+	createdAt := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+
+	daysLater := func(days float64) time.Time {
+		return createdAt.Add(time.Duration(days * 24 * float64(time.Hour)))
+	}
+
+	cases := []struct {
+		name string
+		now  time.Time
+		want float64
+	}{
+		{"captured this instant", createdAt, 0},
+		{"half the horizon", daysLater(AgeHorizonDays / 2), 0.5},
+		{"exactly the horizon", daysLater(AgeHorizonDays), 1},
+		{"twice the horizon — does not grow past 1", daysLater(2 * AgeHorizonDays), 1},
+		{"createdAt one hour after now — negative-Δt clamp", daysLater(-1.0 / 24), 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := AgeRamp(createdAt, c.now)
+			if got != c.want {
+				t.Errorf("AgeRamp(createdAt, now) = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
