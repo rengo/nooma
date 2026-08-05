@@ -616,6 +616,65 @@ reachable component — a natural-sounding restriction, since the rest of the fu
 would silently change it and nothing would fail. Pairs with C20: whichever way that question is answered,
 the answer should be pinned by a test rather than left as the current behaviour by accident.
 
+### C22 — `Priority`'s `adjacency` entered the envelope unvalidated. Found by BOTH judges in round 1. **Closed.**
+
+`Priority(Candidate{Weight: 1.0, DecayRate: 0, LastTouchedAt: now, CreatedAt: now}, -1.0, now)` returned
+`0.75` against `e = 1.0` — a direct falsification of R3.1's `priority ≥ e`. `adjacency` traces to
+`relation.strength`, an LLM-judge output with no schema `CHECK`: the same threat model that made
+`weight.Effective` clamp `weight` and `decayRate` at its own door. `Effective` clamped; `Priority` did not.
+
+Closed by clamping `adjacency` to `[0,1]` at `Priority`'s entry point, per the C15/C16 rule that validation
+belongs at the door rather than mid-computation. The property test's generator had only ever sampled
+`[0,1]`, which is why the gap was invisible; it now sweeps `[-1.0, 2.0]`.
+
+### C23 — `priority ≥ e` was asserted without the finiteness qualifier R1.2 had already needed. **Closed.**
+
+`spec.md` R3.1 (`MUST: priority ≥ e for every input`) and doc 02's `priority ≥ effective_weight always`
+were both unqualified, while `weight.Effective` deliberately does not sanitize `NaN`/`±Inf` on read paths.
+A `NaN` `Weight` therefore made both statements false. R1.2 had already had to add exactly this qualifier
+after Judgment Day caught the identical wording one link earlier (row C-c) — the unqualified form was
+reintroduced anyway.
+
+Closed by qualifying the claim to finite `Weight` and `DecayRate` in all three places that state it.
+
+### C24 — `clamp` was not total under `NaN`, so the C22 fix did not close its own class. Found by BOTH judges in round 2. **Closed.**
+
+```go
+if v < lo { return lo }
+if v > hi { return hi }
+return v
+```
+
+Every IEEE 754 comparison against `NaN` is false, so `clamp(NaN, 0, 1)` returned `NaN` and
+`Priority(c, NaN, now)` returned `NaN` against a finite `e = 1.0`. `NaN >= e` is false for every `e`: not a
+bounded demotion, a collapse of the invariant.
+
+`internal/core/weight/spread.go` had already hit, root-caused and fixed this exact defect one PR earlier
+(C15) — its own comment records that an earlier revision wrongly claimed a `NaN` strength was "still caught
+downstream". `buildAdjacency` needed an explicit `math.IsNaN` before any comparison-based logic. The C22
+fix reused a bare-comparison helper without inheriting that lesson: **the third time in this milestone that
+a fix failed to generalise to its sibling producer.**
+
+Closed by making `clamp` itself total — `math.IsNaN(v)` guarded first, mapping to `lo` — rather than
+guarding only at `Priority`'s call site, so the helper is no longer a trap for `UrgencyRamp`, `AgeRamp`, or
+any future reuse. `lo` is the correct image because it is the neutral element of every term `clamp` feeds.
+
+### C25 — a spec requirement's freeze point was ambiguous, and the two judges read it opposite ways. **Closed by owner ruling.**
+
+The C23 fix annotated `spec.md` §10 with a new row `C-e` instead of rewriting R3.1, citing rows `C-c`/`C-d`
+and `openspec/README.md`'s "after that it is a historical record". Round 2 split: one judge verified the
+precedent and called it correctly applied; the other verified the same precedent and called it *misapplied*,
+because `C-c`/`C-d` annotate the already-merged PR #137 while `C-e` was being written about the unmerged
+branch under review. The empirical argument settled it: `C-e`'s own text was already false — it claimed to
+close that half of the gap "entirely", and C24 was still open — so the rule as applied would have required a
+`C-f` for the same requirement before the PR landed once.
+
+**Owner ruling: a requirement freezes when the PR that implements it merges and is verified — not before.**
+While the implementing branch is in review its text is still mutable and is corrected in place. Closed by
+rewriting R3.1 and deleting `C-e`; `C-c`/`C-d` stand, since PR #137 had merged. `openspec/README.md`'s
+Lifecycle wording is amended separately to state that granularity, which neither judge could find written
+down.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
