@@ -56,6 +56,14 @@ func AllKinds() []Kind {
 // Returns a fresh slice on every call — never an exported var — so a
 // caller mutating the result cannot corrupt the next call's answer (R4.1's
 // own MUST, and R4.2's package-level-var prohibition).
+//
+// Kind is a string-based type, not a closed enum the compiler can check —
+// a caller can construct a Kind value outside {KindTask, KindLoad} (the
+// same open-string shape unit.Type itself has). Types is total over that
+// wider domain: an unrecognized Kind selects nothing, an empty slice,
+// rather than a panic or an unspecified type set — the same "an unknown
+// input contributes nothing rather than crashing" posture this milestone
+// has taken throughout (clamp's NaN handling; scoreKey's NaN remap).
 func Types(k Kind) []unit.Type {
 	switch k {
 	case KindLoad:

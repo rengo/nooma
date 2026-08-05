@@ -43,6 +43,17 @@ func TestTypes(t *testing.T) {
 	})
 }
 
+// TestTypes_UnknownKind_ReturnsNoTypes proves Types is total over Kind's
+// wider string domain, not only its two declared members: an unrecognized
+// Kind selects no unit.Type at all, rather than panicking or falling
+// through to one of the two declared arms by accident.
+func TestTypes_UnknownKind_ReturnsNoTypes(t *testing.T) {
+	got := Types(Kind("unrecognized"))
+	if len(got) != 0 {
+		t.Errorf("Types(Kind(\"unrecognized\")) = %v, want an empty slice", got)
+	}
+}
+
 // TestAllKinds_IsExhaustive proves AllKinds enumerates exactly the Kind
 // vocabulary, in declaration order — the same contract unit.AllTypes and
 // unit.AllStatuses already keep.
@@ -96,6 +107,22 @@ func TestSelect_EmptyPreviousReducesToPlainTopN(t *testing.T) {
 	want := []string{"a", "b"}
 	if !reflect.DeepEqual(got.Members, want) {
 		t.Errorf("Select(KindTask, ranked, Selection{}, 0.05, 2).Members = %v, want %v", got.Members, want)
+	}
+}
+
+// TestSelect_NegativeSize_ReturnsEmptySelection proves Select is total
+// over a negative size rather than panicking on make([]string, n) with a
+// negative n. Nothing in spec R4.1 requires a caller ever pass a negative
+// size, but this package refuses to crash on a corrupt one, the same
+// posture it already takes toward every other value it cannot vouch for.
+func TestSelect_NegativeSize_ReturnsEmptySelection(t *testing.T) {
+	ranked := []Ranked{
+		{Candidate: Candidate{ID: "a", Type: unit.TypeTask}, Score: 1.0},
+	}
+
+	got := Select(KindTask, ranked, Selection{}, 0.05, -1)
+	if len(got.Members) != 0 {
+		t.Errorf("Select(..., -1).Members = %v, want empty, not a panic and not a positive-length slice", got.Members)
 	}
 }
 
