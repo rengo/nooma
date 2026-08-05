@@ -288,12 +288,27 @@ section rejects above.
 - Weight ≠ priority: weight is intrinsic and persisted; priority is contextual to the moment
   and computed. The formula lives in the application layer (typed, testable, heavily
   calibrated) — migrate it to SQL only if volume justifies it.
-- **Two focuses, one table**: task focus (top-N of actionable types) and load focus (top-N of
+- **Two focuses, one table**: task focus (top-N of actionable types — `task` and `event`; a
+  meeting in two hours is the strongest possible answer to "what should I be doing", and a
+  `list` is a container rather than a thing that can itself be done) and load focus (top-N of
   `mental_load`) are two queries with different criteria over `units`. A third focus = another
   query, not another schema.
 - **Anti-jitter hysteresis**: a challenger must beat the incumbent by more than
-  `hysteresis_margin` (default 0.05) to displace it from the focus. This requires remembering
-  the previous focus (in-process state or a state row — not a flag on units).
+  `hysteresis_margin` (default 0.05, **relative** — a challenger displaces only when it exceeds
+  `incumbent × (1 + hysteresis_margin)`, never an absolute band, because `priority` has no fixed
+  scale under the multiplicative envelope above: an absolute 0.05 would mean a 5% margin at
+  priority 1.0 and a 1.25% margin at priority 4.0, damping weakest exactly where the contested
+  values are largest) to displace it from the focus. `hysteresis_margin`'s stored column carries
+  no `CHECK` constraint, so a configured value outside `[0, +Inf)` — non-finite, or negative,
+  which would invert the margin's own direction — resolves to 0 (no anti-jitter protection that
+  round) rather than being trusted as-is (`internal/core/focus.ResolveMargin`, Judgment Day round
+  1). Note that this is a deliberate discontinuity, not a limit: an arbitrarily large **finite**
+  margin passes through and makes the incumbent effectively unseatable, while `+Inf` resolves to 0
+  and protects nothing. `+Inf` is not the end of that trend, it is a value with no valid
+  arithmetic — a `priority` of exactly 0 is reachable, and `0 × (1 + ∞)` is `NaN`, which would
+  make a corrupted incumbent permanent. This requires remembering the previous focus — in process, at the cost of one un-damped
+  transition immediately after every restart,
+  since there is no incumbent yet to compare a challenger against.
 
 ## 4. Relations
 
@@ -782,7 +797,7 @@ module):
 | Knob | Default |
 |---|---|
 | `weight_threshold` (archiving) | 0.5 |
-| `hysteresis_margin` (focus) | 0.05 |
+| `hysteresis_margin` (focus, relative; `internal/core/focus.DefaultHysteresisMargin` + `ResolveMargin`) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
 | `resurface_max_hops` (`internal/core/weight.ResurfaceMaxHops`) | 2 |
@@ -792,6 +807,7 @@ module):
 | `age_weight` (`internal/core/focus.AgeWeight`) | 0.20 |
 | `age_horizon_days` (`internal/core/focus.AgeHorizonDays`) | 15 — owner ruling 10; was 30 under ruling 9 |
 | `focus_adjacency_weight` (`internal/core/focus.AdjacencyWeight`) | 0.25 |
+| `focus_size` (`internal/core/focus.DefaultSize`) | 7 — a human attention bound, 7±2; coincides with `mental_load_threshold` below by coincidence, not by relation — no test ties them |
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |

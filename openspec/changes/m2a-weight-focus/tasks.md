@@ -702,6 +702,132 @@ natural outcome of a PK-keyed read, and say so where the candidate slice is buil
 duplicate id outright, or accept either order explicitly and say so. Choosing silently is what this entry
 exists to prevent.
 
+**Closed by PR 4a, evaluated honestly against what `Select` can actually do — no new code, the resolution is
+inherited.** `Select` is pure `internal/core`: it takes `[]Ranked` (already computed by `Rank` from the same
+`[]Candidate` slice C26's own resolution reasons about) and `Selection.Members` is built by exactly two
+operations on that slice — filtering to `Types(k)`'s type set, and sorting. Filtering is a subset operation:
+it can only remove entries, never introduce an id that was not already present. Sorting is a permutation: it
+reorders, it does not duplicate or drop by id. So `Select` has no operation capable of turning a
+`[]Candidate` with unique ids into a `Selection.Members` with a repeated one, and no operation capable of
+manufacturing a NEW duplicate from one that was not already there in `Rank`'s own input. The precondition for
+a duplicate `Members` entry is therefore identical to the precondition C26 already named for `Rank` — two
+`Candidate` values sharing an `id` in the slice a query built — not a new one `Select` introduces.
+
+Concretely: "guarantee uniqueness upstream" is genuinely **not in `Select`'s power** — it is a pure function
+with zero I/O, so it cannot itself query `units` or verify anything about where its input came from — but the
+guarantee C26 already traced to a PK-keyed read over `units.id` (a query returns at most one row per id)
+covers `Select`'s input by the same construction, unchanged, because that input is the identical
+`[]Candidate`-derived data, only filtered and reordered. **The enforcement point does not move a second link
+down the chain to `Select`; it stays exactly where C26 already put it** — the query that assembles the
+`[]Candidate` slice, still `m2c`'s, still not written.
+
+**Explicitly declined**: adding a defensive dedup pass inside `Select` that drops a second `Members` entry
+sharing an id with an earlier one. Given the argument above, such a guard could only ever fire if `Rank`'s own
+input already violated the PK-keyed-read assumption both C18 and C26 rest on — the identical "a branch no
+fixture can tell apart from its absence, because the precondition it guards against cannot occur given how
+the caller is required to build its input" shape `Resurface`'s own `refused` guard was found to be (C17),
+recorded there as **misleading** rather than merely redundant: a reader finds the guard and concludes
+duplicate-id safety depends on it, when it depends on the query instead. Declining it here is the same
+discipline C17 asks a later link to apply retroactively, applied prospectively instead of needing a sixth
+Judgment Day round to find it.
+
+**One assumption stated rather than left implicit, for `m2c` to verify rather than inherit blindly**: this
+argument assumes `Select`'s own first real caller passes it a `ranked []Ranked` built directly from one
+PK-keyed `[]Candidate` query, the same shape C18 and C26 both assumed. If `m2c` instead assembles `ranked` by
+concatenating results from more than one query (for example, unioning a task-focus candidate set with a
+load-focus one before calling `Select` twice on the combined slice), the PK-per-query guarantee no longer
+transfers automatically — two separate queries can each return a row for the same `id` with no relational
+constraint preventing it. Nothing in `m2a` requires `m2c` to build `ranked` that way, and nothing here
+predicts it will — this is named so whoever writes `m2c`'s `Select` caller confirms the single-query shape
+holds rather than assuming C26's chain of reasoning survived unexamined.
+
+### C27 — task 4a.3 asked PR 4a to "add I19's row" to `docs/06-harness.md` §4, but the row already existed before `m2a` began.
+
+Verified by `git log --all --oneline -p -S "I19" -- docs/06-harness.md`: the row (`| I19 | A challenger must
+beat the incumbent by more than \`hysteresis_margin\` | §3 |`) was already present in `03c99fd`, the original
+foundational-documentation commit, months before any `m2a` PR — the harness's own §4 table is introduced
+there as "Initial extraction", a forward-looking enumeration of every hard invariant the project intends to
+make executable eventually, not a table that only gains a row once its implementing PR lands. This is the
+opposite situation from **I24** (task 2a.7's own harness row addition): `git log -S "I24"` shows that row
+genuinely absent until PR 2a's `fee223f` added it — I24 really was net-new to `m2a`.
+
+Task 4a.3's premise — modeled on I24's own precedent — does not hold for I19. Read literally, the task asks
+for an edit this PR cannot legitimately make: the row's text already matches what this document would have
+written, verbatim, so "adding" it would either be a no-op with a claimed diff that does not exist, or an
+edit invented to manufacture a diff where none is warranted. Recorded here, rather than silently marking the
+task done with no corresponding commit or silently skipping it with no explanation, per this project's own
+discipline (C1, C2, C9) of disclosing rather than quietly resolving a task whose premise turns out to be
+false once checked against the repository's actual history.
+
+**Resolution**: task 4a.3 is satisfied as originally intended — I19's row exists in `docs/06-harness.md` §4
+with the exact text `design.md`/`spec.md` require — with **zero lines changed** in that file by this PR. The
+`i19_hysteresis_margin_test.go` conformance test (task 4a.1) is the genuine, net-new artifact this PR
+contributes toward I19; the harness row it is meant to be paired with had simply already been written down,
+five links early, when the project's initial invariant catalogue was drafted.
+
+### C28 — C7's "one value-pinning test per calibratable constant" convention did not transfer to `internal/core/focus`. Found by judge B in Judgment Day round 1; judge A saw the same fact and dismissed it as intentional.
+
+Judgment Day round 1 mutated `focus.DefaultSize` 7 -> 8 and the entire suite stayed green: every fixture in
+`select_test.go` uses fewer than 7 candidates, so truncation at `size` never engages and the calibrated
+value is never exercised by any shape test. Judge B called this the same gap C7 already recorded and closed
+for `weight.ReviveGain`/`weight.WeightCeiling` — a shape test that re-derives its expectation from the live
+constant is structurally incapable of noticing the constant itself moved (C7's own resolution: "keep the
+shape tests re-deriving from constants, and add one value-pinning test per calibratable constant whose
+expectation is an independent literal, so shape and calibration are guarded separately"). `m2b` already
+followed that convention for `ResurfaceMaxHops`/`ResurfaceAttenuation` (`resurface_test.go`'s own comment
+names C7 explicitly); `m2a`'s own `internal/core/focus` package — introduced across links 3a/4a of this same
+change — never did.
+
+A full sweep of `internal/core/focus` against every constant `docs/02-cognitive-core.md` §13 lists
+(`hysteresis_margin`, `urgency_lead_days`, `urgency_max`, `age_weight`, `age_horizon_days`,
+`focus_adjacency_weight`, `focus_size`) found **zero** existing `*_IsPinnedToItsCalibratedValue` tests in the
+package, verified by mutating each constant one at a time and running the full package suite:
+
+| Constant | Existing coverage before this fix | Caught by mutation? |
+|---|---|---|
+| `DefaultSize` (`focus_size`) | none | **No** — confirms judge B's finding |
+| `DefaultHysteresisMargin` (`hysteresis_margin`) | `TestResolveMargin_NilFallsBackToDefault_NonNilPassesThrough` re-derives its own expectation from the constant | **No** |
+| `UrgencyLeadDays` (`urgency_lead_days`) | `TestUrgencyRamp_Table`'s "due halfway through the lead window" case uses a fixed day-count fixture (`3.5`), not one derived from the constant | Yes, incidentally |
+| `UrgencyMax` (`urgency_max`) | `TestPriority_MaximumAmplificationIdentity` self-checks its own derived `want` against the literal `4.35` | Yes, incidentally |
+| `AgeWeight` (`age_weight`) | same self-check, plus `TestPriority_P2_OverturnableDeficitCrossoverRatio` and `TestPriority_P3_FloorCannotClimbOutOfArchiveThreshold` | Yes, incidentally |
+| `AgeHorizonDays` (`age_horizon_days`) | `TestPriority_P4P5_RisesToPeakAtHorizonThenDeclines`'s fixed-lambda cases | Yes, incidentally |
+| `AdjacencyWeight` (`focus_adjacency_weight`) | `TestPriority_AdjacencyClampedToUnitInterval`'s own pinned-bound self-check, plus the amplification self-check | Yes, incidentally |
+
+Five of the seven constants happen to be caught today, but not by a dedicated, independent-literal
+value-pinning test in the C7 shape — by self-consistency assertions embedded inside other tests (e.g. "this
+test's own expected amplification = %v, want 4.35"), which discriminate a single-constant mutation only
+because no compensating pair of constants happens to preserve the composite result. That is coincidental
+defense, not the deliberate guard C7 asked for.
+
+**Closed** (round-1 fix batch): added one `*_IsPinnedToItsCalibratedValue` test per constant, matching
+`boost_test.go`'s naming and shape exactly — `TestDefaultHysteresisMargin_IsPinnedToItsCalibratedValue`
+(`hysteresis_test.go`), `TestDefaultSize_IsPinnedToItsCalibratedValue` (`select_test.go`), and
+`TestUrgencyLeadDays_IsPinnedToItsCalibratedValue` / `TestUrgencyMax_IsPinnedToItsCalibratedValue` /
+`TestAgeWeight_IsPinnedToItsCalibratedValue` / `TestAgeHorizonDays_IsPinnedToItsCalibratedValue` /
+`TestAdjacencyWeight_IsPinnedToItsCalibratedValue` (`priority_test.go`). Mutation-verified: each of the seven
+mutants above now fails its own new dedicated test (in addition to whatever else already caught five of
+them); reverted every mutant after, tree clean.
+
+### C29 — `Displaces` validates nothing itself; a caller that skips `ResolveMargin` reopens the round-1 trap. Handoff to `m2c`.
+
+The round-1 CRITICAL was closed at `ResolveMargin`, which is the door `config.hysteresis_margin` crosses
+into core through — the right place, per C22/C24's rule that validation belongs at the entry point.
+`Displaces` itself still takes `margin` as a plain parameter and performs no validation, and its doc
+comment says so rather than claiming a guarantee it does not have. Judge A reproduced the consequence on
+demand: `Displaces(0.01, math.NaN(), -1)` — the raw `-1`, never passed through `ResolveMargin` — still
+returns `false`, the exact permanent-occupant trap.
+
+This is not a defect today: `ResolveMargin` is the only path from the config column into core, `rg` finds
+no other reader, and `m2c`'s wiring does not exist yet. It is recorded because the moment that wiring is
+written, "call `ResolveMargin` first" stops being obvious and becomes an unenforced convention — the same
+shape as C7's untransferred convention two entries up, and as the `clamp` lesson that did not carry from
+`weight/spread.go` to `focus/priority.go` one link earlier (C24).
+
+**What `m2c` must do**: resolve the margin exactly once, at the boundary where the config row is read, and
+pass the resolved value down — never the raw `*float64`. If instead it turns out convenient to call
+`Displaces` from more than one site, the cheaper answer is to move the validation inside `Displaces` and
+delete `ResolveMargin`'s separate step, rather than to rely on every call site remembering.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
@@ -1081,7 +1207,7 @@ ceiling (`docs/06-harness.md` §7): the ~400 estimate is a total, and on links 1
 implementation-plus-docs share ran between 16 % and 32 % of the total. Measure 4a's two counts
 separately before treating it as a crossing at all.
 
-- [ ] **4a.1** Commit 1 (RED): `internal/core/focus/hysteresis_test.go` (L1) **and**
+- [x] **4a.1** Commit 1 (RED): `internal/core/focus/hysteresis_test.go` (L1) **and**
       `test/conformance/i19_hysteresis_margin_test.go` (L2, named e.g.
       `TestI19_ChallengerMustExceedRelativeMargin` per `nooma-testing` hard rule 6 — a conformance
       test names the invariant it verifies in its identifier), written together since both prove the
@@ -1094,16 +1220,21 @@ separately before treating it as a crossing at all.
       Stub: `const DefaultHysteresisMargin = 0.05`; `func ResolveMargin(configured *float64) float64
       { return 0 }`; `func Displaces(challenger, incumbent, margin float64) bool { return false }`.
       Requirement: R4.3, R4.4.
-- [ ] **4a.2** Commit 2 (GREEN): implement `Displaces` — `challenger > incumbent*(1+margin)`,
+- [x] **4a.2** Commit 2 (GREEN): implement `Displaces` — `challenger > incumbent*(1+margin)`,
       strict; implement `ResolveMargin` — `relation.Resolve`'s shape verbatim
       (`internal/core/relation/thresholds.go:26-38`), `nil` → `DefaultHysteresisMargin`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.3, R4.4; design D4 (surviving half), D8.
-- [ ] **4a.3** `docs/06-harness.md` §4: add I19's row, in the same PR as its test (task 4a.1), per
-      `nooma-testing` execution step 2.
-      Verify: read the section.
+- [x] **4a.3** `docs/06-harness.md` §4: add I19's row, in the same PR as its test (task 4a.1), per
+      `nooma-testing` execution step 2. **Satisfied with zero lines changed — see C27**: the row
+      already existed, verbatim, since the original foundational documentation commit `03c99fd`,
+      months before `m2a` began. Unlike I24 (task 2a.7, genuinely net-new to `m2a`), I19 was
+      already part of the harness's own forward-looking "Initial extraction" — this task's
+      genuine, net-new contribution is `i19_hysteresis_margin_test.go` (task 4a.1), not a doc edit.
+      Verify: read the section; `git log --all -p -S "I19" -- docs/06-harness.md` confirms no
+      commit besides `03c99fd` ever touched that row.
       Requirement: design §8 (I19 row, PR4).
-- [ ] **4a.4** Commit 1 (RED): `internal/core/focus/select_test.go` — `Types(KindLoad)` is exactly
+- [x] **4a.4** Commit 1 (RED): `internal/core/focus/select_test.go` — `Types(KindLoad)` is exactly
       `{mental_load}`; `Types(KindTask)` is exactly `{task, event}`; `Types` returns a fresh slice
       each call (mutating the result does not affect the next call); `AllKinds()` is exhaustive over
       the `Kind` constants; a mixed-type fixture — `Select(KindTask, …)` returns only `task`/`event`
@@ -1124,29 +1255,35 @@ separately before treating it as a crossing at all.
       Select(k Kind, ranked []Ranked, previous Selection, margin float64, size int) Selection {
       return Selection{} }`.
       Requirement: R4.1, R4.5, R4.7, R4.8.
-- [ ] **4a.5** Commit 2 (GREEN): implement `Types`/`AllKinds`/`Select` as one adjusted sort — `Score
+- [x] **4a.5** Commit 2 (GREEN): implement `Types`/`AllKinds`/`Select` as one adjusted sort — `Score
       × (1 + margin)` for incumbents, `Score` for everyone else, then top `size`; empty `previous` ⇒
       plain top-N; an absent incumbent is dropped with no contest. `Kind`'s values are deliberately
       `"task"`/`"load"`, never `"focus"` (R4.2's absolute rule, verified structurally in 4b).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.1, R4.5, R4.7, R4.8; design D7, D8.
-- [ ] **4a.6** doc 02 §3 amendment (first half of owner ruling round 2 #5's sentence — the second
+- [x] **4a.6** doc 02 §3 amendment (first half of owner ruling round 2 #5's sentence — the second
       half lands in 4b alongside `AdjacencyStrengths`): define "actionable types" as `{task, event}`
       (R4.1, flagged as this change's scoping choice and an owner-review item); state hysteresis is
       **relative** (R4.3); state that the previous focus is remembered in process, at the cost of
       one un-damped transition per restart (the `Select`/`Displaces` half of the sentence).
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR4 row, split across 4a/4b).
-- [ ] **4a.7** §13: add `focus_size` (7, `focus.DefaultSize`, chosen — a human attention bound,
+- [x] **4a.7** §13: add `focus_size` (7, `focus.DefaultSize`, chosen — a human attention bound,
       7±2) row; amend the existing `hysteresis_margin` row in place to `hysteresis_margin (focus,
       relative)` — default unchanged at 0.05, gains a Go home (`focus.DefaultHysteresisMargin` +
       `ResolveMargin`). Row count: 32 → 33, one amendment.
       Verify: read the section.
       Requirement: design §5.1, §5.2.
-- [ ] **4a.8** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
+- [x] **4a.8** Purity/coverage: `golangci-lint run`; `make cover`. 0 lint issues;
+      `internal/core` coverage 100% (491/491) after closing two defensive-branch gaps
+      `make cover`'s underlying profile surfaced (`Types`'s default arm, `Select`'s negative-size
+      guard), each verified by mutation before being trusted.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
       tests, `test/conformance/i19_hysteresis_margin_test.go`, `docs/02-cognitive-core.md`,
-      `docs/06-harness.md`.
+      `docs/06-harness.md`. **`make check-all` fully green** (lint, vet, L1/L2 `-race -shuffle=on`,
+      L3 integration, schema-golden clean, coverage 100%, seven-target cross-compile, L4 `-tags
+      e2e`). The diff does **not** touch `docs/06-harness.md` at all (C27) — every other path
+      matches.
 
 ---
 
