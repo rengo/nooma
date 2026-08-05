@@ -932,9 +932,11 @@ verified by either form of this sweep, corrected or not; it happens to hold toda
 `Candidate` were read field-by-field above and neither carries one), but that is inspection, not a
 mechanized check this task's citation claimed to be.
 
-**What would actually verify it**: a structural, `go/ast`-based conformance check — the same
-discipline `i01_focus_never_persisted_test.go`'s `localStructFieldTypes`/`localNamedTypes` machinery
-already applies to `unit.Status` — that parses every struct type declared in
+**What would actually verify it**: a structural, type-checked conformance check — the same
+discipline `i01_focus_never_persisted_test.go`'s `typeCanYieldWithoutConversion` (a go/types
+resolved-type walk; this replaced the go/ast-text `localStructFieldTypes`/`localNamedTypes`
+machinery this paragraph originally named, in Judgment Day round 3 — see C33) already applies to
+`unit.Status` — that parses every struct type declared in
 `internal/core/weight`/`internal/core/focus` and asserts no field, of any name, has type
 `time.Time` or `*time.Time`, except through a named field that is documented data about the unit
 (`LastTouchedAt`, `CreatedAt`, `DueAt` today) rather than the instant the decision runs. A field-name
@@ -1041,6 +1043,117 @@ stdlib export-data load), inside `test/conformance`'s existing ~1.7–1.9s total
 L1/L2 `-race -shuffle=on` all packages, L3 (real SQLite vault, schema-golden regen diff clean),
 `internal/core` coverage 100% (509/509, floor 90%), seven-target cross-compile matrix OK, L4 `-tags
 e2e` OK.
+
+---
+
+### C34 — Judgment Day round 4, both judges independently: a bare, uninstantiated generic type parameter escaped round 3's own type-checked rewrite. **Fixed — a `*types.TypeParam` case was missing from the switch, not the approach.**
+
+Round 3 replaced the go/ast-text version of I01's "no exported function returns or embeds a
+`unit.Status`" check with a type-checked walk over `go/types`' resolved type graph
+(`typeCanYieldWithoutConversion`) and closed every shape it probed. Round 4 found the one node kind
+that switch never dispatched on: `*types.TypeParam` — the type go/types gives a bare, uninstantiated
+type parameter in an exported GENERIC function's own declared signature (there is no call site to
+inspect at this point, only the declaration). `func GenericFuncConstrained[T StatusConstraint]() T {
+var z T; return z }`, where `StatusConstraint` is `interface{ unit.Status }`, returned a real
+`unit.Status` through an exported function with zero conversion syntax, and the pre-round-4 check said
+nothing about it — reproduced live by both judges. Judge B additionally confirmed a **union**
+constraint (`interface{ unit.Status | int }`) escapes the same way; judge A confirmed it escapes one
+level deeper too (`func F[T StatusConstraint]() []T`). This is a gap in the switch, not in the method:
+every other shape both judges threw at the resolved-type walk (interface embedding, map keys,
+alias-of-instantiation, recursive generics, cross-package unexported fields, chan-of-chan,
+array-of-arrays) was handled correctly, and round 3's own ruling to replace go/ast-text matching with a
+type-checked pass is not reopened by this finding.
+
+**Severity, as both judges recorded it**: `internal/core/focus`, `internal/core/unit`, and
+`internal/core/weight` declare zero generic functions today, so nothing in this change exploits the
+gap. `internal/core/classify` already declares three (`joinVocabulary[T ~string]`, `decodeEnum[T
+~string]`, `assignEnum[T ~string]`), and `unit.Status` is exactly the string-kind vocabulary type those
+constraints admit — the pattern is established one package over, which is why this was fixed now
+rather than deferred.
+
+**Fix**: added a `*types.TypeParam` case to `typeCanYieldWithoutConversion` that resolves through the
+type parameter's own CONSTRAINT type set — every term of the constraint interface, via a new
+`typeParamConstraintTerms` helper that flattens union terms (`A | B`) and embedded interfaces into a
+flat list — rather than through the type parameter itself, since a type parameter carries no concrete
+type until instantiated and this check has no call site to look at. An unconstrained parameter
+(`[T any]`) has no declared terms and correctly resolves to `false` (see the `any` limit below). The
+pre-existing `visited` cycle guard (already marking a type visited before recursing into it) needed no
+change to cover a constraint that names its own type parameter again — proven by probe, not merely
+argued: `type SelfRef[T any] interface{ ~[]T }; func F[T SelfRef[T]]() T` neither hangs nor
+false-negatives on an unrelated shape.
+
+**The `~string` approximation decision, made and stated (not left implicit)**: a `~string`-style term's
+type set is "`string`, plus every OTHER defined type whose own underlying type is `string`" — and
+`unit.Status` genuinely IS one of those (confirmed: `unit.Status`'s own underlying type is `string`,
+the same fact `TestI01_FocusIsNeverAPersistedStatus`'s own first subtest already pins). So
+`func F[T ~string]() T` can be called as `F[unit.Status]()`, extracting a real `unit.Status` with zero
+conversion — a genuine bypass, not a theoretical one, and **flagged** on that basis: the comparison is
+against `banned`'s own UNDERLYING type for a tilde term (`types.Identical(banned.Underlying(),
+term.Type())`), not against `banned` itself, since a plain identity check would silently miss this
+exact case (`string` is never `types.Identical` to `unit.Status`, even though `unit.Status` is a member
+of `~string`'s type set).
+
+**Full probe matrix, as measured** (every shape probed live: five directly against a throwaway
+`internal/core/focus/zz_probe_round4.go` — the exact reproduction plus its nested/union/any
+neighbors — run against `TestI01_FocusIsNeverAPersistedStatus`, then deleted; three more,
+map-value/pointer/chan nesting, in a second throwaway `zz_probe_round4b.go`, same discipline; the rest
+against a standalone `go/types` harness outside the repo, mirroring `typeCanYieldWithoutConversion`
+exactly; `git status --short internal/core/focus` confirmed clean after each):
+
+*Caught, real bypasses:* bare type parameter as the direct result (single-type constraint); `[]T`;
+`map[string]T`; `*T`; `chan T`; single-type constraint (`interface{ unit.Status }`); union constraint
+(`interface{ unit.Status | int }`); approximation constraint (`~string` — decided above, DOES count).
+
+*Correctly excluded, no false positive:* unconstrained `[T any]` (the `any` limit, stated below); a
+constraint that references its own type parameter (`SelfRef[T]` above) — proves termination, reports
+`false`, does not hang; a generic METHOD on a generic struct (`func (g G[T]) Get() T` where `T
+StatusConstraint`) — Go permits this (methods cannot declare their OWN type parameters, but a generic
+receiver's type parameter carries over), and it is correctly invisible to the exported-function loop,
+for the same structural reason a plain method already was: package `Scope()` only ever holds top-level
+declarations, never methods. `type StatusDefined unit.Status`, `[T any]` used elsewhere, and unrelated
+existing generics all remain unflagged — confirmed, no regression.
+
+**The `any` limit, decided and written down, not left for a fifth round to "discover"**:
+`any`/`interface{}` erases the static type by construction — `func F() any { var z unit.Status; return
+z }` is invisible to ANY static type-graph walk, this one or any other, because extracting the real
+value back out requires an explicit type assertion (`f().(unit.Status)`), the same class of explicit
+operation this check already excludes for `type StatusDefined unit.Status`. This is a limit of the
+approach, not a defect in it, and is now stated with its reasoning on
+`TestI01_FocusIsNeverAPersistedStatus`'s own doc comment. Banning `any`/`interface{}` as an exported
+result type in `internal/core/focus` outright would close it as a separate, cheap structural
+assertion — flagged as worth considering, but NOT built here: it is a real, if narrow, API restriction
+that deserves its own decision, not a rider on this fix.
+
+**Two exclusions that were already true but only implicit, now written down on the same doc comment**:
+a function PARAMETER carrying `unit.Status` is not a violation (the structural subtest only ever
+inspects `sig.Results()`, never `sig.Params()` — a parameter is what the caller supplies, not what the
+function's result yields), and a method on a named struct type is not one either (package `Scope()`
+never holds methods, so the exported-function loop never sees them, generic receiver or not). Both
+judges reasoned to these independently in round 4; they are not new decisions, only newly-recorded
+ones.
+
+**Where**:
+- `test/conformance/i01_focus_never_persisted_test.go` — `typeCanYieldWithoutConversion` gains the
+  `*types.TypeParam` case and its `typeParamConstraintTerms` helper; the file's own doc comment gains
+  the round-4 history entry and a new "three boundaries this check accepts on purpose" section (the
+  `any` limit, the parameter exclusion, the method exclusion).
+- `testdata/i01_typecheck_probe/fixture.go` — eight new pinned shapes: `ReturnsBareTypeParam`,
+  `ReturnsNestedTypeParam`, `ReturnsUnionTypeParam`, `ReturnsApproximationTypeParam`,
+  `ReturnsUnconstrainedTypeParam`, `ReturnsSelfReferencingTypeParam` (round 4's own findings),
+  `ReturnsMapKeyIsStatus` (a map-KEY case, unpinned before this round though already handled
+  correctly), and `TakesStatusParamOnly` (pins the parameter exclusion above against a future
+  well-meaning "fix").
+- `openspec/changes/m2a-weight-focus/tasks.md` — this entry, plus the diff-scope correction recorded
+  where task 4b's own close-out list is (adds `openspec/changes/m2a-weight-focus/spec.md`, omitted
+  since R3.8's own correction) and the stale-symbol correction in C32's own "what would actually verify
+  it" paragraph (pointed at `localStructFieldTypes`/`localNamedTypes`, the go/ast-text machinery C33
+  deleted; now points at `typeCanYieldWithoutConversion`).
+
+**Runtime cost after this fix**: unchanged in character — the added case is one more dispatch arm over
+an already-loaded, already-type-checked package; no new import, no new `go/importer` load.
+
+**Verification**: `make check-all` fully green after this fix (see this session's own
+`sdd/m2a-weight-focus/apply-progress` record for the exact gate output).
 
 ---
 
@@ -1594,9 +1707,11 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       seven-target cross-compile matrix OK, L4 `-tags e2e` OK). Diff scope confirmed: exactly
       `internal/core/focus/adjacency.go`, `internal/core/focus/adjacency_test.go`,
       `test/conformance/focus_margin_ddl_test.go`, `test/conformance/i01_focus_never_persisted_test.go`,
-      `docs/02-cognitive-core.md`, plus this file's own bookkeeping. `rg` confirms zero `ports`,
-      `store`, or `brain` imports and zero I/O imports in either package; no code in this change
-      calls `decision_log`.
+      `docs/02-cognitive-core.md`, `openspec/changes/m2a-weight-focus/spec.md` (R3.8's own
+      correction, C-series predecessor to C32/C33 — legitimately part of this PR's diff, omitted
+      from this list until Judgment Day round 4 (C34) caught the omission), plus this file's own
+      bookkeeping. `rg` confirms zero `ports`, `store`, or `brain` imports and zero I/O imports in
+      either package; no code in this change calls `decision_log`.
 
 ---
 
