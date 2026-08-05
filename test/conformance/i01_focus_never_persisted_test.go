@@ -2,11 +2,16 @@
 package conformance
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 )
 
@@ -21,7 +26,7 @@ import (
 // (spec R7.1, design D8), per the ordering internal/core/unit/doc.go used
 // to anchor before this test's promotion removed that paragraph.
 //
-// Two independent checks, mirroring docs/06-harness.md §4's own framing
+// Three independent checks, mirroring docs/06-harness.md §4's own framing
 // ("a test that fails if the literal 'focus' appears as a status value in
 // the tree"):
 //
@@ -33,10 +38,19 @@ import (
 //     of go/ast to reason about a status literal it does not yet know the
 //     shape of. Go source only: migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this scan (design D1).
+//  3. Structural, added PR 4b once a package literally named focus exists
+//     with a real corpus for the first time (spec R4.2, R4.6; design D9 —
+//     "I01 made a property of the API"): no exported function in
+//     internal/core/focus returns or embeds a unit.Status;
+//     focus.Selection.Members is []string, unit ids, never units
+//     themselves; and internal/core/focus declares no package-level var.
+//     Not a missing-symbol red step — by this point in the chain the
+//     structural guarantees already hold (4a and 4b.2 ship the correct
+//     shapes) — this is the permanent proof, not a step toward one.
 //
-// Both checks apply design D10's non-empty-corpus guard: assert a non-empty
-// corpus was found before asserting anything about its content, so a moved
-// or renamed directory cannot turn this test vacuously green.
+// All three checks apply design D10's non-empty-corpus guard: assert a
+// non-empty corpus was found before asserting anything about its content,
+// so a moved or renamed directory cannot turn this test vacuously green.
 func TestI01_FocusIsNeverAPersistedStatus(t *testing.T) {
 	t.Run("Status is a string-kind vocabulary type", func(t *testing.T) {
 		// Referenced directly (not only through AllStatuses' return type) so
@@ -84,6 +98,108 @@ func TestI01_FocusIsNeverAPersistedStatus(t *testing.T) {
 			t.Fatal("scanned zero .go files under internal/ and cmd/ — D10's guard: nothing to check yet")
 		}
 	})
+
+	t.Run("focus package structural guarantees", func(t *testing.T) {
+		repoRoot := repoRootFromCaller(t)
+		focusDir := filepath.Join(repoRoot, "internal", "core", "focus")
+
+		t.Run("no exported function returns or embeds a unit.Status", func(t *testing.T) {
+			names, resultTypes := exportedFuncResultTypes(t, focusDir)
+			if len(names) == 0 {
+				t.Fatal("internal/core/focus has zero exported functions — nothing to check (D10's non-empty-corpus guard)")
+			}
+
+			const banned = "unit.Status"
+			for i, name := range names {
+				for _, resultType := range resultTypes[i] {
+					if strings.Contains(resultType, banned) {
+						t.Errorf(
+							"%s returns %q, which contains %q — focus is a computed view "+
+								"(docs/02-cognitive-core.md §3), never a persisted unit.Status (I01, R4.2)",
+							name, resultType, banned,
+						)
+					}
+				}
+			}
+		})
+
+		t.Run("Selection.Members is []string", func(t *testing.T) {
+			var zero focus.Selection
+			got := reflect.TypeOf(zero.Members)
+			want := reflect.TypeOf([]string(nil))
+			if got != want {
+				t.Errorf(
+					"focus.Selection.Members has type %v, want %v — Members is unit ids, "+
+						"never units themselves, since a []unit.Unit would be a persistable "+
+						"shape and would put I01 one careless repository call away (R4.1, R4.2)",
+					got, want,
+				)
+			}
+		})
+
+		t.Run("no package-level var", func(t *testing.T) {
+			names := focusPackageLevelVarNames(t, focusDir)
+			if len(names) != 0 {
+				t.Errorf(
+					"internal/core/focus declares package-level var(s) %v — R4.2 and R4.6 "+
+						"forbid package-level mutable state: the previous focus is a parameter, "+
+						"never held in a var, sync.Map, or init-time state",
+					names,
+				)
+			}
+		})
+	})
+}
+
+// focusPackageLevelVarNames returns the name of every package-level `var`
+// declared in dir's non-test .go files (R4.2, R4.6): internal/core/focus is
+// pure and stateless, so it must declare none — golangci-lint alone would
+// not catch this, since the stdlib's own sync package is unrestricted, so
+// this structural scan is what makes it a property rather than a review
+// habit (spec R4.6's own "Verified by").
+func focusPackageLevelVarNames(t *testing.T, dir string) []string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", dir, err)
+	}
+
+	var names []string
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				names = append(names, identNames(vs.Names)...)
+			}
+		}
+	}
+	return names
+}
+
+// identNames returns the Name of every *ast.Ident in idents, in order.
+func identNames(idents []*ast.Ident) []string {
+	names := make([]string, len(idents))
+	for i, ident := range idents {
+		names[i] = ident.Name
+	}
+	return names
 }
 
 // isFocusStatusLiteral reports whether line carries both the literal
