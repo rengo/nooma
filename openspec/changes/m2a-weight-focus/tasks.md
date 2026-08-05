@@ -765,6 +765,49 @@ with the exact text `design.md`/`spec.md` require — with **zero lines changed*
 contributes toward I19; the harness row it is meant to be paired with had simply already been written down,
 five links early, when the project's initial invariant catalogue was drafted.
 
+### C28 — C7's "one value-pinning test per calibratable constant" convention did not transfer to `internal/core/focus`. Found by judge B in Judgment Day round 1; judge A saw the same fact and dismissed it as intentional.
+
+Judgment Day round 1 mutated `focus.DefaultSize` 7 -> 8 and the entire suite stayed green: every fixture in
+`select_test.go` uses fewer than 7 candidates, so truncation at `size` never engages and the calibrated
+value is never exercised by any shape test. Judge B called this the same gap C7 already recorded and closed
+for `weight.ReviveGain`/`weight.WeightCeiling` — a shape test that re-derives its expectation from the live
+constant is structurally incapable of noticing the constant itself moved (C7's own resolution: "keep the
+shape tests re-deriving from constants, and add one value-pinning test per calibratable constant whose
+expectation is an independent literal, so shape and calibration are guarded separately"). `m2b` already
+followed that convention for `ResurfaceMaxHops`/`ResurfaceAttenuation` (`resurface_test.go`'s own comment
+names C7 explicitly); `m2a`'s own `internal/core/focus` package — introduced across links 3a/4a of this same
+change — never did.
+
+A full sweep of `internal/core/focus` against every constant `docs/02-cognitive-core.md` §13 lists
+(`hysteresis_margin`, `urgency_lead_days`, `urgency_max`, `age_weight`, `age_horizon_days`,
+`focus_adjacency_weight`, `focus_size`) found **zero** existing `*_IsPinnedToItsCalibratedValue` tests in the
+package, verified by mutating each constant one at a time and running the full package suite:
+
+| Constant | Existing coverage before this fix | Caught by mutation? |
+|---|---|---|
+| `DefaultSize` (`focus_size`) | none | **No** — confirms judge B's finding |
+| `DefaultHysteresisMargin` (`hysteresis_margin`) | `TestResolveMargin_NilFallsBackToDefault_NonNilPassesThrough` re-derives its own expectation from the constant | **No** |
+| `UrgencyLeadDays` (`urgency_lead_days`) | `TestUrgencyRamp_Table`'s "due halfway through the lead window" case uses a fixed day-count fixture (`3.5`), not one derived from the constant | Yes, incidentally |
+| `UrgencyMax` (`urgency_max`) | `TestPriority_MaximumAmplificationIdentity` self-checks its own derived `want` against the literal `4.35` | Yes, incidentally |
+| `AgeWeight` (`age_weight`) | same self-check, plus `TestPriority_P2_OverturnableDeficitCrossoverRatio` and `TestPriority_P3_FloorCannotClimbOutOfArchiveThreshold` | Yes, incidentally |
+| `AgeHorizonDays` (`age_horizon_days`) | `TestPriority_P4P5_RisesToPeakAtHorizonThenDeclines`'s fixed-lambda cases | Yes, incidentally |
+| `AdjacencyWeight` (`focus_adjacency_weight`) | `TestPriority_AdjacencyClampedToUnitInterval`'s own pinned-bound self-check, plus the amplification self-check | Yes, incidentally |
+
+Five of the seven constants happen to be caught today, but not by a dedicated, independent-literal
+value-pinning test in the C7 shape — by self-consistency assertions embedded inside other tests (e.g. "this
+test's own expected amplification = %v, want 4.35"), which discriminate a single-constant mutation only
+because no compensating pair of constants happens to preserve the composite result. That is coincidental
+defense, not the deliberate guard C7 asked for.
+
+**Closed** (round-1 fix batch): added one `*_IsPinnedToItsCalibratedValue` test per constant, matching
+`boost_test.go`'s naming and shape exactly — `TestDefaultHysteresisMargin_IsPinnedToItsCalibratedValue`
+(`hysteresis_test.go`), `TestDefaultSize_IsPinnedToItsCalibratedValue` (`select_test.go`), and
+`TestUrgencyLeadDays_IsPinnedToItsCalibratedValue` / `TestUrgencyMax_IsPinnedToItsCalibratedValue` /
+`TestAgeWeight_IsPinnedToItsCalibratedValue` / `TestAgeHorizonDays_IsPinnedToItsCalibratedValue` /
+`TestAdjacencyWeight_IsPinnedToItsCalibratedValue` (`priority_test.go`). Mutation-verified: each of the seven
+mutants above now fails its own new dedicated test (in addition to whatever else already caught five of
+them); reverted every mutant after, tree clean.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)

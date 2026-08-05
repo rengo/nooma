@@ -8,6 +8,25 @@ import (
 	"github.com/rengo/nooma/internal/core/unit"
 )
 
+// TestDefaultSize_IsPinnedToItsCalibratedValue guards DefaultSize against a
+// wrong VALUE, independent of every shape test in this file — the same
+// defence boost_test.go's TestReviveGain_IsPinnedToItsCalibratedValue and
+// TestWeightCeiling_IsPinnedToItsCalibratedValue built for ReviveGain and
+// WeightCeiling (C7, openspec/changes/m2a-weight-focus/tasks.md). Judgment
+// Day round 1 mutated DefaultSize 7 -> 8 and the entire suite stayed
+// green: every fixture in this file uses fewer than 7 candidates, so
+// truncation at size never engages and the calibrated value is never
+// exercised by any shape test (C28, tasks.md, records the sweep this test
+// closes). nooma-core hard rule 4 and doc 02 §13 name focus_size as
+// calibratable: recalibrating it means updating both the §13 row and this
+// literal in the same PR.
+func TestDefaultSize_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 7 // docs/02-cognitive-core.md §13, row "focus_size"
+	if DefaultSize != want {
+		t.Errorf("DefaultSize = %v, want %v — update docs/02-cognitive-core.md §13's focus_size row in the same change", DefaultSize, want)
+	}
+}
+
 // TestTypes proves spec R4.1's vocabulary: KindLoad selects exactly
 // mental_load, KindTask selects exactly task and event, and every call
 // returns a fresh slice — mutating one call's result must never affect the

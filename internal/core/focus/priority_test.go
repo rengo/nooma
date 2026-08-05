@@ -12,6 +12,66 @@ import (
 	"github.com/rengo/nooma/internal/core/weight"
 )
 
+// TestUrgencyLeadDays_IsPinnedToItsCalibratedValue guards UrgencyLeadDays
+// against a wrong VALUE, independent of every shape test in this file — the
+// same defence boost_test.go's TestReviveGain_IsPinnedToItsCalibratedValue
+// and TestWeightCeiling_IsPinnedToItsCalibratedValue built for ReviveGain
+// and WeightCeiling (C7, openspec/changes/m2a-weight-focus/tasks.md). C7's
+// convention did not transfer to this package on its own: none of this
+// file's UrgencyRamp/AgeRamp/Priority tests carry a dedicated
+// *_IsPinnedToItsCalibratedValue test for any of this link's five
+// constants, even though some of them are incidentally caught by other
+// assertions today (C28, tasks.md, records the sweep and what it found).
+// nooma-core hard rule 4 and doc 02 §13 name urgency_lead_days as
+// calibratable: recalibrating it means updating both the §13 row and this
+// literal in the same PR.
+func TestUrgencyLeadDays_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 7 // docs/02-cognitive-core.md §13, row "urgency_lead_days"
+	if UrgencyLeadDays != want {
+		t.Errorf("UrgencyLeadDays = %v, want %v — update docs/02-cognitive-core.md §13's urgency_lead_days row in the same change", UrgencyLeadDays, want)
+	}
+}
+
+// TestUrgencyMax_IsPinnedToItsCalibratedValue is
+// TestUrgencyLeadDays_IsPinnedToItsCalibratedValue's sibling for UrgencyMax
+// (C28).
+func TestUrgencyMax_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 3.0 // docs/02-cognitive-core.md §13, row "urgency_max"
+	if UrgencyMax != want {
+		t.Errorf("UrgencyMax = %v, want %v — update docs/02-cognitive-core.md §13's urgency_max row in the same change", UrgencyMax, want)
+	}
+}
+
+// TestAgeWeight_IsPinnedToItsCalibratedValue is
+// TestUrgencyLeadDays_IsPinnedToItsCalibratedValue's sibling for AgeWeight
+// (C28).
+func TestAgeWeight_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 0.20 // docs/02-cognitive-core.md §13, row "age_weight"
+	if AgeWeight != want {
+		t.Errorf("AgeWeight = %v, want %v — update docs/02-cognitive-core.md §13's age_weight row in the same change", AgeWeight, want)
+	}
+}
+
+// TestAgeHorizonDays_IsPinnedToItsCalibratedValue is
+// TestUrgencyLeadDays_IsPinnedToItsCalibratedValue's sibling for
+// AgeHorizonDays (C28).
+func TestAgeHorizonDays_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 15 // docs/02-cognitive-core.md §13, row "age_horizon_days"
+	if AgeHorizonDays != want {
+		t.Errorf("AgeHorizonDays = %v, want %v — update docs/02-cognitive-core.md §13's age_horizon_days row in the same change", AgeHorizonDays, want)
+	}
+}
+
+// TestAdjacencyWeight_IsPinnedToItsCalibratedValue is
+// TestUrgencyLeadDays_IsPinnedToItsCalibratedValue's sibling for
+// AdjacencyWeight (C28).
+func TestAdjacencyWeight_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 0.25 // docs/02-cognitive-core.md §13, row "focus_adjacency_weight"
+	if AdjacencyWeight != want {
+		t.Errorf("AdjacencyWeight = %v, want %v — update docs/02-cognitive-core.md §13's focus_adjacency_weight row in the same change", AdjacencyWeight, want)
+	}
+}
+
 // dueIn returns a *time.Time exactly d days after now — a small helper so
 // every UrgencyRamp fixture below states its intent (days until due) rather
 // than a raw time.Duration.

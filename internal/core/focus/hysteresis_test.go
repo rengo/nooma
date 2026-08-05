@@ -5,6 +5,29 @@ import (
 	"testing"
 )
 
+// TestDefaultHysteresisMargin_IsPinnedToItsCalibratedValue guards
+// DefaultHysteresisMargin against a wrong VALUE, independent of every shape
+// test in this file — the same defence boost_test.go's
+// TestReviveGain_IsPinnedToItsCalibratedValue and
+// TestWeightCeiling_IsPinnedToItsCalibratedValue built for ReviveGain and
+// WeightCeiling (C7, openspec/changes/m2a-weight-focus/tasks.md).
+// TestResolveMargin_NilFallsBackToDefault_NonNilPassesThrough above already
+// exercises DefaultHysteresisMargin's nil-fallback role, but it compares
+// ResolveMargin(nil) against the constant itself, not against an
+// independent literal — a mutated DefaultHysteresisMargin flows into that
+// assertion's "want" the same way it flows into ResolveMargin's own
+// output, so it cannot notice the constant moved (C28, tasks.md, records
+// the sweep this test closes: C7's convention did not transfer to this
+// package on its own). nooma-core hard rule 4 and doc 02 §13 name
+// hysteresis_margin as calibratable: recalibrating it means updating both
+// the §13 row and this literal in the same PR.
+func TestDefaultHysteresisMargin_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 0.05 // docs/02-cognitive-core.md §13, row "hysteresis_margin"
+	if DefaultHysteresisMargin != want {
+		t.Errorf("DefaultHysteresisMargin = %v, want %v — update docs/02-cognitive-core.md §13's hysteresis_margin row in the same change", DefaultHysteresisMargin, want)
+	}
+}
+
 // TestDisplaces_RelativeMarginBoundaryTable proves spec R4.3's boundary,
 // verbatim: equality never displaces, exactly at the margin never
 // displaces, and any amount beyond the margin does. All four cases must be
