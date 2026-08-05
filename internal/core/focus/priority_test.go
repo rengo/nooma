@@ -138,6 +138,21 @@ func TestPriority_NeverBelowEffectiveWeight_Property(t *testing.T) {
 		// and Judgment Day round 1 found this generator previously only ever
 		// produced [0,1], leaving the out-of-domain case entirely untested.
 		adjacency := float64(splitmix64(&state)%3_000_001)/1_000_000.0 - 1.0
+		// One in eight iterations, override adjacency with a non-finite
+		// value instead: Judgment Day round 1's out-of-domain sweep above
+		// only ever produced finite values, so it never exercised the case
+		// round 2 found — NaN escapes clamp's two-branch comparison
+		// entirely (both judges, independently). ±Inf is included too, to
+		// keep pinning the already-correct saturation behaviour under the
+		// same generator that now also covers NaN.
+		switch splitmix64(&state) % 8 {
+		case 0:
+			adjacency = math.NaN()
+		case 1:
+			adjacency = math.Inf(1)
+		case 2:
+			adjacency = math.Inf(-1)
+		}
 
 		var dueAt *time.Time
 		if splitmix64(&state)%2 == 0 {
@@ -157,7 +172,13 @@ func TestPriority_NeverBelowEffectiveWeight_Property(t *testing.T) {
 
 		e := weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
 		got := Priority(c, adjacency, now)
-		if got < e {
+		// !(got >= e), not got < e: every IEEE 754 comparison against NaN
+		// is false, so got < e is silently false when got is NaN and this
+		// property would pass right over the exact defect it exists to
+		// catch (Judgment Day round 2, both judges independently).
+		// !(got >= e) is true both for a genuine deficit and for a NaN
+		// got, since NaN >= e is also false.
+		if !(got >= e) {
 			t.Fatalf("iteration %d: Priority(%+v, %v, now) = %v, want >= effective weight %v", i, c, adjacency, got, e)
 		}
 	}
@@ -186,8 +207,21 @@ func TestPriority_AdjacencyClampedToUnitInterval(t *testing.T) {
 	}
 	e := weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
 
-	atLowerBound := Priority(c, 0.0, now)
-	atUpperBound := Priority(c, 1.0, now)
+	// Pinned against literals, not against Priority(c, 0.0, now) /
+	// Priority(c, 1.0, now): a computed oracle routes both the actual and
+	// the expected value through the same clamp call, so a mutant that
+	// swaps clamp's bounds (clamp(adjacency, 1, 0)) stays invisible to this
+	// test — both sides invert together (Judgment Day round 2, judge A,
+	// confirmed by applying the mutant: this test stayed green while 7
+	// others caught it). With e = 1.0 (Weight 1.0, DecayRate 0,
+	// LastTouchedAt == now == CreatedAt, no DueAt so u = g = 0), the
+	// envelope reduces to e * (1 + AdjacencyWeight*a): 1.0 at a=0's lower
+	// bound, 1.0*(1+0.25) = 1.25 at a=1's upper bound.
+	const atLowerBound = 1.0
+	const atUpperBound = 1.25
+	if math.Abs(atUpperBound-(1+AdjacencyWeight)) > 1e-9 {
+		t.Fatalf("this test's own pinned upper bound = %v, want 1+AdjacencyWeight = %v — AdjacencyWeight changed without this test being updated", atUpperBound, 1+AdjacencyWeight)
+	}
 
 	cases := []struct {
 		name      string
@@ -198,6 +232,21 @@ func TestPriority_AdjacencyClampedToUnitInterval(t *testing.T) {
 		{"deeply negative adjacency clamps to the same result as 0", -5.0, atLowerBound},
 		{"adjacency above 1 clamps to the same result as 1", 2.0, atUpperBound},
 		{"adjacency far above 1 clamps to the same result as 1", 1e6, atUpperBound},
+		{"-Inf adjacency clamps to the same result as 0", math.Inf(-1), atLowerBound},
+		{"+Inf adjacency clamps to the same result as 1", math.Inf(1), atUpperBound},
+		// NaN is not "out of range toward one side or the other" the way
+		// ±Inf is — every IEEE 754 comparison against NaN is false, so the
+		// two-branch clamp(v, lo, hi) (`v < lo`, `v > hi`) lets NaN fall
+		// through both branches unclamped, and clamp(NaN, 0, 1) returned
+		// NaN (Judgment Day round 2, both judges independently):
+		// Priority(Candidate{Weight: 1.0, DecayRate: 0, LastTouchedAt: now,
+		// CreatedAt: now}, math.NaN(), now) returned NaN against a fully
+		// finite e = 1.0, and NaN >= e is false, collapsing the very MUST
+		// this test exists to prove. clamp now guards NaN explicitly and
+		// maps it to lo — the conservative "no adjacency" reading, since
+		// adjacency is a promotion-only signal and a corrupt one should
+		// promote nothing (see clamp's own doc comment).
+		{"NaN adjacency clamps to the same result as 0 (no promotion)", math.NaN(), atLowerBound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

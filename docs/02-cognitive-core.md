@@ -230,10 +230,15 @@ rather than **substitute** for it: every factor is ≥ 1, so `priority ≥ effec
 **finite** `weight` and `decay_rate` — the same restriction §2 already states for
 `effective_weight` itself, since `priority` computes it as its first step and inherits whatever it
 returns — context can promote a unit and can never demote one, and the ranking is monotone in
-`effective_weight` at fixed context. A deadline is allowed to dominate — it multiplies, with
-unbounded relative leverage up to `urgency_max` — while age and adjacency are nudges whose
-combined contribution is capped at `1 + age_weight + focus_adjacency_weight` no matter how many
-of them fire, because a due date is a hard external constraint and the other two are not.
+`effective_weight` at fixed context. `relation_to_active_focus` carries no equivalent finiteness
+caveat: it is saturated to `[0, 1]` unconditionally before it enters the envelope, over its own
+entire domain (out-of-range, `NaN`, and `±Infinity` alike), so no value it can take ever breaks
+this guarantee on its own — a corrupt or out-of-domain adjacency value contributes no promotion
+at all rather than an unbounded or undefined one. A deadline is allowed to dominate — it
+multiplies, with unbounded relative leverage up to `urgency_max` — while age and adjacency are
+nudges whose combined contribution is capped at `1 + age_weight + focus_adjacency_weight` no
+matter how many of them fire, because a due date is a hard external constraint and the other two
+are not.
 
 `age` means **ANTI-STARVATION**: it rises `0 → 1` over `age_horizon_days` (15) and stays at 1
 beyond it — **the older a unit, the higher it ranks on this term** — reading `created_at`, never

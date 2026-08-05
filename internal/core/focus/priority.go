@@ -1,6 +1,7 @@
 package focus
 
 import (
+	"math"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
@@ -49,11 +50,48 @@ func UrgencyRamp(dueAt *time.Time, now time.Time) float64 {
 	return clamp((UrgencyLeadDays-d)/UrgencyLeadDays, 0, 1)
 }
 
-// clamp restricts v to [lo, hi]. Every elapsed-time computation in this
-// package saturates rather than inverting or overshooting — the same rule
-// design D1 states once for weight.Effective's negative-Δt clamp and
-// design §3.1 restates here for AgeRamp and UrgencyRamp.
+// clamp restricts v to [lo, hi], total over every float64 input including
+// NaN. Every elapsed-time computation in this package saturates rather
+// than inverting or overshooting — the same rule design D1 states once
+// for weight.Effective's negative-Δt clamp and design §3.1 restates here
+// for AgeRamp and UrgencyRamp.
+//
+// v == NaN maps to lo, not hi or v itself. Every IEEE 754 comparison
+// against NaN is false, so the two ordinary comparisons below (`v < lo`,
+// `v > hi`) both silently evaluate to false for NaN, and a naive
+// two-branch clamp lets it fall through unclamped: clamp(NaN, 0, 1)
+// returned NaN (Judgment Day round 2, both judges, independently).
+// Priority's own adjacency clamp — adjacency = clamp(adjacency, 0, 1) —
+// then multiplied that NaN straight into the envelope, producing a NaN
+// priority against a fully finite e, collapsing the one MUST this
+// function exists to guarantee (priority >= e). ±Inf is unaffected by
+// this guard: it already compares correctly against lo/hi and saturates
+// as intended (+Inf > hi, -Inf < lo), so only NaN needed the extra check
+// — the same "not a real number this formula can reason about" boundary
+// internal/core/weight/spread.go's nonFinite and buildAdjacency draw
+// between NaN and ±Inf (C15, C19).
+//
+// The fix lands in clamp itself, not only at Priority's call site: clamp
+// is a shared helper — UrgencyRamp and AgeRamp call it too — so guarding
+// one caller would leave every other current and future caller exposed
+// to the same trap. UrgencyRamp and AgeRamp can in fact never pass NaN
+// here: both divide a time.Duration.Hours() value, and time.Duration is
+// a bounded int64 difference of two time.Time values, so the division is
+// always finite — confirmed by inspection, not assumed, and this change
+// is a no-op for both of them.
+//
+// lo is the conservative reading for the one caller where this can
+// actually happen — Priority's adjacency clamp: adjacency is a
+// promotion-only signal (Priority's own doc comment below), so a
+// corrupt, non-finite adjacency should contribute no promotion at all,
+// the same "refuse to reason about it, contribute nothing" posture
+// spread.go's buildAdjacency already takes toward a NaN edge strength
+// (C15) rather than guessing hi and amplifying an input core cannot
+// vouch for.
 func clamp(v, lo, hi float64) float64 {
+	if math.IsNaN(v) {
+		return lo
+	}
 	if v < lo {
 		return lo
 	}
@@ -143,7 +181,12 @@ type Candidate struct {
 // Every factor is >= 1, so priority >= e for every FINITE Weight and
 // DecayRate (weight.Effective's own postcondition, spec R1.2 — e itself is
 // not sanitized against NaN or ±Inf, and Priority inherits that boundary
-// unchanged) once adjacency is clamped to [0,1] above: context can
+// unchanged), for any adjacency whatsoever: adjacency is clamped to [0,1]
+// above by clamp, which is total over every float64 adjacency can be,
+// including NaN and ±Inf (clamp's own doc comment) — this MUST does not
+// carry an unstated "finite adjacency" qualifier the way it carries a
+// stated finite-Weight/DecayRate one, because clamp's own guard already
+// closes that gap before the envelope ever runs. Context can
 // promote a unit and can never demote one. Demotion is what decay is for;
 // a modifier that could demote would make the ranking depend on the
 // absence of a signal, the hardest kind of ordering to explain in the
@@ -177,6 +220,15 @@ type Candidate struct {
 // neutralizes a negative strength — this clamp is symmetric: adjacency
 // multiplies directly into this envelope with no equivalent comparison to
 // fall back on, so both bounds are load-bearing here.
+//
+// A second, structurally different gap surfaced later (Judgment Day round
+// 2, both judges, independently): a NaN adjacency is neither below 0 nor
+// above 1 under IEEE 754 comparison, so it passed through the two-branch
+// clamp this line used to call unclamped, and Priority(the same
+// Candidate above, math.NaN(), now) returned NaN against e = 1.0. This was
+// not a gap in this call site's own logic — it was a gap in clamp itself,
+// closed there (clamp's own doc comment) rather than with a second guard
+// duplicated at every clamp call site in this package.
 func Priority(c Candidate, adjacency float64, now time.Time) float64 {
 	adjacency = clamp(adjacency, 0, 1)
 
