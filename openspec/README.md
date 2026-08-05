@@ -27,3 +27,9 @@ and the artifact is wrong.
 A change directory stays until the work merges and is verified. After that it is a historical
 record: it is not edited to match what shipped — the shipped truth lives in `docs/` and in the
 code.
+
+This freezes per requirement, not per change directory. A change can ship across several PRs; a
+requirement freezes when **the PR that implements it** merges and is verified, not when the whole
+change directory finally closes. While the implementing branch is still under review, that
+requirement's text is mutable and gets corrected in place. Once its PR has merged, further
+corrections are recorded as annotations — not rewrites — alongside the frozen text.
