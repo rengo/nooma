@@ -138,8 +138,8 @@ func TestPriority_NeverBelowEffectiveWeight_Property(t *testing.T) {
 		// and Judgment Day round 1 found this generator previously only ever
 		// produced [0,1], leaving the out-of-domain case entirely untested.
 		adjacency := float64(splitmix64(&state)%3_000_001)/1_000_000.0 - 1.0
-		// One in eight iterations, override adjacency with a non-finite
-		// value instead: Judgment Day round 1's out-of-domain sweep above
+		// Three iterations in eight — one per non-finite value — override
+		// adjacency instead: Judgment Day round 1's out-of-domain sweep above
 		// only ever produced finite values, so it never exercised the case
 		// round 2 found — NaN escapes clamp's two-branch comparison
 		// entirely (both judges, independently). ±Inf is included too, to
