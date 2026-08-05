@@ -34,6 +34,16 @@ type Ranked struct {
 //     an ordinary earlier-or-later time.Time would;
 //  3. lexicographic by ID.
 //
+// This tie-break is a total order over cs only when every Candidate.ID is
+// unique. Rank neither validates nor deduplicates ID: two Candidates
+// sharing an ID that also tie on Score and DueAt are indistinguishable at
+// all three levels above, and their relative order then falls through to
+// sort.Slice's own unstable order over the input slice — not decided by
+// Rank, and not pinned to either Candidate's original position. See C26
+// (openspec/changes/m2a-weight-focus/tasks.md), handed to Select — Rank's
+// first caller — to close: guarantee unique ids upstream, reject a
+// duplicate outright, or accept either order explicitly.
+//
 // Score can be NaN: Priority returns NaN whenever weight.Effective's own
 // Weight or DecayRate takes one of the four NaN-producing shapes decay.go's
 // own doc comment enumerates — not only a literal NaN input, since a

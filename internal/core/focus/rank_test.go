@@ -205,3 +205,37 @@ func TestRank_NonFiniteScore_SortsLastWithoutBreakingTotalOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestRank_DuplicateID_BothSurviveOrderUnpinned pins Rank's actual, current
+// behaviour for the one input shape docs/02-cognitive-core.md §3 and Rank's
+// own doc comment now both say is outside the tie-break's total-order
+// guarantee: two distinct Candidate values sharing an ID, tied on Score and
+// DueAt (both nil here). Rank has no dedup or validation step, so both
+// entries survive — this guards against a future refactor silently dropping
+// one the way a map-keyed rewrite (last write wins) would, the identical
+// shape weight.Resurface's own Neighbourhood.States build was found to risk
+// (C18). It asserts only that both survive and both carry the right ID and
+// Score, never which one sorts first: sort.Slice makes no such promise once
+// every comparator level ties, and pinning a specific order here would pin
+// an implementation accident, not a guarantee (C26).
+func TestRank_DuplicateID_BothSurviveOrderUnpinned(t *testing.T) {
+	now := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+
+	dupA := Candidate{ID: "dup", Weight: 1.0, DecayRate: 0, LastTouchedAt: now, CreatedAt: now}
+	dupB := Candidate{ID: "dup", Weight: 1.0, DecayRate: 0, LastTouchedAt: now, CreatedAt: now}
+
+	for _, cs := range [][]Candidate{{dupA, dupB}, {dupB, dupA}} {
+		got := Rank(cs, nil, now)
+		if len(got) != 2 {
+			t.Fatalf("Rank() returned %d Ranked for 2 duplicate-ID Candidates, want 2 (nothing dropped)", len(got))
+		}
+		for _, r := range got {
+			if r.Candidate.ID != "dup" {
+				t.Errorf("Rank()[...].Candidate.ID = %q, want %q", r.Candidate.ID, "dup")
+			}
+			if r.Score != 1.0 {
+				t.Errorf("Rank()[...].Score = %v, want exactly 1.0", r.Score)
+			}
+		}
+	}
+}

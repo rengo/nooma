@@ -216,7 +216,12 @@ priorities are exactly equal, not only the type question above. A unit with no d
 after every due unit at an equal priority, however far away that due date actually is, because
 `due_at` is compared only between two units that both carry one; when both are due-less, `id`
 decides. Priority first, then this sequence, makes the ranking a genuine total order over the
-whole pool — no two distinct units are ever left in an unspecified relative order.
+whole pool **when every unit's `id` is unique** — the ordinary case, since `id` is `units.id`'s
+primary key and a query drawn from the table returns at most one row per `id`. Two units sharing
+an `id` is a caller error the ranking has no way to detect from the data alone: `id` is the last
+level this sequence defines, so two entries with the same `id` are indistinguishable once
+priority and `due_at` also tie, and their relative order is then left unspecified rather than
+resolved by a fourth level that does not exist.
 
 `f` is a **multiplicative envelope over `effective_weight`**, not a weighted sum of normalized
 terms:

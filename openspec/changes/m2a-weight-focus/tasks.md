@@ -675,6 +675,33 @@ rewriting R3.1 and deleting `C-e`; `C-c`/`C-d` stand, since PR #137 had merged. 
 Lifecycle wording is amended separately to state that granularity, which neither judge could find written
 down.
 
+### C26 — `Rank`'s total-order claim was false for a duplicate `Candidate.ID`. Found by BOTH judges, independently, in round 1. **Closed by owner ruling.**
+
+Doc 02 §3 (added `e4100da`) said priority first, then the three-level tie-break, "makes the ranking a
+genuine total order over the whole pool — no two distinct units are ever left in an unspecified relative
+order." `Rank` never validates or deduplicates `Candidate.ID`, and `sort.Slice` is not stable. Two candidates
+sharing an `ID` and tying on `Score` and `DueAt` are indistinguishable at all three tie-break levels, so
+their relative order follows input-slice position instead. Verified by both judges independently:
+
+```go
+Rank([]Candidate{dupA, dupB}, nil, now) → [dupA, dupB]
+Rank([]Candidate{dupB, dupA}, nil, now) → [dupB, dupA]
+```
+
+**Owner ruling: narrow the claim rather than fix the code at this layer.** `id` is `units.id`'s primary key,
+so a query drawn from the table returns at most one row per `id` — the identical shape `Resurface`'s
+`Neighbourhood.States` was found to have (C18), closed the same way: the guarantee holds over the input this
+function's real caller can actually produce, and the caller error is named rather than silently designed
+around. Closed by rewriting doc 02 §3 and `Rank`'s own doc comment to state the total order holds only when
+every `Candidate.ID` is unique, and by pinning current behaviour with a test asserting what actually happens
+— both entries survive, nothing is dropped, only their mutual order is unpinned — rather than a specific
+order `sort.Slice` never promised.
+
+**What PR 4a must do**: it writes `Rank`'s first caller (`Select`). Either guarantee unique ids upstream (the
+natural outcome of a PK-keyed read, and say so where the candidate slice is built), or have `Select` reject a
+duplicate id outright, or accept either order explicitly and say so. Choosing silently is what this entry
+exists to prevent.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
