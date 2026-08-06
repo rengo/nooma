@@ -482,6 +482,15 @@ the first.
 | `focus_adjacency_weight` (priority) | 0.25 | new row, chosen |
 | `hysteresis_margin` (focus) | 0.05 | **existing row, amended** — gains "(relative)" per D8 and ruling 6 |
 
+> **Annotated, not rewritten (archive-time correction — see §10's C-c).** Task 3a.8
+> (`openspec/changes/m2a-weight-focus/tasks.md`) found that this table — cited elsewhere in this
+> chain's task list as "design §5.1" — had at one point carried a PR attribution for
+> `focus_adjacency_weight` that pointed at PR 4, disagreeing with §5's package-layout tree and
+> §8.1's PR split, both of which place `AdjacencyWeight` in PR 3 / 3a (`priority.go`, where
+> `Priority` consumes it directly). The package-layout/§8.1 reading is what shipped. This document
+> is historical record as of PR 3a's merge (`openspec/README.md`'s freeze rule), so the correction
+> is recorded here rather than silently applied.
+
 ### 3.2 The revive boost — F2
 
 #### The shape: asymptotic approach to a ceiling, from the *decayed* value
@@ -1466,6 +1475,7 @@ owns the signatures, and both are recorded so they are not mistaken for silent d
 |---|---|---|
 | C-a | `spec.md` had `ThermalZone`, **partial**, with `superseded`/`incomplete` deliberately excluded from every test on the grounds that doc 02 is silent; D2 had `ZoneOf`, **total**, both mapping to `ZoneCold`, tested over the full `AllStatuses` × 2 matrix | D2's. A deliberately untested arm is an uncovered statement against a ≥ 90 % floor (`nooma-testing` hard rule 5), and a partial function whose contract says "do not call it this way" is a rule somebody remembers rather than a property the type system holds. The Cold mapping is a **choice** and is recorded in the §2 amendment |
 | C-b | Identifier drift throughout: `ThermalZone`/`ZoneOf`, `ActionableTypes()`/`Types(Kind)`, `Displaces(incumbent, challenger, …)`/`Displaces(challenger, incumbent, …)`, `resurface_hop_limit`/`resurface_max_hops`, `temporal_urgency_horizon_days`/`urgency_lead_days`, `revive_boost_amount`/`revive_gain` | This document's names throughout. `spec.md` now states every requirement against the identifiers declared here, so `sdd-tasks` reads one vocabulary rather than two |
+| C-c | **§3.1's "§13 rows F1 adds" table — cited by this chain's `tasks.md` (2a.5, 2b.5, 3a.8) as "design §5.1" — carried a PR attribution for `focus_adjacency_weight` naming PR 4, disagreeing with §5's package-layout tree (`priority.go PR 3 … AdjacencyWeight`) and §8.1's PR split (`3a … the five priority constants … the five §13 rows`).** Found by task 3a.8 during PR 3a's own implementation, and confirmed still present at archive time (`sdd-verify`, `sdd/m2a-weight-focus/verify-report`) | **§5's package-layout / §8.1's reading, and this is the record.** `AdjacencyWeight` is declared where `Priority` needs it — in `priority.go`, PR 3 / 3a — not in `adjacency.go` (PR 4 / 4b), which declares the function `AdjacencyStrengths` instead. The two are easy to conflate by name and sit a few lines apart in §5's tree; the shipped code follows the package-layout/§8.1 reading, confirmed directly against `internal/core/focus/priority.go`. Cosmetic — no shipped behaviour depends on the stale cell — and left as historical record per this project's annotation convention rather than rewritten. See §3.1's own inline note for the same annotation at the table itself |
 
 **Purity re-verified after every edit above.** Neither package imports anything outside `$gostd` +
 `internal/core/**`; `math`, `time` and `sort` are the only stdlib imports and all three are inside
