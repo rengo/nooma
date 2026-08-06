@@ -1216,6 +1216,71 @@ zzStatusConstraint includes the term github.com/rengo/nooma/internal/core/unit.S
 (Judgment Day round 4/5)
 ```
 
+### C36 — Judgment Day round 6 found a seventh shape, and the owner stopped the series instead of fixing it. **Recorded, not fixed, by ruling.**
+
+Judge A demonstrated a further escape in `appendConstraintTerm`: it does not call `types.Unalias`
+before its type-switch, so a constraint embedded through a **type alias** is recorded as one opaque
+term and never walked.
+
+```go
+type zzBaseConstraint interface{ unit.Status }
+type ZZAliasOfBase = zzBaseConstraint          // alias
+type ZZEmbedsAlias interface{ ZZAliasOfBase }  // embeds the alias
+func ZZReturnsEmbedsAlias[T ZZEmbedsAlias]() T { var z T; return z }   // NOT flagged
+```
+
+On Go 1.26.4 an aliased embed materialises as `*types.Alias`, not `*types.Named`, so the `*types.Named`
+arm never fires. The fix would be one `types.Unalias` call, symmetric with the one `f9c17ca` already
+added to `typeCanYieldWithoutConversion` one level up. **It is not being made.**
+
+**Owner ruling — severity is weighted by reachability.** This check has now been re-opened six times.
+Rounds 1–3 were genuine: the AST-text method could not close the class, and replacing it with a
+type-checked pass was correct. Rounds 4, 5 and 6 each found one more dispatch arm — `*types.TypeParam`,
+a named embedded constraint, and now an aliased one — and **not one of them is reachable by any code in
+this repository.** `internal/core/focus`, `unit` and `weight` declare zero generic functions, the check
+inspects only exported top-level functions, and both judges confirmed both facts in every round.
+
+The measured cost of that: `i01_focus_never_persisted_test.go` grew from 95 lines to 1,045, plus a
+303-line fixture, across six review rounds — against the 145 lines of `adjacency.go`, which is the
+feature this PR actually ships and which needed no rounds at all. The test guarding an inherited
+invariant is now roughly nine times the production code of the link that touched it.
+
+**The rule this establishes, binding for `m2b` onward:** a gap in a *test's own* coverage that no code
+in the tree can reach is a recorded conflict, not a merge blocker. Two Judgment Day rounds per PR is the
+default ceiling; a third is justified only by a finding reproducible against production code, not against
+a hypothetical contributor. Rounds that audit a guard's completeness against itself have sharply
+diminishing returns, and this series measured them.
+
+**Judge B found an eighth shape in the same round, and it is the more interesting one** because it is an
+inconsistency inside the check rather than a missing node kind. The `*types.TypeParam` case's **tilde**
+branch does one flat `types.Identical(banned.Underlying(), term.Type())` check and never recurses into
+the term's own structure, while the **non-tilde** branch recurses fully. So `~[]unit.Status` and
+`~map[string]unit.Status` escape, even though the concrete `[]unit.Status` and `map[string]unit.Status`
+are caught and pinned — reachability through a container counts everywhere else in this file. Judge B
+confirmed the asymmetry by contrast: the non-tilde generic-container equivalent
+(`interface{ GenericMapTerm[unit.Status] }`) is caught correctly, so the gap is the tilde shortcut
+specifically, not container recursion generally.
+
+**What closes C36**: `types.Unalias` at the top of `appendConstraintTerm`, and the tilde branch recursing
+the way its non-tilde sibling already does. Both are small and symmetric with code that already exists;
+add a fixture pin per shape. Worth doing the first time anything in `internal/core/focus` declares an
+exported generic function — until then neither gap can be exercised.
+
+Four smaller observations from the same round, none blocking:
+
+- The type-parameter failure message says a matched term is included "directly" even when the reachable
+  `unit.Status` sits one struct-field hop inside it (judge A).
+- Nothing pins the *content* of that message — only its boolean (judge A).
+- The doc comment's stated discriminator, `NumEmbeddeds() >= 1`, is imprecise: `interface{ any }` has
+  one embed and still yields zero terms. The code is right (it checks `len(terms) == 0`); only the prose
+  overstates (judge B).
+- The `visited` guard's recorded rationale — defence against a cycle `go/types` rejects at compile time —
+  is correct but incomplete. It also deduplicates a **diamond**: the same named constraint reached by two
+  embedding paths, which is valid, constructible Go with no cycle involved. That is the guard's real,
+  reachable benefit, and it is not written down. Both judges separately confirmed this guard is **not**
+  C17's shape: C17 was a silent dead branch that read as load-bearing, whereas this one discloses its own
+  compile-time unreachability in the same comment that introduces it (judge B).
+
 The `~string` ruling itself is unchanged and correct (both judges confirmed the membership test is right
 and `banned.Underlying()` stays scoped to that one tilde branch) — only the message gained the missing
 explanation.
