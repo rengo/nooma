@@ -828,6 +828,510 @@ pass the resolved value down — never the raw `*float64`. If instead it turns o
 `Displaces` from more than one site, the cheaper answer is to move the validation inside `Displaces` and
 delete `ResolveMargin`'s separate step, rather than to rely on every call site remembering.
 
+### C30 — task 4b.2's own risk brief asked to inherit `buildAdjacency`'s `math.IsNaN` guard verbatim; verified instead, and declined. **Closed by the executor, self-caught, not by Judgment Day.**
+
+Task 4b.2's brief named this PR's highest-risk question and pointed at `weight/spread.go`'s
+`buildAdjacency`: "read it and inherit it rather than rediscovering it." `buildAdjacency` DOES need an
+explicit `math.IsNaN` guard on a `NaN`-strength edge — but for a reason `AdjacencyStrengths` does not
+share: `buildAdjacency` also returns `corruptEdges`, a second value reporting which edge was corrupt so
+`Resurface`'s caller can log it to `decision_log`. Without the guard, a `NaN`-strength edge that was a
+neighbour's ONLY edge would make that neighbour invisible to `spreadGains` entirely (never becoming an
+adjacency-map key at all), and nothing would report why — the guard exists to catch that silent
+disappearance and surface it, not to fix the max computation itself.
+
+`AdjacencyStrengths`' signature (spec R3.7) is a single `map[string]float64`, with no room for an
+equivalent second return value. Checked directly rather than assumed: with the running max for each `v`
+starting at a Go map's own zero value (0.0) and only ever advancing via `strength > current`, a `NaN`
+operand fails every IEEE 754 comparison regardless of position or order, so it can never win that
+comparison — against 0.0, against a real value already recorded, or as the first edge examined. The
+result is provably identical with or without an explicit guard: verified by adding one, rerunning every
+test in `adjacency_test.go`, and confirming zero change in outcome (this project's own C13 convention —
+a branch no fixture can tell apart from removing it should not exist). Shipped without the guard;
+`adjacency.go`'s own doc comment and `adjacency_test.go`'s
+`TestAdjacencyStrengths_NaNStrengthEdge_VanishesWithoutAnExplicitGuard` record the reasoning and the
+check.
+
+Recorded because the task's own instruction, taken literally, would have added an untested-by-design
+branch to a fresh file in its very first PR — the same class this project's history keeps finding
+(C13's own precedent), just self-caught here instead of waiting for a Judgment Day round to find it.
+
+### C31 — `AdjacencyStrengths` reproduces C19's open question in a second package, closed only by an unrelated function's clamp. Found by BOTH judges in Judgment Day round 1 on PR 4b. **Recorded, not fixed — same disposition as C19/C21.**
+
+C30's own doc comment and fixtures rigorously close the `NaN` question for `AdjacencyStrengths` and
+say nothing about the sibling question the identical code shape (`strength > adjacency[v]`, run over
+an unbounded `weight.Edge.Strength`) necessarily raises:
+
+- `Strength: +Inf` **wins** the max (`+Inf > 0` is true, and nothing later ever exceeds it) and flows
+  out of the returned map raw: `adjacency["v"] = +Inf, present = true`.
+- A finite `Strength` above 1 behaves identically — raw, uncapped.
+- A negative `Strength` never wins against the running max's own zero-value baseline, so the vertex
+  is simply **absent** — read as 0 by any caller indexing the map, indistinguishable from a unit with
+  no edge to `previous.Members` at all.
+
+This is C19 verbatim — "treating `+Inf` like `100.0` rather than like `Weight = +Inf` is an
+inconsistency, not a recorded decision" — reproduced in `internal/core/focus` instead of
+`internal/core/weight`. It is harmless **today** only because of who reads the result: `Priority`
+clamps `adjacency` to `[0,1]` at its own door, and `clamp` is monotonic non-decreasing, so
+`clamp(max(s1, ..., sn)) == max(clamp(s1), ..., clamp(sn))` — bounding after `AdjacencyStrengths`'
+max or bounding before it inside `Priority` gives the identical final priority either way. That
+equivalence is now a checked, stated claim (`adjacency.go`'s own doc comment) rather than a
+coincidence relied upon silently — the same gap `Rank`'s doc comment did not close by inheriting
+Priority's clamp for free.
+
+Fixtures now pin all four cases in one table test, `TestAdjacencyStrengths_UnclampedBoundaryStrengths`
+(`+Inf`, a finite strength above 1, a negative strength, and exactly `0.0`), so a future refactor
+cannot change any of them silently — C21's own argument ("the answer should be pinned by a test
+rather than left as the current behaviour by accident") applied to `AdjacencyStrengths` rather than
+to `buildAdjacency`. The `0.0` case doubles as a mutation-testing fixture: it is the exact boundary a
+`>` → `>=` mutant in the running-max comparison flips (an unrelated but real finding, also from this
+round) — verified to kill that mutant, plus a hypothetical clamp-inside-`AdjacencyStrengths` mutant
+and a hypothetical drop-the-negative-strength-guard mutant, by introducing each temporarily and
+confirming the new fixtures fail for the right reason before reverting.
+
+**What a second consumer of `AdjacencyStrengths` must do**: a future caller that reads the returned
+map directly — without routing it through `Priority`'s clamp first — would see a raw, unbounded,
+possibly-infinite adjacency value with no guarantee at `AdjacencyStrengths`' own boundary, and would
+have to make its own decision about C19/C31 rather than inheriting `Priority`'s answer for free.
+Whoever writes that second consumer decides: bound at `AdjacencyStrengths`' own door (closing C19 and
+C31 together, for both packages, in one place), or document the same deferral again at the new call
+site. Choosing silently, a third time, is what this entry exists to prevent.
+
+### C32 — task 4b.7's own sweep was case-blind by construction, and could not have verified R3.8's second MUST even case-corrected. Found by judge B in Judgment Day round 2 on PR 4b.
+
+4b.7's recorded sweep, `rg 'now time\.Time' internal/core/weight internal/core/focus`, is
+case-sensitive: a struct field `Now time.Time` — the capitalisation Go's own exported-field
+convention *requires* — does not match a pattern whose literal `now` is lowercase. Verified: zero
+hits for that exact probe against a throwaway field. R3.8's second `MUST` is precisely "`now` never
+appears inside an input struct" — the sweep as recorded could not have seen a violation of it at
+all, only of the (unstated) first-letter-lowercase spelling.
+
+**Re-run, case-insensitively**: `rg -in 'now time\.Time' internal/core/weight internal/core/focus`
+returns the identical eleven hits the original case-sensitive sweep did (the same seven production
+functions plus the same four test-only helpers) — no `Now`-cased hit exists today, so the corrected
+sweep's *result* does not change. But the mechanism itself is still not sufficient to verify the
+requirement, for a second, independent reason found while re-running it: `gofmt` column-aligns a
+struct's field declarations with variable-width whitespace once the struct has a field name longer
+than `now`/`Now` (`LastTouchedAt`, `CreatedAt`, `DueAt` all do, in both `weight.Current` and
+`focus.Candidate`). Verified directly: a throwaway
+`struct{ LastTouchedAt time.Time; Now time.Time }`, run through `gofmt`, renders as
+`Now           time.Time` — multiple spaces, not one — and
+`rg -in 'now time\.Time'` (a literal single-space pattern) returns **zero** hits against it, exactly
+as the original case-sensitive form would have. A case-insensitive `rg` closes the letter-casing gap
+and does nothing for the whitespace one.
+
+**What the sweep does and does not verify, stated plainly**: it is a textual grep, with no `go/ast`
+awareness of the tree it is run against. It cannot distinguish a function *parameter* named `now`
+(what every one of its eleven hits actually is) from a struct *field* that happens to render with the
+identical text — it would catch a struct field only by coincidence, if that field's name is spelled
+in a way and aligned in a way the literal pattern happens to match, and this document's own 4b.7
+result read that coincidental match as a verification. R3.8's first `MUST` (the function-signature
+enumeration: exactly `Effective`, `Revive`, `Resurface`, `UrgencyRamp`, `AgeRamp`, `Priority`, `Rank`,
+and not the others) **is** verified by this sweep, case-corrected — a parameter list is exactly what
+`rg` is reading. R3.8's second `MUST` ("`now` never appears inside an input struct") is **not**
+verified by either form of this sweep, corrected or not; it happens to hold today (`Current` and
+`Candidate` were read field-by-field above and neither carries one), but that is inspection, not a
+mechanized check this task's citation claimed to be.
+
+**What would actually verify it**: a structural, type-checked conformance check — the same
+discipline `i01_focus_never_persisted_test.go`'s `typeCanYieldWithoutConversion` (a go/types
+resolved-type walk; this replaced the go/ast-text `localStructFieldTypes`/`localNamedTypes`
+machinery this paragraph originally named, in Judgment Day round 3 — see C33) already applies to
+`unit.Status` — that parses every struct type declared in
+`internal/core/weight`/`internal/core/focus` and asserts no field, of any name, has type
+`time.Time` or `*time.Time`, except through a named field that is documented data about the unit
+(`LastTouchedAt`, `CreatedAt`, `DueAt` today) rather than the instant the decision runs. A field-name
+allow-list, not a field-name-`now` denylist, since the hazard is "the current instant living in a
+struct at all," not specifically a field spelled `now`.
+
+**Not implemented here**: this fix round is `rg` sweep correction and disclosure, not a new
+conformance test; recorded so a later link (or a fresh Judgment Day round) picks up the structural
+check rather than trusting a corrected grep a second time.
+
+### C33 — Judgment Day round 3, both judges independently: I01's "no exported function returns or embeds a `unit.Status`" check's own METHOD was the defect, not one more missing shape. **Closed by owner ruling — the go/ast-text check is replaced with a type-checked pass.**
+
+Round 1 (C-series predecessor, not separately numbered) and round 2 (the fix recorded in
+`sdd/m2a-weight-focus/apply-progress`, engram #653) each closed exactly one missing shape — a local
+struct's fields, then a type alias — by adding one more hand-maintained resolution table
+(`localNamedTypes`'s `structFields` and `aliases` maps) to a check that matched `go/printer`-rendered
+AST text against the literal substring `"unit.Status"`. Round 3 found that the whole APPROACH was
+the defect: `localNamedTypes` indexed only `*ast.StructType` declarations and `Assign`-valid aliases,
+so every defined type whose underlying kind is a slice, map, pointer, channel, func, or interface was
+invisible to it — an entire CATEGORY, confirmed by probing all six shapes
+(`type X []unit.Status`/`map[string]unit.Status`/`*unit.Status`/`chan unit.Status`/`func()
+unit.Status`/`interface{ Get() unit.Status }`) against the pre-existing check and watching every one
+pass green. A generics bypass (a generic struct instantiated with `unit.Status`) was also flagged as
+a theoretical gap the same round.
+
+**Owner ruling**: replace the go/ast-text approach entirely with a real type-checked pass over
+`go/types`' own resolved type graph, so aliases, interfaces, func types, containers and generics fall
+out by construction instead of by an enumerated list of syntax shapes someone had to think of first —
+Go's type-expression space cannot be covered by a hand-maintained list, which is why each of the three
+rounds found a new shape the previous round's fix never anticipated.
+
+**Where**: `test/conformance/i01_focus_never_persisted_test.go` — `localNamedTypes` and
+`resultTypeEmbeds` (the go/ast-text machinery both round 1 and round 2 extended) are removed
+entirely. In their place: `moduleImporter`, a ~90-line `types.Importer` scoped to this module
+(same-module imports — `internal/core/focus`'s own graph is exactly `unit`, `weight`, and three
+stdlib packages — are parsed and type-checked recursively through the same importer; every other
+import path is handed to `go/importer.Default()`, which reads precompiled stdlib export data and
+needs no network access), and `typeCanYieldWithoutConversion`, a recursive walk over `go/types`'
+`*types.Named`/`Struct`/`Slice`/`Array`/`Map`/`Pointer`/`Chan`/`Signature`/`Interface` kinds —
+including a `*types.Named`'s own `TypeArgs()` for generic instantiations — with a `visited`
+cycle guard keyed on `types.Type` for termination over a type graph that is finite but not acyclic.
+
+**Dependency choice, reported explicitly per the owner's own instruction not to slip one in**: stdlib
+`go/types` plus the hand-rolled importer above, NOT `golang.org/x/tools/go/packages`. `go.mod`/`go.sum`
+are unchanged by this fix. `x/tools/go/packages` is the more ergonomic, module-aware way to do this,
+but it is a new dependency this module does not otherwise need; the hand-rolled importer is viable
+specifically because the package under test (`internal/core/focus`) has a small, fully-known import
+graph, not because this technique would generalize to an arbitrary one — recorded so a later reader
+does not read this as "prefer a hand-rolled importer generally."
+
+**A second, real gap this round's OWN probing found and closed, not merely inherited**: the first
+draft resolved named types via `t.(*types.Named)`, which does not fire for `type X = Y` when Y is
+anything other than `unit.Status` itself — this Go toolchain (`go1.26.4`) materializes `X` as its own
+`*types.Alias` node (Go 1.22+ behavior; see `go/types.Unalias`'s own doc comment) rather than
+resolving `X` straight through to `Y`'s type object the way earlier Go versions did. Probed directly:
+`type AliasOfWrapper = wrapperStructContainingStatus; func F() AliasOfWrapper` (and the same shape one
+package away, aliasing a type declared in `internal/core/weight`) passed the first draft green, while
+`func F() wrapperStructContainingStatus` directly did not — confirmed by adding both as throwaway
+exported functions to `internal/core/focus` (and `internal/core/weight`) and watching the subtest stay
+green with them present. Fixed by calling `types.Unalias(t)` unconditionally at the top of
+`typeCanYieldWithoutConversion`, before dispatching on its kind; re-probed after the fix and both
+shapes are now caught (see the full matrix below).
+
+**Full probe matrix, as measured** (every shape added to a throwaway `internal/core/focus/zz_probe.go`
+— plus `zz_probe_crossfile.go` for the different-file case and `internal/core/weight/zz_probe_outside.go`
+for the outside-package case — run once against `TestI01_FocusIsNeverAPersistedStatus`, then all three
+files deleted; `git status --short internal/core/focus internal/core/weight` confirmed clean after):
+
+*Caught (25 of 25 intended shapes, confirmed by the subtest actually failing, for the right reason, on each):*
+direct `unit.Status` return; inline `struct{ S unit.Status }`; local named wrapper struct; two-level
+nesting; anonymous embedded field; `type X = unit.Status`; alias of a wrapper struct (the Unalias gap
+above); alias of an alias; alias declared in a different file of the same package; defined slice, map,
+pointer, channel, func type, and interface over `unit.Status`, both returned directly and as a struct
+field; a named type declared outside `internal/core/focus`, referenced directly and via a local alias;
+`**wrapper` double pointer; a generic struct instantiated with `unit.Status` directly and via a local
+alias; a multi-return function where only the second result carries it.
+
+*Correctly excluded (1 of 1):* `type StatusDefined unit.Status` (no `=`) — confirmed NOT flagged, per
+Go's own distinct-type rule.
+
+*N/A, not a real Go construct*: "a variadic result" (from this round's own task list) — Go has no
+variadic RETURN value; variadic applies only to a function's last PARAMETER, which this check does not
+and must not inspect (I01 is about result types only). Recorded rather than silently skipped.
+
+This supersedes both of round 2's recorded "confirmed NOT caught" gaps (a named type declared outside
+the directory referenced through a local alias; a second level of pointer indirection over a local
+wrapper type) — both are closed by this rewrite, verified above, not merely asserted. It also
+supersedes the go/ast-text version's entire doc-comment gap list, which the test file's own doc comment
+now states plainly rather than leaving stale.
+
+**Permanent regression fixture**: `testdata/i01_typecheck_probe/fixture.go` (a synthetic package under
+`testdata/`, so `go build ./...`/`go vet ./...`/golangci-lint/the cross-compile matrix all skip it by
+Go's own testdata convention) plus `TestI01TypecheckFixture_KnownShapes`, which runs the same
+`typeCanYieldWithoutConversion` machinery against it and pins 15 named shapes — including the
+mutually-recursive and self-referential termination cases and the alias-of-wrapper case this round's
+own probing found — so a future refactor of the check regresses in a test that runs on every `make
+check`, not only when someone re-runs a probe-and-revert matrix by hand.
+
+**Runtime cost**: the rewritten subtest costs ~0.33s (dominated by `go/importer.Default()`'s first
+stdlib export-data load), inside `test/conformance`'s existing ~1.7–1.9s total package time under
+`-race -shuffle=on` — no material change to the fast conformance loop. No new `go.mod`/`go.sum` entries.
+
+**Verification**: `make check-all` fully green after this fix — `golangci-lint run` 0 issues, `go vet`,
+L1/L2 `-race -shuffle=on` all packages, L3 (real SQLite vault, schema-golden regen diff clean),
+`internal/core` coverage 100% (509/509, floor 90%), seven-target cross-compile matrix OK, L4 `-tags
+e2e` OK.
+
+---
+
+### C34 — Judgment Day round 4, both judges independently: a bare, uninstantiated generic type parameter escaped round 3's own type-checked rewrite. **Fixed — a `*types.TypeParam` case was missing from the switch, not the approach.**
+
+Round 3 replaced the go/ast-text version of I01's "no exported function returns or embeds a
+`unit.Status`" check with a type-checked walk over `go/types`' resolved type graph
+(`typeCanYieldWithoutConversion`) and closed every shape it probed. Round 4 found the one node kind
+that switch never dispatched on: `*types.TypeParam` — the type go/types gives a bare, uninstantiated
+type parameter in an exported GENERIC function's own declared signature (there is no call site to
+inspect at this point, only the declaration). `func GenericFuncConstrained[T StatusConstraint]() T {
+var z T; return z }`, where `StatusConstraint` is `interface{ unit.Status }`, returned a real
+`unit.Status` through an exported function with zero conversion syntax, and the pre-round-4 check said
+nothing about it — reproduced live by both judges. Judge B additionally confirmed a **union**
+constraint (`interface{ unit.Status | int }`) escapes the same way; judge A confirmed it escapes one
+level deeper too (`func F[T StatusConstraint]() []T`). This is a gap in the switch, not in the method:
+every other shape both judges threw at the resolved-type walk (interface embedding, map keys,
+alias-of-instantiation, recursive generics, cross-package unexported fields, chan-of-chan,
+array-of-arrays) was handled correctly, and round 3's own ruling to replace go/ast-text matching with a
+type-checked pass is not reopened by this finding.
+
+**Severity, as both judges recorded it**: `internal/core/focus`, `internal/core/unit`, and
+`internal/core/weight` declare zero generic functions today, so nothing in this change exploits the
+gap. `internal/core/classify` already declares three (`joinVocabulary[T ~string]`, `decodeEnum[T
+~string]`, `assignEnum[T ~string]`), and `unit.Status` is exactly the string-kind vocabulary type those
+constraints admit — the pattern is established one package over, which is why this was fixed now
+rather than deferred.
+
+**Fix**: added a `*types.TypeParam` case to `typeCanYieldWithoutConversion` that resolves through the
+type parameter's own CONSTRAINT type set — every term of the constraint interface, via a new
+`typeParamConstraintTerms` helper that flattens union terms (`A | B`) and embedded interfaces into a
+flat list — rather than through the type parameter itself, since a type parameter carries no concrete
+type until instantiated and this check has no call site to look at. An unconstrained parameter
+(`[T any]`) has no declared terms and correctly resolves to `false` (see the `any` limit below). The
+pre-existing `visited` cycle guard (already marking a type visited before recursing into it) needed no
+change to cover a constraint that names its own type parameter again — proven by probe, not merely
+argued: `type SelfRef[T any] interface{ ~[]T }; func F[T SelfRef[T]]() T` neither hangs nor
+false-negatives on an unrelated shape.
+
+**The `~string` approximation decision, made and stated (not left implicit)**: a `~string`-style term's
+type set is "`string`, plus every OTHER defined type whose own underlying type is `string`" — and
+`unit.Status` genuinely IS one of those (confirmed: `unit.Status`'s own underlying type is `string`,
+the same fact `TestI01_FocusIsNeverAPersistedStatus`'s own first subtest already pins). So
+`func F[T ~string]() T` can be called as `F[unit.Status]()`, extracting a real `unit.Status` with zero
+conversion — a genuine bypass, not a theoretical one, and **flagged** on that basis: the comparison is
+against `banned`'s own UNDERLYING type for a tilde term (`types.Identical(banned.Underlying(),
+term.Type())`), not against `banned` itself, since a plain identity check would silently miss this
+exact case (`string` is never `types.Identical` to `unit.Status`, even though `unit.Status` is a member
+of `~string`'s type set).
+
+**Full probe matrix, as measured** (every shape probed live: five directly against a throwaway
+`internal/core/focus/zz_probe_round4.go` — the exact reproduction plus its nested/union/any
+neighbors — run against `TestI01_FocusIsNeverAPersistedStatus`, then deleted; three more,
+map-value/pointer/chan nesting, in a second throwaway `zz_probe_round4b.go`, same discipline; the rest
+against a standalone `go/types` harness outside the repo, mirroring `typeCanYieldWithoutConversion`
+exactly; `git status --short internal/core/focus` confirmed clean after each):
+
+*Caught, real bypasses:* bare type parameter as the direct result (single-type constraint); `[]T`;
+`map[string]T`; `*T`; `chan T`; single-type constraint (`interface{ unit.Status }`); union constraint
+(`interface{ unit.Status | int }`); approximation constraint (`~string` — decided above, DOES count).
+
+*Correctly excluded, no false positive:* unconstrained `[T any]` (the `any` limit, stated below); a
+constraint that references its own type parameter (`SelfRef[T]` above) — proves termination, reports
+`false`, does not hang; a generic METHOD on a generic struct (`func (g G[T]) Get() T` where `T
+StatusConstraint`) — Go permits this (methods cannot declare their OWN type parameters, but a generic
+receiver's type parameter carries over), and it is correctly invisible to the exported-function loop,
+for the same structural reason a plain method already was: package `Scope()` only ever holds top-level
+declarations, never methods. `type StatusDefined unit.Status`, `[T any]` used elsewhere, and unrelated
+existing generics all remain unflagged — confirmed, no regression.
+
+**The `any` limit, decided and written down, not left for a fifth round to "discover"**:
+`any`/`interface{}` erases the static type by construction — `func F() any { var z unit.Status; return
+z }` is invisible to ANY static type-graph walk, this one or any other, because extracting the real
+value back out requires an explicit type assertion (`f().(unit.Status)`), the same class of explicit
+operation this check already excludes for `type StatusDefined unit.Status`. This is a limit of the
+approach, not a defect in it, and is now stated with its reasoning on
+`TestI01_FocusIsNeverAPersistedStatus`'s own doc comment. Banning `any`/`interface{}` as an exported
+result type in `internal/core/focus` outright would close it as a separate, cheap structural
+assertion — flagged as worth considering, but NOT built here: it is a real, if narrow, API restriction
+that deserves its own decision, not a rider on this fix.
+
+**Two exclusions that were already true but only implicit, now written down on the same doc comment**:
+a function PARAMETER carrying `unit.Status` is not a violation (the structural subtest only ever
+inspects `sig.Results()`, never `sig.Params()` — a parameter is what the caller supplies, not what the
+function's result yields), and a method on a named struct type is not one either (package `Scope()`
+never holds methods, so the exported-function loop never sees them, generic receiver or not). Both
+judges reasoned to these independently in round 4; they are not new decisions, only newly-recorded
+ones.
+
+**Where**:
+- `test/conformance/i01_focus_never_persisted_test.go` — `typeCanYieldWithoutConversion` gains the
+  `*types.TypeParam` case and its `typeParamConstraintTerms` helper; the file's own doc comment gains
+  the round-4 history entry and a new "three boundaries this check accepts on purpose" section (the
+  `any` limit, the parameter exclusion, the method exclusion).
+- `testdata/i01_typecheck_probe/fixture.go` — eight new pinned shapes: `ReturnsBareTypeParam`,
+  `ReturnsNestedTypeParam`, `ReturnsUnionTypeParam`, `ReturnsApproximationTypeParam`,
+  `ReturnsUnconstrainedTypeParam`, `ReturnsSelfReferencingTypeParam` (round 4's own findings),
+  `ReturnsMapKeyIsStatus` (a map-KEY case, unpinned before this round though already handled
+  correctly), and `TakesStatusParamOnly` (pins the parameter exclusion above against a future
+  well-meaning "fix").
+- `openspec/changes/m2a-weight-focus/tasks.md` — this entry, plus the diff-scope correction recorded
+  where task 4b's own close-out list is (adds `openspec/changes/m2a-weight-focus/spec.md`, omitted
+  since R3.8's own correction) and the stale-symbol correction in C32's own "what would actually verify
+  it" paragraph (pointed at `localStructFieldTypes`/`localNamedTypes`, the go/ast-text machinery C33
+  deleted; now points at `typeCanYieldWithoutConversion`).
+
+**Runtime cost after this fix**: unchanged in character — the added case is one more dispatch arm over
+an already-loaded, already-type-checked package; no new import, no new `go/importer` load.
+
+**Verification**: `make check-all` fully green after this fix (see this session's own
+`sdd/m2a-weight-focus/apply-progress` record for the exact gate output).
+
+---
+
+### C35 — Judgment Day round 5, both judges independently, with the SAME prescription: a constraint composed by embedding another constraint BY NAME escaped round 4's own type-checked fix. **Fixed — `typeParamConstraintTerms` gains a `*types.Named` resolution step, symmetric with `typeCanYieldWithoutConversion`'s own one level up.**
+
+Round 4 (C34) added a `*types.TypeParam` case to `typeCanYieldWithoutConversion` that resolves a bare,
+uninstantiated type parameter through its constraint's own type set, via a new `typeParamConstraintTerms`
+helper. Round 5 found that helper's own switch never special-cased a *types.Named* embedded or
+unioned-in term — only `*types.Union` and an ANONYMOUS `*types.Interface`. `type baseConstraint
+interface{ unit.Status }; type embeddingConstraint interface{ baseConstraint }; func F[T
+embeddingConstraint]() T { var z T; return z }` — composing a constraint by embedding a NAMED one, the
+ordinary Go idiom — returned a real `unit.Status` through an exported function with zero conversion
+syntax, and the round-4 check said nothing about it. Both judges reproduced the plain one-level embed;
+judge A additionally reproduced it two levels deep, as one arm of a union (`interface{ Inner | int }`),
+as a named constraint that itself embeds a union, and cross-package. Judge A also verified the boundary
+precisely: the ANONYMOUS nested form (`interface{ interface{ unit.Status } }`) stayed caught throughout
+— only the NAMED form was ever the gap.
+
+**Root cause**: `iface.EmbeddedType(i)` and `Union.Term(j).Type()` both return the embedded or
+unioned-in type exactly as declared. For a NAMED constraint, that is a `*types.Named` — the same node
+kind an ordinary defined type is, not pre-unwrapped to the `*types.Interface` it constrains through.
+The pre-round-5 switch dispatched on `*types.Union` and `*types.Interface` only; a `*types.Named` fell
+to `default` and was recorded as one opaque, single-element concrete term, never itself walked for
+further terms — so a zero-method, type-terms-only constraint (exactly what a constraint built by
+embedding a named one always is) reported zero reachable terms, and the caller's `for` loop never ran.
+
+**Fix**: `typeParamConstraintTerms` is now `appendConstraintTerms` + `appendConstraintTerm`: the latter
+resolves a `*types.Named` term through its own `.Underlying()` before the union/interface dispatch and
+recurses — the identical move `typeCanYieldWithoutConversion` already makes one level up for a
+`*types.Named` RESULT type (`named.Underlying()`, existing code, round 3). `typeParamConstraintTerms`
+simply had not been given the same treatment for a `*types.Named` TERM. A `visited map[types.Type]bool`
+guards termination, symmetric with `typeCanYieldWithoutConversion`'s own visited map — though probed,
+not merely reasoned: a literal named-interface embedding cycle (`type A interface{ B }; type B
+interface{ A }`, with or without an intervening generic type parameter) is rejected by `go/types` itself
+as an "invalid recursive type" at COMPILE time, so this function can never actually be handed one from
+valid Go source. The guard stays anyway, as defense in depth, at the cost of one map.
+
+**`comparable` (judge A)**: shares the exact `any`/`interface{}` limit this file's own doc comment
+already documented, under a different name never stated before this round. `comparable`'s constraint
+interface has `NumEmbeddeds() == 0` — its type set is defined by an operator ("every comparable type"),
+not by naming member types — identically to `any`. Generalized in the doc comment: ANY constraint whose
+interface has zero embeds (`any`, `comparable`, or a user-defined method-only constraint with no type
+term) falls in this same accepted-limit class; the discriminator from a constraint that genuinely
+restricts its type set is `NumEmbeddeds() >= 1`.
+
+**The failure message now explains itself (both judges, WARNING)**: before this fix, a type-parameter-
+derived hit (e.g. `func F[T ~string]() T` where `unit.Status`'s own underlying type is `string`) used
+the IDENTICAL message template as a direct, concrete `unit.Status` leak, with no hint that the ruling is
+about constraint TYPE-SET MEMBERSHIP rather than a textual reference. `typeCanYieldWithoutConversion` now
+returns `(bool, string)`; the second value is a human-readable explanation, non-empty only for a
+type-parameter-derived hit, naming the type parameter, its constraint, and (for a tilde term) why the
+approximation admits `unit.Status`. Measured exact text for `func ZzzSecondOf[T zzStatusConstraint]()
+T`, `zzStatusConstraint = interface{ unit.Status }`:
+
+```
+ZzzSecondOf's result 0 (T) can yield a github.com/rengo/nooma/internal/core/unit.Status without an
+explicit conversion — focus is a computed view (docs/02-cognitive-core.md §3), never a persisted
+unit.Status (I01, R4.2) — type parameter T's constraint github.com/rengo/nooma/internal/core/focus.
+zzStatusConstraint includes the term github.com/rengo/nooma/internal/core/unit.Status directly
+(Judgment Day round 4/5)
+```
+
+### C36 — Judgment Day round 6 found a seventh shape, and the owner stopped the series instead of fixing it. **Recorded, not fixed, by ruling.**
+
+Judge A demonstrated a further escape in `appendConstraintTerm`: it does not call `types.Unalias`
+before its type-switch, so a constraint embedded through a **type alias** is recorded as one opaque
+term and never walked.
+
+```go
+type zzBaseConstraint interface{ unit.Status }
+type ZZAliasOfBase = zzBaseConstraint          // alias
+type ZZEmbedsAlias interface{ ZZAliasOfBase }  // embeds the alias
+func ZZReturnsEmbedsAlias[T ZZEmbedsAlias]() T { var z T; return z }   // NOT flagged
+```
+
+On Go 1.26.4 an aliased embed materialises as `*types.Alias`, not `*types.Named`, so the `*types.Named`
+arm never fires. The fix would be one `types.Unalias` call, symmetric with the one `f9c17ca` already
+added to `typeCanYieldWithoutConversion` one level up. **It is not being made.**
+
+**Owner ruling — severity is weighted by reachability.** This check has now been re-opened six times.
+Rounds 1–3 were genuine: the AST-text method could not close the class, and replacing it with a
+type-checked pass was correct. Rounds 4, 5 and 6 each found one more dispatch arm — `*types.TypeParam`,
+a named embedded constraint, and now an aliased one — and **not one of them is reachable by any code in
+this repository.** `internal/core/focus`, `unit` and `weight` declare zero generic functions, the check
+inspects only exported top-level functions, and both judges confirmed both facts in every round.
+
+The measured cost of that: `i01_focus_never_persisted_test.go` grew from 95 lines to 1,045, plus a
+303-line fixture, across six review rounds — against the 145 lines of `adjacency.go`, which is the
+feature this PR actually ships and which needed no rounds at all. The test guarding an inherited
+invariant is now roughly nine times the production code of the link that touched it.
+
+**The rule this establishes, binding for `m2b` onward:** a gap in a *test's own* coverage that no code
+in the tree can reach is a recorded conflict, not a merge blocker. Two Judgment Day rounds per PR is the
+default ceiling; a third is justified only by a finding reproducible against production code, not against
+a hypothetical contributor. Rounds that audit a guard's completeness against itself have sharply
+diminishing returns, and this series measured them.
+
+**Judge B found an eighth shape in the same round, and it is the more interesting one** because it is an
+inconsistency inside the check rather than a missing node kind. The `*types.TypeParam` case's **tilde**
+branch does one flat `types.Identical(banned.Underlying(), term.Type())` check and never recurses into
+the term's own structure, while the **non-tilde** branch recurses fully. So `~[]unit.Status` and
+`~map[string]unit.Status` escape, even though the concrete `[]unit.Status` and `map[string]unit.Status`
+are caught and pinned — reachability through a container counts everywhere else in this file. Judge B
+confirmed the asymmetry by contrast: the non-tilde generic-container equivalent
+(`interface{ GenericMapTerm[unit.Status] }`) is caught correctly, so the gap is the tilde shortcut
+specifically, not container recursion generally.
+
+**What closes C36**: `types.Unalias` at the top of `appendConstraintTerm`, and the tilde branch recursing
+the way its non-tilde sibling already does. Both are small and symmetric with code that already exists;
+add a fixture pin per shape. Worth doing the first time anything in `internal/core/focus` declares an
+exported generic function — until then neither gap can be exercised.
+
+Four smaller observations from the same round, none blocking:
+
+- The type-parameter failure message says a matched term is included "directly" even when the reachable
+  `unit.Status` sits one struct-field hop inside it (judge A).
+- Nothing pins the *content* of that message — only its boolean (judge A).
+- The doc comment's stated discriminator, `NumEmbeddeds() >= 1`, is imprecise: `interface{ any }` has
+  one embed and still yields zero terms. The code is right (it checks `len(terms) == 0`); only the prose
+  overstates (judge B).
+- The `visited` guard's recorded rationale — defence against a cycle `go/types` rejects at compile time —
+  is correct but incomplete. It also deduplicates a **diamond**: the same named constraint reached by two
+  embedding paths, which is valid, constructible Go with no cycle involved. That is the guard's real,
+  reachable benefit, and it is not written down. Both judges separately confirmed this guard is **not**
+  C17's shape: C17 was a silent dead branch that read as load-bearing, whereas this one discloses its own
+  compile-time unreachability in the same comment that introduces it (judge B).
+
+The `~string` ruling itself is unchanged and correct (both judges confirmed the membership test is right
+and `banned.Underlying()` stays scoped to that one tilde branch) — only the message gained the missing
+explanation.
+
+**Correction to the record, made while here**: C34's own text cited `internal/core/classify`'s three
+`~string` generics (`joinVocabulary`, `decodeEnum`, `assignEnum`) as the pattern this fix was pre-empting
+elsewhere in the tree. That citation never claimed those three would be flagged, but read that way absent
+a correction — they will not be: all three are unexported (the structural subtest only ever walks
+`ast.IsExported` names, never reaching them regardless of this fix), and of the three, only `decodeEnum`'s
+own result (`(*T, Reason)`) carries `T` at all — `joinVocabulary` takes `T` only as a parameter, and
+`assignEnum` returns a closure that itself returns no `T`. Corrected on
+`TestI01_FocusIsNeverAPersistedStatus`'s own doc comment (round-4 bullet) and here.
+
+**Full probe matrix, as measured** (fixture-pinned in `testdata/i01_typecheck_probe/fixture.go`, run via
+`TestI01TypecheckFixture_KnownShapes`, plus one throwaway `internal/core/focus/zz_probe_round5.go` for the
+exact failure-message text above, deleted after; `git status --short internal/core/focus` confirmed
+clean after):
+
+*Caught, real bypasses:* a named constraint embedding a named constraint (`ReturnsNamedEmbedsNamedTypeParam`);
+two levels of that (`ReturnsNamedEmbedsNamedTwiceTypeParam`); a named constraint embedded inside a union
+arm (`ReturnsNamedEmbeddedInUnionTypeParam`); a named constraint that embeds a union
+(`ReturnsNamedEmbedsUnionTypeParam`); a cross-package named constraint (`ReturnsCrossPackageNamedTypeParam`,
+against a new throwaway `testdata/i01_typecheck_probe/xpkg` package); the anonymous nested form, confirmed
+still caught (`ReturnsNestedAnonymousTypeParam`).
+
+*Correctly excluded, no false positive:* `comparable` (`ReturnsComparableTypeParam`); `any` (pre-existing
+`ReturnsUnconstrainedTypeParam`); an unrelated generic constrained to `int | string`
+(`ReturnsUnrelatedGenericTypeParam`); `type StatusDefined unit.Status` and unconstrained/comparable
+elsewhere (pre-existing `ReturnsNotFlagged`); mutually referential named constraints — probed and found
+NOT constructible as valid Go at all (`go/types` itself rejects the source as an "invalid recursive
+type"), so no fixture exists for it; the `visited` guard added is defense in depth, not a fix for an
+observed hang.
+
+**Where**:
+- `test/conformance/i01_focus_never_persisted_test.go` — `typeParamConstraintTerms` replaced by
+  `appendConstraintTerms`/`appendConstraintTerm` (named-term resolution, cycle guard);
+  `typeCanYieldWithoutConversion` now returns `(bool, string)` (explanation threading); both call sites
+  updated; the file's own doc comment gains the round-5 history entry, the `comparable` boundary, and the
+  classify correction.
+- `testdata/i01_typecheck_probe/fixture.go` — eight new pinned shapes (listed above) plus the corrected
+  `want` table in `TestI01TypecheckFixture_KnownShapes`.
+- `testdata/i01_typecheck_probe/xpkg/xpkg.go` — new, cross-package named-constraint fixture.
+- `openspec/changes/m2a-weight-focus/tasks.md` — this entry.
+
+**Runtime cost after this fix**: unchanged in character — one more resolution branch over an
+already-loaded, already-type-checked package; no new `go.mod` dependency (the `xpkg` fixture package
+lives under `testdata/`, outside the real build, same convention as `i01_typecheck_probe` itself).
+
+**Verification**: `make check-all` — see this session's own `sdd/m2a-weight-focus/apply-progress` record
+for the exact gate output.
+
 ---
 
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
@@ -1291,7 +1795,7 @@ separately before treating it as a crossing at all.
 
 Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes the chain.
 
-- [ ] **4b.1** Commit 1 (RED): `internal/core/focus/adjacency_test.go` — a unit joined to a
+- [x] **4b.1** Commit 1 (RED): `internal/core/focus/adjacency_test.go` — a unit joined to a
       previous-focus member at `strength = 0.7` asserting `adjacency == 0.7`; a unit joined by two
       edges at 0.7 and 0.4 asserting `0.7`, not `1.1` (`max`, not sum); an edge stored in the
       opposite direction asserting the same result (undirected, reuses `weight.Edge`); an empty
@@ -1300,19 +1804,30 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       Stub: `func AdjacencyStrengths(previous Selection, edges []weight.Edge) map[string]float64 {
       return nil }`.
       Requirement: R3.7.
-- [ ] **4b.2** Commit 2 (GREEN): implement `AdjacencyStrengths` — `max` over edges joining `v` to
+- [x] **4b.2** Commit 2 (GREEN): implement `AdjacencyStrengths` — `max` over edges joining `v` to
       any `previous.Members` entry, undirected, 0 when `previous` is empty or `v` touches no
       member.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.7; design §3.1 (`relation_to_active_focus`).
-- [ ] **4b.3** `test/conformance/focus_margin_ddl_test.go` (new) — parse the `DEFAULT` literal off
+      **Deviation from the task's literal ask, decided and recorded as C30**: the task's own risk
+      brief says to inherit `weight/spread.go`'s `buildAdjacency` `math.IsNaN` guard "rather than
+      rediscovering it". Verified instead of copied: that guard exists to feed a SECOND return
+      value (`corruptEdges`) `AdjacencyStrengths`' fixed single-`map` signature (spec R3.7) has no
+      room for — it is not there to make the max itself correct. The max here starts each `v` at a
+      Go map's own zero value and only ever advances via `strength > current`; every IEEE 754
+      comparison against `NaN` is false in either operand position, so a `NaN`-strength edge can
+      never win that comparison, first or last. Shipped with no guard, proven by a dedicated test
+      table, and mutation-checked: adding the guard back and rerunning every test in the package
+      changed no outcome — this project's own C13 convention (a branch no fixture can tell apart
+      from removing it should not exist).
+- [x] **4b.3** `test/conformance/focus_margin_ddl_test.go` (new) — parse the `DEFAULT` literal off
       `internal/store/sqlite/migrations/0002_learning_and_search.sql:64` via `migrationSQLText`;
       assert `focus.DefaultHysteresisMargin` equals it. **Not a missing-symbol red**:
       `DefaultHysteresisMargin` already exists from 4a and already equals 0.05, matching the
       migration default — this test is the permanent pin against a future drift between the two,
       the same mechanism `relation_thresholds_ddl_test.go` already uses.
       Requirement: R4.4; design D4 (ruling 5).
-- [ ] **4b.4** `test/conformance/i01_focus_never_persisted_test.go` gains **check 3** beside its
+- [x] **4b.4** `test/conformance/i01_focus_never_persisted_test.go` gains **check 3** beside its
       existing two (not rewritten): no exported function in `core/focus` returns or embeds a
       `unit.Status`; `Selection.Members` is `[]string`; `core/focus` declares **no package-level
       `var`**. **Not a missing-symbol red**: by this point in the chain the structural guarantees
@@ -1321,31 +1836,59 @@ Depends on 4a (I01's third check needs `Selection`/`Select` to exist). Closes th
       Checks 1 (`focus` not in `unit.AllStatuses()`) and 2 (the tree scan for the literal `"focus"`
       paired with `Status`) are unchanged and were already passing vacuously since M0.
       Requirement: R4.2, R4.6; design D9 (I01 made a property of the API).
-- [ ] **4b.5** doc 02 §3 amendment (second half of owner ruling round 2 #5's sentence — the first
+- [x] **4b.5** doc 02 §3 amendment (second half of owner ruling round 2 #5's sentence — the first
       half was added in 4a): on the first ranking after a process restart, the previous focus is
       empty, so adjacency is 0 for every unit and the term vanishes entirely. Together with 4a's
       half, this is the full sentence ruling round 2 #5 owes — the proposal priced only the first.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §7 (PR4 row, split across 4a/4b).
-- [ ] **4b.6** Purity/coverage: `golangci-lint run`; `make cover` — this is the last PR of the
+- [x] **4b.6** Purity/coverage: `golangci-lint run`; `make cover` — this is the last PR of the
       chain, so also confirm the ≥90% `internal/core` coverage floor holds across both `weight/`
       and `focus/` (`scripts/core-coverage.sh`, via `make check-all`).
       Requirement: `nooma-testing` hard rule 5.
-- [ ] **4b.7** Cross-cutting close-out: `rg 'now time\.Time' internal/core/weight internal/core/focus`
+      **Result**: `golangci-lint run` — 0 issues. `make cover` —
+      `internal/core` statement coverage 100% (509/509), floor 90%.
+- [x] **4b.7** Cross-cutting close-out: `rg 'now time\.Time' internal/core/weight internal/core/focus`
       enumerates every time-dependent decision this change ships; confirm the list is exactly
       `Effective`, `Revive`, `Resurface`, `UrgencyRamp`, `AgeRamp`, `Priority`, `Rank` — and that
       `Displaces`, `ResolveMargin`, `Select`, `AdjacencyStrengths`, `Types`, `AllKinds`, `ZoneOf` do
       **not** appear (each is correctly time-independent per its own requirement). Final
       `golangci-lint run` over both packages together.
       Requirement: R3.8.
-- [ ] **4b.8** §13 final count check: read `docs/02-cognitive-core.md` §13 and confirm it holds
+      **Result**: the `rg` sweep returns exactly the seven expected production functions (plus
+      four test-only helpers, `mustResurface`/`assertBoosts`/`dueAfter`/`dueIn`, all `_test.go`,
+      outside R3.8's own scope) and none of the seven excluded ones. Final
+      `golangci-lint run ./internal/core/weight/... ./internal/core/focus/...` — 0 issues.
+      **Corrected after Judgment Day round 2 (C32)**: the recorded sweep was case-sensitive,
+      so it could never have seen a struct field spelled `Now` — Go's own exported-field
+      convention. Re-run as `rg -in 'now time\.Time' internal/core/weight internal/core/focus`;
+      identical eleven hits (no case-mismatched hit exists today). This verifies R3.8's first
+      `MUST` (the function enumeration above) but, even case-corrected, **not** its second
+      (`now` never appears inside an input struct) — a textual grep has no AST awareness and
+      cannot distinguish a parameter from a struct field; see C32 for the full argument,
+      including a second, independent whitespace-alignment reason the corrected form still
+      cannot verify it.
+- [x] **4b.8** §13 final count check: read `docs/02-cognitive-core.md` §13 and confirm it holds
       **33** rows (23 + 10 new, 1 amended in place).
       Requirement: design §5.4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
+      **Result**: 33 data rows (`weight_threshold` through `correction_referent_margin`), confirmed
+      by direct count. No new row from this PR — `AdjacencyStrengths` introduces no new calibratable
+      constant, so 4b's doc 02 delta is text-only (4b.5).
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/core/focus/**`, its
       tests, `test/conformance/focus_margin_ddl_test.go`, `test/conformance/i01_...`,
       `docs/02-cognitive-core.md`. Confirm the full seven-PR stack, once merged, leaves
       `internal/core/weight` and `internal/core/focus` with zero `ports`, zero `store`, zero
       `brain`, zero I/O imports, and that no code in this change writes to `decision_log`.
+      **Result**: `make check-all` fully green (lint 0 issues, vet, L1/L2 `-race -shuffle=on`, L3
+      real-SQLite + schema-golden regen diff clean, `internal/core` coverage 100%/90% floor,
+      seven-target cross-compile matrix OK, L4 `-tags e2e` OK). Diff scope confirmed: exactly
+      `internal/core/focus/adjacency.go`, `internal/core/focus/adjacency_test.go`,
+      `test/conformance/focus_margin_ddl_test.go`, `test/conformance/i01_focus_never_persisted_test.go`,
+      `docs/02-cognitive-core.md`, `openspec/changes/m2a-weight-focus/spec.md` (R3.8's own
+      correction, C-series predecessor to C32/C33 — legitimately part of this PR's diff, omitted
+      from this list until Judgment Day round 4 (C34) caught the omission), plus this file's own
+      bookkeeping. `rg` confirms zero `ports`, `store`, or `brain` imports and zero I/O imports in
+      either package; no code in this change calls `decision_log`.
 
 ---
 

@@ -807,9 +807,10 @@ in the opposite direction asserting the same result; an empty `previous` asserti
 
 ### R3.8 — `Priority` calls no clock, no I/O, and reads no OS state
 
-**MUST**: `Priority`, `UrgencyRamp`, `AgeRamp`, `AdjacencyStrengths` and `Rank` take `now` as a
-`time.Time` **named parameter** — never a struct field, never a `Clock` — and call none of
-`time.Now`, `time.Since`, `time.Until`, `rand.*`, `uuid.*`, `os.Getenv`.
+**MUST**: `Priority`, `UrgencyRamp`, `AgeRamp` and `Rank` take `now` as a `time.Time` **named
+parameter** — never a struct field, never a `Clock` — and call none of `time.Now`, `time.Since`,
+`time.Until`, `rand.*`, `uuid.*`, `os.Getenv`. `AdjacencyStrengths` takes no `now` at all: its
+decision (spec R3.7's max-over-edges) does not depend on the current instant.
 
 **MUST**: `now` never appears inside an input struct. `Candidate` carries `LastTouchedAt`,
 `CreatedAt` and `DueAt` — data *about the unit* — and never the instant the decision is made, so
