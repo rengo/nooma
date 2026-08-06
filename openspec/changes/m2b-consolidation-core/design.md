@@ -315,30 +315,52 @@ strengthen **every relation in the vault on the first pass** — evidence conjur
 of a previous pass. "Accumulated evidence" over no interval is no evidence, so `Strengthen(es,
 nil)` returns nothing. Same `*T`-as-sentinel idiom as `relation.Resolve` and `focus.ResolveMargin`.
 
-#### `StrengthenGain = 0.10` — derived, not chosen
+#### `StrengthenGain = 0.10` — chosen, and checked for compatibility, not derived
+
+`StrengthenGain` is a **chosen** constant. Labelling it derived was this design's own defect
+(Judgment Day, both blind judges, independently): the arithmetic below solves *how many nightly
+passes* a given gain takes, not *which gain* a fixed count of nights entails — it runs the
+entailment backwards, and running it forwards does not pin a single value.
 
 doc 02 §4 fixes the two ends of the strength scale in prose: **0.1 is "a passing mention"** and
-**0.9 is "the new node IS about that relation"**. §13 fixes **21 days** as the interval the product
-already treats as "long enough that silence means something" (`goal_stagnation_days`). The gain is
-the value at which unbroken nightly co-use carries a relation from the first to the second in
-exactly that interval:
+**0.9 is "the new node IS about that relation"**. For a gain `g`, the number of unbroken nightly
+co-use passes it takes to carry a relation from the first to the second is:
 
 ```
-n = ceil( ln(0.1 / 0.9) / ln(1 − StrengthenGain) )
-  = ceil( −2.1972 / −0.10536 ) = ceil(20.85) = 21   at StrengthenGain = 0.10
+n(g) = ceil( ln(0.1 / 0.9) / ln(1 − g) )
 ```
 
-Checked from both sides: at n = 20, `s = 1 − 0.9·0.9²⁰ = 0.8906` — below 0.9; at n = 21,
-`s = 1 − 0.9·0.9²¹ = 0.9015` — at or above. **An L1 test asserts the identity against
-`DefaultGoalStagnationDays` rather than against the literal 21**, so a recalibration of either
-breaks loudly instead of silently decoupling.
+At `g = 0.10`, `n(0.10) = ceil(−2.1972 / −0.10536) = ceil(20.85) = 21`, which happens to equal
+`DefaultGoalStagnationDays`. **That is a compatibility check, not a derivation**: inverting the
+formula for `n = 21` gives `g ≥ 1 − (1/9)^(1/21) ≈ 0.0994`, and any gain in roughly
+`[0.0994, 0.1040)` produces the same `n(g) = 21` — a range the L1 test, which only asserts the
+identity at the chosen value, cannot discriminate between. `0.10` is a round number picked from
+inside that admissible range, not the unique value the two prose anchors entail.
 
-The *reason* the interval is the right one to pin against, since the arithmetic alone would let any
-number pass: doc 02 §9 makes "how often does the user delete relations from the nightly job" **the**
-quality metric for `connect`. A gain that promoted a passing mention to an assertion in three
-nights would outrun the user's ability to notice and reject it, and the metric would measure the
-gain rather than the judge. Twenty-one nights is the horizon the product already uses for "you have
-had a fair chance to react".
+**The pin is to `DefaultGoalStagnationDays`, the default, not to the live per-user value, and that
+distinction matters because the knob on the other side of the check personalizes and this one
+cannot.** `goal_stagnation_days` is marked ⚙ in doc 02 §13: the learning module recalibrates it per
+user — "systematically ignoring lengthens the interval (21 → 28 days)" (doc 02 §9). `StrengthenGain`
+is a fixed Go constant that reads no config at runtime (§5.4's own "no clock, no config" list
+already states `Strengthen` takes none). So the compatibility check holds against the *default* 21
+and goes silently stale the first time a real user's horizon personalizes away from it: the L1 test
+keeps passing — it asserts against the constant, never against any resolved per-user value — while
+the informal claim "co-use carries a relation from 0.1 to 0.9 in about as long as this user's
+stagnation horizon" quietly stops being true for that user. Recorded here rather than hidden behind
+the word "derived".
+
+Checked from both sides at the default: at n = 20, `s = 1 − 0.9·0.9²⁰ = 0.8906` — below 0.9; at
+n = 21, `s = 1 − 0.9·0.9²¹ = 0.9015` — at or above. **The L1 test asserts this identity against
+`DefaultGoalStagnationDays` rather than against the literal 21**, so a change to either constant
+breaks the check loudly instead of silently decoupling — that discipline survives the relabeling
+above.
+
+The *reason* the default interval is a reasonable one to check against, since the arithmetic alone
+admits a whole range: doc 02 §9 makes "how often does the user delete relations from the nightly
+job" **the** quality metric for `connect`. A gain that promoted a passing mention to an assertion in
+three nights would outrun the user's ability to notice and reject it, and the metric would measure
+the gain rather than the judge. Twenty-one nights is the horizon the product already uses, by
+default, for "you have had a fair chance to react".
 
 Two properties worth stating because they are testable: **strength never reaches 1** (asymptotic),
 and a relation already at 1 produces **no row** (§11 — a decision with no effect writes nothing).
@@ -453,9 +475,12 @@ than lazy:
 - **The gain scales the target, never the step** — `m2a` §3.3's hardest choice, inherited whole.
   A unit adjacent to a busy node cannot converge on the ceiling; propagation caps *where* it can
   hold a unit.
-- **It is bounded.** New edges ≤ `ConnectSourceLimit × ConnectCandidateK` = 100, so origins ≤ 200
-  and the whole phase is O(100 × branching²) with `ResurfaceMaxHops = 2`. The bound is `connect`'s
-  budget, already named.
+- **It is bounded, once the origins multiplier is counted.** New edges ≤
+  `ConnectSourceLimit × ConnectCandidateK` = 100, so origins ≤ 200, and **each** of those ~200
+  `Resurface` calls re-runs `buildAdjacency` over the same ≤100-edge set — the whole phase is
+  O(origins × edges × branching²) ≈ O(200 × 100 × branching²) with `ResurfaceMaxHops = 2`, not
+  O(100 × branching²). The bound is still `connect`'s budget, already named; it is just larger than
+  the edge count alone suggests.
 - **A two-hop reach through two *new* edges is attenuated to 0.25 and targets 0.5** — exactly
   `m2a`'s stated guarantee that propagation alone cannot lift a unit above the archive threshold.
   It composes.
@@ -474,9 +499,30 @@ builds `Neighbourhood.States` from it **sorted by `UnitID`** so the value handed
 deterministic regardless of map iteration order. C18 closed at the type level, at the first caller,
 for free.
 
-C20/C21 (`corrupted` is not scoped to the origin's reachable component) do not bite here: every
-edge `reweight` passes touches a newly-connected unit by construction, so there is no distant
-component in the input. Stated so `m2c` does not inherit a worry that does not apply.
+**C20/C21 (`corrupted` is not scoped to the origin's reachable component) do bite here, and the fix
+belongs at `Reweight`'s merge, not inside `Resurface`.** `reweight` passes one shared, unfiltered
+`newEdges` set — up to `ConnectSourceLimit × ConnectCandidateK` = 100 edges — to *every* origin's
+`Resurface` call, across up to 20 independent, possibly disjoint `connect` sources, over up to
+~200 origin calls. `buildAdjacency` builds its corrupt-edge map over the **entire** edge list it is
+handed, and `Resurface`'s reporting loop gates only on origin/refused/gains-reachability, never on
+graph distance from that call's own origin. So a single `NaN`-strength edge anywhere in the pass's
+batch is reported by every origin call that does not otherwise explain that unit — not only by the
+call nearest the corruption. `reweight` inherits this rather than closing it inside `Resurface`,
+because the shared-batch shape is `reweight`'s own choice (§4.5(a) above), and the same
+reuse-not-reimplement argument this section already makes for the boost formula applies to the
+refusal path too: the fix is how `Reweight` merges `corrupted` across its ~200 calls (below), not a
+change to a shipped, hardened function. Boosts are unaffected by this: `spreadGains` only walks
+neighbours reachable from each call's own `Origin`, so a call that cannot reach a unit never boosts
+it, corrupted or not.
+
+**`corrupted` merges by union, deduplicated and sorted — never by count, and this is stated because
+`Reweight`'s doc comment was silent on it.** The doc comment already says how `boosts` merge across
+origins (the highest boosted weight); it said nothing about `corrupted`. Decided: a unit id appears
+in `Reweight`'s output `corrupted` at most once, regardless of how many of the ~200 origin calls
+flag it — the same "reported once" property a single `Resurface` call already gives internally
+(`corrupted` is a plain, deduplicated slice, not a per-source count), extended across the batch
+rather than re-invented. §6.6 states this so `spec.md` does not have to invent a merge rule
+`sdd-design` left unnamed.
 
 **C17 is collected on the way past.** `spread.go`'s `refused[unitID]` guard is provably dead
 (`refused ⊆ gains`, and the next line already skips everything in `gains`) and C17's ruling was
@@ -491,8 +537,11 @@ Materialization means rewriting a unit's `(weight, last_touched_at)` pair as `(E
 That is **effective-weight-neutral by construction** — the two pairs denote the same curve, which
 `m2a` proved and tests at L1 for `Revive`'s ceiling branch. Neutrality is not the problem.
 
-The problem is `last_touched_at`. `m2a`'s adjudication ruling 2 settled, and doc 02 §2 now
-**states**, that `last_touched_at` is not only a decay anchor:
+The problem is `last_touched_at`, and it cannot be sidestepped by writing only `weight`: I24
+requires that a weight write move `weight` and `last_touched_at` together (proposal §4, `m2a`'s
+definition, `docs/06-harness.md` §4), so any materializing write — bulk or single — touches the
+timestamp whether or not that is what the write is really about. `m2a`'s adjudication ruling 2
+settled, and doc 02 §2 now **states**, that `last_touched_at` is not only a decay anchor:
 
 > *"`last_touched_at` is the vault's record of **direct use**, and it is read as one."*
 
@@ -511,14 +560,25 @@ milestone after it was taken.
 | Option | Verdict |
 |---|---|
 | Materialize, accept that `last_touched_at` is only a decay anchor | Rejected. It reverses a decision the owner took on `m2a` and that is now written into doc 02 §2, and it silently breaks `strengthen`'s own evidence predicate three phases later in the same pass |
-| Materialize into a separate `last_decayed_at` column | Rejected **for M2**, not on the merits: it is migration 0003, which rulings 2 and Q1 spent real effort keeping out of the whole milestone. This is the honest form of the feature and it should be revisited with the column |
-| **Do not materialize; amend doc 02 §6.6 to say the option is not taken and why** — chosen | Costs nothing observable (the read path already computes decay correctly — that is I05), removes a `reweight` code path with no consumer, and **makes proposal R13 moot**: I05's structural half no longer has to be carefully scoped around a permitted-but-unused bulk write |
+| Materialize into a separate `last_decayed_at` column | Rejected **for M2**, on cost and sequencing, not on an appeal to settled authority: it needs a new migration, and whether the **consolidation** half of M2 may take one is **R1, and it is open** (`m2-sleep-weight/proposal.md:373-375`) — ruling 2 closed that question only for the *scheduler* half, and Q1's option C is about seeding **existing** `config` columns' defaults on a row-less vault, not about a new column for a new purpose. This is the honest form of the feature; revisit it once R1 resolves, not because a ruling forbids it now |
+| **Do not materialize; amend doc 02 §6.6 to say the option is not taken and why** — chosen | Costs nothing observable (the read path already computes decay correctly — that is I05), removes a `reweight` code path with no consumer, and **makes proposal R13 moot**: I05's structural half no longer has to be carefully scoped around a permitted-but-unused bulk write. This verdict stands on I24 plus the "record of direct use" reading above, independent of R1's status |
 
 Consequences to carry forward, stated so they are not discovered: this **narrows** proposal R13 and
 `m2a` §9's last bullet, both of which assumed materialization would ship. `m2c` still scopes I05's
 structural test to read paths — that scoping is correct independently — but it no longer has to
 leave a hole for a feature nobody calls. **§9 Q2**, owner-review, because it declines something doc
 02 currently permits.
+
+**Reconciled against proposal §2's own exit criterion, explicitly** — every other load-bearing claim
+in this document is line-cited, and this one was not. That checkbox reads: *"`effective_weight` is
+computed on read … while consolidation's optional bulk decay materialization — which doc 02 §2 and
+§6.6 explicitly permit — remains legal"* (`m2-sleep-weight/proposal.md:47-49`). **"Not taken,
+revisit with a future migration" satisfies "remains legal."** The checkbox requires that the *option*
+still exist in doc 02, not that `m2b` exercise it: this design's own doc 02 §6.6 amendment records
+that materialization is not taken *in M2*, and does not withdraw the "optional" wording the section
+keeps — a future consolidation half that takes migration 0003 (once R1 resolves) can still
+materialize without doc 02 changing again. Nothing here requires the exit criterion's wording to
+change; declining to exercise a legal option is not the same as making it illegal.
 
 ### 4.6 `pattern_eval` — two watchers, each half-satisfied on purpose
 
@@ -860,8 +920,14 @@ func Strengthen(es []RelationEvidence, since *time.Time) (changes []StrengthChan
 // comparison downstream can skip past it (m2a C15's rule; C19's asymmetry is
 // not inherited).
 //
-// Both slices sorted by UnitID; per-unit results merged by max boosted
+// Both slices sorted by UnitID. boosts is merged per-unit by max boosted
 // weight — the same max rule Resurface and focus.AdjacencyStrengths use.
+// corrupted is merged by UNION, deduplicated: a unit id refused by any one
+// origin's Resurface call is reported at most once in Reweight's output,
+// regardless of how many of the pass's origin calls flag it (m2a C20/C21 —
+// a shared, unfiltered newEdges set means a corrupt edge can be reported by
+// every origin call that does not otherwise explain that unit; the merge is
+// where that is resolved, not the call).
 func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now time.Time) (boosts []weight.Boost, corrupted []string)
 ```
 
@@ -1045,7 +1111,7 @@ they finally get:
 | Knob | Default | Status |
 |---|---|---|
 | `incomplete_expiry_hours` (`consolidation.IncompleteExpiryHours`) | 24 | **new**, quoted from doc 02 §1 |
-| `strengthen_gain` (`consolidation.StrengthenGain`) | 0.10 | **new**, **derived** (§4.3) |
+| `strengthen_gain` (`consolidation.StrengthenGain`) | 0.10 | **new**, **chosen** (§4.3) — checked for compatibility against `DefaultGoalStagnationDays`, not derived from it |
 | `connect_source_limit` (`consolidation.ConnectSourceLimit`) | 20 | **new**, chosen |
 | `connect_candidate_k` (`consolidation.ConnectCandidateK`) | 5 | **new**, chosen — separate from `dedup_candidate_k` despite the identical default |
 | `belief_reinforce_gain` (`consolidation.BeliefReinforceGain`) | 0.10 | **new**, chosen (inherits §4.3's argument, different quantity) |
@@ -1073,7 +1139,7 @@ they finally get:
 | `DefaultWeightThreshold` equals migration `0002:63`'s column `DEFAULT`, read off disk via `migrationSQLText` | L2 | `test/conformance/` | 2 |
 | **The composition with `m2a`** — `weight.ReviveGain × weight.WeightCeiling > DefaultWeightThreshold` (one revive lifts a fully-decayed unit clear of archiving) and a two-hop `Resurface` result is strictly below `DefaultWeightThreshold`, hence archived. `m2a` could only assert the first against SQL text because it had no Go constant (ruling 4); with the constant here, this is an L1 assertion for the first time | L1 | `internal/core/consolidation/` | 2 |
 | `Strengthen`: `since == nil` → empty; one endpoint stale → nothing; both at exactly `since` → a change (`Before` is strict); asymptotic and never reaches 1; already at 1 → no row; sorted | L1 | `internal/core/consolidation/` | 3 |
-| **`StrengthenGain`'s derivation** — `ceil(ln(0.1/0.9)/ln(1−StrengthenGain)) == DefaultGoalStagnationDays`, computed from the constants, never from literals; pinned from both sides (n=20 below 0.9, n=21 at or above) | L1 | `internal/core/consolidation/` | 3 |
+| **`StrengthenGain`'s compatibility check** — `ceil(ln(0.1/0.9)/ln(1−StrengthenGain)) == DefaultGoalStagnationDays`, computed from the constants, never from literals; pinned from both sides (n=20 below 0.9, n=21 at or above) | L1 | `internal/core/consolidation/` | 3 |
 | `Strengthen` refuses `NaN`, `±Inf`, `-0.5` and `1.5` into `corrupted` and emits no change for them — the four shapes at the door, mutation-verified | L1 | `internal/core/consolidation/` | 3 |
 | `Reweight`: both endpoints of a new edge are boosted; multi-origin results merged by max; a corrupt edge strength refuses both endpoints; output deterministic across repeated calls with the same map (the sort, mutation-verified by removing it with ≥3 units — `m2a` C16's own method); no new constants referenced | L1 | `internal/core/consolidation/` | 3 |
 | `spread.go`'s `refused` guard removed and the `weight` package stays green (C17's own closing criterion) | L1 | `internal/core/weight/` | 3 |
@@ -1121,6 +1187,7 @@ suggestion — stated here so `m2c` designs it rather than discovering it at app
 | `RelationRepo` read for `strengthen` | `[]RelationEvidence` — the relation joined to **both** endpoints' `last_touched_at` | A join no port has today. The alternative (load relations, then load units, then zip in `brain`) is two round trips and a correctness hazard if a unit moves between them |
 | `RelationRepo` read for `connect` | `map[Pair]bool` over the candidate set, keyed by `CanonicalPair` | §4.4's exclusion. Bounded by `ConnectSourceLimit × ConnectCandidateK` |
 | `SelfModelRepo` | Upsert by `topic_key` (`RelationRepo.Upsert`'s shape, ruling 5) plus a read whose **name** carries "active", never a status parameter — `ActiveBeliefs()`, not `Beliefs(status)` | `LiveByIDs`'s own precedent. `m2b` deliberately declares no belief-status vocabulary; the port name is the guard |
+| `goal_stagnation_days`'s one schema home | `m2b` declares one Go constant (`DefaultGoalStagnationDays`) and one `Resolve*`, reading whichever table `m2c`'s `ConfigRepo` decides | §9 Q3: two schema homes exist today — `config.goal_stagnation_days` (`0002:66`) and `calibration`'s own example key (`0002:38`) — and §13/§6.11 mark the knob ⚙ (learning-tunable). `m2c` must pick the table `ConfigRepo` reads; **M5's learning module must write the same one**, or a recalibration silently stops being read on the next pass |
 | Belief embeddings | `[]BeliefVector`, computed in memory at the start of `derive` and discarded | Ruling Q2 option A. **The nightly provider cost must be written into doc 02 §6.5 by this change**, not left implicit — that is part of the ruling, not an aside |
 | The two recall legs for `connect` | Two ranked `[]string`, vector leg first | `recall.FuseScored`'s argument order is load-bearing for its tie-break (`fuse.go:33-42`) |
 | `current_state` write | One append-only row per `LoadFinding` | doc 02 §10. No delivery — M3 |
@@ -1146,11 +1213,14 @@ claiming two, i.e. **removing** a behaviour doc 02 describes rather than filling
 shipped with no producer and was accepted for the same reason — §8 R5 there.)*
 
 **Q2 — decay materialization is declined, reversing an assumption both the proposal and `m2a`
-carried.** §4.5(b) has the argument: it would move `last_touched_at` for untouched units and
-falsify the "record of direct use" reading `m2a`'s ruling 2 put into doc 02 §2 and that
+carried.** §4.5(b) has the argument: I24 forces any materializing write to touch `last_touched_at`,
+which would falsify the "record of direct use" reading `m2a`'s ruling 2 put into doc 02 §2 and that
 `focus.AgeRamp` and §4.3's co-activation predicate both depend on. Its honest form needs a
-`last_decayed_at` column, i.e. migration 0003, which rulings 2 and Q1 kept out of the whole
-milestone. **Recommendation: decline in M2, amend §6.6 to say so and why, revisit with the column.**
+`last_decayed_at` column, i.e. a migration — and whether the **consolidation** half of M2 may take
+one is **R1, still open** (`m2-sleep-weight/proposal.md:373-375`); ruling 2 and Q1 settled the
+question only for the scheduler half and for seeding existing `config` defaults, not for a new
+column here. **Recommendation: decline in M2 on the merits above, amend §6.6 to say so and why,
+revisit with the column once R1 resolves.**
 
 **Q3 — `goal_stagnation_days` has two homes in the schema.** `config.goal_stagnation_days INTEGER
 NOT NULL DEFAULT 21` (`0002:66`) **and** `calibration`'s own column comment names it as its example
@@ -1175,11 +1245,19 @@ available instant is the last `current_state` row's `recorded_at`, which starts 
 *hypothesis* rather than on its resolution. `m2b` takes `lastHypothesisAt *time.Time` and is
 agnostic. **`m2c` must map it and say so in the `decision_log` context.**
 
-**Q7 — `focus.ResolveMargin` does not sanitize a non-finite configured margin.** Inherited, shipped,
-and outside `m2b`'s scope — `m2a`'s design is frozen (`openspec/README.md`). `ResolveWeightThreshold`
-(§6.4) takes the sanitizing posture, so the two `Resolve*` functions in the tree will differ.
-Named here so the difference is a recorded decision rather than an accident, and so whichever link
-touches `focus` next can close it.
+**Q7 — `ResolveWeightThreshold` and `focus.ResolveMargin` both sanitize a corrupt configured value,
+but land on different fallbacks, and that is a recorded difference, not an oversight.**
+`focus.ResolveMargin` already refuses a non-finite or negative configured margin — shipped in `m2a`
+(`internal/core/focus/hysteresis.go:79-88`) and stated in doc 02 §3 — but resolves it to `0`, the
+neutral "no anti-jitter protection" value, deliberately never to `DefaultHysteresisMargin`:
+assigning the calibrated default to data core never validated would assert a confidence the
+corruption does not support (`ResolveMargin`'s own doc comment). `ResolveWeightThreshold` (§6.4)
+resolves the same shape of corruption — non-finite or out of `[0, weight.WeightCeiling]` — to
+`DefaultWeightThreshold` instead, because a threshold has no neutral value the way a margin does:
+`0` would archive nothing ever, and `+Inf` would archive everything, so "no configured value" and
+"a corrupted one" collapse onto the same reading core already gives an absent row. The two
+`Resolve*` functions differ on purpose, for a reason specific to each knob's own domain, not because
+one sanitizes and the other does not.
 
 **Q8 — `Strengthen`'s `since` and `SelectConnectSources`'s `since` are the same value, and nothing
 structural says so.** Both take `*time.Time`; `m2c` passes `consolidation_last_run_at` to both. A
@@ -1214,6 +1292,22 @@ four links is **3.9×** (3,115 test vs 800 impl+docs, `docs/06-harness.md:359-36
 assumes 1.6×. **The test column is the number most likely to be wrong, and by roughly 2.5×** — at
 `m2a`'s measured ratio `m2b` ships closer to 4,400 test lines than 1,780. That does not move any
 PR past the ceiling, since the ceiling no longer counts test lines; it moves the calendar.
+
+**The impl+docs column carries a matching risk, and it was not hedged above — it is now.** `m2a`'s
+four measured links never produced an impl+docs figure above 319 (0.80×, link 3a, the table in
+`docs/06-harness.md` §7) — yet PR 4's estimate here already assumes ~350 (0.88×), above every actual
+`m2a` PR, before a single line of `m2b` is written. This project's own doc-comment density adds to
+that risk rather than offsetting it: `weight.Resurface`'s single doc comment runs to ~130 lines
+(`internal/core/weight/spread.go:37-165`), and §4's formula arguments above are written at
+comparable length before they are quoted into `doc.go` and doc 02. If PR 4's actual impl+docs runs
+even 15% over its ~350 estimate — well inside the range `m2a`'s own doc-comment growth showed across
+review rounds — it crosses 400 outright, not merely tightens the margin.
+
+**The pre-drawn split below still holds under that overrun.** PR 4 splits at `connect.go` (~190) |
+`derive.go` (~165); a 15% overrun distributed proportionally puts each half at roughly 218 and 190
+lines, both comfortably under 400 on their own, so the split absorbs the overrun without a mid-PR
+decision. PR 3's split (`strengthen.go` | `reweight.go`) starts smaller (~230 total) and has more
+headroom regardless of which half an overrun lands on.
 
 **Split lines drawn in advance**, so a crossing does not become an unplanned decision:
 
