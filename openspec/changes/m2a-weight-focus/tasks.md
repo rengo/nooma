@@ -1157,6 +1157,118 @@ an already-loaded, already-type-checked package; no new import, no new `go/impor
 
 ---
 
+### C35 — Judgment Day round 5, both judges independently, with the SAME prescription: a constraint composed by embedding another constraint BY NAME escaped round 4's own type-checked fix. **Fixed — `typeParamConstraintTerms` gains a `*types.Named` resolution step, symmetric with `typeCanYieldWithoutConversion`'s own one level up.**
+
+Round 4 (C34) added a `*types.TypeParam` case to `typeCanYieldWithoutConversion` that resolves a bare,
+uninstantiated type parameter through its constraint's own type set, via a new `typeParamConstraintTerms`
+helper. Round 5 found that helper's own switch never special-cased a *types.Named* embedded or
+unioned-in term — only `*types.Union` and an ANONYMOUS `*types.Interface`. `type baseConstraint
+interface{ unit.Status }; type embeddingConstraint interface{ baseConstraint }; func F[T
+embeddingConstraint]() T { var z T; return z }` — composing a constraint by embedding a NAMED one, the
+ordinary Go idiom — returned a real `unit.Status` through an exported function with zero conversion
+syntax, and the round-4 check said nothing about it. Both judges reproduced the plain one-level embed;
+judge A additionally reproduced it two levels deep, as one arm of a union (`interface{ Inner | int }`),
+as a named constraint that itself embeds a union, and cross-package. Judge A also verified the boundary
+precisely: the ANONYMOUS nested form (`interface{ interface{ unit.Status } }`) stayed caught throughout
+— only the NAMED form was ever the gap.
+
+**Root cause**: `iface.EmbeddedType(i)` and `Union.Term(j).Type()` both return the embedded or
+unioned-in type exactly as declared. For a NAMED constraint, that is a `*types.Named` — the same node
+kind an ordinary defined type is, not pre-unwrapped to the `*types.Interface` it constrains through.
+The pre-round-5 switch dispatched on `*types.Union` and `*types.Interface` only; a `*types.Named` fell
+to `default` and was recorded as one opaque, single-element concrete term, never itself walked for
+further terms — so a zero-method, type-terms-only constraint (exactly what a constraint built by
+embedding a named one always is) reported zero reachable terms, and the caller's `for` loop never ran.
+
+**Fix**: `typeParamConstraintTerms` is now `appendConstraintTerms` + `appendConstraintTerm`: the latter
+resolves a `*types.Named` term through its own `.Underlying()` before the union/interface dispatch and
+recurses — the identical move `typeCanYieldWithoutConversion` already makes one level up for a
+`*types.Named` RESULT type (`named.Underlying()`, existing code, round 3). `typeParamConstraintTerms`
+simply had not been given the same treatment for a `*types.Named` TERM. A `visited map[types.Type]bool`
+guards termination, symmetric with `typeCanYieldWithoutConversion`'s own visited map — though probed,
+not merely reasoned: a literal named-interface embedding cycle (`type A interface{ B }; type B
+interface{ A }`, with or without an intervening generic type parameter) is rejected by `go/types` itself
+as an "invalid recursive type" at COMPILE time, so this function can never actually be handed one from
+valid Go source. The guard stays anyway, as defense in depth, at the cost of one map.
+
+**`comparable` (judge A)**: shares the exact `any`/`interface{}` limit this file's own doc comment
+already documented, under a different name never stated before this round. `comparable`'s constraint
+interface has `NumEmbeddeds() == 0` — its type set is defined by an operator ("every comparable type"),
+not by naming member types — identically to `any`. Generalized in the doc comment: ANY constraint whose
+interface has zero embeds (`any`, `comparable`, or a user-defined method-only constraint with no type
+term) falls in this same accepted-limit class; the discriminator from a constraint that genuinely
+restricts its type set is `NumEmbeddeds() >= 1`.
+
+**The failure message now explains itself (both judges, WARNING)**: before this fix, a type-parameter-
+derived hit (e.g. `func F[T ~string]() T` where `unit.Status`'s own underlying type is `string`) used
+the IDENTICAL message template as a direct, concrete `unit.Status` leak, with no hint that the ruling is
+about constraint TYPE-SET MEMBERSHIP rather than a textual reference. `typeCanYieldWithoutConversion` now
+returns `(bool, string)`; the second value is a human-readable explanation, non-empty only for a
+type-parameter-derived hit, naming the type parameter, its constraint, and (for a tilde term) why the
+approximation admits `unit.Status`. Measured exact text for `func ZzzSecondOf[T zzStatusConstraint]()
+T`, `zzStatusConstraint = interface{ unit.Status }`:
+
+```
+ZzzSecondOf's result 0 (T) can yield a github.com/rengo/nooma/internal/core/unit.Status without an
+explicit conversion — focus is a computed view (docs/02-cognitive-core.md §3), never a persisted
+unit.Status (I01, R4.2) — type parameter T's constraint github.com/rengo/nooma/internal/core/focus.
+zzStatusConstraint includes the term github.com/rengo/nooma/internal/core/unit.Status directly
+(Judgment Day round 4/5)
+```
+
+The `~string` ruling itself is unchanged and correct (both judges confirmed the membership test is right
+and `banned.Underlying()` stays scoped to that one tilde branch) — only the message gained the missing
+explanation.
+
+**Correction to the record, made while here**: C34's own text cited `internal/core/classify`'s three
+`~string` generics (`joinVocabulary`, `decodeEnum`, `assignEnum`) as the pattern this fix was pre-empting
+elsewhere in the tree. That citation never claimed those three would be flagged, but read that way absent
+a correction — they will not be: all three are unexported (the structural subtest only ever walks
+`ast.IsExported` names, never reaching them regardless of this fix), and of the three, only `decodeEnum`'s
+own result (`(*T, Reason)`) carries `T` at all — `joinVocabulary` takes `T` only as a parameter, and
+`assignEnum` returns a closure that itself returns no `T`. Corrected on
+`TestI01_FocusIsNeverAPersistedStatus`'s own doc comment (round-4 bullet) and here.
+
+**Full probe matrix, as measured** (fixture-pinned in `testdata/i01_typecheck_probe/fixture.go`, run via
+`TestI01TypecheckFixture_KnownShapes`, plus one throwaway `internal/core/focus/zz_probe_round5.go` for the
+exact failure-message text above, deleted after; `git status --short internal/core/focus` confirmed
+clean after):
+
+*Caught, real bypasses:* a named constraint embedding a named constraint (`ReturnsNamedEmbedsNamedTypeParam`);
+two levels of that (`ReturnsNamedEmbedsNamedTwiceTypeParam`); a named constraint embedded inside a union
+arm (`ReturnsNamedEmbeddedInUnionTypeParam`); a named constraint that embeds a union
+(`ReturnsNamedEmbedsUnionTypeParam`); a cross-package named constraint (`ReturnsCrossPackageNamedTypeParam`,
+against a new throwaway `testdata/i01_typecheck_probe/xpkg` package); the anonymous nested form, confirmed
+still caught (`ReturnsNestedAnonymousTypeParam`).
+
+*Correctly excluded, no false positive:* `comparable` (`ReturnsComparableTypeParam`); `any` (pre-existing
+`ReturnsUnconstrainedTypeParam`); an unrelated generic constrained to `int | string`
+(`ReturnsUnrelatedGenericTypeParam`); `type StatusDefined unit.Status` and unconstrained/comparable
+elsewhere (pre-existing `ReturnsNotFlagged`); mutually referential named constraints — probed and found
+NOT constructible as valid Go at all (`go/types` itself rejects the source as an "invalid recursive
+type"), so no fixture exists for it; the `visited` guard added is defense in depth, not a fix for an
+observed hang.
+
+**Where**:
+- `test/conformance/i01_focus_never_persisted_test.go` — `typeParamConstraintTerms` replaced by
+  `appendConstraintTerms`/`appendConstraintTerm` (named-term resolution, cycle guard);
+  `typeCanYieldWithoutConversion` now returns `(bool, string)` (explanation threading); both call sites
+  updated; the file's own doc comment gains the round-5 history entry, the `comparable` boundary, and the
+  classify correction.
+- `testdata/i01_typecheck_probe/fixture.go` — eight new pinned shapes (listed above) plus the corrected
+  `want` table in `TestI01TypecheckFixture_KnownShapes`.
+- `testdata/i01_typecheck_probe/xpkg/xpkg.go` — new, cross-package named-constraint fixture.
+- `openspec/changes/m2a-weight-focus/tasks.md` — this entry.
+
+**Runtime cost after this fix**: unchanged in character — one more resolution branch over an
+already-loaded, already-type-checked package; no new `go.mod` dependency (the `xpkg` fixture package
+lives under `testdata/`, outside the real build, same convention as `i01_typecheck_probe` itself).
+
+**Verification**: `make check-all` — see this session's own `sdd/m2a-weight-focus/apply-progress` record
+for the exact gate output.
+
+---
+
 ## Package layout (from `design.md` §5/§8.1, cited per task below)
 
 ```
