@@ -267,7 +267,7 @@ the divergence non-negotiable #1 forbids.
 **`IncompleteExpiryHours = 24` is quoted, not chosen.** doc 02 §1 fixes it. It gains a §13 row so
 the one number the phase has is calibratable in the one place §13 promises.
 
-### 4.3 `strengthen` — Hebbian co-use, and a gain derived from two numbers doc 02 already fixes
+### 4.3 `strengthen` — Hebbian co-use, and a gain chosen, then checked for compatibility against two numbers doc 02 already fixes
 
 **What counts as evidence.** doc 02 §6.3's word is *accumulated* — evidence that accrues *between*
 passes. Enumerating what actually accumulates in the vault between two consolidations without a
@@ -477,10 +477,12 @@ than lazy:
   hold a unit.
 - **It is bounded, once the origins multiplier is counted.** New edges ≤
   `ConnectSourceLimit × ConnectCandidateK` = 100, so origins ≤ 200, and **each** of those ~200
-  `Resurface` calls re-runs `buildAdjacency` over the same ≤100-edge set — the whole phase is
-  O(origins × edges × branching²) ≈ O(200 × 100 × branching²) with `ResurfaceMaxHops = 2`, not
-  O(100 × branching²). The bound is still `connect`'s budget, already named; it is just larger than
-  the edge count alone suggests.
+  `Resurface` calls re-runs `buildAdjacency` over the same ≤100-edge set. `buildAdjacency` is
+  O(edges) per call and `spreadGains` is O(branching²) per call — additive, not multiplicative — so
+  the whole phase is O(origins × (edges + branching²)) ≈ O(200 × (100 + branching²)) with
+  `ResurfaceMaxHops = 2`, not O(100 × branching²) and not O(origins × edges × branching²) either.
+  The bound is still `connect`'s budget, already named; it is just larger than the edge count alone
+  suggests.
 - **A two-hop reach through two *new* edges is attenuated to 0.25 and targets 0.5** — exactly
   `m2a`'s stated guarantee that propagation alone cannot lift a unit above the archive threshold.
   It composes.
@@ -524,6 +526,27 @@ flag it — the same "reported once" property a single `Resurface` call already 
 rather than re-invented. §6.6 states this so `spec.md` does not have to invent a merge rule
 `sdd-design` left unnamed.
 
+**A unit id can appear in both `boosts` and `corrupted` from the same `Reweight` call, and neither
+suppresses the other — this is decided, not left for `sdd-tasks` to invent.** `Resurface`'s own
+single-call contract makes the two mutually exclusive per call: a unit that gets no boost is either
+unreached (no effect, no entry anywhere) or refused (an entry in `corrupted`), never both, because
+one call has one origin and one edge set. That guarantee is exactly what a shared, unfiltered
+`newEdges` batch across ~200 origin calls breaks: a unit legitimately boosted by origin A's valid
+two-hop path can simultaneously be flagged by origin B, whose only path to that unit ran through the
+same batch's bad edge. **Decided: report both.** `boosts` answers "did at least one origin move this
+unit's weight"; `corrupted` answers "did at least one origin fail to explain this unit because an
+edge in the shared batch was unusable" — both are true, independent facts about the pass's data
+health, and this repo's own posture is that a corruption is refused and surfaced, never silently
+repaired or silently dropped (§4.3's entry-point rule; C15/C22/C24). Letting a legitimate boost
+cancel the flag would make a real data-quality signal disappear behind an unrelated origin's better
+luck — the corrupted edge is still corrupt, and `doctor` still needs to see it. Scoping each origin's
+edge set so the overlap cannot arise was considered and rejected for M2: it changes `Reweight`'s
+shape from one shared batch to per-origin edge sets, which costs a second pass over the candidate
+graph per origin to compute reachability before calling `Resurface` at all — a real cost, paid to
+avoid reporting a fact that costs nothing to report honestly instead. `m2c` reads a unit id present
+in both outputs as two separate, simultaneously true findings for `decision_log`, not one resolved
+into the other.
+
 **C17 is collected on the way past.** `spread.go`'s `refused[unitID]` guard is provably dead
 (`refused ⊆ gains`, and the next line already skips everything in `gains`) and C17's ruling was
 *"a later link should delete it and confirm the package stays green"*. The `strengthen-reweight` PR
@@ -563,6 +586,16 @@ milestone after it was taken.
 | Materialize into a separate `last_decayed_at` column | Rejected **for M2**, on cost and sequencing, not on an appeal to settled authority: it needs a new migration, and whether the **consolidation** half of M2 may take one is **R1, and it is open** (`m2-sleep-weight/proposal.md:373-375`) — ruling 2 closed that question only for the *scheduler* half, and Q1's option C is about seeding **existing** `config` columns' defaults on a row-less vault, not about a new column for a new purpose. This is the honest form of the feature; revisit it once R1 resolves, not because a ruling forbids it now |
 | **Do not materialize; amend doc 02 §6.6 to say the option is not taken and why** — chosen | Costs nothing observable (the read path already computes decay correctly — that is I05), removes a `reweight` code path with no consumer, and **makes proposal R13 moot**: I05's structural half no longer has to be carefully scoped around a permitted-but-unused bulk write. This verdict stands on I24 plus the "record of direct use" reading above, independent of R1's status |
 
+**The literal doc 02 §6.6 replacement, so `spec.md` locks in wording rather than re-deriving this
+section's argument.** §6.6 currently reads *"post-connection weight adjustments (and optional decay
+materialization)"*; this PR amends it to:
+
+> *"post-connection weight adjustments (decay materialization remains optional and is not exercised
+> by M2's `reweight`)."*
+
+This keeps the "optional" wording the reconciliation below depends on, states plainly that M2 does
+not exercise it, and names the phase that could without implying `reweight` ever will on its own.
+
 Consequences to carry forward, stated so they are not discovered: this **narrows** proposal R13 and
 `m2a` §9's last bullet, both of which assumed materialization would ship. `m2c` still scopes I05's
 structural test to read paths — that scoping is correct independently — but it no longer has to
@@ -579,6 +612,15 @@ that materialization is not taken *in M2*, and does not withdraw the "optional" 
 keeps — a future consolidation half that takes migration 0003 (once R1 resolves) can still
 materialize without doc 02 changing again. Nothing here requires the exit criterion's wording to
 change; declining to exercise a legal option is not the same as making it illegal.
+
+**This reconciliation is itself provisional on Q2, not a second settled fact.** Q2 — decline in M2,
+or materialize after all — is flagged owner-review two paragraphs above, and the "remains legal"
+reading here assumes Q2 lands where this design recommends. Most owner outcomes on Q2 still leave
+"remains legal" true even if reversed: an owner who chooses to materialize in M2 after all keeps the
+option legal by exercising it, which trivially satisfies the checkbox too. The one outcome this
+reconciliation does not survive is an owner ruling that strikes the "optional" wording from doc 02
+§6.6 outright — at that point the option no longer exists to remain legal, and this paragraph needs
+redoing, not restating.
 
 ### 4.6 `pattern_eval` — two watchers, each half-satisfied on purpose
 
@@ -928,6 +970,12 @@ func Strengthen(es []RelationEvidence, since *time.Time) (changes []StrengthChan
 // a shared, unfiltered newEdges set means a corrupt edge can be reported by
 // every origin call that does not otherwise explain that unit; the merge is
 // where that is resolved, not the call).
+//
+// A unit id MAY appear in both boosts and corrupted from the same call:
+// one origin's legitimate boost never cancels another origin's refusal, and
+// neither suppresses the other. They are independent facts about the pass —
+// "at least one origin moved this weight" and "at least one origin could not
+// explain this unit" both hold at once, and both are reported (§4.5(a)).
 func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now time.Time) (boosts []weight.Boost, corrupted []string)
 ```
 
@@ -1300,14 +1348,21 @@ four measured links never produced an impl+docs figure above 319 (0.80×, link 3
 that risk rather than offsetting it: `weight.Resurface`'s single doc comment runs to ~130 lines
 (`internal/core/weight/spread.go:37-165`), and §4's formula arguments above are written at
 comparable length before they are quoted into `doc.go` and doc 02. If PR 4's actual impl+docs runs
-even 15% over its ~350 estimate — well inside the range `m2a`'s own doc-comment growth showed across
-review rounds — it crosses 400 outright, not merely tightens the margin.
+even 15% over its ~350 estimate — a rate far gentler than the growth this same design already cites:
+`internal/core/weight/spread.go` went **183 → 371 lines, ~103%**, across the three Judgment Day
+rounds that hardened `Resurface` (`git diff --stat` between the first green implementation and the
+final C15 fix) — it crosses 400 outright, not merely tightens the margin.
 
-**The pre-drawn split below still holds under that overrun.** PR 4 splits at `connect.go` (~190) |
+**The pre-drawn split below still holds — but the headroom is thinner than the 15% hedge suggests,
+and that is worth saying honestly rather than papering over.** PR 4 splits at `connect.go` (~190) |
 `derive.go` (~165); a 15% overrun distributed proportionally puts each half at roughly 218 and 190
-lines, both comfortably under 400 on their own, so the split absorbs the overrun without a mid-PR
-decision. PR 3's split (`strengthen.go` | `reweight.go`) starts smaller (~230 total) and has more
-headroom regardless of which half an overrun lands on.
+lines. But 15% is this design's working hedge, not the worst case its own evidence supports: at
+`spread.go`'s measured ~103% growth, `connect.go` alone would land at ~386 — still under 400, but
+with only **~3.5% headroom**, not comfortably under. The split absorbs the overrun either way, which
+is exactly why it is drawn in advance rather than decided mid-PR, but "comfortably under" only holds
+at the 15% hedge, not at the growth rate this repository has actually shown. PR 3's split
+(`strengthen.go` | `reweight.go`) starts smaller (~230 total) and has more headroom regardless of
+which half an overrun lands on.
 
 **Split lines drawn in advance**, so a crossing does not become an unplanned decision:
 
