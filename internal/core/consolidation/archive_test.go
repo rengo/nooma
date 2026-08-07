@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 )
 
 // TestArchive_BelowThreshold_ArchivesTheUnit is the C14 length guard: it
@@ -135,5 +136,50 @@ func TestArchive_BothOutputsSortedByUnitID(t *testing.T) {
 		if corrupted[i] != id {
 			t.Fatalf("Archive() corrupted[%d] = %q, want %q — must be sorted", i, corrupted[i], id)
 		}
+	}
+}
+
+// TestResolveWeightThreshold_Nil_ReturnsDefault is the C14 content guard:
+// it must fail against a stub returning a bare 0 rather than
+// DefaultWeightThreshold.
+func TestResolveWeightThreshold_Nil_ReturnsDefault(t *testing.T) {
+	got := ResolveWeightThreshold(nil)
+	if got != DefaultWeightThreshold {
+		t.Errorf("ResolveWeightThreshold(nil) = %v, want %v", got, DefaultWeightThreshold)
+	}
+}
+
+// TestResolveWeightThreshold_FiniteInRangeValue_PassesThrough proves a
+// well-formed configured value is never second-guessed.
+func TestResolveWeightThreshold_FiniteInRangeValue_PassesThrough(t *testing.T) {
+	v := 0.8
+	got := ResolveWeightThreshold(&v)
+	if got != v {
+		t.Errorf("ResolveWeightThreshold(&%v) = %v, want %v unchanged", v, got, v)
+	}
+}
+
+// TestResolveWeightThreshold_NonFiniteOrOutOfRange_FallsBackToDefault
+// proves R2.3's domain restriction: a value core cannot interpret is
+// treated identically to no value at all, never trusted as-is.
+func TestResolveWeightThreshold_NonFiniteOrOutOfRange_FallsBackToDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		v    float64
+	}{
+		{"NaN", math.NaN()},
+		{"+Inf", math.Inf(1)},
+		{"-Inf", math.Inf(-1)},
+		{"negative", -0.1},
+		{"above WeightCeiling", weight.WeightCeiling + 0.1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := tt.v
+			got := ResolveWeightThreshold(&v)
+			if got != DefaultWeightThreshold {
+				t.Errorf("ResolveWeightThreshold(&%v) = %v, want default %v", tt.v, got, DefaultWeightThreshold)
+			}
+		})
 	}
 }
