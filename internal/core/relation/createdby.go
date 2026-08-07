@@ -31,17 +31,18 @@ var ErrUnknownCreatedBy = fmt.Errorf("relation: unknown created_by")
 // members, in the order the constants above declare them —
 // unit.AllStatuses's own house pattern: a function, not an exported var, so
 // a caller mutating one call's result cannot affect another.
-//
-// TODO(RED stub): implemented in the next commit.
 func AllCreatedBy() []CreatedBy {
-	return nil
+	return []CreatedBy{CreatedBySystem, CreatedByConsolidation, CreatedByUser}
 }
 
 // ParseCreatedBy is the sole entry point from untrusted text into the
 // CreatedBy vocabulary. It returns ErrUnknownCreatedBy, naming the rejected
 // value, for anything that is not one of AllCreatedBy()'s members.
-//
-// TODO(RED stub): implemented in the next commit.
 func ParseCreatedBy(s string) (CreatedBy, error) {
-	return "", ErrUnknownCreatedBy
+	for _, want := range AllCreatedBy() {
+		if s == string(want) {
+			return want, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %q", ErrUnknownCreatedBy, s)
 }
