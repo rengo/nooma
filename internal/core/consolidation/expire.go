@@ -1,6 +1,11 @@
 package consolidation
 
-import "time"
+import (
+	"sort"
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // IncompleteExpiryHours is doc 02 §1's own fixed number — quoted, not
 // chosen (design.md §4.2): "an `incomplete` unit ... promoted with what it
@@ -24,6 +29,44 @@ type Incomplete struct {
 // ExpireIncomplete resolves doc 02's §1/§6.1 contradiction: promotion is
 // the default outcome at 24h, and archival is the exception a caller must
 // evidence via Unresolved (spec R2.1, design.md §4.2).
+//
+// elapsed = now - u.CreatedAt, clamped at zero when negative (clock skew, a
+// backdated import — a unit that does not yet exist has waited no time).
+// elapsed < IncompleteExpiryHours produces no transition. At or past that
+// bound, the emitted transition is incomplete -> archived (reason
+// ReasonIncompleteExpired) when u.Unresolved, and incomplete -> pool
+// (reason ReasonIncompletePromoted) otherwise — promotion is the default,
+// archival is the exception the caller must evidence.
+//
+// Output is sorted by UnitID.
 func ExpireIncomplete(us []Incomplete, now time.Time) []Transition {
-	return nil
+	var out []Transition
+	for _, u := range us {
+		elapsed := now.Sub(u.CreatedAt).Hours()
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		if elapsed < IncompleteExpiryHours {
+			continue
+		}
+
+		if u.Unresolved {
+			out = append(out, Transition{
+				UnitID: u.UnitID,
+				From:   unit.StatusIncomplete,
+				To:     unit.StatusArchived,
+				Reason: ReasonIncompleteExpired,
+			})
+			continue
+		}
+		out = append(out, Transition{
+			UnitID: u.UnitID,
+			From:   unit.StatusIncomplete,
+			To:     unit.StatusPool,
+			Reason: ReasonIncompletePromoted,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].UnitID < out[j].UnitID })
+	return out
 }
