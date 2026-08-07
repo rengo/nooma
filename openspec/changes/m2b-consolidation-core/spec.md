@@ -336,11 +336,12 @@ M2 does not exercise it.
 
 **Verified by**: L1 — both endpoints of a new edge are boosted; multi-origin results merge by max;
 a corrupt edge strength refuses both endpoints; `corrupted` deduplicates across origins; a unit
-present in both outputs from one call; `boosts` and `corrupted` sorted by `UnitID`,
-mutation-verified by removing the final sort (Judgment Day round 1 Fix C — a prior draft of this
-line claimed this coverage for an intermediate `Neighbourhood.States` sort that has since been
-deleted as dead per C13, and whose removal never actually changed any test outcome); no reference
-to any constant beyond the four named above.
+present in both outputs from one call; `boosts` and `corrupted` sorted by `UnitID` (eight elements
+each — fewer accidentally lands already sorted too often under Go's randomized map iteration, see
+Fix C below), mutation-verified by removing the final sort and measuring the kill rate (Judgment
+Day round 1 Fix C — a prior draft of this line claimed this coverage for an intermediate
+`Neighbourhood.States` sort that has since been deleted as dead per C13, and whose removal never
+actually changed any test outcome); no reference to any constant beyond the four named above.
 
 ---
 

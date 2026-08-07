@@ -328,9 +328,9 @@ that task is 5.7.
       `corrupted`, before `weight.clampStrength` or any comparison downstream can run; `corrupted`
       is merged by union, deduplicated, across all origin calls; a unit id may appear in both
       `boosts` and `corrupted` from the same call, neither suppressing the other; `boosts` and
-      `corrupted` sorted by `UnitID` (≥3 elements each), mutation-verified by removing the final
-      sort; `rg` check that no constant beyond `weight.ReviveGain`/`WeightCeiling`/
-      `ResurfaceMaxHops`/`ResurfaceAttenuation` is referenced.
+      `corrupted` sorted by `UnitID` (eight elements each, per Fix C below), mutation-verified by
+      removing the final sort and measuring the kill rate; `rg` check that no constant beyond
+      `weight.ReviveGain`/`WeightCeiling`/`ResurfaceMaxHops`/`ResurfaceAttenuation` is referenced.
       **Correction (Judgment Day round 1, Fix B)**: this line originally also claimed the
       intermediate `states sorted by UnitID before building Neighbourhood` step was
       mutation-verified. It never was — no test exercised the difference, because
@@ -339,6 +339,10 @@ that task is 5.7.
       convention). What actually closes `m2a` C18 is the `map[string]weight.Current` input type
       (a duplicate `UnitID` is unrepresentable), not this sort — corrected here and in `spec.md`
       R3.3.
+      **Correction (Judgment Day round 1, Fix C)**: the original fixture used three elements per
+      slice, which lands already sorted 1-in-6 of the time by chance under Go's randomized map
+      iteration — measured at a 43-57% kill rate with the final sort removed. Replaced with an
+      eight-element fixture (1-in-40320 accidental-sort odds); removing the sort now fails 40/40.
       **Red**: `undefined: consolidation.Reweight`.
       Stub: `func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now
       time.Time) (boosts []weight.Boost, corrupted []string) { return nil, nil }` — compiles;
