@@ -1,6 +1,7 @@
 package consolidation
 
 import (
+	"errors"
 	"math"
 	"time"
 
@@ -78,19 +79,41 @@ func mergeQualifies(similarity float64) bool {
 // caller obligation; a zero-magnitude vector is refused
 // (recall.ErrZeroVector), never scored.
 //
-// A non-finite vector component (NaN, +-Inf) is not itself validated at
-// this entry point: recall.Normalize does not catch it either (only a
-// zero magnitude is, via ErrZeroVector), so a corrupted embedding
-// produces a NaN similarity. Cosine's mathematical domain is [-1, 1], not
-// [0, 1] (Cauchy-Schwarz over unit vectors) — NaN is outside any domain,
-// and mergeQualifies's >= comparison is not total over it: NaN >=
-// BeliefMergeCosine is always false under IEEE 754. That resolves the
-// decision to "create a new belief" rather than a merge this package
-// cannot justify — the same safe-default posture Strengthen and Archive
-// use for their own corrupted inputs, applied here through comparison
-// semantics rather than an explicit refusal branch, because this
-// function's signature carries no corrupted output to report into (design
-// stub above). Pinned by TestMergeProposals_NonFiniteSimilarityNeverMerges.
+// A non-finite vector component (NaN, +-Inf) IS validated at this entry
+// point, on both sides, and the two sides are handled differently
+// (Judgment Day round 1, C-series NaN-comparator pattern: clamp, Displaces,
+// Rank, focus.clamp, and now this).
+//
+// On the EXISTING side, a non-finite component fails the whole call:
+// recall.Normalize refuses it via recall.ErrNonFiniteVector while building
+// the comparison index, the same treatment ErrZeroVector already gets one
+// line above. This is deliberate, not incidental: a NaN component makes
+// norm itself NaN, ErrZeroVector's "norm == 0" guard does not catch it
+// (NaN == 0 is false), so an uncaught NaN existing vector would carry a
+// NaN score into recall.Search's sort.Slice — whose comparator
+// (scored[i].Score > scored[j].Score) is not a strict weak ordering once
+// any score is NaN. A NaN-scored entry can then sort ahead of the
+// genuinely nearest finite match, so scored[0] stops being the nearest and
+// a real qualifying merge is missed — silently, and dependent on the
+// corrupted entry's position in existing, not on anything about the
+// proposal being compared. Failing the call surfaces that corruption
+// instead of returning a wrong answer; ruling Q2 re-embeds every belief
+// fresh each night, so this is one embedder hiccup on one stored belief,
+// not a permanent failure.
+//
+// On the PROPOSED side, a non-finite component still resolves to "create a
+// new belief" without aborting the call, unchanged from before this fix:
+// recall.Normalize returns the same recall.ErrNonFiniteVector, but
+// MergeProposals recognizes it here and treats it like any other
+// unqualifying candidate rather than propagating it — the same
+// safe-default posture Strengthen and Archive use for their own corrupted
+// inputs. A corrupted incoming proposal costs a possible duplicate belief,
+// never a wrong merge, and never blocks every other proposal in the same
+// nightly pass. Pinned by TestMergeProposals_NonFiniteSimilarityNeverMerges
+// (proposed side, unchanged) and
+// TestMergeProposals_ExistingNonFiniteVectorSurfacesError (existing side,
+// this fix — verified in both position orderings, since the bug this
+// closes was position-dependent).
 //
 // recall.ErrModelMismatch is part of recall.Search's own contract and
 // would propagate unchanged if it ever fired, but it cannot be produced
@@ -133,6 +156,13 @@ func MergeProposals(model string, existing, proposed []BeliefVector) ([]MergeDec
 
 		v, err := recall.Normalize(p.Vector)
 		if err != nil {
+			if errors.Is(err, recall.ErrNonFiniteVector) {
+				// A corrupted proposed vector never merges (decisions[i]
+				// keeps its zero-value MergeInto == "" == "create"), but
+				// it does not abort the rest of the nightly pass either —
+				// see the doc comment above.
+				continue
+			}
 			return nil, err
 		}
 

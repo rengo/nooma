@@ -230,6 +230,43 @@ func TestMergeProposals_NonFiniteSimilarityNeverMerges(t *testing.T) {
 	}
 }
 
+// TestMergeProposals_ExistingNonFiniteVectorSurfacesError closes Judgment
+// Day round 1's CRITICAL finding: a corrupted EXISTING belief (not a
+// corrupted proposed one — TestMergeProposals_NonFiniteSimilarityNeverMerges
+// already covers that side, unchanged) must fail the call rather than
+// silently defeating the merge. Before this fix, recall.Normalize let a
+// NaN component through uncaught (only a zero magnitude was refused), so
+// the corrupted existing belief carried a NaN score into recall.Search's
+// sort.Slice — whose comparator is not a strict weak ordering over NaN —
+// and could sort ahead of a genuinely qualifying match, so
+// MergeProposals returned "create" even though a real match existed.
+//
+// Both orderings are pinned because the bug was position-dependent: it
+// only reproduced when the corrupted entry sorted ahead of the real
+// match, which depended on slice order under the broken comparator.
+func TestMergeProposals_ExistingNonFiniteVectorSurfacesError(t *testing.T) {
+	nan := float32(math.NaN())
+	realMatch := BeliefVector{BeliefID: "real-match", Vector: []float32{1, 0}}
+	corrupted := BeliefVector{BeliefID: "corrupted", Vector: []float32{nan, nan}}
+	proposed := []BeliefVector{{BeliefID: "p1", Vector: []float32{1, 0}}}
+
+	t.Run("corrupted first", func(t *testing.T) {
+		existing := []BeliefVector{corrupted, realMatch}
+		_, err := MergeProposals("model-a", existing, proposed)
+		if !errors.Is(err, recall.ErrNonFiniteVector) {
+			t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrNonFiniteVector) — a corrupted existing belief must fail the call, not silently miss a real match", err)
+		}
+	})
+
+	t.Run("corrupted last", func(t *testing.T) {
+		existing := []BeliefVector{realMatch, corrupted}
+		_, err := MergeProposals("model-a", existing, proposed)
+		if !errors.Is(err, recall.ErrNonFiniteVector) {
+			t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrNonFiniteVector) — must fail regardless of the corrupted entry's position", err)
+		}
+	})
+}
+
 // TestBeliefReinforceGain_MatchesTheDocumentedDefault pins
 // BeliefReinforceGain against an INDEPENDENT literal (doc 02 §13), the
 // same convention TestBeliefMergeCosine_MatchesTheDocumentedDefault

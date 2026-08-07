@@ -59,6 +59,19 @@ var ErrDimMismatch = fmt.Errorf("recall: query vector dimension does not match i
 // sorts arbitrarily and silently (design D6).
 var ErrZeroVector = fmt.Errorf("recall: vector has zero magnitude")
 
+// ErrNonFiniteVector is returned by Normalize when v has a NaN or +-Inf
+// component. A single non-finite component makes the whole norm NaN,
+// which ErrZeroVector's own "norm == 0" guard does not catch (NaN == 0 is
+// false), so Normalize would otherwise return a NaN vector with no error.
+// A NaN score is not caught downstream either: Search's comparator
+// (scored[i].Score > scored[j].Score) is not a strict weak ordering when
+// either side is NaN, so a NaN-scored entry can sort ahead of the
+// genuinely best match instead of landing last. This guard is the entry
+// point that keeps a non-finite component from ever reaching the index or
+// the scorer, consistent with ErrZeroVector's existing refusal of another
+// direction-less input.
+var ErrNonFiniteVector = fmt.Errorf("recall: vector has a non-finite component (NaN or +-Inf)")
+
 // NewVectorIndex builds a VectorIndex for model, validating that ids and
 // vectors have matching lengths and that every row of vectors shares one
 // dimension — construction is where a ragged index becomes unrepresentable
@@ -125,6 +138,9 @@ func dot(a, b []float32) float32 {
 func Normalize(v []float32) ([]float32, error) {
 	var sumSquares float64
 	for _, x := range v {
+		if math.IsNaN(float64(x)) || math.IsInf(float64(x), 0) {
+			return nil, ErrNonFiniteVector
+		}
 		sumSquares += float64(x) * float64(x)
 	}
 
