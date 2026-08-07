@@ -423,14 +423,23 @@ merges; a similarity a hair below does not (both sides tested).
 
 **MUST**: an empty `existing` slice always creates — every `MergeDecision.MergeInto == ""`.
 
-**MUST**: a model mismatch between compared vectors surfaces `recall.ErrModelMismatch`; a
-zero-magnitude vector surfaces `recall.ErrZeroVector`. `MergeProposals` normalizes every vector
-itself, so an un-normalized input still scores as cosine — normalization is internal, never a
-caller obligation.
+**MUST**: a zero-magnitude vector surfaces `recall.ErrZeroVector`. `MergeProposals` normalizes
+every vector itself, so an un-normalized input still scores as cosine — normalization is
+internal, never a caller obligation.
+
+A model mismatch (`recall.ErrModelMismatch`) is **not** a `MergeProposals`-level scenario: this
+function builds the comparison index and every query from the SAME `model` parameter, so
+`idx.Model` and `q.Model` can never differ through this call surface — `BeliefVector` carries no
+per-entry model tag, and that stays true (a per-vector tag would violate `recall`'s own
+one-model-per-index invariant, I21). The mismatch scenario belongs to `recall.Search`'s own
+contract and is verified there (`internal/core/recall/vector_test.go`), inherited by
+`MergeProposals` for a future caller that might misuse `recall.Search` directly, not independently
+reachable at this signature.
 
 **Verified by**: L1 — cosine exactly `BeliefMergeCosine` merges (boundary, both sides); the
-nearest existing belief wins among several; empty `existing` creates for every proposal; a model
-mismatch surfaces `ErrModelMismatch`; a zero vector surfaces `ErrZeroVector`.
+nearest existing belief wins among several; empty `existing` creates for every proposal; a zero
+vector surfaces `ErrZeroVector`. `ErrModelMismatch` is verified at `recall.Search`'s own level,
+not here (see above).
 
 ### R4.5 — `Reinforce` raises a merged belief's confidence via the shared reinforcement law, and refuses a corrupt or saturated input
 

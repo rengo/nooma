@@ -529,9 +529,12 @@ decision. Both halves are tasked below in that order; **the boundary is the line
 - [x] **4.18** Commit 1 (RED): `derive_test.go` (continued) — `MergeProposals`: cosine exactly
       `BeliefMergeCosine` merges (boundary, both sides — a hair below does not); the nearest
       existing belief wins among several; an empty `existing` slice always creates (every
-      `MergeInto == ""`); a model mismatch surfaces `recall.ErrModelMismatch`; a zero-magnitude
-      vector surfaces `recall.ErrZeroVector`; an un-normalized input still scores as cosine
-      (normalization happens inside `MergeProposals`, never a caller obligation).
+      `MergeInto == ""`); a zero-magnitude vector surfaces `recall.ErrZeroVector`; an
+      un-normalized input still scores as cosine (normalization happens inside `MergeProposals`,
+      never a caller obligation). A model mismatch is NOT tested at this level — it is
+      `recall.Search`'s own contract, verified in `internal/core/recall/vector_test.go`, and
+      cannot be reached through `MergeProposals`'s single-`model` call surface (Judgment Day
+      round 1, F3).
       **Red**: `undefined: consolidation.BeliefMergeCosine`, `undefined: consolidation.
       BeliefVector`, `undefined: consolidation.MergeDecision`, `undefined: consolidation.
       MergeProposals`.
