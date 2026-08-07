@@ -156,3 +156,20 @@ func MergeProposals(model string, existing, proposed []BeliefVector) ([]MergeDec
 
 	return decisions, nil
 }
+
+// BeliefReinforceGain is doc 02 §6.5's confidence-raising rate for a
+// merged belief (spec R4.5, design.md §4.1/§6.8) — CHOSEN, inheriting
+// §4.1's shared reinforcement-law argument (the same asymptotic form
+// StrengthenGain uses), with no compatibility check attached: unlike
+// StrengthenGain, nothing in doc 02 ties a belief's confidence horizon to
+// a fixed night count. Default 0.10 (doc 02 §13).
+const BeliefReinforceGain = 0.10
+
+// Reinforce raises a merged belief's confidence toward 1 by §4.1's shared
+// reinforcement law (spec R4.5).
+//
+// Stub (RED, task 4.20): returns (confidence, false) unconditionally — the
+// in-domain fixture expects (raised, true), fails first.
+func Reinforce(confidence float64) (float64, bool) {
+	return confidence, false
+}

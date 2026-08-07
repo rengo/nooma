@@ -175,3 +175,57 @@ func TestMergeProposals_NonFiniteSimilarityNeverMerges(t *testing.T) {
 		t.Errorf("MergeProposals merged a non-finite proposed vector into %q, want \"\" (never merge on a corrupted signal)", got[0].MergeInto)
 	}
 }
+
+// TestBeliefReinforceGain_MatchesTheDocumentedDefault pins
+// BeliefReinforceGain against an INDEPENDENT literal (doc 02 §13), the
+// same convention TestBeliefMergeCosine_MatchesTheDocumentedDefault
+// applies above — this PR introduces two calibrated constants, and both
+// get their own pin in the commit that declares them.
+func TestBeliefReinforceGain_MatchesTheDocumentedDefault(t *testing.T) {
+	const want = 0.10
+	if BeliefReinforceGain != want {
+		t.Errorf("BeliefReinforceGain = %v, want %v — doc 02 §13's documented rate; recalibrating means editing the §13 row and this literal together", BeliefReinforceGain, want)
+	}
+}
+
+// TestReinforce_AsymptoticAndNeverReaches1 proves R4.5: repeated
+// reinforcement keeps raising confidence but never reaches or exceeds 1.
+func TestReinforce_AsymptoticAndNeverReaches1(t *testing.T) {
+	c := 0.5
+	for i := 0; i < 1000; i++ {
+		next, ok := Reinforce(c)
+		if !ok {
+			t.Fatalf("Reinforce(%v) returned ok=false at iteration %d, want true", c, i)
+		}
+		if next <= c {
+			t.Fatalf("Reinforce(%v) = %v at iteration %d, want an increase", c, next, i)
+		}
+		if next >= 1 {
+			t.Fatalf("Reinforce(%v) = %v at iteration %d, must never reach or exceed 1", c, next, i)
+		}
+		c = next
+	}
+}
+
+// TestReinforce_NoWriteAtExactly1 proves R4.5: a belief already at
+// confidence 1 gets no row (doc 02 §11 — a decision with no effect writes
+// nothing).
+func TestReinforce_NoWriteAtExactly1(t *testing.T) {
+	_, ok := Reinforce(1)
+	if ok {
+		t.Error("Reinforce(1) returned ok=true, want false — a belief already at 1 gets no row")
+	}
+}
+
+// TestReinforce_RefusesNonFiniteAndOutOfDomain proves R4.5: Reinforce
+// refuses a NaN, +-Inf, negative, or greater-than-1 confidence outright,
+// rather than computing a change for a corrupted input.
+func TestReinforce_RefusesNonFiniteAndOutOfDomain(t *testing.T) {
+	cases := []float64{math.NaN(), math.Inf(1), math.Inf(-1), -0.5, 1.5}
+	for _, c := range cases {
+		_, ok := Reinforce(c)
+		if ok {
+			t.Errorf("Reinforce(%v) returned ok=true, want false — refused as non-finite or out of [0,1]", c)
+		}
+	}
+}
