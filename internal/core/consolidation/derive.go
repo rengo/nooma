@@ -3,6 +3,7 @@ package consolidation
 import (
 	"time"
 
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/selfmodel"
 )
 
@@ -57,10 +58,8 @@ type MergeDecision struct {
 // vector geometry can be hand-derived to land on it exactly by
 // construction, while this predicate can be asserted against the constant
 // directly.
-//
-// Stub (RED, task 4.18): always false.
 func mergeQualifies(similarity float64) bool {
-	return false
+	return similarity >= BeliefMergeCosine
 }
 
 // MergeProposals is doc 02 §6.5's SECOND dedup defense (the first is the
@@ -68,8 +67,92 @@ func mergeQualifies(similarity float64) bool {
 // nearest existing belief and merges when cosine >= BeliefMergeCosine
 // (spec R4.4).
 //
-// Stub (RED, task 4.18): returns (nil, nil) — len(decisions) !=
-// len(proposed) fails first on a non-empty proposed fixture.
+// It builds the comparison through recall.NewVectorIndex + recall.Search
+// rather than a second similarity implementation: Search is a dot
+// product, which IS cosine once both sides are unit-normalized, and it
+// carries I21's model filter with it (ErrModelMismatch) — so belief
+// vectors inherit "embeddings from two models never compare" at no cost
+// (design.md §6.8). MergeProposals normalizes every vector itself via
+// recall.Normalize, so normalization is structural here rather than a
+// caller obligation; a zero-magnitude vector is refused
+// (recall.ErrZeroVector), never scored.
+//
+// A non-finite vector component (NaN, +-Inf) is not itself validated at
+// this entry point: recall.Normalize does not catch it either (only a
+// zero magnitude is, via ErrZeroVector), so a corrupted embedding
+// produces a NaN similarity. Cosine's mathematical domain is [-1, 1], not
+// [0, 1] (Cauchy-Schwarz over unit vectors) — NaN is outside any domain,
+// and mergeQualifies's >= comparison is not total over it: NaN >=
+// BeliefMergeCosine is always false under IEEE 754. That resolves the
+// decision to "create a new belief" rather than a merge this package
+// cannot justify — the same safe-default posture Strengthen and Archive
+// use for their own corrupted inputs, applied here through comparison
+// semantics rather than an explicit refusal branch, because this
+// function's signature carries no corrupted output to report into (design
+// stub above). Pinned by TestMergeProposals_NonFiniteSimilarityNeverMerges.
+//
+// recall.ErrModelMismatch is part of recall.Search's own contract and
+// would propagate unchanged if it ever fired, but it cannot be produced
+// through MergeProposals's own call surface as shipped: the index built
+// from existing and every query built from proposed both use the SAME
+// model parameter, so idx.Model and q.Model are never different values
+// within one call — BeliefVector carries no per-entry model tag. The
+// protection is inherited for a future caller that might misuse
+// recall.Search directly (already exercised in
+// internal/core/recall/vector_test.go), not independently reachable at
+// m2b's single-model call boundary. Not fabricated as a passing test here
+// — see derive_test.go's own comment naming this explicitly, per this
+// project's convention against claiming a verification that was not
+// performed.
+//
+// Ruling Q2 (option A): brain embeds every active belief in memory at the
+// start of the phase and discards after. No schema change, and the
+// nightly provider cost is written into doc 02 §6.5 as part of this
+// change.
 func MergeProposals(model string, existing, proposed []BeliefVector) ([]MergeDecision, error) {
-	return nil, nil
+	existingIDs := make([]string, len(existing))
+	existingVectors := make([][]float32, len(existing))
+	for i, e := range existing {
+		v, err := recall.Normalize(e.Vector)
+		if err != nil {
+			return nil, err
+		}
+		existingIDs[i] = e.BeliefID
+		existingVectors[i] = v
+	}
+
+	idx, err := recall.NewVectorIndex(model, existingIDs, existingVectors)
+	if err != nil {
+		return nil, err
+	}
+
+	decisions := make([]MergeDecision, len(proposed))
+	for i, p := range proposed {
+		decisions[i] = MergeDecision{ProposedIndex: i}
+
+		v, err := recall.Normalize(p.Vector)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(existing) == 0 {
+			continue
+		}
+
+		scored, err := recall.Search(idx, recall.VectorQuery{Model: model, Vector: v})
+		if err != nil {
+			return nil, err
+		}
+
+		best := scored[0]
+		if mergeQualifies(float64(best.Score)) {
+			decisions[i] = MergeDecision{
+				ProposedIndex: i,
+				MergeInto:     best.ID,
+				Similarity:    float64(best.Score),
+			}
+		}
+	}
+
+	return decisions, nil
 }
