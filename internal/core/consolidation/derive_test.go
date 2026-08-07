@@ -73,7 +73,14 @@ func TestMergeDecision_ZeroValueMeansCreate(t *testing.T) {
 
 // TestMergeProposals_NearestExistingBeliefWins proves R4.4: among several
 // existing beliefs, the proposed belief merges into the nearest one by
-// cosine, not merely the first one above the threshold.
+// cosine.
+//
+// Note what this fixture can and cannot show: "far" scores 0.0, well below
+// BeliefMergeCosine, so it separates "merges into the nearest" from "merges
+// into an arbitrary one" but NOT from "merges into any candidate above the
+// threshold" — there is only one such candidate here.
+// TestMergeProposals_NearestWinsAmongSeveralQualifying covers that second
+// distinction; this one is deliberately left as the simpler case.
 func TestMergeProposals_NearestExistingBeliefWins(t *testing.T) {
 	existing := []BeliefVector{
 		{BeliefID: "far", Vector: []float32{0, 1}},
@@ -277,5 +284,47 @@ func TestReinforce_RefusesNonFiniteAndOutOfDomain(t *testing.T) {
 		if ok {
 			t.Errorf("Reinforce(%v) returned ok=true, want false — refused as non-finite or out of [0,1]", c)
 		}
+	}
+}
+
+// TestMergeProposals_NearestWinsAmongSeveralQualifying closes the gap
+// TestMergeProposals_NearestExistingBeliefWins leaves open: its "far"
+// candidate scores 0.0, so only one candidate ever clears
+// BeliefMergeCosine and any implementation that merged into *some*
+// qualifying candidate rather than the *nearest* one passed.
+//
+// Judgment Day round 1 found it. Mutating MergeProposals to keep the LAST
+// qualifying candidate instead of the highest-scoring one left the whole
+// package green — R4.4's "nearest" was unpinned, and the older test's own
+// doc comment claimed to prove exactly the distinction its fixture could
+// not show.
+//
+// Here both existing beliefs clear the threshold and differ: [1,0] scores
+// 1.0 against the proposal, [10,5] normalizes to cos 0.8944 — above 0.85,
+// so a "first/any qualifying wins" implementation can reach it, and only
+// picking the maximum lands on "nearest".
+func TestMergeProposals_NearestWinsAmongSeveralQualifying(t *testing.T) {
+	existing := []BeliefVector{
+		// Listed first so an implementation scanning input order rather
+		// than score would pick this one.
+		{BeliefID: "qualifying-farther", Vector: []float32{10, 5}},
+		{BeliefID: "nearest", Vector: []float32{1, 0}},
+	}
+	proposed := []BeliefVector{
+		{BeliefID: "p1", Vector: []float32{1, 0}},
+	}
+
+	got, err := MergeProposals("model-a", existing, proposed)
+	if err != nil {
+		t.Fatalf("MergeProposals returned error %v, want nil", err)
+	}
+	if len(got) != len(proposed) {
+		t.Fatalf("MergeProposals returned %d decisions, want %d", len(got), len(proposed))
+	}
+	if got[0].MergeInto != "nearest" {
+		t.Fatalf("MergeProposals merged proposed[0] into %q, want %q — both candidates clear BeliefMergeCosine, so R4.4 requires the highest cosine, not merely a qualifying one", got[0].MergeInto, "nearest")
+	}
+	if got[0].Similarity <= BeliefMergeCosine {
+		t.Errorf("MergeProposals reported Similarity %v, want the nearest candidate's own cosine (strictly above the %v threshold, since the farther qualifying candidate sits at ~0.894)", got[0].Similarity, BeliefMergeCosine)
 	}
 }
