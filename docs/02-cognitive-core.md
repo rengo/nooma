@@ -702,8 +702,26 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
    proposed relation still runs `source → candidate`, per §4's own direction rule). New
    relations get `created_by='consolidation'`
    (`internal/core/consolidation.ProposeRelation`).
-5. **derive**: derives/updates self-beliefs from units (§10). Dedup with two defenses:
-   existing beliefs in the prompt + semantic merge when cosine ≥ 0.85.
+5. **derive**: derives/updates self-beliefs from units (§10), rendering each one's key as
+   `derived/{facet}/{key}` (`internal/core/consolidation.DeriveTopicKey`). Dedup runs **two
+   defenses, both shipped**: (1) existing beliefs are placed in the derivation prompt itself, so
+   the judge sees what already exists before proposing something new; (2) a semantic merge over
+   embeddings, cosine ≥ 0.85, for whatever the first defense's prompt-side judgment still lets
+   through (`internal/core/consolidation.MergeProposals`) — a proposed belief merges into the
+   nearest existing one at or above that threshold, or becomes a new belief otherwise. A belief
+   that merges is **reinforced**, not duplicated: its confidence rises toward 1 by the same
+   asymptotic law `strengthen` uses for relation strength, at `belief_reinforce_gain` (default
+   0.10) — `internal/core/consolidation.Reinforce`. Neither defense alone is doc 02's stated
+   posture; shipping only one is the gap this document explicitly closes, not an implementation
+   choice left open.
+   **The embedding cost, stated rather than left implicit (owner ruling Q2, option A)**: `derive`
+   embeds every **active** belief in memory at the start of the phase and discards the vectors
+   after — no schema change, no `belief_embeddings` table, no stale-vector problem when a belief's
+   text is later edited. The cost is one provider call per active belief, every night, growing
+   with the belief count; this is accepted because the self-model is a handful of facets by
+   construction (§10's five-facet vocabulary), not an open-ended corpus. If belief counts ever
+   reach the hundreds, a persisted `belief_embeddings` table (option B) becomes the right trade —
+   that migration is `m2c`'s to make if it ever becomes true, not this change's.
 6. **reweight**: post-connection weight adjustments (decay materialization remains optional and is
    not exercised by M2's `reweight`) — every unit a new relation joined this pass spreads
    activation to its new neighbours through §2's resurface mechanism, over this pass's new edges
@@ -870,7 +888,8 @@ module):
 | Push threshold (`interrupt_level`) | 0.70 |
 | Quiet hours | [00:00, 07:00) local |
 | Event lead time | 7 days |
-| Semantic belief merge | cosine ≥ 0.85 |
+| `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
+| Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | cosine ≥ 0.85 |
 | Perception confidence gate | 0.40 |
 | Consolidation / proactive check | 03:00 daily / every 5 min |
 | `boot_consolidation_delay` | 120 s |
