@@ -2,6 +2,7 @@ package consolidation
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -61,6 +62,26 @@ func TestPhaseString_IsTotalAndNeverPanics(t *testing.T) {
 	}
 }
 
+// TestPhaseString_PinsTheOutOfRangeRendering pins the literal shape the
+// doc comment promises for a Phase outside [0, phaseCount). Totality
+// above only asserts non-empty and no panic, so Judgment Day round 1
+// mutated the rendering to a fixed "unknown" and the whole suite stayed
+// green — the promised "Phase(n)" text, which carries the offending value
+// into a decision_log line or an error message, was never pinned.
+func TestPhaseString_PinsTheOutOfRangeRendering(t *testing.T) {
+	cases := map[Phase]string{
+		Phase(-1):              "Phase(-1)",
+		Phase(int(phaseCount)): "Phase(8)",
+		Phase(99):              "Phase(99)",
+	}
+
+	for p, want := range cases {
+		if got := p.String(); got != want {
+			t.Errorf("Phase(%d).String() = %q, want %q — the rendering must carry the offending value, not a fixed placeholder", int(p), got, want)
+		}
+	}
+}
+
 // TestParsePhase_RoundTripsEveryOrderMember: ParsePhase(s.String()) must
 // round-trip to s, for every s in Order().
 func TestParsePhase_RoundTripsEveryOrderMember(t *testing.T) {
@@ -82,6 +103,39 @@ func TestParsePhase_RejectsUnknownText(t *testing.T) {
 	_, err := ParsePhase("not-a-phase")
 	if !errors.Is(err, ErrUnknownPhase) {
 		t.Fatalf("ParsePhase(%q) error = %v, want ErrUnknownPhase", "not-a-phase", err)
+	}
+}
+
+// TestParsePhase_IsExactMatchOnly pins R1.1's "one of the eight names" to
+// mean exactly that: byte-for-byte, no case folding and no surrounding
+// whitespace tolerated. Judgment Day round 1 mutated the comparison to
+// strings.EqualFold and the whole suite stayed green — the behaviour was
+// correct by implementation accident, with nothing stopping a later,
+// well-meant "make the CLI flag forgiving" change from silently widening
+// the vocabulary this type exists to close. ParsePhase has no caller yet;
+// m2c wires it to `nooma consolidate --phase`, which is when an accepted
+// "Learn " would start mattering.
+func TestParsePhase_IsExactMatchOnly(t *testing.T) {
+	rejected := []string{
+		"",
+		" ",
+		"Learn",
+		"LEARN",
+		"learn ",
+		" learn",
+		"learn\n",
+		"Archive",
+		"ARCHIVE",
+		"expire_Incomplete",
+	}
+
+	for _, s := range rejected {
+		t.Run(fmt.Sprintf("%q", s), func(t *testing.T) {
+			got, err := ParsePhase(s)
+			if !errors.Is(err, ErrUnknownPhase) {
+				t.Fatalf("ParsePhase(%q) = (%v, %v), want ErrUnknownPhase — the vocabulary is exact, not forgiving", s, got, err)
+			}
+		})
 	}
 }
 
