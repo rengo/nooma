@@ -38,10 +38,15 @@ and I11's behavioural half are `m2c`'s (`design.md` §8, §11).
 `time.Now`, `time.Since`, `time.Until`, `rand.*`, `uuid.*`, or `os.Getenv`. MUST: the package
 imports only the standard library and `internal/core/{unit,weight,recall,relation,selfmodel}` —
 never `internal/ports`, `internal/store`, or `internal/brain`. MUST: `Strengthen`, `MergeProposals`
-and `Reinforce` take no `time.Time` parameter at all — they are the three decisions doc 02's
-"accumulated evidence" phases do not need an instant to make.
+and `Reinforce` take no `time.Time` **by value** — the instant itself never travels into these three
+decisions doc 02's "accumulated evidence" phases do not need an instant to make. A `*time.Time`
+**resolved-absence sentinel** — nil meaning "no value at all" rather than an instant to compute
+from, the same shape as `focus.ResolveMargin(configured *float64)` — is permitted: it is
+`Strengthen`'s own `since` parameter, which design.md §5.4 lists among the three decisions that
+"take no clock at all" for exactly this reason.
 **Verified by**: L2, `depguard`/`forbidigo` (existing `core-purity` gate) plus a tree-scan
-asserting exactly these three functions have no `time.Time` parameter.
+asserting exactly these three functions have no `time.Time`-by-value parameter — a `*time.Time`
+resolved-absence sentinel is exempt by design, not a gap in the scan.
 
 **R0.2 — every new calibrated number gets exactly one `docs/02-cognitive-core.md` §13 row.** MUST:
 `IncompleteExpiryHours`, `StrengthenGain`, `ConnectSourceLimit`, `ConnectCandidateK`,
@@ -284,17 +289,26 @@ sides (`n = 20` nights: `1 - 0.9·0.9²⁰ ≈ 0.8906`, below 0.9; `n = 21`: `�
 origin is every endpoint of an edge in `newEdges`, over a `Neighbourhood` built from `states` and
 `newEdges`.
 
-**MUST**: `Reweight` builds `Neighbourhood.States` from the `states` map **sorted by `UnitID`**
-before calling `Resurface`, so behaviour is deterministic regardless of Go map iteration order (a
-duplicate `UnitID` is unrepresentable in a `map[string]weight.Current` by construction).
+**MUST**: `Reweight` builds `Neighbourhood.States` from the `states` map as a plain slice before
+calling `Resurface`. A duplicate `UnitID` is unrepresentable in a `map[string]weight.Current` by
+construction — that is what closes m2a C18, not slice order: `weight.Resurface` immediately
+re-keys `Neighbourhood.States` into its own map (`spread.go`), so no `Resurface`-observable outcome
+depends on the order `Reweight` hands it the slice in. `Reweight` does not sort this
+intermediate slice (Judgment Day round 1 Fix B correction — an earlier draft of this requirement
+claimed a sort here was mutation-verified; it never was, see the corrected Verified-by line below).
 
 **MUST**: `boosts` is merged across origins per unit by the **maximum** boosted weight — the same
 `max` rule `weight.Resurface` and `focus.AdjacencyStrengths` already use for combining graph
 evidence.
 
 **MUST**: an `Edge` whose `Strength` is non-finite or outside `[0,1]` is refused at `Reweight`'s
-own door — before `weight.clampStrength` or any downstream comparison runs — and **both**
-endpoints of that edge are reported through `corrupted`.
+own door — before `weight.clampStrength` or any downstream comparison runs — and each endpoint of
+that edge for which `states` holds a `weight.Current` is reported through `corrupted`. An endpoint
+`states` holds no `Current` for is **not** reported, aligning with `weight.Resurface`'s own settled
+policy for the same shape of gap (`TestResurface_CorruptEdgeToAnUnloadedUnit_IsNotReported`):
+reporting an id the caller holds no state for would put an id in `corrupted` it cannot act on
+(Judgment Day round 1 Fix D — an earlier draft of this requirement said "both" unconditionally,
+which is what `Reweight` originally shipped and Fix D corrected).
 
 **MUST**: `corrupted` is merged across all of the pass's origin calls by **union, deduplicated** —
 a unit id appears in `Reweight`'s output `corrupted` at most once, regardless of how many origin
@@ -326,10 +340,14 @@ M2 does not exercise it.
   and neither list omits it because of the other
 
 **Verified by**: L1 — both endpoints of a new edge are boosted; multi-origin results merge by max;
-a corrupt edge strength refuses both endpoints; `corrupted` deduplicates across origins; a unit
-present in both outputs from one call; deterministic output across repeated calls with the same
-map, mutation-verified by removing the sort with ≥3 units; no reference to any constant beyond the
-four named above.
+a corrupt edge strength refuses each endpoint `states` holds a `Current` for; an endpoint `states`
+holds no `Current` for is not reported (Fix D); `corrupted` deduplicates across origins; a unit
+present in both outputs from one call; `boosts` and `corrupted` sorted by `UnitID` (eight elements
+each — fewer accidentally lands already sorted too often under Go's randomized map iteration, see
+Fix C below), mutation-verified by removing the final sort and measuring the kill rate (Judgment
+Day round 1 Fix C — a prior draft of this line claimed this coverage for an intermediate
+`Neighbourhood.States` sort that has since been deleted as dead per C13, and whose removal never
+actually changed any test outcome); no reference to any constant beyond the four named above.
 
 ---
 

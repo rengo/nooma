@@ -172,8 +172,6 @@ func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []stri
 		states[c.UnitID] = c
 	}
 
-	refused := make(map[string]bool)
-
 	for unitID, gain := range gains {
 		c, ok := states[unitID]
 		if !ok {
@@ -182,7 +180,6 @@ func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []stri
 
 		if nonFinite(c.Weight) || nonFinite(c.DecayRate) {
 			corrupted = append(corrupted, unitID)
-			refused[unitID] = true
 			continue
 		}
 
@@ -199,13 +196,20 @@ func Resurface(n Neighbourhood, now time.Time) (boosts []Boost, corrupted []stri
 		})
 	}
 
-	// A unit reported by a NaN-strength edge is corrupt only when it is
-	// not already reported above (the same unit, refused once) and gains
+	// A unit reported by a NaN-strength edge is corrupt only when gains
 	// does not otherwise reach it — a redundant healthy path to the same
 	// neighbour already produced its correct boost or R2.6 no-op above,
 	// and the corrupt edge contributed nothing to that outcome either way.
+	// A unit already refused above (non-finite Weight/DecayRate) is
+	// necessarily a member of gains — the loop above only ever inspects
+	// unitIDs it iterates from gains — so the "reachable" check just below
+	// already excludes it on its own; an earlier revision also tracked a
+	// separate refused map and skipped it here, which was provably dead
+	// (m2a C17: refused ⊆ gains, and the next line already skips everything
+	// in gains). Deleted in feat/core-consolidation-strengthen-reweight,
+	// the PR that makes Resurface reachable through a real caller.
 	for unitID := range corruptEdges {
-		if unitID == n.Origin || refused[unitID] {
+		if unitID == n.Origin {
 			continue
 		}
 		if _, ok := states[unitID]; !ok {
