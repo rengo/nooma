@@ -15,9 +15,13 @@ import (
 //
 // states is a map, not a slice: a duplicate UnitID in a slice silently
 // masks corruption and its outcome depends on slice order (m2a C18). The
-// map makes the duplicate unrepresentable, and Reweight sorts states by
-// UnitID before handing Neighbourhood.States to Resurface so the value is
-// deterministic regardless of map iteration order.
+// map makes the duplicate unrepresentable — that alone is what closes C18;
+// unlike the map type, the order Reweight hands weight.Current values to
+// Resurface in is NOT load-bearing, because Resurface immediately re-keys
+// n.States into its own map (spread.go) before reading it, discarding
+// whatever order it was given. Reweight's own two returned slices are
+// still sorted by UnitID (below), which is what any caller actually
+// observes.
 //
 // origins are every endpoint of newEdges. An Edge whose Strength is
 // non-finite or outside [0,1] is refused at THIS door — both endpoints
@@ -65,7 +69,7 @@ func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now time
 		validEdges = append(validEdges, e)
 	}
 
-	sortedStates := sortedCurrents(states)
+	currentStates := currentsSlice(states)
 
 	origins := make([]string, 0, len(originSet))
 	for id := range originSet {
@@ -75,7 +79,7 @@ func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now time
 
 	boostByUnit := make(map[string]weight.Boost)
 	for _, origin := range origins {
-		n := weight.Neighbourhood{Origin: origin, States: sortedStates, Edges: validEdges}
+		n := weight.Neighbourhood{Origin: origin, States: currentStates, Edges: validEdges}
 		bs, cs := weight.Resurface(n, now)
 
 		for _, b := range bs {
@@ -110,20 +114,23 @@ func invalidEdgeStrength(s float64) bool {
 	return math.IsNaN(s) || math.IsInf(s, 0) || s < 0 || s > 1
 }
 
-// sortedCurrents returns states' values as a slice ordered by UnitID —
-// deterministic regardless of Go's randomized map iteration order (m2a
-// C18's own closing move, applied at Reweight's first use of a map-shaped
-// input).
-func sortedCurrents(states map[string]weight.Current) []weight.Current {
-	ids := make([]string, 0, len(states))
-	for id := range states {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
+// currentsSlice returns states' values as a plain slice, in whatever order
+// Go's map iteration happens to produce. No sort is applied here — a
+// prior version sorted by UnitID, but weight.Resurface immediately
+// re-keys Neighbourhood.States into its own map (spread.go), so no
+// caller-observable outcome depends on this slice's order, and a duplicate
+// UnitID is already unrepresentable in the map[string]weight.Current this
+// reads from. A sort here would be a branch no fixture can tell apart
+// from its absence (m2a C13's own convention), so it was removed
+// (Judgment Day round 1, Fix B) rather than kept for a claim that was
+// never actually tested. If a future change makes Resurface (or some
+// replacement) order-sensitive over States, restore a sort here AND add a
+// test that fails without it — do not assume order-independence still
+// holds without re-checking spread.go.
+func currentsSlice(states map[string]weight.Current) []weight.Current {
 	out := make([]weight.Current, 0, len(states))
-	for _, id := range ids {
-		out = append(out, states[id])
+	for _, c := range states {
+		out = append(out, c)
 	}
 	return out
 }

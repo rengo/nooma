@@ -327,11 +327,18 @@ that task is 5.7.
       or outside `[0,1]`) is refused at `Reweight`'s own door, both endpoints reported into
       `corrupted`, before `weight.clampStrength` or any comparison downstream can run; `corrupted`
       is merged by union, deduplicated, across all origin calls; a unit id may appear in both
-      `boosts` and `corrupted` from the same call, neither suppressing the other; `states` sorted by
-      `UnitID` before building `Neighbourhood`, deterministic regardless of map order
-      (mutation-verified by removing the sort with ≥3 units — `m2a` C16's own method); `rg` check
-      that no constant beyond `weight.ReviveGain`/`WeightCeiling`/`ResurfaceMaxHops`/
-      `ResurfaceAttenuation` is referenced.
+      `boosts` and `corrupted` from the same call, neither suppressing the other; `boosts` and
+      `corrupted` sorted by `UnitID` (≥3 elements each), mutation-verified by removing the final
+      sort; `rg` check that no constant beyond `weight.ReviveGain`/`WeightCeiling`/
+      `ResurfaceMaxHops`/`ResurfaceAttenuation` is referenced.
+      **Correction (Judgment Day round 1, Fix B)**: this line originally also claimed the
+      intermediate `states sorted by UnitID before building Neighbourhood` step was
+      mutation-verified. It never was — no test exercised the difference, because
+      `weight.Resurface` re-keys `Neighbourhood.States` into its own map before reading it. That
+      intermediate sort has since been deleted from `reweight.go` as dead code (m2a C13's own
+      convention). What actually closes `m2a` C18 is the `map[string]weight.Current` input type
+      (a duplicate `UnitID` is unrepresentable), not this sort — corrected here and in `spec.md`
+      R3.3.
       **Red**: `undefined: consolidation.Reweight`.
       Stub: `func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now
       time.Time) (boosts []weight.Boost, corrupted []string) { return nil, nil }` — compiles;
@@ -340,9 +347,9 @@ that task is 5.7.
 - [x] **3.4** Commit 2 (GREEN): implement `Reweight` — origins are every endpoint of `newEdges`;
       refuse non-finite/out-of-range edge strengths at `Reweight`'s own entry point (reporting both
       endpoints into `corrupted` directly, not relying on `weight.clampStrength`); build
-      `Neighbourhood.States` from `states` sorted by `UnitID`; call `weight.Resurface` once per
-      origin over the (validated) `newEdges`; merge `boosts` per unit by max; merge `corrupted` by
-      union, deduplicated, sorted.
+      `Neighbourhood.States` from `states` as a plain slice (no sort — see 3.3's correction); call
+      `weight.Resurface` once per origin over the (validated) `newEdges`; merge `boosts` per unit
+      by max; merge `corrupted` by union, deduplicated, sorted.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.3; design §4.5(a).
 - [x] **3.5** `internal/core/weight/spread.go`: delete C17's dead `refused` guard — remove

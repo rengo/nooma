@@ -289,9 +289,13 @@ sides (`n = 20` nights: `1 - 0.9·0.9²⁰ ≈ 0.8906`, below 0.9; `n = 21`: `�
 origin is every endpoint of an edge in `newEdges`, over a `Neighbourhood` built from `states` and
 `newEdges`.
 
-**MUST**: `Reweight` builds `Neighbourhood.States` from the `states` map **sorted by `UnitID`**
-before calling `Resurface`, so behaviour is deterministic regardless of Go map iteration order (a
-duplicate `UnitID` is unrepresentable in a `map[string]weight.Current` by construction).
+**MUST**: `Reweight` builds `Neighbourhood.States` from the `states` map as a plain slice before
+calling `Resurface`. A duplicate `UnitID` is unrepresentable in a `map[string]weight.Current` by
+construction — that is what closes m2a C18, not slice order: `weight.Resurface` immediately
+re-keys `Neighbourhood.States` into its own map (`spread.go`), so no `Resurface`-observable outcome
+depends on the order `Reweight` hands it the slice in. `Reweight` does not sort this
+intermediate slice (Judgment Day round 1 Fix B correction — an earlier draft of this requirement
+claimed a sort here was mutation-verified; it never was, see the corrected Verified-by line below).
 
 **MUST**: `boosts` is merged across origins per unit by the **maximum** boosted weight — the same
 `max` rule `weight.Resurface` and `focus.AdjacencyStrengths` already use for combining graph
@@ -332,9 +336,11 @@ M2 does not exercise it.
 
 **Verified by**: L1 — both endpoints of a new edge are boosted; multi-origin results merge by max;
 a corrupt edge strength refuses both endpoints; `corrupted` deduplicates across origins; a unit
-present in both outputs from one call; deterministic output across repeated calls with the same
-map, mutation-verified by removing the sort with ≥3 units; no reference to any constant beyond the
-four named above.
+present in both outputs from one call; `boosts` and `corrupted` sorted by `UnitID`,
+mutation-verified by removing the final sort (Judgment Day round 1 Fix C — a prior draft of this
+line claimed this coverage for an intermediate `Neighbourhood.States` sort that has since been
+deleted as dead per C13, and whose removal never actually changed any test outcome); no reference
+to any constant beyond the four named above.
 
 ---
 
