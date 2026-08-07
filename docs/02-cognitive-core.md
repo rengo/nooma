@@ -661,8 +661,27 @@ vault, individually invocable:
 expire_incomplete → archive → strengthen → connect → derive → reweight → pattern_eval → learn
 ```
 
-1. **expire_incomplete**: `incomplete` units older than 24 h are promoted with what they have.
-2. **archive**: `effective_weight < weight_threshold` (default 0.5) → `archived`.
+1. **expire_incomplete**: `incomplete` units older than 24 h are resolved, and promotion is the
+   default: **promoted with what they have**, unless the ambiguity was put to the user and left
+   unresolved, in which case the unit is **archived** instead — the `incomplete → archived`
+   transition §1 already names. This is §1's own two-outcome text, restated here rather than
+   left to contradict it: an earlier revision of this section described only promotion, and §1
+   described both outcomes and named the transition the status vocabulary reserves for the
+   second one. Promotion is the default and archival is the exception a caller must evidence,
+   never the reverse — nothing in M2 can record that an ambiguity was put to the user and
+   settled (a producer for that evidence arrives later), so defaulting to archival here would
+   silently cool every ambiguous capture, the opposite of "cautious to capture"
+   (`internal/core/consolidation.ExpireIncomplete`).
+2. **archive**: `effective_weight < weight_threshold` (default 0.5) → `archived` — the
+   comparison is **strictly** less than; a unit sitting at exactly `weight_threshold` is not
+   archived. At the shipped defaults, this composes with §2's revive and resurface guarantees:
+   one direct revive always clears the archive band (`revive_gain * weight_ceiling >
+   weight_threshold`), and spreading activation alone, at maximum hop distance, never does
+   (`resurface_attenuation ^ resurface_max_hops * weight_ceiling <= weight_threshold`) — both
+   are properties of the chosen defaults, not a general guarantee, since `weight_threshold` is
+   configurable per vault through the `config` row
+   (`internal/core/consolidation.Archive`/`ResolveWeightThreshold`). `weight_ceiling` is not:
+   §13 marks it neither ⚙ nor configurable, and no `Resolve*` reads it — it is a bare constant.
 3. **strengthen**: re-evaluates relation strength with accumulated evidence.
 4. **connect**: finds candidate pairs (hybrid recall among recent/hot units) and runs them
    through the LLM judge. New relations get `created_by='consolidation'`.
@@ -801,7 +820,8 @@ module):
 
 | Knob | Default |
 |---|---|
-| `weight_threshold` (archiving) | 0.5 |
+| `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
+| `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |
 | `hysteresis_margin` (focus, relative; `internal/core/focus.DefaultHysteresisMargin` + `ResolveMargin`) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |

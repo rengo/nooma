@@ -196,7 +196,7 @@ or any doc02-vocabulary function beyond `Phase` — no `internal/core` import be
 Depends on PR 1 (`Order`/`Phase` unused directly, but the package now grows its first real
 producers). Ships `transition.go` per F1's resolution, `expire.go`, `archive.go`.
 
-- [ ] **2.1** Commit 1 (RED): `internal/core/consolidation/transition_test.go` — `AllReasons()`
+- [x] **2.1** Commit 1 (RED): `internal/core/consolidation/transition_test.go` — `AllReasons()`
       returns exactly `{ReasonIncompletePromoted, ReasonIncompleteExpired,
       ReasonBelowWeightThreshold}`, a fresh slice (mutating the returned slice does not affect a
       second call).
@@ -207,11 +207,11 @@ producers). Ships `transition.go` per F1's resolution, `expire.go`, `archive.go`
       `len(AllReasons()) != 3` fails first.
       Requirement: R1.4 (see Finding F1 — declared and tested here, not in PR 1, despite the
       spec's own "R1" prefix).
-- [ ] **2.2** Commit 2 (GREEN): implement `AllReasons()` as a fresh 3-element slice, `unit.
+- [x] **2.2** Commit 2 (GREEN): implement `AllReasons()` as a fresh 3-element slice, `unit.
       AllStatuses()`'s own house pattern.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R1.4; design §6.2.
-- [ ] **2.3** Commit 1 (RED): `internal/core/consolidation/expire_test.go` — `elapsed < 24h` → nil;
+- [x] **2.3** Commit 1 (RED): `internal/core/consolidation/expire_test.go` — `elapsed < 24h` → nil;
       `elapsed == 24h` → a transition (both `Unresolved` branches: `true` → `incomplete →
       archived`/`ReasonIncompleteExpired`, `false` → `incomplete → pool`/`ReasonIncompletePromoted`);
       `elapsed > 24h` same both branches; `CreatedAt` after `now` (clock skew) → nil; output sorted
@@ -223,11 +223,11 @@ producers). Ships `transition.go` per F1's resolution, `expire.go`, `archive.go`
       []Transition { return nil }` — compiles; `len(got) != 1` on the ≥24h fixture fails first
       (C14 guard).
       Requirement: R2.1.
-- [ ] **2.4** Commit 2 (GREEN): implement `ExpireIncomplete` per §4.2's predicate — `elapsed`
+- [x] **2.4** Commit 2 (GREEN): implement `ExpireIncomplete` per §4.2's predicate — `elapsed`
       clamped at zero, branch on `Unresolved` only once `elapsed >= IncompleteExpiryHours`.
       Verify: `make test`; `golangci-lint run` (now imports `internal/core/unit`).
       Requirement: R2.1; design §4.2.
-- [ ] **2.5** Commit 1 (RED): `internal/core/consolidation/archive_test.go` — `e < threshold`
+- [x] **2.5** Commit 1 (RED): `internal/core/consolidation/archive_test.go` — `e < threshold`
       archives (`pool → archived`/`ReasonBelowWeightThreshold`); `e == threshold` does **not**
       (both sides); a non-`pool` status produces neither output; `NaN`/`+Inf`/`-Inf` in `Weight` or
       `DecayRate` refuses into `corrupted`, never archives; both slices sorted (≥3 units).
@@ -237,12 +237,12 @@ producers). Ships `transition.go` per F1's resolution, `expire.go`, `archive.go`
       (transitions []Transition, corrupted []string) { return nil, nil }` — compiles; `len(got) !=
       1` on the below-threshold fixture fails first.
       Requirement: R2.2.
-- [ ] **2.6** Commit 2 (GREEN): implement `Archive` — `weight.Effective(...) < threshold`, with
+- [x] **2.6** Commit 2 (GREEN): implement `Archive` — `weight.Effective(...) < threshold`, with
       entry-point `NaN`/`Inf` refusal on `Weight`/`DecayRate` before the comparison ever runs
       (C15's rule).
       Verify: `make test`; `golangci-lint run` (now imports `internal/core/weight`).
       Requirement: R2.2; design §4.4/§6.4.
-- [ ] **2.7** Commit 1 (RED): `archive_test.go` (continued) — `ResolveWeightThreshold`: `nil` →
+- [x] **2.7** Commit 1 (RED): `archive_test.go` (continued) — `ResolveWeightThreshold`: `nil` →
       `0.5`; a finite in-range value passes through; `NaN`/`+Inf`/`-Inf`/negative/`>
       weight.WeightCeiling` all → default.
       **Red**: `undefined: consolidation.DefaultWeightThreshold`, `undefined: consolidation.
@@ -250,11 +250,11 @@ producers). Ships `transition.go` per F1's resolution, `expire.go`, `archive.go`
       Stub: `const DefaultWeightThreshold = 0.5`; `func ResolveWeightThreshold(configured *float64)
       float64 { return 0 }` — compiles; the `nil` case expects `0.5`, stub returns `0`, fails first.
       Requirement: R2.3.
-- [ ] **2.8** Commit 2 (GREEN): implement `ResolveWeightThreshold`'s nil/non-finite/out-of-range
+- [x] **2.8** Commit 2 (GREEN): implement `ResolveWeightThreshold`'s nil/non-finite/out-of-range
       fallback.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R2.3; design §6.4.
-- [ ] **2.9** `archive_test.go` (continued) — the `m2a`-composition check:
+- [x] **2.9** `archive_test.go` (continued) — the `m2a`-composition check:
       `weight.ReviveGain × weight.WeightCeiling > DefaultWeightThreshold` (0.70 > 0.5) and
       `weight.ResurfaceAttenuation^weight.ResurfaceMaxHops × weight.WeightCeiling <=
       DefaultWeightThreshold` (0.5 ≤ 0.5), computed from the named Go constants, never repeated
@@ -262,32 +262,32 @@ producers). Ships `transition.go` per F1's resolution, `expire.go`, `archive.go`
       **Not a missing-symbol red**: all four constants already exist (three from `m2a`, one from
       task 2.7) — disclosed per `m2a` C9 as a compatibility check, not a TDD red step.
       Requirement: R2.4.
-- [ ] **2.10** `transition_test.go` (continued) — the R1.4 exhaustiveness table: drive every
+- [x] **2.10** `transition_test.go` (continued) — the R1.4 exhaustiveness table: drive every
       `Transition` `ExpireIncomplete` and `Archive` can emit through `unit.ValidateTransition`,
       asserting no error, instead of re-asserting the legal `(From, To)` pairs by hand.
       **Not a missing-symbol red**: both producers already compile and pass their own tests earlier
       in this PR — disclosed per `m2a` C9.
       Requirement: R1.4 (see Finding F1 for why this lives in PR 2).
-- [ ] **2.11** `test/conformance/consolidation_defaults_ddl_test.go` (new) — pin
+- [x] **2.11** `test/conformance/consolidation_defaults_ddl_test.go` (new) — pin
       `DefaultWeightThreshold` to migration `0002_learning_and_search.sql:63`'s `config.
       weight_threshold ... DEFAULT 0.5`, read off disk via the existing `migrationSQLText` helper.
       Requirement: R2.5.
-- [ ] **2.12** doc 02 §6.1 amendment: state both outcomes — promotion by default, archival only
+- [x] **2.12** doc 02 §6.1 amendment: state both outcomes — promotion by default, archival only
       when the caller marks the ambiguity `Unresolved` — resolving the §1/§6.1 contradiction
       (`CLAUDE.md` non-negotiable #1); cross-reference §1's own two-outcome text.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §4.2.
-- [ ] **2.13** doc 02 §6.2 amendment: state the strict `<` operator explicitly and its composition
+- [x] **2.13** doc 02 §6.2 amendment: state the strict `<` operator explicitly and its composition
       with `m2a`'s revive/resurface guarantees (the identity task 2.9 proves), so the doc states
       what the code and test now enforce together.
       Requirement: design §6.4.
-- [ ] **2.14** §13: add `incomplete_expiry_hours` (24, `consolidation.IncompleteExpiryHours`,
+- [x] **2.14** §13: add `incomplete_expiry_hours` (24, `consolidation.IncompleteExpiryHours`,
       quoted from doc 02 §1) as a new row; annotate the existing `weight_threshold` row with
       `consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`. Two rows touched this PR
       (1 new, 1 annotated).
       Requirement: R0.2.
-- [ ] **2.15** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] **2.15** Purity/coverage: `golangci-lint run`; `make cover`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/consolidation/{transition,expire,archive}{,_test}.go`,
       `test/conformance/consolidation_defaults_ddl_test.go`, `docs/02-cognitive-core.md`.
       `docs/06-harness.md` untouched (no new invariant row). Target ≤235 impl+docs lines.
