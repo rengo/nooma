@@ -122,7 +122,7 @@ does not fix it inside `core/weight` either.
 Depends on nothing outside this change. Goes first. **Does not** ship `Transition`/`Reason` (F1)
 or any doc02-vocabulary function beyond `Phase` — no `internal/core` import beyond `errors`.
 
-- [ ] **1.1** Commit 1 (RED): `internal/core/consolidation/phase_test.go` — `Order()` has exactly 8
+- [x] **1.1** Commit 1 (RED): `internal/core/consolidation/phase_test.go` — `Order()` has exactly 8
       elements, strictly ascending from `Phase(0)`, `Order()[7] == PhaseLearn`; `String()` swept
       across a range including negative and above-range ints never panics and is total; `ParsePhase
       ∘ String` round-trips for every `s` in `Order()`; `ParsePhase` rejects unknown text with
@@ -136,11 +136,11 @@ or any doc02-vocabulary function beyond `Phase` — no `internal/core` import be
       return "" }`, `func ParsePhase(s string) (Phase, error) { return 0, ErrUnknownPhase }` —
       compiles; `len(Order()) != 8` fails first (C14 guard), before any name assertion runs.
       Requirement: R1.1.
-- [ ] **1.2** Commit 2 (GREEN): implement `phaseNames()` (array sized by `phaseCount`), `Order()`
+- [x] **1.2** Commit 2 (GREEN): implement `phaseNames()` (array sized by `phaseCount`), `Order()`
       (generated from `[0, phaseCount)`, never a slice literal), `String()`, `ParsePhase()`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R1.1; design §3.1.
-- [ ] **1.3** Structural, not a test: confirm the `const _ uint` assertion from task 1.1 reads
+- [x] **1.3** Structural, not a test: confirm the `const _ uint` assertion from task 1.1 reads
       exactly as design §3.1 states, and record in `phase.go`'s own comment what it proves and what
       it does not. **Proves**: `PhaseLearn` at any position other than `phaseCount - 1` is a compile
       error — not a failing test, a package that does not build. **Does not prove**: that there are
@@ -149,7 +149,7 @@ or any doc02-vocabulary function beyond `Phase` — no `internal/core` import be
       a one-time author check (not part of CI — "the test is not tested," design §7), temporarily
       move `PhaseLearn` earlier in the const block and confirm `go build` fails.
       Requirement: R1.1 (leg 1); design §3.2.
-- [ ] **1.4** `test/conformance/i11_consolidation_phase_order_test.go` (new) — two assertions in one
+- [x] **1.4** `test/conformance/i11_consolidation_phase_order_test.go` (new) — two assertions in one
       file, per spec R1.2's own grouping. **Leg 3**: a new helper (reusing `repoRootFromCaller` from
       `test/conformance/store_api_test.go`, the same helper `migrationSQLText` already reuses)
       reads `docs/02-cognitive-core.md` off disk, extracts the phase arrow line (the line containing
@@ -163,28 +163,28 @@ or any doc02-vocabulary function beyond `Phase` — no `internal/core` import be
       C9) rather than claimed as a TDD red step. This is the first application of the
       migration-text-parsing trick to doc 02 prose rather than to SQL DDL.
       Requirement: R1.2; design §3.2 legs 3–4.
-- [ ] **1.5** R1.3 — `PhaseLearn` occupies slot eight with no decision function. **No test is
+- [x] **1.5** R1.3 — `PhaseLearn` occupies slot eight with no decision function. **No test is
       possible for an absent function** (spec's own words: "there is no positive test for an absent
       function, only the absence itself"). Verify at PR review: `rg 'func Learn' internal/core`
       returns nothing; `core_exported_decls_have_tests_test.go`'s existing presence guard is
       unaffected because there is no new exported declaration to guard.
       Requirement: R1.3.
-- [ ] **1.6** Rewrite `internal/core/consolidation/doc.go`: name the eight phases in order, state
+- [x] **1.6** Rewrite `internal/core/consolidation/doc.go`: name the eight phases in order, state
       that `learn` has no function and why (the no-op is the absence, not a vacuous body), and
       cross-reference §13's incoming rows (this PR adds none — the first calibrated number arrives
       in PR 2).
       Verify: `golangci-lint run`; `go build ./...`.
       Requirement: design §3.3.
-- [ ] **1.7** doc 02 §6 amendment: no change needed to the arrow line itself (task 1.4 pins the
+- [x] **1.7** doc 02 §6 amendment: no change needed to the arrow line itself (task 1.4 pins the
       existing text); add §6.8's one-sentence amendment — `learn`'s slot performs no work and writes
       no `decision_log` row, M5 fills it.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §3.3.
-- [ ] **1.8** Purity/lint: `golangci-lint run` (`depguard`'s `core-purity` — this PR imports only
+- [x] **1.8** Purity/lint: `golangci-lint run` (`depguard`'s `core-purity` — this PR imports only
       `errors` beyond stdlib; `forbidigo` — no `time.Now`/`Since`/`Until`/`rand.*`/`uuid.*`/
       `os.Getenv`).
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm `git diff --name-only` touches only
+- [x] Verify (PR-level): `make check-all`; confirm `git diff --name-only` touches only
       `internal/core/consolidation/{doc,phase}{,_test}.go`,
       `test/conformance/i11_consolidation_phase_order_test.go`, `docs/02-cognitive-core.md`.
       `docs/06-harness.md` is **not** touched — I11 and I12 already have their §4 rows.
