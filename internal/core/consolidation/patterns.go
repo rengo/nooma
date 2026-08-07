@@ -89,7 +89,27 @@ type LoadFinding struct {
 	Threshold int
 }
 
-// EvaluateLoad returns doc 02 §7's tentative current_state hypothesis.
+// EvaluateLoad returns doc 02 §7's tentative current_state hypothesis (spec
+// R5.2) when openMentalLoad is at or above threshold AND either there is no
+// prior hypothesis (lastHypothesisAt == nil) or LoadCooldownDays have
+// elapsed since it. Both boundaries are inclusive.
+//
+// A count at or above threshold, inside the cooldown, is a decision with
+// no effect and writes nothing (doc 02 §11) — that is why the cooldown
+// gate lives here, in core, rather than in the caller: below-threshold
+// short-circuits before the cooldown is even consulted, so a below-
+// threshold count never fires regardless of the cooldown.
 func EvaluateLoad(openMentalLoad, threshold int, lastHypothesisAt *time.Time, now time.Time) (LoadFinding, bool) {
-	return LoadFinding{}, false
+	if openMentalLoad < threshold {
+		return LoadFinding{}, false
+	}
+
+	if lastHypothesisAt != nil {
+		elapsed := now.Sub(*lastHypothesisAt)
+		if elapsed < time.Duration(LoadCooldownDays)*24*time.Hour {
+			return LoadFinding{}, false
+		}
+	}
+
+	return LoadFinding{OpenCount: openMentalLoad, Threshold: threshold}, true
 }
