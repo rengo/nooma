@@ -1,6 +1,7 @@
 package consolidation
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -166,4 +167,65 @@ func TestEvaluateLoad_CooldownBoundary_ExactlyLoadCooldownDaysFires(t *testing.T
 			t.Fatalf("EvaluateLoad ok = true, want false — a hair under LoadCooldownDays must not fire")
 		}
 	})
+}
+
+// TestResolveGoalStagnationDays_NilZeroOrNegative_FallsBackToDefault is the
+// C14 content guard: the nil case must fail against a stub returning a bare
+// 0 rather than DefaultGoalStagnationDays.
+func TestResolveGoalStagnationDays_NilZeroOrNegative_FallsBackToDefault(t *testing.T) {
+	if got := ResolveGoalStagnationDays(nil); got != DefaultGoalStagnationDays {
+		t.Errorf("ResolveGoalStagnationDays(nil) = %v, want %v", got, DefaultGoalStagnationDays)
+	}
+
+	for _, v := range []int{0, -1, -21} {
+		v := v
+		t.Run(intName(v), func(t *testing.T) {
+			got := ResolveGoalStagnationDays(&v)
+			if got != DefaultGoalStagnationDays {
+				t.Errorf("ResolveGoalStagnationDays(&%d) = %v, want default %v", v, got, DefaultGoalStagnationDays)
+			}
+		})
+	}
+}
+
+// TestResolveGoalStagnationDays_Positive_PassesThrough proves a positive
+// configured value is never overridden.
+func TestResolveGoalStagnationDays_Positive_PassesThrough(t *testing.T) {
+	v := 35
+	if got := ResolveGoalStagnationDays(&v); got != 35 {
+		t.Errorf("ResolveGoalStagnationDays(&35) = %v, want 35 unchanged", got)
+	}
+}
+
+// TestResolveMentalLoadThreshold_NilZeroOrNegative_FallsBackToDefault
+// mirrors TestResolveGoalStagnationDays_NilZeroOrNegative_FallsBackToDefault
+// for the sibling Resolve* function.
+func TestResolveMentalLoadThreshold_NilZeroOrNegative_FallsBackToDefault(t *testing.T) {
+	if got := ResolveMentalLoadThreshold(nil); got != DefaultMentalLoadThreshold {
+		t.Errorf("ResolveMentalLoadThreshold(nil) = %v, want %v", got, DefaultMentalLoadThreshold)
+	}
+
+	for _, v := range []int{0, -1, -7} {
+		v := v
+		t.Run(intName(v), func(t *testing.T) {
+			got := ResolveMentalLoadThreshold(&v)
+			if got != DefaultMentalLoadThreshold {
+				t.Errorf("ResolveMentalLoadThreshold(&%d) = %v, want default %v", v, got, DefaultMentalLoadThreshold)
+			}
+		})
+	}
+}
+
+// TestResolveMentalLoadThreshold_Positive_PassesThrough proves a positive
+// configured value is never overridden.
+func TestResolveMentalLoadThreshold_Positive_PassesThrough(t *testing.T) {
+	v := 12
+	if got := ResolveMentalLoadThreshold(&v); got != 12 {
+		t.Errorf("ResolveMentalLoadThreshold(&12) = %v, want 12 unchanged", got)
+	}
+}
+
+// intName renders a signed int as a subtest name.
+func intName(v int) string {
+	return fmt.Sprintf("%d", v)
 }

@@ -113,3 +113,15 @@ func EvaluateLoad(openMentalLoad, threshold int, lastHypothesisAt *time.Time, no
 
 	return LoadFinding{OpenCount: openMentalLoad, Threshold: threshold}, true
 }
+
+// ResolveGoalStagnationDays falls back to DefaultGoalStagnationDays for an
+// absent or non-positive configured value (spec R5.3).
+func ResolveGoalStagnationDays(configured *int) int {
+	return 0
+}
+
+// ResolveMentalLoadThreshold falls back to DefaultMentalLoadThreshold for
+// an absent or non-positive configured value (spec R5.3).
+func ResolveMentalLoadThreshold(configured *int) int {
+	return 0
+}
