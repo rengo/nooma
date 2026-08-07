@@ -1,6 +1,11 @@
 package consolidation
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // TestAllReasons_HasExactlyThreeMembers is the C14 length guard: it must
 // fail on AllReasons()'s length before any content assertion runs, against
@@ -42,5 +47,37 @@ func TestAllReasons_ReturnsAFreshSlice(t *testing.T) {
 	}
 	if b[0] == Reason("mutated") {
 		t.Fatal("AllReasons() does not return a fresh slice — mutating one call's result affected a later call")
+	}
+}
+
+// TestEveryEmittedTransitionIsLegal drives every Transition
+// ExpireIncomplete and Archive can produce through unit.ValidateTransition
+// (spec R1.4), instead of re-asserting the legal (From, To) pairs by hand a
+// second time.
+//
+// Not a missing-symbol red step: both producers already compile and pass
+// their own tests earlier in this PR — disclosed per this project's own
+// convention (m2a C9) as an exhaustiveness check, not a TDD red step.
+func TestEveryEmittedTransitionIsLegal(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+
+	var all []Transition
+	all = append(all, ExpireIncomplete([]Incomplete{
+		{UnitID: "u1", CreatedAt: now.Add(-48 * time.Hour), Unresolved: true},
+		{UnitID: "u2", CreatedAt: now.Add(-48 * time.Hour), Unresolved: false},
+	}, now)...)
+
+	archived, _ := Archive([]Cold{
+		{UnitID: "u3", Status: unit.StatusPool, Weight: 0.1, DecayRate: 0, LastTouchedAt: now},
+	}, 0.5, now)
+	all = append(all, archived...)
+
+	if len(all) != 3 {
+		t.Fatalf("fixture produced %d transitions, want 3 — nothing to exhaustively check", len(all))
+	}
+	for _, tr := range all {
+		if err := unit.ValidateTransition(tr.From, tr.To); err != nil {
+			t.Errorf("Transition{From: %v, To: %v} (Reason %v) is not a legal transition: %v", tr.From, tr.To, tr.Reason, err)
+		}
 	}
 }
