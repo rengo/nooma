@@ -43,6 +43,21 @@ func ExpireIncomplete(us []Incomplete, now time.Time) []Transition {
 	var out []Transition
 	for _, u := range us {
 		elapsed := now.Sub(u.CreatedAt).Hours()
+		// Clamping negative elapsed to zero decides nothing while
+		// IncompleteExpiryHours is positive: elapsed < 0 already implies
+		// elapsed < IncompleteExpiryHours, so the comparison below reaches
+		// the same answer either way. Judgment Day round 1 proved it by
+		// deleting the clamp and watching the whole suite stay green,
+		// including the clock-skew test that names it.
+		//
+		// It stays because it is only inert GIVEN that constant's value,
+		// and that value is now pinned to doc 02's own prose by
+		// test/conformance/consolidation_expiry_doc_test.go. At
+		// IncompleteExpiryHours <= 0 the clamp becomes load-bearing again —
+		// a future unit would expire under a clock skew rather than be
+		// skipped. This comment exists so the next reader does not mistake
+		// it for the mechanism that handles skew (C17's shape); the skew is
+		// handled, and this is not what handles it.
 		if elapsed < 0 {
 			elapsed = 0
 		}

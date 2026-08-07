@@ -678,9 +678,10 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
    one direct revive always clears the archive band (`revive_gain * weight_ceiling >
    weight_threshold`), and spreading activation alone, at maximum hop distance, never does
    (`resurface_attenuation ^ resurface_max_hops * weight_ceiling <= weight_threshold`) — both
-   are properties of the chosen defaults, not a general guarantee, since `weight_threshold` and
-   `weight_ceiling` are both ⚙ recalibratable per user
-   (`internal/core/consolidation.Archive`/`ResolveWeightThreshold`).
+   are properties of the chosen defaults, not a general guarantee, since `weight_threshold` is
+   configurable per vault through the `config` row
+   (`internal/core/consolidation.Archive`/`ResolveWeightThreshold`). `weight_ceiling` is not:
+   §13 marks it neither ⚙ nor configurable, and no `Resolve*` reads it — it is a bare constant.
 3. **strengthen**: re-evaluates relation strength with accumulated evidence.
 4. **connect**: finds candidate pairs (hybrid recall among recent/hot units) and runs them
    through the LLM judge. New relations get `created_by='consolidation'`.

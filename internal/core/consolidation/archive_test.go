@@ -159,6 +159,36 @@ func TestResolveWeightThreshold_FiniteInRangeValue_PassesThrough(t *testing.T) {
 	}
 }
 
+// TestResolveWeightThreshold_InclusiveBoundsPassThrough pins the two
+// endpoints of the accepted range, which the in-range test above misses by
+// sampling only 0.8.
+//
+// Judgment Day round 1 mutated the guard's `t < 0` to `t <= 0` and its
+// `t > weight.WeightCeiling` to `t >= weight.WeightCeiling` — both plausible
+// off-by-one slips — and the whole suite stayed green. Both endpoints are
+// legitimate operator configurations, not corruption: a threshold of exactly
+// 0 means "archive nothing, effective weight is never below zero", and
+// exactly WeightCeiling is the top of R2.4's own compatibility check. Falling
+// either back to the default would silently override a deliberate choice.
+func TestResolveWeightThreshold_InclusiveBoundsPassThrough(t *testing.T) {
+	tests := []struct {
+		name string
+		v    float64
+	}{
+		{"exactly zero — archive nothing", 0},
+		{"exactly WeightCeiling — R2.4's own top", weight.WeightCeiling},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := tt.v
+			got := ResolveWeightThreshold(&v)
+			if got != tt.v {
+				t.Errorf("ResolveWeightThreshold(&%v) = %v, want %v unchanged — an endpoint of the accepted range is a configuration, not corruption", tt.v, got, tt.v)
+			}
+		})
+	}
+}
+
 // TestResolveWeightThreshold_NonFiniteOrOutOfRange_FallsBackToDefault
 // proves R2.3's domain restriction: a value core cannot interpret is
 // treated identically to no value at all, never trusted as-is.
