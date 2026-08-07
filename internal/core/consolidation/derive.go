@@ -1,6 +1,7 @@
 package consolidation
 
 import (
+	"math"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/recall"
@@ -166,10 +167,21 @@ func MergeProposals(model string, existing, proposed []BeliefVector) ([]MergeDec
 const BeliefReinforceGain = 0.10
 
 // Reinforce raises a merged belief's confidence toward 1 by §4.1's shared
-// reinforcement law (spec R4.5).
-//
-// Stub (RED, task 4.20): returns (confidence, false) unconditionally — the
-// in-domain fixture expects (raised, true), fails first.
+// reinforcement law (spec R4.5): c' = c + BeliefReinforceGain*(1-c),
+// asymptotic and never reaching 1 under repetition — the same law
+// Strengthen applies to relation strength, applied here to belief
+// confidence. It refuses a NaN, +-Inf, or finite-but-outside-[0,1]
+// confidence outright — (confidence, false), the input echoed back
+// unchanged rather than coerced (C15/C22/C24's rule, Strengthen's own
+// convention applied here) — and returns (confidence, false) for a belief
+// already at exactly 1 (doc 02 §11 — a decision with no effect writes
+// nothing).
 func Reinforce(confidence float64) (float64, bool) {
-	return confidence, false
+	if math.IsNaN(confidence) || confidence < 0 || confidence > 1 {
+		return confidence, false
+	}
+	if confidence >= 1 {
+		return confidence, false
+	}
+	return confidence + BeliefReinforceGain*(1-confidence), true
 }
