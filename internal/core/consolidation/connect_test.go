@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
 )
 
@@ -251,5 +252,125 @@ func TestConnectPairs_PreservesFusedOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("position %d: got %v, want %v", i, got[i], want[i])
 		}
+	}
+}
+
+func ptrOutcome(o relation.Outcome) *relation.Outcome { return &o }
+func ptrString(s string) *string                      { return &s }
+func ptrFloat(f float64) *float64                     { return &f }
+
+// completeJudgment returns a relation.Judgment with every pointer field
+// present, so a test can nil out exactly one at a time.
+func completeJudgment(outcome relation.Outcome, confidence float64) relation.Judgment {
+	return relation.Judgment{
+		Outcome:      ptrOutcome(outcome),
+		TargetUnitID: ptrString("target-unit"),
+		Type:         ptrString("same_topic"),
+		Strength:     ptrFloat(0.5),
+		Confidence:   ptrFloat(confidence),
+	}
+}
+
+func connectPairsThresholds() relation.Thresholds {
+	return relation.Thresholds{Persist: 0.30, Surface: 0.50}
+}
+
+// TestProposeRelation_OutcomeNewWritesNothing proves R4.3: outcome "new"
+// returns (_, false) regardless of every other field being present.
+func TestProposeRelation_OutcomeNewWritesNothing(t *testing.T) {
+	j := completeJudgment(relation.OutcomeNew, 0.90)
+
+	_, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
+	if ok {
+		t.Fatal("ProposeRelation() returned true for outcome \"new\" — a judgment with this outcome decided nothing")
+	}
+}
+
+// TestProposeRelation_DiscardWritesNothing proves R4.3 (I08): a
+// relation.Discard verdict returns (_, false), even with every field
+// present.
+func TestProposeRelation_DiscardWritesNothing(t *testing.T) {
+	j := completeJudgment(relation.OutcomeDuplicate, 0.10) // below Persist (0.30) -> Discard
+
+	_, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
+	if ok {
+		t.Fatal("ProposeRelation() returned true for a relation.Discard verdict — I08 requires it store nothing")
+	}
+}
+
+// TestProposeRelation_EachMissingFieldWritesNothing proves R4.3: any of
+// the four pointer fields being nil after tolerant decode returns
+// (_, false), tested individually.
+func TestProposeRelation_EachMissingFieldWritesNothing(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*relation.Judgment)
+	}{
+		{"TargetUnitID", func(j *relation.Judgment) { j.TargetUnitID = nil }},
+		{"Type", func(j *relation.Judgment) { j.Type = nil }},
+		{"Strength", func(j *relation.Judgment) { j.Strength = nil }},
+		{"Confidence", func(j *relation.Judgment) { j.Confidence = nil }},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			j := completeJudgment(relation.OutcomeDuplicate, 0.90)
+			tc.mutate(&j)
+
+			_, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
+			if ok {
+				t.Fatalf("ProposeRelation() returned true with %s nil — a judgment missing a field decided nothing", tc.name)
+			}
+		})
+	}
+}
+
+// TestProposeRelation_UncertainAndAssertedWriteAPlan proves R4.3: both
+// relation.Uncertain and relation.Asserted, with every field present,
+// return (_, true) — the Uncertain band is stored AND asked about (I09).
+func TestProposeRelation_UncertainAndAssertedWriteAPlan(t *testing.T) {
+	tests := []struct {
+		name       string
+		confidence float64
+	}{
+		{"Uncertain", 0.40}, // Persist (0.30) <= 0.40 < Surface (0.50)
+		{"Asserted", 0.90},  // >= Surface
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			j := completeJudgment(relation.OutcomeDuplicate, tc.confidence)
+
+			got, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
+			if !ok {
+				t.Fatalf("ProposeRelation() returned false for confidence %v, want true", tc.confidence)
+			}
+			want := ProposedRelation{
+				From:       "source-unit",
+				To:         "target-unit",
+				Type:       "same_topic",
+				Strength:   0.5,
+				Confidence: tc.confidence,
+				CreatedBy:  relation.CreatedByConsolidation,
+			}
+			if got != want {
+				t.Errorf("ProposeRelation() = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+// TestProposeRelation_CreatedByIsAlwaysConsolidation proves R4.3: the
+// returned ProposedRelation.CreatedBy is always
+// relation.CreatedByConsolidation, never CreatedBySystem or CreatedByUser.
+func TestProposeRelation_CreatedByIsAlwaysConsolidation(t *testing.T) {
+	j := completeJudgment(relation.OutcomeRelated, 0.90)
+
+	got, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
+	if !ok {
+		t.Fatal("ProposeRelation() returned false, want true")
+	}
+	if got.CreatedBy != relation.CreatedByConsolidation {
+		t.Errorf("ProposedRelation.CreatedBy = %q, want %q", got.CreatedBy, relation.CreatedByConsolidation)
 	}
 }

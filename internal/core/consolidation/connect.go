@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 )
@@ -115,4 +116,31 @@ func ConnectPairs(source string, fused []recall.FusedCandidate, existing map[Pai
 		out = append(out, Pair{From: source, To: c.ID})
 	}
 	return out
+}
+
+// ProposedRelation is a relation plan brain can persist with
+// created_by='consolidation' (spec R4.3, design.md §4.4).
+type ProposedRelation struct {
+	From       string
+	To         string
+	Type       string
+	Strength   float64
+	Confidence float64
+	CreatedBy  relation.CreatedBy
+}
+
+// ProposeRelation applies doc 02 §4's persist decision — unchanged, through
+// relation.Decide/relation.Resolve — to one judged pair (spec R4.3,
+// design.md §4.4). It returns (_, false) — no plan, no decision_log row —
+// for outcome "new", for relation.Discard (I08), and for a judgment
+// missing any of TargetUnitID, Type, Strength or Confidence after
+// tolerant decode ("a judgment that decided nothing writes nothing", doc
+// 02 §4). relation.Uncertain and relation.Asserted return (_, true): the
+// Uncertain band is stored AND asked about (I09), and the asking is M3's.
+// The returned ProposedRelation.CreatedBy is always
+// relation.CreatedByConsolidation.
+//
+// TODO(RED stub): implemented in the next commit.
+func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds) (ProposedRelation, bool) {
+	return ProposedRelation{}, false
 }
