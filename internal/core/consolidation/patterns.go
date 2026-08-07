@@ -67,3 +67,29 @@ func EvaluateStagnation(bs []Belief, stagnationDays int, now time.Time) []Stagna
 	sort.Slice(findings, func(i, j int) bool { return findings[i].BeliefID < findings[j].BeliefID })
 	return findings
 }
+
+// DefaultMentalLoadThreshold is doc 02 §7/§13's open-mental-load count
+// default (spec R5.2) — ResolveMentalLoadThreshold falls back to it only
+// for an absent or non-positive configured value. Pinned to migration
+// 0002's config.mental_load_threshold column DEFAULT by
+// test/conformance/consolidation_defaults_ddl_test.go (spec R5.4).
+const DefaultMentalLoadThreshold = 7
+
+// LoadCooldownDays is doc 02 §7's "cooldown of days after a resolved
+// check-in" (spec R5.2) — CHOSEN, not derived: doc 02 names no number for
+// it. Unrelated to DefaultMentalLoadThreshold's own coincidentally-equal 7
+// — one is a duration, one is a count, and no test ties them, the same
+// distinction m2a recorded for focus_size and mental_load_threshold.
+const LoadCooldownDays = 7
+
+// LoadFinding is doc 02 §7's tentative current_state hypothesis
+// EvaluateLoad produces (spec R5.2).
+type LoadFinding struct {
+	OpenCount int
+	Threshold int
+}
+
+// EvaluateLoad returns doc 02 §7's tentative current_state hypothesis.
+func EvaluateLoad(openMentalLoad, threshold int, lastHypothesisAt *time.Time, now time.Time) (LoadFinding, bool) {
+	return LoadFinding{}, false
+}

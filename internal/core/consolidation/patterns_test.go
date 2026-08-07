@@ -104,3 +104,66 @@ func TestEvaluateStagnation_OutputSortedByBeliefID(t *testing.T) {
 		}
 	}
 }
+
+// TestEvaluateLoad_AtOrAboveThreshold_FiresWithNilLastHypothesisAt is the
+// C14 length/presence guard: a qualifying count with no prior hypothesis
+// must fire against a stub that always returns false.
+func TestEvaluateLoad_AtOrAboveThreshold_FiresWithNilLastHypothesisAt(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+
+	got, ok := EvaluateLoad(7, 7, nil, now)
+	if !ok {
+		t.Fatalf("EvaluateLoad(7, 7, nil, now) ok = false, want true — at-threshold with no prior hypothesis must fire")
+	}
+	want := LoadFinding{OpenCount: 7, Threshold: 7}
+	if got != want {
+		t.Errorf("EvaluateLoad(7, 7, nil, now) = %+v, want %+v", got, want)
+	}
+}
+
+// TestEvaluateLoad_OneBelowThreshold_NeverFires proves the other side of
+// R5.2's threshold boundary, with no cooldown in play.
+func TestEvaluateLoad_OneBelowThreshold_NeverFires(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+
+	_, ok := EvaluateLoad(6, 7, nil, now)
+	if ok {
+		t.Fatalf("EvaluateLoad(6, 7, nil, now) ok = true, want false — below threshold must never fire")
+	}
+}
+
+// TestEvaluateLoad_InsideCooldown_ReturnsFalseEvenAboveThreshold proves a
+// count above threshold, inside the cooldown, is a decision with no effect
+// and writes nothing (doc 02 §11).
+func TestEvaluateLoad_InsideCooldown_ReturnsFalseEvenAboveThreshold(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+	lastHypothesisAt := now.Add(-3 * 24 * time.Hour)
+
+	_, ok := EvaluateLoad(9, 7, &lastHypothesisAt, now)
+	if ok {
+		t.Fatalf("EvaluateLoad(9, 7, ...) ok = true, want false — 3 days into a 7-day cooldown must not fire")
+	}
+}
+
+// TestEvaluateLoad_CooldownBoundary_ExactlyLoadCooldownDaysFires proves
+// R5.2's second boundary is inclusive: exactly LoadCooldownDays elapsed
+// fires, a hair under does not.
+func TestEvaluateLoad_CooldownBoundary_ExactlyLoadCooldownDaysFires(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+
+	t.Run("ExactlyAtCooldown_Fires", func(t *testing.T) {
+		lastHypothesisAt := now.Add(-time.Duration(LoadCooldownDays) * 24 * time.Hour)
+		_, ok := EvaluateLoad(9, 7, &lastHypothesisAt, now)
+		if !ok {
+			t.Fatalf("EvaluateLoad ok = false, want true — exactly LoadCooldownDays elapsed must fire")
+		}
+	})
+
+	t.Run("AHairUnderCooldown_DoesNotFire", func(t *testing.T) {
+		lastHypothesisAt := now.Add(-time.Duration(LoadCooldownDays)*24*time.Hour + time.Hour)
+		_, ok := EvaluateLoad(9, 7, &lastHypothesisAt, now)
+		if ok {
+			t.Fatalf("EvaluateLoad ok = true, want false — a hair under LoadCooldownDays must not fire")
+		}
+	})
+}
