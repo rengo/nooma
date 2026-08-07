@@ -265,6 +265,23 @@ func TestMergeProposals_ExistingNonFiniteVectorSurfacesError(t *testing.T) {
 			t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrNonFiniteVector) — must fail regardless of the corrupted entry's position", err)
 		}
 	})
+
+	// The pre-fix bug was position-dependent — a NaN score sorted ahead of
+	// the true nearest match only for some placements — so the interior
+	// case is pinned rather than inferred from the two endpoints.
+	t.Run("corrupted in the middle of a longer slice", func(t *testing.T) {
+		existing := []BeliefVector{
+			{BeliefID: "decoy-a", Vector: []float32{0, 1}},
+			{BeliefID: "decoy-b", Vector: []float32{0, -1}},
+			corrupted,
+			realMatch,
+			{BeliefID: "decoy-c", Vector: []float32{-1, 0}},
+		}
+		_, err := MergeProposals("model-a", existing, proposed)
+		if !errors.Is(err, recall.ErrNonFiniteVector) {
+			t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrNonFiniteVector) — the interior position is the one the pre-fix sort mis-ordered", err)
+		}
+	})
 }
 
 // TestBeliefReinforceGain_MatchesTheDocumentedDefault pins

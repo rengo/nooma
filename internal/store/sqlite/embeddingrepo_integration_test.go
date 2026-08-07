@@ -5,10 +5,12 @@ package sqlite
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"math"
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/repocontract"
 )
@@ -259,5 +261,58 @@ func TestEmbeddingRepo_CountLiveWithoutEmbeddingIsZeroOnAFreshVault(t *testing.T
 	}
 	if count != 0 {
 		t.Errorf("CountLiveWithoutEmbedding = %d, want 0", count)
+	}
+}
+
+// TestEmbeddingRepo_PutRefusesANonFiniteVector pins the one place in the
+// capture pipeline where m2b's recall.ErrNonFiniteVector guard changed
+// observable behaviour.
+//
+// Before that guard, recall.Normalize checked only for zero magnitude, so
+// a NaN component made norm itself NaN, the check never fired, and Put
+// wrote a corrupt vector to unit_embeddings while capture reported full
+// success — silent data corruption, live since M1. The guard was added
+// inside Normalize rather than at its m2b caller's door precisely so every
+// caller inherits it, and this is the caller where the inheritance is not
+// merely defensive.
+//
+// Judgment Day round 2 traced the blast radius and found the behaviour
+// change sound — capture's embedAndStore already routes any Put failure
+// through design D8's degrade path (the unit persists, embedded is false,
+// a capture.embedding.failed row lands in decision_log) — but unverified
+// by any test at the point where it actually changed. This is that test.
+func TestEmbeddingRepo_PutRefusesANonFiniteVector(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name string
+		bad  float32
+	}{
+		{"NaN", float32(math.NaN())},
+		{"+Inf", float32(math.Inf(1))},
+		{"-Inf", float32(math.Inf(-1))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := openTestVault(t)
+			h := embeddingHarness{EmbeddingRepo: NewEmbeddingRepo(v), v: v}
+			h.EnsureUnit(t, "unit-1")
+
+			err := h.Put(ctx, ports.Embedding{
+				UnitID: "unit-1", Model: "model-a",
+				Vector: []float32{3, tc.bad, 0}, At: embeddingFixtureTime,
+			})
+			if !errors.Is(err, recall.ErrNonFiniteVector) {
+				t.Fatalf("Put with a %s component: error = %v, want errors.Is(_, recall.ErrNonFiniteVector)", tc.name, err)
+			}
+
+			var n int
+			if err := v.db.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM unit_embeddings WHERE unit_id = ?`, "unit-1").Scan(&n); err != nil {
+				t.Fatalf("counting stored rows: %v", err)
+			}
+			if n != 0 {
+				t.Errorf("Put stored %d row(s) for a %s vector, want 0 — a refused embedding must leave nothing behind", n, tc.name)
+			}
+		})
 	}
 }
