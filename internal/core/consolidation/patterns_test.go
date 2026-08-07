@@ -2,6 +2,7 @@ package consolidation
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -228,4 +229,51 @@ func TestResolveMentalLoadThreshold_Positive_PassesThrough(t *testing.T) {
 // intName renders a signed int as a subtest name.
 func intName(v int) string {
 	return fmt.Sprintf("%d", v)
+}
+
+// TestStrengthenGain_ComposesWithDefaultGoalStagnationDays is R3.2's
+// close-out (Finding F2): the compatibility check between StrengthenGain
+// (declared in PR 3, strengthen.go) and DefaultGoalStagnationDays (declared
+// earlier in THIS PR, task 5.2) — deferred here because PR 3 could not
+// compile a test against a constant that did not exist for two more PRs.
+//
+// This is a compatibility check between two INDEPENDENTLY CHOSEN defaults,
+// not evidence that either value determines the other (spec R3.2,
+// design.md §4.3): the admissible range of gains producing the same night
+// count is wider than 0.10 alone, and StrengthenGain is chosen — two
+// Judgment Day rounds on this design established that, and this test does
+// not upgrade it into an entailment.
+//
+// Not a missing-symbol RED: StrengthenGain shipped in PR 3;
+// DefaultGoalStagnationDays is implemented earlier in this same PR (task
+// 5.2) — disclosed per this project's own convention (m2a C9) as a
+// compatibility check, not a TDD red step.
+func TestStrengthenGain_ComposesWithDefaultGoalStagnationDays(t *testing.T) {
+	n := int(math.Ceil(math.Log(0.1/0.9) / math.Log(1-StrengthenGain)))
+	if n != DefaultGoalStagnationDays {
+		t.Errorf("ceil(ln(0.1/0.9)/ln(1-StrengthenGain)) = %d, want DefaultGoalStagnationDays %d — "+
+			"R3.2's compatibility check between two independently chosen defaults", n, DefaultGoalStagnationDays)
+	}
+
+	// Boundary pinned from both sides by simulating Strengthen's own
+	// asymptotic law directly, starting from strength 0.1 (spec R3.2).
+	t.Run("At20NightsStillBelow0.9", func(t *testing.T) {
+		s := 0.1
+		for i := 0; i < 20; i++ {
+			s += StrengthenGain * (1 - s)
+		}
+		if !(s < 0.9) {
+			t.Errorf("after 20 nights s = %v, want strictly below 0.9", s)
+		}
+	})
+
+	t.Run("At21NightsAtOrAbove0.9", func(t *testing.T) {
+		s := 0.1
+		for i := 0; i < 21; i++ {
+			s += StrengthenGain * (1 - s)
+		}
+		if !(s >= 0.9) {
+			t.Errorf("after 21 nights s = %v, want at or above 0.9", s)
+		}
+	})
 }
