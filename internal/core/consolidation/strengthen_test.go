@@ -168,3 +168,33 @@ func TestStrengthen_ChangesAndCorruptedSortedByRelationID(t *testing.T) {
 		}
 	}
 }
+
+// TestStrengthenGain_IsPinnedToItsCalibratedValue guards StrengthenGain
+// against a wrong VALUE, independent of every shape test in this file. It
+// exists because of C7 and C28 (openspec/changes/m2a-weight-focus/tasks.md):
+// TestStrengthen_ConvergesAsymptotically and its siblings compute their
+// expectation as e.Strength + StrengthenGain*(1-e.Strength) — correct for
+// pinning the law's shape, but structurally incapable of noticing the
+// constant moved, since a mutated StrengthenGain flows into their "want"
+// exactly as it flows into Strengthen's output.
+//
+// C28 recorded that C7's convention did not transfer from internal/core/weight
+// to internal/core/focus, and named m2b as the next place it would be needed.
+// It did not transfer again: PR 2 of this very change shipped
+// IncompleteExpiryHours with no pin, and mutating it 24 -> 23 or 24 -> 25 left
+// the package green at 100% statement coverage.
+//
+// Note what this test does NOT claim. doc 02 §13 records strengthen_gain as
+// CHOSEN, not derived: the 21-night convergence to goal_stagnation_days is a
+// compatibility check against that knob's DEFAULT, and any gain in roughly
+// [0.0994, 0.1040) satisfies the same identity. goal_stagnation_days is also
+// per-user recalibratable while StrengthenGain reads no config, so the
+// compatibility holds at the default and nowhere else. This literal is the
+// chosen number, and recalibrating it means editing the §13 row and this line
+// in the same PR.
+func TestStrengthenGain_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 0.10
+	if StrengthenGain != want {
+		t.Fatalf("StrengthenGain = %v, want %v — doc 02 §13's chosen value; recalibrating means editing the §13 row and this literal together", StrengthenGain, want)
+	}
+}
