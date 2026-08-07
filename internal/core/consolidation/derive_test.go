@@ -130,6 +130,53 @@ func TestMergeProposals_ZeroVectorSurfacesErrZeroVector(t *testing.T) {
 	}
 }
 
+// TestMergeProposals_ExistingZeroVectorSurfacesErrZeroVector proves the
+// same refusal on the OTHER side: an existing belief's own zero-magnitude
+// vector is caught while building the comparison index, before any
+// proposed vector is ever normalized.
+func TestMergeProposals_ExistingZeroVectorSurfacesErrZeroVector(t *testing.T) {
+	existing := []BeliefVector{{BeliefID: "e1", Vector: []float32{0, 0}}}
+	proposed := []BeliefVector{{BeliefID: "p1", Vector: []float32{1, 0}}}
+
+	_, err := MergeProposals("model-a", existing, proposed)
+	if !errors.Is(err, recall.ErrZeroVector) {
+		t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrZeroVector)", err)
+	}
+}
+
+// TestMergeProposals_RaggedExistingVectorsSurfaceErrRaggedVectors proves
+// that existing beliefs whose vectors do not all share one dimension
+// surface recall.ErrRaggedVectors from recall.NewVectorIndex — a
+// genuinely reachable error path, unlike ErrModelMismatch (see the
+// package doc comment on MergeProposals for why that one is not).
+func TestMergeProposals_RaggedExistingVectorsSurfaceErrRaggedVectors(t *testing.T) {
+	existing := []BeliefVector{
+		{BeliefID: "e1", Vector: []float32{1, 0}},
+		{BeliefID: "e2", Vector: []float32{1, 0, 0}},
+	}
+	proposed := []BeliefVector{{BeliefID: "p1", Vector: []float32{1, 0}}}
+
+	_, err := MergeProposals("model-a", existing, proposed)
+	if !errors.Is(err, recall.ErrRaggedVectors) {
+		t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrRaggedVectors)", err)
+	}
+}
+
+// TestMergeProposals_DimensionMismatchSurfacesErrDimMismatch proves that a
+// proposed vector whose dimension differs from existing's surfaces
+// recall.ErrDimMismatch from recall.Search — reachable, and distinct from
+// recall.ErrModelMismatch, which this function's single-model call
+// surface cannot manufacture (see MergeProposals's own doc comment).
+func TestMergeProposals_DimensionMismatchSurfacesErrDimMismatch(t *testing.T) {
+	existing := []BeliefVector{{BeliefID: "e1", Vector: []float32{1, 0}}}
+	proposed := []BeliefVector{{BeliefID: "p1", Vector: []float32{1, 0, 0}}}
+
+	_, err := MergeProposals("model-a", existing, proposed)
+	if !errors.Is(err, recall.ErrDimMismatch) {
+		t.Fatalf("MergeProposals error = %v, want errors.Is(_, recall.ErrDimMismatch)", err)
+	}
+}
+
 // TestMergeProposals_UnNormalizedInputStillScoresAsCosine proves R4.4:
 // normalization happens inside MergeProposals, never a caller obligation —
 // existing and proposed here are parallel but at very different
