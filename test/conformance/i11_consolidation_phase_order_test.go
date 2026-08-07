@@ -120,6 +120,17 @@ func TestI11_NoCallerOutsideConsolidationListsThePhaseNames(t *testing.T) {
 			if d.Name() == ".git" {
 				return filepath.SkipDir
 			}
+			// .claude/worktrees holds live git worktrees of this same
+			// repository, created by review agents. Each contains its own
+			// copy of internal/core/consolidation/phase.go, which this scan
+			// would otherwise report as a second package listing the phase
+			// names — a spurious failure that depends on whether another
+			// agent happens to be running. Found during Judgment Day on
+			// PR 5, where a sibling worktree made this test fail against an
+			// unmodified tree.
+			if d.Name() == "worktrees" && filepath.Base(filepath.Dir(path)) == ".claude" {
+				return filepath.SkipDir
+			}
 			abs, absErr := filepath.Abs(path)
 			if absErr != nil {
 				return absErr

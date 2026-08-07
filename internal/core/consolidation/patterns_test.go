@@ -121,6 +121,20 @@ func TestEvaluateLoad_AtOrAboveThreshold_FiresWithNilLastHypothesisAt(t *testing
 	if got != want {
 		t.Errorf("EvaluateLoad(7, 7, nil, now) = %+v, want %+v", got, want)
 	}
+
+	// Above the threshold, with the two numbers DISTINCT. Judgment Day
+	// round 1 found that the at-threshold case above cannot tell OpenCount
+	// from Threshold — both are 7, so swapping the two fields in the
+	// returned literal passes every test in this package. Downstream, that
+	// swap would render a nudge claiming the user has 7 open loads against
+	// a threshold of 12 when the truth is the reverse.
+	distinct, ok := EvaluateLoad(12, 7, nil, now)
+	if !ok {
+		t.Fatalf("EvaluateLoad(12, 7, nil, now) ok = false, want true — above threshold with no prior hypothesis must fire")
+	}
+	if wantDistinct := (LoadFinding{OpenCount: 12, Threshold: 7}); distinct != wantDistinct {
+		t.Errorf("EvaluateLoad(12, 7, nil, now) = %+v, want %+v — the two fields carry different numbers and must not be transposed", distinct, wantDistinct)
+	}
 }
 
 // TestEvaluateLoad_OneBelowThreshold_NeverFires proves the other side of
@@ -276,4 +290,55 @@ func TestStrengthenGain_ComposesWithDefaultGoalStagnationDays(t *testing.T) {
 			t.Errorf("after 21 nights s = %v, want at or above 0.9", s)
 		}
 	})
+}
+
+// TestEvaluateStagnation_StagnantDaysReportsElapsedNotTheThreshold closes
+// the gap Judgment Day round 1 found: the only other test asserting
+// StagnantDays is built at exactly the boundary
+// (elapsed == stagnationDays == 21), so it cannot tell the elapsed time
+// from the threshold it was compared against. Replacing
+// `StagnantDays: elapsed` with `StagnantDays: float64(stagnationDays)`
+// passed every test in the package.
+//
+// The field exists so a later nudge can say how long something has been
+// stagnant — "45 days" and "21 days" are different sentences, and only one
+// of them is true. This fixture sits well past the threshold so the two
+// numbers cannot coincide.
+func TestEvaluateStagnation_StagnantDaysReportsElapsedNotTheThreshold(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+	const stagnationDays = 21
+
+	bs := []Belief{
+		{ID: "b1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/learn-go",
+			LastReinforcedAt: now.Add(-45 * 24 * time.Hour)},
+	}
+
+	got := EvaluateStagnation(bs, stagnationDays, now)
+	if len(got) != 1 {
+		t.Fatalf("EvaluateStagnation() returned %d findings, want 1", len(got))
+	}
+	if got[0].StagnantDays != 45 {
+		t.Errorf("EvaluateStagnation()[0].StagnantDays = %v, want 45 — the elapsed time, not the %d-day threshold it cleared", got[0].StagnantDays, stagnationDays)
+	}
+}
+
+// TestLoadCooldownDays_IsPinnedToItsCalibratedValue backs spec R5.2's own
+// MUST, which states `consolidation.LoadCooldownDays == 7` — a requirement
+// whose "Verified by" line listed only tests that reference the SYMBOL, so
+// mutating the constant to 8 left this package and test/conformance fully
+// green. Judgment Day round 1, both judges.
+//
+// Unlike DefaultGoalStagnationDays and DefaultMentalLoadThreshold, this one
+// has no config column and therefore no schema DEFAULT to pin against, so
+// the literal lives here — the same treatment BeliefMergeCosine and
+// StrengthenGain already get.
+//
+// The risk is named in patterns.go's own comment: this 7 is unrelated to
+// mental_load_threshold's coincidentally-equal 7, and nothing structural
+// keeps a future "simplification" from merging them.
+func TestLoadCooldownDays_IsPinnedToItsCalibratedValue(t *testing.T) {
+	const want = 7
+	if LoadCooldownDays != want {
+		t.Errorf("LoadCooldownDays = %d, want %d — spec R5.2's own MUST; recalibrating means editing the §13 row and this literal together", LoadCooldownDays, want)
+	}
 }
