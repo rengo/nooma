@@ -38,10 +38,15 @@ and I11's behavioural half are `m2c`'s (`design.md` §8, §11).
 `time.Now`, `time.Since`, `time.Until`, `rand.*`, `uuid.*`, or `os.Getenv`. MUST: the package
 imports only the standard library and `internal/core/{unit,weight,recall,relation,selfmodel}` —
 never `internal/ports`, `internal/store`, or `internal/brain`. MUST: `Strengthen`, `MergeProposals`
-and `Reinforce` take no `time.Time` parameter at all — they are the three decisions doc 02's
-"accumulated evidence" phases do not need an instant to make.
+and `Reinforce` take no `time.Time` **by value** — the instant itself never travels into these three
+decisions doc 02's "accumulated evidence" phases do not need an instant to make. A `*time.Time`
+**resolved-absence sentinel** — nil meaning "no value at all" rather than an instant to compute
+from, the same shape as `focus.ResolveMargin(configured *float64)` — is permitted: it is
+`Strengthen`'s own `since` parameter, which design.md §5.4 lists among the three decisions that
+"take no clock at all" for exactly this reason.
 **Verified by**: L2, `depguard`/`forbidigo` (existing `core-purity` gate) plus a tree-scan
-asserting exactly these three functions have no `time.Time` parameter.
+asserting exactly these three functions have no `time.Time`-by-value parameter — a `*time.Time`
+resolved-absence sentinel is exempt by design, not a gap in the scan.
 
 **R0.2 — every new calibrated number gets exactly one `docs/02-cognitive-core.md` §13 row.** MUST:
 `IncompleteExpiryHours`, `StrengthenGain`, `ConnectSourceLimit`, `ConnectCandidateK`,

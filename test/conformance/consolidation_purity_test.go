@@ -84,9 +84,16 @@ func TestR01_TimeFreeFunctionsTakeNoTimeParameter(t *testing.T) {
 	}
 }
 
-// isTimeTimeType reports whether expr is exactly the type time.Time,
-// referenced through its package selector (the only form a parameter of
-// this type can take from outside the time package).
+// isTimeTimeType reports whether expr is exactly the type time.Time BY
+// VALUE, referenced through its package selector. It deliberately does
+// NOT match *time.Time (an *ast.StarExpr wrapping the same selector):
+// R0.1 forbids the instant travelling into these functions as a value,
+// not a resolved-absence sentinel. Strengthen's own since *time.Time
+// parameter is exactly that sentinel — nil means "never consolidated",
+// the same shape focus.ResolveMargin(configured *float64) already uses —
+// and design.md §5.4 lists Strengthen among the functions that "take no
+// clock at all" for this reason. Do not widen this to unwrap StarExpr:
+// that would fail a signature R0.1 and design.md §5.4 both call correct.
 func isTimeTimeType(expr ast.Expr) bool {
 	sel, ok := expr.(*ast.SelectorExpr)
 	if !ok {
