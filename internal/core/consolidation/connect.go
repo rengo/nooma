@@ -4,6 +4,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 )
@@ -72,4 +73,34 @@ func SelectConnectSources(ss []Source, since *time.Time, now time.Time) []string
 		out[i] = r.id
 	}
 	return out
+}
+
+// Pair is an ordered pair. Storage direction is what the judge said (doc 02
+// §4), so a planned edge always runs source -> candidate; CanonicalPair is
+// used for existing's LOOKUP only, never for the value ConnectPairs
+// returns (spec R4.2, design.md §4.4).
+type Pair struct {
+	From string
+	To   string
+}
+
+// CanonicalPair returns a and b as a symmetric, lexicographically ordered
+// Pair — CanonicalPair(a, b) == CanonicalPair(b, a) — used only to key the
+// existing lookup, never as a stored or returned relation direction.
+//
+// TODO(RED stub): implemented in the next commit.
+func CanonicalPair(a, b string) Pair {
+	return Pair{}
+}
+
+// ConnectPairs turns one source's fused recall result into the pairs the
+// judge is asked about this pass (spec R4.2, design.md §4.4): the first
+// ConnectCandidateK candidates from fused, in fused's own order, excluding
+// source itself and excluding any candidate whose CanonicalPair with
+// source is already in existing. Every returned Pair runs {From: source,
+// To: candidate} — CanonicalPair is never the storage direction.
+//
+// TODO(RED stub): implemented in the next commit.
+func ConnectPairs(source string, fused []recall.FusedCandidate, existing map[Pair]bool) []Pair {
+	return nil
 }

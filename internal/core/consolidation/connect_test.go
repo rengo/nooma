@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 )
 
@@ -149,4 +150,106 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestCanonicalPair_IsSymmetricAndLexicographicallyOrdered proves R4.2:
+// CanonicalPair(a, b) == CanonicalPair(b, a), and the result is ordered
+// lexicographically regardless of argument order.
+func TestCanonicalPair_IsSymmetricAndLexicographicallyOrdered(t *testing.T) {
+	got1 := CanonicalPair("b-unit", "a-unit")
+	got2 := CanonicalPair("a-unit", "b-unit")
+	want := Pair{From: "a-unit", To: "b-unit"}
+
+	if got1 != want {
+		t.Errorf("CanonicalPair(%q, %q) = %v, want %v", "b-unit", "a-unit", got1, want)
+	}
+	if got2 != want {
+		t.Errorf("CanonicalPair(%q, %q) = %v, want %v", "a-unit", "b-unit", got2, want)
+	}
+	if got1 != got2 {
+		t.Fatalf("CanonicalPair is not symmetric: CanonicalPair(b,a) = %v, CanonicalPair(a,b) = %v", got1, got2)
+	}
+}
+
+// TestConnectPairs_SourceNeverItsOwnCandidate proves R4.2: source is
+// excluded from its own candidate list even when fused's own recall result
+// includes it.
+func TestConnectPairs_SourceNeverItsOwnCandidate(t *testing.T) {
+	fused := []recall.FusedCandidate{
+		{ID: "source-unit", Score: 1.0},
+		{ID: "other", Score: 0.5},
+	}
+
+	got := ConnectPairs("source-unit", fused, map[Pair]bool{})
+	for _, p := range got {
+		if p.To == "source-unit" {
+			t.Fatalf("ConnectPairs(%q, ...) includes the source as its own candidate: %v", "source-unit", got)
+		}
+	}
+	if len(got) != 1 || got[0] != (Pair{From: "source-unit", To: "other"}) {
+		t.Fatalf("ConnectPairs() = %v, want exactly [{source-unit other}]", got)
+	}
+}
+
+// TestConnectPairs_ExistingExcludesByCanonicalPairRegardlessOfStoredDirection
+// proves R4.2: a candidate already related to source is excluded whether
+// existing stored it as source->candidate or candidate->source — the
+// lookup key is CanonicalPair, not the stored direction.
+func TestConnectPairs_ExistingExcludesByCanonicalPairRegardlessOfStoredDirection(t *testing.T) {
+	fused := []recall.FusedCandidate{
+		{ID: "already-a-to-b"},
+		{ID: "already-b-to-a"},
+		{ID: "unjudged"},
+	}
+
+	existing := map[Pair]bool{
+		CanonicalPair("source", "already-a-to-b"): true,
+		CanonicalPair("already-b-to-a", "source"): true,
+	}
+
+	got := ConnectPairs("source", fused, existing)
+	want := []Pair{{From: "source", To: "unjudged"}}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("ConnectPairs() = %v, want exactly %v", got, want)
+	}
+}
+
+// TestConnectPairs_CappedAtConnectCandidateK proves R4.2: the result never
+// holds more than ConnectCandidateK pairs.
+func TestConnectPairs_CappedAtConnectCandidateK(t *testing.T) {
+	total := ConnectCandidateK + 3
+	fused := make([]recall.FusedCandidate, total)
+	for i := 0; i < total; i++ {
+		fused[i] = recall.FusedCandidate{ID: idFor(i), Score: float64(total - i)}
+	}
+
+	got := ConnectPairs("source", fused, map[Pair]bool{})
+	if len(got) != ConnectCandidateK {
+		t.Fatalf("ConnectPairs() returned %d pairs, want exactly ConnectCandidateK (%d)", len(got), ConnectCandidateK)
+	}
+}
+
+// TestConnectPairs_PreservesFusedOrder proves R4.2: ConnectPairs does not
+// re-rank fused — the returned pairs follow fused's own order.
+func TestConnectPairs_PreservesFusedOrder(t *testing.T) {
+	fused := []recall.FusedCandidate{
+		{ID: "third", Score: 0.1},
+		{ID: "first", Score: 0.9},
+		{ID: "second", Score: 0.5},
+	}
+
+	got := ConnectPairs("source", fused, map[Pair]bool{})
+	want := []Pair{
+		{From: "source", To: "third"},
+		{From: "source", To: "first"},
+		{From: "source", To: "second"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ConnectPairs() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: got %v, want %v", i, got[i], want[i])
+		}
+	}
 }
