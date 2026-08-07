@@ -689,8 +689,19 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
    no interval is no evidence. Strength never falls here: this document gives exactly one way it
    moves down — the user rejects the relation, which deletes it (§4) — and decay is never consulted
    by this phase (`internal/core/consolidation.Strengthen`).
-4. **connect**: finds candidate pairs (hybrid recall among recent/hot units) and runs them
-   through the LLM judge. New relations get `created_by='consolidation'`.
+4. **connect**: ranks up to `connect_source_limit` (20) live, recently-touched units by
+   effective weight, and for each runs hybrid recall (§5.2's fused ranking) to find up to
+   `connect_candidate_k` (5) unjudged candidates. The per-night provider cost is **one
+   product**, `connect_source_limit * connect_candidate_k` = at most 100 judge calls, and that
+   product — not the two factors separately — is the number actually calibrated
+   (`internal/core/consolidation.SelectConnectSources`/`ConnectPairs`). A candidate already
+   related to its source is excluded regardless of which direction the existing relation runs
+   or its type — the exclusion key is the **unordered** pair, a stated and reversible choice
+   that spends a possible second relation type between the same two units to save a judge call
+   against this per-night budget (`CanonicalPair`, used for this lookup only — a stored or
+   proposed relation still runs `source → candidate`, per §4's own direction rule). New
+   relations get `created_by='consolidation'`
+   (`internal/core/consolidation.ProposeRelation`).
 5. **derive**: derives/updates self-beliefs from units (§10). Dedup with two defenses:
    existing beliefs in the prompt + semantic merge when cosine ≥ 0.85.
 6. **reweight**: post-connection weight adjustments (decay materialization remains optional and is
@@ -837,6 +848,8 @@ module):
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |
 | `strengthen_gain` (`internal/core/consolidation.StrengthenGain`) | 0.10 — chosen, not derived; checked for compatibility (not entailment) against `goal_stagnation_days`'s default below |
+| `connect_source_limit` (`internal/core/consolidation.ConnectSourceLimit`) | 20 — chosen |
+| `connect_candidate_k` (`internal/core/consolidation.ConnectCandidateK`) | 5 — chosen; a separate knob from `dedup_candidate_k` below despite the identical default, per the same reasoning as `urgency_lead_days` above: one bounds capture's per-message judge calls, this one bounds connect's per-night budget |
 | `hysteresis_margin` (focus, relative; `internal/core/focus.DefaultHysteresisMargin` + `ResolveMargin`) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
