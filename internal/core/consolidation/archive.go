@@ -72,5 +72,12 @@ func Archive(cs []Cold, threshold float64, now time.Time) (transitions []Transit
 // value that would silently change Archive's behaviour in either
 // direction.
 func ResolveWeightThreshold(configured *float64) float64 {
-	return 0
+	if configured == nil {
+		return DefaultWeightThreshold
+	}
+	t := *configured
+	if math.IsNaN(t) || math.IsInf(t, 0) || t < 0 || t > weight.WeightCeiling {
+		return DefaultWeightThreshold
+	}
+	return t
 }
