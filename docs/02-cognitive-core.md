@@ -776,12 +776,20 @@ box can audit it):
 
 - **Goal stagnation**: a `goal`-facet belief with no related activity for
   `goal_stagnation_days` (default 21, recalibratable per user, §9) → check-in "Still on this,
-  or shall we let it rest?".
+  or shall we let it rest?". "Related activity" is read off `self_beliefs.last_reinforced_at`
+  — the only column that records it — and that reading is sound only because of the phase
+  order (`internal/core/consolidation.EvaluateStagnation`, §6): `derive` runs before
+  `pattern_eval` in every nightly pass and refreshes `last_reinforced_at` for every belief it
+  re-derives; `pattern_eval` then reads the value THIS SAME PASS already refreshed. Reversing
+  the order would make every reinforced belief look stagnant one more night — this is a data
+  dependency, not an arbitrary sequence.
 - **Load accumulation**: open `mental_load` units ≥ `mental_load_threshold` (default 7) →
   writes a tentative hypothesis into `current_state` ("feeling loaded lately?"), the user
-  confirms/denies in the next conversation; a cooldown of days after a resolved check-in. The
-  nudge offers to **close one loop**: it lists the open ones, the user picks, it gets archived
-  (soft, recoverable).
+  confirms/denies in the next conversation; a cooldown of `load_cooldown_days` (7,
+  `internal/core/consolidation.LoadCooldownDays`, chosen — unrelated to
+  `mental_load_threshold`'s own coincidentally-equal 7, a duration versus a count) after a
+  resolved check-in. The nudge offers to **close one loop**: it lists the open ones, the user
+  picks, it gets archived (soft, recoverable).
 
 ## 8. Ephemeral timers — infrastructure, NOT memory
 
@@ -886,8 +894,9 @@ module):
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |
 | `min_confidence_to_surface` | 0.50 |
-| `goal_stagnation_days` ⚙ | 21 |
-| `mental_load_threshold` | 7 |
+| `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — two schema homes exist today, `config.goal_stagnation_days` and `calibration`'s own example key; `m2c` must pick the table `ConfigRepo` reads and M5's learning module must write the same one (`design.md` §9 Q3) |
+| `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |
+| `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`interrupt_level`) | 0.70 |
 | Quiet hours | [00:00, 07:00) local |
 | Event lead time | 7 days |
