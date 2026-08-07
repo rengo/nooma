@@ -682,12 +682,26 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
    configurable per vault through the `config` row
    (`internal/core/consolidation.Archive`/`ResolveWeightThreshold`). `weight_ceiling` is not:
    §13 marks it neither ⚙ nor configurable, and no `Resolve*` reads it — it is a bare constant.
-3. **strengthen**: re-evaluates relation strength with accumulated evidence.
+3. **strengthen**: re-evaluates relation strength with accumulated evidence — both endpoints'
+   `last_touched_at` at or after the previous pass (`since`) counts as co-use, and a qualifying
+   relation's strength rises asymptotically toward 1: `s' = s + strengthen_gain * (1 - s)`.
+   `since == nil` (the vault has never consolidated) evaluates nothing — accumulated evidence over
+   no interval is no evidence. Strength never falls here: this document gives exactly one way it
+   moves down — the user rejects the relation, which deletes it (§4) — and decay is never consulted
+   by this phase (`internal/core/consolidation.Strengthen`).
 4. **connect**: finds candidate pairs (hybrid recall among recent/hot units) and runs them
    through the LLM judge. New relations get `created_by='consolidation'`.
 5. **derive**: derives/updates self-beliefs from units (§10). Dedup with two defenses:
    existing beliefs in the prompt + semantic merge when cosine ≥ 0.85.
-6. **reweight**: post-connection weight adjustments (and optional decay materialization).
+6. **reweight**: post-connection weight adjustments (decay materialization remains optional and is
+   not exercised by M2's `reweight`) — every unit a new relation joined this pass spreads
+   activation to its new neighbours through §2's resurface mechanism, over this pass's new edges
+   only, merged per unit by the highest boosted weight across origins. Materialization is declined
+   here, not forbidden: §2 already defines `last_touched_at` as the vault's record of *direct* use,
+   and a bulk write moving it for every sufficiently old unit would make that reading false for
+   exactly the untouched units where it matters — `strengthen`'s own co-use predicate, three phases
+   earlier in the same pass, would then see the consolidation pass itself as a user
+   (`internal/core/consolidation.Reweight`).
 7. **pattern_eval**: runs the pattern watchers (§7): goal stagnation, mental load accumulation.
 8. **learn**: the learning module consumes new signals (§9). ALWAYS last. In M2 this slot
    performs no work and writes no `decision_log` row — the phase exists as a no-op placeholder
@@ -822,6 +836,7 @@ module):
 |---|---|
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |
+| `strengthen_gain` (`internal/core/consolidation.StrengthenGain`) | 0.10 — chosen, not derived; checked for compatibility (not entailment) against `goal_stagnation_days`'s default below |
 | `hysteresis_margin` (focus, relative; `internal/core/focus.DefaultHysteresisMargin` + `ResolveMargin`) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
