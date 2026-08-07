@@ -670,7 +670,9 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
    existing beliefs in the prompt + semantic merge when cosine ≥ 0.85.
 6. **reweight**: post-connection weight adjustments (and optional decay materialization).
 7. **pattern_eval**: runs the pattern watchers (§7): goal stagnation, mental load accumulation.
-8. **learn**: the learning module consumes new signals (§9). ALWAYS last.
+8. **learn**: the learning module consumes new signals (§9). ALWAYS last. In M2 this slot
+   performs no work and writes no `decision_log` row — the phase exists as a no-op placeholder
+   occupying the slot; M5 fills it.
 
 Every decision with an effect (archive, connect, derive, adjust) writes to the
 `decision_log` (§11).
