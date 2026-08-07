@@ -301,7 +301,7 @@ first to call `weight.Resurface`). Ships `strengthen.go`, `reweight.go`, and C17
 `internal/core/weight/spread.go`. **Does not** ship R3.2's compatibility check — see Finding F2;
 that task is 5.7.
 
-- [ ] **3.1** Commit 1 (RED): `internal/core/consolidation/strengthen_test.go` — `since == nil` →
+- [x] **3.1** Commit 1 (RED): `internal/core/consolidation/strengthen_test.go` — `since == nil` →
       empty for any input; one endpoint's `LastTouchedAt` before `*since` → nothing; both endpoints
       at exactly `*since` → a change (`Before` is strict, so equality qualifies); asymptotic and
       never reaches 1 under repetition; already at strength 1 → no row; refuses `NaN`, `+Inf`,
@@ -316,13 +316,13 @@ that task is 5.7.
       *time.Time) (changes []StrengthChange, corrupted []string) { return nil, nil }` — compiles;
       the qualifying-co-use fixture expects `len(changes) == 1`, stub nil fails first.
       Requirement: R3.1.
-- [ ] **3.2** Commit 2 (GREEN): implement `Strengthen` — `since == nil` short-circuits to empty;
+- [x] **3.2** Commit 2 (GREEN): implement `Strengthen` — `since == nil` short-circuits to empty;
       co-active gate `!from.Before(*since) && !to.Before(*since)`; entry-point refusal of
       non-finite/out-of-`[0,1]` strength **before** the `== 1` check or the formula runs; the
       asymptotic law `s + StrengthenGain*(1-s)`; no row at exactly 1; never lowers.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.1; design §4.3.
-- [ ] **3.3** Commit 1 (RED): `internal/core/consolidation/reweight_test.go` — both endpoints of a
+- [x] **3.3** Commit 1 (RED): `internal/core/consolidation/reweight_test.go` — both endpoints of a
       new edge are boosted; multi-origin results merge by max; a corrupt edge strength (non-finite
       or outside `[0,1]`) is refused at `Reweight`'s own door, both endpoints reported into
       `corrupted`, before `weight.clampStrength` or any comparison downstream can run; `corrupted`
@@ -337,7 +337,7 @@ that task is 5.7.
       time.Time) (boosts []weight.Boost, corrupted []string) { return nil, nil }` — compiles;
       the two-endpoints-boosted fixture expects `len(boosts) == 2`, stub nil fails first.
       Requirement: R3.3.
-- [ ] **3.4** Commit 2 (GREEN): implement `Reweight` — origins are every endpoint of `newEdges`;
+- [x] **3.4** Commit 2 (GREEN): implement `Reweight` — origins are every endpoint of `newEdges`;
       refuse non-finite/out-of-range edge strengths at `Reweight`'s own entry point (reporting both
       endpoints into `corrupted` directly, not relying on `weight.clampStrength`); build
       `Neighbourhood.States` from `states` sorted by `UnitID`; call `weight.Resurface` once per
@@ -345,7 +345,7 @@ that task is 5.7.
       union, deduplicated, sorted.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.3; design §4.5(a).
-- [ ] **3.5** `internal/core/weight/spread.go`: delete C17's dead `refused` guard — remove
+- [x] **3.5** `internal/core/weight/spread.go`: delete C17's dead `refused` guard — remove
       `refused := make(map[string]bool)`, `refused[unitID] = true`, and `|| refused[unitID]` from
       the corrupt-edge sweep's skip condition, leaving `if unitID == n.Origin { continue }`. This
       PR is the one that makes `Resurface` reachable through a real caller (`Reweight`), so C17's
@@ -353,27 +353,27 @@ that task is 5.7.
       Verify: `go test ./internal/core/weight/... -race` stays green (C17's own closing criterion —
       no fixture in `resurface_test.go` was pinning the dead branch).
       Requirement: design §4.5(a); closes `m2a` C17.
-- [ ] **3.6** `test/conformance/consolidation_purity_test.go` (new, scaffold) — AST tree-scan
+- [x] **3.6** `test/conformance/consolidation_purity_test.go` (new, scaffold) — AST tree-scan
       asserting `Strengthen` has no `time.Time` parameter among `internal/core/consolidation`'s
       exported functions (R0.1's first of three; `MergeProposals`/`Reinforce` don't exist yet — PR 4
       extends this file, mirroring `m2a`'s own i05 scaffold-then-extend precedent, task 1.5 there).
       Requirement: R0.1 (partial).
-- [ ] **3.7** doc 02 §6.3 amendment: state the co-use evidence definition (both endpoints'
+- [x] **3.7** doc 02 §6.3 amendment: state the co-use evidence definition (both endpoints'
       `last_touched_at` at or after `since`), the reinforcement formula, and the "strength never
       falls" sentence (rejection deletes the relation; decay is never consulted here).
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §4.3.
-- [ ] **3.8** doc 02 §6.6 amendment: the literal replacement text — *"post-connection weight
+- [x] **3.8** doc 02 §6.6 amendment: the literal replacement text — *"post-connection weight
       adjustments (decay materialization remains optional and is not exercised by M2's
       `reweight`)."* — plus a §2 cross-reference restating `last_touched_at` as "the vault's record
       of direct use."
       Requirement: R3.3 (the MUST NOT `Materialize` clause); design §4.5(b).
-- [ ] **3.9** §13: add `strengthen_gain` (0.10, `consolidation.StrengthenGain`, chosen — its
+- [x] **3.9** §13: add `strengthen_gain` (0.10, `consolidation.StrengthenGain`, chosen — its
       compatibility check against `DefaultGoalStagnationDays` closes in PR 5, task 5.7) as a new
       row.
       Requirement: R0.2.
-- [ ] **3.10** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] **3.10** Purity/coverage: `golangci-lint run`; `make cover`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/consolidation/{strengthen,reweight}{,_test}.go`,
       `internal/core/weight/spread.go` (C17's 3-line deletion), `test/conformance/
       consolidation_purity_test.go`, `docs/02-cognitive-core.md`. Target ≤230 impl+docs lines. **If
