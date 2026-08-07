@@ -1,9 +1,12 @@
 package consolidation
 
 import (
+	"math"
+	"sort"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 )
 
 // Cold is a unit's decay-relevant read at the instant archive runs (spec
@@ -25,5 +28,29 @@ type Cold struct {
 //
 // Both returned slices are sorted by UnitID.
 func Archive(cs []Cold, threshold float64, now time.Time) (transitions []Transition, corrupted []string) {
-	return nil, nil
+	for _, c := range cs {
+		if c.Status != unit.StatusPool {
+			continue
+		}
+
+		if math.IsNaN(c.Weight) || math.IsInf(c.Weight, 0) ||
+			math.IsNaN(c.DecayRate) || math.IsInf(c.DecayRate, 0) {
+			corrupted = append(corrupted, c.UnitID)
+			continue
+		}
+
+		e := weight.Effective(c.Weight, c.DecayRate, c.LastTouchedAt, now)
+		if e < threshold {
+			transitions = append(transitions, Transition{
+				UnitID: c.UnitID,
+				From:   unit.StatusPool,
+				To:     unit.StatusArchived,
+				Reason: ReasonBelowWeightThreshold,
+			})
+		}
+	}
+
+	sort.Slice(transitions, func(i, j int) bool { return transitions[i].UnitID < transitions[j].UnitID })
+	sort.Strings(corrupted)
+	return transitions, corrupted
 }
