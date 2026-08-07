@@ -374,3 +374,41 @@ func TestProposeRelation_CreatedByIsAlwaysConsolidation(t *testing.T) {
 		t.Errorf("ProposedRelation.CreatedBy = %q, want %q", got.CreatedBy, relation.CreatedByConsolidation)
 	}
 }
+
+// TestConnectBudgetConstants_ArePinnedToTheirCalibratedValues guards both
+// knobs against a wrong VALUE, independently of every shape test in this
+// file — C7 and C28's convention (openspec/changes/m2a-weight-focus/tasks.md).
+//
+// The shape tests here size their fixtures from the constants themselves
+// (ConnectSourceLimit+3 sources, ConnectCandidateK+2 candidates), which is
+// correct for pinning the bounding LOGIC and structurally incapable of
+// noticing a constant moved: a mutated value flows into the fixture exactly
+// as it flows into the function under test.
+//
+// This convention has now failed to transfer four times — focus's seven
+// constants (C28), IncompleteExpiryHours in PR 2, StrengthenGain in PR 3,
+// and these two — so the reason is restated rather than cross-referenced:
+// only a comparison against an independent literal catches a recalibration
+// nobody meant to make.
+//
+// Both are CHOSEN, per doc 02 §13. What the owner actually calibrates is
+// their PRODUCT — at most 100 judge calls per night — so the product is
+// pinned too: moving either factor while compensating with the other still
+// changes the two §13 rows, and both literals here must move with them.
+func TestConnectBudgetConstants_ArePinnedToTheirCalibratedValues(t *testing.T) {
+	const (
+		wantSourceLimit = 20
+		wantCandidateK  = 5
+		wantBudget      = 100
+	)
+
+	if ConnectSourceLimit != wantSourceLimit {
+		t.Errorf("ConnectSourceLimit = %d, want %d — doc 02 §13's chosen value; recalibrating means editing the §13 row and this literal together", ConnectSourceLimit, wantSourceLimit)
+	}
+	if ConnectCandidateK != wantCandidateK {
+		t.Errorf("ConnectCandidateK = %d, want %d — doc 02 §13's chosen value; recalibrating means editing the §13 row and this literal together", ConnectCandidateK, wantCandidateK)
+	}
+	if got := ConnectSourceLimit * ConnectCandidateK; got != wantBudget {
+		t.Errorf("ConnectSourceLimit*ConnectCandidateK = %d, want %d — doc 02 §6.4 states the per-night provider cost as this one product", got, wantBudget)
+	}
+}
