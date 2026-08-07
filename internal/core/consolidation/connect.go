@@ -87,10 +87,11 @@ type Pair struct {
 // CanonicalPair returns a and b as a symmetric, lexicographically ordered
 // Pair — CanonicalPair(a, b) == CanonicalPair(b, a) — used only to key the
 // existing lookup, never as a stored or returned relation direction.
-//
-// TODO(RED stub): implemented in the next commit.
 func CanonicalPair(a, b string) Pair {
-	return Pair{}
+	if a <= b {
+		return Pair{From: a, To: b}
+	}
+	return Pair{From: b, To: a}
 }
 
 // ConnectPairs turns one source's fused recall result into the pairs the
@@ -99,8 +100,19 @@ func CanonicalPair(a, b string) Pair {
 // source itself and excluding any candidate whose CanonicalPair with
 // source is already in existing. Every returned Pair runs {From: source,
 // To: candidate} — CanonicalPair is never the storage direction.
-//
-// TODO(RED stub): implemented in the next commit.
 func ConnectPairs(source string, fused []recall.FusedCandidate, existing map[Pair]bool) []Pair {
-	return nil
+	var out []Pair
+	for _, c := range fused {
+		if len(out) >= ConnectCandidateK {
+			break
+		}
+		if c.ID == source {
+			continue
+		}
+		if existing[CanonicalPair(source, c.ID)] {
+			continue
+		}
+		out = append(out, Pair{From: source, To: c.ID})
+	}
+	return out
 }
