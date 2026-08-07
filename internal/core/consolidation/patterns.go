@@ -115,13 +115,22 @@ func EvaluateLoad(openMentalLoad, threshold int, lastHypothesisAt *time.Time, no
 }
 
 // ResolveGoalStagnationDays falls back to DefaultGoalStagnationDays for an
-// absent or non-positive configured value (spec R5.3).
+// absent or non-positive configured value (spec R5.3). goal_stagnation_days
+// is ⚙ — recalibrated per user by the learning module (doc 02 §9,
+// design.md §9 Q3) — so this resolves what m2c's ConfigRepo hands it, never
+// a live recalibrated value computed here.
 func ResolveGoalStagnationDays(configured *int) int {
-	return 0
+	if configured == nil || *configured <= 0 {
+		return DefaultGoalStagnationDays
+	}
+	return *configured
 }
 
 // ResolveMentalLoadThreshold falls back to DefaultMentalLoadThreshold for
 // an absent or non-positive configured value (spec R5.3).
 func ResolveMentalLoadThreshold(configured *int) int {
-	return 0
+	if configured == nil || *configured <= 0 {
+		return DefaultMentalLoadThreshold
+	}
+	return *configured
 }
