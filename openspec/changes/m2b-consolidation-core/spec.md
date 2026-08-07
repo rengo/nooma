@@ -578,3 +578,14 @@ writing `decision_log`), I11's behavioural half, I12, I03's write path, I24's st
 `nooma consolidate` subcommand, the scheduler, and the learning module are all `m2c`/`m2d`/M5, and
 no requirement above depends on them existing. Every requirement in this document is provable
 against a repo-constructed input, with no database, no network, and no real clock.
+
+---
+
+## Archive Status (added post-merge — annotation, not a rewrite of the spec above)
+
+**Closed 2026-08-07.** All 26 requirements (R0.1–R5.4) traced to shipped, tested code; `sdd-verify`
+found no divergence between this document and what shipped, including the two identifiers whose
+wording (R0.1, R4.4) was already written to match a Judgment Day correction before this document's
+own PR merged. Per `openspec/README.md`'s Lifecycle section (ruling C25), this directory stays in
+place as a historical record — see `tasks.md`'s "Archive Status" section and Engram
+`sdd/m2b-consolidation-core/archive-report` for the full closure record.

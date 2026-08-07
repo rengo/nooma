@@ -737,3 +737,24 @@ before considering the split.
 | Doc 02 amendments | (design §7-equivalent, per PR) | 1.7, 2.12–2.13, 3.7–3.8, 4.10, 4.23–4.24, 5.9 |
 | §13 calibration rows | (design §6.11) | 2.14, 3.9, 4.11, 4.25, 5.10, 5.12 |
 | C17/C18/C20/C21 (`m2a` handoffs closed here) | (not spec requirements) | 3.4 (C18/C20/C21), 3.5 (C17) |
+
+---
+
+## Archive Status (added post-merge — annotation, not a rewrite of the tasks above)
+
+**Closed 2026-08-07.** All six PRs merged to `main` and verified
+(`sdd/m2b-consolidation-core/verify-report`, PASS, 0 CRITICAL, 0 new WARNING, 2 SUGGESTION):
+#149 `feat/core-consolidation-order`, #150 `feat/core-consolidation-expire-archive`,
+#151 `feat/core-consolidation-strengthen-reweight`, #152 `feat/core-consolidation-connect`
+(the connect half of PR 4, split from the pre-drawn line between tasks 4.13/4.14), #153
+`feat/core-consolidation-derive` (the derive half), #154 `feat/core-consolidation-pattern-eval`.
+All 76 checkboxes above correspond to real, verified work (`rg '^\- \[ \]'` over this file → 0).
+
+Per `openspec/README.md`'s Lifecycle section (amended during `m2a`, ruling C25): this directory is
+**not moved** — it stays at `openspec/changes/m2b-consolidation-core/` as a historical record.
+Every requirement's text above froze when the PR implementing it merged and was verified; this
+note is the only edit made to this file after that freeze.
+
+The full archive report — every open handoff to `m2c` stated in full, not paraphrased, plus the
+rulings this change makes binding for future work — lives at Engram
+`sdd/m2b-consolidation-core/archive-report`.

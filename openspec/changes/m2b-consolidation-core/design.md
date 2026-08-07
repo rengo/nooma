@@ -1408,3 +1408,15 @@ places it spends effort on that are the three that cost `m2a` a CRITICAL each:
 - **Any delivery.** No trigger, no digest, no push, no `interrupt_level`. `pattern_eval` produces
   findings and nothing carries them (proposal §3.3).
 - **I06.** Out of scope, honestly, per ruling Q3 — no producer of `incomplete` units.
+
+---
+
+## Archive Status (added post-merge — annotation, not a rewrite of the design above)
+
+**Closed 2026-08-07.** All five PRs this design planned shipped as six merged PRs (PR 4 split at
+its own pre-drawn `connect.go` | `derive.go` line into #152/#153); `sdd-verify` found every
+declared identifier in §6, every formula in §4, and every §8 handoff accurately reflected in the
+shipped code, with no stale content requiring correction here. Per `openspec/README.md`'s
+Lifecycle section (ruling C25), this directory stays in place as a historical record — see
+`tasks.md`'s own "Archive Status" section and Engram `sdd/m2b-consolidation-core/archive-report`
+for the full closure record, including every §8 handoff carried forward to `m2c` in full.
