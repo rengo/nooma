@@ -1,9 +1,11 @@
 package consolidation
 
 import (
+	"sort"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 )
 
 // ConnectSourceLimit and ConnectCandidateK bound connect's per-night
@@ -34,8 +36,40 @@ type Source struct {
 // unit when since is nil — the first pass over an existing vault), ranked
 // by weight.Effective descending, ties broken by UnitID ascending, capped
 // at ConnectSourceLimit.
-//
-// TODO(RED stub): implemented in the next commit.
 func SelectConnectSources(ss []Source, since *time.Time, now time.Time) []string {
-	return nil
+	type ranked struct {
+		id        string
+		effective float64
+	}
+
+	var eligible []ranked
+	for _, s := range ss {
+		if s.Status != unit.StatusPool {
+			continue
+		}
+		if since != nil && s.LastTouchedAt.Before(*since) {
+			continue
+		}
+		eligible = append(eligible, ranked{
+			id:        s.UnitID,
+			effective: weight.Effective(s.Weight, s.DecayRate, s.LastTouchedAt, now),
+		})
+	}
+
+	sort.Slice(eligible, func(i, j int) bool {
+		if eligible[i].effective != eligible[j].effective {
+			return eligible[i].effective > eligible[j].effective
+		}
+		return eligible[i].id < eligible[j].id
+	})
+
+	if len(eligible) > ConnectSourceLimit {
+		eligible = eligible[:ConnectSourceLimit]
+	}
+
+	out := make([]string, len(eligible))
+	for i, r := range eligible {
+		out[i] = r.id
+	}
+	return out
 }
