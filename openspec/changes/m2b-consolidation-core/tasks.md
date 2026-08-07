@@ -410,7 +410,7 @@ decision. Both halves are tasked below in that order; **the boundary is the line
 
 ### Connect half (~190) — `connect.go`, `relation/createdby.go`
 
-- [ ] **4.1** Commit 1 (RED): `internal/core/relation/createdby_test.go` — `AllCreatedBy()` returns
+- [x] **4.1** Commit 1 (RED): `internal/core/relation/createdby_test.go` — `AllCreatedBy()` returns
       a fresh 3-slice `{CreatedBySystem, CreatedByConsolidation, CreatedByUser}`; `ParseCreatedBy`
       round-trips each member's `string()` value; unknown text → `ErrUnknownCreatedBy`.
       **Red**: `undefined: relation.CreatedBy`, the three constants, `undefined: relation.
@@ -420,15 +420,15 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       `func AllCreatedBy() []CreatedBy { return nil }`; `func ParseCreatedBy(s string) (CreatedBy,
       error) { return "", ErrUnknownCreatedBy }` — compiles; `len(AllCreatedBy()) != 3` fails first.
       Requirement: R4.7 (relation half).
-- [ ] **4.2** Commit 2 (GREEN): implement `AllCreatedBy`/`ParseCreatedBy`, `unit.AllStatuses()`'s
+- [x] **4.2** Commit 2 (GREEN): implement `AllCreatedBy`/`ParseCreatedBy`, `unit.AllStatuses()`'s
       house pattern.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.7; design §5.3.
-- [ ] **4.3** `test/conformance/` (extend an existing DDL-pin file or add one) — pin
+- [x] **4.3** `test/conformance/` (extend an existing DDL-pin file or add one) — pin
       `relation.AllCreatedBy()`'s three values against migration `0001_core_tables.sql:37`'s
       `created_by` column comment vocabulary (`system|consolidation|user`), read off disk.
       Requirement: R4.7 (L2 half).
-- [ ] **4.4** Commit 1 (RED): `internal/core/consolidation/connect_test.go` —
+- [x] **4.4** Commit 1 (RED): `internal/core/consolidation/connect_test.go` —
       `SelectConnectSources`: `since == nil` takes the whole live pool; non-live sources excluded;
       a source touched before `*since` excluded; ordered by `weight.Effective` descending, tie by
       `UnitID`; capped at `ConnectSourceLimit`; determinism under `-shuffle=on` (≥3 sources).
@@ -440,11 +440,11 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       SelectConnectSources(ss []Source, since *time.Time, now time.Time) []string { return nil }` —
       compiles; a live-and-eligible fixture expects `len(got) == 1`, stub nil fails first.
       Requirement: R4.1.
-- [ ] **4.5** Commit 2 (GREEN): implement `SelectConnectSources`.
+- [x] **4.5** Commit 2 (GREEN): implement `SelectConnectSources`.
       Verify: `make test`; `golangci-lint run` (now imports `internal/core/recall` transitively via
       the package, though not this function directly).
       Requirement: R4.1; design §4.4.
-- [ ] **4.6** Commit 1 (RED): `connect_test.go` (continued) — `ConnectPairs`: the source is never
+- [x] **4.6** Commit 1 (RED): `connect_test.go` (continued) — `ConnectPairs`: the source is never
       its own candidate; `existing` excludes a candidate regardless of which direction it was
       stored (both `a→b` and `b→a` forms tested against the same `CanonicalPair` key); capped at
       `ConnectCandidateK`; `fused`'s order is preserved; `CanonicalPair` is symmetric and
@@ -457,12 +457,12 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       map[Pair]bool) []Pair { return nil }` — compiles; an unexcluded-candidate fixture expects
       `len(got) == 1`, stub nil fails first.
       Requirement: R4.2.
-- [ ] **4.7** Commit 2 (GREEN): implement `CanonicalPair` (lexicographic order) and `ConnectPairs`
+- [x] **4.7** Commit 2 (GREEN): implement `CanonicalPair` (lexicographic order) and `ConnectPairs`
       (self-exclusion, `existing` lookup via `CanonicalPair`, storage direction `source →
       candidate`, cap at `ConnectCandidateK`).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.2; design §4.4.
-- [ ] **4.8** Commit 1 (RED): `connect_test.go` (continued) — `ProposeRelation`: outcome `new` →
+- [x] **4.8** Commit 1 (RED): `connect_test.go` (continued) — `ProposeRelation`: outcome `new` →
       `false`; `relation.Discard` → `false` (I08); each of the four missing pointer fields
       (`TargetUnitID`/`Type`/`Strength`/`Confidence` nil) → `false`, tested individually;
       `Uncertain` and `Asserted` with all four fields present → `true`; the returned
@@ -475,21 +475,21 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       compiles; the `Uncertain`-with-all-fields fixture expects `true`, stub always `false`, fails
       first.
       Requirement: R4.3.
-- [ ] **4.9** Commit 2 (GREEN): implement `ProposeRelation` via `relation.Decide`/`relation.Resolve`
+- [x] **4.9** Commit 2 (GREEN): implement `ProposeRelation` via `relation.Decide`/`relation.Resolve`
       unchanged, tolerant-decode nil-field checks, `CreatedBy` always `CreatedByConsolidation`.
       Verify: `make test`; `golangci-lint run` (now imports `internal/core/relation` directly for
       `Judgment`/`Thresholds`/`Decide`).
       Requirement: R4.3; design §4.4.
-- [ ] **4.10** doc 02 §6.4 amendment: state the per-night budget as **one product**
+- [x] **4.10** doc 02 §6.4 amendment: state the per-night budget as **one product**
       (`ConnectSourceLimit × ConnectCandidateK = 100` judge calls), not two separate knobs; record
       the unordered-pair exclusion choice (§9 Q5) as a stated, reversible decision.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §4.4.
-- [ ] **4.11** §13: add `connect_source_limit` (20, chosen) and `connect_candidate_k` (5, chosen —
+- [x] **4.11** §13: add `connect_source_limit` (20, chosen) and `connect_candidate_k` (5, chosen —
       a separate row from `dedup_candidate_k` despite the identical default) as two new rows.
       Requirement: R0.2.
-- [ ] **4.12** Purity/lint (connect half): `golangci-lint run`.
-- [ ] **4.13** *(split checkpoint — see the PR-level Verify note below)*: measure
+- [x] **4.12** Purity/lint (connect half): `golangci-lint run`.
+- [x] **4.13** *(split checkpoint — see the PR-level Verify note below)*: measure
       `git diff --stat` for the connect half in isolation (`connect.go`, `relation/createdby.go`,
       their tests, task 4.10/4.11's doc deltas). If this half alone is at risk of the ~190 estimate
       running hot, this is the natural PR4a boundary.
