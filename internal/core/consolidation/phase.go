@@ -1,6 +1,9 @@
 package consolidation
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Phase is one of doc 02 §6's eight nightly phases. Its VALUE is its
 // position: Phase(0) runs first and phaseCount-1 runs last. The order is
@@ -42,21 +45,57 @@ const _ uint = uint(int(PhaseLearn) - int(phaseCount) + 1)
 // of Order().
 var ErrUnknownPhase = errors.New("consolidation: unknown phase")
 
+// phaseNames is an array sized by phaseCount, not a slice literal — this
+// is what makes leg 3's totality check meaningful (design.md §3.2): a
+// ninth phase constant declared before PhaseLearn and left unnamed here
+// yields "" at that index, so String() (and the doc 02 pin) fails on an
+// empty name rather than on a subtle mis-order.
+func phaseNames() [phaseCount]string {
+	return [phaseCount]string{
+		PhaseExpireIncomplete: "expire_incomplete",
+		PhaseArchive:          "archive",
+		PhaseStrengthen:       "strengthen",
+		PhaseConnect:          "connect",
+		PhaseDerive:           "derive",
+		PhaseReweight:         "reweight",
+		PhasePatternEval:      "pattern_eval",
+		PhaseLearn:            "learn",
+	}
+}
+
 // Order returns a fresh slice holding the eight Phase vocabulary members,
 // ascending from Phase(0), with Order()[7] == PhaseLearn (R1.1).
+//
+// Generated from [0, phaseCount), never a slice literal: there is no list
+// of eight names anywhere in this package for a reorder to leave stale —
+// permuting the sequence means renumbering the constants above, which
+// simultaneously changes every String() output and ParsePhase round-trip
+// (design.md §3.2 leg 2).
 func Order() []Phase {
-	return nil
+	order := make([]Phase, 0, phaseCount)
+	for p := Phase(0); p < phaseCount; p++ {
+		order = append(order, p)
+	}
+	return order
 }
 
 // String renders p's name, or "Phase(n)" for a value outside Order() —
 // total over every int value, never panics (R1.1).
 func (p Phase) String() string {
-	return ""
+	if p < 0 || p >= phaseCount {
+		return fmt.Sprintf("Phase(%d)", int(p))
+	}
+	return phaseNames()[p]
 }
 
 // ParsePhase is the sole entry point from untrusted text — a CLI flag —
 // into the Phase vocabulary. It returns ErrUnknownPhase, naming the
 // rejected value, for anything that is not one of Order()'s eight names.
 func ParsePhase(s string) (Phase, error) {
-	return 0, ErrUnknownPhase
+	for _, p := range Order() {
+		if p.String() == s {
+			return p, nil
+		}
+	}
+	return 0, fmt.Errorf("%w: %q", ErrUnknownPhase, s)
 }
