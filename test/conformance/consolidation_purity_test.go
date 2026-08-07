@@ -15,21 +15,23 @@ import (
 // "accumulated evidence" phases — the ones that reason only about strength
 // or confidence already crossed some threshold, never about how much time
 // has elapsed since — need no instant to decide (spec R0.1, design.md
-// §5.4). MergeProposals and Reinforce do not exist yet (PR 4's
-// derive.go); this scaffold is extended there (task 4.22), the same
-// scaffold-then-extend shape m2a's own i05 test used (m2a-weight-focus
-// task 1.5).
+// §5.4). Extended here (task 4.22) with MergeProposals and Reinforce
+// (feat/core-consolidation-connect-derive's derive half, derive.go) —
+// completing R0.1's full three, the same scaffold-then-extend shape m2a's
+// own i05 test used (m2a-weight-focus task 1.5).
 var timeFreeFuncs = map[string]bool{
-	"Strengthen": true,
+	"Strengthen":     true,
+	"MergeProposals": true,
+	"Reinforce":      true,
 }
 
-// TestR01_TimeFreeFunctionsTakeNoTimeParameter proves R0.1's first of
-// three: Strengthen has no time.Time parameter among
-// internal/core/consolidation's exported functions.
+// TestR01_TimeFreeFunctionsTakeNoTimeParameter proves R0.1's complete set:
+// Strengthen, MergeProposals and Reinforce all have no time.Time parameter
+// among internal/core/consolidation's exported functions.
 //
-// Not a missing-symbol RED: Strengthen already compiles and passes its own
-// tests, added earlier in this same PR — disclosed per this project's own
-// convention (m2a C9) as a structural pin, not a TDD red step.
+// Not a missing-symbol RED: all three already compile and pass their own
+// tests, added earlier in this same change — disclosed per this project's
+// own convention (m2a C9) as a structural pin, not a TDD red step.
 func TestR01_TimeFreeFunctionsTakeNoTimeParameter(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	dir := filepath.Join(repoRoot, "internal", "core", "consolidation")

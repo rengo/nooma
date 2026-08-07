@@ -501,7 +501,7 @@ decision. Both halves are tasked below in that order; **the boundary is the line
 
 ### Derive half (~165) — `derive.go`, `selfmodel/facet.go`
 
-- [ ] **4.14** Commit 1 (RED): `internal/core/selfmodel/facet_test.go` — `AllFacets()` returns a
+- [x] **4.14** Commit 1 (RED): `internal/core/selfmodel/facet_test.go` — `AllFacets()` returns a
       fresh 5-slice `{FacetIdentity, FacetValue, FacetGoal, FacetSocial, FacetPreference}`;
       `ParseFacet` round-trips each member; unknown text → `ErrUnknownFacet`.
       **Red**: `undefined: selfmodel.Facet`, the five constants, `undefined: selfmodel.AllFacets`,
@@ -510,12 +510,12 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       ErrUnknownFacet`, zero-value `AllFacets`/`ParseFacet` stubs — compiles; `len(AllFacets()) !=
       5` fails first.
       Requirement: R4.7 (selfmodel half).
-- [ ] **4.15** Commit 2 (GREEN): implement `AllFacets`/`ParseFacet`. Also rewrite
+- [x] **4.15** Commit 2 (GREEN): implement `AllFacets`/`ParseFacet`. Also rewrite
       `internal/core/selfmodel/doc.go` (currently `doc.go`-only) to describe the five-facet
       vocabulary.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.7; design §5.3.
-- [ ] **4.16** Commit 1 (RED): `internal/core/consolidation/derive_test.go` — `DeriveTopicKey`
+- [x] **4.16** Commit 1 (RED): `internal/core/consolidation/derive_test.go` — `DeriveTopicKey`
       renders `"derived/" + facet + "/" + key"` for every `f` in `selfmodel.AllFacets()` (driven by
       the vocabulary itself, asserting its own exhaustiveness — a sixth facet added later is
       exercised automatically).
@@ -523,15 +523,18 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       Stub: `func DeriveTopicKey(f selfmodel.Facet, key string) string { return "" }` — compiles;
       the exact-string assertion fails against `""` first.
       Requirement: R4.6.
-- [ ] **4.17** Commit 2 (GREEN): implement `DeriveTopicKey`.
+- [x] **4.17** Commit 2 (GREEN): implement `DeriveTopicKey`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.6; design §6.8.
-- [ ] **4.18** Commit 1 (RED): `derive_test.go` (continued) — `MergeProposals`: cosine exactly
+- [x] **4.18** Commit 1 (RED): `derive_test.go` (continued) — `MergeProposals`: cosine exactly
       `BeliefMergeCosine` merges (boundary, both sides — a hair below does not); the nearest
       existing belief wins among several; an empty `existing` slice always creates (every
-      `MergeInto == ""`); a model mismatch surfaces `recall.ErrModelMismatch`; a zero-magnitude
-      vector surfaces `recall.ErrZeroVector`; an un-normalized input still scores as cosine
-      (normalization happens inside `MergeProposals`, never a caller obligation).
+      `MergeInto == ""`); a zero-magnitude vector surfaces `recall.ErrZeroVector`; an
+      un-normalized input still scores as cosine (normalization happens inside `MergeProposals`,
+      never a caller obligation). A model mismatch is NOT tested at this level — it is
+      `recall.Search`'s own contract, verified in `internal/core/recall/vector_test.go`, and
+      cannot be reached through `MergeProposals`'s single-`model` call surface (Judgment Day
+      round 1, F3).
       **Red**: `undefined: consolidation.BeliefMergeCosine`, `undefined: consolidation.
       BeliefVector`, `undefined: consolidation.MergeDecision`, `undefined: consolidation.
       MergeProposals`.
@@ -541,11 +544,11 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       ([]MergeDecision, error) { return nil, nil }` — compiles; `len(decisions) != len(proposed)`
       on a non-empty `proposed` fails first.
       Requirement: R4.4.
-- [ ] **4.19** Commit 2 (GREEN): implement `MergeProposals` via `recall.NewVectorIndex`/`recall.
+- [x] **4.19** Commit 2 (GREEN): implement `MergeProposals` via `recall.NewVectorIndex`/`recall.
       Search`/`recall.Normalize`, boundary inclusive at `BeliefMergeCosine`.
       Verify: `make test`; `golangci-lint run` (now imports `internal/core/recall`).
       Requirement: R4.4; design §6.8.
-- [ ] **4.20** Commit 1 (RED): `derive_test.go` (continued) — `Reinforce`: asymptotic, never
+- [x] **4.20** Commit 1 (RED): `derive_test.go` (continued) — `Reinforce`: asymptotic, never
       reaches 1 under repeated calls; no write at exactly `confidence == 1` (`false`, no value
       change asserted); refuses `NaN`/`+Inf`/`-Inf`/negative/`> 1` (each `false`, no write).
       **Red**: `undefined: consolidation.BeliefReinforceGain`, `undefined: consolidation.
@@ -554,31 +557,31 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       { return confidence, false }` — compiles; an in-domain case expects `(raised, true)`, stub
       always `false`, fails first.
       Requirement: R4.5.
-- [ ] **4.21** Commit 2 (GREEN): implement `Reinforce` per §4.1's shared reinforcement law.
+- [x] **4.21** Commit 2 (GREEN): implement `Reinforce` per §4.1's shared reinforcement law.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R4.5; design §4.1/§6.8.
-- [ ] **4.22** `test/conformance/consolidation_purity_test.go` (extend, from task 3.6) — complete
+- [x] **4.22** `test/conformance/consolidation_purity_test.go` (extend, from task 3.6) — complete
       R0.1's tree-scan: assert exactly `{Strengthen, MergeProposals, Reinforce}` among
       `internal/core/consolidation`'s exported functions take no `time.Time` parameter.
       **Not a missing-symbol red**: extends an already-passing scaffold over functions that already
       compile — disclosed per `m2a` C9.
       Requirement: R0.1 (complete).
-- [ ] **4.23** doc 02 §6.5 amendment: state the merge rule (the second dedup defense) explicitly,
+- [x] **4.23** doc 02 §6.5 amendment: state the merge rule (the second dedup defense) explicitly,
       and **ruling Q2's nightly embedding cost** — `brain` embeds every active belief in memory at
       the start of the phase and discards after, no schema change — written out rather than left
       implicit, per the ruling's own requirement.
       Requirement: R4.4; design §8 (the belief-embedding handoff row), ruling Q2.
-- [ ] **4.24** doc 02 §10 cross-reference: confirm the derived-key format text already reads
+- [x] **4.24** doc 02 §10 cross-reference: confirm the derived-key format text already reads
       `derived/{facet}/{key}`; correct it in this PR if it diverges from `DeriveTopicKey`'s shipped
       format.
       Requirement: R4.6.
-- [ ] **4.25** §13: add `belief_reinforce_gain` (0.10, chosen — inherits §4.1's argument, no
+- [x] **4.25** §13: add `belief_reinforce_gain` (0.10, chosen — inherits §4.1's argument, no
       compatibility check attached) as a new row; annotate the existing "Semantic belief merge" row
       with `consolidation.BeliefMergeCosine`'s first Go home. Two rows touched (1 new, 1
       annotated).
       Requirement: R0.2.
-- [ ] **4.26** Purity/coverage (derive half): `golangci-lint run`; `make cover`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] **4.26** Purity/coverage (derive half): `golangci-lint run`; `make cover`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/consolidation/{connect,derive}{,_test}.go`,
       `internal/core/relation/createdby{,_test}.go`,
       `internal/core/selfmodel/{doc,facet}{,_test}.go`,

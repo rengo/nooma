@@ -2,6 +2,7 @@ package recall
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -110,5 +111,29 @@ func TestNormalize(t *testing.T) {
 
 	if _, err := Normalize([]float32{0, 0, 0}); !errors.Is(err, ErrZeroVector) {
 		t.Errorf("zero vector: error = %v, want ErrZeroVector", err)
+	}
+}
+
+// TestNormalize_NonFiniteComponentSurfacesErrNonFiniteVector proves the
+// guard Judgment Day round 1 found missing: a NaN or +-Inf component makes
+// norm itself non-finite, so ErrZeroVector's "norm == 0" check does not
+// catch it (NaN == 0 and +Inf == 0 are both false) — Normalize would
+// otherwise return a non-finite vector with no error, which then sorts
+// arbitrarily inside Search's comparator instead of failing loudly here.
+func TestNormalize_NonFiniteComponentSurfacesErrNonFiniteVector(t *testing.T) {
+	cases := []struct {
+		name string
+		v    []float32
+	}{
+		{"NaN component", []float32{float32(math.NaN()), 1}},
+		{"+Inf component", []float32{float32(math.Inf(1)), 1}},
+		{"-Inf component", []float32{float32(math.Inf(-1)), 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Normalize(tc.v); !errors.Is(err, ErrNonFiniteVector) {
+				t.Errorf("Normalize(%v): error = %v, want ErrNonFiniteVector", tc.v, err)
+			}
+		})
 	}
 }
