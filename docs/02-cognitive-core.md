@@ -901,7 +901,7 @@ module):
 | Quiet hours | [00:00, 07:00) local |
 | Event lead time | 7 days |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
-| Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | cosine ≥ 0.85 |
+| Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
 | Consolidation / proactive check | 03:00 daily / every 5 min |
 | `boot_consolidation_delay` | 120 s |
@@ -915,3 +915,10 @@ module):
 | `correction_referent_margin` (ratio of the top two fused scores) | 1.5 |
 
 Exact values get calibrated with real usage; the mechanisms in this document do not.
+
+**This table is executable.** Every row that names a constant under `internal/core/` is checked
+against that constant by `test/conformance/calibration_doc_test.go`: the symbol must exist, be a
+constant, and hold exactly the number written here. A row's Default column therefore leads with
+its value, and any prose follows after an em dash. Rows naming no constant yet — `Quiet hours`,
+`RRF k`, `recall_top_k` — are not yet implemented, and each one starts being checked on the day
+its row names the constant that implements it.
