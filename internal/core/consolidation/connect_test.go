@@ -412,3 +412,34 @@ func TestConnectBudgetConstants_ArePinnedToTheirCalibratedValues(t *testing.T) {
 		t.Errorf("ConnectSourceLimit*ConnectCandidateK = %d, want %d — doc 02 §6.4 states the per-night provider cost as this one product", got, wantBudget)
 	}
 }
+
+// TestProposeRelation_NilOutcomeWritesNothing pins the branch both blind
+// judges found unpinned in Judgment Day round 1: TestProposeRelation_
+// EachMissingFieldWritesNothing varies TargetUnitID, Type, Strength and
+// Confidence but never Outcome, so mutating the guard back to a bare
+// dereference — design.md §6.7's own literal stub shape — left the whole
+// package green at 100% statement coverage.
+//
+// The shape is reachable in ordinary use, not adversarial: relation.
+// DecodeJudgment documents an absent "outcome" as a degraded-but-expected
+// response (its own TestDecodeJudgment_Degrades/outcome_absent proves the
+// decoder produces it), and internal/brain/capture.go's shipped judge path
+// already treats nil Outcome as "decided nothing". Without this test, a
+// later edit simplifying the guard toward the documented stub panics on a
+// nil dereference with nothing to catch it.
+func TestProposeRelation_NilOutcomeWritesNothing(t *testing.T) {
+	// Built the same way TestProposeRelation_EachMissingFieldWritesNothing
+	// builds its cases — every field present, then exactly one nilled — and
+	// the field it nils is the one that test never varies. The confidence is
+	// well above Surface, so this would persist if the guard let it through.
+	j := completeJudgment(relation.OutcomeRelated, 0.95)
+	j.Outcome = nil
+
+	got, ok := ProposeRelation("unit-a", j, connectPairsThresholds())
+	if ok {
+		t.Fatalf("ProposeRelation(nil Outcome) = (%+v, true), want (_, false) — a judgment that decided nothing writes nothing (doc 02 §4)", got)
+	}
+	if got != (ProposedRelation{}) {
+		t.Errorf("ProposeRelation(nil Outcome) returned %+v, want the zero value alongside false", got)
+	}
+}

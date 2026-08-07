@@ -475,8 +475,13 @@ decision. Both halves are tasked below in that order; **the boundary is the line
       compiles; the `Uncertain`-with-all-fields fixture expects `true`, stub always `false`, fails
       first.
       Requirement: R4.3.
-- [x] **4.9** Commit 2 (GREEN): implement `ProposeRelation` via `relation.Decide`/`relation.Resolve`
-      unchanged, tolerant-decode nil-field checks, `CreatedBy` always `CreatedByConsolidation`.
+- [x] **4.9** Commit 2 (GREEN): implement `ProposeRelation` via `relation.Decide` unchanged,
+      tolerant-decode nil-field checks, `CreatedBy` always `CreatedByConsolidation`.
+      **Corrected (Judgment Day round 1, both judges):** this line and `connect.go`'s own doc
+      comment both claimed `relation.Resolve` was reused. It is not called, and must not be —
+      `ProposeRelation` takes already-resolved `relation.Thresholds`, because resolving them means
+      reading the nullable `relation_thresholds` row, which belongs to `m2c`'s caller rather than
+      to core. `design.md` §6.7's stub was right; both restatements of it were wider than the code.
       Verify: `make test`; `golangci-lint run` (now imports `internal/core/relation` directly for
       `Judgment`/`Thresholds`/`Decide`).
       Requirement: R4.3; design §4.4.

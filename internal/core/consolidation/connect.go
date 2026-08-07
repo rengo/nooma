@@ -130,8 +130,13 @@ type ProposedRelation struct {
 }
 
 // ProposeRelation applies doc 02 §4's persist decision — unchanged, through
-// relation.Decide/relation.Resolve — to one judged pair (spec R4.3,
-// design.md §4.4). It returns (_, false) — no plan, no decision_log row —
+// relation.Decide — to one judged pair (spec R4.3, design.md §4.4).
+// relation.Resolve is NOT called here and must not be: this function takes
+// already-resolved relation.Thresholds, because resolving them means reading
+// the nullable relation_thresholds row, which belongs to whichever caller
+// owns that read (m2c's brain wiring), not to core. An earlier revision of
+// this comment claimed both were called — Judgment Day round 1, both judges.
+// It returns (_, false) — no plan, no decision_log row —
 // for outcome "new", for relation.Discard (I08), and for a judgment
 // missing any of TargetUnitID, Type, Strength or Confidence after
 // tolerant decode ("a judgment that decided nothing writes nothing", doc
@@ -141,9 +146,14 @@ type ProposedRelation struct {
 // relation.CreatedByConsolidation.
 //
 // A nil j.Outcome is treated the same as outcome "new" (a judgment that
-// decided nothing writes nothing) rather than dereferenced — spec R4.3
-// does not test this shape directly, but every other pointer field's
-// absence is refused before use, and Outcome should be no different.
+// decided nothing writes nothing) rather than dereferenced. doc 02 §4
+// covers exactly this shape — "if it degrades so far that the outcome, its
+// confidence or its target is missing, no relation is stored" — and
+// internal/brain/capture.go's own judge path already applies the identical
+// convention, shipped in M1. relation.DecodeJudgment documents an absent
+// outcome as an ordinary degraded response, not a caller error, so this
+// branch is reachable in normal use and is pinned by
+// TestProposeRelation_NilOutcomeWritesNothing.
 func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds) (ProposedRelation, bool) {
 	if j.Outcome == nil || *j.Outcome == relation.OutcomeNew {
 		return ProposedRelation{}, false
