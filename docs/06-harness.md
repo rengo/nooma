@@ -344,7 +344,14 @@ each other again.
   There are real users' vaults on the other side.
 - **Calibratables**: every number in the doc 02 §13 table is a named constant in exactly one
   place. A threshold literal buried in a function is a number nobody will be able to calibrate
-  when real data arrives.
+  when real data arrives. **This rule is a gate, not a convention** —
+  `test/conformance/calibration_doc_test.go` reads §13 and fails when a row names a core symbol
+  that does not exist, is not a constant, or does not hold the number the row documents. It was
+  made a gate because as a written convention it was violated four consecutive times inside
+  `m2b-consolidation-core`, twice with the instruction explicit in the implementer's brief, and
+  every violation passed CI. §13's Default column therefore leads with its value; prose follows
+  after an em dash. The gate covers the table-to-code direction only: a core constant absent
+  from §13 does not fail it, because the table remains the authority on what is calibratable.
 - **Language**: everything in the repository is in English — code, identifiers, comments,
   commit messages, docs, skills, and UI copy. Nooma is an AGPL project that expects community
   contributions; English is the entry condition, not a preference. UI internationalization is
