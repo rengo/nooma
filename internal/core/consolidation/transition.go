@@ -24,7 +24,7 @@ const (
 // not an exported var, so a caller mutating one call's result cannot affect
 // another.
 func AllReasons() []Reason {
-	return nil
+	return []Reason{ReasonIncompletePromoted, ReasonIncompleteExpired, ReasonBelowWeightThreshold}
 }
 
 // Transition is the sole payload a phase's producer emits for a planned
