@@ -703,17 +703,20 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
    relations get `created_by='consolidation'`
    (`internal/core/consolidation.ProposeRelation`).
 5. **derive**: derives/updates self-beliefs from units (§10), rendering each one's key as
-   `derived/{facet}/{key}` (`internal/core/consolidation.DeriveTopicKey`). Dedup runs **two
-   defenses, both shipped**: (1) existing beliefs are placed in the derivation prompt itself, so
-   the judge sees what already exists before proposing something new; (2) a semantic merge over
-   embeddings, cosine ≥ 0.85, for whatever the first defense's prompt-side judgment still lets
-   through (`internal/core/consolidation.MergeProposals`) — a proposed belief merges into the
+   `derived/{facet}/{key}` (`internal/core/consolidation.DeriveTopicKey`). Dedup is meant to run
+   **two defenses**: (1) existing beliefs placed in the derivation prompt itself, so the judge
+   sees what already exists before proposing something new — **required by this document, not
+   yet wired**: no derive-phase prompt builder and no derive-phase orchestration exist anywhere
+   in `internal/brain` yet, owed by whichever PR wires `brain`'s consolidation pass for `derive`
+   (the same no-code gap item 8 below states for `learn`); (2) a semantic merge over embeddings,
+   cosine ≥ 0.85, for whatever the first defense's prompt-side judgment would still let through
+   (`internal/core/consolidation.MergeProposals`) — **shipped**: a proposed belief merges into the
    nearest existing one at or above that threshold, or becomes a new belief otherwise. A belief
    that merges is **reinforced**, not duplicated: its confidence rises toward 1 by the same
    asymptotic law `strengthen` uses for relation strength, at `belief_reinforce_gain` (default
    0.10) — `internal/core/consolidation.Reinforce`. Neither defense alone is doc 02's stated
-   posture; shipping only one is the gap this document explicitly closes, not an implementation
-   choice left open.
+   posture; running defense 2 without defense 1 wired yet is this document's known, named gap,
+   not an implementation choice left open.
    **The embedding cost, stated rather than left implicit (owner ruling Q2, option A)**: `derive`
    embeds every **active** belief in memory at the start of the phase and discards the vectors
    after — no schema change, no `belief_embeddings` table, no stale-vector problem when a belief's
