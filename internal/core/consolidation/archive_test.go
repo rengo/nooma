@@ -183,3 +183,42 @@ func TestResolveWeightThreshold_NonFiniteOrOutOfRange_FallsBackToDefault(t *test
 		})
 	}
 }
+
+// TestDefaultWeightThreshold_ComposesWithM2aReviveAndResurfaceGuarantees is
+// R2.4's compatibility check between DefaultWeightThreshold and m2a's
+// revive/resurface constants, computed from the named Go constants — never
+// repeated literals — so a future recalibration of any one of the four
+// breaks this test loudly instead of drifting silently.
+//
+// Not a missing-symbol red step: all four constants already exist — three
+// from m2a, DefaultWeightThreshold from this PR's own task 2.7 — disclosed
+// per this project's own convention (m2a C9) as a compatibility check, not
+// a TDD red step.
+//
+// ⚙ caveat: both inequalities hold only at the shipped defaults.
+// weight.WeightCeiling and DefaultWeightThreshold are both recalibratable
+// per user (doc 02 §13) — this is not read as a general property.
+func TestDefaultWeightThreshold_ComposesWithM2aReviveAndResurfaceGuarantees(t *testing.T) {
+	t.Run("OneReviveAlwaysClearsTheArchiveBand", func(t *testing.T) {
+		revive := weight.ReviveGain * weight.WeightCeiling
+		if !(revive > DefaultWeightThreshold) {
+			t.Errorf("weight.ReviveGain * weight.WeightCeiling = %v, want strictly greater than "+
+				"DefaultWeightThreshold %v — one direct revive must always clear the archive band "+
+				"at the shipped defaults (R2.4)", revive, DefaultWeightThreshold)
+		}
+	})
+
+	t.Run("ResurfaceAloneCannotClearTheArchiveBandAtMaxHops", func(t *testing.T) {
+		maxGain := 1.0
+		for i := 0; i < weight.ResurfaceMaxHops; i++ {
+			maxGain *= weight.ResurfaceAttenuation
+		}
+		maxTarget := maxGain * weight.WeightCeiling
+		if !(maxTarget <= DefaultWeightThreshold) {
+			t.Errorf("weight.ResurfaceAttenuation^weight.ResurfaceMaxHops * weight.WeightCeiling = %v, "+
+				"want less than or equal to DefaultWeightThreshold %v — spreading activation alone "+
+				"must never lift a unit above the archive threshold at maximum hop distance (R2.4)",
+				maxTarget, DefaultWeightThreshold)
+		}
+	})
+}
