@@ -104,6 +104,13 @@ func TestStrengthen_AlreadyAtOne_ProducesNoRow(t *testing.T) {
 // C15's rule at Strengthen's own door: a co-active relation whose Strength
 // core cannot interpret is refused, never computed into a change, each
 // shape tested individually.
+//
+// The +Inf/-Inf cases still earn their names after Fix E (Judgment Day
+// round 1) removed the redundant math.IsInf check from Strengthen: they
+// assert that these specific values are refused into corrupted, which
+// remains true because +Inf > 1 and -Inf < 0 already trigger the range
+// comparison under IEEE 754 — the behaviour these subtests name did not
+// change, only the implementation detail of which branch catches it.
 func TestStrengthen_NonFiniteOrOutOfRangeStrength_RefusesIntoCorrupted(t *testing.T) {
 	since := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
 

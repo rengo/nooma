@@ -126,7 +126,17 @@ func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now time
 // C19). Reweight does not reach into clampStrength to change a shipped
 // contract; it makes its own door consistent instead (design.md §4.5(a)).
 func invalidEdgeStrength(s float64) bool {
-	return math.IsNaN(s) || math.IsInf(s, 0) || s < 0 || s > 1
+	// math.IsInf is deliberately not checked: under IEEE 754, +Inf > 1
+	// and -Inf < 0 are already true, so the range comparison below already
+	// refuses an infinite s on its own — IsInf never fires by itself.
+	// Removed in Judgment Day round 1 (Fix E, mirroring Strengthen's own
+	// identical deletion) after deleting it and running the suite —
+	// including the +Inf/-Inf subtests naming it — which stayed green
+	// because those subtests assert the behaviour (refused into
+	// corrupted), not this mechanism. See strengthen.go's matching comment
+	// for why no plausible future change revives it (m2a C13's own
+	// convention).
+	return math.IsNaN(s) || s < 0 || s > 1
 }
 
 // currentsSlice returns states' values as a plain slice, in whatever order

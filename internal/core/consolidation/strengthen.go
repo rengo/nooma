@@ -74,7 +74,22 @@ func Strengthen(es []RelationEvidence, since *time.Time) (changes []StrengthChan
 			continue
 		}
 
-		if math.IsNaN(e.Strength) || math.IsInf(e.Strength, 0) || e.Strength < 0 || e.Strength > 1 {
+		// math.IsInf is deliberately not checked here: under IEEE 754,
+		// +Inf > 1 and -Inf < 0 are already true, so an infinite Strength
+		// is already refused by the range comparison below — IsInf never
+		// fires on its own. Judgment Day round 1 (Fix E) proved this by
+		// deleting it and running the suite, including the +Inf/-Inf
+		// subtests naming it, which stayed green because they assert the
+		// *behaviour* (refused into corrupted), not the mechanism. Unlike
+		// ExpireIncomplete's clock-skew clamp (a similarly-inert guard kept
+		// because a single constant's sign flip revives it), no plausible
+		// change here revives IsInf: it would take relaxing the domain
+		// check to accept a value outside [0,1] via some path other than
+		// this comparison, at which point the check is being redesigned
+		// anyway, not "made load-bearing" (m2a C13's own convention: a
+		// branch no fixture can tell apart from its absence should not
+		// exist).
+		if math.IsNaN(e.Strength) || e.Strength < 0 || e.Strength > 1 {
 			corrupted = append(corrupted, e.RelationID)
 			continue
 		}

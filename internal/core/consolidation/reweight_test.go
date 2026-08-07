@@ -112,6 +112,12 @@ func TestReweight_MultiOriginResultsMergeByMax(t *testing.T) {
 // C15/C19 entry-point rule: an edge strength Reweight cannot interpret is
 // refused before weight.clampStrength or any comparison downstream can
 // skip past it, and never produces a boost.
+//
+// The +Inf/-Inf cases still earn their names after Fix E (Judgment Day
+// round 1) removed the redundant math.IsInf check from
+// invalidEdgeStrength: +Inf > 1 and -Inf < 0 already trigger the range
+// comparison under IEEE 754, so these specific values are still refused —
+// only the branch that catches them changed, not the behaviour asserted.
 func TestReweight_CorruptEdgeStrength_RefusedAtReweightsOwnDoor(t *testing.T) {
 	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
 	states := map[string]weight.Current{
