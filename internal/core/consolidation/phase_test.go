@@ -84,3 +84,43 @@ func TestParsePhase_RejectsUnknownText(t *testing.T) {
 		t.Fatalf("ParsePhase(%q) error = %v, want ErrUnknownPhase", "not-a-phase", err)
 	}
 }
+
+// TestPhase_NamedConstantsMatchTheirPositionAndName pins each of the
+// eight named constants to both its expected position in Order() and its
+// expected String() name — a relative oracle (ascending, as
+// TestOrder_HasExactlyEightPhasesAscendingWithLearnLast checks) cannot
+// tell a correct sequence from two adjacent phase names swapped in the
+// const block, since either arrangement is still "ascending". This table
+// pins against the computed literal instead.
+func TestPhase_NamedConstantsMatchTheirPositionAndName(t *testing.T) {
+	tests := []struct {
+		phase Phase
+		name  string
+		want  string
+	}{
+		{PhaseExpireIncomplete, "PhaseExpireIncomplete", "expire_incomplete"},
+		{PhaseArchive, "PhaseArchive", "archive"},
+		{PhaseStrengthen, "PhaseStrengthen", "strengthen"},
+		{PhaseConnect, "PhaseConnect", "connect"},
+		{PhaseDerive, "PhaseDerive", "derive"},
+		{PhaseReweight, "PhaseReweight", "reweight"},
+		{PhasePatternEval, "PhasePatternEval", "pattern_eval"},
+		{PhaseLearn, "PhaseLearn", "learn"},
+	}
+
+	order := Order()
+	if len(order) != len(tests) {
+		t.Fatalf("Order() has %d phases, want %d", len(order), len(tests))
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if order[i] != tt.phase {
+				t.Fatalf("Order()[%d] = %v, want %s at that position", i, order[i], tt.name)
+			}
+			if got := tt.phase.String(); got != tt.want {
+				t.Fatalf("%s.String() = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+}
