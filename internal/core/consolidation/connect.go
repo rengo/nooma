@@ -140,7 +140,27 @@ type ProposedRelation struct {
 // The returned ProposedRelation.CreatedBy is always
 // relation.CreatedByConsolidation.
 //
-// TODO(RED stub): implemented in the next commit.
+// A nil j.Outcome is treated the same as outcome "new" (a judgment that
+// decided nothing writes nothing) rather than dereferenced — spec R4.3
+// does not test this shape directly, but every other pointer field's
+// absence is refused before use, and Outcome should be no different.
 func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds) (ProposedRelation, bool) {
-	return ProposedRelation{}, false
+	if j.Outcome == nil || *j.Outcome == relation.OutcomeNew {
+		return ProposedRelation{}, false
+	}
+	if j.TargetUnitID == nil || j.Type == nil || j.Strength == nil || j.Confidence == nil {
+		return ProposedRelation{}, false
+	}
+	if relation.Decide(*j.Confidence, t) == relation.Discard {
+		return ProposedRelation{}, false
+	}
+
+	return ProposedRelation{
+		From:       from,
+		To:         *j.TargetUnitID,
+		Type:       *j.Type,
+		Strength:   *j.Strength,
+		Confidence: *j.Confidence,
+		CreatedBy:  relation.CreatedByConsolidation,
+	}, true
 }
