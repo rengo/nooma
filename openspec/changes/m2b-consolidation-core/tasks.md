@@ -324,8 +324,9 @@ that task is 5.7.
       Requirement: R3.1; design §4.3.
 - [x] **3.3** Commit 1 (RED): `internal/core/consolidation/reweight_test.go` — both endpoints of a
       new edge are boosted; multi-origin results merge by max; a corrupt edge strength (non-finite
-      or outside `[0,1]`) is refused at `Reweight`'s own door, both endpoints reported into
-      `corrupted`, before `weight.clampStrength` or any comparison downstream can run; `corrupted`
+      or outside `[0,1]`) is refused at `Reweight`'s own door, each endpoint `states` holds a
+      `Current` for reported into `corrupted`, before `weight.clampStrength` or any comparison
+      downstream can run; `corrupted`
       is merged by union, deduplicated, across all origin calls; a unit id may appear in both
       `boosts` and `corrupted` from the same call, neither suppressing the other; `boosts` and
       `corrupted` sorted by `UnitID` (eight elements each, per Fix C below), mutation-verified by
@@ -343,17 +344,23 @@ that task is 5.7.
       slice, which lands already sorted 1-in-6 of the time by chance under Go's randomized map
       iteration — measured at a 43-57% kill rate with the final sort removed. Replaced with an
       eight-element fixture (1-in-40320 accidental-sort odds); removing the sort now fails 40/40.
+      **Correction (Judgment Day round 1, Fix D)**: this line originally also claimed "both
+      endpoints" of a corrupt edge are always reported. `Reweight` originally did that
+      unconditionally; it now only reports an endpoint `states` holds a `Current` for, aligning
+      with `weight.Resurface`'s own settled policy for a caller-unloaded unit — see `spec.md` R3.3
+      and the new `TestReweight_CorruptEdgeToAnUnloadedUnitIsNotReported`.
       **Red**: `undefined: consolidation.Reweight`.
       Stub: `func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now
       time.Time) (boosts []weight.Boost, corrupted []string) { return nil, nil }` — compiles;
       the two-endpoints-boosted fixture expects `len(boosts) == 2`, stub nil fails first.
       Requirement: R3.3.
 - [x] **3.4** Commit 2 (GREEN): implement `Reweight` — origins are every endpoint of `newEdges`;
-      refuse non-finite/out-of-range edge strengths at `Reweight`'s own entry point (reporting both
-      endpoints into `corrupted` directly, not relying on `weight.clampStrength`); build
-      `Neighbourhood.States` from `states` as a plain slice (no sort — see 3.3's correction); call
-      `weight.Resurface` once per origin over the (validated) `newEdges`; merge `boosts` per unit
-      by max; merge `corrupted` by union, deduplicated, sorted.
+      refuse non-finite/out-of-range edge strengths at `Reweight`'s own entry point (reporting each
+      endpoint `states` holds a `Current` for into `corrupted` directly, not relying on
+      `weight.clampStrength`; an endpoint with no `Current` in `states` is not reported, per 3.3's
+      Fix D correction); build `Neighbourhood.States` from `states` as a plain slice (no sort — see
+      3.3's Fix B correction); call `weight.Resurface` once per origin over the (validated)
+      `newEdges`; merge `boosts` per unit by max; merge `corrupted` by union, deduplicated, sorted.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R3.3; design §4.5(a).
 - [x] **3.5** `internal/core/weight/spread.go`: delete C17's dead `refused` guard — remove

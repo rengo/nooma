@@ -144,6 +144,34 @@ func TestReweight_CorruptEdgeStrength_RefusedAtReweightsOwnDoor(t *testing.T) {
 	}
 }
 
+// TestReweight_CorruptEdgeToAnUnloadedUnitIsNotReported proves Reweight's
+// own edge-strength door aligns with weight.Resurface's settled policy
+// (TestResurface_CorruptEdgeToAnUnloadedUnit_IsNotReported): reporting an
+// endpoint the caller holds no Current for would put an id in corrupted
+// the caller cannot act on, so it is not reported. Fix D, Judgment Day
+// round 1 — Reweight previously marked BOTH corruptSet[e.From] and
+// corruptSet[e.To] from invalidEdgeStrength alone, with no states
+// membership check, silently differing from Resurface's own rule in the
+// same package family.
+//
+// states only holds "a"; "ghost" is an edge endpoint the caller never
+// loaded a Current for.
+func TestReweight_CorruptEdgeToAnUnloadedUnitIsNotReported(t *testing.T) {
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+	states := map[string]weight.Current{
+		"a": {UnitID: "a", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+	}
+	edges := []weight.Edge{{From: "a", To: "ghost", Strength: math.NaN()}}
+
+	boosts, corrupted := Reweight(states, edges, now)
+	if len(boosts) != 0 {
+		t.Fatalf("Reweight() boosts = %v, want none", boosts)
+	}
+	if len(corrupted) != 1 || corrupted[0] != "a" {
+		t.Fatalf("Reweight() corrupted = %v, want [a] only — \"ghost\" has no Current in states and must not be reported", corrupted)
+	}
+}
+
 // TestReweight_CorruptedMergedByUnionNotCount proves the pass-wide merge
 // rule: a unit reported corrupted by more than one origin's Resurface call
 // appears at most once in Reweight's own output, never once per reporting
@@ -231,6 +259,13 @@ func TestReweight_BoostsAndCorruptedSortedByUnitID(t *testing.T) {
 	// the chain is also an origin (every edge endpoint is an origin), and
 	// ResurfaceMaxHops == 2 means every unit is reached by at least one
 	// neighbour's Resurface call — all eight end up in boosts.
+	//
+	// c1..c8 must ALSO have a states entry (Fix D, Judgment Day round 1):
+	// Reweight's own door only reports a corrupt edge's endpoint into
+	// corrupted when the caller holds a Current for it, mirroring
+	// weight.Resurface's own settled policy
+	// (TestResurface_CorruptEdgeToAnUnloadedUnit_IsNotReported) — an id
+	// the caller has no state for is not actionable and is not reported.
 	states := map[string]weight.Current{
 		"n1": {UnitID: "n1", Weight: 0, DecayRate: 0, LastTouchedAt: now},
 		"n2": {UnitID: "n2", Weight: 0, DecayRate: 0, LastTouchedAt: now},
@@ -240,6 +275,14 @@ func TestReweight_BoostsAndCorruptedSortedByUnitID(t *testing.T) {
 		"n6": {UnitID: "n6", Weight: 0, DecayRate: 0, LastTouchedAt: now},
 		"n7": {UnitID: "n7", Weight: 0, DecayRate: 0, LastTouchedAt: now},
 		"n8": {UnitID: "n8", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c1": {UnitID: "c1", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c2": {UnitID: "c2", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c3": {UnitID: "c3", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c4": {UnitID: "c4", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c5": {UnitID: "c5", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c6": {UnitID: "c6", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c7": {UnitID: "c7", Weight: 0, DecayRate: 0, LastTouchedAt: now},
+		"c8": {UnitID: "c8", Weight: 0, DecayRate: 0, LastTouchedAt: now},
 	}
 	edges := []weight.Edge{
 		{From: "n1", To: "n2", Strength: 0.9},

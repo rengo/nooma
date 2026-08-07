@@ -24,12 +24,15 @@ import (
 // observes.
 //
 // origins are every endpoint of newEdges. An Edge whose Strength is
-// non-finite or outside [0,1] is refused at THIS door — both endpoints
-// reported into corrupted directly — before weight.clampStrength or any
-// comparison downstream can skip past it (m2a C15's rule; C19's asymmetry,
-// where clampStrength coerces +Inf to 1 rather than refusing it, is not
-// inherited). weight.Resurface is then called once per origin over the
-// validated edge set only.
+// non-finite or outside [0,1] is refused at THIS door before
+// weight.clampStrength or any comparison downstream can skip past it (m2a
+// C15's rule; C19's asymmetry, where clampStrength coerces +Inf to 1
+// rather than refusing it, is not inherited). An endpoint is reported into
+// corrupted only when states holds a Current for it — the same guard
+// weight.Resurface's own NaN-edge sweep applies (Fix D, Judgment Day
+// round 1): reporting an id the caller holds no state for would put an id
+// in corrupted the caller cannot act on. weight.Resurface is then called
+// once per origin over the validated edge set only.
 //
 // Both slices are sorted by UnitID. boosts is merged per unit by the
 // highest boosted weight across every origin's call — the same max rule
@@ -62,8 +65,20 @@ func Reweight(states map[string]weight.Current, newEdges []weight.Edge, now time
 		originSet[e.To] = true
 
 		if invalidEdgeStrength(e.Strength) {
-			corruptSet[e.From] = true
-			corruptSet[e.To] = true
+			// Report an endpoint only when the caller actually holds a
+			// Current for it — the same guard weight.Resurface applies to
+			// its own NaN-edge sweep (TestResurface_
+			// CorruptEdgeToAnUnloadedUnit_IsNotReported): reporting an id
+			// the caller has no state for would put an id in corrupted
+			// the caller cannot act on. Fix D, Judgment Day round 1 — this
+			// door previously reported both endpoints unconditionally,
+			// silently differing from Resurface's settled policy.
+			if _, ok := states[e.From]; ok {
+				corruptSet[e.From] = true
+			}
+			if _, ok := states[e.To]; ok {
+				corruptSet[e.To] = true
+			}
 			continue
 		}
 		validEdges = append(validEdges, e)

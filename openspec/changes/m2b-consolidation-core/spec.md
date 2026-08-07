@@ -302,8 +302,13 @@ claimed a sort here was mutation-verified; it never was, see the corrected Verif
 evidence.
 
 **MUST**: an `Edge` whose `Strength` is non-finite or outside `[0,1]` is refused at `Reweight`'s
-own door — before `weight.clampStrength` or any downstream comparison runs — and **both**
-endpoints of that edge are reported through `corrupted`.
+own door — before `weight.clampStrength` or any downstream comparison runs — and each endpoint of
+that edge for which `states` holds a `weight.Current` is reported through `corrupted`. An endpoint
+`states` holds no `Current` for is **not** reported, aligning with `weight.Resurface`'s own settled
+policy for the same shape of gap (`TestResurface_CorruptEdgeToAnUnloadedUnit_IsNotReported`):
+reporting an id the caller holds no state for would put an id in `corrupted` it cannot act on
+(Judgment Day round 1 Fix D — an earlier draft of this requirement said "both" unconditionally,
+which is what `Reweight` originally shipped and Fix D corrected).
 
 **MUST**: `corrupted` is merged across all of the pass's origin calls by **union, deduplicated** —
 a unit id appears in `Reweight`'s output `corrupted` at most once, regardless of how many origin
@@ -335,7 +340,8 @@ M2 does not exercise it.
   and neither list omits it because of the other
 
 **Verified by**: L1 — both endpoints of a new edge are boosted; multi-origin results merge by max;
-a corrupt edge strength refuses both endpoints; `corrupted` deduplicates across origins; a unit
+a corrupt edge strength refuses each endpoint `states` holds a `Current` for; an endpoint `states`
+holds no `Current` for is not reported (Fix D); `corrupted` deduplicates across origins; a unit
 present in both outputs from one call; `boosts` and `corrupted` sorted by `UnitID` (eight elements
 each — fewer accidentally lands already sorted too often under Go's randomized map iteration, see
 Fix C below), mutation-verified by removing the final sort and measuring the kill rate (Judgment
