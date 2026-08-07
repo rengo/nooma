@@ -602,7 +602,7 @@ decision. Both halves are tasked below in that order; **the boundary is the line
 Depends on PR 4 (no direct call, but completes the chain). Ships `patterns.go`. Also closes
 Finding F2's deferred check (task 5.7).
 
-- [ ] **5.1** Commit 1 (RED): `internal/core/consolidation/patterns_test.go` — `EvaluateStagnation`:
+- [x] **5.1** Commit 1 (RED): `internal/core/consolidation/patterns_test.go` — `EvaluateStagnation`:
       non-`goal`-facet beliefs skipped regardless of elapsed time; exactly `stagnationDays` fires
       (`>=`, both sides — a hair under does not); a future `LastReinforcedAt` (clock skew) clamps to
       zero elapsed and is never stagnant; output sorted by `BeliefID` (≥3 beliefs).
@@ -613,11 +613,11 @@ Finding F2's deferred check (task 5.7).
       stagnationDays int, now time.Time) []StagnationFinding { return nil }` — compiles; a
       genuinely-stagnant goal-facet fixture expects `len(got) == 1`, stub nil fails first.
       Requirement: R5.1.
-- [ ] **5.2** Commit 2 (GREEN): implement `EvaluateStagnation` — facet gate, `>=` boundary, the
+- [x] **5.2** Commit 2 (GREEN): implement `EvaluateStagnation` — facet gate, `>=` boundary, the
       zero-clamp for a future `LastReinforcedAt`.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R5.1; design §4.6.
-- [ ] **5.3** Commit 1 (RED): `patterns_test.go` (continued) — `EvaluateLoad`: exactly `threshold`
+- [x] **5.3** Commit 1 (RED): `patterns_test.go` (continued) — `EvaluateLoad`: exactly `threshold`
       fires (both sides — one below does not); inside the cooldown returns `false` even above
       threshold; `lastHypothesisAt == nil` fires unconditionally on count; exactly
       `LoadCooldownDays` elapsed since `lastHypothesisAt` fires.
@@ -630,11 +630,11 @@ Finding F2's deferred check (task 5.7).
       false }` — compiles; a qualifying-count-with-nil-`lastHypothesisAt` fixture expects `(finding,
       true)`, stub always `false`, fails first.
       Requirement: R5.2.
-- [ ] **5.4** Commit 2 (GREEN): implement `EvaluateLoad` — threshold gate **and** cooldown gate,
+- [x] **5.4** Commit 2 (GREEN): implement `EvaluateLoad` — threshold gate **and** cooldown gate,
       both required.
       Verify: `make test`; `golangci-lint run`.
       Requirement: R5.2; design §4.6.
-- [ ] **5.5** Commit 1 (RED): `patterns_test.go` (continued) — `ResolveGoalStagnationDays`/
+- [x] **5.5** Commit 1 (RED): `patterns_test.go` (continued) — `ResolveGoalStagnationDays`/
       `ResolveMentalLoadThreshold`: `nil`, `0`, and a negative value each fall back to the default
       for both functions; a positive value passes through for both.
       **Red**: `undefined: consolidation.ResolveGoalStagnationDays`, `undefined: consolidation.
@@ -643,10 +643,10 @@ Finding F2's deferred check (task 5.7).
       ResolveMentalLoadThreshold(configured *int) int { return 0 }` — compiles; the `nil` case
       expects `21`/`7` respectively, stub returns `0`, fails first.
       Requirement: R5.3.
-- [ ] **5.6** Commit 2 (GREEN): implement both `Resolve*` fallbacks (`nil` or `<= 0` → default).
+- [x] **5.6** Commit 2 (GREEN): implement both `Resolve*` fallbacks (`nil` or `<= 0` → default).
       Verify: `make test`; `golangci-lint run`.
       Requirement: R5.3.
-- [ ] **5.7** `patterns_test.go` (continued) — **R3.2 close-out** (Finding F2): the
+- [x] **5.7** `patterns_test.go` (continued) — **R3.2 close-out** (Finding F2): the
       `StrengthenGain`/`DefaultGoalStagnationDays` compatibility check, moved here from PR 3 because
       `DefaultGoalStagnationDays` does not exist until this PR — `ceil(ln(0.1/0.9) /
       ln(1-consolidation.StrengthenGain)) == consolidation.DefaultGoalStagnationDays`, computed from
@@ -655,7 +655,7 @@ Finding F2's deferred check (task 5.7).
       **Not a missing-symbol red**: `StrengthenGain` shipped in PR 3, `DefaultGoalStagnationDays` is
       implemented earlier in this same PR (task 5.2) — disclosed per `m2a` C9.
       Requirement: R3.2 (see Finding F2).
-- [ ] **5.8** `test/conformance/consolidation_defaults_ddl_test.go` (extend, from task 2.11) — pin
+- [x] **5.8** `test/conformance/consolidation_defaults_ddl_test.go` (extend, from task 2.11) — pin
       `DefaultGoalStagnationDays` to migration `0002:66`'s `DEFAULT 21` and
       `DefaultMentalLoadThreshold` to `0002:67`'s `DEFAULT 7`, both read off disk. **Note**: this
       brings the file to three DDL-pinned `Default*` constants total (`DefaultWeightThreshold` from
@@ -663,7 +663,7 @@ Finding F2's deferred check (task 5.7).
       `DEFAULT` and is pinned by literal equality instead (task 4.18 already covers it in
       `derive_test.go`, not here).
       Requirement: R5.4.
-- [ ] **5.9** doc 02 §7 amendment: state both watcher predicates explicitly — the stagnation
+- [x] **5.9** doc 02 §7 amendment: state both watcher predicates explicitly — the stagnation
       window read off `last_reinforced_at`, and **why the phase order makes that reading sound**
       (`derive` at slot five refreshes it, `pattern_eval` at slot seven reads the refreshed value —
       reversing the order would make every reinforced belief look stagnant one more night); the
@@ -671,21 +671,21 @@ Finding F2's deferred check (task 5.7).
       `mental_load_threshold`'s own coincidentally-equal 7.
       Verify: read the section; `docs-sync.yml` not locally verifiable.
       Requirement: design §4.6.
-- [ ] **5.10** §13: add `load_cooldown_days` (7, chosen — doc 02 §7 names no number) as a new row;
+- [x] **5.10** §13: add `load_cooldown_days` (7, chosen — doc 02 §7 names no number) as a new row;
       annotate `goal_stagnation_days` with `consolidation.DefaultGoalStagnationDays` +
       `ResolveGoalStagnationDays` (note §9 Q3's two-schema-homes caveat in the row's own comment);
       annotate `mental_load_threshold` with `consolidation.DefaultMentalLoadThreshold` +
       `ResolveMentalLoadThreshold`. Three rows touched (1 new, 2 annotated).
       Requirement: R0.2.
-- [ ] **5.11** Purity/coverage: `golangci-lint run`; `make cover`.
-- [ ] **5.12** Cross-cutting close-out (last PR of the chain): confirm §13 now carries 39 rows
+- [x] **5.11** Purity/coverage: `golangci-lint run`; `make cover`.
+- [x] **5.12** Cross-cutting close-out (last PR of the chain): confirm §13 now carries 39 rows
       (33 + 6 new, matching design §6.11's count); confirm `docs/06-harness.md` needed no change
       across all five PRs (I11/I12 rows already present before this change started); `rg 'now
       time\.Time' internal/core/consolidation` enumerates exactly the time-dependent decisions
       design §5.4's diagram names, confirming `Strengthen`/`MergeProposals`/`Reinforce` (R0.1)
       carry none.
       Requirement: R0.1, R0.2 (final check).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/consolidation/patterns{,_test}.go`,
       `test/conformance/consolidation_defaults_ddl_test.go` (extended), `docs/02-cognitive-core.md`.
       Target ≤180 impl+docs lines.
