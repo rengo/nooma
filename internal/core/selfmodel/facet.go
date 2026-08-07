@@ -26,18 +26,18 @@ var ErrUnknownFacet = fmt.Errorf("selfmodel: unknown facet")
 // members, in the order the constants above declare them —
 // relation.AllCreatedBy's own house pattern: a function, not an exported
 // var, so a caller mutating one call's result cannot affect another.
-//
-// Stub (RED, task 4.14): returns nil so len(AllFacets()) != 5 fails first
-// (C14's guard), before any name assertion runs.
 func AllFacets() []Facet {
-	return nil
+	return []Facet{FacetIdentity, FacetValue, FacetGoal, FacetSocial, FacetPreference}
 }
 
 // ParseFacet is the sole entry point from untrusted text into the Facet
 // vocabulary. It returns ErrUnknownFacet, naming the rejected value, for
 // anything that is not one of AllFacets()'s members.
-//
-// Stub (RED, task 4.14): always rejects.
 func ParseFacet(s string) (Facet, error) {
+	for _, want := range AllFacets() {
+		if s == string(want) {
+			return want, nil
+		}
+	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownFacet, s)
 }
