@@ -12,10 +12,12 @@ package memrepo
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -135,6 +137,55 @@ func (r *Units) SetStatus(_ context.Context, id string, from, to unit.Status, at
 	u.UpdatedAt = at
 	r.units[id] = u
 	return nil
+}
+
+// ApplyBoosts implements ports.UnitRepo. All-or-nothing over the whole
+// batch, mirroring the real sqlite transaction's own semantics (design
+// §5.2) rather than merely the port's error contract: a non-finite
+// Weight anywhere in boosts refuses the entire call before any row is
+// touched, and a boost naming a unit id that does not exist leaves every
+// row untouched — including boosts for units that do exist earlier or
+// later in the slice.
+func (r *Units) ApplyBoosts(_ context.Context, boosts []weight.Boost, at time.Time) error {
+	for _, b := range boosts {
+		if math.IsNaN(b.Weight) || math.IsInf(b.Weight, 0) {
+			return ports.ErrNonFiniteWeight
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, b := range boosts {
+		if _, ok := r.units[b.UnitID]; !ok {
+			return ports.ErrUnitNotFound
+		}
+	}
+
+	for _, b := range boosts {
+		u := r.units[b.UnitID]
+		u.Weight = b.Weight
+		u.LastTouchedAt = b.LastTouchedAt
+		u.UpdatedAt = at
+		r.units[b.UnitID] = u
+	}
+	return nil
+}
+
+// CountLiveByType implements ports.UnitRepo. Iterates and counts — never
+// builds and returns a slice the caller would count itself, keeping owner
+// ruling 6's own point true at the fake too.
+func (r *Units) CountLiveByType(_ context.Context, t unit.Type) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for _, u := range r.units {
+		if u.Status.IsLive() && u.Type == t {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // Count returns the number of units currently held. Test-only: it exists so

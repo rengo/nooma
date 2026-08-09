@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 )
 
 // UnitRepo is the repository port over units — docs/02-cognitive-core.md
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Seven methods, and two absences that are deliberate:
+// Nine methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -23,6 +24,8 @@ import (
 //     read method here is named for what it returns: LiveByIDs cannot be
 //     asked for anything but status = 'pool', and ByID is the deliberate,
 //     single any-status escape hatch corrections and audit need.
+//     CountLiveByType takes a unit.Type, not a status — unit.Type has no
+//     live/non-live axis of its own, so this does not reopen the rule.
 //
 // No method reads a clock: every timestamp arrives as data, inside the
 // unit.Unit value for Create, or as an explicit at parameter for the
@@ -70,12 +73,57 @@ type UnitRepo interface {
 	// id's current status is not from, and ErrUnitNotFound if no unit
 	// with id exists.
 	SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error
+
+	// ApplyBoosts writes every boost's (Weight, LastTouchedAt) pair to its
+	// own unit, and at to every touched unit's updated_at — I24's
+	// structural guarantee (docs/06-harness.md §4, spec R1.1). Three
+	// packed decisions, each with its own reason (design §3.1(a)-(c)):
+	//
+	//   - The parameter is weight.Boost, and nothing else on this
+	//     interface can carry a weight change. weight.Boost is the shape
+	//     m2a declared for exactly this purpose — {UnitID, Weight,
+	//     LastTouchedAt} — so a SetWeight(id string, w float64) that
+	//     leaves LastTouchedAt alone is not expressible at this port.
+	//   - boosts is a batch, not a single Boost. Reweight already returns
+	//     []weight.Boost for a whole pass; a single-value method would
+	//     force the caller into a loop that re-zips a unit id to a weight
+	//     and a timestamp N times — precisely the cross-unit-zip shape
+	//     I24 forbids. A single write is still expressible as
+	//     ApplyBoosts(ctx, []weight.Boost{b}, at); no expressiveness is
+	//     lost.
+	//   - at is a parameter distinct from each Boost's own LastTouchedAt,
+	//     even though every M2 call site passes the pass's own instant
+	//     for both. UpdateEventAt/UpdateDueAt already split "the value"
+	//     from "the audit timestamp" this way, and repocontract fixtures
+	//     the two with different instants on purpose — a swapped-argument
+	//     call site, or an implementation that writes one into the
+	//     other's column, fails.
+	//
+	// ApplyBoosts is all-or-nothing over the batch: a Boost naming a unit
+	// id that does not exist returns ErrUnitNotFound, leaving every row in
+	// the call — including boosts for units that do exist — untouched. A
+	// non-finite Weight (NaN or ±Inf) anywhere in the batch returns
+	// ErrNonFiniteWeight and writes nothing at all, refused before any row
+	// is touched.
+	ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error
+
+	// CountLiveByType returns the count of units whose status is pool
+	// (unit.Status.IsLive) and whose Type is t — never a slice the caller
+	// would count itself (owner ruling 6, spec R1.2). pattern_eval's
+	// EvaluateLoad needs exactly one integer; a method returning
+	// []unit.Unit here would put an unbounded read where the phase needs
+	// a bound. The name carries what it counts (Live) rather than reading
+	// as a general parameterized list — unit.Type is a closed
+	// nine-member vocabulary with no live/non-live axis, so this
+	// parameter is never a status in the sense the package doc comment's
+	// "no List(status)" rule forbids.
+	CountLiveByType(ctx context.Context, t unit.Type) (int, error)
 }
 
 // Sentinel errors ports.UnitRepo implementations return — design D5.
 var (
-	// ErrUnitNotFound is returned by ByID, UpdateContent and SetStatus
-	// when no unit with the given id exists.
+	// ErrUnitNotFound is returned by ByID, UpdateContent, SetStatus and
+	// ApplyBoosts when no unit with the given id exists.
 	ErrUnitNotFound = errors.New("unit not found")
 
 	// ErrUnitExists is returned by Create when a unit with u.ID already
@@ -85,4 +133,10 @@ var (
 	// ErrStatusConflict is returned by SetStatus when id's current status
 	// is not the from precondition.
 	ErrStatusConflict = errors.New("unit is not in the expected status")
+
+	// ErrNonFiniteWeight is returned by ApplyBoosts when any Boost in the
+	// batch carries a NaN or ±Inf Weight. The whole batch is refused —
+	// nothing is written, including finite Boosts in the same call
+	// (design §3.1(e)).
+	ErrNonFiniteWeight = errors.New("weight is not a finite number")
 )

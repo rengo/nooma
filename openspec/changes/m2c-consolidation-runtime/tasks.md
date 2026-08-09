@@ -81,7 +81,7 @@ build on this one's `repocontract`/`memrepo` shape. Ships `ports.UnitRepo`'s two
 (design §3.1, §4.1), I24's two reflection legs, and the two depguard rules design §10.1 found
 missing.
 
-- [ ] **1.1** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) — add
+- [x] **1.1** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) — add
       `RunApplyBoosts(t, newRepo)` cases: (a) for ≥3 units with distinguishable
       `(Weight, LastTouchedAt)` per unit, `ApplyBoosts` writes each unit's pair from its own
       `weight.Boost`, never a cross-unit zip; (b) a `weight.Boost` naming a non-existent unit id
@@ -98,20 +98,40 @@ missing.
       fake gets a zero-value implementation (`return nil`) — compiles, case (a)'s pairing
       assertion fails first (no unit was actually written).
       Requirement: spec R1.1, R1.4; design §3.1(a)–(c), §5.2.
-- [ ] **1.2** Commit 2 (GREEN): implement `ApplyBoosts` in `test/support/memrepo`'s `UnitRepo`
+      **Apply note (honest gap, not smoothed over)**: `test/support/repocontract/repocontract.go`
+      was renamed to `unitrepo.go` first (it held only `RunUnitRepo` already — a legacy name that
+      predates the per-repository file convention `relationrepo.go` and its siblings established),
+      then extended. The wiring test that actually runs `RunApplyBoosts` against the `memrepo` fake
+      (`test/conformance/unitrepo_memrepo_test.go`) was watched red via a throwaway, uncommitted
+      file, then committed together with task 1.2's GREEN implementation rather than in this RED
+      commit — this commit alone, checked out in isolation, does not carry a permanent failing
+      test in the tree. The red state itself was genuinely observed (see PR description).
+      Also, widening `ports.UnitRepo` broke `internal/store/sqlite.UnitRepo`'s existing
+      `var _ ports.UnitRepo = (*UnitRepo)(nil)` compile-time assertion — undocumented by
+      `design.md`'s own package layout (§6.1), which assigns `ApplyBoosts`'s real SQL body to
+      PR 5 and says nothing about PR 1 touching `internal/store/sqlite`. A minimal placeholder
+      (`internal/store/sqlite/unitrepo.go`, returns an explicit "not implemented until PR 5"
+      error) was added in this same commit to keep `main` buildable, and
+      `testdata/schema/store_api.golden` regenerated accordingly (`make store-api-golden`) since
+      the placeholder is a new exported method. See the PR description for the full reasoning —
+      this affects PR 2 and PR 3's own interface widenings the same way and should be resolved
+      before they land.
+- [x] **1.2** Commit 2 (GREEN): implement `ApplyBoosts` in `test/support/memrepo`'s `UnitRepo`
       fake — per-unit write inside the fake's own map, all-or-nothing on a missing id (no partial
       writes for the surviving entries when one is missing — the fake mirrors the sqlite
       transaction's semantics, not merely the port's error contract), refuse non-finite `Weight`
       before touching any row.
       Verify: `go test ./test/support/... ./test/conformance/...`; `golangci-lint run`.
       Requirement: spec R1.1, R1.4; design §3.1(e).
-- [ ] **1.3** Verification, not an edit: confirm `docs/06-harness.md` §4's I24 row (line 196,
+- [x] **1.3** Verification, not an edit: confirm `docs/06-harness.md` §4's I24 row (line 196,
       *"A weight write moves `weight` and `last_touched_at` together; neither is written alone"*)
       is present and its wording matches what task 1.4's test proves. This is `nooma-testing`
       step 2 satisfied by inheritance, not a new row — recorded as its own task so the ordering
       (`row → test → implementation`) is visible in this document rather than assumed.
       Requirement: `nooma-testing` hard rule 3 (ordering); design §1 (I24 already has a §4 row).
-- [ ] **1.4** Commit 1 (RED): `test/conformance/i24_unitrepo_weight_write_test.go` (new) — two
+      Verified by direct read: `docs/06-harness.md:196` carries the row verbatim as quoted above.
+      No edit made.
+- [x] **1.4** Commit 1 (RED): `test/conformance/i24_unitrepo_weight_write_test.go` (new) — two
       legs in one file, per design §3.1(d):
       **Leg 1**: no `ports.UnitRepo` method declares a `float64` parameter, after unwrapping
       slice/map/pointer/array element types. **Not a missing-symbol red**: true today with zero
@@ -121,25 +141,31 @@ missing.
       (bare or sliced). **Genuinely red before task 1.1/1.2 land**: zero methods do today, the
       test asserts exactly one — 0 ≠ 1 fails for the right reason.
       Requirement: spec R1.1; design §3.1(d), leg 1 and leg 2.
-- [ ] **1.5** Commit 2 (GREEN, structural — no new implementation code, only the interface change
+      **Apply note**: executed *before* task 1.1's interface stub, not after, despite the numbering
+      above — leg 2's own text claims it is "genuinely red before task 1.1/1.2 land", which is only
+      observably true if it is actually run before 1.1/1.2 land. Run in that order: leg 1 passed
+      trivially (disclosed non-red, as its own text says), leg 2 failed with `0 != 1` for the exact
+      reason stated. `git log` on this branch therefore has this commit *before* task 1.1's.
+- [x] **1.5** Commit 2 (GREEN, structural — no new implementation code, only the interface change
       from task 1.1): confirm both legs pass once `ApplyBoosts` exists. If leg 1 or leg 2 fails,
       the interface shape is wrong — this task is the checkpoint, not a place to add code.
       Verify: `go test ./test/conformance/... -run TestI24`.
       Requirement: spec R1.1; design §3.1(d).
-- [ ] **1.6** `test/conformance/i24_unitrepo_weight_write_test.go` (continued) — leg 3
+      Verified: `go test ./test/conformance/... -run TestI24` — both subtests PASS.
+- [x] **1.6** `test/conformance/i24_unitrepo_weight_write_test.go` (continued) — leg 3
       (R3.4/design §3.1(d) row 3, the SQL-level proof) cannot run until PR 5 ships the sqlite
       implementation. State that explicitly in this file's own doc comment now, as a forward
       reference, rather than let leg 3 appear silently missing from PR 1: *"Leg 3 (the two-column
       SQL assignment appears in exactly one method) is `test/conformance/i05_...` in PR 5, not
       here — it needs `internal/store/sqlite` source text to scan."*
       Requirement: design §3.1(d), row 3 (forward reference only).
-- [ ] **1.7** doc comment: `internal/ports/unitrepo.go`'s package/interface doc comment gains one
+- [x] **1.7** doc comment: `internal/ports/unitrepo.go`'s package/interface doc comment gains one
       paragraph stating `ApplyBoosts`'s three packed decisions (§3.1(a)–(c)) — the parameter type,
       the batch shape, and `at` as a separate parameter from `Boost.LastTouchedAt` — each with the
       one-line reason `design.md` §3.1 gives, so a reader of the port does not have to find the
       design doc to understand why the signature looks the way it does.
       Requirement: design §3.1.
-- [ ] **1.8** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) —
+- [x] **1.8** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) —
       `RunCountLiveByType(t, newRepo)`: a fixture with live (`pool`) and non-live (`archived`,
       `superseded`, `incomplete`) units across ≥2 `unit.Type` values; `CountLiveByType` returns the
       count of live units of the requested type only, `0` for a type with none live.
@@ -148,18 +174,22 @@ missing.
       interface; `memrepo` fake returns `(0, nil)` — compiles; the live-fixture case expects a
       positive count, stub returns `0`, fails first.
       Requirement: spec R1.2; design §4.1.
-- [ ] **1.9** Commit 2 (GREEN): implement `CountLiveByType` in the `memrepo` fake — iterate and
+      Same build-green consequence as task 1.1: `internal/store/sqlite/unitrepo.go` gained a
+      matching placeholder for `CountLiveByType`, and the store-api golden was regenerated again.
+      The red state was watched via a throwaway wiring file; the committed wiring test landed with
+      task 1.9's GREEN commit, same disclosed gap as task 1.1's note above.
+- [x] **1.9** Commit 2 (GREEN): implement `CountLiveByType` in the `memrepo` fake — iterate and
       count, never build and return a slice the caller would count itself (owner ruling 6's own
       point, kept true at the fake too).
       Verify: `go test ./test/support/...`; `golangci-lint run`.
       Requirement: spec R1.2; design §4.1.
-- [ ] **1.10** `test/conformance/i24_unitrepo_weight_write_test.go` (extend, or a shared reflection
+- [x] **1.10** `test/conformance/i24_unitrepo_weight_write_test.go` (extend, or a shared reflection
       helper) — no exported `ports.UnitRepo` method both accepts a `unit.Type` and returns
       `[]unit.Unit` (spec R1.2's second MUST — the name-carries-what-it-counts discipline, checked
       structurally alongside I24's own reflection sweep since both are shape checks over the same
       interface).
       Requirement: spec R1.2.
-- [ ] **1.11** Commit 1 (RED): `.golangci.yml` — add the `ports-purity` and `brain-boundary`
+- [x] **1.11** Commit 1 (RED): `.golangci.yml` — add the `ports-purity` and `brain-boundary`
       depguard rules exactly as design §10.1 specifies (allow-list for `internal/ports`; deny-list
       for `internal/brain` against `internal/store`, `internal/providers`, `internal/httpapi`,
       `internal/channels`). **Red, recorded as a manual verification rather than a Go test**: add
@@ -168,21 +198,38 @@ missing.
       the temporary import — the same "record the break" discipline `schema_golden_anchor_test.go`
       already uses for its own gate.
       Requirement: spec R0.1 (the claim design §10.1 found false); design §10.1.
-- [ ] **1.12** Commit 2 (GREEN, no code — this is the confirmation the rule doesn't fire on
+      Verified as described: `internal/brain/zz_tmp_boundary_check.go` was added importing
+      `internal/store/sqlite`, `golangci-lint run ./internal/brain/...` failed with exactly
+      `brain-boundary`'s own `desc` ("brain reaches persistence only through a port —
+      docs/06-harness.md §1"), then the file was deleted. The mirror attempt for `ports-purity`
+      (a temporary `internal/store/sqlite` import inside `internal/ports`) hit a Go import cycle
+      before `depguard` could even evaluate it — `internal/store/sqlite` already imports
+      `internal/ports` — a stronger, compiler-level protection for that specific pair, noted here
+      rather than claimed as a `depguard` red.
+- [x] **1.12** Commit 2 (GREEN, no code — this is the confirmation the rule doesn't fire on
       today's tree): `golangci-lint run` passes clean with the two new rules in place, over
       `internal/ports` and `internal/brain` as they stand at the end of PR 1.
       Verify: `golangci-lint run`.
       Requirement: design §10.1.
-- [ ] **1.13** Purity/coverage: `golangci-lint run` (`depguard`'s `ports-purity` — this PR's new
+- [x] **1.13** Purity/coverage: `golangci-lint run` (`depguard`'s `ports-purity` — this PR's new
       `internal/ports` files import only stdlib + `internal/core/weight`/`internal/core/unit`);
       `go vet ./...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/ports/unitrepo.go`, `test/support/memrepo/units.go` (+ its test),
-      `test/support/repocontract/unitrepo.go`, `test/conformance/i24_unitrepo_weight_write_test.go`,
-      `.golangci.yml`. Target ≤170 impl+docs lines.
+      Both clean.
+- [x] Verify (PR-level): `make check-all` — green (lint, vet, race unit+integration tests,
+      schema-golden-clean, 100% core coverage, seven-target cross-compile, e2e).
+      **Diff does NOT match the file list above** — disclosed rather than silently widened. Actual
+      diff: `internal/ports/unitrepo.go`, `test/support/memrepo/units.go`,
+      `test/support/repocontract/unitrepo.go` (renamed from `repocontract.go`),
+      `test/conformance/i24_unitrepo_weight_write_test.go`,
+      `test/conformance/unitrepo_memrepo_test.go`, `.golangci.yml`, plus two files this list did
+      not anticipate: `internal/store/sqlite/unitrepo.go` (PR-5 placeholder methods, see task 1.1's
+      note) and `testdata/schema/store_api.golden` (regenerated because of that placeholder).
+      111 impl+docs lines (well under the ~170 estimate and the 400 ceiling, 0.28×), 474 test
+      lines.
       **Chain-merge check 1**: after merge, `git ls-remote --heads origin feat/ports-unit-weight-count`
-      returns nothing.
+      returns nothing. **Not yet performed — this PR has not been merged.**
       **Chain-merge check 2**: `gh pr view <PR2> --json baseRefName` names `main`.
+      **Not yet performed — PR 2 does not exist yet.**
 
 ---
 
