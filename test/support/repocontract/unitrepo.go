@@ -521,6 +521,38 @@ func RunIncompleteOlderThan(t *testing.T, newRepo func(t *testing.T) ports.UnitR
 			t.Errorf("IncompleteOlderThan()[0].CreatedAt is zero, want %v", older.CreatedAt)
 		}
 	})
+
+	// The boundary is the whole point of this case. The subtest above uses
+	// CreatedAt one hour either side of cutoff, which cannot tell `<` from
+	// `<=` — both operators pass it. This suite is what PR 5's real SQL
+	// predicate gets validated against, so without an exactly-at-cutoff
+	// fixture a `WHERE created_at <= ?` would ship green.
+	//
+	// Strict `<` is the correct operator, and it is not an arbitrary pick:
+	// the port's doc comment says "strictly before cutoff", and callers
+	// compute cutoff as now-IncompleteExpiryHours, so a unit created exactly
+	// at cutoff has aged exactly the expiry window and not past it.
+	t.Run("an incomplete unit created exactly at cutoff is excluded, because the bound is strict", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		cutoff := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+
+		atCutoff := fixtureUnit("incomplete-at-cutoff", unit.StatusIncomplete)
+		atCutoff.CreatedAt = cutoff
+		if err := repo.Create(ctx, atCutoff); err != nil {
+			t.Fatalf("Create %s: %v", atCutoff.ID, err)
+		}
+
+		got, err := repo.IncompleteOlderThan(ctx, cutoff)
+		if err != nil {
+			t.Fatalf("IncompleteOlderThan: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("IncompleteOlderThan(%v) = %v, want empty: a unit created exactly at cutoff "+
+				"is not strictly older than it. An implementation returning it is using `<=` where "+
+				"the port promises `<`.", cutoff, got)
+		}
+	})
 }
 
 // RunLiveDecayStates runs the ports.UnitRepo.LiveDecayStates contract
