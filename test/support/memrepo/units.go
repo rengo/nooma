@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -134,6 +135,14 @@ func (r *Units) SetStatus(_ context.Context, id string, from, to unit.Status, at
 	u.Status = to
 	u.UpdatedAt = at
 	r.units[id] = u
+	return nil
+}
+
+// ApplyBoosts implements ports.UnitRepo. TODO(task 1.2): not yet
+// implemented — returns nil without writing anything, so the fake
+// compiles while repocontract.RunApplyBoosts's cases fail for the right
+// reason (task 1.1's own RED commit).
+func (r *Units) ApplyBoosts(_ context.Context, boosts []weight.Boost, at time.Time) error {
 	return nil
 }
 

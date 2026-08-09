@@ -17,11 +17,13 @@ package repocontract
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -249,6 +251,167 @@ func RunUnitRepo(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		}
 		if got.Status != unit.StatusArchived {
 			t.Fatalf("Status after SetStatus: got %s, want %s", got.Status, unit.StatusArchived)
+		}
+	})
+}
+
+// RunApplyBoosts runs the ports.UnitRepo.ApplyBoosts contract against a
+// fresh repository instance, built by newRepo for every subtest. newRepo
+// must return a repository with no unit already stored in it.
+//
+// Spec R1.1, R1.4; design §3.1(a)-(e), §5.2.
+func RunApplyBoosts(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("writes each unit's own (Weight, LastTouchedAt) pair, never a cross-unit zip", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		a := fixtureUnit("boost-a", unit.StatusPool)
+		b := fixtureUnit("boost-b", unit.StatusPool)
+		c := fixtureUnit("boost-c", unit.StatusPool)
+		for _, u := range []unit.Unit{a, b, c} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		// Every unit gets a distinguishable (Weight, LastTouchedAt) pair —
+		// a cross-unit zip (unit A's weight landing with unit B's
+		// timestamp, or vice versa) would be caught by this fixture and
+		// missed by one where every unit shares the same values.
+		at := a.UpdatedAt.Add(time.Hour)
+		boosts := []weight.Boost{
+			{UnitID: a.ID, Weight: 1.1, LastTouchedAt: at.Add(1 * time.Minute)},
+			{UnitID: b.ID, Weight: 1.2, LastTouchedAt: at.Add(2 * time.Minute)},
+			{UnitID: c.ID, Weight: 1.3, LastTouchedAt: at.Add(3 * time.Minute)},
+		}
+		if err := repo.ApplyBoosts(ctx, boosts, at); err != nil {
+			t.Fatalf("ApplyBoosts: %v", err)
+		}
+
+		for _, b := range boosts {
+			got, err := repo.ByID(ctx, b.UnitID)
+			if err != nil {
+				t.Fatalf("ByID %s: %v", b.UnitID, err)
+			}
+			if got.Weight != b.Weight {
+				t.Errorf("unit %s Weight = %v, want %v (its own Boost, not another unit's)",
+					b.UnitID, got.Weight, b.Weight)
+			}
+			if !got.LastTouchedAt.Equal(b.LastTouchedAt) {
+				t.Errorf("unit %s LastTouchedAt = %v, want %v (its own Boost, not another unit's)",
+					b.UnitID, got.LastTouchedAt, b.LastTouchedAt)
+			}
+			if !got.UpdatedAt.Equal(at) {
+				t.Errorf("unit %s UpdatedAt = %v, want the call's own at %v", b.UnitID, got.UpdatedAt, at)
+			}
+		}
+	})
+
+	t.Run("a boost naming a non-existent unit returns ErrUnitNotFound and touches nothing", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		a := fixtureUnit("boost-existing-a", unit.StatusPool)
+		c := fixtureUnit("boost-existing-c", unit.StatusPool)
+		for _, u := range []unit.Unit{a, c} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		at := a.UpdatedAt.Add(time.Hour)
+		boosts := []weight.Boost{
+			{UnitID: a.ID, Weight: 1.5, LastTouchedAt: at},
+			{UnitID: "boost-missing", Weight: 1.6, LastTouchedAt: at},
+			{UnitID: c.ID, Weight: 1.7, LastTouchedAt: at},
+		}
+		if err := repo.ApplyBoosts(ctx, boosts, at); !errors.Is(err, ports.ErrUnitNotFound) {
+			t.Fatalf("ApplyBoosts: got %v, want ErrUnitNotFound", err)
+		}
+
+		// Every *other* row in the same call — including ones that come
+		// before the missing id in the slice — must be untouched.
+		for _, u := range []unit.Unit{a, c} {
+			got, err := repo.ByID(ctx, u.ID)
+			if err != nil {
+				t.Fatalf("ByID %s: %v", u.ID, err)
+			}
+			if got.Weight != u.Weight || !got.LastTouchedAt.Equal(u.LastTouchedAt) {
+				t.Errorf("unit %s was touched despite ApplyBoosts failing on a different id in the "+
+					"same call: got Weight=%v LastTouchedAt=%v, want unchanged %v/%v",
+					u.ID, got.Weight, got.LastTouchedAt, u.Weight, u.LastTouchedAt)
+			}
+		}
+	})
+
+	t.Run("a non-finite Weight anywhere in the batch returns ErrNonFiniteWeight and writes nothing", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		a := fixtureUnit("boost-finite-a", unit.StatusPool)
+		b := fixtureUnit("boost-finite-b", unit.StatusPool)
+		for _, u := range []unit.Unit{a, b} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		at := a.UpdatedAt.Add(time.Hour)
+		for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+			boosts := []weight.Boost{
+				{UnitID: a.ID, Weight: 1.9, LastTouchedAt: at}, // finite, same call
+				{UnitID: b.ID, Weight: bad, LastTouchedAt: at},
+			}
+			if err := repo.ApplyBoosts(ctx, boosts, at); !errors.Is(err, ports.ErrNonFiniteWeight) {
+				t.Fatalf("ApplyBoosts with Weight=%v: got %v, want ErrNonFiniteWeight", bad, err)
+			}
+
+			gotA, err := repo.ByID(ctx, a.ID)
+			if err != nil {
+				t.Fatalf("ByID %s: %v", a.ID, err)
+			}
+			if gotA.Weight != a.Weight || !gotA.LastTouchedAt.Equal(a.LastTouchedAt) {
+				t.Errorf("finite boost for %s in the same batch as Weight=%v was written despite "+
+					"the refusal: got %v/%v, want unchanged %v/%v",
+					a.ID, bad, gotA.Weight, gotA.LastTouchedAt, a.Weight, a.LastTouchedAt)
+			}
+		}
+	})
+
+	t.Run("at lands in updated_at, Boost.LastTouchedAt lands in last_touched_at — distinct instants", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		u := fixtureUnit("boost-swap", unit.StatusPool)
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// UpdateEventAt's own fixturing pattern (repocontract's existing
+		// case above): distinct instants, so a swapped-argument
+		// implementation fails instead of passing by coincidence.
+		at := u.UpdatedAt.Add(time.Hour)
+		touchedAt := u.UpdatedAt.Add(48 * time.Hour)
+		boosts := []weight.Boost{{UnitID: u.ID, Weight: 1.42, LastTouchedAt: touchedAt}}
+		if err := repo.ApplyBoosts(ctx, boosts, at); err != nil {
+			t.Fatalf("ApplyBoosts: %v", err)
+		}
+
+		got, err := repo.ByID(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		if !got.UpdatedAt.Equal(at) {
+			t.Errorf("UpdatedAt = %v, want the call's own at %v", got.UpdatedAt, at)
+		}
+		if !got.LastTouchedAt.Equal(touchedAt) {
+			t.Errorf("LastTouchedAt = %v, want the Boost's own LastTouchedAt %v", got.LastTouchedAt, touchedAt)
+		}
+		if got.UpdatedAt.Equal(got.LastTouchedAt) {
+			t.Fatal("UpdatedAt and LastTouchedAt landed equal — the fixture uses distinct instants " +
+				"precisely so a swapped-argument implementation cannot pass silently")
 		}
 	})
 }

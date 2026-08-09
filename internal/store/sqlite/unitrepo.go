@@ -12,6 +12,7 @@ import (
 	"github.com/ncruces/go-sqlite3"
 
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -178,6 +179,20 @@ func (r *UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Statu
 		return fmt.Errorf("update unit %q status: %w", id, err)
 	}
 	return requireRowAffected(res, ports.ErrStatusConflict)
+}
+
+// ApplyBoosts implements ports.UnitRepo. Not yet implemented: PR 5
+// (feat/store-unit-relation-repos) gives it the real, transactional SQL
+// body design §5.2 specifies (one BEGIN IMMEDIATE, one UPDATE per boost,
+// ErrUnitNotFound on a zero-rows-affected boost rolling back the whole
+// batch). This placeholder exists only so *UnitRepo keeps satisfying the
+// widened ports.UnitRepo interface between PR 1 (which adds the method to
+// the interface) and PR 5 (which implements it here) — the chain's own
+// stacked-to-main strategy needs internal/store/sqlite to keep compiling
+// at every link, not only at the end of the chain. Every call currently
+// fails loudly rather than silently no-op'ing.
+func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time) error {
+	return errors.New("sqlite.UnitRepo.ApplyBoosts: not implemented until PR 5 (feat/store-unit-relation-repos)")
 }
 
 // unitSelectColumns is shared by ByID and LiveByIDs — one column list, one
