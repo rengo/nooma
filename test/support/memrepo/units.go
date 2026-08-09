@@ -172,12 +172,20 @@ func (r *Units) ApplyBoosts(_ context.Context, boosts []weight.Boost, at time.Ti
 	return nil
 }
 
-// CountLiveByType implements ports.UnitRepo. TODO(task 1.9): not yet
-// implemented — returns 0 unconditionally, so the fake compiles while
-// repocontract.RunCountLiveByType's live-fixture cases fail for the
-// right reason (task 1.8's own RED commit).
+// CountLiveByType implements ports.UnitRepo. Iterates and counts — never
+// builds and returns a slice the caller would count itself, keeping owner
+// ruling 6's own point true at the fake too.
 func (r *Units) CountLiveByType(_ context.Context, t unit.Type) (int, error) {
-	return 0, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for _, u := range r.units {
+		if u.Status.IsLive() && u.Type == t {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // Count returns the number of units currently held. Test-only: it exists so

@@ -31,3 +31,12 @@ func TestUnitRepo_MemRepo_ApplyBoosts(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_CountLiveByType runs repocontract.RunCountLiveByType
+// — owner ruling 6's contract suite (spec R1.2) — against the same fake.
+func TestUnitRepo_MemRepo_CountLiveByType(t *testing.T) {
+	repocontract.RunCountLiveByType(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}
