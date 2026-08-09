@@ -91,6 +91,34 @@ linters:
             - pkg: database/sql
               desc: "only internal/store speaks SQL — docs/06-harness.md §1"
 
+        # m2c design §10.1: R0.1 claimed the dependency rule held at the new
+        # ports/store/brain boundary because "the allow-lists already cover
+        # these three directories" — verified false. core-purity and
+        # sqlite-containment above say nothing about internal/ports or
+        # internal/brain, so nothing prevented either from reaching
+        # internal/store/sqlite directly (a compiling, lint-passing
+        # violation of docs/06-harness.md §1). These two rules close that.
+        ports-purity:
+          files:
+            - "**/internal/ports/**"
+          allow:
+            - $gostd
+            - github.com/rengo/nooma/internal/core
+            - github.com/rengo/nooma/internal/ports
+
+        brain-boundary:
+          files:
+            - "**/internal/brain/**"
+          deny:
+            - pkg: github.com/rengo/nooma/internal/store
+              desc: "brain reaches persistence only through a port — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/providers
+              desc: "brain calls a model only through ports.LLMProvider — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/httpapi
+              desc: "brain does not know about transport — docs/06-harness.md §1"
+            - pkg: github.com/rengo/nooma/internal/channels
+              desc: "brain does not know about channels — docs/06-harness.md §1"
+
     # The clock as a port. Scoped to internal/core by the exclusion rule below:
     # adapters legitimately read the real clock, generate ids and read the env.
     forbidigo:
