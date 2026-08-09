@@ -377,6 +377,8 @@ PR 1's new methods). Ships `ports.UnitRepo.IncompleteOlderThan`/`LiveDecayStates
       144 impl+docs lines (0.36× the 400-line ceiling, just under the ~150 estimate; ports.go +
       sqlite placeholder files + the golden diff), 394 test lines (repocontract + memrepo + wiring
       tests + the integration-tag harness addition).
+      PR opened: https://github.com/rengo/nooma/pull/159 (`baseRefName: main`, `mergeable:
+      MERGEABLE`, `mergeStateStatus: BLOCKED` — pending review/checks, not yet merged).
       **Chain-merge check 1**: after merge, `git ls-remote --heads origin feat/ports-unit-relation-reads`
       returns nothing. **Not yet performed — this PR has not been merged.**
       **Chain-merge check 2**: `gh pr view <PR3> --json baseRefName` names `main`.
