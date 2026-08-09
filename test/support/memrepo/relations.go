@@ -137,17 +137,48 @@ func (r *Relations) ThresholdsFor(_ context.Context, relType string) (*relation.
 	return &t, nil
 }
 
-// Evidence implements ports.RelationRepo. Stub for task 2.6 (RED): returns
-// a zero-value result unconditionally — compiles, but leaves the
-// two-relation fixture failing until task 2.7 implements the real join.
+// Evidence implements ports.RelationRepo. Joins every stored relation to
+// both endpoints' last_touched_at, read from r.lastTouchedAt (set via
+// SetLastTouchedAt) — an endpoint never seeded reports the zero time.Time,
+// matching what an ordinary SQL LEFT JOIN would return for a genuinely
+// missing row (this fake enforces no foreign key, so the case cannot arise
+// from a stored relation, but the zero value is still the honest answer for
+// an endpoint the harness never told this fake about).
 func (r *Relations) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error) {
-	return nil, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []consolidation.RelationEvidence
+	for _, rel := range r.byKey {
+		out = append(out, consolidation.RelationEvidence{
+			RelationID:        rel.ID,
+			Strength:          rel.Strength,
+			FromLastTouchedAt: r.lastTouchedAt[rel.FromUnitID],
+			ToLastTouchedAt:   r.lastTouchedAt[rel.ToUnitID],
+		})
+	}
+	return out, nil
 }
 
-// ExistingPairs implements ports.RelationRepo. Stub for task 2.8 (RED):
-// returns a nil map unconditionally — compiles, but leaves the
-// opposite-direction fixture failing until task 2.9 implements the real
-// lookup.
-func (r *Relations) ExistingPairs(_ context.Context, _ []consolidation.Pair) (map[consolidation.Pair]bool, error) {
-	return nil, nil
+// ExistingPairs implements ports.RelationRepo. Keyed by
+// consolidation.CanonicalPair, over the candidate set pairs names only — a
+// pair with no stored relation is left absent from the returned map, never
+// set to false, so a caller cannot mistake "never checked" for "checked and
+// absent" from the zero value.
+func (r *Relations) ExistingPairs(_ context.Context, pairs []consolidation.Pair) (map[consolidation.Pair]bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored := make(map[consolidation.Pair]bool, len(r.byKey))
+	for _, rel := range r.byKey {
+		stored[consolidation.CanonicalPair(rel.FromUnitID, rel.ToUnitID)] = true
+	}
+
+	out := make(map[consolidation.Pair]bool, len(pairs))
+	for _, p := range pairs {
+		if stored[p] {
+			out[p] = true
+		}
+	}
+	return out, nil
 }
