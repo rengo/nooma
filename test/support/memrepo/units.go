@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -186,6 +187,21 @@ func (r *Units) CountLiveByType(_ context.Context, t unit.Type) (int, error) {
 		}
 	}
 	return count, nil
+}
+
+// IncompleteOlderThan implements ports.UnitRepo. Stub for task 2.1 (RED):
+// returns a zero-value result unconditionally — compiles, but leaves the
+// older-than-cutoff fixture failing until task 2.2 implements the real
+// filter.
+func (r *Units) IncompleteOlderThan(_ context.Context, _ time.Time) ([]consolidation.Incomplete, error) {
+	return nil, nil
+}
+
+// LiveDecayStates implements ports.UnitRepo. Stub for task 2.3 (RED):
+// returns a zero-value result unconditionally — compiles, but leaves the
+// live-pool fixture failing until task 2.4 implements the real filter.
+func (r *Units) LiveDecayStates(_ context.Context) ([]consolidation.Cold, error) {
+	return nil, nil
 }
 
 // Count returns the number of units currently held. Test-only: it exists so

@@ -40,3 +40,23 @@ func TestUnitRepo_MemRepo_CountLiveByType(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_IncompleteOlderThan runs
+// repocontract.RunIncompleteOlderThan — spec R5.1's contract suite —
+// against the same fake.
+func TestUnitRepo_MemRepo_IncompleteOlderThan(t *testing.T) {
+	repocontract.RunIncompleteOlderThan(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}
+
+// TestUnitRepo_MemRepo_LiveDecayStates runs
+// repocontract.RunLiveDecayStates — design §4.1's contract suite — against
+// the same fake.
+func TestUnitRepo_MemRepo_LiveDecayStates(t *testing.T) {
+	repocontract.RunLiveDecayStates(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}
