@@ -105,6 +105,17 @@ linters:
             - $gostd
             - github.com/rengo/nooma/internal/core
             - github.com/rengo/nooma/internal/ports
+          # $gostd alone legalizes net/http, os and os/exec — the same gap
+          # core-purity above closes explicitly. Ports are interfaces, not
+          # adapters: a port that imports one of these has stopped being a
+          # port and started being an implementation.
+          deny:
+            - pkg: net/http
+              desc: "a port declares a contract, it does not speak HTTP — docs/06-harness.md §1"
+            - pkg: os
+              desc: "a port declares a contract, it does not touch the environment or filesystem — docs/06-harness.md §1"
+            - pkg: os/exec
+              desc: "a port declares a contract, it does not run a process — docs/06-harness.md §1"
 
         brain-boundary:
           files:
