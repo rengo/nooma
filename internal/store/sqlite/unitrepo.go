@@ -191,6 +191,11 @@ func (r *UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Statu
 // stacked-to-main strategy needs internal/store/sqlite to keep compiling
 // at every link, not only at the end of the chain. Every call currently
 // fails loudly rather than silently no-op'ing.
+//
+// Deliberately a plain error, not a sentinel: nothing calls this method in
+// this link, so no caller is meant to branch on it with errors.Is. PR 5
+// replaces this body outright rather than adding a case that dispatches on
+// this error.
 func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time) error {
 	return errors.New("sqlite.UnitRepo.ApplyBoosts: not implemented until PR 5 (feat/store-unit-relation-repos)")
 }
@@ -199,6 +204,10 @@ func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time)
 // same PR 5 placeholder as ApplyBoosts above, for the same reason: it
 // keeps *UnitRepo satisfying the widened ports.UnitRepo interface between
 // PR 1 (which adds the method) and PR 5 (which implements it here).
+//
+// Deliberately a plain error, not a sentinel, for the same reason as
+// ApplyBoosts above: unreachable by construction in this link, so no
+// caller should ever match on it — PR 5 replaces this body outright.
 func (r *UnitRepo) CountLiveByType(_ context.Context, _ unit.Type) (int, error) {
 	return 0, errors.New("sqlite.UnitRepo.CountLiveByType: not implemented until PR 5 (feat/store-unit-relation-repos)")
 }
