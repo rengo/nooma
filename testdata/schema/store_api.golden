@@ -6,6 +6,8 @@ internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx conte
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
 internal/store/sqlite: func (*RelationRepo) ByUnit(ctx context.Context, unitID string) ([]ports.Relation, error)
+internal/store/sqlite: func (*RelationRepo) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error)
+internal/store/sqlite: func (*RelationRepo) ExistingPairs(_ context.Context, _ []consolidation.Pair) (map[consolidation.Pair]bool, error)
 internal/store/sqlite: func (*RelationRepo) ThresholdsFor(ctx context.Context, relType string) (*relation.Thresholds, error)
 internal/store/sqlite: func (*RelationRepo) Upsert(ctx context.Context, rel ports.Relation) error
 internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)

@@ -5,7 +5,9 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -24,6 +26,11 @@ type Relations struct {
 	// thresholds holds relation_thresholds rows, keyed by relation_type —
 	// the column's own UNIQUE constraint (migration 0002:32).
 	thresholds map[string]relation.Thresholds
+	// lastTouchedAt holds each unit id's last_touched_at, set via
+	// SetLastTouchedAt — Evidence's join reads this per endpoint. This fake
+	// tracks no other unit column: it exists only to answer this one join,
+	// not to duplicate memrepo.Units.
+	lastTouchedAt map[string]time.Time
 }
 
 type relationKey struct {
@@ -38,8 +45,9 @@ var _ ports.RelationRepo = (*Relations)(nil)
 // Every call returns an independent instance.
 func NewRelations() *Relations {
 	return &Relations{
-		byKey:      make(map[relationKey]ports.Relation),
-		thresholds: make(map[string]relation.Thresholds),
+		byKey:         make(map[relationKey]ports.Relation),
+		thresholds:    make(map[string]relation.Thresholds),
+		lastTouchedAt: make(map[string]time.Time),
 	}
 }
 
@@ -58,6 +66,16 @@ func (r *Relations) SeedThreshold(_ *testing.T, relType string, persist, surface
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.thresholds[relType] = relation.Thresholds{Persist: persist, Surface: surface}
+}
+
+// SetLastTouchedAt implements repocontract.RelationHarness. Records id's
+// last_touched_at for Evidence's join to read — the fake's only unit-side
+// bookkeeping, since memrepo.Relations otherwise tracks no unit data at
+// all.
+func (r *Relations) SetLastTouchedAt(_ *testing.T, id string, at time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastTouchedAt[id] = at
 }
 
 // Upsert implements ports.RelationRepo.
@@ -117,4 +135,19 @@ func (r *Relations) ThresholdsFor(_ context.Context, relType string) (*relation.
 		return nil, nil
 	}
 	return &t, nil
+}
+
+// Evidence implements ports.RelationRepo. Stub for task 2.6 (RED): returns
+// a zero-value result unconditionally — compiles, but leaves the
+// two-relation fixture failing until task 2.7 implements the real join.
+func (r *Relations) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error) {
+	return nil, nil
+}
+
+// ExistingPairs implements ports.RelationRepo. Stub for task 2.8 (RED):
+// returns a nil map unconditionally — compiles, but leaves the
+// opposite-direction fixture failing until task 2.9 implements the real
+// lookup.
+func (r *Relations) ExistingPairs(_ context.Context, _ []consolidation.Pair) (map[consolidation.Pair]bool, error) {
+	return nil, nil
 }
