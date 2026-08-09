@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -103,6 +104,44 @@ func TestI24_UnitRepoWeightWriteStructural(t *testing.T) {
 					"want exactly 1 — a second weight-writing method, however named, is exactly "+
 					"what I24 forbids (docs/06-harness.md §4 I24, design §3.1(d) leg 2)",
 				len(matches), matches)
+		}
+	})
+
+	// Spec R1.2's second MUST: the live-count-by-type method's name
+	// carries what it counts, checked structurally alongside I24's own
+	// reflection sweep since both are shape checks over the same
+	// interface. Not a red step at any point in this PR's own commit
+	// order: today (before CountLiveByType exists) no method takes a
+	// unit.Type at all, and once it exists it returns an int, never
+	// []unit.Unit — disclosed as a non-red structural check per m2a C9,
+	// the same posture leg 1 above discloses.
+	t.Run("R1.2: no method both accepts a unit.Type and returns []unit.Unit", func(t *testing.T) {
+		unitSliceType := reflect.TypeOf([]unit.Unit{})
+		typeType := reflect.TypeOf(unit.TypeTask)
+
+		for i := 0; i < repoType.NumMethod(); i++ {
+			m := repoType.Method(i)
+
+			takesType := false
+			for p := 0; p < m.Type.NumIn(); p++ {
+				if m.Type.In(p) == typeType {
+					takesType = true
+					break
+				}
+			}
+			if !takesType {
+				continue
+			}
+
+			for o := 0; o < m.Type.NumOut(); o++ {
+				if m.Type.Out(o) == unitSliceType {
+					t.Errorf(
+						"ports.UnitRepo.%s both accepts a unit.Type and returns []unit.Unit — "+
+							"spec R1.2 forbids this shape: a live-count method returns an int, "+
+							"never a slice the caller would count itself (owner ruling 6)",
+						m.Name)
+				}
+			}
 		}
 	})
 }

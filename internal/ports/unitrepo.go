@@ -13,7 +13,7 @@ import (
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Eight methods, and two absences that are deliberate:
+// Nine methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -24,6 +24,8 @@ import (
 //     read method here is named for what it returns: LiveByIDs cannot be
 //     asked for anything but status = 'pool', and ByID is the deliberate,
 //     single any-status escape hatch corrections and audit need.
+//     CountLiveByType takes a unit.Type, not a status — unit.Type has no
+//     live/non-live axis of its own, so this does not reopen the rule.
 //
 // No method reads a clock: every timestamp arrives as data, inside the
 // unit.Unit value for Create, or as an explicit at parameter for the
@@ -104,6 +106,18 @@ type UnitRepo interface {
 	// ErrNonFiniteWeight and writes nothing at all, refused before any row
 	// is touched.
 	ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error
+
+	// CountLiveByType returns the count of units whose status is pool
+	// (unit.Status.IsLive) and whose Type is t — never a slice the caller
+	// would count itself (owner ruling 6, spec R1.2). pattern_eval's
+	// EvaluateLoad needs exactly one integer; a method returning
+	// []unit.Unit here would put an unbounded read where the phase needs
+	// a bound. The name carries what it counts (Live) rather than reading
+	// as a general parameterized list — unit.Type is a closed
+	// nine-member vocabulary with no live/non-live axis, so this
+	// parameter is never a status in the sense the package doc comment's
+	// "no List(status)" rule forbids.
+	CountLiveByType(ctx context.Context, t unit.Type) (int, error)
 }
 
 // Sentinel errors ports.UnitRepo implementations return — design D5.

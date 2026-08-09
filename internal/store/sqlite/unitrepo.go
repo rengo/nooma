@@ -195,6 +195,14 @@ func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time)
 	return errors.New("sqlite.UnitRepo.ApplyBoosts: not implemented until PR 5 (feat/store-unit-relation-repos)")
 }
 
+// CountLiveByType implements ports.UnitRepo. Not yet implemented — the
+// same PR 5 placeholder as ApplyBoosts above, for the same reason: it
+// keeps *UnitRepo satisfying the widened ports.UnitRepo interface between
+// PR 1 (which adds the method) and PR 5 (which implements it here).
+func (r *UnitRepo) CountLiveByType(_ context.Context, _ unit.Type) (int, error) {
+	return 0, errors.New("sqlite.UnitRepo.CountLiveByType: not implemented until PR 5 (feat/store-unit-relation-repos)")
+}
+
 // unitSelectColumns is shared by ByID and LiveByIDs — one column list, one
 // place, so the two read paths and scanUnit cannot drift apart.
 const unitSelectColumns = `SELECT id, type, content, status, weight, weight_decay_rate, last_touched_at,

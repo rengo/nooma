@@ -416,6 +416,62 @@ func RunApplyBoosts(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 	})
 }
 
+// RunCountLiveByType runs the ports.UnitRepo.CountLiveByType contract
+// against a fresh repository instance, built by newRepo for every subtest.
+// newRepo must return a repository with no unit already stored in it.
+//
+// Spec R1.2; design §4.1.
+func RunCountLiveByType(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("counts live units of the requested type only", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		// Live and non-live units across two unit.Type values, plus a
+		// third type with no live unit at all, so the zero case is
+		// exercised too.
+		fixtures := []struct {
+			id     string
+			typ    unit.Type
+			status unit.Status
+		}{
+			{"count-task-live-1", unit.TypeTask, unit.StatusPool},
+			{"count-task-live-2", unit.TypeTask, unit.StatusPool},
+			{"count-task-archived", unit.TypeTask, unit.StatusArchived},
+			{"count-task-superseded", unit.TypeTask, unit.StatusSuperseded},
+			{"count-task-incomplete", unit.TypeTask, unit.StatusIncomplete},
+			{"count-event-live", unit.TypeEvent, unit.StatusPool},
+			{"count-knowledge-none-live", unit.TypeKnowledge, unit.StatusArchived},
+		}
+		for _, f := range fixtures {
+			u := fixtureUnit(f.id, f.status)
+			u.Type = f.typ
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		if got, err := repo.CountLiveByType(ctx, unit.TypeTask); err != nil {
+			t.Fatalf("CountLiveByType(task): %v", err)
+		} else if got != 2 {
+			t.Errorf("CountLiveByType(task) = %d, want 2 (only the two pool-status task units)", got)
+		}
+
+		if got, err := repo.CountLiveByType(ctx, unit.TypeEvent); err != nil {
+			t.Fatalf("CountLiveByType(event): %v", err)
+		} else if got != 1 {
+			t.Errorf("CountLiveByType(event) = %d, want 1", got)
+		}
+
+		if got, err := repo.CountLiveByType(ctx, unit.TypeKnowledge); err != nil {
+			t.Fatalf("CountLiveByType(knowledge): %v", err)
+		} else if got != 0 {
+			t.Errorf("CountLiveByType(knowledge) = %d, want 0 (its one unit is archived, not live)", got)
+		}
+	})
+}
+
 // fixtureUnit builds a minimal, valid unit.Unit for contract cases that do
 // not care about any field beyond ID and Status.
 func fixtureUnit(id string, status unit.Status) unit.Unit {
