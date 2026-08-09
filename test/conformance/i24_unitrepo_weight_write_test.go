@@ -123,7 +123,7 @@ func isContextType(t reflect.Type) bool {
 func unwrapContainerType(t reflect.Type) reflect.Type {
 	for {
 		switch t.Kind() {
-		case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map:
+		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
 			t = t.Elem()
 		default:
 			return t

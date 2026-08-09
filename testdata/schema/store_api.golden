@@ -11,6 +11,7 @@ internal/store/sqlite: func (*RelationRepo) Upsert(ctx context.Context, rel port
 internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)
 internal/store/sqlite: func (*SignalRepo) Record(ctx context.Context, s ports.Signal) error
 internal/store/sqlite: func (*SignalRepo) Since(ctx context.Context, t time.Time, limit int) ([]ports.Signal, error)
+internal/store/sqlite: func (*UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time) error
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit) error
 internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)

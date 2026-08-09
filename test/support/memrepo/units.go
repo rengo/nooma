@@ -12,6 +12,7 @@ package memrepo
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"sync"
 	"time"
 
@@ -138,11 +139,36 @@ func (r *Units) SetStatus(_ context.Context, id string, from, to unit.Status, at
 	return nil
 }
 
-// ApplyBoosts implements ports.UnitRepo. TODO(task 1.2): not yet
-// implemented — returns nil without writing anything, so the fake
-// compiles while repocontract.RunApplyBoosts's cases fail for the right
-// reason (task 1.1's own RED commit).
+// ApplyBoosts implements ports.UnitRepo. All-or-nothing over the whole
+// batch, mirroring the real sqlite transaction's own semantics (design
+// §5.2) rather than merely the port's error contract: a non-finite
+// Weight anywhere in boosts refuses the entire call before any row is
+// touched, and a boost naming a unit id that does not exist leaves every
+// row untouched — including boosts for units that do exist earlier or
+// later in the slice.
 func (r *Units) ApplyBoosts(_ context.Context, boosts []weight.Boost, at time.Time) error {
+	for _, b := range boosts {
+		if math.IsNaN(b.Weight) || math.IsInf(b.Weight, 0) {
+			return ports.ErrNonFiniteWeight
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, b := range boosts {
+		if _, ok := r.units[b.UnitID]; !ok {
+			return ports.ErrUnitNotFound
+		}
+	}
+
+	for _, b := range boosts {
+		u := r.units[b.UnitID]
+		u.Weight = b.Weight
+		u.LastTouchedAt = b.LastTouchedAt
+		u.UpdatedAt = at
+		r.units[b.UnitID] = u
+	}
 	return nil
 }
 
