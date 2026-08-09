@@ -159,8 +159,9 @@ PR's two new methods are exercised by that test the moment they exist.
 **MUST**: `test/support/memrepo`'s `UnitRepo` fake implements both new methods with the same
 semantics the port's doc comment states (weight-write pairs the two fields atomically in the fake
 too; the count method counts, never lists). MUST: `test/support/repocontract` gains a shared test
-case per new method, exercised against both the fake and — once PR3 ships — the sqlite adapter,
-following the existing pattern `repocontract/relationrepo.go` and its siblings already establish.
+case per new method, exercised against both the fake and — once PR 5 (`feat/store-unit-relation-repos`)
+ships — the sqlite adapter, following the existing pattern `repocontract/relationrepo.go` and its
+siblings already establish.
 
 **Verified by**: L1 for the fake's own unit behaviour; L1+L3 for the shared contract, run against
 both implementations.
