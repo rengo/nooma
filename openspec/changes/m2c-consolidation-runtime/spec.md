@@ -33,7 +33,14 @@ Six PRs, per proposal §5.1's m2c row: `feat/ports-unit-weight-count` (~300), `f
 (~300), `feat/store-consolidation-repos` (~400), `feat/brain-consolidate-runner` (~400),
 `feat/brain-consolidate-phase-io` (~400), `feat/cli-consolidate` (~250). **These are guesses**
 (proposal §5.1's own caveat, measured wrong 1.3×–4.3× across M0/M1) — `sdd-design`'s own
-re-derivation, once it runs, is authoritative over this row exactly as it was for `m2a`.
+re-derivation **has since run**, and is authoritative over this row exactly as it was for `m2a`.
+
+**Read the `## 1.`–`## 6.` headers below as topic groupings, not as PR numbers.** They carry the
+six-PR labels above, and the real chain is fourteen links: `design.md` §13 and `tasks.md` are
+authoritative for which branch implements what. The two numberings collide rather than merely
+differing — "PR 5" is `feat/store-unit-relation-repos` in the real chain and
+`feat/brain-consolidate-phase-io` in §5's header below, and `feat/store-consolidation-repos`
+exists in neither. Requirement text that names a PR (R1.4) uses the real chain's numbering.
 
 `m2c` introduces **no new package directory** under `internal/core` — it adds no `internal/core`
 code at all. Its new files land in `internal/ports`, `internal/store/sqlite`, `internal/brain`,

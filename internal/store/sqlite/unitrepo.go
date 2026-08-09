@@ -206,8 +206,14 @@ func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time)
 // PR 1 (which adds the method) and PR 5 (which implements it here).
 //
 // Deliberately a plain error, not a sentinel, for the same reason as
-// ApplyBoosts above: unreachable by construction in this link, so no
-// caller should ever match on it — PR 5 replaces this body outright.
+// ApplyBoosts above: no caller invokes it in this link, so none is meant
+// to match on it — PR 5 replaces this body outright.
+//
+// "No caller exists today" is the accurate claim, and it is weaker than
+// "unreachable by construction", which an earlier revision of this comment
+// asserted. Nothing structural prevents a call: this is an exported method
+// satisfying a public interface, and a commit landing before PR 5 could
+// add a call site. What holds is the loud failure, not the impossibility.
 func (r *UnitRepo) CountLiveByType(_ context.Context, _ unit.Type) (int, error) {
 	return 0, errors.New("sqlite.UnitRepo.CountLiveByType: not implemented until PR 5 (feat/store-unit-relation-repos)")
 }
