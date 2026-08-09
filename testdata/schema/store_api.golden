@@ -6,6 +6,8 @@ internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx conte
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
 internal/store/sqlite: func (*RelationRepo) ByUnit(ctx context.Context, unitID string) ([]ports.Relation, error)
+internal/store/sqlite: func (*RelationRepo) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error)
+internal/store/sqlite: func (*RelationRepo) ExistingPairs(_ context.Context, _ []consolidation.Pair) (map[consolidation.Pair]bool, error)
 internal/store/sqlite: func (*RelationRepo) ThresholdsFor(ctx context.Context, relType string) (*relation.Thresholds, error)
 internal/store/sqlite: func (*RelationRepo) Upsert(ctx context.Context, rel ports.Relation) error
 internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)
@@ -15,7 +17,9 @@ internal/store/sqlite: func (*UnitRepo) ApplyBoosts(_ context.Context, _ []weigh
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) CountLiveByType(_ context.Context, _ unit.Type) (int, error)
 internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit) error
+internal/store/sqlite: func (*UnitRepo) IncompleteOlderThan(_ context.Context, _ time.Time) ([]consolidation.Incomplete, error)
 internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
+internal/store/sqlite: func (*UnitRepo) LiveDecayStates(_ context.Context) ([]consolidation.Cold, error)
 internal/store/sqlite: func (*UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) UpdateContent(ctx context.Context, id, content string, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) UpdateDueAt(ctx context.Context, id string, dueAt, at time.Time) error

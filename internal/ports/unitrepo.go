@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 )
@@ -13,7 +14,7 @@ import (
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Nine methods, and two absences that are deliberate:
+// Eleven methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -26,6 +27,9 @@ import (
 //     single any-status escape hatch corrections and audit need.
 //     CountLiveByType takes a unit.Type, not a status — unit.Type has no
 //     live/non-live axis of its own, so this does not reopen the rule.
+//     IncompleteOlderThan is the one deliberate non-live read in M2 (I02's
+//     exception) — its name carries the exception explicitly rather than
+//     hiding it behind a status argument (design §4.1).
 //
 // No method reads a clock: every timestamp arrives as data, inside the
 // unit.Unit value for Create, or as an explicit at parameter for the
@@ -118,6 +122,42 @@ type UnitRepo interface {
 	// parameter is never a status in the sense the package doc comment's
 	// "no List(status)" rule forbids.
 	CountLiveByType(ctx context.Context, t unit.Type) (int, error)
+
+	// IncompleteOlderThan returns every unit.StatusIncomplete unit whose
+	// CreatedAt is strictly before cutoff — expire_incomplete's own read
+	// (design §4.1), and the one deliberate non-live read in M2 (I02's
+	// exception, m2b design §8's own fixed name). No pool, archived or
+	// superseded unit is ever returned, regardless of age.
+	//
+	// cutoff is a bound, not the decision: the caller computes it as
+	// now.Add(-consolidation.IncompleteExpiryHours * time.Hour), and
+	// consolidation.ExpireIncomplete applies the identical 24-hour
+	// predicate itself. Two implementations of one rule is a drift risk
+	// this port does not resolve by picking one side to trust —
+	// over-delivering rows changes nothing, under-delivering is the only
+	// failure mode, and that is what the constant pin (design §4.1) checks.
+	IncompleteOlderThan(ctx context.Context, cutoff time.Time) ([]consolidation.Incomplete, error)
+
+	// LiveDecayStates returns every unit.StatusPool unit's decay-relevant
+	// fields (consolidation.Cold's shape) — never a unit.Unit-shaped value
+	// (m2a D9's rule, kept one layer up). archive, connect and derive all
+	// consume this same read (design §4.1): consolidation.Cold and
+	// consolidation.Source declare the identical five fields, so one read
+	// shape serves all three phases.
+	//
+	// LiveDecayStates is called three times per whole pass — slot 2
+	// (archive), slot 4 (connect), slot 5 (derive) — and this port makes no
+	// caching guarantee across those calls; each call reflects the store's
+	// state at the instant it runs. archive changes unit status at slot 2,
+	// so a cached snapshot taken before slot 2 would hand connect and
+	// derive units archive had just archived as live sources — a caller
+	// that caches this read across phases reintroduces exactly that bug.
+	//
+	// This is an unbounded read: archive must see every live unit, which is
+	// what the phase is. On a personal vault (doc 02's model) that is
+	// O(vault) memory per call and there is no paging (design §4.1, named
+	// as a risk rather than mitigated).
+	LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error)
 }
 
 // Sentinel errors ports.UnitRepo implementations return — design D5.

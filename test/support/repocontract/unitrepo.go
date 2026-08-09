@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -468,6 +469,135 @@ func RunCountLiveByType(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo)
 			t.Fatalf("CountLiveByType(knowledge): %v", err)
 		} else if got != 0 {
 			t.Errorf("CountLiveByType(knowledge) = %d, want 0 (its one unit is archived, not live)", got)
+		}
+	})
+}
+
+// RunIncompleteOlderThan runs the ports.UnitRepo.IncompleteOlderThan
+// contract against a fresh repository instance, built by newRepo for every
+// subtest. newRepo must return a repository with no unit already stored in
+// it.
+//
+// Spec R5.1; design §4.1. IncompleteOlderThan is the one deliberate
+// non-live read in M2 (I02's exception) — its filter is status = incomplete
+// AND created_at < cutoff, never a general status-parameterized list.
+func RunIncompleteOlderThan(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("an incomplete unit older than cutoff is returned, a younger one is not, and every other status is excluded regardless of age", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		cutoff := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+
+		older := fixtureUnit("incomplete-older", unit.StatusIncomplete)
+		older.CreatedAt = cutoff.Add(-time.Hour)
+		younger := fixtureUnit("incomplete-younger", unit.StatusIncomplete)
+		younger.CreatedAt = cutoff.Add(time.Hour)
+		// I02's exception is named, not general: a pool/archived/superseded
+		// unit created well before cutoff must never surface here, no
+		// matter its age.
+		oldPool := fixtureUnit("pool-old", unit.StatusPool)
+		oldPool.CreatedAt = cutoff.Add(-time.Hour)
+		oldArchived := fixtureUnit("archived-old", unit.StatusArchived)
+		oldArchived.CreatedAt = cutoff.Add(-time.Hour)
+		oldSuperseded := fixtureUnit("superseded-old", unit.StatusSuperseded)
+		oldSuperseded.CreatedAt = cutoff.Add(-time.Hour)
+		for _, u := range []unit.Unit{older, younger, oldPool, oldArchived, oldSuperseded} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		got, err := repo.IncompleteOlderThan(ctx, cutoff)
+		if err != nil {
+			t.Fatalf("IncompleteOlderThan: %v", err)
+		}
+		if len(got) != 1 || got[0].UnitID != older.ID {
+			t.Fatalf("IncompleteOlderThan(%v) = %v, want exactly [%s] (the incomplete unit older "+
+				"than cutoff; not the younger incomplete unit, and not any pool/archived/superseded "+
+				"unit regardless of age)", cutoff, got, older.ID)
+		}
+		if got[0].CreatedAt.IsZero() {
+			t.Errorf("IncompleteOlderThan()[0].CreatedAt is zero, want %v", older.CreatedAt)
+		}
+	})
+
+	// The boundary is the whole point of this case. The subtest above uses
+	// CreatedAt one hour either side of cutoff, which cannot tell `<` from
+	// `<=` — both operators pass it. This suite is what PR 5's real SQL
+	// predicate gets validated against, so without an exactly-at-cutoff
+	// fixture a `WHERE created_at <= ?` would ship green.
+	//
+	// Strict `<` is the correct operator, and it is not an arbitrary pick:
+	// the port's doc comment says "strictly before cutoff", and callers
+	// compute cutoff as now-IncompleteExpiryHours, so a unit created exactly
+	// at cutoff has aged exactly the expiry window and not past it.
+	t.Run("an incomplete unit created exactly at cutoff is excluded, because the bound is strict", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		cutoff := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+
+		atCutoff := fixtureUnit("incomplete-at-cutoff", unit.StatusIncomplete)
+		atCutoff.CreatedAt = cutoff
+		if err := repo.Create(ctx, atCutoff); err != nil {
+			t.Fatalf("Create %s: %v", atCutoff.ID, err)
+		}
+
+		got, err := repo.IncompleteOlderThan(ctx, cutoff)
+		if err != nil {
+			t.Fatalf("IncompleteOlderThan: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("IncompleteOlderThan(%v) = %v, want empty: a unit created exactly at cutoff "+
+				"is not strictly older than it. An implementation returning it is using `<=` where "+
+				"the port promises `<`.", cutoff, got)
+		}
+	})
+}
+
+// RunLiveDecayStates runs the ports.UnitRepo.LiveDecayStates contract
+// against a fresh repository instance, built by newRepo for every subtest.
+// newRepo must return a repository with no unit already stored in it.
+//
+// Design §4.1. LiveDecayStates returns pool-status units only, carrying the
+// five decay fields (consolidation.Cold's shape) — no unit.Unit-shaped
+// value anywhere in the return.
+func RunLiveDecayStates(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("returns pool-status units only, carrying the decay fields", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		live := fixtureUnit("decay-live", unit.StatusPool)
+		archived := fixtureUnit("decay-archived", unit.StatusArchived)
+		superseded := fixtureUnit("decay-superseded", unit.StatusSuperseded)
+		incomplete := fixtureUnit("decay-incomplete", unit.StatusIncomplete)
+		for _, u := range []unit.Unit{live, archived, superseded, incomplete} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		got, err := repo.LiveDecayStates(ctx)
+		if err != nil {
+			t.Fatalf("LiveDecayStates: %v", err)
+		}
+		// The return type is asserted by the compiler (got is
+		// []consolidation.Cold, never []unit.Unit) — this check is on the
+		// content, not the shape.
+		if len(got) != 1 {
+			t.Fatalf("LiveDecayStates() = %v, want exactly one entry (the pool-status unit only)", got)
+		}
+		want := consolidation.Cold{
+			UnitID:        live.ID,
+			Status:        unit.StatusPool,
+			Weight:        live.Weight,
+			DecayRate:     live.WeightDecayRate,
+			LastTouchedAt: live.LastTouchedAt,
+		}
+		if got[0] != want {
+			t.Fatalf("LiveDecayStates()[0] = %+v, want %+v", got[0], want)
 		}
 	})
 }

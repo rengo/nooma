@@ -5,7 +5,9 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -24,6 +26,11 @@ type Relations struct {
 	// thresholds holds relation_thresholds rows, keyed by relation_type —
 	// the column's own UNIQUE constraint (migration 0002:32).
 	thresholds map[string]relation.Thresholds
+	// lastTouchedAt holds each unit id's last_touched_at, set via
+	// SetLastTouchedAt — Evidence's join reads this per endpoint. This fake
+	// tracks no other unit column: it exists only to answer this one join,
+	// not to duplicate memrepo.Units.
+	lastTouchedAt map[string]time.Time
 }
 
 type relationKey struct {
@@ -38,8 +45,9 @@ var _ ports.RelationRepo = (*Relations)(nil)
 // Every call returns an independent instance.
 func NewRelations() *Relations {
 	return &Relations{
-		byKey:      make(map[relationKey]ports.Relation),
-		thresholds: make(map[string]relation.Thresholds),
+		byKey:         make(map[relationKey]ports.Relation),
+		thresholds:    make(map[string]relation.Thresholds),
+		lastTouchedAt: make(map[string]time.Time),
 	}
 }
 
@@ -58,6 +66,16 @@ func (r *Relations) SeedThreshold(_ *testing.T, relType string, persist, surface
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.thresholds[relType] = relation.Thresholds{Persist: persist, Surface: surface}
+}
+
+// SetLastTouchedAt implements repocontract.RelationHarness. Records id's
+// last_touched_at for Evidence's join to read — the fake's only unit-side
+// bookkeeping, since memrepo.Relations otherwise tracks no unit data at
+// all.
+func (r *Relations) SetLastTouchedAt(_ *testing.T, id string, at time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastTouchedAt[id] = at
 }
 
 // Upsert implements ports.RelationRepo.
@@ -117,4 +135,50 @@ func (r *Relations) ThresholdsFor(_ context.Context, relType string) (*relation.
 		return nil, nil
 	}
 	return &t, nil
+}
+
+// Evidence implements ports.RelationRepo. Joins every stored relation to
+// both endpoints' last_touched_at, read from r.lastTouchedAt (set via
+// SetLastTouchedAt) — an endpoint never seeded reports the zero time.Time,
+// matching what an ordinary SQL LEFT JOIN would return for a genuinely
+// missing row (this fake enforces no foreign key, so the case cannot arise
+// from a stored relation, but the zero value is still the honest answer for
+// an endpoint the harness never told this fake about).
+func (r *Relations) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []consolidation.RelationEvidence
+	for _, rel := range r.byKey {
+		out = append(out, consolidation.RelationEvidence{
+			RelationID:        rel.ID,
+			Strength:          rel.Strength,
+			FromLastTouchedAt: r.lastTouchedAt[rel.FromUnitID],
+			ToLastTouchedAt:   r.lastTouchedAt[rel.ToUnitID],
+		})
+	}
+	return out, nil
+}
+
+// ExistingPairs implements ports.RelationRepo. Keyed by
+// consolidation.CanonicalPair, over the candidate set pairs names only — a
+// pair with no stored relation is left absent from the returned map, never
+// set to false, so a caller cannot mistake "never checked" for "checked and
+// absent" from the zero value.
+func (r *Relations) ExistingPairs(_ context.Context, pairs []consolidation.Pair) (map[consolidation.Pair]bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored := make(map[consolidation.Pair]bool, len(r.byKey))
+	for _, rel := range r.byKey {
+		stored[consolidation.CanonicalPair(rel.FromUnitID, rel.ToUnitID)] = true
+	}
+
+	out := make(map[consolidation.Pair]bool, len(pairs))
+	for _, p := range pairs {
+		if stored[p] {
+			out[p] = true
+		}
+	}
+	return out, nil
 }

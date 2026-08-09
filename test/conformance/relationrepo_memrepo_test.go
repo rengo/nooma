@@ -19,3 +19,21 @@ func TestRelationRepo_MemRepo(t *testing.T) {
 		return memrepo.NewRelations()
 	})
 }
+
+// TestRelationRepo_MemRepo_Evidence runs repocontract.RunEvidence — spec
+// R3.5's contract suite — against the same fake.
+func TestRelationRepo_MemRepo_Evidence(t *testing.T) {
+	repocontract.RunEvidence(t, func(t *testing.T) repocontract.RelationHarness {
+		t.Helper()
+		return memrepo.NewRelations()
+	})
+}
+
+// TestRelationRepo_MemRepo_ExistingPairs runs repocontract.RunExistingPairs
+// — spec R3.6's contract suite — against the same fake.
+func TestRelationRepo_MemRepo_ExistingPairs(t *testing.T) {
+	repocontract.RunExistingPairs(t, func(t *testing.T) repocontract.RelationHarness {
+		t.Helper()
+		return memrepo.NewRelations()
+	})
+}

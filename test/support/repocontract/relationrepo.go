@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -42,6 +43,13 @@ type RelationHarness interface {
 	// caller would be this suite is exactly the shape m1a-substrate D7
 	// rejected for TranscriptionProvider).
 	SeedThreshold(t *testing.T, relType string, persist, surface float64)
+
+	// SetLastTouchedAt sets id's last_touched_at to at — Evidence's join
+	// reads this column from both a relation's endpoints (design §4.2), and
+	// EnsureUnit alone gives no implementation a way to make the two
+	// endpoints of a fixture relation distinguishable by last_touched_at.
+	// id must already be EnsureUnit'd.
+	SetLastTouchedAt(t *testing.T, id string, at time.Time)
 }
 
 // RunRelationRepo runs the ports.RelationRepo contract against a fresh
@@ -231,6 +239,122 @@ func RunRelationRepo(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
 		}
 		if got != nil {
 			t.Errorf("ThresholdsFor(duplicate) = %v, want nil — the seeded row is for %q", got, "reference")
+		}
+	})
+}
+
+// RunEvidence runs the ports.RelationRepo.Evidence contract against a fresh
+// implementation built by newRepo for every subtest. newRepo must return
+// one holding no relation and no relation_thresholds row.
+//
+// Spec R3.5; design §4.2. Evidence returns each relation joined to both
+// endpoints' last_touched_at, in one read — no zip in the caller.
+func RunEvidence(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
+	t.Helper()
+
+	t.Run("returns every relation joined to both endpoints' last_touched_at", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		repo.EnsureUnit(t, "evidence-a")
+		repo.EnsureUnit(t, "evidence-b")
+		repo.EnsureUnit(t, "evidence-c")
+		repo.EnsureUnit(t, "evidence-d")
+
+		// Four distinct instants, one per endpoint, so a cross-relation or
+		// cross-endpoint zip (e.g. relation 1's "from" landing with
+		// relation 2's "to" timestamp) is caught rather than passing on
+		// coincidentally equal values.
+		base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+		atA := base.Add(1 * time.Hour)
+		atB := base.Add(2 * time.Hour)
+		atC := base.Add(3 * time.Hour)
+		atD := base.Add(4 * time.Hour)
+		repo.SetLastTouchedAt(t, "evidence-a", atA)
+		repo.SetLastTouchedAt(t, "evidence-b", atB)
+		repo.SetLastTouchedAt(t, "evidence-c", atC)
+		repo.SetLastTouchedAt(t, "evidence-d", atD)
+
+		first := fixtureRelation("evidence-rel-1", "evidence-a", "evidence-b", "reference", 0.4, 0.5)
+		second := fixtureRelation("evidence-rel-2", "evidence-c", "evidence-d", "reference", 0.6, 0.7)
+		if err := repo.Upsert(ctx, first); err != nil {
+			t.Fatalf("Upsert %s: %v", first.ID, err)
+		}
+		if err := repo.Upsert(ctx, second); err != nil {
+			t.Fatalf("Upsert %s: %v", second.ID, err)
+		}
+
+		got, err := repo.Evidence(ctx)
+		if err != nil {
+			t.Fatalf("Evidence: %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("Evidence() returned %d entries, want 2: %v", len(got), got)
+		}
+
+		byID := make(map[string]consolidation.RelationEvidence, len(got))
+		for _, e := range got {
+			byID[e.RelationID] = e
+		}
+
+		wantFirst := consolidation.RelationEvidence{
+			RelationID: first.ID, Strength: first.Strength,
+			FromLastTouchedAt: atA, ToLastTouchedAt: atB,
+		}
+		if e, ok := byID[first.ID]; !ok || e != wantFirst {
+			t.Errorf("Evidence()[%s] = %+v (present=%v), want %+v", first.ID, e, ok, wantFirst)
+		}
+
+		wantSecond := consolidation.RelationEvidence{
+			RelationID: second.ID, Strength: second.Strength,
+			FromLastTouchedAt: atC, ToLastTouchedAt: atD,
+		}
+		if e, ok := byID[second.ID]; !ok || e != wantSecond {
+			t.Errorf("Evidence()[%s] = %+v (present=%v), want %+v", second.ID, e, ok, wantSecond)
+		}
+	})
+}
+
+// RunExistingPairs runs the ports.RelationRepo.ExistingPairs contract
+// against a fresh implementation built by newRepo for every subtest.
+// newRepo must return one holding no relation and no relation_thresholds
+// row.
+//
+// Spec R3.6; design §4.2. A relation stored a→b returns true for a lookup
+// built from the opposite direction's canonical pair; a pair with no stored
+// relation is absent from the returned map, not a false-valued entry.
+func RunExistingPairs(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
+	t.Helper()
+
+	t.Run("a stored a->b relation matches a lookup built from the opposite direction's canonical pair", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		repo.EnsureUnit(t, "pair-a")
+		repo.EnsureUnit(t, "pair-b")
+		repo.EnsureUnit(t, "pair-unrelated-1")
+		repo.EnsureUnit(t, "pair-unrelated-2")
+
+		stored := fixtureRelation("pair-rel", "pair-a", "pair-b", "reference", 0.5, 0.5)
+		if err := repo.Upsert(ctx, stored); err != nil {
+			t.Fatalf("Upsert: %v", err)
+		}
+
+		lookup := consolidation.CanonicalPair("pair-b", "pair-a") // opposite direction
+		absent := consolidation.CanonicalPair("pair-unrelated-1", "pair-unrelated-2")
+
+		got, err := repo.ExistingPairs(ctx, []consolidation.Pair{lookup, absent})
+		if err != nil {
+			t.Fatalf("ExistingPairs: %v", err)
+		}
+
+		if v, ok := got[lookup]; !ok || !v {
+			t.Errorf("ExistingPairs()[%+v] = (%v, present=%v), want (true, present=true) — a→b must "+
+				"match a lookup built from b→a's canonical form", lookup, v, ok)
+		}
+		if v, ok := got[absent]; ok {
+			t.Errorf("ExistingPairs()[%+v] = (%v, present=true), want absent from the map (never a "+
+				"false-valued entry) for a pair with no stored relation", absent, v)
 		}
 	})
 }

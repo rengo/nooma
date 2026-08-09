@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -186,6 +187,52 @@ func (r *Units) CountLiveByType(_ context.Context, t unit.Type) (int, error) {
 		}
 	}
 	return count, nil
+}
+
+// IncompleteOlderThan implements ports.UnitRepo. Filters positively on
+// status = incomplete AND CreatedAt < cutoff only — the one deliberate
+// non-live read in M2 (I02's exception).
+func (r *Units) IncompleteOlderThan(_ context.Context, cutoff time.Time) ([]consolidation.Incomplete, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []consolidation.Incomplete
+	for _, u := range r.units {
+		if u.Status != unit.StatusIncomplete {
+			continue
+		}
+		if !u.CreatedAt.Before(cutoff) {
+			continue
+		}
+		out = append(out, consolidation.Incomplete{
+			UnitID:    u.ID,
+			CreatedAt: u.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+// LiveDecayStates implements ports.UnitRepo. Filters positively on
+// status = pool (unit.Status.IsLive) and returns only the five decay
+// fields — never a unit.Unit-shaped value.
+func (r *Units) LiveDecayStates(_ context.Context) ([]consolidation.Cold, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []consolidation.Cold
+	for _, u := range r.units {
+		if !u.Status.IsLive() {
+			continue
+		}
+		out = append(out, consolidation.Cold{
+			UnitID:        u.ID,
+			Status:        u.Status,
+			Weight:        u.Weight,
+			DecayRate:     u.WeightDecayRate,
+			LastTouchedAt: u.LastTouchedAt,
+		})
+	}
+	return out, nil
 }
 
 // Count returns the number of units currently held. Test-only: it exists so

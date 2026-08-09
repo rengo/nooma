@@ -50,6 +50,27 @@ ON CONFLICT(id) DO NOTHING`,
 	}
 }
 
+// SetLastTouchedAt implements repocontract.RelationHarness by updating the
+// real units.last_touched_at column directly — a real implementation, not a
+// placeholder: setting a column on an already-migrated table needs no new
+// port method and no PR 5 dependency, unlike Evidence's own join logic.
+func (h relationHarness) SetLastTouchedAt(t *testing.T, id string, at time.Time) {
+	t.Helper()
+
+	res, err := h.v.db.ExecContext(context.Background(),
+		`UPDATE units SET last_touched_at = ? WHERE id = ?`, at.Format(unitTimeLayout), id)
+	if err != nil {
+		t.Fatalf("setting last_touched_at for unit %s: %v", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		t.Fatalf("rows affected setting last_touched_at for unit %s: %v", id, err)
+	}
+	if n == 0 {
+		t.Fatalf("SetLastTouchedAt(%s): no row updated — call EnsureUnit(%s) first", id, id)
+	}
+}
+
 func (h relationHarness) SeedThreshold(t *testing.T, relType string, persist, surface float64) {
 	t.Helper()
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 )
 
@@ -31,16 +32,23 @@ type Relation struct {
 
 // RelationRepo is the repository port over relations — design D8, spec R5.3.
 //
-// Three methods, and each has a real caller (design D8's own rule for adding
+// Five methods, and each has a real caller (design D8's own rule for adding
 // a port method): Upsert is the judge's persist step (PR 11c), ByUnit is
-// Phase C's read-only units route showing a unit's related units, and
+// Phase C's read-only units route showing a unit's related units,
 // ThresholdsFor is what feeds relation.Resolve — the two are meant to be
-// called together, never ThresholdsFor alone with nothing to resolve.
+// called together, never ThresholdsFor alone with nothing to resolve —
+// Evidence is strengthen's co-use join (design §4.2), and ExistingPairs is
+// connect's exclusion lookup (design §4.2).
 //
 // No Delete*-prefixed method — keeps
 // test/conformance/i03_units_never_deleted_test.go's strengthened prefix set
-// ({Delete, Remove, Purge, Drop, Destroy}) satisfied for every ports
-// interface, not only ports.UnitRepo.
+// ({Delete, Remove, Purge, Drop, Destroy}) satisfied for this interface.
+// That test's reflection sweep runs over ports.UnitRepo only today — it
+// does not yet cross-check RelationRepo or any other ports interface;
+// widening the sweep to cover every ports interface is m2c PR 3's own task
+// (task 3.19), not this PR's. This comment states the narrower, currently
+// true claim rather than the wider one an earlier revision made before the
+// gap was caught.
 type RelationRepo interface {
 	// Upsert writes r, updating strength and confidence in place when a row
 	// already exists for r's (FromUnitID, ToUnitID, Type) triple — I07: a
@@ -70,4 +78,29 @@ type RelationRepo interface {
 	// expects for "this type has never been looked up before". The caller,
 	// never core/relation, performs this lookup (R5.1's purity MUST).
 	ThresholdsFor(ctx context.Context, relType string) (*relation.Thresholds, error)
+
+	// Evidence returns every relation joined to both endpoints'
+	// last_touched_at, in one read — strengthen's own input (design §4.2,
+	// spec R3.5). The alternative — relations, then units, then a zip in
+	// brain — is two round trips and a correctness hazard if a unit moves
+	// between them; this port declares the join instead.
+	//
+	// Evidence takes no since parameter, unlike IncompleteOlderThan
+	// (ports.UnitRepo): strengthen's own co-use predicate compares against
+	// a runtime value with no constant to pin, so pushing that comparison
+	// into SQL would create a second implementation of the predicate with
+	// nothing to hold it honest (design §4.1's asymmetry note). This is an
+	// unbounded read — strengthen must see every relation — named as a
+	// risk (design §12 R4), not mitigated.
+	Evidence(ctx context.Context) ([]consolidation.RelationEvidence, error)
+
+	// ExistingPairs reports, for each of pairs, whether a relation already
+	// exists between its two endpoints — connect's exclusion lookup
+	// (design §4.2, spec R3.6). Every pair in the returned map is keyed by
+	// consolidation.CanonicalPair, so a relation stored a->b matches a
+	// lookup built from b->a's canonical form. A pair with no stored
+	// relation is absent from the returned map — never a false-valued
+	// entry — so a caller cannot mistake "never checked" for "checked and
+	// absent" by inspecting the zero value.
+	ExistingPairs(ctx context.Context, pairs []consolidation.Pair) (map[consolidation.Pair]bool, error)
 }

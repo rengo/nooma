@@ -226,10 +226,13 @@ missing.
       note) and `testdata/schema/store_api.golden` (regenerated because of that placeholder).
       111 impl+docs lines (well under the ~170 estimate and the 400 ceiling, 0.28×), 474 test
       lines.
-      **Chain-merge check 1**: after merge, `git ls-remote --heads origin feat/ports-unit-weight-count`
-      returns nothing. **Not yet performed — this PR has not been merged.**
-      **Chain-merge check 2**: `gh pr view <PR2> --json baseRefName` names `main`.
-      **Not yet performed — PR 2 does not exist yet.**
+      **Chain-merge check 1**: PR #158 merged 2026-08-09T23:19:15Z (`gh pr view 158 --json
+      state,mergedAt` confirms `state: MERGED`). `git ls-remote --heads origin
+      feat/ports-unit-weight-count` returns nothing — the branch is gone. **Performed, by PR 2's
+      own executor, updating this stale line rather than leaving it claiming "not yet performed"
+      after the merge had already happened.**
+      **Chain-merge check 2**: PR 2 (`feat/ports-unit-relation-reads`) is opened against `main` —
+      confirmed at PR-open time below.
 
 ---
 
@@ -239,7 +242,7 @@ Depends on PR 1 (widens the same `test/support/repocontract`/`memrepo` shape; no
 PR 1's new methods). Ships `ports.UnitRepo.IncompleteOlderThan`/`LiveDecayStates`,
 `ports.RelationRepo.Evidence`/`ExistingPairs` (design §4.1, §4.2).
 
-- [ ] **2.1** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) —
+- [x] **2.1** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) —
       `RunIncompleteOlderThan(t, newRepo)`: an `incomplete` unit older than `cutoff` is returned; one
       younger is not; a `pool`/`archived`/`superseded` unit is never returned regardless of age
       (I02's exception is named, not general).
@@ -249,12 +252,24 @@ PR 1's new methods). Ships `ports.UnitRepo.IncompleteOlderThan`/`LiveDecayStates
       ([]consolidation.Incomplete, error)`; `memrepo` returns `(nil, nil)` — compiles; the
       older-than-cutoff fixture expects one result, stub returns none, fails first.
       Requirement: spec R5.1; design §4.1 (`IncompleteOlderThan` row).
-- [ ] **2.2** Commit 2 (GREEN): implement `IncompleteOlderThan` in the `memrepo` fake — filter by
+      **Verified as described, genuinely, both flavors**: `go build ./test/support/...` failed
+      with exactly `repo.IncompleteOlderThan undefined` (and the sibling `LiveDecayStates` error
+      from task 2.3, added in the same commit) before the port stub existed — a real
+      package-does-not-compile red, not a throwaway file. After the stub and the wiring test
+      (`test/conformance/unitrepo_memrepo_test.go`, committed in this same RED commit rather than
+      deferred to GREEN as PR 1's task 1.1 disclosed doing) landed, `go test -run
+      TestUnitRepo_MemRepo_IncompleteOlderThan` failed on the assertion exactly as predicted:
+      `IncompleteOlderThan(...) = [], want exactly [incomplete-older]`.
+      Widening `ports.UnitRepo` again broke `internal/store/sqlite.UnitRepo`'s compile-time
+      assertion, same as PR 1's task 1.1 — a matching placeholder was added in the same commit
+      (see task 2.3's note for the shared file), and `testdata/schema/store_api.golden` was
+      regenerated.
+- [x] **2.2** Commit 2 (GREEN): implement `IncompleteOlderThan` in the `memrepo` fake — filter by
       `status = incomplete` and `CreatedAt < cutoff` only; the port's own doc comment states this
       is the one deliberate non-live read in M2 and names the exception explicitly (I02).
       Verify: `go test ./test/support/...`.
       Requirement: spec R5.1; design §4.1.
-- [ ] **2.3** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) —
+- [x] **2.3** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) —
       `RunLiveDecayStates(t, newRepo)`: returns `pool`-status units only, carrying the five decay
       fields (`consolidation.Cold`'s shape); no `unit.Unit`-shaped value anywhere in the return —
       asserted by checking the returned type is `[]consolidation.Cold`, not by inspecting field
@@ -263,16 +278,27 @@ PR 1's new methods). Ships `ports.UnitRepo.IncompleteOlderThan`/`LiveDecayStates
       Stub: `LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error)`; `memrepo` returns
       `(nil, nil)` — compiles; a live-pool fixture expects ≥1 result, fails first.
       Requirement: design §4.1 (`LiveDecayStates` row), consumed by `archive`/`connect`/`derive`.
-- [ ] **2.4** Commit 2 (GREEN): implement `LiveDecayStates` in the `memrepo` fake.
+      **Verified together with task 2.1** (one commit, one `go build` failure covering both
+      undefined methods, one `go test` run covering both wiring-test assertion failures):
+      `LiveDecayStates() = [], want exactly one entry`.
+      `internal/store/sqlite/unitrepo.go` gained matching placeholders for both
+      `IncompleteOlderThan` and `LiveDecayStates` (plain errors, "not implemented until PR 5", no
+      sentinel — no caller exists today) in this same commit, and `make store-api-golden` was run
+      once for both new methods together.
+- [x] **2.4** Commit 2 (GREEN): implement `LiveDecayStates` in the `memrepo` fake.
       Verify: `go test ./test/support/...`.
       Requirement: design §4.1.
-- [ ] **2.5** Doc comment, `internal/ports/unitrepo.go`: state the duplicated-predicate risk design
+- [x] **2.5** Doc comment, `internal/ports/unitrepo.go`: state the duplicated-predicate risk design
       §4.1 names explicitly — `IncompleteOlderThan`'s `cutoff` is a **bound**, computed by the
       caller from `consolidation.IncompleteExpiryHours`, never the decision itself; `brain` must
       not derive it from a literal. This doc comment is what task 8's conformance test (PR 8) will
       pin against.
       Requirement: design §4.1 ("the cutoff duplicates a predicate" note).
-- [ ] **2.6** Commit 1 (RED): `test/support/repocontract/relationrepo.go` (extend) —
+      Landed inside task 2.1's own RED commit (the method's doc comment is written alongside its
+      signature, not as a separate edit) rather than as its own commit — same paragraph also
+      states `LiveDecayStates`'s three-call/never-cached guarantee (design §4.1) so both of
+      §4.1's two "decisions, not details" paragraphs are on the port, not only in the design doc.
+- [x] **2.6** Commit 1 (RED): `test/support/repocontract/relationrepo.go` (extend) —
       `RunEvidence(t, newRepo)`: a fixture with ≥2 relations, each endpoint carrying a distinct
       `last_touched_at`; `Evidence` returns every relation joined to **both** endpoints'
       `last_touched_at` in one read (no zip in the caller).
@@ -281,10 +307,27 @@ PR 1's new methods). Ships `ports.UnitRepo.IncompleteOlderThan`/`LiveDecayStates
       Stub: `Evidence(ctx context.Context) ([]consolidation.RelationEvidence, error)`; `memrepo`
       returns `(nil, nil)` — compiles; fails on the non-empty fixture.
       Requirement: spec R3.5; design §4.2.
-- [ ] **2.7** Commit 2 (GREEN): implement `Evidence` in the `memrepo` fake.
+      **Apply note (not anticipated by this task's own text)**: `RunEvidence`'s fixture needs each
+      relation's two endpoints to carry *distinct* `last_touched_at` values, and
+      `RelationHarness.EnsureUnit` gives no implementation a way to set one — it only makes an id a
+      valid endpoint. `RelationHarness` gained a fourth method, `SetLastTouchedAt(t, id, at)`,
+      implemented for real (not a PR-5 placeholder — it is an ordinary `units.last_touched_at`
+      `UPDATE`/map-write, unrelated to `Evidence`'s own join logic) in both `memrepo.Relations` and
+      the existing `internal/store/sqlite/relationrepo_integration_test.go` harness, which this PR
+      therefore also touches (not on the task's own anticipated file list, disclosed here and in
+      the PR-level Verify block below).
+      **Verified as described, genuinely**: `go build ./...` failed with `repo.Evidence undefined`
+      (and the sibling `ExistingPairs` error from task 2.8, added in the same commit) before the
+      port stub existed; after the stub and wiring test landed, `go test -run
+      TestRelationRepo_MemRepo_Evidence` failed on the assertion: `Evidence() returned 0 entries,
+      want 2`.
+      Widening `ports.RelationRepo` broke `internal/store/sqlite.RelationRepo`'s compile-time
+      assertion — a matching placeholder was added in this same commit (see task 2.8's note), and
+      `testdata/schema/store_api.golden` was regenerated again.
+- [x] **2.7** Commit 2 (GREEN): implement `Evidence` in the `memrepo` fake.
       Verify: `go test ./test/support/...`.
       Requirement: spec R3.5; design §4.2.
-- [ ] **2.8** Commit 1 (RED): `test/support/repocontract/relationrepo.go` (extend) —
+- [x] **2.8** Commit 1 (RED): `test/support/repocontract/relationrepo.go` (extend) —
       `RunExistingPairs(t, newRepo)`: a relation stored `a→b` returns `true` for a lookup built
       from `CanonicalPair(b, a)` (the opposite direction's canonical form) — spec R3.6's own
       symmetry requirement; a pair with no stored relation returns `false` (absent from the map,
@@ -295,19 +338,51 @@ PR 1's new methods). Ships `ports.UnitRepo.IncompleteOlderThan`/`LiveDecayStates
       (map[consolidation.Pair]bool, error)`; `memrepo` returns `(nil, nil)` — compiles; fails the
       opposite-direction fixture (`false` where `true` is expected).
       Requirement: spec R3.6; design §4.2.
-- [ ] **2.9** Commit 2 (GREEN): implement `ExistingPairs` in the `memrepo` fake, keyed by
+      **Verified together with task 2.6** (one commit, one `go build` failure covering both
+      undefined methods, one `go test` run covering both wiring-test assertion failures):
+      `ExistingPairs()[{From:pair-a To:pair-b}] = (false, present=false), want (true,
+      present=true)`.
+      `internal/store/sqlite/relationrepo.go` gained matching placeholders for both `Evidence` and
+      `ExistingPairs` (plain errors, "not implemented until PR 5", no sentinel) in this same
+      commit, and `make store-api-golden` was run once for all four new methods (two on
+      `UnitRepo`, two on `RelationRepo`) together.
+- [x] **2.9** Commit 2 (GREEN): implement `ExistingPairs` in the `memrepo` fake, keyed by
       `consolidation.CanonicalPair`.
       Verify: `go test ./test/support/...`.
       Requirement: spec R3.6; design §4.2.
-- [ ] **2.10** Purity/coverage: `golangci-lint run` (`ports-purity` from PR 1 stays green — this
+- [x] **2.10** Purity/coverage: `golangci-lint run` (`ports-purity` from PR 1 stays green — this
       PR's new files import only `internal/core/consolidation`, `internal/core/unit`, stdlib).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/ports/{unitrepo,relationrepo}.go`, `test/support/memrepo/{units,relations}.go`
-      (+ tests), `test/support/repocontract/{unitrepo,relationrepo}.go`. Target ≤150 impl+docs
-      lines.
-      **Chain-merge check 1**: `git ls-remote --heads origin feat/ports-unit-relation-reads`
-      returns nothing after merge.
+      Clean — `0 issues`.
+      **Also decided in this PR (not a task the list named, raised in this PR's own brief)**:
+      `internal/ports/relationrepo.go`'s doc comment claimed I03's strengthened prefix set is
+      "satisfied for every ports interface, not only `ports.UnitRepo`", but
+      `test/conformance/i03_units_never_deleted_test.go`'s reflection sweep only ever ran over
+      `ports.UnitRepo` — a description wider than the code. `tasks.md` itself is not silent here:
+      PR 3 (tasks 3.19–3.20) already owns widening that sweep to all five `ports` interfaces, so
+      doing it in this PR would both duplicate PR 3's task and pull PR 3 scope forward, which this
+      PR's own brief forbids. **Chosen resolution: narrow the doc comment to what is true today**
+      (the sweep covers `ports.UnitRepo` only; PR 3 task 3.19 widens it) rather than extend the
+      sweep now.
+- [x] Verify (PR-level): `make check-all` — green (lint 0 issues, vet clean, race unit+integration
+      tests, schema-golden-clean, 100% core coverage, seven-target cross-compile, e2e all green).
+      **Diff does NOT match the file list this task's own text anticipated** — disclosed rather
+      than silently widened, same discipline PR 1's Verify block used. Actual diff:
+      `internal/ports/{unitrepo,relationrepo}.go`, `test/support/memrepo/{units,relations}.go`,
+      `test/support/repocontract/{unitrepo,relationrepo}.go`,
+      `test/conformance/{unitrepo,relationrepo}_memrepo_test.go` (the anticipated "+ tests"), plus
+      four files this list did not name: `internal/store/sqlite/{unitrepo,relationrepo}.go` (PR-5
+      placeholders, same owner ruling as PR 1's), `internal/store/sqlite/relationrepo_integration_test.go`
+      (task 2.6's `SetLastTouchedAt` harness addition, a real implementation not a placeholder),
+      and `testdata/schema/store_api.golden` (regenerated twice, once per placeholder pair).
+      144 impl+docs lines (0.36× the 400-line ceiling, just under the ~150 estimate; ports.go +
+      sqlite placeholder files + the golden diff), 394 test lines (repocontract + memrepo + wiring
+      tests + the integration-tag harness addition).
+      PR opened: https://github.com/rengo/nooma/pull/159 (`baseRefName: main`, `mergeable:
+      MERGEABLE`, `mergeStateStatus: BLOCKED` — pending review/checks, not yet merged).
+      **Chain-merge check 1**: after merge, `git ls-remote --heads origin feat/ports-unit-relation-reads`
+      returns nothing. **Not yet performed — this PR has not been merged.**
       **Chain-merge check 2**: `gh pr view <PR3> --json baseRefName` names `main`.
+      **Not yet performed — PR 3 does not exist yet.**
 
 ---
 

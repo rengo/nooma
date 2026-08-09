@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -118,4 +119,33 @@ WHERE relation_type = ?`
 		return nil, fmt.Errorf("reading thresholds for relation type %s: %w", relType, err)
 	}
 	return &t, nil
+}
+
+// Evidence implements ports.RelationRepo. Not yet implemented: PR 5
+// (feat/store-unit-relation-repos) gives it the real join over both
+// endpoints' last_touched_at (design §4.2). This placeholder exists only so
+// *RelationRepo keeps satisfying the widened ports.RelationRepo interface
+// between PR 2 (which adds the method to the interface) and PR 5 (which
+// implements it here) — the chain's own stacked-to-main strategy needs
+// internal/store/sqlite to keep compiling at every link, following PR 1's
+// precedent for UnitRepo.ApplyBoosts/CountLiveByType.
+//
+// Deliberately a plain error, not a sentinel: no caller exists today, so
+// none is meant to branch on it with errors.Is. PR 5 replaces this body
+// outright rather than adding a case that dispatches on this error. Nothing
+// structural prevents a call — this is an exported method satisfying a
+// public interface — so "no caller exists today" is the claim this comment
+// makes, not "unreachable by construction".
+func (r *RelationRepo) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error) {
+	return nil, errors.New("sqlite.RelationRepo.Evidence: not implemented until PR 5 (feat/store-unit-relation-repos)")
+}
+
+// ExistingPairs implements ports.RelationRepo. Not yet implemented — same
+// PR 5 placeholder, same reason, as Evidence above.
+//
+// Deliberately a plain error, not a sentinel, for the same reason as
+// Evidence: no caller exists today, so none is meant to match on it — PR 5
+// replaces this body outright.
+func (r *RelationRepo) ExistingPairs(_ context.Context, _ []consolidation.Pair) (map[consolidation.Pair]bool, error) {
+	return nil, errors.New("sqlite.RelationRepo.ExistingPairs: not implemented until PR 5 (feat/store-unit-relation-repos)")
 }
