@@ -60,6 +60,29 @@ func TestUnitRepo_ApplyBoosts(t *testing.T) {
 	})
 }
 
+// TestUnitRepo_CountLiveByType, TestUnitRepo_IncompleteOlderThan and
+// TestUnitRepo_LiveDecayStates run repocontract's three remaining
+// ports.UnitRepo contract suites (PR 2) against a real temporary SQLite
+// vault — design D6's "answered twice" standing rule, same pattern as
+// TestUnitRepo_ApplyBoosts above.
+func TestUnitRepo_CountLiveByType(t *testing.T) {
+	repocontract.RunCountLiveByType(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+func TestUnitRepo_IncompleteOlderThan(t *testing.T) {
+	repocontract.RunIncompleteOlderThan(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+func TestUnitRepo_LiveDecayStates(t *testing.T) {
+	repocontract.RunLiveDecayStates(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
 // TestUnitRepo_LiveByIDsFiltersPositively seeds one unit per status via a
 // raw INSERT INTO units — bypassing UnitRepo.Create deliberately, so the
 // fixture cannot lean on the repo already excluding non-pool rows — and
