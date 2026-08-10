@@ -25,16 +25,23 @@ import (
 // Two independent checks (design §8.4/D5):
 //
 //  1. Reflection over every ports repository interface — UnitRepo,
-//     RelationRepo, SelfModelRepo, ConfigRepo and StateRepo (m2c design
-//     §4.6, spec R2.7) — no method name begins with any of
-//     deniedMethodPrefixes. That set is {Delete, Remove, Purge, Drop,
-//     Destroy} — strengthened by an earlier PR from {Delete} alone (design
-//     D5's own stated gap: a Delete-only check would let Purge, Remove or
-//     Drop slip past it). Strengthening a conformance test is allowed;
-//     weakening one is what docs/06-harness.md §4 forbids. The sweep
-//     itself was widened from ports.UnitRepo alone to all five interfaces
-//     by m2c PR 3, closing the gap between what RelationRepo's doc comment
-//     already claimed and what this test actually checked.
+//     RelationRepo, SelfModelRepo, ConfigRepo, StateRepo, SignalRepo and
+//     EmbeddingRepo (m2c design §4.6, spec R2.7) — no method name begins
+//     with any of deniedMethodPrefixes. That set is {Delete, Remove,
+//     Purge, Drop, Destroy} — strengthened by an earlier PR from {Delete}
+//     alone (design D5's own stated gap: a Delete-only check would let
+//     Purge, Remove or Drop slip past it). Strengthening a conformance
+//     test is allowed; weakening one is what docs/06-harness.md §4
+//     forbids. The sweep itself was widened from ports.UnitRepo alone to
+//     the five m2c introduces by m2c PR 3, then to all seven ports
+//     repository interfaces in this PR — closing the gap between what
+//     RelationRepo's doc comment claims ("every ports repository
+//     interface") and what this test actually checked: SignalRepo (I13:
+//     a learning signal outlives the deletion of its target) and
+//     EmbeddingRepo (embeddings hang off units, which are never deleted)
+//     belong to the same invariant and had no removal verb to begin
+//     with — widening the sweep makes the doc comment's claim true
+//     instead of narrowing the claim to match a partial sweep.
 //  2. Tree scan: no Go source file under internal/ or cmd/ issues a literal
 //     DELETE FROM units statement (migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this Go-source
@@ -94,19 +101,24 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 var deniedMethodPrefixes = []string{"Delete", "Remove", "Purge", "Drop", "Destroy"}
 
 // sweptPortsRepoTypes is every ports repository interface I03's reflection
-// check sweeps — m2c design §4.6, spec R2.7: UnitRepo, RelationRepo,
-// SelfModelRepo, ConfigRepo and StateRepo, the five that exist by the time
-// m2c PR 3 lands (the PR that adds the last of the three new interfaces,
-// so the test and its subjects land together). A future ports interface
-// needs a line added here — this list is the "every ports interface, not
-// only ports.UnitRepo" claim, held to what actually exists, not what the
-// package doc comment alone said before this PR closed that gap.
+// check sweeps — m2c design §4.6, spec R2.7: all seven that
+// internal/ports declares — UnitRepo, RelationRepo, SelfModelRepo,
+// ConfigRepo, StateRepo, SignalRepo and EmbeddingRepo. The first five were
+// swept starting with m2c PR 3 (the PR that added the last of the three
+// new interfaces introduced there); SignalRepo and EmbeddingRepo were
+// added to the sweep in this PR, closing the gap between
+// RelationRepo's doc comment's "every ports repository interface" claim
+// and what the sweep actually checked. A future ports interface needs a
+// line added here — this list is that claim, held to what actually
+// exists, not what the package doc comment alone says.
 var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.UnitRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.RelationRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.SelfModelRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.ConfigRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.StateRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.SignalRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.EmbeddingRepo)(nil)).Elem(),
 }
 
 // containsUnitsDeleteStatement reports whether line contains the exact

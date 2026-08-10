@@ -301,16 +301,20 @@ row changes only the one column.
 
 ### R2.7 — the widened port surface stays I03-clean, structurally, not by convention alone
 
-**MUST**: `test/conformance/i03_units_never_deleted_test.go`'s reflection loop is extended, in
-this PR, to also sweep `ports.SelfModelRepo` and `ports.ConfigRepo` (a loop over a slice of
-`reflect.Type` values rather than the current single `ports.UnitRepo` literal) — `RelationRepo`'s
-own doc comment already states this convention in prose ("keeps
-`i03_units_never_deleted_test.go`'s strengthened prefix set satisfied for every ports interface,
-not only `ports.UnitRepo`"), and this PR is where the code catches up to that stated intent for
-every port that exists by the time it lands, closing the gap between what the comment claims and
-what the test actually checks.
+**MUST**: `test/conformance/i03_units_never_deleted_test.go`'s reflection loop sweeps every
+repository interface `internal/ports` declares (a loop over a slice of `reflect.Type` values
+rather than the single `ports.UnitRepo` literal it started as) — `RelationRepo`'s own doc comment
+states this convention in prose ("keeps `i03_units_never_deleted_test.go`'s strengthened prefix
+set satisfied for every ports repository interface, not only `ports.UnitRepo`"), and the sweep
+MUST name what that prose actually claims: not just the three this PR adds
+(`ports.SelfModelRepo`, `ports.ConfigRepo`, `ports.StateRepo`, alongside the pre-existing
+`ports.UnitRepo` and `ports.RelationRepo`), but also `ports.SignalRepo` and `ports.EmbeddingRepo`,
+which already exist and already carry no removal verb. A sweep that stopped at five while the
+comment says "every" would leave the same gap this requirement exists to close, one interface
+narrower. A ports repository interface added after this PR needs a line added to the sweep in the
+same PR that adds it, or the doc comment's claim is wider than the code again.
 
-**Verified by**: L2 — the widened test fails if any of the three interfaces gains a
+**Verified by**: L2 — the widened test fails if any of the seven swept interfaces gains a
 denied-prefix method.
 
 ---

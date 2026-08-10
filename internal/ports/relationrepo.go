@@ -45,8 +45,11 @@ type Relation struct {
 // ({Delete, Remove, Purge, Drop, Destroy}) satisfied for every ports
 // repository interface, not only ports.UnitRepo: m2c PR 3 widened that
 // test's reflection sweep to cover UnitRepo, RelationRepo, SelfModelRepo,
-// ConfigRepo and StateRepo together (design §4.6, spec R2.7), closing the
-// gap an earlier revision of this comment named but did not yet close.
+// ConfigRepo and StateRepo together (design §4.6, spec R2.7); a later PR
+// widened it again to the remaining two, SignalRepo and EmbeddingRepo, so
+// the sweep now covers every ports repository interface that exists,
+// closing the gap an earlier revision of this comment named but did not
+// yet close.
 type RelationRepo interface {
 	// Upsert writes r, updating strength and confidence in place when a row
 	// already exists for r's (FromUnitID, ToUnitID, Type) triple — I07: a
