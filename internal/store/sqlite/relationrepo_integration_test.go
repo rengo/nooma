@@ -93,6 +93,24 @@ func TestRelationRepo_Contract(t *testing.T) {
 	})
 }
 
+// TestRelationRepo_Evidence and TestRelationRepo_ExistingPairs run
+// repocontract's two remaining ports.RelationRepo contract suites (m2c
+// PR 2) against a real temporary SQLite vault — the same "answered twice"
+// pattern as TestRelationRepo_Contract above.
+func TestRelationRepo_Evidence(t *testing.T) {
+	repocontract.RunEvidence(t, func(t *testing.T) repocontract.RelationHarness {
+		v := openTestVault(t)
+		return relationHarness{RelationRepo: NewRelationRepo(v), v: v}
+	})
+}
+
+func TestRelationRepo_ExistingPairs(t *testing.T) {
+	repocontract.RunExistingPairs(t, func(t *testing.T) repocontract.RelationHarness {
+		v := openTestVault(t)
+		return relationHarness{RelationRepo: NewRelationRepo(v), v: v}
+	})
+}
+
 // TestRelationRepo_UpsertSatisfiesRealUniqueConstraint is task 11b.3's own
 // claim, below the contract: the SQL upsert
 // (ON CONFLICT (from_unit_id, to_unit_id, type) DO UPDATE SET strength =

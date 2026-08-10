@@ -41,6 +41,48 @@ func TestUnitRepo_Contract(t *testing.T) {
 	})
 }
 
+// TestUnitRepo_ApplyBoosts runs the same repocontract.RunApplyBoosts suite
+// PR 1 defined against the in-memory fake, now against a real temporary
+// SQLite vault — design D6's "answered twice" standing rule, following
+// TestUnitRepo_Contract's own pattern above.
+//
+// This is task 5.1's RED, with one disclosed deviation from its own text:
+// PR 1 already gave *UnitRepo a compiling ApplyBoosts placeholder (a plain
+// error, kept satisfying ports.UnitRepo across the chain's stacked-to-main
+// links), so this test compiles from the moment it is added — the RED here
+// is a genuine runtime failure (the placeholder returns a plain error
+// instead of ErrUnitNotFound/success and writes nothing), not the "package
+// does not compile" red task 5.1's text describes, which predates PR 1's
+// placeholder decision.
+func TestUnitRepo_ApplyBoosts(t *testing.T) {
+	repocontract.RunApplyBoosts(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+// TestUnitRepo_CountLiveByType, TestUnitRepo_IncompleteOlderThan and
+// TestUnitRepo_LiveDecayStates run repocontract's three remaining
+// ports.UnitRepo contract suites (PR 2) against a real temporary SQLite
+// vault — design D6's "answered twice" standing rule, same pattern as
+// TestUnitRepo_ApplyBoosts above.
+func TestUnitRepo_CountLiveByType(t *testing.T) {
+	repocontract.RunCountLiveByType(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+func TestUnitRepo_IncompleteOlderThan(t *testing.T) {
+	repocontract.RunIncompleteOlderThan(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+func TestUnitRepo_LiveDecayStates(t *testing.T) {
+	repocontract.RunLiveDecayStates(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
 // TestUnitRepo_LiveByIDsFiltersPositively seeds one unit per status via a
 // raw INSERT INTO units — bypassing UnitRepo.Create deliberately, so the
 // fixture cannot lean on the repo already excluding non-pool rows — and

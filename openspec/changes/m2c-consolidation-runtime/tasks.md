@@ -702,8 +702,11 @@ Verify's file list):**
       (both disclosed above). Measured: 24 impl+docs lines (0.30x the ~80 estimate; migration SQL
       + both doc amendments), 118 test lines (vs ~90 est.), 5 golden lines (excluded from the
       impl+docs count, included in schema identity).
-      **Chain-merge check 1**: not yet performed — this PR is open, not merged.
-      **Chain-merge check 2**: not yet performed — PR 5 does not exist yet.
+      **Chain-merge check 1**: PASS — `git ls-remote --heads origin
+      feat/schema-current-state-source` returns nothing (confirmed via `git fetch --prune`, which
+      reported `- [deleted] origin/feat/schema-current-state-source`).
+      **Chain-merge check 2**: PASS — PR 5 (`feat/store-unit-relation-repos`) was opened with
+      `--base main` and `gh pr view --json baseRefName` names `main`.
 
 ---
 
@@ -715,79 +718,115 @@ above ~300 (the same stop-and-report threshold `m2a`/`m2b`'s own PR4/PR4a used),
 `unitrepo.go` (5a, ~210) | `relationrepo.go` (5b, ~120) — two files, two independent integration
 suites, no cross-file dependency to untangle.
 
-- [ ] **5.1** Commit 1 (RED): `internal/store/sqlite/unitrepo_integration_test.go` (extend) —
+**Disclosed commit-order deviation** (all four tasks below still land, but not in strict
+numeric-then-numeric order): task 5.3's own RED description says the structural scan must be
+"genuinely red before task 5.2's implementation lands" — literally true only if 5.3 is committed
+*before* 5.2, not after as the task numbering alone would suggest. The actual commit chronology
+therefore interleaves: 5.1 (RED) → 5.3 (RED) → one GREEN commit implementing `ApplyBoosts` that
+satisfies both 5.2 and 5.4 at once (5.4 needs no code of its own, exactly as its own text says).
+Both RED tests were run and confirmed genuinely failing before that GREEN commit landed.
+
+**Disclosed RED-shape deviation** (tasks 5.1, 5.5, 5.8): each task's text describes its own red as
+"package does not compile" / "does not compile" — accurate when this task list was written, but
+PR 1 and PR 2 later gave every one of these six methods a compiling placeholder body (a plain Go
+error) specifically so `internal/store/sqlite` keeps building at every link of the stacked chain.
+Wiring the contract suites here therefore compiles from the moment each test is added; the actual
+red is a **runtime** failure — the placeholder's plain error instead of the real behavior — not a
+build failure. Disclosed in each test's own doc comment, not only here.
+
+- [x] **5.1** Commit 1 (RED): `internal/store/sqlite/unitrepo_integration_test.go` (extend) —
       run `repocontract.RunApplyBoosts` against the real sqlite `UnitRepo`, `integration` build
       tag.
-      **Red**: `sqlite.UnitRepo` does not implement `ApplyBoosts` — package does not compile under
-      the `integration` tag.
+      **Red**: runtime, not compile (disclosed above) — the PR 1 placeholder's plain error fails
+      every subtest.
       Requirement: spec R3.1, R3.3; design §5.2.
-- [ ] **5.2** Commit 2 (GREEN): implement `ApplyBoosts` in `internal/store/sqlite/unitrepo.go` —
-      one `BEGIN IMMEDIATE` transaction, one `UPDATE units SET weight = ?, last_touched_at = ?,
-      updated_at = ? WHERE id = ?` per boost inside it; `0` rows affected on any one boost rolls
-      back the whole transaction and returns `ports.ErrUnitNotFound`; non-finite `Weight` is
-      refused **before** `BEGIN` (no transaction opened for a batch that cannot land) — design
-      §5.2's exact shape.
-      Verify: `go test -tags integration ./internal/store/sqlite/... -run TestApplyBoosts`.
+- [x] **5.2** Commit 2 (GREEN): implement `ApplyBoosts` in `internal/store/sqlite/unitrepo.go` —
+      one `BEGIN IMMEDIATE` transaction (the vault's own `_txlock=immediate`, design D3 — every
+      `db.BeginTx` on this vault already takes the write lock upfront), one `UPDATE units SET
+      weight = ?, last_touched_at = ?, updated_at = ? WHERE id = ?` per boost inside it; `0` rows
+      affected on any one boost rolls back the whole transaction and returns
+      `ports.ErrUnitNotFound`; non-finite `Weight` is refused **before** `BEGIN` — design §5.2's
+      exact shape. Landed as one commit that also turns task 5.4's scan green (disclosed above).
+      Verify: `go test -tags integration ./internal/store/sqlite/... -run TestUnitRepo_ApplyBoosts` — PASS.
       Requirement: spec R3.1, R3.3; design §5.2.
-- [ ] **5.3** Commit 1 (RED): `test/conformance/i05_...` — **extend the existing file
+- [x] **5.3** Commit 1 (RED): `test/conformance/i05_...` — **extended the existing file
       `i05_effective_weight_computed_on_read_test.go`** (design's own naming precedent: `i05`'s
       file already exists from `m2a`'s pure half) with the structural-half source-text scan (spec
       R3.4): no method whose name identifies it as a read (`ByID`, `LiveByIDs`, `LiveDecayStates`)
       contains, in its own SQL text, an assignment to `units.weight` or `units.last_touched_at`
       under `internal/store/sqlite`.
-      **Red**: genuinely red before task 5.2's implementation lands with the two-column
-      assignment somewhere — the scan asserts the assignment appears in **exactly one** method,
-      and before `ApplyBoosts` exists that count is `0`, not `1`.
+      **Red**: genuinely red — committed before task 5.2's `ApplyBoosts` implementation landed
+      (disclosed commit-order deviation above), the scan counted `0` methods assigning both
+      columns, not the `1` it asserts.
       Requirement: spec R3.4; design §5.3.
-- [ ] **5.4** Commit 2 (GREEN, structural — no new code beyond task 5.2's own): confirm the scan
-      passes at exactly one match. This task **is** I24's leg 3 (task 1.6's forward reference,
+- [x] **5.4** Commit 2 (GREEN, structural — no new code beyond task 5.2's own): confirmed the scan
+      passes at exactly one match, `ApplyBoosts`, the moment task 5.2's GREEN commit landed (same
+      commit, disclosed above). This task **is** I24's leg 3 (task 1.6's forward reference,
       discharged here) and I05's structural half in one file, per spec R3.4's own scoping note
       (bulk decay materialization was already declined by `m2b`, so there is no permitted-but-unused
       write for the scan to accidentally forbid — stated in the test's own doc comment, not
       inferred).
-      Verify: `go test ./test/conformance/... -run TestI05`.
+      Verify: `go test ./test/conformance/... -run TestI05` — PASS.
       Requirement: spec R3.4; design §5.3; discharges task 1.6's I24 leg-3 forward reference.
-- [ ] **5.5** Commit 1 (RED): `internal/store/sqlite/unitrepo_integration_test.go` (extend) — run
+- [x] **5.5** Commit 1 (RED): `internal/store/sqlite/unitrepo_integration_test.go` (extend) — run
       `repocontract.RunCountLiveByType`, `RunIncompleteOlderThan`, `RunLiveDecayStates` against the
       real sqlite `UnitRepo`.
-      **Red**: none of the three methods exist on the sqlite type yet — does not compile.
+      **Red**: runtime, not compile (disclosed above) — the PR 2 placeholders' plain errors fail
+      every subtest.
       Requirement: spec R1.2, R5.1; design §4.1.
-- [ ] **5.6** Commit 2 (GREEN): implement `CountLiveByType`, `IncompleteOlderThan`,
+- [x] **5.6** Commit 2 (GREEN): implemented `CountLiveByType`, `IncompleteOlderThan`,
       `LiveDecayStates` in `internal/store/sqlite/unitrepo.go` — the SQL filters are bounds, not
       the decision (task 2.5's doc comment); `LiveDecayStates` selects `pool`-status units and the
-      five decay fields only, never a full `unit.Unit` row.
-      Verify: `go test -tags integration ./internal/store/sqlite/...`.
+      five decay fields only, never a full `unit.Unit` row; `IncompleteOlderThan` always returns
+      `Unresolved = false` (no column produces it in M2, `consolidation.Incomplete`'s own doc
+      comment).
+      Verify: `go test -tags integration ./internal/store/sqlite/...` — PASS.
       Requirement: spec R1.2, R5.1; design §4.1.
-- [ ] **5.7** *(split checkpoint)*: measure `git diff --stat` for `unitrepo.go` +
-      `unitrepo_integration_test.go` (tasks 5.1–5.6) in isolation. If this half alone is at risk
-      of the ~210 sub-estimate running hot, this is PR 5a's natural boundary — open it now rather
-      than let `relationrepo.go` inflate the same PR.
-- [ ] **5.8** Commit 1 (RED): `internal/store/sqlite/relationrepo_integration_test.go` (extend) —
+- [x] **5.7** *(split checkpoint)*: measured `git diff --stat` for `unitrepo.go` +
+      `unitrepo_integration_test.go` (tasks 5.1–5.6) in isolation against `main`: **182 impl+docs
+      lines** (124 additions, 58 deletions) + **42 test lines** — well under the ~210 sub-estimate
+      and the ~300 stop-and-report threshold. No split triggered; continued directly to
+      `relationrepo.go`.
+- [x] **5.8** Commit 1 (RED): `internal/store/sqlite/relationrepo_integration_test.go` (extend) —
       run `repocontract.RunEvidence`, `RunExistingPairs` against the real sqlite `RelationRepo`.
-      **Red**: neither method exists on the sqlite type — does not compile.
+      **Red**: runtime, not compile (disclosed above) — the PR 2 placeholders' plain errors fail
+      every subtest.
       Requirement: spec R3.5, R3.6; design §4.2.
-- [ ] **5.9** Commit 2 (GREEN): implement `Evidence` (the join over both endpoints'
-      `last_touched_at`, one query) and `ExistingPairs` (keyed by `CanonicalPair`, bounded by the
-      candidate set the caller passes) in `internal/store/sqlite/relationrepo.go`.
-      Verify: `go test -tags integration ./internal/store/sqlite/...`.
+- [x] **5.9** Commit 2 (GREEN): implemented `Evidence` (the join over both endpoints'
+      `last_touched_at`, one query, ordered by relation id) and `ExistingPairs` (keyed by
+      `CanonicalPair`, one query over relations touching any candidate unit id — never a
+      full-table scan — matched in Go against the candidate set the caller passes) in
+      `internal/store/sqlite/relationrepo.go`.
+      Verify: `go test -tags integration ./internal/store/sqlite/...` — PASS.
       Requirement: spec R3.5, R3.6; design §4.2.
-- [ ] **5.10** `make store-api-golden` — regenerate `testdata/schema/store_api.golden` to reflect
-      the six widened/new method signatures across `UnitRepo`/`RelationRepo`. Named as its own
-      task, not discovered as a fast-loop failure — the same surprise M1's PRs 4 and 9 already
-      recorded (spec R3.2).
-      Verify: `make check`'s existing golden-diff check.
+- [x] **5.10** `make store-api-golden` — regenerated `testdata/schema/store_api.golden` to reflect
+      the six widened/new method signatures across `UnitRepo`/`RelationRepo` (only parameter names
+      changed, from PR 1/PR 2's placeholder underscores to their real names — no signature shape
+      changed). Named as its own task, not discovered as a fast-loop failure — the same surprise
+      M1's PRs 4 and 9 already recorded (spec R3.2).
+      Verify: `make check`'s existing golden-diff check — PASS (confirmed again via `make
+      check-all`'s `schema-golden-clean`).
       Requirement: spec R3.2.
-- [ ] **5.11** Purity/coverage: `golangci-lint run` (`sqlite-containment` — this PR's files stay
-      inside `internal/store/sqlite`); `go test -tags integration -race ./internal/store/sqlite/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/store/sqlite/{unitrepo,relationrepo}.go` (+ integration tests),
-      `test/conformance/i05_effective_weight_computed_on_read_test.go` (extended),
-      `testdata/schema/store_api.golden`. Target ≤330 impl+docs lines; **treat ~300 as the
-      stop-and-report checkpoint** per task 5.7 — split at the pre-drawn `unitrepo.go` |
-      `relationrepo.go` boundary if crossed.
-      **Chain-merge check 1**: `git ls-remote --heads origin feat/store-unit-relation-repos`
-      returns nothing after merge (or `feat/store-unit-relation-repos-5a`/`-5b` if split).
-      **Chain-merge check 2**: `gh pr view <PR6> --json baseRefName` names `main`.
+- [x] **5.11** Purity/coverage: `golangci-lint run` — 0 issues (`sqlite-containment` — this PR's
+      files stay inside `internal/store/sqlite`); `go test -tags integration -race
+      ./internal/store/sqlite/...` — PASS.
+- [x] Verify (PR-level): `make check-all` — PASS (lint 0 issues, vet clean, race unit + integration,
+      `schema-golden-clean` zero diff, `internal/core` coverage 100% (718/718, unaffected — no core
+      code touched), 7-target cross-compile, e2e). Confirmed diff touches exactly
+      `internal/store/sqlite/{unitrepo,relationrepo}.go` (+ their integration tests),
+      `test/conformance/i05_effective_weight_computed_on_read_test.go` (extended, not new),
+      `testdata/schema/store_api.golden` — no other file touched.
+      **Measured**: 306 impl+docs lines (`unitrepo.go` 124+58=182, `relationrepo.go` 99+25=124) —
+      **crosses the ~300 stop-and-report checkpoint**, disclosed rather than silently absorbed: the
+      per-file checkpoint at task 5.7 (182 for `unitrepo.go` alone) was well clear of ~210/~300, and
+      the overage only appeared once `relationrepo.go`'s own 124 lines were added on top — the
+      checkpoint's own design (a per-file gate at 5.7, not a running cumulative one) does not
+      re-trigger after 5.7 passes. Still under the ~330 ceiling estimate and the session's 800-line
+      review budget, so no split was performed, per instruction to continue and report honestly
+      rather than split reflexively at the first crossing. 192 test lines (42 + 18 + 132, vs ~520
+      est.). 12 golden lines (6+6, excluded from the impl+docs count, included in schema identity).
+      **Chain-merge check 1**: performed after merge (see PR 6's own tasks, once opened).
+      **Chain-merge check 2**: performed after merge (see PR 6's own tasks, once opened).
 
 ---
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -182,71 +183,136 @@ func (r *UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Statu
 	return requireRowAffected(res, ports.ErrStatusConflict)
 }
 
-// ApplyBoosts implements ports.UnitRepo. Not yet implemented: PR 5
-// (feat/store-unit-relation-repos) gives it the real, transactional SQL
-// body design §5.2 specifies (one BEGIN IMMEDIATE, one UPDATE per boost,
-// ErrUnitNotFound on a zero-rows-affected boost rolling back the whole
-// batch). This placeholder exists only so *UnitRepo keeps satisfying the
-// widened ports.UnitRepo interface between PR 1 (which adds the method to
-// the interface) and PR 5 (which implements it here) — the chain's own
-// stacked-to-main strategy needs internal/store/sqlite to keep compiling
-// at every link, not only at the end of the chain. Every call currently
-// fails loudly rather than silently no-op'ing.
+// ApplyBoosts implements ports.UnitRepo — design §5.2's exact shape.
 //
-// Deliberately a plain error, not a sentinel: nothing calls this method in
-// this link, so no caller is meant to branch on it with errors.Is. PR 5
-// replaces this body outright rather than adding a case that dispatches on
-// this error.
-func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time) error {
-	return errors.New("sqlite.UnitRepo.ApplyBoosts: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// A non-finite Weight anywhere in the batch is refused BEFORE BEGIN
+// (design §3.1(e)): no transaction is opened for a batch that cannot land.
+// Otherwise, one BEGIN IMMEDIATE transaction (buildDSN's own
+// "_txlock=immediate", design D3 — every db.BeginTx on this vault already
+// takes the write lock upfront, so no separate BEGIN IMMEDIATE statement is
+// written here) wraps one UPDATE per boost, setting weight, last_touched_at
+// and updated_at together (I24, spec R3.3 — one round trip, never two). A
+// boost naming a unit id that does not exist rolls back the whole
+// transaction and returns ports.ErrUnitNotFound, leaving every row in the
+// call — including boosts for units that do exist — untouched.
+func (r *UnitRepo) ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error {
+	for _, b := range boosts {
+		if math.IsNaN(b.Weight) || math.IsInf(b.Weight, 0) {
+			return ports.ErrNonFiniteWeight
+		}
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("apply boosts: begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after a successful Commit; the error path below already reports the real failure
+
+	atText := formatUnitTime(at)
+	for _, b := range boosts {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE units SET weight = ?, last_touched_at = ?, updated_at = ? WHERE id = ?`,
+			b.Weight, formatUnitTime(b.LastTouchedAt), atText, b.UnitID,
+		)
+		if err != nil {
+			return fmt.Errorf("apply boost for unit %q: %w", b.UnitID, err)
+		}
+		if err := requireRowAffected(res, ports.ErrUnitNotFound); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("apply boosts: commit: %w", err)
+	}
+	return nil
 }
 
-// CountLiveByType implements ports.UnitRepo. Not yet implemented — the
-// same PR 5 placeholder as ApplyBoosts above, for the same reason: it
-// keeps *UnitRepo satisfying the widened ports.UnitRepo interface between
-// PR 1 (which adds the method) and PR 5 (which implements it here).
-//
-// Deliberately a plain error, not a sentinel, for the same reason as
-// ApplyBoosts above: no caller invokes it in this link, so none is meant
-// to match on it — PR 5 replaces this body outright.
-//
-// "No caller exists today" is the accurate claim, and it is weaker than
-// "unreachable by construction", which an earlier revision of this comment
-// asserted. Nothing structural prevents a call: this is an exported method
-// satisfying a public interface, and a commit landing before PR 5 could
-// add a call site. What holds is the loud failure, not the impossibility.
-func (r *UnitRepo) CountLiveByType(_ context.Context, _ unit.Type) (int, error) {
-	return 0, errors.New("sqlite.UnitRepo.CountLiveByType: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// CountLiveByType implements ports.UnitRepo. The SQL filter (status = pool
+// AND type = t) is a bound, not the decision — pattern_eval's own reading
+// of the resulting integer is what decides anything (design §4.1).
+func (r *UnitRepo) CountLiveByType(ctx context.Context, t unit.Type) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM units WHERE type = ? AND status = ?`,
+		string(t), string(unit.StatusPool),
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting live units of type %q: %w", t, err)
+	}
+	return count, nil
 }
 
-// IncompleteOlderThan implements ports.UnitRepo. Not yet implemented — the
-// same PR 5 placeholder as ApplyBoosts and CountLiveByType above, added by
-// PR 2 (feat/ports-unit-relation-reads) for the identical reason: it keeps
-// *UnitRepo satisfying the widened ports.UnitRepo interface between PR 2
-// (which adds the method to the interface) and PR 5 (which implements it
-// here) — the chain's own stacked-to-main strategy needs
-// internal/store/sqlite to keep compiling at every link.
-//
-// Deliberately a plain error, not a sentinel: no caller exists today, so
-// none is meant to branch on it with errors.Is. PR 5 replaces this body
-// outright rather than adding a case that dispatches on this error. Nothing
-// structural prevents a call — this is an exported method satisfying a
-// public interface — so "no caller exists today" is the claim this comment
-// makes, not "unreachable by construction" (the wording an earlier revision
-// of CountLiveByType's own comment above used before a judge rejected it —
-// the same correction is applied here from the start).
-func (r *UnitRepo) IncompleteOlderThan(_ context.Context, _ time.Time) ([]consolidation.Incomplete, error) {
-	return nil, errors.New("sqlite.UnitRepo.IncompleteOlderThan: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// IncompleteOlderThan implements ports.UnitRepo. cutoff is a bound, not the
+// decision (design §4.1): the SQL filter mirrors consolidation.ExpireIncomplete's
+// own 24h predicate, it does not enforce it — strict "<", never "<=", so a
+// unit created exactly at cutoff is excluded (it has aged exactly the
+// expiry window, not past it).
+func (r *UnitRepo) IncompleteOlderThan(ctx context.Context, cutoff time.Time) ([]consolidation.Incomplete, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, created_at FROM units WHERE status = ? AND created_at < ?`,
+		string(unit.StatusIncomplete), formatUnitTime(cutoff),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("selecting incomplete units older than %s: %w", cutoff, err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := []consolidation.Incomplete{}
+	for rows.Next() {
+		var id, createdAtText string
+		if err := rows.Scan(&id, &createdAtText); err != nil {
+			return nil, fmt.Errorf("scanning an incomplete unit row: %w", err)
+		}
+		createdAt, err := time.Parse(unitTimeLayout, createdAtText)
+		if err != nil {
+			return nil, fmt.Errorf("unit %q: created_at: %w", id, err)
+		}
+		// Unresolved is never populated from a column — no code in M2
+		// produces it (consolidation.Incomplete's own doc comment) — so it
+		// stays at its zero value, false, for every row.
+		out = append(out, consolidation.Incomplete{UnitID: id, CreatedAt: createdAt})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("selecting incomplete units older than %s: %w", cutoff, err)
+	}
+	return out, nil
 }
 
-// LiveDecayStates implements ports.UnitRepo. Not yet implemented — same PR
-// 5 placeholder, same reason, as IncompleteOlderThan above.
-//
-// Deliberately a plain error, not a sentinel, for the same reason as
-// IncompleteOlderThan: no caller exists today, so none is meant to match on
-// it — PR 5 replaces this body outright.
-func (r *UnitRepo) LiveDecayStates(_ context.Context) ([]consolidation.Cold, error) {
-	return nil, errors.New("sqlite.UnitRepo.LiveDecayStates: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// LiveDecayStates implements ports.UnitRepo. Selects status = pool units and
+// only consolidation.Cold's five decay fields — never a full unit.Unit row
+// (m2a D9's rule, kept one layer up, design §4.1).
+func (r *UnitRepo) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, weight, weight_decay_rate, last_touched_at FROM units WHERE status = ?`,
+		string(unit.StatusPool),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("selecting live decay states: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := []consolidation.Cold{}
+	for rows.Next() {
+		var (
+			c                 consolidation.Cold
+			lastTouchedAtText string
+		)
+		if err := rows.Scan(&c.UnitID, &c.Weight, &c.DecayRate, &lastTouchedAtText); err != nil {
+			return nil, fmt.Errorf("scanning a live decay state row: %w", err)
+		}
+		lastTouchedAt, err := time.Parse(unitTimeLayout, lastTouchedAtText)
+		if err != nil {
+			return nil, fmt.Errorf("unit %q: last_touched_at: %w", c.UnitID, err)
+		}
+		c.Status = unit.StatusPool
+		c.LastTouchedAt = lastTouchedAt
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("selecting live decay states: %w", err)
+	}
+	return out, nil
 }
 
 // unitSelectColumns is shared by ByID and LiveByIDs — one column list, one
