@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
-	"github.com/rengo/nooma/internal/ports"
-	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // This file lives inside package brain (white-box), not test/conformance,
@@ -34,33 +32,6 @@ type fixedClock struct{ now time.Time }
 
 func (c fixedClock) Now() time.Time { return c.now }
 
-// spyConfig wraps memrepo.Config to count ports.ConfigRepo.Load and
-// RecordConsolidationRun calls. The "since read once" and
-// "consolidation_last_run_at written once" properties (spec R5.3, R5.4;
-// design §3.3(c)-(d)) are call-count claims, not stored-value claims, so a
-// plain memrepo.Config fixture cannot prove them by itself.
-type spyConfig struct {
-	*memrepo.Config
-	loadCalls   int
-	recordCalls int
-	recordAts   []time.Time
-}
-
-func newSpyConfig() *spyConfig {
-	return &spyConfig{Config: memrepo.NewConfig()}
-}
-
-func (s *spyConfig) Load(ctx context.Context) (ports.VaultConfig, error) {
-	s.loadCalls++
-	return s.Config.Load(ctx)
-}
-
-func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) error {
-	s.recordCalls++
-	s.recordAts = append(s.recordAts, at)
-	return s.Config.RecordConsolidationRun(ctx, at)
-}
-
 // TestConsolidate_WholePassReachesEveryPhaseInOrder is spec R4.1's own
 // scenario (I11's behavioural half, design §3.3(b)): a whole pass
 // (ConsolidateRequest's zero value) reaches every consolidation.Order()
@@ -68,7 +39,7 @@ func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) er
 func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig())
+	svc := NewConsolidateService(fixedClock{now})
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
