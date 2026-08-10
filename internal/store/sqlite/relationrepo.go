@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -121,31 +122,104 @@ WHERE relation_type = ?`
 	return &t, nil
 }
 
-// Evidence implements ports.RelationRepo. Not yet implemented: PR 5
-// (feat/store-unit-relation-repos) gives it the real join over both
-// endpoints' last_touched_at (design §4.2). This placeholder exists only so
-// *RelationRepo keeps satisfying the widened ports.RelationRepo interface
-// between PR 2 (which adds the method to the interface) and PR 5 (which
-// implements it here) — the chain's own stacked-to-main strategy needs
-// internal/store/sqlite to keep compiling at every link, following PR 1's
-// precedent for UnitRepo.ApplyBoosts/CountLiveByType.
-//
-// Deliberately a plain error, not a sentinel: no caller exists today, so
-// none is meant to branch on it with errors.Is. PR 5 replaces this body
-// outright rather than adding a case that dispatches on this error. Nothing
-// structural prevents a call — this is an exported method satisfying a
-// public interface — so "no caller exists today" is the claim this comment
-// makes, not "unreachable by construction".
-func (r *RelationRepo) Evidence(_ context.Context) ([]consolidation.RelationEvidence, error) {
-	return nil, errors.New("sqlite.RelationRepo.Evidence: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// Evidence implements ports.RelationRepo — the join design §4.2 fixed:
+// every relation, joined to both endpoints' own last_touched_at, in one
+// query — never relations, then units, then a zip in brain (design §4.1's
+// own reason against that shape, spec R3.5).
+func (r *RelationRepo) Evidence(ctx context.Context) ([]consolidation.RelationEvidence, error) {
+	const q = `
+SELECT r.id, r.strength, uf.last_touched_at, ut.last_touched_at
+FROM relations r
+JOIN units uf ON uf.id = r.from_unit_id
+JOIN units ut ON ut.id = r.to_unit_id
+ORDER BY r.id`
+
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("reading relation evidence: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []consolidation.RelationEvidence
+	for rows.Next() {
+		var e consolidation.RelationEvidence
+		var fromText, toText string
+		if err := rows.Scan(&e.RelationID, &e.Strength, &fromText, &toText); err != nil {
+			return nil, fmt.Errorf("scanning a relation evidence row: %w", err)
+		}
+		fromAt, err := time.Parse(unitTimeLayout, fromText)
+		if err != nil {
+			return nil, fmt.Errorf("relation %q: from_unit_id last_touched_at: %w", e.RelationID, err)
+		}
+		toAt, err := time.Parse(unitTimeLayout, toText)
+		if err != nil {
+			return nil, fmt.Errorf("relation %q: to_unit_id last_touched_at: %w", e.RelationID, err)
+		}
+		e.FromLastTouchedAt = fromAt
+		e.ToLastTouchedAt = toAt
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading relation evidence: %w", err)
+	}
+	return out, nil
 }
 
-// ExistingPairs implements ports.RelationRepo. Not yet implemented — same
-// PR 5 placeholder, same reason, as Evidence above.
-//
-// Deliberately a plain error, not a sentinel, for the same reason as
-// Evidence: no caller exists today, so none is meant to match on it — PR 5
-// replaces this body outright.
-func (r *RelationRepo) ExistingPairs(_ context.Context, _ []consolidation.Pair) (map[consolidation.Pair]bool, error) {
-	return nil, errors.New("sqlite.RelationRepo.ExistingPairs: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// ExistingPairs implements ports.RelationRepo — bounded by the candidate
+// set pairs names (design §4.2, spec R3.6, ConnectSourceLimit x
+// ConnectCandidateK = 100): one query over relations touching any candidate
+// unit id, canonicalized in Go and matched against pairs, never a
+// full-table scan over every relation in the vault. A pair with no stored
+// relation is left absent from the returned map, never a false-valued
+// entry.
+func (r *RelationRepo) ExistingPairs(ctx context.Context, pairs []consolidation.Pair) (map[consolidation.Pair]bool, error) {
+	out := make(map[consolidation.Pair]bool, len(pairs))
+	if len(pairs) == 0 {
+		return out, nil
+	}
+
+	want := make(map[consolidation.Pair]bool, len(pairs))
+	idSet := make(map[string]struct{}, len(pairs)*2)
+	for _, p := range pairs {
+		want[p] = true
+		idSet[p.From] = struct{}{}
+		idSet[p.To] = struct{}{}
+	}
+	ids := make([]string, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)*2)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	q := `SELECT from_unit_id, to_unit_id FROM relations WHERE from_unit_id IN (` +
+		placeholders + `) OR to_unit_id IN (` + placeholders + `)`
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reading existing pairs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var from, to string
+		if err := rows.Scan(&from, &to); err != nil {
+			return nil, fmt.Errorf("scanning an existing-pairs row: %w", err)
+		}
+		pair := consolidation.CanonicalPair(from, to)
+		if want[pair] {
+			out[pair] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading existing pairs: %w", err)
+	}
+	return out, nil
 }
