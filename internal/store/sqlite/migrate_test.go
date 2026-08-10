@@ -8,16 +8,17 @@ import (
 
 // TestParseMigrationsRealEmbeddedSet is D10's non-empty-corpus guard applied
 // to the real embedded migration set: it asserts parseMigrations finds
-// exactly versions 1..2 (0001_core_tables.sql, 0002_learning_and_search.sql
-// — R3.8, design §5.1's own stated expectation) with non-empty SQL, before
-// any other test in this file trusts synthetic inputs to mean anything.
+// exactly versions 1..3 (0001_core_tables.sql, 0002_learning_and_search.sql,
+// 0003_current_state_source.sql — R3.8, design §5.1's own stated
+// expectation) with non-empty SQL, before any other test in this file
+// trusts synthetic inputs to mean anything.
 func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	migrations, err := parseMigrations(migrationFS)
 	if err != nil {
 		t.Fatalf("parseMigrations(migrationFS) = _, %v, want nil error", err)
 	}
-	if len(migrations) != 2 {
-		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 2 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql)", len(migrations))
+	if len(migrations) != 3 {
+		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 3 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql)", len(migrations))
 	}
 	for _, m := range migrations {
 		if strings.TrimSpace(m.SQL) == "" {
@@ -29,6 +30,9 @@ func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	}
 	if migrations[1].Version != 2 {
 		t.Errorf("migrations[1].Version = %d, want 2", migrations[1].Version)
+	}
+	if migrations[2].Version != 3 {
+		t.Errorf("migrations[2].Version = %d, want 3", migrations[2].Version)
 	}
 }
 
