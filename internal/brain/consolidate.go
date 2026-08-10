@@ -2,6 +2,8 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -25,11 +27,12 @@ type ConsolidateService struct {
 // NewConsolidateService wires a ConsolidateService over the ports one pass
 // needs. clock is read exactly once per Consolidate call; run never sees
 // clock at all — the same structural guarantee captureRunner's split gives
-// (see capture.go's own doc comment).
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo) *ConsolidateService {
+// (see capture.go's own doc comment). ids and log back record (design
+// §3.3(e)) — the one call site every effect a phase persists goes through.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, ids ports.IDGen, log ports.DecisionLog) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg},
+		run:   consolidateRunner{cfg: cfg, ids: ids, log: log},
 	}
 }
 
@@ -55,6 +58,24 @@ type ConsolidateReport struct {
 	// report rendering is a future design decision, not a reason to widen
 	// this struct's public surface ahead of it.
 	phasesRun []consolidation.Phase
+	// corrupted collects every refused entry any of the four
+	// corrupted-capable phases (archive, strengthen, reweight, derive)
+	// reports — design §3.3(e), spec R4.2's MUST NOT: a refusal had no
+	// vault effect, so it is surfaced here and never in decision_log.
+	// Unexported for the same reason phasesRun is: PR 12 owns the eventual
+	// public report shape.
+	corrupted []string
+}
+
+// reportCorrupted folds ids into r.corrupted and touches nothing else —
+// deliberately: this method has no access to a consolidateRunner's log or
+// ids, so it cannot itself become a call site that routes a corrupted
+// entry into record (design §3.3(e): "a corrupted entry from any phase is
+// surfaced in ConsolidateReport and never in decision_log"). The refusal
+// rule is decided once, here, and applied uniformly to all four
+// corrupted-capable phases' own future call sites (PR 8-11).
+func (r *ConsolidateReport) reportCorrupted(ids []string) {
+	r.corrupted = append(r.corrupted, ids...)
 }
 
 // Consolidate is this file's only ports.Clock.Now() read — one per
@@ -65,9 +86,73 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 
 // consolidateRunner is the clockless worker owning one pass (design
 // §3.3(a)) — no ConsolidateService field, no ports.Clock of its own,
-// mirroring captureRunner/correctionRunner's own split.
+// mirroring captureRunner/correctionRunner's own split. ids and log exist
+// for exactly one purpose: record, below — no other method on this type
+// reads either field.
 type consolidateRunner struct {
 	cfg ports.ConfigRepo
+	ids ports.IDGen
+	log ports.DecisionLog
+}
+
+// record persists one decision_log row — the one call site every effect a
+// phase's core decision function returns goes through (design §3.3(e),
+// spec R4.2's first MUST). detail is marshalled into Decision.Context;
+// rationale is the legible sentence spec R6.4's exit criterion needs.
+//
+// Honest limit (design §3.3(e)): nothing here structurally forbids a
+// future persist call from skipping this helper. The guard is the L2
+// fixture pair spec R4.2 requires — every phase fed produces one row per
+// effect, no phase fed produces zero rows — plus review; this is a
+// convention, not a gate, and is named as one rather than presented as
+// something it is not.
+func (r consolidateRunner) record(ctx context.Context, now time.Time, action ports.DecisionAction, rationale string, detail any) error {
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		return fmt.Errorf("consolidate: encode decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     action,
+		Rationale:  rationale,
+		Context:    detailJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("consolidate: record decision: %w", err)
+	}
+	return nil
+}
+
+// persistArchiveTransitions applies ts through units.SetStatus, in the
+// order archive planned them, and records one decision_log row per outcome
+// (design §3.3(e), spec R4.2). A concurrent capture or correction that
+// revived a unit between archive's own read and this write surfaces as
+// ports.ErrStatusConflict: the write is skipped, the skip itself is
+// recorded — spec R4.3's own "this IS an effect worth logging: the pass
+// decided to archive and a race prevented it" — and persistence continues
+// with the remaining transitions. A race never fails the pass; any other
+// SetStatus error still does, returned to the caller unchanged.
+func (r consolidateRunner) persistArchiveTransitions(ctx context.Context, ts []consolidation.Transition, units ports.UnitRepo, now time.Time) error {
+	for _, t := range ts {
+		err := units.SetStatus(ctx, t.UnitID, t.From, t.To, now)
+		switch {
+		case err == nil:
+			rationale := fmt.Sprintf("archived unit %q: effective weight fell below threshold", t.UnitID)
+			if rerr := r.record(ctx, now, ports.ActionArchiveArchived, rationale, t); rerr != nil {
+				return rerr
+			}
+		case errors.Is(err, ports.ErrStatusConflict):
+			rationale := fmt.Sprintf("skipped archiving unit %q: a concurrent capture or correction revived it first", t.UnitID)
+			if rerr := r.record(ctx, now, ports.ActionArchiveConflictSkipped, rationale, t); rerr != nil {
+				return rerr
+			}
+		default:
+			return fmt.Errorf("consolidate: archive: set status for unit %q: %w", t.UnitID, err)
+		}
+	}
+	return nil
 }
 
 // passContext is everything one invocation reads before any phase runs —

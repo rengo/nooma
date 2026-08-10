@@ -2,11 +2,14 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -71,7 +74,7 @@ func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) er
 func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, memrepo.NewDecisionLog())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -111,7 +114,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 
 	t.Run("reaches exactly the requested phase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig())
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, memrepo.NewDecisionLog())
 		phase := consolidation.PhaseArchive
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
@@ -131,7 +134,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	})
 
 	t.Run("an unknown phase errors through Consolidate itself, not just runPhase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig())
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, memrepo.NewDecisionLog())
 		unknown := consolidation.Phase(99)
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &unknown})
@@ -185,7 +188,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a whole pass", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg)
+		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -196,7 +199,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a per-phase run too", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg)
+		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
 		phase := consolidation.PhaseStrengthen
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -217,7 +220,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("whole pass records exactly once with the pass's own now", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg)
+		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -231,7 +234,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("per-phase run never records", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg)
+		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
 		phase := consolidation.PhaseLearn
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -240,4 +243,331 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 			t.Errorf("RecordConsolidationRun calls = %d, want 0 for a per-phase run", cfg.recordCalls)
 		}
 	})
+}
+
+// TestConsolidateRunner_Record is spec R4.2's I12 direction 1, exercised at
+// the one call site design §3.3(e) names — record — rather than through
+// runPhase's dispatch: every arm runPhase's switch declares is still a
+// placeholder (design §3.3(b), PR 7a), so there is no real per-phase
+// "invocation slot" for a spy to observe yet. This PR's own honest
+// substitute (disclosed here rather than silently reconciled, tasks.md
+// 7b.2's own framing): one record call stands in for one phase's one
+// persistable effect, using each of the ten new ports.DecisionAction
+// members design §7.5 enumerates as the ten "invocation slots" — proving
+// record itself persists exactly one decision_log row per call, with an
+// Action that distinguishes which slot produced it. PR 8-11 wire the real
+// per-phase call sites that reach record through runPhase; I11's own
+// whole-pass ordering property (TestConsolidate_WholePassReachesEveryPhaseInOrder,
+// above) already proves the runner reaches every slot in order.
+func TestConsolidateRunner_Record(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	slots := []struct {
+		action ports.DecisionAction
+		detail any
+	}{
+		{ports.ActionExpireIncompleteTransitioned, struct {
+			UnitID string `json:"unit_id"`
+		}{"u-expire"}},
+		{ports.ActionArchiveArchived, struct {
+			UnitID string `json:"unit_id"`
+		}{"u-archive"}},
+		{ports.ActionStrengthenApplied, struct {
+			RelationID string `json:"relation_id"`
+		}{"r-strengthen"}},
+		{ports.ActionConnectRelationPersisted, struct {
+			RelationID string `json:"relation_id"`
+		}{"r-connect"}},
+		{ports.ActionDeriveBeliefCreated, struct {
+			TopicKey string `json:"topic_key"`
+		}{"tk-created"}},
+		{ports.ActionDeriveBeliefReinforced, struct {
+			TopicKey string `json:"topic_key"`
+		}{"tk-reinforced"}},
+		{ports.ActionReweightBoostApplied, struct {
+			UnitID string `json:"unit_id"`
+		}{"u-reweight"}},
+		{ports.ActionPatternEvalStagnationFound, struct {
+			GoalUnitID string `json:"goal_unit_id"`
+		}{"u-stagnant"}},
+		{ports.ActionPatternEvalLoadHypothesisOpened, struct {
+			LastHypothesisAt *time.Time `json:"last_hypothesis_at"`
+		}{nil}},
+		{ports.ActionArchiveConflictSkipped, struct {
+			UnitID string `json:"unit_id"`
+		}{"u-skipped"}},
+	}
+
+	log := memrepo.NewDecisionLog()
+	r := consolidateRunner{ids: &fakeIDs{}, log: log}
+
+	for i, slot := range slots {
+		rationale := "slot " + string(slot.action) + " persisted"
+		if err := r.record(ctx, now, slot.action, rationale, slot.detail); err != nil {
+			t.Fatalf("record(%d, %s): %v", i, slot.action, err)
+		}
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Second), len(slots)+1)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	if len(rows) != len(slots) {
+		t.Fatalf("decision_log rows = %d, want exactly %d — one per persisted effect (spec R4.2)", len(rows), len(slots))
+	}
+
+	seen := make(map[ports.DecisionAction]int)
+	for _, row := range rows {
+		seen[row.Action]++
+		if row.Rationale == "" {
+			t.Errorf("row %s: empty Rationale, want a legible sentence (spec R6.4)", row.Action)
+		}
+	}
+	for _, slot := range slots {
+		if seen[slot.action] != 1 {
+			t.Errorf("Action %s appeared %d times, want exactly 1 — a reader must be able to tell which slot wrote which row (spec R4.2)", slot.action, seen[slot.action])
+		}
+	}
+}
+
+// TestConsolidate_NoEffects is spec R4.2's I12 direction 2: a whole pass
+// where no phase has qualifying input completes and decision_log gains
+// zero rows. Every arm runPhase's switch declares is still a placeholder
+// (design §3.3(b), PR 7a) — none of them calls record unconditionally
+// today, so this passes immediately rather than failing first
+// (tasks.md 7b.4's own framing: "disclosed as the actual regression this
+// test guards, not a hypothetical" — the m2a C9 precedent this PR chain
+// already established for a stated Red that is a proof, not a discovered
+// break). It stays in this suite as the regression guard PR 8-11's real
+// per-phase wiring must keep green: a phase fed nothing must still write
+// nothing.
+func TestConsolidate_NoEffects(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	log := memrepo.NewDecisionLog()
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, log)
+
+	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
+	if err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+	if len(report.phasesRun) != len(consolidation.Order()) {
+		t.Fatalf("PhasesRun = %v, want every phase reached even with nothing to do", report.phasesRun)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 100)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("decision_log rows = %d, want 0 — a phase fed nothing must write nothing (spec R4.2)", len(rows))
+	}
+}
+
+// TestConsolidateReport_CorruptedNeverLogged is spec R4.2's own MUST NOT,
+// decided uniformly across every corrupted-capable phase (design §3.3(e)):
+// a corrupted entry from any of archive, strengthen, reweight or derive is
+// surfaced in ConsolidateReport and never in decision_log, because a
+// refusal had no vault effect. Exercised against two of the four real core
+// producers that already share the (effects, corrupted []string) shape —
+// consolidation.Archive and consolidation.Strengthen — feeding a fixture
+// engineered to refuse one entry through each straight into
+// report.reportCorrupted, the one place this PR routes a corrupted id.
+// reweight (PR 11) and derive (PR 10b) wire their own real corrupted-
+// producing calls later, through this exact same mechanism: it takes only
+// ids, so it structurally cannot itself become a call site into record —
+// disclosed here rather than claimed as coverage this PR does not have.
+func TestConsolidateReport_CorruptedNeverLogged(t *testing.T) {
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	t.Run("archive", func(t *testing.T) {
+		cs := []consolidation.Cold{
+			{UnitID: "u-good", Weight: 0.1, DecayRate: 0.01, LastTouchedAt: now.Add(-24 * time.Hour)},
+			{UnitID: "u-nan", Weight: math.NaN(), DecayRate: 0.01, LastTouchedAt: now},
+		}
+		// Both units start pool; the fixture needs Status set for Archive
+		// to consider them at all.
+		for i := range cs {
+			cs[i].Status = unit.StatusPool
+		}
+		_, corrupted := consolidation.Archive(cs, consolidation.DefaultWeightThreshold, now)
+		if len(corrupted) != 1 || corrupted[0] != "u-nan" {
+			t.Fatalf("fixture corrupted = %v, want exactly [u-nan]", corrupted)
+		}
+
+		log := memrepo.NewDecisionLog()
+		var report ConsolidateReport
+		report.reportCorrupted(corrupted)
+
+		if len(report.corrupted) != 1 || report.corrupted[0] != "u-nan" {
+			t.Errorf("report.corrupted = %v, want [u-nan]", report.corrupted)
+		}
+		rows, err := log.Since(context.Background(), now.Add(-time.Hour), 10)
+		if err != nil {
+			t.Fatalf("Since: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Errorf("decision_log rows = %d, want 0 for a refused archive entry", len(rows))
+		}
+	})
+
+	t.Run("strengthen", func(t *testing.T) {
+		since := now.Add(-48 * time.Hour)
+		es := []consolidation.RelationEvidence{
+			{RelationID: "r-good", Strength: 0.2, FromLastTouchedAt: now, ToLastTouchedAt: now},
+			{RelationID: "r-bad", Strength: 7, FromLastTouchedAt: now, ToLastTouchedAt: now},
+		}
+		_, corrupted := consolidation.Strengthen(es, &since)
+		if len(corrupted) != 1 || corrupted[0] != "r-bad" {
+			t.Fatalf("fixture corrupted = %v, want exactly [r-bad]", corrupted)
+		}
+
+		log := memrepo.NewDecisionLog()
+		var report ConsolidateReport
+		report.reportCorrupted(corrupted)
+
+		if len(report.corrupted) != 1 || report.corrupted[0] != "r-bad" {
+			t.Errorf("report.corrupted = %v, want [r-bad]", report.corrupted)
+		}
+		rows, err := log.Since(context.Background(), now.Add(-time.Hour), 10)
+		if err != nil {
+			t.Fatalf("Since: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Errorf("decision_log rows = %d, want 0 for a refused strengthen entry", len(rows))
+		}
+	})
+}
+
+// TestConsolidateRunner_Record_EncodesDetailIntoContext proves record's own
+// marshalling contract (design §3.3(e)): detail lands in Decision.Context
+// verbatim, decodable by the caller that wrote it.
+func TestConsolidateRunner_Record_EncodesDetailIntoContext(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	log := memrepo.NewDecisionLog()
+	r := consolidateRunner{ids: &fakeIDs{}, log: log}
+
+	type detail struct {
+		UnitID string `json:"unit_id"`
+	}
+	if err := r.record(ctx, now, ports.ActionArchiveArchived, `archived unit "u-1"`, detail{UnitID: "u-1"}); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Second), 1)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("decision_log rows = %d, want 1", len(rows))
+	}
+
+	var got detail
+	if err := json.Unmarshal(rows[0].Context, &got); err != nil {
+		t.Fatalf("decode Context: %v", err)
+	}
+	if got.UnitID != "u-1" {
+		t.Errorf("Context.unit_id = %q, want %q", got.UnitID, "u-1")
+	}
+}
+
+// conflictingUnits wraps memrepo.Units, forcing exactly the conflictOn'th
+// SetStatus call to fail with ports.ErrStatusConflict regardless of the
+// unit's own stored status — spec R4.3's fixture needs one deterministic
+// conflict, not one incidentally derived from seeded state.
+type conflictingUnits struct {
+	*memrepo.Units
+	conflictOn int // 1-based call index that fails
+	calls      int
+}
+
+func (u *conflictingUnits) SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error {
+	u.calls++
+	if u.calls == u.conflictOn {
+		return ports.ErrStatusConflict
+	}
+	return u.Units.SetStatus(ctx, id, from, to, at)
+}
+
+// TestConsolidateRunner_PersistArchiveTransitions_SkipsAndLogsConflict is
+// spec R4.3's own fixture (tasks.md 7b.8's shape): three units planned for
+// archival, the second's SetStatus call returns ports.ErrStatusConflict — a
+// concurrent capture or correction revived it between archive's read and
+// this write. The pass does not fail: the first and third are archived,
+// the second is skipped and the skip itself is logged, and no error
+// propagates.
+//
+// Forward-looking scaffold (design §3.3(e), tasks.md 7b.8): exercised
+// directly against persistArchiveTransitions with a fake phase's own
+// planned transitions, not through runPhase's still-placeholder archive
+// arm — PR 8's own task 8.9 re-runs this identical shape against the real
+// archive wiring, proving the real phase uses the exact mechanism proved
+// here in isolation.
+func TestConsolidateRunner_PersistArchiveTransitions_SkipsAndLogsConflict(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	units := &conflictingUnits{Units: memrepo.NewUnits(), conflictOn: 2}
+	for _, id := range []string{"u-1", "u-2", "u-3"} {
+		if err := units.Create(ctx, unit.Unit{
+			ID: id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "seed", Source: "chat", CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+
+	ts := []consolidation.Transition{
+		{UnitID: "u-1", From: unit.StatusPool, To: unit.StatusArchived, Reason: consolidation.ReasonBelowWeightThreshold},
+		{UnitID: "u-2", From: unit.StatusPool, To: unit.StatusArchived, Reason: consolidation.ReasonBelowWeightThreshold},
+		{UnitID: "u-3", From: unit.StatusPool, To: unit.StatusArchived, Reason: consolidation.ReasonBelowWeightThreshold},
+	}
+
+	log := memrepo.NewDecisionLog()
+	r := consolidateRunner{ids: &fakeIDs{}, log: log}
+
+	if err := r.persistArchiveTransitions(ctx, ts, units, now); err != nil {
+		t.Fatalf("persistArchiveTransitions: %v", err)
+	}
+
+	for id, want := range map[string]unit.Status{
+		"u-1": unit.StatusArchived,
+		"u-2": unit.StatusPool,
+		"u-3": unit.StatusArchived,
+	} {
+		got, err := units.ByID(ctx, id)
+		if err != nil {
+			t.Fatalf("ByID(%s): %v", id, err)
+		}
+		if got.Status != want {
+			t.Errorf("%s status = %s, want %s", id, got.Status, want)
+		}
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	var archived, skipped int
+	for _, row := range rows {
+		switch row.Action {
+		case ports.ActionArchiveArchived:
+			archived++
+		case ports.ActionArchiveConflictSkipped:
+			skipped++
+		default:
+			t.Errorf("unexpected Action %s", row.Action)
+		}
+	}
+	if archived != 2 {
+		t.Errorf("ActionArchiveArchived rows = %d, want 2", archived)
+	}
+	if skipped != 1 {
+		t.Errorf("ActionArchiveConflictSkipped rows = %d, want 1", skipped)
+	}
+	if len(rows) != 3 {
+		t.Errorf("decision_log rows = %d, want 3 — one per unit, including the skip (spec R4.3)", len(rows))
+	}
 }
