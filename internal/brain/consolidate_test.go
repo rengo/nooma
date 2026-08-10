@@ -188,3 +188,38 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 		}
 	})
 }
+
+// TestConsolidate_RecordsConsolidationRunOnce is spec R5.4 and design
+// §3.3(d): RecordConsolidationRun is called exactly once per whole pass,
+// with the pass's own now, and never for a per-phase run — one call site,
+// gated on the same field (req.Phase) that selected the scope.
+func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	t.Run("whole pass records exactly once with the pass's own now", func(t *testing.T) {
+		cfg := newSpyConfig()
+		svc := NewConsolidateService(fixedClock{now}, cfg)
+		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
+			t.Fatalf("Consolidate: %v", err)
+		}
+		if cfg.recordCalls != 1 {
+			t.Fatalf("RecordConsolidationRun calls = %d, want exactly 1", cfg.recordCalls)
+		}
+		if !cfg.recordAts[0].Equal(now) {
+			t.Errorf("RecordConsolidationRun at = %v, want the pass's own now %v", cfg.recordAts[0], now)
+		}
+	})
+
+	t.Run("per-phase run never records", func(t *testing.T) {
+		cfg := newSpyConfig()
+		svc := NewConsolidateService(fixedClock{now}, cfg)
+		phase := consolidation.PhaseLearn
+		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+			t.Fatalf("Consolidate: %v", err)
+		}
+		if cfg.recordCalls != 0 {
+			t.Errorf("RecordConsolidationRun calls = %d, want 0 for a per-phase run", cfg.recordCalls)
+		}
+	})
+}
