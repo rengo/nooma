@@ -789,7 +789,10 @@ box can audit it):
   `internal/core/consolidation.LoadCooldownDays`, chosen — unrelated to
   `mental_load_threshold`'s own coincidentally-equal 7, a duration versus a count) after a
   resolved check-in. The nudge offers to **close one loop**: it lists the open ones, the user
-  picks, it gets archived (soft, recoverable).
+  picks, it gets archived (soft, recoverable). The load watcher's `current_state` row is written
+  with `source = 'consolidation'`, `mood = 'loaded'` and `energy` left NULL, and its cooldown is
+  anchored on the previous hypothesis's own `recorded_at` because M2 has no resolution signal
+  (`m2b` §9 Q6, mapped).
 
 ## 8. Ephemeral timers — infrastructure, NOT memory
 
@@ -841,9 +844,11 @@ use `derived/{facet}/{key}`), `content`, `confidence`, `origin`
 - Editing or deleting a belief emits a learning signal (`belief_edit` / `belief_delete`).
 
 **`current_state`** (the delicate facet): append-only rows with `energy` (0–1), `mood` (text),
-`active`. The load watcher opens it as a tentative hypothesis; the user confirms or corrects.
-Consumers: digest cadence and tone. **Product rule**: LOAD is cared for (observable), emotions
-are not interpreted. If forced to choose, keep `energy` (capacity) and drop the mood labels.
+`active`, `source` (`user` | `consolidation`). The load watcher opens it as a tentative
+hypothesis; the user confirms or corrects. The append-only property is now structural at the
+port — `StateRepo` has no update path. Consumers: digest cadence and tone. **Product rule**:
+LOAD is cared for (observable), emotions are not interpreted. If forced to choose, keep `energy`
+(capacity) and drop the mood labels.
 
 ## 11. The glass box
 
