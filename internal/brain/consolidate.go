@@ -26,10 +26,10 @@ type ConsolidateService struct {
 // needs. clock is read exactly once per Consolidate call; run never sees
 // clock at all — the same structural guarantee captureRunner's split gives
 // (see capture.go's own doc comment).
-func NewConsolidateService(clock ports.Clock) *ConsolidateService {
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{},
+		run:   consolidateRunner{cfg: cfg},
 	}
 }
 
@@ -64,15 +64,31 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // consolidateRunner is the clockless worker owning one pass (design
 // §3.3(a)) — no ConsolidateService field, no ports.Clock of its own,
 // mirroring captureRunner/correctionRunner's own split.
-type consolidateRunner struct{}
+type consolidateRunner struct {
+	cfg ports.ConfigRepo
+}
 
 // passContext is everything one invocation reads before any phase runs —
-// design §3.3(c). Passed by value to every phase runPhase reaches, so
-// `since` and `cfg` cannot drift between phases within the same pass.
+// design §3.3(c). Assembled once by buildPassContext and passed by value
+// to every phase runPhase reaches, so `since` and `cfg` cannot drift
+// between phases within the same pass.
 type passContext struct {
 	now   time.Time
 	cfg   ports.VaultConfig
 	since *time.Time
+}
+
+// buildPassContext reads r.cfg exactly once and assembles pass (design
+// §3.3(c)). A separate method rather than inlined into at, so a test can
+// call it directly and inspect since — this PR ships no phase consumer of
+// since yet (PR 8/9 add the first two), so there is nothing else to
+// observe it through.
+func (r consolidateRunner) buildPassContext(ctx context.Context, now time.Time) (passContext, error) {
+	cfg, err := r.cfg.Load(ctx)
+	if err != nil {
+		return passContext{}, fmt.Errorf("consolidate: load config: %w", err)
+	}
+	return passContext{now: now, cfg: cfg, since: cfg.ConsolidationLastRunAt}, nil
 }
 
 // at runs one invocation given the instant Consolidate already read —
@@ -81,7 +97,10 @@ type passContext struct {
 // calls a phase function directly, so a per-phase run can never reach
 // anything a whole pass would not, or vice versa.
 func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now time.Time) (ConsolidateReport, error) {
-	pass := passContext{now: now}
+	pass, err := r.buildPassContext(ctx, now)
+	if err != nil {
+		return ConsolidateReport{}, err
+	}
 
 	var report ConsolidateReport
 	for _, p := range consolidation.Order() {
