@@ -152,7 +152,11 @@ func (r *Relations) Evidence(_ context.Context) ([]consolidation.RelationEvidenc
 	for _, rel := range r.byKey {
 		out = append(out, consolidation.RelationEvidence{
 			RelationID:        rel.ID,
+			FromUnitID:        rel.FromUnitID,
+			ToUnitID:          rel.ToUnitID,
+			Type:              rel.Type,
 			Strength:          rel.Strength,
+			Confidence:        rel.Confidence,
 			FromLastTouchedAt: r.lastTouchedAt[rel.FromUnitID],
 			ToLastTouchedAt:   r.lastTouchedAt[rel.ToUnitID],
 		})

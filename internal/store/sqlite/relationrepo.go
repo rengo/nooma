@@ -126,9 +126,15 @@ WHERE relation_type = ?`
 // every relation, joined to both endpoints' own last_touched_at, in one
 // query — never relations, then units, then a zip in brain (design §4.1's
 // own reason against that shape, spec R3.5).
+//
+// from_unit_id, to_unit_id, type and confidence ride along in the same
+// SELECT (m2c PR8's own widening, consolidation.RelationEvidence's own doc
+// comment): brain's persist step needs them to target
+// ports.RelationRepo.Upsert's (from, to, type) conflict key correctly, and
+// they cost nothing extra here — the join already has every column.
 func (r *RelationRepo) Evidence(ctx context.Context) ([]consolidation.RelationEvidence, error) {
 	const q = `
-SELECT r.id, r.strength, uf.last_touched_at, ut.last_touched_at
+SELECT r.id, r.from_unit_id, r.to_unit_id, r.type, r.strength, r.confidence, uf.last_touched_at, ut.last_touched_at
 FROM relations r
 JOIN units uf ON uf.id = r.from_unit_id
 JOIN units ut ON ut.id = r.to_unit_id
@@ -144,7 +150,7 @@ ORDER BY r.id`
 	for rows.Next() {
 		var e consolidation.RelationEvidence
 		var fromText, toText string
-		if err := rows.Scan(&e.RelationID, &e.Strength, &fromText, &toText); err != nil {
+		if err := rows.Scan(&e.RelationID, &e.FromUnitID, &e.ToUnitID, &e.Type, &e.Strength, &e.Confidence, &fromText, &toText); err != nil {
 			return nil, fmt.Errorf("scanning a relation evidence row: %w", err)
 		}
 		fromAt, err := time.Parse(unitTimeLayout, fromText)

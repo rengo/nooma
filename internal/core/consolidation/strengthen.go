@@ -22,9 +22,26 @@ const StrengthenGain = 0.10
 // instant strengthen runs: the strength the judge last set, plus both
 // endpoints' last_touched_at — a join no port declares today
 // (design.md §8's RelationRepo handoff).
+//
+// FromUnitID, ToUnitID, Type and Confidence carry no weight in Strengthen's
+// own decision (only RelationID/Strength/the two LastTouchedAt fields do) —
+// they exist so brain's persist step can round-trip a StrengthChange
+// through ports.RelationRepo.Upsert correctly. Upsert's own conflict target
+// is the (FromUnitID, ToUnitID, Type) triple, never the id (design §4.2's
+// own Upsert doc comment) — a caller that only had RelationID and Strength
+// could not target the right row and would either corrupt Confidence to its
+// zero value or, against the real store, collide on the id primary key
+// instead of matching the intended row (discovered during m2c PR8's own
+// apply; internal/store/sqlite's Evidence query already selects these
+// columns in the same join, so this is a zero-cost widening of an existing
+// read, not a second query).
 type RelationEvidence struct {
 	RelationID        string
+	FromUnitID        string
+	ToUnitID          string
+	Type              string
 	Strength          float64
+	Confidence        float64
 	FromLastTouchedAt time.Time
 	ToLastTouchedAt   time.Time
 }
