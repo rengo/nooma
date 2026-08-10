@@ -593,74 +593,117 @@ Depends on PR 3 (`ports.StateRepo`'s two literals exist; this PR pins them to th
 Ships **migration 0003** and its full verified cost — every touched site named explicitly, per the
 owner ruling, not summarized as "update the migration tests."
 
-- [ ] **4.1** `internal/store/sqlite/migrations/0003_current_state_source.sql` (new) —
+**Deviations from this section's text, disclosed once (applies to 4.2, 4.3, 4.7/4.8, and the
+Verify's file list):**
+
+1. **4.2 is a no-op.** `internal/store/sqlite/migrate.go` has no explicit per-file registration
+   list to edit: `//go:embed migrations/*.sql` auto-discovers every file matching
+   `migrationNamePattern`, and `migrateMigrations` computes `target` dynamically as
+   `max(migrations[].Version)`. There is no hardcoded "ceiling" constant anywhere in the file.
+   Adding `0003_current_state_source.sql` (task 4.1) is the entire registration; confirmed by
+   `git diff` touching zero lines of `migrate.go` across this PR.
+2. **Two additional hardcoded-version sites existed beyond design.md §1's five-site citation**,
+   found only because `make check` / `make check-all` failed after 4.1-4.3, not anticipated by
+   this section's text:
+   - `internal/store/sqlite/migrate_test.go`'s `TestParseMigrationsRealEmbeddedSet` (no build
+     tag, part of the fast loop) hardcoded `want exactly 2` and checked only
+     `migrations[0]`/`migrations[1]`. Bumped to 3, added a `migrations[2].Version == 3` check.
+   - `test/integration/concurrent_open_test.go`'s `TestConcurrentOpenOnFreshVault` hardcoded
+     `wantVersion = 2`. Bumped to 3.
+   - Checked and left untouched: `internal/store/sqlite/errors_test.go` and
+     `internal/store/sqlite/migrate_race_integration_test.go` both hardcode literal `2`, but
+     against a synthetic, fabricated two-migration set (`m1`/`m2`, `"0001_a.sql"`/`"0002_b.sql"`)
+     used to drive `migrateMigrations`/`applyMigration` directly — unrelated to the real embedded
+     schema version. Confirmed by reading both files, not assumed.
+3. **4.7/4.8: one commit, not two**, with a discriminating-fixture mutation in place of a literal
+   RED/GREEN split. Task 4.7's own text discloses this is "not a missing-symbol/missing-migration
+   red," and 4.8 explicitly says "no code — a verification" — so instead of forcing an artificial
+   two-commit split, the pin test was written once with `wantOrder` deliberately transposed
+   (`[StateSourceConsolidation, StateSourceUser]` against the comment's real
+   `user|consolidation` order), watched failing at both positions for the right reason (commit
+   `217b6cc`), then corrected to the real order (commit `be6aa1a`) — proving the pin is not
+   vacuous, matching PR 3's own discriminating-fixture precedent, without fabricating a dishonest
+   missing-symbol red the task text itself says does not apply here.
+4. **`ports.MoodLoaded` is pinned to doc 02 §7's prose, not to migration 0003's DDL comment.**
+   Design §3.2 states plainly that `mood` "does not close... `mood` is free text" — migration
+   0001's `mood` column carries no comment at all (unlike `source` or `relations.created_by`), so
+   there is nothing on disk to pin `MoodLoaded` against the way `StateSourceUser`/
+   `StateSourceConsolidation` are pinned to the `source` column's comment. `MoodLoaded` is instead
+   pinned to the literal substring `mood = 'loaded'` in `docs/02-cognitive-core.md` §7 (task 4.9's
+   own amendment), the same doc-vs-code pin shape `TestI11_PhaseOrderMatchesDoc02ArrowLine`
+   already uses.
+
+- [x] **4.1** `internal/store/sqlite/migrations/0003_current_state_source.sql` (new) —
       ```sql
       ALTER TABLE current_state ADD COLUMN source TEXT NOT NULL DEFAULT 'user';  -- user|consolidation
       ```
       exactly as design §3.2 specifies. **A published migration is never modified**
       (`CLAUDE.md` convention) — this is the first and only edit this file will ever receive.
       Requirement: spec's owner ruling (migration 0003 approved, one column); design §3.2 option A.
-- [ ] **4.2** `internal/store/sqlite/migrate.go` — register migration 0003 in the embedded
-      migration list, bumping the applied `user_version` ceiling from 2 to 3.
+- [x] **4.2** `internal/store/sqlite/migrate.go` — register migration 0003 in the embedded
+      migration list, bumping the applied `user_version` ceiling from 2 to 3. **No-op** —
+      disclosed above.
       Requirement: owner ruling; design §3.2.
-- [ ] **4.3** `test/integration/migrate_test.go` — the five hard-coded sites, each edited
+- [x] **4.3** `test/integration/migrate_test.go` — the five hard-coded sites, each edited
       individually and named here so none is missed: line 64 (`wantVersion`), line 104
       (`wantVersion`), line 172 (`wantVersion`), line 235 (`wantVersion`), line 343
       (`BinaryVersion != 2` assertion) — all become `3`. Verified against `design.md` §1's own
-      citation of these five exact lines.
-      Verify: `go test -tags integration ./test/integration/... -run TestMigrate`.
+      citation of these five exact lines. Two further sites, not in this citation, are disclosed
+      above.
+      Verify: `go test -tags integration ./test/integration/... -run TestMigrate` — PASS.
       Requirement: owner ruling (full verified cost of migration 0003).
-- [ ] **4.4** **No edit** to `test/integration/schema_golden_anchor_test.go` — verified in `design.md`
+- [x] **4.4** **No edit** to `test/integration/schema_golden_anchor_test.go` — verified in `design.md`
       §1 (line 66) and restated here as an explicit non-task so a future reader does not go
       looking for one: the anchor list names objects (`table current_state`), never columns, so
       adding a column to an existing table needs no anchor edit. This line exists to make that
-      omission deliberate, not overlooked.
+      omission deliberate, not overlooked. Confirmed: file untouched in this PR's diff.
       Requirement: owner ruling (scope of migration 0003's cost, stated precisely).
-- [ ] **4.5** `make schema-golden` — regenerate `testdata/schema/{structure,ddl}.golden` from the
+- [x] **4.5** `make schema-golden` — regenerate `testdata/schema/{structure,ddl}.golden` from the
       now-three-migration embedded set. Commit the two regenerated files alongside the migration.
-      Verify: `make schema-golden-clean` (fails if regenerating leaves a dirty tree).
+      Verify: `make schema-golden-clean` (fails if regenerating leaves a dirty tree) — PASS, zero
+      diff after regenerating a second time.
       Requirement: spec's owner ruling; `docs/06-harness.md` §7 (calibration/golden convention).
-- [ ] **4.6** `docs/03-data-model.md` — the `current_state` block (currently five columns, doc line
+- [x] **4.6** `docs/03-data-model.md` — the `current_state` block (currently five columns, doc line
       104-110) gains `source TEXT NOT NULL DEFAULT 'user' -- user|consolidation`, matching the
       migration's own column comment verbatim.
       Requirement: owner ruling; design §10.3, row 3 (§10 amendment).
-- [ ] **4.7** Commit 1 (RED): `test/conformance/` (new or extend an existing DDL-pin file,
-      following `relation.AllCreatedBy`'s own precedent against `0001_core_tables.sql:37`) — pin
-      `ports.StateSourceConsolidation`, `ports.StateSourceUser`, `ports.MoodLoaded` against
-      migration 0003's own column comment vocabulary (`user|consolidation`), read off disk via the
-      existing `migrationSQLText` helper.
-      **Red**: the pin test references migration 0003's text, which does not exist until task 4.1
-      — ordered after 4.1 in this PR's own commit sequence, so in practice this is the first
-      commit that can be red for "the migration text I'm reading doesn't have this row yet" if the
-      migration were absent; since 4.1 already landed by the time this task runs, this is
-      disclosed as **not** a missing-symbol/missing-migration red (`m2a` C9) — it is a genuine
-      value-pin test proving the three Go constants match the SQL comment's vocabulary exactly.
+- [x] **4.7** Commit 1 (RED): `test/conformance/state_repo_literals_test.go` (new) — pins
+      `ports.StateSourceConsolidation`/`ports.StateSourceUser` against migration 0003's own column
+      comment vocabulary (`user|consolidation`), read off disk via the existing
+      `migrationSQLText` helper, and `ports.MoodLoaded` against doc 02 §7's prose (disclosed
+      above). Landed as one commit with a discriminating-fixture RED (disclosed above), not a
+      literal missing-symbol red.
       Requirement: spec R2.5's sibling for `StateRepo`'s own literals (design §4.4's own comment:
       *"outside `calibration_doc_test.go`'s reach... pinned instead to migration 0003's own
       column comment"*).
-- [ ] **4.8** Commit 2 (GREEN, no code — a verification): confirm the pin test passes.
-      Verify: `go test ./test/conformance/...`.
+- [x] **4.8** Commit 2 (GREEN): the discriminating-fixture correction (commit `be6aa1a`).
+      Verify: `go test ./test/conformance/...` — PASS.
       Requirement: design §4.4.
-- [ ] **4.9** doc 02 §7 amendment: state the load watcher's `current_state` row is written with
+- [x] **4.9** doc 02 §7 amendment: state the load watcher's `current_state` row is written with
       `source = 'consolidation'`, `mood = 'loaded'`, `energy` left `NULL`, and that its cooldown
       anchors on the previous hypothesis's own `recorded_at` because M2 has no resolution signal
       (`m2b` §9 Q6, mapped) — design §10.3's exact wording for the §7 row.
       Requirement: design §10.3, row 2.
-- [ ] **4.10** doc 02 §10 amendment: state `current_state` gains `source`, and that the
+- [x] **4.10** doc 02 §10 amendment: state `current_state` gains `source`, and that the
       append-only property is now structural at the port (`StateRepo` has no update path), not
       only a convention — design §10.3's exact wording for the §10 row.
       Requirement: design §10.3, row 3.
-- [ ] Verify (PR-level): `make check-all` (this is the PR that first exercises the `integration`
-      build tag's own migration suite in this chain — confirm `test-integration` passes, not only
-      `make check`); confirm diff touches only
+- [x] Verify (PR-level): `make check-all` — PASS (lint 0 issues, vet clean, race unit + integration
+      including `TestMigrate*`, `TestConcurrentOpenOnFreshVault`, `TestParseMigrationsRealEmbeddedSet`,
+      `schema-golden-clean` zero diff, coverage floor, 7-target cross-compile, e2e); this is the PR
+      that first exercises the `integration` build tag's own migration suite in this chain —
+      confirmed `test-integration` passes, not only `make check`. Diff touches
       `internal/store/sqlite/migrations/0003_current_state_source.sql`,
-      `internal/store/sqlite/migrate.go`, `test/integration/migrate_test.go`,
-      `testdata/schema/{structure,ddl}.golden`, `docs/03-data-model.md`,
-      `test/conformance/` (the new pin file), `docs/02-cognitive-core.md` (§7, §10). Target ≤80
-      impl+docs lines.
-      **Chain-merge check 1**: `git ls-remote --heads origin feat/schema-current-state-source`
-      returns nothing after merge.
-      **Chain-merge check 2**: `gh pr view <PR5> --json baseRefName` names `main`.
+      `test/integration/migrate_test.go`, `testdata/schema/{structure,ddl}.golden`,
+      `docs/03-data-model.md`, `test/conformance/state_repo_literals_test.go`,
+      `docs/02-cognitive-core.md` (§7, §10) — the original list minus `migrate.go` (no-op,
+      disclosed) — plus two undisclosed sites also fixed:
+      `internal/store/sqlite/migrate_test.go` and `test/integration/concurrent_open_test.go`
+      (both disclosed above). Measured: 24 impl+docs lines (0.30x the ~80 estimate; migration SQL
+      + both doc amendments), 118 test lines (vs ~90 est.), 5 golden lines (excluded from the
+      impl+docs count, included in schema identity).
+      **Chain-merge check 1**: not yet performed — this PR is open, not merged.
+      **Chain-merge check 2**: not yet performed — PR 5 does not exist yet.
 
 ---
 

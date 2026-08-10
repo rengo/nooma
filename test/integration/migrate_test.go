@@ -18,8 +18,8 @@ import (
 
 // TestMigrateFromScratchSetsUserVersion asserts R3.2/R3.3: opening a
 // brand-new vault applies every published migration and leaves
-// PRAGMA user_version at the highest published version (design §5.2; two
-// migrations, 0001 and 0002, are published as of this change — R3.8).
+// PRAGMA user_version at the highest published version (design §5.2; three
+// migrations, 0001, 0002 and 0003, are published as of this change — R3.8).
 //
 // user_version is a persistent property of the database file header, not a
 // per-connection setting (same reasoning TestOpenAppliesPragmas already
@@ -61,7 +61,7 @@ func TestMigrateFromScratchSetsUserVersion(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 2 // 0001_core_tables.sql and 0002_learning_and_search.sql are both published
+	const wantVersion = 3 // 0001_core_tables.sql, 0002_learning_and_search.sql and 0003_current_state_source.sql are all published
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version = %d, want %d (opening a fresh vault must apply every published migration)", userVersion, wantVersion)
 	}
@@ -101,7 +101,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 2
+	const wantVersion = 3
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version after reopening an already-migrated vault = %d, want %d (unchanged)", userVersion, wantVersion)
 	}
@@ -169,8 +169,8 @@ func TestVaultNewerThanBinaryRefusesToOpen(t *testing.T) {
 	if versionErr.VaultVersion != futureVersion {
 		t.Errorf("VersionError.VaultVersion = %d, want %d", versionErr.VaultVersion, futureVersion)
 	}
-	if versionErr.BinaryVersion != 2 {
-		t.Errorf("VersionError.BinaryVersion = %d, want 2 (0001 and 0002 are both published at this stage)", versionErr.BinaryVersion)
+	if versionErr.BinaryVersion != 3 {
+		t.Errorf("VersionError.BinaryVersion = %d, want 3 (0001, 0002 and 0003 are all published at this stage)", versionErr.BinaryVersion)
 	}
 
 	after, err := os.ReadFile(dbPath)
@@ -232,7 +232,7 @@ func TestMigrationsAreEmbeddedNotReadFromDisk(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 2
+	const wantVersion = 3
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version = %d, want %d (migrations must apply even with no .sql file anywhere on disk)", userVersion, wantVersion)
 	}
@@ -340,9 +340,9 @@ func TestMigrateAppliesOnlyPendingMigrations(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 2
+	const wantVersion = 3
 	if userVersion != wantVersion {
-		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (only 0002 should have applied)", userVersion, wantVersion)
+		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (0002 and 0003 should have applied)", userVersion, wantVersion)
 	}
 
 	// Prove 0002 actually ran — not just that the version counter moved —
