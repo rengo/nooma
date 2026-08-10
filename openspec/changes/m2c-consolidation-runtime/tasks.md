@@ -1074,15 +1074,18 @@ fourteen-to-twenty-four-member vocabulary widening are two separately reviewable
 ten new `DecisionAction` members (design §7.5), the `record` helper, the `corrupted`-never-logged
 rule, and **I12 both directions plus the exclusion** (spec R4.2).
 
-- [ ] **7b.1** `internal/ports/decisionlog.go` — add the ten new `DecisionAction` constants exactly
+- [x] **7b.1** `internal/ports/decisionlog.go` — add the ten new `DecisionAction` constants exactly
       as design §7.5 enumerates them (`ActionExpireIncompleteTransitioned` through
       `ActionPatternEvalLoadHypothesisOpened`), and add all ten to `AllDecisionActions()`'s
-      returned slice, extending the count from fourteen to twenty-four. Not a behavioral change to
-      an existing test — `AllDecisionActions` has no length assertion pinned elsewhere in this
-      repository to update (verified: the fourteen-member count lives only in this file's own doc
-      comment, updated here).
+      returned slice, extending the count from fourteen to twenty-four. ~~Not a behavioral change
+      to an existing test — `AllDecisionActions` has no length assertion pinned elsewhere in this
+      repository to update~~ — **this claim was wrong**, caught by `make check-all` after the
+      apply agent that wrote it stalled mid-PR: `test/support/repocontract/decisionlog.go:133`
+      pins the exact fourteen-member set, exercised by every `DecisionLog` implementation through
+      `RunDecisionLog`. Widened to twenty-four in a follow-up commit (`bae89e1`), disclosed here
+      rather than silently folded into 7b.1's own commit.
       Requirement: design §7.5.
-- [ ] **7b.2** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a fixture wiring
+- [x] **7b.2** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a fixture wiring
       the runner over a fake phase producing exactly one persistable effect per invocation slot
       (using `runPhase`'s existing placeholder arms from PR 7a — this PR does not need real phase
       logic, only that each arm can be made to call `record` once) asserts exactly one
@@ -1093,21 +1096,21 @@ rule, and **I12 both directions plus the exclusion** (spec R4.2).
       ports.DecisionAction, rationale string, detail any) error { return nil }` — compiles; the
       fixture expects `decisionLog.Since(...)` to return one row, gets zero, fails first.
       Requirement: spec R4.2 (direction 1); design §3.3(e).
-- [ ] **7b.3** Commit 2 (GREEN): implement `record` — marshals `detail` into `Decision.Context`,
+- [x] **7b.3** Commit 2 (GREEN): implement `record` — marshals `detail` into `Decision.Context`,
       calls `ports.DecisionLog.Record` with `rationale` as the legible sentence.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2; design §3.3(e).
-- [ ] **7b.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a fixture where no
+- [x] **7b.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a fixture where no
       phase has qualifying input: the pass completes successfully and `decision_log` gains **zero**
       rows (spec R4.2's second `MUST`, direction 2).
       **Red**: if any placeholder phase arm from PR 7a unconditionally calls `record`, this fails
       — disclosed as the actual regression this test guards, not a hypothetical.
       Requirement: spec R4.2 (direction 2).
-- [ ] **7b.5** Commit 2 (GREEN, verification — no new production code expected): confirm no
+- [x] **7b.5** Commit 2 (GREEN, verification — no new production code expected): confirm no
       placeholder arm calls `record` unconditionally.
       Verify: `go test ./internal/brain/... -run TestConsolidate_NoEffects`.
       Requirement: spec R4.2.
-- [ ] **7b.6** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a fixture producing
+- [x] **7b.6** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a fixture producing
       a `corrupted` entry from a fake phase's decision function: **no** `decision_log` row exists
       for it, regardless of which of the four `corrupted`-capable phases (`archive`, `strengthen`,
       `reweight`, `derive`) produced it (spec R4.2's `MUST NOT`, decided uniformly per design
@@ -1117,12 +1120,12 @@ rule, and **I12 both directions plus the exclusion** (spec R4.2).
       PRs land.
       Requirement: spec R4.2 (`MUST NOT`); design §3.3(e) ("decided uniformly... a `corrupted`
       entry from any phase is surfaced in `ConsolidateReport` and never in `decision_log`").
-- [ ] **7b.7** Commit 2 (GREEN): implement `ConsolidateReport`'s `corrupted` field (a set unioned
+- [x] **7b.7** Commit 2 (GREEN): implement `ConsolidateReport`'s `corrupted` field (a set unioned
       across every phase's own corrupted output) as the one place refused entries surface, and
       confirm no call site routes a `corrupted` entry into `record`.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2; design §3.3(e).
-- [ ] **7b.8** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — R4.3's fixture: three
+- [x] **7b.8** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — R4.3's fixture: three
       units planned for archival, the fake `UnitRepo.SetStatus` returns `ErrStatusConflict` for the
       second; the pass completes, the first and third are archived, the second is skipped **and**
       logged (one `decision_log` row naming the skip), and no error propagates out of `Consolidate`.
@@ -1133,15 +1136,22 @@ rule, and **I12 both directions plus the exclusion** (spec R4.2).
       wires the real phase to exercise it end to end. PR 8's own task 8.9 re-runs the identical
       shape against the real `archive` wiring.
       Requirement: spec R4.3; design §3.3(e) ("the line between the two is worth stating").
-- [ ] **7b.9** Commit 2 (GREEN): implement the skip-and-log path in `runPhase`'s persistence
+- [x] **7b.9** Commit 2 (GREEN): implement the skip-and-log path in `runPhase`'s persistence
       helper — `ErrStatusConflict` from `SetStatus` does not abort the pass; it is caught, the unit
       is skipped, and `record` is called naming the skip.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.3; design §3.3(e).
-- [ ] **7b.10** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/ports/decisionlog.go` (ten new constants), `internal/brain/consolidate.go` (+
-      test, extended from PR 7a). Target ≤190 impl+docs lines.
+- [x] **7b.10** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
+- [x] Verify (PR-level): `make check-all` green. Diff touches
+      `internal/ports/decisionlog.go` (ten new constants),
+      `internal/brain/{consolidate.go,consolidate_test.go}` (extended from PR 7a), plus one file
+      not in this PR's own original list: `test/support/repocontract/decisionlog.go` (the
+      `AllDecisionActions` pin, see 7b.1's correction above) — disclosed, not silently absorbed
+      into the ≤190 impl+docs budget's original file set.
+      **Apply-session note**: the `sdd-apply` agent that wrote tasks 7b.1-7b.9 (all 8 commits)
+      stalled mid-session after its last commit, before running `make check-all` or opening the
+      PR. Its committed work was verified clean (`git status` — nothing uncommitted, nothing
+      lost) and picked up directly rather than re-run, to avoid duplicating already-correct work.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/brain-consolidate-decision-log`
       returns nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR8> --json baseRefName` names `main`.
