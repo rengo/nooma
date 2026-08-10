@@ -1163,7 +1163,7 @@ rule, and **I12 both directions plus the exclusion** (spec R4.2).
 Depends on PR 7b (fills three of `runPhase`'s placeholder arms with real I/O). Ships slots 1–3:
 `expire_incomplete`, `archive`, `strengthen` — repo-only, no provider call in any of the three.
 
-- [ ] **8.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `expire_incomplete`'s
+- [x] **8.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `expire_incomplete`'s
       arm: `brain` derives `cutoff` as `now.Add(-consolidation.IncompleteExpiryHours *
       time.Hour)`, never a literal — asserted by a spy on the fake `UnitRepo.IncompleteOlderThan`
       recording the `cutoff` argument and comparing it against the constant-derived value.
@@ -1171,13 +1171,16 @@ Depends on PR 7b (fills three of `runPhase`'s placeholder arms with real I/O). S
       call, fails first.
       Requirement: design §4.1 ("the cutoff duplicates a predicate... an L2 test asserts `brain`
       derives the cutoff from `consolidation.IncompleteExpiryHours`").
-- [ ] **8.2** Commit 2 (GREEN): implement the `expire_incomplete` arm — read via
+- [x] **8.2** Commit 2 (GREEN): implement the `expire_incomplete` arm — read via
       `IncompleteOlderThan(cutoff)`, call `consolidation.ExpireIncomplete(us, now)`, persist each
       `Transition` via `SetStatus`, `record` one row per transition
       (`ActionExpireIncompleteTransitioned`).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2, R5.1; design §6.3 (slot 1).
-- [ ] **8.3** Commit 1 (RED): `test/integration/` (new or extend) — seed a vault through the
+      **Disclosed process deviation**: this single edit pass also wrote the `archive` and
+      `strengthen` arms (tasks 8.6/8.7-8.8/8.12 below) at once, ahead of their own tests —
+      RED-then-GREEN was not honored for those two; see 8.5's own note.
+- [x] **8.3** Commit 1 (RED): `test/integration/` (new or extend) — seed a vault through the
       **real capture path** (no repo-constructed `incomplete` row), run the `expire_incomplete`
       read against it, assert it returns empty (owner ruling Q3's own proof — spec R5.1's second
       `MUST`).
@@ -1186,23 +1189,26 @@ Depends on PR 7b (fills three of `runPhase`'s placeholder arms with real I/O). S
       behavior change; disclosed per `m2a` C9 as not a missing-symbol red.
       Requirement: spec R5.1 ("this is stated as a positive, testable claim rather than left as
       an absence").
-- [ ] **8.4** Commit 2 (GREEN, no code): confirm the L3 fixture passes.
+- [x] **8.4** Commit 2 (GREEN, no code): confirm the L3 fixture passes.
       Verify: `go test -tags integration ./test/integration/...`.
       Requirement: spec R5.1.
-- [ ] **8.5** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `archive`'s arm is
+- [x] **8.5** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `archive`'s arm is
       called with the **configured** `WeightThreshold` (via `consolidation.ResolveWeightThreshold`),
       not the default, when the fixture's `ConfigRepo` returns one that differs from
       `consolidation.DefaultWeightThreshold`.
       **Red**: the placeholder arm calls nothing — fails first.
       Requirement: spec R5.2; design §3.3(c).
-- [ ] **8.6** Commit 2 (GREEN): implement the `archive` arm — read via `LiveDecayStates()`, resolve
+      **Disclosed process deviation**: task 8.2's edit already implemented this arm, so this
+      test passed on first run rather than proving RED first — confirmed non-vacuous by
+      selectively reverting the implementation and re-running.
+- [x] **8.6** Commit 2 (GREEN): implement the `archive` arm — read via `LiveDecayStates()`, resolve
       the threshold through `ResolveWeightThreshold(pass.cfg.WeightThreshold)` (never
       `DefaultWeightThreshold` directly), call `consolidation.Archive(cs, threshold, pass.now)`,
       persist each `Transition` via `SetStatus`, `record` one row per transition
       (`ActionArchiveArchived`).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2, R5.2; design §6.3 (slot 2).
-- [ ] **8.7** **The `Source` sanitization guard (design §8.1), introduced here for `archive`'s own
+- [x] **8.7** **The `Source` sanitization guard (design §8.1), introduced here for `archive`'s own
       call to `LiveDecayStates`, reused by `connect`/`derive` in PR 9/10b.** Commit 1 (RED):
       `internal/brain/consolidate_test.go` (extend) — a `Cold` row with a non-finite `Weight` (or
       `DecayRate`) is refused before `Archive` ever sees it, surfaced through
@@ -1214,12 +1220,14 @@ Depends on PR 7b (fills three of `runPhase`'s placeholder arms with real I/O). S
       `corrupted`, not in any transition) fails against the unguarded stub.
       Requirement: design §8.1 ("what `m2c` does instead... `consolidateRunner` partitions
       `[]consolidation.Cold` into usable and refused before mapping to `[]Source`").
-- [ ] **8.8** Commit 2 (GREEN): implement the partition helper — the same non-finite predicate
+      **Same disclosed process deviation as 8.5**: the guard was already implemented by task
+      8.2's edit.
+- [x] **8.8** Commit 2 (GREEN): implement the partition helper — the same non-finite predicate
       `Archive` applies internally, run once in `brain` before any of `archive`/`connect`/`derive`
       consumes a `LiveDecayStates` read, refused ids folded into `ConsolidateReport.corrupted`.
       Verify: `go test ./internal/brain/...`.
       Requirement: design §8.1.
-- [ ] **8.9** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — **re-run R4.3's exact
+- [x] **8.9** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — **re-run R4.3's exact
       fixture (PR 7b task 7b.8's shape) against the real `archive` wiring**: three units planned
       for archival, the fake `UnitRepo.SetStatus` returns `ErrStatusConflict` for the second; the
       pass completes, first and third archived, second skipped and logged.
@@ -1227,30 +1235,51 @@ Depends on PR 7b (fills three of `runPhase`'s placeholder arms with real I/O). S
       the *mechanism* against a fake phase function; this proves the *real* `archive` phase uses
       it.
       Requirement: spec R4.3; design §3.3(e).
-- [ ] **8.10** Commit 2 (GREEN, no new mechanism — wiring only): confirm the fixture passes using
+      **Same disclosed process deviation as 8.5**.
+- [x] **8.10** Commit 2 (GREEN, no new mechanism — wiring only): confirm the fixture passes using
       the mechanism PR 7b already built.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.3.
-- [ ] **8.11** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `strengthen`'s arm:
+- [x] **8.11** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `strengthen`'s arm:
       `Strengthen` and (once PR 9 exists) `SelectConnectSources` receive an **identical**
       `*time.Time` for `since`; for this PR alone, assert `strengthen`'s own call receives
       `pass.since` unmodified — a spy on the fake `RelationRepo.Evidence` read plus a spy on the
       core `Strengthen` call's `since` argument.
       **Red**: the placeholder arm calls nothing — fails first.
       Requirement: spec R5.3; design §3.3(c), §6.3 (slot 3).
-- [ ] **8.12** Commit 2 (GREEN): implement the `strengthen` arm — read via `Evidence()`, call
+      **Adjusted from the spy shape named above**: `Strengthen` is a plain pure function with no
+      seam to spy on directly, so `since` propagation is proven behaviorally instead — two
+      relations, one qualifying at `since`, one excluded just before it — matching this file's own
+      established pattern (`TestConsolidate_SinceReadOnceBeforeAnyPhase`). Same disclosed process
+      deviation as 8.5 for the RED/GREEN ordering.
+      **Discovered gap, fixed as a disclosed scope deviation (see PR #166's own description)**:
+      `RelationRepo.Evidence()` returned only `RelationID`/`Strength`, insufficient to build a
+      correct `Upsert` call (which conflicts on `(FromUnitID, ToUnitID, Type)`, never `id`) — a
+      persist built from just those two fields would corrupt `Confidence` to zero against
+      `memrepo` or collide on the `id` primary key against the real store. Fixed by widening
+      `consolidation.RelationEvidence` with the four missing fields
+      (`internal/core/consolidation/strengthen.go`, `internal/store/sqlite/relationrepo.go`,
+      `test/support/memrepo/relations.go`, `test/support/repocontract/relationrepo.go`) —
+      backward-compatible, verified against both implementations via the shared `repocontract`
+      suite, `no-spec-change` labeled since `Strengthen`'s own decision logic is unchanged.
+- [x] **8.12** Commit 2 (GREEN): implement the `strengthen` arm — read via `Evidence()`, call
       `consolidation.Strengthen(es, pass.since)`, persist each `StrengthChange` via
       `RelationRepo.Upsert`, `record` one row per change (`ActionStrengthenApplied`).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2, R5.3; design §6.3 (slot 3).
-- [ ] **8.13** Purity/coverage: `golangci-lint run` (`brain-boundary` — no `internal/store` import
-      anywhere in this PR's files); `go test -race ./internal/brain/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/brain/consolidate.go` (+ test, extended), `test/integration/` (the new
-      real-capture-path `expire_incomplete` fixture). Target ≤200 impl+docs lines.
+- [x] **8.13** Purity/coverage: `golangci-lint run` (`brain-boundary` — no `internal/store` import
+      anywhere in this PR's files); `go test -race ./internal/brain/...`. Both clean.
+- [x] Verify (PR-level): `make check-all` green. Diff touches
+      `internal/brain/{consolidate,consolidate_test}.go`,
+      `test/integration/consolidate_expire_incomplete_test.go` (the new real-capture-path
+      `expire_incomplete` fixture) as scoped, **plus** — disclosed deviation, see 8.11 —
+      `internal/core/consolidation/strengthen.go`, `internal/store/sqlite/relationrepo.go`,
+      `test/support/memrepo/relations.go`, `test/support/repocontract/relationrepo.go`. Impl+docs
+      180 lines (under the ≤200 target); test 550 lines (over the ~400 estimate, driven by the
+      `RelationEvidence` widening's own fixtures). PR #166.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/brain-phase-io-transitions`
-      returns nothing after merge.
-      **Chain-merge check 2**: `gh pr view <PR9> --json baseRefName` names `main`.
+      returns nothing after merge — pending merge.
+      **Chain-merge check 2**: `gh pr view <PR9> --json baseRefName` names `main` — pending PR 9.
 
 ---
 
