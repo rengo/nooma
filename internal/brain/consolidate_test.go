@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -361,6 +363,81 @@ func TestConsolidate_NoEffects(t *testing.T) {
 	if len(rows) != 0 {
 		t.Fatalf("decision_log rows = %d, want 0 — a phase fed nothing must write nothing (spec R4.2)", len(rows))
 	}
+}
+
+// TestConsolidateReport_CorruptedNeverLogged is spec R4.2's own MUST NOT,
+// decided uniformly across every corrupted-capable phase (design §3.3(e)):
+// a corrupted entry from any of archive, strengthen, reweight or derive is
+// surfaced in ConsolidateReport and never in decision_log, because a
+// refusal had no vault effect. Exercised against two of the four real core
+// producers that already share the (effects, corrupted []string) shape —
+// consolidation.Archive and consolidation.Strengthen — feeding a fixture
+// engineered to refuse one entry through each straight into
+// report.reportCorrupted, the one place this PR routes a corrupted id.
+// reweight (PR 11) and derive (PR 10b) wire their own real corrupted-
+// producing calls later, through this exact same mechanism: it takes only
+// ids, so it structurally cannot itself become a call site into record —
+// disclosed here rather than claimed as coverage this PR does not have.
+func TestConsolidateReport_CorruptedNeverLogged(t *testing.T) {
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	t.Run("archive", func(t *testing.T) {
+		cs := []consolidation.Cold{
+			{UnitID: "u-good", Weight: 0.1, DecayRate: 0.01, LastTouchedAt: now.Add(-24 * time.Hour)},
+			{UnitID: "u-nan", Weight: math.NaN(), DecayRate: 0.01, LastTouchedAt: now},
+		}
+		// Both units start pool; the fixture needs Status set for Archive
+		// to consider them at all.
+		for i := range cs {
+			cs[i].Status = unit.StatusPool
+		}
+		_, corrupted := consolidation.Archive(cs, consolidation.DefaultWeightThreshold, now)
+		if len(corrupted) != 1 || corrupted[0] != "u-nan" {
+			t.Fatalf("fixture corrupted = %v, want exactly [u-nan]", corrupted)
+		}
+
+		log := memrepo.NewDecisionLog()
+		var report ConsolidateReport
+		report.reportCorrupted(corrupted)
+
+		if len(report.corrupted) != 1 || report.corrupted[0] != "u-nan" {
+			t.Errorf("report.corrupted = %v, want [u-nan]", report.corrupted)
+		}
+		rows, err := log.Since(context.Background(), now.Add(-time.Hour), 10)
+		if err != nil {
+			t.Fatalf("Since: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Errorf("decision_log rows = %d, want 0 for a refused archive entry", len(rows))
+		}
+	})
+
+	t.Run("strengthen", func(t *testing.T) {
+		since := now.Add(-48 * time.Hour)
+		es := []consolidation.RelationEvidence{
+			{RelationID: "r-good", Strength: 0.2, FromLastTouchedAt: now, ToLastTouchedAt: now},
+			{RelationID: "r-bad", Strength: 7, FromLastTouchedAt: now, ToLastTouchedAt: now},
+		}
+		_, corrupted := consolidation.Strengthen(es, &since)
+		if len(corrupted) != 1 || corrupted[0] != "r-bad" {
+			t.Fatalf("fixture corrupted = %v, want exactly [r-bad]", corrupted)
+		}
+
+		log := memrepo.NewDecisionLog()
+		var report ConsolidateReport
+		report.reportCorrupted(corrupted)
+
+		if len(report.corrupted) != 1 || report.corrupted[0] != "r-bad" {
+			t.Errorf("report.corrupted = %v, want [r-bad]", report.corrupted)
+		}
+		rows, err := log.Since(context.Background(), now.Add(-time.Hour), 10)
+		if err != nil {
+			t.Fatalf("Since: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Errorf("decision_log rows = %d, want 0 for a refused strengthen entry", len(rows))
+		}
+	})
 }
 
 // TestConsolidateRunner_Record_EncodesDetailIntoContext proves record's own
