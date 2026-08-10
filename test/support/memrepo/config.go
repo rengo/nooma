@@ -2,6 +2,7 @@ package memrepo
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,14 +11,17 @@ import (
 
 // Config is an in-memory ports.ConfigRepo (plus
 // repocontract.ConfigHarness's SeedConfig). The zero value is not usable —
-// call NewConfig.
-//
-// TODO(PR3 GREEN): this is the RED-commit stub — Load always reports an
-// absent row and RecordConsolidationRun is a no-op, deliberately failing
-// repocontract.RunConfigRepoLoad/RunRecordConsolidationRun for the right
-// reason (nothing is stored) rather than for a compile error. The GREEN
-// commit in this same PR replaces every body below.
-type Config struct{}
+// call NewConfig. Two instances share no state, matching memrepo.Units's
+// own isolation rule.
+type Config struct {
+	mu sync.Mutex
+	// row is nil until first written — either by RecordConsolidationRun
+	// (the port's own, only write, spec R2.6) or by SeedConfig (the
+	// harness's direct-store hook, repocontract.ConfigHarness). Mirrors
+	// design §3.4's "no migration seeds it" rule at the fake's own
+	// zero-value level.
+	row *ports.VaultConfig
+}
 
 // Assert at compile time, following internal/store/sqlite/unitrepo.go:33's
 // precedent.
@@ -29,18 +33,42 @@ func NewConfig() *Config {
 	return &Config{}
 }
 
-// Load implements ports.ConfigRepo. RED-commit stub: always reports an
-// absent row.
+// Load implements ports.ConfigRepo. Returns an all-nil VaultConfig when no
+// row has been written yet; otherwise returns the stored row verbatim —
+// including any corrupt value it holds (spec R2.4).
 func (c *Config) Load(_ context.Context) (ports.VaultConfig, error) {
-	return ports.VaultConfig{}, nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.row == nil {
+		return ports.VaultConfig{}, nil
+	}
+	return *c.row, nil
 }
 
-// RecordConsolidationRun implements ports.ConfigRepo. RED-commit stub: a
-// no-op.
-func (c *Config) RecordConsolidationRun(_ context.Context, _ time.Time) error {
+// RecordConsolidationRun implements ports.ConfigRepo. Lazily creates the
+// row when absent, leaving every other field nil at this fake's own
+// zero-value level (design §3.4: the real store leaves every other column
+// to the migration's SQL DEFAULT, which this fake has none of to read —
+// PR 6's sqlite implementation proves that half). When the row already
+// exists, only ConsolidationLastRunAt changes.
+func (c *Config) RecordConsolidationRun(_ context.Context, at time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.row == nil {
+		c.row = &ports.VaultConfig{}
+	}
+	c.row.ConsolidationLastRunAt = &at
 	return nil
 }
 
-// SeedConfig implements repocontract.ConfigHarness. RED-commit stub: a
-// no-op.
-func (c *Config) SeedConfig(_ *testing.T, _ ports.VaultConfig) {}
+// SeedConfig implements repocontract.ConfigHarness. Replaces the row
+// wholesale — a fixture hook bypassing ports.ConfigRepo entirely, since
+// RecordConsolidationRun cannot set any field but ConsolidationLastRunAt.
+func (c *Config) SeedConfig(_ *testing.T, cfg ports.VaultConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.row = &cfg
+}
