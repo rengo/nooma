@@ -74,7 +74,7 @@ func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) er
 func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, memrepo.NewDecisionLog())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -114,7 +114,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 
 	t.Run("reaches exactly the requested phase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, memrepo.NewDecisionLog())
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 		phase := consolidation.PhaseArchive
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
@@ -128,13 +128,13 @@ func TestConsolidate_PerPhase(t *testing.T) {
 
 	t.Run("an unknown phase errors through runPhase's default", func(t *testing.T) {
 		r := consolidateRunner{}
-		if err := r.runPhase(ctx, consolidation.Phase(99), passContext{}); err == nil {
+		if err := r.runPhase(ctx, consolidation.Phase(99), passContext{}, &ConsolidateReport{}); err == nil {
 			t.Fatal("runPhase(99) error = nil, want an error naming the unhandled phase")
 		}
 	})
 
 	t.Run("an unknown phase errors through Consolidate itself, not just runPhase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, memrepo.NewDecisionLog())
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 		unknown := consolidation.Phase(99)
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &unknown})
@@ -188,7 +188,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a whole pass", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -199,7 +199,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a per-phase run too", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 		phase := consolidation.PhaseStrengthen
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -220,7 +220,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("whole pass records exactly once with the pass's own now", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -234,7 +234,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("per-phase run never records", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, &fakeIDs{}, memrepo.NewDecisionLog())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
 		phase := consolidation.PhaseLearn
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -346,7 +346,7 @@ func TestConsolidate_NoEffects(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 	log := memrepo.NewDecisionLog()
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, log)
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, log)
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -470,6 +470,108 @@ func TestConsolidateRunner_Record_EncodesDetailIntoContext(t *testing.T) {
 	}
 	if got.UnitID != "u-1" {
 		t.Errorf("Context.unit_id = %q, want %q", got.UnitID, "u-1")
+	}
+}
+
+// spyUnits wraps memrepo.Units to record every IncompleteOlderThan cutoff
+// argument it receives — spec R5.1, design §4.1's own duplicated-predicate
+// risk note: expire_incomplete's cutoff must be derived from
+// consolidation.IncompleteExpiryHours, never a literal, and a spy on the
+// argument is the only way to prove which one produced it (the return
+// value alone cannot tell a correct cutoff from a coincidentally-matching
+// one on an empty fixture).
+type spyUnits struct {
+	*memrepo.Units
+	incompleteOlderThanCalls []time.Time
+}
+
+func (u *spyUnits) IncompleteOlderThan(ctx context.Context, cutoff time.Time) ([]consolidation.Incomplete, error) {
+	u.incompleteOlderThanCalls = append(u.incompleteOlderThanCalls, cutoff)
+	return u.Units.IncompleteOlderThan(ctx, cutoff)
+}
+
+// TestConsolidateRunner_ExpireIncomplete_DerivesCutoffFromConstant is spec
+// R5.1 and design §4.1: the cutoff expire_incomplete reads by is
+// now.Add(-consolidation.IncompleteExpiryHours * time.Hour), computed in
+// brain, never a literal duplicating that same 24h window.
+func TestConsolidateRunner_ExpireIncomplete_DerivesCutoffFromConstant(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	units := &spyUnits{Units: memrepo.NewUnits()}
+	phase := consolidation.PhaseExpireIncomplete
+
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog())
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	if len(units.incompleteOlderThanCalls) != 1 {
+		t.Fatalf("IncompleteOlderThan calls = %d, want exactly 1", len(units.incompleteOlderThanCalls))
+	}
+	want := now.Add(-consolidation.IncompleteExpiryHours * time.Hour)
+	if got := units.incompleteOlderThanCalls[0]; !got.Equal(want) {
+		t.Errorf("IncompleteOlderThan cutoff = %v, want %v (now - consolidation.IncompleteExpiryHours)", got, want)
+	}
+}
+
+// TestConsolidateRunner_ExpireIncomplete_TransitionsAndRecords proves the
+// GREEN half of the wiring: a promoted and an archived Incomplete each
+// persist through SetStatus and record exactly one decision_log row
+// (ActionExpireIncompleteTransitioned), spec R4.2/R5.1.
+func TestConsolidateRunner_ExpireIncomplete_TransitionsAndRecords(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	units := memrepo.NewUnits()
+	old := now.Add(-25 * time.Hour)
+	for _, seed := range []struct {
+		id         string
+		unresolved bool
+	}{
+		{"u-promote", false},
+		{"u-archive", true},
+	} {
+		if err := units.Create(ctx, unit.Unit{
+			ID: seed.id, Type: unit.TypeKnowledge, Status: unit.StatusIncomplete,
+			Content: "seed", Source: "chat", CreatedAt: old, UpdatedAt: old,
+			StructuredData: json.RawMessage(`{}`),
+		}); err != nil {
+			t.Fatalf("seed %s: %v", seed.id, err)
+		}
+	}
+	// unresolved has no column yet (design §4.2, spec R2.1's own stated
+	// gap) — this fixture proves the wiring over ExpireIncomplete's pure
+	// output, not a producer of Unresolved: true, so both seeded units
+	// promote under this PR's real IncompleteOlderThan read.
+
+	log := memrepo.NewDecisionLog()
+	phase := consolidation.PhaseExpireIncomplete
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	for _, id := range []string{"u-promote", "u-archive"} {
+		got, err := units.ByID(ctx, id)
+		if err != nil {
+			t.Fatalf("ByID(%s): %v", id, err)
+		}
+		if got.Status != unit.StatusPool {
+			t.Errorf("%s status = %s, want %s (no Unresolved producer exists yet)", id, got.Status, unit.StatusPool)
+		}
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("decision_log rows = %d, want 2 — one per transitioned unit (spec R4.2)", len(rows))
+	}
+	for _, row := range rows {
+		if row.Action != ports.ActionExpireIncompleteTransitioned {
+			t.Errorf("row Action = %s, want %s", row.Action, ports.ActionExpireIncompleteTransitioned)
+		}
 	}
 }
 
