@@ -117,7 +117,8 @@ func TestExpireIncomplete_RealCapturePathProducesNoIncompleteUnits(t *testing.T)
 	// writes no decision_log row — the phase's persist step is a genuine
 	// no-op, not merely "the read happened to be empty".
 	later := now.Add((consolidation.IncompleteExpiryHours + 1) * time.Hour)
-	consolidateSvc := brain.NewConsolidateService(fixedClock{now: later}, cfg, units, relations, &counterIDs{}, decisions)
+	recallSvc := brain.NewRecallService(brain.NewIndex(idx), lexical, units, embed)
+	consolidateSvc := brain.NewConsolidateService(fixedClock{now: later}, cfg, units, relations, &counterIDs{}, decisions, recallSvc)
 	phase := consolidation.PhaseExpireIncomplete
 	if _, err := consolidateSvc.Consolidate(ctx, brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseExpireIncomplete): %v", err)

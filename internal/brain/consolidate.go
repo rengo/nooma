@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -31,13 +33,16 @@ type ConsolidateService struct {
 // (see capture.go's own doc comment). ids and log back record (design
 // §3.3(e)) — the one call site every effect a phase persists goes through.
 // units and rels are PR 8's own widening: expire_incomplete and archive
-// read/write through units, strengthen reads/writes through rels — the
-// first two of runPhase's eight arms this file wires for real (design §6.3
-// slots 1-3).
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog) *ConsolidateService {
+// read/write through units, strengthen reads/writes through rels (design
+// §6.3 slots 1-3). recall is this PR's own addition (slot 4, design §7.1):
+// the same *RecallService instance wiring shares with NewCaptureService
+// (design D9's "one shared RecallService instance"), never a second one
+// built here — connect's candidate search calls its ScoredFor method,
+// never a new fusion implementation.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc},
 	}
 }
 
@@ -94,13 +99,16 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // mirroring captureRunner/correctionRunner's own split. ids and log exist
 // for exactly one purpose: record, below. units and rels are runPhase's own
 // per-phase reads/writes (design §6.3): units backs expire_incomplete and
-// archive, rels backs strengthen.
+// archive, rels backs strengthen and connect. recall is connect's own
+// slot-4 read (design §7.1) — no ports.Clock of its own either, the same
+// property RecallService already has.
 type consolidateRunner struct {
-	cfg   ports.ConfigRepo
-	units ports.UnitRepo
-	rels  ports.RelationRepo
-	ids   ports.IDGen
-	log   ports.DecisionLog
+	cfg    ports.ConfigRepo
+	units  ports.UnitRepo
+	rels   ports.RelationRepo
+	ids    ports.IDGen
+	log    ports.DecisionLog
+	recall *RecallService
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -174,6 +182,90 @@ func partitionLiveDecayStates(cs []consolidation.Cold) (usable []consolidation.C
 		usable = append(usable, c)
 	}
 	return usable, refused
+}
+
+// coldToSources adapts LiveDecayStates' already-refused-filtered
+// []consolidation.Cold into []consolidation.Source — the two declare the
+// identical five decay fields in the identical order (design §4.1's own
+// "one read shape serves all three phases"), so each entry is a direct
+// type conversion, not a computation. connect's own read (design §6.3 slot
+// 4) is this function's first caller; derive (PR 10b, slot 5) is its
+// second.
+func coldToSources(cs []consolidation.Cold) []consolidation.Source {
+	out := make([]consolidation.Source, len(cs))
+	for i, c := range cs {
+		out[i] = consolidation.Source(c)
+	}
+	return out
+}
+
+// scoredToFused adapts []ScoredUnit into the []recall.FusedCandidate shape
+// consolidation.ConnectPairs and correction.Referent both consume, plus an
+// id -> unit.Unit lookup for a caller that needs the full candidate back —
+// design §7.1: "internal/brain/correction.go:117-120 already maps
+// []ScoredUnit -> []recall.FusedCandidate ... The adapter is written once
+// and shared, not copied." correction.go's resolveReferent was the first
+// caller (its own inline block moved here); connect's own candidate search
+// (below) is the second, over the exact same shape.
+func scoredToFused(scored []ScoredUnit) ([]recall.FusedCandidate, map[string]unit.Unit) {
+	cands := make([]recall.FusedCandidate, len(scored))
+	byID := make(map[string]unit.Unit, len(scored))
+	for i, su := range scored {
+		cands[i] = recall.FusedCandidate{ID: su.Unit.ID, Score: su.Score}
+		byID[su.Unit.ID] = su.Unit
+	}
+	return cands, byID
+}
+
+// connectPairsForSource is connectSources' own per-source step: recall's
+// fused ranking over source's content (RecallService.ScoredFor, spec R5.5),
+// adapted through scoredToFused, filtered against rels.ExistingPairs
+// (design §4.2's own exclusion lookup), and bounded by
+// consolidation.ConnectPairs.
+func (r consolidateRunner) connectPairsForSource(ctx context.Context, source unit.Unit) ([]consolidation.Pair, error) {
+	scored, _, err := r.recall.ScoredFor(ctx, source.Content)
+	if err != nil {
+		return nil, fmt.Errorf("consolidate: connect: recall for unit %q: %w", source.ID, err)
+	}
+	fused, _ := scoredToFused(scored)
+
+	candidatePairs := make([]consolidation.Pair, len(fused))
+	for i, c := range fused {
+		candidatePairs[i] = consolidation.CanonicalPair(source.ID, c.ID)
+	}
+	existing, err := r.rels.ExistingPairs(ctx, candidatePairs)
+	if err != nil {
+		return nil, fmt.Errorf("consolidate: connect: existing pairs for unit %q: %w", source.ID, err)
+	}
+
+	return consolidation.ConnectPairs(source.ID, fused, existing), nil
+}
+
+// connectSources runs slot 4's own candidate search (design §7.1, §6.3) for
+// every id in sourceIDs and returns the bounded, existing-pair-excluded
+// pairs consolidation.ConnectPairs plans for each — one source may
+// contribute up to consolidation.ConnectCandidateK pairs. It does not judge
+// or persist anything: that is PR 9b's own step, over each pair this method
+// returns.
+func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []string, now time.Time) ([]consolidation.Pair, error) {
+	if len(sourceIDs) == 0 {
+		return nil, nil
+	}
+
+	sourceUnits, err := r.units.LiveByIDs(ctx, sourceIDs)
+	if err != nil {
+		return nil, fmt.Errorf("consolidate: connect: read source units: %w", err)
+	}
+
+	var all []consolidation.Pair
+	for _, source := range sourceUnits {
+		pairs, err := r.connectPairsForSource(ctx, source)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, pairs...)
+	}
+	return all, nil
 }
 
 // persistArchiveTransitions applies ts through units.SetStatus, in the
@@ -327,9 +419,11 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 // phases this file contains (m2b §3.2 leg 4's tree scan bans a second
 // one). report accumulates every corrupted id a phase's own read refuses
 // (design §3.3(e)) — the one place a refusal is surfaced, never in
-// decision_log (spec R4.2's MUST NOT). Three arms wire real I/O this PR
-// (expire_incomplete, archive, strengthen — design §6.3 slots 1-3); the
-// rest stay placeholders for PR 9-11. default names the unhandled phase
+// decision_log (spec R4.2's MUST NOT). Four arms wire real I/O by this PR
+// (expire_incomplete, archive, strengthen — design §6.3 slots 1-3 — and
+// connect's own bounded candidate search, slot 4, whose judge/persist step
+// PR 9b still owes); the rest stay placeholders for PR 10-11. default names
+// the unhandled phase
 // rather than silently doing nothing, so a ninth phase added to Order()
 // without a matching case fails loudly here instead of being skipped.
 func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, pass passContext, report *ConsolidateReport) error {
@@ -367,7 +461,19 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			return err
 		}
 	case consolidation.PhaseConnect:
-		// placeholder — PR 9 wires the real read/write.
+		cs, err := r.units.LiveDecayStates(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: connect: read live decay states: %w", err)
+		}
+		usable, refused := partitionLiveDecayStates(cs)
+		report.reportCorrupted(refused)
+		sourceIDs := consolidation.SelectConnectSources(coldToSources(usable), pass.since, pass.now)
+		// PR 9b wires the judge call, consolidation.ProposeRelation and
+		// RelationRepo.Upsert over each pair connectSources returns (design
+		// §7.1) — this PR (9a) stops at the bounded candidate list itself.
+		if _, err := r.connectSources(ctx, sourceIDs, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhaseDerive:
 		// placeholder — PR 10 wires the real read/write.
 	case consolidation.PhaseReweight:
