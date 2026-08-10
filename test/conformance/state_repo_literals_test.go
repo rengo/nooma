@@ -43,11 +43,7 @@ func TestStateSourceLiteralsMatchMigration0003Comment(t *testing.T) {
 
 	docMembers := strings.Split(comment, "|")
 
-	// Deliberately the wrong order (discriminating-fixture mutation, PR 3's
-	// own precedent) — migration 0003's comment lists "user|consolidation",
-	// so this must fail at position 0 for the right reason before task
-	// 4.7/4.8's GREEN commit swaps it back.
-	wantOrder := []string{ports.StateSourceConsolidation, ports.StateSourceUser}
+	wantOrder := []string{ports.StateSourceUser, ports.StateSourceConsolidation}
 	if len(docMembers) != len(wantOrder) {
 		t.Fatalf("migration 0003's current_state.source comment lists %d members %v, want %d %v",
 			len(docMembers), docMembers, len(wantOrder), wantOrder)
