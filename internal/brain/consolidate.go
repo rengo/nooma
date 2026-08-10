@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,11 +26,12 @@ type ConsolidateService struct {
 // NewConsolidateService wires a ConsolidateService over the ports one pass
 // needs. clock is read exactly once per Consolidate call; run never sees
 // clock at all — the same structural guarantee captureRunner's split gives
-// (see capture.go's own doc comment).
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo) *ConsolidateService {
+// (see capture.go's own doc comment). ids and log back record (design
+// §3.3(e)) — the one call site every effect a phase persists goes through.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, ids ports.IDGen, log ports.DecisionLog) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg},
+		run:   consolidateRunner{cfg: cfg, ids: ids, log: log},
 	}
 }
 
@@ -65,9 +67,43 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 
 // consolidateRunner is the clockless worker owning one pass (design
 // §3.3(a)) — no ConsolidateService field, no ports.Clock of its own,
-// mirroring captureRunner/correctionRunner's own split.
+// mirroring captureRunner/correctionRunner's own split. ids and log exist
+// for exactly one purpose: record, below — no other method on this type
+// reads either field.
 type consolidateRunner struct {
 	cfg ports.ConfigRepo
+	ids ports.IDGen
+	log ports.DecisionLog
+}
+
+// record persists one decision_log row — the one call site every effect a
+// phase's core decision function returns goes through (design §3.3(e),
+// spec R4.2's first MUST). detail is marshalled into Decision.Context;
+// rationale is the legible sentence spec R6.4's exit criterion needs.
+//
+// Honest limit (design §3.3(e)): nothing here structurally forbids a
+// future persist call from skipping this helper. The guard is the L2
+// fixture pair spec R4.2 requires — every phase fed produces one row per
+// effect, no phase fed produces zero rows — plus review; this is a
+// convention, not a gate, and is named as one rather than presented as
+// something it is not.
+func (r consolidateRunner) record(ctx context.Context, now time.Time, action ports.DecisionAction, rationale string, detail any) error {
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		return fmt.Errorf("consolidate: encode decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     action,
+		Rationale:  rationale,
+		Context:    detailJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("consolidate: record decision: %w", err)
+	}
+	return nil
 }
 
 // passContext is everything one invocation reads before any phase runs —
