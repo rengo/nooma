@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // This file lives inside package brain (white-box), not test/conformance,
@@ -31,6 +33,33 @@ import (
 type fixedClock struct{ now time.Time }
 
 func (c fixedClock) Now() time.Time { return c.now }
+
+// spyConfig wraps memrepo.Config to count ports.ConfigRepo.Load and
+// RecordConsolidationRun calls. "since read once" and
+// "consolidation_last_run_at written once" (spec R5.3, R5.4; design
+// §3.3(c)-(d)) are call-count claims, not stored-value claims — a plain
+// memrepo.Config fixture cannot prove either by itself.
+type spyConfig struct {
+	*memrepo.Config
+	loadCalls   int
+	recordCalls int
+	recordAts   []time.Time
+}
+
+func newSpyConfig() *spyConfig {
+	return &spyConfig{Config: memrepo.NewConfig()}
+}
+
+func (s *spyConfig) Load(ctx context.Context) (ports.VaultConfig, error) {
+	s.loadCalls++
+	return s.Config.Load(ctx)
+}
+
+func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) error {
+	s.recordCalls++
+	s.recordAts = append(s.recordAts, at)
+	return s.Config.RecordConsolidationRun(ctx, at)
+}
 
 // TestConsolidate_WholePassReachesEveryPhaseInOrder is spec R4.1's own
 // scenario (I11's behavioural half, design §3.3(b)): a whole pass
@@ -93,6 +122,69 @@ func TestConsolidate_PerPhase(t *testing.T) {
 		r := consolidateRunner{}
 		if err := r.runPhase(ctx, consolidation.Phase(99), passContext{}); err == nil {
 			t.Fatal("runPhase(99) error = nil, want an error naming the unhandled phase")
+		}
+	})
+}
+
+// TestConsolidate_SinceReadOnceBeforeAnyPhase is spec R5.3 and design
+// §3.3(c): passContext.since is cfg.ConsolidationLastRunAt, read from
+// ports.ConfigRepo.Load exactly once per invocation — whole pass or single
+// phase — before any phase runs. This PR ships no phase consumer of since
+// yet (PR 8/9 add Strengthen/SelectConnectSources), so the assertion is
+// against buildPassContext's own return value and against Load's call
+// count, not against a phase's observed behaviour.
+func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	t.Run("nil since with no config row", func(t *testing.T) {
+		r := consolidateRunner{cfg: memrepo.NewConfig()}
+		pass, err := r.buildPassContext(ctx, now)
+		if err != nil {
+			t.Fatalf("buildPassContext: %v", err)
+		}
+		if pass.since != nil {
+			t.Errorf("since = %v, want nil with no config row", pass.since)
+		}
+	})
+
+	t.Run("since mirrors the stored ConsolidationLastRunAt", func(t *testing.T) {
+		cfg := memrepo.NewConfig()
+		last := now.Add(-48 * time.Hour)
+		if err := cfg.RecordConsolidationRun(ctx, last); err != nil {
+			t.Fatalf("seed RecordConsolidationRun: %v", err)
+		}
+		r := consolidateRunner{cfg: cfg}
+
+		pass, err := r.buildPassContext(ctx, now)
+		if err != nil {
+			t.Fatalf("buildPassContext: %v", err)
+		}
+		if pass.since == nil || !pass.since.Equal(last) {
+			t.Errorf("since = %v, want %v", pass.since, last)
+		}
+	})
+
+	t.Run("Load is called exactly once for a whole pass", func(t *testing.T) {
+		cfg := newSpyConfig()
+		svc := NewConsolidateService(fixedClock{now}, cfg)
+		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
+			t.Fatalf("Consolidate: %v", err)
+		}
+		if cfg.loadCalls != 1 {
+			t.Errorf("Load calls = %d, want exactly 1", cfg.loadCalls)
+		}
+	})
+
+	t.Run("Load is called exactly once for a per-phase run too", func(t *testing.T) {
+		cfg := newSpyConfig()
+		svc := NewConsolidateService(fixedClock{now}, cfg)
+		phase := consolidation.PhaseStrengthen
+		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+			t.Fatalf("Consolidate: %v", err)
+		}
+		if cfg.loadCalls != 1 {
+			t.Errorf("Load calls = %d, want exactly 1", cfg.loadCalls)
 		}
 	})
 }
