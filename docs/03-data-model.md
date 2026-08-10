@@ -106,7 +106,8 @@ CREATE TABLE current_state (
   energy      REAL,                              -- 0–1
   mood        TEXT,
   active      INTEGER NOT NULL DEFAULT 1,
-  recorded_at TEXT NOT NULL
+  recorded_at TEXT NOT NULL,
+  source      TEXT NOT NULL DEFAULT 'user' -- user|consolidation
 );
 
 CREATE TABLE decision_log (
