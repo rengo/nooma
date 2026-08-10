@@ -57,6 +57,24 @@ type ConsolidateReport struct {
 	// report rendering is a future design decision, not a reason to widen
 	// this struct's public surface ahead of it.
 	phasesRun []consolidation.Phase
+	// corrupted collects every refused entry any of the four
+	// corrupted-capable phases (archive, strengthen, reweight, derive)
+	// reports — design §3.3(e), spec R4.2's MUST NOT: a refusal had no
+	// vault effect, so it is surfaced here and never in decision_log.
+	// Unexported for the same reason phasesRun is: PR 12 owns the eventual
+	// public report shape.
+	corrupted []string
+}
+
+// reportCorrupted folds ids into r.corrupted and touches nothing else —
+// deliberately: this method has no access to a consolidateRunner's log or
+// ids, so it cannot itself become a call site that routes a corrupted
+// entry into record (design §3.3(e): "a corrupted entry from any phase is
+// surfaced in ConsolidateReport and never in decision_log"). The refusal
+// rule is decided once, here, and applied uniformly to all four
+// corrupted-capable phases' own future call sites (PR 8-11).
+func (r *ConsolidateReport) reportCorrupted(ids []string) {
+	r.corrupted = append(r.corrupted, ids...)
 }
 
 // Consolidate is this file's only ports.Clock.Now() read — one per
