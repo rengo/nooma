@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -94,15 +95,17 @@ func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 // TestConsolidate_PerPhase is design §3.3(a)-(b)'s per-phase scope: a
 // ConsolidateRequest naming one Phase reaches exactly that phase's arm and
 // no other; a Phase value outside consolidation.Order()'s range errors
-// through runPhase's own default case rather than being silently skipped.
+// through consolidation.ErrUnknownPhase rather than being silently
+// skipped.
 //
-// Disclosed rather than presented as a literal RED: by the time this test
-// is added, 7a.2's filter loop and switch already implement both
-// properties in full (design §3.3(b)'s own code shape, quoted verbatim),
-// so both subtests pass immediately — proof that the already-implemented
-// filter and default are correct, not a behaviour change. Matches this
-// change's own m2a C9/task-8.3 precedent for a stated "Red" that does not
-// materialize as a missing-symbol or failing-assertion red once written.
+// The third subtest below was added in round 1 of this PR's Judgment Day:
+// both blind judges independently confirmed that an out-of-range
+// req.Phase reached svc.Consolidate as a silent no-op success (the filter
+// loop's continue never matches it, so runPhase — the only place the old
+// code produced an error — was never called), because the only prior
+// coverage of "unknown phase" called runPhase directly and never drove
+// the request through the real entry point. Fixed in consolidate.go's
+// `at` by checking for an empty phasesRun after a non-nil req.Phase.
 func TestConsolidate_PerPhase(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
@@ -124,6 +127,19 @@ func TestConsolidate_PerPhase(t *testing.T) {
 		r := consolidateRunner{}
 		if err := r.runPhase(ctx, consolidation.Phase(99), passContext{}); err == nil {
 			t.Fatal("runPhase(99) error = nil, want an error naming the unhandled phase")
+		}
+	})
+
+	t.Run("an unknown phase errors through Consolidate itself, not just runPhase", func(t *testing.T) {
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig())
+		unknown := consolidation.Phase(99)
+
+		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &unknown})
+		if !errors.Is(err, consolidation.ErrUnknownPhase) {
+			t.Fatalf("Consolidate(Phase(99)) error = %v, want errors.Is(err, consolidation.ErrUnknownPhase)", err)
+		}
+		if len(report.phasesRun) != 0 {
+			t.Fatalf("PhasesRun = %v, want empty — an unknown phase must run nothing", report.phasesRun)
 		}
 	})
 }

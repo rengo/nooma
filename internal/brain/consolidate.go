@@ -97,7 +97,13 @@ func (r consolidateRunner) buildPassContext(ctx context.Context, now time.Time) 
 // design §3.3(b): one execution path, filtered, never a second dispatch.
 // The per-phase run iterates consolidation.Order() and skips; it never
 // calls a phase function directly, so a per-phase run can never reach
-// anything a whole pass would not, or vice versa.
+// anything a whole pass would not, or vice versa. A req.Phase outside
+// Order() matches nothing in that loop, so phasesRun stays empty — the
+// check below turns that into consolidation.ErrUnknownPhase instead of
+// the false "success, nothing ran" a caller would otherwise see (Judgment
+// Day, PR 7a round 1: confirmed by both judges, design.md's own test
+// matrix row 1078 already required this and the shipped test only proved
+// it against runPhase in isolation, never through this entry point).
 //
 // What this does not cover (design §3.3(d)): consolidation_last_run_at is
 // written only after every phase in the loop below has returned. A phase
@@ -124,6 +130,10 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 		if err := r.runPhase(ctx, p, pass); err != nil {
 			return report, err
 		}
+	}
+
+	if req.Phase != nil && len(report.phasesRun) == 0 {
+		return report, fmt.Errorf("consolidate: %w: %s", consolidation.ErrUnknownPhase, *req.Phase)
 	}
 
 	if req.Phase == nil {
@@ -162,7 +172,7 @@ func (r consolidateRunner) runPhase(_ context.Context, p consolidation.Phase, _ 
 		// No work, ever (owner ruling 3) — this arm exists so Order()'s
 		// last slot is reached and reported, and performs nothing.
 	default:
-		return fmt.Errorf("consolidate: unhandled phase %s", p)
+		return fmt.Errorf("consolidate: %w: %s", consolidation.ErrUnknownPhase, p)
 	}
 	return nil
 }
