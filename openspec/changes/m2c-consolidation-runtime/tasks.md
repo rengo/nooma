@@ -1292,7 +1292,13 @@ one-line adoption; and (for `connect`'s own `LiveDecayStates` read) the guard PR
 adapter — `ScoredUnit → FusedCandidate`, `ExistingPairs`, `SelectConnectSources` wiring, §8.1's
 guard reuse, ~160) | 9b (the judge call, `ProposeRelation`, `Upsert`, `capture.go:485`, ~140).
 
-**SPLIT TAKEN.** Shipped as `feat/brain-phase-io-connect-9a` (tasks 9.1-9.3, 9.8) and
+**SPLIT TAKEN.** Measured **147 impl+docs / 220 test** for 9a — counted as `docs/06-harness.md`
+§7 defines it, *changed* lines (additions **plus** deletions), not additions alone. An earlier
+revision of this note and of PR #167's own description claimed "125 / 205" by counting additions
+only; `sdd-verify` caught the methodology error and it is corrected here rather than left to
+propagate into 9b's own measurement. No practical impact either way — both are far under the
+400-line ceiling — but a size convention measured two different ways is not a convention.
+Shipped as `feat/brain-phase-io-connect-9a` (tasks 9.1-9.3, 9.8) and
 `feat/brain-phase-io-connect-9b` (tasks 9.4-9.7, 9.9). Taken proactively rather than on a
 measured overrun: PR 8's own larger-than-typical diff cost three `sdd-verify` attempts (two agent
 failures — one stall, one API connection drop) before one completed, so the chain preferred the
