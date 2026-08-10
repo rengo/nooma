@@ -72,3 +72,15 @@ func (c *Config) SeedConfig(_ *testing.T, cfg ports.VaultConfig) {
 
 	c.row = &cfg
 }
+
+// RowExists implements repocontract.ConfigHarness. Reports whether c.row
+// has been written yet, independent of what Load returns — Load's
+// zero-value VaultConfig is indistinguishable from an all-NULL stored row,
+// which is exactly why repocontract.ConfigHarness needs this as a separate
+// capability (see its doc comment on RowExists).
+func (c *Config) RowExists(_ *testing.T) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.row != nil
+}

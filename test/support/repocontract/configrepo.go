@@ -27,6 +27,17 @@ type ConfigHarness interface {
 	// store's own zero value / NULL for that column. Calling SeedConfig
 	// more than once against the same harness replaces the row.
 	SeedConfig(t *testing.T, cfg ports.VaultConfig)
+
+	// RowExists reports whether the config singleton row exists in the
+	// backing store, independent of what Load returns. Load's "an absent
+	// row returns an all-nil VaultConfig" contract (spec R2.4) is
+	// satisfiable by two different implementations: one that writes
+	// nothing on an absent read (correct — owner ruling Q1), and one that
+	// lazily creates an all-NULL row on the way out of Load (incorrect,
+	// but indistinguishable from Load's return value alone — an absent
+	// row and an all-NULL row both decode to every field nil). RowExists
+	// is what tells them apart.
+	RowExists(t *testing.T) bool
 }
 
 // RunConfigRepoLoad runs the ports.ConfigRepo.Load contract against a
@@ -50,6 +61,11 @@ func RunConfigRepoLoad(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
 			got.GoalStagnationDays != nil || got.MentalLoadThreshold != nil || got.ConsolidationLastRunAt != nil {
 			t.Errorf("Load(absent row) = %+v, want every field nil — an unwritten config row is the "+
 				"normal state of a vault, not a failure", got)
+		}
+		if repo.RowExists(t) {
+			t.Errorf("Load(absent row) created a config row as a side effect — Load must write " +
+				"nothing to seed the row (spec R2.4, owner ruling Q1); only " +
+				"RecordConsolidationRun may create it")
 		}
 	})
 
