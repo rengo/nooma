@@ -42,13 +42,11 @@ type Relation struct {
 //
 // No Delete*-prefixed method — keeps
 // test/conformance/i03_units_never_deleted_test.go's strengthened prefix set
-// ({Delete, Remove, Purge, Drop, Destroy}) satisfied for this interface.
-// That test's reflection sweep runs over ports.UnitRepo only today — it
-// does not yet cross-check RelationRepo or any other ports interface;
-// widening the sweep to cover every ports interface is m2c PR 3's own task
-// (task 3.19), not this PR's. This comment states the narrower, currently
-// true claim rather than the wider one an earlier revision made before the
-// gap was caught.
+// ({Delete, Remove, Purge, Drop, Destroy}) satisfied for every ports
+// repository interface, not only ports.UnitRepo: m2c PR 3 widened that
+// test's reflection sweep to cover UnitRepo, RelationRepo, SelfModelRepo,
+// ConfigRepo and StateRepo together (design §4.6, spec R2.7), closing the
+// gap an earlier revision of this comment named but did not yet close.
 type RelationRepo interface {
 	// Upsert writes r, updating strength and confidence in place when a row
 	// already exists for r's (FromUnitID, ToUnitID, Type) triple — I07: a
