@@ -59,3 +59,40 @@ func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 		t.Errorf("last phase run = %s, want PhaseLearn (I11)", last)
 	}
 }
+
+// TestConsolidate_PerPhase is design §3.3(a)-(b)'s per-phase scope: a
+// ConsolidateRequest naming one Phase reaches exactly that phase's arm and
+// no other; a Phase value outside consolidation.Order()'s range errors
+// through runPhase's own default case rather than being silently skipped.
+//
+// Disclosed rather than presented as a literal RED: by the time this test
+// is added, 7a.2's filter loop and switch already implement both
+// properties in full (design §3.3(b)'s own code shape, quoted verbatim),
+// so both subtests pass immediately — proof that the already-implemented
+// filter and default are correct, not a behaviour change. Matches this
+// change's own m2a C9/task-8.3 precedent for a stated "Red" that does not
+// materialize as a missing-symbol or failing-assertion red once written.
+func TestConsolidate_PerPhase(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	t.Run("reaches exactly the requested phase", func(t *testing.T) {
+		svc := NewConsolidateService(fixedClock{now})
+		phase := consolidation.PhaseArchive
+
+		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
+		if err != nil {
+			t.Fatalf("Consolidate: %v", err)
+		}
+		if len(report.PhasesRun) != 1 || report.PhasesRun[0] != consolidation.PhaseArchive {
+			t.Fatalf("PhasesRun = %v, want exactly [PhaseArchive]", report.PhasesRun)
+		}
+	})
+
+	t.Run("an unknown phase errors through runPhase's default", func(t *testing.T) {
+		r := consolidateRunner{}
+		if err := r.runPhase(ctx, consolidation.Phase(99), passContext{}); err == nil {
+			t.Fatal("runPhase(99) error = nil, want an error naming the unhandled phase")
+		}
+	})
+}
