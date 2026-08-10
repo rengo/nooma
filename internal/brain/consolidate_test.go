@@ -472,3 +472,102 @@ func TestConsolidateRunner_Record_EncodesDetailIntoContext(t *testing.T) {
 		t.Errorf("Context.unit_id = %q, want %q", got.UnitID, "u-1")
 	}
 }
+
+// conflictingUnits wraps memrepo.Units, forcing exactly the conflictOn'th
+// SetStatus call to fail with ports.ErrStatusConflict regardless of the
+// unit's own stored status — spec R4.3's fixture needs one deterministic
+// conflict, not one incidentally derived from seeded state.
+type conflictingUnits struct {
+	*memrepo.Units
+	conflictOn int // 1-based call index that fails
+	calls      int
+}
+
+func (u *conflictingUnits) SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error {
+	u.calls++
+	if u.calls == u.conflictOn {
+		return ports.ErrStatusConflict
+	}
+	return u.Units.SetStatus(ctx, id, from, to, at)
+}
+
+// TestConsolidateRunner_PersistArchiveTransitions_SkipsAndLogsConflict is
+// spec R4.3's own fixture (tasks.md 7b.8's shape): three units planned for
+// archival, the second's SetStatus call returns ports.ErrStatusConflict — a
+// concurrent capture or correction revived it between archive's read and
+// this write. The pass does not fail: the first and third are archived,
+// the second is skipped and the skip itself is logged, and no error
+// propagates.
+//
+// Forward-looking scaffold (design §3.3(e), tasks.md 7b.8): exercised
+// directly against persistArchiveTransitions with a fake phase's own
+// planned transitions, not through runPhase's still-placeholder archive
+// arm — PR 8's own task 8.9 re-runs this identical shape against the real
+// archive wiring, proving the real phase uses the exact mechanism proved
+// here in isolation.
+func TestConsolidateRunner_PersistArchiveTransitions_SkipsAndLogsConflict(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	units := &conflictingUnits{Units: memrepo.NewUnits(), conflictOn: 2}
+	for _, id := range []string{"u-1", "u-2", "u-3"} {
+		if err := units.Create(ctx, unit.Unit{
+			ID: id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "seed", Source: "chat", CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+
+	ts := []consolidation.Transition{
+		{UnitID: "u-1", From: unit.StatusPool, To: unit.StatusArchived, Reason: consolidation.ReasonBelowWeightThreshold},
+		{UnitID: "u-2", From: unit.StatusPool, To: unit.StatusArchived, Reason: consolidation.ReasonBelowWeightThreshold},
+		{UnitID: "u-3", From: unit.StatusPool, To: unit.StatusArchived, Reason: consolidation.ReasonBelowWeightThreshold},
+	}
+
+	log := memrepo.NewDecisionLog()
+	r := consolidateRunner{ids: &fakeIDs{}, log: log}
+
+	if err := r.persistArchiveTransitions(ctx, ts, units, now); err != nil {
+		t.Fatalf("persistArchiveTransitions: %v", err)
+	}
+
+	for id, want := range map[string]unit.Status{
+		"u-1": unit.StatusArchived,
+		"u-2": unit.StatusPool,
+		"u-3": unit.StatusArchived,
+	} {
+		got, err := units.ByID(ctx, id)
+		if err != nil {
+			t.Fatalf("ByID(%s): %v", id, err)
+		}
+		if got.Status != want {
+			t.Errorf("%s status = %s, want %s", id, got.Status, want)
+		}
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	var archived, skipped int
+	for _, row := range rows {
+		switch row.Action {
+		case ports.ActionArchiveArchived:
+			archived++
+		case ports.ActionArchiveConflictSkipped:
+			skipped++
+		default:
+			t.Errorf("unexpected Action %s", row.Action)
+		}
+	}
+	if archived != 2 {
+		t.Errorf("ActionArchiveArchived rows = %d, want 2", archived)
+	}
+	if skipped != 1 {
+		t.Errorf("ActionArchiveConflictSkipped rows = %d, want 1", skipped)
+	}
+	if len(rows) != 3 {
+		t.Errorf("decision_log rows = %d, want 3 — one per unit, including the skip (spec R4.3)", len(rows))
+	}
+}
