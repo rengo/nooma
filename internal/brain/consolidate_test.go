@@ -329,6 +329,40 @@ func TestConsolidateRunner_Record(t *testing.T) {
 	}
 }
 
+// TestConsolidate_NoEffects is spec R4.2's I12 direction 2: a whole pass
+// where no phase has qualifying input completes and decision_log gains
+// zero rows. Every arm runPhase's switch declares is still a placeholder
+// (design §3.3(b), PR 7a) — none of them calls record unconditionally
+// today, so this passes immediately rather than failing first
+// (tasks.md 7b.4's own framing: "disclosed as the actual regression this
+// test guards, not a hypothetical" — the m2a C9 precedent this PR chain
+// already established for a stated Red that is a proof, not a discovered
+// break). It stays in this suite as the regression guard PR 8-11's real
+// per-phase wiring must keep green: a phase fed nothing must still write
+// nothing.
+func TestConsolidate_NoEffects(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	log := memrepo.NewDecisionLog()
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), &fakeIDs{}, log)
+
+	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
+	if err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+	if len(report.phasesRun) != len(consolidation.Order()) {
+		t.Fatalf("PhasesRun = %v, want every phase reached even with nothing to do", report.phasesRun)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 100)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("decision_log rows = %d, want 0 — a phase fed nothing must write nothing (spec R4.2)", len(rows))
+	}
+}
+
 // TestConsolidateRunner_Record_EncodesDetailIntoContext proves record's own
 // marshalling contract (design §3.3(e)): detail lands in Decision.Context
 // verbatim, decodable by the caller that wrote it.
