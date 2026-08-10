@@ -19,18 +19,28 @@ import (
 // as an example ('capture.classify', 0001:97).
 type DecisionAction string
 
-// The fourteen members of the DecisionAction vocabulary — design D9, plus
-// ActionCaptureDedupFailed (C14a: a judge-provider outage degrades the
-// capture the same way ActionCaptureEmbeddingFailed already does for an
-// embedding-provider outage, a decision D8 made and this one mirrors rather
-// than re-argues) and, design D5, ActionCorrectionApplied/
-// ActionCorrectionAmbiguous — the sanctioned R7.4 edit to this file for
-// PR 12f-i's correction-audit slice. Order matches design D9's own
-// declaration for its original eleven — the eight capture-time actions spec
-// R4.5/R4.6/R4.7 and Q3a's refusal name, then the three relation-judging
-// actions design D7 names — with the twelfth appended after its nearest
-// sibling, ActionCaptureEmbeddingFailed, and the two correction actions
-// appended last, rather than reordering what design D9 already fixed.
+// The fourteen capture/relation/correction members of the DecisionAction
+// vocabulary — design D9, plus ActionCaptureDedupFailed (C14a: a
+// judge-provider outage degrades the capture the same way
+// ActionCaptureEmbeddingFailed already does for an embedding-provider
+// outage, a decision D8 made and this one mirrors rather than re-argues)
+// and, design D5, ActionCorrectionApplied/ActionCorrectionAmbiguous — the
+// sanctioned R7.4 edit to this file for PR 12f-i's correction-audit slice.
+// Order matches design D9's own declaration for its original eleven — the
+// eight capture-time actions spec R4.5/R4.6/R4.7 and Q3a's refusal name,
+// then the three relation-judging actions design D7 names — with the
+// twelfth appended after its nearest sibling, ActionCaptureEmbeddingFailed,
+// and the two correction actions appended last, rather than reordering what
+// design D9 already fixed.
+//
+// The ten members below them are m2c's own — design §7.5, spec
+// R4.2/R4.3/R5.8/R5.10 — one per consolidation phase's persistable effect
+// kind (§7.5's own table), bringing the total to twenty-four. Unlike the
+// fourteen above, every new segment is snake_case where it names a phase
+// (expire_incomplete, pattern_eval — Phase.String()'s own spelling,
+// internal/core/consolidation/phase.go — reused deliberately) or an effect
+// kind coined here; design §7.5 states plainly that this does not match the
+// fourteen's single-lowercase-word convention and is not claimed to.
 const (
 	ActionCaptureClassify           DecisionAction = "capture.classify"
 	ActionCaptureUnparseable        DecisionAction = "capture.classify.unparseable"
@@ -51,9 +61,41 @@ const (
 	// the referent gate or the edit plan asked instead of picking (design
 	// D2/D3, m1b D7's precedent for a discard that still explains itself).
 	ActionCorrectionAmbiguous DecisionAction = "correction.ambiguous"
+
+	// ActionExpireIncompleteTransitioned covers expire_incomplete's one
+	// effect kind — both ReasonIncompleteExpired and ReasonIncompletePromoted
+	// travel in Decision.Context, not the Action (design §7.5).
+	ActionExpireIncompleteTransitioned DecisionAction = "consolidate.expire_incomplete.transitioned"
+	// ActionArchiveArchived is archive's transition itself.
+	ActionArchiveArchived DecisionAction = "consolidate.archive.archived"
+	// ActionArchiveConflictSkipped is spec R4.3's own separately-logged
+	// effect: a race prevented a planned archive, which is a decision the
+	// pass made, not a refusal (design §3.3(e)).
+	ActionArchiveConflictSkipped DecisionAction = "consolidate.archive.conflict_skipped"
+	// ActionStrengthenApplied is strengthen's one effect kind.
+	ActionStrengthenApplied DecisionAction = "consolidate.strengthen.applied"
+	// ActionConnectRelationPersisted is connect's one effect kind — no
+	// second action for a discard, unlike capture's ActionRelationDiscarded
+	// (design §7.1).
+	ActionConnectRelationPersisted DecisionAction = "consolidate.connect.relation_persisted"
+	// ActionDeriveBeliefCreated and ActionDeriveBeliefReinforced are
+	// derive's two distinguishable vault effects (R5.8's own create/
+	// reinforce split).
+	ActionDeriveBeliefCreated    DecisionAction = "consolidate.derive.belief_created"
+	ActionDeriveBeliefReinforced DecisionAction = "consolidate.derive.belief_reinforced"
+	// ActionReweightBoostApplied is reweight's one effect kind — its
+	// corrupted entries are never logged (design §3.3(e), spec R4.2's MUST
+	// NOT).
+	ActionReweightBoostApplied DecisionAction = "consolidate.reweight.boost_applied"
+	// ActionPatternEvalStagnationFound and
+	// ActionPatternEvalLoadHypothesisOpened are pattern_eval's two effect
+	// kinds — R5.10 logs a stagnation finding and a firing load hypothesis
+	// separately, since they carry different Context shapes.
+	ActionPatternEvalStagnationFound      DecisionAction = "consolidate.pattern_eval.stagnation_found"
+	ActionPatternEvalLoadHypothesisOpened DecisionAction = "consolidate.pattern_eval.load_hypothesis_opened"
 )
 
-// AllDecisionActions returns a fresh slice holding the fourteen
+// AllDecisionActions returns a fresh slice holding the twenty-four
 // DecisionAction vocabulary members, in the order the constants above
 // declare them.
 //
@@ -68,6 +110,10 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureDedupFailed, ActionCaptureHookDeferred, ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,
+		ActionExpireIncompleteTransitioned, ActionArchiveArchived, ActionArchiveConflictSkipped,
+		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
+		ActionDeriveBeliefReinforced, ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
+		ActionPatternEvalLoadHypothesisOpened,
 	}
 }
 
