@@ -956,7 +956,7 @@ this PR itself uses fakes for its own tests). Ships `ConsolidateService`, `Conso
 `consolidateRunner`, `passContext`, `ConsolidateReport`, the `Order()` loop and `runPhase`'s
 `switch` (design §3.3), and **I11's behavioural half** (spec R4.1).
 
-- [ ] **7a.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (new) — a fixture over fake
+- [x] **7a.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (new) — a fixture over fake
       repos seeded so every phase has qualifying input, with a spy `consolidation.Phase` recorder;
       asserts the recorded invocation sequence equals `consolidation.Order()` exactly, including
       that `PhaseLearn`'s slot is reached and reached **last**.
@@ -966,7 +966,16 @@ this PR itself uses fakes for its own tests). Ships `ConsolidateService`, `Conso
       Consolidate(ctx, req) (ConsolidateReport, error) { return ConsolidateReport{}, nil }` —
       compiles; the spy sees zero invocations, fails first.
       Requirement: spec R4.1; design §3.3(a)–(b).
-- [ ] **7a.2** Commit 2 (GREEN): implement `consolidateRunner.at` — the `for _, p := range
+      **Deviation disclosed**: the "spy" is `ConsolidateReport.PhasesRun []consolidation.Phase`, a
+      real field this PR adds (not named by design.md, which shows only `corrupted` from PR 7b) —
+      no port this PR wires is called by any placeholder `runPhase` arm, so there is nothing else
+      to observe invocation through from outside the package; `PhasesRun` doubles as the audit
+      trail `nooma consolidate`'s eventual report rendering (PR 12) will read. Also, design.md §9's
+      test matrix names `test/conformance/i11_...` as this test's location; this file follows
+      tasks.md's own explicit `internal/brain/consolidate_test.go` instead (matching
+      `correction_test.go`'s white-box precedent — `consolidateRunner` is unexported and has no
+      caller `test/conformance` could reach), not silently reconciled.
+- [x] **7a.2** Commit 2 (GREEN): implement `consolidateRunner.at` — the `for _, p := range
       consolidation.Order() { if req.Phase != nil && p != *req.Phase { continue }; ...
       runPhase(ctx, p, pass) }` filter loop (design §3.3(b)), `runPhase`'s `switch p {
       case consolidation.PhaseArchive: ... }` with a `default` returning an error naming the
@@ -975,17 +984,29 @@ this PR itself uses fakes for its own tests). Ships `ConsolidateService`, `Conso
       (8–11) fill in; the spy still fires for each case reached.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.1; design §3.3(b).
-- [ ] **7a.3** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a per-phase run
+      **Deviation disclosed**: this commit deliberately does NOT yet wire `ports.ConfigRepo` into
+      `consolidateRunner` — `passContext{now: now}` is assembled inline, cfg/since stay zero — so
+      that 7a.5's RED is a genuine one (0 `Load` calls, not a pre-existing pass). `cfg` is added in
+      7a.6.
+- [x] **7a.3** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a per-phase run
       (`ConsolidateRequest{Phase: &consolidation.PhaseArchive}`) reaches exactly one arm's spy
       entry, no others; an unknown phase value (out of `Order()`'s range) errors through
       `runPhase`'s `default` case.
       **Red**: genuinely red until task 7a.2's filter+switch exists — the stub from 7a.1 runs
       nothing, so the "exactly one" assertion fails against zero.
       Requirement: design §3.3(a)'s `*Phase` sentinel, §3.3(b)'s filter.
-- [ ] **7a.4** Commit 2 (GREEN, no new code beyond 7a.2): confirm task 7a.3 passes.
+      **Deviation disclosed**: not a literal red as executed — 7a.2 already lands the complete
+      filter+switch+default (its own task text says so), so both `TestConsolidate_PerPhase`
+      subtests pass immediately once added, proving the already-implemented logic correct rather
+      than driving new code. Disclosed the same way task 8.3 (`m2a` C9) discloses a stated "Red"
+      that turns out to be a proof, not a behaviour change — landed as one commit with 7a.4 rather
+      than a separate no-op GREEN.
+- [x] **7a.4** Commit 2 (GREEN, no new code beyond 7a.2): confirm task 7a.3 passes.
       Verify: `go test ./internal/brain/... -run TestConsolidate_PerPhase`.
       Requirement: design §3.3(a)–(b).
-- [ ] **7a.5** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `passContext`'s
+      **Deviation disclosed**: folded into 7a.3's own commit (see above) — there being no new code
+      to add, a separate "confirm" commit would be empty.
+- [x] **7a.5** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `passContext`'s
       `since` is read from `ConfigRepo.Load` **before any phase runs**, once, and the **same**
       `*time.Time` value is what the runner would hand to any phase that consumes it (this PR has
       no real phase consumer yet — the assertion is against `passContext.since` itself, captured
@@ -994,7 +1015,11 @@ this PR itself uses fakes for its own tests). Ships `ConsolidateService`, `Conso
       **Red**: the stub from 7a.1/7a.2 does not read config at all — fails the "`Load` called
       exactly once" assertion (zero calls).
       Requirement: spec R5.3; design §3.3(c); discharges `m2b` §9 Q8.
-- [ ] **7a.6** Commit 2 (GREEN): implement `passContext` assembly in `consolidateRunner.at` —
+      Confirmed genuinely red: `go vet` failed with `unknown field cfg in struct literal of type
+      consolidateRunner` before 7a.6 landed. The "test-only accessor" option was taken:
+      `consolidateRunner.buildPassContext`, an unexported method the white-box test calls directly
+      — not a hidden test-hook field, an ordinary internal call any test in this package can make.
+- [x] **7a.6** Commit 2 (GREEN): implement `passContext` assembly in `consolidateRunner.at` —
       `now := s.clock.Now()` (the **one** clock read this package makes per invocation, guarded by
       `brain_single_clock_read_test.go`, already scoped to every non-test file under
       `internal/brain/**`, no test-file edit needed), `cfg := configRepo.Load(ctx)` once,
@@ -1003,29 +1028,41 @@ this PR itself uses fakes for its own tests). Ships `ConsolidateService`, `Conso
       Verify: `go test ./internal/brain/...`; `go test ./test/conformance/... -run
       TestBrainSingleClockRead`.
       Requirement: spec R0.2, R5.3; design §3.3(c).
-- [ ] **7a.7** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a whole-pass fixture
+- [x] **7a.7** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a whole-pass fixture
       asserts `ConfigRepo.RecordConsolidationRun` is called exactly once, with the pass's own
       `now`; a per-phase fixture asserts it is **never** called (spec R5.4's `MUST NOT`).
       **Red**: no call site exists yet in the stub — the whole-pass case fails (0 calls, want 1).
       Requirement: spec R5.4; design §3.3(d).
-- [ ] **7a.8** Commit 2 (GREEN): implement the one write site — `if req.Phase == nil {
+      Confirmed genuinely red: whole-pass subtest failed `RecordConsolidationRun calls = 0, want
+      exactly 1`; per-phase subtest passed trivially (0 calls, as intended) before 7a.8 landed.
+- [x] **7a.8** Commit 2 (GREEN): implement the one write site — `if req.Phase == nil {
       r.cfg.RecordConsolidationRun(ctx, pass.now) }` after the `Order()` loop completes, design
       §3.3(d)'s exact shape (one call site, gated on the same field that selected the scope).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R5.4; design §3.3(d).
-- [ ] **7a.9** Doc comment, `internal/brain/consolidate.go`: state design §3.3(d)'s own named
+- [x] **7a.9** Doc comment, `internal/brain/consolidate.go`: state design §3.3(d)'s own named
       limit — a pass that fails mid-way leaves `since` pointing at the previous pass, and every
       phase in M2 is idempotent under a re-read, so this is a cost, not a correctness problem
       — written down so it is not rediscovered as a surprise.
       Requirement: design §3.3(d) ("what this does not cover").
-- [ ] **7a.10** Purity/coverage: `golangci-lint run` (`brain-boundary` from PR 1 — this PR imports
+      Landed in the same commit as 7a.8 (same file, same concern, no test of its own).
+- [x] **7a.10** Purity/coverage: `golangci-lint run` (`brain-boundary` from PR 1 — this PR imports
       only `internal/core/*` and `internal/ports`, never `internal/store`); `go test -race
       ./internal/brain/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+      `make lint`: 0 issues. `go test -race ./internal/brain/...`: ok. No code change needed — not
+      committed as a separate commit.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/brain/consolidate.go` (+ test). Target ≤230 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/brain-consolidate-runner`
       returns nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR7b> --json baseRefName` names `main`.
+      `make check-all` fully green (lint 0 issues, go vet clean, race unit+integration,
+      `schema-golden-clean` zero diff, `internal/core` coverage 100% (718/718, unaffected),
+      7-target cross-compile, e2e suite). Diff confirmed to touch exactly
+      `internal/brain/consolidate.go` (166 lines) and `internal/brain/consolidate_test.go` (225
+      lines) — 166 impl+docs (0.72x the ~230 estimate), 225 test lines (0.52x the ~430 estimate).
+      Chain-merge checks 1/2 are deferred to PR 7b's own apply pass, per the established pattern
+      (PR4's/PR5's checks were filled in during the following PR's pass).
 
 ---
 
