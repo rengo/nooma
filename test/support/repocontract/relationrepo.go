@@ -298,7 +298,8 @@ func RunEvidence(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
 		}
 
 		wantFirst := consolidation.RelationEvidence{
-			RelationID: first.ID, Strength: first.Strength,
+			RelationID: first.ID, FromUnitID: first.FromUnitID, ToUnitID: first.ToUnitID,
+			Type: first.Type, Strength: first.Strength, Confidence: first.Confidence,
 			FromLastTouchedAt: atA, ToLastTouchedAt: atB,
 		}
 		if e, ok := byID[first.ID]; !ok || e != wantFirst {
@@ -306,7 +307,8 @@ func RunEvidence(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
 		}
 
 		wantSecond := consolidation.RelationEvidence{
-			RelationID: second.ID, Strength: second.Strength,
+			RelationID: second.ID, FromUnitID: second.FromUnitID, ToUnitID: second.ToUnitID,
+			Type: second.Type, Strength: second.Strength, Confidence: second.Confidence,
 			FromLastTouchedAt: atC, ToLastTouchedAt: atD,
 		}
 		if e, ok := byID[second.ID]; !ok || e != wantSecond {

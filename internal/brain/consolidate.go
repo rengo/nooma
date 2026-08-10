@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -29,10 +30,14 @@ type ConsolidateService struct {
 // clock at all — the same structural guarantee captureRunner's split gives
 // (see capture.go's own doc comment). ids and log back record (design
 // §3.3(e)) — the one call site every effect a phase persists goes through.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, ids ports.IDGen, log ports.DecisionLog) *ConsolidateService {
+// units and rels are PR 8's own widening: expire_incomplete and archive
+// read/write through units, strengthen reads/writes through rels — the
+// first two of runPhase's eight arms this file wires for real (design §6.3
+// slots 1-3).
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, ids: ids, log: log},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log},
 	}
 }
 
@@ -87,12 +92,15 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // consolidateRunner is the clockless worker owning one pass (design
 // §3.3(a)) — no ConsolidateService field, no ports.Clock of its own,
 // mirroring captureRunner/correctionRunner's own split. ids and log exist
-// for exactly one purpose: record, below — no other method on this type
-// reads either field.
+// for exactly one purpose: record, below. units and rels are runPhase's own
+// per-phase reads/writes (design §6.3): units backs expire_incomplete and
+// archive, rels backs strengthen.
 type consolidateRunner struct {
-	cfg ports.ConfigRepo
-	ids ports.IDGen
-	log ports.DecisionLog
+	cfg   ports.ConfigRepo
+	units ports.UnitRepo
+	rels  ports.RelationRepo
+	ids   ports.IDGen
+	log   ports.DecisionLog
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -125,6 +133,49 @@ func (r consolidateRunner) record(ctx context.Context, now time.Time, action por
 	return nil
 }
 
+// persistExpireIncompleteTransitions applies ts through units.SetStatus, in
+// the order ExpireIncomplete planned them, and records one decision_log row
+// per transition (design §3.3(e), spec R4.2, R5.1). Unlike archive's own
+// persist (below), expire_incomplete has no documented concurrent-revive
+// exception (spec R4.3 names only archive's race) — any SetStatus error
+// here propagates and aborts the pass, matching every other phase's default
+// posture.
+func (r consolidateRunner) persistExpireIncompleteTransitions(ctx context.Context, ts []consolidation.Transition, now time.Time) error {
+	for _, t := range ts {
+		if err := r.units.SetStatus(ctx, t.UnitID, t.From, t.To, now); err != nil {
+			return fmt.Errorf("consolidate: expire_incomplete: set status for unit %q: %w", t.UnitID, err)
+		}
+		rationale := fmt.Sprintf("expire_incomplete: unit %q transitioned %s -> %s (%s)", t.UnitID, t.From, t.To, t.Reason)
+		if err := r.record(ctx, now, ports.ActionExpireIncompleteTransitioned, rationale, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// partitionLiveDecayStates splits cs into usable and refused entries, using
+// the identical non-finite predicate consolidation.Archive applies
+// internally — design §8.1: "consolidateRunner partitions
+// []consolidation.Cold into usable and refused before mapping to []Source,
+// using the same non-finite predicate Archive applies, and reports the
+// refused ids through ConsolidateReport's corrupted set." Introduced here
+// for archive's own LiveDecayStates read (slot 2); connect and derive
+// (PR 9/10b, slots 4/5) reuse this exact function over their own
+// LiveDecayStates reads rather than duplicating the predicate a third and
+// fourth time — the guard that closes the SelectConnectSources NaN-
+// comparator hazard those two phases would otherwise feed unfiltered
+// (design §8.1's "two uncovered paths").
+func partitionLiveDecayStates(cs []consolidation.Cold) (usable []consolidation.Cold, refused []string) {
+	for _, c := range cs {
+		if math.IsNaN(c.Weight) || math.IsInf(c.Weight, 0) || math.IsNaN(c.DecayRate) || math.IsInf(c.DecayRate, 0) {
+			refused = append(refused, c.UnitID)
+			continue
+		}
+		usable = append(usable, c)
+	}
+	return usable, refused
+}
+
 // persistArchiveTransitions applies ts through units.SetStatus, in the
 // order archive planned them, and records one decision_log row per outcome
 // (design §3.3(e), spec R4.2). A concurrent capture or correction that
@@ -150,6 +201,47 @@ func (r consolidateRunner) persistArchiveTransitions(ctx context.Context, ts []c
 			}
 		default:
 			return fmt.Errorf("consolidate: archive: set status for unit %q: %w", t.UnitID, err)
+		}
+	}
+	return nil
+}
+
+// persistStrengthChanges applies cs through rels.Upsert and records one
+// decision_log row per change (design §3.3(e), spec R4.2, R5.3). es is the
+// same Evidence() read Strengthen consumed: RelationRepo.Upsert conflicts
+// on the (FromUnitID, ToUnitID, Type) triple, never on id (design §4.2's
+// own Upsert doc comment), so each StrengthChange — which carries only
+// RelationID and the new Strength — is looked up back into es for the
+// identity fields a correct Upsert call needs. Confidence rides along
+// unchanged: Strengthen never revises it, and Upsert always overwrites
+// Confidence with whatever it is given, so passing the value es already
+// read (rather than a zero value) is what keeps this call a strength-only
+// change in practice, not merely in intent.
+func (r consolidateRunner) persistStrengthChanges(ctx context.Context, cs []consolidation.StrengthChange, es []consolidation.RelationEvidence, now time.Time) error {
+	byID := make(map[string]consolidation.RelationEvidence, len(es))
+	for _, e := range es {
+		byID[e.RelationID] = e
+	}
+
+	for _, c := range cs {
+		e, ok := byID[c.RelationID]
+		if !ok {
+			return fmt.Errorf("consolidate: strengthen: no evidence found for relation %q", c.RelationID)
+		}
+		rel := ports.Relation{
+			ID:         c.RelationID,
+			FromUnitID: e.FromUnitID,
+			ToUnitID:   e.ToUnitID,
+			Type:       e.Type,
+			Strength:   c.Strength,
+			Confidence: e.Confidence,
+		}
+		if err := r.rels.Upsert(ctx, rel); err != nil {
+			return fmt.Errorf("consolidate: strengthen: upsert relation %q: %w", c.RelationID, err)
+		}
+		rationale := fmt.Sprintf("strengthen: relation %q raised to strength %.4f", c.RelationID, c.Strength)
+		if err := r.record(ctx, now, ports.ActionStrengthenApplied, rationale, c); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -212,7 +304,7 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 			continue
 		}
 		report.phasesRun = append(report.phasesRun, p)
-		if err := r.runPhase(ctx, p, pass); err != nil {
+		if err := r.runPhase(ctx, p, pass, &report); err != nil {
 			return report, err
 		}
 	}
@@ -233,18 +325,47 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 // runPhase dispatches p to its own arm — design §3.3(b)'s switch over
 // consolidation's own Phase constants, the only enumeration of the eight
 // phases this file contains (m2b §3.2 leg 4's tree scan bans a second
-// one). No arm does real work yet: each is a placeholder the phase-IO PRs
-// (8-11) fill in. default names the unhandled phase rather than silently
-// doing nothing, so a ninth phase added to Order() without a matching
-// case fails loudly here instead of being skipped.
-func (r consolidateRunner) runPhase(_ context.Context, p consolidation.Phase, _ passContext) error {
+// one). report accumulates every corrupted id a phase's own read refuses
+// (design §3.3(e)) — the one place a refusal is surfaced, never in
+// decision_log (spec R4.2's MUST NOT). Three arms wire real I/O this PR
+// (expire_incomplete, archive, strengthen — design §6.3 slots 1-3); the
+// rest stay placeholders for PR 9-11. default names the unhandled phase
+// rather than silently doing nothing, so a ninth phase added to Order()
+// without a matching case fails loudly here instead of being skipped.
+func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, pass passContext, report *ConsolidateReport) error {
 	switch p {
 	case consolidation.PhaseExpireIncomplete:
-		// placeholder — PR 8 wires the real read/write.
+		cutoff := pass.now.Add(-consolidation.IncompleteExpiryHours * time.Hour)
+		us, err := r.units.IncompleteOlderThan(ctx, cutoff)
+		if err != nil {
+			return fmt.Errorf("consolidate: expire_incomplete: read incomplete units: %w", err)
+		}
+		ts := consolidation.ExpireIncomplete(us, pass.now)
+		if err := r.persistExpireIncompleteTransitions(ctx, ts, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhaseArchive:
-		// placeholder — PR 8 wires the real read/write.
+		cs, err := r.units.LiveDecayStates(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: archive: read live decay states: %w", err)
+		}
+		usable, refused := partitionLiveDecayStates(cs)
+		report.reportCorrupted(refused)
+		threshold := consolidation.ResolveWeightThreshold(pass.cfg.WeightThreshold)
+		ts, _ := consolidation.Archive(usable, threshold, pass.now)
+		if err := r.persistArchiveTransitions(ctx, ts, r.units, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhaseStrengthen:
-		// placeholder — PR 8 wires the real read/write.
+		es, err := r.rels.Evidence(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: strengthen: read relation evidence: %w", err)
+		}
+		changes, corrupted := consolidation.Strengthen(es, pass.since)
+		report.reportCorrupted(corrupted)
+		if err := r.persistStrengthChanges(ctx, changes, es, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhaseConnect:
 		// placeholder — PR 9 wires the real read/write.
 	case consolidation.PhaseDerive:
