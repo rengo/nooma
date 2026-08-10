@@ -1,5 +1,7 @@
 # nooma store API golden — regenerate with `make store-api-golden`.
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
+internal/store/sqlite: func (*ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error)
+internal/store/sqlite: func (*ConfigRepo) RecordConsolidationRun(ctx context.Context, at time.Time) error
 internal/store/sqlite: func (*DecisionLog) Record(ctx context.Context, d ports.Decision) error
 internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Time, limit int) ([]ports.Decision, error)
 internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error)
@@ -11,8 +13,13 @@ internal/store/sqlite: func (*RelationRepo) ExistingPairs(ctx context.Context, p
 internal/store/sqlite: func (*RelationRepo) ThresholdsFor(ctx context.Context, relType string) (*relation.Thresholds, error)
 internal/store/sqlite: func (*RelationRepo) Upsert(ctx context.Context, rel ports.Relation) error
 internal/store/sqlite: func (*Search) SearchLexical(ctx context.Context, tokens []string, k int) ([]string, error)
+internal/store/sqlite: func (*SelfModelRepo) ActiveBeliefs(ctx context.Context) ([]ports.Belief, error)
+internal/store/sqlite: func (*SelfModelRepo) ReinforceByID(ctx context.Context, id string, confidence float64, at time.Time) error
+internal/store/sqlite: func (*SelfModelRepo) UpsertByTopicKey(ctx context.Context, b ports.Belief) error
 internal/store/sqlite: func (*SignalRepo) Record(ctx context.Context, s ports.Signal) error
 internal/store/sqlite: func (*SignalRepo) Since(ctx context.Context, t time.Time, limit int) ([]ports.Signal, error)
+internal/store/sqlite: func (*StateRepo) LastHypothesisAt(ctx context.Context) (*time.Time, error)
+internal/store/sqlite: func (*StateRepo) OpenHypothesis(ctx context.Context, h ports.StateHypothesis) error
 internal/store/sqlite: func (*UnitRepo) ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) CountLiveByType(ctx context.Context, t unit.Type) (int, error)
@@ -31,18 +38,24 @@ internal/store/sqlite: func (*Vault) Path() string
 internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
+internal/store/sqlite: func NewConfigRepo(v *Vault) *ConfigRepo
 internal/store/sqlite: func NewDecisionLog(v *Vault) *DecisionLog
 internal/store/sqlite: func NewEmbeddingRepo(v *Vault) *EmbeddingRepo
 internal/store/sqlite: func NewRelationRepo(v *Vault) *RelationRepo
 internal/store/sqlite: func NewSearch(v *Vault) *Search
+internal/store/sqlite: func NewSelfModelRepo(v *Vault) *SelfModelRepo
 internal/store/sqlite: func NewSignalRepo(v *Vault) *SignalRepo
+internal/store/sqlite: func NewStateRepo(v *Vault) *StateRepo
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
+internal/store/sqlite: type ConfigRepo
 internal/store/sqlite: type DecisionLog
 internal/store/sqlite: type EmbeddingRepo
 internal/store/sqlite: type RelationRepo
 internal/store/sqlite: type Search
+internal/store/sqlite: type SelfModelRepo
 internal/store/sqlite: type SignalRepo
+internal/store/sqlite: type StateRepo
 internal/store/sqlite: type UnitRepo
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError
