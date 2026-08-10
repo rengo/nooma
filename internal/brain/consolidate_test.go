@@ -19,13 +19,15 @@ import (
 // it to this file instead, and this file follows tasks.md — the executable
 // instruction — disclosed here rather than silently reconciled.
 //
-// ConsolidateReport.PhasesRun (consolidate.go) is this PR's own answer to
+// ConsolidateReport.phasesRun (consolidate.go) is this PR's own answer to
 // spec R4.1's "spy recording each phase's invocation" requirement: no
 // production case in runPhase's switch calls any port this PR wires yet
 // (every arm is a placeholder — design §3.3(b)), so there is nothing else
-// for a spy to observe from outside the package. PhasesRun is real output,
-// not a test-only seam — it is also what `nooma consolidate`'s eventual
-// report rendering (PR 12) reads.
+// for a spy to observe. Unexported deliberately, per Judgment Day/verify
+// feedback on this PR: this file is white-box (package brain), so an
+// unexported field gives identical observability without committing
+// public API surface design.md never named — PR 12's own report-rendering
+// shape is a future decision, not this PR's to make.
 
 // fixedClock is a deterministic ports.Clock for this file only, mirroring
 // correction_test.go's fakeIDs precedent for a small package-local test
@@ -76,15 +78,15 @@ func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 	}
 
 	want := consolidation.Order()
-	if len(report.PhasesRun) != len(want) {
-		t.Fatalf("PhasesRun = %v, want %v", report.PhasesRun, want)
+	if len(report.phasesRun) != len(want) {
+		t.Fatalf("PhasesRun = %v, want %v", report.phasesRun, want)
 	}
 	for i, p := range want {
-		if report.PhasesRun[i] != p {
-			t.Errorf("PhasesRun[%d] = %s, want %s", i, report.PhasesRun[i], p)
+		if report.phasesRun[i] != p {
+			t.Errorf("PhasesRun[%d] = %s, want %s", i, report.phasesRun[i], p)
 		}
 	}
-	if last := report.PhasesRun[len(report.PhasesRun)-1]; last != consolidation.PhaseLearn {
+	if last := report.phasesRun[len(report.phasesRun)-1]; last != consolidation.PhaseLearn {
 		t.Errorf("last phase run = %s, want PhaseLearn (I11)", last)
 	}
 }
@@ -113,8 +115,8 @@ func TestConsolidate_PerPhase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
-		if len(report.PhasesRun) != 1 || report.PhasesRun[0] != consolidation.PhaseArchive {
-			t.Fatalf("PhasesRun = %v, want exactly [PhaseArchive]", report.PhasesRun)
+		if len(report.phasesRun) != 1 || report.phasesRun[0] != consolidation.PhaseArchive {
+			t.Fatalf("PhasesRun = %v, want exactly [PhaseArchive]", report.phasesRun)
 		}
 	})
 

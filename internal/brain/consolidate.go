@@ -47,12 +47,14 @@ type ConsolidateRequest struct {
 
 // ConsolidateReport is Consolidate's return value.
 type ConsolidateReport struct {
-	// PhasesRun records every phase runPhase reached, in the exact order
+	// phasesRun records every phase runPhase reached, in the exact order
 	// consolidation.Order() presents them — I11's own behavioural proof
-	// reads this directly (spec R4.1). This is real output, not a test
-	// seam: `nooma consolidate`'s eventual report rendering (PR 12) has
-	// the same use for it.
-	PhasesRun []consolidation.Phase
+	// reads this directly (spec R4.1), from inside package brain
+	// (consolidate_test.go is white-box). Unexported deliberately: no
+	// caller outside this package needs it yet, and PR 12's eventual
+	// report rendering is a future design decision, not a reason to widen
+	// this struct's public surface ahead of it.
+	phasesRun []consolidation.Phase
 }
 
 // Consolidate is this file's only ports.Clock.Now() read — one per
@@ -118,7 +120,7 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 		if req.Phase != nil && p != *req.Phase {
 			continue
 		}
-		report.PhasesRun = append(report.PhasesRun, p)
+		report.phasesRun = append(report.phasesRun, p)
 		if err := r.runPhase(ctx, p, pass); err != nil {
 			return report, err
 		}
