@@ -894,7 +894,7 @@ module):
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |
 | `min_confidence_to_surface` | 0.50 |
-| `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — two schema homes exist today, `config.goal_stagnation_days` and `calibration`'s own example key; `m2c` must pick the table `ConfigRepo` reads and M5's learning module must write the same one (`design.md` §9 Q3) |
+| `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — `config.goal_stagnation_days` is this knob's one schema home for the whole of M2; `ports.ConfigRepo` reads it, never `calibration`'s own generic key/value row (`m2c` spec R2.5, discharging `m2b design.md` §9 Q3). `calibration` stays unused through `m2c`, verified by a source-tree scan (`test/conformance`); it remains reserved for M5's learning module to write arbitrary future per-user knobs that have no dedicated `config` column |
 | `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`interrupt_level`) | 0.70 |
