@@ -96,6 +96,17 @@ func (r consolidateRunner) buildPassContext(ctx context.Context, now time.Time) 
 // The per-phase run iterates consolidation.Order() and skips; it never
 // calls a phase function directly, so a per-phase run can never reach
 // anything a whole pass would not, or vice versa.
+//
+// What this does not cover (design §3.3(d)): consolidation_last_run_at is
+// written only after every phase in the loop below has returned. A phase
+// that returns an error aborts the pass before that write runs — correct,
+// since an aborted pass did not happen — but it leaves since pointing at
+// the previous pass, so the next pass re-reads whatever slots the failed
+// one had already read. Every phase M2 ships is idempotent under a
+// re-read (archive re-reads status, strengthen re-computes from the same
+// since, connect re-excludes existing pairs), so this is a cost, not a
+// correctness problem — stated here so it is not rediscovered as a
+// surprise.
 func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now time.Time) (ConsolidateReport, error) {
 	pass, err := r.buildPassContext(ctx, now)
 	if err != nil {
@@ -110,6 +121,12 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 		report.PhasesRun = append(report.PhasesRun, p)
 		if err := r.runPhase(ctx, p, pass); err != nil {
 			return report, err
+		}
+	}
+
+	if req.Phase == nil {
+		if err := r.cfg.RecordConsolidationRun(ctx, pass.now); err != nil {
+			return report, fmt.Errorf("consolidate: record consolidation run: %w", err)
 		}
 	}
 
