@@ -24,12 +24,24 @@ import (
 //
 // Two independent checks (design §8.4/D5):
 //
-//  1. Reflection over the interface: no method name begins with any of
-//     deniedMethodPrefixes. That set is {Delete, Remove, Purge, Drop,
-//     Destroy} — strengthened by this PR from {Delete} alone (design D5's
-//     own stated gap: a Delete-only check would let Purge, Remove or Drop
-//     slip past it). Strengthening a conformance test is allowed;
-//     weakening one is what docs/06-harness.md §4 forbids.
+//  1. Reflection over every ports repository interface — UnitRepo,
+//     RelationRepo, SelfModelRepo, ConfigRepo, StateRepo, SignalRepo and
+//     EmbeddingRepo (m2c design §4.6, spec R2.7) — no method name begins
+//     with any of deniedMethodPrefixes. That set is {Delete, Remove,
+//     Purge, Drop, Destroy} — strengthened by an earlier PR from {Delete}
+//     alone (design D5's own stated gap: a Delete-only check would let
+//     Purge, Remove or Drop slip past it). Strengthening a conformance
+//     test is allowed; weakening one is what docs/06-harness.md §4
+//     forbids. The sweep itself was widened from ports.UnitRepo alone to
+//     the five m2c introduces by m2c PR 3, then to all seven ports
+//     repository interfaces in this PR — closing the gap between what
+//     RelationRepo's doc comment claims ("every ports repository
+//     interface") and what this test actually checked: SignalRepo (I13:
+//     a learning signal outlives the deletion of its target) and
+//     EmbeddingRepo (embeddings hang off units, which are never deleted)
+//     belong to the same invariant and had no removal verb to begin
+//     with — widening the sweep makes the doc comment's claim true
+//     instead of narrowing the claim to match a partial sweep.
 //  2. Tree scan: no Go source file under internal/ or cmd/ issues a literal
 //     DELETE FROM units statement (migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this Go-source
@@ -39,23 +51,24 @@ import (
 // zero-file scan fails loudly instead of passing vacuously.
 func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 	t.Run("repo declares no removal method", func(t *testing.T) {
-		repoType := reflect.TypeOf((*ports.UnitRepo)(nil)).Elem()
-		if repoType.Kind() != reflect.Interface {
-			t.Fatalf("ports.UnitRepo has kind %s, want interface", repoType.Kind())
-		}
-		if repoType.NumMethod() == 0 {
-			t.Fatal("ports.UnitRepo declares zero methods — D10's guard: nothing to check yet")
-		}
-		for i := 0; i < repoType.NumMethod(); i++ {
-			name := repoType.Method(i).Name
-			for _, prefix := range deniedMethodPrefixes {
-				if strings.HasPrefix(name, prefix) {
-					t.Errorf(
-						"ports.UnitRepo declares %s — nothing deletes a unit "+
-							"(docs/02-cognitive-core.md §1, CLAUDE.md non-negotiable #6: "+
-							"archiving is a state transition, not a removal)",
-						name,
-					)
+		for _, repoType := range sweptPortsRepoTypes {
+			if repoType.Kind() != reflect.Interface {
+				t.Fatalf("%s has kind %s, want interface", repoType, repoType.Kind())
+			}
+			if repoType.NumMethod() == 0 {
+				t.Fatalf("%s declares zero methods — D10's guard: nothing to check yet", repoType)
+			}
+			for i := 0; i < repoType.NumMethod(); i++ {
+				name := repoType.Method(i).Name
+				for _, prefix := range deniedMethodPrefixes {
+					if strings.HasPrefix(name, prefix) {
+						t.Errorf(
+							"%s declares %s — nothing deletes a unit "+
+								"(docs/02-cognitive-core.md §1, CLAUDE.md non-negotiable #6: "+
+								"archiving is a state transition, not a removal)",
+							repoType, name,
+						)
+					}
 				}
 			}
 		}
@@ -81,11 +94,32 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 }
 
 // deniedMethodPrefixes is I03's strengthened prefix set (design D5): a
-// ports.UnitRepo method name beginning with any of these would give
+// ports repository method name beginning with any of these would give
 // deletion a verb to name it, defeating I03's structural guarantee. Widened
-// by this PR from {Delete} alone — a strengthening, per
+// by an earlier PR from {Delete} alone — a strengthening, per
 // docs/06-harness.md §4.
 var deniedMethodPrefixes = []string{"Delete", "Remove", "Purge", "Drop", "Destroy"}
+
+// sweptPortsRepoTypes is every ports repository interface I03's reflection
+// check sweeps — m2c design §4.6, spec R2.7: all seven that
+// internal/ports declares — UnitRepo, RelationRepo, SelfModelRepo,
+// ConfigRepo, StateRepo, SignalRepo and EmbeddingRepo. The first five were
+// swept starting with m2c PR 3 (the PR that added the last of the three
+// new interfaces introduced there); SignalRepo and EmbeddingRepo were
+// added to the sweep in this PR, closing the gap between
+// RelationRepo's doc comment's "every ports repository interface" claim
+// and what the sweep actually checked. A future ports interface needs a
+// line added here — this list is that claim, held to what actually
+// exists, not what the package doc comment alone says.
+var sweptPortsRepoTypes = []reflect.Type{
+	reflect.TypeOf((*ports.UnitRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.RelationRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.SelfModelRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.ConfigRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.StateRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.SignalRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.EmbeddingRepo)(nil)).Elem(),
+}
 
 // containsUnitsDeleteStatement reports whether line contains the exact
 // (case-insensitive) statement "DELETE FROM units", rejecting a match whose

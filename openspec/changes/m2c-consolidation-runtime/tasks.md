@@ -393,9 +393,22 @@ Depends on PR 2 (no direct call; same fake/contract shape widened a third time).
 methods, plus the three literals) — design §4.3, §4.4, §3.4 — and **I03's widened reflection
 sweep** (spec R2.7), the PR where all three new interfaces exist together.
 
+**Deviation from this section's per-method commit granularity** (disclosed once, applies to
+3.1-3.18): each port's three tasks pairs (e.g. 3.1/3.2, 3.3/3.4, 3.5/3.6) were implemented as
+**one RED commit + one GREEN commit per port** (six commits total for the three ports) rather
+than one RED/GREEN pair per method (which would have been nine). Each RED commit still reproduces
+both flavors of red this file's tasks describe — first `go build` failing on the undefined port
+symbol (contract file added before the port exists), then, after restoring the port and adding a
+zero-value fake stub, a genuine assertion failure — watched locally before committing, exactly as
+3.1/3.3/3.5 etc. individually describe; they are simply consolidated to port granularity for
+commit-count efficiency. `ConfigRepo`'s contract additionally gained a `ConfigHarness.SeedConfig`
+hook (`RelationHarness.SeedThreshold`'s own precedent) not named in 3.9's text, because
+`RecordConsolidationRun` is `ConfigRepo`'s only write and touches one column — without a seed
+hook, task 3.9's corrupt-`WeightThreshold` fixture could never be constructed at all.
+
 ### `SelfModelRepo` (design §4.3)
 
-- [ ] **3.1** Commit 1 (RED): `test/support/repocontract/selfmodelrepo.go` (new) —
+- [x] **3.1** Commit 1 (RED): `test/support/repocontract/selfmodelrepo.go` (new) —
       `RunActiveBeliefs(t, newRepo)`: a fixture with beliefs across every `selfmodel.Facet` and
       both `active`/non-`active` status; returns exactly the active ones, all facets included, no
       status parameter on the call.
@@ -406,21 +419,21 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       `test/support/memrepo/selfmodel.go` fake returning `(nil, nil)` for `ActiveBeliefs` —
       compiles; fails the non-empty active-belief fixture.
       Requirement: spec R2.3; design §4.3.
-- [ ] **3.2** Commit 2 (GREEN): implement `ActiveBeliefs` in the fake.
+- [x] **3.2** Commit 2 (GREEN): implement `ActiveBeliefs` in the fake.
       Verify: `go test ./test/support/...`.
       Requirement: spec R2.3; design §4.3.
-- [ ] **3.3** Commit 1 (RED): `test/support/repocontract/selfmodelrepo.go` (extend) —
+- [x] **3.3** Commit 1 (RED): `test/support/repocontract/selfmodelrepo.go` (extend) —
       `RunUpsertByTopicKey(t, newRepo)`: writing the same `topic_key` twice with different
       `Content` produces **one** row, updated in place, not two.
       **Red**: covered by the same interface stub from 3.1 — `UpsertByTopicKey` compiles but the
       fake's zero-value implementation is a no-op, so the fixture's second write does not update
       the first; fails on the round-trip read.
       Requirement: spec R2.1.
-- [ ] **3.4** Commit 2 (GREEN): implement `UpsertByTopicKey` in the fake — conflict target is
+- [x] **3.4** Commit 2 (GREEN): implement `UpsertByTopicKey` in the fake — conflict target is
       `topic_key`, `RelationRepo.Upsert`'s own pattern.
       Verify: `go test ./test/support/...`.
       Requirement: spec R2.1; design §4.3.
-- [ ] **3.5** Commit 1 (RED): `test/support/repocontract/selfmodelrepo.go` (extend) —
+- [x] **3.5** Commit 1 (RED): `test/support/repocontract/selfmodelrepo.go` (extend) —
       `RunReinforceByID(t, newRepo)`: reinforcing an existing id changes only `confidence` and
       `last_reinforced_at`, leaving `topic_key`/`content`/`facet`/`origin`/`source_unit_id`
       unchanged; reinforcing an absent id returns `ErrBeliefNotFound` and creates **no** row.
@@ -429,12 +442,12 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       `ErrBeliefNotFound` unconditionally — compiles; fails the existing-id fixture (expects the
       two fields changed, gets an error instead).
       Requirement: spec R2.2; design §4.3.
-- [ ] **3.6** Commit 2 (GREEN): implement `ReinforceByID` in the fake — updates the two named
+- [x] **3.6** Commit 2 (GREEN): implement `ReinforceByID` in the fake — updates the two named
       columns only on a found id, `ErrBeliefNotFound` on a miss, never a silent create (spec R2.2's
       own `MUST`).
       Verify: `go test ./test/support/...`.
       Requirement: spec R2.2; design §4.3.
-- [ ] **3.7** Doc comment, `internal/ports/selfmodelrepo.go`: state spec R2.2's `MUST NOT` inline —
+- [x] **3.7** Doc comment, `internal/ports/selfmodelrepo.go`: state spec R2.2's `MUST NOT` inline —
       a merge (`MergeInto != ""`) must never route through `UpsertByTopicKey`, because
       `MergeInto` names an id that need not equal the newly-derived belief's own `topic_key`, and
       routing it through the wrong method silently creates a second belief instead of reinforcing
@@ -444,7 +457,7 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
 
 ### `ConfigRepo` (design §3.4)
 
-- [ ] **3.8** Commit 1 (RED): `test/support/repocontract/configrepo.go` (new) —
+- [x] **3.8** Commit 1 (RED): `test/support/repocontract/configrepo.go` (new) —
       `RunConfigRepoLoad(t, newRepo)`: on an empty backing store, `Load` returns an all-`nil`
       `VaultConfig` and a `nil` error — every one of the six fields is `nil`, not a partial
       struct.
@@ -457,7 +470,7 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       case passes immediately since the zero value of six pointers is already all-nil; **not a
       missing-symbol red beyond the compile step**, disclosed per `m2a` C9).
       Requirement: spec R2.4; design §3.4.
-- [ ] **3.9** `configrepo.go` (repocontract, continued) — `RunConfigRepoLoad`: on a store holding a
+- [x] **3.9** `configrepo.go` (repocontract, continued) — `RunConfigRepoLoad`: on a store holding a
       config row, every field carries the column's stored value **as stored** — including a
       corrupt one (e.g. `WeightThreshold` set to a `NaN`-equivalent sentinel the fake can produce)
       — never sanitized or defaulted by `ConfigRepo` itself. This is a genuine red once the fake
@@ -465,12 +478,12 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       round-trip a stored value.
       Requirement: spec R2.4 ("`ConfigRepo` does not itself decide what a `nil` or an
       out-of-range value defaults to"); design §3.4.
-- [ ] **3.10** Commit 2 (GREEN): implement the fake's config storage (a single optional
+- [x] **3.10** Commit 2 (GREEN): implement the fake's config storage (a single optional
       `*VaultConfig` field the fake holds, `nil` until `RecordConsolidationRun` first writes it)
       and `Load` reading it back verbatim.
       Verify: `go test ./test/support/...`.
       Requirement: spec R2.4; design §3.4.
-- [ ] **3.11** Commit 1 (RED): `configrepo.go` (repocontract, continued) —
+- [x] **3.11** Commit 1 (RED): `configrepo.go` (repocontract, continued) —
       `RunRecordConsolidationRun(t, newRepo)`: writing to an absent row creates it with
       `consolidation_last_run_at` set to the given instant and asserts the fake's own `Load`
       round-trips that one field with every other field still `nil` (mirroring "every other
@@ -481,16 +494,16 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       **Red**: the fake's zero-value `RecordConsolidationRun` (task 3.8's stub) is a no-op —
       fails the round-trip.
       Requirement: spec R2.6; design §3.4.
-- [ ] **3.12** Commit 2 (GREEN): implement `RecordConsolidationRun` in the fake.
+- [x] **3.12** Commit 2 (GREEN): implement `RecordConsolidationRun` in the fake.
       Verify: `go test ./test/support/...`.
       Requirement: spec R2.6; design §3.4.
-- [ ] **3.13** `test/conformance/` (new) — a source-tree scan, the same shape I03's own DELETE-scan
+- [x] **3.13** `test/conformance/` (new) — a source-tree scan, the same shape I03's own DELETE-scan
       uses: no `.go` file under `internal/` references the string `"calibration"` as a table name.
       This is the L2 half of spec R2.5's "the `calibration` table stays fully unused through the
       whole of `m2c`" — genuinely red for the right reason if any earlier task had accidentally
       referenced it; passes today because nothing does.
       Requirement: spec R2.5.
-- [ ] **3.14** doc 02 §13 amendment: rewrite the `goal_stagnation_days` row (currently: *"two
+- [x] **3.14** doc 02 §13 amendment: rewrite the `goal_stagnation_days` row (currently: *"two
       schema homes exist today... `m2c` must pick the table `ConfigRepo` reads"*, doc 02 line 897)
       to state the decision this PR makes rather than the open question it used to name:
       `ConfigRepo` reads `config.goal_stagnation_days`; `calibration` stays unused, verified by
@@ -501,7 +514,7 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
 
 ### `StateRepo` (design §4.4)
 
-- [ ] **3.15** Commit 1 (RED): `test/support/repocontract/staterepo.go` (new) —
+- [x] **3.15** Commit 1 (RED): `test/support/repocontract/staterepo.go` (new) —
       `RunOpenHypothesis(t, newRepo)`: two calls append two rows, neither call updates the other —
       asserted by reading both back and confirming both exist with their own `RecordedAt`.
       **Red**: `undefined: ports.StateRepo`, `undefined: ports.StateHypothesis` — package does not
@@ -513,11 +526,11 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       `OpenHypothesis` — compiles; fails the two-rows-appended fixture (only zero or one row
       visible).
       Requirement: design §4.4; spec R5.10 (the shape, not yet the SQL pin — that is PR 4).
-- [ ] **3.16** Commit 2 (GREEN): implement `OpenHypothesis` in the fake — append-only, no update
+- [x] **3.16** Commit 2 (GREEN): implement `OpenHypothesis` in the fake — append-only, no update
       path exists on the port at all (structural, per design §4.4's own point).
       Verify: `go test ./test/support/...`.
       Requirement: design §4.4.
-- [ ] **3.17** Commit 1 (RED): `staterepo.go` (repocontract, continued) —
+- [x] **3.17** Commit 1 (RED): `staterepo.go` (repocontract, continued) —
       `RunLastHypothesisAt(t, newRepo)`: ignores rows written with `Mood` not carrying the
       `source = consolidation` marker the fake tracks internally (the fake must track `source`
       even though `StateHypothesis` itself carries no `Source` field — the port's real
@@ -529,13 +542,13 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       `(nil, nil)` — passes the empty case trivially but fails the non-empty case once task 3.16
       lands rows to find.
       Requirement: design §4.4 ("feeds `EvaluateLoad`'s `lastHypothesisAt` parameter directly").
-- [ ] **3.18** Commit 2 (GREEN): implement `LastHypothesisAt` in the fake.
+- [x] **3.18** Commit 2 (GREEN): implement `LastHypothesisAt` in the fake.
       Verify: `go test ./test/support/...`.
       Requirement: design §4.4.
 
 ### I03 widened, cross-cutting for this PR
 
-- [ ] **3.19** Commit 1 (RED): `test/conformance/i03_units_never_deleted_test.go` (extend) —
+- [x] **3.19** Commit 1 (RED): `test/conformance/i03_units_never_deleted_test.go` (extend) —
       replace the single `reflect.TypeOf((*ports.UnitRepo)(nil)).Elem()` with a loop over five
       `reflect.Type` values: `UnitRepo`, `RelationRepo`, `SelfModelRepo`, `ConfigRepo`,
       `StateRepo`. **Genuinely red for the right reason before this task's own change**: the test
@@ -544,20 +557,30 @@ sweep** (spec R2.7), the PR where all three new interfaces exist together.
       C3.3's discipline of checking rather than trusting) would pass the *old* test and must fail
       the *new* one — this is the mutation check the task performs before considering itself done.
       Requirement: spec R2.7.
-- [ ] **3.20** Commit 2 (GREEN, structural): confirm the widened loop passes against the real five
+- [x] **3.20** Commit 2 (GREEN, structural): confirm the widened loop passes against the real five
       interfaces as they stand at the end of this PR, and that the temporary `PurgeBelief`
       mutation from task 3.19 is reverted, tree clean.
       Verify: `go test ./test/conformance/... -run TestI03`.
       Requirement: spec R2.7; design §4.6.
-- [ ] **3.21** Purity/coverage: `golangci-lint run` (`ports-purity` — this PR's three new
+- [x] **3.21** Purity/coverage: `golangci-lint run` (`ports-purity` — this PR's three new
       `internal/ports` files import only stdlib + `internal/core/{selfmodel,unit}`, no store, no
       brain).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/ports/{selfmodelrepo,configrepo,staterepo}.go`,
       `test/support/memrepo/{selfmodel,config,state}.go` (+ tests),
       `test/support/repocontract/{selfmodelrepo,configrepo,staterepo}.go`,
       `test/conformance/i03_units_never_deleted_test.go` (widened), `docs/02-cognitive-core.md`
-      (§13's `goal_stagnation_days` row, amended). Target ≤240 impl+docs lines.
+      (§13's `goal_stagnation_days` row, amended). Target ≤240 impl+docs lines. **Actual: 188
+      impl+docs lines** (`internal/ports/{configrepo,relationrepo,selfmodelrepo,staterepo}.go` +
+      `docs/02-cognitive-core.md`), ~1000 test lines. **Disclosed diff beyond this bullet's own
+      list**: `internal/ports/relationrepo.go` (doc comment restored to the wider I03 claim, task
+      3.20's own follow-through — PR 2 narrowed it pending this PR); three wiring test files
+      `test/conformance/{selfmodelrepo,configrepo,staterepo}_memrepo_test.go` (the "(+ tests)"
+      this bullet's own `memrepo` line names); `test/conformance/calibration_table_unused_test.go`
+      (new file for task 3.13's scan, not itself named by this bullet's original file list).
+      **Chain-merge checks 1 and 2 below are post-merge steps, not yet performed** — this PR is
+      open, not merged, as of this checklist update (learned from PR 1's tasks.md going stale on
+      exactly this point, corrected in PR 2 — see PR 2's own apply-progress note).
       **Chain-merge check 1**: `git ls-remote --heads origin feat/ports-selfmodel-config-state`
       returns nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR4> --json baseRefName` names `main`.
