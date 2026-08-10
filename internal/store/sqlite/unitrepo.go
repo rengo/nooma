@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -182,23 +183,49 @@ func (r *UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Statu
 	return requireRowAffected(res, ports.ErrStatusConflict)
 }
 
-// ApplyBoosts implements ports.UnitRepo. Not yet implemented: PR 5
-// (feat/store-unit-relation-repos) gives it the real, transactional SQL
-// body design §5.2 specifies (one BEGIN IMMEDIATE, one UPDATE per boost,
-// ErrUnitNotFound on a zero-rows-affected boost rolling back the whole
-// batch). This placeholder exists only so *UnitRepo keeps satisfying the
-// widened ports.UnitRepo interface between PR 1 (which adds the method to
-// the interface) and PR 5 (which implements it here) — the chain's own
-// stacked-to-main strategy needs internal/store/sqlite to keep compiling
-// at every link, not only at the end of the chain. Every call currently
-// fails loudly rather than silently no-op'ing.
+// ApplyBoosts implements ports.UnitRepo — design §5.2's exact shape.
 //
-// Deliberately a plain error, not a sentinel: nothing calls this method in
-// this link, so no caller is meant to branch on it with errors.Is. PR 5
-// replaces this body outright rather than adding a case that dispatches on
-// this error.
-func (r *UnitRepo) ApplyBoosts(_ context.Context, _ []weight.Boost, _ time.Time) error {
-	return errors.New("sqlite.UnitRepo.ApplyBoosts: not implemented until PR 5 (feat/store-unit-relation-repos)")
+// A non-finite Weight anywhere in the batch is refused BEFORE BEGIN
+// (design §3.1(e)): no transaction is opened for a batch that cannot land.
+// Otherwise, one BEGIN IMMEDIATE transaction (buildDSN's own
+// "_txlock=immediate", design D3 — every db.BeginTx on this vault already
+// takes the write lock upfront, so no separate BEGIN IMMEDIATE statement is
+// written here) wraps one UPDATE per boost, setting weight, last_touched_at
+// and updated_at together (I24, spec R3.3 — one round trip, never two). A
+// boost naming a unit id that does not exist rolls back the whole
+// transaction and returns ports.ErrUnitNotFound, leaving every row in the
+// call — including boosts for units that do exist — untouched.
+func (r *UnitRepo) ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error {
+	for _, b := range boosts {
+		if math.IsNaN(b.Weight) || math.IsInf(b.Weight, 0) {
+			return ports.ErrNonFiniteWeight
+		}
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("apply boosts: begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after a successful Commit; the error path below already reports the real failure
+
+	atText := formatUnitTime(at)
+	for _, b := range boosts {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE units SET weight = ?, last_touched_at = ?, updated_at = ? WHERE id = ?`,
+			b.Weight, formatUnitTime(b.LastTouchedAt), atText, b.UnitID,
+		)
+		if err != nil {
+			return fmt.Errorf("apply boost for unit %q: %w", b.UnitID, err)
+		}
+		if err := requireRowAffected(res, ports.ErrUnitNotFound); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("apply boosts: commit: %w", err)
+	}
+	return nil
 }
 
 // CountLiveByType implements ports.UnitRepo. Not yet implemented — the
