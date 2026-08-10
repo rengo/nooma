@@ -1292,21 +1292,43 @@ one-line adoption; and (for `connect`'s own `LiveDecayStates` read) the guard PR
 adapter — `ScoredUnit → FusedCandidate`, `ExistingPairs`, `SelectConnectSources` wiring, §8.1's
 guard reuse, ~160) | 9b (the judge call, `ProposeRelation`, `Upsert`, `capture.go:485`, ~140).
 
-- [ ] **9.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `connect`'s candidate
+**SPLIT TAKEN.** Shipped as `feat/brain-phase-io-connect-9a` (tasks 9.1-9.3, 9.8) and
+`feat/brain-phase-io-connect-9b` (tasks 9.4-9.7, 9.9). Taken proactively rather than on a
+measured overrun: PR 8's own larger-than-typical diff cost three `sdd-verify` attempts (two agent
+failures — one stall, one API connection drop) before one completed, so the chain preferred the
+pre-drawn boundary over another wide review surface.
+
+**Disclosed process deviation, PR 9a: the RED/GREEN commit sequence was lost.** The `sdd-apply`
+agent hit its session limit mid-work, having written both production code and tests but committed
+**nothing** — the working tree was recovered intact and committed as one work unit (`30284ad`),
+per this repository's own "one commit = one reviewable unit (change + tests + doc)" convention.
+No RED commit exists for tasks 9.1/9.8, so their `[x]` records the property as *proven*, not as
+*proven-in-that-order*. Non-vacuity was established after the fact instead, and is reproducible:
+(a) against `main`'s own `consolidate.go`/`correction.go` the new tests fail to compile
+(`NewConsolidateService` lacks the `*RecallService` parameter); (b) with the `PhaseConnect` arm
+body neutered but every signature intact, `TestConsolidateRunner_Connect_CallsRecallServiceScoredFor`
+fails (`EmbedCalls() = 0, want exactly 1`) and `TestConnect_RefusesNonFiniteSources` fails
+(`report.corrupted = [], want exactly [u-nan]`).
+`TestConsolidateRunner_Connect_ExcludesExistingPairsAndCandidateSelf` is unaffected by that probe
+by design — it drives the unexported `connectSources` helper directly rather than the phase arm,
+so the arm is not in its path. This is weaker evidence than a real red-first sequence and is
+recorded as such, not presented as equivalent.
+
+- [x] **9.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `connect`'s candidate
       search calls `RecallService.ScoredFor`, never a second fusion implementation — asserted via
       a spy on a fake `RecallService` (or, if `RecallService` is a concrete struct with no
       interface seam today, a source-tree scan confirming no new `sort.Slice`/ranking function is
       added under `internal/brain` for this phase — the shape `correction.go` already reuses).
       **Red**: the placeholder `connect` arm calls nothing — fails first.
       Requirement: spec R5.5; design §7.1.
-- [ ] **9.2** Commit 2 (GREEN): implement `connect`'s adapter — `LiveDecayStates()` (through PR
+- [x] **9.2** Commit 2 (GREEN): implement `connect`'s adapter — `LiveDecayStates()` (through PR
       8's partition guard) → `[]consolidation.Source`, `SelectConnectSources(ss, pass.since,
       pass.now)` → for each source, `RecallService.ScoredFor(ctx, text)` → the existing
       `[]ScoredUnit → []recall.FusedCandidate` mapping `correction.go:117-120` already establishes
       (shared, not copied) → `ExistingPairs` → `consolidation.ConnectPairs`.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R5.5; design §7.1, §6.3 (slot 4).
-- [ ] **9.3** *(split checkpoint)*: measure `git diff --stat` for tasks 9.1–9.2 (the adapter half)
+- [x] **9.3** *(split checkpoint)*: measure `git diff --stat` for tasks 9.1–9.2 (the adapter half)
       in isolation. If at risk of the ~160 sub-estimate running hot, this is PR 9a's boundary.
 - [ ] **9.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `connect`'s persisted
       relations carry `relation.CreatedByConsolidation`; the judged decision routes through
@@ -1333,7 +1355,7 @@ guard reuse, ~160) | 9b (the judge call, `ProposeRelation`, `Upsert`, `capture.g
       (`ActionConnectRelationPersisted`), never on a discard.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2; design §7.1.
-- [ ] **9.8** Re-run the `Source` sanitization fixture (PR 8 task 8.7's shape) against `connect`'s
+- [x] **9.8** Re-run the `Source` sanitization fixture (PR 8 task 8.7's shape) against `connect`'s
       own `LiveDecayStates` consumption — confirm the same partition guard (built once, shared)
       refuses the identical set of rows `archive` refused, over a fixture that exercises both
       phases from the same seeded state.
