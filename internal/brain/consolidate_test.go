@@ -673,3 +673,288 @@ func TestConsolidateRunner_PersistArchiveTransitions_SkipsAndLogsConflict(t *tes
 		t.Errorf("decision_log rows = %d, want 3 — one per unit, including the skip (spec R4.3)", len(rows))
 	}
 }
+
+// TestConsolidateRunner_Archive_ResolvesConfiguredThreshold is spec R5.2
+// and design §3.3(c): archive's own weight.Effective comparison must run
+// against ConfigRepo's configured WeightThreshold, resolved through
+// consolidation.ResolveWeightThreshold — never DefaultWeightThreshold read
+// directly, which would silently ignore a user's own configuration. A unit
+// at effective weight 0.6 sits ABOVE the 0.5 default (would stay pool under
+// a default-only read) but BELOW a configured 0.8 threshold (must archive)
+// — the two readings disagree, so the outcome proves which one the runner
+// actually used.
+func TestConsolidateRunner_Archive_ResolvesConfiguredThreshold(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	units := memrepo.NewUnits()
+	if err := units.Create(ctx, unit.Unit{
+		ID: "u-mid", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+		Content: "seed", Source: "chat", Weight: 0.6, WeightDecayRate: 0,
+		LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed u-mid: %v", err)
+	}
+
+	cfg := memrepo.NewConfig()
+	configured := 0.8
+	cfg.SeedConfig(t, ports.VaultConfig{WeightThreshold: &configured})
+
+	log := memrepo.NewDecisionLog()
+	phase := consolidation.PhaseArchive
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, log)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	got, err := units.ByID(ctx, "u-mid")
+	if err != nil {
+		t.Fatalf("ByID(u-mid): %v", err)
+	}
+	if got.Status != unit.StatusArchived {
+		t.Errorf("u-mid status = %s, want %s — 0.6 < configured threshold 0.8; a default-only read (0.5) would have left this unit pool, so this outcome proves the configured value was used", got.Status, unit.StatusArchived)
+	}
+}
+
+// TestConsolidateRunner_Archive_RefusesNonFiniteBeforeArchiveSees is design
+// §8.1: consolidateRunner partitions the LiveDecayStates read into usable
+// and refused, using Archive's own non-finite predicate, BEFORE any of it
+// reaches consolidation.Archive — three units so removing the guard would
+// change the fixture's outcome (two would-be archivals plus one refusal,
+// not indistinguishable from Archive's own internal check alone).
+func TestConsolidateRunner_Archive_RefusesNonFiniteBeforeArchiveSees(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	units := memrepo.NewUnits()
+	seeds := []struct {
+		id     string
+		weight float64
+	}{
+		{"u-cold-1", 0.1},
+		{"u-nan", math.NaN()},
+		{"u-cold-2", 0.05},
+	}
+	for _, s := range seeds {
+		if err := units.Create(ctx, unit.Unit{
+			ID: s.id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "seed", Source: "chat", Weight: s.weight, WeightDecayRate: 0.01,
+			LastTouchedAt: now.Add(-48 * time.Hour), CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", s.id, err)
+		}
+	}
+
+	log := memrepo.NewDecisionLog()
+	phase := consolidation.PhaseArchive
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log)
+
+	report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
+	if err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	if len(report.corrupted) != 1 || report.corrupted[0] != "u-nan" {
+		t.Fatalf("report.corrupted = %v, want exactly [u-nan]", report.corrupted)
+	}
+
+	for _, id := range []string{"u-cold-1", "u-cold-2"} {
+		got, err := units.ByID(ctx, id)
+		if err != nil {
+			t.Fatalf("ByID(%s): %v", id, err)
+		}
+		if got.Status != unit.StatusArchived {
+			t.Errorf("%s status = %s, want %s", id, got.Status, unit.StatusArchived)
+		}
+	}
+
+	nanUnit, err := units.ByID(ctx, "u-nan")
+	if err != nil {
+		t.Fatalf("ByID(u-nan): %v", err)
+	}
+	if nanUnit.Status != unit.StatusPool {
+		t.Errorf("u-nan status = %s, want unchanged %s — a refused entry must never reach Archive/SetStatus", nanUnit.Status, unit.StatusPool)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	for _, row := range rows {
+		var detail struct {
+			UnitID string `json:"UnitID"`
+		}
+		_ = json.Unmarshal(row.Context, &detail)
+		if detail.UnitID == "u-nan" {
+			t.Errorf("decision_log row %+v names the refused unit u-nan — a refusal must never be logged (spec R4.2's MUST NOT)", row)
+		}
+	}
+}
+
+// TestConsolidateRunner_Archive_RealWiringSkipsAndLogsConflict re-runs spec
+// R4.3's exact fixture (PR 7b task 7b.8's shape, proven in isolation there
+// against persistArchiveTransitions directly) through this PR's real
+// archive wiring: three units planned for archival via the real
+// LiveDecayStates -> Archive path, the second's SetStatus call conflicts.
+// The pass completes, the first and third archive, the second is skipped
+// and logged, and no error propagates — proving the real phase uses the
+// exact mechanism PR 7b already built, not a second one.
+func TestConsolidateRunner_Archive_RealWiringSkipsAndLogsConflict(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	base := memrepo.NewUnits()
+	for _, id := range []string{"u-1", "u-2", "u-3"} {
+		if err := base.Create(ctx, unit.Unit{
+			ID: id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "seed", Source: "chat", Weight: 0.1, WeightDecayRate: 0.01,
+			LastTouchedAt: now.Add(-48 * time.Hour), CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	units := &conflictingUnits{Units: base, conflictOn: 2}
+
+	log := memrepo.NewDecisionLog()
+	phase := consolidation.PhaseArchive
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	for id, want := range map[string]unit.Status{
+		"u-1": unit.StatusArchived,
+		"u-2": unit.StatusPool,
+		"u-3": unit.StatusArchived,
+	} {
+		got, err := units.ByID(ctx, id)
+		if err != nil {
+			t.Fatalf("ByID(%s): %v", id, err)
+		}
+		if got.Status != want {
+			t.Errorf("%s status = %s, want %s", id, got.Status, want)
+		}
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	var archived, skipped int
+	for _, row := range rows {
+		switch row.Action {
+		case ports.ActionArchiveArchived:
+			archived++
+		case ports.ActionArchiveConflictSkipped:
+			skipped++
+		default:
+			t.Errorf("unexpected Action %s", row.Action)
+		}
+	}
+	if archived != 2 {
+		t.Errorf("ActionArchiveArchived rows = %d, want 2", archived)
+	}
+	if skipped != 1 {
+		t.Errorf("ActionArchiveConflictSkipped rows = %d, want 1", skipped)
+	}
+}
+
+// TestConsolidateRunner_Strengthen_SincePropagatesAndPersists is spec R5.3
+// and R4.2/R5.3's persist half combined: strengthen's own Evidence() read
+// feeds Strengthen(es, pass.since) with pass.since unmodified — proven
+// behaviourally (two relations, one qualifying at since, one excluded
+// before it, since Strengthen is a pure function with no seam to spy on
+// directly) — and each resulting StrengthChange persists through
+// RelationRepo.Upsert with the ORIGINAL relation's FromUnitID/ToUnitID/Type
+// (Upsert's own conflict target, design §4.2) and Confidence preserved,
+// never zeroed.
+func TestConsolidateRunner_Strengthen_SincePropagatesAndPersists(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	since := now.Add(-48 * time.Hour)
+
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed RecordConsolidationRun: %v", err)
+	}
+
+	rels := memrepo.NewRelations()
+	for _, id := range []string{"u-a", "u-b", "u-c", "u-d"} {
+		rels.EnsureUnit(t, id)
+	}
+	rels.SetLastTouchedAt(t, "u-a", now)
+	rels.SetLastTouchedAt(t, "u-b", now)
+	rels.SetLastTouchedAt(t, "u-c", since.Add(-time.Hour))
+	rels.SetLastTouchedAt(t, "u-d", now)
+
+	qualifying := ports.Relation{
+		ID: "r-qualify", FromUnitID: "u-a", ToUnitID: "u-b", Type: "reference",
+		Strength: 0.2, Confidence: 0.9, CreatedBy: "system", CreatedAt: now,
+	}
+	excluded := ports.Relation{
+		ID: "r-exclude", FromUnitID: "u-c", ToUnitID: "u-d", Type: "reference",
+		Strength: 0.2, Confidence: 0.9, CreatedBy: "system", CreatedAt: now,
+	}
+	if err := rels.Upsert(ctx, qualifying); err != nil {
+		t.Fatalf("seed qualifying: %v", err)
+	}
+	if err := rels.Upsert(ctx, excluded); err != nil {
+		t.Fatalf("seed excluded: %v", err)
+	}
+
+	log := memrepo.NewDecisionLog()
+	phase := consolidation.PhaseStrengthen
+	svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), rels, &fakeIDs{}, log)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	byRelationID := func(unitID string) map[string]ports.Relation {
+		out, err := rels.ByUnit(ctx, unitID)
+		if err != nil {
+			t.Fatalf("ByUnit(%s): %v", unitID, err)
+		}
+		byID := make(map[string]ports.Relation, len(out))
+		for _, r := range out {
+			byID[r.ID] = r
+		}
+		return byID
+	}
+
+	afterQualify, ok := byRelationID("u-a")["r-qualify"]
+	if !ok {
+		t.Fatal("r-qualify not found after Consolidate — the runner must never drop a persisted relation")
+	}
+	wantStrength := 0.2 + consolidation.StrengthenGain*(1-0.2)
+	if afterQualify.Strength != wantStrength {
+		t.Errorf("r-qualify Strength = %v, want %v (StrengthenGain's own formula)", afterQualify.Strength, wantStrength)
+	}
+	if afterQualify.Confidence != 0.9 {
+		t.Errorf("r-qualify Confidence = %v, want 0.9 unchanged — Upsert must not corrupt it to the zero value", afterQualify.Confidence)
+	}
+	if afterQualify.FromUnitID != "u-a" || afterQualify.ToUnitID != "u-b" || afterQualify.Type != "reference" {
+		t.Errorf("r-qualify identity = (%s, %s, %s), want (u-a, u-b, reference) unchanged", afterQualify.FromUnitID, afterQualify.ToUnitID, afterQualify.Type)
+	}
+
+	afterExclude, ok := byRelationID("u-c")["r-exclude"]
+	if !ok {
+		t.Fatal("r-exclude not found after Consolidate")
+	}
+	if afterExclude.Strength != 0.2 {
+		t.Errorf("r-exclude Strength = %v, want unchanged 0.2 — its endpoint u-c was touched before since, so it must not qualify (spec R5.3)", afterExclude.Strength)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Since: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("decision_log rows = %d, want exactly 1 — only the qualifying relation changed (spec R4.2)", len(rows))
+	}
+	if rows[0].Action != ports.ActionStrengthenApplied {
+		t.Errorf("row Action = %s, want %s", rows[0].Action, ports.ActionStrengthenApplied)
+	}
+}
