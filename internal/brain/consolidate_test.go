@@ -1072,7 +1072,7 @@ func TestConsolidateRunner_Connect_ExcludesExistingPairsAndCandidateSelf(t *test
 	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), lex, units, fakeprovider.NewEmbeddingFake("test-model"))
 
 	r := consolidateRunner{units: units, rels: rels, recall: rec}
-	pairs, err := r.connectSources(ctx, []string{"u-source"}, now)
+	pairs, err := r.connectSources(ctx, []string{"u-source"})
 	if err != nil {
 		t.Fatalf("connectSources: %v", err)
 	}
@@ -1145,5 +1145,65 @@ func TestConnect_RefusesNonFiniteSources(t *testing.T) {
 	}
 	if len(connectReport.corrupted) != 1 || connectReport.corrupted[0] != "u-nan" {
 		t.Errorf("connect report.corrupted = %v, want exactly [u-nan] — the identical guard, reused (design §8.1)", connectReport.corrupted)
+	}
+}
+
+// TestConsolidate_WholePassReportsEachCorruptedIDOnce is the whole-pass
+// companion TestConnect_RefusesNonFiniteSources (above) deliberately does
+// not provide: that fixture drives archive and connect as two SEPARATE
+// per-phase calls, so each gets its own fresh ConsolidateReport and neither
+// can observe what happens when both phases fold into the SAME report.
+//
+// They do both fold into one report on a whole pass, and both read
+// LiveDecayStates independently: archive refuses a non-finite row at slot
+// 2, and connect reads the same row again at slot 4 and refuses it again,
+// because archive's refusal is not a vault write — nothing removes the row
+// between the two reads. Without dedup the same id lands in corrupted
+// twice, which PR 12's report rendering would then print twice, reading as
+// two distinct corrupt units rather than one seen by two phases.
+//
+// Found by Judgment Day on PR 9a (Judge A, SUGGESTION); fixed here rather
+// than carried to 9b because 9b extends this exact call path.
+func TestConsolidate_WholePassReportsEachCorruptedIDOnce(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+
+	units := memrepo.NewUnits()
+	seeds := []struct {
+		id     string
+		weight float64
+	}{
+		{"u-cold-1", 0.9},
+		{"u-nan", math.NaN()},
+		{"u-inf", math.Inf(1)},
+	}
+	for _, s := range seeds {
+		if err := units.Create(ctx, unit.Unit{
+			ID: s.id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "seed content for " + s.id, Source: "chat",
+			Weight: s.weight, WeightDecayRate: 0,
+			LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", s.id, err)
+		}
+	}
+
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units))
+	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
+	if err != nil {
+		t.Fatalf("Consolidate(whole pass): %v", err)
+	}
+
+	seen := make(map[string]int, len(report.corrupted))
+	for _, id := range report.corrupted {
+		seen[id]++
+	}
+	for id, n := range seen {
+		if n != 1 {
+			t.Errorf("corrupted contains %q %d times, want exactly 1 — archive (slot 2) and connect (slot 4) both refuse it from the same unchanged rows, but one corrupt unit is one entry", id, n)
+		}
+	}
+	if len(seen) != 2 || seen["u-nan"] != 1 || seen["u-inf"] != 1 {
+		t.Errorf("corrupted = %v, want exactly [u-inf u-nan] in some order", report.corrupted)
 	}
 }

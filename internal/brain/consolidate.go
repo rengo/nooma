@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -84,8 +85,23 @@ type ConsolidateReport struct {
 // surfaced in ConsolidateReport and never in decision_log"). The refusal
 // rule is decided once, here, and applied uniformly to all four
 // corrupted-capable phases' own future call sites (PR 8-11).
+//
+// An id already reported is not appended again. Two phases refusing the
+// same row is the normal case, not an edge one: archive (slot 2) and
+// connect (slot 4) each read LiveDecayStates independently within one
+// pass, and a refusal writes nothing to the vault, so the second read sees
+// the same corrupt row the first one refused. corrupted answers "which
+// units could not be used", so one unit is one entry however many phases
+// tripped over it. Membership is a linear scan rather than a set field:
+// the slice holds refused rows only, which are rare by construction and
+// bounded by the live pool, and a set would widen this struct's own shape
+// for no measurable gain.
 func (r *ConsolidateReport) reportCorrupted(ids []string) {
-	r.corrupted = append(r.corrupted, ids...)
+	for _, id := range ids {
+		if !slices.Contains(r.corrupted, id) {
+			r.corrupted = append(r.corrupted, id)
+		}
+	}
 }
 
 // Consolidate is this file's only ports.Clock.Now() read — one per
@@ -247,7 +263,7 @@ func (r consolidateRunner) connectPairsForSource(ctx context.Context, source uni
 // contribute up to consolidation.ConnectCandidateK pairs. It does not judge
 // or persist anything: that is PR 9b's own step, over each pair this method
 // returns.
-func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []string, now time.Time) ([]consolidation.Pair, error) {
+func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []string) ([]consolidation.Pair, error) {
 	if len(sourceIDs) == 0 {
 		return nil, nil
 	}
@@ -471,7 +487,7 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		// PR 9b wires the judge call, consolidation.ProposeRelation and
 		// RelationRepo.Upsert over each pair connectSources returns (design
 		// §7.1) — this PR (9a) stops at the bounded candidate list itself.
-		if _, err := r.connectSources(ctx, sourceIDs, pass.now); err != nil {
+		if _, err := r.connectSources(ctx, sourceIDs); err != nil {
 			return err
 		}
 	case consolidation.PhaseDerive:
