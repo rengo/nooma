@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
@@ -104,21 +105,37 @@ func runConsolidate(args []string, out, errOut io.Writer) error {
 		return err
 	}
 
-	if _, err := svc.Consolidate(context.Background(), req); err != nil {
+	report, err := svc.Consolidate(context.Background(), req)
+	if err != nil {
 		return err
 	}
 
-	return renderConsolidateReport(out, req)
+	return renderConsolidateReport(out, req, report.Corrupted())
 }
 
 // renderConsolidateReport prints what ran. Its phase name, when there is
 // one, comes from consolidation.Phase.String() — never a literal here,
 // for the same I11 reason ParsePhase above is the only way in.
-func renderConsolidateReport(out io.Writer, req brain.ConsolidateRequest) error {
+//
+// corrupted names every unit a phase refused. It is printed here because
+// this is the only place it can be: a refusal writes nothing to the vault,
+// so spec R4.2 keeps it out of decision_log on purpose, and a reader who
+// only ever sees decision_log would watch a corrupt row be skipped every
+// night without one line saying so. Silence is printed for a clean pass —
+// naming an empty set would train the eye to skip the line that matters.
+func renderConsolidateReport(out io.Writer, req brain.ConsolidateRequest, corrupted []string) error {
 	if req.Phase == nil {
-		_, err := fmt.Fprintln(out, "consolidate: ran the whole pass")
+		if _, err := fmt.Fprintln(out, "consolidate: ran the whole pass"); err != nil {
+			return err
+		}
+	} else if _, err := fmt.Fprintf(out, "consolidate: ran phase %s\n", req.Phase.String()); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(out, "consolidate: ran phase %s\n", req.Phase.String())
+
+	if len(corrupted) == 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(out, "consolidate: refused %d unit(s) as corrupt, none written: %s\n",
+		len(corrupted), strings.Join(corrupted, ", "))
 	return err
 }
