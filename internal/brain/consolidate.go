@@ -229,12 +229,14 @@ func (r consolidateRunner) persistExpireIncompleteTransitions(ctx context.Contex
 // []consolidation.Cold into usable and refused before mapping to []Source,
 // using the same non-finite predicate Archive applies, and reports the
 // refused ids through ConsolidateReport's corrupted set." Introduced here
-// for archive's own LiveDecayStates read (slot 2); connect and derive
-// (PR 9/10b, slots 4/5) reuse this exact function over their own
-// LiveDecayStates reads rather than duplicating the predicate a third and
-// fourth time — the guard that closes the SelectConnectSources NaN-
-// comparator hazard those two phases would otherwise feed unfiltered
-// (design §8.1's "two uncovered paths").
+// for archive's own LiveDecayStates read (slot 2); connect, derive and
+// reweight (PR 9/10b/11, slots 4/5/6) reuse this exact function over their
+// own LiveDecayStates reads rather than restating the predicate once per
+// phase — the guard that closes the SelectConnectSources NaN-comparator
+// hazard those phases would otherwise feed unfiltered (design §8.1's "two
+// uncovered paths"). Four readers now share it; the count is deliberately
+// not restated here, because a comment carrying a call count goes stale
+// the next time a phase learns to read decay states.
 func partitionLiveDecayStates(cs []consolidation.Cold) (usable []consolidation.Cold, refused []string) {
 	for _, c := range cs {
 		if math.IsNaN(c.Weight) || math.IsInf(c.Weight, 0) || math.IsNaN(c.DecayRate) || math.IsInf(c.DecayRate, 0) {
