@@ -1462,7 +1462,7 @@ correcting `spec.md`'s Scope-boundary claim of zero). `docs-sync.yml` fires on t
 only PR in the chain that needs a genuine `internal/core/` ↔ doc 02 delta from `docs-sync`'s own
 perspective, per this document's header note.
 
-- [ ] **10a.1** Commit 1 (RED): `internal/core/consolidation/prompt_test.go` (new) —
+- [x] **10a.1** Commit 1 (RED): `internal/core/consolidation/prompt_test.go` (new) —
       `BuildDerivePrompt` is a pure function over `([]DeriveSource, []Belief)`, deterministic
       across repeated calls; with ≥3 beliefs and ≥3 units (so ordering is falsifiable), every
       belief's `TopicKey`/`Content` appears in the output; with an empty `existing` slice, the
@@ -1475,24 +1475,39 @@ perspective, per this document's header note.
       the non-empty fixture expects the belief's `TopicKey` as a substring, empty string fails
       first.
       Requirement: spec R5.6; design §10.2.
-- [ ] **10a.2** Commit 2 (GREEN): implement `BuildDerivePrompt` per doc 02 §6.5's derivation
+      **Done** (`825be38`): three fixtures (determinism, render-every-unit-and-belief, empty-
+      existing states the gap plainly) drove the exact documented RED — `go test` failed with
+      `undefined: DeriveSource`/`undefined: BuildDerivePrompt` plus `unknown field Content in
+      struct literal of type Belief` (10a.3's own field, referenced a commit early since one test
+      file exercises both additions at once) — matching this repo's own precedent for a net-new-
+      symbol RED commit (5f47c89, fe00008): the test-only commit itself is what fails to build,
+      not a production signature widened without updating its call sites.
+- [x] **10a.2** Commit 2 (GREEN): implement `BuildDerivePrompt` per doc 02 §6.5's derivation
       prompt shape, rendering every active belief so the judge can decide "this already exists"
       before proposing a new one.
       Verify: `go test ./internal/core/consolidation/...`; `golangci-lint run`
       (`core-purity` — this file imports only stdlib + `internal/core/{unit,selfmodel}`).
       Requirement: spec R5.6; design §10.2.
-- [ ] **10a.3** `internal/core/consolidation/derive.go` — add `Content string` to the
+      **Done** (`ba47ebe`): `internal/core/consolidation/prompt.go` — `BuildDerivePrompt` renders
+      an "Existing self-beliefs" section (every belief's facet/topic_key/content, or one sentence
+      stating none exist yet) followed by a "Units to derive from" section (every source's
+      type/content). All three fixtures green; `golangci-lint run` 0 issues.
+- [x] **10a.3** `internal/core/consolidation/derive.go` — add `Content string` to the
       `m2b`-shipped `Belief` type (design §10.2's exact field addition); confirm
       `EvaluateStagnation` and `MergeProposals` (both `m2b`, unchanged callers) continue to ignore
       the new field — no behavior change to either, verified by their existing `m2b` test suites
       staying green with no edit.
       Verify: `go test ./internal/core/consolidation/...`.
       Requirement: design §10.2.
-- [ ] **10a.4** No new `internal/core` constant — verification, not a task with an edit: `rg 'const'
+      **Done** (`ba47ebe`, same commit as 10a.2): `Content string` added to `Belief`; every
+      `TestMergeProposals_*`/`TestEvaluateStagnation_*` case in `derive_test.go` stayed green with
+      zero edits to that file.
+- [x] **10a.4** No new `internal/core` constant — verification, not a task with an edit: `rg 'const'
       internal/core/consolidation/prompt.go` returns nothing. Confirms spec R0.3's own claim holds
       through this PR (`calibration_doc_test.go`'s §13 sweep is unaffected).
       Requirement: spec R0.3.
-- [ ] **10a.5** doc 02 §6.5 amendment: one sentence naming `derive`'s source selection — the units
+      **Done**: `rg 'const' internal/core/consolidation/prompt.go` returns nothing — confirmed.
+- [x] **10a.5** doc 02 §6.5 amendment: one sentence naming `derive`'s source selection — the units
       a pass derives from are the same recently-touched, effective-weight-ranked,
       `connect_source_limit`-capped set `connect` uses (design §7.3, discharged fully in PR 10b —
       this PR's own doc obligation is limited to the prompt builder's existence and shape; the
@@ -1500,15 +1515,37 @@ perspective, per this document's header note.
       PR's `internal/core/` change, but the §13 `connect_source_limit` annotation itself is task
       10b's, since it is stated alongside the phase that actually reuses the knob).
       Requirement: design §10.3, row 1 (partial — the sentence, not the §13 annotation).
-- [ ] **10a.6** Purity/coverage: `golangci-lint run`; `make cover` (`internal/core`'s 90% floor —
+      **Done** (`ba47ebe`): added the source-selection sentence to §6.5 item 5, and — beyond the
+      one sentence the task names, needed to give `docs-sync` a genuine content delta tied to the
+      new `internal/core` file, not just an unrelated sentence — updated the dedup-defense-1 gap
+      note from "no derive-phase prompt builder ... exist anywhere in `internal/brain` yet" to "the
+      prompt builder itself is **shipped** ... but **not yet wired**: no `derive`-phase
+      orchestration calling it exists anywhere in `internal/brain` yet" — correcting the doc to
+      match the code this PR actually ships (CLAUDE.md non-negotiable #1), while leaving the
+      orchestration gap itself open for PR 10b exactly as before.
+- [x] **10a.6** Purity/coverage: `golangci-lint run`; `make cover` (`internal/core`'s 90% floor —
       this is the one PR in the chain where it is the binding constraint, per design §9's own
       note).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+      **Done**: `golangci-lint run` 0 issues; `make cover` — `internal/core` statement coverage
+      100% (738/738, up from 718/718 pre-PR — every new branch in `prompt.go` is exercised).
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/consolidation/{prompt,derive}{,_test}.go`, `docs/02-cognitive-core.md` (§6.5).
       Target ≤150 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/core-derive-prompt` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR10b> --json baseRefName` names `main`.
+      **Done**: `make check-all` green (L1-L4, schema-golden regen-diff clean, `internal/core`
+      coverage 100% (738/738), seven-target cross-compile matrix OK, e2e green). Diff touches
+      exactly `internal/core/consolidation/{prompt,derive}{,_test}.go` and
+      `docs/02-cognitive-core.md` — confirmed via `git diff --stat main...feat/core-derive-prompt`,
+      no other file touched. Measured (`docs/06-harness.md` §7 convention, changed lines =
+      additions + deletions): impl+docs **117** (`prompt.go` 75, `derive.go` 10,
+      `02-cognitive-core.md` 32) — under the ~150 estimate and the ≤150 target, no split triggered;
+      test **93** (`prompt_test.go`, new file). PR #169 opened
+      (`https://github.com/rengo/nooma/pull/169`), `mergeStateStatus: CLEAN`, all 16 checks green
+      including `docs<->code sync` (the one gate `make check-all` cannot run locally — confirmed
+      passing on the actual PR, per this PR's own special instruction). Not merged yet — merge
+      happens after sdd-verify/Judgment Day; chain-merge checks pending.
 
 ---
 
