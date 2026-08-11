@@ -11,6 +11,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -35,15 +36,19 @@ type ConsolidateService struct {
 // §3.3(e)) — the one call site every effect a phase persists goes through.
 // units and rels are PR 8's own widening: expire_incomplete and archive
 // read/write through units, strengthen reads/writes through rels (design
-// §6.3 slots 1-3). recall is this PR's own addition (slot 4, design §7.1):
+// §6.3 slots 1-3). recall is PR 9a's own addition (slot 4, design §7.1):
 // the same *RecallService instance wiring shares with NewCaptureService
 // (design D9's "one shared RecallService instance"), never a second one
 // built here — connect's candidate search calls its ScoredFor method,
-// never a new fusion implementation.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService) *ConsolidateService {
+// never a new fusion implementation. judge is PR 9b's own addition
+// (design §7.1, spec R5.5): the identical relation-judge ports.LLMProvider
+// shape NewCaptureService's own judge parameter already establishes —
+// connect's persist decision routes through the same
+// relation.Resolve/Decide, never a second judge wiring.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge},
 	}
 }
 
@@ -117,7 +122,9 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // per-phase reads/writes (design §6.3): units backs expire_incomplete and
 // archive, rels backs strengthen and connect. recall is connect's own
 // slot-4 read (design §7.1) — no ports.Clock of its own either, the same
-// property RecallService already has.
+// property RecallService already has. judge is connect's own persist step
+// (design §7.1, spec R5.5) — the identical relation-judge ports.LLMProvider
+// shape captureRunner's own judge field already holds.
 type consolidateRunner struct {
 	cfg    ports.ConfigRepo
 	units  ports.UnitRepo
@@ -125,6 +132,7 @@ type consolidateRunner struct {
 	ids    ports.IDGen
 	log    ports.DecisionLog
 	recall *RecallService
+	judge  ports.LLMProvider
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -261,8 +269,8 @@ func (r consolidateRunner) connectPairsForSource(ctx context.Context, source uni
 // every id in sourceIDs and returns the bounded, existing-pair-excluded
 // pairs consolidation.ConnectPairs plans for each — one source may
 // contribute up to consolidation.ConnectCandidateK pairs. It does not judge
-// or persist anything: that is PR 9b's own step, over each pair this method
-// returns.
+// or persist anything itself: judgeAndPersistPairs (below) is PR 9b's own
+// step, over each pair this method returns.
 func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []string) ([]consolidation.Pair, error) {
 	if len(sourceIDs) == 0 {
 		return nil, nil
@@ -282,6 +290,113 @@ func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []strin
 		all = append(all, pairs...)
 	}
 	return all, nil
+}
+
+// judgeAndPersistPairs runs PR 9b's own step (design §7.1, spec R5.5) over
+// every pair connectSources returned: one relation-judge call per pair
+// (bounded by ConnectSourceLimit * ConnectCandidateK, design.md's own cost
+// comment on connect.go), decided through consolidation.ProposeRelation and
+// persisted on acceptance. ids is deduplicated once, up front, so a unit
+// that is both a source in one pair and a candidate in another (or that
+// repeats across several pairs) costs one units.LiveByIDs lookup, not one
+// per pair.
+func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []consolidation.Pair, now time.Time) error {
+	if len(pairs) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(pairs)*2)
+	seen := make(map[string]bool, len(pairs)*2)
+	for _, p := range pairs {
+		for _, id := range [2]string{p.From, p.To} {
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	units, err := r.units.LiveByIDs(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("consolidate: connect: read pair units: %w", err)
+	}
+	byID := make(map[string]unit.Unit, len(units))
+	for _, u := range units {
+		byID[u.ID] = u
+	}
+
+	for _, p := range pairs {
+		source, ok := byID[p.From]
+		if !ok {
+			continue
+		}
+		target, ok := byID[p.To]
+		if !ok {
+			continue
+		}
+		if err := r.judgeAndPersistPair(ctx, source, target, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// judgeAndPersistPair judges one connect-planned pair through the same
+// relation-judge shape capture.go's own judgeRelation establishes (design
+// §7.1, spec R5.5: "the same relation-judge ports.LLMProvider shape
+// capture.go's own judge call already establishes"), one candidate per
+// call — JudgePrompt(source, []unit.Unit{target}) — matching connect.go's
+// own ConnectSourceLimit * ConnectCandidateK cost bound (one call per
+// pair, never one call per source's whole candidate list).
+//
+// The persist decision is consolidation.ProposeRelation, unchanged
+// (design §7.1) — this function only supplies the resolved
+// relation.Thresholds it needs. A judgment missing Type cannot even be
+// looked up (ThresholdsFor needs a type name), so that check happens here,
+// before the repo round trip; every other missing-field, discard and
+// outcome-"new" case is ProposeRelation's own contract, already proven at
+// the core level (connect_test.go).
+//
+// A judgment ProposeRelation refuses (ok == false) writes no
+// decision_log row — deliberately unlike capture's own
+// ActionRelationDiscarded (design §7.1's own stated divergence, spec
+// R4.2's second MUST, flagged for owner review at design §12 Q2).
+func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, target unit.Unit, now time.Time) error {
+	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(source, []unit.Unit{target}), Task: taskRelationEvaluation})
+	if err != nil {
+		return fmt.Errorf("consolidate: connect: judge relation for unit %q: %w", source.ID, err)
+	}
+
+	j, _ := relation.DecodeJudgment(resp.Text)
+	if j.Type == nil {
+		return nil
+	}
+
+	row, err := r.rels.ThresholdsFor(ctx, *j.Type)
+	if err != nil {
+		return fmt.Errorf("consolidate: connect: resolve relation thresholds for %q: %w", *j.Type, err)
+	}
+
+	proposed, ok := consolidation.ProposeRelation(source.ID, j, relation.Resolve(row))
+	if !ok {
+		return nil
+	}
+
+	rel := ports.Relation{
+		ID:         r.ids.New(),
+		FromUnitID: proposed.From,
+		ToUnitID:   proposed.To,
+		Type:       proposed.Type,
+		Strength:   proposed.Strength,
+		Confidence: proposed.Confidence,
+		CreatedBy:  string(proposed.CreatedBy),
+		CreatedAt:  now,
+	}
+	if err := r.rels.Upsert(ctx, rel); err != nil {
+		return fmt.Errorf("consolidate: connect: persist relation %s->%s: %w", rel.FromUnitID, rel.ToUnitID, err)
+	}
+
+	rationale := fmt.Sprintf("connect: judged unit %q related to %q as %q", rel.FromUnitID, rel.ToUnitID, rel.Type)
+	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
 }
 
 // persistArchiveTransitions applies ts through units.SetStatus, in the
@@ -484,10 +599,11 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		usable, refused := partitionLiveDecayStates(cs)
 		report.reportCorrupted(refused)
 		sourceIDs := consolidation.SelectConnectSources(coldToSources(usable), pass.since, pass.now)
-		// PR 9b wires the judge call, consolidation.ProposeRelation and
-		// RelationRepo.Upsert over each pair connectSources returns (design
-		// §7.1) — this PR (9a) stops at the bounded candidate list itself.
-		if _, err := r.connectSources(ctx, sourceIDs); err != nil {
+		pairs, err := r.connectSources(ctx, sourceIDs)
+		if err != nil {
+			return err
+		}
+		if err := r.judgeAndPersistPairs(ctx, pairs, pass.now); err != nil {
 			return err
 		}
 	case consolidation.PhaseDerive:

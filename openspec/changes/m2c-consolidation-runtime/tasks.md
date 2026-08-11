@@ -1336,7 +1336,24 @@ recorded as such, not presented as equivalent.
       Requirement: spec R5.5; design §7.1, §6.3 (slot 4).
 - [x] **9.3** *(split checkpoint)*: measure `git diff --stat` for tasks 9.1–9.2 (the adapter half)
       in isolation. If at risk of the ~160 sub-estimate running hot, this is PR 9a's boundary.
-- [ ] **9.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `connect`'s persisted
+
+**Carried Judgment Day items from PR 9a, disposition:**
+
+- **WARNING (Judge A)** — no test exercised self-exclusion / existing-pair-exclusion through the
+  real `PhaseConnect` dispatch path. **Addressed** in task 9.4's own persist fixture
+  (`TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch`): it seeds a
+  pre-existing relation that `ExistingPairs` must exclude before the judge is ever asked, and
+  scripts the fake judge with exactly one case — a broken exclusion would trigger a second,
+  unscripted `Complete` call, which fails the test loudly via fakeprovider's own guard.
+- **SUGGESTION (Judge A)** — `connectPairsForSource` sends every fused candidate (~40) to
+  `RelationRepo.ExistingPairs`, though `ConnectPairs` only consumes the first `ConnectCandidateK`
+  (5). **Declined for this PR**: no bug, only an efficiency note unrelated to 9b's own scope
+  (judge call + persist), and `connectPairsForSource`/`connectSources` were deliberately left
+  untouched here so PR 9a's own `TestConsolidateRunner_Connect_ExcludesExistingPairsAndCandidateSelf`
+  (which constructs a `consolidateRunner` directly, without a `judge`) keeps passing unmodified.
+  Revisit alongside any future change that already touches that function.
+
+- [x] **9.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `connect`'s persisted
       relations carry `relation.CreatedByConsolidation`; the judged decision routes through
       `relation.Resolve`/`Decide` unchanged — asserted against the identical decision-table
       fixtures `capture`'s own relation tests already prove (I07/I08 regression coverage), not a
@@ -1344,12 +1361,32 @@ recorded as such, not presented as equivalent.
       **Red**: the placeholder arm from 9.2 does not yet call the judge or persist anything — fails
       first.
       Requirement: spec R5.5; design §7.1.
-- [ ] **9.5** Commit 2 (GREEN): implement the judge call — the `relation_evaluation` LLM task,
+      **Done** (`fe00008`): also widens `NewConsolidateService`/`consolidateRunner` with a `judge
+      ports.LLMProvider` parameter and updates all 21 existing call sites (20 in
+      `consolidate_test.go`, 1 in `test/integration/consolidate_expire_incomplete_test.go`) in the
+      same commit — required for the tree to keep compiling, the same precedent PR 9a's own
+      recall-widening commit set. Two new fixtures added, both driven through the real
+      `PhaseConnect` dispatch (`svc.Consolidate`), not `connectSources` directly — this also
+      resolves PR 9a's own carried Judgment Day WARNING (Judge A) that the exclusion property was
+      only proven against the unexported helper: the persist fixture below seeds a pre-existing
+      relation excluded by `ExistingPairs` and scripts the fake judge with exactly one case, so a
+      broken exclusion (a second, unscripted `Complete` call) fails loudly via fakeprovider's own
+      guard.
+- [x] **9.5** Commit 2 (GREEN): implement the judge call — the `relation_evaluation` LLM task,
       `relation.DecodeJudgment`, `consolidation.ProposeRelation(from, judgment, thresholds)`, and
       on acceptance `RelationRepo.Upsert` with `CreatedBy = CreatedByConsolidation`.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R5.5; design §7.1.
-- [ ] **9.6** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a judgement that
+      **Done** (`269a174`): `judgeAndPersistPairs`/`judgeAndPersistPair`, wired into `runPhase`'s
+      `PhaseConnect` arm after `connectSources`. One judge call per pair (bounded by
+      `ConnectSourceLimit * ConnectCandidateK`, connect.go's own cost comment), never one call per
+      source's whole candidate list. Discovered and fixed, in the same commit, a bug in both new
+      9.4 fixtures rather than in production code: `consolidation.SelectConnectSources` treats
+      every live pool unit as a candidate connect SOURCE, not only the one unit each fixture meant
+      by "the source" — both fixtures now seed a `since` cutoff (spec R5.3) so the other seeded
+      units stay recall-discoverable as candidates without also becoming sources in their own
+      right.
+- [x] **9.6** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — a judgement that
       decided nothing (`ProposeRelation` returns `false`) writes **no** `decision_log` row for
       `connect` — deliberately differing from capture's own `ActionRelationDiscarded` (design
       §7.1's own stated divergence, flagged for owner review at §12 Q2 but implemented as
@@ -1357,10 +1394,26 @@ recorded as such, not presented as equivalent.
       **Red**: genuinely red if `record` were called on every judge result regardless of outcome —
       this test is the guard from the start.
       Requirement: spec R4.2 (a judgment with no effect writes nothing); design §7.1.
-- [ ] **9.7** Commit 2 (GREEN, verification): confirm the arm only calls `record` on acceptance
+      **Done, disclosed** (`fe00008`/`269a174`): added alongside 9.4 in the same RED commit, not
+      as its own commit — a correct GREEN for 9.5 necessarily satisfies both the persist and the
+      no-log-on-discard property in the same code path, so a genuinely separate red-then-green
+      pair was not achievable without deliberately shipping a wrong interim implementation. At RED
+      time this test *did* fail, but not for the property it asserts: the placeholder arm never
+      called the judge at all, so fakeprovider's own scripted-and-never-called guard failed the
+      test in `Cleanup` before its own "zero relations, zero decision_log rows" assertions were
+      ever reached — recorded in the test's own doc comment rather than presented as equivalent to
+      a real red-first sequence.
+- [x] **9.7** Commit 2 (GREEN, verification): confirm the arm only calls `record` on acceptance
       (`ActionConnectRelationPersisted`), never on a discard.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2; design §7.1.
+      **Done, disclosed** (`269a174`): no separate commit exists — nothing to implement beyond
+      9.5's own single code path. Non-vacuity established via a reversion probe instead: the
+      `ok`-gate around `consolidation.ProposeRelation`'s return was temporarily dropped so `record`
+      ran unconditionally, `TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow` was
+      confirmed to fail against that probe, then the probe was reverted before committing — the
+      same disclosed pattern PR 9a's own tasks.md record already used for its own lost RED
+      sequence.
 - [x] **9.8** Re-run the `Source` sanitization fixture (PR 8 task 8.7's shape) against `connect`'s
       own `LiveDecayStates` consumption — confirm the same partition guard (built once, shared)
       refuses the identical set of rows `archive` refused, over a fixture that exercises both
@@ -1368,18 +1421,36 @@ recorded as such, not presented as equivalent.
       Verify: `go test ./internal/brain/... -run TestConnect_RefusesNonFiniteSources`.
       Requirement: design §8.1 ("`archive` at slot 2 and `connect`/`derive` at slots 4/5 therefore
       refuse the identical set of rows").
-- [ ] **9.9** `internal/brain/capture.go:485` — replace the bare `"system"` literal with
+- [x] **9.9** `internal/brain/capture.go:485` — replace the bare `"system"` literal with
       `relation.CreatedBySystem` (`m2b` §8's one-line handoff, discharged here per this document's
       own inherited-handoffs section).
       Verify: `go test ./internal/brain/... -run TestCapture`.
       Requirement: design §7.1 ("discharged rather than carried forward again").
-- [ ] **9.10** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+      **Done** (`65bbe79`): `CreatedBy: string(relation.CreatedBySystem)`, no behavior change —
+      `TestCapture_RelationJudgePersistsOutcomeMatchingConfidenceBand`'s own `CreatedBy == "system"`
+      assertion stays green unedited. No `internal/brain` package test is actually named
+      `TestCapture*` (capture's own judge/persist coverage lives in
+      `test/conformance/capture_relation_judge_test.go`); ran that suite instead of a literal
+      `go test ./internal/brain/... -run TestCapture`, which matches zero tests but still proves
+      the package compiles.
+- [x] **9.10** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
+      Both clean — `golangci-lint run` 0 issues (`brain-boundary` clean: no `internal/store`
+      import in any PR 9b file), `go test -race -shuffle=on ./...` green repo-wide.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/brain/{consolidate,capture}.go` (+ test, extended). Target ≤300 impl+docs lines;
       split at the pre-drawn adapter | judge boundary if task 9.3's checkpoint flags it.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/brain-phase-io-connect` returns
       nothing after merge (or the 9a/9b names if split).
       **Chain-merge check 2**: `gh pr view <PR10a> --json baseRefName` names `main`.
+      **Done**: `make check-all` green (L1-L4, schema-golden regen-diff clean, `internal/core`
+      coverage 100% (718/718), seven-target cross-compile matrix OK, e2e green). Diff touches
+      exactly `internal/brain/{consolidate,capture}.go` (+ test, extended) plus
+      `test/integration/consolidate_expire_incomplete_test.go` — the same disclosed-in-scope
+      mechanical call-site update PR 8/9a's own widening commits already made to that file, not a
+      new deviation. Measured (`docs/06-harness.md` §7 convention, changed lines = additions +
+      deletions): impl+docs **140** (`consolidate.go` 138, `capture.go` 2) — on the ~140 estimate,
+      well under the ≤300 target, no split triggered; test **293** (`consolidate_test.go` 285,
+      integration test 8). PR not yet opened — chain-merge checks pending.
 
 ---
 

@@ -118,7 +118,13 @@ func TestExpireIncomplete_RealCapturePathProducesNoIncompleteUnits(t *testing.T)
 	// no-op, not merely "the read happened to be empty".
 	later := now.Add((consolidation.IncompleteExpiryHours + 1) * time.Hour)
 	recallSvc := brain.NewRecallService(brain.NewIndex(idx), lexical, units, embed)
-	consolidateSvc := brain.NewConsolidateService(fixedClock{now: later}, cfg, units, relations, &counterIDs{}, decisions, recallSvc)
+	// This fixture's own PhaseExpireIncomplete run never reaches PR 9b's
+	// judge call, so a zero-case fake is what NewConsolidateService's own
+	// widened judge parameter needs here — consolidate_test.go's noJudge
+	// precedent, reimplemented locally for the same reason
+	// repoRootForConsolidateIT above is: that helper lives in package brain,
+	// which this package cannot import.
+	consolidateSvc := brain.NewConsolidateService(fixedClock{now: later}, cfg, units, relations, &counterIDs{}, decisions, recallSvc, fakeprovider.New(t, ""))
 	phase := consolidation.PhaseExpireIncomplete
 	if _, err := consolidateSvc.Consolidate(ctx, brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseExpireIncomplete): %v", err)
