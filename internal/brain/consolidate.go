@@ -87,8 +87,8 @@ type ConsolidateReport struct {
 	// corrupted-capable phases (archive, strengthen, reweight, derive)
 	// reports — design §3.3(e), spec R4.2's MUST NOT: a refusal had no
 	// vault effect, so it is surfaced here and never in decision_log.
-	// Unexported for the same reason phasesRun is: PR 12 owns the eventual
-	// public report shape.
+	// The field stays unexported; Corrupted() below is the public shape
+	// PR 12 was left to decide, and it is the ONLY way out of this struct.
 	corrupted []string
 	// newRelationEdges accumulates every relation connect (slot 4) persists
 	// during THIS pass, as the plain weight.Edge shape reweight's own
@@ -136,6 +136,24 @@ func (r *ConsolidateReport) reportCorrupted(ids []string) {
 			r.corrupted = append(r.corrupted, id)
 		}
 	}
+}
+
+// Corrupted returns the ids of every unit a phase refused this pass, in
+// first-refused order. It returns a copy: a caller that sorts or truncates
+// the result must not be able to edit a report the runner already handed
+// back.
+//
+// This is the public shape the field's own doc comment deferred to PR 12,
+// and it exists because a refusal has exactly one honest exit. It is kept
+// out of decision_log deliberately (spec R4.2's MUST NOT — nothing was
+// written to the vault, so no decision was made), which means that without
+// a reader here a refused unit would appear nowhere at all: `nooma
+// consolidate` would report a clean pass while silently skipping the same
+// corrupt row every night. Judgment Day on PR 12 found exactly that gap —
+// the CLI discarded the whole report — and this method plus its caller in
+// cmd/nooma/consolidate.go close it.
+func (r ConsolidateReport) Corrupted() []string {
+	return slices.Clone(r.corrupted)
 }
 
 // Consolidate is this file's only ports.Clock.Now() read — one per

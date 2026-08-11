@@ -40,13 +40,18 @@ func TestUsageNamesOnlyCommandsThatWork(t *testing.T) {
 }
 
 // TestUnimplementedCommandsDoNotExist is spec R10.1's no-stubs rule, aimed at the
-// four commands docs/01-architecture.md documents but M0 does not build. A stub
+// commands docs/01-architecture.md documents but M0 does not build. A stub
 // printing "not implemented" would teach the user the command is there; an
 // unknown-command error is the honest answer until it works.
+//
+// "consolidate" left this list in m2c-consolidation-runtime PR 12
+// (cmd/nooma/consolidate.go): it is dispatchable now, so it belongs in
+// TestUsageNamesOnlyCommandsThatWork's own coverage above instead —
+// leaving it here would fail that exact test this file already runs.
 func TestUnimplementedCommandsDoNotExist(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"consolidate", "reindex", "export", "import", "nonsense"} {
+	for _, name := range []string{"reindex", "export", "import", "nonsense"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
