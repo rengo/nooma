@@ -9,9 +9,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/relation"
+	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -476,18 +478,134 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 		}
 	}
 
-	if _, err := r.judge.Complete(ctx, ports.LLMRequest{
+	resp, err := r.judge.Complete(ctx, ports.LLMRequest{
 		Prompt: consolidation.BuildDerivePrompt(sources, existingBeliefs),
 		Task:   taskBeliefDerivation,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("consolidate: derive: judge belief derivation: %w", err)
 	}
+	proposals := decodeDerivedBeliefs(resp.Text)
 
-	// Embedding (task 10b.4), merge (task 10b.4) and the create/reinforce
-	// routing (task 10b.6) land in the following commits — this call
-	// already exercises the real dedup-defense-1 prompt (spec R5.6), which
-	// is all task 10b.2 owns.
+	existingVectors, proposedVectors, model, err := r.embedForMerge(ctx, active, proposals)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: %w", err)
+	}
+
+	decisions, err := consolidation.MergeProposals(model, existingVectors, proposedVectors)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: merge proposals: %w", err)
+	}
+
+	// The create/reinforce routing (task 10b.6) lands in the following
+	// commit — decisions is computed (and MergeProposals genuinely called,
+	// over both sides' real embeddings, per spec R5.7's own "held only for
+	// the duration of this phase run's MergeProposals call") but not yet
+	// persisted.
+	_ = decisions
 	return nil
+}
+
+// derivedBeliefProposal is one belief_derivation response's own proposed
+// belief. Decoded here, in internal/brain, rather than in
+// internal/core/consolidation: design §10.2 names PR 10a's prompt.go as
+// the one internal/core file m2c adds in the whole change, and this
+// decode step is response-wiring, not a core decision function — the same
+// split JudgePrompt (internal/brain/capture.go) and
+// relation.DecodeJudgment (internal/core/relation) already draw
+// differently for connect's own judge, restated here because no analogous
+// decode function existed anywhere for belief_derivation before this PR:
+// BuildDerivePrompt's own prompt text ("For each new belief worth
+// proposing, decide facet, topic_key and content") is this decode's only
+// documented contract — there is no testdata/llm/format.md precedent, no
+// core decode function, and no §9 wire-format section in design.md to
+// reuse for this task's response shape (a genuine design gap, disclosed
+// in this PR's own apply report rather than silently invented). Wire
+// shape: {"beliefs":[{"facet":...,"topic_key":...,"content":...,
+// "confidence":...}, ...]} — confidence is not literally requested by
+// BuildDerivePrompt's own text, but every other judge task in this
+// codebase reports one (relation.Judgment's own "confidence" field), and
+// requiring it here needs no invented core constant for a newly created
+// belief's starting confidence.
+type derivedBeliefProposal struct {
+	Facet      string  `json:"facet"`
+	Key        string  `json:"topic_key"`
+	Content    string  `json:"content"`
+	Confidence float64 `json:"confidence"`
+}
+
+// decodeDerivedBeliefs tolerantly extracts the "beliefs" array a
+// belief_derivation response carries, degrading to zero proposals — never
+// an error — on anything malformed: no "{" found, no "beliefs" field, an
+// unparsable array, an unknown facet, an empty key/content, or a
+// confidence outside [0,1] (including NaN). This is the same posture
+// relation.DecodeJudgment already established for a judge response this
+// codebase cannot fully trust (classify.Salvage's own tolerant byte-scan),
+// restated here because no core package exists to hold it (see
+// derivedBeliefProposal's own doc comment).
+func decodeDerivedBeliefs(raw string) []derivedBeliefProposal {
+	fields, _ := classify.Salvage([]byte(raw))
+	beliefsRaw, ok := fields["beliefs"]
+	if !ok {
+		return nil
+	}
+	var candidates []derivedBeliefProposal
+	if err := json.Unmarshal(beliefsRaw, &candidates); err != nil {
+		return nil
+	}
+	out := make([]derivedBeliefProposal, 0, len(candidates))
+	for _, c := range candidates {
+		if _, err := selfmodel.ParseFacet(c.Facet); err != nil {
+			continue
+		}
+		if c.Key == "" || c.Content == "" {
+			continue
+		}
+		if math.IsNaN(c.Confidence) || c.Confidence < 0 || c.Confidence > 1 {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// embedForMerge is spec R5.7's own embedding step: every entry in active
+// is embedded exactly once, unconditionally — "in memory, per pass"
+// regardless of whether proposals is empty — followed by every entry in
+// proposals. Both sides go through the same *RecallService instance's own
+// ports.EmbeddingProvider (r.recall's own unexported embed field,
+// package-private but same-package here — design D9's "one shared
+// RecallService instance", never a second wiring convention for this
+// port), never a new consolidateRunner field: PR 10b widens no
+// NewConsolidateService parameter beyond ce23b23's own selfModel add.
+// model is whichever side's own EmbedResponse.Model answers first — both
+// sides share one EmbeddingProvider within a single phase run, so
+// idx.Model and every query's Model are never different values within one
+// MergeProposals call (design.md §7.1's own note on this exact hazard,
+// restated for derive).
+func (r consolidateRunner) embedForMerge(ctx context.Context, active []ports.Belief, proposals []derivedBeliefProposal) (existing, proposed []consolidation.BeliefVector, model string, err error) {
+	existing = make([]consolidation.BeliefVector, len(active))
+	for i, b := range active {
+		ev, eerr := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: b.Content})
+		if eerr != nil {
+			return nil, nil, "", fmt.Errorf("embed active belief %q: %w", b.ID, eerr)
+		}
+		existing[i] = consolidation.BeliefVector{BeliefID: b.ID, Vector: ev.Vector}
+		model = ev.Model
+	}
+
+	proposed = make([]consolidation.BeliefVector, len(proposals))
+	for i, p := range proposals {
+		ev, eerr := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: p.Content})
+		if eerr != nil {
+			return nil, nil, "", fmt.Errorf("embed proposed belief %d: %w", i, eerr)
+		}
+		proposed[i] = consolidation.BeliefVector{Vector: ev.Vector}
+		if model == "" {
+			model = ev.Model
+		}
+	}
+	return existing, proposed, model, nil
 }
 
 // persistArchiveTransitions applies ts through units.SetStatus, in the
