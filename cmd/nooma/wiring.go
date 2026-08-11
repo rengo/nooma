@@ -146,6 +146,91 @@ func resolveTaskProviders(cfg *config.Config, lookup func(string) (string, bool)
 // httpapi.Handler(Deps{Capture, Recall}), whose existing nil guards (13b,
 // 13c) answer it honestly over HTTP instead of this command refusing to
 // serve at all.
+// resolveConsolidateProviders resolves every task tasksConsolidateConsumes
+// names into the two ports.LLMProvider/ports.EmbeddingProvider slots
+// ConsolidateService needs. Unlike resolveTaskProviders' all-or-nothing
+// bool (right for serve's own degrade-to-nil posture), this names the
+// first task it cannot resolve — unbound, bound to an unconfigured
+// provider name, an unbuildable provider type, or a provider that does
+// not implement the port that task needs — because runConsolidate's own
+// refusal (design §7.2) must tell the operator what to fix, not just that
+// something failed.
+//
+// judge serves BOTH relation_evaluation's connect call and
+// belief_derivation's derive call: consolidateRunner (internal/brain)
+// carries exactly one judge field for both — NewConsolidateService's own
+// existing shape (PR 9b added it for connect, PR 10b reused the same
+// field for derive rather than widening the constructor a second time).
+// When the two tasks name different providers, belief_derivation's client
+// wins simply because it is resolved second in tasksConsolidateConsumes'
+// own order — a disclosed gap neither spec.md nor design.md decides,
+// carried here rather than silently picked without comment; binding both
+// tasks to the same provider (the ordinary case) makes the order moot.
+func resolveConsolidateProviders(cfg *config.Config, lookup func(string) (string, bool)) (judge ports.LLMProvider, embed ports.EmbeddingProvider, embedModel string, err error) {
+	for _, task := range tasksConsolidateConsumes {
+		binding, bound := cfg.Tasks[task]
+		if !bound {
+			return nil, nil, "", fmt.Errorf("consolidate: task %q has no provider bound — add it under tasks: in nooma.yml before running a pass", task)
+		}
+		provider, present := cfg.Providers[binding.Provider]
+		if !present {
+			return nil, nil, "", fmt.Errorf("consolidate: task %q names provider %q, which is not present in the providers map", task, binding.Provider)
+		}
+		client, buildErr := buildProvider(provider, lookup)
+		if buildErr != nil {
+			return nil, nil, "", fmt.Errorf("consolidate: task %q: %w", task, buildErr)
+		}
+
+		switch task {
+		case "relation_evaluation", "belief_derivation":
+			p, isLLM := client.(ports.LLMProvider)
+			if !isLLM {
+				return nil, nil, "", fmt.Errorf("consolidate: task %q is bound to a provider that cannot answer completions", task)
+			}
+			judge = p
+		case "embedding":
+			p, isEmbed := client.(ports.EmbeddingProvider)
+			if !isEmbed {
+				return nil, nil, "", fmt.Errorf("consolidate: task %q is bound to a provider that cannot embed", task)
+			}
+			embed = p
+			embedModel = provider.Model
+		}
+	}
+	return judge, embed, embedModel, nil
+}
+
+// wireConsolidate builds the real ConsolidateService over db and cfg —
+// wireBrain's own shape (config -> providers -> repos -> RecallService ->
+// service), but refusing with a named error instead of wireBrain's own
+// (nil, nil) degrade: design §7.2's own MUST NOT — a pass that silently
+// skipped connect/derive because a provider was unbound must never still
+// write consolidation_last_run_at as though a full pass had run.
+func wireConsolidate(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.ConsolidateService, error) {
+	judge, embed, embedModel, err := resolveConsolidateProviders(cfg, lookup)
+	if err != nil {
+		return nil, err
+	}
+
+	units := sqlite.NewUnitRepo(db)
+	rels := sqlite.NewRelationRepo(db)
+	lex := sqlite.NewSearch(db)
+	embeds := sqlite.NewEmbeddingRepo(db)
+	log := sqlite.NewDecisionLog(db)
+	cfgRepo := sqlite.NewConfigRepo(db)
+	selfModel := sqlite.NewSelfModelRepo(db)
+	state := sqlite.NewStateRepo(db)
+
+	loaded, err := embeds.LoadIndex(ctx, embedModel)
+	if err != nil {
+		return nil, fmt.Errorf("loading the resident vector index: %w", err)
+	}
+	index := brain.NewIndex(loaded)
+	recall := brain.NewRecallService(index, lex, units, embed)
+
+	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state), nil
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {

@@ -153,8 +153,11 @@ func TestConsolidate_Lock(t *testing.T) {
 	})
 
 	t.Run("an unlocked vault succeeds", func(t *testing.T) {
+		llm := mockConsolidateLLM(t)
+
 		home, work := t.TempDir(), t.TempDir()
 		vault := initVault(t, home, work, "pablo.nooma")
+		writeConfig(t, vault, consolidateConfig(llm.URL))
 
 		_, stderr, err := nooma(t, home, work, "consolidate", vault)
 		if err != nil {

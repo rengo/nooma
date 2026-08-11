@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/vaultlock"
@@ -70,6 +72,15 @@ func runConsolidate(args []string, out, errOut io.Writer) error {
 	}
 	defer func() { _ = db.Close() }()
 
-	_, _ = fmt.Fprintln(out, "consolidate: nothing wired yet")
-	return nil
+	svc, err := wireConsolidate(context.Background(), db, cfg, os.LookupEnv)
+	if err != nil {
+		return err
+	}
+
+	if _, err := svc.Consolidate(context.Background(), brain.ConsolidateRequest{}); err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintln(out, "consolidate: ran the whole pass")
+	return err
 }

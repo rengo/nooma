@@ -23,3 +23,18 @@ package main
 // Every member is one of config.DocumentedTaskNames — TestTasksM1ConsumesAreAllDocumented
 // (tasks_test.go) pins it.
 var tasksM1Consumes = []string{"capture_processing", "relation_evaluation", "embedding"}
+
+// tasksConsolidateConsumes are the three tasks one consolidation pass
+// needs bound — design §7.2 (m2c-consolidation-runtime). capture_processing
+// is deliberately absent: no consolidation phase classifies. Every member
+// is one of config.DocumentedTaskNames — belief_derivation was already
+// documented before this change, so no config-vocabulary edit was needed
+// for it — the same TestTasksM1ConsumesAreAllDocumented-shaped pin covers
+// this slice too (tasks_test.go).
+//
+// runConsolidate (consolidate.go) reads this list directly for its
+// pre-lock refusal, and wiring.go's resolveConsolidateProviders reads the
+// identical slice for the real provider resolution after the lock — one
+// list, two readers, the same D18a shape tasksM1Consumes already
+// establishes above.
+var tasksConsolidateConsumes = []string{"relation_evaluation", "belief_derivation", "embedding"}
