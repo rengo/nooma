@@ -5,16 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
+	"github.com/rengo/nooma/test/support/goldenset"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -71,6 +75,37 @@ func testdataLLMCasesDir(t *testing.T) string {
 	// thisFile is .../internal/brain/consolidate_test.go
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
 	return filepath.Join(repoRoot, "testdata", "llm", "cases")
+}
+
+// writeDeriveCase writes a throwaway belief_derivation golden case under
+// dir (a t.TempDir(), never testdata/llm/cases/) — derive's own judge
+// fixtures do not join the shared corpus PR 9b's own connect fixtures
+// reuse (testdataLLMCasesDir, above): belief_derivation is not one of
+// cmd/nooma/doctor.go's jsonTasks (capture_processing, relation_evaluation
+// only), so a case added to the shared corpus would sit there unchecked by
+// the live quality gate and outside this PR's own declared diff scope
+// (tasks.md's PR-level Verify: internal/brain/consolidate.go, its test,
+// and doc 02 §13 only). fakeprovider_test.go's own writeCase draws the
+// identical distinction for its own throwaway fixtures — restated here
+// rather than imported, since that helper lives in package
+// fakeprovider_test, not exported for another package to call.
+func writeDeriveCase(t *testing.T, dir, id, response string) {
+	t.Helper()
+	ex := goldenset.LLMExample{
+		ID:       id,
+		Provider: "test",
+		Model:    "test-model",
+		Task:     "belief_derivation",
+		Message:  "derive fixture — Message only feeds nooma doctor's live gate, which does not cover belief_derivation; Complete replays strictly by case id (fakeprovider.go)",
+		Response: response,
+	}
+	data, err := json.Marshal(ex)
+	if err != nil {
+		t.Fatalf("marshal derive case %q: %v", id, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id+".json"), data, 0o644); err != nil {
+		t.Fatalf("write derive case %q: %v", id, err)
+	}
 }
 
 // This file lives inside package brain (white-box), not test/conformance,
@@ -1455,4 +1490,87 @@ func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 	if len(rows) != 0 {
 		t.Fatalf("decision_log rows = %+v, want none — a judgment ProposeRelation refuses writes no row for connect, unlike capture's own relation.discarded (design §7.1, spec R4.2)", rows)
 	}
+}
+
+// TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState
+// is spec R5.6's own dedup-defense-1 wiring proof (design §6.3 slot 5,
+// §7.3): derive's belief_derivation call always sends
+// consolidation.BuildDerivePrompt's own rendering — every active belief's
+// TopicKey/Content when SelfModelRepo.ActiveBeliefs returns non-empty, or
+// (PR 10a's own writeExistingBeliefs) the plain empty-state sentence when
+// it returns none — never a skipped call either way (R5.6's second MUST).
+//
+// Red against PR 9/10a's own placeholder derive arm: the arm calls
+// nothing, so the scripted judge case below is never consumed and
+// fakeprovider's own under-run guard fails this test in Cleanup, before
+// either subtest's own prompt-content assertion is ever reached.
+func TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+
+	seedSourceUnit := func(t *testing.T, units *memrepo.Units) {
+		t.Helper()
+		if err := units.Create(ctx, unit.Unit{
+			ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "training for a half marathon in October", Source: "chat",
+			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed source unit: %v", err)
+		}
+	}
+
+	runDerive := func(t *testing.T, selfModel ports.SelfModelRepo, judge *fakeprovider.Fake) []string {
+		t.Helper()
+		units := memrepo.NewUnits()
+		seedSourceUnit(t, units)
+		cfg := memrepo.NewConfig()
+		if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+			t.Fatalf("seed since: %v", err)
+		}
+		phase := consolidation.PhaseDerive
+		svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, selfModel)
+
+		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+			t.Fatalf("Consolidate(PhaseDerive): %v", err)
+		}
+		return judge.SeenPrompts()
+	}
+
+	t.Run("with active beliefs, every one's topic_key and content appear in the prompt", func(t *testing.T) {
+		selfModel := memrepo.NewSelfModel()
+		if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
+			ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness",
+			Content: "wants to run more consistently", Confidence: 0.6, Status: "active",
+			LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed belief: %v", err)
+		}
+
+		dir := t.TempDir()
+		writeDeriveCase(t, dir, "derive-with-beliefs", `{"beliefs":[]}`)
+		judge := fakeprovider.New(t, dir, "derive-with-beliefs")
+
+		prompts := runDerive(t, selfModel, judge)
+		if len(prompts) != 1 {
+			t.Fatalf("SeenPrompts() = %d, want exactly 1", len(prompts))
+		}
+		if !strings.Contains(prompts[0], "derived/goal/fitness") || !strings.Contains(prompts[0], "wants to run more consistently") {
+			t.Errorf("prompt = %q, want it to contain the active belief's topic_key and content", prompts[0])
+		}
+	})
+
+	t.Run("with no active beliefs, the call still sends and names the empty state", func(t *testing.T) {
+		dir := t.TempDir()
+		writeDeriveCase(t, dir, "derive-no-beliefs", `{"beliefs":[]}`)
+		judge := fakeprovider.New(t, dir, "derive-no-beliefs")
+
+		prompts := runDerive(t, memrepo.NewSelfModel(), judge)
+		if len(prompts) != 1 {
+			t.Fatalf("SeenPrompts() = %d, want exactly 1 — the call is never skipped (spec R5.6's second MUST)", len(prompts))
+		}
+		if !strings.Contains(prompts[0], "There are no existing self-beliefs for this user yet.") {
+			t.Errorf("prompt = %q, want the empty-state sentence BuildDerivePrompt renders", prompts[0])
+		}
+	})
 }
