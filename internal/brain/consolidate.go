@@ -912,6 +912,38 @@ func (r consolidateRunner) persistStagnationFindings(ctx context.Context, fs []c
 	return nil
 }
 
+// loadHypothesisMapping is the fixed sentence spec R5.10's second MUST
+// requires the decision_log row's own Context to carry, verbatim: m2b
+// design §9 Q6 left lastHypothesisAt's anchor an open question, and Q6's
+// own instruction is that whichever mapping m2c picks, "m2c must map it
+// and say so in the decision_log context" — not merely pick it in code.
+const loadHypothesisMapping = "lastHypothesisAt is StateRepo.LastHypothesisAt's own return: the recorded_at of this phase's most recent PRIOR current_state row written with source='consolidation'. M2 has no state_confirmed/state_denied resolution signal yet (that arrives in M5), so the cooldown anchors on the hypothesis's own write, never on a resolution (m2b design §9 Q6)."
+
+// loadHypothesisDetail is ActionPatternEvalLoadHypothesisOpened's own
+// Context shape (spec R5.10's second MUST).
+type loadHypothesisDetail struct {
+	OpenCount        int        `json:"open_count"`
+	Threshold        int        `json:"threshold"`
+	LastHypothesisAt *time.Time `json:"last_hypothesis_at"`
+	Mapping          string     `json:"last_hypothesis_at_mapping"`
+}
+
+// persistLoadHypothesis appends the current_state row EvaluateLoad's firing
+// result plans, through StateRepo.OpenHypothesis, and records the matching
+// decision_log row (design §3.3(e), §4.4; spec R5.10's second MUST).
+// lastAt is the SAME value EvaluateLoad already consumed for its own
+// cooldown check — passed through again here only to restate it in
+// Context, never recomputed.
+func (r consolidateRunner) persistLoadHypothesis(ctx context.Context, f consolidation.LoadFinding, lastAt *time.Time, now time.Time) error {
+	h := ports.StateHypothesis{ID: r.ids.New(), Mood: ports.MoodLoaded, RecordedAt: now}
+	if err := r.state.OpenHypothesis(ctx, h); err != nil {
+		return fmt.Errorf("consolidate: pattern_eval: open load hypothesis: %w", err)
+	}
+	rationale := fmt.Sprintf("pattern_eval: mental load hypothesis opened (%d open loops at or above threshold %d)", f.OpenCount, f.Threshold)
+	detail := loadHypothesisDetail{OpenCount: f.OpenCount, Threshold: f.Threshold, LastHypothesisAt: lastAt, Mapping: loadHypothesisMapping}
+	return r.record(ctx, now, ports.ActionPatternEvalLoadHypothesisOpened, rationale, detail)
+}
+
 // passContext is everything one invocation reads before any phase runs —
 // design §3.3(c). Assembled once by buildPassContext and passed by value
 // to every phase runPhase reaches, so `since` and `cfg` cannot drift
@@ -1071,6 +1103,20 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		findings := consolidation.EvaluateStagnation(beliefsToConsolidation(active), consolidation.ResolveGoalStagnationDays(pass.cfg.GoalStagnationDays), pass.now)
 		if err := r.persistStagnationFindings(ctx, findings, pass.now); err != nil {
 			return err
+		}
+
+		n, err := r.units.CountLiveByType(ctx, unit.TypeMentalLoad)
+		if err != nil {
+			return fmt.Errorf("consolidate: pattern_eval: count live mental load units: %w", err)
+		}
+		lastAt, err := r.state.LastHypothesisAt(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: pattern_eval: read last hypothesis: %w", err)
+		}
+		if finding, fired := consolidation.EvaluateLoad(n, consolidation.ResolveMentalLoadThreshold(pass.cfg.MentalLoadThreshold), lastAt, pass.now); fired {
+			if err := r.persistLoadHypothesis(ctx, finding, lastAt, pass.now); err != nil {
+				return err
+			}
 		}
 	case consolidation.PhaseLearn:
 		// No work, ever (owner ruling 3) — this arm exists so Order()'s

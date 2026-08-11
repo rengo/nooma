@@ -1947,7 +1947,7 @@ func TestConsolidateRunner_PatternEval_StagnationFindingsEachProduceOneRow(t *te
 	}
 
 	log := memrepo.NewDecisionLog()
-	r := consolidateRunner{selfModel: selfModel, ids: &fakeIDs{}, log: log}
+	r := consolidateRunner{selfModel: selfModel, units: memrepo.NewUnits(), state: memrepo.NewState(), ids: &fakeIDs{}, log: log}
 	pass := passContext{now: now}
 
 	if err := r.runPhase(ctx, consolidation.PhasePatternEval, pass, &ConsolidateReport{}); err != nil {
@@ -1959,7 +1959,7 @@ func TestConsolidateRunner_PatternEval_StagnationFindingsEachProduceOneRow(t *te
 		t.Fatalf("log.Since: %v", err)
 	}
 	if len(rows) != 1 {
-		t.Fatalf("decision_log rows = %d, want exactly 1 (only b-stagnant-goal: a fresh goal belief and a stagnant NON-goal belief must not fire)", len(rows))
+		t.Fatalf("decision_log rows = %d, want exactly 1 (only b-stagnant-goal: a fresh goal belief and a stagnant NON-goal belief must not fire, and no mental_load units exist so the load half stays silent)", len(rows))
 	}
 	if rows[0].Action != ports.ActionPatternEvalStagnationFound {
 		t.Errorf("row Action = %s, want %s", rows[0].Action, ports.ActionPatternEvalStagnationFound)
