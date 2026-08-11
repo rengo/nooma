@@ -5,16 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
+	"github.com/rengo/nooma/test/support/goldenset"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -71,6 +75,37 @@ func testdataLLMCasesDir(t *testing.T) string {
 	// thisFile is .../internal/brain/consolidate_test.go
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
 	return filepath.Join(repoRoot, "testdata", "llm", "cases")
+}
+
+// writeDeriveCase writes a throwaway belief_derivation golden case under
+// dir (a t.TempDir(), never testdata/llm/cases/) — derive's own judge
+// fixtures do not join the shared corpus PR 9b's own connect fixtures
+// reuse (testdataLLMCasesDir, above): belief_derivation is not one of
+// cmd/nooma/doctor.go's jsonTasks (capture_processing, relation_evaluation
+// only), so a case added to the shared corpus would sit there unchecked by
+// the live quality gate and outside this PR's own declared diff scope
+// (tasks.md's PR-level Verify: internal/brain/consolidate.go, its test,
+// and doc 02 §13 only). fakeprovider_test.go's own writeCase draws the
+// identical distinction for its own throwaway fixtures — restated here
+// rather than imported, since that helper lives in package
+// fakeprovider_test, not exported for another package to call.
+func writeDeriveCase(t *testing.T, dir, id, response string) {
+	t.Helper()
+	ex := goldenset.LLMExample{
+		ID:       id,
+		Provider: "test",
+		Model:    "test-model",
+		Task:     "belief_derivation",
+		Message:  "derive fixture — Message only feeds nooma doctor's live gate, which does not cover belief_derivation; Complete replays strictly by case id (fakeprovider.go)",
+		Response: response,
+	}
+	data, err := json.Marshal(ex)
+	if err != nil {
+		t.Fatalf("marshal derive case %q: %v", id, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id+".json"), data, 0o644); err != nil {
+		t.Fatalf("write derive case %q: %v", id, err)
+	}
 }
 
 // This file lives inside package brain (white-box), not test/conformance,
@@ -133,7 +168,7 @@ func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) er
 func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -173,7 +208,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 
 	t.Run("reaches exactly the requested phase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 		phase := consolidation.PhaseArchive
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
@@ -193,7 +228,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	})
 
 	t.Run("an unknown phase errors through Consolidate itself, not just runPhase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 		unknown := consolidation.Phase(99)
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &unknown})
@@ -247,7 +282,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a whole pass", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -258,7 +293,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a per-phase run too", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 		phase := consolidation.PhaseStrengthen
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -279,7 +314,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("whole pass records exactly once with the pass's own now", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -293,7 +328,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("per-phase run never records", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 		phase := consolidation.PhaseLearn
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -405,7 +440,7 @@ func TestConsolidate_NoEffects(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 	log := memrepo.NewDecisionLog()
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -559,7 +594,7 @@ func TestConsolidateRunner_ExpireIncomplete_DerivesCutoffFromConstant(t *testing
 	units := &spyUnits{Units: memrepo.NewUnits()}
 	phase := consolidation.PhaseExpireIncomplete
 
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel())
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
 	}
@@ -604,7 +639,7 @@ func TestConsolidateRunner_ExpireIncomplete_TransitionsAndRecords(t *testing.T) 
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseExpireIncomplete
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -761,7 +796,7 @@ func TestConsolidateRunner_Archive_ResolvesConfiguredThreshold(t *testing.T) {
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseArchive
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -807,7 +842,7 @@ func TestConsolidateRunner_Archive_RefusesNonFiniteBeforeArchiveSees(t *testing.
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseArchive
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
 	if err != nil {
@@ -877,7 +912,7 @@ func TestConsolidateRunner_Archive_RealWiringSkipsAndLogsConflict(t *testing.T) 
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseArchive
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -965,7 +1000,7 @@ func TestConsolidateRunner_Strengthen_SincePropagatesAndPersists(t *testing.T) {
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseStrengthen
-	svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), rels, &fakeIDs{}, log, testRecall(), noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), rels, &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -1049,7 +1084,7 @@ func TestConsolidateRunner_Connect_CallsRecallServiceScoredFor(t *testing.T) {
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, rec, noJudge(t))
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, rec, noJudge(t), memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -1155,7 +1190,7 @@ func TestConnect_RefusesNonFiniteSources(t *testing.T) {
 	}
 
 	archivePhase := consolidation.PhaseArchive
-	archiveSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t))
+	archiveSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel())
 	archiveReport, err := archiveSvc.Consolidate(ctx, ConsolidateRequest{Phase: &archivePhase})
 	if err != nil {
 		t.Fatalf("Consolidate(PhaseArchive): %v", err)
@@ -1174,7 +1209,7 @@ func TestConnect_RefusesNonFiniteSources(t *testing.T) {
 	}
 
 	connectPhase := consolidation.PhaseConnect
-	connectSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t))
+	connectSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel())
 	connectReport, err := connectSvc.Consolidate(ctx, ConsolidateRequest{Phase: &connectPhase})
 	if err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1224,7 +1259,15 @@ func TestConsolidate_WholePassReportsEachCorruptedIDOnce(t *testing.T) {
 		}
 	}
 
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t))
+	// u-cold-1 is a live, finite source — derive's own call is never
+	// skipped for it (unlike connect's own zero candidates here, since
+	// testRecallOver's index/lexical stores are empty): one scripted case
+	// covers it, connect's own zero calls need none.
+	dir := t.TempDir()
+	writeDeriveCase(t, dir, "derive-corrupted-fixture", `{"beliefs":[]}`)
+	judge := fakeprovider.New(t, dir, "derive-corrupted-fixture")
+
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, memrepo.NewSelfModel())
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
 		t.Fatalf("Consolidate(whole pass): %v", err)
@@ -1320,7 +1363,7 @@ func TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch(t
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-related-uncertain-band")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge)
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1434,7 +1477,7 @@ func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-discard-low-confidence")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge)
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1454,5 +1497,311 @@ func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("decision_log rows = %+v, want none — a judgment ProposeRelation refuses writes no row for connect, unlike capture's own relation.discarded (design §7.1, spec R4.2)", rows)
+	}
+}
+
+// TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState
+// is spec R5.6's own dedup-defense-1 wiring proof (design §6.3 slot 5,
+// §7.3): derive's belief_derivation call always sends
+// consolidation.BuildDerivePrompt's own rendering — every active belief's
+// TopicKey/Content when SelfModelRepo.ActiveBeliefs returns non-empty, or
+// (PR 10a's own writeExistingBeliefs) the plain empty-state sentence when
+// it returns none — never a skipped call either way (R5.6's second MUST).
+//
+// Red against PR 9/10a's own placeholder derive arm: the arm calls
+// nothing, so the scripted judge case below is never consumed and
+// fakeprovider's own under-run guard fails this test in Cleanup, before
+// either subtest's own prompt-content assertion is ever reached.
+func TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+
+	seedSourceUnit := func(t *testing.T, units *memrepo.Units) {
+		t.Helper()
+		if err := units.Create(ctx, unit.Unit{
+			ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "training for a half marathon in October", Source: "chat",
+			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed source unit: %v", err)
+		}
+	}
+
+	runDerive := func(t *testing.T, selfModel ports.SelfModelRepo, judge *fakeprovider.Fake) []string {
+		t.Helper()
+		units := memrepo.NewUnits()
+		seedSourceUnit(t, units)
+		cfg := memrepo.NewConfig()
+		if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+			t.Fatalf("seed since: %v", err)
+		}
+		phase := consolidation.PhaseDerive
+		svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, selfModel)
+
+		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+			t.Fatalf("Consolidate(PhaseDerive): %v", err)
+		}
+		return judge.SeenPrompts()
+	}
+
+	t.Run("with active beliefs, every one's topic_key and content appear in the prompt", func(t *testing.T) {
+		selfModel := memrepo.NewSelfModel()
+		if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
+			ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness",
+			Content: "wants to run more consistently", Confidence: 0.6, Status: "active",
+			LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed belief: %v", err)
+		}
+
+		dir := t.TempDir()
+		writeDeriveCase(t, dir, "derive-with-beliefs", `{"beliefs":[]}`)
+		judge := fakeprovider.New(t, dir, "derive-with-beliefs")
+
+		prompts := runDerive(t, selfModel, judge)
+		if len(prompts) != 1 {
+			t.Fatalf("SeenPrompts() = %d, want exactly 1", len(prompts))
+		}
+		if !strings.Contains(prompts[0], "derived/goal/fitness") || !strings.Contains(prompts[0], "wants to run more consistently") {
+			t.Errorf("prompt = %q, want it to contain the active belief's topic_key and content", prompts[0])
+		}
+	})
+
+	t.Run("with no active beliefs, the call still sends and names the empty state", func(t *testing.T) {
+		dir := t.TempDir()
+		writeDeriveCase(t, dir, "derive-no-beliefs", `{"beliefs":[]}`)
+		judge := fakeprovider.New(t, dir, "derive-no-beliefs")
+
+		prompts := runDerive(t, memrepo.NewSelfModel(), judge)
+		if len(prompts) != 1 {
+			t.Fatalf("SeenPrompts() = %d, want exactly 1 — the call is never skipped (spec R5.6's second MUST)", len(prompts))
+		}
+		if !strings.Contains(prompts[0], "There are no existing self-beliefs for this user yet.") {
+			t.Errorf("prompt = %q, want the empty-state sentence BuildDerivePrompt renders", prompts[0])
+		}
+	})
+}
+
+// TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief is spec
+// R5.7's own cost proof (design §6.3 slot 5): the runner embeds every
+// active belief exactly once, in memory, per derive phase run — never
+// more, never fewer — and no new port or store method persists the
+// result (owner ruling Q2, option A; task 10b.7's own source-tree scan
+// covers the second half separately).
+//
+// The scripted belief_derivation response below decodes to zero proposed
+// beliefs, so this fixture isolates the EXISTING side of R5.7's embedding
+// cost from the PROPOSED side task 10b.5/10b.6's own merge-routing fixture
+// exercises — MergeProposals's "proposed" vectors are embedded too
+// (task 10b.4's own GREEN), but only when the judge actually proposes
+// something, which this fixture deliberately does not.
+//
+// Red against task 10b.2's own placeholder-embedding derive: it never
+// calls EmbeddingProvider at all, so EmbedCalls() is 0 against a fixture
+// seeding 2 active beliefs.
+func TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+
+	units := memrepo.NewUnits()
+	if err := units.Create(ctx, unit.Unit{
+		ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+		Content: "training for a half marathon in October", Source: "chat",
+		Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed source unit: %v", err)
+	}
+
+	selfModel := memrepo.NewSelfModel()
+	for _, b := range []ports.Belief{
+		{ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness", Content: "wants to run more consistently", Confidence: 0.6, Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+		{ID: "b-2", Facet: selfmodel.FacetValue, TopicKey: "derived/value/health", Content: "values staying active", Confidence: 0.5, Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := selfModel.UpsertByTopicKey(ctx, b); err != nil {
+			t.Fatalf("seed belief %s: %v", b.ID, err)
+		}
+	}
+
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
+	embed := fakeprovider.NewEmbeddingFake("test-model")
+	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), units, embed)
+
+	dir := t.TempDir()
+	writeDeriveCase(t, dir, "derive-embed-count", `{"beliefs":[]}`)
+	judge := fakeprovider.New(t, dir, "derive-embed-count")
+
+	phase := consolidation.PhaseDerive
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate(PhaseDerive): %v", err)
+	}
+
+	if got, want := embed.EmbedCalls(), 2; got != want {
+		t.Fatalf("EmbedCalls() = %d, want exactly len(activeBeliefs) = %d (spec R5.7)", got, want)
+	}
+}
+
+// spySelfModel counts UpsertByTopicKey/ReinforceByID calls on top of a
+// real memrepo.SelfModel — task 10b.5's own "exactly one of each" proof
+// needs call counts, not merely final state, the same reason spyConfig
+// (above) wraps memrepo.Config instead of reading RecordConsolidationRun's
+// own side effect back out.
+type spySelfModel struct {
+	*memrepo.SelfModel
+	upsertCalls    int
+	reinforceCalls int
+}
+
+func newSpySelfModel() *spySelfModel {
+	return &spySelfModel{SelfModel: memrepo.NewSelfModel()}
+}
+
+func (s *spySelfModel) UpsertByTopicKey(ctx context.Context, b ports.Belief) error {
+	s.upsertCalls++
+	return s.SelfModel.UpsertByTopicKey(ctx, b)
+}
+
+func (s *spySelfModel) ReinforceByID(ctx context.Context, id string, confidence float64, at time.Time) error {
+	s.reinforceCalls++
+	return s.SelfModel.ReinforceByID(ctx, id, confidence, at)
+}
+
+// TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite is spec
+// R5.8's own split: one create-decision and one merge-decision from the
+// same derive run produce exactly one SelfModelRepo.UpsertByTopicKey call
+// and exactly one ReinforceByID call, each with the correct target.
+//
+// fakeprovider.NewEmbeddingFake derives a deterministic vector from text
+// alone (test/support/fakeprovider/embed.go): a proposed belief whose
+// Content is byte-identical to an existing one embeds to the identical
+// vector (cosine similarity 1.0, well above BeliefMergeCosine's 0.85) and
+// therefore merges; a proposed belief with unrelated text embeds far
+// enough away to create instead. No hand-derived vector geometry is
+// needed to land on the 0.85 boundary — reusing the existing belief's own
+// Content verbatim is exact by construction.
+//
+// Red against task 10b.4's own derive: decisions is computed and then
+// discarded (`_ = decisions`), so neither write ever happens.
+func TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+	const existingContent = "wants to run more consistently"
+
+	units := memrepo.NewUnits()
+	if err := units.Create(ctx, unit.Unit{
+		ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+		Content: "training log entry", Source: "chat",
+		Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed source unit: %v", err)
+	}
+
+	selfModel := newSpySelfModel()
+	if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
+		ID: "b-existing", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness",
+		Content: existingContent, Confidence: 0.5, Status: "active",
+		LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed existing belief: %v", err)
+	}
+	selfModel.upsertCalls = 0 // reset: only derive's own calls count below
+
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
+	embed := fakeprovider.NewEmbeddingFake("test-model")
+	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), units, embed)
+
+	dir := t.TempDir()
+	response := `{"beliefs":[` +
+		`{"facet":"goal","topic_key":"fitness-again","content":"` + existingContent + `","confidence":0.55},` +
+		`{"facet":"goal","topic_key":"hiking","content":"enjoys weekend hiking trips","confidence":0.7}` +
+		`]}`
+	writeDeriveCase(t, dir, "derive-create-and-merge", response)
+	judge := fakeprovider.New(t, dir, "derive-create-and-merge")
+
+	phase := consolidation.PhaseDerive
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate(PhaseDerive): %v", err)
+	}
+
+	if selfModel.upsertCalls != 1 {
+		t.Errorf("UpsertByTopicKey calls = %d, want exactly 1 (the hiking belief)", selfModel.upsertCalls)
+	}
+	if selfModel.reinforceCalls != 1 {
+		t.Errorf("ReinforceByID calls = %d, want exactly 1 (b-existing)", selfModel.reinforceCalls)
+	}
+
+	active, err := selfModel.ActiveBeliefs(ctx)
+	if err != nil {
+		t.Fatalf("ActiveBeliefs: %v", err)
+	}
+	if len(active) != 2 {
+		t.Fatalf("ActiveBeliefs() = %d, want exactly 2 (b-existing reinforced, hiking created)", len(active))
+	}
+	var reinforced ports.Belief
+	var created ports.Belief
+	for _, b := range active {
+		if b.ID == "b-existing" {
+			reinforced = b
+		} else {
+			created = b
+		}
+	}
+	if reinforced.Confidence <= 0.5 {
+		t.Errorf("b-existing Confidence = %v, want raised above its seeded 0.5 (consolidation.Reinforce)", reinforced.Confidence)
+	}
+	if created.Content != "enjoys weekend hiking trips" {
+		t.Errorf("created belief Content = %q, want the hiking proposal's own content", created.Content)
+	}
+}
+
+// TestDecodeDerivedBeliefs_DedupsByTopicKey pins the collision Judgment Day
+// found on this PR (Judge B: CRITICAL, Judge A: SUGGESTION — escalated and
+// ruled a defect by the owner).
+//
+// A belief_derivation response is free to propose the same (facet,
+// topic_key) twice with different content — nothing in the prompt forbids
+// it and a degraded judge will do it. Without dedup both proposals reached
+// createDerivedBelief, so each wrote its own ActionDeriveBeliefCreated row
+// while UpsertByTopicKey (INSERT ... ON CONFLICT(topic_key) DO UPDATE)
+// silently overwrote the first in self_beliefs. decision_log then claimed
+// two beliefs were created when the vault held one, and the losing
+// proposal's content vanished with no refusal and no corrupted entry.
+//
+// doc 05's own M2 demo bullet is "the decision_log tells the story", so an
+// audit trail that reports an effect the vault never kept is not a
+// documented-behavior footnote — it is the one thing that phase must not
+// do. First proposal wins; later collisions are dropped at decode, before
+// any write or any row exists.
+func TestDecodeDerivedBeliefs_DedupsByTopicKey(t *testing.T) {
+	raw := `{"beliefs":[
+		{"facet":"preference","topic_key":"ui-theme","content":"Prefers dark mode.","confidence":0.8},
+		{"facet":"preference","topic_key":"ui-theme","content":"Prefers light mode.","confidence":0.7},
+		{"facet":"identity","topic_key":"role","content":"Backend engineer.","confidence":0.9}
+	]}`
+
+	got := decodeDerivedBeliefs(raw)
+
+	if len(got) != 2 {
+		t.Fatalf("decodeDerivedBeliefs returned %d proposals, want 2 — the duplicate (preference, ui-theme) must be dropped at decode: %+v", len(got), got)
+	}
+	if got[0].Facet != "preference" || got[0].Key != "ui-theme" || got[0].Content != "Prefers dark mode." {
+		t.Errorf("first proposal = %+v, want the FIRST (preference, ui-theme) entry — first wins, later collisions drop", got[0])
+	}
+	if got[1].Facet != "identity" || got[1].Key != "role" {
+		t.Errorf("second proposal = %+v, want the (identity, role) entry — a different topic_key is not a collision", got[1])
 	}
 }

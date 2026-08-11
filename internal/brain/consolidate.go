@@ -9,9 +9,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/relation"
+	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -45,10 +47,13 @@ type ConsolidateService struct {
 // shape NewCaptureService's own judge parameter already establishes —
 // connect's persist decision routes through the same
 // relation.Resolve/Decide, never a second judge wiring.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider) *ConsolidateService {
+// selfModel is PR 10b's own addition (design §7.3, spec R5.6/R5.8): derive's
+// two SelfModelRepo reads/writes — the same shape recall/judge already
+// establish for their own ports, never a second wiring convention.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel},
 	}
 }
 
@@ -124,15 +129,19 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // slot-4 read (design §7.1) — no ports.Clock of its own either, the same
 // property RecallService already has. judge is connect's own persist step
 // (design §7.1, spec R5.5) — the identical relation-judge ports.LLMProvider
-// shape captureRunner's own judge field already holds.
+// shape captureRunner's own judge field already holds. selfModel is
+// derive's own slot-5 read/write pair (design §7.3, spec R5.6/R5.8) — the
+// same judge field above sends derive's own belief_derivation call too, one
+// port for both connect's and derive's judge traffic.
 type consolidateRunner struct {
-	cfg    ports.ConfigRepo
-	units  ports.UnitRepo
-	rels   ports.RelationRepo
-	ids    ports.IDGen
-	log    ports.DecisionLog
-	recall *RecallService
-	judge  ports.LLMProvider
+	cfg       ports.ConfigRepo
+	units     ports.UnitRepo
+	rels      ports.RelationRepo
+	ids       ports.IDGen
+	log       ports.DecisionLog
+	recall    *RecallService
+	judge     ports.LLMProvider
+	selfModel ports.SelfModelRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -399,6 +408,329 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
 }
 
+// taskBeliefDerivation is the LLMRequest.Task value derive's own judge
+// call sends (design §7.2's tasksConsolidateConsumes, spec R5.6) — the
+// exact string internal/config.DocumentedTaskNames already documents
+// (design §7.2), so this PR adds no config-vocabulary entry.
+const taskBeliefDerivation = "belief_derivation"
+
+// deriveSourceIDs is derive's own slot-5 source read (design §7.3): the
+// identical recently-touched, weight-ranked, ConnectSourceLimit-capped
+// selection connect's own slot 4 computes — over derive's OWN fresh
+// LiveDecayStates read, never connect's cached slot-4 slice (design §6.3's
+// pipeline note; spec-verified by the three-calls-per-pass L2 fixture
+// design.md names for archive/connect/derive together).
+func (r consolidateRunner) deriveSourceIDs(ctx context.Context, pass passContext, report *ConsolidateReport) ([]string, error) {
+	cs, err := r.units.LiveDecayStates(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("consolidate: derive: read live decay states: %w", err)
+	}
+	usable, refused := partitionLiveDecayStates(cs)
+	report.reportCorrupted(refused)
+	return consolidation.SelectConnectSources(coldToSources(usable), pass.since, pass.now), nil
+}
+
+// derive runs slot 5's own read/write pipeline (design §6.3, §7.3; spec
+// R5.6-R5.8): the same source selection connect's own slot 4 computes,
+// fresh, feeds consolidation.BuildDerivePrompt (PR 10a) alongside every
+// active belief (dedup defense 1, spec R5.6) into one belief_derivation
+// judge call.
+// A pass with nothing to derive from (no live source unit, the same
+// "nothing changed since the last sleep" condition SelectConnectSources
+// already applies) never calls the judge at all — connectSources' own
+// "if len(sourceIDs) == 0 { return nil, nil }" precedent (above), applied
+// here for the identical reason: TestConsolidate_NoEffects's own MUST
+// ("a phase fed nothing must write nothing") and every noJudge(t) fixture
+// this file already carries would otherwise send a judge call into a
+// provider scripted with zero cases. Zero source units is the only skip
+// condition — an empty *existing beliefs* list still sends (spec R5.6's
+// second MUST, task 10b.1's own proof).
+func (r consolidateRunner) derive(ctx context.Context, pass passContext, report *ConsolidateReport) error {
+	sourceIDs, err := r.deriveSourceIDs(ctx, pass, report)
+	if err != nil {
+		return err
+	}
+	if len(sourceIDs) == 0 {
+		return nil
+	}
+	sourceUnits, err := r.units.LiveByIDs(ctx, sourceIDs)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: read source units: %w", err)
+	}
+	sources := make([]consolidation.DeriveSource, len(sourceUnits))
+	for i, u := range sourceUnits {
+		sources[i] = consolidation.DeriveSource{UnitID: u.ID, Type: u.Type, Content: u.Content}
+	}
+
+	active, err := r.selfModel.ActiveBeliefs(ctx)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: read active beliefs: %w", err)
+	}
+	existingBeliefs := make([]consolidation.Belief, len(active))
+	for i, b := range active {
+		existingBeliefs[i] = consolidation.Belief{
+			ID:               b.ID,
+			Facet:            b.Facet,
+			TopicKey:         b.TopicKey,
+			Content:          b.Content,
+			Confidence:       b.Confidence,
+			LastReinforcedAt: b.LastReinforcedAt,
+		}
+	}
+
+	resp, err := r.judge.Complete(ctx, ports.LLMRequest{
+		Prompt: consolidation.BuildDerivePrompt(sources, existingBeliefs),
+		Task:   taskBeliefDerivation,
+	})
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: judge belief derivation: %w", err)
+	}
+	proposals := decodeDerivedBeliefs(resp.Text)
+
+	existingVectors, proposedVectors, model, err := r.embedForMerge(ctx, active, proposals)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: %w", err)
+	}
+
+	decisions, err := consolidation.MergeProposals(model, existingVectors, proposedVectors)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: merge proposals: %w", err)
+	}
+
+	return r.persistMergeDecisions(ctx, decisions, proposals, active, pass.now)
+}
+
+// persistMergeDecisions routes every MergeProposals decision to its own
+// write (spec R5.8): MergeInto == "" (its own zero value) is the CREATE
+// half, routed to r.createDerivedBelief; MergeInto != "" is the MERGE
+// half, routed to r.reinforceDerivedBelief — never the topic-key upsert
+// for a merge, per ports.SelfModelRepo's own MUST NOT (selfmodelrepo.go).
+// active is indexed by id once, up front, so the merge half can look up
+// each target's current confidence without a second SelfModelRepo round
+// trip per decision.
+func (r consolidateRunner) persistMergeDecisions(ctx context.Context, decisions []consolidation.MergeDecision, proposals []derivedBeliefProposal, active []ports.Belief, now time.Time) error {
+	if len(decisions) == 0 {
+		return nil
+	}
+
+	byID := make(map[string]ports.Belief, len(active))
+	for _, b := range active {
+		byID[b.ID] = b
+	}
+
+	for _, d := range decisions {
+		proposal := proposals[d.ProposedIndex]
+		if d.MergeInto == "" {
+			if err := r.createDerivedBelief(ctx, proposal, now); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := r.reinforceDerivedBelief(ctx, byID, d.MergeInto, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// createDerivedBelief is R5.8's CREATE half: p's own facet/topic_key/
+// content/confidence become a new self_beliefs row, keyed the way
+// consolidation.DeriveTopicKey renders it (doc 02 §10:
+// "derived/{facet}/{key}"), written through UpsertByTopicKey and recorded
+// as ActionDeriveBeliefCreated (design §7.5's own count, row 5).
+func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBeliefProposal, now time.Time) error {
+	facet, err := selfmodel.ParseFacet(p.Facet)
+	if err != nil {
+		// decodeDerivedBeliefs already filters an unparsable facet out of
+		// every proposal it returns — unreachable in practice, but treated
+		// as "nothing to create" rather than a panic, the same safe-default
+		// posture every other decode degradation in this file takes.
+		return nil
+	}
+	b := ports.Belief{
+		ID:               r.ids.New(),
+		Facet:            facet,
+		TopicKey:         consolidation.DeriveTopicKey(facet, p.Key),
+		Content:          p.Content,
+		Confidence:       p.Confidence,
+		Origin:           "derived",
+		Status:           "active",
+		LastReinforcedAt: now,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if err := r.selfModel.UpsertByTopicKey(ctx, b); err != nil {
+		return fmt.Errorf("consolidate: derive: upsert belief %q: %w", b.TopicKey, err)
+	}
+	rationale := fmt.Sprintf("derive: created belief %q (facet %q)", b.TopicKey, b.Facet)
+	return r.record(ctx, now, ports.ActionDeriveBeliefCreated, rationale, b)
+}
+
+// reinforceDerivedBelief is R5.8's MERGE half: id names the existing
+// belief MergeProposals chose (by embedding similarity, m2b spec R4.4),
+// looked up in active for the current Confidence consolidation.Reinforce
+// needs (m2b spec R4.5's own asymptotic law). active not containing id is
+// defensive-only — MergeInto is always chosen from the exact `existing`
+// slice built from active itself (embedForMerge, above), so this is
+// unreachable in practice, the same "never assume, still guard" posture
+// judgeAndPersistPair's own j.Type == nil check takes for connect's judge
+// response (PR 9b), restated here because ReinforceByID's own
+// ErrBeliefNotFound would otherwise abort the whole pass on a case that
+// should just skip one decision. A decision with no effect writes nothing
+// (doc 02 §11): a belief already at exactly confidence 1 also returns
+// early here, via Reinforce's own (confidence, false).
+func (r consolidateRunner) reinforceDerivedBelief(ctx context.Context, active map[string]ports.Belief, id string, now time.Time) error {
+	belief, ok := active[id]
+	if !ok {
+		return nil
+	}
+	newConfidence, ok := consolidation.Reinforce(belief.Confidence)
+	if !ok {
+		return nil
+	}
+	if err := r.selfModel.ReinforceByID(ctx, id, newConfidence, now); err != nil {
+		return fmt.Errorf("consolidate: derive: reinforce belief %q: %w", id, err)
+	}
+	rationale := fmt.Sprintf("derive: reinforced belief %q to confidence %.4f", id, newConfidence)
+	return r.record(ctx, now, ports.ActionDeriveBeliefReinforced, rationale, map[string]any{"belief_id": id, "confidence": newConfidence})
+}
+
+// derivedBeliefProposal is one belief_derivation response's own proposed
+// belief. Decoded here, in internal/brain, rather than in
+// internal/core/consolidation: design §10.2 names PR 10a's prompt.go as
+// the one internal/core file m2c adds in the whole change, and this
+// decode step is response-wiring, not a core decision function.
+//
+// Named plainly because Judgment Day on this PR flagged it (both judges,
+// WARNING): this placement is the INVERSE of connect's, not an instance of
+// it. Connect puts JudgePrompt in internal/brain and DecodeJudgment in
+// internal/core/relation; derive puts BuildDerivePrompt in
+// internal/core/consolidation and this decode in internal/brain. So the
+// codebase now holds two judge tasks whose prompt/decode halves sit on
+// opposite sides of the core boundary. The owner's ruling was to keep the
+// decode here — moving it would amend design §10.2, an approved decision —
+// and to stop the comment claiming a precedent it reverses. The real
+// justification is the §10.2 constraint alone; consistency with connect is
+// a debt this leaves open, not a property it has. One concrete cost is
+// already visible: the confidence [0,1]/NaN check below restates a bound
+// consolidation.Reinforce also encodes, so the same rule now lives in two
+// packages and can drift.
+//
+// No analogous decode function existed anywhere for belief_derivation
+// before this PR:
+// BuildDerivePrompt's own prompt text ("For each new belief worth
+// proposing, decide facet, topic_key and content") is this decode's only
+// documented contract — there is no testdata/llm/format.md precedent, no
+// core decode function, and no §9 wire-format section in design.md to
+// reuse for this task's response shape (a genuine design gap, disclosed
+// in this PR's own apply report rather than silently invented). Wire
+// shape: {"beliefs":[{"facet":...,"topic_key":...,"content":...,
+// "confidence":...}, ...]} — confidence is not literally requested by
+// BuildDerivePrompt's own text, but every other judge task in this
+// codebase reports one (relation.Judgment's own "confidence" field), and
+// requiring it here needs no invented core constant for a newly created
+// belief's starting confidence.
+type derivedBeliefProposal struct {
+	Facet      string  `json:"facet"`
+	Key        string  `json:"topic_key"`
+	Content    string  `json:"content"`
+	Confidence float64 `json:"confidence"`
+}
+
+// decodeDerivedBeliefs tolerantly extracts the "beliefs" array a
+// belief_derivation response carries, degrading to zero proposals — never
+// an error — on anything malformed: no "{" found, no "beliefs" field, an
+// unparsable array, an unknown facet, an empty key/content, or a
+// confidence outside [0,1] (including NaN). This is the same posture
+// relation.DecodeJudgment already established for a judge response this
+// codebase cannot fully trust (classify.Salvage's own tolerant byte-scan),
+// restated here because no core package exists to hold it (see
+// derivedBeliefProposal's own doc comment).
+//
+// A (facet, topic_key) pair already seen in this same response is dropped,
+// first occurrence winning. Nothing in the derivation prompt forbids the
+// judge proposing one topic key twice, and downstream nothing else would
+// catch it: both proposals reach createDerivedBelief, each records its own
+// ActionDeriveBeliefCreated row, and UpsertByTopicKey's ON CONFLICT
+// (topic_key) DO UPDATE silently overwrites the first — leaving
+// decision_log claiming two beliefs were created where the vault kept one,
+// with the losing content gone and no refusal naming it. Dedup belongs
+// here rather than at the persist site because a collision is a malformed
+// response, not a persist outcome: dropping it before any decision exists
+// keeps decision_log's count equal to the vault's, which is the property
+// doc 05's own M2 demo ("the decision_log tells the story") rests on.
+func decodeDerivedBeliefs(raw string) []derivedBeliefProposal {
+	fields, _ := classify.Salvage([]byte(raw))
+	beliefsRaw, ok := fields["beliefs"]
+	if !ok {
+		return nil
+	}
+	var candidates []derivedBeliefProposal
+	if err := json.Unmarshal(beliefsRaw, &candidates); err != nil {
+		return nil
+	}
+	out := make([]derivedBeliefProposal, 0, len(candidates))
+	seen := make(map[string]bool, len(candidates))
+	for _, c := range candidates {
+		facet, err := selfmodel.ParseFacet(c.Facet)
+		if err != nil {
+			continue
+		}
+		if c.Key == "" || c.Content == "" {
+			continue
+		}
+		if math.IsNaN(c.Confidence) || c.Confidence < 0 || c.Confidence > 1 {
+			continue
+		}
+		topicKey := consolidation.DeriveTopicKey(facet, c.Key)
+		if seen[topicKey] {
+			continue
+		}
+		seen[topicKey] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+// embedForMerge is spec R5.7's own embedding step: every entry in active
+// is embedded exactly once, unconditionally — "in memory, per pass"
+// regardless of whether proposals is empty — followed by every entry in
+// proposals. Both sides go through the same *RecallService instance's own
+// ports.EmbeddingProvider (r.recall's own unexported embed field,
+// package-private but same-package here — design D9's "one shared
+// RecallService instance", never a second wiring convention for this
+// port), never a new consolidateRunner field: PR 10b widens no
+// NewConsolidateService parameter beyond ce23b23's own selfModel add.
+// model is whichever side's own EmbedResponse.Model answers first — both
+// sides share one EmbeddingProvider within a single phase run, so
+// idx.Model and every query's Model are never different values within one
+// MergeProposals call (design.md §7.1's own note on this exact hazard,
+// restated for derive).
+func (r consolidateRunner) embedForMerge(ctx context.Context, active []ports.Belief, proposals []derivedBeliefProposal) (existing, proposed []consolidation.BeliefVector, model string, err error) {
+	existing = make([]consolidation.BeliefVector, len(active))
+	for i, b := range active {
+		ev, eerr := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: b.Content})
+		if eerr != nil {
+			return nil, nil, "", fmt.Errorf("embed active belief %q: %w", b.ID, eerr)
+		}
+		existing[i] = consolidation.BeliefVector{BeliefID: b.ID, Vector: ev.Vector}
+		model = ev.Model
+	}
+
+	proposed = make([]consolidation.BeliefVector, len(proposals))
+	for i, p := range proposals {
+		ev, eerr := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: p.Content})
+		if eerr != nil {
+			return nil, nil, "", fmt.Errorf("embed proposed belief %d: %w", i, eerr)
+		}
+		proposed[i] = consolidation.BeliefVector{Vector: ev.Vector}
+		if model == "" {
+			model = ev.Model
+		}
+	}
+	return existing, proposed, model, nil
+}
+
 // persistArchiveTransitions applies ts through units.SetStatus, in the
 // order archive planned them, and records one decision_log row per outcome
 // (design §3.3(e), spec R4.2). A concurrent capture or correction that
@@ -607,7 +939,9 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			return err
 		}
 	case consolidation.PhaseDerive:
-		// placeholder — PR 10 wires the real read/write.
+		if err := r.derive(ctx, pass, report); err != nil {
+			return err
+		}
 	case consolidation.PhaseReweight:
 		// placeholder — PR 11 wires the real read/write.
 	case consolidation.PhasePatternEval:
