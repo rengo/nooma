@@ -198,3 +198,67 @@ func TestConsolidate_WholePass(t *testing.T) {
 		t.Error("consolidate did not write consolidation_last_run_at after a whole pass")
 	}
 }
+
+// TestConsolidate_Phase is spec R6.3: a per-phase invocation validates its
+// argument through consolidation.ParsePhase — never a second, CLI-local
+// phase-name vocabulary — runs exactly that phase, and leaves
+// consolidation_last_run_at untouched (R5.4's own MUST NOT, restated at
+// the CLI boundary). An unknown name errors cleanly through
+// consolidation.ErrUnknownPhase, naming the rejected value.
+func TestConsolidate_Phase(t *testing.T) {
+	t.Run("a known phase runs and leaves the timestamp untouched", func(t *testing.T) {
+		llm := mockConsolidateLLM(t)
+
+		home, work := t.TempDir(), t.TempDir()
+		vault := initVault(t, home, work, "pablo.nooma")
+		writeConfig(t, vault, consolidateConfig(llm.URL))
+
+		stdout, stderr, err := nooma(t, home, work, "consolidate", "--phase=archive", vault)
+		if err != nil {
+			t.Fatalf("consolidate --phase=archive: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+		}
+
+		after := readVaultConfig(t, vault)
+		if after.ConsolidationLastRunAt != nil {
+			t.Errorf("a per-phase run wrote consolidation_last_run_at = %v, want untouched", after.ConsolidationLastRunAt)
+		}
+	})
+
+	t.Run("an unknown phase errors cleanly and names the rejected value", func(t *testing.T) {
+		home, work := t.TempDir(), t.TempDir()
+		vault := initVault(t, home, work, "pablo.nooma")
+
+		_, stderr, err := nooma(t, home, work, "consolidate", "--phase=not-a-real-phase", vault)
+		if err == nil {
+			t.Fatal("consolidate --phase=not-a-real-phase succeeded")
+		}
+		if !strings.Contains(stderr, "not-a-real-phase") {
+			t.Errorf("the refusal does not name the rejected phase:\n%s", stderr)
+		}
+	})
+}
+
+// TestConsolidate_NewFileHasNoSecondPhaseVocabulary hand-verifies, for this
+// PR's own new file, the property
+// TestI11_NoCallerOutsideConsolidationListsThePhaseNames
+// (test/conformance/i11_consolidation_phase_order_test.go) already proves
+// automatically across the whole tree: consolidate.go never lists two or
+// more of the eight phase-name string literals — every name it needs comes
+// from consolidation.Phase.String() or consolidation.ParsePhase, never a
+// restated copy.
+func TestConsolidate_NewFileHasNoSecondPhaseVocabulary(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join(repoRoot(t), "cmd", "nooma", "consolidate.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"expire_incomplete", "archive", "strengthen", "connect", "derive", "reweight", "pattern_eval", "learn"}
+	found := 0
+	for _, n := range names {
+		if strings.Contains(string(src), `"`+n+`"`) {
+			found++
+		}
+	}
+	if found >= 2 {
+		t.Errorf("cmd/nooma/consolidate.go contains %d of the eight phase-name string literals, want at most 1 (I11, R6.3)", found)
+	}
+}
