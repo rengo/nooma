@@ -1582,3 +1582,68 @@ func TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState(t
 		}
 	})
 }
+
+// TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief is spec
+// R5.7's own cost proof (design §6.3 slot 5): the runner embeds every
+// active belief exactly once, in memory, per derive phase run — never
+// more, never fewer — and no new port or store method persists the
+// result (owner ruling Q2, option A; task 10b.7's own source-tree scan
+// covers the second half separately).
+//
+// The scripted belief_derivation response below decodes to zero proposed
+// beliefs, so this fixture isolates the EXISTING side of R5.7's embedding
+// cost from the PROPOSED side task 10b.5/10b.6's own merge-routing fixture
+// exercises — MergeProposals's "proposed" vectors are embedded too
+// (task 10b.4's own GREEN), but only when the judge actually proposes
+// something, which this fixture deliberately does not.
+//
+// Red against task 10b.2's own placeholder-embedding derive: it never
+// calls EmbeddingProvider at all, so EmbedCalls() is 0 against a fixture
+// seeding 2 active beliefs.
+func TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+
+	units := memrepo.NewUnits()
+	if err := units.Create(ctx, unit.Unit{
+		ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+		Content: "training for a half marathon in October", Source: "chat",
+		Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed source unit: %v", err)
+	}
+
+	selfModel := memrepo.NewSelfModel()
+	for _, b := range []ports.Belief{
+		{ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness", Content: "wants to run more consistently", Confidence: 0.6, Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+		{ID: "b-2", Facet: selfmodel.FacetValue, TopicKey: "derived/value/health", Content: "values staying active", Confidence: 0.5, Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := selfModel.UpsertByTopicKey(ctx, b); err != nil {
+			t.Fatalf("seed belief %s: %v", b.ID, err)
+		}
+	}
+
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
+	embed := fakeprovider.NewEmbeddingFake("test-model")
+	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), units, embed)
+
+	dir := t.TempDir()
+	writeDeriveCase(t, dir, "derive-embed-count", `{"beliefs":[]}`)
+	judge := fakeprovider.New(t, dir, "derive-embed-count")
+
+	phase := consolidation.PhaseDerive
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate(PhaseDerive): %v", err)
+	}
+
+	if got, want := embed.EmbedCalls(), 2; got != want {
+		t.Fatalf("EmbedCalls() = %d, want exactly len(activeBeliefs) = %d (spec R5.7)", got, want)
+	}
+}
