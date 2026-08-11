@@ -1555,59 +1555,117 @@ Depends on PR 10a (`BuildDerivePrompt`) and PR 9 (the `Source` guard, reused for
 `LiveDecayStates` read). Ships slot 5: `ActiveBeliefs` → prompt → `belief_derivation` →
 embeddings → `MergeProposals` → the two `SelfModelRepo` writes.
 
-- [ ] **10b.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `derive`'s prompt
+- [x] **10b.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `derive`'s prompt
       contains every active belief's `TopicKey`/`Content` when `ActiveBeliefs` returns non-empty;
       with none, the prompt still sends (not a skipped call) and names the empty state — via a
       fake `LLMProvider` capturing the prompt text passed to the `belief_derivation` task.
       **Red**: the placeholder `derive` arm calls nothing — fails first.
       Requirement: spec R5.6; design §6.3 (slot 5).
-- [ ] **10b.2** Commit 2 (GREEN): implement the `derive` arm's source selection and prompt call —
+      **Done**: commit `39cd4ba`. Confirmed red via `go test`: both subtests failed with
+      `SeenPrompts() = 0` plus fakeprovider's own under-run guard (`1 scripted case(s) never
+      called`), exactly the placeholder-arm reason named above.
+- [x] **10b.2** Commit 2 (GREEN): implement the `derive` arm's source selection and prompt call —
       `LiveDecayStates()` (through the guard) → `SelectConnectSources(ss, pass.since, pass.now)` →
       `LiveByIDs` to materialize `[]DeriveSource`; `ActiveBeliefs()` → `BuildDerivePrompt` → the
       `belief_derivation` LLM call.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R5.6; design §7.3, §6.3 (slot 5).
-- [ ] **10b.3** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `derive` calls
+      **Done**: commit `d995974`. Adds a zero-source-units skip (never calling the judge with
+      nothing to derive from — connectSources' own precedent), disclosed as the one place this
+      task's own wording ("prompt call") needed a decision the task text did not spell out;
+      without it every `noJudge(t)`-scripted whole-pass fixture in this file would fail. One
+      existing whole-pass fixture (`TestConsolidate_WholePassReportsEachCorruptedIDOnce`, one live
+      finite source unit) gained its own scripted `belief_derivation` case in the same commit.
+      `go test ./internal/brain/...` and `go test -tags integration ./test/integration/...` both
+      green.
+- [x] **10b.3** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — `derive` calls
       `EmbeddingProvider` exactly `len(activeBeliefs)` times per phase run — a fake
       `EmbeddingProvider` counting calls; separately, a source-tree scan confirms no new port or
       store method persists a belief vector (owner ruling Q2, option A).
       **Red**: fails first (zero calls against the placeholder).
       Requirement: spec R5.7; design §6.3 (slot 5).
-- [ ] **10b.4** Commit 2 (GREEN): implement the in-memory embedding step — one
+      **Done**: commit `7fed440`. Confirmed red: `EmbedCalls() = 0, want exactly len(activeBeliefs)
+      = 2`. The scripted `belief_derivation` response decodes to zero proposals, isolating the
+      EXISTING (active-belief) side of the embedding cost from the PROPOSED side task 10b.4/10b.6
+      also embed.
+- [x] **10b.4** Commit 2 (GREEN): implement the in-memory embedding step — one
       `EmbeddingProvider` call per active belief, held only for the duration of this phase run's
       `MergeProposals` call, discarded after.
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R5.7; design §6.3 (slot 5).
-- [ ] **10b.5** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — one
+      **Done**: commit `9e5990d`. Also lands `decodeDerivedBeliefs` (a new `internal/brain`-local
+      decode — disclosed design gap, see this PR's own apply-progress note) and the
+      `consolidation.MergeProposals` call itself (its result is computed, over real embeddings from
+      both sides, but not yet persisted — task 10b.6's own commit). `go test ./internal/brain/...`
+      green.
+- [x] **10b.5** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — one
       create-decision and one merge-decision from the same `derive` run produce exactly one
       `SelfModelRepo.UpsertByTopicKey` call and exactly one `ReinforceByID` call, each with the
       correct target (spec R5.8's own split).
       **Red**: fails first (zero calls against the placeholder).
       Requirement: spec R5.8.
-- [ ] **10b.6** Commit 2 (GREEN): implement the routing — `MergeInto == ""` →
+      **Done**: commit `382a61d`. Confirmed red: both call counts 0, `ActiveBeliefs()` still 1 (the
+      seeded row, unchanged). The merge candidate reuses an existing belief's own `Content`
+      verbatim so `fakeprovider`'s deterministic embedding lands on cosine similarity 1.0 by
+      construction, well above `BeliefMergeCosine` (0.85) — no hand-derived vector geometry needed.
+- [x] **10b.6** Commit 2 (GREEN): implement the routing — `MergeInto == ""` →
       `UpsertByTopicKey`; `MergeInto != ""` → `ReinforceByID` with the confidence
       `consolidation.Reinforce` computes from the merged-into belief's current confidence; `record`
       one row per decision (`ActionDeriveBeliefCreated`/`ActionDeriveBeliefReinforced`).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2, R5.8; design §6.3 (slot 5).
-- [ ] **10b.7** Verification, not an edit: confirm no `belief_embeddings` table, migration, or
+      **Done**: commit `c65c914`. `reinforceDerivedBelief` guards a `MergeInto` id absent from the
+      active-belief map (unreachable in practice, since `MergeInto` is always chosen from the same
+      `active`-derived `existing` slice) by skipping rather than propagating `ReinforceByID`'s own
+      `ErrBeliefNotFound` and aborting the whole pass — the closest derive-side analogue to PR 9b's
+      own carried `judgeAndPersistPair` `j.Type == nil` guard, though not the identical
+      pointer-nil-deref class (this PR's apply-progress note disambiguates the two explicitly).
+      `go test ./internal/brain/...`, `go test -tags integration ./test/integration/...` both
+      green.
+- [x] **10b.7** Verification, not an edit: confirm no `belief_embeddings` table, migration, or
       port/store method exists anywhere in this PR's diff — `rg -i 'belief.?embedding'
       internal/store internal/ports` returns only doc comments, never a type or table name.
       Discharges the `m2b` §8 handoff ("belief embeddings in memory, no table").
       Requirement: spec R5.7 (`MUST NOT`); design §6.3 (slot 5).
-- [ ] **10b.8** doc 02 §13 amendment: annotate the `connect_source_limit` row (§6.4's own product,
+      **Done**: `rg -i 'belief.?embedding' internal/store internal/ports` returns zero hits (not
+      even a doc comment) — no table, migration, or method exists.
+- [x] **10b.8** doc 02 §13 amendment: annotate the `connect_source_limit` row (§6.4's own product,
       already documented by `m2b`) to state it now governs **two** phases —
       `derive`'s source selection reuses it (design §7.3) — the Default column's number is
       unchanged, so `calibration_doc_test.go` stays green; this is prose-only, discharging the
       remainder of task 10a.5's doc obligation.
       Requirement: design §10.3, row 1 (the §13 annotation half); §7.3, §12 Q5.
-- [ ] **10b.9** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+      **Done**: commit `95b3282`. Also corrects §6.5's own two pre-existing issues in the same
+      commit (non-negotiable #1): the "not yet wired" sentence PR 10a left (now false, this PR
+      wires it) and a factual error PR 10a's own §6.5 edit introduced ("one selection, read once
+      per pass, feeding both phases" contradicts design §7.3's own decision that `derive` re-runs
+      the selection fresh, never reusing `connect`'s). `go test ./test/conformance/... -run
+      Calibration` green (`TestHarness_CalibrationTableMatchesConstants/ConnectSourceLimit` and
+      `TestCalibrationTableStaysUnused` both PASS).
+- [x] **10b.9** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
+      **Done**: `golangci-lint run` — 0 issues. `go test -race -shuffle=on ./internal/brain/...` —
+      green.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/brain/consolidate.go` (+ test, extended), `docs/02-cognitive-core.md` (§13's
       `connect_source_limit` row, annotated). Target ≤250 impl+docs lines.
+      **Done**: `make check-all` green — L1-L4, schema-golden regen-diff clean, `internal/core`
+      coverage **100% (738/738, unchanged — this PR adds no `internal/core` code)**, seven-target
+      cross-compile matrix OK. Diff scope confirmed via `git diff --stat main...feat/brain-phase-io-derive`:
+      `internal/brain/consolidate.go` (+322/-11 including ce23b23's own plumbing), its test
+      (+351/-20), `docs/02-cognitive-core.md` (+11/-12), and
+      `test/integration/consolidate_expire_incomplete_test.go` (+1/-1, ce23b23's own widened
+      call-site update) — nothing else. **Measured, disclosed against the ~250/~430 estimate**:
+      impl+docs 345 (consolidate.go 322 + doc 02 23) — over the ~250 estimate (under the 400-line
+      single-PR review-workload ceiling, so no split was performed); test 353 (consolidate_test.go
+      351 + integration test 2) — under the ~430 estimate. Natural seam, named per instruction even
+      though no split was taken: 10b.1-10b.2 (prompt/source-selection half, ~96 of the 322 impl
+      lines) vs 10b.3-10b.6 (embedding/decode/merge/persist half, ~226 lines) — the second half
+      carries the disclosed wire-format design gap (`decodeDerivedBeliefs`) and is where a future
+      split would cut if this PR's own measurement had crossed 400.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/brain-phase-io-derive` returns
-      nothing after merge.
-      **Chain-merge check 2**: `gh pr view <PR11> --json baseRefName` names `main`.
+      nothing after merge. **Not yet performed — this PR is not merged.**
+      **Chain-merge check 2**: `gh pr view <PR11> --json baseRefName` names `main`. **Not yet
+      performed — PR 11 does not exist yet.**
 
 ---
 
