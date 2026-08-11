@@ -271,6 +271,29 @@ func coldToStates(cs []consolidation.Cold) map[string]weight.Current {
 	return out
 }
 
+// beliefsToConsolidation adapts SelfModelRepo.ActiveBeliefs' own
+// []ports.Belief into consolidation.Belief — the shape both derive's
+// BuildDerivePrompt (slot 5, spec R5.6) and pattern_eval's own
+// EvaluateStagnation (slot 7, spec R5.10) consume. Extracted here (PR 11)
+// from derive's own inline conversion, which pattern_eval would otherwise
+// duplicate a second time — Origin and Status carry nothing either core
+// function reads, so both are dropped rather than added to
+// consolidation.Belief for no consumer.
+func beliefsToConsolidation(bs []ports.Belief) []consolidation.Belief {
+	out := make([]consolidation.Belief, len(bs))
+	for i, b := range bs {
+		out[i] = consolidation.Belief{
+			ID:               b.ID,
+			Facet:            b.Facet,
+			TopicKey:         b.TopicKey,
+			Content:          b.Content,
+			Confidence:       b.Confidence,
+			LastReinforcedAt: b.LastReinforcedAt,
+		}
+	}
+	return out
+}
+
 // scoredToFused adapts []ScoredUnit into the []recall.FusedCandidate shape
 // consolidation.ConnectPairs and correction.Referent both consume, plus an
 // id -> unit.Unit lookup for a caller that needs the full candidate back —
@@ -516,17 +539,7 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 	if err != nil {
 		return fmt.Errorf("consolidate: derive: read active beliefs: %w", err)
 	}
-	existingBeliefs := make([]consolidation.Belief, len(active))
-	for i, b := range active {
-		existingBeliefs[i] = consolidation.Belief{
-			ID:               b.ID,
-			Facet:            b.Facet,
-			TopicKey:         b.TopicKey,
-			Content:          b.Content,
-			Confidence:       b.Confidence,
-			LastReinforcedAt: b.LastReinforcedAt,
-		}
-	}
+	existingBeliefs := beliefsToConsolidation(active)
 
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{
 		Prompt: consolidation.BuildDerivePrompt(sources, existingBeliefs),
@@ -877,6 +890,20 @@ func (r consolidateRunner) persistBoosts(ctx context.Context, boosts []weight.Bo
 	return nil
 }
 
+// persistStagnationFindings records one decision_log row per finding
+// (design §3.3(e), spec R5.10's first MUST) — doc 02 §7's stagnation
+// check-in has no M2 delivery mechanism of its own, so decision_log is its
+// only recorded trace this milestone (spec R5.10's own framing).
+func (r consolidateRunner) persistStagnationFindings(ctx context.Context, fs []consolidation.StagnationFinding, now time.Time) error {
+	for _, f := range fs {
+		rationale := fmt.Sprintf("pattern_eval: goal belief %q stagnant for %.1f days", f.TopicKey, f.StagnantDays)
+		if err := r.record(ctx, now, ports.ActionPatternEvalStagnationFound, rationale, f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // passContext is everything one invocation reads before any phase runs —
 // design §3.3(c). Assembled once by buildPassContext and passed by value
 // to every phase runPhase reaches, so `since` and `cfg` cannot drift
@@ -1029,7 +1056,14 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			return err
 		}
 	case consolidation.PhasePatternEval:
-		// placeholder — PR 11 wires the real read/write.
+		active, err := r.selfModel.ActiveBeliefs(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: pattern_eval: read active beliefs: %w", err)
+		}
+		findings := consolidation.EvaluateStagnation(beliefsToConsolidation(active), consolidation.ResolveGoalStagnationDays(pass.cfg.GoalStagnationDays), pass.now)
+		if err := r.persistStagnationFindings(ctx, findings, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhaseLearn:
 		// No work, ever (owner ruling 3) — this arm exists so Order()'s
 		// last slot is reached and reported, and performs nothing.
