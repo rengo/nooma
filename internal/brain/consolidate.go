@@ -884,6 +884,26 @@ func (r consolidateRunner) persistStrengthChanges(ctx context.Context, cs []cons
 // consolidation.Reweight's corrupted return only into
 // report.reportCorrupted, the one place a refusal is surfaced (spec R4.2's
 // MUST NOT).
+//
+// An ApplyBoosts error aborts the whole pass, including ports.ErrUnitNotFound
+// — and that is deliberately NOT what persistArchiveTransitions does with its
+// own analogous race (it catches ports.ErrStatusConflict, records the skip and
+// continues). Judgment Day on PR 11 named the asymmetry; it is left standing,
+// and the reason is that only one of the two races has a mandate. Spec R4.3
+// documents archive's concurrent-revive case and states the required
+// behaviour, so tolerating it there implements a decision already taken. No
+// spec line covers a unit disappearing between reweight's own LiveDecayStates
+// read and this call, so inventing tolerance here would be deciding design
+// from an implementation seat — and the failure is loud, not silent.
+//
+// The cost is real and worth stating plainly: because ApplyBoosts is
+// all-or-nothing over its batch (ports.UnitRepo's own contract), one vanished
+// unit discards every legitimate boost in the same call, and because `at`
+// aborts on any phase error, pattern_eval and learn do not run that pass. The
+// next pass re-reads and re-derives, so nothing is permanently lost; a pass is
+// skipped, not corrupted. If M2's scheduler later runs passes unattended
+// (m2d), this is the first place to revisit — an unattended pass that dies on
+// a race nobody sees is a different proposition from a hand-run one.
 func (r consolidateRunner) persistBoosts(ctx context.Context, boosts []weight.Boost, now time.Time) error {
 	if len(boosts) == 0 {
 		return nil
