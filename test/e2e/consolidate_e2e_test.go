@@ -61,7 +61,7 @@ func mockConsolidateLLM(t *testing.T) *httptest.Server {
 // consolidateConfig renders a nooma.yml binding every task
 // tasksConsolidateConsumes (cmd/nooma/consolidate.go) needs to llmURL —
 // the fully-configured fixture every consolidate test but the
-// unbound-task one (TestConsolidate_RefusesUnboundTask) starts from.
+// unbound-task one (TestConsolidate_RefusesUnboundTaskBeforeTheLock) starts from.
 func consolidateConfig(llmURL string) string {
 	return fmt.Sprintf(`providers:
   local:
@@ -260,5 +260,49 @@ func TestConsolidate_NewFileHasNoSecondPhaseVocabulary(t *testing.T) {
 	}
 	if found >= 2 {
 		t.Errorf("cmd/nooma/consolidate.go contains %d of the eight phase-name string literals, want at most 1 (I11, R6.3)", found)
+	}
+}
+
+// TestConsolidate_RefusesUnboundTaskBeforeTheLock is design §7.2: a vault
+// with an unbound task (here, belief_derivation — no
+// relation_evaluation/embedding gap needed to prove the same point)
+// refuses before taking the lock, naming the unbound task. `consolidate`'s
+// posture deliberately diverges from `serve`'s degrade-and-503 here — a
+// pass that silently skipped derive because no provider was bound would
+// still write consolidation_last_run_at as though a full pass had run,
+// corrupting the next pass's own `since` (design §7.2's own reasoning).
+//
+// Proven "before the lock" rather than merely "the vault is refused"
+// (which a post-lock check would also produce): the vault's write lock is
+// already held by THIS test process when consolidate runs. If the refusal
+// happened after attempting the lock, the error would be about a held
+// vault, not about the unbound task — so the assertion below on the error
+// text is the ordering proof, not a restatement of it.
+func TestConsolidate_RefusesUnboundTaskBeforeTheLock(t *testing.T) {
+	home, work := t.TempDir(), t.TempDir()
+	vault := initVault(t, home, work, "pablo.nooma")
+	writeConfig(t, vault, `providers:
+  local:
+    type: ollama
+    model: test-model
+    endpoint: http://127.0.0.1:1
+tasks:
+  relation_evaluation:
+    provider: local
+  embedding:
+    provider: local
+`)
+
+	holdVaultLock(t, vault)
+
+	_, stderr, err := nooma(t, home, work, "consolidate", vault)
+	if err == nil {
+		t.Fatal("consolidate succeeded against a vault missing belief_derivation's binding")
+	}
+	if !strings.Contains(stderr, "belief_derivation") {
+		t.Errorf("the refusal does not name the unbound task:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "already in use") {
+		t.Errorf("the refusal is about the held lock, not the unbound task — the check ran after attempting the lock, not before:\n%s", stderr)
 	}
 }
