@@ -68,6 +68,17 @@ func runConsolidate(args []string, out, errOut io.Writer) error {
 		return err
 	}
 
+	// design §7.2: `consolidate` refuses before taking the lock when a task
+	// this pass needs is unbound — a pass that silently skipped connect or
+	// derive would still write consolidation_last_run_at as though it had
+	// run in full, corrupting the next pass's own `since`. This is the same
+	// resolution wireConsolidate performs after the lock (defense in
+	// depth); doing it again here, before vaultlock.Acquire, is what makes
+	// the refusal precede the lock rather than merely accompany it.
+	if _, _, _, err := resolveConsolidateProviders(cfg, os.LookupEnv); err != nil {
+		return err
+	}
+
 	lock, err := vaultlock.Acquire(vault)
 	if err != nil {
 		var inUse *vaultlock.InUseError

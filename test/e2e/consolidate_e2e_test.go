@@ -138,8 +138,11 @@ func vaultDBPath(t *testing.T, vault string) string {
 // unlocked vault, it succeeds.
 func TestConsolidate_Lock(t *testing.T) {
 	t.Run("a held vault refuses and names the holder", func(t *testing.T) {
+		llm := mockConsolidateLLM(t)
+
 		home, work := t.TempDir(), t.TempDir()
 		vault := initVault(t, home, work, "pablo.nooma")
+		writeConfig(t, vault, consolidateConfig(llm.URL))
 
 		holder := holdVaultLock(t, vault)
 
