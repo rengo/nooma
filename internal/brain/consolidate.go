@@ -632,6 +632,19 @@ type derivedBeliefProposal struct {
 // codebase cannot fully trust (classify.Salvage's own tolerant byte-scan),
 // restated here because no core package exists to hold it (see
 // derivedBeliefProposal's own doc comment).
+//
+// A (facet, topic_key) pair already seen in this same response is dropped,
+// first occurrence winning. Nothing in the derivation prompt forbids the
+// judge proposing one topic key twice, and downstream nothing else would
+// catch it: both proposals reach createDerivedBelief, each records its own
+// ActionDeriveBeliefCreated row, and UpsertByTopicKey's ON CONFLICT
+// (topic_key) DO UPDATE silently overwrites the first — leaving
+// decision_log claiming two beliefs were created where the vault kept one,
+// with the losing content gone and no refusal naming it. Dedup belongs
+// here rather than at the persist site because a collision is a malformed
+// response, not a persist outcome: dropping it before any decision exists
+// keeps decision_log's count equal to the vault's, which is the property
+// doc 05's own M2 demo ("the decision_log tells the story") rests on.
 func decodeDerivedBeliefs(raw string) []derivedBeliefProposal {
 	fields, _ := classify.Salvage([]byte(raw))
 	beliefsRaw, ok := fields["beliefs"]
@@ -643,8 +656,10 @@ func decodeDerivedBeliefs(raw string) []derivedBeliefProposal {
 		return nil
 	}
 	out := make([]derivedBeliefProposal, 0, len(candidates))
+	seen := make(map[string]bool, len(candidates))
 	for _, c := range candidates {
-		if _, err := selfmodel.ParseFacet(c.Facet); err != nil {
+		facet, err := selfmodel.ParseFacet(c.Facet)
+		if err != nil {
 			continue
 		}
 		if c.Key == "" || c.Content == "" {
@@ -653,6 +668,11 @@ func decodeDerivedBeliefs(raw string) []derivedBeliefProposal {
 		if math.IsNaN(c.Confidence) || c.Confidence < 0 || c.Confidence > 1 {
 			continue
 		}
+		topicKey := consolidation.DeriveTopicKey(facet, c.Key)
+		if seen[topicKey] {
+			continue
+		}
+		seen[topicKey] = true
 		out = append(out, c)
 	}
 	return out
