@@ -1767,3 +1767,41 @@ func TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite(t *testing
 		t.Errorf("created belief Content = %q, want the hiking proposal's own content", created.Content)
 	}
 }
+
+// TestDecodeDerivedBeliefs_DedupsByTopicKey pins the collision Judgment Day
+// found on this PR (Judge B: CRITICAL, Judge A: SUGGESTION — escalated and
+// ruled a defect by the owner).
+//
+// A belief_derivation response is free to propose the same (facet,
+// topic_key) twice with different content — nothing in the prompt forbids
+// it and a degraded judge will do it. Without dedup both proposals reached
+// createDerivedBelief, so each wrote its own ActionDeriveBeliefCreated row
+// while UpsertByTopicKey (INSERT ... ON CONFLICT(topic_key) DO UPDATE)
+// silently overwrote the first in self_beliefs. decision_log then claimed
+// two beliefs were created when the vault held one, and the losing
+// proposal's content vanished with no refusal and no corrupted entry.
+//
+// doc 05's own M2 demo bullet is "the decision_log tells the story", so an
+// audit trail that reports an effect the vault never kept is not a
+// documented-behavior footnote — it is the one thing that phase must not
+// do. First proposal wins; later collisions are dropped at decode, before
+// any write or any row exists.
+func TestDecodeDerivedBeliefs_DedupsByTopicKey(t *testing.T) {
+	raw := `{"beliefs":[
+		{"facet":"preference","topic_key":"ui-theme","content":"Prefers dark mode.","confidence":0.8},
+		{"facet":"preference","topic_key":"ui-theme","content":"Prefers light mode.","confidence":0.7},
+		{"facet":"identity","topic_key":"role","content":"Backend engineer.","confidence":0.9}
+	]}`
+
+	got := decodeDerivedBeliefs(raw)
+
+	if len(got) != 2 {
+		t.Fatalf("decodeDerivedBeliefs returned %d proposals, want 2 — the duplicate (preference, ui-theme) must be dropped at decode: %+v", len(got), got)
+	}
+	if got[0].Facet != "preference" || got[0].Key != "ui-theme" || got[0].Content != "Prefers dark mode." {
+		t.Errorf("first proposal = %+v, want the FIRST (preference, ui-theme) entry — first wins, later collisions drop", got[0])
+	}
+	if got[1].Facet != "identity" || got[1].Key != "role" {
+		t.Errorf("second proposal = %+v, want the (identity, role) entry — a different topic_key is not a collision", got[1])
+	}
+}
