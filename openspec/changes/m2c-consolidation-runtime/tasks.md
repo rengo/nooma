@@ -1783,7 +1783,7 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
 `vaultlock`, `tasksConsolidateConsumes`, report rendering, and the four L4 tests spec §6 requires
 — the last link in the chain and `m2c`'s own exit criterion.
 
-- [ ] **12.1** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (new, `e2e` build tag) — running
+- [x] **12.1** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (new, `e2e` build tag) — running
       `nooma consolidate <vault>` against a vault a `serve` process already holds the write lock on
       returns a clean, non-zero-exit error naming the holder; against an unlocked vault, it
       succeeds.
@@ -1791,22 +1791,36 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
       binary this test invokes, or the command errors "unknown command".
       Requirement: spec R6.1; design §11 (n/a — this is CLI-native, no design cross-ref beyond
       spec).
-- [ ] **12.2** Commit 2 (GREEN): implement `cmd/nooma/consolidate.go`'s lock acquisition —
+      Confirmed red: `nooma: unknown command "consolidate"` on both subtests (commit `f87236c`).
+- [x] **12.2** Commit 2 (GREEN): implement `cmd/nooma/consolidate.go`'s lock acquisition —
       `vaultlock.Acquire(vault)` before opening the store for write, `serve.go`'s own pattern
       (`cmd/nooma/serve.go:71-79`), a clean error naming the holder on failure.
       Verify: `go test -tags e2e ./test/e2e/... -run TestConsolidate_Lock`.
       Requirement: spec R6.1.
-- [ ] **12.3** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — the default invocation
+      Registered via `init()` in consolidate.go rather than editing `main.go`'s dispatch literal —
+      keeps this PR's diff to exactly the four files this section's own Verify item names (commit
+      `bed8a03`).
+- [x] **12.3** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — the default invocation
       (no `--phase`) runs the full eight-phase pass and writes `consolidation_last_run_at` on
       completion.
       **Red**: fails against the still-incomplete command from task 12.2 (no phase execution yet).
       Requirement: spec R6.2.
-- [ ] **12.4** Commit 2 (GREEN): wire `runConsolidate` to call `ConsolidateService.Consolidate`
+      Confirmed red: `consolidate did not write consolidation_last_run_at after a whole pass`
+      (commit `5c04d6c`). Read back directly via `ConfigRepo.Load` in the test itself
+      (`sqlite.NewConfigRepo`, an allowed import outside `internal/store/**` — depguard's
+      sqlite-containment rule denies the literal `go-sqlite3`/`database/sql` imports, not this
+      one, the same way `test/integration/**` already does it) — `consolidate` prints no internal
+      state to stdout that would make this observable any other way.
+- [x] **12.4** Commit 2 (GREEN): wire `runConsolidate` to call `ConsolidateService.Consolidate`
       with a zero-value `ConsolidateRequest` (whole pass, per design §3.3(a)'s own stated zero
       value).
       Verify: `go test -tags e2e ./test/e2e/...`.
       Requirement: spec R6.2.
-- [ ] **12.5** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — `--phase=<known>` runs
+      This commit also introduced `wireConsolidate`/`resolveConsolidateProviders` (task 12.11's own
+      code, landed here since 12.4 is the first task that needs a working `ConsolidateService`) —
+      strict from this commit on, so `TestConsolidate_Lock`'s "unlocked vault succeeds" subtest was
+      updated to bind a provider (commit `d6834fa`).
+- [x] **12.5** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — `--phase=<known>` runs
       exactly that phase and leaves `consolidation_last_run_at` untouched; `--phase=<unknown>`
       errors cleanly through `consolidation.ErrUnknownPhase`; `cmd/nooma`'s new file contains no
       two-or-more phase-name string literals (I11's own tree scan from `m2b`, already covering
@@ -1814,7 +1828,15 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
       new test).
       **Red**: `--phase` flag does not exist — flag parse fails.
       Requirement: spec R6.3.
-- [ ] **12.6** Commit 2 (GREEN): implement `--phase`, validated through
+      Confirmed red: `flag provided but not defined: -phase` on both subtests (commit `5ebac88`).
+      Flag ordering settled as `nooma consolidate [--phase=<name>] [vault]` (flag before the
+      positional vault argument) — Go's stdlib `flag` package stops flag parsing at the first
+      non-flag token, so `[vault] [--phase=<name>]` (spec R6.3's own illustrative order; the spec
+      text explicitly leaves "exact flag shape" to design/apply) is not workable without a second
+      parsing pass. Added `TestConsolidate_NewFileHasNoSecondPhaseVocabulary` as a hand-verification
+      of I11's own property for this PR's new file specifically, alongside the automated
+      tree-scan's own repo-wide coverage.
+- [x] **12.6** Commit 2 (GREEN): implement `--phase`, validated through
       `consolidation.ParsePhase` — never a second CLI-local phase-name vocabulary — building a
       `ConsolidateRequest{Phase: &p}`.
       Verify: `go test -tags e2e ./test/e2e/...`; `rg -c '"expire_incomplete"|"archive"|"strengthen"|
@@ -1822,7 +1844,10 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
       most one match per literal (confirming the tree-scan's own property by hand, in addition to
       the automated I11 test already covering the file).
       Requirement: spec R6.3.
-- [ ] **12.7** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — a vault with an unbound
+      `rg` confirms zero literal phase-name matches in consolidate.go (every name flows through
+      `ParsePhase`/`Phase.String()`); `TestI11_NoCallerOutsideConsolidationListsThePhaseNames` green
+      (commit `8566903`).
+- [x] **12.7** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — a vault with an unbound
       task (no `relation_evaluation`, `belief_derivation`, or `embedding` provider configured)
       refuses **before** taking the lock, naming the unbound task — `consolidate`'s posture
       diverges deliberately from `serve`'s degrade-and-503 (design §7.2, owner-flagged at §12 Q6
@@ -1830,13 +1855,22 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
       **Red**: fails against the current command, which either hangs, panics, or silently no-ops
       through a nil provider.
       Requirement: design §7.2.
-- [ ] **12.8** Commit 2 (GREEN): implement `tasksConsolidateConsumes = []string{"relation_evaluation",
+      Confirmed red for the *ordering*, not just "the vault is refused": with the vault's lock
+      already held by the test process itself, the pre-12.8 command's only check
+      (`resolveConsolidateProviders` inside `wireConsolidate`, which runs after `vaultlock.Acquire`)
+      surfaced "already in use by process N", not the unbound task's name — proving the check ran
+      after attempting the lock (commit `7ad425f`).
+- [x] **12.8** Commit 2 (GREEN): implement `tasksConsolidateConsumes = []string{"relation_evaluation",
       "belief_derivation", "embedding"}` and the pre-lock task-binding check, reusing
       `internal/config.DocumentedTaskNames`'s existing vocabulary (already contains
       `belief_derivation` — no config-vocabulary change needed, verified `design.md` §1).
       Verify: `go test -tags e2e ./test/e2e/...`.
       Requirement: design §7.2.
-- [ ] **12.9** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — **the exit
+      `runConsolidate` now calls `resolveConsolidateProviders` once before `vaultlock.Acquire` (and
+      again inside `wireConsolidate` after — defense in depth, not a second vocabulary). The earlier
+      `TestConsolidate_Lock` "held vault" subtest was updated to bind every task too, since its own
+      assertion is about the lock, not configuration (commit `66223ec`).
+- [x] **12.9** Commit 1 (RED): `test/e2e/consolidate_e2e_test.go` (extend) — **the exit
       criterion**: a minimal fixture vault seeded through the real capture path (not the `m2d`
       demo golden set — explicitly out of `m2c`'s scope), run through `nooma consolidate`, exits 0
       and `decision_log` gains at least one row whose `rationale` is a legible sentence, not a
@@ -1844,31 +1878,71 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
       **Red**: fails until the full pass genuinely produces at least one effect on the fixture.
       Requirement: spec R6.4 (the proposal's own stated exit criterion — *"run the pass by hand on
       a vault and read the `decision_log`"*).
-- [ ] **12.10** Commit 2 (GREEN, no new mechanism — the fixture and wiring): build the minimal
+      **Disclosed deviation**: no RED observed at this task. By 12.8 every mechanism the exit
+      criterion needs (whole-pass execution, derive's real judge call from PR 10b, decision_log
+      writes) already existed — this PR's own earlier commits (12.2–12.8) plus the already-merged
+      `internal/brain` chain left nothing missing for the CLI to add. `TestConsolidate_ExitCriterion`
+      passed on introduction, with zero production changes, matching task 12.10's own description
+      ("no new mechanism — the fixture and wiring") — so 12.9/12.10 landed as one commit
+      (`9c134f5`) rather than a RED/GREEN pair.
+- [x] **12.10** Commit 2 (GREEN, no new mechanism — the fixture and wiring): build the minimal
       fixture vault (seeded via the real capture path, at least one unit qualifying for at least
       one phase's effect — e.g. a unit old enough for `strengthen`'s co-use window, or a relation
       pair `connect` can find) and confirm the exit criterion passes end to end.
       Verify: `go test -tags e2e ./test/e2e/...`.
       Requirement: spec R6.4.
-- [ ] **12.11** `cmd/nooma/wiring.go` — add `wireConsolidate`, following `wireBrain`'s own shape
+      The fixture captures one unit through `nooma serve` + `nooma capture` (real path), releases
+      the lock, then runs `nooma consolidate`: exit 0, `decision_log` gains two legible rows —
+      `capture.classify`: `classified as "task" and persisted a pool unit`, and
+      `consolidate.derive.belief_created`: `derive: created belief "derived/preference/dry_cleaning"
+      (facet "preference")`. Derive (not strengthen/connect, both of which this task's own text
+      names only as examples) is what fires from a single fresh capture: `SelectConnectSources`
+      filters on `Status == StatusPool` and `since` only, never on age, and a fresh capture is
+      always `StatusPool` (`classify/tounit_test.go`'s own comment) — no elapsed-time or
+      paired-unit precondition needed the way strengthen/connect would require.
+- [x] **12.11** `cmd/nooma/wiring.go` — add `wireConsolidate`, following `wireBrain`'s own shape
       (`cmd/nooma/wiring.go:149-171`) but **refusing** rather than returning `(nil, nil)` on an
       unbound task, per task 12.8's own decision.
       Requirement: design §7.2; `design.md` §1's own citation of `wireBrain`'s current shape.
-- [ ] **12.12** `cmd/nooma/tasks.go` — register `tasksConsolidateConsumes` where `serve`'s own task
+      Landed inside commit `d6834fa` (task 12.4) — `wireConsolidate` is the function that makes
+      12.4's own whole-pass call possible at all, so it could not wait for a later commit.
+      `resolveConsolidateProviders` shares one `judge ports.LLMProvider` between
+      `relation_evaluation` and `belief_derivation` — `NewConsolidateService`'s own existing single
+      field (PR 9b/10b) — a disclosed gap neither spec.md nor design.md decides: when the two tasks
+      name different providers, whichever is resolved second in `tasksConsolidateConsumes`'s own
+      order wins. Documented in the function's own doc comment; moot when both are bound to the
+      same provider, the ordinary case and the one every test in this PR uses.
+- [x] **12.12** `cmd/nooma/tasks.go` — register `tasksConsolidateConsumes` where `serve`'s own task
       list lives, so `nooma status`/`nooma doctor` (if either inspects task bindings) see
       `consolidate`'s requirement too.
       Verify: `go build ./...`.
       Requirement: design §7.2.
-- [ ] **12.13** Purity/lint: `golangci-lint run` (`cmd/nooma` is unconstrained by depguard — it
+      Landed inside commit `d6834fa` (task 12.4), for the same reason as 12.11: `resolveConsolidateProviders`
+      needs the list to exist to compile. `go build ./...` clean throughout.
+- [x] **12.13** Purity/lint: `golangci-lint run` (`cmd/nooma` is unconstrained by depguard — it
       legitimately imports everything, per design §10.1's own scoping note); `go vet ./...`.
-- [ ] Verify (PR-level): `make check-all` (this PR's own L4 suite is the first `e2e`-tagged run in
+      `golangci-lint run ./...` (repo-wide, `.golangci.yml`'s own `build-tags: [integration, e2e]`
+      picks up both tagged trees automatically): 0 issues. `go vet -tags e2e,integration ./...`:
+      clean.
+- [x] Verify (PR-level): `make check-all` (this PR's own L4 suite is the first `e2e`-tagged run in
       the chain — confirm `make test-e2e` passes, not only `make check`); confirm diff touches only
       `cmd/nooma/{consolidate,tasks,wiring}.go`, `test/e2e/consolidate_e2e_test.go`. Target ≤230
       impl+docs lines.
-      **Chain-merge check 1**: `git ls-remote --heads origin feat/cli-consolidate` returns nothing
-      after merge. This is the **last** link — there is no next PR to retarget, so chain-merge
-      check 2 does not apply here; instead, confirm `main`'s own `git log --oneline -14` shows all
-      fourteen (or more, if any link split) `m2c` commits in dependency order.
+      **`make check-all` green** end to end: L1–L4, schema-golden regen-diff clean, `internal/core`
+      coverage 100% (738/738, unchanged — this PR adds no core code), seven-target cross-compile
+      matrix OK. `make test-e2e` (and `go clean -testcache && go test -tags e2e ./test/e2e/... -v`)
+      confirmed separately: the full 30-test e2e suite passes, `TestConsolidate_*` included.
+      **Diff-scope disclosure**: the diff also touches `cmd/nooma/dispatch_test.go` (one line
+      removed from `TestUnimplementedCommandsDoNotExist`'s literal list, which named "consolidate"
+      as a command that must not exist yet — stale as of this PR's own command, and caught only by
+      running `make check`, not by inspecting the four named files). `git diff --stat main...HEAD`
+      on the four originally-named files: `consolidate.go` +124, `tasks.go` +15, `wiring.go` +85
+      (impl+docs = 224, target ≤230); `consolidate_e2e_test.go` +428 (test, vs. ~380 est.);
+      `dispatch_test.go` +9/-4 (test, disclosed addition).
+      **Chain-merge check 1**: not yet run — PR not merged. Will confirm
+      `git ls-remote --heads origin feat/cli-consolidate` returns nothing after merge, and that
+      `main`'s own `git log --oneline -14` (or wider, since PR 5/6/9/11 all split) shows every
+      `m2c` commit in dependency order.
 
 ---
 
