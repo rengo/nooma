@@ -143,15 +143,16 @@ type UnitRepo interface {
 	// (m2a D9's rule, kept one layer up). archive, connect and derive all
 	// consume this same read (design §4.1): consolidation.Cold and
 	// consolidation.Source declare the identical five fields, so one read
-	// shape serves all three phases.
+	// shape serves every one of them.
 	//
-	// LiveDecayStates is called three times per whole pass — slot 2
-	// (archive), slot 4 (connect), slot 5 (derive) — and this port makes no
-	// caching guarantee across those calls; each call reflects the store's
-	// state at the instant it runs. archive changes unit status at slot 2,
-	// so a cached snapshot taken before slot 2 would hand connect and
-	// derive units archive had just archived as live sources — a caller
-	// that caches this read across phases reintroduces exactly that bug.
+	// LiveDecayStates is called four times per whole pass — slot 2
+	// (archive), slot 4 (connect), slot 5 (derive), slot 6 (reweight) — and
+	// this port makes no caching guarantee across those calls; each call
+	// reflects the store's state at the instant it runs. archive changes
+	// unit status at slot 2, so a cached snapshot taken before slot 2 would
+	// hand the later phases units archive had just archived as live
+	// sources — a caller that caches this read across phases reintroduces
+	// exactly that bug.
 	//
 	// This is an unbounded read: archive must see every live unit, which is
 	// what the phase is. On a personal vault (doc 02's model) that is

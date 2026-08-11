@@ -1679,36 +1679,41 @@ phase-IO PR. **Pre-drawn split, per design §13**: if impl+docs measures at or a
 
 ### `reweight` (design §6.3, slot 6)
 
-- [ ] **11.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — the exact `m2b`
+- [x] **11.1** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — the exact `m2b`
       spec R3.3 scenario re-run through the wired runner: a unit boosted by one origin and
       corrupted by another origin's edge in the same call — the boost is persisted through
       `ApplyBoosts`, and **no** `decision_log` row exists for the corrupted half (restating PR 7b's
       exclusion rule at this specific phase, per spec R5.9).
       **Red**: the placeholder `reweight` arm calls nothing — fails first.
       Requirement: spec R5.9; design §6.3 (slot 6).
-- [ ] **11.2** Commit 2 (GREEN): implement the `reweight` arm — `consolidation.Reweight(states,
+- [x] **11.2** Commit 2 (GREEN): implement the `reweight` arm — `consolidation.Reweight(states,
       newEdges, pass.now)` → every `boosts` entry persisted through `ApplyBoosts`, preserving the
       per-unit `(Weight, LastTouchedAt)` pairing; `record` one row per boost
       (`ActionReweightBoostApplied`); `corrupted` entries never logged (already proven at the
       runner level by PR 7b, exercised here against the real phase).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2, R5.9; design §6.3 (slot 6).
-- [ ] **11.3** *(split checkpoint)*: measure `git diff --stat` for tasks 11.1–11.2 in isolation.
+- [x] **11.3** *(split checkpoint)*: measure `git diff --stat` for tasks 11.1–11.2 in isolation.
+      **Measured, split declined.** Whole-PR impl+docs came to **230 changed lines** (`docs/06-harness.md`
+      §7 convention: additions plus deletions) — under the ~250 trigger this section's own header
+      sets, so the pre-drawn 11a|11b boundary was not taken. Test 441. Recorded as a measurement
+      that was actually made, not a threshold waved past: PR 9 hit the same checkpoint, measured
+      over it, and did split.
       If at risk of the ~110 sub-estimate running hot, this is PR 11a's boundary.
 
 ### `pattern_eval` + `learn` (design §6.3, slots 7–8)
 
-- [ ] **11.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — every
+- [x] **11.4** Commit 1 (RED): `internal/brain/consolidate_test.go` (extend) — every
       `StagnationFinding` `EvaluateStagnation` returns produces one `decision_log` row, correctly
       attributed (spec R5.10's first `MUST`).
       **Red**: the placeholder `pattern_eval` arm calls nothing — fails first.
       Requirement: spec R4.2, R5.10; design §6.3 (slot 7).
-- [ ] **11.5** Commit 2 (GREEN): implement the stagnation half of the `pattern_eval` arm —
+- [x] **11.5** Commit 2 (GREEN): implement the stagnation half of the `pattern_eval` arm —
       `ActiveBeliefs()` → `EvaluateStagnation(bs, ResolveGoalStagnationDays(pass.cfg), pass.now)` →
       `record` one row per finding (`ActionPatternEvalStagnationFound`).
       Verify: `go test ./internal/brain/...`.
       Requirement: spec R4.2, R5.10; design §6.3 (slot 7).
-- [ ] **11.6** Commit 1 (RED, L2 + L3) — `internal/brain/consolidate_test.go` (extend, L2) plus a
+- [x] **11.6** Commit 1 (RED, L2 + L3) — `internal/brain/consolidate_test.go` (extend, L2) plus a
       new `test/integration/` fixture (L3): `EvaluateLoad` firing produces exactly one
       `current_state` row (`OpenHypothesis`, `source = 'consolidation'`, `mood = 'loaded'`,
       `energy` `NULL`) **plus** one `decision_log` row whose `Context` states the
@@ -1718,7 +1723,7 @@ phase-IO PR. **Pre-drawn split, per design §13**: if impl+docs measures at or a
       **Red**: the placeholder arm calls nothing — fails first, both at L2 (fake) and L3 (real
       sqlite `StateRepo`).
       Requirement: spec R5.10 (second `MUST`); design §3.2 (Q6 mapped), §6.3 (slot 7).
-- [ ] **11.7** Commit 2 (GREEN): implement the load half of the `pattern_eval` arm —
+- [x] **11.7** Commit 2 (GREEN): implement the load half of the `pattern_eval` arm —
       `CountLiveByType(unit.TypeMentalLoad)`, `StateRepo.LastHypothesisAt()` →
       `EvaluateLoad(n, ResolveMentalLoadThreshold(pass.cfg), lastAt, pass.now)` → on firing,
       `OpenHypothesis` **and** `record` (`ActionPatternEvalLoadHypothesisOpened`) with the
@@ -1726,25 +1731,45 @@ phase-IO PR. **Pre-drawn split, per design §13**: if impl+docs measures at or a
       Verify: `go test ./internal/brain/...`; `go test -tags integration
       ./test/integration/...`.
       Requirement: spec R4.2, R5.10; design §3.2, §6.3 (slot 7).
-- [ ] **11.8** `learn`'s arm — no core function to call (ruling 3, already established by `m2b`).
+- [x] **11.8** `learn`'s arm — no core function to call (ruling 3, already established by `m2b`).
       Confirm `runPhase`'s `switch` has a `case consolidation.PhaseLearn:` that performs no work
       and calls `record` zero times — this is the arm PR 7a's own I11 behavioural test (task 7a.1)
       already asserts is reached and reached last; this task is the verification that `learn`'s
       case body stays empty rather than accidentally growing a call, not a new test.
       Requirement: spec R1.3 (no positive test for an absent function — the absence itself, `m2b`
       spec's own words); design §6.3 (slot 8).
-- [ ] **11.9** doc 02 §7 cross-check (verification, not an edit unless found stale): confirm the
+- [x] **11.9** **Checked; doc 02 §7 is accurate, no edit needed** — and the ordering guarantee
+      holds for a reason worth naming, because it would be easy to break later: `pattern_eval`
+      (slot 7) issues its **own fresh** `SelfModelRepo.ActiveBeliefs` read (`consolidate.go:1099`)
+      rather than reusing the snapshot `derive` (slot 5) took at `consolidate.go:546`. `derive`'s
+      `reinforceDerivedBelief` writes through `ReinforceByID`, which updates `confidence` **and**
+      `last_reinforced_at` (`internal/store/sqlite/selfmodelrepo.go:89-90`), and
+      `EvaluateStagnation` reads exactly that field (`internal/core/consolidation/patterns.go:53`).
+      So within one pass `pattern_eval` sees the refresh `derive` just made. Had it reused derive's
+      pre-write snapshot, the stagnation predicate would read a stale `last_reinforced_at` and
+      report a goal as stagnant that this very pass had just reinforced. The soundness comes from
+      the fresh read, not from the phase order alone — the order is necessary, not sufficient.
+      Original task text follows:
+      doc 02 §7 cross-check (verification, not an edit unless found stale): confirm the
       stagnation and load-accumulation predicates described in doc 02 §7 (amended by `m2b` task
       5.9) match this PR's actual wiring — `derive` at slot 5 refreshes `last_reinforced_at`,
       `pattern_eval` at slot 7 reads the refreshed value, and the phase order makes that reading
       sound. No edit expected; recorded as an explicit check per this document's own "every task
       names something a reader could check" standard.
       Requirement: design §6.3 (the pipeline diagram's own ordering guarantee).
-- [ ] **11.10** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/brain/consolidate.go` (+ test, extended), `test/integration/` (the new
-      `EvaluateLoad`-firing L3 fixture). Target ≤250 impl+docs lines; split at the pre-drawn
-      `reweight` | `pattern_eval`+`learn` boundary if task 11.3's checkpoint flags it.
+- [x] **11.10** Purity/coverage: `golangci-lint run`; `go test -race ./internal/brain/...`.
+- [x] Verify (PR-level): `make check-all` **green** (exit 0), `internal/core` coverage unchanged at
+      100% (738/738) — this PR adds no core code. Diff touches exactly
+      `internal/brain/consolidate.go` (+ test, extended) and `test/integration/` (the new
+      `consolidate_pattern_eval_load_test.go` L3 fixture, plus a one-line call-site update in
+      `consolidate_expire_incomplete_test.go`). **230 impl+docs / 441 test** changed lines — under
+      the ≤250 target, so the pre-drawn split was declined (task 11.3).
+      **Apply-session note**: the `sdd-apply` agent died at 600s immediately before running
+      `make check-all` — but the checkpoint-commit convention held: all six commits (three genuine
+      RED/GREEN pairs for `reweight`, stagnation and the load hypothesis) were already history and
+      the tree was clean, so nothing needed reconstruction. The orchestrator ran the gate and
+      closed tasks 11.3, 11.9 and this Verify. Contrast PR 9a, where the same failure with no
+      checkpoint commits cost the entire RED/GREEN sequence.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/brain-phase-io-reweight-patterns`
       returns nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR12> --json baseRefName` names `main`.

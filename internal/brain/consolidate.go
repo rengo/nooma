@@ -15,6 +15,7 @@ import (
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -49,11 +50,14 @@ type ConsolidateService struct {
 // relation.Resolve/Decide, never a second judge wiring.
 // selfModel is PR 10b's own addition (design §7.3, spec R5.6/R5.8): derive's
 // two SelfModelRepo reads/writes — the same shape recall/judge already
-// establish for their own ports, never a second wiring convention.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo) *ConsolidateService {
+// establish for their own ports, never a second wiring convention. state is
+// PR 11's own addition (design §3.2 Q6, §6.3 slot 7): pattern_eval's load
+// half reads StateRepo.LastHypothesisAt and writes OpenHypothesis, the same
+// widen-at-the-end-of-the-parameter-list convention selfModel already set.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state},
 	}
 }
 
@@ -86,6 +90,26 @@ type ConsolidateReport struct {
 	// Unexported for the same reason phasesRun is: PR 12 owns the eventual
 	// public report shape.
 	corrupted []string
+	// newRelationEdges accumulates every relation connect (slot 4) persists
+	// during THIS pass, as the plain weight.Edge shape reweight's own
+	// Reweight function consumes — doc 02 §6 item 6's own words: "over this
+	// pass's new edges only". This is a disclosed design gap: neither
+	// spec.md nor design.md's §6.3 pipeline diagram states how newEdges
+	// reaches slot 6 from slot 4's own persist step (design §6.3 only names
+	// the two arguments, "Reweight(states, newEdges, now)", never their
+	// source). ConsolidateReport already plays the identical mid-pass
+	// accumulator role for corrupted (above), so extending it — rather than
+	// widening passContext, which is assembled once BEFORE any phase runs
+	// (design §3.3(c)) and cannot hold a value slot 4 only produces DURING
+	// the pass — is the minimal change that closes the gap without a new
+	// port or a second wiring convention. One direct consequence, named
+	// rather than silently accepted: a per-phase `--phase=reweight` run
+	// never populates this field (connect never runs), so it always sees
+	// zero new edges — correct per doc 02 §6 item 6's own text, not a bug;
+	// unlike derive (design §7.3), reweight's "this pass's new edges" rule
+	// is inherently pass-relative, not something a fresh independent read
+	// could ever reconstruct for a single-phase invocation.
+	newRelationEdges []weight.Edge
 }
 
 // reportCorrupted folds ids into r.corrupted and touches nothing else —
@@ -132,7 +156,11 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // shape captureRunner's own judge field already holds. selfModel is
 // derive's own slot-5 read/write pair (design §7.3, spec R5.6/R5.8) — the
 // same judge field above sends derive's own belief_derivation call too, one
-// port for both connect's and derive's judge traffic.
+// port for both connect's and derive's judge traffic. state is
+// pattern_eval's own slot-7 load-half pair (design §3.2 Q6, §6.3 slot 7,
+// spec R5.10's second MUST): StateRepo.LastHypothesisAt feeds
+// consolidation.EvaluateLoad, and a firing result appends through
+// OpenHypothesis.
 type consolidateRunner struct {
 	cfg       ports.ConfigRepo
 	units     ports.UnitRepo
@@ -142,6 +170,7 @@ type consolidateRunner struct {
 	recall    *RecallService
 	judge     ports.LLMProvider
 	selfModel ports.SelfModelRepo
+	state     ports.StateRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -200,12 +229,14 @@ func (r consolidateRunner) persistExpireIncompleteTransitions(ctx context.Contex
 // []consolidation.Cold into usable and refused before mapping to []Source,
 // using the same non-finite predicate Archive applies, and reports the
 // refused ids through ConsolidateReport's corrupted set." Introduced here
-// for archive's own LiveDecayStates read (slot 2); connect and derive
-// (PR 9/10b, slots 4/5) reuse this exact function over their own
-// LiveDecayStates reads rather than duplicating the predicate a third and
-// fourth time — the guard that closes the SelectConnectSources NaN-
-// comparator hazard those two phases would otherwise feed unfiltered
-// (design §8.1's "two uncovered paths").
+// for archive's own LiveDecayStates read (slot 2); connect, derive and
+// reweight (PR 9/10b/11, slots 4/5/6) reuse this exact function over their
+// own LiveDecayStates reads rather than restating the predicate once per
+// phase — the guard that closes the SelectConnectSources NaN-comparator
+// hazard those phases would otherwise feed unfiltered (design §8.1's "two
+// uncovered paths"). Four readers now share it; the count is deliberately
+// not restated here, because a comment carrying a call count goes stale
+// the next time a phase learns to read decay states.
 func partitionLiveDecayStates(cs []consolidation.Cold) (usable []consolidation.Cold, refused []string) {
 	for _, c := range cs {
 		if math.IsNaN(c.Weight) || math.IsInf(c.Weight, 0) || math.IsNaN(c.DecayRate) || math.IsInf(c.DecayRate, 0) {
@@ -228,6 +259,47 @@ func coldToSources(cs []consolidation.Cold) []consolidation.Source {
 	out := make([]consolidation.Source, len(cs))
 	for i, c := range cs {
 		out[i] = consolidation.Source(c)
+	}
+	return out
+}
+
+// coldToStates adapts LiveDecayStates' already-refused-filtered
+// []consolidation.Cold into reweight's own map[string]weight.Current shape
+// (design §6.3 slot 6, spec R3.3) — reweight's own second caller-supplied
+// input, alongside coldToSources' identical Cold source above. Cold's own
+// extra Status field is dropped: weight.Current never carried one, and
+// Reweight has no use for it (its own scenario reasons about weight,
+// decay rate and last-touched only). Keyed by UnitID, matching Reweight's
+// own map[string]weight.Current parameter shape exactly — the same "make a
+// duplicate id unrepresentable" property reweight.go's own doc comment
+// names for m2a C18.
+func coldToStates(cs []consolidation.Cold) map[string]weight.Current {
+	out := make(map[string]weight.Current, len(cs))
+	for _, c := range cs {
+		out[c.UnitID] = weight.Current{UnitID: c.UnitID, Weight: c.Weight, DecayRate: c.DecayRate, LastTouchedAt: c.LastTouchedAt}
+	}
+	return out
+}
+
+// beliefsToConsolidation adapts SelfModelRepo.ActiveBeliefs' own
+// []ports.Belief into consolidation.Belief — the shape both derive's
+// BuildDerivePrompt (slot 5, spec R5.6) and pattern_eval's own
+// EvaluateStagnation (slot 7, spec R5.10) consume. Extracted here (PR 11)
+// from derive's own inline conversion, which pattern_eval would otherwise
+// duplicate a second time — Origin and Status carry nothing either core
+// function reads, so both are dropped rather than added to
+// consolidation.Belief for no consumer.
+func beliefsToConsolidation(bs []ports.Belief) []consolidation.Belief {
+	out := make([]consolidation.Belief, len(bs))
+	for i, b := range bs {
+		out[i] = consolidation.Belief{
+			ID:               b.ID,
+			Facet:            b.Facet,
+			TopicKey:         b.TopicKey,
+			Content:          b.Content,
+			Confidence:       b.Confidence,
+			LastReinforcedAt: b.LastReinforcedAt,
+		}
 	}
 	return out
 }
@@ -308,8 +380,12 @@ func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []strin
 // persisted on acceptance. ids is deduplicated once, up front, so a unit
 // that is both a source in one pair and a candidate in another (or that
 // repeats across several pairs) costs one units.LiveByIDs lookup, not one
-// per pair.
-func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []consolidation.Pair, now time.Time) error {
+// per pair. report is PR 11's own addition (design §6.3 slot 6's disclosed
+// gap, see ConsolidateReport.newRelationEdges' own doc comment): every
+// relation actually persisted here is also folded into
+// report.newRelationEdges, the exact "this pass's new edges" reweight
+// reads three slots later.
+func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []consolidation.Pair, report *ConsolidateReport, now time.Time) error {
 	if len(pairs) == 0 {
 		return nil
 	}
@@ -342,7 +418,7 @@ func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []con
 		if !ok {
 			continue
 		}
-		if err := r.judgeAndPersistPair(ctx, source, target, now); err != nil {
+		if err := r.judgeAndPersistPair(ctx, source, target, report, now); err != nil {
 			return err
 		}
 	}
@@ -369,7 +445,13 @@ func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []con
 // decision_log row — deliberately unlike capture's own
 // ActionRelationDiscarded (design §7.1's own stated divergence, spec
 // R4.2's second MUST, flagged for owner review at design §12 Q2).
-func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, target unit.Unit, now time.Time) error {
+//
+// report is PR 11's own addition: an accepted proposal also becomes one
+// weight.Edge in report.newRelationEdges, folded from proposed's own
+// From/To/Strength (never rel's DB-shaped fields) — the exact triple
+// weight.Edge declares (see ConsolidateReport.newRelationEdges' own doc
+// comment for why this accumulates here rather than through a repo read).
+func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, target unit.Unit, report *ConsolidateReport, now time.Time) error {
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(source, []unit.Unit{target}), Task: taskRelationEvaluation})
 	if err != nil {
 		return fmt.Errorf("consolidate: connect: judge relation for unit %q: %w", source.ID, err)
@@ -403,6 +485,7 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 	if err := r.rels.Upsert(ctx, rel); err != nil {
 		return fmt.Errorf("consolidate: connect: persist relation %s->%s: %w", rel.FromUnitID, rel.ToUnitID, err)
 	}
+	report.newRelationEdges = append(report.newRelationEdges, weight.Edge{From: proposed.From, To: proposed.To, Strength: proposed.Strength})
 
 	rationale := fmt.Sprintf("connect: judged unit %q related to %q as %q", rel.FromUnitID, rel.ToUnitID, rel.Type)
 	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
@@ -466,17 +549,7 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 	if err != nil {
 		return fmt.Errorf("consolidate: derive: read active beliefs: %w", err)
 	}
-	existingBeliefs := make([]consolidation.Belief, len(active))
-	for i, b := range active {
-		existingBeliefs[i] = consolidation.Belief{
-			ID:               b.ID,
-			Facet:            b.Facet,
-			TopicKey:         b.TopicKey,
-			Content:          b.Content,
-			Confidence:       b.Confidence,
-			LastReinforcedAt: b.LastReinforcedAt,
-		}
-	}
+	existingBeliefs := beliefsToConsolidation(active)
 
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{
 		Prompt: consolidation.BuildDerivePrompt(sources, existingBeliefs),
@@ -802,6 +875,97 @@ func (r consolidateRunner) persistStrengthChanges(ctx context.Context, cs []cons
 	return nil
 }
 
+// persistBoosts applies boosts through units.ApplyBoosts — one batch call,
+// one transaction, matching design §5.2's own "one statement per boost
+// inside one transaction, never two statements a partial failure could
+// leave half-applied" — and records one decision_log row per boost
+// afterward (design §3.3(e), spec R4.2, R5.9). corrupted entries are never
+// passed here: runPhase's own PhaseReweight arm (below) routes
+// consolidation.Reweight's corrupted return only into
+// report.reportCorrupted, the one place a refusal is surfaced (spec R4.2's
+// MUST NOT).
+//
+// An ApplyBoosts error aborts the whole pass, including ports.ErrUnitNotFound
+// — and that is deliberately NOT what persistArchiveTransitions does with its
+// own analogous race (it catches ports.ErrStatusConflict, records the skip and
+// continues). Judgment Day on PR 11 named the asymmetry; it is left standing,
+// and the reason is that only one of the two races has a mandate. Spec R4.3
+// documents archive's concurrent-revive case and states the required
+// behaviour, so tolerating it there implements a decision already taken. No
+// spec line covers a unit disappearing between reweight's own LiveDecayStates
+// read and this call, so inventing tolerance here would be deciding design
+// from an implementation seat — and the failure is loud, not silent.
+//
+// The cost is real and worth stating plainly: because ApplyBoosts is
+// all-or-nothing over its batch (ports.UnitRepo's own contract), one vanished
+// unit discards every legitimate boost in the same call, and because `at`
+// aborts on any phase error, pattern_eval and learn do not run that pass. The
+// next pass re-reads and re-derives, so nothing is permanently lost; a pass is
+// skipped, not corrupted. If M2's scheduler later runs passes unattended
+// (m2d), this is the first place to revisit — an unattended pass that dies on
+// a race nobody sees is a different proposition from a hand-run one.
+func (r consolidateRunner) persistBoosts(ctx context.Context, boosts []weight.Boost, now time.Time) error {
+	if len(boosts) == 0 {
+		return nil
+	}
+	if err := r.units.ApplyBoosts(ctx, boosts, now); err != nil {
+		return fmt.Errorf("consolidate: reweight: apply boosts: %w", err)
+	}
+	for _, b := range boosts {
+		rationale := fmt.Sprintf("reweight: unit %q boosted to weight %.4f", b.UnitID, b.Weight)
+		if err := r.record(ctx, now, ports.ActionReweightBoostApplied, rationale, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// persistStagnationFindings records one decision_log row per finding
+// (design §3.3(e), spec R5.10's first MUST) — doc 02 §7's stagnation
+// check-in has no M2 delivery mechanism of its own, so decision_log is its
+// only recorded trace this milestone (spec R5.10's own framing).
+func (r consolidateRunner) persistStagnationFindings(ctx context.Context, fs []consolidation.StagnationFinding, now time.Time) error {
+	for _, f := range fs {
+		rationale := fmt.Sprintf("pattern_eval: goal belief %q stagnant for %.1f days", f.TopicKey, f.StagnantDays)
+		if err := r.record(ctx, now, ports.ActionPatternEvalStagnationFound, rationale, f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadHypothesisMapping is the fixed sentence spec R5.10's second MUST
+// requires the decision_log row's own Context to carry, verbatim: m2b
+// design §9 Q6 left lastHypothesisAt's anchor an open question, and Q6's
+// own instruction is that whichever mapping m2c picks, "m2c must map it
+// and say so in the decision_log context" — not merely pick it in code.
+const loadHypothesisMapping = "lastHypothesisAt is StateRepo.LastHypothesisAt's own return: the recorded_at of this phase's most recent PRIOR current_state row written with source='consolidation'. M2 has no state_confirmed/state_denied resolution signal yet (that arrives in M5), so the cooldown anchors on the hypothesis's own write, never on a resolution (m2b design §9 Q6)."
+
+// loadHypothesisDetail is ActionPatternEvalLoadHypothesisOpened's own
+// Context shape (spec R5.10's second MUST).
+type loadHypothesisDetail struct {
+	OpenCount        int        `json:"open_count"`
+	Threshold        int        `json:"threshold"`
+	LastHypothesisAt *time.Time `json:"last_hypothesis_at"`
+	Mapping          string     `json:"last_hypothesis_at_mapping"`
+}
+
+// persistLoadHypothesis appends the current_state row EvaluateLoad's firing
+// result plans, through StateRepo.OpenHypothesis, and records the matching
+// decision_log row (design §3.3(e), §4.4; spec R5.10's second MUST).
+// lastAt is the SAME value EvaluateLoad already consumed for its own
+// cooldown check — passed through again here only to restate it in
+// Context, never recomputed.
+func (r consolidateRunner) persistLoadHypothesis(ctx context.Context, f consolidation.LoadFinding, lastAt *time.Time, now time.Time) error {
+	h := ports.StateHypothesis{ID: r.ids.New(), Mood: ports.MoodLoaded, RecordedAt: now}
+	if err := r.state.OpenHypothesis(ctx, h); err != nil {
+		return fmt.Errorf("consolidate: pattern_eval: open load hypothesis: %w", err)
+	}
+	rationale := fmt.Sprintf("pattern_eval: mental load hypothesis opened (%d open loops at or above threshold %d)", f.OpenCount, f.Threshold)
+	detail := loadHypothesisDetail{OpenCount: f.OpenCount, Threshold: f.Threshold, LastHypothesisAt: lastAt, Mapping: loadHypothesisMapping}
+	return r.record(ctx, now, ports.ActionPatternEvalLoadHypothesisOpened, rationale, detail)
+}
+
 // passContext is everything one invocation reads before any phase runs —
 // design §3.3(c). Assembled once by buildPassContext and passed by value
 // to every phase runPhase reaches, so `since` and `cfg` cannot drift
@@ -882,13 +1046,12 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 // phases this file contains (m2b §3.2 leg 4's tree scan bans a second
 // one). report accumulates every corrupted id a phase's own read refuses
 // (design §3.3(e)) — the one place a refusal is surfaced, never in
-// decision_log (spec R4.2's MUST NOT). Four arms wire real I/O by this PR
-// (expire_incomplete, archive, strengthen — design §6.3 slots 1-3 — and
-// connect's own bounded candidate search, slot 4, whose judge/persist step
-// PR 9b still owes); the rest stay placeholders for PR 10-11. default names
-// the unhandled phase
-// rather than silently doing nothing, so a ninth phase added to Order()
-// without a matching case fails loudly here instead of being skipped.
+// decision_log (spec R4.2's MUST NOT). PR 11 is the last phase-IO PR:
+// every arm but learn's now wires real I/O (design §6.3 slots 1-8);
+// learn's own arm performs no work, ever (owner ruling 3), by design
+// rather than by omission. default names the unhandled phase rather than
+// silently doing nothing, so a ninth phase added to Order() without a
+// matching case fails loudly here instead of being skipped.
 func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, pass passContext, report *ConsolidateReport) error {
 	switch p {
 	case consolidation.PhaseExpireIncomplete:
@@ -935,7 +1098,7 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		if err != nil {
 			return err
 		}
-		if err := r.judgeAndPersistPairs(ctx, pairs, pass.now); err != nil {
+		if err := r.judgeAndPersistPairs(ctx, pairs, report, pass.now); err != nil {
 			return err
 		}
 	case consolidation.PhaseDerive:
@@ -943,9 +1106,40 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			return err
 		}
 	case consolidation.PhaseReweight:
-		// placeholder — PR 11 wires the real read/write.
+		cs, err := r.units.LiveDecayStates(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: reweight: read live decay states: %w", err)
+		}
+		usable, refused := partitionLiveDecayStates(cs)
+		report.reportCorrupted(refused)
+		boosts, corrupted := consolidation.Reweight(coldToStates(usable), report.newRelationEdges, pass.now)
+		report.reportCorrupted(corrupted)
+		if err := r.persistBoosts(ctx, boosts, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhasePatternEval:
-		// placeholder — PR 11 wires the real read/write.
+		active, err := r.selfModel.ActiveBeliefs(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: pattern_eval: read active beliefs: %w", err)
+		}
+		findings := consolidation.EvaluateStagnation(beliefsToConsolidation(active), consolidation.ResolveGoalStagnationDays(pass.cfg.GoalStagnationDays), pass.now)
+		if err := r.persistStagnationFindings(ctx, findings, pass.now); err != nil {
+			return err
+		}
+
+		n, err := r.units.CountLiveByType(ctx, unit.TypeMentalLoad)
+		if err != nil {
+			return fmt.Errorf("consolidate: pattern_eval: count live mental load units: %w", err)
+		}
+		lastAt, err := r.state.LastHypothesisAt(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: pattern_eval: read last hypothesis: %w", err)
+		}
+		if finding, fired := consolidation.EvaluateLoad(n, consolidation.ResolveMentalLoadThreshold(pass.cfg.MentalLoadThreshold), lastAt, pass.now); fired {
+			if err := r.persistLoadHypothesis(ctx, finding, lastAt, pass.now); err != nil {
+				return err
+			}
+		}
 	case consolidation.PhaseLearn:
 		// No work, ever (owner ruling 3) — this arm exists so Order()'s
 		// last slot is reached and reported, and performs nothing.

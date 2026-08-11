@@ -124,7 +124,7 @@ func TestExpireIncomplete_RealCapturePathProducesNoIncompleteUnits(t *testing.T)
 	// precedent, reimplemented locally for the same reason
 	// repoRootForConsolidateIT above is: that helper lives in package brain,
 	// which this package cannot import.
-	consolidateSvc := brain.NewConsolidateService(fixedClock{now: later}, cfg, units, relations, &counterIDs{}, decisions, recallSvc, fakeprovider.New(t, ""), sqlite.NewSelfModelRepo(v))
+	consolidateSvc := brain.NewConsolidateService(fixedClock{now: later}, cfg, units, relations, &counterIDs{}, decisions, recallSvc, fakeprovider.New(t, ""), sqlite.NewSelfModelRepo(v), sqlite.NewStateRepo(v))
 	phase := consolidation.PhaseExpireIncomplete
 	if _, err := consolidateSvc.Consolidate(ctx, brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseExpireIncomplete): %v", err)
