@@ -1647,3 +1647,123 @@ func TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief(t *testing.T)
 		t.Fatalf("EmbedCalls() = %d, want exactly len(activeBeliefs) = %d (spec R5.7)", got, want)
 	}
 }
+
+// spySelfModel counts UpsertByTopicKey/ReinforceByID calls on top of a
+// real memrepo.SelfModel — task 10b.5's own "exactly one of each" proof
+// needs call counts, not merely final state, the same reason spyConfig
+// (above) wraps memrepo.Config instead of reading RecordConsolidationRun's
+// own side effect back out.
+type spySelfModel struct {
+	*memrepo.SelfModel
+	upsertCalls    int
+	reinforceCalls int
+}
+
+func newSpySelfModel() *spySelfModel {
+	return &spySelfModel{SelfModel: memrepo.NewSelfModel()}
+}
+
+func (s *spySelfModel) UpsertByTopicKey(ctx context.Context, b ports.Belief) error {
+	s.upsertCalls++
+	return s.SelfModel.UpsertByTopicKey(ctx, b)
+}
+
+func (s *spySelfModel) ReinforceByID(ctx context.Context, id string, confidence float64, at time.Time) error {
+	s.reinforceCalls++
+	return s.SelfModel.ReinforceByID(ctx, id, confidence, at)
+}
+
+// TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite is spec
+// R5.8's own split: one create-decision and one merge-decision from the
+// same derive run produce exactly one SelfModelRepo.UpsertByTopicKey call
+// and exactly one ReinforceByID call, each with the correct target.
+//
+// fakeprovider.NewEmbeddingFake derives a deterministic vector from text
+// alone (test/support/fakeprovider/embed.go): a proposed belief whose
+// Content is byte-identical to an existing one embeds to the identical
+// vector (cosine similarity 1.0, well above BeliefMergeCosine's 0.85) and
+// therefore merges; a proposed belief with unrelated text embeds far
+// enough away to create instead. No hand-derived vector geometry is
+// needed to land on the 0.85 boundary — reusing the existing belief's own
+// Content verbatim is exact by construction.
+//
+// Red against task 10b.4's own derive: decisions is computed and then
+// discarded (`_ = decisions`), so neither write ever happens.
+func TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+	const existingContent = "wants to run more consistently"
+
+	units := memrepo.NewUnits()
+	if err := units.Create(ctx, unit.Unit{
+		ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+		Content: "training log entry", Source: "chat",
+		Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed source unit: %v", err)
+	}
+
+	selfModel := newSpySelfModel()
+	if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
+		ID: "b-existing", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness",
+		Content: existingContent, Confidence: 0.5, Status: "active",
+		LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed existing belief: %v", err)
+	}
+	selfModel.upsertCalls = 0 // reset: only derive's own calls count below
+
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
+	embed := fakeprovider.NewEmbeddingFake("test-model")
+	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), units, embed)
+
+	dir := t.TempDir()
+	response := `{"beliefs":[` +
+		`{"facet":"goal","topic_key":"fitness-again","content":"` + existingContent + `","confidence":0.55},` +
+		`{"facet":"goal","topic_key":"hiking","content":"enjoys weekend hiking trips","confidence":0.7}` +
+		`]}`
+	writeDeriveCase(t, dir, "derive-create-and-merge", response)
+	judge := fakeprovider.New(t, dir, "derive-create-and-merge")
+
+	phase := consolidation.PhaseDerive
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel)
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate(PhaseDerive): %v", err)
+	}
+
+	if selfModel.upsertCalls != 1 {
+		t.Errorf("UpsertByTopicKey calls = %d, want exactly 1 (the hiking belief)", selfModel.upsertCalls)
+	}
+	if selfModel.reinforceCalls != 1 {
+		t.Errorf("ReinforceByID calls = %d, want exactly 1 (b-existing)", selfModel.reinforceCalls)
+	}
+
+	active, err := selfModel.ActiveBeliefs(ctx)
+	if err != nil {
+		t.Fatalf("ActiveBeliefs: %v", err)
+	}
+	if len(active) != 2 {
+		t.Fatalf("ActiveBeliefs() = %d, want exactly 2 (b-existing reinforced, hiking created)", len(active))
+	}
+	var reinforced ports.Belief
+	var created ports.Belief
+	for _, b := range active {
+		if b.ID == "b-existing" {
+			reinforced = b
+		} else {
+			created = b
+		}
+	}
+	if reinforced.Confidence <= 0.5 {
+		t.Errorf("b-existing Confidence = %v, want raised above its seeded 0.5 (consolidation.Reinforce)", reinforced.Confidence)
+	}
+	if created.Content != "enjoys weekend hiking trips" {
+		t.Errorf("created belief Content = %q, want the hiking proposal's own content", created.Content)
+	}
+}
