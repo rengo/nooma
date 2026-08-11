@@ -35,15 +35,19 @@ type ConsolidateService struct {
 // §3.3(e)) — the one call site every effect a phase persists goes through.
 // units and rels are PR 8's own widening: expire_incomplete and archive
 // read/write through units, strengthen reads/writes through rels (design
-// §6.3 slots 1-3). recall is this PR's own addition (slot 4, design §7.1):
+// §6.3 slots 1-3). recall is PR 9a's own addition (slot 4, design §7.1):
 // the same *RecallService instance wiring shares with NewCaptureService
 // (design D9's "one shared RecallService instance"), never a second one
 // built here — connect's candidate search calls its ScoredFor method,
-// never a new fusion implementation.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService) *ConsolidateService {
+// never a new fusion implementation. judge is PR 9b's own addition
+// (design §7.1, spec R5.5): the identical relation-judge ports.LLMProvider
+// shape NewCaptureService's own judge parameter already establishes —
+// connect's persist decision routes through the same
+// relation.Resolve/Decide, never a second judge wiring.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge},
 	}
 }
 
@@ -117,7 +121,9 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // per-phase reads/writes (design §6.3): units backs expire_incomplete and
 // archive, rels backs strengthen and connect. recall is connect's own
 // slot-4 read (design §7.1) — no ports.Clock of its own either, the same
-// property RecallService already has.
+// property RecallService already has. judge is connect's own persist step
+// (design §7.1, spec R5.5) — the identical relation-judge ports.LLMProvider
+// shape captureRunner's own judge field already holds.
 type consolidateRunner struct {
 	cfg    ports.ConfigRepo
 	units  ports.UnitRepo
@@ -125,6 +131,7 @@ type consolidateRunner struct {
 	ids    ports.IDGen
 	log    ports.DecisionLog
 	recall *RecallService
+	judge  ports.LLMProvider
 }
 
 // record persists one decision_log row — the one call site every effect a
