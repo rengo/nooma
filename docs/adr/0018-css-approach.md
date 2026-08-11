@@ -1,6 +1,6 @@
 # ADR-0018 — CSS: hand-written, embedded, no framework
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-08-11
 - **Supersedes**: —
 - **Superseded by**: —
