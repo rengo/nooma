@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/ports"
@@ -102,6 +103,27 @@ func readVaultConfig(t *testing.T, vault string) ports.VaultConfig {
 		t.Fatalf("loading the config row: %v", err)
 	}
 	return cfg
+}
+
+// readDecisionLog opens vault read-only the same way readVaultConfig does
+// and returns every row decision_log holds, oldest first — the direct read
+// spec R6.4's own exit criterion needs: "run the pass by hand on a vault
+// and read the decision_log."
+func readDecisionLog(t *testing.T, vault string) []ports.Decision {
+	t.Helper()
+
+	dbPath := vaultDBPath(t, vault)
+	db, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("opening %s read-only: %v", dbPath, err)
+	}
+	defer func() { _ = db.Close() }()
+
+	decisions, err := sqlite.NewDecisionLog(db).Since(context.Background(), time.Time{}, 1000)
+	if err != nil {
+		t.Fatalf("reading decision_log: %v", err)
+	}
+	return decisions
 }
 
 // vaultDBPath decodes vault's own nooma.yml the same way
@@ -307,5 +329,100 @@ tasks:
 	}
 	if strings.Contains(stderr, "already in use") {
 		t.Errorf("the refusal is about the held lock, not the unbound task — the check ran after attempting the lock, not before:\n%s", stderr)
+	}
+}
+
+// TestConsolidate_ExitCriterion is spec R6.4 — m2c's own exit criterion,
+// quoting the proposal directly: "run the pass by hand on a vault and read
+// the decision_log." A minimal fixture vault is seeded through the REAL
+// capture path (`nooma serve` + `nooma capture`, never a repo-constructed
+// row — the m2d demo golden set is explicitly out of m2c's scope), then
+// run through `nooma consolidate`. The pass must exit 0, and decision_log
+// must gain at least one row whose rationale is a legible sentence, not a
+// code — read back directly through DecisionLog.Since, since
+// `renderConsolidateReport` prints only which phase(s) ran, never a
+// decision's own text.
+//
+// The one captured unit is fresh (`LastTouchedAt` is `now`), StatusPool
+// (a fresh capture is always live — classify/tounit_test.go's own
+// comment), and consolidation_last_run_at is unset on a freshly
+// initialized vault, so `since` is nil and every live unit is eligible:
+// SelectConnectSources (internal/core/consolidation/connect.go) filters
+// only on status and `since`, never on age. That makes derive's own
+// source selection (design §7.3) the phase most likely to produce an
+// effect from exactly one capture, with no elapsed-time or paired-unit
+// precondition the way strengthen (co-use window) or connect (a related
+// pair) would need — the fixture design.md §6.3's task list names as one
+// example among several ("e.g. a unit old enough for strengthen's co-use
+// window, or a relation pair connect can find"), not the only one.
+func TestConsolidate_ExitCriterion(t *testing.T) {
+	llm := mockConsolidateLLM(t)
+
+	home, work := t.TempDir(), t.TempDir()
+	vault := initVault(t, home, work, "pablo.nooma")
+	port := freePort(t)
+	writeConfig(t, vault, fmt.Sprintf(`server:
+  bind: 127.0.0.1
+  http_port: %d
+providers:
+  local:
+    type: ollama
+    model: test-model
+    endpoint: %s
+tasks:
+  capture_processing:
+    provider: local
+  relation_evaluation:
+    provider: local
+  belief_derivation:
+    provider: local
+  embedding:
+    provider: local
+`, port, llm.URL))
+
+	// Seed through the real capture path: nooma capture proxies over HTTP
+	// to a running nooma serve (design D11) — never a second direct-vault
+	// writer, so this is the identical write path a real user's capture
+	// would take.
+	serve := startServe(t, home, vault, port)
+	stdout, stderr, err := nooma(t, home, work, "capture", "Pick up the dry cleaning on Friday", vault)
+	if err != nil {
+		t.Fatalf("capture: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "stored") {
+		t.Fatalf("capture did not store a unit:\n%s", stdout)
+	}
+
+	// Release the lock before consolidate needs it — killing the process
+	// releases the flock the same way a normal exit would (this test does
+	// not need to prove a CLEAN shutdown, only that the lock is free
+	// afterward; TestServeReleasesTheLockOnSignal already proves the clean
+	// path).
+	_ = serve.Process.Kill()
+	_ = serve.Wait()
+
+	stdout, stderr, err = nooma(t, home, work, "consolidate", vault)
+	if err != nil {
+		t.Fatalf("consolidate: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+
+	decisions := readDecisionLog(t, vault)
+	if len(decisions) == 0 {
+		t.Fatal("decision_log gained no row — the exit criterion requires at least one real effect on the fixture (spec R6.4)")
+	}
+
+	legible := false
+	for _, d := range decisions {
+		// "Legible sentence, not a code": a bare code (an Action value like
+		// "consolidate.derive.belief_created") has no space; every
+		// rationale this file's own record() call sites build (design §7.5)
+		// is a full sentence built with fmt.Sprintf.
+		if strings.Contains(d.Rationale, " ") {
+			legible = true
+			t.Logf("legible decision_log row: action=%s rationale=%q", d.Action, d.Rationale)
+		}
+	}
+	if !legible {
+		t.Fatalf("decision_log gained %d row(s), but none has a legible (space-containing) rationale: %+v", len(decisions), decisions)
 	}
 }
