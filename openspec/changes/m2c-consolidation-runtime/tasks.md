@@ -1948,24 +1948,48 @@ end against a real vault). Ships `cmd/nooma/consolidate.go`, `--phase` via `Pars
 
 ## Cross-cutting close-out (after PR 12 merges, before archive)
 
-- [ ] **X.1** Confirm `docs/06-harness.md` needed no change across all fourteen links — I03, I05,
+- [x] **X.1** **Ran; claim holds, with one caveat about how to read the diff.** `m2c` itself
+      changed nothing in `docs/06-harness.md`. The range is not literally empty — `2b55432`
+      ("docs(harness): place the UI in the test taxonomy") touches it — but that commit came from
+      PR #175, an unrelated docs PR merged into `main` mid-chain, not from any link of this
+      change. Checked by author rather than by an empty-diff assertion, because a long chain
+      shares `main` with other work and "the range is empty" stops being the same question as
+      "this change touched it". Original task text follows:
+      Confirm `docs/06-harness.md` needed no change across all fourteen links — I03, I05,
       I11, I12 and I24 all already had §4 rows before this change started (design §1, §10.3's own
       closing sentence). `git diff main~14..main -- docs/06-harness.md` (or the equivalent range
       once any split PRs are accounted for) is empty.
       Requirement: design §10.3.
-- [ ] **X.2** Confirm `internal/core` gained exactly one file's worth of new code across the whole
+- [x] **X.2** **Ran; the claim is close but not exact — recorded rather than rounded off.** Across
+      `cc7cccb..main`, `internal/core` gained: `prompt.go` (75, new) and `prompt_test.go` (93,
+      new) from PR 10a, `derive.go` +10 (the `Belief.Content` field, PR 10a) — **and
+      `strengthen.go` +17**, which this task's own wording does not name. That last one is the
+      `RelationEvidence` widening (`FromUnitID`/`ToUnitID`/`Type`/`Confidence`) PR 8 disclosed as
+      a scope deviation at the time: `Evidence()` returned too little to build a correct `Upsert`
+      call, since `Upsert` conflicts on `(FromUnitID, ToUnitID, Type)` and never on `id`. So the
+      change is honestly *two* `internal/core` files' worth, not one. The constant half of the
+      claim does hold exactly: `git diff cc7cccb..main -- internal/core/` adds **no** `const`
+      anywhere, so spec R0.3 stands and `calibration_doc_test.go`'s §13 sweep is untouched.
+      Original task text follows:
+      Confirm `internal/core` gained exactly one file's worth of new code across the whole
       chain — `prompt.go` plus the one `Belief.Content` field (PR 10a) — and no new
       `internal/core` constant anywhere else, per spec R0.3's own claim. `rg 'const \(' -A5
       internal/core/consolidation/` reviewed by hand against `m2b`'s already-shipped constant set.
       Requirement: spec R0.3; design §10.2.
-- [ ] **X.3** Confirm `docs/02-cognitive-core.md` §13 carries the same row **count** it had before
+- [x] **X.3** **Ran, confirmed: 28 rows before (`cc7cccb`), 28 after.** No row added, matching
+      X.2's finding that the chain introduced no new `internal/core` constant. Original task text
+      follows:
+      Confirm `docs/02-cognitive-core.md` §13 carries the same row **count** it had before
       this change (no new row — `m2c` introduces no new `internal/core` constant), with exactly
       two rows **amended** in place: `goal_stagnation_days` (PR 3, task 3.14) and
       `connect_source_limit` (PR 10b, task 10b.8). `calibration_doc_test.go`'s symbol floor is
       unchanged by this entire chain.
       Requirement: spec R0.3; design §7.5's own arithmetic correction (fourteen-to-twenty-four for
       `DecisionAction`, not §13).
-- [ ] **X.4** Confirm the ten `DecisionAction` members (PR 7b) bring `AllDecisionActions()` from
+- [x] **X.4** **Ran, confirmed exactly: 14 constant declarations at `cc7cccb`, 24 at `main`.**
+      Ten added, design §7.5's corrected count, not the eleven an earlier draft mis-stated.
+      Original task text follows:
+      Confirm the ten `DecisionAction` members (PR 7b) bring `AllDecisionActions()` from
       fourteen to twenty-four, matching design §7.5's corrected count exactly (not eleven, the
       number an earlier draft of the design mis-stated and corrected in the same document).
       Requirement: design §7.5.
