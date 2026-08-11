@@ -27,9 +27,13 @@ const BeliefMergeCosine = 0.85
 // exist yet — this is a forward declaration, the same shape design gave
 // Source (connect.go) ahead of its own second reader.
 type Belief struct {
-	ID               string
-	Facet            selfmodel.Facet
-	TopicKey         string
+	ID       string
+	Facet    selfmodel.Facet
+	TopicKey string
+	// Content is added by m2c (design.md §10.2): the derive prompt needs
+	// the text. EvaluateStagnation and MergeProposals both ignore it —
+	// they compare embeddings and last-reinforced instants, never text.
+	Content          string
 	Confidence       float64
 	LastReinforcedAt time.Time
 }
