@@ -1268,18 +1268,28 @@ func TestConsolidate_WholePassReportsEachCorruptedIDOnce(t *testing.T) {
 func TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
 	const candidateID = "3527ca73-93c4-4688-a680-145243ce1e04"
 
+	// SelectConnectSources treats every live unit as a candidate SOURCE, not
+	// only the one this fixture means by "the source" — u-existing and
+	// candidateID must sit before since (excluded as sources, spec R5.3's
+	// own "since" gate) while remaining ordinary live units recall can
+	// still find AS candidates, since ScoredFor applies no since filter of
+	// its own.
 	units := memrepo.NewUnits()
-	for _, seed := range []struct{ id, content string }{
-		{"u-source", "plan the quarterly offsite in Lisbon"},
-		{"u-existing", "quarterly offsite venue shortlist"},
-		{candidateID, "quarterly offsite travel budget"},
+	for _, seed := range []struct {
+		id, content   string
+		lastTouchedAt time.Time
+	}{
+		{"u-source", "plan the quarterly offsite in Lisbon", now},
+		{"u-existing", "quarterly offsite venue shortlist", since.Add(-time.Hour)},
+		{candidateID, "quarterly offsite travel budget", since.Add(-time.Hour)},
 	} {
 		if err := units.Create(ctx, unit.Unit{
 			ID: seed.id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
 			Content: seed.content, Source: "chat",
-			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: seed.lastTouchedAt, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatalf("seed %s: %v", seed.id, err)
 		}
@@ -1301,11 +1311,16 @@ func TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch(t
 		t.Fatalf("seed existing relation: %v", err)
 	}
 
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
 	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), lex, units, fakeprovider.NewEmbeddingFake("test-model"))
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-related-uncertain-band")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, rels, &fakeIDs{}, log, rec, judge)
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge)
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1378,17 +1393,24 @@ func TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch(t
 func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
 	const candidateID = "ce8d8460-dfb3-42bf-9cd0-0fc74f3dab42"
 
+	// candidateID sits before since (excluded as a connect SOURCE, spec
+	// R5.3) so it is discoverable only as u-source's own recall candidate —
+	// the persist test's own fixture, above, explains why this matters.
 	units := memrepo.NewUnits()
-	for _, seed := range []struct{ id, content string }{
-		{"u-source", "thinking about repainting the kitchen this weekend"},
-		{candidateID, "kitchen renovation ideas from last spring"},
+	for _, seed := range []struct {
+		id, content   string
+		lastTouchedAt time.Time
+	}{
+		{"u-source", "thinking about repainting the kitchen this weekend", now},
+		{candidateID, "kitchen renovation ideas from last spring", since.Add(-time.Hour)},
 	} {
 		if err := units.Create(ctx, unit.Unit{
 			ID: seed.id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
 			Content: seed.content, Source: "chat",
-			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: seed.lastTouchedAt, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatalf("seed %s: %v", seed.id, err)
 		}
@@ -1403,11 +1425,16 @@ func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 		rels.EnsureUnit(t, id)
 	}
 
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
 	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), lex, units, fakeprovider.NewEmbeddingFake("test-model"))
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-discard-low-confidence")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, rels, &fakeIDs{}, log, rec, judge)
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge)
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
