@@ -1908,3 +1908,67 @@ func TestConsolidateRunner_Reweight_PersistsBoostAndOmitsCorruptedFromLog(t *tes
 		}
 	}
 }
+
+// TestConsolidateRunner_PatternEval_StagnationFindingsEachProduceOneRow is
+// spec R5.10's first MUST (design §6.3 slot 7): every StagnationFinding
+// consolidation.EvaluateStagnation returns is recorded to decision_log,
+// correctly attributed. Three beliefs: one goal-facet belief stagnant well
+// past DefaultGoalStagnationDays (21), one goal-facet belief reinforced
+// today (not stagnant), and one preference-facet belief stagnant for the
+// same span as the first — EvaluateStagnation's own facet filter (only
+// selfmodel.FacetGoal) excludes it, so it must never produce a finding
+// however stagnant.
+//
+// Red: the placeholder pattern_eval arm calls nothing — decision_log stays
+// empty.
+func TestConsolidateRunner_PatternEval_StagnationFindingsEachProduceOneRow(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
+	stagnantSince := now.Add(-30 * 24 * time.Hour)
+
+	selfModel := memrepo.NewSelfModel()
+	seeds := []struct {
+		id, topicKey     string
+		facet            selfmodel.Facet
+		lastReinforcedAt time.Time
+	}{
+		{"b-stagnant-goal", "derived/goal/fitness", selfmodel.FacetGoal, stagnantSince},
+		{"b-fresh-goal", "derived/goal/reading", selfmodel.FacetGoal, now},
+		{"b-stagnant-preference", "derived/preference/coffee", selfmodel.FacetPreference, stagnantSince},
+	}
+	for _, s := range seeds {
+		if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
+			ID: s.id, Facet: s.facet, TopicKey: s.topicKey,
+			Content: "seed content for " + s.id, Confidence: 0.5, Status: "active",
+			LastReinforcedAt: s.lastReinforcedAt, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", s.id, err)
+		}
+	}
+
+	log := memrepo.NewDecisionLog()
+	r := consolidateRunner{selfModel: selfModel, ids: &fakeIDs{}, log: log}
+	pass := passContext{now: now}
+
+	if err := r.runPhase(ctx, consolidation.PhasePatternEval, pass, &ConsolidateReport{}); err != nil {
+		t.Fatalf("runPhase(PhasePatternEval): %v", err)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("log.Since: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("decision_log rows = %d, want exactly 1 (only b-stagnant-goal: a fresh goal belief and a stagnant NON-goal belief must not fire)", len(rows))
+	}
+	if rows[0].Action != ports.ActionPatternEvalStagnationFound {
+		t.Errorf("row Action = %s, want %s", rows[0].Action, ports.ActionPatternEvalStagnationFound)
+	}
+	var detail consolidation.StagnationFinding
+	if err := json.Unmarshal(rows[0].Context, &detail); err != nil {
+		t.Fatalf("unmarshal row Context: %v", err)
+	}
+	if detail.BeliefID != "b-stagnant-goal" {
+		t.Errorf("row Context.BeliefID = %q, want %q — correctly attributed to the stagnant goal belief", detail.BeliefID, "b-stagnant-goal")
+	}
+}
