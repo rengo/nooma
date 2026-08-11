@@ -705,22 +705,21 @@ expire_incomplete → archive → strengthen → connect → derive → reweight
 5. **derive**: derives/updates self-beliefs from units (§10), rendering each one's key as
    `derived/{facet}/{key}` (`internal/core/consolidation.DeriveTopicKey`). The units a pass
    derives from are the same recently-touched, effective-weight-ranked, `connect_source_limit`-
-   capped set `connect` uses (item 4 above) — one selection, read once per pass, feeding both
-   phases. Dedup is meant to run **two defenses**: (1) existing beliefs placed in the derivation
-   prompt itself, so the judge sees what already exists before proposing something new — the
-   prompt builder itself is **shipped** (`internal/core/consolidation.BuildDerivePrompt`,
-   rendering every active belief's `topic_key`/`content`, or stating plainly that none exist yet
-   when there are none), but **not yet wired**: no `derive`-phase orchestration calling it exists
-   anywhere in `internal/brain` yet, owed by whichever PR wires `brain`'s consolidation pass for
-   `derive` (the same no-code gap item 8 below states for `learn`); (2) a semantic merge over
+   capped selection `connect` uses (item 4 above) — the identical function, but `derive` re-runs
+   it over its own fresh read rather than reusing `connect`'s, so `--phase=derive` alone behaves
+   the same as slot 5 of a whole pass (`internal/brain`'s own single-execution-path rule: caching
+   one phase's read for another would make the two paths differ). Dedup runs **two defenses**:
+   (1) existing beliefs placed in the derivation prompt itself, so the judge sees what already
+   exists before proposing something new — the prompt builder
+   (`internal/core/consolidation.BuildDerivePrompt`, rendering every active belief's
+   `topic_key`/`content`, or stating plainly that none exist yet when there are none) and the
+   `internal/brain` orchestration that calls it are both **shipped**; (2) a semantic merge over
    embeddings, cosine ≥ 0.85, for whatever the first defense's prompt-side judgment would still
    let through (`internal/core/consolidation.MergeProposals`) — **shipped**: a proposed belief
    merges into the nearest existing one at or above that threshold, or becomes a new belief
    otherwise. A belief that merges is **reinforced**, not duplicated: its confidence rises toward
    1 by the same asymptotic law `strengthen` uses for relation strength, at
-   `belief_reinforce_gain` (default 0.10) — `internal/core/consolidation.Reinforce`. Neither
-   defense alone is doc 02's stated posture; running defense 2 without defense 1 wired yet is
-   this document's known, named gap, not an implementation choice left open.
+   `belief_reinforce_gain` (default 0.10) — `internal/core/consolidation.Reinforce`.
    **The embedding cost, stated rather than left implicit (owner ruling Q2, option A)**: `derive`
    embeds every **active** belief in memory at the start of the phase and discards the vectors
    after — no schema change, no `belief_embeddings` table, no stale-vector problem when a belief's
@@ -886,7 +885,7 @@ module):
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |
 | `strengthen_gain` (`internal/core/consolidation.StrengthenGain`) | 0.10 — chosen, not derived; checked for compatibility (not entailment) against `goal_stagnation_days`'s default below |
-| `connect_source_limit` (`internal/core/consolidation.ConnectSourceLimit`) | 20 — chosen |
+| `connect_source_limit` (`internal/core/consolidation.ConnectSourceLimit`) | 20 — chosen; governs two phases as of `m2c` — `connect`'s own candidate search (item 4 above) and, separately, `derive`'s own fresh source selection (item 5 above, design §7.3: `derive` re-runs the identical selection over its own read rather than reusing `connect`'s, so `--phase=derive` alone behaves the same as slot 5 of a whole pass) |
 | `connect_candidate_k` (`internal/core/consolidation.ConnectCandidateK`) | 5 — chosen; a separate knob from `dedup_candidate_k` below despite the identical default, per the same reasoning as `urgency_lead_days` above: one bounds capture's per-message judge calls, this one bounds connect's per-night budget |
 | `hysteresis_margin` (focus, relative; `internal/core/focus.DefaultHysteresisMargin` + `ResolveMargin`) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
