@@ -1259,7 +1259,15 @@ func TestConsolidate_WholePassReportsEachCorruptedIDOnce(t *testing.T) {
 		}
 	}
 
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel())
+	// u-cold-1 is a live, finite source — derive's own call is never
+	// skipped for it (unlike connect's own zero candidates here, since
+	// testRecallOver's index/lexical stores are empty): one scripted case
+	// covers it, connect's own zero calls need none.
+	dir := t.TempDir()
+	writeDeriveCase(t, dir, "derive-corrupted-fixture", `{"beliefs":[]}`)
+	judge := fakeprovider.New(t, dir, "derive-corrupted-fixture")
+
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, memrepo.NewSelfModel())
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
 		t.Fatalf("Consolidate(whole pass): %v", err)

@@ -406,6 +406,90 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
 }
 
+// taskBeliefDerivation is the LLMRequest.Task value derive's own judge
+// call sends (design §7.2's tasksConsolidateConsumes, spec R5.6) — the
+// exact string internal/config.DocumentedTaskNames already documents
+// (design §7.2), so this PR adds no config-vocabulary entry.
+const taskBeliefDerivation = "belief_derivation"
+
+// deriveSourceIDs is derive's own slot-5 source read (design §7.3): the
+// identical recently-touched, weight-ranked, ConnectSourceLimit-capped
+// selection connect's own slot 4 computes — over derive's OWN fresh
+// LiveDecayStates read, never connect's cached slot-4 slice (design §6.3's
+// pipeline note; spec-verified by the three-calls-per-pass L2 fixture
+// design.md names for archive/connect/derive together).
+func (r consolidateRunner) deriveSourceIDs(ctx context.Context, pass passContext, report *ConsolidateReport) ([]string, error) {
+	cs, err := r.units.LiveDecayStates(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("consolidate: derive: read live decay states: %w", err)
+	}
+	usable, refused := partitionLiveDecayStates(cs)
+	report.reportCorrupted(refused)
+	return consolidation.SelectConnectSources(coldToSources(usable), pass.since, pass.now), nil
+}
+
+// derive runs slot 5's own read/write pipeline (design §6.3, §7.3; spec
+// R5.6-R5.8): the same source selection connect's own slot 4 computes,
+// fresh, feeds consolidation.BuildDerivePrompt (PR 10a) alongside every
+// active belief (dedup defense 1, spec R5.6) into one belief_derivation
+// judge call.
+// A pass with nothing to derive from (no live source unit, the same
+// "nothing changed since the last sleep" condition SelectConnectSources
+// already applies) never calls the judge at all — connectSources' own
+// "if len(sourceIDs) == 0 { return nil, nil }" precedent (above), applied
+// here for the identical reason: TestConsolidate_NoEffects's own MUST
+// ("a phase fed nothing must write nothing") and every noJudge(t) fixture
+// this file already carries would otherwise send a judge call into a
+// provider scripted with zero cases. Zero source units is the only skip
+// condition — an empty *existing beliefs* list still sends (spec R5.6's
+// second MUST, task 10b.1's own proof).
+func (r consolidateRunner) derive(ctx context.Context, pass passContext, report *ConsolidateReport) error {
+	sourceIDs, err := r.deriveSourceIDs(ctx, pass, report)
+	if err != nil {
+		return err
+	}
+	if len(sourceIDs) == 0 {
+		return nil
+	}
+	sourceUnits, err := r.units.LiveByIDs(ctx, sourceIDs)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: read source units: %w", err)
+	}
+	sources := make([]consolidation.DeriveSource, len(sourceUnits))
+	for i, u := range sourceUnits {
+		sources[i] = consolidation.DeriveSource{UnitID: u.ID, Type: u.Type, Content: u.Content}
+	}
+
+	active, err := r.selfModel.ActiveBeliefs(ctx)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: read active beliefs: %w", err)
+	}
+	existingBeliefs := make([]consolidation.Belief, len(active))
+	for i, b := range active {
+		existingBeliefs[i] = consolidation.Belief{
+			ID:               b.ID,
+			Facet:            b.Facet,
+			TopicKey:         b.TopicKey,
+			Content:          b.Content,
+			Confidence:       b.Confidence,
+			LastReinforcedAt: b.LastReinforcedAt,
+		}
+	}
+
+	if _, err := r.judge.Complete(ctx, ports.LLMRequest{
+		Prompt: consolidation.BuildDerivePrompt(sources, existingBeliefs),
+		Task:   taskBeliefDerivation,
+	}); err != nil {
+		return fmt.Errorf("consolidate: derive: judge belief derivation: %w", err)
+	}
+
+	// Embedding (task 10b.4), merge (task 10b.4) and the create/reinforce
+	// routing (task 10b.6) land in the following commits — this call
+	// already exercises the real dedup-defense-1 prompt (spec R5.6), which
+	// is all task 10b.2 owns.
+	return nil
+}
+
 // persistArchiveTransitions applies ts through units.SetStatus, in the
 // order archive planned them, and records one decision_log row per outcome
 // (design §3.3(e), spec R4.2). A concurrent capture or correction that
@@ -614,7 +698,9 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			return err
 		}
 	case consolidation.PhaseDerive:
-		// placeholder — PR 10 wires the real read/write.
+		if err := r.derive(ctx, pass, report); err != nil {
+			return err
+		}
 	case consolidation.PhaseReweight:
 		// placeholder — PR 11 wires the real read/write.
 	case consolidation.PhasePatternEval:
