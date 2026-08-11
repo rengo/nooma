@@ -482,7 +482,7 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 		Type:       relType,
 		Strength:   strength,
 		Confidence: *j.Confidence,
-		CreatedBy:  "system",
+		CreatedBy:  string(relation.CreatedBySystem),
 		CreatedAt:  now,
 	}
 	if err := r.rels.Upsert(ctx, rel); err != nil {
