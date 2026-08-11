@@ -8,7 +8,6 @@ import (
 
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/correction"
-	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -114,12 +113,10 @@ func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, 
 	if err != nil {
 		return nil, referentSource{}, fmt.Errorf("correction: resolve referent: %w", err)
 	}
-	cands := make([]recall.FusedCandidate, len(scored))
-	byID := make(map[string]unit.Unit, len(scored))
-	for i, su := range scored {
-		cands[i] = recall.FusedCandidate{ID: su.Unit.ID, Score: su.Score}
-		byID[su.Unit.ID] = su.Unit
-	}
+	// scoredToFused (consolidate.go) is this mapping's one implementation,
+	// shared rather than copied — connect's own candidate search (design
+	// §7.1, m2c PR 9) is its second caller.
+	cands, byID := scoredToFused(scored)
 
 	id, ok := correction.Referent(cands, correction.ReferentMargin)
 	if !ok {
