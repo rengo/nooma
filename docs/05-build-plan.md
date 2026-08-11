@@ -165,7 +165,8 @@ Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel),
 ## M4 — The mirror: complete UI
 
 Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
-**[ADR-0008](adr/0008-ui-stack.md)** (UI stack).
+**[ADR-0008](adr/0008-ui-stack.md)** (UI stack),
+**[ADR-0018](adr/0018-css-approach.md)** (CSS).
 
 - All the views from [`01-architecture.md`](01-architecture.md) Layer 2: today/focus, capture,
   graph (with edge curation), beliefs (edit/delete → signals), activity, admin.

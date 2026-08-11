@@ -69,6 +69,7 @@ order, with no correspondence to anything.
 | [0015](0015-versioning-and-releases.md) | Versioning: SemVer, tags from M1, no `beta` label | Accepted | M1, M6 |
 | [0016](0016-correction-pre-image.md) | A correction records what it overwrote, before overwriting it | Accepted | M1 Phase C |
 | [0017](0017-http-request-auth.md) | Per-request bearer-token auth for the HTTP API | Accepted | M1 Phase C |
+| [0018](0018-css-approach.md) | CSS: hand-written, embedded, no framework | Proposed | M4 |
 
 ## Template
 
