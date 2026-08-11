@@ -45,10 +45,13 @@ type ConsolidateService struct {
 // shape NewCaptureService's own judge parameter already establishes —
 // connect's persist decision routes through the same
 // relation.Resolve/Decide, never a second judge wiring.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider) *ConsolidateService {
+// selfModel is PR 10b's own addition (design §7.3, spec R5.6/R5.8): derive's
+// two SelfModelRepo reads/writes — the same shape recall/judge already
+// establish for their own ports, never a second wiring convention.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel},
 	}
 }
 
@@ -124,15 +127,19 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // slot-4 read (design §7.1) — no ports.Clock of its own either, the same
 // property RecallService already has. judge is connect's own persist step
 // (design §7.1, spec R5.5) — the identical relation-judge ports.LLMProvider
-// shape captureRunner's own judge field already holds.
+// shape captureRunner's own judge field already holds. selfModel is
+// derive's own slot-5 read/write pair (design §7.3, spec R5.6/R5.8) — the
+// same judge field above sends derive's own belief_derivation call too, one
+// port for both connect's and derive's judge traffic.
 type consolidateRunner struct {
-	cfg    ports.ConfigRepo
-	units  ports.UnitRepo
-	rels   ports.RelationRepo
-	ids    ports.IDGen
-	log    ports.DecisionLog
-	recall *RecallService
-	judge  ports.LLMProvider
+	cfg       ports.ConfigRepo
+	units     ports.UnitRepo
+	rels      ports.RelationRepo
+	ids       ports.IDGen
+	log       ports.DecisionLog
+	recall    *RecallService
+	judge     ports.LLMProvider
+	selfModel ports.SelfModelRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
