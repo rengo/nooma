@@ -599,11 +599,25 @@ func (r consolidateRunner) reinforceDerivedBelief(ctx context.Context, active ma
 // belief. Decoded here, in internal/brain, rather than in
 // internal/core/consolidation: design §10.2 names PR 10a's prompt.go as
 // the one internal/core file m2c adds in the whole change, and this
-// decode step is response-wiring, not a core decision function — the same
-// split JudgePrompt (internal/brain/capture.go) and
-// relation.DecodeJudgment (internal/core/relation) already draw
-// differently for connect's own judge, restated here because no analogous
-// decode function existed anywhere for belief_derivation before this PR:
+// decode step is response-wiring, not a core decision function.
+//
+// Named plainly because Judgment Day on this PR flagged it (both judges,
+// WARNING): this placement is the INVERSE of connect's, not an instance of
+// it. Connect puts JudgePrompt in internal/brain and DecodeJudgment in
+// internal/core/relation; derive puts BuildDerivePrompt in
+// internal/core/consolidation and this decode in internal/brain. So the
+// codebase now holds two judge tasks whose prompt/decode halves sit on
+// opposite sides of the core boundary. The owner's ruling was to keep the
+// decode here — moving it would amend design §10.2, an approved decision —
+// and to stop the comment claiming a precedent it reverses. The real
+// justification is the §10.2 constraint alone; consistency with connect is
+// a debt this leaves open, not a property it has. One concrete cost is
+// already visible: the confidence [0,1]/NaN check below restates a bound
+// consolidation.Reinforce also encodes, so the same rule now lives in two
+// packages and can drift.
+//
+// No analogous decode function existed anywhere for belief_derivation
+// before this PR:
 // BuildDerivePrompt's own prompt text ("For each new belief worth
 // proposing, decide facet, topic_key and content") is this decode's only
 // documented contract — there is no testdata/llm/format.md precedent, no
