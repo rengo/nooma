@@ -135,20 +135,88 @@ where it still proves something real.**
 
 | Level | Where | Build tag | Touches | When it runs |
 |---|---|---|---|---|
-| **L1 — Pure** | next to the `core/` code | none | nothing | Always. Milliseconds |
+| **L1 — Pure** | next to the code under test | none | nothing real: no vault, no binary, no network — fakes only | Always. Milliseconds |
 | **L2 — Conformance** | `test/conformance/` | none | `core` + `brain` with fakes | Always |
 | **L3 — Integration** | `test/integration/` | `integration` | a real temporary SQLite vault | In CI and on demand |
 | **L4 — Smoke E2E** | `test/e2e/` | `e2e` | the compiled binary | In CI, before release |
 
-- **L1** covers the pure functions. Hard coverage floor: **≥ 90 % in `internal/core/`**. There
-  is no global coverage floor — global coverage is a metric you satisfy by writing useless
-  getter tests.
+- **L1** covers the pure functions **and every adapter tested against fakes**. Hard coverage
+  floor: **≥ 90 % in `internal/core/`** and nowhere else. There is no global coverage floor —
+  global coverage is a metric you satisfy by writing useless getter tests.
+
+  This row used to read *"next to the `core/` code"*, and that had stopped being true before it
+  was noticed: `internal/httpapi/` has carried seven untagged `httptest` suites since M1, and
+  none of the four rows described them. What defines L1 is not the directory — it is **cost and
+  isolation**: untagged, always-run, touching nothing real. `internal/core/` is the strictest
+  inhabitant of that tier, not its boundary.
 - **L2** is the level this project needs and almost no project has. See §4.
 - **L3** verifies what only SQLite can disprove: migrations, FTS5 registration and
   synchronization, transactions, the single-writer lockfile. Each test starts from an empty
   temporary vault.
 - **L4** compiles the binary and walks the user path: `nooma init`, `nooma serve`, a capture
   via API, a recall, `nooma doctor`, `nooma export`.
+
+### The UI is L1, and the stack is why
+
+`internal/ui/` needs no level of its own. The UI is server-side rendered
+([ADR-0008](adr/0008-ui-stack.md)), so **an htmx interaction is an HTTP request that returns a
+fragment of HTML** — there is no client-side state to inspect. Filtering `/ui/units`, confirming
+a relation, paginating: each one is a request, a response, and an assertion on the markup that
+came back. That is the same test `internal/httpapi/` has been writing since M1, against the same
+`httptest`, at the same tier.
+
+Two things that would otherwise need tests do not:
+
+- **Template errors never reach a test.** `templ` catches them at compile time; the gate that
+  proves the committed `_templ.go` files are current already runs on every PR (§6). That was the
+  entire argument for choosing `templ` over `html/template`.
+- **Styling is not tested at all.** Hand-written CSS ([ADR-0018](adr/0018-css-approach.md)) has
+  no behavior to assert. A test that pins a class name pins a decision nobody made.
+
+Assert on **structure and behavior** — that the response lists the expected unit ids, that an
+`hx-get` points at the endpoint that serves it — never on the whole rendered document. A golden
+of a complete page churns on every CSS class change, and a golden that gets regenerated without
+being read is worse than no golden: it reports "reviewed" for something nobody looked at.
+
+**L4 gains the UI's own path**: `nooma serve`, then `GET /ui`, and the token handshake from
+[ADR-0007](adr/0007-http-auth.md) once a token is configured. It proves the UI boots and
+authenticates, nothing more — the behavior itself is already proven at L1, cheaper.
+
+### The one surface with no automated test
+
+**The graph island — the vendored Cytoscape.js bundle and the hand-written JavaScript that
+drives it — carries no automated test, deliberately.** Verifying a WebGL render needs a real
+headless browser, and installing one contradicts the promise ADR-0008 paid for twice: `go build`
+works on a clean machine with no extra toolchain. It is the same objection that ruled out a CSS
+build step in [ADR-0018](adr/0018-css-approach.md), and it does not get a pass here because the
+subject is JavaScript.
+
+What makes an untested surface acceptable is that it is **small and dumb**, and neither of those
+survives on good intentions. So the constraint is structural, in the shape §4 already uses for
+I01, I03 and I23 — a test that fails when the tree stops looking the way the decision said it
+would:
+
+- The hand-written UI JavaScript contains **no `fetch`, no `XMLHttpRequest`, no `WebSocket`, no
+  `eval`**. It renders what the server handed it and reports interactions back through htmx. The
+  same scan run against the vendored bundle during ADR-0019's spike found zero of all four; it
+  becomes a permanent gate rather than a one-time measurement.
+- The hand-written island stays under a **stated line budget**, restated in the PR that raises
+  it. Growth is allowed; growing quietly is not.
+
+Neither gate exists yet, because neither has a file to scan: `internal/ui/` is a `doc.go` and
+nothing else. **They ship in the same PR as the first line of island JavaScript**, and §6 gains
+their row then — a gate listed as blocking before it can run would be the one kind of entry this
+table must never contain.
+
+Everything the island would otherwise be trusted with lives on the Go side and is tested there:
+the bounded subgraph is computed, capped and serialized by `internal/core` and its handler
+([ADR-0019](adr/0019-graph-library.md)), so what reaches the browser is data with a contract, not
+a decision.
+
+**This gap is named here so it is never mistaken for coverage.** If the island ever grows logic
+worth testing — a layout the server does not determine, an interaction htmx cannot express — that
+is the evidence that the constraint failed, and the answer is to move that logic back to Go
+before it is to add a browser.
 
 No level calls an LLM or an external API. Ever. Providers are served from fixtures (§5). A test
 that depends on the network is a test that will fail on a Tuesday with nobody having touched
