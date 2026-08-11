@@ -10,6 +10,7 @@ import (
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/vaultlock"
 )
@@ -35,12 +36,27 @@ func init() {
 func runConsolidate(args []string, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("consolidate", flag.ContinueOnError)
 	fs.SetOutput(errOut)
-	fs.Usage = func() { _, _ = fmt.Fprint(errOut, "usage: nooma consolidate [vault]\n") }
+	var phaseFlag string
+	fs.StringVar(&phaseFlag, "phase", "", "run exactly one phase instead of the whole pass")
+	fs.Usage = func() { _, _ = fmt.Fprint(errOut, "usage: nooma consolidate [--phase=<name>] [vault]\n") }
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 1 {
 		return fmt.Errorf("consolidate takes at most one vault path, got %d", fs.NArg())
+	}
+
+	// R6.3: the only entry point from untrusted text (a CLI flag) into the
+	// Phase vocabulary is consolidation.ParsePhase — never a second,
+	// CLI-local list of the eight names (I11's own tree scan, m2b spec
+	// R1.2).
+	var req brain.ConsolidateRequest
+	if phaseFlag != "" {
+		p, err := consolidation.ParsePhase(phaseFlag)
+		if err != nil {
+			return err
+		}
+		req.Phase = &p
 	}
 
 	vault, err := config.ResolveVault(fs.Arg(0))
@@ -77,10 +93,21 @@ func runConsolidate(args []string, out, errOut io.Writer) error {
 		return err
 	}
 
-	if _, err := svc.Consolidate(context.Background(), brain.ConsolidateRequest{}); err != nil {
+	if _, err := svc.Consolidate(context.Background(), req); err != nil {
 		return err
 	}
 
-	_, err = fmt.Fprintln(out, "consolidate: ran the whole pass")
+	return renderConsolidateReport(out, req)
+}
+
+// renderConsolidateReport prints what ran. Its phase name, when there is
+// one, comes from consolidation.Phase.String() — never a literal here,
+// for the same I11 reason ParsePhase above is the only way in.
+func renderConsolidateReport(out io.Writer, req brain.ConsolidateRequest) error {
+	if req.Phase == nil {
+		_, err := fmt.Fprintln(out, "consolidate: ran the whole pass")
+		return err
+	}
+	_, err := fmt.Fprintf(out, "consolidate: ran phase %s\n", req.Phase.String())
 	return err
 }
