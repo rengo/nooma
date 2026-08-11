@@ -253,6 +253,24 @@ func coldToSources(cs []consolidation.Cold) []consolidation.Source {
 	return out
 }
 
+// coldToStates adapts LiveDecayStates' already-refused-filtered
+// []consolidation.Cold into reweight's own map[string]weight.Current shape
+// (design §6.3 slot 6, spec R3.3) — reweight's own second caller-supplied
+// input, alongside coldToSources' identical Cold source above. Cold's own
+// extra Status field is dropped: weight.Current never carried one, and
+// Reweight has no use for it (its own scenario reasons about weight,
+// decay rate and last-touched only). Keyed by UnitID, matching Reweight's
+// own map[string]weight.Current parameter shape exactly — the same "make a
+// duplicate id unrepresentable" property reweight.go's own doc comment
+// names for m2a C18.
+func coldToStates(cs []consolidation.Cold) map[string]weight.Current {
+	out := make(map[string]weight.Current, len(cs))
+	for _, c := range cs {
+		out[c.UnitID] = weight.Current{UnitID: c.UnitID, Weight: c.Weight, DecayRate: c.DecayRate, LastTouchedAt: c.LastTouchedAt}
+	}
+	return out
+}
+
 // scoredToFused adapts []ScoredUnit into the []recall.FusedCandidate shape
 // consolidation.ConnectPairs and correction.Referent both consume, plus an
 // id -> unit.Unit lookup for a caller that needs the full candidate back —
@@ -329,8 +347,12 @@ func (r consolidateRunner) connectSources(ctx context.Context, sourceIDs []strin
 // persisted on acceptance. ids is deduplicated once, up front, so a unit
 // that is both a source in one pair and a candidate in another (or that
 // repeats across several pairs) costs one units.LiveByIDs lookup, not one
-// per pair.
-func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []consolidation.Pair, now time.Time) error {
+// per pair. report is PR 11's own addition (design §6.3 slot 6's disclosed
+// gap, see ConsolidateReport.newRelationEdges' own doc comment): every
+// relation actually persisted here is also folded into
+// report.newRelationEdges, the exact "this pass's new edges" reweight
+// reads three slots later.
+func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []consolidation.Pair, report *ConsolidateReport, now time.Time) error {
 	if len(pairs) == 0 {
 		return nil
 	}
@@ -363,7 +385,7 @@ func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []con
 		if !ok {
 			continue
 		}
-		if err := r.judgeAndPersistPair(ctx, source, target, now); err != nil {
+		if err := r.judgeAndPersistPair(ctx, source, target, report, now); err != nil {
 			return err
 		}
 	}
@@ -390,7 +412,13 @@ func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []con
 // decision_log row — deliberately unlike capture's own
 // ActionRelationDiscarded (design §7.1's own stated divergence, spec
 // R4.2's second MUST, flagged for owner review at design §12 Q2).
-func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, target unit.Unit, now time.Time) error {
+//
+// report is PR 11's own addition: an accepted proposal also becomes one
+// weight.Edge in report.newRelationEdges, folded from proposed's own
+// From/To/Strength (never rel's DB-shaped fields) — the exact triple
+// weight.Edge declares (see ConsolidateReport.newRelationEdges' own doc
+// comment for why this accumulates here rather than through a repo read).
+func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, target unit.Unit, report *ConsolidateReport, now time.Time) error {
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(source, []unit.Unit{target}), Task: taskRelationEvaluation})
 	if err != nil {
 		return fmt.Errorf("consolidate: connect: judge relation for unit %q: %w", source.ID, err)
@@ -424,6 +452,7 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 	if err := r.rels.Upsert(ctx, rel); err != nil {
 		return fmt.Errorf("consolidate: connect: persist relation %s->%s: %w", rel.FromUnitID, rel.ToUnitID, err)
 	}
+	report.newRelationEdges = append(report.newRelationEdges, weight.Edge{From: proposed.From, To: proposed.To, Strength: proposed.Strength})
 
 	rationale := fmt.Sprintf("connect: judged unit %q related to %q as %q", rel.FromUnitID, rel.ToUnitID, rel.Type)
 	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
@@ -823,6 +852,31 @@ func (r consolidateRunner) persistStrengthChanges(ctx context.Context, cs []cons
 	return nil
 }
 
+// persistBoosts applies boosts through units.ApplyBoosts — one batch call,
+// one transaction, matching design §5.2's own "one statement per boost
+// inside one transaction, never two statements a partial failure could
+// leave half-applied" — and records one decision_log row per boost
+// afterward (design §3.3(e), spec R4.2, R5.9). corrupted entries are never
+// passed here: runPhase's own PhaseReweight arm (below) routes
+// consolidation.Reweight's corrupted return only into
+// report.reportCorrupted, the one place a refusal is surfaced (spec R4.2's
+// MUST NOT).
+func (r consolidateRunner) persistBoosts(ctx context.Context, boosts []weight.Boost, now time.Time) error {
+	if len(boosts) == 0 {
+		return nil
+	}
+	if err := r.units.ApplyBoosts(ctx, boosts, now); err != nil {
+		return fmt.Errorf("consolidate: reweight: apply boosts: %w", err)
+	}
+	for _, b := range boosts {
+		rationale := fmt.Sprintf("reweight: unit %q boosted to weight %.4f", b.UnitID, b.Weight)
+		if err := r.record(ctx, now, ports.ActionReweightBoostApplied, rationale, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // passContext is everything one invocation reads before any phase runs —
 // design §3.3(c). Assembled once by buildPassContext and passed by value
 // to every phase runPhase reaches, so `since` and `cfg` cannot drift
@@ -903,13 +957,12 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 // phases this file contains (m2b §3.2 leg 4's tree scan bans a second
 // one). report accumulates every corrupted id a phase's own read refuses
 // (design §3.3(e)) — the one place a refusal is surfaced, never in
-// decision_log (spec R4.2's MUST NOT). Four arms wire real I/O by this PR
-// (expire_incomplete, archive, strengthen — design §6.3 slots 1-3 — and
-// connect's own bounded candidate search, slot 4, whose judge/persist step
-// PR 9b still owes); the rest stay placeholders for PR 10-11. default names
-// the unhandled phase
-// rather than silently doing nothing, so a ninth phase added to Order()
-// without a matching case fails loudly here instead of being skipped.
+// decision_log (spec R4.2's MUST NOT). PR 11 is the last phase-IO PR:
+// every arm but learn's now wires real I/O (design §6.3 slots 1-8);
+// learn's own arm performs no work, ever (owner ruling 3), by design
+// rather than by omission. default names the unhandled phase rather than
+// silently doing nothing, so a ninth phase added to Order() without a
+// matching case fails loudly here instead of being skipped.
 func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, pass passContext, report *ConsolidateReport) error {
 	switch p {
 	case consolidation.PhaseExpireIncomplete:
@@ -956,7 +1009,7 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		if err != nil {
 			return err
 		}
-		if err := r.judgeAndPersistPairs(ctx, pairs, pass.now); err != nil {
+		if err := r.judgeAndPersistPairs(ctx, pairs, report, pass.now); err != nil {
 			return err
 		}
 	case consolidation.PhaseDerive:
@@ -964,7 +1017,17 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			return err
 		}
 	case consolidation.PhaseReweight:
-		// placeholder — PR 11 wires the real read/write.
+		cs, err := r.units.LiveDecayStates(ctx)
+		if err != nil {
+			return fmt.Errorf("consolidate: reweight: read live decay states: %w", err)
+		}
+		usable, refused := partitionLiveDecayStates(cs)
+		report.reportCorrupted(refused)
+		boosts, corrupted := consolidation.Reweight(coldToStates(usable), report.newRelationEdges, pass.now)
+		report.reportCorrupted(corrupted)
+		if err := r.persistBoosts(ctx, boosts, pass.now); err != nil {
+			return err
+		}
 	case consolidation.PhasePatternEval:
 		// placeholder — PR 11 wires the real read/write.
 	case consolidation.PhaseLearn:
