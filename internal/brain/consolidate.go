@@ -50,11 +50,14 @@ type ConsolidateService struct {
 // relation.Resolve/Decide, never a second judge wiring.
 // selfModel is PR 10b's own addition (design §7.3, spec R5.6/R5.8): derive's
 // two SelfModelRepo reads/writes — the same shape recall/judge already
-// establish for their own ports, never a second wiring convention.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo) *ConsolidateService {
+// establish for their own ports, never a second wiring convention. state is
+// PR 11's own addition (design §3.2 Q6, §6.3 slot 7): pattern_eval's load
+// half reads StateRepo.LastHypothesisAt and writes OpenHypothesis, the same
+// widen-at-the-end-of-the-parameter-list convention selfModel already set.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state},
 	}
 }
 
@@ -153,7 +156,11 @@ func (s *ConsolidateService) Consolidate(ctx context.Context, req ConsolidateReq
 // shape captureRunner's own judge field already holds. selfModel is
 // derive's own slot-5 read/write pair (design §7.3, spec R5.6/R5.8) — the
 // same judge field above sends derive's own belief_derivation call too, one
-// port for both connect's and derive's judge traffic.
+// port for both connect's and derive's judge traffic. state is
+// pattern_eval's own slot-7 load-half pair (design §3.2 Q6, §6.3 slot 7,
+// spec R5.10's second MUST): StateRepo.LastHypothesisAt feeds
+// consolidation.EvaluateLoad, and a firing result appends through
+// OpenHypothesis.
 type consolidateRunner struct {
 	cfg       ports.ConfigRepo
 	units     ports.UnitRepo
@@ -163,6 +170,7 @@ type consolidateRunner struct {
 	recall    *RecallService
 	judge     ports.LLMProvider
 	selfModel ports.SelfModelRepo
+	state     ports.StateRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
