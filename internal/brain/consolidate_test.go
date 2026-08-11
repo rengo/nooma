@@ -16,6 +16,7 @@ import (
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/goldenset"
@@ -1803,5 +1804,107 @@ func TestDecodeDerivedBeliefs_DedupsByTopicKey(t *testing.T) {
 	}
 	if got[1].Facet != "identity" || got[1].Key != "role" {
 		t.Errorf("second proposal = %+v, want the (identity, role) entry — a different topic_key is not a collision", got[1])
+	}
+}
+
+// TestConsolidateRunner_Reweight_PersistsBoostAndOmitsCorruptedFromLog is
+// the exact m2b spec R3.3 scenario (internal/core/consolidation's own
+// TestReweight_UnitMayAppearInBothBoostsAndCorrupted) re-run through the
+// wired PhaseReweight arm (design §6.3 slot 6, spec R5.9): unit "x" gains a
+// clean edge from origin "a" (Strength 0.9) and, in the SAME call, a
+// corrupt-strength edge from origin "b" (NaN). "x" is boosted through the
+// clean edge and refused through the corrupt one — both facts hold at once
+// (spec R3.3's own "neither suppresses the other") — and only the boost
+// reaches decision_log: R4.2's MUST NOT says a Reweight corrupted entry has
+// no vault effect, so it is never logged. "a" is boosted too (Resurface's
+// own hop-0 self-effect over its one valid outgoing edge); "b" is refused
+// and gets no boost at all.
+//
+// newRelationEdges is set directly on the report (white-box, package
+// brain) rather than produced by driving PhaseConnect first: connect's own
+// persisted relations always carry a finite, [0,1]-bounded Strength
+// (relation.Resolve's own contract), so the "corrupted" half of this
+// scenario cannot arise from a real judge response — the identical
+// reasoning TestConsolidateRunner_Record (above) already applies to
+// exercise record's ten slots directly rather than through ten scripted
+// whole passes.
+func TestConsolidateRunner_Reweight_PersistsBoostAndOmitsCorruptedFromLog(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, time.UTC)
+
+	units := memrepo.NewUnits()
+	for _, id := range []string{"a", "b", "x"} {
+		if err := units.Create(ctx, unit.Unit{
+			ID: id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: "seed content for " + id, Source: "chat",
+			Weight: 0, WeightDecayRate: 0,
+			LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+
+	log := memrepo.NewDecisionLog()
+	r := consolidateRunner{units: units, ids: &fakeIDs{}, log: log}
+	report := &ConsolidateReport{
+		newRelationEdges: []weight.Edge{
+			{From: "a", To: "x", Strength: 0.9},
+			{From: "b", To: "x", Strength: math.NaN()},
+		},
+	}
+
+	if err := r.runPhase(ctx, consolidation.PhaseReweight, passContext{now: now}, report); err != nil {
+		t.Fatalf("runPhase(PhaseReweight): %v", err)
+	}
+
+	gotA, err := units.ByID(ctx, "a")
+	if err != nil {
+		t.Fatalf("ByID(a): %v", err)
+	}
+	if gotA.Weight != 0.315 {
+		t.Errorf("a weight = %v, want 0.315 (boosted through its own valid a->x edge)", gotA.Weight)
+	}
+	if !gotA.LastTouchedAt.Equal(now) {
+		t.Errorf("a LastTouchedAt = %v, want %v", gotA.LastTouchedAt, now)
+	}
+
+	gotX, err := units.ByID(ctx, "x")
+	if err != nil {
+		t.Fatalf("ByID(x): %v", err)
+	}
+	if gotX.Weight != 0.315 {
+		t.Errorf("x weight = %v, want 0.315 (the boosted value ApplyBoosts must persist, despite also being corrupted)", gotX.Weight)
+	}
+	if !gotX.LastTouchedAt.Equal(now) {
+		t.Errorf("x LastTouchedAt = %v, want %v", gotX.LastTouchedAt, now)
+	}
+
+	gotB, err := units.ByID(ctx, "b")
+	if err != nil {
+		t.Fatalf("ByID(b): %v", err)
+	}
+	if gotB.Weight != 0 {
+		t.Errorf("b weight = %v, want unchanged 0 — b is refused, never boosted", gotB.Weight)
+	}
+
+	corruptedSeen := make(map[string]bool, len(report.corrupted))
+	for _, id := range report.corrupted {
+		corruptedSeen[id] = true
+	}
+	if len(corruptedSeen) != 2 || !corruptedSeen["b"] || !corruptedSeen["x"] {
+		t.Errorf("report.corrupted = %v, want exactly [b x] in some order", report.corrupted)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("log.Since: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("decision_log rows = %d, want exactly 2 (one per boosted unit: a, x) — none for the corrupted half", len(rows))
+	}
+	for _, row := range rows {
+		if row.Action != ports.ActionReweightBoostApplied {
+			t.Errorf("row Action = %s, want %s", row.Action, ports.ActionReweightBoostApplied)
+		}
 	}
 }

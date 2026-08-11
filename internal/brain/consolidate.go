@@ -15,6 +15,7 @@ import (
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -86,6 +87,26 @@ type ConsolidateReport struct {
 	// Unexported for the same reason phasesRun is: PR 12 owns the eventual
 	// public report shape.
 	corrupted []string
+	// newRelationEdges accumulates every relation connect (slot 4) persists
+	// during THIS pass, as the plain weight.Edge shape reweight's own
+	// Reweight function consumes — doc 02 §6 item 6's own words: "over this
+	// pass's new edges only". This is a disclosed design gap: neither
+	// spec.md nor design.md's §6.3 pipeline diagram states how newEdges
+	// reaches slot 6 from slot 4's own persist step (design §6.3 only names
+	// the two arguments, "Reweight(states, newEdges, now)", never their
+	// source). ConsolidateReport already plays the identical mid-pass
+	// accumulator role for corrupted (above), so extending it — rather than
+	// widening passContext, which is assembled once BEFORE any phase runs
+	// (design §3.3(c)) and cannot hold a value slot 4 only produces DURING
+	// the pass — is the minimal change that closes the gap without a new
+	// port or a second wiring convention. One direct consequence, named
+	// rather than silently accepted: a per-phase `--phase=reweight` run
+	// never populates this field (connect never runs), so it always sees
+	// zero new edges — correct per doc 02 §6 item 6's own text, not a bug;
+	// unlike derive (design §7.3), reweight's "this pass's new edges" rule
+	// is inherently pass-relative, not something a fresh independent read
+	// could ever reconstruct for a single-phase invocation.
+	newRelationEdges []weight.Edge
 }
 
 // reportCorrupted folds ids into r.corrupted and touches nothing else —
