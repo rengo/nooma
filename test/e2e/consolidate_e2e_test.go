@@ -407,12 +407,26 @@ tasks:
 	}
 
 	decisions := readDecisionLog(t, vault)
-	if len(decisions) == 0 {
-		t.Fatal("decision_log gained no row — the exit criterion requires at least one real effect on the fixture (spec R6.4)")
+
+	// The criterion is what the PASS produced, not what the vault holds.
+	// Seeding goes through the real capture path, so capture.* rows already
+	// exist before consolidate runs; a check over the whole table is
+	// satisfied by those alone and would keep passing if consolidation
+	// regressed to producing nothing at all. spec R6.4's own words are
+	// "decision_log GAINS at least one row" — so only rows this pass wrote
+	// count, and a consolidate.* action is what makes a row this pass's.
+	var gained []ports.Decision
+	for _, d := range decisions {
+		if strings.HasPrefix(string(d.Action), "consolidate.") {
+			gained = append(gained, d)
+		}
+	}
+	if len(gained) == 0 {
+		t.Fatalf("no consolidate.* row in decision_log — the exit criterion requires the PASS to produce at least one real effect on the fixture, and %d pre-existing capture.* row(s) do not count (spec R6.4): %+v", len(decisions), decisions)
 	}
 
 	legible := false
-	for _, d := range decisions {
+	for _, d := range gained {
 		// "Legible sentence, not a code": a bare code (an Action value like
 		// "consolidate.derive.belief_created") has no space; every
 		// rationale this file's own record() call sites build (design §7.5)
@@ -423,6 +437,6 @@ tasks:
 		}
 	}
 	if !legible {
-		t.Fatalf("decision_log gained %d row(s), but none has a legible (space-containing) rationale: %+v", len(decisions), decisions)
+		t.Fatalf("the pass wrote %d consolidate.* row(s), none with a legible (space-containing) rationale: %+v", len(gained), gained)
 	}
 }
