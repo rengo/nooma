@@ -70,6 +70,7 @@ order, with no correspondence to anything.
 | [0016](0016-correction-pre-image.md) | A correction records what it overwrote, before overwriting it | Accepted | M1 Phase C |
 | [0017](0017-http-request-auth.md) | Per-request bearer-token auth for the HTTP API | Accepted | M1 Phase C |
 | [0018](0018-css-approach.md) | CSS: hand-written, embedded, no framework | Accepted | M4 |
+| [0019](0019-graph-library.md) | Graph rendering: Cytoscape.js over a server-bounded neighbourhood | Proposed | M4 |
 
 ## Template
 

@@ -118,7 +118,8 @@ queues nudges that remain visible in the UI.
 |---|---|
 | `/ui` | Today: task focus + load focus, pending digest, system status |
 | `/ui/capture` | Written capture + file attachment (perception, once it exists) |
-| `/ui/graph` | Graph of units and relations; edge-level curation (split/confirm connections) |
+| `/ui/units` | Browse every unit in the vault: search, filters, pagination. The way in — the graph is entered *from* here ([ADR-0019](adr/0019-graph-library.md)) |
+| `/ui/graph` | Graph of units and relations; edge-level curation (split/confirm connections), over a server-bounded neighbourhood ([ADR-0019](adr/0019-graph-library.md)) |
 | `/ui/beliefs` | Self-model: beliefs by facet, edit/delete (each action emits a learning signal) |
 | `/ui/activity` | Glass box: chronological decision_log, "why did you do that" |
 | `/ui/tracking` | Measurement series + derived insights (once perception exists) |
@@ -127,7 +128,10 @@ queues nudges that remain visible in the UI.
 UI principles: a mirror, not an advisor (insight-led, the chart as evidence); server-side
 rendered with targeted interactivity (htmx); dense, sober self-hosted-tool aesthetics; no
 heavy build tooling. The graph is the only view that may require a dedicated JS component
-(see [ADR-0008](adr/0008-ui-stack.md)). Turned off with `--no-ui`.
+(see [ADR-0008](adr/0008-ui-stack.md) for the stack, [ADR-0019](adr/0019-graph-library.md) for
+the library); every other view, `/ui/units` included, is htmx over server-rendered HTML with no
+JavaScript of its own. Styling is hand-written CSS, embedded, no framework
+([ADR-0018](adr/0018-css-approach.md)). Turned off with `--no-ui`.
 
 ### Layer 3 — Channel adapters (enabled by config)
 
