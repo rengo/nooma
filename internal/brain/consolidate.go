@@ -497,13 +497,102 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 		return fmt.Errorf("consolidate: derive: merge proposals: %w", err)
 	}
 
-	// The create/reinforce routing (task 10b.6) lands in the following
-	// commit — decisions is computed (and MergeProposals genuinely called,
-	// over both sides' real embeddings, per spec R5.7's own "held only for
-	// the duration of this phase run's MergeProposals call") but not yet
-	// persisted.
-	_ = decisions
+	return r.persistMergeDecisions(ctx, decisions, proposals, active, pass.now)
+}
+
+// persistMergeDecisions routes every MergeProposals decision to its own
+// write (spec R5.8): MergeInto == "" (its own zero value) is the CREATE
+// half, routed to r.createDerivedBelief; MergeInto != "" is the MERGE
+// half, routed to r.reinforceDerivedBelief — never the topic-key upsert
+// for a merge, per ports.SelfModelRepo's own MUST NOT (selfmodelrepo.go).
+// active is indexed by id once, up front, so the merge half can look up
+// each target's current confidence without a second SelfModelRepo round
+// trip per decision.
+func (r consolidateRunner) persistMergeDecisions(ctx context.Context, decisions []consolidation.MergeDecision, proposals []derivedBeliefProposal, active []ports.Belief, now time.Time) error {
+	if len(decisions) == 0 {
+		return nil
+	}
+
+	byID := make(map[string]ports.Belief, len(active))
+	for _, b := range active {
+		byID[b.ID] = b
+	}
+
+	for _, d := range decisions {
+		proposal := proposals[d.ProposedIndex]
+		if d.MergeInto == "" {
+			if err := r.createDerivedBelief(ctx, proposal, now); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := r.reinforceDerivedBelief(ctx, byID, d.MergeInto, now); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// createDerivedBelief is R5.8's CREATE half: p's own facet/topic_key/
+// content/confidence become a new self_beliefs row, keyed the way
+// consolidation.DeriveTopicKey renders it (doc 02 §10:
+// "derived/{facet}/{key}"), written through UpsertByTopicKey and recorded
+// as ActionDeriveBeliefCreated (design §7.5's own count, row 5).
+func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBeliefProposal, now time.Time) error {
+	facet, err := selfmodel.ParseFacet(p.Facet)
+	if err != nil {
+		// decodeDerivedBeliefs already filters an unparsable facet out of
+		// every proposal it returns — unreachable in practice, but treated
+		// as "nothing to create" rather than a panic, the same safe-default
+		// posture every other decode degradation in this file takes.
+		return nil
+	}
+	b := ports.Belief{
+		ID:               r.ids.New(),
+		Facet:            facet,
+		TopicKey:         consolidation.DeriveTopicKey(facet, p.Key),
+		Content:          p.Content,
+		Confidence:       p.Confidence,
+		Origin:           "derived",
+		Status:           "active",
+		LastReinforcedAt: now,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if err := r.selfModel.UpsertByTopicKey(ctx, b); err != nil {
+		return fmt.Errorf("consolidate: derive: upsert belief %q: %w", b.TopicKey, err)
+	}
+	rationale := fmt.Sprintf("derive: created belief %q (facet %q)", b.TopicKey, b.Facet)
+	return r.record(ctx, now, ports.ActionDeriveBeliefCreated, rationale, b)
+}
+
+// reinforceDerivedBelief is R5.8's MERGE half: id names the existing
+// belief MergeProposals chose (by embedding similarity, m2b spec R4.4),
+// looked up in active for the current Confidence consolidation.Reinforce
+// needs (m2b spec R4.5's own asymptotic law). active not containing id is
+// defensive-only — MergeInto is always chosen from the exact `existing`
+// slice built from active itself (embedForMerge, above), so this is
+// unreachable in practice, the same "never assume, still guard" posture
+// judgeAndPersistPair's own j.Type == nil check takes for connect's judge
+// response (PR 9b), restated here because ReinforceByID's own
+// ErrBeliefNotFound would otherwise abort the whole pass on a case that
+// should just skip one decision. A decision with no effect writes nothing
+// (doc 02 §11): a belief already at exactly confidence 1 also returns
+// early here, via Reinforce's own (confidence, false).
+func (r consolidateRunner) reinforceDerivedBelief(ctx context.Context, active map[string]ports.Belief, id string, now time.Time) error {
+	belief, ok := active[id]
+	if !ok {
+		return nil
+	}
+	newConfidence, ok := consolidation.Reinforce(belief.Confidence)
+	if !ok {
+		return nil
+	}
+	if err := r.selfModel.ReinforceByID(ctx, id, newConfidence, now); err != nil {
+		return fmt.Errorf("consolidate: derive: reinforce belief %q: %w", id, err)
+	}
+	rationale := fmt.Sprintf("derive: reinforced belief %q to confidence %.4f", id, newConfidence)
+	return r.record(ctx, now, ports.ActionDeriveBeliefReinforced, rationale, map[string]any{"belief_id": id, "confidence": newConfidence})
 }
 
 // derivedBeliefProposal is one belief_derivation response's own proposed
