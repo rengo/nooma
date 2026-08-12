@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/rengo/nooma/internal/providers/anthropic"
 	"github.com/rengo/nooma/internal/providers/ollama"
 	"github.com/rengo/nooma/internal/providers/openai"
+	"github.com/rengo/nooma/internal/scheduler"
 	"github.com/rengo/nooma/internal/store/sqlite"
 )
 
@@ -253,4 +255,26 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, embed, index, signals)
 	recall := brain.NewRecallService(index, lex, units, embed)
 	return capture, recall, nil
+}
+
+// wireScheduler builds the real *scheduler.Scheduler over db and cfg,
+// reusing the *sqlite.Vault runServe already opened under its own lock
+// (serve.go:71-89): no second vaultlock.Acquire anywhere, so the scheduler
+// never fights nooma consolidate over two separate lock handles (spec
+// R3.1).
+//
+// log is the scheduler's process log (scheduler.Deps.Log) — serve passes
+// its errOut, per that field's own doc comment.
+func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer) (*scheduler.Scheduler, error) {
+	consolidate, err := wireConsolidate(ctx, db, cfg, lookup)
+	if err != nil {
+		return nil, err
+	}
+
+	return scheduler.New(scheduler.Deps{
+		Clock:       systemClock{},
+		Config:      sqlite.NewConfigRepo(db),
+		Consolidate: consolidate,
+		Log:         log,
+	})
 }

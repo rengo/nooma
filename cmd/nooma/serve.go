@@ -103,6 +103,12 @@ func runServe(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("wiring the capture/recall pipeline: %w", err)
 	}
 
+	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut)
+	if err != nil {
+		return fmt.Errorf("wiring the scheduler: %w", err)
+	}
+	_ = sched // Start(ctx) wiring lands in task 6.5, after the signal-aware ctx exists.
+
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token}),
