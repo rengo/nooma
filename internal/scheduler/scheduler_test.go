@@ -337,14 +337,90 @@ func TestScheduler_Wait(t *testing.T) {
 	})
 }
 
+// discriminatingTimer is JD-4-04's own fixture. fakeTimer (cron_test.go)
+// hands every caller the SAME shared channel, so a test with both the cron
+// and the catch-up goroutine running cannot fire one without also risking
+// the other racing to receive it. discriminatingTimer instead keys a
+// distinct channel per distinct requested duration — the cron's own
+// next-tick duration and the catch-up's own BootConsolidationDelay are
+// never equal in this package's fixtures — so a test can fire exactly one
+// of the two waits and leave the other genuinely unfired.
+type discriminatingTimer struct {
+	mu    sync.Mutex
+	chans map[time.Duration]chan time.Time
+	calls chan struct{}
+}
+
+func newDiscriminatingTimer() *discriminatingTimer {
+	return &discriminatingTimer{chans: make(map[time.Duration]chan time.Time), calls: make(chan struct{}, 8)}
+}
+
+func (d *discriminatingTimer) After(dur time.Duration) <-chan time.Time {
+	d.mu.Lock()
+	ch, ok := d.chans[dur]
+	if !ok {
+		ch = make(chan time.Time, 1)
+		d.chans[dur] = ch
+	}
+	d.mu.Unlock()
+	select {
+	case d.calls <- struct{}{}:
+	default:
+	}
+	return ch
+}
+
+// fire sends t on dur's own channel, creating it first if no caller has
+// asked for dur yet.
+func (d *discriminatingTimer) fire(dur time.Duration, t time.Time) {
+	d.mu.Lock()
+	ch, ok := d.chans[dur]
+	if !ok {
+		ch = make(chan time.Time, 1)
+		d.chans[dur] = ch
+	}
+	d.mu.Unlock()
+	ch <- t
+}
+
+// waitForTimerCalls blocks until dt has recorded n more After calls (any
+// duration), or fails after 2s.
+func waitForTimerCalls(t *testing.T, dt *discriminatingTimer, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-dt.calls:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for timer call %d/%d", i+1, n)
+		}
+	}
+}
+
 // TestScheduler_Start_JoinsBootCatchUp closes the gap PR 3a's own Start
 // comment disclosed: "the boot catch-up goroutine's own wg.Add(1)/Done()
 // is PR 4's addition to this same group." Start must spawn both the cron
 // and the catch-up goroutines into the SAME sync.WaitGroup, so Wait does
 // not return early because only one of the two has unwound.
+//
+// JD-4-04 correction: the original version of this test used a fakeTimer
+// that both goroutines were left blocked on forever (never fed), so after
+// cancel() both goroutines returned via their own ctx.Done() branch almost
+// immediately — the only assertion was that Wait returned before a 2s
+// timeout, which holds whether or not the catch-up goroutine was ever
+// added to s.wg. This version instead lets the cron goroutine unwind via
+// ctx.Done() (its own wait duration is left unfired) while the catch-up
+// goroutine's own wait is fired and routed into a real, deliberately
+// blocked Consolidate call — so Wait cannot return until this test
+// releases it, and a s.Wait call with a short bounded ctx, issued while
+// the catch-up goroutine is still deterministically blocked inside
+// Consolidate, must NOT return: it can only return early if the catch-up
+// goroutine is missing from s.wg, exactly the bug this test exists to
+// catch. Verified genuinely discriminating by a disclosed temporary probe:
+// see this task's own evidence.
 func TestScheduler_Start_JoinsBootCatchUp(t *testing.T) {
-	ft := newFakeTimer() // never fed — both goroutines block on it until ctx is done
-	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: newRecordingConsolidator(), Timer: ft})
+	dt := newDiscriminatingTimer()
+	bc := newBlockingConsolidator()
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: bc, Timer: dt})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -354,10 +430,56 @@ func TestScheduler_Start_JoinsBootCatchUp(t *testing.T) {
 
 	// Both goroutines must have asked the timer for a wait — proof both
 	// are actually running, not merely the cron loop alone.
-	waitForAfterCall(t, ft)
-	waitForAfterCall(t, ft)
+	waitForTimerCalls(t, dt, 2)
 
+	// Fire only the catch-up's own wait, BEFORE cancelling ctx. Its due
+	// fire now routes through runPass into bc.Consolidate, which blocks
+	// on bc.release until this test releases it — the catch-up goroutine
+	// cannot reach its own deferred wg.Done() until then. Firing this
+	// before cancel matters: cancelling ctx first would make the
+	// catch-up goroutine's own select also pick its ctx.Done() branch
+	// (the only ready case, since its timer channel would not have been
+	// fired yet), defeating the whole point.
+	dt.fire(BootConsolidationDelay, fixedNow)
+
+	select {
+	case <-bc.entered:
+		// Deterministic checkpoint: the catch-up goroutine is now
+		// synchronously blocked inside Consolidate (bc.release is not
+		// yet closed), strictly before its own
+		// runPass/runCatchUp/wg.Done() unwind in that same goroutine's
+		// own program order — it cannot have called wg.Done() yet.
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the catch-up's own Consolidate call to start")
+	}
+
+	// Cancel ctx now: the cron goroutine's own wait (its next-tick
+	// duration) is never fired, so its own select picks the ctx.Done()
+	// branch and it unwinds within microseconds — plain control flow and
+	// one deferred wg.Done() call, no I/O. The catch-up goroutine is
+	// unaffected: it is already past its own select, synchronously
+	// blocked inside Consolidate, not waiting on ctx at all.
 	cancel()
+
+	// At this checkpoint Wait must NOT be able to return: the cron
+	// goroutine has (or is about to have) unwound above, and if the
+	// catch-up goroutine were not in s.wg, the group would already be
+	// empty and Wait would return immediately regardless of the
+	// catch-up goroutine's own still-blocked state. 200ms is far more
+	// than the cron goroutine needs to unwind after cancel — this bound
+	// exists only to prove the negative promptly, not as the
+	// synchronization mechanism for the positive proof below.
+	blockedCtx, blockedCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer blockedCancel()
+	s.Wait(blockedCtx)
+	if blockedCtx.Err() == nil {
+		t.Fatal("Wait returned while the catch-up goroutine was still blocked inside Consolidate — proof Wait is not actually joining the catch-up goroutine's own wg.Add(1)")
+	}
+
+	// Release the blocked call: the catch-up goroutine can now return
+	// from Consolidate, unwind through runPass/runCatchUp, and reach its
+	// own deferred wg.Done().
+	close(bc.release)
 
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer waitCancel()
