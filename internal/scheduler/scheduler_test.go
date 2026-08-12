@@ -46,12 +46,6 @@ func (c *recordingConsolidator) Consolidate(_ context.Context, req brain.Consoli
 	return brain.ConsolidateReport{}, nil
 }
 
-func (c *recordingConsolidator) callCount() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.calls)
-}
-
 // validDeps returns a Deps every field of which is non-nil — the baseline
 // TestNew_RejectsNilDeps mutates one field of at a time.
 func validDeps() Deps {
