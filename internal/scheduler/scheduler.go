@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -43,6 +44,7 @@ type Scheduler struct {
 	consolidate Consolidator
 	log         io.Writer
 	timer       timer
+	wg          sync.WaitGroup
 }
 
 // New validates d's three required dependencies and returns a *Scheduler
@@ -75,6 +77,37 @@ func New(d Deps) (*Scheduler, error) {
 		log:         log,
 		timer:       t,
 	}, nil
+}
+
+// Start spawns the cron goroutine and returns immediately (design §5.2).
+//
+// Known gap, disclosed rather than silently assumed complete: the boot
+// catch-up goroutine's own wg.Add(1)/Done() is PR 4's addition to this
+// same group. Until PR 4 lands, Wait unwinds as soon as the cron goroutine
+// alone returns — there is no second goroutine to join yet.
+func (s *Scheduler) Start(ctx context.Context) {
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.runCron(ctx)
+	}()
+}
+
+// Wait blocks until every goroutine Start spawned has unwound, or until
+// ctx is done, whichever happens first — the mechanical join design §3.5
+// (D5) names; the shutdown-budget wiring that calls this with a
+// timeout-bounded ctx is PR 7's own scope.
+func (s *Scheduler) Wait(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 // runPass is the one entry point into Consolidate from this package
