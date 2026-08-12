@@ -106,6 +106,50 @@ func TestCatchUp_GatedOff_ZeroCallsEvenOnStaleVault(t *testing.T) {
 	}
 }
 
+// TestCatchUp_ConfigLoadError_ZeroCallsEvenOnStaleVault is JD-4-02:
+// runCatchUp's own copy of runPass's fail-closed pattern (catchup.go:20-27)
+// had zero tests — cron_test.go's TestCron_ConfigLoadError_
+// FiredTickCallsConsolidateZeroTimes covers runPass's copy, but runCatchUp's
+// copy never got its own regression test. errConfigRepo (cron_test.go) is
+// reused rather than duplicated, per this task's own instruction; it always
+// errors regardless of any seeded VaultConfig, which is itself the "even on
+// a stale vault" property: were the error discarded, the resulting
+// zero-value VaultConfig has a nil ConsolidationLastRunAt, which CatchUpDue
+// reads as "never consolidated" — always due — so a broken fail-closed path
+// would still proceed into the 120s delay and eventually fire.
+//
+// The production code is already correct, so this is not a chronological
+// red — see the disclosed probe in this task's own evidence (catchup.go's
+// `if err != nil { return }` branch temporarily removed, this test observed
+// FAIL, then restored byte-identical).
+func TestCatchUp_ConfigLoadError_ZeroCallsEvenOnStaleVault(t *testing.T) {
+	ft := newFakeTimer()
+	rc := newRecordingConsolidator()
+
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: errConfigRepo{}, Consolidate: rc, Timer: ft})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan struct{})
+	go func() {
+		s.runCatchUp(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCatchUp did not return — a Config.Load error must be a true no-op, never reaching the delay")
+	}
+
+	if got := rc.callCount(); got != 0 {
+		t.Fatalf("Consolidate called %d times, want 0 — Config.Load returned an error", got)
+	}
+}
+
 // TestCatchUp_CancelledDelayNeverFires is task 4.5: ctx cancelled before
 // BootConsolidationDelay elapses asserts Consolidate is never called.
 // Spec R2.3 (second Verified-by clause).
