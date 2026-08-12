@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -425,6 +426,100 @@ func TestRunPass_AbortSurfacesOnProcessLog(t *testing.T) {
 	const want = "scheduler: pass aborted (cron): unit not found\n"
 	if got := logBuf.String(); got != want {
 		t.Fatalf("log = %q, want %q", got, want)
+	}
+}
+
+// blockingErrorConsolidator is JD-5-01's own fixture: every call blocks on
+// entry, signaling entered, until the test closes release, then returns the
+// scripted error — the shape needed to hold the pass slot open (so a second,
+// genuinely concurrent fire is forced onto the default/skip branch) while
+// this call later aborts and calls logf itself.
+type blockingErrorConsolidator struct {
+	entered chan struct{}
+	release chan struct{}
+	err     error
+}
+
+func newBlockingErrorConsolidator(err error) *blockingErrorConsolidator {
+	return &blockingErrorConsolidator{entered: make(chan struct{}, 1), release: make(chan struct{}), err: err}
+}
+
+func (b *blockingErrorConsolidator) Consolidate(_ context.Context, _ brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
+	b.entered <- struct{}{}
+	<-b.release
+	return brain.ConsolidateReport{}, b.err
+}
+
+// TestRunPass_LogfIsRaceFree is JD-5-01: logf (scheduler.go) wrote to
+// s.log with no synchronization of its own. The non-blocking try-lock
+// (design §3.4, D4) only excludes concurrent entry into Consolidate — a
+// fire that loses the try-lock (the default branch) calls logf
+// immediately, with no happens-before relationship at all to the fire
+// that is still holding the slot and will itself call logf on abort
+// moments later. This test exercises exactly that interleaving for real:
+//
+//  1. Goroutine A calls runPass, acquires the slot, and blocks inside
+//     Consolidate (signaled via bc.entered, so the test knows A genuinely
+//     holds the slot before proceeding — not a timing guess).
+//  2. Goroutine B then calls runPass concurrently. Because A still holds
+//     the slot, B deterministically takes the default (skip) branch and
+//     calls logf right away — this determinism comes from Go's channel
+//     memory model (A's slot acquisition happens-before the test's own
+//     receive from bc.entered, which happens-before B's goroutine starts),
+//     not from waiting on B in any way.
+//  3. The test then releases A, which returns its scripted error and
+//     calls logf itself on the abort path.
+//
+// B's logf call and A's logf call are never ordered relative to each
+// other by any channel, mutex, or WaitGroup — the try-lock only ever
+// orders the SLOT, not the LOG — so this is a genuine, reproducible data
+// race on the shared bytes.Buffer under -race, not a theoretical one.
+func TestRunPass_LogfIsRaceFree(t *testing.T) {
+	bc := newBlockingErrorConsolidator(errors.New("boom"))
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: bc, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+	aDone := make(chan struct{})
+	go func() {
+		s.runPass(ctx, "cron") // acquires the slot, blocks inside Consolidate, then aborts
+		close(aDone)
+	}()
+
+	select {
+	case <-bc.entered:
+		// A now holds the slot, synchronously blocked inside Consolidate.
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first fire to enter Consolidate")
+	}
+
+	bDone := make(chan struct{})
+	go func() {
+		s.runPass(ctx, "catchup") // the slot is held: takes the default branch and skips
+		close(bDone)
+	}()
+
+	close(bc.release) // let A's Consolidate call return its scripted error, unordered with B's own logf call above
+
+	select {
+	case <-aDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first fire to return")
+	}
+	select {
+	case <-bDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the second fire to return")
+	}
+
+	// The real assertion is `go test -race`: an unsynchronized shared
+	// io.Writer written from both goroutines above is a data race whether
+	// or not the two lines below look sane.
+	if logBuf.Len() == 0 {
+		t.Fatal("expected both fires to have written to the log")
 	}
 }
 

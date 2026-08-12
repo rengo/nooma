@@ -40,8 +40,15 @@ type Deps struct {
 	Clock       ports.Clock
 	Config      ports.ConfigRepo
 	Consolidate Consolidator
-	Log         io.Writer // the process log; serve passes its errOut. nil defaults to io.Discard.
-	Timer       timer
+	// Log is the process log; serve passes its errOut. nil defaults to
+	// io.Discard. It is written from multiple goroutines: the cron and
+	// catch-up goroutines both call runPass, and their fires can
+	// genuinely overlap — design §3.4/D4's try-lock excludes concurrent
+	// entry into Consolidate, not concurrent entry into logf. logf is the
+	// only sanctioned path to this writer; nothing else in this package
+	// writes to it directly (JD-5-01).
+	Log   io.Writer
+	Timer timer
 }
 
 // Scheduler owns the cron and boot catch-up goroutines, the timer seam,
@@ -52,6 +59,7 @@ type Scheduler struct {
 	config      ports.ConfigRepo
 	consolidate Consolidator
 	log         io.Writer
+	logMu       sync.Mutex // guards every write to log; see logf (JD-5-01)
 	timer       timer
 	wg          sync.WaitGroup
 	slot        chan struct{} // capacity 1: the non-blocking try-lock, design §3.4 (D4)
@@ -93,7 +101,20 @@ func New(d Deps) (*Scheduler, error) {
 // logf writes one line to the process log (design §5.4): an abort, a
 // skipped fire, or a completed pass that refused units. Never decision_log
 // — an aborted or skipped pass had no vault effect (m2c's own I12 scoping).
+//
+// logf is the only sanctioned path to s.log, and this is deliberate, not
+// incidental: s.log is written from multiple goroutines (the cron and
+// catch-up goroutines both call runPass), and the non-blocking try-lock
+// (design §3.4/D4) only ever excludes concurrent entry into Consolidate —
+// a fire that loses the try-lock takes the default branch and calls logf
+// immediately, with no ordering at all relative to the fire that is still
+// holding the slot and will itself call logf on abort or on a completed
+// pass with refusals moments later. logMu guards every write here so those
+// calls never race (JD-5-01) — no caller may bypass logf and write to
+// s.log directly.
 func (s *Scheduler) logf(format string, args ...any) {
+	s.logMu.Lock()
+	defer s.logMu.Unlock()
 	_, _ = fmt.Fprintf(s.log, format+"\n", args...)
 }
 
