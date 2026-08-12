@@ -575,6 +575,61 @@ correction — the doc 02 §6 sentence design §3.3 itself says belongs here.
       Chain-merge checks deferred to actual merge time (PR not yet merged as of this apply batch),
       same posture PR 1/2/3a/3b took.
 
+- [x] **Judgment Day correction round** (PR #184, frozen target `2906af1`): four confirmed findings,
+      fixed and re-verified.
+      - **JD-4-01** (CRITICAL): `test/conformance/scheduler_boundary_scan_test.go` leg 2 checked
+        `strings.Contains(text, sym)` over each file's raw bytes, so a symbol name mentioned only in
+        a comment (`catchup.go:24`'s own `CatchUpDue` mention, `cron.go:9,12`'s own `NextDailyRun`
+        mentions) satisfied it even with the real call deleted. Rewritten to parse each scanned file
+        with `go/parser`/`go/ast` and look for a real `*ast.CallExpr` selecting the symbol — comments
+        and string literals cannot satisfy it. The collective, package-union scope (task 4.11's own
+        disclosed deviation from a per-file reading) is unchanged; only the detection methodology was
+        defective. **Disclosed probe**: the real `consolidation.CatchUpDue(...)` call in
+        `catchup.go` was temporarily removed (its line-24 comment kept) — leg 2 FAILED, correctly, on
+        the missing real call site — then restored byte-identical, `git diff --exit-code` clean, leg
+        2 green again.
+      - **JD-4-02** (WARNING): `runCatchUp`'s `Config.Load` error early return (`catchup.go:20-27`)
+        had zero tests, unlike `runPass`'s identical pattern (`TestCron_ConfigLoadError_
+        FiredTickCallsConsolidateZeroTimes`, landed for JD-3a-01). Added
+        `TestCatchUp_ConfigLoadError_ZeroCallsEvenOnStaleVault` (`catchup_test.go`), reusing
+        `errConfigRepo` (`cron_test.go`) rather than duplicating it. The production code was already
+        correct, so this was not a chronological red. **Disclosed probe**: the `if err != nil {
+        return }` branch was temporarily removed — the new test FAILED (`runCatchUp did not return`)
+        — then restored byte-identical, `git diff --exit-code` clean, test green again.
+      - **JD-4-03** (WARNING): `design.md` §3.3's Mechanism paragraph stated the catch-up "reads it
+        once at boot... there is nothing to re-read," which predates R2.4's single-entry-point
+        requirement (routing the due catch-up fire through the same `runPass` the cron uses) — the
+        shipped code reads config twice (once at boot to gate the delay, once inside `runPass` when
+        the delay elapses). Corrected the prose to describe the two-read behavior and explain why:
+        the second read is a structural consequence of routing through `runPass`, and it is the safer
+        shape (the enabled flag is re-checked immediately before the pass fires). Docs-only, no code
+        change — same posture §3.4's own PR-3b correction note took.
+      - **JD-4-04** (WARNING): `TestScheduler_Start_JoinsBootCatchUp` (`scheduler_test.go`) could not
+        distinguish the catch-up goroutine being in `s.wg` from it not being: the fake timer was
+        never fed, so after `cancel()` both goroutines returned via their own `ctx.Done()` branch
+        almost immediately regardless of `wg` membership. Rewritten with a new `discriminatingTimer`
+        fixture (keys a distinct channel per distinct requested duration, unlike the shared-channel
+        `fakeTimer`) so the catch-up's own 120s wait can be fired independently of the cron's: the
+        catch-up goroutine is routed into a real, deliberately blocked `Consolidate` call, and a
+        `s.Wait` call issued with a short bounded ctx while that call is still blocked must NOT
+        return — it can only return early if the catch-up goroutine is missing from `s.wg`.
+        **Disclosed probe**: `Start`'s `s.wg.Add(1)` for the catch-up goroutine was temporarily
+        removed — the new test FAILED (`Wait returned while the catch-up goroutine was still blocked
+        inside Consolidate`) — then restored byte-identical, `git diff --exit-code` clean, test green
+        again.
+
+      **Full verification**: `make check-all` green end to end; `internal/core` coverage floor
+      unchanged at 750/750 (100%). `go test -race -shuffle=on ./internal/scheduler/... -count=5`:
+      green, no race. `go test ./test/conformance/... -run TestSchedulerBoundaryScan -v`: all three
+      legs green.
+      **Rollback boundaries**: JD-4-01 touches only `test/conformance/scheduler_boundary_scan_test.go`
+      (leg 2's doc comment and body); JD-4-02 touches only `internal/scheduler/catchup_test.go` (one
+      new test); JD-4-03 touches only `openspec/changes/m2d-scheduler-demo/design.md` §3.3; JD-4-04
+      touches only `internal/scheduler/scheduler_test.go` (`discriminatingTimer` fixture plus the one
+      rewritten test) — no production behavior changed by any of the four; `internal/scheduler/
+      {catchup,scheduler}.go` are byte-identical to PR 4's own committed state once each disclosed
+      probe was reverted.
+
 ---
 
 ## PR 5 — `feat/scheduler-abort-logging` (~110 impl+docs / ~150 test)
