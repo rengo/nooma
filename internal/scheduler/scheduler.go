@@ -188,10 +188,11 @@ func (s *Scheduler) Wait(ctx context.Context) {
 //
 // An aborted pass can ALSO carry already-refused units (JD-5-02):
 // internal/brain/consolidate.go:1044-1045 returns (report, err) together,
-// and report.reportCorrupted runs from five separate phase sites — Archive
-// (slot 2), Strengthen (slot 3), Connect (slot 4, two call sites), Reweight
-// (slot 6, two call sites) — every one of which can run and refuse units
-// before a LATER phase's own error aborts the same pass. The abort branch
+// and report.reportCorrupted runs from six call sites across all five
+// phases — Archive, Strengthen and Connect one each, Derive one (inside
+// deriveSourceIDs rather than the phase switch itself), and Reweight two —
+// every one of which can run and refuse units before a LATER phase's own
+// error aborts the same pass. The abort branch
 // below surfaces report.Corrupted() alongside the abort itself, as one
 // combined log line rather than two separate logf calls: two calls would
 // let an unrelated, concurrent write from another goroutine land between

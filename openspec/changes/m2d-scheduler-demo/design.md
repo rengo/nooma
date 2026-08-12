@@ -424,8 +424,9 @@ implemented that faithfully: on abort it logged only the abort line and returned
 `report` entirely. That was exactly the bug (JD-5-02) — the diagram was not describing an
 accepted simplification, it was describing the information loss. `internal/brain/
 consolidate.go:1044-1045` returns `(report, err)` **together** from `at`, and
-`report.reportCorrupted` is called from five separate phase sites (archive, strengthen, connect
-×2, reweight ×2) that all run **before** a later phase's own error can abort the same pass — so an
+`report.reportCorrupted` is called from six call sites spanning all five phases (archive,
+strengthen, connect and derive one each — derive's inside `deriveSourceIDs`, not the phase switch
+— plus reweight ×2) that all run **before** a later phase's own error can abort the same pass — so an
 earlier phase can refuse units and a later one can still abort, and those already-refused ids have
 nowhere else to surface for an unattended pass (§5.4). The diagram now matches the corrected
 `runPass`: the abort arm surfaces `report.Corrupted()` too, in the same log line as the abort
