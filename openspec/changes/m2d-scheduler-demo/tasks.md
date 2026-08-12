@@ -327,9 +327,17 @@ design §13**: 3a (skeleton + cron loop, ~200) | 3b (the overlap guard, ~60).
       `scheduler_test.go` (new, 149 lines), `cron_test.go` (new, 177 lines) — no strays, no
       `internal/core`, `cmd/nooma`, or `docs/` file touched. Impl+docs 212 lines (~106% of the
       ~200 sub-estimate, task 3a.12's own flagged-not-split conclusion); test 326 lines (~125% of
-      the ~260 sub-estimate). Both well under CLAUDE.md's 400-line impl+docs ceiling. Chain-merge
-      checks deferred to actual merge time (PR not yet merged as of this apply batch), same posture
-      PR 1 and PR 2 took.
+      the ~260 sub-estimate). Both well under CLAUDE.md's 400-line impl+docs ceiling.
+
+      **Chain-merge check 1, confirmed**: PR #182 merged to `main` at `696d4d6`;
+      `git ls-remote --heads origin feat/scheduler-cron` returns nothing.
+
+      **Judgment Day correction JD-3a-01**: `runPass` discarded the `Config.Load` error, so a read
+      failure resolved `ConsolidationEnabled == nil` to `true` and opened the R1.2 gate. Fixed by
+      failing closed — commits `3f1ec4a` (RED) and `2763cad` (GREEN), both on `main` via PR #182.
+
+      **Chain-merge check 2, for PR 3a**: satisfied by PR 3b's own `gh pr view --json baseRefName`
+      naming `main` — see PR 3b's own Verify block below.
 
 ---
 
@@ -338,7 +346,7 @@ design §13**: 3a (skeleton + cron loop, ~200) | 3b (the overlap guard, ~60).
 Depends on PR 3a. Ships D4's non-blocking try-lock — the concurrency guard design §13 names as "the
 slowest part to get right", split from the mechanism landing before it, the same seam `m2c` used.
 
-- [ ] **3b.1** Commit 1 (RED): `internal/scheduler/scheduler_test.go` (extend) —
+- [x] **3b.1** Commit 1 (RED): `internal/scheduler/scheduler_test.go` (extend) —
       `TestScheduler_NoOverlap_ExactlyOneInFlight`: a slow fake `Consolidate` blocked on a channel,
       two fires landing inside that window (a cron fire plus a direct `runPass(ctx, "test")` call —
       the catch-up trigger does not exist until PR 4) assert exactly one call is ever in flight, run
@@ -346,29 +354,59 @@ slowest part to get right", split from the mechanism landing before it, the same
       **Red**: genuinely red against PR 3a's own committed `runPass` — no slot exists, so the second
       fire proceeds concurrently, and the "exactly one in flight" counter observes two.
       Requirement: spec R1.3; design §3.4 (D4).
-- [ ] **3b.2** Commit 2 (GREEN): `scheduler.go` (extend) — `slot chan struct{}` (capacity 1) on
+      **Done** (commit `1573be8`) — observed failing before the green: `max concurrent Consolidate
+      calls = 2, want exactly 1`, exactly the stated reason.
+- [x] **3b.2** Commit 2 (GREEN): `scheduler.go` (extend) — `slot chan struct{}` (capacity 1) on
       `Scheduler`; `runPass` wraps the `Consolidate` call in the non-blocking try-lock/skip pattern
       from design §3.4's exact shape (`select { s.slot <- struct{}{}: ... ; default: skip+log }`).
       Verify: `go test ./internal/scheduler/... -race`.
       Requirement: spec R1.3; design §3.4.
-- [ ] **3b.3** Commit 1 (RED): `scheduler_test.go` (extend) — a skipped fire logs one line naming
+      **Done** (commit `316a4be`) — green, no race.
+- [x] **3b.3** Commit 1 (RED): `scheduler_test.go` (extend) — a skipped fire logs one line naming
       the trigger it skipped and the trigger holding the slot, over a `bytes.Buffer` log fixture.
       **Red**: `3b.2`'s skip path exists but the log line's exact content is unasserted until this
       test — fails first on the message text.
       Requirement: design §3.4, §5.4.
-- [ ] **3b.4** Commit 2 (GREEN): `scheduler.go` (extend) — `s.logf("scheduler: %s fire skipped, a
+      **Disclosed, not a genuine red** (commit `909c3dc`, combined with 3b.4 below — one commit, no
+      code change between them): task 3b.2's own text already quotes design §3.4's exact shape
+      (`"default: skip+log"`) as part of its own scope, so the `logf` call landed complete inside
+      3b.2's commit. `TestScheduler_SkippedFire_LogsOneLine` passed on first run — there was no
+      implementation state in which it could have failed. A second disclosure in the same commit:
+      the test asserts a narrower claim than this task's own prose ("naming the trigger it skipped
+      **and** the trigger holding the slot") — design §3.4's own code block and task 3b.4's own
+      verbatim text both give a single `%s` (the skipped trigger only); no task adds state recording
+      which trigger holds the slot, so that half of this task's prose has no matching implementation
+      to test. Followed the verbatim design instead of the broader prose.
+- [x] **3b.4** Commit 2 (GREEN): `scheduler.go` (extend) — `s.logf("scheduler: %s fire skipped, a
       pass is already running", trigger)` on the `default` branch (owner ruling round 2 Q1: process
       log only, no `decision_log` row for a skip).
       Verify: `go test ./internal/scheduler/...`.
       Requirement: design §3.4, §5.4; owner ruling round 2 Q1.
-- [ ] **3b.5** `golangci-lint run`; `go test -race -shuffle=on ./internal/scheduler/...`.
-- [ ] Verify (PR-level): `make check-all` incl. `-race`; diff scope — `internal/scheduler/
+      **Done** — already implemented as part of 3b.2's own commit (see 3b.3's disclosure above); no
+      separate code change, `TestScheduler_SkippedFire_LogsOneLine` (commit `909c3dc`) is its own
+      Verify.
+- [x] **3b.5** `golangci-lint run`; `go test -race -shuffle=on ./internal/scheduler/...`.
+      **Done** — `make lint` → `0 issues.`; `go test -race -shuffle=on ./internal/scheduler/... -v
+      -count=5` → all tests `PASS` across all 5 shuffled runs, no race reported; a further isolated
+      `go test -race -run TestScheduler_NoOverlap_ExactlyOneInFlight -count=20` also green, no race
+      — the concurrency test proven non-flaky over 25 total runs.
+- [x] Verify (PR-level): `make check-all` incl. `-race`; diff scope — `internal/scheduler/
       scheduler.go` (+ tests, extended only, no new file). Target ≤60 impl+docs lines. Threat
       matrix discharge: design §10's "Concurrency" row (two triggers into one non-reentrant pass) —
       planned RED test is 3b.1.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/scheduler-overlap-guard` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR4> --json baseRefName` names `main`.
+
+      **PR 3b result** (`feat/scheduler-overlap-guard`): `make check-all` green end to end;
+      `internal/core` coverage floor unchanged at 750/750 (100%) — this PR adds no `internal/core`
+      code. Diff scope matched exactly: `scheduler.go` (extended, no new file), `scheduler_test.go`
+      (extended) — no strays, no `internal/core`, `cmd/nooma`, or `docs/` file touched. `git diff
+      --stat main...HEAD -- internal/scheduler/`: `scheduler.go` +32/-6 (38 changed lines), impl+docs
+      well under the ~60 sub-estimate; `scheduler_test.go` +181/-0 (181 test lines), ~129% of the
+      ~140 sub-estimate — flagged, not split: the overrun is entirely in test lines, and CLAUDE.md's
+      400-line PR ceiling counts impl+docs only. Chain-merge checks deferred to actual merge time
+      (PR not yet merged as of this apply batch), same posture PR 1, PR 2, and PR 3a took.
 
 ---
 
