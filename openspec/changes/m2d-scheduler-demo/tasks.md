@@ -86,7 +86,7 @@ Depends on nothing outside this change. Ships the whole of `m2d`'s `internal/cor
 PR (design §4: "two files, one of them a test" — nothing else under `internal/core/**` is touched
 by any later link in this chain).
 
-- [ ] **1.1** Commit 1 (RED): `internal/core/consolidation/schedule_test.go` (new) —
+- [x] **1.1** Commit 1 (RED): `internal/core/consolidation/schedule_test.go` (new) —
       `TestCatchUpDue` table: `nil` `lastRunAt` → due at any `now`; `now - 23h59m` → not due;
       `now - 24h` exactly → not due (ADR-0009's "more than 24h", strict, mirroring §6's own
       strict-comparison convention); `now - 24h - 1s` → due; a future `lastRunAt` (`now + 1h`) →
@@ -94,34 +94,34 @@ by any later link in this chain).
       **Red**: `undefined: consolidation.CatchUpDue` — package does not compile (`schedule.go`
       does not exist).
       Requirement: spec R2.1; design §4 (`CatchUpDue`'s doc comment).
-- [ ] **1.2** Commit 2 (GREEN): `internal/core/consolidation/schedule.go` (new) —
+- [x] **1.2** Commit 2 (GREEN): `internal/core/consolidation/schedule.go` (new) —
       `const CatchUpStalenessHours = 24` (**untyped**, not `time.Duration` — design D2/§3.2: the
       calibration gate's anchored `calibrationLeadingNumber` regex must read the literal `24`, not
       `86400000000000`) and `func CatchUpDue(lastRunAt *time.Time, now time.Time, stalenessHours
       int) bool`.
       Verify: `go test ./internal/core/consolidation/...`.
       Requirement: spec R2.1, R2.2; design §3.2 (D2), §4.
-- [ ] **1.3** Commit 1 (RED): `schedule_test.go` (extend) — `TestResolveConsolidationEnabled`
+- [x] **1.3** Commit 1 (RED): `schedule_test.go` (extend) — `TestResolveConsolidationEnabled`
       table: `nil` → `true` (migration `0002:65`'s own `DEFAULT 1`), `&false` → `false`, `&true` →
       `true`.
       **Red**: `undefined: consolidation.ResolveConsolidationEnabled` — package does not compile.
       Requirement: spec R1.2; design §3.1 (D1).
-- [ ] **1.4** Commit 2 (GREEN): `schedule.go` (extend) — `func ResolveConsolidationEnabled
+- [x] **1.4** Commit 2 (GREEN): `schedule.go` (extend) — `func ResolveConsolidationEnabled
       (configured *bool) bool`.
       Verify: `go test ./internal/core/consolidation/...`.
       Requirement: spec R1.2; design §3.1, §4.
-- [ ] **1.5** Commit 1 (RED): `schedule_test.go` (extend) — `TestNextDailyRun` table, via
+- [x] **1.5** Commit 1 (RED): `schedule_test.go` (extend) — `TestNextDailyRun` table, via
       `time.FixedZone` (no tzdata dependency): before the hour today (`02:00`, hour `3` → today
       `03:00`); after the hour today (`04:00`, hour `3` → tomorrow `03:00`); exactly on the hour
       (`03:00:00`, hour `3` → tomorrow `03:00`, "strictly after" per design §4's own comment); across
       a month/year boundary (Dec 31 23:00 → Jan 1 03:00).
       **Red**: `undefined: consolidation.NextDailyRun` — package does not compile.
       Requirement: design §3.1 (D1), §4.
-- [ ] **1.6** Commit 2 (GREEN): `schedule.go` (extend) — `func NextDailyRun(after time.Time, hour
+- [x] **1.6** Commit 2 (GREEN): `schedule.go` (extend) — `func NextDailyRun(after time.Time, hour
       int) time.Time`.
       Verify: `go test ./internal/core/consolidation/...`.
       Requirement: design §3.1, §4.
-- [ ] **1.7** `schedule_test.go` (extend) — `TestNextDailyRun_DST`: spring-forward normalization (a
+- [x] **1.7** `schedule_test.go` (extend) — `TestNextDailyRun_DST`: spring-forward normalization (a
       non-existent local `03:00` normalizes forward, `time.Date`'s own behavior) and fall-back
       (the first `03:00` wins) over a real zone, `import _ "time/tzdata"` **in the test file only**
       — `time.LoadLocation` has no zone database on Windows otherwise, and this repo cross-compiles
@@ -130,32 +130,41 @@ by any later link in this chain).
       edge of the same function.
       Verify: `go test ./internal/core/consolidation/... -run TestNextDailyRun_DST`.
       Requirement: design §9 (testing strategy, `NextDailyRun` DST row).
-- [ ] **1.8** `docs/02-cognitive-core.md` §13 — add the new row for `catch_up_staleness_hours`,
+- [x] **1.8** `docs/02-cognitive-core.md` §13 — add the new row for `catch_up_staleness_hours`,
       text verbatim from design §3.2: `` | `catch_up_staleness_hours`
       (`internal/core/consolidation.CatchUpStalenessHours`) | 24 — ADR-0009's boot catch-up gate;
       coincides with `incomplete_expiry_hours` above by coincidence, not by relation (a startup
       staleness window versus a phase's expiry window), no test ties them | ``. **Not** the §6
       sentence — see this document's opening correction; that lands in PR 4.
       Requirement: spec R0.3, R2.2; design §3.2.
-- [ ] **1.9** `schedule.go` — GoDoc comments for all four exported symbols, verbatim per design §4:
+- [x] **1.9** `schedule.go` — GoDoc comments for all four exported symbols, verbatim per design §4:
       `CatchUpStalenessHours`'s doc names ADR-0009 and doc 02 §13; `CatchUpDue`'s doc states the
       `nil`-is-always-due reading and the strict-comparison/no-repair-for-future decisions;
       `ResolveConsolidationEnabled`'s doc names the `DEFAULT 1` precedent; `NextDailyRun`'s doc
       states the DST-normalization behavior explicitly, so a reader does not have to find the
       design doc to understand the signature.
       Requirement: design §4 (reasoning belongs in the comment, `nooma-core` convention).
-- [ ] **1.10** Verify: `go test ./test/conformance/... -run TestCalibrationDoc` (or the suite's
+- [x] **1.10** Verify: `go test ./test/conformance/... -run TestCalibrationDoc` (or the suite's
       actual test name) — confirms the new §13 row is picked up automatically by the existing gate
       (R0.3/R2.2's own Verified-by clause); `calibrationMinSymbols`'s floor moves by exactly one,
       no other row needs bumping.
       Requirement: spec R0.3, R2.2 (Verified by).
-- [ ] **1.11** `golangci-lint run`; `go test -race ./internal/core/consolidation/...`.
-- [ ] Verify (PR-level): `make check-all`; diff scope — `internal/core/consolidation/schedule.go`
+- [x] **1.11** `golangci-lint run`; `go test -race ./internal/core/consolidation/...`.
+- [x] Verify (PR-level): `make check-all`; diff scope — `internal/core/consolidation/schedule.go`
       (new), `internal/core/consolidation/schedule_test.go` (new), `docs/02-cognitive-core.md`
       (one new §13 row only, **not** §6 — corrected above). Target ≤130 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/scheduler-core-decisions` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR2> --json baseRefName` names `main`.
+
+      **PR 1 result** (`feat/scheduler-core-decisions`, PR #180): `make check-all` green end to
+      end; `internal/core` coverage floor 749/749 (100%, up from 738/738);
+      `TestHarness_CalibrationTableMatchesConstants` green (`CatchUpStalenessHours` subtest
+      passes; `calibrationMinSymbols` left at 21 — it is a floor, not an equality, per its own
+      doc comment, and 22 live rows already clear it; not part of this PR's declared diff scope).
+      Changed lines: 71 impl+docs (`schedule.go` 70 + doc02 1) / 189 test — both under budget.
+      Diff scope matched exactly (3 files, no strays). Chain-merge checks deferred to actual
+      merge time (not yet merged as of this apply batch).
 
 ---
 
