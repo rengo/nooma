@@ -62,3 +62,46 @@ func TestCatchUp_FiresAfterDelay(t *testing.T) {
 		t.Fatalf("Phase = %v, want nil (a whole pass)", rc.calls[0].Phase)
 	}
 }
+
+// TestCatchUp_GatedOff_ZeroCallsEvenOnStaleVault is task 4.3:
+// ConsolidationEnabled = &false plus a 30-day-stale lastRunAt asserts zero
+// Consolidate calls — owner ruling round 1 #1 (D3): consolidation_enabled
+// gates the boot catch-up too, not only the cron. Spec R2.4.
+//
+// Red: genuinely red against this file's own committed runCatchUp — it
+// checks only CatchUpDue, with no consolidation_enabled gate at all, so a
+// disabled vault with a 30-day-stale lastRunAt still fires.
+func TestCatchUp_GatedOff_ZeroCallsEvenOnStaleVault(t *testing.T) {
+	ft := newFakeTimer()
+	rc := newRecordingConsolidator()
+	cfg := memrepo.NewConfig()
+	disabled := false
+	thirtyDaysStale := fixedNow.Add(-30 * 24 * time.Hour)
+	cfg.SeedConfig(t, ports.VaultConfig{
+		ConsolidationEnabled:   &disabled,
+		ConsolidationLastRunAt: &thirtyDaysStale,
+	})
+
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: cfg, Consolidate: rc, Timer: ft})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan struct{})
+	go func() {
+		s.runCatchUp(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCatchUp did not return — a gated-off catch-up must be a true no-op, never reaching the delay")
+	}
+
+	if got := rc.callCount(); got != 0 {
+		t.Fatalf("Consolidate called %d times, want 0 — ConsolidationEnabled is false", got)
+	}
+}
