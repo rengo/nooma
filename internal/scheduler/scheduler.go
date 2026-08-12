@@ -130,7 +130,14 @@ func (s *Scheduler) Wait(ctx context.Context) {
 func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 	_ = trigger
 
-	cfg, _ := s.config.Load(ctx)
+	cfg, err := s.config.Load(ctx)
+	if err != nil {
+		// Fail closed: an unread config is not an open gate. Treating a
+		// Load error as a zero-value VaultConfig would resolve
+		// ConsolidationEnabled as nil, which defaults to true — silently
+		// converting a read failure into a full consolidation pass.
+		return
+	}
 	if !consolidation.ResolveConsolidationEnabled(cfg.ConsolidationEnabled) {
 		return
 	}
