@@ -81,6 +81,56 @@ func TestResolveConsolidationEnabled(t *testing.T) {
 	}
 }
 
+// TestNextDailyRun proves the cron's next-fire computation is strictly
+// after the given instant: exactly on the hour returns tomorrow, not
+// today (design §4's own "strictly after" comment), and the computation
+// crosses a month/year boundary the same way a plain calendar day would.
+// time.FixedZone, not time.LoadLocation, so this test carries no tzdata
+// dependency.
+func TestNextDailyRun(t *testing.T) {
+	loc := time.FixedZone("FIXED-5", -5*60*60)
+
+	tests := []struct {
+		name  string
+		after time.Time
+		hour  int
+		want  time.Time
+	}{
+		{
+			name:  "before the hour today fires later today",
+			after: time.Date(2026, 8, 7, 2, 0, 0, 0, loc),
+			hour:  3,
+			want:  time.Date(2026, 8, 7, 3, 0, 0, 0, loc),
+		},
+		{
+			name:  "after the hour today fires tomorrow",
+			after: time.Date(2026, 8, 7, 4, 0, 0, 0, loc),
+			hour:  3,
+			want:  time.Date(2026, 8, 8, 3, 0, 0, 0, loc),
+		},
+		{
+			name:  "exactly on the hour fires tomorrow — strictly after",
+			after: time.Date(2026, 8, 7, 3, 0, 0, 0, loc),
+			hour:  3,
+			want:  time.Date(2026, 8, 8, 3, 0, 0, 0, loc),
+		},
+		{
+			name:  "crosses a month and year boundary",
+			after: time.Date(2026, 12, 31, 23, 0, 0, 0, loc),
+			hour:  3,
+			want:  time.Date(2027, 1, 1, 3, 0, 0, 0, loc),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NextDailyRun(tt.after, tt.hour)
+			if !got.Equal(tt.want) {
+				t.Errorf("NextDailyRun(%v, %d) = %v, want %v", tt.after, tt.hour, got, tt.want)
+			}
+		})
+	}
+}
+
 // timePtr returns a pointer to t — time.Time has no address to take
 // directly off a composite literal field.
 func timePtr(t time.Time) *time.Time {
