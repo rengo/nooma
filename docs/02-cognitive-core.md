@@ -884,6 +884,7 @@ module):
 |---|---|
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |
+| `catch_up_staleness_hours` (`internal/core/consolidation.CatchUpStalenessHours`) | 24 — ADR-0009's boot catch-up gate; coincides with `incomplete_expiry_hours` above by coincidence, not by relation (a startup staleness window versus a phase's expiry window), no test ties them |
 | `strengthen_gain` (`internal/core/consolidation.StrengthenGain`) | 0.10 — chosen, not derived; checked for compatibility (not entailment) against `goal_stagnation_days`'s default below |
 | `connect_source_limit` (`internal/core/consolidation.ConnectSourceLimit`) | 20 — chosen; governs two phases as of `m2c` — `connect`'s own candidate search (item 4 above) and, separately, `derive`'s own fresh source selection (item 5 above, design §7.3: `derive` re-runs the identical selection over its own read rather than reusing `connect`'s, so `--phase=derive` alone behaves the same as slot 5 of a whole pass) |
 | `connect_candidate_k` (`internal/core/consolidation.ConnectCandidateK`) | 5 — chosen; a separate knob from `dedup_candidate_k` below despite the identical default, per the same reasoning as `urgency_lead_days` above: one bounds capture's per-message judge calls, this one bounds connect's per-night budget |
