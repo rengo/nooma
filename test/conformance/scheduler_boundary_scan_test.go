@@ -2,6 +2,9 @@
 package conformance
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +28,7 @@ import (
 //
 //  2. Every one of the three consolidation.CatchUpDue,
 //     consolidation.ResolveConsolidationEnabled, consolidation.NextDailyRun
-//     symbols is referenced at least once, SOMEWHERE across the
+//     symbols has a real call site at least once, SOMEWHERE across the
 //     non-test, non-doc.go files under internal/scheduler — collectively,
 //     not per file. A per-file reading (task 2.5/design §3.1 item 4's own
 //     "every... file... references all three" wording, read most
@@ -39,7 +42,9 @@ import (
 //     duration/hour/bool decision it could instead ask the three pure
 //     functions for. Deviation from task 2.5's own per-file phrasing,
 //     disclosed rather than silently resolved — the same posture PR 3b
-//     took for design §3.4's skip-log wording.
+//     took for design §3.4's skip-log wording. The scope kept exactly
+//     this collective reading is JD-4-01's own confirmed-correct part;
+//     only the detection methodology below was defective.
 //
 //     Discharges PR link 2's own task 2.5 forward reference. Genuinely
 //     red before this PR's own catchup.go landed: CatchUpDue had zero
@@ -51,6 +56,17 @@ import (
 //     CatchUpDue reference, then restored), the same technique task
 //     3a.11 used to prove leg 1 was genuinely live rather than merely
 //     passing because there was nothing to check.
+//
+//     JD-4-01 correction: the original implementation checked
+//     strings.Contains(text, sym) over each file's raw bytes, so a symbol
+//     name appearing only in a doc comment (catchup.go's own line-24
+//     comment mentions CatchUpDue; cron.go's own lines 9/12 mention
+//     NextDailyRun) satisfied the check even with the real call deleted —
+//     verified by a disclosed temporary probe below. This leg now parses
+//     each scanned file with go/parser and looks for an actual
+//     *ast.CallExpr selecting the symbol (a real call site), which
+//     comments and string literals cannot satisfy. The collective,
+//     package-union scope is unchanged.
 //
 //  3. No non-test .go file under internal/scheduler references
 //     "time_based", "expired", or "cancelled" as a Go string literal
@@ -110,6 +126,7 @@ func TestSchedulerBoundaryScan(t *testing.T) {
 		want := []string{"CatchUpDue", "ResolveConsolidationEnabled", "NextDailyRun"}
 		found := make(map[string]bool, len(want))
 
+		fset := token.NewFileSet()
 		scanned := 0
 		err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
@@ -120,16 +137,31 @@ func TestSchedulerBoundaryScan(t *testing.T) {
 			}
 			scanned++
 
-			content, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return readErr
+			// go/parser, not strings.Contains over raw bytes (JD-4-01): a
+			// symbol name inside a comment or a string literal must not
+			// satisfy this check — only a real *ast.CallExpr selecting the
+			// symbol does, since that is the only thing that actually
+			// delegates the decision to internal/core/consolidation.
+			file, parseErr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+			if parseErr != nil {
+				return parseErr
 			}
-			text := string(content)
-			for _, sym := range want {
-				if strings.Contains(text, sym) {
-					found[sym] = true
+			ast.Inspect(file, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
 				}
-			}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				for _, sym := range want {
+					if sel.Sel.Name == sym {
+						found[sym] = true
+					}
+				}
+				return true
+			})
 			return nil
 		})
 		if err != nil {
@@ -141,10 +173,11 @@ func TestSchedulerBoundaryScan(t *testing.T) {
 		for _, sym := range want {
 			if !found[sym] {
 				t.Errorf(
-					"no non-test, non-doc.go file under internal/scheduler references "+
-						"consolidation.%s — the package's only durable proof it decides "+
+					"no non-test, non-doc.go file under internal/scheduler has a real call site "+
+						"for consolidation.%s — the package's only durable proof it decides "+
 						"nothing itself is that every one of the three core pure functions "+
-						"has a real caller here",
+						"has a real caller here, and a mention inside a comment or string "+
+						"literal does not count",
 					sym,
 				)
 			}
