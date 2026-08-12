@@ -185,6 +185,20 @@ func (s *Scheduler) Wait(ctx context.Context) {
 // (cmd/nooma/consolidate.go:120-125) — an unattended pass has none, so
 // silence would make the refusal invisible until someone notices a stale
 // decision_log.
+//
+// An aborted pass can ALSO carry already-refused units (JD-5-02):
+// internal/brain/consolidate.go:1044-1045 returns (report, err) together,
+// and report.reportCorrupted runs from five separate phase sites — Archive
+// (slot 2), Strengthen (slot 3), Connect (slot 4, two call sites), Reweight
+// (slot 6, two call sites) — every one of which can run and refuse units
+// before a LATER phase's own error aborts the same pass. The abort branch
+// below surfaces report.Corrupted() alongside the abort itself, as one
+// combined log line rather than two separate logf calls: two calls would
+// let an unrelated, concurrent write from another goroutine land between
+// them (logMu, JD-5-01, only ever makes ONE logf call atomic, not two
+// consecutive ones), splitting one pass's own story across two lines that
+// might not even stay adjacent in the log. When Corrupted() is empty the
+// line is unchanged from before — no refusal, nothing to add.
 func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 	cfg, err := s.config.Load(ctx)
 	if err != nil {
@@ -214,7 +228,17 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 		// like one that never started (spec R1.4). No retry loop, no
 		// special-cased "retry" state — the next fire attempts a fresh
 		// whole pass, same as any other.
-		s.logf("scheduler: pass aborted (%s): %v", trigger, err)
+		//
+		// report is not discarded (JD-5-02): an earlier phase can have
+		// already refused units before this later abort, and the process
+		// log is the only place that refusal is ever surfaced for an
+		// unattended pass. One combined line, not two separate logf calls
+		// — see this method's own doc comment above for why.
+		if corrupted := report.Corrupted(); len(corrupted) > 0 {
+			s.logf("scheduler: pass aborted (%s): %v, refused %d unit(s) before the abort: %v", trigger, err, len(corrupted), corrupted)
+		} else {
+			s.logf("scheduler: pass aborted (%s): %v", trigger, err)
+		}
 		return
 	}
 	if corrupted := report.Corrupted(); len(corrupted) > 0 {

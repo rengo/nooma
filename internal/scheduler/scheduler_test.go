@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
@@ -651,6 +652,114 @@ func TestRunPass_CompletedPassLogsCorrupted(t *testing.T) {
 	s.runPass(context.Background(), "cron")
 
 	const want = "scheduler: cron pass completed, refused 1 unit(s): [u-corrupted]\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
+	}
+}
+
+// abortingUnitsAfterNCalls is JD-5-02's own fixture: wraps a real
+// ports.UnitRepo and returns err from its nth LiveDecayStates call onward,
+// every other call and every other method passing straight through to the
+// wrapped repo. LiveDecayStates is called four times per whole pass — slot
+// 2 (archive), slot 4 (connect), slot 5 (derive), slot 6 (reweight)
+// (internal/ports/unitrepo.go:148-149) — so n=2 aborts at Connect's own
+// read, strictly after Archive's own report.reportCorrupted call
+// (internal/brain/consolidate.go:1090-1091) has already run. This is the
+// only way to make a real *brain.ConsolidateService return a (report, err)
+// pair where both are non-trivial in the same call, without touching
+// internal/brain/consolidate.go (task 5.7's own hard constraint) or
+// constructing a brain.ConsolidateReport by hand from outside package brain
+// (its fields are unexported — task 5.5's own disclosed precedent for the
+// identical problem).
+type abortingUnitsAfterNCalls struct {
+	ports.UnitRepo
+	n   int
+	err error
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (u *abortingUnitsAfterNCalls) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error) {
+	u.mu.Lock()
+	u.calls++
+	call := u.calls
+	u.mu.Unlock()
+	if call == u.n {
+		return nil, u.err
+	}
+	return u.UnitRepo.LiveDecayStates(ctx)
+}
+
+// TestRunPass_AbortSurfacesRefusedUnits is JD-5-02: runPass's abort branch
+// logged only the abort line and discarded report entirely, but
+// internal/brain/consolidate.go:1044-1045 returns (report, err) together,
+// and report.reportCorrupted is called from five separate phase sites
+// (lines 1091, 1103, 1113, 1132, 1134) — so an earlier phase can refuse
+// units and a later phase can still abort the same pass, and those
+// already-refused ids never reached the process log. Unattended, the
+// process log is the only place a refused unit is surfaced at all (design
+// §5.4).
+//
+// This wires a real *brain.ConsolidateService (task 5.5's own precedent)
+// over one seeded unit whose decay state is non-finite — refused at
+// Archive (slot 2) — and abortingUnitsAfterNCalls{n: 2}, which fails
+// Connect's own LiveDecayStates read (slot 4), strictly after Archive's own
+// refusal was already recorded. The returned report therefore genuinely
+// carries both Corrupted() = ["u-corrupted"] and a non-nil err in the same
+// call — not two independently-scripted fake return values.
+//
+// Red: runPass's abort branch discards report and logs only the plain
+// abort line — fails on the missing refused-unit clause.
+func TestRunPass_AbortSurfacesRefusedUnits(t *testing.T) {
+	units := memrepo.NewUnits()
+	if err := units.Create(context.Background(), unit.Unit{
+		ID:              "u-corrupted",
+		Type:            unit.TypeKnowledge,
+		Status:          unit.StatusPool,
+		Content:         "a unit whose decay state is non-finite",
+		Source:          "chat",
+		Weight:          math.NaN(),
+		WeightDecayRate: 0,
+		LastTouchedAt:   fixedNow,
+		CreatedAt:       fixedNow,
+		UpdatedAt:       fixedNow,
+	}); err != nil {
+		t.Fatalf("seed corrupted unit: %v", err)
+	}
+
+	wrapped := &abortingUnitsAfterNCalls{UnitRepo: units, n: 2, err: errors.New("boom")}
+
+	recallSvc := brain.NewRecallService(
+		brain.NewIndex(recall.VectorIndex{Model: "test-model"}),
+		memrepo.NewLexical(),
+		units,
+		fakeprovider.NewEmbeddingFake("test-model"),
+	)
+	judge := fakeprovider.New(t, "") // zero scripted cases: never reached before the abort
+
+	svc := brain.NewConsolidateService(
+		fixedClock{now: fixedNow},
+		memrepo.NewConfig(),
+		wrapped,
+		memrepo.NewRelations(),
+		&fakeIDGen{},
+		memrepo.NewDecisionLog(),
+		recallSvc,
+		judge,
+		memrepo.NewSelfModel(),
+		memrepo.NewState(),
+	)
+
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: svc, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	s.runPass(context.Background(), "cron")
+
+	const want = "scheduler: pass aborted (cron): consolidate: connect: read live decay states: boom, refused 1 unit(s) before the abort: [u-corrupted]\n"
 	if got := logBuf.String(); got != want {
 		t.Fatalf("log = %q, want %q", got, want)
 	}
