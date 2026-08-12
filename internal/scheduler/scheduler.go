@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 
@@ -45,6 +46,7 @@ type Scheduler struct {
 	log         io.Writer
 	timer       timer
 	wg          sync.WaitGroup
+	slot        chan struct{} // capacity 1: the non-blocking try-lock, design §3.4 (D4)
 }
 
 // New validates d's three required dependencies and returns a *Scheduler
@@ -76,7 +78,15 @@ func New(d Deps) (*Scheduler, error) {
 		consolidate: d.Consolidate,
 		log:         log,
 		timer:       t,
+		slot:        make(chan struct{}, 1),
 	}, nil
+}
+
+// logf writes one line to the process log (design §5.4): an abort, a
+// skipped fire, or a completed pass that refused units. Never decision_log
+// — an aborted or skipped pass had no vault effect (m2c's own I12 scoping).
+func (s *Scheduler) logf(format string, args ...any) {
+	_, _ = fmt.Fprintf(s.log, format+"\n", args...)
 }
 
 // Start spawns the cron goroutine and returns immediately (design §5.2).
@@ -123,13 +133,15 @@ func (s *Scheduler) Wait(ctx context.Context) {
 // consolidation_last_run_at write, no side effect beyond this read (spec
 // R1.2).
 //
-// No overlap guard yet (PR 3b) and no abort/Corrupted() logging yet (PR
-// 5), each named here rather than silently assumed. trigger is accepted
-// now, ahead of its first reader, so this method's signature does not
-// change again once those callers land.
+// The non-blocking try-lock (design §3.4, D4) serializes both triggers
+// into this one method: a fire that cannot take the slot skips rather than
+// queuing behind the one in flight — queuing would run a second whole pass
+// over a corpus the first one just consolidated (design §3.4's own
+// rejected alternative). No abort/Corrupted() logging yet (PR 5), named
+// here rather than silently assumed. trigger is accepted now, ahead of its
+// first reader, so this method's signature does not change again once
+// those callers land.
 func (s *Scheduler) runPass(ctx context.Context, trigger string) {
-	_ = trigger
-
 	cfg, err := s.config.Load(ctx)
 	if err != nil {
 		// Fail closed: an unread config is not an open gate. Treating a
@@ -139,6 +151,14 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 		return
 	}
 	if !consolidation.ResolveConsolidationEnabled(cfg.ConsolidationEnabled) {
+		return
+	}
+
+	select {
+	case s.slot <- struct{}{}: // acquired
+		defer func() { <-s.slot }()
+	default:
+		s.logf("scheduler: %s fire skipped, a pass is already running", trigger)
 		return
 	}
 
