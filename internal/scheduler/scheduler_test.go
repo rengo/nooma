@@ -112,19 +112,21 @@ type blockingConsolidator struct {
 	calls       int
 	inFlight    int
 	maxInFlight int
+	lastReq     brain.ConsolidateRequest // task 4.7's own addition: the last call's own request
 }
 
 func newBlockingConsolidator() *blockingConsolidator {
 	return &blockingConsolidator{entered: make(chan struct{}, 4), release: make(chan struct{})}
 }
 
-func (b *blockingConsolidator) Consolidate(_ context.Context, _ brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
+func (b *blockingConsolidator) Consolidate(_ context.Context, req brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
 	b.mu.Lock()
 	b.calls++
 	b.inFlight++
 	if b.inFlight > b.maxInFlight {
 		b.maxInFlight = b.inFlight
 	}
+	b.lastReq = req
 	b.mu.Unlock()
 
 	b.entered <- struct{}{}
@@ -140,6 +142,12 @@ func (b *blockingConsolidator) snapshot() (calls, maxInFlight int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.calls, b.maxInFlight
+}
+
+func (b *blockingConsolidator) lastRequest() brain.ConsolidateRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.lastReq
 }
 
 // TestScheduler_NoOverlap_ExactlyOneInFlight is task 3b.1: a slow fake
