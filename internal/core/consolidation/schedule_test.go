@@ -54,6 +54,33 @@ func TestCatchUpDue(t *testing.T) {
 	}
 }
 
+// TestResolveConsolidationEnabled proves R1.2's gate resolution mirrors
+// migration 0002:65's own consolidation_enabled DEFAULT 1: a config row
+// that has never set the column reads nil, not false, so nil must resolve
+// to enabled.
+func TestResolveConsolidationEnabled(t *testing.T) {
+	tru := true
+	fls := false
+
+	tests := []struct {
+		name       string
+		configured *bool
+		want       bool
+	}{
+		{"nil resolves to enabled — DEFAULT 1", nil, true},
+		{"explicit false stays disabled", &fls, false},
+		{"explicit true stays enabled", &tru, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveConsolidationEnabled(tt.configured)
+			if got != tt.want {
+				t.Errorf("ResolveConsolidationEnabled(%v) = %v, want %v", tt.configured, got, tt.want)
+			}
+		})
+	}
+}
+
 // timePtr returns a pointer to t — time.Time has no address to take
 // directly off a composite literal field.
 func timePtr(t time.Time) *time.Time {
