@@ -336,8 +336,8 @@ design §13**: 3a (skeleton + cron loop, ~200) | 3b (the overlap guard, ~60).
       failure resolved `ConsolidationEnabled == nil` to `true` and opened the R1.2 gate. Fixed by
       failing closed — commits `3f1ec4a` (RED) and `2763cad` (GREEN), both on `main` via PR #182.
 
-      **Chain-merge check 2, for PR 3a**: satisfied by PR 3b's own `gh pr view --json baseRefName`
-      naming `main` — see PR 3b's own Verify block below.
+      **Chain-merge check 2, for PR 3a, confirmed**: `gh pr view 183 --json baseRefName` →
+      `"main"` — PR 3b (`feat/scheduler-overlap-guard`, GitHub PR #183) targets `main`.
 
 ---
 
