@@ -416,13 +416,13 @@ Depends on PR 3b (shares the slot and `runPass`). Ships ADR-0009's boot catch-up
 120s delay, the D3 gate (round 1 ruling 1: gates both triggers), and — per this document's opening
 correction — the doc 02 §6 sentence design §3.3 itself says belongs here.
 
-- [ ] **4.1** Commit 1 (RED): `internal/scheduler/catchup_test.go` (new) — `TestCatchUp_FiresAfter
+- [x] **4.1** Commit 1 (RED): `internal/scheduler/catchup_test.go` (new) — `TestCatchUp_FiresAfter
       Delay`: `CatchUpDue` evaluates true at boot (a `lastRunAt` older than `CatchUpStalenessHours`)
       → `Consolidate` not called before 120s elapses, called once after, via a fake clock/timer.
       **Red**: `undefined: scheduler.BootConsolidationDelay` / `catchup.go`'s goroutine — package
       does not compile.
       Requirement: spec R2.3; design §5.1, §5.3.
-- [ ] **4.2** Commit 2 (GREEN): `scheduler.go` (extend) — `const BootConsolidationDelay = 120 *
+- [x] **4.2** Commit 2 (GREEN): `scheduler.go` (extend) — `const BootConsolidationDelay = 120 *
       time.Second` (alongside `ConsolidationHour`, per design §5.1's "the constants"). `internal/
       scheduler/catchup.go` (new) — at `Start`, `Config.Load` once, resolve
       `consolidation.ResolveConsolidationEnabled` (owner ruling round 1 #1: gates catch-up too —
@@ -431,61 +431,92 @@ correction — the doc 02 §6 sentence design §3.3 itself says belongs here.
       `select { timer.After(120s) | ctx.Done() → return }` → `runPass(ctx, "catchup")`.
       Verify: `go test ./internal/scheduler/...`.
       Requirement: spec R2.3; design §3.3 (D3), §5.1, §5.3.
-- [ ] **4.3** Commit 1 (RED): `catchup_test.go` (extend) — `TestCatchUp_GatedOff_ZeroCallsEven
+      **Staged deliberately without the gate check and without routing through `runPass` yet**
+      (disclosed deviation from this task's own combined prose), to keep `4.3` and `4.7` genuinely
+      red per strict TDD's own minimum-code law — `4.1`'s test alone does not exercise either. Both
+      landed later, in `4.4`'s and `4.8`'s own GREEN commits, matching this task's final shape
+      exactly by the time `4.16`'s verify runs. `Start` also wired to spawn the catch-up goroutine
+      into the same `sync.WaitGroup` as the cron goroutine in this same commit, closing the gap PR
+      3a's own `Start` comment disclosed — not a separately numbered task, but literally "at
+      `Start`" per this task's own text, verified by a new `TestScheduler_Start_JoinsBootCatchUp`.
+- [x] **4.3** Commit 1 (RED): `catchup_test.go` (extend) — `TestCatchUp_GatedOff_ZeroCallsEven
       OnStaleVault`: `ConsolidationEnabled = &false` plus a 30-day-stale `lastRunAt` asserts zero
       `Consolidate` calls.
       **Red**: genuinely red if the gate check does not precede `CatchUpDue` (owner ruling round 1
       #1 — the whole point of this task).
       Requirement: spec R2.4 ("whether `consolidation_enabled = false` also suppresses the boot
       catch-up" — resolved by owner ruling, no longer open); design §3.3 (D3).
-- [ ] **4.4** Verify/confirm: `4.2`'s gate check already precedes the `CatchUpDue` evaluation per
+      **Observed failing for the stated reason**: `4.2`'s own committed `runCatchUp` checked only
+      `CatchUpDue`, so the disabled+stale fixture reached the delay and blocked forever instead of
+      returning as a true no-op — `runCatchUp did not return`.
+- [x] **4.4** Verify/confirm: `4.2`'s gate check already precedes the `CatchUpDue` evaluation per
       the code order specified — no new implementation if `4.3` passes; this task is the checkpoint.
       Verify: `go test ./internal/scheduler/... -run TestCatchUp_GatedOff`.
       Requirement: spec R2.4.
-- [ ] **4.5** Commit 1 (RED): `catchup_test.go` (extend) — `TestCatchUp_CancelledDelayNeverFires`:
+      **New implementation was needed** (per `4.2`'s own disclosed staging above):
+      `consolidation.ResolveConsolidationEnabled` added ahead of `CatchUpDue` in `runCatchUp`. `4.3`
+      green afterward.
+- [x] **4.5** Commit 1 (RED): `catchup_test.go` (extend) — `TestCatchUp_CancelledDelayNeverFires`:
       `ctx` cancelled before the 120s delay elapses asserts `Consolidate` is never called.
       **Red**: only red if the `select` omits the `ctx.Done()` arm — `4.2`'s shape already includes
       it, so this is confirmatory rather than a genuine pre-existing bug; disclosed rather than
       claimed as a fresh red.
       Requirement: spec R2.3 (second Verified-by clause).
-- [ ] **4.6** Verify/confirm: `go test ./internal/scheduler/... -run TestCatchUp_CancelledDelay`.
+      **Confirmed**: passed on first run, no implementation change.
+- [x] **4.6** Verify/confirm: `go test ./internal/scheduler/... -run TestCatchUp_CancelledDelay`.
       Requirement: spec R2.3.
-- [ ] **4.7** Commit 1 (RED): `catchup_test.go` (extend) — `TestCatchUp_IndistinguishableFromCron`:
+- [x] **4.7** Commit 1 (RED): `catchup_test.go` (extend) — `TestCatchUp_IndistinguishableFromCron`:
       a due catch-up call is indistinguishable, on the mock `Consolidator`, from a cron-triggered
       call (both `Phase == nil`, both routed through `runPass`).
       **Red**: fails if `catchup.go` constructs its own `ConsolidateRequest` instead of relying on
       `runPass`'s own single construction point.
       Requirement: spec R2.4 (first Verified-by clause).
-- [ ] **4.8** Verify/confirm: both triggers call only `runPass(ctx, trigger)`, `ConsolidateRequest{}`
+      **Observed failing for the stated reason**: `runCatchUp` still called
+      `s.consolidate.Consolidate` directly, bypassing `runPass`'s slot — `max concurrent Consolidate
+      calls = 2, want exactly 1`. Extended `blockingConsolidator` (`scheduler_test.go`) with a
+      `lastReq`/`lastRequest()` so the `Phase` assertion could inspect the winning call.
+- [x] **4.8** Verify/confirm: both triggers call only `runPass(ctx, trigger)`, `ConsolidateRequest{}`
       constructed in exactly one place (`runPass` itself) — R1.1's "unrepresentable from this
       package" property.
       Verify: `go test ./internal/scheduler/... -run TestCatchUp_Indistinguishable`.
       Requirement: spec R1.1, R2.4.
-- [ ] **4.9** Commit 1 (RED, structural): `test/conformance/scheduler_boundary_scan_test.go`
+      **Done**: `runCatchUp`'s due fire now calls `s.runPass(ctx, "catchup")`; `4.7` green.
+- [x] **4.9** Commit 1 (RED, structural): `test/conformance/scheduler_boundary_scan_test.go`
       (extend) — leg 3: no non-test file under `internal/scheduler` references `time_based`,
       `expired`, or `cancelled` as a status literal (R2.4's own `MUST NOT` — "no part of ADR-0009
       beyond 'always recovered'").
       **Red**: not genuinely red — nothing in this chain has ever referenced those literals;
       disclosed as a guard against future regression, not a proven-broken state, per `m2a` C9.
       Requirement: spec R2.4 (Verified by, second clause).
-- [ ] **4.10** Verify/confirm: `go test ./test/conformance/... -run TestSchedulerBoundaryScan`.
+- [x] **4.10** Verify/confirm: `go test ./test/conformance/... -run TestSchedulerBoundaryScan`.
       Requirement: spec R2.4.
-- [ ] **4.11** Discharge PR 2's forward reference (task 2.5): `scheduler_boundary_scan_test.go`
+- [x] **4.11** Discharge PR 2's forward reference (task 2.5): `scheduler_boundary_scan_test.go`
       (extend) — leg 2: every non-test, non-`doc.go` file under `internal/scheduler` references all
       three of `CatchUpDue`, `ResolveConsolidationEnabled`, `NextDailyRun` at least once.
       **Genuinely red before this task's own `catchup.go` lands** — `CatchUpDue` had zero callers
       until `4.2`; first true, live check in the chain.
       Requirement: design §3.1 item 4.
-- [ ] **4.12** `docs/02-cognitive-core.md` §6 — one new sentence, design §3.3/owner ruling round 1
+      **Read collectively, not per file** (disclosed deviation): task 2.5's own "every... file...
+      references all three" phrasing, read most literally, is unsatisfiable — `timer.go` is a bare
+      `time.After` seam with no legitimate reason to import `internal/core/consolidation` at all.
+      This leg checks that all three symbols are referenced somewhere across the non-test,
+      non-`doc.go` files, matching design §3.1 item 4's own package-level prose.
+      **Genuineness proven by a disclosed temporary probe** (same technique task 3a.11 used):
+      `catchup.go` moved out of the package, the leg re-run, observed failing exactly on the missing
+      `consolidation.CatchUpDue` reference, then restored byte-identical (`git diff --exit-code`
+      clean) and re-run green — since `catchup.go` was already committed by this task's own position
+      in the sequence, a plain write-then-run would not have observed the genuine failure otherwise.
+- [x] **4.12** `docs/02-cognitive-core.md` §6 — one new sentence, design §3.3/owner ruling round 1
       #1: `config.consolidation_enabled = 0` suppresses the nightly pass **and** ADR-0009's boot
       catch-up — the two are one body of work behind two triggers. Corrects design §13's own PR-1
       scope line per this document's opening note; lands here, not in PR 1.
       Requirement: spec R0.3 (non-negotiable #1 — doc 02 governs behavior); design §3.3.
-- [ ] **4.13** `internal/scheduler/catchup.go` — a doc comment at the gate's call site naming
+- [x] **4.13** `internal/scheduler/catchup.go` — a doc comment at the gate's call site naming
       ADR-0009 by section and carrying the "recovered vs. expired, not vs. a user switch" reading in
       two sentences (design §3.3 item 2).
       Requirement: design §3.3.
-- [ ] **4.14** `docs/02-cognitive-core.md` §13 — amend the existing `boot_consolidation_delay` row
+      **Landed in `4.4`'s own commit** (same gate-check line), ticked here for its own record.
+- [x] **4.14** `docs/02-cognitive-core.md` §13 — amend the existing `boot_consolidation_delay` row
       (line ~914-917) to name `internal/scheduler.BootConsolidationDelay` in prose (manual review
       only, no gate — design §3.2's asymmetry table); amend the "03:00 daily" cadence row to name
       `internal/scheduler.ConsolidationHour` in prose, with a note stating explicitly why this does
@@ -493,19 +524,56 @@ correction — the doc 02 §6 sentence design §3.3 itself says belongs here.
       which the gate's anchored numeric-leading regex reads as `03`, not the constant's value `3`;
       splitting the row is M3's job (the row's other half, "every 5 min", is M3's proactive check).
       Requirement: spec R0.3; design §3.2.
-- [ ] **4.15** Explicit non-task, recorded rather than silently dropped: no automated check exists
+- [x] **4.15** Explicit non-task, recorded rather than silently dropped: no automated check exists
       for `TriggerStalenessHours`/`TimerStalenessHours` naming rows because **neither constant is
       defined in `m2d` at all** — round-2 owner ruling Q3 deferred both to M3, overriding design §12
       Q3's own default answer ("owner ruling 2 says define them now") and design §13's PR-5 scope
       line, which still lists them. This document does not carry that line into PR 5 below.
       Requirement: owner ruling round 2, Q3.
-- [ ] **4.16** `golangci-lint run`; `go test -race ./internal/scheduler/...`.
-- [ ] Verify (PR-level): `make check-all`; diff scope — `internal/scheduler/{catchup,scheduler}.go`
+      **Nothing implemented** — recorded as an explicit non-task, per its own text.
+- [x] **4.16** `golangci-lint run`; `go test -race ./internal/scheduler/...`.
+      **Done** — `make lint` → `0 issues.`; `go test -race ./internal/scheduler/... -v` → all 12
+      top-level tests `PASS` (`TestCatchUp_FiresAfterDelay`, `TestCatchUp_GatedOff_
+      ZeroCallsEvenOnStaleVault`, `TestCatchUp_CancelledDelayNeverFires`,
+      `TestCatchUp_IndistinguishableFromCron`, `TestCron_FiresAfterHourElapses`,
+      `TestCron_NeverFiresBeforeCtxCancelled`, `TestCron_GatedOff_FiredTickCallsConsolidateZeroTimes`,
+      `TestCron_ConfigLoadError_FiredTickCallsConsolidateZeroTimes`, `TestNew_RejectsNilDeps` (3
+      subtests), `TestNew_AcceptsValidDeps`, `TestScheduler_NoOverlap_ExactlyOneInFlight`,
+      `TestScheduler_SkippedFire_LogsOneLine`, `TestScheduler_Wait` (2 subtests),
+      `TestScheduler_Start_JoinsBootCatchUp`), no race.
+- [x] Verify (PR-level): `make check-all`; diff scope — `internal/scheduler/{catchup,scheduler}.go`
       (+ tests), `docs/02-cognitive-core.md` (§6 sentence + two §13 prose amendments). Target ≤150
       impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/scheduler-boot-catchup` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR5> --json baseRefName` names `main`.
+
+      **PR 4 result** (`feat/scheduler-boot-catchup`): `make check-all` green end to end;
+      `internal/core` coverage floor unchanged at 750/750 (100%) — this PR adds no `internal/core`
+      code. `sh scripts/docs-sync.sh '[]' < changed-files`: `OK: this PR does not touch
+      internal/core/** — nothing for this gate to check` (this PR touches no `internal/core/` file;
+      the doc02 edits are done anyway, per non-negotiable #1, same as this document's own opening
+      note). `TestHarness_CalibrationTableMatchesConstants` unaffected — the two amended §13 rows
+      are `internal/scheduler` constants, outside that gate's reach by construction (spec R0.3).
+      Diff scope matched exactly: `internal/scheduler/catchup.go` (new, 49 lines),
+      `internal/scheduler/scheduler.go` (extended, +20/-7 = 27 changed lines), `docs/02-
+      cognitive-core.md` (+5/-2 = 7 changed lines), plus `internal/scheduler/catchup_test.go` (new,
+      227 lines), `internal/scheduler/scheduler_test.go` (extended, +40/-1 = 41 lines),
+      `test/conformance/scheduler_boundary_scan_test.go` (extended, +134/-22 = 156 lines) — no
+      strays. Impl+docs 83 lines (~55% of the ~150 estimate, comfortably under). Test 424 lines
+      (~193% of the ~220 estimate) — **flagged, not split**: the overrun is entirely in test lines
+      (CLAUDE.md's 400-line ceiling counts impl+docs only), but this is a notably larger overrun
+      percentage than links 1/2/3a/3b saw (106–129%); most of it is `scheduler_boundary_scan_test.go`
+      growing from 84 to 218 lines (legs 2/3 plus the doc-comment expansion) and `catchup_test.go`'s
+      own 227 lines covering four distinct fixtures. Reported for the orchestrator's own read, not
+      split unilaterally.
+      `go test -race ./internal/scheduler/... -count=5`: green, all 5 runs, no race.
+      `go test -race -shuffle=on ./internal/scheduler/... -count=5`: green, all 5 shuffled runs, no
+      race. `go test -race -run 'TestCatchUp_IndistinguishableFromCron|
+      TestScheduler_NoOverlap_ExactlyOneInFlight' ./internal/scheduler/... -count=20`: green, no
+      race — 20 runs of both concurrency-sensitive tests together, zero flakes.
+      Chain-merge checks deferred to actual merge time (PR not yet merged as of this apply batch),
+      same posture PR 1/2/3a/3b took.
 
 ---
 
