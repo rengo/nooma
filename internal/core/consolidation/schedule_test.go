@@ -187,3 +187,42 @@ func TestNextDailyRun_DST(t *testing.T) {
 func timePtr(t time.Time) *time.Time {
 	return &t
 }
+
+// TestNextDailyRun_SpringForwardDoesNotDriftTheHour pins the defect
+// Judgment Day found on this PR (m2d link 1, Judge B, CRITICAL —
+// independently reproduced with a probe before being accepted).
+//
+// When hour falls inside a spring-forward gap, time.Date normalizes the
+// candidate forward: asking for 02:00 on a day whose 02:00 does not exist
+// yields 03:00. If after is later that same day, the old code advanced the
+// ALREADY-NORMALIZED candidate with AddDate — and AddDate reuses the
+// receiver's own Clock(), which by then reads 03:00, not the hour that was
+// asked for. The next day carries no DST anomaly, so 02:00 exists there and
+// is what the caller asked for, yet the returned time read 03:00: a silent,
+// deterministic one-hour drift, once a year, in whichever zone puts its
+// transition on the configured hour.
+//
+// The existing DST test cannot catch this: it uses after = 01:00, which is
+// before the normalized candidate, so the AddDate branch never runs.
+func TestNextDailyRun_SpringForwardDoesNotDriftTheHour(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatalf("loading Europe/Berlin: %v", err)
+	}
+
+	// 2026-03-29 in Berlin jumps 02:00 -> 03:00, so local 02:00 does not
+	// exist. after is 10:00 that same day, so the next occurrence is
+	// tomorrow — a day with no anomaly at all.
+	after := time.Date(2026, 3, 29, 10, 0, 0, 0, berlin)
+	got := NextDailyRun(after, 2)
+
+	wantY, wantM, wantD := 2026, time.March, 30
+	if y, m, d := got.Date(); y != wantY || m != wantM || d != wantD {
+		t.Fatalf("NextDailyRun(%s, 2) date = %04d-%02d-%02d, want %04d-%02d-%02d",
+			after, y, m, d, wantY, wantM, wantD)
+	}
+	if h, min, s := got.Clock(); h != 2 || min != 0 || s != 0 {
+		t.Errorf("NextDailyRun(%s, 2) = %s (clock %02d:%02d:%02d), want 02:00:00 — 2026-03-30 has no DST gap, so the hour asked for exists and must not be inherited from the previous day's normalized candidate",
+			after, got, h, min, s)
+	}
+}
