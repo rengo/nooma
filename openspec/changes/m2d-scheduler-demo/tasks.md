@@ -225,34 +225,34 @@ seam, and the daily cron loop calling `Consolidate` with no overlap protection y
 PR 3b's own scope — this link's `runPass` calls `Consolidate` directly). **Pre-drawn split, per
 design §13**: 3a (skeleton + cron loop, ~200) | 3b (the overlap guard, ~60).
 
-- [ ] **3a.1** `internal/scheduler/doc.go` (modify) — extend the package comment: what the package
+- [x] **3a.1** `internal/scheduler/doc.go` (modify) — extend the package comment: what the package
       owns (goroutines, the timer seam, the process log) and what it does not (any decision — every
       `if` over a duration, an hour, or a `*bool` lives in `internal/core/consolidation`). Not a
       red/green pair — a doc comment, verified by review only.
       Requirement: design §2, §3.1.
-- [ ] **3a.2** Commit 1 (RED): `internal/scheduler/scheduler_test.go` (new) — `New` rejects a `nil`
+- [x] **3a.2** Commit 1 (RED): `internal/scheduler/scheduler_test.go` (new) — `New` rejects a `nil`
       `Clock`, a `nil` `Config`, and a `nil` `Consolidate` (three cases).
       **Red**: `undefined: scheduler.New` / `scheduler.Deps` / `scheduler.Scheduler` — package does
       not compile.
       Requirement: design §5.2.
-- [ ] **3a.3** Commit 2 (GREEN): `internal/scheduler/scheduler.go` (new) — `Consolidator` interface,
+- [x] **3a.3** Commit 2 (GREEN): `internal/scheduler/scheduler.go` (new) — `Consolidator` interface,
       `Deps` struct (`Clock`, `Config`, `Consolidate`, `Log io.Writer`, `Timer timer` — the only
       optional field), `Scheduler` struct, `New(d Deps) (*Scheduler, error)` validating the three
       non-nil deps.
       Verify: `go test ./internal/scheduler/...`.
       Requirement: design §5.2.
-- [ ] **3a.4** `internal/scheduler/timer.go` (new) — the `timer` seam (an interface over
+- [x] **3a.4** `internal/scheduler/timer.go` (new) — the `timer` seam (an interface over
       `time.After`) and its real implementation calling `time.After` directly (`internal/scheduler`
       is outside `forbidigo`'s scope, design §5.2). **No meaningful red**: a bare interface satisfied
       trivially by both implementations — disclosed; proven indirectly by 3a.5's own cron test.
       Requirement: design §5.2 ("Why a package-local `timer` seam").
-- [ ] **3a.5** Commit 1 (RED): `internal/scheduler/cron_test.go` (new) — a fake clock/timer advanced
+- [x] **3a.5** Commit 1 (RED): `internal/scheduler/cron_test.go` (new) — a fake clock/timer advanced
       past `ConsolidationHour` asserts exactly one whole-pass call (`Phase == nil`) to the fake
       `Consolidator`; a clock/timer that never reaches the hour asserts zero calls.
       **Red**: `undefined: scheduler.ConsolidationHour` / `cron.go`'s loop — package does not
       compile.
       Requirement: spec R1.1; design §5.3.
-- [ ] **3a.6** Commit 2 (GREEN): `scheduler.go` (extend) — `const ConsolidationHour = 3` (local
+- [x] **3a.6** Commit 2 (GREEN): `scheduler.go` (extend) — `const ConsolidationHour = 3` (local
       time — owner ruling round 1 #2; design §5.1 places this constant in `scheduler.go` alongside
       `BootConsolidationDelay`, "the constants", not in `cron.go`). `internal/scheduler/cron.go`
       (new) — the daily loop: `next := NextDailyRun(Clock.Now(), ConsolidationHour)`,
@@ -261,37 +261,56 @@ design §13**: 3a (skeleton + cron loop, ~200) | 3b (the overlap guard, ~60).
       calls `Consolidate(ctx, brain.ConsolidateRequest{})` unconditionally.
       Verify: `go test ./internal/scheduler/...`.
       Requirement: spec R1.1; design §5.1, §5.3.
-- [ ] **3a.7** Commit 1 (RED): `cron_test.go` (extend) — a fixture with `ConsolidationEnabled =
+- [x] **3a.7** Commit 1 (RED): `cron_test.go` (extend) — a fixture with `ConsolidationEnabled =
       &false` asserts the fired tick calls `Consolidate` zero times.
       **Red**: `3a.6`'s `runPass` has no gate check — fails, calling `Consolidate` once.
       Requirement: spec R1.2.
-- [ ] **3a.8** Commit 2 (GREEN): `scheduler.go` (extend) — `runPass` reads `Config.Load`, resolves
+- [x] **3a.8** Commit 2 (GREEN): `scheduler.go` (extend) — `runPass` reads `Config.Load`, resolves
       `consolidation.ResolveConsolidationEnabled`; `false` → return before calling `Consolidate` —
       no pass, no `decision_log` rows, no `consolidation_last_run_at` write, no side effect beyond
       the `Config.Load` read (R1.2's own MUST).
       Verify: `go test ./internal/scheduler/...`.
       Requirement: spec R1.2; design §5.3.
-- [ ] **3a.9** Commit 1 (RED): `scheduler_test.go` (extend) — `Wait(ctx)` returns once the cron
+- [x] **3a.9** Commit 1 (RED): `scheduler_test.go` (extend) — `Wait(ctx)` returns once the cron
       goroutine unwinds after `ctx` cancellation, or when `ctx` itself is done first.
       **Red**: `undefined: Scheduler.Wait` — package does not compile.
       Requirement: design §5.2, §3.5 (D5, mechanical join only — the shutdown-budget wiring is
       PR 7's own scope).
-- [ ] **3a.10** Commit 2 (GREEN): `scheduler.go` (extend) — `Start(ctx)` spawns the cron goroutine
+- [x] **3a.10** Commit 2 (GREEN): `scheduler.go` (extend) — `Start(ctx)` spawns the cron goroutine
       into a `sync.WaitGroup`; `Wait(ctx)` blocks on the group or `ctx.Done()`, whichever first. The
       catch-up goroutine's own `Add(1)`/`Done()` is PR 4's addition to the same group — documented
       as a known gap in this commit's own comment, not silently assumed complete.
       Verify: `go test ./internal/scheduler/...`.
       Requirement: design §5.2.
-- [ ] **3a.11** Verify: `go test ./test/conformance/... -run TestSchedulerBoundaryScan` — confirm
+- [x] **3a.11** Verify: `go test ./test/conformance/... -run TestSchedulerBoundaryScan` — confirm
       PR 2's leg 1 (no `time.Hour` literal) still passes now that `scheduler.go`/`cron.go`/`timer.go`
       exist — the guard is live for the first time, not vacuous.
       Requirement: design §3.1 item 4.
-- [ ] **3a.12** *(split checkpoint)*: measure `git diff --stat` for tasks 3a.1–3a.11 in isolation
+      **Done** — `PASS`, and genuinely live confirmed by a disclosed temporary probe (not merely
+      passing because there is nothing to check): a throwaway `time.Hour` literal was inserted into
+      `scheduler.go`, the scan failed pointing at that exact line, then the file was reverted to its
+      prior committed state (`git diff` empty afterward) — the same disclosed-probe convention
+      `m2c` task 9.7 used, restated in this document's own PR 3a preamble note. `scanned` was 4
+      non-test `.go` files (`doc.go`, `scheduler.go`, `cron.go`, `timer.go`), not the vacuous 1 of
+      PR 2's own leg-1 result.
+- [x] **3a.12** *(split checkpoint)*: measure `git diff --stat` for tasks 3a.1–3a.11 in isolation
       against the ~200/260 sub-estimate. The 3a/3b boundary is already pre-drawn (design §13); this
       checkpoint decides only whether 3a itself needs a further, undrawn split — flag and report if
       at risk rather than split reflexively.
-- [ ] **3a.13** `golangci-lint run`; `go test -race ./internal/scheduler/...`.
-- [ ] Verify (PR-level): `make check-all`; diff scope — `internal/scheduler/{doc,scheduler,cron,
+      **Done, no further split** — `git diff --stat main...HEAD -- internal/scheduler/` for tasks
+      3a.1–3a.11: impl+docs (`doc.go` +19, `scheduler.go` +139, `cron.go` +26, `timer.go` +28) = 212
+      lines, next to the 200-line sub-estimate; test (`scheduler_test.go` +149, `cron_test.go` +177)
+      = 326 lines, ~25% over the 260-line sub-estimate. Flagged rather than silently absorbed: the
+      overrun is entirely in test lines, and CLAUDE.md's own 400-line PR ceiling counts
+      implementation + docs only, test lines counted and reported separately
+      (`docs/06-harness.md` §7) — 212 sits comfortably under that ceiling with task 3a.13 still to
+      come (lint/race only, no new lines). No further, undrawn split of 3a is warranted.
+- [x] **3a.13** `golangci-lint run`; `go test -race ./internal/scheduler/...`.
+      **Done** — `make lint` → `0 issues.`; `go test -race ./internal/scheduler/... -v` → all 6 top
+      level tests (`TestCron_FiresAfterHourElapses`, `TestCron_NeverFiresBeforeCtxCancelled`,
+      `TestCron_GatedOff_FiredTickCallsConsolidateZeroTimes`, `TestNew_RejectsNilDeps` (3 subtests),
+      `TestNew_AcceptsValidDeps`, `TestScheduler_Wait` (2 subtests)) `PASS`, no race reported.
+- [x] Verify (PR-level): `make check-all`; diff scope — `internal/scheduler/{doc,scheduler,cron,
       timer}.go` (+ tests, new). Target ≤200 impl+docs lines. **No wake-up detection is implemented
       anywhere in this loop** — a machine asleep across 03:00 fires late on resume by construction
       (owner ruling round 2 Q2, accepted) — recorded here since this is the file that would carry
@@ -299,6 +318,18 @@ design §13**: 3a (skeleton + cron loop, ~200) | 3b (the overlap guard, ~60).
       **Chain-merge check 1**: `git ls-remote --heads origin feat/scheduler-cron` returns nothing
       after merge.
       **Chain-merge check 2**: `gh pr view <PR3b> --json baseRefName` names `main`.
+
+      **PR 3a result** (`feat/scheduler-cron`): `make check-all` green end to end (see PR-level
+      evidence below); `internal/core` coverage floor unchanged at 750/750 (100%) — this PR adds no
+      `internal/core` code, only a new consumer of the already-shipped
+      `internal/core/consolidation` symbols. Diff scope matched exactly: `doc.go` (modified, +19/-1),
+      `scheduler.go` (new, 139 lines), `cron.go` (new, 26 lines), `timer.go` (new, 28 lines),
+      `scheduler_test.go` (new, 149 lines), `cron_test.go` (new, 177 lines) — no strays, no
+      `internal/core`, `cmd/nooma`, or `docs/` file touched. Impl+docs 212 lines (~106% of the
+      ~200 sub-estimate, task 3a.12's own flagged-not-split conclusion); test 326 lines (~125% of
+      the ~260 sub-estimate). Both well under CLAUDE.md's 400-line impl+docs ceiling. Chain-merge
+      checks deferred to actual merge time (PR not yet merged as of this apply batch), same posture
+      PR 1 and PR 2 took.
 
 ---
 
