@@ -91,13 +91,25 @@ func NextDailyRun(after time.Time, hour int) time.Time {
 	// scheduled from it would fire again immediately, forever. Asking the
 	// next day, and the next, costs nothing and cannot do that.
 	//
-	// The loop carries no iteration bound, and that is deliberate: it
-	// terminates in at most two or three steps for any real zone, because
-	// each step advances the civil date by a full day while normalization can
-	// only pull an instant back by a DST offset — hours, never days. A bound
-	// would have to be a guess, and its unreachable fall-through would be a
-	// statement no test can ever cover, which in this package means either a
-	// hole in the coverage floor or a test written to exercise dead code.
+	// The loop carries no iteration bound, and that is deliberate. It
+	// terminates because i grows without limit while every offset anomaly a
+	// zone can hold is finite and does not repeat on consecutive days: each
+	// step asks for a later civil date, so the candidate instants increase
+	// without bound and must eventually pass after.
+	//
+	// Note what that argument does NOT claim. An earlier version of this
+	// comment said normalization can pull an instant back "by a DST offset —
+	// hours, never days", and that is false: Pacific/Apia skipped 2011-12-30
+	// outright and Pacific/Kiritimati skipped 1994-12-31, both full-day jumps
+	// across the date line. Termination does not rest on the size of the
+	// anomaly, only on its being finite and non-recurring — which is why the
+	// loop is written without a bound rather than with one sized to a
+	// wrong premise. Verified by sweeping both skip windows hour by hour.
+	//
+	// A bound would also have to be a guess, and its unreachable
+	// fall-through would be a statement no test can ever cover — which in
+	// this package means either a hole in the coverage floor or a test
+	// written to exercise dead code.
 	for i := 0; ; i++ {
 		if candidate := time.Date(y, m, d+i, hour, 0, 0, 0, loc); candidate.After(after) {
 			return candidate
