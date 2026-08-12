@@ -191,7 +191,11 @@ it fires once, so there is nothing to re-read.
 `runPass(ctx, trigger)`. Both triggers — the 03:00 tick and the due boot catch-up — call only that
 method, so there is exactly one entry into `brain.ConsolidateService.Consolidate` from this package
 (spec R2.4). A fire that cannot take the slot **skips**, writes one line to the process log naming
-the trigger it skipped and the trigger that holds the slot, and returns.
+the trigger it skipped, and returns. The line does not name the trigger holding the slot: doing so
+would need state on `Scheduler` recording the current holder, which the code block below does not
+carry and no task asks for. Corrected here after PR 3b, where this prose and the code block below
+were found to disagree — the code block, the single-`%s` line it implies, and PR 3b's own task text
+were already consistent with each other, so the prose was the outlier.
 
 ```go
 select {
