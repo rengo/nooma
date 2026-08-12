@@ -174,7 +174,7 @@ Depends on PR 1 (references the same three core symbols the boundary scan below 
 check for). Ships the `scheduler-boundary` depguard rule and the source-scan scaffolding design
 §3.1 item 4 calls for — genuinely live only once PR 3a/PR 4 add the package's first real files.
 
-- [ ] **2.1** `.golangci.yml` — add the `scheduler-boundary` rule, verbatim from design §7: `files:
+- [x] **2.1** `.golangci.yml` — add the `scheduler-boundary` rule, verbatim from design §7: `files:
       ["**/internal/scheduler/**"]`, `deny`: `internal/store` (vault access), `database/sql`
       (redundant with `sqlite-containment`, kept for a self-contained rule statement),
       `internal/providers` (no direct model calls), `internal/httpapi` (no transport knowledge).
@@ -182,29 +182,39 @@ check for). Ships the `scheduler-boundary` depguard rule and the source-scan sca
       exists that could violate the rule — disclosed per `m2a` C9 rather than claimed as red, same
       posture `m2c` R0.1 took for its own three depguard rules.
       Requirement: spec R0.1; design §7.
-- [ ] **2.2** Verify: `golangci-lint run` (or `make check`'s lint step) — 0 issues, confirming the
+      **Done** (commit `b1c8a82`).
+- [x] **2.2** Verify: `golangci-lint run` (or `make check`'s lint step) — 0 issues, confirming the
       rule is syntactically valid and vacuously satisfied.
       Requirement: spec R0.1 (Verified by).
-- [ ] **2.3** `test/conformance/scheduler_boundary_scan_test.go` (new) — leg 1: no non-test file
+      **Done** — `make lint` → `0 issues.`
+- [x] **2.3** `test/conformance/scheduler_boundary_scan_test.go` (new) — leg 1: no non-test file
       under `internal/scheduler` contains the literal `time.Hour` (design §3.1 item 4's realistic
       regression: someone re-deriving "24h" or "03:00" inline instead of through the three core
       symbols). **Vacuously true today** — `doc.go` has no such literal — disclosed, not claimed as
       red; becomes a live guard from PR 3a onward.
       Requirement: design §3.1 item 4.
-- [ ] **2.4** Verify: `go test ./test/conformance/... -run TestSchedulerBoundaryScan` passes today
+      **Done** (commit `cbccf99`).
+- [x] **2.4** Verify: `go test ./test/conformance/... -run TestSchedulerBoundaryScan` passes today
       (trivially, per 2.3's disclosure).
       Requirement: design §3.1 item 4.
-- [ ] **2.5** Forward reference, in the same test file's own doc comment: leg 2 (every non-test,
+      **Done** — `PASS`, leg 1 subtest green (vacuously, `doc.go` scanned, no violation).
+- [x] **2.5** Forward reference, in the same test file's own doc comment: leg 2 (every non-test,
       non-`doc.go` file under `internal/scheduler` references all three of `CatchUpDue`,
       `ResolveConsolidationEnabled`, `NextDailyRun` at least once) is added as PR 4's own task
       (4.11), once `CatchUpDue` finally has a real caller — the same forward-reference pattern
       `m2c` task 1.6 used for a leg that could not exist yet.
       Requirement: design §3.1 item 4 (forward reference only).
-- [ ] Verify (PR-level): `make check-all`; diff scope — `.golangci.yml`,
+      **Done** — recorded in `scheduler_boundary_scan_test.go`'s own doc comment, not implemented.
+- [x] Verify (PR-level): `make check-all`; diff scope — `.golangci.yml`,
       `test/conformance/scheduler_boundary_scan_test.go` (new). Target ≤70 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/scheduler-boundary-lint` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR3a> --json baseRefName` names `main`.
+      **Done** — `make check-all` green end to end; `internal/core` coverage 750/750 (100%,
+      unchanged — this PR adds no core code); diff scope matched exactly (`.golangci.yml` +17/-0,
+      `test/conformance/scheduler_boundary_scan_test.go` +84/-0, 101 changed lines total, both
+      files under their ~70/~90 targets). Chain-merge checks deferred to actual merge time (PR not
+      yet merged), same posture PR 1 took.
 
 ---
 
