@@ -97,3 +97,53 @@ func TestNew_AcceptsValidDeps(t *testing.T) {
 		t.Fatal("New(validDeps()) returned a nil *Scheduler alongside a nil error")
 	}
 }
+
+// TestScheduler_Wait is task 3a.9: Wait(ctx) returns once the cron
+// goroutine unwinds after ctx cancellation, or when ctx itself is done
+// first — design §5.2, §3.5 (D5, mechanical join only; the shutdown-budget
+// wiring itself is PR 7's own scope).
+func TestScheduler_Wait(t *testing.T) {
+	t.Run("returns once the cron goroutine unwinds after ctx cancellation", func(t *testing.T) {
+		ft := newFakeTimer() // never fed — the cron goroutine blocks on it until ctx is done
+		s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: newRecordingConsolidator(), Timer: ft})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		s.Start(ctx)
+		cancel()
+
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer waitCancel()
+		s.Wait(waitCtx)
+
+		if err := waitCtx.Err(); err != nil {
+			t.Fatalf("Wait did not return before its own 2s ctx expired: %v", err)
+		}
+	})
+
+	t.Run("returns when ctx itself is done first", func(t *testing.T) {
+		ft := newFakeTimer() // never fed — the cron goroutine never unwinds on its own
+		s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: newRecordingConsolidator(), Timer: ft})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+
+		// Start with a ctx that this subtest never cancels: only Wait's own
+		// ctx governs when this call unblocks, isolating the second claim
+		// from the first.
+		schedCtx, schedCancel := context.WithCancel(context.Background())
+		t.Cleanup(schedCancel)
+		s.Start(schedCtx)
+
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer waitCancel()
+
+		start := time.Now()
+		s.Wait(waitCtx)
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Fatalf("Wait blocked for %v; want it to return promptly once its own ctx is done", elapsed)
+		}
+	})
+}
