@@ -49,3 +49,22 @@ func ResolveConsolidationEnabled(configured *bool) bool {
 	}
 	return *configured
 }
+
+// NextDailyRun returns the next instant, strictly after after, at which
+// the clock reads hour:00:00 in after's own location (spec R1.1's own
+// cron loop calls this with the local clock; design §4). Strictly after,
+// not at-or-after: an after that already reads exactly hour:00:00.000
+// returns tomorrow's occurrence, never itself — a cron loop that just
+// fired must schedule its next fire in the future, not fire again
+// immediately.
+//
+// A non-existent or ambiguous local wall-clock time (a DST transition)
+// resolves however time.Date's own normalization resolves it — this
+// function adds no DST-specific handling.
+func NextDailyRun(after time.Time, hour int) time.Time {
+	candidate := time.Date(after.Year(), after.Month(), after.Day(), hour, 0, 0, 0, after.Location())
+	if !candidate.After(after) {
+		candidate = candidate.AddDate(0, 0, 1)
+	}
+	return candidate
+}
