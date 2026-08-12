@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // fakeTimer is this package's own timer seam test double (design §5.2):
@@ -11,16 +14,35 @@ import (
 // fake lets a test control exactly when the cron loop's own wait fires,
 // with no wall-clock sleep. fire is buffered so a test can send before the
 // loop's own goroutine has reached its receive.
+// calls is buffered and drops rather than blocks on overflow: it exists
+// only so a test can wait for "the loop asked for its next wait", not to
+// count every invocation precisely.
 type fakeTimer struct {
-	fire chan time.Time
+	fire  chan time.Time
+	calls chan struct{}
 }
 
 func newFakeTimer() *fakeTimer {
-	return &fakeTimer{fire: make(chan time.Time, 1)}
+	return &fakeTimer{fire: make(chan time.Time, 1), calls: make(chan struct{}, 8)}
 }
 
 func (f *fakeTimer) After(time.Duration) <-chan time.Time {
+	select {
+	case f.calls <- struct{}{}:
+	default:
+	}
 	return f.fire
+}
+
+// waitForAfterCall blocks until the loop has asked the fake timer for a
+// wait at least once more, or fails after 2s.
+func waitForAfterCall(t *testing.T, ft *fakeTimer) {
+	t.Helper()
+	select {
+	case <-ft.calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the cron loop to call timer.After")
+	}
 }
 
 // callCount is recordingConsolidator's own read, used from this file
@@ -107,5 +129,49 @@ func TestCron_NeverFiresBeforeCtxCancelled(t *testing.T) {
 
 	if got := rc.callCount(); got != 0 {
 		t.Fatalf("Consolidate called %d times, want 0 — the timer never fired", got)
+	}
+}
+
+// TestCron_GatedOff_FiredTickCallsConsolidateZeroTimes is task 3a.7: a
+// fixture with ConsolidationEnabled = &false asserts the fired tick calls
+// Consolidate zero times — spec R1.2's "a gated-off tick is a true
+// no-op". Red against 3a.6's own runPass, which has no gate check yet.
+func TestCron_GatedOff_FiredTickCallsConsolidateZeroTimes(t *testing.T) {
+	ft := newFakeTimer()
+	rc := newRecordingConsolidator()
+	cfg := memrepo.NewConfig()
+	disabled := false
+	cfg.SeedConfig(t, ports.VaultConfig{ConsolidationEnabled: &disabled})
+
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: cfg, Consolidate: rc, Timer: ft})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.runCron(ctx)
+		close(done)
+	}()
+
+	waitForAfterCall(t, ft) // the loop is now blocked in its first wait
+	ft.fire <- fixedNow
+
+	// The tick must be observed as a no-op, not merely absent because the
+	// loop has not reached it yet: wait for the loop to ask the timer for
+	// its NEXT wait — proof the first iteration's own runPass already
+	// returned — before asserting zero calls.
+	waitForAfterCall(t, ft)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCron did not return after ctx cancellation")
+	}
+
+	if got := rc.callCount(); got != 0 {
+		t.Fatalf("Consolidate called %d times, want 0 — ConsolidationEnabled is false", got)
 	}
 }
