@@ -123,7 +123,16 @@ func (s *Scheduler) logf(format string, args ...any) {
 // Wait does not return until both have unwound — closing the gap PR 3a's
 // own Start disclosed ("the boot catch-up goroutine's own wg.Add(1)/Done()
 // is PR 4's addition to this same group").
+//
+// Start is a no-op on a nil *Scheduler — design §6's own note, PR 6: a
+// vault whose resolveConsolidateProviders refuses (wireScheduler,
+// cmd/nooma/wiring.go) has no working *scheduler.Scheduler to start, and
+// runServe calls Start unconditionally rather than branching on nil.
 func (s *Scheduler) Start(ctx context.Context) {
+	if s == nil {
+		return
+	}
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -141,7 +150,14 @@ func (s *Scheduler) Start(ctx context.Context) {
 // ctx is done, whichever happens first — the mechanical join design §3.5
 // (D5) names; the shutdown-budget wiring that calls this with a
 // timeout-bounded ctx is PR 7's own scope.
+//
+// Wait is a no-op on a nil *Scheduler, matching Start above: a nil
+// Scheduler spawned no goroutines, so there is nothing to join.
 func (s *Scheduler) Wait(ctx context.Context) {
+	if s == nil {
+		return
+	}
+
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()

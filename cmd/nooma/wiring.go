@@ -263,18 +263,41 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 // never fights nooma consolidate over two separate lock handles (spec
 // R3.1).
 //
+// It mirrors wireBrain's own degrade-to-nil precedent (:236-238), not
+// wireConsolidate's named-refusal one: a vault whose
+// resolveConsolidateProviders refuses (an unbound task, an unconfigured
+// provider name, a provider that cannot answer the task it is bound to —
+// the same class of gap nooma consolidate's own CLI path already refuses
+// on) yields a nil scheduler, a nil error, and one line on log naming why
+// — not a failed runServe. HTTP capture and recall stay available on such
+// a vault exactly as they do today (spec R3.2). resolveConsolidateProviders
+// is checked here, ahead of wireConsolidate's own heavier call (which
+// opens the resident vector index), the same two-step shape
+// resolveTaskProviders/wireBrain already takes for capture/recall — a
+// genuine failure past this point (the index failing to load) is not a
+// configuration gap and still fails runServe outright.
+//
 // log is the scheduler's process log (scheduler.Deps.Log) — serve passes
 // its errOut, per that field's own doc comment.
 func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer) (*scheduler.Scheduler, error) {
-	consolidate, err := wireConsolidate(ctx, db, cfg, lookup)
-	if err != nil {
-		return nil, err
+	if _, _, _, err := resolveConsolidateProviders(cfg, lookup); err != nil {
+		_, _ = fmt.Fprintf(log, "scheduler: consolidation not scheduled: %v\n", err)
+		return nil, nil
 	}
 
-	return scheduler.New(scheduler.Deps{
+	consolidate, err := wireConsolidate(ctx, db, cfg, lookup)
+	if err != nil {
+		return nil, fmt.Errorf("wiring the scheduler: %w", err)
+	}
+
+	sched, err := scheduler.New(scheduler.Deps{
 		Clock:       systemClock{},
 		Config:      sqlite.NewConfigRepo(db),
 		Consolidate: consolidate,
 		Log:         log,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("wiring the scheduler: %w", err)
+	}
+	return sched, nil
 }

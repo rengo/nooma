@@ -345,6 +345,24 @@ func TestScheduler_Wait(t *testing.T) {
 	})
 }
 
+// TestScheduler_NilScheduler_StartAndWaitAreNoOps is PR 6's own addition
+// (task 6.7; non-negotiable: "Start/Wait must be no-ops on a nil
+// *Scheduler so runServe needs no branch"): wireScheduler
+// (cmd/nooma/wiring.go) returns a nil *Scheduler, nil error when a vault's
+// resolveConsolidateProviders refuses (design §6; spec R3.2), and
+// cmd/nooma/serve.go calls Start/Wait on that result unconditionally, with
+// no nil guard of its own. Both calls, on a nil receiver, must return
+// rather than panic on a nil-pointer field dereference.
+func TestScheduler_NilScheduler_StartAndWaitAreNoOps(t *testing.T) {
+	var s *Scheduler
+
+	s.Start(context.Background())
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer waitCancel()
+	s.Wait(waitCtx)
+}
+
 // erroringConsolidator is task 5.1's own fixture: every call returns the
 // scripted error and the zero-value ConsolidateReport, simulating a
 // mid-pass abort — persistBoosts's own ports.ErrUnitNotFound (spec R1.4).
