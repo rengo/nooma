@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -14,8 +15,15 @@ import (
 
 // ConsolidationHour is owner ruling round 1 #2: the cron fires at 03:00
 // local time. Design §5.1 places this constant here, beside
-// BootConsolidationDelay (PR 4) — "the constants" — not in cron.go.
+// BootConsolidationDelay — "the constants" — not in cron.go.
 const ConsolidationHour = 3
+
+// BootConsolidationDelay is ADR-0009's own reasoning for the boot catch-up:
+// startup is already busy opening the vault, running migrations, and
+// connecting channels, and consolidation "bothers nobody" by waiting two
+// minutes rather than firing immediately. Design §5.1 places this constant
+// here, beside ConsolidationHour, not in catchup.go.
+const BootConsolidationDelay = 120 * time.Second
 
 // Consolidator is the only thing the scheduler asks the brain to do.
 // *brain.ConsolidateService satisfies it; this package's own L2 fixtures
@@ -89,17 +97,22 @@ func (s *Scheduler) logf(format string, args ...any) {
 	_, _ = fmt.Fprintf(s.log, format+"\n", args...)
 }
 
-// Start spawns the cron goroutine and returns immediately (design §5.2).
-//
-// Known gap, disclosed rather than silently assumed complete: the boot
-// catch-up goroutine's own wg.Add(1)/Done() is PR 4's addition to this
-// same group. Until PR 4 lands, Wait unwinds as soon as the cron goroutine
-// alone returns — there is no second goroutine to join yet.
+// Start spawns the cron goroutine and the boot catch-up goroutine and
+// returns immediately (design §5.2). Both join the same sync.WaitGroup, so
+// Wait does not return until both have unwound — closing the gap PR 3a's
+// own Start disclosed ("the boot catch-up goroutine's own wg.Add(1)/Done()
+// is PR 4's addition to this same group").
 func (s *Scheduler) Start(ctx context.Context) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		s.runCron(ctx)
+	}()
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.runCatchUp(ctx)
 	}()
 }
 

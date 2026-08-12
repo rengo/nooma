@@ -661,6 +661,9 @@ vault, individually invocable:
 expire_incomplete → archive → strengthen → connect → derive → reweight → pattern_eval → learn
 ```
 
+`config.consolidation_enabled = 0` suppresses the nightly pass **and** [ADR-0009](adr/0009-scheduler-downtime.md)'s
+boot catch-up — the two are one body of work behind two triggers.
+
 1. **expire_incomplete**: `incomplete` units older than 24 h are resolved, and promotion is the
    default: **promoted with what they have**, unless the ambiguity was put to the user and left
    unresolved, in which case the unit is **archived** instead — the `incomplete → archived`
@@ -912,8 +915,8 @@ module):
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
-| Consolidation / proactive check | 03:00 daily / every 5 min |
-| `boot_consolidation_delay` | 120 s |
+| Consolidation / proactive check (`internal/scheduler.ConsolidationHour`; not calibration-gate-checkable this way — the Default cell's leading `03:00` reads as `03` under the gate's anchored numeric parser, not the constant's own value `3`; splitting this row so the consolidation half can be checked is M3's job, the same PR that fills the proactive-check half) | 03:00 daily / every 5 min |
+| `boot_consolidation_delay` (`internal/scheduler.BootConsolidationDelay`) | 120 s |
 | `trigger_staleness_hours` | 6 |
 | `timer_staleness_hours` | 3 |
 | RRF `k` | 60 |
