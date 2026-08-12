@@ -37,3 +37,15 @@ func CatchUpDue(lastRunAt *time.Time, now time.Time, stalenessHours int) bool {
 	elapsed := now.Sub(*lastRunAt).Hours()
 	return elapsed > float64(stalenessHours)
 }
+
+// ResolveConsolidationEnabled falls back to enabled for an absent
+// configured value (spec R1.2), mirroring migration 0002:65's own
+// consolidation_enabled DEFAULT 1 — a vault that has never set the column
+// reads nil, and nil must read the same as the schema's own default, not
+// as "disabled".
+func ResolveConsolidationEnabled(configured *bool) bool {
+	if configured == nil {
+		return true
+	}
+	return *configured
+}
