@@ -3,11 +3,19 @@ package scheduler
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -335,6 +343,426 @@ func TestScheduler_Wait(t *testing.T) {
 			t.Fatalf("Wait blocked for %v; want it to return promptly once its own ctx is done", elapsed)
 		}
 	})
+}
+
+// erroringConsolidator is task 5.1's own fixture: every call returns the
+// scripted error and the zero-value ConsolidateReport, simulating a
+// mid-pass abort — persistBoosts's own ports.ErrUnitNotFound (spec R1.4).
+// runPass must return cleanly rather than propagate or panic, and the
+// process log must record the failure (design §5.4).
+type erroringConsolidator struct {
+	mu    sync.Mutex
+	calls []brain.ConsolidateRequest
+	err   error
+}
+
+func (c *erroringConsolidator) Consolidate(_ context.Context, req brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
+	c.mu.Lock()
+	c.calls = append(c.calls, req)
+	c.mu.Unlock()
+	return brain.ConsolidateReport{}, c.err
+}
+
+func (c *erroringConsolidator) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.calls)
+}
+
+func (c *erroringConsolidator) recordedCalls() []brain.ConsolidateRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]brain.ConsolidateRequest(nil), c.calls...)
+}
+
+// TestRunPass_AbortSurfacesOnProcessLog is task 5.1: a fake Consolidator
+// returns ports.ErrUnitNotFound mid-pass (simulating persistBoosts's own
+// abort), triggered by a scheduler fire (not a direct Consolidate call) —
+// runPass returns without panicking and the operational log records the
+// failure. Spec R1.4; design §5.4.
+//
+// Scope note: the "consolidation_last_run_at unwritten" property is m2c
+// R5.4's own already-proven guarantee (RecordConsolidationRun unreachable
+// on any runPhase error) — relied upon here as a fact the scheduler package
+// has no write path to re-assert, not re-tested at this layer.
+//
+// Red: runPass's error path is unasserted before this test — fails on the
+// missing log line (no s.logf call exists on this path yet).
+func TestRunPass_AbortSurfacesOnProcessLog(t *testing.T) {
+	ft := newFakeTimer()
+	ec := &erroringConsolidator{err: ports.ErrUnitNotFound}
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: ec, Timer: ft, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan struct{})
+	go func() {
+		s.runCron(ctx)
+		close(done)
+	}()
+
+	waitForAfterCall(t, ft) // the cron loop is now blocked in its first wait
+	ft.fire <- fixedNow
+
+	// Wait for the loop to ask the timer for its NEXT wait — proof the
+	// erroring call already returned and runPass already unwound, not
+	// merely that the tick was sent.
+	waitForAfterCall(t, ft)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCron did not return after ctx cancellation")
+	}
+
+	if got := ec.callCount(); got != 1 {
+		t.Fatalf("Consolidate called %d times, want exactly 1", got)
+	}
+
+	const want = "scheduler: pass aborted (cron): unit not found\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
+	}
+}
+
+// blockingErrorConsolidator is JD-5-01's own fixture: every call blocks on
+// entry, signaling entered, until the test closes release, then returns the
+// scripted error — the shape needed to hold the pass slot open (so a second,
+// genuinely concurrent fire is forced onto the default/skip branch) while
+// this call later aborts and calls logf itself.
+type blockingErrorConsolidator struct {
+	entered chan struct{}
+	release chan struct{}
+	err     error
+}
+
+func newBlockingErrorConsolidator(err error) *blockingErrorConsolidator {
+	return &blockingErrorConsolidator{entered: make(chan struct{}, 1), release: make(chan struct{}), err: err}
+}
+
+func (b *blockingErrorConsolidator) Consolidate(_ context.Context, _ brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
+	b.entered <- struct{}{}
+	<-b.release
+	return brain.ConsolidateReport{}, b.err
+}
+
+// TestRunPass_LogfIsRaceFree is JD-5-01: logf (scheduler.go) wrote to
+// s.log with no synchronization of its own. The non-blocking try-lock
+// (design §3.4, D4) only excludes concurrent entry into Consolidate — a
+// fire that loses the try-lock (the default branch) calls logf
+// immediately, with no happens-before relationship at all to the fire
+// that is still holding the slot and will itself call logf on abort
+// moments later. This test exercises exactly that interleaving for real:
+//
+//  1. Goroutine A calls runPass, acquires the slot, and blocks inside
+//     Consolidate (signaled via bc.entered, so the test knows A genuinely
+//     holds the slot before proceeding — not a timing guess).
+//  2. Goroutine B then calls runPass concurrently. Because A still holds
+//     the slot, B deterministically takes the default (skip) branch and
+//     calls logf right away — this determinism comes from Go's channel
+//     memory model (A's slot acquisition happens-before the test's own
+//     receive from bc.entered, which happens-before B's goroutine starts),
+//     not from waiting on B in any way.
+//  3. The test then releases A, which returns its scripted error and
+//     calls logf itself on the abort path.
+//
+// B's logf call and A's logf call are never ordered relative to each
+// other by any channel, mutex, or WaitGroup — the try-lock only ever
+// orders the SLOT, not the LOG — so this is a genuine, reproducible data
+// race on the shared bytes.Buffer under -race, not a theoretical one.
+func TestRunPass_LogfIsRaceFree(t *testing.T) {
+	bc := newBlockingErrorConsolidator(errors.New("boom"))
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: bc, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+	aDone := make(chan struct{})
+	go func() {
+		s.runPass(ctx, "cron") // acquires the slot, blocks inside Consolidate, then aborts
+		close(aDone)
+	}()
+
+	select {
+	case <-bc.entered:
+		// A now holds the slot, synchronously blocked inside Consolidate.
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first fire to enter Consolidate")
+	}
+
+	bDone := make(chan struct{})
+	go func() {
+		s.runPass(ctx, "catchup") // the slot is held: takes the default branch and skips
+		close(bDone)
+	}()
+
+	close(bc.release) // let A's Consolidate call return its scripted error, unordered with B's own logf call above
+
+	select {
+	case <-aDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first fire to return")
+	}
+	select {
+	case <-bDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the second fire to return")
+	}
+
+	// The real assertion is `go test -race`: an unsynchronized shared
+	// io.Writer written from both goroutines above is a data race whether
+	// or not the two lines below look sane.
+	if logBuf.Len() == 0 {
+		t.Fatal("expected both fires to have written to the log")
+	}
+}
+
+// TestRunPass_NextFireAttemptsFreshWholePass is task 5.3: after an aborted
+// fire, a second runPass call attempts a full pass again — the fake
+// Consolidator's recorded ConsolidateRequest{} is the same zero value both
+// times, no carried state. Spec R1.4 (second Verified-by clause).
+//
+// Disclosed, not a genuine red: this is only red if 5.2's abort path
+// accidentally threads state into the next call — runPass already
+// constructs brain.ConsolidateRequest{} fresh at every call and never
+// mutates trigger-scoped state across calls, so this is a regression guard
+// more than a fresh failure.
+func TestRunPass_NextFireAttemptsFreshWholePass(t *testing.T) {
+	ec := &erroringConsolidator{err: ports.ErrUnitNotFound}
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: ec})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+	s.runPass(ctx, "cron")
+	s.runPass(ctx, "cron")
+
+	calls := ec.recordedCalls()
+	if len(calls) != 2 {
+		t.Fatalf("Consolidate called %d times, want exactly 2", len(calls))
+	}
+	for i, req := range calls {
+		if req != (brain.ConsolidateRequest{}) {
+			t.Fatalf("call %d: request = %+v, want the zero value (no carried state from the prior aborted call)", i, req)
+		}
+	}
+}
+
+// newSingleCorruptedUnitConsolidator wires a real *brain.ConsolidateService
+// over in-memory repos seeded with exactly one unit whose decay state is
+// non-finite (Weight: NaN) — partitionLiveDecayStates (internal/brain)
+// refuses it in every phase that reads LiveDecayStates (archive, connect,
+// reweight), and report.reportCorrupted dedups the id to one entry.
+//
+// Disclosed deviation from task 5.5's own "a fake Consolidate" wording:
+// brain.ConsolidateReport's fields are unexported, so no value outside
+// package brain can construct one with a non-empty Corrupted() — and this
+// PR's own hard constraints forbid both touching internal/brain/
+// consolidate.go (task 5.7) and adding any new file (this PR's own diff
+// scope note). A real ConsolidateService, wired the same way internal/
+// brain's own TestConsolidate_WholePassReportsEachCorruptedIDOnce and
+// TestConsolidate_NoEffects already do, is the only way to produce a
+// genuine non-empty Corrupted() value without either. The single seeded
+// unit is refused everywhere and never a valid source: connect's and
+// derive's own sourceIDs are computed from the usable (non-refused) set,
+// which is empty here, so both short-circuit before ever calling the judge
+// or the recall service — the whole pass is otherwise a true no-op, the
+// same "nothing fed, nothing written" shape TestConsolidate_NoEffects
+// already proves for an entirely empty fixture.
+func newSingleCorruptedUnitConsolidator(t *testing.T) *brain.ConsolidateService {
+	t.Helper()
+
+	units := memrepo.NewUnits()
+	if err := units.Create(context.Background(), unit.Unit{
+		ID:              "u-corrupted",
+		Type:            unit.TypeKnowledge,
+		Status:          unit.StatusPool,
+		Content:         "a unit whose decay state is non-finite",
+		Source:          "chat",
+		Weight:          math.NaN(),
+		WeightDecayRate: 0,
+		LastTouchedAt:   fixedNow,
+		CreatedAt:       fixedNow,
+		UpdatedAt:       fixedNow,
+	}); err != nil {
+		t.Fatalf("seed corrupted unit: %v", err)
+	}
+
+	recallSvc := brain.NewRecallService(
+		brain.NewIndex(recall.VectorIndex{Model: "test-model"}),
+		memrepo.NewLexical(),
+		units,
+		fakeprovider.NewEmbeddingFake("test-model"),
+	)
+	// Zero scripted cases: the only seeded unit is refused everywhere, so
+	// derive's own sourceIDs end up empty and the judge is never called —
+	// an unexpected call fails this test loudly (fakeprovider's own
+	// unscripted-call guard) rather than reaching a real provider (CLAUDE.md
+	// non-negotiable #5).
+	judge := fakeprovider.New(t, "")
+
+	return brain.NewConsolidateService(
+		fixedClock{now: fixedNow},
+		memrepo.NewConfig(),
+		units,
+		memrepo.NewRelations(),
+		&fakeIDGen{},
+		memrepo.NewDecisionLog(),
+		recallSvc,
+		judge,
+		memrepo.NewSelfModel(),
+		memrepo.NewState(),
+	)
+}
+
+// fakeIDGen is a small package-local ports.IDGen double, the same
+// precedent internal/brain/correction_test.go's own fakeIDs sets — no
+// export exists for this from package brain, and this PR adds no new file,
+// so it is reimplemented locally rather than shared.
+type fakeIDGen struct{ n int }
+
+func (g *fakeIDGen) New() string {
+	g.n++
+	return fmt.Sprintf("scheduler-test-id-%d", g.n)
+}
+
+// TestRunPass_CompletedPassLogsCorrupted is task 5.5: a fake Consolidate
+// returning a brain.ConsolidateReport with a non-empty Corrupted() (no
+// error) logs one line naming the refused unit ids on success. Design §5.2
+// ("Corrupted() is operationally meaningful for an unattended pass").
+//
+// Red: no log call exists on the success path yet — fails on the missing
+// line.
+func TestRunPass_CompletedPassLogsCorrupted(t *testing.T) {
+	svc := newSingleCorruptedUnitConsolidator(t)
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: svc, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	s.runPass(context.Background(), "cron")
+
+	const want = "scheduler: cron pass completed, refused 1 unit(s): [u-corrupted]\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
+	}
+}
+
+// abortingUnitsAfterNCalls is JD-5-02's own fixture: wraps a real
+// ports.UnitRepo and returns err from its nth LiveDecayStates call onward,
+// every other call and every other method passing straight through to the
+// wrapped repo. LiveDecayStates is called four times per whole pass — slot
+// 2 (archive), slot 4 (connect), slot 5 (derive), slot 6 (reweight)
+// (internal/ports/unitrepo.go:148-149) — so n=2 aborts at Connect's own
+// read, strictly after Archive's own report.reportCorrupted call
+// (internal/brain/consolidate.go:1090-1091) has already run. This is the
+// only way to make a real *brain.ConsolidateService return a (report, err)
+// pair where both are non-trivial in the same call, without touching
+// internal/brain/consolidate.go (task 5.7's own hard constraint) or
+// constructing a brain.ConsolidateReport by hand from outside package brain
+// (its fields are unexported — task 5.5's own disclosed precedent for the
+// identical problem).
+type abortingUnitsAfterNCalls struct {
+	ports.UnitRepo
+	n   int
+	err error
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (u *abortingUnitsAfterNCalls) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error) {
+	u.mu.Lock()
+	u.calls++
+	call := u.calls
+	u.mu.Unlock()
+	if call == u.n {
+		return nil, u.err
+	}
+	return u.UnitRepo.LiveDecayStates(ctx)
+}
+
+// TestRunPass_AbortSurfacesRefusedUnits is JD-5-02: runPass's abort branch
+// logged only the abort line and discarded report entirely, but
+// internal/brain/consolidate.go:1044-1045 returns (report, err) together,
+// and report.reportCorrupted is called from five separate phase sites
+// (lines 1091, 1103, 1113, 1132, 1134) — so an earlier phase can refuse
+// units and a later phase can still abort the same pass, and those
+// already-refused ids never reached the process log. Unattended, the
+// process log is the only place a refused unit is surfaced at all (design
+// §5.4).
+//
+// This wires a real *brain.ConsolidateService (task 5.5's own precedent)
+// over one seeded unit whose decay state is non-finite — refused at
+// Archive (slot 2) — and abortingUnitsAfterNCalls{n: 2}, which fails
+// Connect's own LiveDecayStates read (slot 4), strictly after Archive's own
+// refusal was already recorded. The returned report therefore genuinely
+// carries both Corrupted() = ["u-corrupted"] and a non-nil err in the same
+// call — not two independently-scripted fake return values.
+//
+// Red: runPass's abort branch discards report and logs only the plain
+// abort line — fails on the missing refused-unit clause.
+func TestRunPass_AbortSurfacesRefusedUnits(t *testing.T) {
+	units := memrepo.NewUnits()
+	if err := units.Create(context.Background(), unit.Unit{
+		ID:              "u-corrupted",
+		Type:            unit.TypeKnowledge,
+		Status:          unit.StatusPool,
+		Content:         "a unit whose decay state is non-finite",
+		Source:          "chat",
+		Weight:          math.NaN(),
+		WeightDecayRate: 0,
+		LastTouchedAt:   fixedNow,
+		CreatedAt:       fixedNow,
+		UpdatedAt:       fixedNow,
+	}); err != nil {
+		t.Fatalf("seed corrupted unit: %v", err)
+	}
+
+	wrapped := &abortingUnitsAfterNCalls{UnitRepo: units, n: 2, err: errors.New("boom")}
+
+	recallSvc := brain.NewRecallService(
+		brain.NewIndex(recall.VectorIndex{Model: "test-model"}),
+		memrepo.NewLexical(),
+		units,
+		fakeprovider.NewEmbeddingFake("test-model"),
+	)
+	judge := fakeprovider.New(t, "") // zero scripted cases: never reached before the abort
+
+	svc := brain.NewConsolidateService(
+		fixedClock{now: fixedNow},
+		memrepo.NewConfig(),
+		wrapped,
+		memrepo.NewRelations(),
+		&fakeIDGen{},
+		memrepo.NewDecisionLog(),
+		recallSvc,
+		judge,
+		memrepo.NewSelfModel(),
+		memrepo.NewState(),
+	)
+
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: svc, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	s.runPass(context.Background(), "cron")
+
+	const want = "scheduler: pass aborted (cron): consolidate: connect: read live decay states: boom, refused 1 unit(s) before the abort: [u-corrupted]\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
+	}
 }
 
 // discriminatingTimer is JD-4-04's own fixture. fakeTimer (cron_test.go)

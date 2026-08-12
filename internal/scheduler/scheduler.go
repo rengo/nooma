@@ -40,8 +40,15 @@ type Deps struct {
 	Clock       ports.Clock
 	Config      ports.ConfigRepo
 	Consolidate Consolidator
-	Log         io.Writer // the process log; serve passes its errOut. nil defaults to io.Discard.
-	Timer       timer
+	// Log is the process log; serve passes its errOut. nil defaults to
+	// io.Discard. It is written from multiple goroutines: the cron and
+	// catch-up goroutines both call runPass, and their fires can
+	// genuinely overlap — design §3.4/D4's try-lock excludes concurrent
+	// entry into Consolidate, not concurrent entry into logf. logf is the
+	// only sanctioned path to this writer; nothing else in this package
+	// writes to it directly (JD-5-01).
+	Log   io.Writer
+	Timer timer
 }
 
 // Scheduler owns the cron and boot catch-up goroutines, the timer seam,
@@ -52,6 +59,7 @@ type Scheduler struct {
 	config      ports.ConfigRepo
 	consolidate Consolidator
 	log         io.Writer
+	logMu       sync.Mutex // guards every write to log; see logf (JD-5-01)
 	timer       timer
 	wg          sync.WaitGroup
 	slot        chan struct{} // capacity 1: the non-blocking try-lock, design §3.4 (D4)
@@ -93,7 +101,20 @@ func New(d Deps) (*Scheduler, error) {
 // logf writes one line to the process log (design §5.4): an abort, a
 // skipped fire, or a completed pass that refused units. Never decision_log
 // — an aborted or skipped pass had no vault effect (m2c's own I12 scoping).
+//
+// logf is the only sanctioned path to s.log, and this is deliberate, not
+// incidental: s.log is written from multiple goroutines (the cron and
+// catch-up goroutines both call runPass), and the non-blocking try-lock
+// (design §3.4/D4) only ever excludes concurrent entry into Consolidate —
+// a fire that loses the try-lock takes the default branch and calls logf
+// immediately, with no ordering at all relative to the fire that is still
+// holding the slot and will itself call logf on abort or on a completed
+// pass with refusals moments later. logMu guards every write here so those
+// calls never race (JD-5-01) — no caller may bypass logf and write to
+// s.log directly.
 func (s *Scheduler) logf(format string, args ...any) {
+	s.logMu.Lock()
+	defer s.logMu.Unlock()
 	_, _ = fmt.Fprintf(s.log, format+"\n", args...)
 }
 
@@ -150,10 +171,35 @@ func (s *Scheduler) Wait(ctx context.Context) {
 // into this one method: a fire that cannot take the slot skips rather than
 // queuing behind the one in flight — queuing would run a second whole pass
 // over a corpus the first one just consolidated (design §3.4's own
-// rejected alternative). No abort/Corrupted() logging yet (PR 5), named
-// here rather than silently assumed. trigger is accepted now, ahead of its
-// first reader, so this method's signature does not change again once
-// those callers land.
+// rejected alternative).
+//
+// A Consolidate error aborts the pass: logged to the process log only
+// (design §5.4), never decision_log — nothing was written to the vault, so
+// there is no decision to log (m2c's own I12 effect-scoping). No retry
+// loop, no special-cased "retry" state: the next fire attempts a fresh
+// whole pass, safe because m2c R5.4 already gates
+// consolidation_last_run_at on full pass completion (spec R1.4). A
+// completed pass that refused units (report.Corrupted() non-empty) is
+// logged too, for the identical reason renderConsolidateReport already
+// surfaces it to `nooma consolidate`'s own terminal audience
+// (cmd/nooma/consolidate.go:120-125) — an unattended pass has none, so
+// silence would make the refusal invisible until someone notices a stale
+// decision_log.
+//
+// An aborted pass can ALSO carry already-refused units (JD-5-02):
+// internal/brain/consolidate.go:1044-1045 returns (report, err) together,
+// and report.reportCorrupted runs from six call sites across all five
+// phases — Archive, Strengthen and Connect one each, Derive one (inside
+// deriveSourceIDs rather than the phase switch itself), and Reweight two —
+// every one of which can run and refuse units before a LATER phase's own
+// error aborts the same pass. The abort branch
+// below surfaces report.Corrupted() alongside the abort itself, as one
+// combined log line rather than two separate logf calls: two calls would
+// let an unrelated, concurrent write from another goroutine land between
+// them (logMu, JD-5-01, only ever makes ONE logf call atomic, not two
+// consecutive ones), splitting one pass's own story across two lines that
+// might not even stay adjacent in the log. When Corrupted() is empty the
+// line is unchanged from before — no refusal, nothing to add.
 func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 	cfg, err := s.config.Load(ctx)
 	if err != nil {
@@ -175,5 +221,35 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 		return
 	}
 
-	_, _ = s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+	report, err := s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+	if err != nil {
+		// Aborted, not retried: m2c R5.4 already gates
+		// consolidation_last_run_at on full pass completion, so an aborted
+		// pass writes nothing and looks, to the very next fire, exactly
+		// like one that never started (spec R1.4). No retry loop, no
+		// special-cased "retry" state — the next fire attempts a fresh
+		// whole pass, same as any other.
+		//
+		// report is not discarded (JD-5-02): an earlier phase can have
+		// already refused units before this later abort, and the process
+		// log is the only place that refusal is ever surfaced for an
+		// unattended pass. One combined line, not two separate logf calls
+		// — see this method's own doc comment above for why.
+		if corrupted := report.Corrupted(); len(corrupted) > 0 {
+			s.logf("scheduler: pass aborted (%s): %v, refused %d unit(s) before the abort: %v", trigger, err, len(corrupted), corrupted)
+		} else {
+			s.logf("scheduler: pass aborted (%s): %v", trigger, err)
+		}
+		return
+	}
+	if corrupted := report.Corrupted(); len(corrupted) > 0 {
+		// A refusal had no vault effect, so it is process-log only, never
+		// decision_log (m2c's own I12 effect-scoping) — the same rule
+		// runPass's own abort line above already follows. Unattended, this
+		// is the only place a refused unit is surfaced at all;
+		// renderConsolidateReport (cmd/nooma/consolidate.go:120-125) is a
+		// hand-run pass's own terminal audience, which a scheduler-
+		// triggered pass has none of.
+		s.logf("scheduler: %s pass completed, refused %d unit(s): %v", trigger, len(corrupted), corrupted)
+	}
 }

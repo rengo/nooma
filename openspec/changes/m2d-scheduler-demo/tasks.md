@@ -639,7 +639,7 @@ Depends on PR 4. **Correction to design §13's own scope line for this link**: d
 pre-round-2 default ("define now"); round-2 owner ruling Q3 deferred both constants to M3 (task
 4.15 above). This PR's real scope is R1.4's abort surfacing and the `Corrupted()` log line only.
 
-- [ ] **5.1** Commit 1 (RED): `internal/scheduler/scheduler_test.go` (extend) —
+- [x] **5.1** Commit 1 (RED): `internal/scheduler/scheduler_test.go` (extend) —
       `TestRunPass_AbortSurfacesOnProcessLog`: a fake `Consolidator` returns `ports.
       ErrUnitNotFound` (simulating `persistBoosts`'s own abort) mid-pass, triggered by a scheduler
       fire (not a direct `Consolidate` call) — `runPass` returns without panicking and the
@@ -650,40 +650,222 @@ pre-round-2 default ("define now"); round-2 owner ruling Q3 deferred both consta
       **Red**: `runPass`'s error path is unasserted before this test — fails on the missing log
       line.
       Requirement: spec R1.4; design §5.4.
-- [ ] **5.2** Commit 2 (GREEN): `scheduler.go` (extend) — `runPass`, on a `Consolidate` error:
+      **Done** (commit `336fa7f`) — observed failing: `log = "", want "scheduler: pass aborted
+      (cron): unit not found\n"`, exactly the stated reason.
+- [x] **5.2** Commit 2 (GREEN): `scheduler.go` (extend) — `runPass`, on a `Consolidate` error:
       `s.logf("scheduler: pass aborted (%s): %v", trigger, err)`; returns cleanly, no retry loop, no
       special-cased "retry" state.
       Verify: `go test ./internal/scheduler/...`.
       Requirement: spec R1.4; design §5.4.
-- [ ] **5.3** Commit 1 (RED): `scheduler_test.go` (extend) —
+      **Done** (commit `1a247ee`) — green, verbatim log line landed.
+- [x] **5.3** Commit 1 (RED): `scheduler_test.go` (extend) —
       `TestRunPass_NextFireAttemptsFreshWholePass`: after an aborted fire, a second `runPass` call
       attempts a full pass again — the fake `Consolidator`'s recorded `ConsolidateRequest{}` is the
       same zero value both times, no carried state.
       **Red**: only red if `5.2`'s abort path accidentally threads state into the next call — a
       regression guard more than a fresh failure; disclosed as such.
       Requirement: spec R1.4 (second Verified-by clause).
-- [ ] **5.4** Verify/confirm: `go test ./internal/scheduler/... -run TestRunPass_NextFireAttempts`.
+      **Confirmed, not a genuine red** (commit `336fa7f`, same commit as 5.1) — passed on first run:
+      `runPass` constructs `brain.ConsolidateRequest{}` fresh at every call and threads no state
+      across calls, so there was no implementation state in which this could have failed.
+- [x] **5.4** Verify/confirm: `go test ./internal/scheduler/... -run TestRunPass_NextFireAttempts`.
       Requirement: spec R1.4.
-- [ ] **5.5** Commit 1 (RED): `scheduler_test.go` (extend) —
+      **Done** — `PASS`.
+- [x] **5.5** Commit 1 (RED): `scheduler_test.go` (extend) —
       `TestRunPass_CompletedPassLogsCorrupted`: a fake `Consolidate` returning a
       `brain.ConsolidateReport` with a non-empty `Corrupted()` (no error) logs one line naming the
       refused unit ids on success.
       **Red**: no log call exists on the success path yet — fails on the missing line.
       Requirement: design §5.2 ("`Corrupted()` is operationally meaningful for an unattended pass").
-- [ ] **5.6** Commit 2 (GREEN): `scheduler.go` (extend) — after a successful `Consolidate` call, if
+      **Done** (commit `9e0be9b`) — observed failing: `log = "", want "scheduler: cron pass
+      completed, refused 1 unit(s): [u-corrupted]\n"`, exactly the stated reason.
+      **Disclosed deviation from this task's own "a fake `Consolidate`" wording**: found while
+      implementing — `brain.ConsolidateReport`'s fields (`corrupted` included) are unexported, and
+      package `brain` exposes no constructor or setter that reaches them. No value satisfying the
+      `Consolidator` interface from outside package `brain` can therefore return a report with a
+      non-empty `Corrupted()` by construction alone. This PR's own two hard constraints rule out the
+      two natural fixes: task 5.7 forbids touching `internal/brain/consolidate.go`, and this PR's
+      own diff-scope note ("`scheduler.go` extended only — no new file") forbids adding an
+      `export_test.go`-style file anywhere, including inside package `brain`. `reflect`/`unsafe`
+      field-poking was considered and rejected as contrary to this codebase's own quality bar (no
+      precedent for it anywhere in the tree). The fixture instead wires a real
+      `*brain.ConsolidateService` (`brain.NewConsolidateService`, all-exported constructor) over
+      `test/support/memrepo` in-memory repos seeded with exactly one unit whose decay state is
+      non-finite (`Weight: math.NaN()`) — `partitionLiveDecayStates` (package `brain`, unexported,
+      unmodified) refuses it in every phase that reads `LiveDecayStates` (archive, connect,
+      reweight), and `report.reportCorrupted`'s own dedup collapses it to one entry. The refused
+      unit is never a valid connect/derive source, so both phases' own `sourceIDs` come back empty
+      and short-circuit before ever calling the judge or the recall service — the rest of the pass
+      is a true no-op, the identical "nothing fed, nothing written" shape
+      `internal/brain`'s own `TestConsolidate_NoEffects` already proves for a fully empty fixture.
+      This is the same wiring pattern `internal/brain`'s own
+      `TestConsolidate_WholePassReportsEachCorruptedIDOnce` already uses to produce a non-empty
+      `Corrupted()`, reused here through exported symbols only (`fakeprovider.New`/
+      `fakeprovider.NewEmbeddingFake`, `brain.NewRecallService`, `brain.NewIndex`,
+      `memrepo.New*`) — zero lines touch `internal/brain/consolidate.go` (task 5.7's own
+      confirmation below verifies this directly) and no new file is added anywhere (the fixture and
+      a small local `ports.IDGen` double, `fakeIDGen`, both live inside the already-existing,
+      extended `scheduler_test.go`).
+- [x] **5.6** Commit 2 (GREEN): `scheduler.go` (extend) — after a successful `Consolidate` call, if
       `report.Corrupted()` is non-empty, `s.logf(...)` naming the refused ids.
       Verify: `go test ./internal/scheduler/...`.
       Requirement: design §5.2.
-- [ ] **5.7** Confirm `internal/brain/consolidate.go` is unchanged by this PR: `git diff --stat --
+      **Done** (commit `098f9c3`) — green: `s.logf("scheduler: %s pass completed, refused %d
+      unit(s): %v", trigger, len(corrupted), corrupted)`.
+- [x] **5.7** Confirm `internal/brain/consolidate.go` is unchanged by this PR: `git diff --stat --
       internal/brain/consolidate.go` on this branch is empty — R1.4's own MUST: `persistBoosts` gets
       no retry loop, no partial-application logic, no new tolerance for `ports.ErrUnitNotFound`.
       Requirement: spec R1.4.
-- [ ] **5.8** `golangci-lint run`; `go test -race ./internal/scheduler/...`.
-- [ ] Verify (PR-level): `make check-all`; diff scope — `internal/scheduler/scheduler.go` (+ tests,
+      **Confirmed** — `git diff --stat --exit-code main...HEAD -- internal/brain/consolidate.go`
+      exits 0 with empty output. `persistBoosts` untouched.
+- [x] **5.8** `golangci-lint run`; `go test -race ./internal/scheduler/...`.
+      **Done** — `make lint` → `0 issues.`; `go test -race ./internal/scheduler/... -v` → all 17
+      top-level tests `PASS` (the 12 from PR 4 plus `TestRunPass_AbortSurfacesOnProcessLog`,
+      `TestRunPass_NextFireAttemptsFreshWholePass`, `TestRunPass_CompletedPassLogsCorrupted`
+      new here, plus `TestNew_RejectsNilDeps`/`TestScheduler_Wait` subtests), no race.
+- [x] Verify (PR-level): `make check-all`; diff scope — `internal/scheduler/scheduler.go` (+ tests,
       extended only, no new file). Target ≤110 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/scheduler-abort-logging` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR6> --json baseRefName` names `main`.
+
+      **PR 5 result** (`feat/scheduler-abort-logging`): `make check-all` green end to end; `internal/
+      core` coverage floor unchanged at 750/750 (100%) — this PR adds no `internal/core` code.
+      Diff scope matched exactly: `internal/scheduler/scheduler.go` (extended, no new file),
+      `internal/scheduler/scheduler_test.go` (extended, no new file) — no strays, no
+      `internal/brain`, `cmd/nooma`, or `docs/` file touched (task 5.7's own confirmation above).
+      `git diff --stat main...HEAD -- internal/scheduler/`: `scheduler.go` +35/-5 (40 changed
+      lines), impl+docs well under the ≤110 target; `scheduler_test.go` +224/-0 (224 test lines),
+      ~149% of the ~150 sub-estimate — flagged, not split: squarely inside the 106–193% band prior
+      links in this chain already saw, and CLAUDE.md's 400-line PR ceiling counts impl+docs only.
+      Most of the test overrun is the disclosed real-`ConsolidateService` fixture (task 5.5's own
+      deviation note) — heavier than a plain fake, but the only construction path available under
+      this PR's own hard constraints.
+      `go test -race -shuffle=on ./internal/scheduler/... -count=5`: green, all 5 shuffled runs, no
+      race. `go test -race -run 'TestScheduler_NoOverlap_ExactlyOneInFlight|
+      TestCatchUp_IndistinguishableFromCron|TestRunPass_CompletedPassLogsCorrupted|
+      TestRunPass_AbortSurfacesOnProcessLog' ./internal/scheduler/... -count=20`: green, no race —
+      20 runs of all four log/concurrency-sensitive tests together, zero flakes.
+
+      **The inherited `logf`/unsynchronized-`io.Writer` note (link 3b's Judgment Day, carried
+      forward by link 4's own Judgment Day), reasoned through explicitly rather than re-inherited
+      unexamined**: this PR adds two new `logf` call sites inside `runPass` — the abort line and the
+      completed-pass-with-`Corrupted()` line. Both sit strictly *after* the non-blocking try-lock
+      (`select { s.slot <- struct{}{}: ...; default: ... }`, design §3.4/D4) already established in
+      PR 3b, on the path where the slot was actually acquired — i.e., inside the
+      `defer func() { <-s.slot }()` region. Since the slot has capacity 1 and is acquired
+      non-blockingly, **at most one goroutine can be inside that region, and therefore inside either
+      new `logf` call, at any instant** — exactly the same guarantee that already covers PR 3b's own
+      skip-path `logf` call (which sits *outside* the region, on the `default` branch, contended by
+      construction, but writing to `s.log` only after failing to acquire the slot — no overlap with
+      the acquired-path calls either, since a `default`-branch caller by definition never entered
+      the acquired region at all). All three call sites — skip (3b), abort (5.2), completed-with-
+      refusals (5.6) — are therefore mutually exclusive at runtime under the current two-trigger
+      model (cron, catch-up), the same model link 3b's and link 4's judges already reasoned about.
+      **This does not change the "not yet, but soon" conclusion, and here is why it still holds**:
+      the try-lock serializes *pass-holding* access to `logf`, but does not by itself prove no
+      *other*, non-pass-holding writer will ever call `s.log.Write` concurrently — that was true in
+      PR 3b (no other writer existed) and remains true here (still no other writer exists in this
+      PR's own diff), but it stops being trivially true the moment PR 6 wires `serve`'s own
+      `errOut` as a shared `io.Writer` that other parts of `runServe` may also write to
+      concurrently with a scheduler pass in flight. This PR's own two new call sites do not
+      themselves introduce a race — no test failed under `-race` at any point in this PR's work,
+      including the 20-run repeated-execution proof above — but the risk surface named in link 3b
+      is now three call sites deep instead of one, all still protected by the *same* single
+      assumption (the try-lock's own mutual exclusion), which was never `Deps.Log`'s or `logf`'s own
+      documented contract. No mutex was added: the orchestrator's own instruction was explicit that
+      this is not this link's call to make, and the try-lock's mutual exclusion is sufficient for
+      every writer this PR itself introduces. Flagged for link 6's own Judgment Day to re-examine
+      once a real, possibly-shared writer is actually wired.
+
+**Judgment Day correction round, `feat/scheduler-abort-logging` (PR #185), frozen target
+`f4f57c6`. Three confirmed findings, all fixed in this same branch — none deferred to link 6.**
+
+- **JD-5-01 (CRITICAL, Judge A).** The "mutually exclusive at runtime" reasoning immediately
+  above this note was wrong, and this is why. It reasoned from "a `default`-branch caller by
+  definition never entered the acquired region" to "no overlap with the acquired-path calls" —
+  but that only proves the two callers are in different goroutines and different code regions; it
+  proves nothing about ordering between their two `logf` calls, which have no channel, mutex, or
+  `WaitGroup` between them at all. Two goroutines calling an unsynchronized `fmt.Fprintf(s.log,
+  ...)` — one from the `default` (skip) branch, one from inside the acquired region on abort or
+  completed-with-refusals — is a genuine data race under Go's memory model regardless of whether
+  the try-lock excludes them from being inside the *same region* at the *same time*; the try-lock
+  never claimed to order writes to `s.log` at all, only entry into `Consolidate`. Fixed by adding
+  `Scheduler.logMu sync.Mutex`, held for the duration of every `logf` call — see `logf`'s own
+  updated doc comment (`internal/scheduler/scheduler.go`) and `Deps.Log`'s own updated doc comment
+  for the documented multi-goroutine-writer contract this PR's original version never stated.
+  **Regression test**: `TestRunPass_LogfIsRaceFree` (`internal/scheduler/scheduler_test.go`) —
+  genuinely exercises the interleaving (a fire holding the slot inside a blocked `Consolidate`
+  that then aborts, concurrent with a second fire taking the skip branch, both writing to the same
+  `Log`), observed failing for real before the fix:
+  ```
+  go test -race -run TestRunPass_LogfIsRaceFree -v ./internal/scheduler/...
+  WARNING: DATA RACE
+  Write at 0x00c0001a27d0 by goroutine 9:
+    bytes.(*Buffer).Write()
+    fmt.Fprintf()
+    github.com/rengo/nooma/internal/scheduler.(*Scheduler).logf()
+        internal/scheduler/scheduler.go:97
+    github.com/rengo/nooma/internal/scheduler.(*Scheduler).runPass()
+        internal/scheduler/scheduler.go:184
+  Previous write at 0x00c0001a27d0 by goroutine 8:
+    (same stack, scheduler.go:97 via runPass at scheduler.go:196)
+  --- FAIL: TestRunPass_LogfIsRaceFree (0.00s)
+  ```
+  Green after the `logMu` fix: `go test -race -run TestRunPass_LogfIsRaceFree -v
+  ./internal/scheduler/...` → `PASS`.
+  **Rollback boundary**: `internal/scheduler/scheduler.go`'s `logMu` field and `logf`'s two new
+  lines, plus `TestRunPass_LogfIsRaceFree` and `blockingErrorConsolidator` in
+  `scheduler_test.go` — revertible independently of JD-5-02's own changes below.
+- **JD-5-02 (WARNING, Judge B).** `runPass`'s abort branch discarded `report` entirely, so any
+  unit an earlier phase had already refused (`internal/brain/consolidate.go:1044-1045` returns
+  `(report, err)` together; `report.reportCorrupted` runs from five phase sites, any of which can
+  run before a later phase aborts the same pass) never reached the process log — the only place a
+  refused unit is surfaced at all for an unattended pass. Fixed: the abort branch now surfaces
+  `report.Corrupted()` alongside the abort, as **one combined log line**, not two separate `logf`
+  calls — chosen over two lines because `logMu` (JD-5-01) only ever makes a single `logf` call
+  atomic, not two consecutive ones, so two calls would let a concurrent, unrelated write from
+  another goroutine land between them once `Deps.Log` becomes a writer other code shares (the
+  exact risk this same PR's own note above already flagged for link 6). When `Corrupted()` is
+  empty the line is byte-identical to before. `internal/brain/consolidate.go` is untouched — no
+  retry loop, no partial-application logic (spec R1.4's own MUST); `git diff --stat --
+  internal/brain/consolidate.go` on this branch is empty, confirmed below.
+  **Regression test**: `TestRunPass_AbortSurfacesRefusedUnits` — wires a real
+  `*brain.ConsolidateService` (task 5.5's own precedent: `ConsolidateReport`'s fields are
+  unexported, so no fake outside package `brain` can construct a non-empty `Corrupted()`) over one
+  seeded corrupted unit plus `abortingUnitsAfterNCalls{n: 2}`, a `ports.UnitRepo` wrapper that
+  fails Connect's own `LiveDecayStates` read (slot 4) strictly after Archive's own `slot` 2 refusal
+  is already recorded — so the returned `(report, err)` pair genuinely carries both in the same
+  call. Observed failing for the stated reason before the fix:
+  ```
+  go test -run TestRunPass_AbortSurfacesRefusedUnits -v ./internal/scheduler/...
+  scheduler_test.go:764: log = "scheduler: pass aborted (cron): consolidate: connect: read live
+  decay states: boom\n", want "scheduler: pass aborted (cron): consolidate: connect: read live
+  decay states: boom, refused 1 unit(s) before the abort: [u-corrupted]\n"
+  --- FAIL: TestRunPass_AbortSurfacesRefusedUnits (0.00s)
+  ```
+  Green after the fix: `PASS`.
+  **Rollback boundary**: `runPass`'s abort branch (the `if corrupted := report.Corrupted(); ...`
+  clause) plus `TestRunPass_AbortSurfacesRefusedUnits` and `abortingUnitsAfterNCalls` in
+  `scheduler_test.go` — revertible independently of JD-5-01's own `logMu` change.
+- **JD-5-03 (docs).** `design.md`'s diagram documenting the shape that produced JD-5-02 lives in
+  **§5.3 "Flow"**, not §5.2 as the correction round's own delegate prompt named it — §5.2 is "The
+  dependency surface" (a Go interface/struct block with no diagram at all); the `err ─▶ log the
+  abort │ ok ─▶ log Corrupted(), if any` diagram Judge B described is unambiguously §5.3's own
+  ASCII flow chart. Fixed at its real location: the diagram no longer gives the abort and
+  completed-with-refusals arms as mutually exclusive; a correction note below it states plainly
+  what was wrong (the abort arm carried no `Corrupted()` clause, and the shipped code implemented
+  that faithfully — that fidelity *was* the bug), what the corrected behavior now is (the abort arm
+  surfaces `Corrupted()` too, one combined line), and why (§3.3's and §3.4's own correction notes
+  already took the identical posture twice in this chain: the shipped code was the outlier's
+  cause, the design was the one left to correct). Docs-only; recorded separately below.
+  **Rollback boundary**: `design.md` §5.3's diagram and its new correction paragraph only.
+
+**Verification, this correction round**: `go test -race -shuffle=on ./internal/scheduler/...
+-count=5` → green, no race. `make check-all` → green end to end; `internal/core` coverage floor
+unchanged at 750/750 (100%) — this round adds no `internal/core` code. `git diff --stat --
+internal/brain/consolidate.go` → empty (JD-5-02's own hard constraint, task 5.7's precedent).
+`make lint` → `0 issues.`
 
 ---
 
