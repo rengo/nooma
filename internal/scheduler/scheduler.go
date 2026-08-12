@@ -185,7 +185,8 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 		return
 	}
 
-	if _, err := s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{}); err != nil {
+	report, err := s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+	if err != nil {
 		// Aborted, not retried: m2c R5.4 already gates
 		// consolidation_last_run_at on full pass completion, so an aborted
 		// pass writes nothing and looks, to the very next fire, exactly
@@ -193,5 +194,16 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 		// special-cased "retry" state — the next fire attempts a fresh
 		// whole pass, same as any other.
 		s.logf("scheduler: pass aborted (%s): %v", trigger, err)
+		return
+	}
+	if corrupted := report.Corrupted(); len(corrupted) > 0 {
+		// A refusal had no vault effect, so it is process-log only, never
+		// decision_log (m2c's own I12 effect-scoping) — the same rule
+		// runPass's own abort line above already follows. Unattended, this
+		// is the only place a refused unit is surfaced at all;
+		// renderConsolidateReport (cmd/nooma/consolidate.go:120-125) is a
+		// hand-run pass's own terminal audience, which a scheduler-
+		// triggered pass has none of.
+		s.logf("scheduler: %s pass completed, refused %d unit(s): %v", trigger, len(corrupted), corrupted)
 	}
 }
