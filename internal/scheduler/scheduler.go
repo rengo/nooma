@@ -75,3 +75,19 @@ func New(d Deps) (*Scheduler, error) {
 		timer:       t,
 	}, nil
 }
+
+// runPass is the one entry point into Consolidate from this package
+// (design §5.3): both the cron and the boot catch-up (PR 4) call only
+// this method, so a per-phase scheduled run is unrepresentable from this
+// package (spec R1.1) — brain.ConsolidateRequest{} is its zero value,
+// constructed nowhere else.
+//
+// This commit's version (task 3a.6) checks nothing before calling
+// Consolidate: no gate (task 3a.8's own addition), no overlap guard (PR
+// 3b), no abort/Corrupted() logging (PR 5). trigger is accepted now,
+// ahead of its first reader, so this method's signature does not change
+// again once those callers land.
+func (s *Scheduler) runPass(ctx context.Context, trigger string) {
+	_ = trigger
+	_, _ = s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+}
