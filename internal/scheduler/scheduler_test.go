@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"testing"
@@ -217,6 +218,64 @@ func TestScheduler_NoOverlap_ExactlyOneInFlight(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("Consolidate called %d times, want exactly 1 — the second fire must be skipped while the first is in flight", calls)
+	}
+}
+
+// TestScheduler_SkippedFire_LogsOneLine is tasks 3b.3/3b.4. Disclosed, not
+// a genuine red: task 3b.2's own text quotes design §3.4's exact shape
+// ("default: skip+log") as part of its own scope, and the runPass commit
+// already carries the final s.logf("scheduler: %s fire skipped, a pass is
+// already running", trigger) call verbatim — so this test passes on first
+// run, with no prior implementation state where it could have failed.
+//
+// It also asserts a narrower claim than task 3b.3's own prose ("naming the
+// trigger it skipped and the trigger holding the slot"): design §3.4's own
+// code block and task 3b.4's own verbatim text both give a single %s — the
+// skipped trigger only. No task adds a field that records which trigger
+// currently holds the slot, so that half of 3b.3's prose describes a log
+// line this implementation does not produce; asserting it here would be
+// testing a design that was never built. Followed here: verbatim design.
+func TestScheduler_SkippedFire_LogsOneLine(t *testing.T) {
+	ft := newFakeTimer()
+	bc := newBlockingConsolidator()
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: bc, Timer: ft, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cronDone := make(chan struct{})
+	go func() {
+		s.runCron(ctx)
+		close(cronDone)
+	}()
+
+	waitForAfterCall(t, ft)
+	ft.fire <- fixedNow
+
+	select {
+	case <-bc.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the cron fire's own Consolidate call to start")
+	}
+
+	// The direct call is the one that gets skipped — its trigger name is
+	// what the log line must name.
+	s.runPass(ctx, "catchup")
+
+	close(bc.release)
+	cancel()
+	select {
+	case <-cronDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCron did not return after ctx cancellation")
+	}
+
+	const want = "scheduler: catchup fire skipped, a pass is already running\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
 	}
 }
 
