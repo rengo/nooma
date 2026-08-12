@@ -105,3 +105,43 @@ func TestCatchUp_GatedOff_ZeroCallsEvenOnStaleVault(t *testing.T) {
 		t.Fatalf("Consolidate called %d times, want 0 — ConsolidationEnabled is false", got)
 	}
 }
+
+// TestCatchUp_CancelledDelayNeverFires is task 4.5: ctx cancelled before
+// BootConsolidationDelay elapses asserts Consolidate is never called.
+// Spec R2.3 (second Verified-by clause).
+//
+// Disclosed, not a genuine red: runCatchUp's select already carries the
+// ctx.Done() arm since its first committed shape (task 4.2's own commit),
+// so this test passes on first run — confirmatory rather than a fresh
+// failure, the same posture task 4.5's own text discloses.
+func TestCatchUp_CancelledDelayNeverFires(t *testing.T) {
+	ft := newFakeTimer()
+	rc := newRecordingConsolidator()
+	cfg := memrepo.NewConfig()
+	cfg.SeedConfig(t, ports.VaultConfig{ConsolidationLastRunAt: &staleLastRun})
+
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: cfg, Consolidate: rc, Timer: ft})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.runCatchUp(ctx)
+		close(done)
+	}()
+
+	waitForAfterCall(t, ft) // the catch-up goroutine is now blocked in its delay wait
+	cancel()                // cancelled before the delay ever elapses — ft.fire is never fed
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCatchUp did not return after ctx cancellation")
+	}
+
+	if got := rc.callCount(); got != 0 {
+		t.Fatalf("Consolidate called %d times, want 0 — ctx was cancelled before the delay elapsed", got)
+	}
+}
