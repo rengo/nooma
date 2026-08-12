@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -335,6 +336,123 @@ func TestScheduler_Wait(t *testing.T) {
 			t.Fatalf("Wait blocked for %v; want it to return promptly once its own ctx is done", elapsed)
 		}
 	})
+}
+
+// erroringConsolidator is task 5.1's own fixture: every call returns the
+// scripted error and the zero-value ConsolidateReport, simulating a
+// mid-pass abort — persistBoosts's own ports.ErrUnitNotFound (spec R1.4).
+// runPass must return cleanly rather than propagate or panic, and the
+// process log must record the failure (design §5.4).
+type erroringConsolidator struct {
+	mu    sync.Mutex
+	calls []brain.ConsolidateRequest
+	err   error
+}
+
+func (c *erroringConsolidator) Consolidate(_ context.Context, req brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
+	c.mu.Lock()
+	c.calls = append(c.calls, req)
+	c.mu.Unlock()
+	return brain.ConsolidateReport{}, c.err
+}
+
+func (c *erroringConsolidator) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.calls)
+}
+
+func (c *erroringConsolidator) recordedCalls() []brain.ConsolidateRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]brain.ConsolidateRequest(nil), c.calls...)
+}
+
+// TestRunPass_AbortSurfacesOnProcessLog is task 5.1: a fake Consolidator
+// returns ports.ErrUnitNotFound mid-pass (simulating persistBoosts's own
+// abort), triggered by a scheduler fire (not a direct Consolidate call) —
+// runPass returns without panicking and the operational log records the
+// failure. Spec R1.4; design §5.4.
+//
+// Scope note: the "consolidation_last_run_at unwritten" property is m2c
+// R5.4's own already-proven guarantee (RecordConsolidationRun unreachable
+// on any runPhase error) — relied upon here as a fact the scheduler package
+// has no write path to re-assert, not re-tested at this layer.
+//
+// Red: runPass's error path is unasserted before this test — fails on the
+// missing log line (no s.logf call exists on this path yet).
+func TestRunPass_AbortSurfacesOnProcessLog(t *testing.T) {
+	ft := newFakeTimer()
+	ec := &erroringConsolidator{err: ports.ErrUnitNotFound}
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: ec, Timer: ft, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan struct{})
+	go func() {
+		s.runCron(ctx)
+		close(done)
+	}()
+
+	waitForAfterCall(t, ft) // the cron loop is now blocked in its first wait
+	ft.fire <- fixedNow
+
+	// Wait for the loop to ask the timer for its NEXT wait — proof the
+	// erroring call already returned and runPass already unwound, not
+	// merely that the tick was sent.
+	waitForAfterCall(t, ft)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCron did not return after ctx cancellation")
+	}
+
+	if got := ec.callCount(); got != 1 {
+		t.Fatalf("Consolidate called %d times, want exactly 1", got)
+	}
+
+	const want = "scheduler: pass aborted (cron): unit not found\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
+	}
+}
+
+// TestRunPass_NextFireAttemptsFreshWholePass is task 5.3: after an aborted
+// fire, a second runPass call attempts a full pass again — the fake
+// Consolidator's recorded ConsolidateRequest{} is the same zero value both
+// times, no carried state. Spec R1.4 (second Verified-by clause).
+//
+// Disclosed, not a genuine red: this is only red if 5.2's abort path
+// accidentally threads state into the next call — runPass already
+// constructs brain.ConsolidateRequest{} fresh at every call and never
+// mutates trigger-scoped state across calls, so this is a regression guard
+// more than a fresh failure.
+func TestRunPass_NextFireAttemptsFreshWholePass(t *testing.T) {
+	ec := &erroringConsolidator{err: ports.ErrUnitNotFound}
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: ec})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+	s.runPass(ctx, "cron")
+	s.runPass(ctx, "cron")
+
+	calls := ec.recordedCalls()
+	if len(calls) != 2 {
+		t.Fatalf("Consolidate called %d times, want exactly 2", len(calls))
+	}
+	for i, req := range calls {
+		if req != (brain.ConsolidateRequest{}) {
+			t.Fatalf("call %d: request = %+v, want the zero value (no carried state from the prior aborted call)", i, req)
+		}
+	}
 }
 
 // discriminatingTimer is JD-4-04's own fixture. fakeTimer (cron_test.go)
