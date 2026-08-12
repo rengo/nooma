@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 
-	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/consolidation"
 )
 
@@ -12,6 +11,12 @@ import (
 // if so delays the actual pass by BootConsolidationDelay so it does not
 // compete with startup. The delay is itself cancellable: ctx.Done() before
 // it elapses means the catch-up never fires (spec R2.3).
+//
+// The due fire goes through runPass(ctx, "catchup") — the same single
+// entry point the cron uses — never a ConsolidateRequest this function
+// builds itself, so the catch-up shares runPass's own non-blocking
+// try-lock (design §3.4, D4) and is indistinguishable, on the
+// Consolidator, from a cron-triggered call (spec R2.4).
 func (s *Scheduler) runCatchUp(ctx context.Context) {
 	cfg, err := s.config.Load(ctx)
 	if err != nil {
@@ -37,7 +42,7 @@ func (s *Scheduler) runCatchUp(ctx context.Context) {
 
 	select {
 	case <-s.timer.After(BootConsolidationDelay):
-		_, _ = s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+		s.runPass(ctx, "catchup")
 	case <-ctx.Done():
 		return
 	}

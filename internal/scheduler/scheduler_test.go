@@ -336,3 +336,34 @@ func TestScheduler_Wait(t *testing.T) {
 		}
 	})
 }
+
+// TestScheduler_Start_JoinsBootCatchUp closes the gap PR 3a's own Start
+// comment disclosed: "the boot catch-up goroutine's own wg.Add(1)/Done()
+// is PR 4's addition to this same group." Start must spawn both the cron
+// and the catch-up goroutines into the SAME sync.WaitGroup, so Wait does
+// not return early because only one of the two has unwound.
+func TestScheduler_Start_JoinsBootCatchUp(t *testing.T) {
+	ft := newFakeTimer() // never fed — both goroutines block on it until ctx is done
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: newRecordingConsolidator(), Timer: ft})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.Start(ctx)
+
+	// Both goroutines must have asked the timer for a wait — proof both
+	// are actually running, not merely the cron loop alone.
+	waitForAfterCall(t, ft)
+	waitForAfterCall(t, ft)
+
+	cancel()
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer waitCancel()
+	s.Wait(waitCtx)
+
+	if err := waitCtx.Err(); err != nil {
+		t.Fatalf("Wait did not return before its own 2s ctx expired: %v", err)
+	}
+}
