@@ -73,11 +73,34 @@ func ResolveConsolidationEnabled(configured *bool) bool {
 // transition on the configured hour. Rebuilding from (day+1, hour) instead
 // keeps each day's normalization a question about that day alone.
 func NextDailyRun(after time.Time, hour int) time.Time {
-	candidate := time.Date(after.Year(), after.Month(), after.Day(), hour, 0, 0, 0, after.Location())
-	if candidate.After(after) {
-		return candidate
-	}
+	y, m, d := after.Date()
+	loc := after.Location()
 
-	tomorrow := after.AddDate(0, 0, 1)
-	return time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), hour, 0, 0, 0, after.Location())
+	// Walk forward a calendar day at a time until a candidate is genuinely
+	// after. Days are advanced by handing time.Date an out-of-range day
+	// (d+i), which it normalizes — never by round-tripping a wall clock
+	// through AddDate, which is where the two defects Judgment Day found on
+	// this PR both came from.
+	//
+	// The loop, rather than a single "tomorrow", is what makes the strictly-
+	// after promise above true in every zone. A requested hour that does not
+	// exist on a given day gets normalized to a real instant, and that
+	// normalization can move BACKWARD: local 00:00 on Havana's spring-forward
+	// day resolves to 23:00 the previous evening. A one-shot "build tomorrow"
+	// therefore hands back an instant at or before after, and a cron that
+	// scheduled from it would fire again immediately, forever. Asking the
+	// next day, and the next, costs nothing and cannot do that.
+	//
+	// The loop carries no iteration bound, and that is deliberate: it
+	// terminates in at most two or three steps for any real zone, because
+	// each step advances the civil date by a full day while normalization can
+	// only pull an instant back by a DST offset — hours, never days. A bound
+	// would have to be a guess, and its unreachable fall-through would be a
+	// statement no test can ever cover, which in this package means either a
+	// hole in the coverage floor or a test written to exercise dead code.
+	for i := 0; ; i++ {
+		if candidate := time.Date(y, m, d+i, hour, 0, 0, 0, loc); candidate.After(after) {
+			return candidate
+		}
+	}
 }

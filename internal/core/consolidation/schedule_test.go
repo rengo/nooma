@@ -248,3 +248,29 @@ func TestNextDailyRun_SpringForwardDoesNotDriftTheHour(t *testing.T) {
 			after, got, h, min, s)
 	}
 }
+
+// TestNextDailyRun_AlwaysStrictlyAfter pins the contract the doc comment
+// promises — and that a one-shot "build tomorrow" silently broke.
+//
+// Havana springs forward AT midnight: local 00:00 on 2026-03-08 never
+// occurs. Asking time.Date for it resolves BACKWARD, to 23:00 on the 7th.
+// An implementation that derived tomorrow's calendar day from that resolved
+// instant read the 7th again, rebuilt 00:00 on the 7th, and handed back the
+// very instant it was asked to schedule past. A cron loop seeded with that
+// fires forever.
+//
+// This case is here rather than in the DST test above because it is not
+// really about DST: it is about the promise that the result is strictly
+// after the argument, which no zone may break.
+func TestNextDailyRun_AlwaysStrictlyAfter(t *testing.T) {
+	havana, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Fatalf("loading America/Havana: %v", err)
+	}
+
+	after := time.Date(2026, 3, 7, 0, 0, 0, 0, havana)
+	got := NextDailyRun(after, 0)
+	if !got.After(after) {
+		t.Fatalf("NextDailyRun(%s, 0) = %s — must be strictly after; a cron scheduling from this would fire again immediately, forever", after, got)
+	}
+}
