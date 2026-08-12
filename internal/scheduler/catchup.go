@@ -20,6 +20,17 @@ func (s *Scheduler) runCatchUp(ctx context.Context) {
 		// "never consolidated" and treat as always due.
 		return
 	}
+
+	// ADR-0009's "Consolidation — always recovered" section contrasts
+	// consolidation against the time-based trigger and ephemeral timer
+	// kinds, which expire by staleness — it names no user-facing
+	// off-switch at all. Gating this catch-up on consolidation_enabled
+	// interprets that silence rather than overriding the ADR: the cron and
+	// this catch-up are the same work behind two triggers (design §3.3,
+	// D3; owner ruling round 1 #1).
+	if !consolidation.ResolveConsolidationEnabled(cfg.ConsolidationEnabled) {
+		return
+	}
 	if !consolidation.CatchUpDue(cfg.ConsolidationLastRunAt, s.clock.Now(), consolidation.CatchUpStalenessHours) {
 		return
 	}
