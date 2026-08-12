@@ -2,12 +2,27 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
+
+// errConfigRepo is a package-local ports.ConfigRepo fake whose Load always
+// fails — memrepo.Config's Load never returns an error (it has no seam for
+// one), so JD-3a-01's fixture needs its own minimal double rather than a
+// change to the shared fixture.
+type errConfigRepo struct{}
+
+func (errConfigRepo) Load(_ context.Context) (ports.VaultConfig, error) {
+	return ports.VaultConfig{}, errors.New("errConfigRepo: simulated read failure")
+}
+
+func (errConfigRepo) RecordConsolidationRun(_ context.Context, _ time.Time) error {
+	return nil
+}
 
 // fakeTimer is this package's own timer seam test double (design §5.2):
 // the real timer.go implementation calls time.After directly, and this
@@ -173,5 +188,47 @@ func TestCron_GatedOff_FiredTickCallsConsolidateZeroTimes(t *testing.T) {
 
 	if got := rc.callCount(); got != 0 {
 		t.Fatalf("Consolidate called %d times, want 0 — ConsolidationEnabled is false", got)
+	}
+}
+
+// TestCron_ConfigLoadError_FiredTickCallsConsolidateZeroTimes is JD-3a-01: a
+// fired tick whose ConfigRepo.Load returns a non-nil error must not treat
+// the resulting zero-value VaultConfig as an open gate. runPass discarding
+// that error (`cfg, _ := s.config.Load(ctx)`) resolves ConsolidationEnabled
+// as nil, which consolidation.ResolveConsolidationEnabled defaults to true —
+// converting a read failure into a full consolidation pass. This must be a
+// true no-op instead: fail closed, exactly like the gated-off case above.
+func TestCron_ConfigLoadError_FiredTickCallsConsolidateZeroTimes(t *testing.T) {
+	ft := newFakeTimer()
+	rc := newRecordingConsolidator()
+
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: errConfigRepo{}, Consolidate: rc, Timer: ft})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.runCron(ctx)
+		close(done)
+	}()
+
+	waitForAfterCall(t, ft) // the loop is now blocked in its first wait
+	ft.fire <- fixedNow
+
+	// Same non-absence proof as the gated-off case: wait for the loop to
+	// ask the timer for its NEXT wait before asserting zero calls.
+	waitForAfterCall(t, ft)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCron did not return after ctx cancellation")
+	}
+
+	if got := rc.callCount(); got != 0 {
+		t.Fatalf("Consolidate called %d times, want 0 — Config.Load returned an error", got)
 	}
 }
