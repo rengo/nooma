@@ -61,10 +61,23 @@ func ResolveConsolidationEnabled(configured *bool) bool {
 // A non-existent or ambiguous local wall-clock time (a DST transition)
 // resolves however time.Date's own normalization resolves it — this
 // function adds no DST-specific handling.
+//
+// Tomorrow's candidate is built from hour again rather than advanced from
+// today's, and that is the whole of the fix Judgment Day forced here. On a
+// spring-forward day the requested hour may not exist, and time.Date
+// normalizes it forward: ask for 02:00 where 02:00 was skipped and you get
+// 03:00. Advancing THAT with AddDate carries 03:00 into the next day —
+// AddDate reuses the receiver's own Clock(), not the argument this function
+// was called with — and the next day has no gap, so the caller silently
+// gets an hour it never asked for, once a year, in whichever zone puts its
+// transition on the configured hour. Rebuilding from (day+1, hour) instead
+// keeps each day's normalization a question about that day alone.
 func NextDailyRun(after time.Time, hour int) time.Time {
 	candidate := time.Date(after.Year(), after.Month(), after.Day(), hour, 0, 0, 0, after.Location())
-	if !candidate.After(after) {
-		candidate = candidate.AddDate(0, 0, 1)
+	if candidate.After(after) {
+		return candidate
 	}
-	return candidate
+
+	tomorrow := after.AddDate(0, 0, 1)
+	return time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), hour, 0, 0, 0, after.Location())
 }
