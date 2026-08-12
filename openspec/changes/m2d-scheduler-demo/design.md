@@ -182,8 +182,23 @@ set a precedent that every silence needs one.
 **Mechanism**: both triggers call `consolidation.ResolveConsolidationEnabled(cfg.ConsolidationEnabled)`
 (`nil` → `true`, migration 0002:65's `DEFAULT 1`, never a Go literal at the call site). The cron
 re-reads config **at every fire**, so flipping the switch on a running `serve` takes effect at the
-next tick without a restart. The catch-up reads it **once at boot**, before the 120-second delay —
-it fires once, so there is nothing to re-read.
+next tick without a restart. The catch-up reads config **twice**, not once: once at boot, to
+evaluate `CatchUpDue` and decide whether to schedule the delayed fire at all, and a second time
+when the 120-second delay elapses and the due fire routes through `runPass` (§3.4, D4) — the same
+single entry point the cron uses (spec R2.4). The second read is not an oversight; it is a
+structural consequence of PR 4's own single-entry-point requirement: routing the catch-up's due
+fire through `runPass`, rather than a `ConsolidateRequest` `catchup.go` constructs itself, means it
+inherits `runPass`'s own `Config.Load` and gate re-evaluation. It is also the safer of the two
+possible shapes, not merely an accepted cost: the enabled flag is re-checked immediately before the
+pass actually fires, so a user who disables consolidation during the 120s delay window has that
+change honored at boot's own catch-up too, not only at the cron's next tick.
+
+**Corrected here (JD-4-03), after PR 4.** This paragraph originally read "The catch-up reads it
+once at boot, before the 120-second delay — it fires once, so there is nothing to re-read," which
+predates R2.4's single-entry-point requirement and was never updated once that requirement
+structurally forced the second read through `runPass`. The same posture §3.4's own correction note
+above took after PR 3b: the shipped code was the outlier's cause, and the prose was the one left to
+correct, not the code.
 
 ### 3.4 D4 — one pass at a time: a non-blocking try-lock that skips
 
