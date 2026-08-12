@@ -3,6 +3,14 @@ package consolidation
 import (
 	"testing"
 	"time"
+
+	// tzdata is imported for its side effect only, and only by this test
+	// file: TestNextDailyRun_DST loads a real IANA zone by name
+	// (time.LoadLocation), which has no zone database to read from on
+	// Windows without it. This repo cross-compiles for Windows (ADR-0013),
+	// so the import stays out of the shipped binary — schedule.go itself
+	// never imports it.
+	_ "time/tzdata"
 )
 
 // TestCatchUpDue proves R2.1's boot catch-up gate: a nil lastRunAt is
@@ -129,6 +137,49 @@ func TestNextDailyRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNextDailyRun_DST is an edge of TestNextDailyRun over a real IANA
+// zone (Europe/Berlin) instead of time.FixedZone, covering both 2026 DST
+// transitions. It runs against 1.6's already-committed NextDailyRun — no
+// production change accompanies this test; the function already delegates
+// entirely to time.Date's own normalization, so this is a proof, not a
+// fix.
+//
+// go doc time.Date is explicit that an ambiguous repeated local time
+// resolves to "one of the two zones involved in the transition", without
+// guaranteeing which — so the fall-back assertion below pins this
+// toolchain's and this tzdata release's observed choice, not a documented
+// Go contract. If a future Go/tzdata upgrade changes it, this test is the
+// place that will say so.
+func TestNextDailyRun_DST(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatalf("time.LoadLocation(%q): %v", "Europe/Berlin", err)
+	}
+
+	t.Run("spring forward: non-existent local 02:00 normalizes forward to 03:00 CEST", func(t *testing.T) {
+		// 2026-03-29: Berlin's clocks jump from 01:59:59 CET straight to
+		// 03:00:00 CEST — local 02:00-02:59 never occurs.
+		after := time.Date(2026, 3, 29, 1, 0, 0, 0, berlin)
+		got := NextDailyRun(after, 2)
+		want := time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC) // = 03:00 CEST
+		if !got.Equal(want) {
+			t.Errorf("NextDailyRun(%v, 2) = %v, want %v (03:00 CEST, the normalized instant)", after, got, want)
+		}
+	})
+
+	t.Run("fall back: the repeated local 02:00 resolves to one deterministic instant", func(t *testing.T) {
+		// 2026-10-25: Berlin's local 02:00 occurs twice — first as 02:00
+		// CEST, then again as 02:00 CET an hour later. after sits before
+		// both occurrences (01:00 CEST, unambiguous).
+		after := time.Date(2026, 10, 25, 1, 0, 0, 0, berlin)
+		got := NextDailyRun(after, 2)
+		want := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC) // = 02:00 CET, the second occurrence
+		if !got.Equal(want) {
+			t.Errorf("NextDailyRun(%v, 2) = %v, want %v (the second 02:00, this toolchain's observed pick)", after, got, want)
+		}
+	})
 }
 
 // timePtr returns a pointer to t — time.Time has no address to take
