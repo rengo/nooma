@@ -413,8 +413,28 @@ serve ── ctx (signal-aware) ──▶ Scheduler.Start(ctx)
                                    ▼
                      Consolidate(ctx, ConsolidateRequest{})   ← Phase nil: the whole pass, always
                                    │
-                     err ─▶ log the abort (process log only)  │  ok ─▶ log Corrupted(), if any
+                     err ─▶ log the abort, ALSO Corrupted() if non-empty (one combined line)
+                     ok  ─▶ log Corrupted(), if any
 ```
+
+**Corrected here (JD-5-03), after PR 5.** This diagram originally gave `err ─▶ log the abort` and
+`ok ─▶ log Corrupted(), if any` as mutually exclusive branches — the abort arm carried no
+`Corrupted()` clause at all. PR 5's shipped code (`runPass`'s own `if err != nil` branch)
+implemented that faithfully: on abort it logged only the abort line and returned, discarding
+`report` entirely. That was exactly the bug (JD-5-02) — the diagram was not describing an
+accepted simplification, it was describing the information loss. `internal/brain/
+consolidate.go:1044-1045` returns `(report, err)` **together** from `at`, and
+`report.reportCorrupted` is called from five separate phase sites (archive, strengthen, connect
+×2, reweight ×2) that all run **before** a later phase's own error can abort the same pass — so an
+earlier phase can refuse units and a later one can still abort, and those already-refused ids have
+nowhere else to surface for an unattended pass (§5.4). The diagram now matches the corrected
+`runPass`: the abort arm surfaces `report.Corrupted()` too, in the same log line as the abort
+itself, not a second `logf` call — two separate calls would let a concurrent, unrelated write from
+another goroutine land between them once `Deps.Log` is a writer other code paths can also reach
+(the same risk PR 5's own tasks.md correction-round note already flagged for link 6), splitting one
+pass's own story across two lines that might not even stay adjacent in the log. The same posture
+§3.3's and §3.4's own correction notes already took twice in this chain: the shipped code was the
+outlier's cause here too, and the diagram was the one left to correct, not the code.
 
 The `ConsolidateRequest` is the zero value at both call sites, and it is constructed in exactly
 one place — `runPass` — so a per-phase scheduled run is not merely discouraged but unrepresentable
