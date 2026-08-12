@@ -150,10 +150,20 @@ func (s *Scheduler) Wait(ctx context.Context) {
 // into this one method: a fire that cannot take the slot skips rather than
 // queuing behind the one in flight — queuing would run a second whole pass
 // over a corpus the first one just consolidated (design §3.4's own
-// rejected alternative). No abort/Corrupted() logging yet (PR 5), named
-// here rather than silently assumed. trigger is accepted now, ahead of its
-// first reader, so this method's signature does not change again once
-// those callers land.
+// rejected alternative).
+//
+// A Consolidate error aborts the pass: logged to the process log only
+// (design §5.4), never decision_log — nothing was written to the vault, so
+// there is no decision to log (m2c's own I12 effect-scoping). No retry
+// loop, no special-cased "retry" state: the next fire attempts a fresh
+// whole pass, safe because m2c R5.4 already gates
+// consolidation_last_run_at on full pass completion (spec R1.4). A
+// completed pass that refused units (report.Corrupted() non-empty) is
+// logged too, for the identical reason renderConsolidateReport already
+// surfaces it to `nooma consolidate`'s own terminal audience
+// (cmd/nooma/consolidate.go:120-125) — an unattended pass has none, so
+// silence would make the refusal invisible until someone notices a stale
+// decision_log.
 func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 	cfg, err := s.config.Load(ctx)
 	if err != nil {
@@ -175,5 +185,13 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 		return
 	}
 
-	_, _ = s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+	if _, err := s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{}); err != nil {
+		// Aborted, not retried: m2c R5.4 already gates
+		// consolidation_last_run_at on full pass completion, so an aborted
+		// pass writes nothing and looks, to the very next fire, exactly
+		// like one that never started (spec R1.4). No retry loop, no
+		// special-cased "retry" state — the next fire attempts a fresh
+		// whole pass, same as any other.
+		s.logf("scheduler: pass aborted (%s): %v", trigger, err)
+	}
 }
