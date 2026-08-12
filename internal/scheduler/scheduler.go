@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -82,12 +83,24 @@ func New(d Deps) (*Scheduler, error) {
 // package (spec R1.1) — brain.ConsolidateRequest{} is its zero value,
 // constructed nowhere else.
 //
-// This commit's version (task 3a.6) checks nothing before calling
-// Consolidate: no gate (task 3a.8's own addition), no overlap guard (PR
-// 3b), no abort/Corrupted() logging (PR 5). trigger is accepted now,
-// ahead of its first reader, so this method's signature does not change
-// again once those callers land.
+// Config.Load is read at every fire (design §3.3's "the cron re-reads
+// config at every fire, so flipping the switch on a running serve takes
+// effect at the next tick without a restart"). A false resolution returns
+// before Consolidate is ever called — no pass, no decision_log rows, no
+// consolidation_last_run_at write, no side effect beyond this read (spec
+// R1.2).
+//
+// No overlap guard yet (PR 3b) and no abort/Corrupted() logging yet (PR
+// 5), each named here rather than silently assumed. trigger is accepted
+// now, ahead of its first reader, so this method's signature does not
+// change again once those callers land.
 func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 	_ = trigger
+
+	cfg, _ := s.config.Load(ctx)
+	if !consolidation.ResolveConsolidationEnabled(cfg.ConsolidationEnabled) {
+		return
+	}
+
 	_, _ = s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
 }
