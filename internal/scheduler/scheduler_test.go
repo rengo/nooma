@@ -3,12 +3,17 @@ package scheduler
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -452,6 +457,107 @@ func TestRunPass_NextFireAttemptsFreshWholePass(t *testing.T) {
 		if req != (brain.ConsolidateRequest{}) {
 			t.Fatalf("call %d: request = %+v, want the zero value (no carried state from the prior aborted call)", i, req)
 		}
+	}
+}
+
+// newSingleCorruptedUnitConsolidator wires a real *brain.ConsolidateService
+// over in-memory repos seeded with exactly one unit whose decay state is
+// non-finite (Weight: NaN) — partitionLiveDecayStates (internal/brain)
+// refuses it in every phase that reads LiveDecayStates (archive, connect,
+// reweight), and report.reportCorrupted dedups the id to one entry.
+//
+// Disclosed deviation from task 5.5's own "a fake Consolidate" wording:
+// brain.ConsolidateReport's fields are unexported, so no value outside
+// package brain can construct one with a non-empty Corrupted() — and this
+// PR's own hard constraints forbid both touching internal/brain/
+// consolidate.go (task 5.7) and adding any new file (this PR's own diff
+// scope note). A real ConsolidateService, wired the same way internal/
+// brain's own TestConsolidate_WholePassReportsEachCorruptedIDOnce and
+// TestConsolidate_NoEffects already do, is the only way to produce a
+// genuine non-empty Corrupted() value without either. The single seeded
+// unit is refused everywhere and never a valid source: connect's and
+// derive's own sourceIDs are computed from the usable (non-refused) set,
+// which is empty here, so both short-circuit before ever calling the judge
+// or the recall service — the whole pass is otherwise a true no-op, the
+// same "nothing fed, nothing written" shape TestConsolidate_NoEffects
+// already proves for an entirely empty fixture.
+func newSingleCorruptedUnitConsolidator(t *testing.T) *brain.ConsolidateService {
+	t.Helper()
+
+	units := memrepo.NewUnits()
+	if err := units.Create(context.Background(), unit.Unit{
+		ID:              "u-corrupted",
+		Type:            unit.TypeKnowledge,
+		Status:          unit.StatusPool,
+		Content:         "a unit whose decay state is non-finite",
+		Source:          "chat",
+		Weight:          math.NaN(),
+		WeightDecayRate: 0,
+		LastTouchedAt:   fixedNow,
+		CreatedAt:       fixedNow,
+		UpdatedAt:       fixedNow,
+	}); err != nil {
+		t.Fatalf("seed corrupted unit: %v", err)
+	}
+
+	recallSvc := brain.NewRecallService(
+		brain.NewIndex(recall.VectorIndex{Model: "test-model"}),
+		memrepo.NewLexical(),
+		units,
+		fakeprovider.NewEmbeddingFake("test-model"),
+	)
+	// Zero scripted cases: the only seeded unit is refused everywhere, so
+	// derive's own sourceIDs end up empty and the judge is never called —
+	// an unexpected call fails this test loudly (fakeprovider's own
+	// unscripted-call guard) rather than reaching a real provider (CLAUDE.md
+	// non-negotiable #5).
+	judge := fakeprovider.New(t, "")
+
+	return brain.NewConsolidateService(
+		fixedClock{now: fixedNow},
+		memrepo.NewConfig(),
+		units,
+		memrepo.NewRelations(),
+		&fakeIDGen{},
+		memrepo.NewDecisionLog(),
+		recallSvc,
+		judge,
+		memrepo.NewSelfModel(),
+		memrepo.NewState(),
+	)
+}
+
+// fakeIDGen is a small package-local ports.IDGen double, the same
+// precedent internal/brain/correction_test.go's own fakeIDs sets — no
+// export exists for this from package brain, and this PR adds no new file,
+// so it is reimplemented locally rather than shared.
+type fakeIDGen struct{ n int }
+
+func (g *fakeIDGen) New() string {
+	g.n++
+	return fmt.Sprintf("scheduler-test-id-%d", g.n)
+}
+
+// TestRunPass_CompletedPassLogsCorrupted is task 5.5: a fake Consolidate
+// returning a brain.ConsolidateReport with a non-empty Corrupted() (no
+// error) logs one line naming the refused unit ids on success. Design §5.2
+// ("Corrupted() is operationally meaningful for an unattended pass").
+//
+// Red: no log call exists on the success path yet — fails on the missing
+// line.
+func TestRunPass_CompletedPassLogsCorrupted(t *testing.T) {
+	svc := newSingleCorruptedUnitConsolidator(t)
+	var logBuf bytes.Buffer
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: svc, Log: &logBuf})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	s.runPass(context.Background(), "cron")
+
+	const want = "scheduler: cron pass completed, refused 1 unit(s): [u-corrupted]\n"
+	if got := logBuf.String(); got != want {
+		t.Fatalf("log = %q, want %q", got, want)
 	}
 }
 
