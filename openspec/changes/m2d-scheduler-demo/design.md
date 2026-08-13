@@ -447,10 +447,23 @@ from this package (R1.1).
 vault effect; an aborted pass had none — nothing was written, by construction. Writing an
 "abort" row would be the first row in that table describing something that did not happen, and it
 would arrive through a code path (`ConsolidateService`'s caller) that has no `DecisionLog` at all.
-The `io.Writer` in `Deps` is the whole mechanism: `serve` passes its `errOut`, which already
-carries `runServe`'s own human lines (`cmd/nooma/serve.go:119,137`), so no logging framework
-decision is forced on this milestone. Three events are logged: an abort, a skipped fire, and a
-completed pass that refused units.
+The `io.Writer` in `Deps` is the whole mechanism: `serve` passes its `errOut`.
+
+**Corrected here, after PR 6.** This paragraph originally went on to claim `errOut` "already
+carries `runServe`'s own human lines (`cmd/nooma/serve.go:119,137`)" — wrong: those two lines
+(`"nooma serving %s on http://%s\n"` and `"\nshutting down"`, now `serve.go:134,152` as the file
+has grown) have always written to `out` (`os.Stdout`), confirmed by reading both call sites
+directly, not merely by re-reading this citation. The real shape is the opposite of what was
+written: `errOut` is written to only during flag parsing (`fs.SetOutput(errOut)`, the `Usage`
+line), which completes and returns long before the vault is even resolved — before
+`wireScheduler`/`sched.Start` exist in the call graph at all. So `errOut`/`os.Stderr` is
+exclusively `logf`'s own writer for the lifetime of a running scheduler inside `runServe`, which is
+precisely *why* `errOut` (not `out`) is the safe choice to hand to `Deps.Log` here — a more precise
+reason than the wrong citation gave, not a different conclusion. The same posture §3.3's, §3.4's
+and §5.3's own correction notes already took in this chain: the shipped code was accurate, and this
+prose was the outlier left to correct.
+
+Three events are logged: an abort, a skipped fire, and a completed pass that refused units.
 
 `persistBoosts` is not touched (spec R1.4): no retry, no partial application, no new tolerance for
 `ports.ErrUnitNotFound`.

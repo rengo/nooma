@@ -1000,13 +1000,121 @@ must not hold each other hostage.
       lines; the code at those lines has always written to `out`). `errOut` is written to only
       during flag parsing (`fs.SetOutput(errOut)`, the `Usage` line), which completes and returns
       before the vault is even resolved — long before `wireScheduler`/`sched.Start` exist in the
-      call graph. So: **no second concurrent writer to `errOut` exists inside `runServe` for the
-      lifetime of a running scheduler** — `errOut`/`os.Stderr` is exclusively `logf`'s own writer
-      once `Start` returns, which is precisely why `errOut` (not `out`) is the safe choice here,
-      for a different and more precise reason than design §5.4's own citation gives. This
-      design-vs-code mismatch is disclosed, not corrected in design.md — out of this PR's
-      authorized scope (a docs-only, no-code-change correction, the same class of fix links 3b/4/5
-      made under their own explicit authorization, not assumed here).
+      call graph. So: **no second concurrent writer to `errOut` exists *inside `runServe`* while a
+      scheduler is running.**
+
+      **Corrected here (JD-6-02, correction round after PR 6), narrower than originally
+      stated.** The claim above originally read "no second concurrent writer to `errOut` exists
+      inside `runServe` for the lifetime of a running scheduler" — that overreaches. This PR starts
+      scheduler goroutines (`sched.Start(ctx)`, `serve.go`) and does not join them: `sched.Wait` is
+      never called here (PR 7's own disclosed scope, `6`'s own Verify note above). So a scheduler
+      goroutine can still be synchronously inside `logf`, writing to `os.Stderr`, at the moment
+      `runServe` itself has already returned an error and unwound — `main()`
+      (`cmd/nooma/main.go:19-23`) then writes `fmt.Fprintln(os.Stderr, "nooma:", err)` to that same
+      file descriptor, entirely outside `logMu`, which `logf` alone can never guard against. The
+      analysis above was correct as far as it went — genuinely no second writer exists *while
+      `runServe` itself is still running* — but "inside `runServe`" and "for the lifetime of a
+      running scheduler" are not the same claim, and the text conflated them. Impact stays bounded:
+      interleaved or torn output on one line at process exit, no data loss, no crash. PR 7's own
+      `sched.Wait(shutdownCtx)` addition closes this for the normal shutdown path, by joining every
+      scheduler goroutine before `runServe` (and therefore `main`) can return. Docs-only; `design.md`
+      §5.4's own citation is corrected in the same round (the two call sites now cited as
+      `serve.go:134,152`, matching this file's own current line numbers), with the citation's
+      inaccuracy noted the same way, in its own correction paragraph there.
+
+**Judgment Day correction round, `feat/serve-scheduler-wiring` (PR #186), frozen target
+`0464bb8`. Two confirmed findings, both fixed in this same branch — none deferred beyond PR 7's
+own already-disclosed scope.**
+
+- **JD-6-01 (CRITICAL, Judge A; WARNING, Judge B; both judges confirmed, orchestrator verified
+  the cascade firsthand).** `runPass`'s try-lock released the slot only via `defer func() {
+  <-s.slot }()`, which fires when `runPass` itself returns — but `logf` (called from inside the
+  acquired region, on abort or on a completed pass with refusals) holds `logMu` for the duration
+  of `fmt.Fprintf(s.log, ...)`, and this PR is the first to wire `errOut` = `os.Stderr`
+  (`cmd/nooma/main.go:20`) into `Deps.Log` in production. `os.Stderr` genuinely blocks under
+  ordinary deployment conditions — an unread `docker logs` consumer, a full pipe buffer, a stalled
+  journald, a full disk. A goroutine blocked inside `logf` therefore holds **both** `logMu` and the
+  slot; `runPass` never returns, so the slot is never released, and every later fire takes the
+  `default` branch and calls `logf` itself, which also blocks on the same `logMu` — consolidation
+  halts permanently, with no crash and no log line escaping to say so, because the log is the thing
+  that is stuck.
+
+  Fixed: the slot is now released explicitly right after `Consolidate` returns, **before** any
+  `logf` call — not by a defer that only fires once `runPass` itself returns
+  (`internal/scheduler/scheduler.go`). Panic-safety is preserved: a `released` bool plus an
+  idempotent `release()` closure mean the explicit call covers the normal path and a `defer
+  release()` covers a panic inside `Consolidate`, with neither able to run `<-s.slot` twice — a
+  double release would otherwise block the releasing goroutine on an already-empty channel and
+  permanently consume a slot token no fire legitimately holds, deadlocking the very next fire's own
+  non-blocking acquire. D4's try-lock semantics are unchanged: non-blocking acquire, skip-don't-queue,
+  at most one pass in flight — verified by `TestScheduler_NoOverlap_ExactlyOneInFlight` staying
+  green, and confirmed still genuinely discriminating by a disclosed temporary probe (the same
+  technique links 3a/4/6 used): the try-lock's `slot` channel capacity bumped from 1 to 2, the test
+  observed failing for real (`max concurrent Consolidate calls = 2, want exactly 1`), then the file
+  restored byte-identical (`diff` against a pre-probe copy, clean) before this commit.
+
+  **Regression test**: `TestRunPass_SlotReleasedBeforeBlockedLog`
+  (`internal/scheduler/scheduler_test.go`) — a `Deps.Log` writer (`permanentlyBlockedWriter`) whose
+  `Write` blocks forever, a first fire that reaches the abort-log path and calls `logf` into it, and
+  a proof that a SECOND, independent fire (`twoPhaseConsolidator`) can still acquire the slot and
+  actually run its own pass. Observed failing for real against the pre-fix code:
+  ```
+  go test -run TestRunPass_SlotReleasedBeforeBlockedLog -v -timeout 15s ./internal/scheduler/...
+  --- FAIL: TestRunPass_SlotReleasedBeforeBlockedLog (2.00s)
+      scheduler_test.go:912: timed out waiting for the second fire to return — the slot (and
+      logMu) are permanently wedged by the first fire's blocked logf call
+  FAIL
+  ```
+  Green after the fix: `PASS`.
+
+  **Deliberately deferred, not fixed here (recorded per the owner's own instruction)**: `logf`
+  itself is not redesigned — no async writer, no buffered channel, no timeout. A blocked `Deps.Log`
+  writer still stalls the individual goroutine that called `logf`, and still stalls `logMu` for
+  every OTHER goroutine that tries to log while it is blocked (two fires, or a fire and a future
+  caller, cannot both log concurrently if one is wedged) — only the *permanent, all-future-fires*
+  halt this round closes. A genuine fix for the underlying blocking-writer hazard is its own future
+  work unit, not in this branch's scope.
+
+  **Rollback boundary**: `runPass`'s slot-acquire/release restructuring
+  (`internal/scheduler/scheduler.go`) plus `TestRunPass_SlotReleasedBeforeBlockedLog`,
+  `permanentlyBlockedWriter` and `twoPhaseConsolidator` in `scheduler_test.go` — revertible
+  independently of JD-6-02's docs-only fix below.
+
+- **JD-6-02 (WARNING, confirmed by both judges).** `cmd/nooma/main.go:19-23` writes
+  `fmt.Fprintln(os.Stderr, "nooma:", err)` at process exit, entirely outside `logMu`. PR 6's own
+  second-writer analysis above scoped its "no second concurrent writer" claim to *inside
+  `runServe`*, but this PR starts scheduler goroutines (`sched.Start(ctx)`, `serve.go`) without
+  joining them (`sched.Wait` is PR 7's own disclosed scope) — so a scheduler goroutine can still be
+  synchronously inside `logf`, writing to `os.Stderr`, at the exact moment `runServe` has already
+  returned and `main()` writes its own line to the same file descriptor. The PR 6 text, read
+  literally, could be misread as covering the scheduler's whole lifetime rather than only the
+  window while `runServe` itself is still executing — those are not the same claim.
+
+  This is a documentation fix, not a code fix: the analysis above is corrected in place (see its own
+  new correction paragraph) to state the real scope precisely (exclusive *inside `runServe`*, not
+  for the scheduler's whole lifetime) and to name PR 7's `sched.Wait(shutdownCtx)` as what closes
+  the normal shutdown path, by joining every scheduler goroutine before `runServe` (and therefore
+  `main`) can return. Impact stays bounded either way: interleaved or torn output on one line at
+  process exit, no data loss, no crash. `cmd/nooma/main.go`'s error reporting is untouched — closing
+  this gap in code stays PR 7's own scope, not assumed here.
+
+  **Rollback boundary**: this file's own correction paragraph above (PR 6's Verify note) plus
+  `design.md` §5.4's own new correction paragraph — docs only, no code changed, independently
+  revertible from JD-6-01.
+
+**Also corrected (docs only, no separate ledger ID)**: `design.md` §5.4 cited
+`cmd/nooma/serve.go:119,137` as carrying `runServe`'s own human lines on `errOut` — those two lines
+have always written to `out`, confirmed by reading both call sites directly (now `serve.go:134,152`
+as the file has grown since the pre-PR6 citation). Corrected in `design.md` §5.4 itself, in the same
+style this chain has used three times already (links 3b §3.4, 4 §3.3, 5 §5.3): what was wrong, the
+real shape, and why — not merely swapped line numbers.
+
+**Verification, this correction round**: `go test -run TestRunPass_SlotReleasedBeforeBlockedLog -v
+-timeout 15s ./internal/scheduler/...` → red before the fix (shown above), green after.
+`go test -race -shuffle=on ./internal/scheduler/... -count=5` → green, no race.
+`go test -tags e2e ./test/e2e/...` → green. `make check-all` → green end to end; `internal/core`
+coverage floor unchanged at 750/750 (100%) — this round adds no `internal/core` code. `make lint` →
+`0 issues.`
 
 ---
 
