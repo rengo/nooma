@@ -238,6 +238,18 @@ func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *si
 // is still correct and required for a wedged or non-ctx-aware provider
 // call, a case this project's own real clients do not reach.
 func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
+	// Safe to parallelize (JD-7-03): each of the three TestServe_SIGTERM_*
+	// tests gets its own t.TempDir() home/work/vault, its own freePort(t)
+	// port, and its own mockConsolidateLLM/blockingConsolidateLLM server —
+	// verified by reading sigtermMidPass and every helper it calls; none
+	// keep mutable package-level state, and binaryPath's shared build cache
+	// is a sync.Once-guarded read-only path once built. The only shared
+	// risk is freePort's own already-documented TOCTOU window between
+	// closing the probe listener and the child process binding it — a
+	// pre-existing, disclosed tradeoff for the whole package, not something
+	// this parallelization introduces or worsens beyond running three
+	// freePort calls closer together in time instead of the whole suite's.
+	t.Parallel()
 	f := sigtermMidPass(t, nil)
 
 	waitErr := waitForExit(t, f.cmd)
@@ -269,6 +281,7 @@ func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
 // only after Order() returns with no error), which this scheduler package
 // has no write path to circumvent. Confirmed passing, not merely assumed.
 func TestServe_SIGTERM_ConsolidationLastRunAtUnchanged(t *testing.T) {
+	t.Parallel() // isolation checked in TestServe_SIGTERM_PassInFlight_ExitsWithinGrace's own comment (JD-7-03)
 	f := sigtermMidPass(t, nil)
 	if err := waitForExit(t, f.cmd); err != nil {
 		t.Fatalf("serve exited non-zero after SIGTERM mid-pass: %v\nstderr: %s", err, f.errOut.String())
@@ -292,6 +305,7 @@ func TestServe_SIGTERM_ConsolidationLastRunAtUnchanged(t *testing.T) {
 // the fixture's own SIGTERM above), so every request from this follow-up
 // pass is proxied through and answered normally.
 func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
+	t.Parallel() // isolation checked in TestServe_SIGTERM_PassInFlight_ExitsWithinGrace's own comment (JD-7-03)
 	f := sigtermMidPass(t, nil)
 	if err := waitForExit(t, f.cmd); err != nil {
 		t.Fatalf("serve exited non-zero after SIGTERM mid-pass: %v\nstderr: %s", err, f.errOut.String())

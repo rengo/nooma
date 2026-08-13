@@ -64,7 +64,13 @@ test-integration: ## L3 — a real temporary SQLite vault
 
 .PHONY: test-e2e
 test-e2e: ## L4 — the compiled binary
-	go test -tags e2e ./test/e2e/...
+	# -timeout 20m: an explicit ceiling, not Go's implicit 600s per-package
+	# default (JD-7-03). The three TestServe_SIGTERM_* tests each wait on
+	# scheduler.BootConsolidationDelay (120s); run in parallel (t.Parallel())
+	# that overlaps into roughly one 120s window, but PR 9a's simulated-weeks
+	# demo is deliberately the slowest test this repo will ever have, and a
+	# stated decision beats quietly riding a language default toward it.
+	go test -tags e2e -timeout 20m ./test/e2e/...
 
 .PHONY: schema-golden
 schema-golden: ## Regenerate testdata/schema/{structure,ddl}.golden from the embedded migrations
