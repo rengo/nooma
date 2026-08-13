@@ -124,9 +124,9 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// handed the same signal-aware ctx as the HTTP server, not a separate
 	// context.Background() — cancellation reaches an in-flight pass and any
 	// pending boot-catch-up delay the same instant the server's own
-	// graceful shutdown begins (spec R3.3, design §3.5/D5). Joining that
-	// goroutine before the vault closes is PR 7's own scope (sched.Wait
-	// below still has nothing to wait on until then).
+	// graceful shutdown begins (spec R3.3, design §3.5/D5). sched.Wait
+	// below joins it, inside the same shutdownGrace budget server.Shutdown
+	// already uses — not a second window.
 	sched.Start(ctx)
 
 	errc := make(chan error, 1)
@@ -156,5 +156,19 @@ func runServe(args []string, out, errOut io.Writer) error {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutting down: %w", err)
 	}
+
+	// sched.Wait takes the SAME shutdownCtx server.Shutdown just used, not
+	// a fresh timeout — design §3.5 (D5): the total shutdown bound stays
+	// shutdownGrace, no second window. It is a no-op on a nil *Scheduler
+	// (an unconfigured vault, spec R3.2), and returns once both scheduler
+	// goroutines have unwound or shutdownCtx expires, whichever is first —
+	// so db.Close() below never races an in-flight pass in the common
+	// case, and only proceeds anyway, past a still-wedged pathological
+	// call, once the same budget server.Shutdown honored has also run out
+	// (design §3.5's own accepted error path, not corruption: no SQLite
+	// write survives an incomplete transaction, and consolidation_last_run_at
+	// is written only on full completion, m2c R5.4).
+	sched.Wait(shutdownCtx)
+
 	return <-errc
 }
