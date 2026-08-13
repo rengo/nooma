@@ -203,10 +203,24 @@ func sigtermMidPass(t *testing.T) *sigtermFixture {
 // §3.5 (D5) end to end (tasks.md 7.1): SIGTERM sent while the boot
 // catch-up pass is blocked inside a real outbound HTTP call must exit the
 // process within shutdownGrace, the fake LLM must observe ctx cancellation
-// on that in-flight request, and — the property that actually
-// distinguishes a joined shutdown from an unjoined one — the scheduler's
-// own abort line must have reached the process log BEFORE the process
-// exits, not raced away by it.
+// on that in-flight request, and the scheduler's own abort line must reach
+// the process log before the test gives up waiting for it.
+//
+// Disclosed (see this task's own tasks.md entry for the full account): run
+// twice against unmodified serve.go, before 7.2's sched.Wait existed, this
+// test already PASSED both times (120.92s, 120.96s — not flaky). PR 6
+// already wires the pass's ctx to the same signal-aware ctx as the HTTP
+// server, and every provider call in this codebase is ctx-aware
+// (http.NewRequestWithContext), so cancellation propagation and unwinding
+// are sub-millisecond regardless of whether runServe joins the goroutine —
+// the background goroutine reliably wins its own race against the main
+// goroutine's slower Shutdown()-involving path. This test could not be
+// made to fail for the reason tasks.md 7.1 states without either an
+// artificially non-ctx-aware fake (not what "cancellation is not
+// instantaneous" describes) or breaking an unrelated property. Kept as a
+// genuine end-to-end proof of R3.3's three MUST clauses regardless — 7.2
+// is still correct and required for a wedged or non-ctx-aware provider
+// call, a case this project's own real clients do not reach.
 func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
 	f := sigtermMidPass(t)
 
@@ -228,5 +242,52 @@ func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
 
 	if !strings.Contains(f.errOut.String(), "scheduler: pass aborted (catchup):") {
 		t.Errorf("runServe exited without the scheduler's own abort line reaching the process log — the pass goroutine was not joined before the vault closed:\n%s", f.errOut.String())
+	}
+}
+
+// TestServe_SIGTERM_ConsolidationLastRunAtUnchanged is spec R3.3's second
+// Verified-by clause (tasks.md 7.3): consolidation_last_run_at stays
+// exactly as it was before the cancelled pass started. Not a genuine red
+// against 7.2's own implementation — relies on, and does not re-derive,
+// m2c R5.4's completion-gated write (RecordConsolidationRun is reached
+// only after Order() returns with no error), which this scheduler package
+// has no write path to circumvent. Confirmed passing, not merely assumed.
+func TestServe_SIGTERM_ConsolidationLastRunAtUnchanged(t *testing.T) {
+	f := sigtermMidPass(t)
+	if err := waitForExit(t, f.cmd); err != nil {
+		t.Fatalf("serve exited non-zero after SIGTERM mid-pass: %v\nstderr: %s", err, f.errOut.String())
+	}
+
+	after := readVaultConfig(t, f.vault)
+	if after.ConsolidationLastRunAt != nil {
+		t.Errorf("consolidation_last_run_at = %v after a SIGTERM-cancelled pass, want unchanged (nil) — m2c R5.4's completion-gated write", after.ConsolidationLastRunAt)
+	}
+}
+
+// TestServe_SIGTERM_FollowUpRunCompletesFreshPass is spec R3.3's third
+// Verified-by clause (tasks.md 7.4): a follow-up run against the same
+// vault, after the cancelled shutdown, completes a fresh whole pass with
+// nothing skipped because of the earlier cancellation. Also not a genuine
+// red — fails only if the cancelled pass left partial state behind, which
+// again relies on, rather than re-derives, m2c R5.4.
+//
+// The follow-up reuses the SAME fake LLM URL already bound in the vault's
+// nooma.yml: blockingConsolidateLLM's block is one-shot (already spent by
+// the fixture's own SIGTERM above), so every request from this follow-up
+// pass is proxied through and answered normally.
+func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
+	f := sigtermMidPass(t)
+	if err := waitForExit(t, f.cmd); err != nil {
+		t.Fatalf("serve exited non-zero after SIGTERM mid-pass: %v\nstderr: %s", err, f.errOut.String())
+	}
+
+	stdout, stderr, err := nooma(t, f.home, f.work, "consolidate", f.vault)
+	if err != nil {
+		t.Fatalf("follow-up consolidate after the cancelled shutdown: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+
+	after := readVaultConfig(t, f.vault)
+	if after.ConsolidationLastRunAt == nil {
+		t.Error("a follow-up whole pass after the SIGTERM-cancelled one did not write consolidation_last_run_at — the earlier cancellation left partial state behind")
 	}
 }
