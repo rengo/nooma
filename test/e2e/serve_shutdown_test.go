@@ -5,6 +5,7 @@ package e2e
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -161,7 +162,7 @@ type sigtermFixture struct {
 // (cmd/nooma/serve.go plus this file) — internal/scheduler's constants are
 // deliberately not test-configurable (design §5.1's "the constants"), and
 // making them so is out of this link's scope.
-func sigtermMidPass(t *testing.T) *sigtermFixture {
+func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *sigtermFixture {
 	t.Helper()
 
 	llm := mockConsolidateLLM(t)
@@ -189,6 +190,15 @@ func sigtermMidPass(t *testing.T) *sigtermFixture {
 	case <-time.After(scheduler.BootConsolidationDelay + 30*time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatalf("the boot catch-up pass never reached the fake LLM within %s of starting serve\nstderr: %s", scheduler.BootConsolidationDelay+30*time.Second, errOut.String())
+	}
+
+	// beforeSignal, when given, runs after the boot catch-up pass is
+	// observed in flight but before SIGTERM is sent — e.g. JD-7-01's own
+	// regression test opens a deliberately unfinished HTTP request here, so
+	// server.Shutdown itself is what times out and returns an error, not
+	// just the scheduler's pass.
+	if beforeSignal != nil {
+		beforeSignal(t, port)
 	}
 
 	sentAt := time.Now()
@@ -222,7 +232,7 @@ func sigtermMidPass(t *testing.T) *sigtermFixture {
 // is still correct and required for a wedged or non-ctx-aware provider
 // call, a case this project's own real clients do not reach.
 func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
-	f := sigtermMidPass(t)
+	f := sigtermMidPass(t, nil)
 
 	waitErr := waitForExit(t, f.cmd)
 	elapsed := time.Since(f.sentAt)
@@ -253,7 +263,7 @@ func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
 // only after Order() returns with no error), which this scheduler package
 // has no write path to circumvent. Confirmed passing, not merely assumed.
 func TestServe_SIGTERM_ConsolidationLastRunAtUnchanged(t *testing.T) {
-	f := sigtermMidPass(t)
+	f := sigtermMidPass(t, nil)
 	if err := waitForExit(t, f.cmd); err != nil {
 		t.Fatalf("serve exited non-zero after SIGTERM mid-pass: %v\nstderr: %s", err, f.errOut.String())
 	}
@@ -276,7 +286,7 @@ func TestServe_SIGTERM_ConsolidationLastRunAtUnchanged(t *testing.T) {
 // the fixture's own SIGTERM above), so every request from this follow-up
 // pass is proxied through and answered normally.
 func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
-	f := sigtermMidPass(t)
+	f := sigtermMidPass(t, nil)
 	if err := waitForExit(t, f.cmd); err != nil {
 		t.Fatalf("serve exited non-zero after SIGTERM mid-pass: %v\nstderr: %s", err, f.errOut.String())
 	}
@@ -289,5 +299,117 @@ func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
 	after := readVaultConfig(t, f.vault)
 	if after.ConsolidationLastRunAt == nil {
 		t.Error("a follow-up whole pass after the SIGTERM-cancelled one did not write consolidation_last_run_at — the earlier cancellation left partial state behind")
+	}
+}
+
+// openStuckCaptureConn dials the running serve process directly over a raw
+// TCP connection — bypassing the `nooma capture` CLI, which is a plain HTTP
+// client of this same server (design D11) — and writes a POST /capture
+// request whose Content-Length promises far more body than it ever sends,
+// then stops writing without closing the connection. captureHandler's
+// json.Decoder blocks on r.Body.Read waiting for bytes that never arrive,
+// so net/http considers this connection genuinely active, not idle: this is
+// what makes server.Shutdown itself block until shutdownCtx expires and
+// return a non-nil context error, the exact branch JD-7-01 is about. No
+// invented fake or mock — a real socket, a real half-written HTTP/1.1
+// request, read by the real captureHandler.
+func openStuckCaptureConn(t *testing.T, port int) net.Conn {
+	t.Helper()
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatalf("dialing serve directly to open a stuck request: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	// Content-Length: 4096 promises 4096 body bytes; only `{"text":"x"` (11
+	// bytes, not even valid JSON on its own) is ever sent. The decoder
+	// cannot resolve a complete token from that alone, so it keeps reading.
+	req := fmt.Sprintf("POST /capture HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n%s", port, `{"text":"x"`)
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatalf("writing the stuck request's headers and partial body: %v", err)
+	}
+	return conn
+}
+
+// TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler is JD-7-01's own
+// regression test — with an empirically-checked disclosure about what it
+// does and does not prove, read this comment in full before trusting its
+// assertions. Before the fix, runServe's shape was:
+//
+//	if err := server.Shutdown(shutdownCtx); err != nil {
+//	    return fmt.Errorf("shutting down: %w", err)   // returns here
+//	}
+//	sched.Wait(shutdownCtx)                            // never reached
+//
+// so a server.Shutdown that itself failed (a real client outliving
+// shutdownGrace, driven here by openStuckCaptureConn — not a simulated
+// error) skipped the scheduler join entirely. Corrected: sched.Wait runs
+// unconditionally, and the captured Shutdown error is returned only after
+// the join.
+//
+// What this test genuinely proves, run red against the unfixed shape above
+// and green against the fix: server.Shutdown really can be driven into
+// returning a non-nil error by a real, unmodified client (no invented
+// fake) — openStuckCaptureConn is that client — and the process still
+// exits, with that same error propagated as a non-zero status, instead of
+// hanging. That second half is real coverage: a fix that made the join
+// unconditional but introduced a deadlock between it and an already-timed-
+// out server.Shutdown would fail this test via waitForExit's own bound.
+//
+// What this test does NOT prove, disclosed after actually trying: that
+// sched.Wait's statement itself executed on this branch. The
+// "scheduler: pass aborted (catchup):" line looked like a candidate
+// assertion for that and an earlier draft of this test asserted it — until
+// running it red-first (git-stashing serve.go's fix, leaving this test file
+// as is) showed it PASSES unmodified too. Reading internal/scheduler's own
+// logf call sites explains why: that line is written by the pass's own
+// background goroutine the instant it observes ctx.Done(), synchronously
+// and unconditionally — never gated by whether the main goroutine ever
+// calls Wait on it. Design's own comment on the sibling
+// TestServe_SIGTERM_PassInFlight_ExitsWithinGrace above already discloses
+// this exact limitation for the happy path ("every provider call in this
+// codebase is ctx-aware... the background goroutine reliably wins its own
+// race... regardless of whether runServe joins the goroutine"); it applies
+// identically here, on the Shutdown-error branch, for the identical
+// reason — not a new gap, the same one restated for this branch. Building a
+// test that DID discriminate would need a deliberately non-ctx-aware or
+// slow-to-unwind fake pass, which the correction round's own boundaries
+// forbid inventing.
+//
+// The join's own reachability on this branch — the actual heart of
+// JD-7-01 — is instead proven directly against the code by a disclosed
+// temporary probe (not shipped, not part of this file): a one-line marker
+// added after cmd/nooma/serve.go's sched.Wait(shutdownCtx) call, run once
+// against the unfixed shape (marker absent from stderr — the statement is
+// unreached) and once against the fixed shape (marker present — the
+// statement runs), then reverted byte-identical
+// (`git diff --exit-code cmd/nooma/serve.go` clean afterward). See this
+// correction round's own tasks.md entry for the exact commands and output.
+//
+// Not parallelized with the other three SIGTERM tests: it shares their
+// ~2-minute BootConsolidationDelay wait plus its own ~shutdownGrace stall
+// on the stuck connection, so it does not compress the same way — see the
+// PR 7 correction round's tasks.md entry for the measured total.
+func TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler(t *testing.T) {
+	var stuck net.Conn
+	f := sigtermMidPass(t, func(t *testing.T, port int) {
+		stuck = openStuckCaptureConn(t, port)
+	})
+	if stuck == nil {
+		t.Fatal("beforeSignal never ran — no stuck connection was opened before SIGTERM")
+	}
+
+	waitErr := waitForExit(t, f.cmd)
+	if waitErr == nil {
+		t.Fatal("serve exited 0 after SIGTERM with an HTTP request still open past shutdownGrace — want a non-zero exit from server.Shutdown's own error (JD-7-01)")
+	}
+
+	// Not a discriminator for the join (see the doc comment above) — kept
+	// as a sanity check that the fixture actually reached the intended
+	// scenario (a pass genuinely aborting mid-flight), the same way the
+	// other three SIGTERM tests use it.
+	if !strings.Contains(f.errOut.String(), "scheduler: pass aborted (catchup):") {
+		t.Errorf("the scheduler's own abort line never reached the process log — the fixture did not reach the intended scenario (a pass aborting mid-flight) regardless of JD-7-01:\n%s", f.errOut.String())
 	}
 }

@@ -153,9 +153,7 @@ func runServe(args []string, out, errOut io.Writer) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutting down: %w", err)
-	}
+	shutdownErr := server.Shutdown(shutdownCtx)
 
 	// sched.Wait takes the SAME shutdownCtx server.Shutdown just used, not
 	// a fresh timeout — design §3.5 (D5): the total shutdown bound stays
@@ -168,7 +166,21 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// (design §3.5's own accepted error path, not corruption: no SQLite
 	// write survives an incomplete transaction, and consolidation_last_run_at
 	// is written only on full completion, m2c R5.4).
+	//
+	// Called UNCONDITIONALLY — deliberately not skipped when server.Shutdown
+	// itself returned an error (JD-7-01). An earlier shape returned on that
+	// branch before this line ever ran, so a slow client outliving
+	// shutdownGrace would make runServe return with the scheduler goroutine
+	// still unjoined and the deferred db.Close()/lock.Release() running
+	// anyway — precisely the hazard this join exists to close, on the one
+	// path that used to skip it. shutdownErr is captured above and returned
+	// below, after the join, so error propagation is unchanged: the caller
+	// still learns server.Shutdown failed, exactly as before.
 	sched.Wait(shutdownCtx)
+
+	if shutdownErr != nil {
+		return fmt.Errorf("shutting down: %w", shutdownErr)
+	}
 
 	return <-errc
 }
