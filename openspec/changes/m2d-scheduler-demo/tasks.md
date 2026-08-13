@@ -1195,6 +1195,13 @@ spec's literal reading).
       the `if err != nil` check for brevity — kept the existing check rather than regressing error
       propagation). `TestServe_SIGTERM_PassInFlight_ExitsWithinGrace` stays green with the join in
       place (121.03s).
+
+      **Corrected (JD-7-01, correction round below)**: the sentence above understated its own scope.
+      Keeping the `if err != nil { return ... }` check unmodified meant that check's own `return` ran
+      **before** `sched.Wait` on the `server.Shutdown`-error branch specifically — the join covered
+      only the happy path, silently narrowing R3.3/D5's guarantee, which this disclosure did not say
+      at the time. Fixed and re-disclosed in the correction round below; this paragraph is the
+      corrected statement of that omission, not a new gap.
 - [x] **7.3** Commit 1 (RED): `serve_shutdown_test.go` (extend) —
       `TestServe_SIGTERM_ConsolidationLastRunAtUnchanged`: `consolidation_last_run_at` is unchanged
       from before the pass started, after the `SIGTERM` above.
@@ -1273,6 +1280,169 @@ spec's literal reading).
       about the CLEAN-shutdown path racing an unjoined scheduler goroutine's own `logf` — this PR's
       `sched.Wait` closes exactly that path. An early error return was never the scenario JD-6-02
       described, and remains outside this PR's scope for the same reason it was never in it.
+
+**Judgment Day correction round, `feat/serve-shutdown-cancel` (PR #187), frozen target `28e6652`.
+Three confirmed findings, all fixed in this same branch.**
+
+- **JD-7-01 (CRITICAL, Judge A; WARNING, Judge B; both judges confirmed, orchestrator verified).**
+  `cmd/nooma/serve.go:156-158,171`: `server.Shutdown`'s own error branch returned before
+  `sched.Wait(shutdownCtx)` ever ran — `if err := server.Shutdown(shutdownCtx); err != nil { return
+  fmt.Errorf(...) }` returned on that branch, and `sched.Wait` sat after it, unreached. design.md's
+  own D5 pseudocode (§3.5) and `7.2`'s own task snippet both call `sched.Wait(shutdownCtx)`
+  UNCONDITIONALLY after that `if` block, not behind a `return` — `7.2`'s own disclosure (corrected
+  above, in place) kept the `if err != nil` check to avoid regressing error propagation, which was
+  the right call, but never said doing so also narrowed R3.3/D5's join guarantee to the happy path
+  only. Judge B's fairness note, recorded rather than dropped: in *disposition* this was
+  pre-existing, since PR 6's base never joined on any path — this PR closed the happy path and left
+  the error branch exactly as unjoined as it always was. A narrowed guarantee, not a fresh
+  regression, but still the gap this correction closes.
+
+  **Fixed shape**: `server.Shutdown`'s error is now captured (`shutdownErr := server.Shutdown(shutdownCtx)`)
+  rather than branched on immediately; `sched.Wait(shutdownCtx)` runs unconditionally right after,
+  on the same shared `shutdownCtx` (still one budget, no second window); the captured error is
+  returned only afterward (`if shutdownErr != nil { return fmt.Errorf("shutting down: %w",
+  shutdownErr) }`). Chosen over restructuring into two separate blocks because it keeps the exact
+  same wrapped error text and exact same non-nil/nil branching the caller already saw — error
+  propagation is provably unchanged, byte-for-byte, only its position in the function moved. `Wait`
+  stays a no-op on a nil `*Scheduler` (`scheduler.go:157-159`, untouched).
+
+  **Proof, in two parts, since a black-box e2e assertion for the join's own reachability turned out
+  not to exist without inventing machinery this codebase does not have (checked, not assumed):**
+
+  1. A genuine new e2e test, `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler`
+     (`test/e2e/serve_shutdown_test.go`), forces `server.Shutdown` itself into a real, non-simulated
+     error: `openStuckCaptureConn` opens a raw TCP connection straight to the running `serve`
+     process (bypassing the `nooma capture` CLI, which is itself only an HTTP client of this same
+     server per design D11) and writes a `POST /capture` whose `Content-Length` promises far more
+     body than it ever sends, then stops without closing. `captureHandler`'s `json.Decoder` blocks
+     on `r.Body.Read` waiting for bytes that never arrive, so `net/http` treats the connection as
+     genuinely active — `server.Shutdown` blocks the full `shutdownGrace` and returns a real
+     `context.DeadlineExceeded`, not a mock. This is layered onto the existing `sigtermMidPass`
+     fixture (extended with an optional `beforeSignal func(t *testing.T, port int)` hook, run right
+     before `SIGTERM`; the three existing `TestServe_SIGTERM_*` tests pass `nil` and are otherwise
+     unchanged) so a real pass is also genuinely in flight. The test asserts the process still exits
+     with the propagated non-zero status (error propagation intact) and does not hang past
+     `waitForExit`'s own bound — real regression coverage against a fix that made the join
+     unconditional but introduced a deadlock between it and an already-timed-out
+     `server.Shutdown`.
+
+     **Disclosed limitation, found by actually running red-then-green, not assumed**: an earlier
+     draft of this test also asserted on the scheduler's own `"scheduler: pass aborted (catchup):"`
+     log line as proof the join ran. Run with `-count=1` against `serve.go` stashed back to the
+     pre-fix (early-`return`) shape, that assertion **still passed** — the same non-discriminating
+     outcome `7.1`'s own disclosure #3 above already recorded for the happy path, for the identical
+     reason: `internal/scheduler/scheduler.go`'s `logf` call is made by the pass's own background
+     goroutine the instant it observes `ctx.Done()`, synchronously and unconditionally, never gated
+     by whether the main goroutine ever calls `Wait` on it. Reused as a sanity check that the
+     fixture reaches its intended scenario (the same purpose the other three SIGTERM tests already
+     put it to), not as a discriminator — its doc comment says so. Boundaries for this round forbid
+     inventing a non-ctx-aware fake to force a genuine discriminator, matching `7.1`'s own accepted
+     gap.
+
+  2. The join's own reachability on the error branch — the actual heart of this finding — is proven
+     directly against the code instead, by a disclosed temporary probe (the same technique links
+     3a/4/6/JD-6-01 already used, never shipped): a one-line marker,
+     `fmt.Fprintln(errOut, "PROBE: sched.Wait reached")`, added immediately after
+     `sched.Wait(shutdownCtx)` in `serve.go`, with `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler`
+     logging whether the marker appears in the process's stderr. Run with `-count=1` (`go test`'s
+     package-level cache does not see changes under `cmd/nooma`, confirmed the hard way — a first
+     run without `-count=1` silently replayed a cached result instead of re-executing):
+     - Pre-fix shape (early `return` before the probe line, `serve.go` temporarily restored to
+       that shape) — `PROBE marker present: false`. The statement is genuinely unreached.
+     - Fixed shape (probe placed right after the now-unconditional `sched.Wait`) — `PROBE marker
+       present: true`, reproduced twice.
+     The probe was then fully reverted from both `serve.go` and the test file; `git diff` against
+     each shows only the intended `JD-7-01` fix and test additions, no leftover probe line.
+
+  **Rollback boundary**: `cmd/nooma/serve.go`'s `runServe` shutdown block (the `shutdownErr`
+  restructuring) plus `test/e2e/serve_shutdown_test.go`'s `sigtermMidPass` `beforeSignal` parameter,
+  `openStuckCaptureConn`, and `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler` — revertible
+  independently of JD-7-02 and JD-7-03 below.
+
+- **JD-7-02 (WARNING, confirmed by both judges).** `test/e2e/serve_shutdown_test.go:180-181`:
+  `_ = seed.Process.Kill(); _ = seed.Wait()` — the one process wait in this file bypassing its own
+  `waitForExit` helper, contradicting the file's own doc comment (lines 29-34): "every channel
+  receive and every process wait below is guarded by one of these two bounds, never left
+  unbounded." `SIGKILL` cannot be trapped, so both judges noted a hang here is very unlikely in
+  practice — fixed anyway, so the stated invariant is true as written, not true-in-practice-only.
+
+  **Fixed**: `_ = seed.Wait()` replaced with `_ = waitForExit(t, seed)`, with a comment naming why
+  (JD-7-02, the file's own doc-comment invariant). `waitForExit`'s own fatal message says "did not
+  exit within %s of SIGTERM" — technically imprecise here since this reap follows `SIGKILL`, not
+  `SIGTERM`; left as is rather than forking a second near-identical helper for one call site, since
+  `SIGKILL`'s untrappable nature makes this branch effectively unreachable regardless of wording.
+
+  **Proof**: a disclosed probe, not a red-then-green test — this codebase has no way to make a
+  `SIGKILL`'d process hang (that is the whole reason both judges called a real hang "very
+  unlikely"), so there is no red state to construct honestly. Verified instead by reading the diff
+  directly: `seed` is now reaped through the same bounded helper (`waitForExit`, `waitBudget` =
+  35s) every other process wait in this file already uses, making the doc comment's "never left
+  unbounded" claim true by inspection, and confirmed by the full-suite green run below (no new
+  timeout, no new flake).
+
+  **Rollback boundary**: the single `seed.Wait()` → `waitForExit(t, seed)` substitution and its
+  comment in `sigtermMidPass` — a one-line, independently revertible change.
+
+- **JD-7-03 (WARNING, Judge B; independently measured and confirmed by the orchestrator).**
+  Measured directly: `go test -tags e2e -count=1 ./test/e2e/...` → **364.324s** on the frozen
+  target, against Go's implicit 600s per-package default — neither `Makefile`'s `test-e2e` target
+  nor either CI invocation (`.github/workflows/main.yml` lines 43, 59) passed `-timeout`, so the
+  whole package ran on that implicit ceiling by accident of the language default, not by a stated
+  decision. The three `TestServe_SIGTERM_*` tests each wait `scheduler.BootConsolidationDelay`
+  (120s) via `sigtermMidPass`, none called `t.Parallel()`, and ran sequentially — roughly 360s of
+  the 364s total.
+
+  **Fixed, both parts the owner selected**:
+  1. Explicit `-timeout 20m` added to `Makefile`'s `test-e2e` target and to both CI invocations in
+     `.github/workflows/main.yml` (the `ubuntu` job at line ~43 via `make test-e2e` itself, and the
+     `windows` job at line ~66, kept in sync by hand per that job's own existing comment), each with
+     a comment naming why the ceiling exists (the `BootConsolidationDelay`-bound SIGTERM tests) and
+     that it is a stated decision, not a default.
+  2. `t.Parallel()` added to all three `TestServe_SIGTERM_*` tests, so their ~360s of sequential
+     waiting overlaps into roughly one `BootConsolidationDelay` window.
+
+  **Isolation checked before parallelizing, not assumed** — read `sigtermMidPass` and every helper
+  it calls (`freePort`, `initVault`, `writeConfig`, `startServe`/`startServeCapturingStderr`,
+  `mockConsolidateLLM`, `newBlockingConsolidateLLM`, `binaryPath`) directly:
+  - **Vault directory**: each call gets its own `t.TempDir()` for both `home` and `work`;
+    `initVault` joins the vault name under that test's own `work`, so no two tests share a path.
+  - **Port**: each call gets its own `freePort(t)` (`net.Listen("tcp", "127.0.0.1:0")`, read the
+    assigned port, close, hand it back) — the file's own comment already discloses the one residual
+    risk honestly: a TOCTOU window between closing the probe listener and the child process binding
+    it. Running three of these closer together in time (parallel) shifts that pre-existing,
+    already-accepted risk's odds slightly without introducing a new failure mode; it was already
+    present for any two tests in this package sharing a `go test` invocation.
+  - **Fake provider server**: each call gets its own `mockConsolidateLLM(t)` (`httptest.NewServer`,
+    a fresh instance) and its own `newBlockingConsolidateLLM(t, llm.URL)` wrapping it (its own
+    `atomic.Bool`/channel fields) — no shared server or shared armed/triggered state between tests.
+  - **Package-level state**: the only package-level shared state in this file or its helpers is
+    `init_test.go`'s `buildOnce sync.Once` / `builtPath` compiling `cmd/nooma` once — `sync.Once`
+    provides the happens-before guarantee that makes concurrent reads of `builtPath` after `Do`
+    returns safe; no other `var` at package scope holds mutable state any of these three tests
+    touch.
+  - **Fixed paths**: none found — every path used (`home`, `work`, `vault`) is derived from that
+    call's own `t.TempDir()`.
+  All three passed this check; none were left sequential.
+
+  **Measured after the fix**: `go test -tags e2e -count=1 ./test/e2e/...` → **256.988s**, down from
+  the 364.324s baseline (a 107.336s / ~29.5% reduction) — smaller than a naive "360s → 120s"
+  estimate because this same correction round's `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler`
+  (JD-7-01) adds one further sequential ~131s run (deliberately not parallelized with the other
+  three — it carries its own additional `shutdownGrace` stall on top of the shared
+  `BootConsolidationDelay` wait, so it does not compress the same way; see that test's own doc
+  comment). All tests green, no failure, no flake observed across the runs in this round.
+
+  **Rollback boundary**: `Makefile`'s `test-e2e` target and `.github/workflows/main.yml`'s two `run:`
+  lines (the `-timeout 20m` additions) are independently revertible from the three `t.Parallel()`
+  calls in `test/e2e/serve_shutdown_test.go`, which are in turn independently revertible from
+  JD-7-01 and JD-7-02 above.
+
+**Verification, this correction round**: `go test -tags e2e -count=1 -run
+TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler -v ./test/e2e/...` → red (`PROBE marker present:
+false`) against the pre-fix shape, green (`PROBE marker present: true`, reproduced twice) against
+the fix, temporary probe reverted, diff clean. `go test -tags e2e -count=1 ./test/e2e/...` →
+green, 256.988s (was 364.324s). `make check-all` → green end to end; `internal/core` coverage floor
+unchanged at 750/750 (100%) — this round adds no `internal/core` code. `make lint` → `0 issues.`
 
 ---
 
