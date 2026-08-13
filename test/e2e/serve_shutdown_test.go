@@ -179,7 +179,13 @@ func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *si
 		t.Fatalf("seeding capture: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
 	_ = seed.Process.Kill()
-	_ = seed.Wait()
+	// waitForExit, not a bare seed.Wait(): this file's own doc comment above
+	// states every process wait here is bounded (JD-7-02). SIGKILL cannot be
+	// trapped, so this reap is not expected to ever actually block — but
+	// routing it through the same bounded helper as every other wait in this
+	// file is what makes that doc comment true as written, instead of one
+	// silent exception to it.
+	_ = waitForExit(t, seed)
 
 	blocking.armed.Store(true)
 
