@@ -231,13 +231,46 @@ func (s *Scheduler) runPass(ctx context.Context, trigger string) {
 
 	select {
 	case s.slot <- struct{}{}: // acquired
-		defer func() { <-s.slot }()
 	default:
 		s.logf("scheduler: %s fire skipped, a pass is already running", trigger)
 		return
 	}
 
+	// The slot is released explicitly below, right after Consolidate
+	// returns and BEFORE any logging — never by a defer that only fires
+	// once this whole method returns (JD-6-01). logf holds logMu for the
+	// duration of its write, and Deps.Log can be a genuinely blocking
+	// io.Writer in production (wireScheduler passes errOut, os.Stderr as
+	// of this PR — an unread `docker logs` consumer, a full pipe buffer, a
+	// stalled journald, or a full disk all block a write indefinitely). A
+	// slot held until runPass itself returns would stay held for as long
+	// as a blocked logf call blocks, and every later fire would then also
+	// block trying to acquire the SAME logMu inside its own logf call on
+	// the default (skip) branch below — a permanent, silent halt of
+	// consolidation, because the log is the very thing stuck.
+	//
+	// released + the release closure make this a single release no matter
+	// which path runs: the explicit call right after Consolidate covers
+	// the normal case, and the deferred call is panic-safety only (a panic
+	// inside Consolidate must not leak the slot). released guards against
+	// ever running both: a second `<-s.slot` on a capacity-1 channel that
+	// already gave up its one token would simply block the releasing
+	// goroutine forever — not corrupt state, but silently swallow whatever
+	// runs after it, and permanently consume a slot token no fire ever
+	// legitimately holds, deadlocking the very next fire's own
+	// non-blocking acquire. release() is idempotent specifically to make
+	// that impossible.
+	released := false
+	release := func() {
+		if !released {
+			released = true
+			<-s.slot
+		}
+	}
+	defer release()
+
 	report, err := s.consolidate.Consolidate(ctx, brain.ConsolidateRequest{})
+	release() // released before any logging — see the comment above
 	if err != nil {
 		// Aborted, not retried: m2c R5.4 already gates
 		// consolidation_last_run_at on full pass completion, so an aborted
