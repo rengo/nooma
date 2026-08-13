@@ -345,6 +345,24 @@ func TestScheduler_Wait(t *testing.T) {
 	})
 }
 
+// TestScheduler_NilScheduler_StartAndWaitAreNoOps is PR 6's own addition
+// (task 6.7; non-negotiable: "Start/Wait must be no-ops on a nil
+// *Scheduler so runServe needs no branch"): wireScheduler
+// (cmd/nooma/wiring.go) returns a nil *Scheduler, nil error when a vault's
+// resolveConsolidateProviders refuses (design §6; spec R3.2), and
+// cmd/nooma/serve.go calls Start/Wait on that result unconditionally, with
+// no nil guard of its own. Both calls, on a nil receiver, must return
+// rather than panic on a nil-pointer field dereference.
+func TestScheduler_NilScheduler_StartAndWaitAreNoOps(t *testing.T) {
+	var s *Scheduler
+
+	s.Start(context.Background())
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer waitCancel()
+	s.Wait(waitCtx)
+}
+
 // erroringConsolidator is task 5.1's own fixture: every call returns the
 // scripted error and the zero-value ConsolidateReport, simulating a
 // mid-pass abort — persistBoosts's own ports.ErrUnitNotFound (spec R1.4).
@@ -762,6 +780,140 @@ func TestRunPass_AbortSurfacesRefusedUnits(t *testing.T) {
 	const want = "scheduler: pass aborted (cron): consolidate: connect: read live decay states: boom, refused 1 unit(s) before the abort: [u-corrupted]\n"
 	if got := logBuf.String(); got != want {
 		t.Fatalf("log = %q, want %q", got, want)
+	}
+}
+
+// permanentlyBlockedWriter is JD-6-01's own fixture: Write blocks forever
+// once entered, signaling entered exactly once (buffered, non-blocking
+// send) so a test can deterministically wait until logf is synchronously
+// inside Write before proceeding — no sleep-based timing. This is the test
+// double for a genuinely blocking os.Stderr: an unread `docker logs`
+// consumer, a full pipe buffer, a stalled journald, or a full disk are all
+// real deployment shapes that block a write indefinitely, not fabricated
+// ones.
+type permanentlyBlockedWriter struct {
+	entered chan struct{}
+}
+
+func newPermanentlyBlockedWriter() *permanentlyBlockedWriter {
+	return &permanentlyBlockedWriter{entered: make(chan struct{}, 1)}
+}
+
+func (w *permanentlyBlockedWriter) Write(_ []byte) (int, error) {
+	select {
+	case w.entered <- struct{}{}:
+	default:
+	}
+	select {} // blocks forever, deliberately — see the type's own doc comment
+}
+
+// twoPhaseConsolidator is JD-6-01's own fixture: the first call returns a
+// scripted error immediately (routing runPass into the abort-log path,
+// which then calls logf); every later call returns success immediately and
+// is recorded. This is the shape needed to prove a SECOND, independent
+// fire can still reach Consolidate after the first fire's own logf call is
+// permanently blocked inside Write.
+type twoPhaseConsolidator struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (c *twoPhaseConsolidator) Consolidate(_ context.Context, _ brain.ConsolidateRequest) (brain.ConsolidateReport, error) {
+	c.mu.Lock()
+	c.calls++
+	first := c.calls == 1
+	c.mu.Unlock()
+	if first {
+		return brain.ConsolidateReport{}, c.err
+	}
+	return brain.ConsolidateReport{}, nil
+}
+
+func (c *twoPhaseConsolidator) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+// TestRunPass_SlotReleasedBeforeBlockedLog is JD-6-01: logf holds logMu for
+// the duration of fmt.Fprintf(s.log, ...), and runPass's original shape
+// released the slot only via a defer that fires when runPass itself
+// returns. A fire whose logf call blocks forever therefore never returns,
+// so the slot it still holds is never released either — every later fire
+// then takes the default (skip) branch and calls logf itself, which also
+// blocks forever on the SAME logMu the first goroutine is still holding
+// inside its own blocked Fprintf call. The result: consolidation halts
+// permanently, with no crash and no log line escaping to say so, because
+// the log is the thing that is stuck.
+//
+// This test proves the cascade is broken: the first fire's Consolidate
+// call errors (routing it into the abort-log path) and its Log writer
+// blocks forever on the very first Write. A SECOND, independent fire —
+// sharing the same *Scheduler, the same slot and the same logMu — must
+// still be able to acquire the slot and actually run its own pass, which
+// is only possible if the slot was released strictly before the first
+// fire's blocked logf call, not after (i.e. never, in this scenario).
+//
+// Red, observed against the pre-fix code (slot released by a defer that
+// only fires when runPass returns):
+//
+//	go test -run TestRunPass_SlotReleasedBeforeBlockedLog -v -timeout 10s ./internal/scheduler/...
+//	--- FAIL: TestRunPass_SlotReleasedBeforeBlockedLog (2.00s)
+//	    scheduler_test.go:...: timed out waiting for the second fire to return — the slot (and logMu) are permanently wedged by the first fire's blocked logf call
+//
+// Green after the fix: the slot is released before Consolidate's caller
+// ever calls logf, so the second fire's try-lock succeeds and it reaches
+// Consolidate on its own, independently of the first fire's still-blocked
+// Write call.
+func TestRunPass_SlotReleasedBeforeBlockedLog(t *testing.T) {
+	tc := &twoPhaseConsolidator{err: errors.New("boom")}
+	w := newPermanentlyBlockedWriter()
+	s, err := New(Deps{Clock: fixedClock{now: fixedNow}, Config: memrepo.NewConfig(), Consolidate: tc, Log: w})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// First fire: acquires the slot, aborts (tc.err), and calls logf,
+	// which blocks forever inside Write. This goroutine never returns — it
+	// is deliberately leaked for the lifetime of the test, mirroring
+	// exactly what a genuinely blocked os.Stderr would do to the real
+	// goroutine in production.
+	go func() {
+		s.runPass(ctx, "cron")
+	}()
+
+	select {
+	case <-w.entered:
+		// The first fire's logf call is now synchronously blocked inside
+		// Write — the checkpoint this test needs: under the fix, the slot
+		// was already released strictly before this call; under the bug,
+		// it is still held and will never be released.
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first fire's logf call to reach the blocked writer")
+	}
+
+	// A second, independent fire must still be able to acquire the slot
+	// and reach Consolidate — proof consolidation did not permanently
+	// halt. Bounded: under the bug this call blocks forever inside its own
+	// logf call (default branch, same wedged logMu), so it must never be
+	// allowed to hang the test itself.
+	secondDone := make(chan struct{})
+	go func() {
+		s.runPass(ctx, "catchup")
+		close(secondDone)
+	}()
+
+	select {
+	case <-secondDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the second fire to return — the slot (and logMu) are permanently wedged by the first fire's blocked logf call")
+	}
+
+	if got := tc.callCount(); got != 2 {
+		t.Fatalf("Consolidate called %d times, want exactly 2 — the second fire must have actually run a pass, not merely returned", got)
 	}
 }
 

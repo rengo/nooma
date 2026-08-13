@@ -876,43 +876,86 @@ Depends on PR 5. Ships `wireScheduler` and `serve`'s own `Start` call over the v
 join, ~60) — the two have different failure modes (a wiring change vs. an e2e SIGTERM fixture) and
 must not hold each other hostage.
 
-- [ ] **6.1** Commit 1 (RED): `test/e2e/serve_scheduler_test.go` (new, `e2e` build tag) —
+- [x] **6.1** Commit 1 (RED): `test/e2e/serve_scheduler_test.go` (new, `e2e` build tag) —
       `TestServe_ConcurrentConsolidate_StillRefused`: a `serve` process with the scheduler wired,
       running against a vault a second `nooma consolidate` invocation targets, asserts the CLI is
       refused with `m2c` R6.1's existing clean lock error.
       **Red**: `undefined: wiring.wireScheduler` — package/binary does not compile.
       Requirement: spec R3.1; design §6.
-- [ ] **6.2** Commit 2 (GREEN): `cmd/nooma/wiring.go` (extend) — `wireScheduler(ctx, db, cfg,
-      lookup, log) *scheduler.Scheduler`, reusing `wireConsolidate`'s own resolution over the
-      `*sqlite.Vault` `runServe` already opened under its own lock (`serve.go:71-89`) — no second
-      `vaultlock.Acquire` anywhere.
+      **Disclosed, not a genuine red** (commit `bef96d0`): `test/e2e` only drives the compiled
+      binary as a subprocess and never imports `cmd/nooma` (`package main`, unimportable by any
+      other package), so no reference to an unexported `wireScheduler` could ever appear in this
+      file, compile-time or otherwise. Run against unmodified `main` (before `wireScheduler`
+      existed at all), the test already **passes**: the refusal it asserts comes from
+      `vaultlock`'s pre-existing mutual exclusion (M1), unrelated to anything this PR adds —
+      confirmed by actually running it against `main` first, not merely reasoned about. Kept as a
+      genuine forward regression guard for R3.1 (proving `wireScheduler`'s addition does not
+      change this observable behavior), not a fabricated red.
+- [x] **6.2** Commit 2 (GREEN): `cmd/nooma/wiring.go` (extend) — `wireScheduler(ctx, db, cfg,
+      lookup, log) (*scheduler.Scheduler, error)`, reusing `wireConsolidate`'s own resolution over
+      the `*sqlite.Vault` `runServe` already opened under its own lock (`serve.go:71-89`) — no
+      second `vaultlock.Acquire` anywhere.
       Verify: `go test -tags e2e ./test/e2e/... -run TestServe_ConcurrentConsolidate`.
       Requirement: spec R3.1; design §6.
-- [ ] **6.3** Commit 1 (RED): `test/e2e/serve_scheduler_test.go` (extend) —
+      **Done** (commit `59bba01`) — this stage's own naive shape still propagates
+      `resolveConsolidateProviders`' refusal as a hard error (fixed in 6.4); `6.1`'s test verified
+      green, now proving the property live over a real `wireScheduler` rather than vacuously.
+- [x] **6.3** Commit 1 (RED): `test/e2e/serve_scheduler_test.go` (extend) —
       `TestServe_UnconfiguredVault_HTTPStillAnswers`: `serve` started against a vault with no
       `relation_evaluation`/`embedding` task binding asserts the HTTP server starts and answers
       `/capture`/`/recall` normally, no scheduled or catch-up pass ever fires.
       **Red**: `wireScheduler` (as of `6.2`) does not yet degrade gracefully — fails `runServe`
       outright or panics on the unresolved provider.
       Requirement: spec R3.2; design §6.
-- [ ] **6.4** Commit 2 (GREEN): `wiring.go` (extend) — `wireScheduler` mirrors `wireBrain`'s
+      **Genuine, observed failing for the stated reason** (commit `99c9a20`): `serve never
+      answered on port <port>`, `stderr: nooma: wiring the scheduler: consolidate: task
+      "relation_evaluation" has no provider bound — add it under tasks: in nooma.yml before
+      running a pass` — `runServe` exited before the listener ever came up, exactly as predicted.
+- [x] **6.4** Commit 2 (GREEN): `wiring.go` (extend) — `wireScheduler` mirrors `wireBrain`'s
       degrade-to-`nil` precedent (`wiring.go:236-238`): a vault whose `resolveConsolidateProviders`
       refuses yields a `nil` scheduler, `nil` error, one log line naming why. `Start`/`Wait` are
       no-ops on a `nil *Scheduler` (design §6's own note — `runServe` needs no branch).
       Verify: `go test -tags e2e ./test/e2e/... -run TestServe_UnconfiguredVault`.
       Requirement: spec R3.2; design §6.
-- [ ] **6.5** Commit 2 (GREEN, same commit as 6.4 or its own): `cmd/nooma/serve.go` (extend) — call
+      **Done** (commit `463b632`) — `wireScheduler` now checks `resolveConsolidateProviders`
+      itself, ahead of `wireConsolidate`'s heavier call (which opens the resident vector index),
+      the same two-step shape `resolveTaskProviders`/`wireBrain` already take; `6.3`'s test green
+      afterward, for the stated reason.
+- [x] **6.5** Commit 2 (GREEN, same commit as 6.4): `cmd/nooma/serve.go` (extend) — call
       `scheduler.Start(ctx)` after `wireBrain`, using the same signal-aware `ctx`
       `signal.NotifyContext` already produces (`serve.go:114`) — not a new `context.Background()`.
       Verify: `go test -tags e2e ./test/e2e/...`.
       Requirement: spec R3.3 (first clause); design §6.
-- [ ] **6.6** *(split checkpoint)*: measure `git diff --stat` for tasks 6.1–6.5 in isolation against
+      **Done** (commit `463b632`) — `sched.Start(ctx)` called unconditionally right after the
+      signal-aware `ctx` is created; relies on `6.4`'s own nil-safe `Start`/`Wait` (task 6.7) so
+      `runServe` needs no branch on the unconfigured-vault case.
+- [x] **6.6** *(split checkpoint)*: measure `git diff --stat` for tasks 6.1–6.5 in isolation against
       the ~140/120 sub-estimate. The 6/7 split is already pre-drawn (design §13); this checkpoint
       confirms PR 6 alone stays inside its own share, flagging rather than splitting reflexively if
       at risk.
-- [ ] **6.7** `golangci-lint run`; confirm `Start`/`Wait` remain no-ops on a `nil *Scheduler`
+      **Done, no further split** — `git diff --stat main -- cmd/nooma/wiring.go cmd/nooma/serve.go
+      internal/scheduler/scheduler.go test/e2e/serve_scheduler_test.go
+      internal/scheduler/scheduler_test.go`: impl+docs (`serve.go` +15, `wiring.go` +47,
+      `scheduler.go` +16 — the nil-guard, see `6.7`'s own disclosure) = 78 lines, well under the
+      ~140 sub-estimate (56%); test (`scheduler_test.go` +18, `serve_scheduler_test.go` +162) =
+      180 lines, ~150% of the ~120 sub-estimate — flagged, not split: the overrun is entirely in
+      test lines, inside the 106–193% band every prior link in this chain has already seen, and
+      CLAUDE.md's own 400-line PR ceiling counts impl+docs only (78, nowhere near it).
+- [x] **6.7** `golangci-lint run`; confirm `Start`/`Wait` remain no-ops on a `nil *Scheduler`
       (covered by `6.4`'s own fixture).
-- [ ] Verify (PR-level): `make check-all` incl. the `e2e`-tagged suite; diff scope — `cmd/nooma/
+      **Done** — `make lint` → `0 issues.`. **Disclosed diff-scope note**: making `Start`/`Wait`
+      genuinely no-op on a nil receiver required a two-line guard in each method
+      (`internal/scheduler/scheduler.go`), one file beyond this PR's own stated diff scope
+      (`cmd/nooma/{wiring,serve}.go`, `test/e2e/serve_scheduler_test.go`) — a minimal,
+      non-negotiable-mandated change, not scope creep; without it `TestServe_UnconfiguredVault_
+      HTTPStillAnswers` (6.3/6.4) would panic once `Start` is called unconditionally (6.5) against
+      a `nil` scheduler. Genuineness proven by a disclosed temporary probe (the same technique
+      links 3a/4 used): both nil checks removed, the new `TestScheduler_NilScheduler_
+      StartAndWaitAreNoOps` (`internal/scheduler/scheduler_test.go`) failed with `panic: runtime
+      error: invalid memory address or nil pointer dereference` at the exact removed line
+      (`scheduler.go:132`, `Start`), then the file restored byte-identical (`diff` against a
+      pre-probe copy, clean) before the commit that ships the guard.
+- [x] Verify (PR-level): `make check-all` incl. the `e2e`-tagged suite; diff scope — `cmd/nooma/
       {wiring,serve}.go`, `test/e2e/serve_scheduler_test.go` (new). Target ≤140 impl+docs lines.
       **Disclosed, temporary gap inside this stacked chain**: this PR does **not** add
       `sched.Wait(shutdownCtx)` (D5's own correction — PR 7's scope). Between this PR's merge and
@@ -922,6 +965,156 @@ must not hold each other hostage.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/serve-scheduler-wiring` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR7> --json baseRefName` names `main`.
+
+      **PR 6 result** (`feat/serve-scheduler-wiring`): `make check-all` green end to end;
+      `internal/core` coverage floor unchanged at 750/750 (100%) — this PR adds no `internal/core`
+      code. Diff scope: `cmd/nooma/wiring.go` (extended, +47/-0), `cmd/nooma/serve.go` (extended,
+      +15/-1), `test/e2e/serve_scheduler_test.go` (new, 162 lines) as declared, plus
+      `internal/scheduler/scheduler.go` (+16, the nil-guard) and
+      `internal/scheduler/scheduler_test.go` (+18, its own direct proof) — both disclosed above
+      (task 6.7) as a minimal, non-negotiable-mandated addition beyond the stated file list, not a
+      stray. Impl+docs 78 lines (56% of the ~140 estimate); test 180 lines (~150% of the ~120
+      estimate, flagged not split per 6.6).
+
+      **The `Deps.Log` writer reasoning link 5's Judgment Day (JD #728) named for this link,
+      carried out explicitly rather than inherited**: `wireScheduler` passes `errOut` as
+      `scheduler.Deps.Log` — in production, `os.Stderr` (`cmd/nooma/main.go:20`,
+      `run(os.Args[1:], os.Stdout, os.Stderr)`). `os.Stderr` is a real OS-level `io.Writer` that
+      **can** block: redirected to a stalled pipe, a full disk, a slow syslog/journal consumer, or
+      `docker logs` backpressure are all real deployment shapes, not fabricated ones. This makes
+      link 5's round-2 WARNING ("`logf` now holds `logMu` across `fmt.Fprintf`... a pathological
+      `Deps.Log`... blocks every other `logf` caller, and `wg.Done()`/`Wait` too") concrete rather
+      than hypothetical for the first time — exactly what JD #728 asked this link's own review to
+      re-examine. Per the orchestrator's explicit instruction, this is reported rather than
+      silently redesigned: **no timeout, no mutex change, no `logf` redesign was made in this PR.**
+      `internal/scheduler/scheduler.go`'s own `Deps.Log` and `logf` doc comments already carry this
+      exact hazard (JD-5-01), written before this PR, and this PR does not touch either.
+
+      **Whether `runServe` writes to the same writer independently of the scheduler, which would
+      make it a second writer bypassing `logf` entirely (`logMu` cannot help there)**: verified
+      directly by reading `cmd/nooma/serve.go` end to end. `runServe`'s own human-facing lines
+      (`"nooma serving %s on http://%s\n"`, `"\nshutting down"`) write to `out` (`os.Stdout`), not
+      `errOut` — confirmed by reading the two exact call sites design §5.4 cites
+      (`serve.go:119,137` in the pre-PR6 file), which the design document's own prose describes
+      inaccurately (it claims `errOut` "already carries runServe's own human lines" at those two
+      lines; the code at those lines has always written to `out`). `errOut` is written to only
+      during flag parsing (`fs.SetOutput(errOut)`, the `Usage` line), which completes and returns
+      before the vault is even resolved — long before `wireScheduler`/`sched.Start` exist in the
+      call graph. So: **no second concurrent writer to `errOut` exists *inside `runServe`* while a
+      scheduler is running.**
+
+      **Corrected here (JD-6-02, correction round after PR 6), narrower than originally
+      stated.** The claim above originally read "no second concurrent writer to `errOut` exists
+      inside `runServe` for the lifetime of a running scheduler" — that overreaches. This PR starts
+      scheduler goroutines (`sched.Start(ctx)`, `serve.go`) and does not join them: `sched.Wait` is
+      never called here (PR 7's own disclosed scope, `6`'s own Verify note above). So a scheduler
+      goroutine can still be synchronously inside `logf`, writing to `os.Stderr`, at the moment
+      `runServe` itself has already returned an error and unwound — `main()`
+      (`cmd/nooma/main.go:19-23`) then writes `fmt.Fprintln(os.Stderr, "nooma:", err)` to that same
+      file descriptor, entirely outside `logMu`, which `logf` alone can never guard against. The
+      analysis above was correct as far as it went — genuinely no second writer exists *while
+      `runServe` itself is still running* — but "inside `runServe`" and "for the lifetime of a
+      running scheduler" are not the same claim, and the text conflated them. Impact stays bounded:
+      interleaved or torn output on one line at process exit, no data loss, no crash. PR 7's own
+      `sched.Wait(shutdownCtx)` addition closes this for the normal shutdown path, by joining every
+      scheduler goroutine before `runServe` (and therefore `main`) can return. Docs-only; `design.md`
+      §5.4's own citation is corrected in the same round (the two call sites now cited as
+      `serve.go:134,152`, matching this file's own current line numbers), with the citation's
+      inaccuracy noted the same way, in its own correction paragraph there.
+
+**Judgment Day correction round, `feat/serve-scheduler-wiring` (PR #186), frozen target
+`0464bb8`. Two confirmed findings, both fixed in this same branch — none deferred beyond PR 7's
+own already-disclosed scope.**
+
+- **JD-6-01 (CRITICAL, Judge A; WARNING, Judge B; both judges confirmed, orchestrator verified
+  the cascade firsthand).** `runPass`'s try-lock released the slot only via `defer func() {
+  <-s.slot }()`, which fires when `runPass` itself returns — but `logf` (called from inside the
+  acquired region, on abort or on a completed pass with refusals) holds `logMu` for the duration
+  of `fmt.Fprintf(s.log, ...)`, and this PR is the first to wire `errOut` = `os.Stderr`
+  (`cmd/nooma/main.go:20`) into `Deps.Log` in production. `os.Stderr` genuinely blocks under
+  ordinary deployment conditions — an unread `docker logs` consumer, a full pipe buffer, a stalled
+  journald, a full disk. A goroutine blocked inside `logf` therefore holds **both** `logMu` and the
+  slot; `runPass` never returns, so the slot is never released, and every later fire takes the
+  `default` branch and calls `logf` itself, which also blocks on the same `logMu` — consolidation
+  halts permanently, with no crash and no log line escaping to say so, because the log is the thing
+  that is stuck.
+
+  Fixed: the slot is now released explicitly right after `Consolidate` returns, **before** any
+  `logf` call — not by a defer that only fires once `runPass` itself returns
+  (`internal/scheduler/scheduler.go`). Panic-safety is preserved: a `released` bool plus an
+  idempotent `release()` closure mean the explicit call covers the normal path and a `defer
+  release()` covers a panic inside `Consolidate`, with neither able to run `<-s.slot` twice — a
+  double release would otherwise block the releasing goroutine on an already-empty channel and
+  permanently consume a slot token no fire legitimately holds, deadlocking the very next fire's own
+  non-blocking acquire. D4's try-lock semantics are unchanged: non-blocking acquire, skip-don't-queue,
+  at most one pass in flight — verified by `TestScheduler_NoOverlap_ExactlyOneInFlight` staying
+  green, and confirmed still genuinely discriminating by a disclosed temporary probe (the same
+  technique links 3a/4/6 used): the try-lock's `slot` channel capacity bumped from 1 to 2, the test
+  observed failing for real (`max concurrent Consolidate calls = 2, want exactly 1`), then the file
+  restored byte-identical (`diff` against a pre-probe copy, clean) before this commit.
+
+  **Regression test**: `TestRunPass_SlotReleasedBeforeBlockedLog`
+  (`internal/scheduler/scheduler_test.go`) — a `Deps.Log` writer (`permanentlyBlockedWriter`) whose
+  `Write` blocks forever, a first fire that reaches the abort-log path and calls `logf` into it, and
+  a proof that a SECOND, independent fire (`twoPhaseConsolidator`) can still acquire the slot and
+  actually run its own pass. Observed failing for real against the pre-fix code:
+  ```
+  go test -run TestRunPass_SlotReleasedBeforeBlockedLog -v -timeout 15s ./internal/scheduler/...
+  --- FAIL: TestRunPass_SlotReleasedBeforeBlockedLog (2.00s)
+      scheduler_test.go:912: timed out waiting for the second fire to return — the slot (and
+      logMu) are permanently wedged by the first fire's blocked logf call
+  FAIL
+  ```
+  Green after the fix: `PASS`.
+
+  **Deliberately deferred, not fixed here (recorded per the owner's own instruction)**: `logf`
+  itself is not redesigned — no async writer, no buffered channel, no timeout. A blocked `Deps.Log`
+  writer still stalls the individual goroutine that called `logf`, and still stalls `logMu` for
+  every OTHER goroutine that tries to log while it is blocked (two fires, or a fire and a future
+  caller, cannot both log concurrently if one is wedged) — only the *permanent, all-future-fires*
+  halt this round closes. A genuine fix for the underlying blocking-writer hazard is its own future
+  work unit, not in this branch's scope.
+
+  **Rollback boundary**: `runPass`'s slot-acquire/release restructuring
+  (`internal/scheduler/scheduler.go`) plus `TestRunPass_SlotReleasedBeforeBlockedLog`,
+  `permanentlyBlockedWriter` and `twoPhaseConsolidator` in `scheduler_test.go` — revertible
+  independently of JD-6-02's docs-only fix below.
+
+- **JD-6-02 (WARNING, confirmed by both judges).** `cmd/nooma/main.go:19-23` writes
+  `fmt.Fprintln(os.Stderr, "nooma:", err)` at process exit, entirely outside `logMu`. PR 6's own
+  second-writer analysis above scoped its "no second concurrent writer" claim to *inside
+  `runServe`*, but this PR starts scheduler goroutines (`sched.Start(ctx)`, `serve.go`) without
+  joining them (`sched.Wait` is PR 7's own disclosed scope) — so a scheduler goroutine can still be
+  synchronously inside `logf`, writing to `os.Stderr`, at the exact moment `runServe` has already
+  returned and `main()` writes its own line to the same file descriptor. The PR 6 text, read
+  literally, could be misread as covering the scheduler's whole lifetime rather than only the
+  window while `runServe` itself is still executing — those are not the same claim.
+
+  This is a documentation fix, not a code fix: the analysis above is corrected in place (see its own
+  new correction paragraph) to state the real scope precisely (exclusive *inside `runServe`*, not
+  for the scheduler's whole lifetime) and to name PR 7's `sched.Wait(shutdownCtx)` as what closes
+  the normal shutdown path, by joining every scheduler goroutine before `runServe` (and therefore
+  `main`) can return. Impact stays bounded either way: interleaved or torn output on one line at
+  process exit, no data loss, no crash. `cmd/nooma/main.go`'s error reporting is untouched — closing
+  this gap in code stays PR 7's own scope, not assumed here.
+
+  **Rollback boundary**: this file's own correction paragraph above (PR 6's Verify note) plus
+  `design.md` §5.4's own new correction paragraph — docs only, no code changed, independently
+  revertible from JD-6-01.
+
+**Also corrected (docs only, no separate ledger ID)**: `design.md` §5.4 cited
+`cmd/nooma/serve.go:119,137` as carrying `runServe`'s own human lines on `errOut` — those two lines
+have always written to `out`, confirmed by reading both call sites directly (now `serve.go:134,152`
+as the file has grown since the pre-PR6 citation). Corrected in `design.md` §5.4 itself, in the same
+style this chain has used three times already (links 3b §3.4, 4 §3.3, 5 §5.3): what was wrong, the
+real shape, and why — not merely swapped line numbers.
+
+**Verification, this correction round**: `go test -run TestRunPass_SlotReleasedBeforeBlockedLog -v
+-timeout 15s ./internal/scheduler/...` → red before the fix (shown above), green after.
+`go test -race -shuffle=on ./internal/scheduler/... -count=5` → green, no race.
+`go test -tags e2e ./test/e2e/...` → green. `make check-all` → green end to end; `internal/core`
+coverage floor unchanged at 750/750 (100%) — this round adds no `internal/core` code. `make lint` →
+`0 issues.`
 
 ---
 

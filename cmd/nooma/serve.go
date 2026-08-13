@@ -103,6 +103,11 @@ func runServe(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("wiring the capture/recall pipeline: %w", err)
 	}
 
+	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut)
+	if err != nil {
+		return fmt.Errorf("wiring the scheduler: %w", err)
+	}
+
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token}),
@@ -113,6 +118,16 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// during startup is not lost.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// sched.Start is a no-op on a nil *Scheduler (design §6; spec R3.2), so
+	// this needs no branch for the unconfigured-vault case above. It is
+	// handed the same signal-aware ctx as the HTTP server, not a separate
+	// context.Background() — cancellation reaches an in-flight pass and any
+	// pending boot-catch-up delay the same instant the server's own
+	// graceful shutdown begins (spec R3.3, design §3.5/D5). Joining that
+	// goroutine before the vault closes is PR 7's own scope (sched.Wait
+	// below still has nothing to wait on until then).
+	sched.Start(ctx)
 
 	errc := make(chan error, 1)
 	go func() {
