@@ -102,6 +102,39 @@ func TestGoldenSetFormatExamples(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:        "consolidation",
+			examplePath: "../../../testdata/consolidation/format_example.json",
+			newValue:    func() any { return &ConsolidationExample{} },
+			nestedPath:  "expected",
+			populated: func(t *testing.T, v any) {
+				t.Helper()
+				ex, ok := v.(*ConsolidationExample)
+				if !ok {
+					t.Fatalf("value is %T, want *ConsolidationExample", v)
+				}
+				if ex.ID == "" {
+					t.Error("ID is empty")
+				}
+				if len(ex.CaptureScript) == 0 {
+					t.Error("CaptureScript is empty")
+				}
+				for _, c := range ex.CaptureScript {
+					if c.Offset == "" || c.Text == "" || c.LLMCaseID == "" {
+						t.Errorf("capture_script entry %+v is not fully populated", c)
+					}
+				}
+				if ex.Now == "" {
+					t.Error("Now is empty")
+				}
+				if ex.Expected == nil {
+					t.Fatal("Expected is nil — the format_example.json fixture is expected to carry a populated expected object")
+				}
+				if len(ex.Expected.Archived) == 0 && len(ex.Expected.RelationsCreated) == 0 && len(ex.Expected.Beliefs) == 0 {
+					t.Errorf("Expected = %+v, want at least one of archived/relations_created/beliefs populated in the fixture", ex.Expected)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
