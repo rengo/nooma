@@ -1458,6 +1458,34 @@ Three confirmed findings, all fixed in this same branch.**
   are worse than not running. The other three `TestServe_SIGTERM_*` tests carry no such premise and
   still cover shutdown on Windows. Reopen once the premise is measured on a Windows runner.
 
+  **JD-7-07 — the whole fixture never ran on Windows, and the escalation round's own claim about
+  that was wrong**: the JD-7-04 write-up above stated "the other three `TestServe_SIGTERM_*` tests
+  carry no such premise and still cover shutdown on Windows." They do not. `sigtermMidPass` delivers
+  a real `SIGTERM` to the child process, and Go's `os.Process.Signal` supports only `os.Kill` on
+  Windows — `cmd.Process.Signal(syscall.SIGTERM)` there returns `not supported by windows`
+  unconditionally. The `e2e (windows)` CI job was consequently **red from the moment this link's
+  tests landed**, failing all three of them after each had burnt its full ~120s
+  `BootConsolidationDelay` setup:
+
+  ```
+  FAIL: TestServe_SIGTERM_ConsolidationLastRunAtUnchanged (120.50s)  not supported by windows
+  FAIL: TestServe_SIGTERM_FollowUpRunCompletesFreshPass     (120.51s)  not supported by windows
+  FAIL: TestServe_SIGTERM_PassInFlight_ExitsWithinGrace     (120.52s)  not supported by windows
+  ```
+
+  This was invisible to `make check-all`, which runs on the developer's own platform; the
+  `e2e (windows)` job is the only gate that could see it, which is exactly why it exists. It was
+  also missed once by reading the PR's `mergeStateStatus: BLOCKED` as "checks still running" rather
+  than opening `gh pr checks`.
+
+  Fixed by skipping at `sigtermMidPass`'s own root — before its ~2 minute setup rather than after,
+  and so any future test built on the fixture inherits it. The platform limitation is real and not a
+  defect in `serve`: the shutdown path is covered on Linux and macOS, and Windows offers no
+  equivalent signal to model it with. `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler` keeps its
+  own separate Windows skip as well, unreachable behind this one, so that lifting the signalling
+  limitation someday cannot silently start it running on the unmeasured buffer premise JD-7-04
+  identified.
+
   **JD-7-06 — a doc comment claimed a red that never happened**: `TestServe_SIGTERM_ShutdownError
   StillJoinsScheduler`'s comment opened "What this test genuinely proves, run red against the
   unfixed shape above and green against the fix". Against the pre-fix shape the test **passed** —

@@ -167,6 +167,19 @@ type sigtermFixture struct {
 func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *sigtermFixture {
 	t.Helper()
 
+	// Every test built on this fixture needs a real SIGTERM delivered to a
+	// live child process, and Go's os.Process.Signal supports nothing but
+	// os.Kill on Windows — cmd.Process.Signal(syscall.SIGTERM) there returns
+	// "not supported by windows" unconditionally. That is a platform
+	// limitation, not a defect in serve: the shutdown path these tests cover
+	// is exercised on Linux and macOS, and Windows has no equivalent signal
+	// to model it with. Skipped at the fixture's own root rather than in each
+	// caller, so the skip happens before the ~2 minute setup below instead of
+	// after it, and so a fifth test built on this fixture inherits it.
+	if runtime.GOOS == "windows" {
+		t.Skip("serve's SIGTERM shutdown path cannot be driven on Windows: os.Process.Signal supports only os.Kill there")
+	}
+
 	llm := mockConsolidateLLM(t)
 	blocking := newBlockingConsolidateLLM(t, llm.URL)
 
@@ -495,9 +508,13 @@ func TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler(t *testing.T) {
 	// auto-tuning receive window can plausibly absorb it over loopback, and
 	// a test whose premise may be false on a platform either flakes there
 	// or passes without proving anything — both worse than not running.
-	// The other three TestServe_SIGTERM_* tests carry no such premise and
-	// still cover shutdown on Windows. Reopen this once the premise is
-	// measured on a Windows runner.
+	// This skip is independent of, and unreachable behind, sigtermMidPass's
+	// own Windows skip: that one exists because Go cannot deliver SIGTERM to
+	// a process on Windows at all, which stops all four of these tests there.
+	// This one is kept anyway so that if the signalling limitation is ever
+	// lifted, this test does not silently start running on an unmeasured
+	// buffer premise. Reopen it once that premise is measured on a Windows
+	// runner.
 	if runtime.GOOS == "windows" {
 		t.Skip("openStuckCaptureConn's 16MiB rendezvous premise is unmeasured on Windows — see its doc comment")
 	}
