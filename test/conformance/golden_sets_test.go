@@ -11,20 +11,23 @@ import (
 	"github.com/rengo/nooma/test/support/goldenset"
 )
 
-// goldenSetDirs are the three golden-set directories docs/06-harness.md §5
-// and spec R10.1 require — empty of real cases in this change, since
-// populating cases/ is M1's responsibility (spec R10.1's MUST NOT).
-var goldenSetDirs = []string{"recall", "classify", "llm"}
+// goldenSetDirs are the golden-set directories docs/06-harness.md §5 and
+// spec R10.1 require, plus testdata/consolidation/ (spec R4.1, design
+// §8.2, m2d-scheduler-demo) — the newest addition, and the only one of the
+// four still populated by real cases in this change rather than emptied of
+// them (recall/classify/llm are M1's own responsibility, spec R10.1's MUST
+// NOT).
+var goldenSetDirs = []string{"recall", "classify", "llm", "consolidation"}
 
-// TestHarness_GoldenSetFormatsDeclared proves testdata/{recall,classify,llm}/
-// exist and each carries a documented, machine-checkable format (spec
-// R10.1/R10.2/R10.4): a format.md with a valid fenced JSON shape, a
-// format_example.json sibling of cases/ (never inside it), and an empty
-// cases/ directory.
+// TestHarness_GoldenSetFormatsDeclared proves every directory in
+// goldenSetDirs exists and each carries a documented, machine-checkable
+// format (spec R10.1/R10.2/R10.4, R4.1): a format.md with a valid fenced
+// JSON shape, a format_example.json sibling of cases/ (never inside it),
+// and cases/ matching casesDirMustBeEmpty's rule for that directory.
 //
-// Design D10's guard: it asserts it found all three directories before
-// asserting anything about their content, so a renamed or moved directory
-// fails this test loudly instead of the per-directory subtests silently
+// Design D10's guard: it asserts it found every directory before asserting
+// anything about their content, so a renamed or moved directory fails this
+// test loudly instead of the per-directory subtests silently
 // iterating zero directories and reporting green.
 func TestHarness_GoldenSetFormatsDeclared(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
@@ -60,9 +63,10 @@ func TestHarness_GoldenSetFormatsDeclared(t *testing.T) {
 // pairing TestHarness_GoldenSetFormatMatchesType proves format.md's fenced
 // example still agrees with.
 var formatToType = map[string]func() any{
-	"recall":   func() any { return &goldenset.RecallExample{} },
-	"classify": func() any { return &goldenset.ClassifyExample{} },
-	"llm":      func() any { return &goldenset.LLMExample{} },
+	"recall":        func() any { return &goldenset.RecallExample{} },
+	"classify":      func() any { return &goldenset.ClassifyExample{} },
+	"llm":           func() any { return &goldenset.LLMExample{} },
+	"consolidation": func() any { return &goldenset.ConsolidationExample{} },
 }
 
 // TestHarness_GoldenSetFormatMatchesType proves each format.md's fenced
@@ -252,17 +256,20 @@ func assertFormatExampleIsSiblingOfCases(t *testing.T, dir string) {
 // cases/ subdirectory (beyond .gitkeep) is still required to hold nothing,
 // or must already hold at least one real case.
 //
-// All three are now false, and the map stays rather than collapsing into a
+// All four are now false, and the map stays rather than collapsing into a
 // single "every corpus must be non-empty" check. Its job was never only the
 // asymmetry: an emptied-out or relocated corpus must fail LOUDLY rather than
 // pass vacuously, and that half applies to every directory here forever.
 // The classify entry was the last true one — inverted by m1b-pipeline PR 7c,
 // the PR that populates it (spec R1.6), after recall's (PR 8c) and llm's
-// (R5.3). Rules-as-data, design D10's pattern.
+// (R5.3). consolidation is added already false (spec R4.1, m2d-scheduler-
+// demo): unlike the other three, this golden set ships its first real case
+// in the same PR that registers it. Rules-as-data, design D10's pattern.
 var casesDirMustBeEmpty = map[string]bool{
-	"recall":   false,
-	"classify": false,
-	"llm":      false,
+	"recall":        false,
+	"classify":      false,
+	"llm":           false,
+	"consolidation": false,
 }
 
 // assertCasesDirEmptiness checks dir/cases/ against casesDirMustBeEmpty for
