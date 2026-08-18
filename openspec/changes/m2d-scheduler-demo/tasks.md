@@ -1609,6 +1609,11 @@ two most likely to blow its budget (prose is not code, and `format.md` is prose)
       illustrative, not tuned against real archive/connect/derive thresholds; that tuning is
       `feat/demo-simulated-weeks`'s own job (design §13's PR 9a row), which grows this same
       directory rather than replacing it.
+      **Corrected (JD-8-02, correction round below)**: the claim above was false for its first id —
+      `classify-remind-me-tomorrow` never existed anywhere in the repository. The seed case was
+      rewritten and renamed to `dry-cleaning-and-ambiguous-contract-request.json`, now referencing
+      two real `testdata/llm/` cases: `classify-person-ref-ambiguous-ana` and
+      `classify-pick-up-dry-cleaning`. See the correction round for the verification run.
 - [x] **8.8** Verify: `golden_sets_test.go`'s widened guard fails if the directory is ever empty —
       confirmed via a throwaway local probe (temporarily empty `cases/`, observe the `Fatalf`,
       restore), the same disclosed-probe convention `m2c` task 9.7 used for a reversion check; the
@@ -1636,6 +1641,16 @@ two most likely to blow its budget (prose is not code, and `format.md` is prose)
       this link's own risk, and the overrun is entirely inside that one file's own documentation
       surface, not scope creep into a second concern). Reported, not resolved unilaterally — the
       split decision belongs to the orchestrator, per this task's own instruction.
+      **Corrected (correction round below, record defects #2 and #3)**: both the attribution and the
+      test-line total above were wrong. (1) The +24-line overrun was NOT "entirely inside" `format.md`'s
+      own documentation surface — 72 of the 194 counted impl+docs lines are `types.go`, a Go file;
+      design §13 gives one combined ~170 figure for the whole link with no per-file split, so there
+      was no basis for attributing the overrun to prose alone. (2) `golden_sets_test.go`'s 47 counted
+      insertions-only, but this same `tasks.md` sums insertions+deletions for a modified test file
+      elsewhere (e.g. PR 4's "`scheduler_test.go` (extended, +40/-1 = 41 lines)"); on that convention
+      `golden_sets_test.go` is **78** lines (insertions+deletions), making the test total **154** (78 +
+      57 + 19 + 0) vs the ~160 sub-estimate — **96%, not 77% "comfortably under"**. Still under budget,
+      just by a much narrower margin than originally reported.
 - [x] Verify (PR-level): `make check-all`; diff scope — `testdata/consolidation/**`, `test/support/
       goldenset/types.go`, `test/conformance/golden_sets_test.go`. Target ≤170 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/demo-golden-format` returns
@@ -1652,6 +1667,129 @@ two most likely to blow its budget (prose is not code, and `format.md` is prose)
       Both chain-merge checks are post-merge verifications — deferred until after this PR merges;
       not run by this apply phase, consistent with PR 7's own precedent (Judgment Day runs before
       any merge decision).
+
+**Judgment Day correction round, `feat/demo-golden-format` (PR #188), frozen target `2cce109`.
+Two CRITICAL findings (JD-8-01, JD-8-02) plus three record defects, all fixed in this same branch.**
+
+- **JD-8-01 (CRITICAL, both judges confirmed, orchestrator verified).** `testdata/consolidation/
+  format.md:60` and its own "Checked" section (~lines 84-90) claimed `ConsolidationExample.Validate`
+  enforces every "Required: yes" field, including `expected` — but `Validate` never looked at
+  `Expected` at all, and `ConsolidationExpected` had no `Validate` method (task 8.3's own disclosed
+  drop). Because `Expected` was a plain, non-pointer `ConsolidationExpected`, an absent `expected` key
+  and an explicit `"expected": {}` decoded to the identical Go zero value — a case omitting `expected`
+  entirely loaded, validated, and asserted nothing, contradicting the document's own named guarantee.
+
+  **RED, observed before the fix**: added `TestDecodeStrict_EnforcesRequiredFields`'s "consolidation:
+  an absent expected key is rejected, not silently treated as {}" case
+  (`test/support/goldenset/validate_test.go`), data `{"id":"x","capture_script":[{"offset":"0h",
+  "text":"t","llm_case_id":"c"}],"now":"2026-01-01T00:00:00Z"}` (no `expected` key). Run against the
+  pre-fix code:
+  ```
+  validate_test.go:77: DecodeStrict({"id":"x","capture_script":[{"offset":"0h","text":"t",
+  "llm_case_id":"c"}],"now":"2026-01-01T00:00:00Z"}) = nil, want an error containing "expected is required"
+  --- FAIL: TestDecodeStrict_EnforcesRequiredFields
+  ```
+
+  **Fixed shape**: `ConsolidationExample.Expected` changed to `*ConsolidationExpected`
+  (`test/support/goldenset/types.go`), the same absent-vs-zero-value pattern this file already uses
+  for `ConsolidationExample.LastRunAt *string` and `ClassifyExpected.Weight/DecayRate *float64` — a
+  pointer, not `json.RawMessage`, because `ConsolidationExpected` is a fixed, already-declared struct
+  with no schema-varies-by-type reason to defer parsing (unlike `ClassifyExpected.StructuredData`,
+  whose shape genuinely varies by `expected.type`). `ConsolidationExample.Validate` now rejects a nil
+  `Expected`. The owner's explicit ruling is preserved: an explicit, empty `"expected": {}` decodes to
+  a non-nil pointer to a zero-value struct and stays valid — a case asserting "nothing should happen"
+  is legitimate — proven by a new companion test,
+  `TestDecodeStrict_ConsolidationExpectedEmptyObjectStaysValid`. `format.md` itself needed no change —
+  it already documented the intended contract correctly; only the code was made to honour it.
+
+  **Verification**: `go test ./test/support/goldenset/... ./test/conformance/... -v` — every
+  `goldenset` and `golden_sets_test.go` subtest green, including
+  `TestLoad_ConsolidationCaseRoundTrips` and `TestHarness_GoldenSetFormatMatchesType/consolidation`
+  against the real, unpointer-touched case and fenced example.
+
+  **Rollback boundary**: `test/support/goldenset/types.go`'s `ConsolidationExample.Expected` field and
+  `Validate` method, plus the two new tests in `test/support/goldenset/validate_test.go` — revertible
+  independently of JD-8-02 and the record corrections below.
+
+- **JD-8-02 (Judge B: CRITICAL, Judge A: WARNING; both judges confirmed, orchestrator verified).**
+  `testdata/consolidation/cases/dry-cleaning-and-descale-reminder.json:7`'s first `capture_script`
+  entry named `llm_case_id: "classify-remind-me-tomorrow"` — no such file exists anywhere in the
+  repository (`fd 'classify-remind-me-tomorrow' testdata/` returns nothing;
+  `testdata/llm/cases/` holds 21 cases, none with that name). `test/support/fakeprovider`'s `Complete`
+  calls `t.Fatalf` on a missing scripted case, so the seed case would fail the instant PR 9a's
+  `fakeprovider` corpus actually replays it — not the "at least one real case" spec R4.1 requires, and
+  task 8.7's own disclosure (corrected above) was false for this id.
+
+  **Chosen replacement, verified by running it, not by reasoning about it**: of the four `classify-*`
+  cases that return `"type":"task"` (`classify-pick-up-dry-cleaning`, already used;
+  `classify-fenced-response`, same message as pick-up-dry-cleaning; `classify-person-ref-ambiguous-ana`,
+  message "Ana asked me to send her the contract", `person_ref_status: "ambiguous"`;
+  `classify-truncated-response`), `classify-person-ref-ambiguous-ana` was chosen over
+  `classify-fenced-response` specifically to avoid capturing the identical "Pick up the dry cleaning"
+  text twice in the same two-entry case. Read `internal/brain/capture.go:257-267` directly first:
+  `ambiguousPersonRef` only adds an extra `decision_log` row (`recordAmbiguousPersonRefDecision`) — the
+  unit is still built via `classify.ToUnit` and persisted `unit.StatusPool` on either branch, so
+  `person_ref_status: "ambiguous"` does not change archivability.
+
+  A throwaway test (`test/conformance/zzverify_seed_pair_test.go`, deleted after verification, never
+  committed) drove `brain.NewCaptureService(...).Capture` for real over both messages
+  (`classify-person-ref-ambiguous-ana` at `t0`, `classify-pick-up-dry-cleaning` at `t0+24h`, `t0 =
+  2026-04-01T09:00:00Z`, one month before the case's own `now`), then ran the real
+  `internal/core/consolidation.Archive` at `now = 2026-05-01T09:00:00Z`:
+  ```
+  capture_script[0]: unit=zz-id-1 weight=0.7 decay_rate=0.05 last_touched_at=2026-04-01 09:00:00 +0000 UTC effective@now=0.15619111210390085
+  capture_script[1]: unit=zz-id-4 weight=0.6 decay_rate=0.1 last_touched_at=2026-04-02 09:00:00 +0000 UTC effective@now=0.033013932033844326
+  --- PASS: TestZZVerifySeedPairArchivesBoth (0.00s)
+  ```
+  Both effective weights (0.156, 0.033) are below `DefaultWeightThreshold` (0.5) — both indices
+  genuinely archive, confirming `expected.archived: [0, 1]` holds for this pair for real, not just by
+  inspection.
+
+  **Renamed** (the "dry cleaning and descale reminder" name was no longer truthful once the descale
+  message left): `testdata/consolidation/cases/dry-cleaning-and-descale-reminder.json` →
+  `testdata/consolidation/cases/dry-cleaning-and-ambiguous-contract-request.json`, `id` field updated
+  to match verbatim (naming convention, `format.md`'s own rule). New content: `capture_script[0]` text
+  "Ana asked me to send her the contract" / `llm_case_id: "classify-person-ref-ambiguous-ana"`;
+  `capture_script[1]` unchanged ("Pick up the dry cleaning on Friday" /
+  `classify-pick-up-dry-cleaning"`); `now` and `expected.archived: [0, 1]` unchanged.
+
+  Task 8.7's disclosure above is corrected in place, not silently rewritten — see the `**Corrected
+  (JD-8-02 ...)**` paragraph there.
+
+  **Verification**: `go test ./test/support/goldenset/... -run TestLoad_ConsolidationCaseRoundTrips
+  -v` — `dry-cleaning-and-ambiguous-contract-request.json` round-trips through `Load`/`DecodeStrict`
+  cleanly.
+
+  **Rollback boundary**: the file rename plus its content rewrite
+  (`testdata/consolidation/cases/dry-cleaning-and-ambiguous-contract-request.json`) — revertible
+  independently of JD-8-01 and the record corrections below.
+
+- **Record correction #1 (Judge A).** `TestGoldenSetFormatExamples`
+  (`test/support/goldenset/loader_test.go`) had no `consolidation` entry — the shared table proving,
+  for `recall`/`classify`/`llm`, that a top-level and a nested unknown field are both rejected and a
+  well-formed example populates every declared field never covered `ConsolidationExample`;
+  `TestLoad_ConsolidationCaseRoundTrips` only exercised the happy path. Added a `consolidation` entry
+  (`examplePath: testdata/consolidation/format_example.json`, `nestedPath: "expected"`, populated-check
+  on `ID`/`CaptureScript`/`Now`/`Expected`) — same coverage shape as its three siblings. Verified:
+  `go test ./test/support/goldenset/... -run TestGoldenSetFormatExamples -v` —
+  `TestGoldenSetFormatExamples/consolidation` PASS, including the nested-unknown-field-in-`expected`
+  rejection.
+
+- **Record correction #2 (Judge A).** 8.10's budget disclosure attributed the +24-line overrun to
+  `format.md`'s own prose alone ("the overrun is entirely inside that one file's own documentation
+  surface"), but 72 of the 194 counted impl+docs lines are `types.go`, a Go file — `design.md` §13
+  gives one combined ~170 figure for the whole link with no per-file split, so there was no basis for
+  that attribution. Corrected in place in 8.10 above.
+
+- **Record correction #3 (Judge B).** 8.10's test-line accounting counted `golden_sets_test.go` as 47
+  (insertions only), inconsistent with this same `tasks.md`'s own established convention of summing
+  insertions+deletions for a modified test file (e.g. PR 4's "`scheduler_test.go` (extended, +40/-1 =
+  41 lines)"). On that convention `golden_sets_test.go` is 78 lines, making the test total 154 vs the
+  ~160 sub-estimate — 96%, not 77% "comfortably under". Corrected in place in 8.10 above.
+
+**Verification, this correction round**: `go build ./...`; `go test ./test/support/goldenset/...
+./test/conformance/... -v` (all green, including the new/renamed consolidation coverage);
+`make check-all` (below).
 
 ---
 
