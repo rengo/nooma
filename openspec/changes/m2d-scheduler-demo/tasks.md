@@ -1540,57 +1540,118 @@ Ships the new golden-set format and registration, before any real corpus content
 recall/format.md`'s own shape is the bar (design §8.2), and design names this link as one of the
 two most likely to blow its budget (prose is not code, and `format.md` is prose).
 
-- [ ] **8.1** Commit 1 (RED): `test/conformance/golden_sets_test.go` (extend) — require
+- [x] **8.1** Commit 1 (RED): `test/conformance/golden_sets_test.go` (extend) — require
       `"consolidation"` registered in `goldenSetDirs`, `formatToType`, and
       `casesDirMustBeEmpty`. **Red**: `assertCasesDirEmptiness`/`TestHarness_GoldenSetFormatMatches
       Type` `t.Fatalf` on the unregistered directory (or the directory itself is missing) — package
       compiles but the test fails loudly, per the existing gate's own half-registration guard.
       Requirement: spec R4.1; design §8.2.
-- [ ] **8.2** `testdata/consolidation/format.md` (new) — written before or in the same commit as the
+      **Done** (`6ba2aff`): only `goldenSetDirs` was extended in this commit — `formatToType` and
+      `casesDirMustBeEmpty` were deliberately left unregistered so `TestHarness_GoldenSetFormats
+      Declared` fails on the directory count (3 of 4 found) and `TestHarness_GoldenSetFormatMatches
+      Type/consolidation` fails reading the not-yet-existing `format.md`, exactly the disclosed red.
+      Package compiled.
+- [x] **8.2** `testdata/consolidation/format.md` (new) — written before or in the same commit as the
       first case file: field table (case name; capture script — offset from `t0`, text, the scripted
       fake-provider answer; injected `now`; optional `last_run_at`; expected effects — `archived`,
       `relations_created`, `beliefs`), one fenced ` ```json``` ` worked example, a "what the loader
       does and does not check" section — `testdata/recall/format.md`'s shape, not a template
       improvised past.
       Requirement: spec R4.1; design §8.2.
-- [ ] **8.3** `test/support/goldenset/types.go` (extend) — `ConsolidationExample` struct decoding
+      **Done** (`ff6cd8a`): 100 lines. Adds a "Why indices, not unit IDs" section
+      `testdata/recall/format.md` has no counterpart for — `expected.archived`/`.relations_created`/
+      `.beliefs` name `capture_script` array positions, not unit IDs, because a captured unit's ID
+      does not exist until `CaptureService.Capture` runs (design D6). Documented as a departure from
+      `recall`/`classify`'s authored-row convention up front, not left implicit.
+- [x] **8.3** `test/support/goldenset/types.go` (extend) — `ConsolidationExample` struct decoding
       `format.md`'s fenced example via `goldenset.DecodeStrict` — makes `format.md` executable
       rather than aspirational.
       Requirement: design §8.2.
-- [ ] **8.4** Commit 2 (GREEN): `golden_sets_test.go` (extend) — register `"consolidation"` in all
+      **Done** (`eef43be`): `ConsolidationExample`/`ConsolidationCapture`/`ConsolidationExpected`,
+      72 lines, appended at file end (after `LLMExample.Validate`) rather than between `LLMExample`'s
+      struct and its own `Validate` method, where an earlier draft of this edit briefly, incorrectly
+      landed it — caught before commit. `ConsolidationExpected.Validate` was dropped (no required
+      fields, so a no-op method served no caller).
+- [x] **8.4** Commit 2 (GREEN): `golden_sets_test.go` (extend) — register `"consolidation"` in all
       three maps: `goldenSetDirs`, `formatToType`'s constructor, `casesDirMustBeEmpty["consolidation"]
       = false`.
       Verify: `go test ./test/conformance/... -run TestHarness_GoldenSetFormatMatchesType`.
       Requirement: spec R4.1; design §8.2.
-- [ ] **8.5** `testdata/consolidation/format_example.json` (new) — sibling of `cases/`, never inside
+      **Done** (`22dc2c0`): all four `TestHarness_GoldenSetFormatMatchesType` subtests PASS.
+      `TestHarness_GoldenSetFormatsDeclared/consolidation` still failed at this point (missing
+      `format_example.json`, empty `cases/`) — expected, this task's own Verify line is deliberately
+      scoped to `-run TestHarness_GoldenSetFormatMatchesType` only, closed by 8.5/8.7.
+- [x] **8.5** `testdata/consolidation/format_example.json` (new) — sibling of `cases/`, never inside
       it. Verify: `assertFormatExampleIsSiblingOfCases` passes.
       Requirement: design §8.2.
-- [ ] **8.6** Commit 1 (RED): a loader test proving `format.md`'s documented shape round-trips — a
+      **Done** (`63c5c63`): 22 lines, same content as `format.md`'s fenced example. Also bootstrapped
+      `testdata/consolidation/cases/.gitkeep` here (not its own task, needed so 8.6's `os.ReadDir`
+      has a directory to read). After this commit `TestHarness_GoldenSetFormatsDeclared/consolidation`
+      failed only on the empty `cases/` directory (R5.4) — expected, closed by 8.7.
+- [x] **8.6** Commit 1 (RED): a loader test proving `format.md`'s documented shape round-trips — a
       case file decoded via `goldenset.DecodeStrict`, asserting each field lands where `format.md`
       says.
       **Red**: no case file exists yet under `testdata/consolidation/cases/` — the loader has
       nothing to decode, fails on a missing/empty directory.
       Requirement: spec R4.1 (Verified by, first clause).
-- [ ] **8.7** Commit 2 (GREEN): `testdata/consolidation/cases/*.json` (new) — at least one real case
+      **Done** (`8045abc`): `TestLoad_ConsolidationCaseRoundTrips` added to
+      `test/support/goldenset/loader_test.go`, 57 lines. **Red confirmed**: `cases/` held only
+      `.gitkeep`, so the test `t.Fatal`'d on the empty directory verbatim as stated. Package
+      compiled.
+- [x] **8.7** Commit 2 (GREEN): `testdata/consolidation/cases/*.json` (new) — at least one real case
       satisfying `8.6`.
       Verify: `go test ./test/conformance/... ./test/support/...`.
       Requirement: spec R4.1.
-- [ ] **8.8** Verify: `golden_sets_test.go`'s widened guard fails if the directory is ever empty —
+      **Done** (`b54c384`): `dry-cleaning-and-descale-reminder.json`, 19 lines — a two-entry capture
+      script against real `testdata/llm/` cases (`classify-remind-me-tomorrow`,
+      `classify-pick-up-dry-cleaning`). **Green confirmed**: both target test suites pass. Disclosed
+      scope note: this seed case satisfies the loader round-trip only — its `expected` values are
+      illustrative, not tuned against real archive/connect/derive thresholds; that tuning is
+      `feat/demo-simulated-weeks`'s own job (design §13's PR 9a row), which grows this same
+      directory rather than replacing it.
+- [x] **8.8** Verify: `golden_sets_test.go`'s widened guard fails if the directory is ever empty —
       confirmed via a throwaway local probe (temporarily empty `cases/`, observe the `Fatalf`,
       restore), the same disclosed-probe convention `m2c` task 9.7 used for a reversion check; the
       tree is never left broken by this verification.
       Requirement: spec R4.1 (Verified by, second clause).
-- [ ] **8.9** `golangci-lint run`.
-- [ ] **8.10** *(unplanned but flagged split checkpoint — design §13 names PR 8 among the two links
+      **Done**: moved `dry-cleaning-and-descale-reminder.json` out of `cases/` to `/tmp`, ran
+      `TestHarness_GoldenSetFormatsDeclared` — `--- FAIL`, `golden_sets_test.go:56: .../consolidation/
+      cases holds only .gitkeep — expected at least one real case beyond .gitkeep (R5.4)`, exactly
+      the guard's own message. Moved the file back, `git diff --exit-code` clean (no working-tree
+      residue), re-ran the same test — green again.
+- [x] **8.9** `golangci-lint run`.
+      **Done**: `0 issues.` — no fixes needed, no separate commit.
+- [x] **8.10** *(unplanned but flagged split checkpoint — design §13 names PR 8 among the two links
       most likely to blow their budget)*: measure `git diff --stat` in isolation. If `format.md`'s
       own prose risks the ~170 sub-estimate alone, split the prose (`format.md` + example) from the
       loader/registration wiring — an undrawn split, reported honestly rather than forced, the same
       discipline `m2c`'s own PR 5/6/9/11 checkpoints used.
-- [ ] Verify (PR-level): `make check-all`; diff scope — `testdata/consolidation/**`, `test/support/
+      **Done, flagged not split**: `git diff --numstat main...HEAD` — impl+docs
+      (`format.md` 100 + `format_example.json` 22 + `types.go` 72) = **194 lines vs the ~170
+      sub-estimate (114%, +24 lines, +14%)**; test (`golden_sets_test.go` 47 + `loader_test.go` 57 +
+      the seed case 19 + `.gitkeep` 0) = 123 lines vs the ~160 sub-estimate (77%, comfortably under).
+      194 is a modest overrun, not the kind design's own PR 3a/8 budget-risk framing treats as
+      requiring a split (PR 7's own precedent treated a considerably larger, 147% test-line overrun
+      as flag-not-split for the same reason: `format.md`'s prose is what design §13 itself named as
+      this link's own risk, and the overrun is entirely inside that one file's own documentation
+      surface, not scope creep into a second concern). Reported, not resolved unilaterally — the
+      split decision belongs to the orchestrator, per this task's own instruction.
+- [x] Verify (PR-level): `make check-all`; diff scope — `testdata/consolidation/**`, `test/support/
       goldenset/types.go`, `test/conformance/golden_sets_test.go`. Target ≤170 impl+docs lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/demo-golden-format` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR9a> --json baseRefName` names `main`.
+      **Done**: `make check-all` green end to end — lint 0 issues, vet, `-race -shuffle=on` full
+      unit+conformance suite green, `-tags integration` green, schema-golden diff-clean,
+      `internal/core` coverage 750/750 (100%, unchanged — this PR adds no `internal/core` code),
+      7-target cross-compile matrix all OK, `-tags e2e` suite green (133.511s). Diff scope matched
+      exactly: only `testdata/consolidation/**`, `test/support/goldenset/types.go` and
+      `test/support/goldenset/loader_test.go` (loader test, same package, task 8.6's own home), and
+      `test/conformance/golden_sets_test.go` were touched — no file outside the declared scope.
+      **Target ≤170 impl+docs lines: exceeded at 194 (+14%), flagged in 8.10 above, not split.**
+      Both chain-merge checks are post-merge verifications — deferred until after this PR merges;
+      not run by this apply phase, consistent with PR 7's own precedent (Judgment Day runs before
+      any merge decision).
 
 ---
 
