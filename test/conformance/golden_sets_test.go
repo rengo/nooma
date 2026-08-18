@@ -14,7 +14,7 @@ import (
 // goldenSetDirs are the three golden-set directories docs/06-harness.md §5
 // and spec R10.1 require — empty of real cases in this change, since
 // populating cases/ is M1's responsibility (spec R10.1's MUST NOT).
-var goldenSetDirs = []string{"recall", "classify", "llm"}
+var goldenSetDirs = []string{"recall", "classify", "llm", "consolidation"}
 
 // TestHarness_GoldenSetFormatsDeclared proves testdata/{recall,classify,llm}/
 // exist and each carries a documented, machine-checkable format (spec
