@@ -167,6 +167,63 @@ func TestClassifyExampleLinksToLLMExample(t *testing.T) {
 	}
 }
 
+// TestLoad_ConsolidationCaseRoundTrips proves testdata/consolidation/
+// format.md's documented shape round-trips through the same Load/
+// DecodeStrict path a real case file goes through (spec R4.1, design
+// §8.2): every real case under testdata/consolidation/cases/ decodes into
+// a ConsolidationExample with every field landing where format.md says.
+//
+// Red: before task 8.7 adds a real case file, testdata/consolidation/
+// cases/ holds only .gitkeep — the loader has nothing to decode, and this
+// test fails loudly on the empty directory rather than silently iterating
+// zero files and reporting green.
+func TestLoad_ConsolidationCaseRoundTrips(t *testing.T) {
+	dir := "../../../testdata/consolidation/cases"
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", dir, err)
+	}
+
+	found := 0
+	for _, entry := range entries {
+		if entry.Name() == ".gitkeep" || entry.IsDir() {
+			continue
+		}
+		found++
+
+		t.Run(entry.Name(), func(t *testing.T) {
+			var ex ConsolidationExample
+			path := filepath.Join(dir, entry.Name())
+			if err := Load(path, &ex); err != nil {
+				t.Fatalf("Load(%s) = %v, want success", path, err)
+			}
+
+			if ex.ID == "" {
+				t.Error("ID is empty")
+			}
+			if len(ex.CaptureScript) == 0 {
+				t.Error("CaptureScript is empty")
+			}
+			for i, c := range ex.CaptureScript {
+				if c.Offset == "" || c.Text == "" || c.LLMCaseID == "" {
+					t.Errorf("CaptureScript[%d] = %+v, not fully populated", i, c)
+				}
+			}
+			if ex.Now == "" {
+				t.Error("Now is empty")
+			}
+		})
+	}
+
+	if found == 0 {
+		t.Fatal(
+			"testdata/consolidation/cases/ holds only .gitkeep — expected at least one real " +
+				"case file to decode (R4.1's own 'verified by' clause: a loader test over the " +
+				"new format proves format.md's documented shape round-trips)",
+		)
+	}
+}
+
 // addUnknownField copies src to dst, adding one top-level field the
 // destination type does not declare — proving Load's
 // DisallowUnknownFields actually rejects an added field, not merely that
