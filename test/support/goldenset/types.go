@@ -345,3 +345,75 @@ func (e *LLMExample) Validate() error {
 	}
 	return nil
 }
+
+// ConsolidationExample is one case of testdata/consolidation/'s golden set
+// (spec R4.1-R4.5, design §8.2): a capture script that builds this case's
+// own corpus by driving brain.CaptureService.Capture (design D6), the
+// single injected "now" the consolidation pass runs at, an optional
+// last_run_at, and the expected archive/connect/derive effects. See
+// testdata/consolidation/format.md for the full field-by-field contract.
+type ConsolidationExample struct {
+	ID            string                 `json:"id"`
+	CaptureScript []ConsolidationCapture `json:"capture_script"`
+	Now           string                 `json:"now"`
+	LastRunAt     *string                `json:"last_run_at,omitempty"`
+	Expected      ConsolidationExpected  `json:"expected"`
+}
+
+// Validate implements Validator: id, capture_script (at least 1 entry,
+// each itself validated), and now are required.
+func (e *ConsolidationExample) Validate() error {
+	if e.ID == "" {
+		return fmt.Errorf("id is required and must not be empty")
+	}
+	if len(e.CaptureScript) == 0 {
+		return fmt.Errorf("capture_script is required and must have at least 1 entry")
+	}
+	for i, c := range e.CaptureScript {
+		if err := c.Validate(); err != nil {
+			return fmt.Errorf("capture_script[%d]: %w", i, err)
+		}
+	}
+	if e.Now == "" {
+		return fmt.Errorf("now is required and must not be empty")
+	}
+	return nil
+}
+
+// ConsolidationCapture is one capture_script entry: the offset from a
+// simulated t0, the raw message text, and the testdata/llm/ case id the
+// scripted fake provider replays for this capture's classify call (design
+// D7's selection-by-id, never by prompt content).
+type ConsolidationCapture struct {
+	Offset    string `json:"offset"`
+	Text      string `json:"text"`
+	LLMCaseID string `json:"llm_case_id"`
+}
+
+// Validate implements the per-capture half of ConsolidationExample.Validate.
+func (c ConsolidationCapture) Validate() error {
+	if c.Offset == "" {
+		return fmt.Errorf("offset is required and must not be empty")
+	}
+	if c.Text == "" {
+		return fmt.Errorf("text is required and must not be empty")
+	}
+	if c.LLMCaseID == "" {
+		return fmt.Errorf("llm_case_id is required and must not be empty")
+	}
+	return nil
+}
+
+// ConsolidationExpected is the archive/connect/derive effects a
+// ConsolidationExample's pass must produce (spec R4.4/R4.5), each naming
+// capture_script indices rather than unit IDs — a captured unit's ID does
+// not exist until CaptureService.Capture runs (design D6, format.md's own
+// "Why indices, not unit IDs" section). All three fields are optional per
+// case, and none is cross-validated against capture_script's own length
+// here (format.md's cross-field constraint, documented not mechanized, the
+// same posture testdata/recall/format.md's own cross-field section takes).
+type ConsolidationExpected struct {
+	Archived         []int    `json:"archived,omitempty"`
+	RelationsCreated [][2]int `json:"relations_created,omitempty"`
+	Beliefs          []int    `json:"beliefs,omitempty"`
+}
