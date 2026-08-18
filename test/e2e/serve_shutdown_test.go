@@ -12,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -239,7 +240,8 @@ func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *si
 // is still correct and required for a wedged or non-ctx-aware provider
 // call, a case this project's own real clients do not reach.
 func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
-	// Safe to parallelize (JD-7-03): each of the three TestServe_SIGTERM_*
+	// Safe to parallelize (JD-7-03, widened to four by JD-7-05): each of
+	// the four TestServe_SIGTERM_*
 	// tests gets its own t.TempDir() home/work/vault, its own freePort(t)
 	// port, and its own mockConsolidateLLM/blockingConsolidateLLM server —
 	// verified by reading sigtermMidPass and every helper it calls; none
@@ -248,7 +250,7 @@ func TestServe_SIGTERM_PassInFlight_ExitsWithinGrace(t *testing.T) {
 	// risk is freePort's own already-documented TOCTOU window between
 	// closing the probe listener and the child process binding it — a
 	// pre-existing, disclosed tradeoff for the whole package, not something
-	// this parallelization introduces or worsens beyond running three
+	// this parallelization introduces or worsens beyond running four
 	// freePort calls closer together in time instead of the whole suite's.
 	t.Parallel()
 	f := sigtermMidPass(t, nil)
@@ -343,7 +345,7 @@ func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
 // buffer regardless, so the caller could send SIGTERM before the server
 // had genuinely started reading, and server.Shutdown could then treat the
 // connection as not-yet-active — checked directly with a standalone probe
-// (disclosed in this round's tasks.md entry): against a listener whose
+// (recorded in tasks.md's JD-7-04 entry): against a listener whose
 // Accept() was held back 2s to model exactly that window, an 11-byte write
 // like the one this function used to send returned in ~79µs — proving
 // nothing about server progress — while a write sized past any plausible
@@ -354,7 +356,17 @@ func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
 // Darwin's net.inet.tcp.recvspace/autorcvbufmax both cap in the low
 // single-digit megabytes without deliberate sysctl tuning for long-fat WAN
 // links, which a loopback test has no reason to carry, so 16MiB clears any
-// of those defaults with comfortable margin. The filler bytes stay inside
+// of those defaults with comfortable margin.
+//
+// That reasoning covers Linux and Darwin and NOT Windows, which is why the
+// caller skips there (JD-7-04's own escalation). Windows' TCP receive
+// window auto-tunes upward on its own, and over a near-zero-RTT loopback
+// connection it can grow well past the figures above without the server
+// process reading a byte — so on that platform a completed 16MiB write
+// would prove nothing, silently restoring the false positive this
+// rendezvous exists to remove. The premise was never measured on a Windows
+// runner, so the test does not run there rather than running on an
+// assumption nobody checked. The filler bytes stay inside
 // the request's still-open, unterminated JSON string value (never an
 // unescaped `"` or `\`), so json.Decoder never gets a reason to stop asking
 // for more — the only reader of this connection's body is captureHandler's
@@ -476,6 +488,19 @@ func openStuckCaptureConn(t *testing.T, port int) net.Conn {
 // comment (JD-7-03): its own home/work/vault/port/servers, nothing shared
 // beyond the already-documented freePort TOCTOU window.
 func TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler(t *testing.T) {
+	// Skipped on Windows, deliberately and with the reason stated rather
+	// than left to chance: openStuckCaptureConn's rendezvous is sound only
+	// while a 16MiB write cannot complete without the server draining it,
+	// and that premise was measured on Linux and Darwin only. Windows'
+	// auto-tuning receive window can plausibly absorb it over loopback, and
+	// a test whose premise may be false on a platform either flakes there
+	// or passes without proving anything — both worse than not running.
+	// The other three TestServe_SIGTERM_* tests carry no such premise and
+	// still cover shutdown on Windows. Reopen this once the premise is
+	// measured on a Windows runner.
+	if runtime.GOOS == "windows" {
+		t.Skip("openStuckCaptureConn's 16MiB rendezvous premise is unmeasured on Windows — see its doc comment")
+	}
 	t.Parallel()
 	var stuck net.Conn
 	f := sigtermMidPass(t, func(t *testing.T, port int) {

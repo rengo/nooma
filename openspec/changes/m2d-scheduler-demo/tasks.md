@@ -1431,6 +1431,42 @@ Three confirmed findings, all fixed in this same branch.**
   adding one further ~131s run on top of the other three's shared window. All tests green, no
   failure, no flake observed across the runs in this round.
 
+  **JD-7-04 — the rendezvous, and its measured basis**: `openStuckCaptureConn` used to dial, write
+  an 11-byte partial body, and return. `conn.Write` returns as soon as the OS ACKs bytes into the
+  connection's kernel receive buffer, which happens the instant the TCP handshake completes — before
+  the server process has necessarily called `Accept()` or `Read()`. The caller then sent `SIGTERM`
+  immediately, so `server.Shutdown` could see no active connection, return `nil`, and fail the
+  test's own non-nil assertion on unlucky timing. Every other blocking wait in that file uses an
+  explicit rendezvous; this one did not.
+
+  Measured with a standalone ~15-line probe outside the e2e harness, against a listener whose
+  `Accept()` was deliberately held back 2s to model exactly that window: an 11-byte write returned
+  in **~79µs** (proving nothing about server-side progress), while a write sized past any plausible
+  passive receive buffer completed only after **~3.9s** — i.e. only once something was actively
+  draining the connection throughout. `stuckConnBodyFillerBytes` is 16MiB on that basis: Linux's
+  `tcp_rmem` and Darwin's `net.inet.tcp.recvspace`/`autorcvbufmax` both cap in the low single-digit
+  megabytes absent deliberate long-fat-WAN sysctl tuning, which a loopback test has no reason to
+  carry.
+
+  **That basis covers Linux and Darwin only.** Judgment Day round 2 escalated the gap (both judges):
+  `.github/workflows/main.yml`'s `e2e-windows` job runs this same file on `windows-latest`, and
+  Windows' auto-tuning TCP receive window can grow past those figures over a near-zero-RTT loopback
+  connection without the server reading — which would restore the exact false completion the
+  rendezvous exists to remove. Resolved by **skipping `TestServe_SIGTERM_ShutdownErrorStillJoins
+  Scheduler` on Windows with the reason stated in the test itself**, rather than running it on an
+  unmeasured premise: a test whose premise may be false either flakes or passes vacuously, and both
+  are worse than not running. The other three `TestServe_SIGTERM_*` tests carry no such premise and
+  still cover shutdown on Windows. Reopen once the premise is measured on a Windows runner.
+
+  **JD-7-06 — a doc comment claimed a red that never happened**: `TestServe_SIGTERM_ShutdownError
+  StillJoinsScheduler`'s comment opened "What this test genuinely proves, run red against the
+  unfixed shape above and green against the fix". Against the pre-fix shape the test **passed** —
+  none of its assertions discriminate, which the same file already conceded two paragraphs below and
+  again for the sibling `PassInFlight` test. Corrected to state that it already passes against the
+  unfixed shape and is therefore not a red-to-green regression test for the join itself, while
+  keeping what it does prove: a fix that made the join unconditional but deadlocked against an
+  already-timed-out `server.Shutdown` would fail it via `waitForExit`'s bound.
+
   **Corrected in the JD-7-05 round (this reasoning was wrong)**: the sequential placement above was
   justified as "it carries its own additional `shutdownGrace` stall on top of the shared
   `BootConsolidationDelay` wait, so it does not compress the same way" — but parallel wall clock is
@@ -1443,8 +1479,10 @@ Three confirmed findings, all fixed in this same branch.**
 
   **Measured after JD-7-05** (`go test -tags e2e -count=1 ./test/e2e/...`, run twice to check the
   newly-parallelised group for flakes): **137.771s** and **135.900s** — both green, 1.9s apart, no
-  flake. Against the **364.324s** original baseline that is a **62.6% reduction**; against the
-  **256.988s** figure the JD-7-03 round left, a further **~121s**. The result lands on the predicted
+  flake. Against the **364.324s** original baseline that is a **62.18%** reduction for the 137.771s
+  run and **62.70%** for the 135.900s one; against the **256.988s** figure the JD-7-03 round left,
+  a further **119.217s** and **121.088s** respectively. (An earlier revision of this paragraph gave
+  a single "62.6%" that matched neither run — corrected here rather than left to be rediscovered.) The result lands on the predicted
   bound: a parallel group's wall clock is its longest member (`TestServe_SIGTERM_
   ShutdownErrorStillJoinsScheduler`, ~131s), not the sum of its members. Measured with `-count=1`
   because `go test`'s cache does not observe `cmd/nooma` changes (recorded separately as a
@@ -1459,7 +1497,10 @@ Three confirmed findings, all fixed in this same branch.**
 TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler -v ./test/e2e/...` → red (`PROBE marker present:
 false`) against the pre-fix shape, green (`PROBE marker present: true`, reproduced twice) against
 the fix, temporary probe reverted, diff clean. `go test -tags e2e -count=1 ./test/e2e/...` →
-green, 256.988s (was 364.324s). `make check-all` → green end to end; `internal/core` coverage floor
+green, **137.771s and 135.900s** after JD-7-05 parallelised the fourth test (was 256.988s after the
+JD-7-03 round, 364.324s before it). This line previously still carried the stale 256.988s figure
+while the paragraph above already reported the corrected one — flagged by Judgment Day round 2 and
+propagated here. `make check-all` → green end to end; `internal/core` coverage floor
 unchanged at 750/750 (100%) — this round adds no `internal/core` code. `make lint` → `0 issues.`
 
 ---
