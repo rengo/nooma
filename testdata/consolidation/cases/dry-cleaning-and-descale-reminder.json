@@ -1,0 +1,19 @@
+{
+  "id": "dry-cleaning-and-descale-reminder",
+  "capture_script": [
+    {
+      "offset": "0h",
+      "text": "Remind me to buy descaling solution tomorrow",
+      "llm_case_id": "classify-remind-me-tomorrow"
+    },
+    {
+      "offset": "24h",
+      "text": "Pick up the dry cleaning on Friday",
+      "llm_case_id": "classify-pick-up-dry-cleaning"
+    }
+  ],
+  "now": "2026-05-01T09:00:00Z",
+  "expected": {
+    "archived": [0, 1]
+  }
+}
