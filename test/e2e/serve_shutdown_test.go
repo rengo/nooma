@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -333,6 +334,37 @@ func TestServe_SIGTERM_FollowUpRunCompletesFreshPass(t *testing.T) {
 // return a non-nil context error, the exact branch JD-7-01 is about. No
 // invented fake or mock — a real socket, a real half-written HTTP/1.1
 // request, read by the real captureHandler.
+//
+// JD-7-04's rendezvous: conn.Write returning proves only that the client
+// wrote — the OS accepts and ACKs bytes into a connection's kernel-level
+// receive buffer the instant the TCP handshake completes, entirely
+// independent of whether the server process has even called Accept() or
+// Read() yet. A handful of small body bytes fits inside that passive
+// buffer regardless, so the caller could send SIGTERM before the server
+// had genuinely started reading, and server.Shutdown could then treat the
+// connection as not-yet-active — checked directly with a standalone probe
+// (disclosed in this round's tasks.md entry): against a listener whose
+// Accept() was held back 2s to model exactly that window, an 11-byte write
+// like the one this function used to send returned in ~79µs — proving
+// nothing about server progress — while a write sized past any plausible
+// passive kernel receive buffer only completed after ~3.9s, i.e. only once
+// something was actively draining the connection throughout the transfer.
+//
+// stuckConnBodyFillerBytes is sized on that basis: Linux's tcp_rmem and
+// Darwin's net.inet.tcp.recvspace/autorcvbufmax both cap in the low
+// single-digit megabytes without deliberate sysctl tuning for long-fat WAN
+// links, which a loopback test has no reason to carry, so 16MiB clears any
+// of those defaults with comfortable margin. The filler bytes stay inside
+// the request's still-open, unterminated JSON string value (never an
+// unescaped `"` or `\`), so json.Decoder never gets a reason to stop asking
+// for more — the only reader of this connection's body is captureHandler's
+// decoder, so a full, on-time write of stuckConnBodyFillerBytes can only
+// happen if that decoder is actively looping Read calls against this exact
+// connection. That is genuine server-side progress, not merely proof the
+// client wrote. Per this file's own bounded-wait invariant, a write that
+// cannot complete within waitBudget — because the server never started
+// reading — fails the test legibly instead of racing SIGTERM against an
+// unproven assumption.
 func openStuckCaptureConn(t *testing.T, port int) net.Conn {
 	t.Helper()
 
@@ -342,12 +374,34 @@ func openStuckCaptureConn(t *testing.T, port int) net.Conn {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	// Content-Length: 4096 promises 4096 body bytes; only `{"text":"x"` (11
-	// bytes, not even valid JSON on its own) is ever sent. The decoder
-	// cannot resolve a complete token from that alone, so it keeps reading.
-	req := fmt.Sprintf("POST /capture HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n%s", port, `{"text":"x"`)
-	if _, err := conn.Write([]byte(req)); err != nil {
-		t.Fatalf("writing the stuck request's headers and partial body: %v", err)
+	// stuckConnBodyFillerBytes is sized to exceed any passive kernel
+	// receive buffer — see the doc comment above for the full reasoning
+	// and the standalone probe that checked it.
+	const stuckConnBodyFillerBytes = 16 * 1024 * 1024 // 16MiB
+
+	// Content-Length promises far more than header+filler ever delivers, so
+	// captureHandler's decoder is left wanting more forever, exactly like
+	// the request this fixture models.
+	contentLength := stuckConnBodyFillerBytes + 4096
+	header := fmt.Sprintf("POST /capture HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s", port, contentLength, `{"text":"`)
+	if _, err := conn.Write([]byte(header)); err != nil {
+		t.Fatalf("writing the stuck request's headers: %v", err)
+	}
+
+	// The rendezvous write itself — see the doc comment above for what its
+	// completion proves. Bounded by waitBudget, this file's own invariant
+	// for every blocking wait, so a server that never starts reading fails
+	// this test with a clear message instead of racing SIGTERM regardless.
+	filler := bytes.Repeat([]byte("x"), stuckConnBodyFillerBytes)
+	if err := conn.SetWriteDeadline(time.Now().Add(waitBudget)); err != nil {
+		t.Fatalf("setting the rendezvous write's deadline: %v", err)
+	}
+	n, err := conn.Write(filler)
+	if err != nil || n != len(filler) {
+		t.Fatalf("rendezvous write did not complete within %s (wrote %d/%d filler bytes, err: %v) — captureHandler never demonstrably began reading this connection's body", waitBudget, n, len(filler), err)
+	}
+	if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+		t.Fatalf("clearing the connection's write deadline: %v", err)
 	}
 	return conn
 }
@@ -368,14 +422,19 @@ func openStuckCaptureConn(t *testing.T, port int) net.Conn {
 // unconditionally, and the captured Shutdown error is returned only after
 // the join.
 //
-// What this test genuinely proves, run red against the unfixed shape above
-// and green against the fix: server.Shutdown really can be driven into
-// returning a non-nil error by a real, unmodified client (no invented
-// fake) — openStuckCaptureConn is that client — and the process still
-// exits, with that same error propagated as a non-zero status, instead of
-// hanging. That second half is real coverage: a fix that made the join
-// unconditional but introduced a deadlock between it and an already-timed-
-// out server.Shutdown would fail this test via waitForExit's own bound.
+// What this test genuinely proves — checked directly, not assumed: against
+// the unfixed shape above, this test already PASSES (the early return still
+// propagates server.Shutdown's own error as a non-zero exit, join or no
+// join), so it is not a red-to-green regression test for the fix itself —
+// see the further disclosure below for the identical limitation on
+// sched.Wait's own reachability. What it does prove: server.Shutdown really
+// can be driven into returning a non-nil error by a real, unmodified client
+// (no invented fake) — openStuckCaptureConn is that client — and the
+// process still exits, with that same error propagated as a non-zero
+// status, instead of hanging. That is real coverage regardless: a fix that
+// made the join unconditional but introduced a deadlock between it and an
+// already-timed-out server.Shutdown would fail this test via waitForExit's
+// own bound.
 //
 // What this test does NOT prove, disclosed after actually trying: that
 // sched.Wait's statement itself executed on this branch. The
@@ -407,11 +466,17 @@ func openStuckCaptureConn(t *testing.T, port int) net.Conn {
 // (`git diff --exit-code cmd/nooma/serve.go` clean afterward). See this
 // correction round's own tasks.md entry for the exact commands and output.
 //
-// Not parallelized with the other three SIGTERM tests: it shares their
-// ~2-minute BootConsolidationDelay wait plus its own ~shutdownGrace stall
-// on the stuck connection, so it does not compress the same way — see the
-// PR 7 correction round's tasks.md entry for the measured total.
+// Parallelized with the other three SIGTERM tests (JD-7-05, correcting
+// JD-7-03's own comment here): wall clock for a group of concurrent tests is
+// bounded by their max, not their sum, so this test's own extra
+// shutdownGrace stall on top of the shared BootConsolidationDelay wait does
+// not cost the suite anything by running alongside the other three — it
+// only changes which test happens to be the group's longest pole. Isolation
+// is checked in TestServe_SIGTERM_PassInFlight_ExitsWithinGrace's own
+// comment (JD-7-03): its own home/work/vault/port/servers, nothing shared
+// beyond the already-documented freePort TOCTOU window.
 func TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler(t *testing.T) {
+	t.Parallel()
 	var stuck net.Conn
 	f := sigtermMidPass(t, func(t *testing.T, port int) {
 		stuck = openStuckCaptureConn(t, port)
