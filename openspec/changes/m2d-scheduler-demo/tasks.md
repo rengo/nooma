@@ -1424,13 +1424,31 @@ Three confirmed findings, all fixed in this same branch.**
     call's own `t.TempDir()`.
   All three passed this check; none were left sequential.
 
-  **Measured after the fix**: `go test -tags e2e -count=1 ./test/e2e/...` → **256.988s**, down from
-  the 364.324s baseline (a 107.336s / ~29.5% reduction) — smaller than a naive "360s → 120s"
-  estimate because this same correction round's `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler`
-  (JD-7-01) adds one further sequential ~131s run (deliberately not parallelized with the other
-  three — it carries its own additional `shutdownGrace` stall on top of the shared
-  `BootConsolidationDelay` wait, so it does not compress the same way; see that test's own doc
-  comment). All tests green, no failure, no flake observed across the runs in this round.
+  **Measured after this fix (JD-7-03 round)**: `go test -tags e2e -count=1 ./test/e2e/...` →
+  **256.988s**, down from the 364.324s baseline (a 107.336s / ~29.5% reduction) — smaller than a
+  naive "360s → 120s" estimate because this same correction round's
+  `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler` (JD-7-01) was left sequential at the time,
+  adding one further ~131s run on top of the other three's shared window. All tests green, no
+  failure, no flake observed across the runs in this round.
+
+  **Corrected in the JD-7-05 round (this reasoning was wrong)**: the sequential placement above was
+  justified as "it carries its own additional `shutdownGrace` stall on top of the shared
+  `BootConsolidationDelay` wait, so it does not compress the same way" — but parallel wall clock is
+  bounded by the group's **max**, not the **sum** of its members. Adding a fourth ~131s test to a
+  parallel group whose longest member is otherwise ~126s only raises the group's bound to ~131s; it
+  was the sequential placement itself that added the extra ~131s on top, discarding roughly half of
+  this reduction. `t.Parallel()` was added to
+  `TestServe_SIGTERM_ShutdownErrorStillJoinsScheduler` and both this entry and the test's own doc
+  comment were corrected to state the right reasoning. Re-measured below.
+
+  **Measured after JD-7-05** (`go test -tags e2e -count=1 ./test/e2e/...`, run twice to check the
+  newly-parallelised group for flakes): **137.771s** and **135.900s** — both green, 1.9s apart, no
+  flake. Against the **364.324s** original baseline that is a **62.6% reduction**; against the
+  **256.988s** figure the JD-7-03 round left, a further **~121s**. The result lands on the predicted
+  bound: a parallel group's wall clock is its longest member (`TestServe_SIGTERM_
+  ShutdownErrorStillJoinsScheduler`, ~131s), not the sum of its members. Measured with `-count=1`
+  because `go test`'s cache does not observe `cmd/nooma` changes (recorded separately as a
+  harness-level finding, out of this link's scope).
 
   **Rollback boundary**: `Makefile`'s `test-e2e` target and `.github/workflows/main.yml`'s two `run:`
   lines (the `-timeout 20m` additions) are independently revertible from the three `t.Parallel()`
