@@ -1,10 +1,10 @@
 {
-  "id": "dry-cleaning-and-descale-reminder",
+  "id": "dry-cleaning-and-ambiguous-contract-request",
   "capture_script": [
     {
       "offset": "0h",
-      "text": "Remind me to buy descaling solution tomorrow",
-      "llm_case_id": "classify-remind-me-tomorrow"
+      "text": "Ana asked me to send her the contract",
+      "llm_case_id": "classify-person-ref-ambiguous-ana"
     },
     {
       "offset": "24h",
