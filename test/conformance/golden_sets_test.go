@@ -19,15 +19,15 @@ import (
 // NOT).
 var goldenSetDirs = []string{"recall", "classify", "llm", "consolidation"}
 
-// TestHarness_GoldenSetFormatsDeclared proves testdata/{recall,classify,llm}/
-// exist and each carries a documented, machine-checkable format (spec
-// R10.1/R10.2/R10.4): a format.md with a valid fenced JSON shape, a
-// format_example.json sibling of cases/ (never inside it), and an empty
-// cases/ directory.
+// TestHarness_GoldenSetFormatsDeclared proves every directory in
+// goldenSetDirs exists and each carries a documented, machine-checkable
+// format (spec R10.1/R10.2/R10.4, R4.1): a format.md with a valid fenced
+// JSON shape, a format_example.json sibling of cases/ (never inside it),
+// and cases/ matching casesDirMustBeEmpty's rule for that directory.
 //
-// Design D10's guard: it asserts it found all three directories before
-// asserting anything about their content, so a renamed or moved directory
-// fails this test loudly instead of the per-directory subtests silently
+// Design D10's guard: it asserts it found every directory before asserting
+// anything about their content, so a renamed or moved directory fails this
+// test loudly instead of the per-directory subtests silently
 // iterating zero directories and reporting green.
 func TestHarness_GoldenSetFormatsDeclared(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
