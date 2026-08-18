@@ -357,11 +357,26 @@ type ConsolidationExample struct {
 	CaptureScript []ConsolidationCapture `json:"capture_script"`
 	Now           string                 `json:"now"`
 	LastRunAt     *string                `json:"last_run_at,omitempty"`
-	Expected      ConsolidationExpected  `json:"expected"`
+
+	// Expected is a pointer, not a plain ConsolidationExpected, specifically
+	// so a document missing the "expected" key entirely can be told apart
+	// from one that spells it out as an explicit, legitimately empty
+	// `"expected": {}` (format.md's own "Checked" section, four-lens pre-PR
+	// review JD-8-01) — the same absent-vs-zero-value problem
+	// ClassifyExpected.Weight/DecayRate and this struct's own LastRunAt
+	// above already solve with a pointer. With a plain struct, both shapes
+	// decode to the same Go zero value and Validate below could not reject
+	// only the first: a case asserting "nothing should happen" (an
+	// explicit, empty `expected: {}`) must stay valid — a scheduler needs
+	// to be able to express exactly that — while a case that never mentions
+	// `expected` at all is the actual defect this field's absence-check
+	// below catches.
+	Expected *ConsolidationExpected `json:"expected"`
 }
 
 // Validate implements Validator: id, capture_script (at least 1 entry,
-// each itself validated), and now are required.
+// each itself validated), now, and expected (present, possibly empty) are
+// required.
 func (e *ConsolidationExample) Validate() error {
 	if e.ID == "" {
 		return fmt.Errorf("id is required and must not be empty")
@@ -376,6 +391,9 @@ func (e *ConsolidationExample) Validate() error {
 	}
 	if e.Now == "" {
 		return fmt.Errorf("now is required and must not be empty")
+	}
+	if e.Expected == nil {
+		return fmt.Errorf("expected is required (present, possibly as an explicit empty object {}), got neither")
 	}
 	return nil
 }

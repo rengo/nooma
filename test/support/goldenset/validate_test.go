@@ -61,6 +61,12 @@ func TestDecodeStrict_EnforcesRequiredFields(t *testing.T) {
 			newValue: func() any { return &LLMExample{} },
 			wantErr:  "exactly one of response or error",
 		},
+		{
+			name:     "consolidation: an absent expected key is rejected, not silently treated as {}",
+			data:     `{"id":"x","capture_script":[{"offset":"0h","text":"t","llm_case_id":"c"}],"now":"2026-01-01T00:00:00Z"}`,
+			newValue: func() any { return &ConsolidationExample{} },
+			wantErr:  "expected is required",
+		},
 	}
 
 	for _, tt := range tests {
@@ -74,6 +80,27 @@ func TestDecodeStrict_EnforcesRequiredFields(t *testing.T) {
 				t.Fatalf("DecodeStrict(%s) error = %q, want it to contain %q", tt.data, err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestDecodeStrict_ConsolidationExpectedEmptyObjectStaysValid proves the
+// other half of JD-8-01's ruling: ConsolidationExample.Expected becoming a
+// pointer must reject an ABSENT "expected" key (the test above) without
+// also rejecting an explicit, legitimately empty `"expected": {}` — a case
+// asserting "nothing should happen" against this pass is a real scenario a
+// scheduler needs to express (owner ruling, four-lens pre-PR review
+// JD-8-01), not a defect to catch alongside the missing-key case.
+func TestDecodeStrict_ConsolidationExpectedEmptyObjectStaysValid(t *testing.T) {
+	data := `{"id":"x","capture_script":[{"offset":"0h","text":"t","llm_case_id":"c"}],"now":"2026-01-01T00:00:00Z","expected":{}}`
+	var ex ConsolidationExample
+	if err := DecodeStrict([]byte(data), &ex); err != nil {
+		t.Fatalf("DecodeStrict(%s) = %v, want success — an explicit empty expected:{} must remain valid", data, err)
+	}
+	if ex.Expected == nil {
+		t.Fatal("Expected is nil after decoding an explicit expected:{} — want a non-nil pointer to a zero-value ConsolidationExpected")
+	}
+	if len(ex.Expected.Archived) != 0 || len(ex.Expected.RelationsCreated) != 0 || len(ex.Expected.Beliefs) != 0 {
+		t.Errorf("Expected = %+v, want all three fields empty", ex.Expected)
 	}
 }
 
