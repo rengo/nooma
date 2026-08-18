@@ -10,10 +10,22 @@
       "offset": "24h",
       "text": "Pick up the dry cleaning on Friday",
       "llm_case_id": "classify-pick-up-dry-cleaning"
+    },
+    {
+      "offset": "235h",
+      "text": "Draft the agenda for the team meeting",
+      "llm_case_id": "classify-prepare-meeting-agenda"
+    },
+    {
+      "offset": "239h",
+      "text": "Schedule the team meeting for Monday",
+      "llm_case_id": "classify-schedule-team-meeting"
     }
   ],
-  "now": "2026-05-01T09:00:00Z",
+  "now": "2026-02-11T09:00:00Z",
+  "last_run_at": "2026-02-11T06:00:00Z",
   "expected": {
-    "archived": [0, 1]
+    "archived": [0, 1],
+    "beliefs": [3]
   }
 }

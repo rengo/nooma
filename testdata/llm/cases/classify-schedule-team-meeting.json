@@ -1,0 +1,8 @@
+{
+  "id": "classify-schedule-team-meeting",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "Schedule the team meeting for Monday",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Schedule the team meeting for Monday\",\"weight\":0.65,\"decay_rate\":0.05}"
+}
