@@ -40,6 +40,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      # make test-e2e itself passes -timeout 20m (JD-7-03) — see the
+      # Makefile's own comment on that target for why the ceiling exists.
       - run: make test-e2e
 
   # L4 on Windows: the real binary, run as a subprocess, on the platform
@@ -56,7 +58,12 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go test -tags e2e ./test/e2e/...
+      # -timeout 20m: an explicit ceiling, not Go's implicit 600s per-package
+      # default (JD-7-03) — kept in sync with the Makefile's own test-e2e
+      # target by hand, per this job's own comment above. Driven by the
+      # three TestServe_SIGTERM_* tests, each waiting on
+      # scheduler.BootConsolidationDelay (120s).
+      - run: go test -tags e2e -timeout 20m ./test/e2e/...
 
   cross-compile:
     name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}
