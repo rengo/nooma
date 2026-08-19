@@ -2209,43 +2209,43 @@ Depends on PR 9a. Ships R4.5's own bar — `decision_log` alone tells the story 
 
 ## X — Chain-wide verifications (only make sense once every link is in)
 
-- [ ] **X.1** Confirm `docs/06-harness.md` needed no change across all eleven links — `m2d` adds no
+- [x] **X.1** Confirm `docs/06-harness.md` needed no change across all eleven links — `m2d` adds no
       new invariant number (no `I`-prefixed row), unlike `m2c`. `git diff main~11..main --
       docs/06-harness.md` (or the equivalent range once the two undrawn checkpoints, 8.10/9a.9, are
       accounted for) is empty.
       Requirement: design §1 (no new invariant claimed anywhere in spec/design).
-- [ ] **X.2** Confirm `internal/core` gained exactly the one file's worth of new code the chain
+- [x] **X.2** Confirm `internal/core` gained exactly the one file's worth of new code the chain
       claims — `internal/core/consolidation/schedule.go` plus its own test — and no other
       `internal/core` file is touched anywhere in the chain. `git diff <base>..<tip> --
       internal/core/` names only those two files.
       Requirement: design §4.
-- [ ] **X.3** Confirm `docs/02-cognitive-core.md` §13 grew by exactly one row (`catch_up_staleness_
+- [x] **X.3** Confirm `docs/02-cognitive-core.md` §13 grew by exactly one row (`catch_up_staleness_
       hours`, PR 1) and exactly two existing rows were amended in place, not replaced
       (`boot_consolidation_delay` → names `BootConsolidationDelay`; the "03:00 daily" cadence row →
       names `ConsolidationHour`, both PR 4). `calibration_doc_test.go`'s symbol floor moves by
       exactly one new `internal/core` symbol; nothing scheduler-side is gated.
       Requirement: spec R0.3; design §3.2.
-- [ ] **X.4** Confirm `docs/02-cognitive-core.md` §6 gained exactly the one `consolidation_enabled`
+- [x] **X.4** Confirm `docs/02-cognitive-core.md` §6 gained exactly the one `consolidation_enabled`
       sentence, landing in PR 4's own commit range — not PR 1's, correcting design §13's own
       mis-scoped table entry per this document's opening note.
       Requirement: spec R0.3; design §3.3.
-- [ ] **X.5** Confirm `TriggerStalenessHours`/`TimerStalenessHours` were never defined anywhere in
+- [x] **X.5** Confirm `TriggerStalenessHours`/`TimerStalenessHours` were never defined anywhere in
       the chain: `rg 'TriggerStalenessHours|TimerStalenessHours' internal/` returns nothing.
       Requirement: owner ruling round 2, Q3.
-- [ ] **X.6** Confirm `.golangci.yml`'s `scheduler-boundary` rule is exercised for real by the time
+- [x] **X.6** Confirm `.golangci.yml`'s `scheduler-boundary` rule is exercised for real by the time
       the chain closes, not merely vacuously as it was at PR 2: `golangci-lint run` passes with the
       rule active against the finished `internal/scheduler` package, which by PR 9b's own merge
       legitimately imports `internal/brain`, `internal/ports`, and `internal/core/consolidation`.
       Requirement: spec R0.1; design §7.
-- [ ] **X.7** Confirm the boundary scan's leg 2 (all three core symbols referenced) is genuinely
+- [x] **X.7** Confirm the boundary scan's leg 2 (all three core symbols referenced) is genuinely
       live by the chain's end: `CatchUpDue`, `ResolveConsolidationEnabled`, and `NextDailyRun` each
       have ≥1 non-test reference under `internal/scheduler`.
       Requirement: design §3.1 item 4.
-- [ ] **X.8** `make check-all` green end to end on the tip of the chain: L1–L4, `internal/core`
+- [x] **X.8** `make check-all` green end to end on the tip of the chain: L1–L4, `internal/core`
       coverage floor, the seven-target cross-compile matrix (ADR-0013). The schema-golden
       regen-diff check is **N/A** for this whole chain — `m2d` adds no migration (design §11).
       Requirement: `docs/06-harness.md` §9 (the full local gate).
-- [ ] **X.9** Confirm the umbrella proposal's own M2 success criteria and `docs/05-build-plan.md`'s
+- [x] **X.9** Confirm the umbrella proposal's own M2 success criteria and `docs/05-build-plan.md`'s
       M2 demo bullet are both checked off, dated, and reference PR 9b's own merge — R4.6's discharge,
       restated as the chain's own closing fact rather than assumed.
       Requirement: spec R4.6.
@@ -2347,3 +2347,40 @@ one.
 `m2d`'s exit criterion is link 9b: `docs/05-build-plan.md` §M2's demo bullet and the umbrella
 proposal's final success criterion are checked off there and nowhere later (R4.6, task 9b.3).
 
+---
+
+## X — results (verified 2026-08-19 at `074033a`, orchestrator, directly)
+
+- **X.1** `git diff main~11..main -- docs/06-harness.md` — empty. Eleven links, no harness change,
+  no new `I`-prefixed invariant row, as design §1 claimed.
+- **X.2** `git diff main~11..main -- internal/core/` names exactly two files:
+  `internal/core/consolidation/schedule.go` and its own `schedule_test.go`. Nothing else under
+  `internal/core` was touched anywhere in the chain.
+- **X.3** doc 02 §13 gained exactly one row (`catch_up_staleness_hours`, PR 1's `8522f0e`) and two
+  existing rows were amended **in place** — the diff shows `-`/`+` pairs, not replacements: the
+  "03:00 daily" cadence row now names `internal/scheduler.ConsolidationHour`, and
+  `boot_consolidation_delay` now names `internal/scheduler.BootConsolidationDelay` (both PR 4's
+  `7a991da`).
+- **X.4** The one `consolidation_enabled` sentence in §6 landed in `7a991da` — PR 4's commit, not
+  PR 1's, correcting design §13's own mis-scoped table entry exactly as this document's opening note
+  required.
+- **X.5** `rg 'TriggerStalenessHours|TimerStalenessHours' internal/` — zero matches. Round-2 owner
+  ruling Q3 held across the whole chain.
+- **X.6** `scheduler-boundary` is live, not vacuous: `internal/scheduler` legitimately imports
+  `internal/brain`, `internal/ports` and `internal/core/consolidation` (`scheduler.go:11-13`,
+  `cron.go:6`, `catchup.go:6`), and `make lint` reports `0 issues.` with the rule active.
+- **X.7** Each of the three core symbols has ≥1 non-test reference under `internal/scheduler`:
+  `CatchUpDue` → `catchup.go`; `ResolveConsolidationEnabled` → `scheduler.go`, `catchup.go`;
+  `NextDailyRun` → `cron.go`. PR 2's leg-2 forward reference is fully discharged.
+- **X.8** `make check-all` green on the tip: `internal/core` coverage 100% (750/750), all seven
+  cross-compile targets OK, e2e 134.2s. Schema-golden regen-diff is **N/A** for this chain — `m2d`
+  adds no migration (design §11).
+- **X.9** Both discharged in `8d2a428`. `docs/05-build-plan.md` §M2's demo bullet carries
+  **"Met on Linux and Windows (2026-08-19, PR #190)"** plus a "what this demo does not cover"
+  paragraph, following M0's and M1's own precedent. The umbrella proposal's §2 criteria were
+  **verified against the code at `074033a`, not inferred from the four sub-changes' closed task
+  lists** — which is how criterion 3 was found not to hold as written (`internal/core/focus` has no
+  production importer; the promised "two queries over one table" do not exist and were never in M2's
+  scope). It was corrected and its remainder assigned to M3 rather than ticked past. Five further
+  criteria are recorded in that proposal's own discharge note as holding more narrowly than their
+  wording implies.

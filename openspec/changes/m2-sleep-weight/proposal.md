@@ -44,34 +44,45 @@ inversion of M1.
 
 The change is done when:
 
-- [ ] `effective_weight` is computed on read from `(weight, weight_decay_rate, last_touched_at,
+- [x] `effective_weight` is computed on read from `(weight, weight_decay_rate, last_touched_at,
       now)` and is never written by a read path (**I05**), while consolidation's optional bulk
       decay materialization — which doc 02 §2 and §6.6 explicitly permit — remains legal.
-- [ ] A revive and a resurface each write `weight` **and** `last_touched_at` together, never one
+- [x] A revive and a resurface each write `weight` **and** `last_touched_at` together, never one
       without the other (**I24**, new — see §6).
-- [ ] Priority ranks the pool, the task focus and the load focus are two queries over one table,
-      and a challenger displaces an incumbent only by beating it by more than `hysteresis_margin`
-      (**I19**).
-- [ ] `status='focus'` is still absent from the tree after focus is built (**I01**) — M2 is the
+- [x] Priority ranks the pool; the task focus and the load focus are two selections over one
+      table's shape — `focus.Select(Kind, …)` twice, not two schemas — and a challenger displaces an
+      incumbent only by beating it by more than `hysteresis_margin` (**I19**).
+      **Corrected and discharged 2026-08-19.** This criterion originally read "are two queries over
+      one table". Verified at `074033a`: the pure layer is complete and heavily tested
+      (`internal/core/focus/{priority,rank,select,hysteresis}.go`, guarded by
+      `test/conformance/i19_hysteresis_margin_test.go` and `i01_focus_never_persisted_test.go`), but
+      **`internal/core/focus` has no production importer** — no `ports.UnitRepo` method returns focus
+      candidates and no `ORDER BY` over `units` exists in `internal/store/sqlite`. The query and its
+      consumer were never in M2's scope: `docs/05-build-plan.md` §M2 scopes this line as "pure
+      functions, HEAVILY tested", and `internal/core/focus/select.go`'s own doc comment says "two
+      `Select` calls with a different `Kind`, not two schemas". The wording promised a query M2 never
+      set out to build. **The query and its caller land in M3**, recorded here rather than implied by
+      a tick.
+- [x] `status='focus'` is still absent from the tree after focus is built (**I01**) — M2 is the
       first change capable of breaking that test.
-- [ ] The eight phases run in the order `expire_incomplete → archive → strengthen → connect →
+- [x] The eight phases run in the order `expire_incomplete → archive → strengthen → connect →
       derive → reweight → pattern_eval → learn`, with `learn` always last (**I11**), and each is
       individually invocable through `nooma consolidate`.
-- [ ] Every phase decision with an effect writes a `decision_log` row from `internal/brain`, never
+- [x] Every phase decision with an effect writes a `decision_log` row from `internal/brain`, never
       from `internal/core` (**I12**), and a phase that decided nothing writes nothing.
-- [ ] `archive` moves a unit `pool → archived` through `SetStatus`, never through a `DELETE`
+- [x] `archive` moves a unit `pool → archived` through `SetStatus`, never through a `DELETE`
       (**I03**), and a concurrent revive that loses the `from` precondition is skipped and logged,
       not treated as a failure.
-- [ ] At startup, a vault whose `consolidation_last_run_at` is more than 24 h old queues a
+- [x] At startup, a vault whose `consolidation_last_run_at` is more than 24 h old queues a
       consolidation with a **120-second delay** (ADR-0009), and one whose value is fresher does
       not.
-- [ ] Every behavioural number M2 introduces is a named constant in exactly one place **and** a row
+- [x] Every behavioural number M2 introduces is a named constant in exactly one place **and** a row
       in `docs/02-cognitive-core.md` §13.
-- [ ] `make check-all` green, and CI green, on every PR in the chain — including the
+- [x] `make check-all` green, and CI green, on every PR in the chain — including the
       `internal/core` coverage floor, which `make check` does not run and which m2a and m2b are
       made almost entirely of.
-- [ ] No test touches the network or a real LLM, and no core test uses the real clock.
-- [ ] **Demo**: a vault seeded with simulated weeks of data, run through `nooma consolidate` —
+- [x] No test touches the network or a real LLM, and no core test uses the real clock.
+- [x] **Demo**: a vault seeded with simulated weeks of data, run through `nooma consolidate` —
       cold things get archived, related things get connected, beliefs get derived, and
       `decision_log` tells the story end to end.
 
@@ -81,6 +92,41 @@ port: *"the M2 demo is 'a vault with simulated weeks of data'. That demo is lite
 without an injected clock."* The harness committed to this shape a milestone in advance.
 
 ---
+
+### Discharge — 2026-08-19, PR #190
+
+M2 closed with the merge of `m2d-scheduler-demo`'s last link (PR #190, `074033a`), the eleventh of
+eleven (#180–#190). Every criterion above was verified against the code at that commit rather than
+inferred from the four sub-changes' own task lists. `make check-all` green, `internal/core` coverage
+100% (750/750), the seven-target cross-compile matrix OK, `golangci-lint` 0 issues, and the `e2e` and
+`e2e (windows)` jobs green on every PR in the chain.
+
+**Five things are true more narrowly than the wording above implies. Recorded, not smoothed over:**
+
+1. **`weight.Revive` has no production caller.** The two-column write is structurally guaranteed for
+   every revive that could occur, and zero revives occur today — `Resurface` is the only producer
+   wired end to end (`reweight` → `persistBoosts` → `ApplyBoosts`).
+2. **The demo runs the service in-process, not the `nooma consolidate` binary.**
+   `TestDemo_DecisionLogTellsTheStory` drives `brain.NewConsolidateService(…).Consolidate(…)`. The CLI
+   path is proven separately by `TestConsolidate_ExitCriterion`, but over a one-capture vault, not
+   simulated weeks. No single test does both.
+3. **The calibration gate is one-directional and core-only.** It checks doc-row → constant, so a new
+   `internal/core` constant with no §13 row fails nothing; and its regex matches only
+   `internal/core/…`, so `internal/scheduler.BootConsolidationDelay` and
+   `internal/scheduler.ConsolidationHour` are unchecked (§13 row 38 says so itself).
+4. **No guard enforces "no test touches the network or a real LLM."** The property holds at
+   `074033a` — verified by inspecting every test's target host, all loopback or `httptest` — but a
+   test dialling a real endpoint would pass CI. The clock half of the same criterion *is* gated, by
+   `forbidigo` plus three conformance scans.
+5. **CI history is a rollup read, not a merge-time record.** `gh pr view` reports #180–#190 all
+   merged with 16/16 checks green today; that no check was made non-required or overridden at merge
+   time is not verifiable after the fact.
+
+**Also carried forward from `m2d`'s own last Judgment Day**: `consolidation.ProposeRelation` trusts
+the judge's `TargetUnitID` without cross-checking it against the candidate the search returned. The
+demo proves connect's search *presented* the expected target; it does not prove the pipeline would
+reject a judge naming a unit the search never offered. Pre-existing, out of `m2d`'s scope, and its
+own future work unit.
 
 ## 3. Scope
 
