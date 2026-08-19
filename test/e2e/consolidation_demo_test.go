@@ -354,7 +354,14 @@ func connectJudgeCase(t *testing.T, dv demoVault, ex goldenset.ConsolidationExam
 // doc comment), and "derive-team-meeting-preference" answers derive's one
 // source with a real belief proposal, which DOES persist (createDerived
 // Belief carries no unit reference to get wrong).
-func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (brain.ConsolidateReport, error) {
+//
+// buildDemoPass is runDemoPass's own construction half, split out (JD-9b-02)
+// so TestDemo_DecisionLogTellsTheStory can also keep passJudge — the Fake
+// that actually receives connect's rendered prompt — and inspect it via
+// SeenPrompts() after the pass runs. runDemoPass below is unchanged in
+// behavior and signature; every other TestDemo_* test keeps calling it
+// exactly as before.
+func buildDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (*brain.ConsolidateService, *fakeprovider.Fake) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -379,7 +386,13 @@ func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) 
 	clock := &steppingClock{now: now}
 	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state)
 
-	return consolidateSvc.Consolidate(ctx, brain.ConsolidateRequest{})
+	return consolidateSvc, passJudge
+}
+
+func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (brain.ConsolidateReport, error) {
+	t.Helper()
+	consolidateSvc, _ := buildDemoPass(t, dv, ex)
+	return consolidateSvc.Consolidate(context.Background(), brain.ConsolidateRequest{})
 }
 
 // TestDemo_SimulatedWeeks_PassCompletes is spec R4.2 (as corrected by design
@@ -501,6 +514,18 @@ const demoDeriveBeliefTopicKey = "team_meeting"
 // one named constant rather than a literal repeated in two places.
 const demoRelationType = "related_to"
 
+// demoConnectTargetContent is testdata/llm/cases/classify-prepare-meeting-
+// agenda.json's own scripted normalized_content — the exact text
+// classify.tounit stores as capture_script[2]'s unit.Content, and therefore
+// the exact text JudgePrompt (internal/brain/capture.go) renders into the
+// connect judge's prompt as that candidate's own line. Distinctive across
+// this corpus's four units (JD-9b-02): "Send Ana the contract", "Pick up
+// the dry cleaning" and "Schedule the team meeting for Monday" — the other
+// three capture_script entries' own normalized_content — share none of this
+// string, so its presence in a rendered prompt can only name capture_script
+// [2], never another unit in this corpus.
+const demoConnectTargetContent = "Draft the team meeting agenda"
+
 // decisionsWithAction filters decisions (already read once via
 // DecisionLog.Since, never re-queried per action) down to one Action —
 // a small local helper so TestDemo_DecisionLogTellsTheStory reads once
@@ -564,11 +589,22 @@ func anyRationaleNames(rows []ports.Decision, substrings ...string) bool {
 // runDemoPass's own connectJudgeCase call for how this PR solves it: a
 // fresh per-run judge case, written to a temp dir, whose target_unit_id is
 // read from dv.unitIDs itself — never a hardcoded guess.
+//
+// This test calls buildDemoPass (runDemoPass's own construction half)
+// rather than runDemoPass itself, solely to keep passJudge — the Fake that
+// receives connect's rendered prompt — for the SeenPrompts check below
+// (JD-9b-02). That check is a SEPARATE proof from everything above: it
+// establishes that connect's real candidate search presented the expected
+// target, not merely that ProposeRelation persisted whatever the fixture's
+// judge answer named. It never substitutes for spec R4.5's own bar, which
+// stays exactly "decision_log (DecisionLog.Since) alone tells the story" —
+// see the Rationale-only checks immediately below.
 func TestDemo_DecisionLogTellsTheStory(t *testing.T) {
 	ex := loadDemoCase(t)
 	dv := driveDemoCorpus(t, ex)
 
-	if _, err := runDemoPass(t, dv, ex); err != nil {
+	consolidateSvc, passJudge := buildDemoPass(t, dv, ex)
+	if _, err := consolidateSvc.Consolidate(context.Background(), brain.ConsolidateRequest{}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
 	}
 
@@ -596,6 +632,33 @@ func TestDemo_DecisionLogTellsTheStory(t *testing.T) {
 	connectRows := decisionsWithAction(decisions, ports.ActionConnectRelationPersisted)
 	if !anyRationaleNames(connectRows, sourceID, targetID) {
 		t.Fatalf("decision_log has no %s row whose Rationale names both unit %s (capture_script[%d]) and unit %s (capture_script[%d]) — spec R4.5's connect clause", ports.ActionConnectRelationPersisted, sourceID, pair[0], targetID, pair[1])
+	}
+
+	// SEPARATE proof, not part of R4.5's own "decision_log alone" bar above
+	// (JD-9b-02): rel.ToUnitID above is the fixture's own scripted answer
+	// (connectJudgeCase writes it verbatim into target_unit_id, and
+	// judgeAndPersistPair/ProposeRelation trust it without cross-checking
+	// the candidate RecallService actually found — internal/brain/
+	// consolidate.go, internal/core/consolidation/connect.go; pre-existing,
+	// out of this PR's scope). anyRationaleNames above therefore cannot
+	// tell "the search found this target" from "we told it the answer".
+	// SeenPrompts() inspects what JudgePrompt (internal/brain/capture.go)
+	// actually rendered from the real candidate the search returned,
+	// independent of the fixture's canned response — fakeprovider.Fake
+	// replays strictly by scripted case id, never by prompt content, so
+	// this is real evidence, not another read of the same fixture value.
+	// demoConnectTargetContent is capture_script[2]'s own normalized
+	// content, distinctive across all four units in this corpus (see its
+	// own doc comment).
+	seenConnectPrompt := false
+	for _, p := range passJudge.SeenPrompts() {
+		if strings.Contains(p, demoConnectTargetContent) {
+			seenConnectPrompt = true
+			break
+		}
+	}
+	if !seenConnectPrompt {
+		t.Fatalf("no prompt sent to the connect judge names %q (capture_script[%d]'s own content) — the candidate search never presented the expected target, so the persisted relation's target_unit_id cannot be trusted as anything but the fixture's own scripted answer", demoConnectTargetContent, pair[1])
 	}
 
 	if len(ex.Expected.Beliefs) == 0 {
