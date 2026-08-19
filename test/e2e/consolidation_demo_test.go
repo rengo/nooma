@@ -650,15 +650,35 @@ func TestDemo_DecisionLogTellsTheStory(t *testing.T) {
 	// demoConnectTargetContent is capture_script[2]'s own normalized
 	// content, distinctive across all four units in this corpus (see its
 	// own doc comment).
+	// Anchored on the composite JudgePrompt renders for a CANDIDATE —
+	// "  " + c.ID + ": " + c.Content (internal/brain/capture.go) — not on
+	// the content alone, and with the id half derived from the case's own
+	// declared pair rather than hardcoded. Two things follow, each closing
+	// a way this check could have looked stronger than it was:
+	//
+	//   - Only a candidate line carries "<id>: <content>". JudgePrompt
+	//     renders the SOURCE unit as bare content with no id prefix, and
+	//     derive's own prompt (consolidation.BuildDerivePrompt) renders
+	//     sources, never candidates. passJudge receives both phases' calls
+	//     and SeenPrompts() cannot distinguish them, so matching on content
+	//     alone could in principle have been satisfied by a derive prompt;
+	//     matching on the composite cannot.
+	//   - targetUnitID comes from ex.Expected.RelationsCreated[0], the same
+	//     place connectJudgeCase reads it. If a future edit repoints the
+	//     case's declared pair, the id half moves with it and stops
+	//     matching the content literal — a loud failure, never a silent
+	//     correlation against the wrong unit.
+	targetUnitID := dv.unitIDs[pair[1]]
+	wantCandidateLine := targetUnitID + ": " + demoConnectTargetContent
 	seenConnectPrompt := false
 	for _, p := range passJudge.SeenPrompts() {
-		if strings.Contains(p, demoConnectTargetContent) {
+		if strings.Contains(p, wantCandidateLine) {
 			seenConnectPrompt = true
 			break
 		}
 	}
 	if !seenConnectPrompt {
-		t.Fatalf("no prompt sent to the connect judge names %q (capture_script[%d]'s own content) — the candidate search never presented the expected target, so the persisted relation's target_unit_id cannot be trusted as anything but the fixture's own scripted answer", demoConnectTargetContent, pair[1])
+		t.Fatalf("no prompt sent to a judge renders %q as a candidate line — connect's candidate search never presented capture_script[%d] to the judge, so the persisted relation's target_unit_id cannot be trusted as anything but the fixture's own scripted answer", wantCandidateLine, pair[1])
 	}
 
 	if len(ex.Expected.Beliefs) == 0 {

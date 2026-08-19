@@ -2170,6 +2170,41 @@ Depends on PR 9a. Ships R4.5's own bar — `decision_log` alone tells the story 
       - Not merged: scoped re-judgment runs first, per this chain's own two-round Judgment Day
         budget; this is the chain's last link.
 
+  **JD-9b-03 (scoped re-judgment, one finding from each judge, same family)**: the `SeenPrompts`
+  proof added for JD-9b-02 was correct on this corpus but rested on properties the assertion did not
+  itself enforce. Judge A: the loop had no `req.Task` filter, and `passJudge` receives both connect's
+  `relation_evaluation` and derive's `belief_derivation` calls — a match on content alone could in
+  principle be satisfied by a derive prompt; it is not today only because `SelectConnectSources`'
+  `since` window (capture_script[2] at `2026-02-11T04:00Z`, `last_run_at` at `06:00Z`) excludes that
+  unit from derive's sources. Judge B: `demoConnectTargetContent` was a hardcoded literal tied to
+  capture_script[2], while `connectJudgeCase` one function away derives its target from
+  `ex.Expected.RelationsCreated[0]` — a corpus edit repointing the declared pair would decouple the
+  anchor from the real target.
+
+  **Fix (orchestrator, one change closing both)**: anchor on the composite `JudgePrompt` renders for
+  a candidate — `"  " + c.ID + ": " + c.Content` (`internal/brain/capture.go:521-524`) — with the id
+  half derived from `ex.Expected.RelationsCreated[0]`. Only a candidate line carries `<id>: <content>`
+  (the source unit is rendered as bare content with no id prefix, and `BuildDerivePrompt` renders
+  sources, never candidates), so a derive prompt can no longer satisfy it; and a future edit
+  repointing the declared pair moves the id half and produces a loud failure instead of a silent
+  correlation against the wrong unit.
+
+  **Disclosed probe**: `" PROBE-ABSENT"` appended to the composite so no rendered prompt could
+  contain it. `TestDemo_DecisionLogTellsTheStory` failed cleanly at the new assertion's own
+  `t.Fatalf`, not pre-empted:
+  ```
+  no prompt sent to a judge renders "demo-id-0006: Draft the team meeting agenda PROBE-ABSENT" as a
+  candidate line — connect's candidate search never presented capture_script[2] to the judge ...
+  ```
+  The message carries the real run-time id (`demo-id-0006`), confirming the id half is genuinely
+  derived rather than literal. Restored from an explicit `cp` backup (not `git checkout --`);
+  `diff` reported byte-identical.
+
+  **Verify**: `go test -tags e2e -count=1 ./test/e2e/...` green, 134.072s (baseline ~134s);
+  `make lint` 0 issues. No production code touched.
+  **Rollback boundary**: the `wantCandidateLine` composite and its comment in
+  `test/e2e/consolidation_demo_test.go` — one commit, independently revertible.
+
 ---
 
 ## X — Chain-wide verifications (only make sense once every link is in)
