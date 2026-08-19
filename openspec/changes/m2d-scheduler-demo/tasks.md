@@ -2121,6 +2121,55 @@ Depends on PR 9a. Ships R4.5's own bar — `decision_log` alone tells the story 
       merge time (PR not yet merged as of this apply batch), same posture every earlier link in
       this chain took.
 
+      **Judgment Day scoped correction round** (PR #190, target `8d8c76d`, branch
+      `feat/demo-decision-log-assertions`) — two owner-authorized ledger IDs, both fix-agent-
+      applied, test-only, no production code:
+      - **JD-9b-01** (Judge B): `TestDemo_DecisionLogTellsTheStory`'s archive clause looped over
+        `ex.Expected.Archived` with no guard, unlike its connect and derive siblings, so
+        `expected.archived: []` would report PASS with zero rows checked — an undisclosed
+        asymmetry, not exploitable on this corpus (`[0,1]` is non-empty) but the exact
+        vacuous-pass-on-empty class this chain has caught throughout. **Fix**: added the same
+        `len(ex.Expected.Archived) == 0 { t.Fatalf(...) }` guard the connect and derive clauses
+        already had, worded consistently. No natural red exists for it on this corpus; a disclosed
+        probe was not additionally run since the guard's own logic is identical in shape to the two
+        already-proven siblings.
+      - **JD-9b-02** (Judge A: SUGGESTION, Judge B: WARNING, both confirmed): the connect clause's
+        `anyRationaleNames(connectRows, sourceID, targetID)` could not distinguish "the real
+        candidate search found the expected target" from "the fixture's own scripted judge answer
+        named it" — `judgeAndPersistPair` persists `rel.ToUnitID` from the judge's own
+        `TargetUnitID` verbatim (`internal/brain/consolidate.go`, `ProposeRelation`), never
+        cross-checked against the candidate `RecallService` actually returned; that verbatim trust
+        is pre-existing and stays out of this PR's scope, untouched. **Fix**: added a second,
+        clearly separated assertion (own comment block, distinct from the `DecisionLog`-only
+        checks above it) using `fakeprovider.Fake.SeenPrompts()` — already exported, unmodified —
+        to verify the prompt actually sent to the connect judge names `demoConnectTargetContent`
+        ("Draft the team meeting agenda", capture_script[2]'s own `normalized_content` from
+        `testdata/llm/cases/classify-prepare-meeting-agenda.json`), a substring none of the
+        corpus's other three units' own `normalized_content` share
+        ("Send Ana the contract", "Pick up the dry cleaning", "Schedule the team meeting for
+        Monday"), so it can only name capture_script[2] in this corpus. `runDemoPass` was split
+        into `buildDemoPass` (construction) + `runDemoPass` (wraps it, discards `passJudge`,
+        unchanged signature and behavior) so `TestDemo_DecisionLogTellsTheStory` alone can keep
+        `passJudge` for this check — the other four `TestDemo_*` tests were not touched.
+        **Disclosed probe**: temporarily changed `demoConnectTargetContent` to a string absent from
+        every rendered prompt; `TestDemo_DecisionLogTellsTheStory` failed cleanly at the new
+        assertion's own `t.Fatalf` ("no prompt sent to the connect judge names ... — the candidate
+        search never presented the expected target ..."), not pre-empted by any earlier assertion.
+        Restored from an explicit pre-probe copy (not `git checkout --`, this branch's own key
+        learning), confirmed `git diff --exit-code` clean, full suite re-run green.
+      - **Evidence**: `go test -tags e2e -count=1 ./test/e2e/...` green at **134.066s** (and
+        **134.411s** on an earlier run of this same round) — both within the ~134s baseline, no
+        regression. `make check-all` green end to end (lint 0 issues, L1-L3, schema-golden diff
+        clean, 7-target cross-compile matrix OK, `internal/core` coverage unchanged at 750/750,
+        L4 e2e **134.261s**). Diff scope: `test/e2e/consolidation_demo_test.go` only (extended, no
+        new file); `openspec/changes/m2d-scheduler-demo/tasks.md` (this record).
+      - **Rollback boundary**: each ledger ID is one independent, reversible edit inside
+        `TestDemo_DecisionLogTellsTheStory` and its two small helpers (`buildDemoPass`,
+        `demoConnectTargetContent`) — JD-9b-01's guard and JD-9b-02's `SeenPrompts` block do not
+        depend on each other and can each be reverted alone without touching the other.
+      - Not merged: scoped re-judgment runs first, per this chain's own two-round Judgment Day
+        budget; this is the chain's last link.
+
 ---
 
 ## X — Chain-wide verifications (only make sense once every link is in)
