@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -261,6 +262,83 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 	}
 }
 
+// connectJudgeCaseID is the case id connectJudgeCase writes fresh into a
+// temp dir on every call — never checked in (see connectJudgeCase's own
+// doc comment for why a checked-in file structurally cannot carry this
+// response's one dynamic field).
+const connectJudgeCaseID = "consolidation-demo-connect-related"
+
+// connectJudgeCase solves 9b's own "id problem" (this document's PR 9b
+// preamble; 9a's own disclosed scope boundary): a persisted
+// ActionConnectRelationPersisted row needs connect's judge to answer with
+// a real target_unit_id (relation.Judgment.TargetUnitID, consolidate.go's
+// own judgeAndPersistPair — ProposeRelation trusts the judge's own
+// TargetUnitID verbatim, it does not cross-check it against the candidate
+// RecallService actually found), and that id is only assigned once
+// CaptureService.Capture runs inside this same test — a checked-in,
+// pre-authored testdata/llm/cases/*.json fixture cannot hold a value it
+// predates.
+//
+// The id IS deterministic, though (demoIDs increments one shared counter,
+// no wall clock, no map-iteration-order dependency anywhere on this
+// path — the same property 9a's own dv.unitIDs already relies on), so
+// this function does not invent or guess a value: it reads the real id
+// straight out of dv.unitIDs, using the exact (source, target) capture
+// indices the corpus's own expected.relations_created pair declares, and
+// writes ONE fresh case file per test run into a t.TempDir() — never
+// committed, never stale, self-correcting if a future corpus edit shifts
+// which indices are involved. fakeprovider.New still does every bit of
+// the actual replaying (CLAUDE.md non-negotiable #5, no network, no real
+// LLM) — this only supplies the one value a static file structurally
+// cannot carry. derive's own case is copied in unchanged alongside it so
+// both calls still replay from one fakeprovider.Fake, matching Order()'s
+// own connect-before-derive sequence.
+//
+// Returns the temp dir fakeprovider.New should load from.
+func connectJudgeCase(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) string {
+	t.Helper()
+	if len(ex.Expected.RelationsCreated) == 0 {
+		t.Fatalf("case %q declares no expected.relations_created — connect's judge response has no pair to target", ex.ID)
+	}
+	pair := ex.Expected.RelationsCreated[0]
+	sourceUnitID, targetUnitID := dv.unitIDs[pair[0]], dv.unitIDs[pair[1]]
+
+	dir := t.TempDir()
+
+	derive, err := os.ReadFile(filepath.Join(llmCasesDir(t), "derive-team-meeting-preference.json"))
+	if err != nil {
+		t.Fatalf("reading derive-team-meeting-preference.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "derive-team-meeting-preference.json"), derive, 0o600); err != nil {
+		t.Fatalf("copying derive-team-meeting-preference.json into judge dir: %v", err)
+	}
+
+	response := fmt.Sprintf(`{"outcome":"related","target_unit_id":%q,"type":%q,"strength":0.8,"confidence":0.85}`, targetUnitID, demoRelationType)
+	connectCase := struct {
+		ID       string `json:"id"`
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+		Task     string `json:"task"`
+		Message  string `json:"message"`
+		Response string `json:"response"`
+	}{
+		ID:       connectJudgeCaseID,
+		Provider: "anthropic",
+		Model:    "claude-sonnet",
+		Task:     "relation_evaluation",
+		Message:  fmt.Sprintf("unit %s relates to unit %s — 9b's own dynamically-generated judge case, see connectJudgeCase's own doc comment", sourceUnitID, targetUnitID),
+		Response: response,
+	}
+	data, err := json.Marshal(connectCase)
+	if err != nil {
+		t.Fatalf("marshal dynamic connect judge case: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, connectJudgeCaseID+".json"), data, 0o600); err != nil {
+		t.Fatalf("write dynamic connect judge case: %v", err)
+	}
+	return dir
+}
+
 // runDemoPass seeds config.consolidation_last_run_at from ex's own
 // last_run_at (R4.4's MAY, so strengthen/connect's `since` is non-nil and
 // excludes capture 2 from SelectConnectSources while still including
@@ -270,14 +348,12 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 //
 // passJudge scripts the two provider calls this specific corpus's pass
 // makes, in Order()'s own phase sequence (connect before derive):
-// "relation-no-match-for-dry-cleaning" answers connect's one judged pair
-// with "outcome":"new" (deliberately no persist — spec R4.4's connect
-// clause is proven here only as far as 9a.5's own task text requires,
-// "reach the judge"; producing a persisted relation with the real target
-// id is 9b's own tuning scope, not invented ahead of it), and
-// "derive-team-meeting-preference" answers derive's one source with a real
-// belief proposal, which DOES persist (createDerivedBelief carries no unit
-// reference to get wrong).
+// connectJudgeCase's own freshly-written case answers connect's one judged
+// pair with "outcome":"related" and the real target unit id (9b's own
+// discharge of 9a's disclosed scope boundary — see connectJudgeCase's own
+// doc comment), and "derive-team-meeting-preference" answers derive's one
+// source with a real belief proposal, which DOES persist (createDerived
+// Belief carries no unit reference to get wrong).
 func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (brain.ConsolidateReport, error) {
 	t.Helper()
 	ctx := context.Background()
@@ -298,7 +374,8 @@ func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) 
 	}
 
 	recallSvc := brain.NewRecallService(dv.index, dv.lexical, dv.units, dv.embed)
-	passJudge := fakeprovider.New(t, llmCasesDir(t), "relation-no-match-for-dry-cleaning", "derive-team-meeting-preference")
+	judgeDir := connectJudgeCase(t, dv, ex)
+	passJudge := fakeprovider.New(t, judgeDir, connectJudgeCaseID, "derive-team-meeting-preference")
 	clock := &steppingClock{now: now}
 	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state)
 
@@ -418,6 +495,11 @@ func TestDemo_DeriveBeliefExists(t *testing.T) {
 // can assert the derived belief's own Rationale names it (spec R4.5's
 // derive clause), without re-deriving it from self_beliefs directly.
 const demoDeriveBeliefTopicKey = "team_meeting"
+
+// demoRelationType is the relation type connectJudgeCase's own
+// dynamically-written judge case scripts (runDemoPass, below) — kept as
+// one named constant rather than a literal repeated in two places.
+const demoRelationType = "related_to"
 
 // decisionsWithAction filters decisions (already read once via
 // DecisionLog.Since, never re-queried per action) down to one Action —
