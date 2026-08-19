@@ -1951,6 +1951,64 @@ by silently narrowing the demo's scope.
       SIGTERM suite). Chain-merge checks deferred to actual merge time (PR not yet merged as of this
       apply batch), same posture every earlier link in this chain took.
 
+**Judgment Day correction round, `feat/demo-simulated-weeks` (PR #189), frozen target `5990ffd`.
+One confirmed finding (JD-9a-01, CRITICAL by Judge A, WARNING by Judge B, both confirmed and
+orchestrator-verified), fixed in this same branch.**
+
+- **JD-9a-01.** `demoT0`'s own doc comment (`consolidation_demo_test.go`) claimed
+  `TestDemo_ArchiveFires` was "MECHANICAL, not merely a comment" and protected capture 0's own
+  ~6.73-day archival threshold. It did not: the assertion counted `decision_log` rows
+  (`archived == 0`) instead of checking the case's own declared `expected.archived` indices
+  (`[0, 1]`), so it only required "at least one" capture to archive — capture 1's own weaker
+  ~2.823-day threshold, not capture 0's ~6.73-day one the comment described. Verified: at
+  `demoT0 = now - 3 days`, capture 0 sits at effective weight ~0.6025 (does not archive) while
+  capture 1 sits at ~0.4912 (archives), so the old assertion PASSED even though the case's own
+  `expected.archived` says both indices must archive; the comment's claimed ~3.27-day margin was
+  actually ~7.18 days on the assertion as shipped. Further, a close-`demoT0` perturbation does not
+  always fail on this file's own archive assertion at all: `SelectConnectSources`' `since` filter
+  gates only which units are considered connect sources, never the candidate search itself
+  (`connectPairsForSource` -> `RecallService.ScoredFor`, whose only liveness filter is
+  `LiveByIDs`), so a capture that stays live because it missed the archive threshold becomes an
+  extra connect candidate and can drive more judge calls than `runDemoPass`'s fixed two-entry
+  `passJudge` script allows — `fakeprovider.Complete`'s own `t.Fatalf` then fires INSIDE
+  `Consolidate()` itself, and `runtime.Goexit()` aborts the test goroutine before the archive
+  assertion ever runs.
+  **Fix**: `TestDemo_ArchiveFires` now reads `expected.archived` from the loaded case and requires
+  a matching `ActionArchiveArchived` row (its `Context`'s own `UnitID`, decoded via
+  `encoding/json`) for each declared index, rather than counting rows and comparing to zero. With
+  that fix, the BINDING constraint (the harder of the two thresholds to satisfy, since both
+  indices must now archive) really is capture 0's own ~6.73-day math — restoring the mechanism the
+  comment always intended. `demoT0`'s own doc comment was corrected in place (not silently
+  rewritten) to state what was wrong, why, the real margin, and the connect-script-exhaustion
+  failure mode. `demoT0`/`now` themselves are unchanged — both judges verified the shipped values
+  arithmetically satisfy `expected.archived: [0, 1]` and `expected.beliefs: [3]`. No production
+  code touched (`internal/core` coverage floor unchanged at 750/750, 100%); no `database/sql` or
+  raw SQL added (`test/e2e/**` stays outside `sqlite-containment`'s exception list); every judge
+  call stays on `test/support/fakeprovider`. This round intentionally does not widen the demo's
+  assertions to a full three-effect check with named rationales — that is PR 9b's own scope; only
+  9a's own archive clause was strengthened to match its own case data.
+  **Disclosed probe** (proves the strengthened guard genuinely discriminates, not vacuously):
+  `demoT0` was temporarily moved to `now - 3 days` (`2026-02-08T09:00:00Z`) and
+  `TestDemo_ArchiveFires` re-run. It did **not** fail cleanly on the archive assertion — it aborted
+  earlier, exactly as the corrected comment now documents:
+  ```
+  consolidate.go:473: fakeprovider: unscripted Complete call (task "relation_evaluation", ...);
+  no scripted case ids remain
+  --- FAIL: TestDemo_ArchiveFires (0.02s)
+  ```
+  `demoT0` was then restored byte-identical from an explicit pre-probe copy (not `git checkout --`,
+  per this branch's own key learning #5: that command has no committed baseline for this file on
+  this branch and would revert to the parent branch's state, not to the prior edit) — confirmed
+  identical via `diff`, and the file's real fix content preserved. All four `TestDemo_*` tests
+  re-run green.
+  **Verify**: `go test -tags e2e -count=1 -v ./test/e2e/...` → all green, `test/e2e` package
+  wall-clock 134.038s (baseline 133.371s — the SIGTERM suite still dominates; the four `TestDemo_*`
+  tests themselves run in well under 1s combined, unchanged). `make check-all` green;
+  `internal/core` coverage unchanged at 750/750 (100%).
+  **Rollback boundary**: `test/e2e/consolidation_demo_test.go`'s `demoT0` doc comment and
+  `TestDemo_ArchiveFires`'s body (plus the new `encoding/json` import) — revertible independently
+  of any other PR 9a change; no other file touched.
+
 ---
 
 ## PR 9b — `feat/demo-decision-log-assertions` (pre-drawn split of 9a) (~40 impl+docs / ~180 test)
