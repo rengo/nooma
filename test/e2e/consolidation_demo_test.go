@@ -577,6 +577,9 @@ func TestDemo_DecisionLogTellsTheStory(t *testing.T) {
 		t.Fatalf("decisions.Since: %v", err)
 	}
 
+	if len(ex.Expected.Archived) == 0 {
+		t.Fatalf("case %q declares no expected.archived — spec R4.5's archive clause has nothing to check", ex.ID)
+	}
 	archiveRows := decisionsWithAction(decisions, ports.ActionArchiveArchived)
 	for _, idx := range ex.Expected.Archived {
 		unitID := dv.unitIDs[idx]
