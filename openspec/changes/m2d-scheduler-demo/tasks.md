@@ -1804,7 +1804,7 @@ specifically, "the single highest-variance task in the chain" — the round-2 ow
 already declined the one-corpus-per-phase alternative, so an overrun here is reported, not resolved
 by silently narrowing the demo's scope.
 
-- [ ] **9a.1** Commit 1 (RED): `test/e2e/consolidation_demo_test.go` (new, `e2e` tag) —
+- [x] **9a.1** Commit 1 (RED): `test/e2e/consolidation_demo_test.go` (new, `e2e` tag) —
       `TestDemo_SimulatedWeeks_PassCompletes`: construct the corpus by driving
       `brain.CaptureService.Capture` per scripted entry (offset from `t0` advances a stepping fake
       clock) through `test/support/fakeprovider` for every judge/embedding call (R4.3), against
@@ -1815,23 +1815,52 @@ by silently narrowing the demo's scope.
       **Red**: `undefined: goldenset.ConsolidationExample` / the corpus loader — package does not
       compile.
       Requirement: spec R4.2 (as corrected by design D6), R4.3; design §8.1.
-- [ ] **9a.2** Commit 2 (GREEN): build the corpus loader reading `testdata/consolidation/cases/
+      **Disclosed deviation from the two-commit shape**: `goldenset.ConsolidationExample` already
+      compiles (link 8 shipped it), so this task's own literal red cannot occur; the whole file
+      (driver + all four `TestDemo_*` functions) was built and verified as one unit rather than
+      split into a genuinely separate RED commit and GREEN commit, disclosed rather than presented
+      as a real two-commit TDD cycle it is not — the same `m2a` C9 posture this document's own
+      preamble states for a red that cannot occur. In its place: three **disclosed temporary
+      probes**, run after the whole file was green, each proving one guard is genuine rather than
+      vacuous — reported verbatim under 9a.4/9a.6/9a.8 below.
+- [x] **9a.2** Commit 2 (GREEN): build the corpus loader reading `testdata/consolidation/cases/
       *.json` via `test/support/goldenset`, drive `CaptureService` per case, wire `fakeprovider.New`/
       `fakeprovider.NewEmbeddingFake` for every call.
       Verify: `go test -tags e2e ./test/e2e/... -run TestDemo_SimulatedWeeks_PassCompletes`.
       Requirement: spec R4.2, R4.3; design §8.1.
-- [ ] **9a.3** Commit 1 (RED): `consolidation_demo_test.go` (extend) — `TestDemo_ArchiveFires`: over
+      **Done** — `driveDemoCorpus`/`runDemoPass` (`consolidation_demo_test.go`), green.
+- [x] **9a.3** Commit 1 (RED): `consolidation_demo_test.go` (extend) — `TestDemo_ArchiveFires`: over
       the chosen `now`, at least one unit's `effective_weight` has fallen under `weight_threshold`
       (archive fires) — asserted via `DecisionLog.Since` containing ≥1 `ActionArchiveArchived` row
       (R4.4's archive clause only; the full three-effect assertion with named rationales is PR 9b's
       own scope).
       **Red**: no corpus timestamps chosen yet to cross the threshold — zero rows.
       Requirement: spec R4.4 (archive clause).
-- [ ] **9a.4** Commit 2 (GREEN, tuning): adjust the corpus's `weight`/`last_touched_at` fixture
+      **Disclosed, same posture as 9a.1**: the corpus's timing was chosen and tuned together with
+      9a.1/9a.2, not as a separate genuinely-red step.
+- [x] **9a.4** Commit 2 (GREEN, tuning): adjust the corpus's `weight`/`last_touched_at` fixture
       values until `9a.3` passes.
       Verify: `go test -tags e2e ./test/e2e/... -run TestDemo_ArchiveFires`.
       Requirement: spec R4.4.
-- [ ] **9a.5** Commit 1 (RED): `consolidation_demo_test.go` (extend) —
+      **Done** — the demo extends `testdata/consolidation/cases/dry-cleaning-and-ambiguous-contract-
+      request.json` (PR 8's own seed case, `id` and offsets 0h/24h unchanged) with two more
+      `capture_script` entries (`235h`, `239h`) and `t0` fixed in the driver
+      (`consolidation_demo_test.go`'s own `demoT0`, 2026-02-01T09:00:00Z, 10 days before the case's
+      own `now` 2026-02-11T09:00:00Z) — clearing JD-737's own ~6.73-day archival threshold for
+      capture 0 (`classify-person-ref-ambiguous-ana`, weight 0.7, decay 0.05) with margin
+      (effective weight ≈0.4246 at 10 days, JD-737's own table already confirms 7 days archives at
+      ≈0.493). Capture 1 (`classify-pick-up-dry-cleaning`, weight 0.6, decay 0.1) archives even
+      sooner (≈1.82 days). **Disclosed temporary probe** (proves this guard is genuine, not
+      vacuous): both llm cases' `weight`/`decay_rate` were temporarily bumped to `0.99`/`0.001` (no
+      decay), `TestDemo_ArchiveFires` re-run — failed, but for a richer reason than "0 archived
+      rows": with captures 0/1 now staying live, they also became connect candidates, so connect's
+      one live source (capture 3) found three live candidates instead of one and issued three judge
+      calls against a two-entry script, failing on the third with "unscripted Complete call" before
+      the archive assertion itself was ever reached — `runtime.Goexit()` inside `t.Fatalf` aborts the
+      test goroutine immediately, so no later code in the test runs. Both llm case files were then
+      restored via `git checkout --`, confirmed `git diff --exit-code` clean, and the four
+      `TestDemo_*` tests re-run green.
+- [x] **9a.5** Commit 1 (RED): `consolidation_demo_test.go` (extend) —
       `TestDemo_ConnectCandidatePairExists`: at least one candidate pair is close enough by
       `connect`'s fused ranking to reach the judge, proven via a `fakeprovider` script expecting
       exactly one `Complete` call for the pair — a broken candidate search either calls zero times or
@@ -1839,32 +1868,146 @@ by silently narrowing the demo's scope.
       **Red**: no candidate pair reaches the judge yet — the scripted call is never made,
       `fakeprovider`'s own never-called guard fails the test.
       Requirement: spec R4.4 (connect clause).
-- [ ] **9a.6** Commit 2 (GREEN, tuning): script the fake embedding responses so `RecallService.
+      **Disclosed, same posture as 9a.1**. The connect judge's own scripted response is
+      `"outcome":"new"` (`relation-no-match-for-dry-cleaning`, already committed) — deliberately no
+      persist: this task's own text proves only "reach the judge", and a persisted relation needs
+      the real, dynamically-generated target unit id, which a static pre-authored fixture cannot
+      carry — left to PR 9b's own tuning scope rather than invented here (9b.2's own "if 9a's
+      phases already produce the right effects" language is conditional, not a guarantee 9a owes).
+- [x] **9a.6** Commit 2 (GREEN, tuning): script the fake embedding responses so `RecallService.
       ScoredFor`'s fusion surfaces the intended pair; seed `config.consolidation_last_run_at` via
       `ConfigRepo.RecordConsolidationRun` to a value before the corpus's own most-recent timestamps
       (R4.4's `MAY`, so `strengthen`'s `since` is non-`nil`).
       Verify: `go test -tags e2e ./test/e2e/... -run TestDemo_ConnectCandidatePairExists`.
       Requirement: spec R4.4.
-- [ ] **9a.7** Commit 1 (RED): `consolidation_demo_test.go` (extend) —
+      **Done, no embedding tuning needed**: `RecallService`'s vector leg is an unconditional top-K
+      (`internal/core/recall.Search` has no similarity gate — verified by reading, not assumed), so
+      any two live units are found as candidates regardless of their fake-embedding vectors; the
+      corpus needed only ONE eligible connect source, not a specific pair, so the tuning surface was
+      the corpus's own timing, not the embedding fake. `last_run_at` is seeded at
+      `2026-02-11T06:00:00Z` — after capture 2 (`235h`, touched at `04:00`, excluded as a source but
+      still a live candidate) and before capture 3 (`239h`, touched at `08:00`, the pass's one
+      connect/derive source), so `SelectConnectSources` returns exactly one id. **Disclosed
+      temporary probe**: `last_run_at` was temporarily pushed to `2026-02-11T08:30:00Z` (past every
+      capture) — `TestDemo_ConnectCandidatePairExists` failed with "2 scripted case(s) never called"
+      (zero sources, zero judge calls), exactly the stated "calls zero times... fails the scripted
+      guard" property — then restored via `git checkout --`, confirmed clean, tests re-run green.
+- [x] **9a.7** Commit 1 (RED): `consolidation_demo_test.go` (extend) —
       `TestDemo_DeriveBeliefExists`: at least one derivable belief exists in the corpus, proven by
       scripting the dedup-judge fake to accept exactly one derive candidate.
       **Red**: no derive candidate accepted yet — zero beliefs.
       Requirement: spec R4.4 (derive clause).
-- [ ] **9a.8** Commit 2 (GREEN, tuning): adjust the corpus/fake script until `9a.7` passes.
+      **Disclosed, same posture as 9a.1**.
+- [x] **9a.8** Commit 2 (GREEN, tuning): adjust the corpus/fake script until `9a.7` passes.
       Verify: `go test -tags e2e ./test/e2e/... -run TestDemo_DeriveBeliefExists`.
       Requirement: spec R4.4.
-- [ ] **9a.9** *(split checkpoint, pre-drawn per design §13)*: measure `git diff --stat` for tasks
+      **Done**: `derive`'s one source (capture 3, the same unit connect's own source is) feeds
+      `taskBeliefDerivation`, scripted by a new `testdata/llm/cases/derive-team-meeting-
+      preference.json` proposing one real belief (facet `goal`, topic key `team_meeting`) —
+      persisted for real via `createDerivedBelief` (`MergeProposals` has zero active beliefs to
+      merge against, so the decision is always CREATE), unlike connect's own deliberately-inert
+      response: a derived belief carries no unit reference at all, so no real-id problem exists
+      here. **Disclosed temporary probe**: the same `last_run_at` probe as 9a.6 (zero sources) also
+      demonstrated derive's own guard directly — `TestDemo_DeriveBeliefExists` failed with
+      `"decision_log gained 0 consolidate.derive.belief_created/consolidate.derive.belief_reinforced
+      rows over 7 total, want >= 1"`, both the row-count assertion AND fakeprovider's own
+      never-called guard firing together — then restored and re-verified green (same probe/restore
+      pair as 9a.6, one probe proving both guards).
+- [x] **9a.9** *(split checkpoint, pre-drawn per design §13)*: measure `git diff --stat` for tasks
       9a.1–9a.8 in isolation against the ~130/280 sub-estimate. If the fake-provider tuning proves
       unbounded, report it rather than resolve it — round-2 owner ruling Q5 already declined the
       per-phase-corpus alternative design §12 raised.
-- [ ] **9a.10** `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all` incl. the `e2e` suite; diff scope — `test/e2e/
+      **Done, flagged not split**: `git diff --stat main...HEAD`: impl+docs **0 lines** (no
+      production code or docs touched — this link is test/fixture-only, well under the ~130
+      estimate); test/fixture `test/e2e/consolidation_demo_test.go` (new, 347 lines) +
+      `testdata/consolidation/cases/dry-cleaning-and-ambiguous-contract-request.json` (+14/-2) +
+      three new `testdata/llm/cases/*.json` (8 lines each, 24 total) = 387 changed lines, ~138% of
+      the ~280 test sub-estimate — consistent with this chain's own established 106%-193% band
+      (PR1-PR8), reported per the round-2 owner ruling on Q5 rather than resolved by narrowing the
+      demo. Fake-provider tuning did NOT prove unbounded: the vector leg's unconditional top-K
+      (9a.6's own finding) meant no embedding-response tuning was needed at all, only corpus timing
+      — the actual variance driver this link hit was the capture-time relation_evaluation calls
+      every capture past the first triggers (not named by design §8.1/§12 Q5 explicitly), handled
+      once via `driveDemoCorpus`'s own interleaved script rather than per-test tuning.
+- [x] **9a.10** `golangci-lint run`.
+      **Done** — `make lint` → `0 issues.`
+- [x] Verify (PR-level): `make check-all` incl. the `e2e` suite; diff scope — `test/e2e/
       consolidation_demo_test.go` (new), `testdata/consolidation/cases/` (corpus content growth
       only — the format/schema itself is PR 8's own scope, unchanged here). Target ≤130 impl+docs
       lines.
       **Chain-merge check 1**: `git ls-remote --heads origin feat/demo-simulated-weeks` returns
       nothing after merge.
       **Chain-merge check 2**: `gh pr view <PR9b> --json baseRefName` names `main`.
+
+      **PR 9a result** (`feat/demo-simulated-weeks`): `make check-all` green end to end;
+      `internal/core` coverage floor unchanged at 750/750 (100%) — this PR adds no `internal/core`
+      code. Diff scope matched the declared set exactly, plus three new `testdata/llm/cases/*.json`
+      fixtures the declared scope's own prose did not separately name but design §8.1 anticipates
+      (capture-time and pass-time provider responses) — disclosed rather than silently added.
+      Impl+docs 0 lines (well under ~130). Test/fixture 387 lines (~138% of ~280, task 9a.9's own
+      flagged-not-split conclusion). `go test -tags e2e ./test/e2e/... -count=1 -timeout 20m`: green,
+      133.371s wall-clock — essentially unchanged from link 7's own ~134s baseline (this link's four
+      new tests run in well under 1s combined; no real timer, signal, or subprocess wait, unlike the
+      SIGTERM suite). Chain-merge checks deferred to actual merge time (PR not yet merged as of this
+      apply batch), same posture every earlier link in this chain took.
+
+**Judgment Day correction round, `feat/demo-simulated-weeks` (PR #189), frozen target `5990ffd`.
+One confirmed finding (JD-9a-01, CRITICAL by Judge A, WARNING by Judge B, both confirmed and
+orchestrator-verified), fixed in this same branch.**
+
+- **JD-9a-01.** `demoT0`'s own doc comment (`consolidation_demo_test.go`) claimed
+  `TestDemo_ArchiveFires` was "MECHANICAL, not merely a comment" and protected capture 0's own
+  ~6.73-day archival threshold. It did not: the assertion counted `decision_log` rows
+  (`archived == 0`) instead of checking the case's own declared `expected.archived` indices
+  (`[0, 1]`), so it only required "at least one" capture to archive — capture 1's own weaker
+  ~2.823-day threshold, not capture 0's ~6.73-day one the comment described. Verified: at
+  `demoT0 = now - 3 days`, capture 0 sits at effective weight ~0.6025 (does not archive) while
+  capture 1 sits at ~0.4912 (archives), so the old assertion PASSED even though the case's own
+  `expected.archived` says both indices must archive; the comment's claimed ~3.27-day margin was
+  actually ~7.18 days on the assertion as shipped. Further, a close-`demoT0` perturbation does not
+  always fail on this file's own archive assertion at all: `SelectConnectSources`' `since` filter
+  gates only which units are considered connect sources, never the candidate search itself
+  (`connectPairsForSource` -> `RecallService.ScoredFor`, whose only liveness filter is
+  `LiveByIDs`), so a capture that stays live because it missed the archive threshold becomes an
+  extra connect candidate and can drive more judge calls than `runDemoPass`'s fixed two-entry
+  `passJudge` script allows — `fakeprovider.Complete`'s own `t.Fatalf` then fires INSIDE
+  `Consolidate()` itself, and `runtime.Goexit()` aborts the test goroutine before the archive
+  assertion ever runs.
+  **Fix**: `TestDemo_ArchiveFires` now reads `expected.archived` from the loaded case and requires
+  a matching `ActionArchiveArchived` row (its `Context`'s own `UnitID`, decoded via
+  `encoding/json`) for each declared index, rather than counting rows and comparing to zero. With
+  that fix, the BINDING constraint (the harder of the two thresholds to satisfy, since both
+  indices must now archive) really is capture 0's own ~6.73-day math — restoring the mechanism the
+  comment always intended. `demoT0`'s own doc comment was corrected in place (not silently
+  rewritten) to state what was wrong, why, the real margin, and the connect-script-exhaustion
+  failure mode. `demoT0`/`now` themselves are unchanged — both judges verified the shipped values
+  arithmetically satisfy `expected.archived: [0, 1]` and `expected.beliefs: [3]`. No production
+  code touched (`internal/core` coverage floor unchanged at 750/750, 100%); no `database/sql` or
+  raw SQL added (`test/e2e/**` stays outside `sqlite-containment`'s exception list); every judge
+  call stays on `test/support/fakeprovider`. This round intentionally does not widen the demo's
+  assertions to a full three-effect check with named rationales — that is PR 9b's own scope; only
+  9a's own archive clause was strengthened to match its own case data.
+  **Disclosed probe** (proves the strengthened guard genuinely discriminates, not vacuously):
+  `demoT0` was temporarily moved to `now - 3 days` (`2026-02-08T09:00:00Z`) and
+  `TestDemo_ArchiveFires` re-run. It did **not** fail cleanly on the archive assertion — it aborted
+  earlier, exactly as the corrected comment now documents:
+  ```
+  consolidate.go:473: fakeprovider: unscripted Complete call (task "relation_evaluation", ...);
+  no scripted case ids remain
+  --- FAIL: TestDemo_ArchiveFires (0.02s)
+  ```
+  `demoT0` was then restored byte-identical from an explicit pre-probe copy (not `git checkout --`,
+  per this branch's own key learning #5: that command has no committed baseline for this file on
+  this branch and would revert to the parent branch's state, not to the prior edit) — confirmed
+  identical via `diff`, and the file's real fix content preserved. All four `TestDemo_*` tests
+  re-run green.
+  **Verify**: `go test -tags e2e -count=1 -v ./test/e2e/...` → all green, `test/e2e` package
+  wall-clock 134.038s (baseline 133.371s — the SIGTERM suite still dominates; the four `TestDemo_*`
+  tests themselves run in well under 1s combined, unchanged). `make check-all` green;
+  `internal/core` coverage unchanged at 750/750 (100%).
+  **Rollback boundary**: `test/e2e/consolidation_demo_test.go`'s `demoT0` doc comment and
+  `TestDemo_ArchiveFires`'s body (plus the new `encoding/json` import) — revertible independently
+  of any other PR 9a change; no other file touched.
 
 ---
 

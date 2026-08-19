@@ -1,0 +1,8 @@
+{
+  "id": "derive-team-meeting-preference",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "belief_derivation",
+  "message": "Schedule the team meeting for Monday",
+  "response": "{\"beliefs\":[{\"facet\":\"goal\",\"topic_key\":\"team_meeting\",\"content\":\"The user is organizing a team meeting with the team.\",\"confidence\":0.7}]}"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "classify-prepare-meeting-agenda",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "Draft the agenda for the team meeting",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Draft the team meeting agenda\",\"weight\":0.65,\"decay_rate\":0.05}"
+}
