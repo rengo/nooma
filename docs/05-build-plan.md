@@ -144,7 +144,21 @@ Prior decisions: **[ADR-0009](adr/0009-scheduler-downtime.md)** (downtime).
 - Nightly consolidation: the 8 phases in order, each individually invocable
   (`nooma consolidate`). `decision_log` in every phase with an effect.
 - **Demo**: a vault with simulated weeks of data — cold things get archived, related things get
-  connected, beliefs get derived; the decision_log tells the story.
+  connected, beliefs get derived; the decision_log tells the story. **Met on Linux and Windows
+  (2026-08-19, PR #190).** `TestDemo_DecisionLogTellsTheStory` (`test/e2e/consolidation_demo_test.go`)
+  is *run*, not inferred, by the same required checks M0's and M1's own bullets name: `e2e` on
+  `ubuntu-latest`, `e2e (windows)` on `windows-latest`, both on every PR. It builds the corpus by
+  driving the real capture path under a stepping fake clock — hand-authored rows never populate the
+  vector index or the FTS `connect` needs — then runs one consolidation pass and asserts, through
+  `DecisionLog.Since` alone, one legible row for archive, connect and derive, each `Rationale`
+  naming the specific unit, relation or belief.
+
+  **What this demo does not cover, stated rather than implied.** `consolidation.ProposeRelation`
+  trusts the judge's own `TargetUnitID` without cross-checking it against the candidate the search
+  returned (pre-existing, out of `m2d`'s scope). The demo proves connect's search *presented* the
+  expected target — it anchors on the candidate line `JudgePrompt` actually rendered — but it does
+  not prove the pipeline would reject a judge naming a unit the search never offered. Recorded as
+  its own future work unit rather than closed on the chain's last link.
 
 ## M3 — The mouth: Telegram + prospection
 
