@@ -37,11 +37,14 @@ const demoEmbedModel = "demo-embed-fake-v1"
 // such field; Judgment Day on link 8, JD-737, found and disclosed exactly
 // this gap, leaving it to this PR to pin).
 //
-// MECHANICAL, not merely a comment: TestDemo_ArchiveFires below runs the
+// MECHANICAL, not merely a comment — but read the CORRECTED block below
+// for exactly which failure lands where. TestDemo_ArchiveFires runs the
 // real capture-then-consolidate pipeline over (demoT0, the case's own
 // "now") every time this package is tested, so a future edit that moves
-// demoT0 (or the case's own offsets) too close together fails LOUDLY there,
-// never silently.
+// demoT0 (or the case's own offsets) too close together fails LOUDLY,
+// never silently — though a timing edit specifically surfaces first as
+// connect-script exhaustion inside Consolidate(), not at the archive
+// assertion itself.
 //
 // CORRECTED (Judgment Day, JD-9a-01): an earlier version of this comment
 // claimed the mechanism above was already enforced by TestDemo_ArchiveFires,
