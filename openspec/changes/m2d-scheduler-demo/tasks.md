@@ -2016,7 +2016,7 @@ orchestrator-verified), fixed in this same branch.**
 Depends on PR 9a. Ships R4.5's own bar — `decision_log` alone tells the story — and, per R4.6,
 **this is `m2d`'s own exit criterion**: no later PR owes anything toward it.
 
-- [ ] **9b.1** Commit 1 (RED): `test/e2e/consolidation_demo_test.go` (extend) —
+- [x] **9b.1** Commit 1 (RED): `test/e2e/consolidation_demo_test.go` (extend) —
       `TestDemo_DecisionLogTellsTheStory`: extends `9a`'s pass fixture to assert, via `DecisionLog.
       Since` only (never re-deriving from `units`/`relations`/`self_beliefs` directly), at least one
       legible row for each of `ActionArchiveArchived`, `ActionConnectRelationPersisted`, and
@@ -2026,19 +2026,76 @@ Depends on PR 9a. Ships R4.5's own bar — `decision_log` alone tells the story 
       **Red**: `9a`'s own fixtures only assert row *existence*, not rationale content naming the
       specific item — fails on the strengthened assertion.
       Requirement: spec R4.5.
-- [ ] **9b.2** Commit 2 (GREEN, mostly tuning, no production code expected): if `9a`'s three phases
+      **Done** (commit `22f7730`) — observed failing for exactly the stated reason:
+      ```
+      decision_log has no consolidate.connect.relation_persisted row whose Rationale names both
+      unit demo-id-0008 (capture_script[3]) and unit demo-id-0006 (capture_script[2]) — spec
+      R4.5's connect clause
+      ```
+      The archive and derive clauses passed unmodified at this same commit — the red is
+      specifically 9a's own disclosed connect boundary, not a defect anywhere else. Also adds
+      `expected.relations_created: [[3, 2]]` to the corpus (already documented by `format.md`,
+      unused until now) — fixture data, not a fix.
+- [x] **9b.2** Commit 2 (GREEN, mostly tuning, no production code expected): if `9a`'s three phases
       already produce the right effects, no `internal/brain`/`internal/core` change is needed — only
       the corpus's content (distinctive unit text) is tuned until each `Rationale` string uniquely
       identifies the expected unit/relation/belief.
       Verify: `go test -tags e2e ./test/e2e/... -run TestDemo_DecisionLogTellsTheStory`.
       Requirement: spec R4.5.
-- [ ] **9b.3** R4.6 discharge, verification not a new test: confirm this is the PR where `docs/
+      **Done** (commit `24417fb`), **zero production code touched, confirmed** — solved 9a's own
+      disclosed "id problem" (a persisted `ActionConnectRelationPersisted` row needs connect's
+      judge to answer with the real, run-time `target_unit_id`
+      `consolidate.go`'s own `judgeAndPersistPair`/`ProposeRelation` trusts verbatim — never
+      cross-checked against the candidate `RecallService` actually found) entirely inside
+      `test/e2e/consolidation_demo_test.go`: a new `connectJudgeCase` helper reads the real id
+      straight out of `dv.unitIDs` (deterministic — one shared, monotonic counter, no wall clock,
+      no map-iteration dependency on this path, the same property `dv.unitIDs` itself already
+      relies on) using the corpus's own `expected.relations_created` pair, and writes ONE fresh
+      case file per test run into a `t.TempDir()` (never committed, self-correcting if a future
+      corpus edit shifts which indices are involved) alongside an unchanged copy of derive's own
+      static case. `fakeprovider.New` still does every bit of the actual replaying (CLAUDE.md
+      non-negotiable #5) — this only supplies the one value a checked-in, pre-authored fixture
+      structurally cannot carry. No change to `test/support/fakeprovider` or `test/support/
+      goldenset` — both stay exactly as 9a/PR8 shipped them.
+      **Disclosed temporary probe** (proves the connect assertion is genuinely reachable, not
+      vacuous — a different failure mode than the natural 9b.1 red above): `connectJudgeCase`'s
+      response was temporarily built with `sourceUnitID` in place of `targetUnitID` (a wrong id on
+      purpose). `TestDemo_DecisionLogTellsTheStory` failed on exactly the connect clause again:
+      ```
+      decision_log has no consolidate.connect.relation_persisted row whose Rationale names both
+      unit demo-id-0008 (capture_script[3]) and unit demo-id-0006 (capture_script[2]) — spec
+      R4.5's connect clause
+      ```
+      Restored from an explicit pre-probe copy (not `git checkout --`, this branch's own key
+      learning — see 9a's own Judgment Day record for why), confirmed `diff` clean, all five
+      `TestDemo_*` tests re-run green afterward.
+- [x] **9b.3** R4.6 discharge, verification not a new test: confirm this is the PR where `docs/
       05-build-plan.md` §M2's demo bullet and the umbrella proposal's own final success-criteria
       bullet (§2) may be checked off — no later PR in this chain, and none in the wider M2 chain,
       owes anything further toward either.
       Requirement: spec R4.6.
-- [ ] **9b.4** `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all` incl. the `e2e` suite; diff scope — `test/e2e/
+      **Confirmed.** `fd -d 1 -t d . openspec/changes | rg m2` names exactly four M2 sub-changes:
+      `m2a-weight-focus`, `m2b-consolidation-core`, `m2c-consolidation-runtime`,
+      `m2d-scheduler-demo` — the whole of the umbrella `m2-sleep-weight` proposal's own PR split
+      (proposal.md's own "sharing this proposal and this scope" framing). `rg -c '^\s*- \[ \]'
+      openspec/changes/{m2a,m2b,m2c}*/tasks.md` returns **zero** unchecked boxes in all three —
+      only `m2d-scheduler-demo/tasks.md` still has open items, and after this batch they are
+      exactly the "## X — Chain-wide verifications" section (verification-only, not new work owed
+      toward R4.5/R4.6) plus the "Handoffs `m2d` leaves open" section (explicitly deferred to M3
+      by design §14/owner ruling round 2 Q3, never owed by `m2d`). `m2d`'s own chain has no PR
+      after 9b (design §13's own table ends at row 9b; this document's own opening line names 9b
+      as the exit criterion). **This is therefore the PR** — `docs/05-build-plan.md` §M2's demo
+      bullet and the umbrella proposal's §2 final bullet ("a vault seeded with simulated weeks of
+      data, run through `nooma consolidate` — cold things get archived, related things get
+      connected, beliefs get derived, and `decision_log` tells the story end to end") may both be
+      checked off once this PR merges, and no later PR anywhere in M2 owes anything further toward
+      either. **Doc edits themselves are NOT made in this apply batch** — landing them in this PR
+      or immediately after is the orchestrator's own call, per this task's own instruction not to
+      make that unilaterally.
+- [x] **9b.4** `golangci-lint run`.
+      **Done** — `make lint` → `0 issues.` (also re-confirmed inside `make check-all`'s own lint
+      step below).
+- [x] Verify (PR-level): `make check-all` incl. the `e2e` suite; diff scope — `test/e2e/
       consolidation_demo_test.go` (extended only, no new file). Target ≤40 impl+docs lines. **This
       is `m2d`'s own exit criterion (R4.6)** — after this PR merges, `docs/05-build-plan.md`'s M2
       demo bullet and the umbrella proposal's final success criterion get checked off in the same PR
@@ -2048,6 +2105,21 @@ Depends on PR 9a. Ships R4.5's own bar — `decision_log` alone tells the story 
       **Chain-merge check 2**: this is the chain's last link — no next PR to check a base against;
       confirm `main`'s own `git log --oneline -11` (wider if any undrawn split fired) shows every
       link merged in order instead.
+
+      **PR 9b result** (`feat/demo-decision-log-assertions`): `make check-all` green end to end;
+      `internal/core` coverage floor unchanged at 750/750 (100%) — this PR adds no `internal/core`
+      code, no production code of any kind. Diff scope matched exactly: `test/e2e/
+      consolidation_demo_test.go` (extended only, no new file, `git diff --numstat` +203/-9 = 212
+      changed lines), `testdata/consolidation/cases/dry-cleaning-and-ambiguous-contract-request.json`
+      (+1/-0, one new `expected.relations_created` field already documented by `format.md`) — no
+      strays, no new file anywhere. Impl+docs **0 lines** (well under the ~40 target — this link is
+      test/fixture-only, same posture 9a took). Test/fixture 213 changed lines (~118% of the ~180
+      estimate), inside this chain's own established 106%-193% band (PR1-PR9a), not split.
+      `go test -tags e2e ./test/e2e/... -count=1 -timeout 20m`: green, **134.045s** wall-clock —
+      essentially unchanged from 9a's own 134.038s (this link's one new test runs in well under a
+      second; no new timer, signal, or subprocess wait). Chain-merge checks deferred to actual
+      merge time (PR not yet merged as of this apply batch), same posture every earlier link in
+      this chain took.
 
 ---
 
