@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -40,14 +41,59 @@ const demoEmbedModel = "demo-embed-fake-v1"
 // real capture-then-consolidate pipeline over (demoT0, the case's own
 // "now") every time this package is tested, so a future edit that moves
 // demoT0 (or the case's own offsets) too close together fails LOUDLY there,
-// never silently. The margin is JD-737's own verified math: capture 0 is
-// classify-person-ref-ambiguous-ana (weight 0.7, decay_rate 0.05); solving
-// 0.7*exp(-0.05*d) = consolidation.DefaultWeightThreshold (0.5) gives
-// d ~= 6.73 days, so demoT0 must sit at least that far before the case's
-// own "now" (2026-02-11T09:00:00Z) or archival stops firing. Fixed here at
-// 10 days before "now", comfortably past the threshold (JD-737's own table:
-// 7 days already archives at effective weight ~0.493; 10 days leaves more
-// margin at ~0.4246).
+// never silently.
+//
+// CORRECTED (Judgment Day, JD-9a-01): an earlier version of this comment
+// claimed the mechanism above was already enforced by TestDemo_ArchiveFires,
+// citing capture 0's own ~6.73-day threshold as the margin being protected.
+// That was wrong about WHICH assertion did the protecting. The test's
+// original assertion counted decision_log rows (archived == 0) rather than
+// checking the case's own declared expected.archived indices ([0, 1]), so it
+// only required "at least one" capture to archive — the weaker of the two
+// thresholds below, not the stronger one this comment described. Both
+// judges and the orchestrator verified: at demoT0 = now - 3 days, capture 0
+// sits at effective weight ~0.6025 (does NOT archive) while capture 1 sits
+// at ~0.4912 (archives), so the old "archived >= 1" assertion PASSED even
+// though the case's own expected.archived says both must archive — the
+// comment's claimed ~3.27-day margin was actually ~7.18 days on the
+// assertion as shipped.
+//
+// TestDemo_ArchiveFires now reads expected.archived from the loaded case
+// and requires a matching ActionArchiveArchived row for each declared
+// index, so both captures must archive for the test to pass. With that
+// fix, the BINDING constraint (the harder of the two to satisfy) really is
+// capture 0's own math, restoring the mechanism this comment always
+// intended: capture 0 is classify-person-ref-ambiguous-ana (weight 0.7,
+// decay_rate 0.05); solving 0.7*exp(-0.05*d) =
+// consolidation.DefaultWeightThreshold (0.5) gives d ~= 6.73 days, so demoT0
+// must sit at least that far before the case's own "now"
+// (2026-02-11T09:00:00Z) or capture 0 never archives. Capture 1
+// (classify-pick-up-dry-cleaning, weight 0.6, decay_rate 0.1, offset +24h)
+// crosses the same threshold sooner, at ~2.823 days after demoT0 — not the
+// binding constraint once both indices are checked, but the one the old,
+// weaker assertion actually depended on. Fixed here at 10 days before "now",
+// comfortably past capture 0's threshold (JD-737's own table: 7 days already
+// archives at effective weight ~0.493; 10 days leaves more margin at
+// ~0.4246).
+//
+// One more disclosed wrinkle, found while proving the strengthened guard is
+// genuine (see TestDemo_ArchiveFires's own probe record in
+// openspec/changes/m2d-scheduler-demo/tasks.md, PR 9a's Judgment Day
+// correction round): a close-demoT0 perturbation does not always fail
+// cleanly on this file's own archive assertion. SelectConnectSources' own
+// `since` filter gates only which units are considered connect SOURCES,
+// never the candidate search itself (connectPairsForSource ->
+// RecallService.ScoredFor, whose only liveness filter is LiveByIDs). A
+// capture that stays live because it missed the archive threshold becomes
+// an extra connect candidate, which can drive more judge calls than
+// runDemoPass's fixed two-entry passJudge script allows —
+// fakeprovider.Complete's own t.Fatalf then fires INSIDE Consolidate()
+// itself, and runtime.Goexit() aborts the test goroutine before this file's
+// own archive assertion ever runs. A future regression here may therefore
+// surface first as "unscripted Complete call" rather than a missing
+// ActionArchiveArchived row — both are real signals of the same underlying
+// problem (demoT0 sitting too close to "now"), but only one of them is this
+// comment's own archive-clause failure.
 var demoT0 = time.Date(2026, 2, 1, 9, 0, 0, 0, time.UTC)
 
 // steppingClock is a mutable ports.Clock — design D6's own "a fake clock
@@ -270,11 +316,15 @@ func TestDemo_SimulatedWeeks_PassCompletes(t *testing.T) {
 }
 
 // TestDemo_ArchiveFires is spec R4.4's archive clause: over this corpus's
-// chosen "now", at least one unit's effective weight has fallen under
-// weight_threshold, read back directly through DecisionLog.Since (never by
-// re-deriving from units directly) rather than via re-running the pass a
-// second time. This is also demoT0's own mechanical guard — see demoT0's
-// doc comment.
+// chosen "now", every capture_script index the case's own expected.archived
+// declares has archived, read back directly through DecisionLog.Since
+// (never by re-deriving from units directly) rather than via re-running the
+// pass a second time. This is also demoT0's own mechanical guard — see
+// demoT0's doc comment. Checking each declared index specifically (JD-9a-01
+// correction), rather than counting rows and comparing to zero, is what
+// makes demoT0's own margin claim true: see demoT0's own doc comment for
+// which capture actually binds and why an earlier version of this
+// assertion did not enforce it.
 func TestDemo_ArchiveFires(t *testing.T) {
 	ex := loadDemoCase(t)
 	dv := driveDemoCorpus(t, ex)
@@ -287,14 +337,25 @@ func TestDemo_ArchiveFires(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decisions.Since: %v", err)
 	}
-	archived := 0
+	archivedUnitIDs := make(map[string]bool, len(decisions))
 	for _, d := range decisions {
-		if d.Action == ports.ActionArchiveArchived {
-			archived++
+		if d.Action != ports.ActionArchiveArchived {
+			continue
 		}
+		var detail struct{ UnitID string }
+		if err := json.Unmarshal(d.Context, &detail); err != nil {
+			t.Fatalf("unmarshal %s decision context %s: %v", ports.ActionArchiveArchived, d.Context, err)
+		}
+		archivedUnitIDs[detail.UnitID] = true
 	}
-	if archived == 0 {
-		t.Fatalf("decision_log gained 0 %s rows over %d total, want >= 1 (spec R4.4's archive clause) — demoT0 %s and the case's own now %s no longer clear the archival threshold; see demoT0's own doc comment", ports.ActionArchiveArchived, len(decisions), demoT0, ex.Now)
+	for _, idx := range ex.Expected.Archived {
+		if idx < 0 || idx >= len(dv.unitIDs) {
+			t.Fatalf("expected.archived index %d is out of range for %d capture_script entries", idx, len(dv.unitIDs))
+		}
+		unitID := dv.unitIDs[idx]
+		if !archivedUnitIDs[unitID] {
+			t.Fatalf("capture_script[%d] (unit %s) has no %s row, want one for every case's own expected.archived index %v (spec R4.4's archive clause) — demoT0 %s and the case's own now %s no longer clear the archival threshold; see demoT0's own doc comment", idx, unitID, ports.ActionArchiveArchived, ex.Expected.Archived, demoT0, ex.Now)
+		}
 	}
 }
 
