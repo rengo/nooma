@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -407,5 +408,116 @@ func TestDemo_DeriveBeliefExists(t *testing.T) {
 	}
 	if created == 0 {
 		t.Fatalf("decision_log gained 0 %s/%s rows over %d total, want >= 1 (spec R4.4's derive clause)", ports.ActionDeriveBeliefCreated, ports.ActionDeriveBeliefReinforced, len(decisions))
+	}
+}
+
+// demoDeriveBeliefTopicKey is testdata/llm/cases/derive-team-meeting-
+// preference.json's own scripted topic_key — the fixture 9a already wires
+// unconditionally for derive's one source (the corpus's own
+// expected.beliefs: [3]) — named here so TestDemo_DecisionLogTellsTheStory
+// can assert the derived belief's own Rationale names it (spec R4.5's
+// derive clause), without re-deriving it from self_beliefs directly.
+const demoDeriveBeliefTopicKey = "team_meeting"
+
+// decisionsWithAction filters decisions (already read once via
+// DecisionLog.Since, never re-queried per action) down to one Action —
+// a small local helper so TestDemo_DecisionLogTellsTheStory reads once
+// and checks three times, matching spec R4.5's own "decision_log alone
+// tells the story" framing: one read, multiple assertions over it.
+func decisionsWithAction(decisions []ports.Decision, action ports.DecisionAction) []ports.Decision {
+	var out []ports.Decision
+	for _, d := range decisions {
+		if d.Action == action {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// anyRationaleNames reports whether at least one row's Rationale contains
+// every one of substrings — spec R4.5's own bar ("each Rationale string
+// is present and names the specific unit/relation/belief the fixture
+// expects, not merely that a row of the right Action exists somewhere").
+// A substring check, not an exact-string match: it proves the row names
+// the specific item without coupling this test to internal/brain's own
+// incidental wording (fmt.Sprintf's exact phrasing in consolidate.go).
+func anyRationaleNames(rows []ports.Decision, substrings ...string) bool {
+	for _, d := range rows {
+		if d.Rationale == "" {
+			continue
+		}
+		named := true
+		for _, s := range substrings {
+			if !strings.Contains(d.Rationale, s) {
+				named = false
+				break
+			}
+		}
+		if named {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDemo_DecisionLogTellsTheStory is spec R4.5's own bar — decision_log
+// alone tells the story — asserted only through DecisionLog.Since (never
+// re-deriving from units/relations/self_beliefs directly): at least one
+// legible row for each of ActionArchiveArchived, ActionConnectRelation
+// Persisted, and (ActionDeriveBeliefCreated or ActionDeriveBeliefReinforced),
+// with each Rationale string present and naming the SPECIFIC unit/
+// relation/belief the case's own expected block declares — not merely
+// that a row of the right Action exists somewhere, the exact bar 9a's own
+// three narrower tests (TestDemo_ArchiveFires excepted, strengthened by
+// JD-9a-01) stopped short of. R4.6's own exit criterion rides on this
+// assertion (this file's own package, `m2d`'s last link).
+//
+// The connect clause is the one this corpus could not satisfy until this
+// PR: 9a's own passJudge scripted connect's one judge call with
+// "outcome":"new" (no persist) precisely because a real persisted
+// relation needs the real, run-time unit id RecallService's own candidate
+// search finds — an id only CaptureService.Capture assigns once this test
+// runs, which a checked-in, pre-authored testdata/llm fixture cannot
+// carry (design §8.1; 9a's own disclosed scope boundary). See
+// runDemoPass's own connectJudgeCase call for how this PR solves it: a
+// fresh per-run judge case, written to a temp dir, whose target_unit_id is
+// read from dv.unitIDs itself — never a hardcoded guess.
+func TestDemo_DecisionLogTellsTheStory(t *testing.T) {
+	ex := loadDemoCase(t)
+	dv := driveDemoCorpus(t, ex)
+
+	if _, err := runDemoPass(t, dv, ex); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	decisions, err := dv.decisions.Since(context.Background(), time.Time{}, 1000)
+	if err != nil {
+		t.Fatalf("decisions.Since: %v", err)
+	}
+
+	archiveRows := decisionsWithAction(decisions, ports.ActionArchiveArchived)
+	for _, idx := range ex.Expected.Archived {
+		unitID := dv.unitIDs[idx]
+		if !anyRationaleNames(archiveRows, unitID) {
+			t.Fatalf("decision_log has no %s row whose Rationale names unit %s (capture_script[%d]) — spec R4.5's archive clause", ports.ActionArchiveArchived, unitID, idx)
+		}
+	}
+
+	if len(ex.Expected.RelationsCreated) == 0 {
+		t.Fatalf("case %q declares no expected.relations_created — spec R4.5's connect clause has nothing to check", ex.ID)
+	}
+	pair := ex.Expected.RelationsCreated[0]
+	sourceID, targetID := dv.unitIDs[pair[0]], dv.unitIDs[pair[1]]
+	connectRows := decisionsWithAction(decisions, ports.ActionConnectRelationPersisted)
+	if !anyRationaleNames(connectRows, sourceID, targetID) {
+		t.Fatalf("decision_log has no %s row whose Rationale names both unit %s (capture_script[%d]) and unit %s (capture_script[%d]) — spec R4.5's connect clause", ports.ActionConnectRelationPersisted, sourceID, pair[0], targetID, pair[1])
+	}
+
+	if len(ex.Expected.Beliefs) == 0 {
+		t.Fatalf("case %q declares no expected.beliefs — spec R4.5's derive clause has nothing to check", ex.ID)
+	}
+	deriveRows := append(decisionsWithAction(decisions, ports.ActionDeriveBeliefCreated), decisionsWithAction(decisions, ports.ActionDeriveBeliefReinforced)...)
+	if !anyRationaleNames(deriveRows, demoDeriveBeliefTopicKey) {
+		t.Fatalf("decision_log has no %s/%s row whose Rationale names belief topic key %q — spec R4.5's derive clause", ports.ActionDeriveBeliefCreated, ports.ActionDeriveBeliefReinforced, demoDeriveBeliefTopicKey)
 	}
 }

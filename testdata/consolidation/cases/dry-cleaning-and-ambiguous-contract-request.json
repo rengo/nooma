@@ -26,6 +26,7 @@
   "last_run_at": "2026-02-11T06:00:00Z",
   "expected": {
     "archived": [0, 1],
+    "relations_created": [[3, 2]],
     "beliefs": [3]
   }
 }
