@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -260,6 +262,83 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 	}
 }
 
+// connectJudgeCaseID is the case id connectJudgeCase writes fresh into a
+// temp dir on every call — never checked in (see connectJudgeCase's own
+// doc comment for why a checked-in file structurally cannot carry this
+// response's one dynamic field).
+const connectJudgeCaseID = "consolidation-demo-connect-related"
+
+// connectJudgeCase solves 9b's own "id problem" (this document's PR 9b
+// preamble; 9a's own disclosed scope boundary): a persisted
+// ActionConnectRelationPersisted row needs connect's judge to answer with
+// a real target_unit_id (relation.Judgment.TargetUnitID, consolidate.go's
+// own judgeAndPersistPair — ProposeRelation trusts the judge's own
+// TargetUnitID verbatim, it does not cross-check it against the candidate
+// RecallService actually found), and that id is only assigned once
+// CaptureService.Capture runs inside this same test — a checked-in,
+// pre-authored testdata/llm/cases/*.json fixture cannot hold a value it
+// predates.
+//
+// The id IS deterministic, though (demoIDs increments one shared counter,
+// no wall clock, no map-iteration-order dependency anywhere on this
+// path — the same property 9a's own dv.unitIDs already relies on), so
+// this function does not invent or guess a value: it reads the real id
+// straight out of dv.unitIDs, using the exact (source, target) capture
+// indices the corpus's own expected.relations_created pair declares, and
+// writes ONE fresh case file per test run into a t.TempDir() — never
+// committed, never stale, self-correcting if a future corpus edit shifts
+// which indices are involved. fakeprovider.New still does every bit of
+// the actual replaying (CLAUDE.md non-negotiable #5, no network, no real
+// LLM) — this only supplies the one value a static file structurally
+// cannot carry. derive's own case is copied in unchanged alongside it so
+// both calls still replay from one fakeprovider.Fake, matching Order()'s
+// own connect-before-derive sequence.
+//
+// Returns the temp dir fakeprovider.New should load from.
+func connectJudgeCase(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) string {
+	t.Helper()
+	if len(ex.Expected.RelationsCreated) == 0 {
+		t.Fatalf("case %q declares no expected.relations_created — connect's judge response has no pair to target", ex.ID)
+	}
+	pair := ex.Expected.RelationsCreated[0]
+	sourceUnitID, targetUnitID := dv.unitIDs[pair[0]], dv.unitIDs[pair[1]]
+
+	dir := t.TempDir()
+
+	derive, err := os.ReadFile(filepath.Join(llmCasesDir(t), "derive-team-meeting-preference.json"))
+	if err != nil {
+		t.Fatalf("reading derive-team-meeting-preference.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "derive-team-meeting-preference.json"), derive, 0o600); err != nil {
+		t.Fatalf("copying derive-team-meeting-preference.json into judge dir: %v", err)
+	}
+
+	response := fmt.Sprintf(`{"outcome":"related","target_unit_id":%q,"type":%q,"strength":0.8,"confidence":0.85}`, targetUnitID, demoRelationType)
+	connectCase := struct {
+		ID       string `json:"id"`
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+		Task     string `json:"task"`
+		Message  string `json:"message"`
+		Response string `json:"response"`
+	}{
+		ID:       connectJudgeCaseID,
+		Provider: "anthropic",
+		Model:    "claude-sonnet",
+		Task:     "relation_evaluation",
+		Message:  fmt.Sprintf("unit %s relates to unit %s — 9b's own dynamically-generated judge case, see connectJudgeCase's own doc comment", sourceUnitID, targetUnitID),
+		Response: response,
+	}
+	data, err := json.Marshal(connectCase)
+	if err != nil {
+		t.Fatalf("marshal dynamic connect judge case: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, connectJudgeCaseID+".json"), data, 0o600); err != nil {
+		t.Fatalf("write dynamic connect judge case: %v", err)
+	}
+	return dir
+}
+
 // runDemoPass seeds config.consolidation_last_run_at from ex's own
 // last_run_at (R4.4's MAY, so strengthen/connect's `since` is non-nil and
 // excludes capture 2 from SelectConnectSources while still including
@@ -269,15 +348,20 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 //
 // passJudge scripts the two provider calls this specific corpus's pass
 // makes, in Order()'s own phase sequence (connect before derive):
-// "relation-no-match-for-dry-cleaning" answers connect's one judged pair
-// with "outcome":"new" (deliberately no persist — spec R4.4's connect
-// clause is proven here only as far as 9a.5's own task text requires,
-// "reach the judge"; producing a persisted relation with the real target
-// id is 9b's own tuning scope, not invented ahead of it), and
-// "derive-team-meeting-preference" answers derive's one source with a real
-// belief proposal, which DOES persist (createDerivedBelief carries no unit
-// reference to get wrong).
-func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (brain.ConsolidateReport, error) {
+// connectJudgeCase's own freshly-written case answers connect's one judged
+// pair with "outcome":"related" and the real target unit id (9b's own
+// discharge of 9a's disclosed scope boundary — see connectJudgeCase's own
+// doc comment), and "derive-team-meeting-preference" answers derive's one
+// source with a real belief proposal, which DOES persist (createDerived
+// Belief carries no unit reference to get wrong).
+//
+// buildDemoPass is runDemoPass's own construction half, split out (JD-9b-02)
+// so TestDemo_DecisionLogTellsTheStory can also keep passJudge — the Fake
+// that actually receives connect's rendered prompt — and inspect it via
+// SeenPrompts() after the pass runs. runDemoPass below is unchanged in
+// behavior and signature; every other TestDemo_* test keeps calling it
+// exactly as before.
+func buildDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (*brain.ConsolidateService, *fakeprovider.Fake) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -297,11 +381,18 @@ func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) 
 	}
 
 	recallSvc := brain.NewRecallService(dv.index, dv.lexical, dv.units, dv.embed)
-	passJudge := fakeprovider.New(t, llmCasesDir(t), "relation-no-match-for-dry-cleaning", "derive-team-meeting-preference")
+	judgeDir := connectJudgeCase(t, dv, ex)
+	passJudge := fakeprovider.New(t, judgeDir, connectJudgeCaseID, "derive-team-meeting-preference")
 	clock := &steppingClock{now: now}
 	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state)
 
-	return consolidateSvc.Consolidate(ctx, brain.ConsolidateRequest{})
+	return consolidateSvc, passJudge
+}
+
+func runDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample) (brain.ConsolidateReport, error) {
+	t.Helper()
+	consolidateSvc, _ := buildDemoPass(t, dv, ex)
+	return consolidateSvc.Consolidate(context.Background(), brain.ConsolidateRequest{})
 }
 
 // TestDemo_SimulatedWeeks_PassCompletes is spec R4.2 (as corrected by design
@@ -407,5 +498,194 @@ func TestDemo_DeriveBeliefExists(t *testing.T) {
 	}
 	if created == 0 {
 		t.Fatalf("decision_log gained 0 %s/%s rows over %d total, want >= 1 (spec R4.4's derive clause)", ports.ActionDeriveBeliefCreated, ports.ActionDeriveBeliefReinforced, len(decisions))
+	}
+}
+
+// demoDeriveBeliefTopicKey is testdata/llm/cases/derive-team-meeting-
+// preference.json's own scripted topic_key — the fixture 9a already wires
+// unconditionally for derive's one source (the corpus's own
+// expected.beliefs: [3]) — named here so TestDemo_DecisionLogTellsTheStory
+// can assert the derived belief's own Rationale names it (spec R4.5's
+// derive clause), without re-deriving it from self_beliefs directly.
+const demoDeriveBeliefTopicKey = "team_meeting"
+
+// demoRelationType is the relation type connectJudgeCase's own
+// dynamically-written judge case scripts (runDemoPass, below) — kept as
+// one named constant rather than a literal repeated in two places.
+const demoRelationType = "related_to"
+
+// demoConnectTargetContent is testdata/llm/cases/classify-prepare-meeting-
+// agenda.json's own scripted normalized_content — the exact text
+// classify.tounit stores as capture_script[2]'s unit.Content, and therefore
+// the exact text JudgePrompt (internal/brain/capture.go) renders into the
+// connect judge's prompt as that candidate's own line. Distinctive across
+// this corpus's four units (JD-9b-02): "Send Ana the contract", "Pick up
+// the dry cleaning" and "Schedule the team meeting for Monday" — the other
+// three capture_script entries' own normalized_content — share none of this
+// string, so its presence in a rendered prompt can only name capture_script
+// [2], never another unit in this corpus.
+const demoConnectTargetContent = "Draft the team meeting agenda"
+
+// decisionsWithAction filters decisions (already read once via
+// DecisionLog.Since, never re-queried per action) down to one Action —
+// a small local helper so TestDemo_DecisionLogTellsTheStory reads once
+// and checks three times, matching spec R4.5's own "decision_log alone
+// tells the story" framing: one read, multiple assertions over it.
+func decisionsWithAction(decisions []ports.Decision, action ports.DecisionAction) []ports.Decision {
+	var out []ports.Decision
+	for _, d := range decisions {
+		if d.Action == action {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// anyRationaleNames reports whether at least one row's Rationale contains
+// every one of substrings — spec R4.5's own bar ("each Rationale string
+// is present and names the specific unit/relation/belief the fixture
+// expects, not merely that a row of the right Action exists somewhere").
+// A substring check, not an exact-string match: it proves the row names
+// the specific item without coupling this test to internal/brain's own
+// incidental wording (fmt.Sprintf's exact phrasing in consolidate.go).
+func anyRationaleNames(rows []ports.Decision, substrings ...string) bool {
+	for _, d := range rows {
+		if d.Rationale == "" {
+			continue
+		}
+		named := true
+		for _, s := range substrings {
+			if !strings.Contains(d.Rationale, s) {
+				named = false
+				break
+			}
+		}
+		if named {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDemo_DecisionLogTellsTheStory is spec R4.5's own bar — decision_log
+// alone tells the story — asserted only through DecisionLog.Since (never
+// re-deriving from units/relations/self_beliefs directly): at least one
+// legible row for each of ActionArchiveArchived, ActionConnectRelation
+// Persisted, and (ActionDeriveBeliefCreated or ActionDeriveBeliefReinforced),
+// with each Rationale string present and naming the SPECIFIC unit/
+// relation/belief the case's own expected block declares — not merely
+// that a row of the right Action exists somewhere, the exact bar 9a's own
+// three narrower tests (TestDemo_ArchiveFires excepted, strengthened by
+// JD-9a-01) stopped short of. R4.6's own exit criterion rides on this
+// assertion (this file's own package, `m2d`'s last link).
+//
+// The connect clause is the one this corpus could not satisfy until this
+// PR: 9a's own passJudge scripted connect's one judge call with
+// "outcome":"new" (no persist) precisely because a real persisted
+// relation needs the real, run-time unit id RecallService's own candidate
+// search finds — an id only CaptureService.Capture assigns once this test
+// runs, which a checked-in, pre-authored testdata/llm fixture cannot
+// carry (design §8.1; 9a's own disclosed scope boundary). See
+// runDemoPass's own connectJudgeCase call for how this PR solves it: a
+// fresh per-run judge case, written to a temp dir, whose target_unit_id is
+// read from dv.unitIDs itself — never a hardcoded guess.
+//
+// This test calls buildDemoPass (runDemoPass's own construction half)
+// rather than runDemoPass itself, solely to keep passJudge — the Fake that
+// receives connect's rendered prompt — for the SeenPrompts check below
+// (JD-9b-02). That check is a SEPARATE proof from everything above: it
+// establishes that connect's real candidate search presented the expected
+// target, not merely that ProposeRelation persisted whatever the fixture's
+// judge answer named. It never substitutes for spec R4.5's own bar, which
+// stays exactly "decision_log (DecisionLog.Since) alone tells the story" —
+// see the Rationale-only checks immediately below.
+func TestDemo_DecisionLogTellsTheStory(t *testing.T) {
+	ex := loadDemoCase(t)
+	dv := driveDemoCorpus(t, ex)
+
+	consolidateSvc, passJudge := buildDemoPass(t, dv, ex)
+	if _, err := consolidateSvc.Consolidate(context.Background(), brain.ConsolidateRequest{}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+
+	decisions, err := dv.decisions.Since(context.Background(), time.Time{}, 1000)
+	if err != nil {
+		t.Fatalf("decisions.Since: %v", err)
+	}
+
+	if len(ex.Expected.Archived) == 0 {
+		t.Fatalf("case %q declares no expected.archived — spec R4.5's archive clause has nothing to check", ex.ID)
+	}
+	archiveRows := decisionsWithAction(decisions, ports.ActionArchiveArchived)
+	for _, idx := range ex.Expected.Archived {
+		unitID := dv.unitIDs[idx]
+		if !anyRationaleNames(archiveRows, unitID) {
+			t.Fatalf("decision_log has no %s row whose Rationale names unit %s (capture_script[%d]) — spec R4.5's archive clause", ports.ActionArchiveArchived, unitID, idx)
+		}
+	}
+
+	if len(ex.Expected.RelationsCreated) == 0 {
+		t.Fatalf("case %q declares no expected.relations_created — spec R4.5's connect clause has nothing to check", ex.ID)
+	}
+	pair := ex.Expected.RelationsCreated[0]
+	sourceID, targetID := dv.unitIDs[pair[0]], dv.unitIDs[pair[1]]
+	connectRows := decisionsWithAction(decisions, ports.ActionConnectRelationPersisted)
+	if !anyRationaleNames(connectRows, sourceID, targetID) {
+		t.Fatalf("decision_log has no %s row whose Rationale names both unit %s (capture_script[%d]) and unit %s (capture_script[%d]) — spec R4.5's connect clause", ports.ActionConnectRelationPersisted, sourceID, pair[0], targetID, pair[1])
+	}
+
+	// SEPARATE proof, not part of R4.5's own "decision_log alone" bar above
+	// (JD-9b-02): rel.ToUnitID above is the fixture's own scripted answer
+	// (connectJudgeCase writes it verbatim into target_unit_id, and
+	// judgeAndPersistPair/ProposeRelation trust it without cross-checking
+	// the candidate RecallService actually found — internal/brain/
+	// consolidate.go, internal/core/consolidation/connect.go; pre-existing,
+	// out of this PR's scope). anyRationaleNames above therefore cannot
+	// tell "the search found this target" from "we told it the answer".
+	// SeenPrompts() inspects what JudgePrompt (internal/brain/capture.go)
+	// actually rendered from the real candidate the search returned,
+	// independent of the fixture's canned response — fakeprovider.Fake
+	// replays strictly by scripted case id, never by prompt content, so
+	// this is real evidence, not another read of the same fixture value.
+	// demoConnectTargetContent is capture_script[2]'s own normalized
+	// content, distinctive across all four units in this corpus (see its
+	// own doc comment).
+	// Anchored on the composite JudgePrompt renders for a CANDIDATE —
+	// "  " + c.ID + ": " + c.Content (internal/brain/capture.go) — not on
+	// the content alone, and with the id half derived from the case's own
+	// declared pair rather than hardcoded. Two things follow, each closing
+	// a way this check could have looked stronger than it was:
+	//
+	//   - Only a candidate line carries "<id>: <content>". JudgePrompt
+	//     renders the SOURCE unit as bare content with no id prefix, and
+	//     derive's own prompt (consolidation.BuildDerivePrompt) renders
+	//     sources, never candidates. passJudge receives both phases' calls
+	//     and SeenPrompts() cannot distinguish them, so matching on content
+	//     alone could in principle have been satisfied by a derive prompt;
+	//     matching on the composite cannot.
+	//   - targetUnitID comes from ex.Expected.RelationsCreated[0], the same
+	//     place connectJudgeCase reads it. If a future edit repoints the
+	//     case's declared pair, the id half moves with it and stops
+	//     matching the content literal — a loud failure, never a silent
+	//     correlation against the wrong unit.
+	targetUnitID := dv.unitIDs[pair[1]]
+	wantCandidateLine := targetUnitID + ": " + demoConnectTargetContent
+	seenConnectPrompt := false
+	for _, p := range passJudge.SeenPrompts() {
+		if strings.Contains(p, wantCandidateLine) {
+			seenConnectPrompt = true
+			break
+		}
+	}
+	if !seenConnectPrompt {
+		t.Fatalf("no prompt sent to a judge renders %q as a candidate line — connect's candidate search never presented capture_script[%d] to the judge, so the persisted relation's target_unit_id cannot be trusted as anything but the fixture's own scripted answer", wantCandidateLine, pair[1])
+	}
+
+	if len(ex.Expected.Beliefs) == 0 {
+		t.Fatalf("case %q declares no expected.beliefs — spec R4.5's derive clause has nothing to check", ex.ID)
+	}
+	deriveRows := append(decisionsWithAction(decisions, ports.ActionDeriveBeliefCreated), decisionsWithAction(decisions, ports.ActionDeriveBeliefReinforced)...)
+	if !anyRationaleNames(deriveRows, demoDeriveBeliefTopicKey) {
+		t.Fatalf("decision_log has no %s/%s row whose Rationale names belief topic key %q — spec R4.5's derive clause", ports.ActionDeriveBeliefCreated, ports.ActionDeriveBeliefReinforced, demoDeriveBeliefTopicKey)
 	}
 }
