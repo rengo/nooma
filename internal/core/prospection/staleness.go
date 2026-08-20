@@ -17,6 +17,16 @@ const TriggerStalenessHours = 6
 // temporal (doc 02 §8) and decays faster than a memory-backed nudge.
 const TimerStalenessHours = 3
 
+// DelayCaveatMinutes is the overdue amount at which a delivered-but-late
+// item must say so (spec R1.3, ADR-0009, design §3.3): below it, the
+// lateness is the scheduler's own granularity and is not a fact about the
+// user's world; at or above it, ADR-0009's rule against out-of-context
+// nudges applies. Three shipped proactive_check ticks
+// (*/5 * * * *, docs/01-architecture.md:227) — the derivation, and its
+// docs/config assertion deferred to m3d #1, are recorded in design §3.3
+// (owner-review R4).
+const DelayCaveatMinutes = 15
+
 // Verdict is the whole delivery gate's output for one pending trigger or
 // timer. Core states only this neutral vocabulary — never a schema
 // status. brain maps VerdictStale to "expired" on a trigger (I15) and to
@@ -92,4 +102,14 @@ func TriggerVerdict(fireAt, now time.Time) Verdict {
 // fireAt directly, with no DeliverableFrom shift.
 func TimerVerdict(fireAt, now time.Time) Verdict {
 	return verdict(fireAt, fireAt, TimerStalenessHours, now, false)
+}
+
+// DelayCaveat reports whether a delivered item's overdue duration is
+// large enough that the fire-time rendering (m3d's job) must mention the
+// delay explicitly (spec R1.3, ADR-0009).
+//
+// TODO(PR 2, task 2.6): implement as the inclusive comparison design
+// §3.3 (Finding F6) requires.
+func DelayCaveat(overdue time.Duration) bool {
+	return true
 }

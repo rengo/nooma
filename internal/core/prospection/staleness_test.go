@@ -197,3 +197,35 @@ func TestTimerVerdict_StalenessBoundaryIsStrict(t *testing.T) {
 		t.Errorf("TimerVerdict one nanosecond past TimerStalenessHours = %v, want VerdictStale", got)
 	}
 }
+
+// TestDelayCaveat_BelowThreshold proves spec R1.3's own "a few seconds
+// late" scenario: the scheduler's own granularity is not a caveat-worthy
+// fact about the user's world.
+func TestDelayCaveat_BelowThreshold(t *testing.T) {
+	if got := DelayCaveat(3 * time.Second); got != false {
+		t.Errorf("DelayCaveat(3s) = %v, want false", got)
+	}
+}
+
+// TestDelayCaveat_BoundaryIsInclusive proves Finding F6: exactly
+// DelayCaveatMinutes late already caveats. This is deliberately the
+// opposite direction of TriggerVerdict/TimerVerdict's own strict
+// staleness comparison above (design §3.3) — there the inclusive side is
+// destructive (expiring is unrecoverable); here a caveat that was not
+// strictly necessary costs one clause of politeness, while a missing one
+// on a genuinely late delivery is the exact failure ADR-0009 exists to
+// prevent, so the boundary belongs on the cheap side.
+func TestDelayCaveat_BoundaryIsInclusive(t *testing.T) {
+	if got := DelayCaveat(DelayCaveatMinutes * time.Minute); got != true {
+		t.Errorf("DelayCaveat(%d min) = %v, want true (inclusive boundary)", DelayCaveatMinutes, got)
+	}
+}
+
+// TestDelayCaveat_AboveThreshold proves the ordinary above-threshold
+// case.
+func TestDelayCaveat_AboveThreshold(t *testing.T) {
+	overdue := DelayCaveatMinutes*time.Minute + time.Minute
+	if got := DelayCaveat(overdue); got != true {
+		t.Errorf("DelayCaveat(%v) = %v, want true", overdue, got)
+	}
+}
