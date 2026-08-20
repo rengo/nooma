@@ -31,8 +31,15 @@ func InQuietHours(now time.Time) bool {
 // trigger may actually be delivered: t itself when t is outside quiet
 // hours, and that day's QuietHoursEndHour otherwise (design §3.1/§3.3).
 //
-// TODO(PR 1, task 1.4): implement via time.Date with out-of-range
-// fields, never AddDate.
+// Built with time.Date rather than AddDate, the house pattern
+// (consolidation.NextDailyRun's own discipline): the shift never needs to
+// cross a calendar day, so no loop is needed here, but the same
+// out-of-range-field construction keeps the wall clock's own
+// normalization in one place.
 func DeliverableFrom(t time.Time) time.Time {
-    return t
+    if !InQuietHours(t) {
+        return t
+    }
+    y, m, d := t.Date()
+    return time.Date(y, m, d, QuietHoursEndHour, 0, 0, 0, t.Location())
 }
