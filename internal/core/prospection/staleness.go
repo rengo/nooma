@@ -106,10 +106,19 @@ func TimerVerdict(fireAt, now time.Time) Verdict {
 
 // DelayCaveat reports whether a delivered item's overdue duration is
 // large enough that the fire-time rendering (m3d's job) must mention the
-// delay explicitly (spec R1.3, ADR-0009).
+// delay explicitly (spec R1.3, ADR-0009). The comparison is inclusive —
+// exactly DelayCaveatMinutes late already caveats — deliberately the
+// opposite of verdict's own strict staleness comparison above: there the
+// inclusive side is destructive (expiring is unrecoverable, delivering
+// late is not), while here a caveat that was not strictly necessary
+// costs one clause of politeness and a missing one on a genuinely late
+// delivery is the exact failure ADR-0009 exists to prevent, so the
+// boundary belongs on the cheap side (design §3.3, Finding F6). It also
+// matches doc 02 §7's own permissive-side convention,
+// interrupt_level >= 0.70.
 //
-// TODO(PR 2, task 2.6): implement as the inclusive comparison design
-// §3.3 (Finding F6) requires.
+// DelayCaveat reports the fact; the render layer picks the words (doc 02
+// §7's own division of labour).
 func DelayCaveat(overdue time.Duration) bool {
-	return true
+	return overdue >= DelayCaveatMinutes*time.Minute
 }
