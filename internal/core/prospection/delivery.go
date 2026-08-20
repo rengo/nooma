@@ -59,7 +59,9 @@ func (i Interrupt) Level() float64 { return i.level }
 // itself.
 func (i Interrupt) Degraded() bool { return !i.confirmed }
 
-// Route is the delivery split's own two-member vocabulary (spec R3.2).
+// Route is the delivery split's own two-member vocabulary (spec R3.2):
+// mutually exclusive by construction, never a bare bool a caller could
+// misread.
 type Route string
 
 const (
@@ -69,7 +71,20 @@ const (
 	RouteDigest Route = "digest"
 )
 
-// Route is not implemented yet.
+// Route decides push vs digest for this resolved interrupt (spec R3.2;
+// design §3.4). The degraded check runs first and short-circuits: ruling
+// 1's "a degraded classification never produces a push" then holds even
+// if a future recalibration moves PushThreshold below DefaultInterruptLevel,
+// which the arithmetic comparison alone would not survive. The boundary
+// is inclusive — level == PushThreshold routes to push — matching doc 02
+// §7's own "interrupt_level >= 0.7" wording and DelayCaveat's own
+// permissive-side convention (staleness.go).
 func (i Interrupt) Route() Route {
-	return RoutePush
+	if i.Degraded() {
+		return RouteDigest
+	}
+	if i.level >= PushThreshold {
+		return RoutePush
+	}
+	return RouteDigest
 }
