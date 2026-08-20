@@ -119,3 +119,62 @@ func TestDefaultInterruptLevel_BelowPushThreshold(t *testing.T) {
 			DefaultInterruptLevel, PushThreshold)
 	}
 }
+
+// TestInterrupt_Route_DegradedAlwaysDigest proves spec R3.2's own MUST: a
+// degraded Interrupt routes to RouteDigest regardless of the level it
+// carries — including a corrupt level far above PushThreshold,
+// constructed directly (in-package) rather than through ResolveInterrupt,
+// since that is exactly the shape a bug elsewhere in this package could
+// produce. Declared first among the Route tests so this is the case that
+// fails first against the always-push stub, not a boundary case the stub
+// happens to satisfy already.
+func TestInterrupt_Route_DegradedAlwaysDigest(t *testing.T) {
+	corrupt := Interrupt{level: 0.95} // confirmed left false: degraded
+	if got := corrupt.Route(); got != RouteDigest {
+		t.Errorf("Interrupt{level: 0.95, degraded}.Route() = %v, want RouteDigest — the "+
+			"degraded short-circuit must run before the level comparison", got)
+	}
+}
+
+// TestInterrupt_Route_BoundaryIsInclusive proves spec R3.2's own
+// boundary: level == PushThreshold routes to push, matching doc 02 §7's
+// "interrupt_level >= 0.7" wording and DelayCaveat's own permissive-side
+// convention (staleness.go).
+func TestInterrupt_Route_BoundaryIsInclusive(t *testing.T) {
+	v := PushThreshold
+	if got := ResolveInterrupt(&v).Route(); got != RoutePush {
+		t.Errorf("ResolveInterrupt(&PushThreshold).Route() = %v, want RoutePush (inclusive boundary)", got)
+	}
+}
+
+// TestInterrupt_Route_OneUlpBelowThresholdIsDigest proves the boundary is
+// not accidentally inclusive on the wrong side.
+func TestInterrupt_Route_OneUlpBelowThresholdIsDigest(t *testing.T) {
+	v := math.Nextafter(PushThreshold, 0)
+	if v >= PushThreshold {
+		t.Fatalf("test fixture is broken: %v must be strictly below PushThreshold (%v)", v, PushThreshold)
+	}
+	if got := ResolveInterrupt(&v).Route(); got != RouteDigest {
+		t.Errorf("ResolveInterrupt(&%v).Route() = %v, want RouteDigest", v, got)
+	}
+}
+
+// TestInterrupt_Route_MaxLevelIsPush proves the top of the accepted range
+// routes to push, matching TestResolveInterrupt_InclusiveBoundsPassThrough's
+// own "exactly 1" case.
+func TestInterrupt_Route_MaxLevelIsPush(t *testing.T) {
+	v := 1.0
+	if got := ResolveInterrupt(&v).Route(); got != RoutePush {
+		t.Errorf("ResolveInterrupt(&1.0).Route() = %v, want RoutePush", got)
+	}
+}
+
+// TestInterrupt_Route_ResolvedFromNilRoutesDigest proves spec R3.2's own
+// composed scenario end to end: a degraded classification never reaches
+// Push, twice over — by the arithmetic inequality (R3.1) and by the
+// degraded short-circuit, either of which alone would suffice.
+func TestInterrupt_Route_ResolvedFromNilRoutesDigest(t *testing.T) {
+	if got := ResolveInterrupt(nil).Route(); got != RouteDigest {
+		t.Errorf("ResolveInterrupt(nil).Route() = %v, want RouteDigest", got)
+	}
+}

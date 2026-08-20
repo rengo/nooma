@@ -58,3 +58,18 @@ func (i Interrupt) Level() float64 { return i.level }
 // distinction doc 02 §5.1 requires, carried separately from the level
 // itself.
 func (i Interrupt) Degraded() bool { return !i.confirmed }
+
+// Route is the delivery split's own two-member vocabulary (spec R3.2).
+type Route string
+
+const (
+	// RoutePush is the immediate, cadence-skipping delivery path.
+	RoutePush Route = "push"
+	// RouteDigest is the accumulating, cadence-gated delivery path.
+	RouteDigest Route = "digest"
+)
+
+// Route is not implemented yet.
+func (i Interrupt) Route() Route {
+	return RoutePush
+}
