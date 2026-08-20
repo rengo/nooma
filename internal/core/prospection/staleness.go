@@ -32,10 +32,50 @@ const (
 	VerdictDeliver Verdict = "deliver"
 )
 
-// TriggerVerdict decides deliver vs. stale vs. defer vs. pending for one
-// armed time_based trigger (spec R1.1).
+// verdict is the one decision shared by TriggerVerdict and TimerVerdict
+// (design §3.3), evaluated in this fixed order:
 //
-// TODO(PR 2, task 2.2): implement via DeliverableFrom-measured overdue.
+//  1. now.Before(fireAt) → Pending. Not yet due.
+//  2. deferInQuietHours && InQuietHours(now) → Defer. Quiet hours are
+//     evaluated before staleness, so an item is never declared stale
+//     during a window in which it was refused delivery. Trigger-only —
+//     TimerVerdict passes deferInQuietHours = false and never reaches
+//     this branch, which is how the timer stays the one push exception
+//     to quiet hours (design §3.2).
+//  3. now.Sub(from) > stalenessHours → Stale. Strict, matching
+//     consolidation.CatchUpDue's own "more than" convention and
+//     ADR-0009's wording: exactly stalenessHours overdue still delivers.
+//  4. → Deliver.
+//
+// deferInQuietHours is the one parameter design §3.3's own four-argument
+// sketch does not name explicitly, alongside its "trigger only" prose for
+// step 2 — a shared helper cannot honor that exception from (fireAt,
+// from, stalenessHours, now) alone, since a timer whose fireAt equals its
+// own from is indistinguishable from a trigger armed outside quiet hours
+// on those four values. Behavior matches design's own worked table and
+// scenarios exactly; only this private, unexported parameter is added to
+// make the "trigger only" sentence executable.
+func verdict(fireAt, from time.Time, stalenessHours int, now time.Time, deferInQuietHours bool) Verdict {
+	if now.Before(fireAt) {
+		return VerdictPending
+	}
+	if deferInQuietHours && InQuietHours(now) {
+		return VerdictDefer
+	}
+	overdue := now.Sub(from)
+	if overdue > time.Duration(stalenessHours)*time.Hour {
+		return VerdictStale
+	}
+	return VerdictDeliver
+}
+
+// TriggerVerdict decides deliver vs. stale vs. defer vs. pending for one
+// armed time_based trigger (spec R1.1). overdue is measured from
+// DeliverableFrom(fireAt) — the first instant the trigger could actually
+// have been delivered — not from fireAt itself: the quiet-hours window is
+// longer than the trigger staleness threshold, so measuring from fireAt
+// directly would expire every trigger armed inside quiet hours before the
+// user woke, every night (design §3.3, Finding F1).
 func TriggerVerdict(fireAt, now time.Time) Verdict {
-	return ""
+	return verdict(fireAt, DeliverableFrom(fireAt), TriggerStalenessHours, now, true)
 }
