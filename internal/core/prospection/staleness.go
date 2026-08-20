@@ -86,10 +86,10 @@ func TriggerVerdict(fireAt, now time.Time) Verdict {
 }
 
 // TimerVerdict mirrors TriggerVerdict with the timer's own threshold and
-// without the quiet-hours gate (spec R1.2).
-//
-// TODO(PR 2, task 2.4): implement via fireAt-measured overdue, no
-// DeliverableFrom shift, no quiet-hours check.
+// without the quiet-hours gate (spec R1.2): a timer's instant was set by
+// an explicit user instruction at capture, so it is the one exception to
+// quiet hours and never accrues policy delay — overdue is measured from
+// fireAt directly, with no DeliverableFrom shift.
 func TimerVerdict(fireAt, now time.Time) Verdict {
-	return ""
+	return verdict(fireAt, fireAt, TimerStalenessHours, now, false)
 }
