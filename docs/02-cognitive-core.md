@@ -756,6 +756,20 @@ have N nudges; a pattern watcher does not hang off any unit):
 - `kind`: `time_based` (fire_at; armed by capture or by the user) | `event_based` (condition
   evaluated in the capture hook) | `pattern_based` (condition evaluated during consolidation).
 - `status`: `armed → fired → …` | `dismissed` | `expired`.
+- **Staleness** ([ADR-0009](adr/0009-scheduler-downtime.md)): overdue is measured from the first
+  instant the item could actually have been delivered, not from `fire_at` directly —
+  `DeliverableFrom(fire_at)` for a trigger (that day's quiet-hours end, if `fire_at` falls
+  inside them), `fire_at` itself for a timer, which is exempt from quiet hours (see below).
+  This exists because the quiet-hours window (seven hours, `[00:00, 07:00)`) is longer than
+  `trigger_staleness_hours` (six): measured naively from `fire_at`, every trigger armed
+  between 00:00 and 01:00 would expire before the user woke, every night. Past that first
+  deliverable instant, `trigger_staleness_hours` (6,
+  `internal/core/prospection.TriggerStalenessHours`) and `timer_staleness_hours` (3,
+  `internal/core/prospection.TimerStalenessHours`) govern expiry, quiet hours are evaluated
+  before staleness, and overdue by more, a trigger goes `expired` and a timer goes
+  `cancelled` — never fired (ADR-0009). A delivered-but-late item mentions the delay
+  explicitly once overdue reaches `delay_caveat_minutes` (15 minutes — three shipped
+  `proactive_check` ticks, `internal/core/prospection.DelayCaveatMinutes`).
 - Delivery lifecycle: `fired_at` (fired) → `surfaced_at` (delivered to the user) →
   `responded_at` + `resolution` (`engaged` | `declined` | `self_healed` — fresh activity
   resolved it before the user answered).
@@ -922,8 +936,9 @@ module):
 | Perception confidence gate | 0.40 |
 | Consolidation / proactive check (`internal/scheduler.ConsolidationHour`; not calibration-gate-checkable this way — the Default cell's leading `03:00` reads as `03` under the gate's anchored numeric parser, not the constant's own value `3`; splitting this row so the consolidation half can be checked is M3's job, the same PR that fills the proactive-check half) | 03:00 daily / every 5 min |
 | `boot_consolidation_delay` (`internal/scheduler.BootConsolidationDelay`) | 120 s |
-| `trigger_staleness_hours` | 6 |
-| `timer_staleness_hours` | 3 |
+| `trigger_staleness_hours` (`internal/core/prospection.TriggerStalenessHours`) | 6 — ADR-0009's catch-up threshold for a time_based trigger; gains a constant here, value unchanged |
+| `timer_staleness_hours` (`internal/core/prospection.TimerStalenessHours`) | 3 — ADR-0009's tighter catch-up threshold for an ephemeral timer; gains a constant here, value unchanged |
+| `delay_caveat_minutes` (`internal/core/prospection.DelayCaveatMinutes`) | 15 — chosen: three shipped `proactive_check` ticks (`*/5 * * * *`), so scheduler granularity never produces a caveat on its own; the relation `delay_caveat_minutes >= 3 × proactive_check period` cannot be asserted yet — `internal/config/defaults.go` declares no schedule default today — and lands as an L2 test in `m3d` #1 once the tick has a Go home |
 | RRF `k` | 60 |
 | `recall_top_k` | 20 |
 | RRF vector-leg weight (`weight_vector`) | 1.0 |
