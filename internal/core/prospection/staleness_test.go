@@ -181,6 +181,71 @@ func TestTimerVerdict_DeliversInsideQuietHours(t *testing.T) {
 	}
 }
 
+// TestTriggerVerdict_ArmedInsideQuietHoursStillGoesStale closes the half
+// of DeliverableFrom's argument the worked boundary table does not reach.
+// That table's two Stale rows are both armed OUTSIDE quiet hours (20:00
+// and 23:30), and its three quiet-hours rows all end in Defer or in
+// Deliver at zero overdue — so nothing in it proves that the shift
+// DeliverableFrom performs moves the starting line without also granting
+// immunity.
+//
+// A trigger armed at 00:30 is deliverable from 07:00. Seven hours after
+// that, past TriggerStalenessHours, it must be Stale exactly like any
+// other trigger the system was down for: quiet hours excuse the policy
+// window, and nothing after it.
+func TestTriggerVerdict_ArmedInsideQuietHoursStillGoesStale(t *testing.T) {
+	loc := time.FixedZone("UTC+2", 2*60*60)
+	fireAt := time.Date(2026, 8, 7, 0, 30, 0, 0, loc)
+	now := time.Date(2026, 8, 7, 14, 0, 0, 0, loc)
+
+	if !InQuietHours(fireAt) {
+		t.Fatalf("test fixture is broken: fireAt %v must be inside quiet hours", fireAt)
+	}
+	if InQuietHours(now) {
+		t.Fatalf("test fixture is broken: now %v must be outside quiet hours, so this test "+
+			"is about staleness and not about the Defer gate", now)
+	}
+	if overdue := now.Sub(DeliverableFrom(fireAt)); overdue <= time.Duration(TriggerStalenessHours)*time.Hour {
+		t.Fatalf("test fixture is broken: overdue from the first deliverable instant is %v, "+
+			"which does not exceed TriggerStalenessHours (%dh) — this case would prove nothing",
+			overdue, TriggerStalenessHours)
+	}
+
+	if got := TriggerVerdict(fireAt, now); got != VerdictStale {
+		t.Errorf("TriggerVerdict(%v, %v) = %v, want VerdictStale — DeliverableFrom moves where "+
+			"overdue starts counting, it does not exempt a trigger from ever expiring", fireAt, now, got)
+	}
+}
+
+// TestTimerVerdict_StaleInsideQuietHours proves the timer's exception is
+// scoped to the quiet-hours gate alone. TestTimerVerdict_DeliversInsideQuietHours
+// covers a timer due at that very instant (zero overdue); this covers the
+// other side, where the timer is both inside quiet hours and genuinely
+// past TimerStalenessHours.
+//
+// Being exempt from being deferred is not being exempt from going stale.
+// If these two ever fused, a timer armed before a long downtime would
+// fire in the middle of the night, hours late — which is the pair of
+// failures ADR-0009 names, arriving together.
+func TestTimerVerdict_StaleInsideQuietHours(t *testing.T) {
+	loc := time.UTC
+	fireAt := time.Date(2026, 8, 7, 0, 0, 0, 0, loc)
+	now := time.Date(2026, 8, 7, 4, 0, 0, 0, loc)
+
+	if !InQuietHours(now) {
+		t.Fatalf("test fixture is broken: now %v must be inside quiet hours", now)
+	}
+	if overdue := now.Sub(fireAt); overdue <= time.Duration(TimerStalenessHours)*time.Hour {
+		t.Fatalf("test fixture is broken: overdue is %v, which does not exceed "+
+			"TimerStalenessHours (%dh)", overdue, TimerStalenessHours)
+	}
+
+	if got := TimerVerdict(fireAt, now); got != VerdictStale {
+		t.Errorf("TimerVerdict(%v, %v) = %v, want VerdictStale — a timer is exempt from the "+
+			"quiet-hours gate, not from its own staleness window", fireAt, now, got)
+	}
+}
+
 // TestTimerVerdict_StalenessBoundaryIsStrict mirrors TriggerVerdict's own
 // boundary with the timer's own threshold.
 func TestTimerVerdict_StalenessBoundaryIsStrict(t *testing.T) {
