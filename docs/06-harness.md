@@ -253,7 +253,7 @@ Initial extraction:
 | I13 | A `learning_signal` outlives the deletion of its target (no FK) | §9 |
 | I14 | A malformed `classify` field degrades to null; it never aborts the classification | §5 |
 | I15 | A trigger overdue past the threshold → `expired`, never `fired` | ADR-0009 |
-| I16 | Nothing is delivered during quiet hours except the defined push exception | §7 |
+| I16 | Nothing is delivered during quiet hours except the timer, an explicit instruction | §7 |
 | I17 | Firing a recurring trigger creates the next one pointing at the **same** unit | §7 |
 | I18 | `event_at`, `created_at`, and `due_at` are never interchanged | §1 |
 | I19 | A challenger must beat the incumbent by more than `hysteresis_margin` | §3 |

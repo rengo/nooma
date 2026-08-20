@@ -96,7 +96,7 @@ already-past clamp). Neither requirement is weakened; they compose.
 Depends on nothing outside this change. Ships `quiethours.go` — `InQuietHours`, `DeliverableFrom`,
 2 constants. I16 pure half.
 
-- [ ] **1.1** Commit 1 (RED): `internal/core/prospection/quiethours_test.go` — `InQuietHours`
+- [x] **1.1** Commit 1 (RED): `internal/core/prospection/quiethours_test.go` — `InQuietHours`
       boundary table: `00:00:00`→true, `06:59:59`→true, `07:00:00`→false, `23:59:59`→false; a
       fixed non-UTC `Location` test double proving two `time.Time` values denoting the same
       instant but carrying different `Location`s (one reads `06:30` local, one reads `08:30`)
@@ -107,10 +107,10 @@ Depends on nothing outside this change. Ships `quiethours.go` — `InQuietHours`
       Stub: the two consts (0, 7); `func InQuietHours(now time.Time) bool { return false }` —
       compiles; the `00:00:00` case expects `true`, fails first.
       Requirement: R2.1.
-- [ ] **1.2** Commit 2 (GREEN): implement `InQuietHours` via `now.Hour()` in `now.Location()`.
+- [x] **1.2** Commit 2 (GREEN): implement `InQuietHours` via `now.Hour()` in `now.Location()`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R2.1; design §3.1.
-- [ ] **1.3** Commit 1 (RED): `quiethours_test.go` (continued) — `DeliverableFrom`: `t` outside
+- [x] **1.3** Commit 1 (RED): `quiethours_test.go` (continued) — `DeliverableFrom`: `t` outside
       quiet hours → `t` unchanged; `t` inside quiet hours → that day's `QuietHoursEndHour` instant,
       same `Location`; `t == QuietHoursEndHour` exactly → `t` unchanged (end is exclusive, matching
       `InQuietHours`'s own boundary).
@@ -119,11 +119,11 @@ Depends on nothing outside this change. Ships `quiethours.go` — `InQuietHours`
       inside-quiet-hours case expects a shifted instant, fails first.
       Requirement: design §3.1/§3.3 (Risk A's mitigation) — flagged: spec's own R1.1 does not name
       this function; see Finding F1.
-- [ ] **1.4** Commit 2 (GREEN): implement `DeliverableFrom` via `time.Date` with out-of-range
+- [x] **1.4** Commit 2 (GREEN): implement `DeliverableFrom` via `time.Date` with out-of-range
       fields, never `AddDate` (house pattern, `consolidation.NextDailyRun`'s own discipline).
       Verify: `go test ./internal/core/prospection/... -run DeliverableFrom`.
       Requirement: design §3.1/§3.3.
-- [ ] **1.5** `test/conformance/i16_quiet_hours_test.go` (new) — sweep the whole `[00:00, 24:00)`
+- [x] **1.5** `test/conformance/i16_quiet_hours_test.go` (new) — sweep the whole `[00:00, 24:00)`
       window in a fixed `Location`, asserting `InQuietHours` against the boundary table; assert
       `InQuietHours` takes no "kind" parameter — it structurally cannot special-case a timer even
       if a caller wanted it to (this PR's own half of "the timer is the only exception"; the real
@@ -131,22 +131,22 @@ Depends on nothing outside this change. Ships `quiethours.go` — `InQuietHours`
       **Not a missing-symbol red**: `InQuietHours` already compiles and passes (task 1.2) —
       disclosed per `m2a` C9.
       Requirement: R2.1 (I16 row, `docs/06-harness.md` §4).
-- [ ] **1.6** `docs/02-cognitive-core.md` §7 amendment: state the timer exception explicitly in the
+- [x] **1.6** `docs/02-cognitive-core.md` §7 amendment: state the timer exception explicitly in the
       push bullet — an explicit user instruction (a timer) outranks the quiet-hours policy window;
       an inferred trigger does not, and is always deferred. Owner-review **R1**.
       Requirement: design §3.2 (decision C).
-- [ ] **1.7** `docs/06-harness.md:256` amendment: I16's row gains the four words naming the
+- [x] **1.7** `docs/06-harness.md:256` amendment: I16's row gains the four words naming the
       exception.
       Requirement: design §3.2; **R1**.
-- [ ] **1.8** §13: row 913 (`Quiet hours`) **splits into two** — `quiet_hours_start_hour` (0,
+- [x] **1.8** §13: row 913 (`Quiet hours`) **splits into two** — `quiet_hours_start_hour` (0,
       `prospection.QuietHoursStartHour`) and `quiet_hours_end_hour` (7,
       `prospection.QuietHoursEndHour`) — because a Default cell starting with `[` fails the gate's
       anchored numeric parse.
       Requirement: R0; design §3.1.
-- [ ] **1.9** Purity/lint: `golangci-lint run` (`core-purity` — imports only `time` beyond stdlib;
+- [x] **1.9** Purity/lint: `golangci-lint run` (`core-purity` — imports only `time` beyond stdlib;
       `forbidigo` — no `time.Now`/`rand.*`/`os.Getenv`).
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/quiethours{,_test}.go`, `test/conformance/i16_quiet_hours_test.go`,
       `docs/02-cognitive-core.md`, `docs/06-harness.md`. Target ≤320 impl+docs lines.
 

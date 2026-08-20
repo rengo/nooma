@@ -771,7 +771,11 @@ box can audit it):
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, 07:00)` local time: deferred and
-  resurfacing on waking. Mutually exclusive with the digest (no double delivery).
+  resurfacing on waking — **except a timer**. A timer's instant was set by an explicit user
+  instruction at capture ("remind me in 15 min"); an inferred trigger's instant was not, and an
+  inferred trigger always defers through quiet hours regardless of its own `interrupt_level`. An
+  explicit instruction outranks the quiet-hours policy window; an inference does not. Mutually
+  exclusive with the digest (no double delivery).
 - Below that → **digest** (pull, accumulates): with a cadence, and two care gates:
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery (anti-starvation).
@@ -910,7 +914,8 @@ module):
 | `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`interrupt_level`) | 0.70 |
-| Quiet hours | [00:00, 07:00) local |
+| `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
+| `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
 | Event lead time | 7 days |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
@@ -931,6 +936,6 @@ Exact values get calibrated with real usage; the mechanisms in this document do 
 **This table is executable.** Every row that names a constant under `internal/core/` is checked
 against that constant by `test/conformance/calibration_doc_test.go`: the symbol must exist, be a
 constant, and hold exactly the number written here. A row's Default column therefore leads with
-its value, and any prose follows after an em dash. Rows naming no constant yet — `Quiet hours`,
-`RRF k`, `recall_top_k` — are not yet implemented, and each one starts being checked on the day
+its value, and any prose follows after an em dash. Rows naming no constant yet — `RRF k`,
+`recall_top_k` — are not yet implemented, and each one starts being checked on the day
 its row names the constant that implements it.
