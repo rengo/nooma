@@ -114,6 +114,24 @@ func TestDeliverableFrom(t *testing.T) {
 			t:    time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, loc),
 			want: time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, loc),
 		},
+		{
+			// The other bound. The start is inclusive, so the very first
+			// instant of the window shifts — and this is the input the
+			// naive `now - fire_at` staleness formula killed nightly
+			// (design §3.3), so it is the one case worth pinning by name.
+			name: "exactly at QuietHoursStartHour shifts — the start bound is inclusive",
+			t:    time.Date(2026, 8, 7, QuietHoursStartHour, 0, 0, 0, loc),
+			want: time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, loc),
+		},
+		{
+			// A negative offset, so the sign of the zone is an exercised
+			// input class rather than an assumed symmetry. DeliverableFrom
+			// rebuilds its result from t.Date() and t.Location(); nothing
+			// in that is sign-aware, and this is what proves it.
+			name: "a negative-offset zone behaves like a positive one",
+			t:    time.Date(2026, 8, 7, 3, 15, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
+			want: time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -936,6 +936,6 @@ Exact values get calibrated with real usage; the mechanisms in this document do 
 **This table is executable.** Every row that names a constant under `internal/core/` is checked
 against that constant by `test/conformance/calibration_doc_test.go`: the symbol must exist, be a
 constant, and hold exactly the number written here. A row's Default column therefore leads with
-its value, and any prose follows after an em dash. Rows naming no constant yet — `Quiet hours`,
-`RRF k`, `recall_top_k` — are not yet implemented, and each one starts being checked on the day
+its value, and any prose follows after an em dash. Rows naming no constant yet — `RRF k`,
+`recall_top_k` — are not yet implemented, and each one starts being checked on the day
 its row names the constant that implements it.
