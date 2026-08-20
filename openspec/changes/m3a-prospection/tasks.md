@@ -158,7 +158,7 @@ Depends on PR 1 (`DeliverableFrom`). Ships `staleness.go` — `Verdict`, `Trigge
 `TimerVerdict`, `DelayCaveat`, 3 constants. I15 pure half. See **Finding F1**: the formula tested
 here is design's `DeliverableFrom`-based one, not spec's literal `now.Sub(fireAt)`.
 
-- [ ] **2.1** Commit 1 (RED): `internal/core/prospection/staleness_test.go` — `TriggerVerdict`
+- [x] **2.1** Commit 1 (RED): `internal/core/prospection/staleness_test.go` — `TriggerVerdict`
       exercised through design §3.3's own worked six-row boundary table (`00:30`/pass `03:00` →
       Defer; `00:30`/pass `07:00` → Deliver, overdue 0; `00:00`/pass `07:00` → Deliver; `20:00`/pass
       next-day `10:00` → Stale; `23:30`/pass next-day `07:00` → Stale, 7.5h overdue; `06:00`/pass
@@ -173,12 +173,12 @@ here is design's `DeliverableFrom`-based one, not spec's literal `now.Sub(fireAt
       first.
       Requirement: R1.1, resolved per **Finding F1**; I16-ordering (quiet hours evaluated before
       staleness).
-- [ ] **2.2** Commit 2 (GREEN): implement `TriggerVerdict` via an unexported
+- [x] **2.2** Commit 2 (GREEN): implement `TriggerVerdict` via an unexported
       `verdict(fireAt, from, stalenessHours, now)` helper — `from = DeliverableFrom(fireAt)`; order:
       Pending → (trigger-only) Defer via `InQuietHours(now)` → Stale (strict `>`) → Deliver.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R1.1; design §3.3.
-- [ ] **2.3** Commit 1 (RED): `staleness_test.go` (continued) — `TimerVerdict`: not-yet-due →
+- [x] **2.3** Commit 1 (RED): `staleness_test.go` (continued) — `TimerVerdict`: not-yet-due →
       Pending; `fireAt` 2h before `now`, `TimerStalenessHours = 3` → Deliver (spec R1.2's own
       scenario); Deliver even while `InQuietHours(now)` is true — the direct proof of "the timer is
       the only push exception" (PR 1 task 1.5's forward reference).
@@ -187,43 +187,44 @@ here is design's `DeliverableFrom`-based one, not spec's literal `now.Sub(fireAt
       Deliver-inside-quiet-hours case fails first.
       Requirement: R1.2, resolved per **Finding F2** (`TimerVerdict` shares `Verdict` rather than a
       separate Deliver/Cancel pair — `brain` maps `VerdictStale` to `cancelled`, per design §3.3).
-- [ ] **2.4** Commit 2 (GREEN): implement `TimerVerdict` via the same helper, `from = fireAt`
+- [x] **2.4** Commit 2 (GREEN): implement `TimerVerdict` via the same helper, `from = fireAt`
       directly — no `DeliverableFrom` shift, no quiet-hours check.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R1.2; design §3.3.
-- [ ] **2.5** Commit 1 (RED): `staleness_test.go` (continued) — `DelayCaveat`: overdue far below
+- [x] **2.5** Commit 1 (RED): `staleness_test.go` (continued) — `DelayCaveat`: overdue far below
       `DelayCaveatMinutes` → false (spec R1.3's "a few seconds late" scenario); `overdue ==
       DelayCaveatMinutes` exactly → **true** (inclusive `>=` — Finding F6); one minute above → true.
       **Red**: `undefined: prospection.DelayCaveatMinutes`, `undefined: prospection.DelayCaveat`.
       Stub: `const DelayCaveatMinutes = 15`; `func DelayCaveat(overdue time.Duration) bool { return
       true }` — compiles; the below-threshold case expects `false`, fails first.
       Requirement: R1.3.
-- [ ] **2.6** Commit 2 (GREEN): implement `DelayCaveat` — `overdue >= DelayCaveatMinutes*time.Minute`.
+- [x] **2.6** Commit 2 (GREEN): implement `DelayCaveat` — `overdue >= DelayCaveatMinutes*time.Minute`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R1.3; design §3.3.
-- [ ] **2.7** `test/conformance/i15_trigger_expires_not_fires_test.go` (new) — for every `fireAt`
+- [x] **2.7** `test/conformance/i15_trigger_expires_not_fires_test.go` (new) — for every `fireAt`
       swept across the staleness window, `TriggerVerdict` never returns `VerdictDeliver` once
       genuinely past the window, and core returns `VerdictStale`, never a status the schema knows
       (design §3.3's own I12 note).
       Requirement: R1.1 (I15 row, `docs/06-harness.md` §4).
-- [ ] **2.8** `docs/02-cognitive-core.md` §7 + ADR-0009 cross-reference amendment: staleness counts
+- [x] **2.8** `docs/02-cognitive-core.md` §7 + ADR-0009 cross-reference amendment: staleness counts
       from the first deliverable instant (`DeliverableFrom`), not from `fire_at` directly, and why
       (the 7h-quiet/6h-staleness interaction); the delay-caveat threshold and its three-tick
       derivation.
       Requirement: design §3.3 (Risk A's doc-facing half).
-- [ ] **2.9** §13: row 920 (`trigger_staleness_hours`) amended with `prospection.
+- [x] **2.9** §13: row 920 (`trigger_staleness_hours`) amended with `prospection.
       TriggerStalenessHours`; row 921 (`timer_staleness_hours`) amended with `prospection.
       TimerStalenessHours`; new row `delay_caveat_minutes` (15, chosen — three shipped
       `proactive_check` ticks). Note **R4**: the `DelayCaveatMinutes >= 3×` tick relation cannot be
       asserted here — `internal/config/defaults.go` declares no schedule default — documented as
       deferred to `m3d` #1 in the row's own comment.
       Requirement: R0; design §3.3.
-- [ ] **2.10** Purity/lint: `golangci-lint run`.
+- [x] **2.10** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/staleness{,_test}.go`,
       `test/conformance/i15_trigger_expires_not_fires_test.go`, `docs/02-cognitive-core.md`. Target
-      ≤370 impl+docs lines. **If the boundary table plus the property sweep run long**, split at
+      ≤370 impl+docs lines — measured 143 (124 `staleness.go` + 19 `docs/02-cognitive-core.md`), no
+      split needed. **If the boundary table plus the property sweep run long**, split at
       `TriggerVerdict` (the trigger-side, `DeliverableFrom`-composed half) | `TimerVerdict` +
       `DelayCaveat` (the timer-only half, structurally independent of the trigger's own shift) —
       not pre-drawn by design, report before splitting.
