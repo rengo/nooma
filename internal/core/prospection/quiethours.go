@@ -18,7 +18,11 @@ const QuietHoursEndHour = 7
 // now.Location(), never a configured or global zone — falls in
 // [QuietHoursStartHour, QuietHoursEndHour) (spec R2.1).
 //
-// TODO(PR 1, task 1.2): implement via now.Hour() in now.Location().
+// The zone is not a parameter and not a config key: now.Hour() reads the
+// wall clock in now.Location(), and the location travels inside the
+// instant ports.Clock.Now() produced (docs/02-cognitive-core.md:600-610;
+// the same mechanism classify/prompt.go documents for capture).
 func InQuietHours(now time.Time) bool {
-    return false
+    hour := now.Hour()
+    return hour >= QuietHoursStartHour && hour < QuietHoursEndHour
 }
