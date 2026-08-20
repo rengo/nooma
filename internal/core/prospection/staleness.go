@@ -12,6 +12,11 @@ import "time"
 // own doc comment gives the same reason).
 const TriggerStalenessHours = 6
 
+// TimerStalenessHours is ADR-0009's catch-up threshold for an ephemeral
+// timer — tighter than a trigger's because a timer's value is purely
+// temporal (doc 02 §8) and decays faster than a memory-backed nudge.
+const TimerStalenessHours = 3
+
 // Verdict is the whole delivery gate's output for one pending trigger or
 // timer. Core states only this neutral vocabulary — never a schema
 // status. brain maps VerdictStale to "expired" on a trigger (I15) and to
@@ -78,4 +83,13 @@ func verdict(fireAt, from time.Time, stalenessHours int, now time.Time, deferInQ
 // user woke, every night (design §3.3, Finding F1).
 func TriggerVerdict(fireAt, now time.Time) Verdict {
 	return verdict(fireAt, DeliverableFrom(fireAt), TriggerStalenessHours, now, true)
+}
+
+// TimerVerdict mirrors TriggerVerdict with the timer's own threshold and
+// without the quiet-hours gate (spec R1.2).
+//
+// TODO(PR 2, task 2.4): implement via fireAt-measured overdue, no
+// DeliverableFrom shift, no quiet-hours check.
+func TimerVerdict(fireAt, now time.Time) Verdict {
+	return ""
 }

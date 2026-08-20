@@ -137,3 +137,63 @@ func TestTriggerVerdict_NeverStaleAtQuietHoursEnd(t *testing.T) {
 		}
 	}
 }
+
+// TestTimerVerdict_NotYetDueIsPending mirrors TriggerVerdict's own
+// not-yet-due case.
+func TestTimerVerdict_NotYetDueIsPending(t *testing.T) {
+	loc := time.UTC
+	fireAt := time.Date(2026, 8, 7, 12, 0, 0, 0, loc)
+	now := time.Date(2026, 8, 7, 11, 0, 0, 0, loc)
+
+	if got := TimerVerdict(fireAt, now); got != VerdictPending {
+		t.Errorf("TimerVerdict(%v, %v) = %v, want VerdictPending", fireAt, now, got)
+	}
+}
+
+// TestTimerVerdict_OverdueLessThanThresholdDelivers proves spec R1.2's
+// own scenario: a timer 2 hours overdue against a 3-hour threshold still
+// delivers.
+func TestTimerVerdict_OverdueLessThanThresholdDelivers(t *testing.T) {
+	loc := time.UTC
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, loc)
+	fireAt := now.Add(-2 * time.Hour)
+
+	if got := TimerVerdict(fireAt, now); got != VerdictDeliver {
+		t.Errorf("TimerVerdict(%v, %v) = %v, want VerdictDeliver", fireAt, now, got)
+	}
+}
+
+// TestTimerVerdict_DeliversInsideQuietHours proves spec R1.2's exception:
+// a timer due while now is inside quiet hours still delivers — the
+// timer, not a level, not a threshold, is the one exception (design
+// §3.2), and this is the direct proof that InQuietHours never gates it.
+func TestTimerVerdict_DeliversInsideQuietHours(t *testing.T) {
+	loc := time.UTC
+	fireAt := time.Date(2026, 8, 7, 3, 0, 0, 0, loc)
+	now := time.Date(2026, 8, 7, 3, 0, 0, 0, loc)
+
+	if !InQuietHours(now) {
+		t.Fatalf("test fixture is broken: %v must be inside quiet hours", now)
+	}
+	if got := TimerVerdict(fireAt, now); got != VerdictDeliver {
+		t.Errorf("TimerVerdict(%v, %v) = %v, want VerdictDeliver — the timer is the one push "+
+			"exception to quiet hours, never deferred", fireAt, now, got)
+	}
+}
+
+// TestTimerVerdict_StalenessBoundaryIsStrict mirrors TriggerVerdict's own
+// boundary with the timer's own threshold.
+func TestTimerVerdict_StalenessBoundaryIsStrict(t *testing.T) {
+	loc := time.UTC
+	fireAt := time.Date(2026, 8, 7, 12, 0, 0, 0, loc)
+
+	atThreshold := fireAt.Add(time.Duration(TimerStalenessHours) * time.Hour)
+	if got := TimerVerdict(fireAt, atThreshold); got != VerdictDeliver {
+		t.Errorf("TimerVerdict at exactly TimerStalenessHours overdue = %v, want VerdictDeliver", got)
+	}
+
+	pastThreshold := atThreshold.Add(time.Nanosecond)
+	if got := TimerVerdict(fireAt, pastThreshold); got != VerdictStale {
+		t.Errorf("TimerVerdict one nanosecond past TimerStalenessHours = %v, want VerdictStale", got)
+	}
+}
