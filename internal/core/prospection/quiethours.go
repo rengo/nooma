@@ -23,8 +23,8 @@ const QuietHoursEndHour = 7
 // instant ports.Clock.Now() produced (docs/02-cognitive-core.md:600-610;
 // the same mechanism classify/prompt.go documents for capture).
 func InQuietHours(now time.Time) bool {
-    hour := now.Hour()
-    return hour >= QuietHoursStartHour && hour < QuietHoursEndHour
+	hour := now.Hour()
+	return hour >= QuietHoursStartHour && hour < QuietHoursEndHour
 }
 
 // DeliverableFrom returns the first instant at or after t at which a
@@ -37,9 +37,9 @@ func InQuietHours(now time.Time) bool {
 // out-of-range-field construction keeps the wall clock's own
 // normalization in one place.
 func DeliverableFrom(t time.Time) time.Time {
-    if !InQuietHours(t) {
-        return t
-    }
-    y, m, d := t.Date()
-    return time.Date(y, m, d, QuietHoursEndHour, 0, 0, 0, t.Location())
+	if !InQuietHours(t) {
+		return t
+	}
+	y, m, d := t.Date()
+	return time.Date(y, m, d, QuietHoursEndHour, 0, 0, 0, t.Location())
 }
