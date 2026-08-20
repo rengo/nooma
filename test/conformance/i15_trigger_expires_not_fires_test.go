@@ -12,10 +12,16 @@ import (
 // triggers ("armed", "fired", "dismissed", "expired", doc 02 §7) and
 // timers ("pending", "fired", "cancelled", doc 02 §8). prospection.Verdict
 // must never surface one of these directly: brain names the transition
-// (design §3.3), core states only its own neutral vocabulary. "pending"
-// is deliberately included even though Verdict has its own same-named
-// member — the point of this list is the schema's timer status, which
-// happens to share the word by coincidence, not by relation.
+// (design §3.3), core states only its own neutral vocabulary.
+//
+// "pending" is the one schema status deliberately EXCLUDED from the list.
+// The timers table owns it (doc 02 §8) and Verdict has a same-named member
+// of its own, but the two are homonyms rather than the same fact: the
+// schema's is a persisted timer row's state, VerdictPending is "fire_at is
+// still in the future", which TriggerVerdict returns legitimately and this
+// sweep sees on every not-yet-due offset. Listing it would fail the test
+// against correct behaviour. The collision is a coincidence of vocabulary,
+// and this comment exists so the next reader does not "complete" the list.
 var i15SchemaStatuses = []prospection.Verdict{"armed", "fired", "dismissed", "expired", "cancelled"}
 
 // TestI15_TriggerOverdueExpiresNeverFires proves invariant I15
