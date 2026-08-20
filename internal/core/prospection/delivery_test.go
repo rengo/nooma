@@ -2,6 +2,7 @@ package prospection
 
 import (
 	"math"
+	"reflect"
 	"testing"
 )
 
@@ -176,5 +177,59 @@ func TestInterrupt_Route_MaxLevelIsPush(t *testing.T) {
 func TestInterrupt_Route_ResolvedFromNilRoutesDigest(t *testing.T) {
 	if got := ResolveInterrupt(nil).Route(); got != RouteDigest {
 		t.Errorf("ResolveInterrupt(nil).Route() = %v, want RouteDigest", got)
+	}
+}
+
+// TestInterrupt_LevelAndDegraded_RoundTripEveryConstructedInterrupt
+// proves Level()/Degraded() report exactly what ResolveInterrupt resolved
+// for every shape exercised above, in one place. Not a missing-symbol red
+// step: both accessors already compile and pass (task 3.2) — disclosed
+// per this project's own convention (m2a C9).
+func TestInterrupt_LevelAndDegraded_RoundTripEveryConstructedInterrupt(t *testing.T) {
+	inRange := 0.42
+	lowerBound := 0.0
+	upperBound := 1.0
+	nan := math.NaN()
+
+	tests := []struct {
+		name         string
+		level        *float64
+		wantLevel    float64
+		wantDegraded bool
+	}{
+		{"nil", nil, DefaultInterruptLevel, true},
+		{"non-finite", &nan, DefaultInterruptLevel, true},
+		{"in range", &inRange, inRange, false},
+		{"lower bound", &lowerBound, lowerBound, false},
+		{"upper bound", &upperBound, upperBound, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveInterrupt(tt.level)
+			if got.Level() != tt.wantLevel {
+				t.Errorf("ResolveInterrupt(%v).Level() = %v, want %v", tt.name, got.Level(), tt.wantLevel)
+			}
+			if got.Degraded() != tt.wantDegraded {
+				t.Errorf("ResolveInterrupt(%v).Degraded() = %v, want %v", tt.name, got.Degraded(), tt.wantDegraded)
+			}
+		})
+	}
+}
+
+// TestInterrupt_FieldsAreUnexported is design §3.4's own type-safety
+// argument, checked rather than only asserted in prose: if either field
+// of Interrupt is ever exported, ResolveInterrupt stops being the only
+// way to construct one, and a caller outside this package could build a
+// non-degraded Interrupt carrying an out-of-range level directly —
+// exactly the bypass spec R3.1's own MUST forbids. This is the
+// in-package structural proof that no such caller exists today.
+func TestInterrupt_FieldsAreUnexported(t *testing.T) {
+	typ := reflect.TypeOf(Interrupt{})
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		if f.IsExported() {
+			t.Errorf("Interrupt.%s is exported; ResolveInterrupt must be the only way to "+
+				"construct a non-degraded Interrupt from outside this package", f.Name)
+		}
 	}
 }
