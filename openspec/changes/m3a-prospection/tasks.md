@@ -237,7 +237,7 @@ Independent of PR 1/2/4. Ships `delivery.go` — `Interrupt`, `ResolveInterrupt`
 constants. See **Finding F2**: this PR ships design's opaque `Interrupt` type, not spec's bare
 `ResolveInterruptLevel`/`DecideDelivery` pair.
 
-- [ ] **3.1** Commit 1 (RED): `internal/core/prospection/delivery_test.go` — `ResolveInterrupt`:
+- [x] **3.1** Commit 1 (RED): `internal/core/prospection/delivery_test.go` — `ResolveInterrupt`:
       `nil` → `{DefaultInterruptLevel, degraded: true}`; `NaN`/`+Inf`/`-Inf`/`-0.1`/`1.1` → the same
       degraded default (five shapes, individually — spec R3.1's own enumeration); an in-range value
       passes through non-degraded; the zero value `Interrupt{}` also reports `Degraded() == true`
@@ -249,11 +249,11 @@ constants. See **Finding F2**: this PR ships design's opaque `Interrupt` type, n
       bool }`; `func ResolveInterrupt(level *float64) Interrupt { return Interrupt{} }` — compiles;
       the `nil` case fails first (C14 guard).
       Requirement: R3.1, resolved per **Finding F2**.
-- [ ] **3.2** Commit 2 (GREEN): implement `ResolveInterrupt` — `nil`, non-finite, or outside
+- [x] **3.2** Commit 2 (GREEN): implement `ResolveInterrupt` — `nil`, non-finite, or outside
       `[0,1]` → `{DefaultInterruptLevel, true}`; else → `{level, false}`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R3.1; design §3.4.
-- [ ] **3.3** Commit 1 (RED): `delivery_test.go` (continued) — `Route()`: a degraded `Interrupt` →
+- [x] **3.3** Commit 1 (RED): `delivery_test.go` (continued) — `Route()`: a degraded `Interrupt` →
       `RouteDigest` regardless of `level`, even a corrupt level far above `PushThreshold`; `level ==
       PushThreshold` exactly → `RoutePush` (spec R3.2's inclusive boundary); one ulp below →
       `RouteDigest`; `1.0` → `RoutePush`; the composed scenario `ResolveInterrupt(nil).Route()` →
@@ -262,29 +262,29 @@ constants. See **Finding F2**: this PR ships design's opaque `Interrupt` type, n
       Stub: the two `Route` consts; `func (i Interrupt) Route() Route { return RoutePush }` —
       compiles; the degraded-always-digest case fails first.
       Requirement: R3.2.
-- [ ] **3.4** Commit 2 (GREEN): implement `Route()` — degraded short-circuit first, then `level >=
+- [x] **3.4** Commit 2 (GREEN): implement `Route()` — degraded short-circuit first, then `level >=
       PushThreshold`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R3.2; design §3.4.
-- [ ] **3.5** `delivery_test.go` (continued) — `Level()`/`Degraded()` accessor round-trip for every
+- [x] **3.5** `delivery_test.go` (continued) — `Level()`/`Degraded()` accessor round-trip for every
       constructed `Interrupt`; an in-package structural assertion that `Interrupt`'s fields are
       unexported, so no caller outside this package can construct a non-degraded `Interrupt` with an
       out-of-range level.
       **Not a missing-symbol red**: `Level`/`Degraded` already compile (task 3.2) — disclosed per
       `m2a` C9.
       Requirement: design §3.4 (the type-safety argument).
-- [ ] **3.6** `docs/02-cognitive-core.md` §7 amendment: the degradation path (a degraded
+- [x] **3.6** `docs/02-cognitive-core.md` §7 amendment: the degradation path (a degraded
       classification never produces a push); the NULL↔degraded round trip `brain` must persist
       (`m3a`'s contract to state, `m3b`'s to implement); the tone exemption (`Route() == RoutePush`
       is the "urgent push is NOT softened" exemption).
       Requirement: design §3.4.
-- [ ] **3.7** §13: row 912 (`Push threshold`) amended with `prospection.PushThreshold`; new row
+- [x] **3.7** §13: row 912 (`Push threshold`) amended with `prospection.PushThreshold`; new row
       `default_interrupt_level` (0.0, chosen — "no claim was made," behaviourally inert below the
       push threshold).
       Requirement: R0; design §3.4.
-- [ ] **3.8** Purity/lint: `golangci-lint run`.
+- [x] **3.8** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/delivery{,_test}.go`, `docs/02-cognitive-core.md`. Target ≤300
       impl+docs lines.
 
