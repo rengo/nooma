@@ -84,3 +84,43 @@ func TestInQuietHours_ZoneTravelsWithInstant(t *testing.T) {
             readsAsEightThirty, got)
     }
 }
+
+// TestDeliverableFrom proves design §3.1/§3.3's own arithmetic: outside
+// quiet hours, t passes through unchanged; inside quiet hours, the first
+// deliverable instant is that same day's QuietHoursEndHour, in t's own
+// Location; and the end bound is exclusive on this function exactly as it
+// is on InQuietHours — t already at QuietHoursEndHour is already
+// deliverable and passes through unchanged, never shifted a day forward.
+func TestDeliverableFrom(t *testing.T) {
+    loc := time.FixedZone("UTC+2", 2*60*60)
+
+    tests := []struct {
+        name string
+        t    time.Time
+        want time.Time
+    }{
+        {
+            name: "outside quiet hours passes through unchanged",
+            t:    time.Date(2026, 8, 7, 14, 30, 0, 0, loc),
+            want: time.Date(2026, 8, 7, 14, 30, 0, 0, loc),
+        },
+        {
+            name: "inside quiet hours shifts to that day's QuietHoursEndHour, same Location",
+            t:    time.Date(2026, 8, 7, 3, 15, 0, 0, loc),
+            want: time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, loc),
+        },
+        {
+            name: "exactly at QuietHoursEndHour is unchanged — the end bound is exclusive",
+            t:    time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, loc),
+            want: time.Date(2026, 8, 7, QuietHoursEndHour, 0, 0, 0, loc),
+        },
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got := DeliverableFrom(tt.t)
+            if !got.Equal(tt.want) || got.Location().String() != tt.want.Location().String() {
+                t.Errorf("DeliverableFrom(%v) = %v, want %v", tt.t, got, tt.want)
+            }
+        })
+    }
+}

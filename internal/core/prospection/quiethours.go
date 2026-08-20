@@ -26,3 +26,13 @@ func InQuietHours(now time.Time) bool {
     hour := now.Hour()
     return hour >= QuietHoursStartHour && hour < QuietHoursEndHour
 }
+
+// DeliverableFrom returns the first instant at or after t at which a
+// trigger may actually be delivered: t itself when t is outside quiet
+// hours, and that day's QuietHoursEndHour otherwise (design §3.1/§3.3).
+//
+// TODO(PR 1, task 1.4): implement via time.Date with out-of-range
+// fields, never AddDate.
+func DeliverableFrom(t time.Time) time.Time {
+    return t
+}
