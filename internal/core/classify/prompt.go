@@ -57,6 +57,10 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 	b.WriteString("Optional fields — omit any that do not apply\n")
 	b.WriteString("  structured_data      free-form JSON object, shape follows from type\n")
 	b.WriteString("  event_at, due_at     absolute; \"YYYY-MM-DD\" or a full RFC3339 timestamp\n")
+	b.WriteString("  interrupt_level      0-1, how urgently this should interrupt the user " +
+		"versus wait for a digest\n")
+	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
+		" — only for a recurring reminder\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
 	}
