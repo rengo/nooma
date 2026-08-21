@@ -73,6 +73,38 @@ they landed, so both were added to `sweptPortsRepoTypes` — a strengthening, wh
 reflection check stays: it runs per implementation, this one runs over the declaration, and the
 redundancy is stated in both places rather than left to look accidental.
 
+**G6 — the contract suite PR 1 shipped could not run at L3 as written, and the schema is why.**
+`triggers.unit_id REFERENCES units(id) ON DELETE CASCADE` (`0001:43`) and the vault opens with
+`foreign_keys=on`, so every contract case that created a trigger for a fixture unit id failed with
+`FOREIGN KEY constraint failed` the moment the real repository stopped being a no-op. Neither
+`spec.md` nor `design.md` names the FK; the in-memory fake has no notion of one, so L2 was green
+and silent about it. **Resolved by the house pattern that already exists for exactly this**:
+`RunTriggerRepo` now takes a `repocontract.TriggerHarness` (`ports.TriggerRepo` plus
+`EnsureUnit(t, id)`), the shape `repocontract.EmbeddingHarness` has carried since `m1a` — and whose
+own doc comment names this failure mode in advance: "without this hook the suite would pass at L2
+and be impossible to run at L3 — which is not a contract, it is a fake's opinion". `RunTimerRepo`
+takes no harness, and the asymmetry is the schema's own: `timers` carries no `unit_id`, because a
+timer is never a unit (I04).
+
+**G7 — `triggers.payload`'s JSON keys were unspecified, and are now pinned to the column comment.**
+Design §3.1 fixes `TriggerPayload{ActionText, Rationale, LeadDays}` as the Go shape and doc 02 §7
+pins `payload.lead_days` as a stored key, but nothing named the other two. Migration `0001:48`'s own
+comment — "JSON (action, rationale, lead_days…)" — is the only other source of truth, so
+`payloadJSON` follows it: `action`, `rationale`, `lead_days`. `ActionText` maps to `action`
+deliberately rather than to `action_text`; `timers.action_text` is a different table's column, not
+this key's namesake. Asserted against the stored bytes, `anchorJSON`'s own discipline.
+
+**G8 — PR 2 measured 463 implementation-and-docs lines against design §7's ~250 budget, so it was
+cut in two.** Not an exception claimed, a measurement acted on: design §7 already set that posture
+for PR 5a ("apply that cut if its own forecast exceeds 400"), and the same rule read against the
+same number gives the same answer here. The cut is the natural one — **PR 2a
+`feat/store-trigger`** (~280 impl+docs: the trigger repository, `anchorJSON`, `payloadJSON`, the
+`interrupt_level` round trip, the `TriggerHarness` retrofit) and **PR 2b `feat/store-timer`**
+(~150: the timer repository and its own asymmetries). Both regenerate the golden, each for its own
+rows. Tasks 2.1–2.4 belong to 2a, 2.5–2.6 to 2b, and 2.7/2.8 are done once per PR. The chain is now
+nine PRs, which was already design §7's own named contingency shape, reached one slice earlier than
+it expected.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -163,13 +195,13 @@ shapes, sentinels, `memrepo` fakes, `repocontract` shared suites.
 
 ---
 
-## PR 2 — `feat/store-trigger-timer` (~250 impl+docs)
+## PR 2a — `feat/store-trigger` (~280 impl+docs) — see finding G8 for the cut
 
 Depends on PR 1. Ships both SQLite repos, `anchorJSON`, `store_api.golden` regenerated. **L3 owns
 §3.4's round trip** — both the `interrupt_level` NULL↔degraded contract and `recurrence_anchor`'s
 lowercase-key stored TEXT.
 
-- [ ] **2.1** Commit 1 (RED): `internal/store/sqlite/triggerrepo_integration_test.go` (build tag
+- [x] **2.1** Commit 1 (RED): `internal/store/sqlite/triggerrepo_integration_test.go` (build tag
       `integration`) — `repocontract.RunTriggerRepoContract` run against a real migrated vault
       (`unitrepo_integration_test.go`'s own pattern); a raw-SQL fixture inserting `interrupt_level`
       as NaN/+Inf/-Inf directly (bypassing the repo), read back through `Due`, asserted against the
@@ -182,7 +214,7 @@ lowercase-key stored TEXT.
       **Mutation**: this task's own discipline is the guard — asserting a value chosen in advance
       instead of the value actually read would silently stop tracking a future SQLite storage-format
       change; the fixture must assert the observed bytes, named as the check itself.
-- [ ] **2.2** Commit 2 (GREEN): implement `internal/store/sqlite/triggerrepo.go` — `Create` INSERTs
+- [x] **2.2** Commit 2 (GREEN): implement `internal/store/sqlite/triggerrepo.go` — `Create` INSERTs
       per `Trigger`/`TriggerPayload` (JSON-marshalled payload); `Due` SELECTs
       `WHERE status = 'armed' AND fire_at IS NOT NULL AND fire_at <= ?` (matches
       `idx_triggers_status_fire`); `Fire`/`Expire` as single `UPDATE ... WHERE id = ? AND status =
@@ -191,7 +223,7 @@ lowercase-key stored TEXT.
       bearing for PR 5b).
       Verify: `go test -tags=integration ./internal/store/sqlite/... -run TriggerRepo`.
       Requirement: R1.1, R1.3, R2.1; design §3.1, §3.4, §3.6.
-- [ ] **2.3** Commit 1 (RED): `triggerrepo_integration_test.go` (continued) — `recurrence_anchor`'s
+- [x] **2.3** Commit 1 (RED): `triggerrepo_integration_test.go` (continued) — `recurrence_anchor`'s
       **stored TEXT**: `Create` with `RecurrenceAnchor: &prospection.Anchor{Month: time.September,
       Day: 4}`, then a raw `SELECT recurrence_anchor FROM triggers WHERE id = ?` asserted to equal
       the literal string `{"month":9,"day":4}` — never `{"Month":9,"Day":4}`, Go's default.
@@ -203,7 +235,7 @@ lowercase-key stored TEXT.
       would still pass (Go's `json.Unmarshal` is case-insensitive on read). This is the exact
       "defence that protects the result but not the probe" this task is written to close: the
       assertion is against raw bytes, not the round-tripped struct.
-- [ ] **2.4** Commit 2 (GREEN): implement a private `anchorJSON{Month int `json:"month"`; Day int
+- [x] **2.4** Commit 2 (GREEN): implement a private `anchorJSON{Month int `json:"month"`; Day int
       `json:"day"`}` in `triggerrepo.go`; `Create` converts `*prospection.Anchor` → `*anchorJSON`
       before marshalling, `Due`'s unmarshal path converts back.
       Verify: `go test -tags=integration ./internal/store/sqlite/... -run Anchor`.
@@ -230,9 +262,10 @@ lowercase-key stored TEXT.
       regeneration-diff gate (inside `make check-all`) fails on any drift from the tool's output.
 - [ ] **2.8** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules; design §4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/store/sqlite/{triggerrepo,timerrepo}{,_integration_test}.go`,
-      `testdata/schema/store_api.golden`. No `docs/02-cognitive-core.md` delta (store is I/O, not
+- [x] Verify (PR-level, 2a): `make check-all`; confirm diff touches only
+      `internal/store/sqlite/triggerrepo{,_integration_test}.go`,
+      `testdata/schema/store_api.golden`, and the `TriggerHarness` retrofit in
+      `test/support/{repocontract,memrepo}` plus its L2 wiring (finding G6). No `docs/02-cognitive-core.md` delta (store is I/O, not
       core). Target ≤250 impl+docs lines.
 
 ---
