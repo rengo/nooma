@@ -130,6 +130,33 @@ fifth live status arrives. So the guard is the SQL itself plus a named limit in
 `RunLiveFocusCandidates`' doc comment and in
 `TestUnitRepo_LiveFocusCandidatesFiltersPositively` — not a passing case pretending to be proof.
 
+**G12 — `ports.ActionCaptureHookDeferred` had TWO producers, not one, so design §3.5's stated
+reason for deleting it did not hold as written.** The design's justification is "a vocabulary member
+with no producer is a bucket the glass box can never show"; besides the timer refusal,
+`recordAmbiguousPersonRefDecision` (spec R4.7) writes the same action for a completely unrelated
+fact, the two told apart only by `context.kind` — which that function's own doc comment already
+confessed to. **Owner ruling R3 (delete, not keep read-only) is honoured, on a better reason**: once
+the timer refusal is gone, `capture.hook.deferred` names nothing left standing. The member is
+deleted and the surviving producer gets `ports.ActionCapturePersonRefAmbiguous`
+(`"capture.person_ref.ambiguous"`), which it shares with nothing. Historical rows still read back —
+`DecisionLog.Since` casts the column with a plain `ports.DecisionAction(action)` and applies no
+vocabulary gate. **This changes an action name a vault may already hold, which is owner-visible**;
+it is recorded here rather than buried in a diff. It also moves G1's arithmetic: `AllDecisionActions()`
+is 27 after this PR (24 − 1 + 1 + 3), reaching **32** after PR 5a, not G1's stated 31.
+
+**G13 — PR 4a measured 431 implementation-and-docs lines, and unlike PR 2 it must NOT be split.**
+Design §3.5 sets the cut in advance: "if its measured diff exceeds ~150 implementation lines
+[the retirement] becomes its own PR". Measured, the retirement commit is **153** lines, so the rule
+fires. It is still the wrong cut, for a reason the design could not have seen from the artifact:
+**the refusal was the only thing routing a `timer` away from `classify.ToUnit`.** A
+retirement-only PR merged to `main` leaves every timer capture failing with "this classification
+persists no unit" until the arming PR lands — a broken binary on `main` for the length of a review,
+which `stacked-to-main` makes real rather than hypothetical. Splitting is therefore *genuinely
+wrong* here in the exact sense `nooma-pr`'s ceiling rule reserves the `size:exception` label for,
+and that label is applied with this paragraph as its justification. The three-commit order the task
+list mandates (retirement → I04 red → arming) is preserved inside the one PR, so the retirement is
+still reviewable as its own act.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -355,7 +382,7 @@ M2's carry-over (owner ruling 4, umbrella §3.3).
 Depends on PR 1+2. **Non-negotiable commit order inside this PR**: (1) retirement, (2) I04
 test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`TimerRepo`).
 
-- [ ] **4a.1** Commit 1 (retirement): delete `timerHookRefusal` (`capture.go:296-322`) and its call
+- [x] **4a.1** Commit 1 (retirement): delete `timerHookRefusal` (`capture.go:296-322`) and its call
       site (`:178-183`); delete `brain.OutcomeDeferred`, `brain.Deferred`, `CaptureResult.Deferred`
       (`result.go`); delete `ports.ActionCaptureHookDeferred` and its `AllDecisionActions()` entry
       (**R3**); narrow the switches in `internal/httpapi/capture.go` and `cmd/nooma/capture.go` to
@@ -363,7 +390,7 @@ test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`Timer
       Verify: `go build ./...` — this commit is not green on the whole suite by design (`capture_test.go`
       fixtures asserting `OutcomeDeferred` are expected red until 4a.3, not fixed in this commit).
       Requirement: design §3.5 ("its own commit").
-- [ ] **4a.2** Commit 2 (RED, I04 strengthened — R4.4): rewrite
+- [x] **4a.2** Commit 2 (RED, I04 strengthened — R4.4): rewrite
       `test/conformance/i04_timer_never_a_unit_test.go` — **delete lines 36-46's vacuity paragraph
       entirely**, not amend; assert via the real `TriggerRepo`/`TimerRepo` fakes wired into a test
       `CaptureService`: zero `units` rows, **exactly one `timers` row**, `CaptureResult.Outcome ==
@@ -381,7 +408,7 @@ test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`Timer
       **Mutation**: revert the doc-comment deletion — no code mutation catches prose; the task's own
       completion check is `git diff` for this commit showing lines 36-46 removed, named explicitly
       here so it is checkable from the tree rather than assumed done.
-- [ ] **4a.3** Commit 3 (GREEN): implement arming — `captureRunner.at` gains `triggers
+- [x] **4a.3** Commit 3 (GREEN): implement arming — `captureRunner.at` gains `triggers
       ports.TriggerRepo`, `timers ports.TimerRepo` (no clock field — `Arm(c, now)` reuses the
       instant the pipeline already read, satisfying `brain_single_clock_read_test.go` by
       construction); replaces the deleted fork with `prospection.Arm(classification, now)`; on
@@ -391,7 +418,7 @@ test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`Timer
       Plan.What, ID: <created id>, FireAt: Plan.FireAt}}`.
       Verify: `go test ./internal/brain/... ./test/conformance/... -run I04`.
       Requirement: R4.1, R4.4; design §3.4, §3.5.
-- [ ] **4a.4** `internal/brain/interrupt_test.go` (new, L1 white-box) — `interruptColumn ∘
+- [x] **4a.4** `internal/brain/interrupt_test.go` (new, L1 white-box) — `interruptColumn ∘
       prospection.ResolveInterrupt` is the identity over `{nil, 0.0, PushThreshold, 1.0, a degraded
       resolution}` — no SQLite (design §3.4's L1 assignment).
       **Red/stub**: folded into 4a.3's own red/green split — disclosed rather than inventing a
@@ -400,10 +427,10 @@ test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`Timer
       **Mutation**: make `interruptColumn` write `0.0` instead of SQL `NULL` for a degraded
       `Interrupt` — the identity breaks at the `nil` case, since re-resolving `0.0` reports
       `Degraded() == false`.
-- [ ] **4a.5** `internal/httpapi/capture.go`, `cmd/nooma/capture.go` — restore totality with a real
+- [x] **4a.5** `internal/httpapi/capture.go`, `cmd/nooma/capture.go` — restore totality with a real
       `OutcomeArmed` branch (HTTP: 200 naming the armed id/fire time; CLI: a one-line confirmation).
       Requirement: design §3.5 (the "compile-time-visible retirement" property, closed).
-- [ ] **4a.6** `test/conformance/i18_arm_persists_distinct_instants_test.go` (new) — R4.3's own
+- [x] **4a.6** `test/conformance/i18_arm_persists_distinct_instants_test.go` (new) — R4.3's own
       scenario: a classification whose `DueAt`, `EventAt`, `CreatedAt` are three distinct instants;
       after capture, the persisted `timers.fire_at` (`timer` case) equals `*DueAt` bit-for-bit, and
       the persisted `triggers.fire_at` (dated `event` case) derives from `EventAt`, never
@@ -411,16 +438,16 @@ test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`Timer
       Requirement: R4.3.
       **Mutation**: swap the `Create` call's `FireAt` argument for `classification.CreatedAt` — the
       three-distinct-instants fixture catches it; two distinct instants would not.
-- [ ] **4a.7** `docs/02-cognitive-core.md` §5 step 5 amendment: replace the M1-era "not wired up yet"
+- [x] **4a.7** `docs/02-cognitive-core.md` §5 step 5 amendment: replace the M1-era "not wired up yet"
       note with what arming does per `Kind`, cross-referencing `Arm`'s table (`m3a` §3.7, unchanged).
       Requirement: `CLAUDE.md` non-negotiable #1 (behavior-change delta, this PR touches no
       `internal/core`).
-- [ ] **4a.8** `docs/02-cognitive-core.md` §8 amendment: the request text is stored verbatim and
+- [x] **4a.8** `docs/02-cognitive-core.md` §8 amendment: the request text is stored verbatim and
       worded only at fire time (`m3d`'s); `rendered_text` stays NULL through this change (**G2**).
       Requirement: design §3.5 (`ArmTimer` row's contract).
-- [ ] **4a.9** Purity/lint: `golangci-lint run` (`brain-boundary` — one `Now()` in the capture path).
+- [x] **4a.9** Purity/lint: `golangci-lint run` (`brain-boundary` — one `Now()` in the capture path).
       Requirement: `docs/06-harness.md`'s single-clock-read rule.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/brain/{capture,result,interrupt}{,_test}.go`, `internal/httpapi/capture.go`,
       `cmd/nooma/capture.go`, `internal/ports/decisionlog.go`,
       `test/conformance/{i04_timer_never_a_unit,i18_arm_persists_distinct_instants}_test.go`,
