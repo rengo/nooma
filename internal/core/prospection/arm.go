@@ -17,5 +17,7 @@ const EventLeadDays = 7
 // fact about arming rather than about the horizon. Two layers, so each is
 // testable on its own terms.
 func LeadTime(eventAt time.Time) time.Time {
-	return eventAt
+	y, m, d := eventAt.Date()
+	return time.Date(y, m, d-EventLeadDays, eventAt.Hour(), eventAt.Minute(),
+		eventAt.Second(), eventAt.Nanosecond(), eventAt.Location())
 }
