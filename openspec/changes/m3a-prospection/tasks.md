@@ -450,7 +450,7 @@ spec R4.2 and R4.3 into one function.
       `internal/core/focus` from outside `focus` itself; confirm `depguard` allows the core-to-core
       edge, per design §4's own claim).
       Requirement: `nooma-core` hard rule 1; design §4 (Risk C).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/digest{,_test}.go`, `docs/02-cognitive-core.md`. Target ≤400
       impl+docs lines — **at the ceiling before code is written, highest risk in this chain**. **If
       `Carry`'s own test table or its four-part doc-02 amendment run long**, split at `DigestDue` +
