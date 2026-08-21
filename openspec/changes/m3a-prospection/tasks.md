@@ -699,3 +699,40 @@ property the design stated is preserved; only the field expressing it changed.
 
 **F8's own scope note.** This is not a correction to `design.md` §3.4's decision — that decision
 is implemented faithfully. It corrects the snippet that illustrated it.
+
+---
+
+## Judgment Day note — PR 4, 2026-08-21
+
+Round 1 on frozen target `0c76021`. Both judges independently found the same CRITICAL; the
+findings below are recorded here because two of them are about how this change was *made*, not
+only about what it shipped.
+
+- **JD-4-01 (CRITICAL, both judges, fixed).** `{"interrupt_level": null}` decoded to a claimed
+  `0.0` with no degradation. `Salvage` stores any decodable value under its key, so an explicit
+  null is present rather than absent, and `json.Unmarshal` accepts null for a non-pointer
+  destination without error. Fixed by reading into a `*float64`; the three states — absent,
+  degraded, claimed 0.0 — were re-verified distinct by decoding all three.
+- **JD-4-02 (WARNING, both judges, base-only, NOT fixed here).** `assignFloat` carries the
+  identical shape for `weight` and `decay_rate` and has since M1. `classification.go`'s own doc
+  comment has described this exact defect since M1, and `goldenset.ClassifyExpected` fixed it on
+  the fixture side — the decoder never did. Worse than JD-4-01's instance, because doc 02 records
+  that a λ of 0 never decays and so §6's archiving pass can never reach the unit, while the row
+  violates no NOT NULL constraint. **Its own work unit**, with its own conformance test and doc
+  02 delta, rather than buried in a PR named for two prospection fields.
+- **JD-4-03 (WARNING, judge B, fixed).** `classification.go`'s citation of
+  `goldenset/types.go:152-165` went stale — this PR's own widening of that file shifted the
+  block to 210-217. The comment now also records the necessary-but-not-sufficient point: a
+  pointer *field* does not help unless the *assigner* reads into a pointer.
+- **JD-4-04 (WARNING, judge B, recorded not re-done).** Task 4.6's golden-corpus widening was
+  reported as having no genuine RED available, citing `m2a` C9. That framing does not hold:
+  adding a fixture carrying the new keys *before* widening `goldenset.ClassifyExpected` would
+  fail `Load`'s `DisallowUnknownFields`, which is a real, mechanically-detectable red. C9 covers
+  a check whose operands both already exist and therefore cannot fail; this was not that. The
+  commits are not being rewritten, and the misapplied precedent is recorded so the next slice
+  does not inherit it.
+- **JD-4-05 (SUGGESTION, judge B).** `{"recurrence_rule": null}` degrades safely — `""` matches
+  no vocabulary member, so `ReasonUnknownEnum` is recorded and the field stays nil — but the
+  label describes an explicit null imprecisely. No data is miscoded, so it is pinned as-is with
+  the imprecision stated rather than a sixth `Reason` invented for it (owner-review R3's own
+  argument).

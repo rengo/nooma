@@ -19,9 +19,19 @@ var ErrNoFieldsSalvaged = errors.New("classify: no fields salvaged from the resp
 // survives (02:124-125), and Degradations carries what was lost.
 //
 // Pointers rather than zero values, for the reason goldenset.ClassifyExpected
-// already recorded for this exact problem (types.go:152-165): with a plain
+// already recorded for this exact problem (types.go:210-217): with a plain
 // float64, "weight": null and a missing "weight" key both decode to 0.0,
 // indistinguishable from a case that genuinely means zero.
+//
+// A pointer field is necessary and not sufficient: the assigner has to
+// unmarshal into a pointer too. json.Unmarshal accepts null for a
+// non-pointer destination without error and leaves the zero value, so an
+// assigner that reads into a local float64 and takes its address produces a
+// non-nil pointer to 0.0 for an explicit null, defeating this field's own
+// shape. assignInterruptLevel reads into a *float64 for exactly that reason.
+// assignFloat — weight and decay_rate — still does not, so the defect this
+// comment describes is live for those two fields; it is being fixed as its
+// own work unit rather than inside m3a-prospection's PR 4.
 type Classification struct {
 	Kind              *Kind // the thirteen-member taxonomy — doc 02 §5
 	NormalizedContent *string
