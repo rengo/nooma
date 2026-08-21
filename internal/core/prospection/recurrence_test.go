@@ -175,6 +175,25 @@ func TestNextOccurrence_LandsAtNoonInTheInstantsOwnZone(t *testing.T) {
 		t.Errorf("occurrence at hour %d, want RecurrenceAnchorHour (%d)",
 			got.Hour(), RecurrenceAnchorHour)
 	}
+
+	// The property, asserted separately from the constant, because the check
+	// above reads RecurrenceAnchorHour to build its own expectation and would
+	// therefore move with a recalibration to midnight — passing on exactly
+	// the change it is here to prevent.
+	//
+	// Eleven hours of clearance in each direction is what makes noon safe:
+	// it is off by more than any transition shorter than twelve hours, and
+	// the only known transitions of twelve or more delete the whole calendar
+	// date (Pacific/Apia skipped 2011-12-30, Pacific/Kiritimati 1994-12-31),
+	// where no instant on that date exists at any hour.
+	const minClearance = 11
+	if RecurrenceAnchorHour < minClearance || RecurrenceAnchorHour > 24-minClearance {
+		t.Errorf("RecurrenceAnchorHour = %d, want between %d and %d — an anniversary within an "+
+			"hour of midnight can normalise BACKWARD through a DST gap onto the previous "+
+			"calendar date and nudge a day early, once a year, in whichever zone puts its "+
+			"transition there (consolidation.NextDailyRun records Havana doing exactly this)",
+			RecurrenceAnchorHour, minClearance, 24-minClearance)
+	}
 	if got.Location().String() != recLoc.String() {
 		t.Errorf("occurrence in zone %v, want the zone the instant arrived in (%v) — the zone "+
 			"travels inside the instant, never from configuration",
