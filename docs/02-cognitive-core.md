@@ -363,7 +363,10 @@ and no decision is recorded. There is no effect to record — the same reason a 
 Synchronous pipeline on receiving a message (from any channel or the UI):
 
 1. **classify** (LLM, a single call): returns `type` + `normalized_content` +
-   `structured_data` + initial weight/λ + fields resolving pending answers. Classification
+   `structured_data` + initial weight/λ + fields resolving pending answers +
+   prospection's two capture fields, `interrupt_level` (0-1, §7's push/digest split) and
+   `recurrence_rule` (`yearly | monthly`, §7's recurrence, decoded rather than left inside
+   `structured_data`). Classification
    taxonomy: `task | mental_load | event | knowledge | procedural | emotional | chitchat |
    out_of_scope | recall | correction | timer | recurring_reminder | list`.
    - `recall`, `knowledge` and `correction` are separated by **what the message does, not
@@ -563,6 +566,8 @@ belonging to *some* vocabulary is not the test; belonging to *this field's* voca
 | `weight`, λ | no value | Both are required on a stored unit, so the base priors below fill them. A degraded weight is not a zero weight — that distinction is why the fields are optional at the type level rather than defaulting to `0` |
 | dated fields | no date | The unit is stored undated. Nothing is armed for it (§7), because arming a trigger on a guessed date is worse than not arming one |
 | the six orthogonal fields | absent | The resolution that field carried is ignored — the pending check-in, relation or state question stays open. The capture still becomes a unit |
+| `interrupt_level` | no value | Absent or out-of-range degrades like any other field (owner ruling 1's Option A); `internal/core/prospection.ResolveInterrupt` (§7) then supplies `default_interrupt_level`, never this decoder — a degraded reading is never coerced into a claimed number here, only at that later layer, and it stays marked degraded there too |
+| `recurrence_rule` | no value | A value outside `yearly \| monthly` degrades like any closed vocabulary; `internal/core/prospection.Arm` (§7) still arms the dated occurrence as a one-shot trigger — the capture is honoured, the recurrence itself is not invented |
 
 **A date is degraded in two distinguishable ways**, and they are recorded separately: a value
 that is not text at all, and text that is not a date Nooma reads. Only two date formats are
