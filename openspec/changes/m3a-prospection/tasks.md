@@ -368,7 +368,7 @@ Independent of PR 3/4. Ships `digest.go` — `DigestDue`, `LowEnergy`, `Carry`, 
 first `internal/core/focus` importer outside its own package. See **Finding F4**: `Carry` merges
 spec R4.2 and R4.3 into one function.
 
-- [ ] **5.1** Commit 1 (RED): `internal/core/prospection/digest_test.go` — `DigestDue`: `nil`
+- [x] **5.1** Commit 1 (RED): `internal/core/prospection/digest_test.go` — `DigestDue`: `nil`
       `lastDigestAt` + `now` at/after `DigestHour` → true (spec R4.1's nil-prior scenario); `now`
       before `DigestHour` same day → false; `lastDigestAt` at today's `DigestHour` instant, `now`
       later same day → false; `lastDigestAt` from yesterday, `now` at/after today's `DigestHour` →
@@ -377,16 +377,16 @@ spec R4.2 and R4.3 into one function.
       Stub: `const DigestHour = 7`; `func DigestDue(lastDigestAt *time.Time, now time.Time) bool {
       return false }` — compiles; the nil-prior case expects `true`, fails first.
       Requirement: R4.1.
-- [ ] **5.2** Commit 2 (GREEN): implement `DigestDue` — local hour `>= DigestHour` AND
+- [x] **5.2** Commit 2 (GREEN): implement `DigestDue` — local hour `>= DigestHour` AND
       (`lastDigestAt` nil OR strictly before today's `DigestHour` instant), built with `time.Date`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R4.1; design §3.5.
-- [ ] **5.3** `digest_test.go` (continued) — the relation `DigestHour >= QuietHoursEndHour`,
+- [x] **5.3** `digest_test.go` (continued) — the relation `DigestHour >= QuietHoursEndHour`,
       computed from both named constants.
       **Not a missing-symbol red**: both constants already exist by this point in the chain
       (PR 1 merged) — disclosed per `m2a` C9.
       Requirement: design §3.5.
-- [ ] **5.4** Commit 1 (RED): `digest_test.go` (continued) — `LowEnergy`: `nil` reading → false
+- [x] **5.4** Commit 1 (RED): `digest_test.go` (continued) — `LowEnergy`: `nil` reading → false
       ("no observation is not an observation of depletion," spec R4.2's own resolution); `Level <
       LowEnergyMax` and `RecordedAt` within `EnergyReadingMaxAgeHours` → true; `Level ==
       LowEnergyMax` exactly → false (strict `<`); a reading older than
@@ -398,11 +398,11 @@ spec R4.2 and R4.3 into one function.
       case expects `false`, fails first.
       Requirement: R4.2 (the resolution half — the `pattern_based`/no-priority answer lives in
       `Carry`, task 5.6).
-- [ ] **5.5** Commit 2 (GREEN): implement `LowEnergy` — `nil` → false; else `Level < LowEnergyMax`
+- [x] **5.5** Commit 2 (GREEN): implement `LowEnergy` — `nil` → false; else `Level < LowEnergyMax`
       AND `now.Sub(r.RecordedAt) <= EnergyReadingMaxAgeHours*time.Hour`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R4.2; design §3.5.
-- [ ] **5.6** Commit 1 (RED): `digest_test.go` (continued) — `Carry`: `!lowEnergy` → every item
+- [x] **5.6** Commit 1 (RED): `digest_test.go` (continued) — `Carry`: `!lowEnergy` → every item
       carried, nothing held (spec R4.2's own "at/above energy, every candidate passes"); fewer
       items than `LowEnergyDigestSize` under `lowEnergy` → all carried; more items than
       `LowEnergyDigestSize`, none at `MaxDigestDeferrals` → exactly the top `LowEnergyDigestSize` by
@@ -420,33 +420,33 @@ spec R4.2 and R4.3 into one function.
       (carry, held []DigestItem) { return nil, nil }` — compiles; the `!lowEnergy`-carries-everything
       case expects `len(carry) == len(items)`, fails first.
       Requirement: R4.2, R4.3 — see **Finding F4**.
-- [ ] **5.7** Commit 2 (GREEN): implement `Carry` per design's three-step rule: `!lowEnergy`
+- [x] **5.7** Commit 2 (GREEN): implement `Carry` per design's three-step rule: `!lowEnergy`
       short-circuit; `MaxDigestDeferrals` force-carry (added regardless of rank, never inside the
       truncation); rank the remainder via `focus.Rank` (zero `focus.Candidate` for a nil
       `Candidate`) and carry the top `LowEnergyDigestSize`.
       Verify: `go test ./internal/core/prospection/...` (now imports `internal/core/focus`).
       Requirement: R4.2, R4.3; design §3.5.
-- [ ] **5.8** `digest_test.go` (continued) — the relation `MaxDigestDeferrals <
+- [x] **5.8** `digest_test.go` (continued) — the relation `MaxDigestDeferrals <
       consolidation.LoadCooldownDays`, computed from both named constants (owner-review **R2**'s
       upper bound).
       **Not a missing-symbol red**: `consolidation.LoadCooldownDays` ships in `m2b` — disclosed per
       `m2a` C9.
       Requirement: design §3.5; **R2**.
-- [ ] **5.9** `digest_test.go` (continued) — `LowEnergyDigestSize == focus.DefaultSize / 2`, a
+- [x] **5.9** `digest_test.go` (continued) — `LowEnergyDigestSize == focus.DefaultSize / 2`, a
       `go/constant`-level equality (written as that expression, not the literal `3`).
       **Not a missing-symbol red**: same as 5.8.
       Requirement: design §3.5.
-- [ ] **5.10** `docs/02-cognitive-core.md` §7 amendment: the cadence; the care gate's two-part shape
+- [x] **5.10** `docs/02-cognitive-core.md` §7 amendment: the cadence; the care gate's two-part shape
       ("low" and "recent"); the anti-starvation rule (one deferral = one day, forced delivery
       regardless); the `pattern_based`-trigger answer (ranked last via the zero-Candidate score, no
       special case).
       Requirement: design §3.5.
-- [ ] **5.11** §13: five new rows — `digest_hour` (7, derived); `low_energy_max` (0.5, chosen,
+- [x] **5.11** §13: five new rows — `digest_hour` (7, derived); `low_energy_max` (0.5, chosen,
       midpoint of an uncalibrated `[0,1]` scale); `energy_reading_max_age_hours` (24, derived from
       the digest cycle); `low_energy_digest_size` (3, derived as `focus.DefaultSize/2`);
       `max_digest_deferrals` (3, chosen inside the band `(1, load_cooldown_days)` — **R2**).
       Requirement: R0; design §3.5.
-- [ ] **5.12** Purity/lint: `golangci-lint run` (`core-purity` — first import of
+- [x] **5.12** Purity/lint: `golangci-lint run` (`core-purity` — first import of
       `internal/core/focus` from outside `focus` itself; confirm `depguard` allows the core-to-core
       edge, per design §4's own claim).
       Requirement: `nooma-core` hard rule 1; design §4 (Risk C).
