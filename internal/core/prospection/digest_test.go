@@ -74,3 +74,84 @@ func TestDigestDue(t *testing.T) {
 		})
 	}
 }
+
+// TestDigestHourIsNotBeforeQuietHoursEnd pins the one relation that matters
+// between two constants deliberately kept separate (design §3.5).
+//
+// A digest hour before quiet hours end is a digest born deferred every
+// single day: the cadence would be decorative and the real delivery hour
+// would be QuietHoursEndHour anyway. Today the two are equal, which is the
+// only hour that is both a morning digest and never born deferred — but
+// they are two knobs with two §13 rows, and this asserts the invariant
+// rather than their current equality, so either can be recalibrated as long
+// as the relation survives.
+//
+// Disclosed per m2a C9: both constants already exist by this point in the
+// chain, so there is no missing-symbol red available for this check.
+func TestDigestHourIsNotBeforeQuietHoursEnd(t *testing.T) {
+	if DigestHour < QuietHoursEndHour {
+		t.Fatalf("DigestHour (%d) is before QuietHoursEndHour (%d): every digest would be born "+
+			"deferred, the cadence would be decorative, and the real delivery hour would be %d",
+			DigestHour, QuietHoursEndHour, QuietHoursEndHour)
+	}
+}
+
+// TestLowEnergy proves doc 02 §7's own two-part condition — "low (recent
+// reading)" — with both halves independently falsifiable.
+func TestLowEnergy(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	reading := func(level float64, ago time.Duration) *EnergyReading {
+		return &EnergyReading{Level: level, RecordedAt: now.Add(-ago)}
+	}
+
+	tests := []struct {
+		name string
+		r    *EnergyReading
+		want bool
+	}{
+		{
+			// No observation is not an observation of depletion. The gate
+			// suppresses delivery, so silence must not be read as consent
+			// to suppress.
+			name: "no reading at all",
+			r:    nil,
+			want: false,
+		},
+		{
+			name: "low and recent",
+			r:    reading(LowEnergyMax-0.1, time.Hour),
+			want: true,
+		},
+		{
+			// Strict: the gate suppresses, so the burden of proof is on
+			// "low", and exactly the midpoint is not low. Same convention as
+			// consolidation.CatchUpDue and the staleness gate.
+			name: "exactly at the threshold is not low",
+			r:    reading(LowEnergyMax, time.Hour),
+			want: false,
+		},
+		{
+			name: "low but stale — the recent half fails",
+			r:    reading(0.0, (EnergyReadingMaxAgeHours+1)*time.Hour),
+			want: false,
+		},
+		{
+			name: "exactly at the age bound is still recent",
+			r:    reading(LowEnergyMax-0.1, EnergyReadingMaxAgeHours*time.Hour),
+			want: true,
+		},
+		{
+			name: "high and recent",
+			r:    reading(0.9, time.Hour),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LowEnergy(tt.r, now); got != tt.want {
+				t.Errorf("LowEnergy(%+v, %v) = %v, want %v", tt.r, now, got, tt.want)
+			}
+		})
+	}
+}

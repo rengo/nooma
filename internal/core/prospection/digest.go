@@ -35,3 +35,38 @@ func DigestDue(lastDigestAt *time.Time, now time.Time) bool {
 	dueAt := time.Date(y, m, d, DigestHour, 0, 0, 0, now.Location())
 	return lastDigestAt == nil || lastDigestAt.Before(dueAt)
 }
+
+// LowEnergyMax is the level below which energy reads as low (design §3.5).
+// Chosen, not derived: energy is declared on [0,1] (doc 02 §10) with no
+// calibration data behind it, and the midpoint is the only point on such a
+// scale that is not an invention — the same reading that put
+// weight_threshold at 0.5.
+const LowEnergyMax = 0.5
+
+// EnergyReadingMaxAgeHours is how old a reading may be and still count as
+// "recent" (doc 02 §7). Derived from the cadence: the digest is once daily
+// (owner ruling 2), so its input must be no older than one digest cycle — a
+// reading from two digests ago would hold items back on a day it never
+// observed. It equals incomplete_expiry_hours and catch_up_staleness_hours
+// by coincidence, not by relation, and no test ties them.
+const EnergyReadingMaxAgeHours = 24
+
+// EnergyReading is one current_state row as the care gate sees it. Both
+// fields are required because doc 02 §7's gate is "low (recent reading)" —
+// two conditions, not one.
+type EnergyReading struct {
+	Level      float64
+	RecordedAt time.Time
+}
+
+// LowEnergy reports doc 02 §7's own two-part condition.
+//
+// A nil reading is not low: no observation is not an observation of
+// depletion. That direction is deliberate — this gate suppresses delivery,
+// so silence must never be read as consent to suppress.
+//
+// The level comparison is strict for the same reason: the burden of proof
+// is on "low", and exactly the midpoint is not low.
+func LowEnergy(r *EnergyReading, now time.Time) bool {
+	return true
+}
