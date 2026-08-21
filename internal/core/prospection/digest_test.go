@@ -273,11 +273,19 @@ func TestCarry(t *testing.T) {
 	})
 
 	t.Run("starvation is bounded, not merely counted", func(t *testing.T) {
-		// The whole anti-starvation claim, walked: the same last-ranked item,
-		// against the same fuller-ranked field, on four consecutive digests.
-		// Held, held, held, carried. A test that only checked "an item with
-		// MaxDigestDeferrals is carried" would pass even if nothing ever
-		// reached that count.
+		// The same last-ranked item, against the same field, at every
+		// deferral count from 0 to the bound: held, held, held, carried.
+		//
+		// Its honest scope: each iteration is an independent call with the
+		// count supplied, not a sequence threaded through Carry's own
+		// output. Carry takes Deferrals as an input and owns no increment
+		// (Finding F4's scope), so nothing here proves a real caller's
+		// counter reaches the bound only after genuinely being held that
+		// many times — that composition is m3b's, and its test belongs
+		// there. What this does prove, and what a single "an item at
+		// MaxDigestDeferrals is carried" case would not, is that the bound
+		// is the FIRST count at which the item is carried: it is held at
+		// every lower one.
 		var carried int
 		for deferrals := 0; deferrals <= MaxDigestDeferrals; deferrals++ {
 			items := []DigestItem{

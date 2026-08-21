@@ -805,7 +805,7 @@ box can audit it):
     one that is neither, and `digest_hour` is a separate knob from `quiet_hours_end_hour` with the
     relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality.
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
-    lets important ones through; deferred items resurface on recovery (anti-starvation).
+    lets important ones through; deferred items resurface on recovery.
     **Low** is `energy < low_energy_max`, strict — this gate suppresses delivery, so the burden of
     proof is on low, and no reading at all is not low: silence is not an observation of depletion.
     **Recent** is within `energy_reading_max_age_hours`, one digest cycle, because a reading from
@@ -815,7 +815,11 @@ box can audit it):
     items by `focus.Priority` (owner ruling 4), and a trigger with no source unit — a pattern
     watcher, whose `unit_id` is NULL — has priority zero and therefore ranks last, so *"still on
     this goal, or shall we let it rest?"* is the first thing a depleted user stops being asked.
-    **Anti-starvation** is a bound, not a delay: an item held back `max_digest_deferrals` times is
+    **Anti-starvation** here is the digest's own bound, and it is a different mechanism from §3's
+    `age` term, which carries the same name for the ranking. That one lifts a neglected unit's
+    priority continuously; this one guarantees delivery outright after a fixed count, independent
+    of rank and independent of whether energy ever recovers. It is a bound, not a delay: an item
+    held back `max_digest_deferrals` times is
     carried regardless of rank, and carried *in addition to* the truncation rather than inside it —
     if it competed for the same slots, a low-ranked item could be starved by fresher ones forever,
     which is the thing the rule exists to prevent.
