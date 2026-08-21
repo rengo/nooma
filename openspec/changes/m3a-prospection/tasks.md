@@ -658,3 +658,36 @@ before apply.
 - **F7 — `internal/core/classify` inside `m3a`.** `spec.md`'s scope box and R3.1 declared the
   package out of scope while PR 4 ships it. `spec.md` was corrected; the task list, which already
   carried PR 4 in full, did not change.
+
+---
+
+## Reconciliation note — 2026-08-20 (F8, found at apply time)
+
+**F8 — `Interrupt`'s degraded field is inverted from the design's snippet.** `design.md` §3.4's
+illustrative Go declares `type Interrupt struct { level float64; degraded bool }`, and this
+document's own task 3.1 stub repeats it. PR 3 ships `confirmed bool` instead, with
+`Degraded()` returning `!confirmed`. Recorded here because F1-F7 set the convention that a
+deviation from a planning artifact is written down, not just implemented.
+
+**Why the inversion.** With `degraded bool`, an `Interrupt` that never passed through
+`ResolveInterrupt` reports `Degraded() == false` — it claims a provenance it does not have.
+Three consequences, of which only the first is harmless:
+
+1. *Routing is unaffected.* A zero-value `Interrupt{}` carries `level == 0.0`, below
+   `PushThreshold`, so it routes to the digest under either polarity. Judgment Day's first judge
+   verified this and was right to.
+2. *An in-package literal is not.* `Interrupt{level: 0.9}` written by hand reports itself
+   non-degraded and routes to **push**, having never been validated. Today `prospection` is one
+   author's package; PRs 5 and 7 add files to it.
+3. *The audit trail is not.* `Degraded()` does not only feed routing — doc 02 §7, as amended by
+   this same PR, makes it decide persistence: `brain` writes `triggers.interrupt_level` as `NULL`
+   exactly when the resolution degraded. Under the old polarity a forgotten resolution would
+   persist `0.0` as a **claimed** value, which is the precise distinction §5.1 warns about ("a
+   degraded weight is not a zero weight") written into the database.
+
+With `confirmed bool`, `confirmed` is set only inside `ResolveInterrupt` on a validated in-range
+value, so the zero value and every hand-written literal are degraded by construction. The
+property the design stated is preserved; only the field expressing it changed.
+
+**F8's own scope note.** This is not a correction to `design.md` §3.4's decision — that decision
+is implemented faithfully. It corrects the snippet that illustrated it.

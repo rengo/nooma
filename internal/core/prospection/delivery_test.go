@@ -56,6 +56,52 @@ func TestResolveInterrupt_NonFiniteOrOutOfRange_DegradesToDefault(t *testing.T) 
 	}
 }
 
+// TestResolveInterrupt_EdgeOfRangeShapesAreInRange pins two float64 shapes
+// that no other test in this file exercises, and records that both are
+// ordinary in-range values rather than anything this gate special-cases:
+//
+//   - Negative zero is not less than zero (IEEE-754: -0.0 == 0.0), so it
+//     passes through as a claimed 0.0.
+//   - The smallest positive denormal is in range and is trusted, because
+//     "unusably small" is not a thing this gate judges: every value below
+//     PushThreshold behaves identically, so there is nothing to protect
+//     against and no reason to invent a floor.
+//
+// Its honest weight: this test is NOT what catches an operator slip in the
+// guard. Rewriting `v < 0` as `v <= 0` is already caught by
+// TestResolveInterrupt_InclusiveBoundsPassThrough's exactly-0 case and by
+// the round-trip table's lower bound — verified by running that mutation
+// against the suite. What this adds is the two shapes stated explicitly,
+// so a reader who wonders what -0.0 does here finds the answer asserted
+// rather than has to derive it from the comparison.
+func TestResolveInterrupt_EdgeOfRangeShapesAreInRange(t *testing.T) {
+	tests := []struct {
+		name string
+		v    float64
+	}{
+		{"negative zero", math.Copysign(0, -1)},
+		{"smallest positive denormal", math.SmallestNonzeroFloat64},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := tt.v
+			got := ResolveInterrupt(&v)
+			if got.Degraded() {
+				t.Errorf("ResolveInterrupt(&%v).Degraded() = true, want false — %v is inside "+
+					"[0,1] and is a claim the model made, not a reading core failed to parse",
+					tt.v, tt.v)
+			}
+			if got.Level() != tt.v {
+				t.Errorf("ResolveInterrupt(&%v).Level() = %v, want %v unchanged",
+					tt.v, got.Level(), tt.v)
+			}
+			if got.Route() != RouteDigest {
+				t.Errorf("ResolveInterrupt(&%v).Route() = %v, want RouteDigest", tt.v, got.Route())
+			}
+		})
+	}
+}
+
 // TestResolveInterrupt_InRangeValue_PassesThroughNonDegraded proves a
 // well-formed reading is never second-guessed.
 func TestResolveInterrupt_InRangeValue_PassesThroughNonDegraded(t *testing.T) {
