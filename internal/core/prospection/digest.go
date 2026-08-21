@@ -210,15 +210,14 @@ func Carry(items []DigestItem, adjacency map[string]float64, lowEnergy bool, now
 	}
 
 	for i, ranked := range focus.Rank(rankable, adjacency, now) {
+		// Indexed without a length check, per design D11 point 3's "no
+		// unreachable arm" — the same reading salvage.go gives for its own
+		// type assertion. focus.Rank returns exactly one entry per candidate
+		// it was given, and every candidate here was appended in the same
+		// pass that enqueued its item, so an id's queue holds precisely as
+		// many items as the ranking will ask for. An empty queue would mean
+		// Rank had invented a candidate.
 		q := queued[ranked.Candidate.ID]
-		if len(q) == 0 {
-			// Unreachable against focus.Rank's contract — it returns one
-			// entry per candidate, and every candidate came from this
-			// queue. Guarded rather than indexed blindly, so a future change
-			// to that contract surfaces as a missing item rather than a
-			// panic in a pure function the whole delivery path calls.
-			continue
-		}
 		item := q[0]
 		queued[ranked.Candidate.ID] = q[1:]
 
