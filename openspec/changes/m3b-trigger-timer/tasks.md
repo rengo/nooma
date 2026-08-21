@@ -196,6 +196,26 @@ two domains — outside quiet hours an overdue trigger expires; at every overdue
 not, it never fires — and doc 02 §7 states the interaction. This is a documentation gap being
 closed, not a behaviour change: `prospection` already worked this way and `m3a` tested it at L1.
 
+**G17 — the L3 race test passed for the wrong reason before a barrier was added, and that is worth
+recording as a method note.** Written as design §3.6 describes it — two goroutines running
+`checkRunner.at` against one vault under `-race` — the first pass simply finished before the second
+read, the second found nothing due, no conflict occurred, and **every assertion still held**. A
+race test that depends on the scheduler is a flaky test on its way to being deleted, and this one
+would have been deleted as flaky *in the direction of always passing*. The reads are now held at a
+barrier that releases when both passes have finished reading; the two `UPDATE`s then run genuinely
+concurrently and which one wins is still SQLite's decision. The barrier carries a 10-second timeout
+for a second-order reason: before the conflict arm exists, the pass that loses the trigger race
+aborts and never reaches the timer read, so an untimed barrier would have **hung** the red step
+instead of failing it.
+
+**G18 — task 5b.3 says the concurrent fixture is a trigger; design §3.6 says it must be a timer.**
+Design's reasoning is that F1 leaves a trigger with no transition, so a trigger fixture "would race
+two passes that both correctly write nothing". That reasoning holds for a *delivering* trigger and
+not for a **stale** one, which does transition (`Expire`). **Both fixtures are raced**, which
+resolves the disagreement by covering it rather than by picking a side, and it buys something
+neither artifact asked for: the conflict arm exists in two separate loops, and "it works for
+triggers" is not evidence about the other one.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -607,7 +627,7 @@ four due-scan `DecisionAction` members ship here (`check.trigger.expired`, `chec
 
 Depends on PR 5a. **R6/R7** (proposal), double-firing guard.
 
-- [ ] **5b.1** Commit 1 (RED): `internal/brain/check_test.go` (extend) — pre-seed a trigger already
+- [x] **5b.1** Commit 1 (RED): `internal/brain/check_test.go` (extend) — pre-seed a trigger already
       `expired`, feed a due window that would have matched it had it still been `armed` (simulating
       a race where `Due` returned it before a concurrent writer moved it); assert `checkRunner.at`
       does not abort, records exactly one `check.conflict_skipped` row, and still processes a second,
@@ -617,12 +637,12 @@ Depends on PR 5a. **R6/R7** (proposal), double-firing guard.
       Requirement: R5.4.
       **Mutation**: revert the conflict arm to propagate instead of record-and-continue — the
       second, unrelated row's own row-count assertion fails.
-- [ ] **5b.2** Commit 2 (GREEN): implement the conflict arm in `checkRunner.at` — catch
+- [x] **5b.2** Commit 2 (GREEN): implement the conflict arm in `checkRunner.at` — catch
       `ErrTriggerStatusConflict`/`ErrTimerStatusConflict`, record `check.conflict_skipped`, continue;
       any other error still aborts (`persistArchiveTransitions`'s verbatim shape).
       Verify: `go test ./internal/brain/... -run Conflict`.
       Requirement: R5.4; design §3.6.
-- [ ] **5b.3** Commit 1 (RED, L3): `test/integration/due_scan_concurrent_test.go` (build tag
+- [x] **5b.3** Commit 1 (RED, L3): `test/integration/due_scan_concurrent_test.go` (build tag
       `integration`) — two goroutines running `checkRunner.at` against **one real migrated vault**
       (SQLite's own `_txlock=immediate` DSN — a `memrepo` fake proves nothing about the race),
       `go test -race`, over one armed trigger past its staleness window: exactly one `expired` row,
@@ -635,11 +655,11 @@ Depends on PR 5a. **R6/R7** (proposal), double-firing guard.
       task is written to close** — a race test passing against a fake proves nothing about the SQL
       `WHERE`-clause precondition it claims to guard, which is why this task is pinned to L3 and not
       folded into 5a's L2 suite.
-- [ ] **5b.4** `docs/02-cognitive-core.md` §11 amendment: a scan-time transition conflict is
+- [x] **5b.4** `docs/02-cognitive-core.md` §11 amendment: a scan-time transition conflict is
       recorded and skipped, never fatal to the pass.
       Requirement: R5.4; design §3.6.
-- [ ] **5b.5** Purity/lint: `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/brain/check{,_test}.go`,
+- [x] **5b.5** Purity/lint: `golangci-lint run`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/brain/check{,_test}.go`,
       `internal/ports/decisionlog.go`, `test/integration/due_scan_concurrent_test.go`,
       `docs/02-cognitive-core.md`. Target ≤90 impl+docs lines.
 
