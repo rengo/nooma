@@ -296,7 +296,7 @@ Touches `internal/core/classify`, not `prospection`. Independent of PR 1–3; fe
 **Finding F3**: `RecurrenceRule`'s exact classify-side type is not fully specified by design and
 must be confirmed against classify's existing closed-enum pattern before task 4.3's stub is named.
 
-- [ ] **4.1** Commit 1 (RED): `internal/core/classify/classification_test.go` (extend) —
+- [x] **4.1** Commit 1 (RED): `internal/core/classify/classification_test.go` (extend) —
       `InterruptLevel`: absent → `nil`, no `Reason` (the six existing fields' own "absence is
       ordinary" pattern); present, valid `[0,1]` → the float; present, out of `[0,1]` → `nil` +
       `ReasonBadFormat` (owner-review **R3**: reuse, not a new `Reason`).
@@ -306,12 +306,12 @@ must be confirmed against classify's existing closed-enum pattern before task 4.
       the out-of-range fixture expects `ReasonBadFormat`, the decoder never reads the field, no
       `Reason` is ever emitted, fails first.
       Requirement: design §3.8; **R3**.
-- [ ] **4.2** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `interrupt_level` with a
+- [x] **4.2** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `interrupt_level` with a
       range-checking assigner (JSON number → `*float64`; non-finite or outside `[0,1]` → `nil` +
       append `ReasonBadFormat`).
       Verify: `go test ./internal/core/classify/...`.
       Requirement: design §3.8; **R3**.
-- [ ] **4.3** Commit 1 (RED): `classification_test.go` (continued) — `RecurrenceRule`: absent →
+- [x] **4.3** Commit 1 (RED): `classification_test.go` (continued) — `RecurrenceRule`: absent →
       `nil`, no `Reason`; `"yearly"`/`"monthly"` → the decoded value; unknown text (`"weekly"`) →
       `nil` + `ReasonUnknownEnum`, matching the six orthogonal enum fields' own degradation.
       **Before writing the stub**: confirm classify's existing closed-enum field pattern (e.g. how
@@ -322,35 +322,43 @@ must be confirmed against classify's existing closed-enum pattern before task 4.
       Stub: add the field per the confirmed pattern; no `fieldSpecs` row yet — compiles; the
       `"yearly"` case fails first.
       Requirement: design §3.8; **R5**.
-- [ ] **4.4** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `recurrence_rule`,
+- [x] **4.4** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `recurrence_rule`,
       reusing `assignEnum` against `{"yearly", "monthly"}`.
       Verify: `go test ./internal/core/classify/...`.
       Requirement: design §3.8; **R5**.
-- [ ] **4.5** `prompt.go`: widen the field list to include `interrupt_level` and `recurrence_rule`
+- [x] **4.5** `prompt.go`: widen the field list to include `interrupt_level` and `recurrence_rule`
       (§5 step 1's list); state doc 02 §7's guidance for the model verbatim (`interrupt_level ∈
       [0,1]`; `recurrence_rule` closed vocabulary).
       Requirement: design §3.8.
-- [ ] **4.6** `testdata/classify/format.md` + golden corpus: widen with the two new fields; extend
+- [x] **4.6** `testdata/classify/format.md` + golden corpus: widen with the two new fields; extend
       fixtures covering present, absent, out-of-range, and unknown-enum for both.
       Verify: `go test ./internal/core/classify/... -run Golden` (or the suite's actual golden-test
       name).
       Requirement: design §3.8.
-- [ ] **4.7** `docs/02-cognitive-core.md` §5 step 1 amendment: add `interrupt_level` and
+- [x] **4.7** `docs/02-cognitive-core.md` §5 step 1 amendment: add `interrupt_level` and
       `recurrence_rule` to the enumerated orthogonal fields.
       Requirement: design §3.8.
-- [ ] **4.8** `docs/02-cognitive-core.md` §5.1's degradable-field table: two new rows —
+- [x] **4.8** `docs/02-cognitive-core.md` §5.1's degradable-field table: two new rows —
       `interrupt_level` (degrades via `ReasonBadFormat`, widening its doc comment per **R3**) and
       `recurrence_rule` (degrades via `ReasonUnknownEnum`, per **R5**).
       Requirement: design §3.8; **R3**, **R5**.
-- [ ] **4.9** Purity/lint: `golangci-lint run`.
+- [x] **4.9** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/classify/{classification,decode,prompt}{,_test}.go`,
       `testdata/classify/format.md` and its golden corpus, `docs/02-cognitive-core.md`. Target ≤380
       impl+docs lines — **Medium-High risk**, 0.95× the ceiling before code is written. **If the
       golden-corpus regeneration runs long**, split at `InterruptLevel` (tasks 4.1–4.2, half of
       4.5/4.8) | `RecurrenceRule` (tasks 4.3–4.4, the other half, plus Finding F3's type
       resolution) — not pre-drawn by design, report before splitting.
+
+      **Diff-scope deviation, found at apply time**: the stated scope omitted
+      `test/support/goldenset/types.go`. `goldenset.ClassifyExpected` needed
+      `InterruptLevel`/`RecurrenceRule` fields before any golden-corpus case file could carry
+      either name past `Load`'s `DisallowUnknownFields` gate — task 4.6's own instruction to
+      "widen [...] the golden corpus" is unsatisfiable without it. `make check-all` stayed
+      green; impl+docs landed at 115 lines (see apply-progress), well under the 380 budget even
+      with this file included.
 
 ---
 
