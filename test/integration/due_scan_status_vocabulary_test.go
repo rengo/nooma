@@ -79,7 +79,7 @@ func TestDueScan_WritesOnlyVocabularyStatuses(t *testing.T) {
 	}
 
 	if _, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions).
-		Check(ctx); err != nil {
+		Check(ctx, brain.CheckRequest{}); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 

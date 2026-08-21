@@ -134,7 +134,7 @@ func runCheck(t *testing.T, now time.Time, triggers ports.TriggerRepo, timers po
 	t.Helper()
 
 	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions).
-		Check(context.Background())
+		Check(context.Background(), brain.CheckRequest{})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
