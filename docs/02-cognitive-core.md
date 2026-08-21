@@ -1016,6 +1016,15 @@ The rule, then, is not a list of refusals: **a refusal is recorded exactly when 
 otherwise leave no trace at all.** A new refusal reason, or a new kind that can arm, is covered by
 that sentence without it being rewritten.
 
+**A scan-time conflict is recorded and skipped, never fatal.** Two due scans overlapping is the
+normal state of something that runs every few minutes, and the precondition that keeps them from
+both acting on one row lives in the `UPDATE`'s own `WHERE` clause — the loser learns it lost by
+changing zero rows. That is a decision with a consequence (a nudge this pass did not deliver, and
+the reason why), so it is recorded, and the scan continues: one contended row must not cost every
+row behind it. Any other failure still aborts the pass, and the asymmetry is the point — a
+repository that cannot be reached at all is not a race, and swallowing it would turn a broken vault
+into a scan that cheerfully reports having done nothing.
+
 ## 12. Perception (phase 2 — design reserved)
 
 A single multi-format door: any file (image, digital/scanned PDF, DOCX, XLSX) is normalized,

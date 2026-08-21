@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -81,6 +82,13 @@ func (r checkRunner) at(ctx context.Context, now time.Time) (CheckReport, error)
 			return CheckReport{}, fmt.Errorf("check: trigger %q: no write path for status %q", t.ID, status)
 		}
 		if err := r.triggers.Expire(ctx, t.ID); err != nil {
+			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
+			if skipErr != nil {
+				return CheckReport{}, skipErr
+			}
+			if skipped {
+				continue
+			}
 			return CheckReport{}, fmt.Errorf("check: expire trigger %q: %w", t.ID, err)
 		}
 		if err := r.record(ctx, now, ports.ActionCheckTriggerExpired,
@@ -109,6 +117,13 @@ func (r checkRunner) at(ctx context.Context, now time.Time) (CheckReport, error)
 		switch status {
 		case ports.TimerStatusFired:
 			if err := r.timers.Fire(ctx, t.ID, now); err != nil {
+				skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTimerStatusConflict, "timers", t.ID, t.FireAt)
+				if skipErr != nil {
+					return CheckReport{}, skipErr
+				}
+				if skipped {
+					continue
+				}
 				return CheckReport{}, fmt.Errorf("check: fire timer %q: %w", t.ID, err)
 			}
 			if err := r.record(ctx, now, ports.ActionCheckTimerFired,
@@ -119,6 +134,13 @@ func (r checkRunner) at(ctx context.Context, now time.Time) (CheckReport, error)
 
 		case ports.TimerStatusCancelled:
 			if err := r.timers.Cancel(ctx, t.ID); err != nil {
+				skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTimerStatusConflict, "timers", t.ID, t.FireAt)
+				if skipErr != nil {
+					return CheckReport{}, skipErr
+				}
+				if skipped {
+					continue
+				}
 				return CheckReport{}, fmt.Errorf("check: cancel timer %q: %w", t.ID, err)
 			}
 			if err := r.record(ctx, now, ports.ActionCheckTimerCancelled,
@@ -150,9 +172,17 @@ type checkRunner struct {
 // facts, and splitting a context that does not differ would be splitting
 // for symmetry rather than for meaning.
 type checkDetail struct {
-	ID      string `json:"id"`
-	FireAt  string `json:"fire_at"`
-	Verdict string `json:"verdict"`
+	ID     string `json:"id"`
+	FireAt string `json:"fire_at"`
+	// Verdict is what the gate decided, on the three rows that record an
+	// effect. It is empty on a conflict row, where no verdict was acted
+	// on — the write was refused before the verdict could become one.
+	Verdict string `json:"verdict,omitempty"`
+	// Table names which of the two a conflict row is about, and is empty
+	// on the effect rows, where the action already says. Putting the
+	// table into Verdict instead would have made one field mean two
+	// things and read as a lie in the audit trail.
+	Table string `json:"table,omitempty"`
 }
 
 // record is this pass's one decision_log call site — consolidateRunner's
@@ -174,6 +204,34 @@ func (r checkRunner) record(ctx context.Context, now time.Time, action ports.Dec
 		return fmt.Errorf("check: record decision: %w", err)
 	}
 	return nil
+}
+
+// skipOnConflict is this pass's whole tolerance for concurrency, and its
+// shape is persistArchiveTransitions' verbatim.
+//
+// A transition another pass already made is not this pass's failure: two
+// scans overlapping is the normal state of a thing that runs every few
+// minutes, and one contended row must not cost every row behind it in the
+// same scan. So a conflict is recorded and skipped.
+//
+// Anything else aborts. That asymmetry is load-bearing — a repository that
+// cannot be reached at all is not a race, and swallowing it would turn a
+// broken vault into a scan that cheerfully reports having done nothing.
+//
+// It reports whether the error was a conflict, so the caller decides what
+// to do with everything else rather than having this function guess.
+func (r checkRunner) skipOnConflict(ctx context.Context, now time.Time, err, sentinel error, table, id string, fireAt time.Time) (bool, error) {
+	if !errors.Is(err, sentinel) {
+		return false, nil
+	}
+
+	if recordErr := r.record(ctx, now, ports.ActionCheckConflictSkipped,
+		fmt.Sprintf("%s %q changed status between this scan's read and its write — another pass got there first, and this one skipped it", table, id),
+		checkDetail{ID: id, FireAt: fireAt.UTC().Format(time.RFC3339), Table: table},
+	); recordErr != nil {
+		return false, recordErr
+	}
+	return true, nil
 }
 
 // triggerTransition maps one verdict to the triggers.status a scan writes
