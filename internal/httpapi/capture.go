@@ -36,6 +36,10 @@ type captureResponse struct {
 	ArmedID string `json:"armed_id,omitempty"`
 	FireAt  string `json:"fire_at,omitempty"`
 
+	// OutcomeArmRefused.
+	Why     string `json:"why,omitempty"`
+	Message string `json:"message,omitempty"`
+
 	// OutcomeRecalled.
 	Units []unitResponse `json:"units,omitempty"`
 
@@ -178,6 +182,16 @@ func renderCaptureResult(result brain.CaptureResult) (int, captureResponse) {
 			Armed:   string(result.Armed.What),
 			ArmedID: result.Armed.ID,
 			FireAt:  result.Armed.FireAt.UTC().Format(time.RFC3339),
+		}
+
+	case brain.OutcomeArmRefused:
+		// 200, not 4xx: the request was understood and answered honestly.
+		// A refusal to schedule is not a client error — the caller is told
+		// which thing was missing, in words it can show the user.
+		return http.StatusOK, captureResponse{
+			Outcome: string(result.Outcome),
+			Why:     string(result.ArmRefused.Why),
+			Message: result.ArmRefused.Message,
 		}
 
 	case brain.OutcomeDiscarded:
