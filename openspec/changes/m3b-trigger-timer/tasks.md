@@ -157,6 +157,25 @@ and that label is applied with this paragraph as its justification. The three-co
 list mandates (retirement → I04 red → arming) is preserved inside the one PR, so the retirement is
 still reviewable as its own act.
 
+**G14 — PR 4a shipped a defect to `main`, and PR 4b's own sweep is what found it.** Retiring
+`timerHookRefusal` removed the fork that caught **every** timer regardless of date; the arming fork
+that replaced it only intercepts when `Arm` returns a plan. So an **undated or already-past timer
+fell through to `classify.ToUnit`**, which refuses to build a unit out of one (I04), and the whole
+capture failed with `capture: build unit: classify: this classification persists no unit` — a
+mistyped reminder became a 500. Neither `spec.md` nor `design.md` names an outcome for this case:
+design §3.5's refusal table says which refusals write a `decision_log` row and is silent on what the
+caller is told, and the old `OutcomeDeferred` that used to answer it was deleted by the same PR.
+**Resolved by adding `brain.OutcomeArmRefused` + `brain.ArmRefused{Why, Message}`**, a distinct
+outcome rather than a discard, because "nothing worth keeping" and "you asked for a reminder and I
+could not set it" are different facts and `OutcomeStored` is unavailable to a timer by I04. The
+early-return gate is the Kind's own `UnitType()`, not a list of the two kinds that have it today.
+`AllCaptureOutcomes()` is therefore **seven** after this PR, and `AllDecisionActions()` **28**.
+
+The finding worth carrying past this change: the sweep caught it because it is exhaustive over
+`classify.AllKinds()` × date shapes rather than over a table of expected rows. A four-row table —
+the shape design §3.5 explicitly warned against — would have contained only the cells someone
+thought of, and every one of those cells armed successfully.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -460,7 +479,7 @@ test-rewrite (RED), (3) arming implementation (GREEN, wires `TriggerRepo`/`Timer
 
 Depends on PR 4a.
 
-- [ ] **4b.1** Commit 1 (RED): `test/conformance/capture_arm_refusal_audit_test.go` (new) —
+- [x] **4b.1** Commit 1 (RED): `test/conformance/capture_arm_refusal_audit_test.go` (new) —
       table-driven over `classify.AllKinds()` (thirteen members) × {dated future, dated past,
       undated} × {rule present, absent}: `RefusalNoDate`/`RefusalAlreadyPast` → exactly one
       `capture.arm.refused` row with `Context.why` set and a distinct `Rationale` substring per
@@ -475,15 +494,15 @@ Depends on PR 4a.
       **Mutation**: replace the `classify.AllKinds()` iteration with a hand-written five-`Kind`
       subset — a fourteenth `Kind` added later would silently not appear; the `len() == 13` guard
       catches a silent narrowing of the iterated set itself.
-- [ ] **4b.2** Commit 2 (GREEN): implement the `capture.arm.refused` write in `captureRunner.at`'s
+- [x] **4b.2** Commit 2 (GREEN): implement the `capture.arm.refused` write in `captureRunner.at`'s
       `(_, false)` branch, gated to `RefusalNoDate`/`RefusalAlreadyPast` only.
       Verify: `go test ./test/conformance/... -run CaptureArmRefusalAudit`.
       Requirement: R4.2; design §3.5.
-- [ ] **4b.3** `docs/02-cognitive-core.md` §11 amendment: state the derived rule verbatim (refusal
+- [x] **4b.3** `docs/02-cognitive-core.md` §11 amendment: state the derived rule verbatim (refusal
       writes exactly when the capture would otherwise be traceless), not a fixed four-row table.
       Requirement: design §3.5.
-- [ ] **4b.4** Purity/lint: `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/brain/capture.go`,
+- [x] **4b.4** Purity/lint: `golangci-lint run`.
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/brain/capture.go`,
       `internal/ports/decisionlog.go`, `test/conformance/capture_arm_refusal_audit_test.go`,
       `docs/02-cognitive-core.md`. Target ≤110 impl+docs lines.
 

@@ -186,6 +186,8 @@ type captureCLIResponse struct {
 	Armed    string `json:"armed,omitempty"`
 	ArmedID  string `json:"armed_id,omitempty"`
 	FireAt   string `json:"fire_at,omitempty"`
+	Why      string `json:"why,omitempty"`
+	Message  string `json:"message,omitempty"`
 	Units    []struct {
 		Content string `json:"content"`
 	} `json:"units,omitempty"`
@@ -208,6 +210,10 @@ func renderCaptureResponse(out io.Writer, resp captureCLIResponse) error {
 
 	case brain.OutcomeArmed:
 		_, err := fmt.Fprintf(out, "captured: armed %s %s — fires at %s\n", resp.Armed, resp.ArmedID, resp.FireAt)
+		return err
+
+	case brain.OutcomeArmRefused:
+		_, err := fmt.Fprintf(out, "captured: not scheduled — %s\n", resp.Message)
 		return err
 
 	case brain.OutcomeDiscarded:

@@ -42,12 +42,15 @@ type CaptureInput struct {
 type CaptureOutcome string
 
 const (
-	OutcomeStored    CaptureOutcome = "stored"    // a unit was persisted
-	OutcomeArmed     CaptureOutcome = "armed"     // a timer or trigger was armed — never a unit (I04)
-	OutcomeDiscarded CaptureOutcome = "discarded" // chitchat / out_of_scope
-	OutcomeRecalled  CaptureOutcome = "recalled"  // a recall, answered
-	OutcomeCorrected CaptureOutcome = "corrected" // a correction, applied
-	OutcomeAsked     CaptureOutcome = "asked"     // a correction whose referent or plan was ambiguous
+	OutcomeStored CaptureOutcome = "stored" // a unit was persisted
+	OutcomeArmed  CaptureOutcome = "armed"  // a timer or trigger was armed — never a unit (I04)
+	// OutcomeArmRefused: the capture asked for a nudge and could not get
+	// one — an undated timer, or a date already behind us.
+	OutcomeArmRefused CaptureOutcome = "arm_refused"
+	OutcomeDiscarded  CaptureOutcome = "discarded" // chitchat / out_of_scope
+	OutcomeRecalled   CaptureOutcome = "recalled"  // a recall, answered
+	OutcomeCorrected  CaptureOutcome = "corrected" // a correction, applied
+	OutcomeAsked      CaptureOutcome = "asked"     // a correction whose referent or plan was ambiguous
 )
 
 // AllCaptureOutcomes returns a fresh slice holding every CaptureOutcome, in
@@ -55,7 +58,7 @@ const (
 // var, for the same mutability reason ports.AllDecisionActions is one.
 func AllCaptureOutcomes() []CaptureOutcome {
 	return []CaptureOutcome{
-		OutcomeStored, OutcomeArmed, OutcomeDiscarded,
+		OutcomeStored, OutcomeArmed, OutcomeArmRefused, OutcomeDiscarded,
 		OutcomeRecalled, OutcomeCorrected, OutcomeAsked,
 	}
 }
@@ -64,7 +67,7 @@ func AllCaptureOutcomes() []CaptureOutcome {
 // over Outcome (design D8): only the fields naming that outcome are ever
 // populated; every other field stays its zero value.
 type CaptureResult struct {
-	// Outcome names which of the six ways this capture ended — the one
+	// Outcome names which of the seven ways this capture ended — the one
 	// field every caller switches on.
 	Outcome CaptureOutcome
 
@@ -88,6 +91,10 @@ type CaptureResult struct {
 	// Armed names what this capture armed. Set only for
 	// Outcome == OutcomeArmed.
 	Armed *Armed
+
+	// ArmRefused names why a capture that asked for a nudge did not get
+	// one. Set only for Outcome == OutcomeArmRefused.
+	ArmRefused *ArmRefused
 
 	// Recalled holds the units RecallService.ForText found for a
 	// `recall`-classified capture (spec R2.3, design D9), in fused order.
@@ -117,6 +124,25 @@ type Armed struct {
 	// FireAt is when it will fire — the Plan's own instant, not a
 	// re-derivation.
 	FireAt time.Time
+}
+
+// ArmRefused is what CaptureResult carries when a capture classified as
+// something armable but could not be armed — an undated timer, or one
+// whose instant is already behind us.
+//
+// It is a distinct outcome rather than a discard because the two are
+// different facts: discarding says "nothing worth keeping", and this says
+// "you asked for a reminder and I could not set it". Reusing OutcomeStored
+// is not available either — I04 forbids the unit — so without this the
+// capture has nothing truthful left to answer, which is how it came to
+// fail outright instead.
+type ArmRefused struct {
+	// Why is prospection's own refusal vocabulary, typed rather than a
+	// bare string.
+	Why prospection.Refusal
+	// Message is the caller-visible sentence, in plain words. A caller
+	// renders this directly; it is never a technical error message.
+	Message string
 }
 
 // Correction is what CaptureResult carries for the Corrected and Asked

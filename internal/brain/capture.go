@@ -189,12 +189,30 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// and I04 stays structural rather than remembered. Arm takes the
 	// instant Capture already read — there is no second clock read here,
 	// and captureRunner holds no clock to make one with.
-	if plan, armed := prospection.Arm(c, now); armed {
+	plan, armable := prospection.Arm(c, now)
+	if armable {
 		result, err := r.arm(ctx, c, plan, now)
 		if err != nil {
 			return CaptureResult{}, err
 		}
 		return result, nil
+	}
+
+	// A classification that asked to arm something and could not still has
+	// to leave here: classify.ToUnit refuses to build a unit out of a
+	// timer (I04), so falling through would turn a mistyped reminder into
+	// an error. The gate is the Kind's own UnitType rather than a list of
+	// the two kinds that have it today — a future armable kind that
+	// persists no unit is covered without anyone remembering to add it.
+	//
+	// A Kind that DOES persist a unit and refuses to arm — a dated event
+	// with no date — is not caught here on purpose. It keeps going, its
+	// unit is created, and that unit is the trace of the capture. Which is
+	// also why it writes no refusal row below.
+	if c.Kind != nil {
+		if _, persistsUnit := c.Kind.UnitType(); !persistsUnit && plan.Why != prospection.RefusalKindNotArming {
+			return r.refuseArm(ctx, plan, now)
+		}
 	}
 
 	// The correction fork (design D7/D8, spec R1.1): a correction never
@@ -718,6 +736,59 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		Outcome: OutcomeArmed,
 		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt},
 	}, nil
+}
+
+// refuseArm records and reports a capture that asked for a nudge and did
+// not get one.
+//
+// The row is written exactly here and nowhere else, and that placement IS
+// the rule doc 02 §11 states: a refusal is recorded when the capture would
+// otherwise leave no trace at all. Every other refusal already has one — a
+// dated event that cannot arm still persists its unit, an unclassifiable
+// capture already writes capture.classify.unclassifiable, and a kind that
+// arms nothing by design is the system working, not a decision with an
+// effect. Recording those too would fill the glass box with a row per
+// capture saying "this was not a timer", which is how a glass box stops
+// being read.
+func (r captureRunner) refuseArm(ctx context.Context, plan prospection.Plan, now time.Time) (CaptureResult, error) {
+	message := refusalMessage(plan.Why)
+
+	contextJSON, err := json.Marshal(struct {
+		Why string `json:"why"`
+	}{Why: string(plan.Why)})
+	if err != nil {
+		return CaptureResult{}, fmt.Errorf("capture: encode arm-refused decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionCaptureArmRefused,
+		Rationale:  message,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return CaptureResult{}, fmt.Errorf("capture: record arm-refused decision: %w", err)
+	}
+
+	return CaptureResult{
+		Outcome:    OutcomeArmRefused,
+		ArmRefused: &ArmRefused{Why: plan.Why, Message: message},
+	}, nil
+}
+
+// refusalMessage is doc 02 §11's human-readable sentence for one refusal,
+// and it doubles as what the caller is told — a refusal the user can act on
+// says which thing was missing, so no two reasons share a sentence.
+func refusalMessage(why prospection.Refusal) string {
+	switch why {
+	case prospection.RefusalNoDate:
+		return "nothing was scheduled: no time was given, and guessing one is worse than not setting a reminder at all"
+	case prospection.RefusalAlreadyPast:
+		return "nothing was scheduled: the time given has already passed"
+	default:
+		return fmt.Sprintf("nothing was scheduled: %s", why)
+	}
 }
 
 // recordArmedDecision writes decision_log's account of one arming (doc 02

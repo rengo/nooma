@@ -204,6 +204,8 @@ func TestAllCaptureOutcomesHaveAStatusMapping(t *testing.T) {
 		switch outcome {
 		case brain.OutcomeArmed:
 			result.Armed = &brain.Armed{What: prospection.ArmTimer, ID: "placeholder"}
+		case brain.OutcomeArmRefused:
+			result.ArmRefused = &brain.ArmRefused{Why: prospection.RefusalNoDate, Message: "placeholder"}
 		case brain.OutcomeCorrected, brain.OutcomeAsked:
 			result.Correction = &brain.Correction{}
 		}

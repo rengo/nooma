@@ -986,6 +986,20 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   high-impact decision). "Cautious to capture, selective to speak", applied to its own
   transparency — relief must not turn into an auditing chore.
 
+**"With an effect" is the whole rule, and a refused arming is where it earns its keep.** When a
+capture asks for a nudge and cannot get one — no time was given, or the time given has already
+passed — the refusal is recorded, because the user asked for something and did not get it, and
+nothing else about that capture leaves a trace: a timer never becomes a unit (§8), so there is no
+row anywhere else to find it by. When a capture refuses to arm but persists a unit anyway — a
+dated event with no date is still an event worth keeping — the unit IS the trace, and a second row
+would double-count one fact. And when a kind arms nothing by design, which is most of them, there
+is no decision to record at all: a row per capture saying "this was not a timer" is how a glass
+box stops being read.
+
+The rule, then, is not a list of refusals: **a refusal is recorded exactly when the capture would
+otherwise leave no trace at all.** A new refusal reason, or a new kind that can arm, is covered by
+that sentence without it being rewritten.
+
 ## 12. Perception (phase 2 — design reserved)
 
 A single multi-format door: any file (image, digital/scanned PDF, DOCX, XLSX) is normalized,
