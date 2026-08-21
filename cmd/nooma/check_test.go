@@ -80,8 +80,11 @@ func TestCheckFailsCleanlyOnAHeldVault(t *testing.T) {
 	if !errors.As(err, &inUse) {
 		t.Fatalf("error %v is not a vaultlock.InUseError — a held vault must say who holds it", err)
 	}
-	if !strings.Contains(err.Error(), fmt.Sprintf("pid %d", os.Getpid())) {
-		t.Errorf("error %q does not name the holding pid", err)
+	if !strings.Contains(err.Error(), fmt.Sprintf("%d", os.Getpid())) {
+		t.Errorf("error %q does not name the holding process", err)
+	}
+	if !strings.Contains(err.Error(), vault) {
+		t.Errorf("error %q does not name the vault it could not take", err)
 	}
 }
 

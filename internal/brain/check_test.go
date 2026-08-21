@@ -186,7 +186,7 @@ func TestCheck_ConflictIsRecordedAndTheScanContinues(t *testing.T) {
 		timers:   &emptyTimers{},
 		ids:      &countingIDs{},
 		log:      log,
-	}.at(context.Background(), now)
+	}.at(context.Background(), now, true)
 	if err != nil {
 		t.Fatalf("at: %v — a transition another pass already made is not this pass's failure", err)
 	}
@@ -250,7 +250,7 @@ func TestCheck_TimerConflictIsRecordedAndTheScanContinues(t *testing.T) {
 		timers:   timers,
 		ids:      &countingIDs{},
 		log:      log,
-	}.at(context.Background(), now)
+	}.at(context.Background(), now, true)
 	if err != nil {
 		t.Fatalf("at: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestCheck_AnyOtherErrorStillAbortsTheScan(t *testing.T) {
 	}
 
 	if _, err := (checkRunner{triggers: broken, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}}).
-		at(context.Background(), now); err == nil {
+		at(context.Background(), now, true); err == nil {
 		t.Fatal("at returned nil for a non-conflict repository error — only a conflict is survivable")
 	}
 }
@@ -345,4 +345,53 @@ type countingIDs struct{ n int }
 func (g *countingIDs) New() string {
 	g.n++
 	return fmt.Sprintf("id-%d", g.n)
+}
+
+// TestCheckDryRun_ReachesTheSameVerdictsAndWritesNothing is owner decision
+// Q1 at the layer that can prove it cheapest: same runner, same rows, same
+// counts, no writes and no rows.
+//
+// The two runs use separate repository doubles seeded identically rather
+// than one vault twice, so the wet run's own effects cannot be what makes
+// the dry run look correct.
+func TestCheckDryRun_ReachesTheSameVerdictsAndWritesNothing(t *testing.T) {
+	fireAt := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	now := fireAt.Add(time.Duration(prospection.TriggerStalenessHours+1) * time.Hour)
+
+	seed := func() (*conflictingTriggers, *conflictingTimers, *recordingLog) {
+		return &conflictingTriggers{due: []ports.DueTrigger{{ID: "trg", FireAt: fireAt}}},
+			&conflictingTimers{due: []ports.DueTimer{{ID: "tmr", FireAt: fireAt}}},
+			&recordingLog{}
+	}
+
+	dryTriggers, dryTimers, dryLog := seed()
+	dry, err := checkRunner{triggers: dryTriggers, timers: dryTimers, ids: &countingIDs{}, log: dryLog}.
+		at(context.Background(), now, false)
+	if err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+
+	if len(dryLog.actions) != 0 {
+		t.Errorf("the dry run wrote %v, want nothing", dryLog.actions)
+	}
+	if len(dryTriggers.expired) != 0 {
+		t.Errorf("the dry run expired %v, want nothing", dryTriggers.expired)
+	}
+	if len(dryTimers.fired) != 0 {
+		t.Errorf("the dry run fired %v, want nothing", dryTimers.fired)
+	}
+
+	wetTriggers, wetTimers, wetLog := seed()
+	wet, err := checkRunner{triggers: wetTriggers, timers: wetTimers, ids: &countingIDs{}, log: wetLog}.
+		at(context.Background(), now, true)
+	if err != nil {
+		t.Fatalf("wet run: %v", err)
+	}
+
+	if dry != wet {
+		t.Fatalf("dry run reported %+v, wet run reported %+v — a dry run must reach the identical verdicts", dry, wet)
+	}
+	if len(wetLog.actions) == 0 {
+		t.Fatal("the wet run wrote nothing — this test's own premise is gone")
+	}
 }

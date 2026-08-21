@@ -233,6 +233,20 @@ func wireConsolidate(ctx context.Context, db *sqlite.Vault, cfg *config.Config, 
 	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state), nil
 }
 
+// wireCheck builds a *brain.CheckService over db. It resolves no provider
+// and loads no index, because a due scan calls no model and searches
+// nothing — the shortest wiring function in this file, and short for a
+// reason worth stating rather than for one worth wondering about.
+func wireCheck(db *sqlite.Vault) *brain.CheckService {
+	return brain.NewCheckService(
+		systemClock{},
+		sqlite.NewTriggerRepo(db),
+		sqlite.NewTimerRepo(db),
+		uuidGen{},
+		sqlite.NewDecisionLog(db),
+	)
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {

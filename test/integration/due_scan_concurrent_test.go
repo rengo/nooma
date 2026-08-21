@@ -103,7 +103,7 @@ func TestDueScan_ConcurrentPassesTransitionExactlyOnce(t *testing.T) {
 		go func(i int, svc *brain.CheckService) {
 			defer wg.Done()
 			<-start
-			_, errs[i] = svc.Check(ctx)
+			_, errs[i] = svc.Check(ctx, brain.CheckRequest{})
 		}(i, svc)
 	}
 	close(start)

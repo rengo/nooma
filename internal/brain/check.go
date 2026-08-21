@@ -48,9 +48,25 @@ type CheckReport struct {
 	TimersCancelled int
 }
 
+// CheckRequest selects how one Check call behaves. Its zero value is an
+// ordinary scan that writes — the shape `nooma check` with no flag has,
+// following ConsolidateRequest's own convention.
+type CheckRequest struct {
+	// DryRun suppresses every write: the same rows are read, the same
+	// verdicts are reached and the same report is built, and nothing is
+	// persisted and nothing is logged.
+	//
+	// It is a suppression, not a second code path, and the distinction is
+	// the whole of owner decision Q1. A preview derived by its own
+	// independent function would agree with the real scan on the day it
+	// was written and drift from it thereafter; this one cannot disagree,
+	// because it IS the real scan with its effects held back.
+	DryRun bool
+}
+
 // Check runs one due scan. It is this file's one ports.Clock.Now() call.
-func (s *CheckService) Check(ctx context.Context) (CheckReport, error) {
-	return s.run.at(ctx, s.clock.Now())
+func (s *CheckService) Check(ctx context.Context, req CheckRequest) (CheckReport, error) {
+	return s.run.at(ctx, s.clock.Now(), !req.DryRun)
 }
 
 // at runs one scan at the instant Check already read.
@@ -61,7 +77,11 @@ func (s *CheckService) Check(ctx context.Context) (CheckReport, error) {
 // window, a threshold or a boundary — the scan that decides for itself
 // what "overdue" means is the scan that drifts from the gate it was
 // supposed to run.
-func (r checkRunner) at(ctx context.Context, now time.Time) (CheckReport, error) {
+//
+// commit gates the writes and nothing else. Every read, every verdict and
+// every count below is identical in both modes, which is what makes a dry
+// run a preview of this scan rather than a story about it.
+func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckReport, error) {
 	var report CheckReport
 
 	due, err := r.triggers.Due(ctx, now)
@@ -80,6 +100,10 @@ func (r checkRunner) at(ctx context.Context, now time.Time) (CheckReport, error)
 		// a branch with no producer is a branch nothing can be said about.
 		if status != ports.TriggerStatusExpired {
 			return CheckReport{}, fmt.Errorf("check: trigger %q: no write path for status %q", t.ID, status)
+		}
+		if !commit {
+			report.TriggersExpired++
+			continue
 		}
 		if err := r.triggers.Expire(ctx, t.ID); err != nil {
 			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
@@ -114,6 +138,17 @@ func (r checkRunner) at(ctx context.Context, now time.Time) (CheckReport, error)
 		}
 
 		detail := checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(verdict)}
+		if !commit {
+			switch status {
+			case ports.TimerStatusFired:
+				report.TimersFired++
+			case ports.TimerStatusCancelled:
+				report.TimersCancelled++
+			default:
+				return CheckReport{}, fmt.Errorf("check: timer %q: no write path for status %q", t.ID, status)
+			}
+			continue
+		}
 		switch status {
 		case ports.TimerStatusFired:
 			if err := r.timers.Fire(ctx, t.ID, now); err != nil {
