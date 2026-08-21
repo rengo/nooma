@@ -2,8 +2,9 @@
 
 This is the JSON gate corpus (ADR-0002, `docs/06-harness.md` §5): input
 messages with their expected structured classification output, covering
-the taxonomy in `docs/02-cognitive-core.md` §5 and its orthogonal
-resolution fields. Written once, used in two places — the capture
+the taxonomy in `docs/02-cognitive-core.md` §5, its orthogonal resolution
+fields, and §7's two prospection capture fields (`interrupt_level`,
+`recurrence_rule`). Written once, used in two places — the capture
 pipeline tests, and the `nooma doctor` provider quality gate.
 
 **Before any case is added**: the eventual corpus (`cases/`) must include
@@ -62,6 +63,8 @@ own `id` field verbatim (e.g. `id: "remind-me-tomorrow"` →
 | `expected.task_checkin_outcome` | string | no | `done \| snooze \| drop` |
 | `expected.list_op` | string | no | `append \| delete \| mark_done \| remove` |
 | `expected.person_ref_status` | string | no | `resolved \| new \| ambiguous` |
+| `expected.interrupt_level` | number | no | `docs/02-cognitive-core.md` §7's push/digest split, `0-1`. A pointer internally, for the same reason `expected.weight`/`expected.decay_rate` are — an absent reading and a claimed `0.0` must stay distinguishable |
+| `expected.recurrence_rule` | string | no | `yearly \| monthly`, `docs/02-cognitive-core.md` §7's recurrence vocabulary — a decoded field, not part of `structured_data` (§5.1: "opaque to the brain and stays opaque") |
 | `llm_case_id` | string | no | The `id` of a `testdata/llm/` case that recorded the malformed provider response this case's `expected` degrades from — the structural link I14 needs between the JSON gate corpus and the recorded-response corpus (see "Cross-field constraint" below) |
 
 ## Cross-field constraint
@@ -74,6 +77,12 @@ same time). None of the six is required, and there is no mutual-exclusion
 rule among them today: **this is documented, not mechanized** — `Load`
 (`test/support/goldenset`) validates JSON shape only, not which
 combination of these fields a case populates.
+
+`expected.interrupt_level` and `expected.recurrence_rule` are independently
+optional the same way: neither is one of the six above (`docs/02-cognitive-
+core.md` §7's prospection fields are a separate family from §5's orthogonal
+resolutions), and a case may carry either, both, or neither regardless of
+`expected.type` or any of the six.
 
 **`llm_case_id`, when set, must equal the `id` of an existing
 `testdata/llm/` case** — that recording is what a malformed-degradation
@@ -140,9 +149,10 @@ inside `weight` or `decay_rate` instead.
 
 **Not checked**:
 
-- `expected.type` enum membership, and the six `expected.*_outcome` /
-  `list_op` / `person_ref_status` fields' allowed values — a review-time
-  concern, not a mechanized one.
+- `expected.type` enum membership, the six `expected.*_outcome` /
+  `list_op` / `person_ref_status` fields' allowed values, `expected.
+  recurrence_rule`'s vocabulary, and `expected.interrupt_level`'s `[0,1]`
+  range — a review-time concern, not a mechanized one.
 - `llm_case_id` resolving to a real, existing `testdata/llm/` case file —
   proven only for the two checked-in `format_example.json` fixtures today
   (see "Cross-field constraint" above); a future, separate check would be

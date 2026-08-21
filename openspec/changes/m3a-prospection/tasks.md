@@ -296,7 +296,7 @@ Touches `internal/core/classify`, not `prospection`. Independent of PR 1–3; fe
 **Finding F3**: `RecurrenceRule`'s exact classify-side type is not fully specified by design and
 must be confirmed against classify's existing closed-enum pattern before task 4.3's stub is named.
 
-- [ ] **4.1** Commit 1 (RED): `internal/core/classify/classification_test.go` (extend) —
+- [x] **4.1** Commit 1 (RED): `internal/core/classify/classification_test.go` (extend) —
       `InterruptLevel`: absent → `nil`, no `Reason` (the six existing fields' own "absence is
       ordinary" pattern); present, valid `[0,1]` → the float; present, out of `[0,1]` → `nil` +
       `ReasonBadFormat` (owner-review **R3**: reuse, not a new `Reason`).
@@ -306,12 +306,12 @@ must be confirmed against classify's existing closed-enum pattern before task 4.
       the out-of-range fixture expects `ReasonBadFormat`, the decoder never reads the field, no
       `Reason` is ever emitted, fails first.
       Requirement: design §3.8; **R3**.
-- [ ] **4.2** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `interrupt_level` with a
+- [x] **4.2** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `interrupt_level` with a
       range-checking assigner (JSON number → `*float64`; non-finite or outside `[0,1]` → `nil` +
       append `ReasonBadFormat`).
       Verify: `go test ./internal/core/classify/...`.
       Requirement: design §3.8; **R3**.
-- [ ] **4.3** Commit 1 (RED): `classification_test.go` (continued) — `RecurrenceRule`: absent →
+- [x] **4.3** Commit 1 (RED): `classification_test.go` (continued) — `RecurrenceRule`: absent →
       `nil`, no `Reason`; `"yearly"`/`"monthly"` → the decoded value; unknown text (`"weekly"`) →
       `nil` + `ReasonUnknownEnum`, matching the six orthogonal enum fields' own degradation.
       **Before writing the stub**: confirm classify's existing closed-enum field pattern (e.g. how
@@ -322,35 +322,43 @@ must be confirmed against classify's existing closed-enum pattern before task 4.
       Stub: add the field per the confirmed pattern; no `fieldSpecs` row yet — compiles; the
       `"yearly"` case fails first.
       Requirement: design §3.8; **R5**.
-- [ ] **4.4** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `recurrence_rule`,
+- [x] **4.4** Commit 2 (GREEN): `decode.go` — add the `fieldSpecs` row for `recurrence_rule`,
       reusing `assignEnum` against `{"yearly", "monthly"}`.
       Verify: `go test ./internal/core/classify/...`.
       Requirement: design §3.8; **R5**.
-- [ ] **4.5** `prompt.go`: widen the field list to include `interrupt_level` and `recurrence_rule`
+- [x] **4.5** `prompt.go`: widen the field list to include `interrupt_level` and `recurrence_rule`
       (§5 step 1's list); state doc 02 §7's guidance for the model verbatim (`interrupt_level ∈
       [0,1]`; `recurrence_rule` closed vocabulary).
       Requirement: design §3.8.
-- [ ] **4.6** `testdata/classify/format.md` + golden corpus: widen with the two new fields; extend
+- [x] **4.6** `testdata/classify/format.md` + golden corpus: widen with the two new fields; extend
       fixtures covering present, absent, out-of-range, and unknown-enum for both.
       Verify: `go test ./internal/core/classify/... -run Golden` (or the suite's actual golden-test
       name).
       Requirement: design §3.8.
-- [ ] **4.7** `docs/02-cognitive-core.md` §5 step 1 amendment: add `interrupt_level` and
+- [x] **4.7** `docs/02-cognitive-core.md` §5 step 1 amendment: add `interrupt_level` and
       `recurrence_rule` to the enumerated orthogonal fields.
       Requirement: design §3.8.
-- [ ] **4.8** `docs/02-cognitive-core.md` §5.1's degradable-field table: two new rows —
+- [x] **4.8** `docs/02-cognitive-core.md` §5.1's degradable-field table: two new rows —
       `interrupt_level` (degrades via `ReasonBadFormat`, widening its doc comment per **R3**) and
       `recurrence_rule` (degrades via `ReasonUnknownEnum`, per **R5**).
       Requirement: design §3.8; **R3**, **R5**.
-- [ ] **4.9** Purity/lint: `golangci-lint run`.
+- [x] **4.9** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/classify/{classification,decode,prompt}{,_test}.go`,
       `testdata/classify/format.md` and its golden corpus, `docs/02-cognitive-core.md`. Target ≤380
       impl+docs lines — **Medium-High risk**, 0.95× the ceiling before code is written. **If the
       golden-corpus regeneration runs long**, split at `InterruptLevel` (tasks 4.1–4.2, half of
       4.5/4.8) | `RecurrenceRule` (tasks 4.3–4.4, the other half, plus Finding F3's type
       resolution) — not pre-drawn by design, report before splitting.
+
+      **Diff-scope deviation, found at apply time**: the stated scope omitted
+      `test/support/goldenset/types.go`. `goldenset.ClassifyExpected` needed
+      `InterruptLevel`/`RecurrenceRule` fields before any golden-corpus case file could carry
+      either name past `Load`'s `DisallowUnknownFields` gate — task 4.6's own instruction to
+      "widen [...] the golden corpus" is unsatisfiable without it. `make check-all` stayed
+      green; impl+docs landed at 115 lines (see apply-progress), well under the 380 budget even
+      with this file included.
 
 ---
 
@@ -691,3 +699,40 @@ property the design stated is preserved; only the field expressing it changed.
 
 **F8's own scope note.** This is not a correction to `design.md` §3.4's decision — that decision
 is implemented faithfully. It corrects the snippet that illustrated it.
+
+---
+
+## Judgment Day note — PR 4, 2026-08-21
+
+Round 1 on frozen target `0c76021`. Both judges independently found the same CRITICAL; the
+findings below are recorded here because two of them are about how this change was *made*, not
+only about what it shipped.
+
+- **JD-4-01 (CRITICAL, both judges, fixed).** `{"interrupt_level": null}` decoded to a claimed
+  `0.0` with no degradation. `Salvage` stores any decodable value under its key, so an explicit
+  null is present rather than absent, and `json.Unmarshal` accepts null for a non-pointer
+  destination without error. Fixed by reading into a `*float64`; the three states — absent,
+  degraded, claimed 0.0 — were re-verified distinct by decoding all three.
+- **JD-4-02 (WARNING, both judges, base-only, NOT fixed here).** `assignFloat` carries the
+  identical shape for `weight` and `decay_rate` and has since M1. `classification.go`'s own doc
+  comment has described this exact defect since M1, and `goldenset.ClassifyExpected` fixed it on
+  the fixture side — the decoder never did. Worse than JD-4-01's instance, because doc 02 records
+  that a λ of 0 never decays and so §6's archiving pass can never reach the unit, while the row
+  violates no NOT NULL constraint. **Its own work unit**, with its own conformance test and doc
+  02 delta, rather than buried in a PR named for two prospection fields.
+- **JD-4-03 (WARNING, judge B, fixed).** `classification.go`'s citation of
+  `goldenset/types.go:152-165` went stale — this PR's own widening of that file shifted the
+  block to 210-217. The comment now also records the necessary-but-not-sufficient point: a
+  pointer *field* does not help unless the *assigner* reads into a pointer.
+- **JD-4-04 (WARNING, judge B, recorded not re-done).** Task 4.6's golden-corpus widening was
+  reported as having no genuine RED available, citing `m2a` C9. That framing does not hold:
+  adding a fixture carrying the new keys *before* widening `goldenset.ClassifyExpected` would
+  fail `Load`'s `DisallowUnknownFields`, which is a real, mechanically-detectable red. C9 covers
+  a check whose operands both already exist and therefore cannot fail; this was not that. The
+  commits are not being rewritten, and the misapplied precedent is recorded so the next slice
+  does not inherit it.
+- **JD-4-05 (SUGGESTION, judge B).** `{"recurrence_rule": null}` degrades safely — `""` matches
+  no vocabulary member, so `ReasonUnknownEnum` is recorded and the field stays nil — but the
+  label describes an explicit null imprecisely. No data is miscoded, so it is pinned as-is with
+  the imprecision stated rather than a sixth `Reason` invented for it (owner-review R3's own
+  argument).

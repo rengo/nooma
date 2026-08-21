@@ -1,0 +1,11 @@
+{
+  "id": "event-urgent-pipe-burst",
+  "input": "the kitchen pipe just burst, water everywhere, need a plumber now",
+  "expected": {
+    "type": "event",
+    "normalized_content": "Kitchen pipe burst, needs a plumber urgently",
+    "weight": 0.9,
+    "decay_rate": 0.2,
+    "interrupt_level": 0.95
+  }
+}

@@ -234,6 +234,15 @@ func (e *ClassifyExample) Validate() error {
 // column; docs/02-cognitive-core.md's decay formula (§2, line 29) uses the
 // short name `decay_rate`, which is what this field and its JSON tag
 // follow. See testdata/classify/format.md's field table for the mapping.
+// InterruptLevel and RecurrenceRule are m3a-prospection's own widening
+// (docs/02-cognitive-core.md §7, design.md §3.8): prospection's capture
+// fields, not part of the six orthogonal resolutions above. InterruptLevel
+// is a pointer for the same reason Weight/DecayRate are — an absent
+// reading and a claimed 0.0 must stay distinguishable (§5.1: "a degraded
+// weight is not a zero weight", restated for interrupt_level at §7).
+// RecurrenceRule is a plain string with the six orthogonal fields' own
+// convention: a closed vocabulary has no legitimate empty member, so an
+// empty string is absence, unambiguously.
 type ClassifyExpected struct {
 	Type               string          `json:"type"`
 	NormalizedContent  string          `json:"normalized_content"`
@@ -248,6 +257,8 @@ type ClassifyExpected struct {
 	TaskCheckinOutcome string          `json:"task_checkin_outcome,omitempty"`
 	ListOp             string          `json:"list_op,omitempty"`
 	PersonRefStatus    string          `json:"person_ref_status,omitempty"`
+	InterruptLevel     *float64        `json:"interrupt_level,omitempty"`
+	RecurrenceRule     string          `json:"recurrence_rule,omitempty"`
 }
 
 // Validate implements the Expected half of ClassifyExample.Validate.
