@@ -1,0 +1,8 @@
+{
+  "id": "classify-timer-three-distinct-instants",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "remind me to send the contract at 3pm on the 20th — the meeting itself is on 4 September",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Send the contract\",\"weight\":0.4,\"decay_rate\":0.1,\"due_at\":\"2026-08-20T15:00:00Z\",\"event_at\":\"2026-09-04T09:00:00Z\"}"
+}

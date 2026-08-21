@@ -21,7 +21,7 @@ import (
 // TWO decision_log rows, because two decisions happened: the unit was
 // created (capture.unit.created, not capture.classify — design.md:934
 // reserves that action for this exact scenario), and the reference was left
-// unresolved (capture.hook.deferred, context.kind = "ambiguous_person_ref").
+// unresolved (capture.person_ref.ambiguous, context.kind = "ambiguous_person_ref").
 //
 // I06 is explicitly out of scope for this test, and this paragraph exists
 // so a future reader does not mistake that for an oversight. I06
@@ -50,7 +50,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Ana asked me to send her the contract",
@@ -79,7 +79,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 		t.Fatalf("decisions.Since: %v", err)
 	}
 	if len(rows) != 2 {
-		t.Fatalf("decision_log has %d rows, want exactly 2 (capture.unit.created + capture.hook.deferred): %+v", len(rows), rows)
+		t.Fatalf("decision_log has %d rows, want exactly 2 (capture.unit.created + capture.person_ref.ambiguous): %+v", len(rows), rows)
 	}
 
 	var createdRow, deferredRow *ports.Decision
@@ -87,7 +87,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 		switch rows[i].Action {
 		case ports.ActionCaptureUnitCreated:
 			createdRow = &rows[i]
-		case ports.ActionCaptureHookDeferred:
+		case ports.ActionCapturePersonRefAmbiguous:
 			deferredRow = &rows[i]
 		}
 	}
@@ -95,7 +95,7 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 		t.Fatalf("no %q row found among %+v", ports.ActionCaptureUnitCreated, rows)
 	}
 	if deferredRow == nil {
-		t.Fatalf("no %q row found among %+v", ports.ActionCaptureHookDeferred, rows)
+		t.Fatalf("no %q row found among %+v", ports.ActionCapturePersonRefAmbiguous, rows)
 	}
 
 	if createdRow.Rationale == "" {
@@ -112,19 +112,19 @@ func TestCapture_AmbiguousPersonRefPersistsPoolUnitAndLogsTwice(t *testing.T) {
 	}
 
 	if deferredRow.Rationale == "" {
-		t.Error("capture.hook.deferred Rationale is empty — doc 02 §11 requires a human-readable sentence")
+		t.Error("capture.person_ref.ambiguous Rationale is empty — doc 02 §11 requires a human-readable sentence")
 	}
 	var deferredContext struct {
 		Kind   string `json:"kind"`
 		UnitID string `json:"unit_id"`
 	}
 	if err := json.Unmarshal(deferredRow.Context, &deferredContext); err != nil {
-		t.Fatalf("capture.hook.deferred Context is not valid JSON: %v (%s)", err, deferredRow.Context)
+		t.Fatalf("capture.person_ref.ambiguous Context is not valid JSON: %v (%s)", err, deferredRow.Context)
 	}
 	if deferredContext.Kind != "ambiguous_person_ref" {
-		t.Errorf("capture.hook.deferred Context.kind = %q, want %q", deferredContext.Kind, "ambiguous_person_ref")
+		t.Errorf("capture.person_ref.ambiguous Context.kind = %q, want %q", deferredContext.Kind, "ambiguous_person_ref")
 	}
 	if deferredContext.UnitID != result.UnitID {
-		t.Errorf("capture.hook.deferred Context.unit_id = %q, want %q", deferredContext.UnitID, result.UnitID)
+		t.Errorf("capture.person_ref.ambiguous Context.unit_id = %q, want %q", deferredContext.UnitID, result.UnitID)
 	}
 }

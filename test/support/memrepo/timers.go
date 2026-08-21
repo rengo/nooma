@@ -96,3 +96,27 @@ func (r *Timers) transition(id string, to ports.TimerStatus) error {
 	r.timers[id] = stored
 	return nil
 }
+
+// Count returns the number of timers currently held, at any status —
+// Triggers.Count's own note applies.
+func (r *Timers) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.timers)
+}
+
+// All returns every stored timer's written value, ordered by id.
+// Test-only — see Triggers.All.
+func (r *Timers) All() []ports.Timer {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	all := make([]ports.Timer, 0, len(r.timers))
+	for _, stored := range r.timers {
+		t := stored.timer
+		t.ActionText = copyString(t.ActionText)
+		all = append(all, t)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
+	return all
+}

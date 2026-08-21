@@ -175,3 +175,28 @@ func copyAnchor(p *prospection.Anchor) *prospection.Anchor {
 	v := *p
 	return &v
 }
+
+// Count returns the number of triggers currently held, at any status.
+// Test-only, and it exists for the same reason memrepo.Units.Count does: a
+// conformance test asserting "exactly one triggers row" cannot know an id
+// to look up, and a counter is not a contract case.
+func (r *Triggers) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.triggers)
+}
+
+// All returns every stored trigger's written value, ordered by id — the
+// read a conformance test needs to assert what was persisted, which
+// ports.TriggerRepo itself deliberately offers no method for. Test-only.
+func (r *Triggers) All() []ports.Trigger {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	all := make([]ports.Trigger, 0, len(r.triggers))
+	for _, stored := range r.triggers {
+		all = append(all, copyTrigger(stored.trigger))
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
+	return all
+}

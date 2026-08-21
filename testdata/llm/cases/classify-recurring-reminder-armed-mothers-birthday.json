@@ -1,0 +1,8 @@
+{
+  "id": "classify-recurring-reminder-armed-mothers-birthday",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "remind me about my mother's birthday every year on 4 September",
+  "response": "{\"type\":\"recurring_reminder\",\"normalized_content\":\"Mother's birthday\",\"weight\":0.6,\"decay_rate\":0.02,\"event_at\":\"2026-09-04T09:00:00Z\",\"recurrence_rule\":\"yearly\",\"interrupt_level\":0.8}"
+}

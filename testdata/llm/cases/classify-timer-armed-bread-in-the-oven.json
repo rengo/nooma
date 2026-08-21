@@ -1,0 +1,8 @@
+{
+  "id": "classify-timer-armed-bread-in-the-oven",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "take the bread out of the oven in 40 minutes",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Take the bread out of the oven\",\"weight\":0.1,\"decay_rate\":0.5,\"due_at\":\"2026-08-01T10:10:00Z\",\"structured_data\":{\"duration_seconds\":2400}}"
+}

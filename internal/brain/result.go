@@ -1,8 +1,10 @@
 package brain
 
 import (
-	"github.com/rengo/nooma/internal/core/classify"
+	"time"
+
 	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 )
 
@@ -41,7 +43,7 @@ type CaptureOutcome string
 
 const (
 	OutcomeStored    CaptureOutcome = "stored"    // a unit was persisted
-	OutcomeDeferred  CaptureOutcome = "deferred"  // timer / recurring_reminder — Q3a
+	OutcomeArmed     CaptureOutcome = "armed"     // a timer or trigger was armed — never a unit (I04)
 	OutcomeDiscarded CaptureOutcome = "discarded" // chitchat / out_of_scope
 	OutcomeRecalled  CaptureOutcome = "recalled"  // a recall, answered
 	OutcomeCorrected CaptureOutcome = "corrected" // a correction, applied
@@ -53,7 +55,7 @@ const (
 // var, for the same mutability reason ports.AllDecisionActions is one.
 func AllCaptureOutcomes() []CaptureOutcome {
 	return []CaptureOutcome{
-		OutcomeStored, OutcomeDeferred, OutcomeDiscarded,
+		OutcomeStored, OutcomeArmed, OutcomeDiscarded,
 		OutcomeRecalled, OutcomeCorrected, OutcomeAsked,
 	}
 }
@@ -83,9 +85,9 @@ type CaptureResult struct {
 	// embedding did not happen or recall found nothing.
 	Candidates []string
 
-	// Deferred names the refusal — Q3a's refusal path, spec R4.6. Set only
-	// for Outcome == OutcomeDeferred.
-	Deferred *Deferred
+	// Armed names what this capture armed. Set only for
+	// Outcome == OutcomeArmed.
+	Armed *Armed
 
 	// Recalled holds the units RecallService.ForText found for a
 	// `recall`-classified capture (spec R2.3, design D9), in fused order.
@@ -97,22 +99,24 @@ type CaptureResult struct {
 	Correction *Correction
 }
 
-// Deferred is what CaptureResult carries in place of a persisted unit, when
-// Q3a's refusal path activates (design D9, spec R4.6). It exists so the
-// refusal is representable and distinguishable from an ordinary success —
-// Phase C's HTTP route and CLI render it; this PR's job is only that it can
-// be told apart, not how it looks on the wire (design.md §8: "the HTTP and
-// CLI shapes of CaptureResult.Deferred" are explicitly not decided here).
-type Deferred struct {
-	// Kind is the classification kind that triggered the refusal —
-	// classify.KindTimer or classify.KindRecurringReminder today. A typed
-	// value, not a bare string, for the same reason classify.Kind exists at
-	// all: the vocabulary is closed and greppable.
-	Kind classify.Kind
-	// Message is the caller-visible refusal, in plain words — Q3a's own
-	// wording: "tells the caller 'not yet' in plain words". Never a
-	// technical error message; a caller renders this directly.
-	Message string
+// Armed is what CaptureResult carries when a capture armed something
+// instead of persisting a unit — a timer or a trigger, never both, and
+// never a unit (I04, doc 02 §8's own bold sentence).
+//
+// It replaces the Deferred value this capture path used to return, and the
+// difference is the whole of m3b: the refusal said "not yet", this says
+// what was scheduled and when.
+type Armed struct {
+	// What names which of prospection.Arm's armaments was created — a
+	// typed value, not a bare string, for the reason every closed
+	// vocabulary in this codebase is typed.
+	What prospection.Armament
+	// ID is the created timers or triggers row's own id, so a caller can
+	// name the thing it just scheduled.
+	ID string
+	// FireAt is when it will fire — the Plan's own instant, not a
+	// re-derivation.
+	FireAt time.Time
 }
 
 // Correction is what CaptureResult carries for the Corrected and Asked

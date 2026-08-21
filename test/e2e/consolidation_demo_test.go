@@ -217,6 +217,8 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 	relations := sqlite.NewRelationRepo(v)
 	decisions := sqlite.NewDecisionLog(v)
 	signals := sqlite.NewSignalRepo(v)
+	triggers := sqlite.NewTriggerRepo(v)
+	timers := sqlite.NewTimerRepo(v)
 
 	loaded, err := embeddings.LoadIndex(ctx, demoEmbedModel)
 	if err != nil {
@@ -235,7 +237,7 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 	captureLLM := fakeprovider.New(t, llmCasesDir(t), captureScript...)
 	clock := &steppingClock{}
 	ids := &demoIDs{}
-	captureSvc := brain.NewCaptureService(clock, ids, units, embeddings, lexical, relations, decisions, captureLLM, captureLLM, embed, index, signals)
+	captureSvc := brain.NewCaptureService(clock, ids, units, embeddings, lexical, relations, decisions, captureLLM, captureLLM, embed, index, signals, triggers, timers)
 
 	unitIDs := make([]string, len(ex.CaptureScript))
 	for i, c := range ex.CaptureScript {

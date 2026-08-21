@@ -85,7 +85,7 @@ func TestDecisionLog_ContextExplicitValueRoundTrips(t *testing.T) {
 
 	d := ports.Decision{
 		ID:         "decision-with-context",
-		Action:     ports.ActionCaptureHookDeferred,
+		Action:     ports.ActionCapturePersonRefAmbiguous,
 		Rationale:  "context supplied explicitly",
 		Context:    json.RawMessage(`{"kind":"timer","reason":"prospection_not_implemented"}`),
 		OccurredAt: decisionFixtureTime,

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
@@ -59,22 +60,24 @@ type CaptureService struct {
 // index is the in-memory Index ADR-0012 requires be loaded once at vault
 // open — NewCaptureService never builds one itself, it only holds the one
 // its caller already loaded.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo) *CaptureService {
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo) *CaptureService {
 	sharedRecall := NewRecallService(index, lex, units, embed)
 	return &CaptureService{
 		clock: clock,
 		run: captureRunner{
-			ids:    ids,
-			units:  units,
-			embeds: embeds,
-			lex:    lex,
-			rels:   rels,
-			log:    log,
-			llm:    llm,
-			judge:  judge,
-			embed:  embed,
-			index:  index,
-			recall: sharedRecall,
+			ids:      ids,
+			units:    units,
+			embeds:   embeds,
+			lex:      lex,
+			rels:     rels,
+			log:      log,
+			llm:      llm,
+			judge:    judge,
+			embed:    embed,
+			index:    index,
+			recall:   sharedRecall,
+			triggers: triggers,
+			timers:   timers,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
 			},
@@ -119,6 +122,12 @@ type captureRunner struct {
 	// (design D7), owned by captureRunner and built once, alongside recall,
 	// rather than per capture.
 	correction correctionRunner
+	// triggers and timers are what arming writes through. There is no
+	// clock field beside them on purpose: Arm(c, now) reuses the instant
+	// Capture already read, so the single-clock-read rule holds by
+	// construction rather than by a reviewer noticing.
+	triggers ports.TriggerRepo
+	timers   ports.TimerRepo
 }
 
 // at runs one capture given the instant CaptureService.Capture already
@@ -175,11 +184,17 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
 	}
 
-	if deferred, isHook := timerHookRefusal(c); isHook {
-		if err := r.recordHookDeferredDecision(ctx, c, now, deferred.Kind); err != nil {
+	// The arming fork (design §3.5), in the position the retired timer
+	// refusal held: before classify.ToUnit, so a timer never reaches it
+	// and I04 stays structural rather than remembered. Arm takes the
+	// instant Capture already read — there is no second clock read here,
+	// and captureRunner holds no clock to make one with.
+	if plan, armed := prospection.Arm(c, now); armed {
+		result, err := r.arm(ctx, c, plan, now)
+		if err != nil {
 			return CaptureResult{}, err
 		}
-		return CaptureResult{Outcome: OutcomeDeferred, Deferred: &deferred}, nil
+		return result, nil
 	}
 
 	// The correction fork (design D7/D8, spec R1.1): a correction never
@@ -215,7 +230,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 
 	// The discard fork (design D8, 13a's own half of it): chitchat and
 	// out_of_scope are not memory, so they never reach classify.ToUnit at
-	// all — the same "route before ToUnit" shape timerHookRefusal already
+	// all — the same "route before ToUnit" shape the retired timer refusal
 	// established.
 	if c.Kind != nil && (*c.Kind == classify.KindChitchat || *c.Kind == classify.KindOutOfScope) {
 		rationale := fmt.Sprintf("classified as %q — not memory content, nothing was stored", string(*c.Kind))
@@ -291,34 +306,6 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	}
 
 	return CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
-}
-
-// timerHookRefusal is design D9's routing decision, restricted to the
-// timer/recurring_reminder half of Q3a's refusal (spec R4.6): it reports
-// whether c must be refused rather than persisted, and if so, the Deferred
-// value the caller sees. It does not decide the ambiguous-person-reference
-// half (spec R4.7) — that classification still persists a unit, so it is
-// not a routing fork away from classify.ToUnit at all, only an extra
-// decision_log row after the ordinary path.
-//
-// A pure function of c, deliberately kept in internal/brain rather than
-// internal/core: design D9 assigns "route on c.Kind" to brain, and this
-// closes doc 02 §8's own bold sentence ("a timer is NEVER a unit"), not a
-// classify-time decision — classify.Kind.UnitType() already reports "no
-// unit" for six values; what brain does with that fact is orchestration.
-func timerHookRefusal(c classify.Classification) (Deferred, bool) {
-	if c.Kind == nil {
-		return Deferred{}, false
-	}
-	switch *c.Kind {
-	case classify.KindTimer, classify.KindRecurringReminder:
-		return Deferred{
-			Kind:    *c.Kind,
-			Message: "timers and recurring reminders aren't wired up yet — nothing was scheduled, and this capture was not stored.",
-		}, true
-	default:
-		return Deferred{}, false
-	}
 }
 
 // embedAndStore is design D8's step past persistence (spec R4.3): embed u's
@@ -608,17 +595,18 @@ func (r captureRunner) recordUnitCreatedDecision(ctx context.Context, c classify
 
 // recordAmbiguousPersonRefDecision writes decision_log's account of the
 // second of the ambiguous-person-reference scenario's two decisions (spec
-// R4.5, R4.7; design D9): the reference itself was never resolved. action is
-// ports.ActionCaptureHookDeferred, shared with the timer/recurring_reminder
-// refusal (recordHookDeferredDecision below) — both are Q3a's "capture knows
-// what it cannot yet do, and says so" — distinguished by context.kind
-// ("ambiguous_person_ref" here, "timer"/"recurring_reminder" there).
+// R4.5, R4.7; design D9): the reference itself was never resolved.
 //
-// Unlike the timer refusal, this decision does not accompany an
-// OutcomeDeferred result — the unit u names is already persisted (spec
-// R4.7's own MUST:
-// unit.StatusPool, never unit.StatusIncomplete), so the rationale says what
-// was deferred (disambiguation), not what was refused (the whole capture).
+// Its action is ports.ActionCapturePersonRefAmbiguous, which it no longer
+// shares with anything. It used to be ports.ActionCaptureHookDeferred, one
+// bucket for two unrelated facts told apart only by context.kind; the other
+// producer was the timer/recurring_reminder refusal this change retires, and
+// once that went, the name described nothing left standing.
+//
+// This decision does not accompany a distinct outcome — the unit u names is
+// already persisted (spec R4.7's own MUST: unit.StatusPool, never
+// unit.StatusIncomplete), so the rationale says what was deferred
+// (disambiguation), not what was refused.
 func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u unit.Unit, now time.Time) error {
 	rationale := fmt.Sprintf("person reference in unit %q was ambiguous and left unresolved; the unit was stored complete rather than held, because nothing can promote an incomplete unit before M2", u.ID)
 	contextJSON, err := json.Marshal(struct {
@@ -631,7 +619,7 @@ func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u u
 
 	d := ports.Decision{
 		ID:         r.ids.New(),
-		Action:     ports.ActionCaptureHookDeferred,
+		Action:     ports.ActionCapturePersonRefAmbiguous,
 		Rationale:  rationale,
 		Context:    contextJSON,
 		OccurredAt: now,
@@ -642,48 +630,178 @@ func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u u
 	return nil
 }
 
-// recordHookDeferredDecision writes decision_log's account of Q3a's timer/
-// recurring_reminder refusal (spec R4.5, R4.6; design D9): no unit exists
-// for this decision to name, only the classification that was refused —
-// c is embedded verbatim in context.classification so the record is a
-// truthful account of what was understood, not merely of what was refused
-// (design D9's own reasoning). kind is the classification kind that
-// triggered the refusal, timerHookRefusal's own finding, passed rather than
-// re-derived so this function has one job: writing the row, not deciding
-// whether to.
+// arm persists what one Plan decided and reports it back to the caller.
 //
-// occurred_at is now, the same single clock read every other timestamp in
-// this capture used (spec R4.1) — there is no unit here to disagree with,
-// but a decision row timestamped separately from the capture that produced
-// it would still misreport when the refusal happened.
-func (r captureRunner) recordHookDeferredDecision(ctx context.Context, c classify.Classification, now time.Time, kind classify.Kind) error {
-	rationale := fmt.Sprintf("classified as %q; M1 arms no timer and cannot fire one, so nothing was scheduled", string(kind))
-	contextJSON, err := json.Marshal(struct {
-		Kind           string                  `json:"kind"`
-		Classification classify.Classification `json:"classification"`
-		Reason         string                  `json:"reason"`
-		Milestone      string                  `json:"milestone"`
-	}{
-		Kind:           string(kind),
-		Classification: c,
-		Reason:         "prospection_not_implemented",
-		Milestone:      "M3",
-	})
+// One row, in one table, per Plan — never both, which is why the switch
+// has no shared tail: a timer and a trigger disagree about almost every
+// column, and a merged writer would have to carry the union of two shapes
+// and decide which half to leave zero.
+//
+// The id is generated here rather than inside prospection: Plan is a
+// decision about what to arm, and an id is a fact about a row that does
+// not exist yet.
+func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan prospection.Plan, now time.Time) (CaptureResult, error) {
+	id := r.ids.New()
+
+	switch plan.What {
+	case prospection.ArmTimer:
+		// action_text is the request VERBATIM — doc 02 §8: "the request is
+		// stored verbatim and only worded at delivery time". Wording it
+		// here would spend an LLM call at capture on text that may never
+		// be shown, and would lose the user's own words for good.
+		//
+		// c.NormalizedContent is a *string because classify degrades a
+		// missing field to nil, and that nil is passed through rather than
+		// flattened to "": timers.action_text's own NULL already means
+		// "generic nudge" (migration 0001:65), which is exactly what a
+		// timer with no salvaged text is.
+		if err := r.timers.Create(ctx, ports.Timer{
+			ID:         id,
+			FireAt:     plan.FireAt,
+			ActionText: c.NormalizedContent,
+			CreatedAt:  now,
+		}); err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: arm timer: %w", err)
+		}
+		if err := r.recordArmedDecision(ctx, ports.ActionCaptureArmedTimer, id, plan, now); err != nil {
+			return CaptureResult{}, err
+		}
+
+	case prospection.ArmTrigger, prospection.ArmRecurring:
+		fireAt := plan.FireAt
+		trigger := ports.Trigger{
+			ID:             id,
+			Kind:           ports.TriggerKindTimeBased,
+			InterruptLevel: interruptColumn(plan.Interrupt),
+			Payload: ports.TriggerPayload{
+				// The trigger payload is JSON, not a nullable column, so
+				// a degraded normalized_content lands as the empty string
+				// here rather than as a key meaning "generic nudge" —
+				// triggers have no such concept, and inventing one for
+				// them would give payload.action two readings.
+				ActionText: derefString(c.NormalizedContent),
+				Rationale:  armRationale(plan),
+				LeadDays:   plan.LeadDays,
+			},
+			FireAt:    &fireAt,
+			CreatedAt: now,
+		}
+
+		action := ports.ActionCaptureArmedTrigger
+		if plan.What == prospection.ArmRecurring {
+			// The recurrence columns are written only for ArmRecurring.
+			// Plan.Rule and Plan.Anchor carry zero values for the one-shot
+			// case, and writing those would claim a recurrence the user
+			// never asked for.
+			rule, anchor := plan.Rule, plan.Anchor
+			trigger.RecurrenceRule = &rule
+			trigger.RecurrenceAnchor = &anchor
+			action = ports.ActionCaptureArmedRecurring
+		}
+
+		if err := r.triggers.Create(ctx, trigger); err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: arm trigger: %w", err)
+		}
+		if err := r.recordArmedDecision(ctx, action, id, plan, now); err != nil {
+			return CaptureResult{}, err
+		}
+
+	default:
+		// Unreachable while Arm's second return value is the guard: it is
+		// false for ArmNothing. A default that returned a zero
+		// CaptureResult would answer a caller with an outcome of "", so
+		// this fails loudly instead.
+		return CaptureResult{}, fmt.Errorf("capture: arm: unhandled armament %q", plan.What)
+	}
+
+	return CaptureResult{
+		Outcome: OutcomeArmed,
+		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt},
+	}, nil
+}
+
+// recordArmedDecision writes decision_log's account of one arming (doc 02
+// §11's glass box).
+//
+// Three actions rather than one carrying the armament in context, following
+// the rule that effects split when their Context shapes differ: a timer row
+// has no lead days, no recurrence and no interrupt level, so a merged
+// action would produce rows whose keys mean "absent" for one armament and
+// "missing" for another with nothing to tell them apart. m3d's re-arm needs
+// its own action too, which would read oddly beside a merged capture.armed.
+func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.DecisionAction, id string, plan prospection.Plan, now time.Time) error {
+	rationale := armRationale(plan)
+
+	type armedContext struct {
+		ArmedID        string   `json:"armed_id"`
+		What           string   `json:"what"`
+		FireAt         string   `json:"fire_at"`
+		LeadDays       *int     `json:"lead_days,omitempty"`
+		RecurrenceRule *string  `json:"recurrence_rule,omitempty"`
+		InterruptLevel *float64 `json:"interrupt_level,omitempty"`
+		// InterruptDegraded travels beside the level rather than being
+		// inferred from its absence: a NULL level and a level the store
+		// could not use look identical downstream, and the glass box
+		// should show both what was stored and what was made of it.
+		InterruptDegraded bool `json:"interrupt_degraded"`
+	}
+
+	ctxValue := armedContext{
+		ArmedID:           id,
+		What:              string(plan.What),
+		FireAt:            plan.FireAt.UTC().Format(time.RFC3339),
+		InterruptLevel:    interruptColumn(plan.Interrupt),
+		InterruptDegraded: plan.Interrupt.Degraded(),
+	}
+	if plan.What != prospection.ArmTimer {
+		leadDays := plan.LeadDays
+		ctxValue.LeadDays = &leadDays
+	}
+	if plan.What == prospection.ArmRecurring {
+		rule := string(plan.Rule)
+		ctxValue.RecurrenceRule = &rule
+	}
+
+	contextJSON, err := json.Marshal(ctxValue)
 	if err != nil {
-		return fmt.Errorf("capture: encode hook-deferred decision context: %w", err)
+		return fmt.Errorf("capture: encode armed decision context: %w", err)
 	}
 
 	d := ports.Decision{
 		ID:         r.ids.New(),
-		Action:     ports.ActionCaptureHookDeferred,
+		Action:     action,
 		Rationale:  rationale,
 		Context:    contextJSON,
 		OccurredAt: now,
 	}
 	if err := r.log.Record(ctx, d); err != nil {
-		return fmt.Errorf("capture: record hook-deferred decision: %w", err)
+		return fmt.Errorf("capture: record armed decision for %q: %w", id, err)
 	}
 	return nil
+}
+
+// derefString reads a possibly-degraded classify field into the plain
+// string a JSON payload needs.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// armRationale is doc 02 §11's human-readable sentence for one arming — a
+// sentence, not a code a reader has to look up.
+func armRationale(plan prospection.Plan) string {
+	switch plan.What {
+	case prospection.ArmTimer:
+		return fmt.Sprintf("armed a timer to fire at %s", plan.FireAt.UTC().Format(time.RFC3339))
+	case prospection.ArmRecurring:
+		return fmt.Sprintf("armed a %s recurring trigger, first firing at %s, %d days ahead of the occurrence",
+			plan.Rule, plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
+	default:
+		return fmt.Sprintf("armed a trigger to fire at %s, %d days ahead of the event",
+			plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
+	}
 }
 
 // recordOrphanDecision writes one of design D8's three orphan-action rows

@@ -498,11 +498,22 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    event's own month and day; the same kind with the rule degraded arms the one-shot dated
    occurrence instead, because the capture is honoured and the recurrence is not invented; and
    anything undated, already past, or of another kind arms nothing.
-   - **Status note**: the decision above exists and is tested; the *effect* — writing the
-     `triggers` or `timers` row — is `m3b`'s. Until it lands, a `timer`/`recurring_reminder`
-     capture is still refused outright (no `units` row — §8's "a timer is NEVER a unit"), and an
-     ambiguous person reference persists as an ordinary `pool` unit with the ambiguity logged,
-     rather than held as `incomplete`.
+   The effect follows the decision in the same capture: `Arm`'s plan is written as one row, in
+   one table, and never both — a `timer` becomes one `timers` row whose `fire_at` is the
+   classification's own `due_at`; a dated `event` and a `recurring_reminder` each become one
+   `triggers` row, `kind = time_based`, carrying `payload.lead_days` and the resolved
+   `interrupt_level` (§7's `NULL` ↔ degraded contract), the recurring one adding
+   `recurrence_rule` and `recurrence_anchor`. A capture that arms something persists no unit at
+   all — §8's "a timer is NEVER a unit" is what routes it before the unit is ever built — and
+   the capture reports what it armed, not that it stored something.
+   Each arming writes exactly one `decision_log` row: `capture.armed.timer`,
+   `capture.armed.trigger` or `capture.armed.recurring_trigger`. Three actions rather than one,
+   because their contexts carry different facts — a timer has no lead days, no recurrence and no
+   interrupt level — and the row records both the level that was stored and whether the reading
+   behind it was degraded.
+   - **Status note**: an ambiguous person reference still persists as an ordinary `pool` unit
+     with the ambiguity logged, rather than held as `incomplete`. Delivering an armed timer or
+     trigger — surfacing it to the user, wording it at fire time — is `m3d`'s.
 
 **Product rule: asking is the EXCEPTION.** Nooma captures with what it has, decides on its
 own, leaves an auditable trace, and only asks when ambiguity blocks it (e.g. two different
@@ -906,9 +917,17 @@ state; `m3b` implements the store-layer round trip.
 "Remind me in 15 minutes to turn off the stove" is born from the `timer` outcome of classify
 and goes into its own table. **A timer is NEVER a unit**: no weight, no decay, no graph, no
 belief derivation. `pending | fired | cancelled`. `action_text` is nullable ("remind me in
-15 min" with no object → a generic nudge). On firing, the LLM rephrases the text
+15 min" with no object → a generic nudge, and a capture whose text could not be salvaged writes
+that same `NULL` rather than an empty string). On firing, the LLM rephrases the text
 (`rendered_text`) — the request is stored verbatim and only worded at delivery time. Listable
 and cancellable from chat and from the UI.
+
+The verbatim half is what capture does today: the row is written with `action_text` holding the
+request as classified and `rendered_text` left `NULL`, untouched rather than defaulted, because
+`NULL` there means "not yet worded" and an empty string would destroy that distinction. The
+rephrasing, the delivery, and the listing and cancelling from chat and UI are all `m3d`'s and
+M4's — a timer that has fired but not been surfaced is a real state this table can hold, and
+`surfaced_at` is what tells the two apart.
 
 ## 9. Learning — the prediction-error loop
 

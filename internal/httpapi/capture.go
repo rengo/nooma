@@ -31,9 +31,10 @@ type captureResponse struct {
 	Embedded   bool     `json:"embedded,omitempty"`
 	Candidates []string `json:"candidates,omitempty"`
 
-	// OutcomeDeferred.
-	Kind    string `json:"kind,omitempty"`
-	Message string `json:"message,omitempty"`
+	// OutcomeArmed.
+	Armed   string `json:"armed,omitempty"`
+	ArmedID string `json:"armed_id,omitempty"`
+	FireAt  string `json:"fire_at,omitempty"`
 
 	// OutcomeRecalled.
 	Units []unitResponse `json:"units,omitempty"`
@@ -168,11 +169,15 @@ func renderCaptureResult(result brain.CaptureResult) (int, captureResponse) {
 			Candidates: result.Candidates,
 		}
 
-	case brain.OutcomeDeferred:
+	case brain.OutcomeArmed:
+		// 200, not 201: nothing was created at /capture's own resource —
+		// the armed row lives in a table this route does not address, and
+		// answering 201 would invite a caller to look for a Location.
 		return http.StatusOK, captureResponse{
 			Outcome: string(result.Outcome),
-			Kind:    string(result.Deferred.Kind),
-			Message: result.Deferred.Message,
+			Armed:   string(result.Armed.What),
+			ArmedID: result.Armed.ID,
+			FireAt:  result.Armed.FireAt.UTC().Format(time.RFC3339),
 		}
 
 	case brain.OutcomeDiscarded:
