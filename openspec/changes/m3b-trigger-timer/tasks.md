@@ -105,6 +105,31 @@ rows. Tasks 2.1–2.4 belong to 2a, 2.5–2.6 to 2b, and 2.7/2.8 are done once p
 nine PRs, which was already design §7's own named contingency shape, reached one slice earlier than
 it expected.
 
+**G9 — spec R3.1 and design §3.7 declare different methods, and the difference is a read surface.**
+R3.1's MUST is explicit: a method that, "given a set of unit ids", returns `focus.Candidate` for
+every id among them that is live. Design §3.7's own code snippet drops the parameter —
+`LiveFocusCandidates(ctx) ([]focus.Candidate, error)`, "every `status = pool` unit". **Resolved in
+spec's favour**, and not by precedence: the unparameterised form is a new *unbounded* read over the
+whole vault, while the id-set form mirrors `LiveByIDs`, which already exists and is already
+reviewed. Nothing in design §3.7's prose is lost either — its reasoning is about `ORDER BY` and the
+absence of a `LIMIT`, and holds identically under both signatures. Shipped as
+`LiveFocusCandidates(ctx, ids []string)`.
+
+**G10 — "five fields" is a slip in both spec R3.1 and task 3.1; `focus.Candidate` has seven.**
+R3.1's own MUST lists all seven two paragraphs above its "each row matching the unit's own five
+fields exactly" verification line (`ID, Type, Weight, DecayRate, LastTouchedAt, CreatedAt, DueAt` —
+`focus/priority.go:158-166`). The contract asserts all seven, with the pool fixture's values set
+away from `fixtureUnit`'s defaults so a field read from the wrong column cannot pass by coincidence.
+
+**G11 — I02's positive filter is not provable by any fixture built from today's vocabulary, and
+that is now written down instead of implied.** Task 3.1 asks the mutation to be "change the filter
+from `status == "pool"` to `status != "superseded" && status != "incomplete"`" and already notes the
+fixture cannot distinguish them. It cannot, and neither can any other: with four statuses, the
+positive filter and the exclusion list are extensionally equal. The divergence only appears when a
+fifth live status arrives. So the guard is the SQL itself plus a named limit in
+`RunLiveFocusCandidates`' doc comment and in
+`TestUnitRepo_LiveFocusCandidatesFiltersPositively` — not a passing case pretending to be proof.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -288,7 +313,7 @@ per PR and were done in both.
 Independent of everything after it. Ships `LiveFocusCandidates` + its positive-`pool` SQL (I02),
 M2's carry-over (owner ruling 4, umbrella §3.3).
 
-- [ ] **3.1** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) — `LiveFocusCandidates`
+- [x] **3.1** Commit 1 (RED): `test/support/repocontract/unitrepo.go` (extend) — `LiveFocusCandidates`
       given a mixed id set (one `pool`, one `superseded`, one `incomplete`, one absent id) returns
       only the `pool` row's five `focus.Candidate` fields, exactly matching the unit's own stored
       values; an empty id set returns an empty slice, never an error; ordered by id (design's own
@@ -302,23 +327,23 @@ M2's carry-over (owner ruling 4, umbrella §3.3).
       statuses among the mix, cannot distinguish the two on its own; recorded as the fixture's own
       named limit rather than assumed complete, per the "guard entered from underneath" concern —
       a third live status added later by M4 would pass the negative-list implementation silently.
-- [ ] **3.2** Commit 2 (GREEN): implement `LiveFocusCandidates` in `memrepo` and in
+- [x] **3.2** Commit 2 (GREEN): implement `LiveFocusCandidates` in `memrepo` and in
       `internal/store/sqlite/unitrepo.go` (`WHERE status = 'pool' AND id IN (...)`, positive filter
       per I02, `ORDER BY id`).
       Verify: `go test ./test/support/repocontract/...` and
       `go test -tags=integration ./internal/store/sqlite/... -run FocusCandidates`.
       Requirement: R3.1; design §3.7; I02.
-- [ ] **3.3** `internal/store/sqlite/unitrepo_integration_test.go` (extend) — 3.1's fixture against
+- [x] **3.3** `internal/store/sqlite/unitrepo_integration_test.go` (extend) — 3.1's fixture against
       a real migrated vault.
       Requirement: R3.1.
-- [ ] **3.4** `testdata/schema/store_api.golden` — regenerate; diff limited to `UnitRepo`'s widened
+- [x] **3.4** `testdata/schema/store_api.golden` — regenerate; diff limited to `UnitRepo`'s widened
       method set.
       Verify: `make store-api-golden`.
       Requirement: R2.1's regeneration discipline, applied here.
-- [ ] **3.5** Purity/lint: `golangci-lint run` (`ports-purity` — `internal/ports` now imports
+- [x] **3.5** Purity/lint: `golangci-lint run` (`ports-purity` — `internal/ports` now imports
       `internal/core/focus`, already exercised by `unitrepo.go`'s other core imports).
       Requirement: design §4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only `internal/ports/unitrepo.go`,
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only `internal/ports/unitrepo.go`,
       `internal/store/sqlite/{unitrepo,unitrepo_integration_test}.go`,
       `testdata/schema/store_api.golden`, `test/support/{memrepo,repocontract}/unitrepo.go`. No
       `docs/02-cognitive-core.md` delta. Target ≤120 impl+docs lines.
