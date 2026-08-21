@@ -563,3 +563,77 @@ func TestDecode_FieldSpecsCoverEveryWireField(t *testing.T) {
 			"weight, decay_rate — testdata/classify/format.md:51-55)", required)
 	}
 }
+
+// TestDecode_ExplicitNullRequiredFloat proves that an explicit null for a
+// required float degrades rather than becoming a claimed zero.
+//
+// Salvage stores any decodable value under its key, so `"weight": null` is
+// present, not absent — the missing-field branch that would have recorded
+// Degradation{weight, absent} never runs. json.Unmarshal then accepts null
+// for a non-pointer destination without error and leaves the zero value, so
+// an assigner reading into a local float64 and taking its address yields a
+// non-nil pointer to 0.0 with no Reason appended.
+//
+// Both consequences are named in doc 02 rather than hypothetical:
+//   - weight: §5.1 line 566, "a degraded weight is not a zero weight — that
+//     distinction is why the fields are optional at the type level rather
+//     than defaulting to 0". A claimed 0.0 means PriorWeight (1.0) never
+//     fills it.
+//   - decay_rate: a λ of 0 never decays, so §6's archiving pass can never
+//     reach the unit. It looks like ordinary data and violates no NOT NULL
+//     constraint.
+//
+// The pointer field is necessary and not sufficient: Classification.Weight
+// has been a *float64 since M1 precisely for this, and the assigner defeated
+// it. That is why this test asserts through Decode, not through the struct.
+func TestDecode_ExplicitNullRequiredFloat(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+
+	tests := map[string]struct {
+		payload string
+		field   string
+		got     func(Classification) *float64
+	}{
+		"weight": {
+			payload: `{"type":"task","normalized_content":"buy milk","weight":null,"decay_rate":0.02}`,
+			field:   "weight",
+			got:     func(c Classification) *float64 { return c.Weight },
+		},
+		"decay_rate": {
+			payload: `{"type":"task","normalized_content":"buy milk","weight":1.5,"decay_rate":null}`,
+			field:   "decay_rate",
+			got:     func(c Classification) *float64 { return c.DecayRate },
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c, err := Decode(tt.payload, now)
+			if err != nil {
+				t.Fatalf("Decode returned %v, want no error — a null field degrades, it does "+
+					"not abort the classification (I14)", err)
+			}
+
+			if v := tt.got(c); v != nil {
+				t.Errorf("%s = %v (a claimed value), want nil — an explicit null is a reading "+
+					"core could not use, never a number the model asked for", tt.field, *v)
+			}
+
+			var found bool
+			for _, d := range c.Degradations {
+				if d.Field == tt.field {
+					found = true
+					if d.Reason != ReasonWrongType {
+						t.Errorf("%s degraded with %q, want %q — null is not the JSON type "+
+							"this field reads", tt.field, d.Reason, ReasonWrongType)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("no degradation recorded for %s; got %v — brain writes the rationale "+
+					"into decision_log from this list (I12), so a loss it cannot see is a loss "+
+					"no audit can explain", tt.field, c.Degradations)
+			}
+		})
+	}
+}
