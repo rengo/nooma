@@ -529,7 +529,7 @@ func TestDecode_FieldSpecsCoverEveryWireField(t *testing.T) {
 	want := []string{
 		"type", "normalized_content", "structured_data", "weight", "decay_rate",
 		"event_at", "due_at", "nudge_outcome", "relation_outcome", "state_outcome",
-		"task_checkin_outcome", "list_op", "person_ref_status",
+		"task_checkin_outcome", "list_op", "person_ref_status", "interrupt_level",
 	}
 
 	specs := fieldSpecs()

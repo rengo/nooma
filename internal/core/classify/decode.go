@@ -45,6 +45,7 @@ func fieldSpecs() []fieldSpec {
 		{"task_checkin_outcome", false, assignEnum(AllTaskCheckinOutcomes, func(c *Classification, v *TaskCheckinOutcome) { c.TaskCheckinOutcome = v })},
 		{"list_op", false, assignEnum(AllListOps, func(c *Classification, v *ListOp) { c.ListOp = v })},
 		{"person_ref_status", false, assignEnum(AllPersonRefStatuses, func(c *Classification, v *PersonRefStatus) { c.PersonRefStatus = v })},
+		{"interrupt_level", false, assignInterruptLevel},
 	}
 }
 
@@ -182,6 +183,31 @@ func assignTime(set func(*Classification, *time.Time)) func(json.RawMessage, *Cl
 		}
 		return ReasonBadFormat
 	}
+}
+
+// assignInterruptLevel is interrupt_level's own assigner (design §3.8) —
+// assignFloat alone cannot serve this row: it returns only ReasonWrongType,
+// and the [0,1] range check is this field's whole point (spec R3.1). A
+// value outside that range degrades with ReasonBadFormat, reused rather than
+// adding a sixth Reason — owner-review R3, design §3.8's own argument: the
+// existing vocabulary already means "the JSON type was right and the value
+// is not one this field reads", which an out-of-range number is exactly.
+//
+// json.Unmarshal itself already rejects NaN/±Inf as invalid JSON number
+// syntax (there is no literal token for either in the JSON grammar), so
+// those arrive here as ReasonWrongType, not as a value this range check
+// ever sees — the same "no unreachable arm" discipline decode.go already
+// states for decodeEnum above.
+func assignInterruptLevel(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var f float64
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return ReasonWrongType
+	}
+	if f < 0 || f > 1 {
+		return ReasonBadFormat
+	}
+	c.InterruptLevel = &f
+	return ""
 }
 
 // assignRaw stores structured_data verbatim. Its shape varies by type and is
