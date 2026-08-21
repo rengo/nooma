@@ -31,10 +31,6 @@ type captureResponse struct {
 	Embedded   bool     `json:"embedded,omitempty"`
 	Candidates []string `json:"candidates,omitempty"`
 
-	// OutcomeDeferred.
-	Kind    string `json:"kind,omitempty"`
-	Message string `json:"message,omitempty"`
-
 	// OutcomeRecalled.
 	Units []unitResponse `json:"units,omitempty"`
 
@@ -166,13 +162,6 @@ func renderCaptureResult(result brain.CaptureResult) (int, captureResponse) {
 			UnitID:     result.UnitID,
 			Embedded:   result.Embedded,
 			Candidates: result.Candidates,
-		}
-
-	case brain.OutcomeDeferred:
-		return http.StatusOK, captureResponse{
-			Outcome: string(result.Outcome),
-			Kind:    string(result.Deferred.Kind),
-			Message: result.Deferred.Message,
 		}
 
 	case brain.OutcomeDiscarded:

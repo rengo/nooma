@@ -139,7 +139,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCaptureUnitCreated:              true,
 			ports.ActionCaptureEmbeddingFailed:          true,
 			ports.ActionCaptureDedupFailed:              true,
-			ports.ActionCaptureHookDeferred:             true,
+			ports.ActionCapturePersonRefAmbiguous:       true,
 			ports.ActionCaptureDedupJudged:              true,
 			ports.ActionRelationPersisted:               true,
 			ports.ActionRelationDiscarded:               true,

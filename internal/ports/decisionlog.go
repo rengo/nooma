@@ -49,7 +49,7 @@ const (
 	ActionCaptureUnitCreated        DecisionAction = "capture.unit.created"
 	ActionCaptureEmbeddingFailed    DecisionAction = "capture.embedding.failed"
 	ActionCaptureDedupFailed        DecisionAction = "capture.dedup.failed"
-	ActionCaptureHookDeferred       DecisionAction = "capture.hook.deferred"
+	ActionCapturePersonRefAmbiguous DecisionAction = "capture.person_ref.ambiguous"
 	ActionCaptureDedupJudged        DecisionAction = "capture.dedup.judged"
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
@@ -107,7 +107,7 @@ func AllDecisionActions() []DecisionAction {
 	return []DecisionAction{
 		ActionCaptureClassify, ActionCaptureUnparseable, ActionCaptureUnclassifiable,
 		ActionCaptureDiscarded, ActionCaptureUnitCreated, ActionCaptureEmbeddingFailed,
-		ActionCaptureDedupFailed, ActionCaptureHookDeferred, ActionCaptureDedupJudged,
+		ActionCaptureDedupFailed, ActionCapturePersonRefAmbiguous, ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,
 		ActionExpireIncompleteTransitioned, ActionArchiveArchived, ActionArchiveConflictSkipped,
