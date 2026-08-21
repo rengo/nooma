@@ -146,5 +146,37 @@ type DigestItem struct {
 // returns two slices and says nothing about publishing. Whether a digest
 // carrying nothing is sent at all is m3d's decision (design §11 Q1).
 func Carry(items []DigestItem, adjacency map[string]float64, lowEnergy bool, now time.Time) (carry, held []DigestItem) {
-	return nil, nil
+	if !lowEnergy {
+		return items, nil
+	}
+
+	byID := make(map[string]DigestItem, len(items))
+	rankable := make([]focus.Candidate, 0, len(items))
+
+	for _, item := range items {
+		byID[item.ID] = item
+
+		if item.Deferrals >= MaxDigestDeferrals {
+			carry = append(carry, item)
+			continue
+		}
+
+		c := focus.Candidate{ID: item.ID}
+		if item.Candidate != nil {
+			c = *item.Candidate
+			c.ID = item.ID
+		}
+		rankable = append(rankable, c)
+	}
+
+	for i, ranked := range focus.Rank(rankable, adjacency, now) {
+		item := byID[ranked.Candidate.ID]
+		if i < LowEnergyDigestSize {
+			carry = append(carry, item)
+			continue
+		}
+		held = append(held, item)
+	}
+
+	return carry, held
 }
