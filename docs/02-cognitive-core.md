@@ -796,6 +796,22 @@ have N nudges; a pattern watcher does not hang off any unit):
 - Delivery lifecycle: `fired_at` (fired) → `surfaced_at` (delivered to the user) →
   `responded_at` + `resolution` (`engaged` | `declined` | `self_healed` — fresh activity
   resolved it before the user answered).
+- **The due scan** reads the clock once and judges every trigger and timer that has come due
+  against that one instant, so a pass's verdicts are consistent with each other. It decides
+  nothing itself: staleness, quiet hours and the deliverable-from shift above are all evaluated
+  by `internal/core/prospection`, and the scan owns only what a verdict means for a column —
+  `stale` expires a trigger and cancels a timer, and a timer's `deliver` fires it. The
+  vocabulary is iterable as `prospection.AllVerdicts()`, which is what lets that mapping be
+  swept member by member rather than written as a switch a fifth verdict would slip past.
+  **A trigger's `deliver` writes nothing at all, and stays `armed`.** Nothing can surface a
+  fired trigger yet, so moving it to `fired` would record a delivery that never happened and
+  drop it from the next scan's read; it waits, and the scan that can deliver it will find it.
+  A deferred trigger writes nothing either: quiet-hours deferral is recomputed every pass from
+  `fire_at` and the current instant and needs no persisted state, so it resurfaces by
+  arithmetic rather than by a row. Quiet hours being evaluated before staleness has a
+  consequence worth stating: a trigger that is already overdue *during* the window is deferred,
+  not expired — it is never declared stale inside a window in which it was refused delivery,
+  and it expires on the first pass after the window ends.
 - **Recurrence**: `recurrence_rule` (`yearly` | `monthly`) + `recurrence_anchor`
   (`{month, day}`). On firing, the next one is created automatically pointing at the SAME
   source unit — memory is not duplicated, only the nudge is re-armed.

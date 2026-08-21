@@ -2,10 +2,14 @@
 package conformance
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // i15SchemaStatuses are the status strings the schema itself owns —
@@ -107,5 +111,125 @@ func TestI15_TriggerOverdueExpiresNeverFires(t *testing.T) {
 	if deliverSeen == 0 {
 		t.Fatalf("sweep never produced a VerdictDeliver case — this guard would pass even if " +
 			"TriggerVerdict always returned VerdictStale")
+	}
+}
+
+// TestI15_OverdueTriggerExpiresAndNeverFiresThroughAScan is I15's
+// behavioural half: the pure sweep above proves core says "stale", this
+// proves brain acts on it.
+//
+// It sweeps the window rather than sampling it. Sampling at one overdue
+// instant would pass against an implementation that expired only at the
+// boundary, or only far past it; a sweep fails at every instant an
+// implementation gets wrong, which is what makes the failure point at the
+// shape of the bug rather than at one unlucky offset. The offsets are
+// multiples of prospection.TriggerStalenessHours, so a recalibration needs
+// no edit here.
+//
+// **Two claims over two domains, because overdue does not always mean
+// expired.** verdict evaluates quiet hours BEFORE staleness on purpose —
+// an item is never declared stale during a window in which it was refused
+// delivery — so a trigger that is hours overdue at 06:00 is deferred, not
+// expired, and will expire once the window ends. Writing this as a single
+// "every overdue instant expires" sweep would have asserted a bug into
+// existence, and it is only because the sweep covered the whole range
+// that the interaction showed up at all.
+//
+// So: outside quiet hours, an overdue trigger expires. At EVERY overdue
+// instant, quiet hours or not, it never fires. The second claim is I15's
+// own sentence and holds unconditionally; the first is I15 as I16 leaves
+// it. prospection.InQuietHours is the gate the runner itself consults —
+// naming it here is using the same documented rule, not reimplementing it.
+func TestI15_OverdueTriggerExpiresAndNeverFiresThroughAScan(t *testing.T) {
+	// A Wednesday noon.
+	fireAt := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	staleness := time.Duration(prospection.TriggerStalenessHours) * time.Hour
+
+	sweptOutsideQuietHours := 0
+
+	for offset := staleness + time.Hour; offset <= 4*staleness; offset += time.Hour {
+		now := fireAt.Add(offset)
+		t.Run(offset.String()+" overdue", func(t *testing.T) {
+			triggers := memrepo.NewTriggers()
+			timers := memrepo.NewTimers()
+			decisions := memrepo.NewDecisionLog()
+
+			ctx := context.Background()
+			at := fireAt
+			if err := triggers.Create(ctx, ports.Trigger{
+				ID:        "trg-overdue",
+				Kind:      ports.TriggerKindTimeBased,
+				FireAt:    &at,
+				CreatedAt: fireAt.Add(-24 * time.Hour),
+			}); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			svc := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions)
+			report, err := svc.Check(ctx)
+			if err != nil {
+				t.Fatalf("Check: %v", err)
+			}
+
+			rows, err := decisions.Since(ctx, fireAt.Add(-time.Hour), -1)
+			if err != nil {
+				t.Fatalf("decisions.Since: %v", err)
+			}
+
+			// I15's own sentence, unconditional: never fired, at any
+			// overdue instant, in or out of quiet hours.
+			for _, row := range rows {
+				if row.Action == ports.ActionCheckTimerFired {
+					t.Fatalf("an overdue trigger produced %q — it must expire, never fire late", row.Action)
+				}
+			}
+			if report.TimersFired != 0 {
+				t.Fatalf("TimersFired = %d for a scan with no timers at all", report.TimersFired)
+			}
+
+			if prospection.InQuietHours(now) {
+				// Deferred: nothing written, still armed, and next scan
+				// outside the window will expire it by arithmetic alone.
+				if report.TriggersExpired != 0 || len(rows) != 0 {
+					t.Fatalf("inside quiet hours the scan expired %d trigger(s) and wrote %d row(s), want none — quiet hours are evaluated before staleness so an item is never declared stale during a window in which it was refused delivery",
+						report.TriggersExpired, len(rows))
+				}
+				stillDue, err := triggers.Due(ctx, now)
+				if err != nil {
+					t.Fatalf("Due: %v", err)
+				}
+				if len(stillDue) != 1 {
+					t.Fatalf("a deferred trigger left Due (%d rows) — it must stay armed and resurface next pass", len(stillDue))
+				}
+				return
+			}
+
+			sweptOutsideQuietHours++
+
+			if report.TriggersExpired != 1 {
+				t.Fatalf("TriggersExpired = %d, want 1", report.TriggersExpired)
+			}
+			if len(rows) != 1 {
+				t.Fatalf("decision_log has %d rows, want exactly 1: %+v", len(rows), rows)
+			}
+			if rows[0].Action != ports.ActionCheckTriggerExpired {
+				t.Fatalf("Action = %q, want %q", rows[0].Action, ports.ActionCheckTriggerExpired)
+			}
+
+			// It left Due, which for an armed-only read means it is no
+			// longer armed. That it is expired and not fired is what the
+			// row above says, and what L3 asserts against the column.
+			stillDue, err := triggers.Due(ctx, now.Add(24*time.Hour))
+			if err != nil {
+				t.Fatalf("Due: %v", err)
+			}
+			if len(stillDue) != 0 {
+				t.Fatalf("the trigger is still armed after the scan: %+v", stillDue)
+			}
+		})
+	}
+
+	if sweptOutsideQuietHours == 0 {
+		t.Fatal("every swept instant fell inside quiet hours — the expiry half of this test checked nothing")
 	}
 }
