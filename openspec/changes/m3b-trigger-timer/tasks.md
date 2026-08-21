@@ -234,6 +234,41 @@ file under `internal/**` mentions the Telegram API host or the two methods ADR-0
 **not** scanned for — config declaring a field is not the binary speaking, and a scan that flagged
 it would be noise that gets the whole test deleted.
 
+**G21 — spec R4.2's first MUST was knowingly not satisfied, because design §3.5 rejects it with
+reasons and the task list follows the design. RESOLVED by owner ruling; `spec.md` R4.2 is amended.**
+
+R4.2 says: *"every `Arm` call that returns `(_, false)` (nothing armed) writes exactly one
+`decision_log` row whose `Context` carries `Plan.Why` … verbatim"* — all four `Refusal` members,
+including `RefusalKindNotArming` and `RefusalNoKind` — and its scenario has a `chitchat` capture
+writing a row.
+
+Design §3.5's refusal table says the opposite for two of those four, and argues it rather than
+asserting it: `RefusalKindNotArming` gets **no** row ("ten of thirteen kinds land here … a row per
+capture saying 'this was not a timer' is noise that defeats the glass box, and doc 02 §11 records
+every decision *with an effect*; this is the system working"), and `RefusalNoKind` gets **no** row
+("already recorded, by `ActionCaptureUnclassifiable`; a second row would double-count one fact").
+Task 4b.1 encodes the design's version explicitly.
+
+**Shipped: the design's version**, with doc 02 §11 rewritten to state the derived rule ("a refusal is
+recorded exactly when the capture would otherwise leave no trace at all") rather than a table. The
+spec's own *intent* — R4.2's title, "so an undated event is told apart from a chitchat capture" — is
+fully met: an undated event writes `capture.arm.refused` and a chitchat capture writes
+`capture.discarded`, two different actions with two different sentences, which is exactly the
+distinction `arm.go`'s doc comment asks for. What is not met is R4.2's literal *mechanism*, one
+shared action carrying all four `Refusal` values.
+
+**Why this is flagged rather than filed**: a spec MUST going unmet is the owner's call to ratify, not
+an implementer's to decide quietly. The two candidate resolutions are (a) amend R4.2 to the derived
+rule the design and doc 02 now both carry, or (b) implement R4.2 literally and reopen design §3.5's
+argument about audit noise. Nothing in the code depends on which is chosen; the change ships (a)'s
+behaviour today.
+
+Secondary, and much smaller: R4.2's second MUST asks an arming row to carry `Plan.Why ==
+RefusalNone`. The arming rows carry `armed_id`, `what`, `fire_at`, and where applicable `lead_days`,
+`recurrence_rule`, `interrupt_level` and `interrupt_degraded` — but no `why` key, since there is no
+refusal to name. Read as a statement about the `Plan` it is satisfied; read as a required context
+key it is not. Named here rather than guessed at.
+
 **G22 — PR 6 shipped two time-of-day-dependent tests, and CI found them at 01:45 UTC.** The CLI
 dry-run test and both L4 demos seed a stale trigger and a due timer against the **real system
 clock** — the shipped binary reads it and no test can inject one, which is the point of running at
@@ -256,6 +291,38 @@ and `make check-all` was run under `TZ=UTC` end to end.
 The lesson worth keeping past this change: **G16 was recorded as a finding and still bit twice**,
 because the second bite was in a test whose fixture reads the wall clock rather than a fake one. A
 documented interaction is not a guarded one.
+
+---
+
+## Verification — 2026-08-21
+
+All nine PRs merged; every task above ticked. `main` at the merge of PR #211, `make check-all` green
+on it end to end (lint, L1/L2, build, L3, the schema-golden regeneration diff, `internal/core`
+coverage at 100% against a 90% floor, the seven-target cross-compile matrix, L4 at 133s).
+
+| Requirement | Discharged by | Note |
+|---|---|---|
+| R0 | PRs 1–6 | One deliberate `internal/core` line (`AllVerdicts`), recorded as **G3** |
+| R1.1, R1.2, R1.3 | PR 1 (#203) | Contract answered by the fake at L2 and by SQLite at L3 |
+| R2.1 | PRs 2a (#204), 2b (#205) | No migration; `store_api.golden` widened by twelve reviewed lines |
+| R3.1 | PR 3 (#206) | Signature resolved in spec's favour over design's snippet (**G9**) |
+| R4.1, R4.3, R4.4 | PR 4a (#207) | I04 rewritten against real repositories; I18's persistence half swept over three distinct instants |
+| R4.2 | PR 4b (#208) | **Partially — see G21.** The intent is met, the literal mechanism is not |
+| R5.1 | PR 5a (#209) | Verified by mutation: a second `Now()` in `check.go` fails `brain_single_clock_read_test.go` |
+| R5.2, R5.3 | PR 5a (#209) | I15's behavioural half is two claims over two domains (**G16**) |
+| R5.4 | PR 5b (#210) | The L3 race needed a read barrier to stop passing for free (**G17**) |
+| R6.1 | PR 6 (#211) | Including Q1's `--dry-run` |
+| Exit criterion | PR 6 (#211) | `test/e2e/check_demo_test.go`, against the compiled binary |
+
+Twenty-two findings recorded across the chain (G1–G22). Three were owner-facing: **G12**, an action
+rename a vault may already hold; **G14**, a defect PR 4a shipped to `main` and PR 4b fixed; and
+**G21**, the unmet spec MUST above, now ruled on and amended. **G22** was found after this
+verification section was first written — by CI, on the documentation-only PR that carries it — and
+is recorded above rather than folded away, because a verification pass that missed a defect should
+say so.
+
+**Not done, and deliberately**: this change is not archived. Archiving merges the delta spec into the
+main specs, and G21 is an open question about what that delta should say.
 
 ---
 
