@@ -40,6 +40,18 @@ func TestDecode_InterruptLevel(t *testing.T) {
 			want:    nil,
 			reason:  ReasonBadFormat,
 		},
+		// An explicit null is present-but-unusable, and must never become a
+		// claimed value. json.Unmarshal into a non-pointer float64 accepts
+		// `null` without error and leaves the zero — so the obvious assigner
+		// shape silently turns "the model declined to answer" into "the model
+		// said 0.0", which §5.1's "a degraded weight is not a zero weight"
+		// exists to forbid and which doc 02 §7's NULL round trip depends on.
+		// ReasonWrongType, because null is not the JSON type this field reads.
+		"present, explicit null": {
+			payload: `{"type":"task","normalized_content":"buy milk","weight":1.5,"decay_rate":0.02,"interrupt_level":null}`,
+			want:    nil,
+			reason:  ReasonWrongType,
+		},
 		"present, below range": {
 			payload: `{"type":"task","normalized_content":"buy milk","weight":1.5,"decay_rate":0.02,"interrupt_level":-0.1}`,
 			want:    nil,
