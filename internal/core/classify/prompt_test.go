@@ -121,6 +121,28 @@ func TestBuildPrompt_RendersEveryVocabularyFromItsOwnSource(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_RendersProspectionFields pins design §3.8's prompt
+// widening: the model is asked for interrupt_level and recurrence_rule
+// alongside the fields M1 already asked for, with doc 02 §7's own guidance —
+// the [0,1] range for one, the closed vocabulary for the other — stated,
+// not left implied. recurrence_rule's vocabulary is rendered from
+// AllRecurrenceRules(), the same "no drift" property the six orthogonal
+// fields already have (TestBuildPrompt_RendersEveryVocabularyFromItsOwnSource).
+func TestBuildPrompt_RendersProspectionFields(t *testing.T) {
+	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires))
+
+	for _, want := range []string{"interrupt_level", "recurrence_rule", "0-1"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt does not mention %q", want)
+		}
+	}
+	for _, m := range AllRecurrenceRules() {
+		if !strings.Contains(prompt, string(m)) {
+			t.Errorf("prompt does not offer recurrence_rule = %q", m)
+		}
+	}
+}
+
 func asStrings[T ~string](vs []T) []string {
 	out := make([]string, 0, len(vs))
 	for _, v := range vs {
