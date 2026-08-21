@@ -1,6 +1,7 @@
 package prospection
 
 import (
+	"math"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/focus"
@@ -65,20 +66,37 @@ type EnergyReading struct {
 
 // LowEnergy reports doc 02 §7's own two-part condition.
 //
-// A nil reading is not low: no observation is not an observation of
-// depletion. That direction is deliberate — this gate suppresses delivery,
-// so silence must never be read as consent to suppress.
+// One direction governs every branch here: this gate SUPPRESSES delivery,
+// so anything core cannot vouch for must not be grounds to suppress. That
+// is why a nil reading is not low — no observation is not an observation of
+// depletion — and it is why each of the following is also not low:
 //
-// The level comparison is strict for the same reason: the burden of proof
-// is on "low", and exactly the midpoint is not low.
+//   - A level outside [0,1], or NaN, or ±Inf. current_state.energy is a bare
+//     REAL with no CHECK constraint, so nothing between the database and
+//     this gate guarantees a usable number. NaN is the sharp one: every
+//     IEEE-754 comparison against it is false, so a plain `Level >=
+//     LowEnergyMax` guard falls straight through and reports a corrupt
+//     reading as depletion. focus/priority.go carries the same trap, found
+//     twice by earlier review rounds.
+//   - A reading dated after now — clock skew, a backdated import. Elapsed
+//     time is negative there, and a negative duration is always inside a
+//     positive bound, so an unguarded check calls a reading from next year
+//     recent. weight.Effective and focus.AgeRamp clamp exactly this.
+//
+// The level comparison is strict for the same reason the rest is: the
+// burden of proof is on "low", and exactly the midpoint is not low.
 func LowEnergy(r *EnergyReading, now time.Time) bool {
 	if r == nil {
+		return false
+	}
+	if math.IsNaN(r.Level) || math.IsInf(r.Level, 0) || r.Level < 0 || r.Level > 1 {
 		return false
 	}
 	if r.Level >= LowEnergyMax {
 		return false
 	}
-	return now.Sub(r.RecordedAt) <= EnergyReadingMaxAgeHours*time.Hour
+	elapsed := now.Sub(r.RecordedAt)
+	return elapsed >= 0 && elapsed <= EnergyReadingMaxAgeHours*time.Hour
 }
 
 // LowEnergyDigestSize is how many items a low-energy digest carries. Half
@@ -107,9 +125,9 @@ const MaxDigestDeferrals = 3
 // DigestItem is one pending trigger as the digest gate sees it.
 //
 // Candidate is nil for a trigger with no source unit — triggers.unit_id is
-// nullable, so a pattern watcher has none. Carry handles that without a nil
-// check of its own; see its own comment for why the arithmetic already
-// answers it.
+// nullable, so a pattern watcher has none. Carry substitutes the zero
+// focus.Candidate for it, which the ranking then scores at exactly 0.0
+// without any nil-awareness of its own.
 type DigestItem struct {
 	ID        string
 	Candidate *focus.Candidate
@@ -133,14 +151,15 @@ type DigestItem struct {
 //  3. Everything else is ranked by focus.Rank and the top
 //     LowEnergyDigestSize are carried.
 //
-// A nil Candidate enters focus.Rank as the zero focus.Candidate carrying
-// only its own ID, and needs no special case: every term of focus.Priority
-// is multiplicative in effective weight, which is 0 for a zero candidate, so
-// its score is exactly 0.0 and Rank's own tie-break orders it last,
-// deterministically, by ID. A "still on this goal, or shall we let it rest?"
-// nudge is therefore the first thing a depleted user stops being asked —
-// which is what doc 02 §7 asks for, reached with no special case and no
-// invented number.
+// A nil Candidate is substituted with the zero focus.Candidate carrying
+// only its own ID. That substitution is one branch here; what it buys is
+// that no nil-awareness reaches the ranking or the priority formula. Every
+// term of focus.Priority is multiplicative in effective weight, which is 0
+// for a zero candidate, so its score is exactly 0.0 and Rank's own
+// tie-break orders it last, deterministically. A "still on this goal, or
+// shall we let it rest?" nudge is therefore the first thing a depleted user
+// stops being asked — which is what doc 02 §7 asks for, reached with no
+// invented number and no special case anywhere downstream of this line.
 //
 // Carry takes no position on whether an empty result is delivered: it
 // returns two slices and says nothing about publishing. Whether a digest
@@ -150,17 +169,38 @@ func Carry(items []DigestItem, adjacency map[string]float64, lowEnergy bool, now
 		return items, nil
 	}
 
-	byID := make(map[string]DigestItem, len(items))
+	// A queue per id, not one slot per id. focus.Rank neither validates nor
+	// deduplicates ids (its own doc comment says so, and hands the caller
+	// three ways to close it: guarantee uniqueness upstream, reject a
+	// duplicate outright, or accept either order explicitly). Carry takes
+	// the third. A single-slot map takes none of them: it keeps only the
+	// last item written under an id, and every ranked entry sharing that id
+	// then resolves to that one item — so with two items sharing an id, the
+	// counts still balance while one item is emitted twice and the other,
+	// possibly the highest-ranked pending trigger in the digest, never
+	// appears in either slice.
+	//
+	// Popping from the queue keeps the pairing one-to-one: n ranked entries
+	// for an id consume exactly the n items that carry it. Which of two
+	// same-id items lands in which slice is unspecified, and saying so is
+	// the "accept either order explicitly" option rather than a silent one.
+	queued := make(map[string][]DigestItem, len(items))
 	rankable := make([]focus.Candidate, 0, len(items))
 
 	for _, item := range items {
-		byID[item.ID] = item
-
 		if item.Deferrals >= MaxDigestDeferrals {
 			carry = append(carry, item)
 			continue
 		}
 
+		queued[item.ID] = append(queued[item.ID], item)
+
+		// The nil case is a substitution, not a branch the ranking sees: a
+		// trigger with no source unit ranks as the zero focus.Candidate.
+		// Every term of focus.Priority is multiplicative in effective
+		// weight, which is 0 there, so its score is exactly 0.0 and Rank's
+		// own tie-break orders it last, deterministically. No nil check
+		// reaches inside the ranking, and no number is invented for it.
 		c := focus.Candidate{ID: item.ID}
 		if item.Candidate != nil {
 			c = *item.Candidate
@@ -170,7 +210,18 @@ func Carry(items []DigestItem, adjacency map[string]float64, lowEnergy bool, now
 	}
 
 	for i, ranked := range focus.Rank(rankable, adjacency, now) {
-		item := byID[ranked.Candidate.ID]
+		q := queued[ranked.Candidate.ID]
+		if len(q) == 0 {
+			// Unreachable against focus.Rank's contract — it returns one
+			// entry per candidate, and every candidate came from this
+			// queue. Guarded rather than indexed blindly, so a future change
+			// to that contract surfaces as a missing item rather than a
+			// panic in a pure function the whole delivery path calls.
+			continue
+		}
+		item := q[0]
+		queued[ranked.Candidate.ID] = q[1:]
+
 		if i < LowEnergyDigestSize {
 			carry = append(carry, item)
 			continue
