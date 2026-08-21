@@ -78,6 +78,8 @@ func TestExpireIncomplete_RealCapturePathProducesNoIncompleteUnits(t *testing.T)
 	decisions := sqlite.NewDecisionLog(v)
 	signals := sqlite.NewSignalRepo(v)
 	cfg := sqlite.NewConfigRepo(v)
+	triggers := sqlite.NewTriggerRepo(v)
+	timers := sqlite.NewTimerRepo(v)
 
 	idx, err := embeddings.LoadIndex(ctx, consolidateITEmbedModel)
 	if err != nil {
@@ -87,7 +89,7 @@ func TestExpireIncomplete_RealCapturePathProducesNoIncompleteUnits(t *testing.T)
 	llm := fakeprovider.New(t, filepath.Join(repoRootForConsolidateIT(t), "testdata", "llm", "cases"), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(consolidateITEmbedModel)
 
-	captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), signals, memrepo.NewTriggers(), memrepo.NewTimers())
+	captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), signals, triggers, timers)
 
 	result, err := captureSvc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
