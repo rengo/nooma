@@ -13,6 +13,7 @@ import (
 	"github.com/ncruces/go-sqlite3"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -429,4 +430,66 @@ func requireRowAffected(res sql.Result, notFound error) error {
 		return notFound
 	}
 	return nil
+}
+
+// LiveFocusCandidates implements ports.UnitRepo. The SQL filters
+// positively on status = 'pool' (I02) — never a negative exclusion — and
+// orders by id, which is a deterministic tie-break and not a ranking: see
+// the port's own doc comment for why no SQL ORDER BY can express
+// focus.Priority.
+func (r *UnitRepo) LiveFocusCandidates(ctx context.Context, ids []string) ([]focus.Candidate, error) {
+	if len(ids) == 0 {
+		return []focus.Candidate{}, nil
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+1)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	args = append(args, string(unit.StatusPool))
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, type, weight, weight_decay_rate, last_touched_at, created_at, due_at
+		 FROM units
+		 WHERE id IN (`+placeholders+`) AND status = ?
+		 ORDER BY id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("select focus candidates: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	candidates := make([]focus.Candidate, 0, len(ids))
+	for rows.Next() {
+		var (
+			c                        focus.Candidate
+			typ                      string
+			lastTouchedAt, createdAt string
+			dueAt                    sql.NullString
+		)
+		if err := rows.Scan(&c.ID, &typ, &c.Weight, &c.DecayRate, &lastTouchedAt, &createdAt, &dueAt); err != nil {
+			return nil, fmt.Errorf("scan focus candidate: %w", err)
+		}
+		if c.Type, err = unit.ParseType(typ); err != nil {
+			return nil, fmt.Errorf("unit %q: %w", c.ID, err)
+		}
+		if c.LastTouchedAt, err = time.Parse(unitTimeLayout, lastTouchedAt); err != nil {
+			return nil, fmt.Errorf("unit %q: last_touched_at: %w", c.ID, err)
+		}
+		if c.CreatedAt, err = time.Parse(unitTimeLayout, createdAt); err != nil {
+			return nil, fmt.Errorf("unit %q: created_at: %w", c.ID, err)
+		}
+		if dueAt.Valid {
+			t, err := time.Parse(unitTimeLayout, dueAt.String)
+			if err != nil {
+				return nil, fmt.Errorf("unit %q: due_at: %w", c.ID, err)
+			}
+			c.DueAt = &t
+		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select focus candidates: %w", err)
+	}
+	return candidates, nil
 }

@@ -179,3 +179,42 @@ func seedRawUnit(t *testing.T, db *sql.DB, id, status string) {
 		t.Fatalf("seedRawUnit(%q, %q): %v", id, status, err)
 	}
 }
+
+// TestUnitRepo_LiveFocusCandidates runs the same
+// repocontract.RunLiveFocusCandidates suite the in-memory fake answers at
+// L2, now against a real migrated vault.
+func TestUnitRepo_LiveFocusCandidates(t *testing.T) {
+	repocontract.RunLiveFocusCandidates(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+// TestUnitRepo_LiveFocusCandidatesFiltersPositively seeds its non-pool rows
+// through raw SQL rather than UnitRepo.Create, so the fixture cannot
+// accidentally depend on the repository's own write path already excluding
+// them — TestUnitRepo_LiveByIDsFiltersPositively's own reasoning, applied
+// to the second live read surface (I02).
+//
+// It still cannot distinguish a positive status = 'pool' filter from a
+// negative exclusion list built out of today's four statuses. That limit
+// belongs to the vocabulary, not to this fixture, and
+// RunLiveFocusCandidates' doc comment states it.
+func TestUnitRepo_LiveFocusCandidatesFiltersPositively(t *testing.T) {
+	v := openTestVault(t)
+	ctx := context.Background()
+
+	seedRawUnit(t, v.db, "focus-raw-pool", "pool")
+	seedRawUnit(t, v.db, "focus-raw-archived", "archived")
+	seedRawUnit(t, v.db, "focus-raw-superseded", "superseded")
+	seedRawUnit(t, v.db, "focus-raw-incomplete", "incomplete")
+
+	got, err := NewUnitRepo(v).LiveFocusCandidates(ctx, []string{
+		"focus-raw-pool", "focus-raw-archived", "focus-raw-superseded", "focus-raw-incomplete",
+	})
+	if err != nil {
+		t.Fatalf("LiveFocusCandidates: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "focus-raw-pool" {
+		t.Fatalf("LiveFocusCandidates: got %+v, want exactly focus-raw-pool", got)
+	}
+}

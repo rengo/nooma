@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -627,3 +628,141 @@ func idsOf(units []unit.Unit) []string {
 	}
 	return ids
 }
+
+// RunLiveFocusCandidates runs the ports.UnitRepo.LiveFocusCandidates
+// contract against a fresh repository instance.
+//
+// One thing this suite cannot distinguish, named rather than assumed: the
+// fixture seeds a superseded and an incomplete unit among the ids, so a
+// negative implementation (status != 'superseded' AND status !=
+// 'incomplete') passes every case here exactly as a positive one
+// (status = 'pool') does. I02 requires the positive filter, and no fixture
+// built from today's vocabulary can tell the two apart — the difference
+// only appears when M4 adds a fifth status, at which point the negative
+// implementation silently starts returning it. The guard is therefore the
+// SQL itself and this comment, not a case below.
+func RunLiveFocusCandidates(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("returns only the live ids, with every focus.Candidate field", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		pool := fixtureUnit("focus-pool", unit.StatusPool)
+		// Values distinct from fixtureUnit's defaults, so a field read
+		// from the wrong column cannot pass by coincidence.
+		pool.Type = unit.TypeEvent
+		pool.Weight = 0.73
+		pool.WeightDecayRate = 0.017
+		pool.LastTouchedAt = focusFixtureTime.Add(-3 * time.Hour)
+		pool.CreatedAt = focusFixtureTime.Add(-72 * time.Hour)
+		dueAt := focusFixtureTime.Add(48 * time.Hour)
+		pool.DueAt = &dueAt
+
+		for _, u := range []unit.Unit{
+			pool,
+			fixtureUnit("focus-archived", unit.StatusArchived),
+			fixtureUnit("focus-superseded", unit.StatusSuperseded),
+			fixtureUnit("focus-incomplete", unit.StatusIncomplete),
+		} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		got, err := repo.LiveFocusCandidates(ctx, []string{
+			"focus-archived", "focus-pool", "focus-superseded", "focus-incomplete", "focus-absent",
+		})
+		if err != nil {
+			t.Fatalf("LiveFocusCandidates: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("LiveFocusCandidates: got %+v, want exactly the pool unit", got)
+		}
+
+		want := focus.Candidate{
+			ID:            pool.ID,
+			Type:          pool.Type,
+			Weight:        pool.Weight,
+			DecayRate:     pool.WeightDecayRate,
+			LastTouchedAt: pool.LastTouchedAt,
+			CreatedAt:     pool.CreatedAt,
+			DueAt:         &dueAt,
+		}
+		if got[0].DueAt == nil || !got[0].DueAt.Equal(*want.DueAt) {
+			t.Errorf("DueAt: got %v, want %s", got[0].DueAt, *want.DueAt)
+		}
+		if got[0].DueAt == pool.DueAt {
+			t.Error("DueAt: the repository handed back the caller's own pointer")
+		}
+		got[0].DueAt, want.DueAt = nil, nil
+		if !reflect.DeepEqual(got[0], want) {
+			t.Errorf("LiveFocusCandidates()[0] = %+v, want %+v", got[0], want)
+		}
+	})
+
+	t.Run("a unit with no due date reads back with none", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		if err := repo.Create(ctx, fixtureUnit("focus-undated", unit.StatusPool)); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		got, err := repo.LiveFocusCandidates(ctx, []string{"focus-undated"})
+		if err != nil {
+			t.Fatalf("LiveFocusCandidates: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("LiveFocusCandidates: got %d candidates, want 1", len(got))
+		}
+		if got[0].DueAt != nil {
+			t.Fatalf("DueAt: got %s, want nil", *got[0].DueAt)
+		}
+	})
+
+	t.Run("orders by id, whatever order the ids arrive in", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		for _, id := range []string{"focus-c", "focus-a", "focus-b"} {
+			if err := repo.Create(ctx, fixtureUnit(id, unit.StatusPool)); err != nil {
+				t.Fatalf("Create %s: %v", id, err)
+			}
+		}
+
+		// Deliberately not the ids' own order, and deliberately not
+		// LiveByIDs' posture either: that one answers in the caller's
+		// order, this one answers in id order, because it is a set to be
+		// ranked in core and not a lookup to be zipped back up.
+		got, err := repo.LiveFocusCandidates(ctx, []string{"focus-b", "focus-c", "focus-a"})
+		if err != nil {
+			t.Fatalf("LiveFocusCandidates: %v", err)
+		}
+
+		ids := make([]string, 0, len(got))
+		for _, c := range got {
+			ids = append(ids, c.ID)
+		}
+		if !reflect.DeepEqual(ids, []string{"focus-a", "focus-b", "focus-c"}) {
+			t.Fatalf("LiveFocusCandidates ids = %v, want [focus-a focus-b focus-c]", ids)
+		}
+	})
+
+	t.Run("an empty id set returns an empty slice, never an error", func(t *testing.T) {
+		repo := newRepo(t)
+
+		got, err := repo.LiveFocusCandidates(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("LiveFocusCandidates: %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("LiveFocusCandidates: got %d candidates, want 0", len(got))
+		}
+	})
+}
+
+// focusFixtureTime is RunLiveFocusCandidates' own anchor instant. Every
+// value in that suite is an offset from it, so no case carries a second
+// literal date.
+var focusFixtureTime = time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
