@@ -245,6 +245,8 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 	rels := sqlite.NewRelationRepo(db)
 	log := sqlite.NewDecisionLog(db)
 	signals := sqlite.NewSignalRepo(db)
+	triggers := sqlite.NewTriggerRepo(db)
+	timers := sqlite.NewTimerRepo(db)
 
 	loaded, err := embeds.LoadIndex(ctx, embedModel)
 	if err != nil {
@@ -252,7 +254,7 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 	}
 	index := brain.NewIndex(loaded)
 
-	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, embed, index, signals)
+	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, embed, index, signals, triggers, timers)
 	recall := brain.NewRecallService(index, lex, units, embed)
 	return capture, recall, nil
 }

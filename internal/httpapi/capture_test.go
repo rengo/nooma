@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -76,7 +77,7 @@ func newTestCaptureService(t *testing.T, now time.Time, llmCase string) *brain.C
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
 
-	return brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
+	return brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 }
 
 func postCapture(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {
@@ -144,37 +145,43 @@ func TestCaptureHandler_UnwiredCaptureServiceReturns503(t *testing.T) {
 	}
 }
 
-// TestCaptureHandler_TimerRefusalSurfacesPlainWordsVerbatim is R2.2's own L2
-// test: a timer-classified message's refusal is distinguishable from every
-// other outcome and carries the refusal's plain-words message verbatim —
-// never merely a status code standing in for it.
-func TestCaptureHandler_TimerRefusalSurfacesPlainWordsVerbatim(t *testing.T) {
+// TestCaptureHandler_ArmedSurfacesWhatWasScheduled is R2.1's own
+// distinguishability MUST, at the outcome this change introduces: an armed
+// capture answers 200 with a body naming the armament, the created id and
+// the fire instant — never merely a status code standing in for it, and
+// never a 4xx/5xx, because arming something is a success.
+//
+// It replaces this file's timer-refusal case verbatim in intent: the shape
+// under test is still "the caller learns what happened to their timer", it
+// is just that the answer is no longer "not yet".
+func TestCaptureHandler_ArmedSurfacesWhatWasScheduled(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
-	svc := newTestCaptureService(t, now, "classify-timer-set-a-timer")
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	svc := newTestCaptureService(t, now, "classify-timer-armed-bread-in-the-oven")
 	h := Handler(Deps{Version: "test", Capture: svc})
 
-	rec := postCapture(t, h, `{"text": "set a timer for 10 minutes"}`)
+	rec := postCapture(t, h, `{"text": "take the bread out of the oven in 40 minutes"}`)
 
-	// A deferred refusal is Q3a's honest answer, not an error — it must
-	// never surface as a 4xx/5xx (design D10: "a deferred timer is NOT an
-	// error status").
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d (a refusal is not an error); body = %s", rec.Code, http.StatusOK, rec.Body.String())
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
 	var got map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decoding response: %v; body = %s", err, rec.Body.String())
 	}
-	if got["outcome"] != string(brain.OutcomeDeferred) {
-		t.Errorf("outcome = %v, want %q", got["outcome"], brain.OutcomeDeferred)
+	if got["outcome"] != string(brain.OutcomeArmed) {
+		t.Errorf("outcome = %v, want %q", got["outcome"], brain.OutcomeArmed)
 	}
-
-	const wantMessage = "timers and recurring reminders aren't wired up yet — nothing was scheduled, and this capture was not stored."
-	if got["message"] != wantMessage {
-		t.Errorf("message = %q, want the refusal's plain-words message verbatim: %q", got["message"], wantMessage)
+	if got["armed"] != string(prospection.ArmTimer) {
+		t.Errorf("armed = %v, want %q", got["armed"], prospection.ArmTimer)
+	}
+	if got["armed_id"] == nil || got["armed_id"] == "" {
+		t.Errorf("armed_id = %v, want the created row's own id", got["armed_id"])
+	}
+	if want := "2026-08-01T10:10:00Z"; got["fire_at"] != want {
+		t.Errorf("fire_at = %v, want %q — the instant the classification named", got["fire_at"], want)
 	}
 }
 
@@ -195,8 +202,8 @@ func TestAllCaptureOutcomesHaveAStatusMapping(t *testing.T) {
 		// same way captureRunner's own production code always sets it for
 		// that outcome (result.go's own field comments).
 		switch outcome {
-		case brain.OutcomeDeferred:
-			result.Deferred = &brain.Deferred{Message: "placeholder"}
+		case brain.OutcomeArmed:
+			result.Armed = &brain.Armed{What: prospection.ArmTimer, ID: "placeholder"}
 		case brain.OutcomeCorrected, brain.OutcomeAsked:
 			result.Correction = &brain.Correction{}
 		}

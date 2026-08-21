@@ -106,7 +106,7 @@ func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 		signals := memrepo.NewSignals()
 		llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-recall-leaky-faucet")
 		captureEmbed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-		captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, captureEmbed, brain.NewIndex(idx), signals)
+		captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, captureEmbed, brain.NewIndex(idx), signals, memrepo.NewTriggers(), memrepo.NewTimers())
 		result, err := captureSvc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "chat"})
 		if err != nil {
 			return nil, err

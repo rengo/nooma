@@ -1,7 +1,10 @@
 package brain
 
 import (
+	"time"
+
 	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 )
 
@@ -40,6 +43,7 @@ type CaptureOutcome string
 
 const (
 	OutcomeStored    CaptureOutcome = "stored"    // a unit was persisted
+	OutcomeArmed     CaptureOutcome = "armed"     // a timer or trigger was armed — never a unit (I04)
 	OutcomeDiscarded CaptureOutcome = "discarded" // chitchat / out_of_scope
 	OutcomeRecalled  CaptureOutcome = "recalled"  // a recall, answered
 	OutcomeCorrected CaptureOutcome = "corrected" // a correction, applied
@@ -51,7 +55,7 @@ const (
 // var, for the same mutability reason ports.AllDecisionActions is one.
 func AllCaptureOutcomes() []CaptureOutcome {
 	return []CaptureOutcome{
-		OutcomeStored, OutcomeDiscarded,
+		OutcomeStored, OutcomeArmed, OutcomeDiscarded,
 		OutcomeRecalled, OutcomeCorrected, OutcomeAsked,
 	}
 }
@@ -60,7 +64,7 @@ func AllCaptureOutcomes() []CaptureOutcome {
 // over Outcome (design D8): only the fields naming that outcome are ever
 // populated; every other field stays its zero value.
 type CaptureResult struct {
-	// Outcome names which of the five ways this capture ended — the one
+	// Outcome names which of the six ways this capture ended — the one
 	// field every caller switches on.
 	Outcome CaptureOutcome
 
@@ -81,6 +85,10 @@ type CaptureResult struct {
 	// embedding did not happen or recall found nothing.
 	Candidates []string
 
+	// Armed names what this capture armed. Set only for
+	// Outcome == OutcomeArmed.
+	Armed *Armed
+
 	// Recalled holds the units RecallService.ForText found for a
 	// `recall`-classified capture (spec R2.3, design D9), in fused order.
 	// Set only for Outcome == OutcomeRecalled; never persists a unit.
@@ -89,6 +97,26 @@ type CaptureResult struct {
 	// Correction names how a correction resolved, or why it could not. Set
 	// only for Outcome == OutcomeCorrected or Outcome == OutcomeAsked.
 	Correction *Correction
+}
+
+// Armed is what CaptureResult carries when a capture armed something
+// instead of persisting a unit — a timer or a trigger, never both, and
+// never a unit (I04, doc 02 §8's own bold sentence).
+//
+// It replaces the Deferred value this capture path used to return, and the
+// difference is the whole of m3b: the refusal said "not yet", this says
+// what was scheduled and when.
+type Armed struct {
+	// What names which of prospection.Arm's armaments was created — a
+	// typed value, not a bare string, for the reason every closed
+	// vocabulary in this codebase is typed.
+	What prospection.Armament
+	// ID is the created timers or triggers row's own id, so a caller can
+	// name the thing it just scheduled.
+	ID string
+	// FireAt is when it will fire — the Plan's own instant, not a
+	// re-derivation.
+	FireAt time.Time
 }
 
 // Correction is what CaptureResult carries for the Corrected and Asked

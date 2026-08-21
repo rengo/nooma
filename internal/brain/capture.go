@@ -59,22 +59,24 @@ type CaptureService struct {
 // index is the in-memory Index ADR-0012 requires be loaded once at vault
 // open — NewCaptureService never builds one itself, it only holds the one
 // its caller already loaded.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo) *CaptureService {
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo) *CaptureService {
 	sharedRecall := NewRecallService(index, lex, units, embed)
 	return &CaptureService{
 		clock: clock,
 		run: captureRunner{
-			ids:    ids,
-			units:  units,
-			embeds: embeds,
-			lex:    lex,
-			rels:   rels,
-			log:    log,
-			llm:    llm,
-			judge:  judge,
-			embed:  embed,
-			index:  index,
-			recall: sharedRecall,
+			ids:      ids,
+			units:    units,
+			embeds:   embeds,
+			lex:      lex,
+			rels:     rels,
+			log:      log,
+			llm:      llm,
+			judge:    judge,
+			embed:    embed,
+			index:    index,
+			recall:   sharedRecall,
+			triggers: triggers,
+			timers:   timers,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
 			},
@@ -119,6 +121,12 @@ type captureRunner struct {
 	// (design D7), owned by captureRunner and built once, alongside recall,
 	// rather than per capture.
 	correction correctionRunner
+	// triggers and timers are what arming writes through. There is no
+	// clock field beside them on purpose: Arm(c, now) reuses the instant
+	// Capture already read, so the single-clock-read rule holds by
+	// construction rather than by a reviewer noticing.
+	triggers ports.TriggerRepo
+	timers   ports.TimerRepo
 }
 
 // at runs one capture given the instant CaptureService.Capture already

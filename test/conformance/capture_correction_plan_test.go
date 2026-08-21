@@ -32,7 +32,7 @@ func TestCapture_CorrectionPlanWritesExactlyOneField(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 		}
-		return brain.NewCaptureService(fixedClock{now: fixedNow}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
+		return brain.NewCaptureService(fixedClock{now: fixedNow}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 	}
 
 	t.Run("content-only correction leaves both dates unchanged", func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestCapture_CorrectionPlanWritesExactlyOneField(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 		}
-		svc := brain.NewCaptureService(fixedClock{now: fixedNow}, &counterIDs{}, counting, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
+		svc := brain.NewCaptureService(fixedClock{now: fixedNow}, &counterIDs{}, counting, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 		result, err := svc.Capture(ctx, brain.CaptureInput{Text: "irrelevant", Channel: "chat", ReferentID: "target-1"})
 		if err != nil {

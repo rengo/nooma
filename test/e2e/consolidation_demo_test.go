@@ -235,7 +235,7 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 	captureLLM := fakeprovider.New(t, llmCasesDir(t), captureScript...)
 	clock := &steppingClock{}
 	ids := &demoIDs{}
-	captureSvc := brain.NewCaptureService(clock, ids, units, embeddings, lexical, relations, decisions, captureLLM, captureLLM, embed, index, signals)
+	captureSvc := brain.NewCaptureService(clock, ids, units, embeddings, lexical, relations, decisions, captureLLM, captureLLM, embed, index, signals, memrepo.NewTriggers(), memrepo.NewTimers())
 
 	unitIDs := make([]string, len(ex.CaptureScript))
 	for i, c := range ex.CaptureScript {

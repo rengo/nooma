@@ -3,62 +3,61 @@ package conformance
 
 import (
 	"context"
-	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // TestI04_TimerAndRecurringReminderNeverPersistAUnit is I04's own
-// conformance test (docs/06-harness.md §4's table already lists I04; no
-// test existed for it before this PR — design D9, spec R4.6, Q3a).
+// conformance test (docs/06-harness.md §4).
 //
 // docs/02-cognitive-core.md §8 states in bold "A timer is NEVER a unit: no
-// weight, no decay, no graph, no belief derivation." An unarmed timer is
-// still, in substance, a timer — this is what closes C3/design's own C2
-// callout: the question was never open, it was unsearched (spec R4.6's own
-// recorded reasoning).
+// weight, no decay, no graph, no belief derivation." Until this change the
+// invariant held for the emptiest of reasons — capture refused timers
+// outright, and internal/ports declared no repository through which one
+// could have been written. Now capture arms them, so the invariant is
+// under real load for the first time and this test asserts it against what
+// was actually persisted.
 //
 // A timer or recurring_reminder classification MUST leave:
 //   - zero units rows,
-//   - zero timers rows, zero triggers rows (arming is M3 — proposal §3.3's
-//     explicit non-goal),
-//   - exactly one decision_log row (capture.hook.deferred), and
-//   - a CaptureResult distinguishable from an ordinary successful capture
-//     (Outcome: OutcomeDeferred, Deferred naming the refused Kind and a
-//     plain-words Message).
-//
-// timers/triggers have no fake, and no port, at all: grepping
-// internal/ports/ finds no TimerRepo or TriggerRepo (confirmed at the time
-// this test was written — internal/ports holds exactly clock.go,
-// decisionlog.go, doc.go, embeddingrepo.go, lexicalsearch.go, provider.go,
-// unitrepo.go). captureRunner therefore has no port through which it could
-// even attempt a timers/triggers write, so "zero timers rows, zero triggers
-// rows" holds structurally, not merely by an assertion this test can make —
-// there is nothing here to query. What this test actually asserts is zero
-// units rows (via memrepo.Units.Count, a real observation) and the
-// decision_log/CaptureResult shape; the timers/triggers half of the MUST is
-// true by construction, and is recorded here rather than pretended away.
+//   - exactly one row in the table its armament belongs to and zero in the
+//     other, and
+//   - a CaptureResult naming what was armed (Outcome: OutcomeArmed, Armed
+//     carrying the armament, the created id, and the fire instant).
 func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 	tests := []struct {
-		name     string
-		llmCase  string
-		wantKind classify.Kind
+		name         string
+		llmCase      string
+		wantKind     classify.Kind
+		wantArmament prospection.Armament
+		wantTimers   int
+		wantTriggers int
 	}{
 		{
-			name:     "timer",
-			llmCase:  "classify-timer-set-a-timer",
-			wantKind: classify.KindTimer,
+			name:         "timer",
+			llmCase:      "classify-timer-armed-bread-in-the-oven",
+			wantKind:     classify.KindTimer,
+			wantArmament: prospection.ArmTimer,
+			wantTimers:   1,
+			wantTriggers: 0,
 		},
 		{
-			name:     "recurring_reminder",
-			llmCase:  "classify-recurring-reminder-water-plants",
-			wantKind: classify.KindRecurringReminder,
+			name:         "recurring_reminder",
+			llmCase:      "classify-recurring-reminder-armed-mothers-birthday",
+			wantKind:     classify.KindRecurringReminder,
+			wantArmament: prospection.ArmRecurring,
+			wantTimers:   0,
+			wantTriggers: 1,
 		},
 	}
 
@@ -71,6 +70,8 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			embeddings := memrepo.NewEmbeddings()
 			lexical := memrepo.NewLexical()
 			relations := memrepo.NewRelations()
+			triggers := memrepo.NewTriggers()
+			timers := memrepo.NewTimers()
 			llm := fakeprovider.New(t, testdataLLMCasesDir(t), tt.llmCase)
 			embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
@@ -78,78 +79,114 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals())
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), triggers, timers)
 
 			result, err := svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the fake replays by case id, not prompt text",
 				Channel: "chat",
 			})
 			if err != nil {
-				t.Fatalf("Capture error = %v, want nil — a timer/recurring_reminder classification is a refusal, never a Go error (Q3a)", err)
+				t.Fatalf("Capture error = %v, want nil", err)
 			}
 
-			// Zero units rows (spec R4.6's MUST NOT).
+			// The invariant itself.
 			if got := units.Count(); got != 0 {
 				t.Fatalf("units.Count() = %d, want 0 — a %s classification must never persist a unit (doc 02 §8)", got, tt.wantKind)
 			}
 
-			// A caller-visible refusal, distinguishable from success.
-			if result.Outcome != brain.OutcomeDeferred {
-				t.Fatalf("CaptureResult.Outcome = %q, want %q — a timer/recurring_reminder classification is a refusal, not a success", result.Outcome, brain.OutcomeDeferred)
+			// Exactly one row, in exactly one of the two tables. Asserting
+			// both counts, not just the one expected to be 1, is what
+			// catches an arming that wrote to both.
+			if got := timers.Count(); got != tt.wantTimers {
+				t.Errorf("timers.Count() = %d, want %d", got, tt.wantTimers)
 			}
-			if result.Deferred == nil {
-				t.Fatal("CaptureResult.Deferred = nil, want a non-nil Deferred naming the refusal")
-			}
-			if result.Deferred.Kind != tt.wantKind {
-				t.Errorf("Deferred.Kind = %q, want %q", result.Deferred.Kind, tt.wantKind)
-			}
-			if result.Deferred.Message == "" {
-				t.Error("Deferred.Message is empty — Q3a requires the caller be told 'not yet' in plain words")
+			if got := triggers.Count(); got != tt.wantTriggers {
+				t.Errorf("triggers.Count() = %d, want %d", got, tt.wantTriggers)
 			}
 
-			// Exactly one decision_log row, capture.hook.deferred.
-			rows, err := decisions.Since(ctx, now.Add(-time.Hour), -1)
-			if err != nil {
-				t.Fatalf("decisions.Since: %v", err)
+			if result.Outcome != brain.OutcomeArmed {
+				t.Fatalf("CaptureResult.Outcome = %q, want %q", result.Outcome, brain.OutcomeArmed)
 			}
-			if len(rows) != 1 {
-				t.Fatalf("decision_log has %d rows, want exactly 1: %+v", len(rows), rows)
+			if result.Armed == nil {
+				t.Fatal("CaptureResult.Armed = nil, want a non-nil Armed naming what was scheduled")
 			}
-			row := rows[0]
-			if row.Action != ports.ActionCaptureHookDeferred {
-				t.Errorf("Action = %q, want %q", row.Action, ports.ActionCaptureHookDeferred)
+			if result.Armed.What != tt.wantArmament {
+				t.Errorf("Armed.What = %q, want %q", result.Armed.What, tt.wantArmament)
 			}
-			if row.Rationale == "" {
-				t.Error("Rationale is empty — doc 02 §11 requires a human-readable sentence naming the refusal")
+			if result.Armed.ID == "" {
+				t.Error("Armed.ID is empty — a caller must be able to name the row it just scheduled")
 			}
-			if !row.OccurredAt.Equal(now) {
-				t.Errorf("OccurredAt = %v, want the single clock read %v", row.OccurredAt, now)
-			}
-
-			// context carries the classification verbatim (design D9: "a
-			// truthful account of what was understood, not merely of what
-			// was refused").
-			var rowContext struct {
-				Kind           string                  `json:"kind"`
-				Classification classify.Classification `json:"classification"`
-				Reason         string                  `json:"reason"`
-				Milestone      string                  `json:"milestone"`
-			}
-			if err := json.Unmarshal(row.Context, &rowContext); err != nil {
-				t.Fatalf("decision_log row Context is not valid JSON: %v (%s)", err, row.Context)
-			}
-			if rowContext.Kind != string(tt.wantKind) {
-				t.Errorf("Context.kind = %q, want %q", rowContext.Kind, tt.wantKind)
-			}
-			if rowContext.Classification.Kind == nil || *rowContext.Classification.Kind != tt.wantKind {
-				t.Errorf("Context.classification.Kind = %v, want %q — the classification must be embedded verbatim", rowContext.Classification.Kind, tt.wantKind)
-			}
-			if rowContext.Reason == "" {
-				t.Error("Context.reason is empty — the record must say why this was refused")
-			}
-			if rowContext.Milestone == "" {
-				t.Error("Context.milestone is empty — the record must say when this capability arrives")
+			if !result.Armed.FireAt.After(now) {
+				t.Errorf("Armed.FireAt = %s, want an instant after the capture's own %s", result.Armed.FireAt, now)
 			}
 		})
+	}
+}
+
+// TestI04_NoTimerPortMethodCanCarryAUnit is the structural half, and it is
+// the half that cannot be entered from underneath: no method on
+// ports.TimerRepo takes or returns a unit.Unit in any form, so a timer
+// cannot become a unit through the port at all, whatever the pipeline
+// above it does.
+//
+// The scan is over the interface's own method set, and over every
+// parameter and result type of every method — never a hand-checked list of
+// the four method names. A fifth method added tomorrow is covered without
+// a test edit; a list would only ever cover what someone remembered to add
+// to it.
+//
+// This sub-test already passed before arming existed (ports.TimerRepo has
+// never had such a method), which is disclosed rather than counted as
+// proof of this change. It is here to stay true.
+func TestI04_NoTimerPortMethodCanCarryAUnit(t *testing.T) {
+	timerRepo := reflect.TypeOf((*ports.TimerRepo)(nil)).Elem()
+	unitType := reflect.TypeOf(unit.Unit{})
+
+	if timerRepo.NumMethod() == 0 {
+		t.Fatal("ports.TimerRepo declares zero methods — nothing to check yet")
+	}
+
+	// carriesUnit reports whether t is unit.Unit, or any pointer, slice,
+	// array, map or channel that reaches it — so *unit.Unit, []unit.Unit
+	// and map[string]unit.Unit are all caught, not just the bare type.
+	var carriesUnit func(reflect.Type) bool
+	carriesUnit = func(t reflect.Type) bool {
+		if t == unitType {
+			return true
+		}
+		switch t.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan:
+			return carriesUnit(t.Elem())
+		case reflect.Map:
+			return carriesUnit(t.Key()) || carriesUnit(t.Elem())
+		default:
+			return false
+		}
+	}
+
+	for i := 0; i < timerRepo.NumMethod(); i++ {
+		m := timerRepo.Method(i)
+		for j := 0; j < m.Type.NumIn(); j++ {
+			if carriesUnit(m.Type.In(j)) {
+				t.Errorf("ports.TimerRepo.%s takes %s: a timer is never a unit (doc 02 §8)", m.Name, m.Type.In(j))
+			}
+		}
+		for j := 0; j < m.Type.NumOut(); j++ {
+			if carriesUnit(m.Type.Out(j)) {
+				t.Errorf("ports.TimerRepo.%s returns %s: a timer is never a unit (doc 02 §8)", m.Name, m.Type.Out(j))
+			}
+		}
+	}
+
+	// The same claim about the package, not just the interface: nothing
+	// named Timer in internal/ports mentions a unit id either. timers has
+	// no unit_id column (migration 0001:62-70), and ports.Timer having one
+	// would be the first step toward the invariant failing at the schema
+	// level rather than at this port.
+	timerStruct := reflect.TypeOf(ports.Timer{})
+	for i := 0; i < timerStruct.NumField(); i++ {
+		if name := timerStruct.Field(i).Name; strings.Contains(strings.ToLower(name), "unit") {
+			t.Errorf("ports.Timer declares a field named %s — timers carries no unit_id", name)
+		}
 	}
 }
