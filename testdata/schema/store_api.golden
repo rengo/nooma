@@ -20,6 +20,10 @@ internal/store/sqlite: func (*SignalRepo) Record(ctx context.Context, s ports.Si
 internal/store/sqlite: func (*SignalRepo) Since(ctx context.Context, t time.Time, limit int) ([]ports.Signal, error)
 internal/store/sqlite: func (*StateRepo) LastHypothesisAt(ctx context.Context) (*time.Time, error)
 internal/store/sqlite: func (*StateRepo) OpenHypothesis(ctx context.Context, h ports.StateHypothesis) error
+internal/store/sqlite: func (*TriggerRepo) Create(ctx context.Context, t ports.Trigger) error
+internal/store/sqlite: func (*TriggerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTrigger, error)
+internal/store/sqlite: func (*TriggerRepo) Expire(ctx context.Context, id string) error
+internal/store/sqlite: func (*TriggerRepo) Fire(ctx context.Context, id string, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) CountLiveByType(ctx context.Context, t unit.Type) (int, error)
@@ -46,6 +50,7 @@ internal/store/sqlite: func NewSearch(v *Vault) *Search
 internal/store/sqlite: func NewSelfModelRepo(v *Vault) *SelfModelRepo
 internal/store/sqlite: func NewSignalRepo(v *Vault) *SignalRepo
 internal/store/sqlite: func NewStateRepo(v *Vault) *StateRepo
+internal/store/sqlite: func NewTriggerRepo(v *Vault) *TriggerRepo
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: type ConfigRepo
@@ -56,6 +61,7 @@ internal/store/sqlite: type Search
 internal/store/sqlite: type SelfModelRepo
 internal/store/sqlite: type SignalRepo
 internal/store/sqlite: type StateRepo
+internal/store/sqlite: type TriggerRepo
 internal/store/sqlite: type UnitRepo
 internal/store/sqlite: type Vault
 internal/store/sqlite: type VersionError

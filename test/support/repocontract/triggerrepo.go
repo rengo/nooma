@@ -57,9 +57,32 @@ func assertNoRemovalMethod(t *testing.T, iface reflect.Type) {
 	}
 }
 
+// TriggerHarness is what a TriggerRepo implementation must offer the
+// contract so the suite can put triggers in front of it.
+//
+// EnsureUnit exists because triggers.unit_id REFERENCES units(id)
+// (migration 0001:43) and the vault opens with foreign_keys=on: over the
+// real store, creating a trigger for a unit that does not exist is a
+// constraint violation, while the in-memory fake has no such notion.
+// Without this hook the suite would pass at L2 and be impossible to run at
+// L3 — which is not a contract, it is a fake's opinion.
+// repocontract.EmbeddingHarness exists for the identical reason, and this
+// is its shape.
+//
+// ports.TimerRepo needs no such harness, and the asymmetry is the schema's
+// own: timers carries no unit_id at all, because a timer is never a unit
+// (I04).
+type TriggerHarness interface {
+	ports.TriggerRepo
+
+	// EnsureUnit makes id a valid trigger target. The store inserts the
+	// row; the fake does nothing.
+	EnsureUnit(t *testing.T, id string)
+}
+
 // RunTriggerRepo runs the ports.TriggerRepo contract against a fresh
-// repository instance, built by newRepo for every subtest. newRepo must
-// return a repository with no trigger already stored in it.
+// implementation, built by newRepo for every subtest. newRepo must return
+// one with no trigger already stored in it.
 //
 // One thing this suite cannot observe, stated rather than papered over:
 // ports.TriggerRepo declares no any-status read (there is no ByID —
@@ -68,7 +91,7 @@ func assertNoRemovalMethod(t *testing.T, iface reflect.Type) {
 // Due plus a second refused transition, never by reading the status back.
 // The status column itself is asserted directly at L3, where raw SQL is
 // available (internal/store/sqlite/triggerrepo_integration_test.go).
-func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) {
+func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 	t.Helper()
 
 	t.Run("the port declares no removal method", func(t *testing.T) {
@@ -77,12 +100,9 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("Create then Due: present at and after fire_at, absent before", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		fireAt := contractNow
 
-		if err := repo.Create(ctx, fixtureTrigger("trg-due", &fireAt)); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, fixtureTrigger("trg-due", &fireAt))
 
 		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt.Add(-time.Second)))
 		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt), "trg-due")
@@ -91,13 +111,10 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("Due returns the stored id, unit id and fire_at", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		fireAt := contractNow
 		want := fixtureTrigger("trg-fields", &fireAt)
 
-		if err := repo.Create(ctx, want); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, want)
 
 		got := dueTriggers(t, repo, fireAt)
 		if len(got) != 1 {
@@ -120,9 +137,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 		fireAt := contractNow
 		trg := fixtureTrigger("trg-dup", &fireAt)
 
-		if err := repo.Create(ctx, trg); err != nil {
-			t.Fatalf("first Create: %v", err)
-		}
+		createTrigger(t, repo, trg)
 		if err := repo.Create(ctx, trg); !errors.Is(err, ports.ErrTriggerExists) {
 			t.Fatalf("second Create: got %v, want ErrTriggerExists", err)
 		}
@@ -130,7 +145,6 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("a trigger with no fire_at never appears in Due", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 
 		// A pattern_based trigger legitimately carries no fire_at
 		// (migration 0001:44, :50), so fire_at IS NOT NULL is part of
@@ -138,9 +152,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 		patterned := fixtureTrigger("trg-pattern", nil)
 		patterned.Kind = ports.TriggerKindPatternBased
 		patterned.UnitID = nil
-		if err := repo.Create(ctx, patterned); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, patterned)
 
 		assertDueTriggerIDs(t, dueTriggers(t, repo, contractNow.Add(100*365*24*time.Hour)))
 	})
@@ -150,9 +162,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 		ctx := context.Background()
 		fireAt := contractNow
 
-		if err := repo.Create(ctx, fixtureTrigger("trg-fire", &fireAt)); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, fixtureTrigger("trg-fire", &fireAt))
 		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt), "trg-fire")
 
 		if err := repo.Fire(ctx, "trg-fire", fireAt.Add(time.Minute)); err != nil {
@@ -170,9 +180,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 		ctx := context.Background()
 		fireAt := contractNow
 
-		if err := repo.Create(ctx, fixtureTrigger("trg-expire", &fireAt)); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, fixtureTrigger("trg-expire", &fireAt))
 		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt), "trg-expire")
 
 		if err := repo.Expire(ctx, "trg-expire"); err != nil {
@@ -186,9 +194,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 		ctx := context.Background()
 		fireAt := contractNow
 
-		if err := repo.Create(ctx, fixtureTrigger("trg-conflict", &fireAt)); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, fixtureTrigger("trg-conflict", &fireAt))
 		if err := repo.Expire(ctx, "trg-conflict"); err != nil {
 			t.Fatalf("Expire: %v", err)
 		}
@@ -221,7 +227,6 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("Due orders by fire_at then id", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		early := contractNow.Add(-time.Hour)
 		late := contractNow
 
@@ -236,9 +241,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 			{"trg-c", early},
 		} {
 			at := seed.fireAt
-			if err := repo.Create(ctx, fixtureTrigger(seed.id, &at)); err != nil {
-				t.Fatalf("Create %s: %v", seed.id, err)
-			}
+			createTrigger(t, repo, fixtureTrigger(seed.id, &at))
 		}
 
 		assertDueTriggerIDs(t, dueTriggers(t, repo, late), "trg-c", "trg-a", "trg-b")
@@ -255,14 +258,11 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("interrupt_level: nil stays nil", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		fireAt := contractNow
 
 		trg := fixtureTrigger("trg-no-interrupt", &fireAt)
 		trg.InterruptLevel = nil
-		if err := repo.Create(ctx, trg); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, trg)
 
 		got := dueTriggers(t, repo, fireAt)
 		if len(got) != 1 {
@@ -275,15 +275,12 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("interrupt_level: a value round-trips through a freshly allocated pointer", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		fireAt := contractNow
 
 		level := 0.37
 		trg := fixtureTrigger("trg-interrupt", &fireAt)
 		trg.InterruptLevel = &level
-		if err := repo.Create(ctx, trg); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, trg)
 
 		// The caller mutates its own variable after Create. A repository
 		// that stored the pointer instead of the float would now hold
@@ -315,7 +312,6 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("recurrence rule and anchor round-trip", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		fireAt := contractNow
 
 		rule := prospection.RuleYearly
@@ -323,9 +319,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 		trg := fixtureTrigger("trg-recurring", &fireAt)
 		trg.RecurrenceRule = &rule
 		trg.RecurrenceAnchor = &anchor
-		if err := repo.Create(ctx, trg); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, trg)
 
 		got := dueTriggers(t, repo, fireAt)
 		if len(got) != 1 {
@@ -344,12 +338,9 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) ports.TriggerRepo) 
 
 	t.Run("a trigger with no recurrence reads back with none", func(t *testing.T) {
 		repo := newRepo(t)
-		ctx := context.Background()
 		fireAt := contractNow
 
-		if err := repo.Create(ctx, fixtureTrigger("trg-one-shot", &fireAt)); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		createTrigger(t, repo, fixtureTrigger("trg-one-shot", &fireAt))
 
 		got := dueTriggers(t, repo, fireAt)
 		if len(got) != 1 {
@@ -382,6 +373,20 @@ func fixtureTrigger(id string, fireAt *time.Time) ports.Trigger {
 		},
 		FireAt:    fireAt,
 		CreatedAt: contractNow.Add(-24 * time.Hour),
+	}
+}
+
+// createTrigger seeds trg's unit and stores it. Every case that expects a
+// successful Create goes through here: seeding is a precondition of the
+// case, not part of what it proves.
+func createTrigger(t *testing.T, repo TriggerHarness, trg ports.Trigger) {
+	t.Helper()
+
+	if trg.UnitID != nil {
+		repo.EnsureUnit(t, *trg.UnitID)
+	}
+	if err := repo.Create(context.Background(), trg); err != nil {
+		t.Fatalf("Create %s: %v", trg.ID, err)
 	}
 }
 

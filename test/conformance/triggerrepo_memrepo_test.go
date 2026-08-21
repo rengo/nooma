@@ -4,7 +4,6 @@ package conformance
 import (
 	"testing"
 
-	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 	"github.com/rengo/nooma/test/support/repocontract"
 )
@@ -14,7 +13,7 @@ import (
 // at L3 in the next PR (feat/store-trigger-timer) — design D6's "answered
 // twice" rule.
 func TestTriggerRepo_MemRepo(t *testing.T) {
-	repocontract.RunTriggerRepo(t, func(t *testing.T) ports.TriggerRepo {
+	repocontract.RunTriggerRepo(t, func(t *testing.T) repocontract.TriggerHarness {
 		t.Helper()
 		return memrepo.NewTriggers()
 	})
