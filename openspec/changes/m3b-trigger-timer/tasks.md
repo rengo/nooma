@@ -240,7 +240,7 @@ lowercase-key stored TEXT.
       before marshalling, `Due`'s unmarshal path converts back.
       Verify: `go test -tags=integration ./internal/store/sqlite/... -run Anchor`.
       Requirement: design §3.4.
-- [ ] **2.5** Commit 1 (RED): `internal/store/sqlite/timerrepo_integration_test.go` — mirrors 2.1 for
+- [x] **2.5** Commit 1 (RED): `internal/store/sqlite/timerrepo_integration_test.go` — mirrors 2.1 for
       `TimerRepo`: contract run against a real vault; `Fire`'s single-statement write of
       `status='fired', surfaced_at=?` verified via a raw read after the call; a raw `SELECT
       rendered_text` after `Fire` confirms it is still `NULL` (**G2**'s resolution — untouched, not
@@ -248,25 +248,38 @@ lowercase-key stored TEXT.
       **Red**: `undefined: sqlite.NewTimerRepo`.
       Stub: zero-value constructor — compiles; Due round trip fails first.
       Requirement: R1.2, R2.1; **G2**.
-- [ ] **2.6** Commit 2 (GREEN): implement `internal/store/sqlite/timerrepo.go` — `Create`; `Due`
+- [x] **2.6** Commit 2 (GREEN): implement `internal/store/sqlite/timerrepo.go` — `Create`; `Due`
       (`WHERE status = 'pending' AND fire_at <= ?`, full scan — `timers` carries **no index**, **Q2**
       accepted, named not mitigated); `Fire` (single `UPDATE status='fired', surfaced_at=?` under
       `from='pending'`); `Cancel` (`status='cancelled'` under `from='pending'`, no timestamp column).
       Verify: `go test -tags=integration ./internal/store/sqlite/... -run TimerRepo`.
       Requirement: R1.2, R2.1; design §3.6 (Risk E, Q2).
-- [ ] **2.7** `testdata/schema/store_api.golden` — regenerate; diff limited to the two new
+- [x] **2.7** `testdata/schema/store_api.golden` — regenerate; diff limited to the two new
       repositories' `type`/`func`/`var` lines, no existing row changed (spec R2.1's own MUST).
       Verify: `make store-api-golden && git diff --stat testdata/schema/store_api.golden`.
       Requirement: R2.1.
       **Mutation**: hand-edit the golden instead of regenerating — `store_api_test.go`'s own
       regeneration-diff gate (inside `make check-all`) fails on any drift from the tool's output.
-- [ ] **2.8** Purity/lint: `golangci-lint run`.
+- [x] **2.8** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules; design §4.
 - [x] Verify (PR-level, 2a): `make check-all`; confirm diff touches only
       `internal/store/sqlite/triggerrepo{,_integration_test}.go`,
       `testdata/schema/store_api.golden`, and the `TriggerHarness` retrofit in
       `test/support/{repocontract,memrepo}` plus its L2 wiring (finding G6). No `docs/02-cognitive-core.md` delta (store is I/O, not
       core). Target ≤250 impl+docs lines.
+
+---
+
+## PR 2b — `feat/store-timer` (~150 impl+docs) — the second half of the G8 cut
+
+Depends on PR 2a. Ships the SQLite timer repository and its own L3 suite; `store_api.golden`
+regenerated for its own six rows. Tasks 2.5 and 2.6 above are this PR's; 2.7 and 2.8 are done once
+per PR and were done in both.
+
+- [x] Verify (PR-level, 2b): `make check-all`; confirm diff touches only
+      `internal/store/sqlite/timerrepo{,_integration_test}.go` and
+      `testdata/schema/store_api.golden`. No `docs/02-cognitive-core.md` delta (store is I/O, not
+      core). Target ≤150 impl+docs lines.
 
 ---
 
