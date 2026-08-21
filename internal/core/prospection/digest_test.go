@@ -1,9 +1,11 @@
 package prospection
 
 import (
+	"math"
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 )
@@ -370,4 +372,144 @@ func TestCarry(t *testing.T) {
 			t.Errorf("carried %v, held %v — nothing in, nothing out", ids(carry), ids(held))
 		}
 	})
+}
+
+// TestLowEnergy_UnvouchableLevelIsNotLow covers the values core cannot
+// vouch for. current_state.energy is a bare REAL with no CHECK constraint
+// (migration 0001), so nothing between the database and this gate
+// guarantees a number in [0,1].
+//
+// The direction is the same one the nil case already states: this gate
+// SUPPRESSES delivery, so anything core cannot read must not be grounds to
+// suppress. NaN is the sharp case — every IEEE-754 comparison against NaN
+// is false, so a plain `Level >= LowEnergyMax` guard falls straight through
+// to the recency check and reports a corrupt reading as low energy.
+// focus/priority.go records this same trap being found twice before.
+func TestLowEnergy_UnvouchableLevelIsNotLow(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+
+	for name, level := range map[string]float64{
+		"NaN":         math.NaN(),
+		"+Inf":        math.Inf(1),
+		"-Inf":        math.Inf(-1),
+		"below range": -0.5,
+		"above range": 9.9,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if LowEnergy(&EnergyReading{Level: level, RecordedAt: now}, now) {
+				t.Errorf("LowEnergy(level=%v, recent) = true — a level core cannot vouch for is "+
+					"not an observation of depletion, and this gate suppresses delivery", level)
+			}
+		})
+	}
+}
+
+// TestCarry_DuplicateIDsLoseNothing is the invariant "every item lands in
+// exactly one slice" under the input that actually breaks a lookup by ID.
+//
+// focus.Rank's own doc comment says it neither validates nor deduplicates
+// ids, and names three ways a caller may close that: guarantee uniqueness
+// upstream, reject a duplicate outright, or accept either order explicitly.
+// Carry is Rank's second caller in this repository and takes the third: it
+// resolves each ranked entry against a per-id queue rather than a single map
+// slot, so duplicates round-trip and only their relative order is
+// unspecified.
+//
+// The failure this guards against is not a crash. With a single-slot map the
+// counts still balance — four in, four out — while the highest-priority item
+// silently vanishes and a lower one is delivered twice. A test that only
+// counted would have passed.
+func TestCarry_DuplicateIDsLoseNothing(t *testing.T) {
+	now := time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC)
+
+	items := []DigestItem{
+		digestItem("dup", 5.0, 0, now),
+		digestItem("dup", 1.0, 0, now),
+		digestItem("c", 3.0, 0, now),
+		digestItem("d", 4.0, 0, now),
+	}
+	carry, held := Carry(items, nil, true, now)
+
+	if got := len(carry) + len(held); got != len(items) {
+		t.Fatalf("carry+held holds %d items, want %d", got, len(items))
+	}
+
+	weights := map[float64]int{}
+	for _, i := range append(append([]DigestItem{}, carry...), held...) {
+		weights[i.Candidate.Weight]++
+	}
+	for _, want := range []float64{5.0, 1.0, 3.0, 4.0} {
+		if weights[want] != 1 {
+			t.Errorf("the item with weight %v appears %d times across carry and held, want "+
+				"exactly 1 — identity is resolved per ranked entry, so a shared id must not "+
+				"collapse two items into one", want, weights[want])
+		}
+	}
+}
+
+// TestLowEnergy_FutureReadingIsNotRecent covers clock skew and a backdated
+// import. now.Sub(future) is negative, and a negative duration is always
+// <= a positive bound, so an unguarded recency check reads a reading dated
+// next year as "recent" and lets it suppress delivery indefinitely.
+//
+// The repository already has this convention twice: weight.Effective clamps
+// a negative deltaDays to 0, and focus.AgeRamp's own comment names
+// "createdAt after now — clock skew, a backdated import". This gate follows
+// it, in the direction its own nil case already established.
+func TestLowEnergy_FutureReadingIsNotRecent(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+
+	for name, ahead := range map[string]time.Duration{
+		"a second ahead": time.Second,
+		"a year ahead":   365 * 24 * time.Hour,
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := &EnergyReading{Level: 0.1, RecordedAt: now.Add(ahead)}
+			if LowEnergy(r, now) {
+				t.Errorf("LowEnergy(recordedAt=%v ahead of now) = true — a reading from the "+
+					"future is not an observation of the present, and this gate suppresses "+
+					"delivery", ahead)
+			}
+		})
+	}
+}
+
+// TestMaxDigestDeferralsIsInsideItsDerivedBand is task 5.8: the band the
+// constant was chosen inside, asserted from both named constants rather
+// than restated in prose. More than one deferral, or anti-starvation is a
+// one-day delay wearing the name; strictly fewer than the load cooldown, or
+// an item can be silenced across exactly the window in which the load
+// watcher has stopped looking.
+//
+// Disclosed per m2a C9: both constants already exist, so there is no
+// missing-symbol red available for this check.
+func TestMaxDigestDeferralsIsInsideItsDerivedBand(t *testing.T) {
+	if MaxDigestDeferrals <= 1 {
+		t.Errorf("MaxDigestDeferrals = %d, want > 1 — at 1 or below, the care gate is a "+
+			"one-day delay and anti-starvation bounds nothing", MaxDigestDeferrals)
+	}
+	if MaxDigestDeferrals >= consolidation.LoadCooldownDays {
+		t.Errorf("MaxDigestDeferrals = %d, want < consolidation.LoadCooldownDays (%d) — an item "+
+			"suppressible for the whole cooldown could be silenced across exactly the window in "+
+			"which the load watcher will not re-open a state hypothesis",
+			MaxDigestDeferrals, consolidation.LoadCooldownDays)
+	}
+}
+
+// TestLowEnergyDigestSizeIsHalfFocusSize is task 5.9: the derivation, held
+// as a relation between two named constants so a recalibration of focus_size
+// carries it rather than silently diverging from the comment that claims it.
+//
+// Disclosed per m2a C9: both constants already exist, so no missing-symbol
+// red is available.
+func TestLowEnergyDigestSizeIsHalfFocusSize(t *testing.T) {
+	if want := focus.DefaultSize / 2; LowEnergyDigestSize != want {
+		t.Errorf("LowEnergyDigestSize = %d, want focus.DefaultSize/2 = %d — the derivation is "+
+			"the point, and a constant that drifts from it is an invented number",
+			LowEnergyDigestSize, want)
+	}
+	if LowEnergyDigestSize < 1 {
+		t.Errorf("LowEnergyDigestSize = %d — a low-energy digest that carries nothing is not a "+
+			"care gate, it is silence", LowEnergyDigestSize)
+	}
 }
