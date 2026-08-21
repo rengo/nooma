@@ -200,15 +200,27 @@ func assignTime(set func(*Classification, *time.Time)) func(json.RawMessage, *Cl
 // those arrive here as ReasonWrongType, not as a value this range check
 // ever sees — the same "no unreachable arm" discipline decode.go already
 // states for decodeEnum above.
+// It unmarshals into a *float64 rather than a float64 on purpose. An
+// explicit `"interrupt_level": null` is present, not absent — Salvage
+// stores any decodable value under its key — and json.Unmarshal accepts
+// null for a non-pointer destination without error, leaving the zero value
+// in place. Read into a float64, that turns "the model declined to answer"
+// into "the model claimed 0.0", with no Reason recorded to tell them apart.
+// Read into a *float64, null arrives as nil and degrades, which is what
+// §5.1's "a degraded weight is not a zero weight" requires and what doc 02
+// §7's NULL round trip depends on.
 func assignInterruptLevel(raw json.RawMessage, c *Classification, _ time.Time) Reason {
-	var f float64
+	var f *float64
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return ReasonWrongType
 	}
-	if f < 0 || f > 1 {
+	if f == nil {
+		return ReasonWrongType
+	}
+	if *f < 0 || *f > 1 {
 		return ReasonBadFormat
 	}
-	c.InterruptLevel = &f
+	c.InterruptLevel = f
 	return ""
 }
 
