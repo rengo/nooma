@@ -141,24 +141,62 @@ func assignEnum[T ~string](all func() []T, set func(*Classification, *T)) func(j
 	}
 }
 
+// Null handling across the rest of the table, recorded so it is not
+// rediscovered: decodeEnum and assignTime read an explicit null into a
+// non-pointer too, and both are safe for a reason neither states in its own
+// signature. decodeEnum leaves "", a member of no vocabulary in outcomes.go
+// or kind.go, so it degrades with ReasonUnknownEnum; assignTime leaves "",
+// which parses as neither RFC3339 nor 2006-01-02, so it degrades with
+// ReasonBadFormat. Neither can produce a claimed value, which is the failure
+// assignString, assignFloat and assignInterruptLevel each had. What both get
+// wrong is only the label — doc 02's rationale for ReasonWrongType is "null
+// is not the JSON type this field reads" — which makes an I12 rationale less
+// precise than it could be rather than miscoding a value, so it is written
+// down here instead of fixed by inventing a branch neither field needs.
 func assignString(set func(*Classification, *string)) func(json.RawMessage, *Classification, time.Time) Reason {
 	return func(raw json.RawMessage, c *Classification, _ time.Time) Reason {
-		var s string
+		// Into a *string, for the reason assignFloat gives below, and with a
+		// sharper consequence here: ToUnit refuses a classification whose
+		// NormalizedContent is nil (ErrNoContent), and a non-nil pointer to
+		// "" walks past that check into a persisted unit with empty content.
+		// The guard is correct; reading into a plain string let the defect in
+		// underneath it. doc 02 §5.1 calls this field's loss the one that is
+		// "not survivable downstream" — recall cannot reach a unit with no
+		// content — so a claimed empty string is the shape that guarantee
+		// most needs to exclude.
+		var s *string
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return ReasonWrongType
 		}
-		set(c, &s)
+		if s == nil {
+			return ReasonWrongType
+		}
+		set(c, s)
 		return ""
 	}
 }
 
 func assignFloat(set func(*Classification, *float64)) func(json.RawMessage, *Classification, time.Time) Reason {
 	return func(raw json.RawMessage, c *Classification, _ time.Time) Reason {
-		var f float64
+		// Into a *float64, not a float64. An explicit `"weight": null` is
+		// present rather than absent — Salvage stores any decodable value
+		// under its key — so the missing-field branch never runs, and
+		// json.Unmarshal accepts null for a non-pointer destination without
+		// error, leaving the zero value. Reading into a float64 and taking
+		// its address therefore yields a non-nil pointer to 0.0 with no
+		// Reason: a claimed zero the model never asked for, which is
+		// precisely the collapse Classification's pointer fields exist to
+		// prevent (§5.1: "a degraded weight is not a zero weight"). For
+		// decay_rate the cost is larger — a λ of 0 never decays, so §6's
+		// archiving pass can never reach the unit.
+		var f *float64
 		if err := json.Unmarshal(raw, &f); err != nil {
 			return ReasonWrongType
 		}
-		set(c, &f)
+		if f == nil {
+			return ReasonWrongType
+		}
+		set(c, f)
 		return ""
 	}
 }
