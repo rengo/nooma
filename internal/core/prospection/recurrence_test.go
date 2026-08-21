@@ -3,6 +3,7 @@ package prospection
 import (
 	"testing"
 	"time"
+	_ "time/tzdata"
 )
 
 var recLoc = time.FixedZone("UTC+2", 2*60*60)
@@ -245,4 +246,129 @@ func TestNextOccurrence_DegenerateAnchorStaysInsideItsMonth(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNextOccurrence_AdvancesPastMonthsAndYears covers the two steps the
+// clamp cases never reach, because each of those starts on the 1st and
+// finds its answer in the same month.
+//
+// Both are ordinary: a monthly reminder is asked about most often on a day
+// its anchor has already passed, and every December recurrence rolls into
+// the next year.
+func TestNextOccurrence_AdvancesPastMonthsAndYears(t *testing.T) {
+	tests := map[string]struct {
+		rule   Rule
+		anchor Anchor
+		after  time.Time
+		want   time.Time
+	}{
+		"monthly, this month's day already gone": {
+			rule:   RuleMonthly,
+			anchor: Anchor{Day: 5},
+			after:  recAt(2027, time.March, 20, 9),
+			want:   recAt(2027, time.April, 5, RecurrenceAnchorHour),
+		},
+		"monthly rolls December into January of the next year": {
+			rule:   RuleMonthly,
+			anchor: Anchor{Day: 15},
+			after:  recAt(2027, time.December, 20, 9),
+			want:   recAt(2028, time.January, 15, RecurrenceAnchorHour),
+		},
+		"monthly day 31 crossing December keeps the 31st": {
+			rule:   RuleMonthly,
+			anchor: Anchor{Day: 31},
+			after:  recAt(2027, time.December, 31, 23),
+			want:   recAt(2028, time.January, 31, RecurrenceAnchorHour),
+		},
+		"yearly, a December anchor already past": {
+			rule:   RuleYearly,
+			anchor: Anchor{Month: time.December, Day: 25},
+			after:  recAt(2027, time.December, 26, 9),
+			want:   recAt(2028, time.December, 25, RecurrenceAnchorHour),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := NextOccurrence(tt.rule, tt.anchor, tt.after)
+			if !got.Equal(tt.want) {
+				t.Errorf("NextOccurrence(%v, %+v, %v) = %v, want %v",
+					tt.rule, tt.anchor, tt.after, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNextOccurrence_RealZoneTransitions is design §8's two mandatory
+// fixtures, plus a fixed-offset control. tzdata is imported by this test
+// file only: the shipped binary must not carry it, because this repository
+// cross-compiles for Windows (ADR-0013).
+//
+// These are the zones that make RecurrenceAnchorHour a decision instead of
+// a preference, and the numbers below were read off the real database
+// rather than assumed:
+//
+//	America/Havana  2026-03-08 00:00 -> 2026-03-07 23:00  (the day before)
+//	America/Havana  2027-03-14 00:00 -> 2027-03-13 23:00  (the day before)
+//	Pacific/Apia    2011-12-30 00:00 -> 2011-12-29 00:00  (the day before)
+//	Pacific/Apia    2011-12-30 12:00 -> 2011-12-31 12:00  (the day after)
+//
+// At midnight both zones normalise BACKWARD, so an anniversary fires a day
+// EARLY — the failure mode this constant exists to avoid, because a
+// reminder that arrives before the thing it is about is not late, it is
+// wrong. At noon Havana is nowhere near its gap, and Apia — whose calendar
+// date genuinely does not exist — resolves forward, a day late, which is
+// recoverable.
+func TestNextOccurrence_RealZoneTransitions(t *testing.T) {
+	havana, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Fatalf("America/Havana: %v", err)
+	}
+	apia, err := time.LoadLocation("Pacific/Apia")
+	if err != nil {
+		t.Fatalf("Pacific/Apia: %v", err)
+	}
+
+	t.Run("Havana's spring-forward date keeps its own calendar day", func(t *testing.T) {
+		// Midnight on this date does not exist and rolls back to the 7th.
+		if midnight := time.Date(2026, time.March, 8, 0, 0, 0, 0, havana); midnight.Day() != 7 {
+			t.Fatalf("fixture is stale: 2026-03-08 00:00 in Havana resolved to day %d, want 7 — "+
+				"this test's whole premise is that it normalises backward", midnight.Day())
+		}
+
+		got := NextOccurrence(RuleYearly, Anchor{Month: time.March, Day: 8},
+			time.Date(2026, time.January, 1, 0, 0, 0, 0, havana))
+
+		if got.Day() != 8 || got.Month() != time.March {
+			t.Errorf("occurrence = %v, want 8 March — an anniversary must land on its own date, "+
+				"and at midnight this one would have landed on the 7th", got)
+		}
+	})
+
+	t.Run("Apia's non-existent date resolves forward, never backward", func(t *testing.T) {
+		if midnight := time.Date(2011, time.December, 30, 0, 0, 0, 0, apia); midnight.Day() != 29 {
+			t.Fatalf("fixture is stale: 2011-12-30 00:00 in Apia resolved to day %d, want 29",
+				midnight.Day())
+		}
+
+		got := NextOccurrence(RuleYearly, Anchor{Month: time.December, Day: 30},
+			time.Date(2011, time.December, 1, 0, 0, 0, 0, apia))
+
+		if got.Before(time.Date(2011, time.December, 30, 0, 0, 0, 0, apia)) {
+			t.Errorf("occurrence = %v, which precedes the anchor's own date — a date that does "+
+				"not exist must resolve forward, so the nudge is late rather than early", got)
+		}
+		if got.Day() != 31 {
+			t.Errorf("occurrence = %v, want 31 December — 30 December 2011 does not exist in "+
+				"this zone, and forward is the only safe answer", got)
+		}
+	})
+
+	t.Run("a fixed-offset zone is unaffected", func(t *testing.T) {
+		got := NextOccurrence(RuleYearly, Anchor{Month: time.March, Day: 8},
+			time.Date(2026, time.January, 1, 0, 0, 0, 0, recLoc))
+		if want := recAt(2026, time.March, 8, RecurrenceAnchorHour); !got.Equal(want) {
+			t.Errorf("control zone: occurrence = %v, want %v", got, want)
+		}
+	})
 }

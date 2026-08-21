@@ -464,7 +464,7 @@ spec R4.2 and R4.3 into one function.
 Independent; feeds PR 7. Ships `recurrence.go` — `NextOccurrence`, `Rule`, `Anchor`, 1 constant.
 I17 pure half.
 
-- [ ] **6.1** Commit 1 (RED): `internal/core/prospection/recurrence_test.go` — an ordinary anchor
+- [x] **6.1** Commit 1 (RED): `internal/core/prospection/recurrence_test.go` — an ordinary anchor
       (15 March / day 10) across several years/months as a sanity baseline (spec R5.1's own
       baseline); yearly `{Feb, 29}` evaluated from a leap year toward a non-leap year → **28 Feb**
       (design's clamp rule, chosen over Go's own `Mar 3` rollover and over "skip months lacking the
@@ -480,36 +480,36 @@ I17 pure half.
       Requirement: R5.1 — note: design's parameter is named `after`, spec's `firedAt`; kept as
       `after` per design's own stated reason (the caller may mean "the arming instant," not only
       "the last occurrence").
-- [ ] **6.2** Commit 2 (GREEN): implement `NextOccurrence` via `time.Date` with out-of-range day
+- [x] **6.2** Commit 2 (GREEN): implement `NextOccurrence` via `time.Date` with out-of-range day
       fields (never `AddDate`), clamping to the target month's last day.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R5.1; design §3.6.
-- [ ] **6.3** `recurrence_test.go` (continued) — the anchor-idempotence property: occurrence *N*
+- [x] **6.3** `recurrence_test.go` (continued) — the anchor-idempotence property: occurrence *N*
       re-derived from the anchor *N* times equals occurrence *N* computed directly — never
       "advance from the previous occurrence" (design's Rule 2, rejecting the drift bug where
       advancing 29 Feb by a year gives 28 Feb forever). Fixtures fix both the anchor and `after` as
       literals — no test computes a year from anything but a literal (design §12 Risk E).
       Requirement: design §3.6 (Rule 2); Risk E.
-- [ ] **6.4** `recurrence_test.go` (continued) — the two mandatory zone fixtures (design §8):
+- [x] **6.4** `recurrence_test.go` (continued) — the two mandatory zone fixtures (design §8):
       `America/Havana` (spring-forward at local midnight) and `Pacific/Apia` (2011-12-30 does not
       exist); a third fixed-offset zone as the control. `import _ "time/tzdata"` in the test file
       only (tzdata stays out of the shipped binary — this repo cross-compiles for Windows,
       ADR-0013).
       Requirement: design §3.6, §8; R5.1.
-- [ ] **6.5** `test/conformance/i17_recurrence_same_unit_test.go` (new) — I17's arithmetic half
+- [x] **6.5** `test/conformance/i17_recurrence_same_unit_test.go` (new) — I17's arithmetic half
       only (the "same unit" half is a caller obligation, spec R5.1's own scoping): every occurrence
       carries the anchor's own month/day, clamped, never the previous occurrence's.
       Requirement: R5.1 (I17 row, `docs/06-harness.md` §4).
-- [ ] **6.6** `docs/02-cognitive-core.md` §7 amendment: the clamp rule (never overflow, never skip)
+- [x] **6.6** `docs/02-cognitive-core.md` §7 amendment: the clamp rule (never overflow, never skip)
       and the anchor-idempotence rule (always re-derive, never advance from the previous
       occurrence).
       Requirement: design §3.6.
-- [ ] **6.7** §13: new row `recurrence_anchor_hour` (12, derived — local noon; midnight rejected
+- [x] **6.7** §13: new row `recurrence_anchor_hour` (12, derived — local noon; midnight rejected
       because a DST gap can normalise it onto the previous calendar date).
       Requirement: R0; design §3.6.
-- [ ] **6.8** Purity/lint: `golangci-lint run`.
+- [x] **6.8** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/recurrence{,_test}.go`,
       `test/conformance/i17_recurrence_same_unit_test.go`, `docs/02-cognitive-core.md`. Target
       ≤350 impl+docs lines.

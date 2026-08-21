@@ -781,6 +781,16 @@ have N nudges; a pattern watcher does not hang off any unit):
 - **Recurrence**: `recurrence_rule` (`yearly` | `monthly`) + `recurrence_anchor`
   (`{month, day}`). On firing, the next one is created automatically pointing at the SAME
   source unit — memory is not duplicated, only the nudge is re-armed.
+  The next occurrence is **always re-derived from the anchor**, never advanced from the previous
+  one, and a day the target month does not have **clamps to that month's last** rather than
+  overflowing into the next. The two rules hold each other up: 29 February advanced by a year is
+  28 February, and advancing *that* is 28 February forever, so the anniversary drifts off its own
+  date after one leap cycle — and a day-31 monthly reminder does the same after its first
+  February. Re-deriving makes occurrence *N* the same instant however many times the trigger has
+  re-armed, which is what lets re-arming be a pure function of `(rule, anchor, now)` rather than
+  of the trigger's own history. Skipping the months that lack the day is rejected for the obvious
+  reason: a day-31 reminder would fire seven times a year and never in February.
+  Occurrences land at `recurrence_anchor_hour` local, which is deliberately not midnight.
 - **Lead time**: default 7 days before the event, stored in `payload.lead_days` (the re-arm
   propagates it). Policy per event class; migrating it to a self-model preference is a
   deferred decision.
@@ -976,6 +986,7 @@ module):
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`internal/core/prospection.PushThreshold`) | 0.70 — `interrupt_level >= this value` routes to push (R3.2), inclusive; gains a constant here, value unchanged |
 | `default_interrupt_level` (`internal/core/prospection.DefaultInterruptLevel`) | 0.0 — fills a degraded or out-of-range `interrupt_level`; behaviourally inert below the push threshold, chosen so an audit reads "no claim was made" (design §3.4) |
+| `recurrence_anchor_hour` (`internal/core/prospection.RecurrenceAnchorHour`) | 12 — derived: the local wall clock a recurring occurrence lands on. Not midnight, because a DST gap there normalises *backward* onto the previous calendar date (`internal/core/consolidation.NextDailyRun` records Havana mapping local 00:00 to 23:00 the previous evening), which would nudge an anniversary a day early once a year. Noon clears every transition shorter than twelve hours, and the only known longer ones delete the whole calendar date |
 | `digest_hour` (`internal/core/prospection.DigestHour`) | 7 — the local hour the daily digest becomes due (owner ruling 2). Equals `quiet_hours_end_hour` today and is deliberately a separate knob: one is a delivery window's edge, the other a cadence. The asserted relation is `digest_hour >= quiet_hours_end_hour`, not their equality |
 | `low_energy_max` (`internal/core/prospection.LowEnergyMax`) | 0.5 — chosen: `energy` is declared on [0,1] with no calibration data behind it, and the midpoint is the only point on such a scale that is not an invention. The comparison is strict, because the gate suppresses delivery |
 | `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
