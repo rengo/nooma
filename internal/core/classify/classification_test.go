@@ -80,3 +80,71 @@ func TestDecode_InterruptLevel(t *testing.T) {
 }
 
 func ptr(f float64) *float64 { return &f }
+
+// TestDecode_RecurrenceRule covers design §3.8's second field: a decoded,
+// closed-vocabulary "yearly | monthly", not opaque structured_data (doc 02
+// §5.1: "structured_data ... is opaque to the brain and stays opaque"). It
+// is optional exactly like the six orthogonal fields, and degrades exactly
+// as they do: a value outside the vocabulary is ReasonUnknownEnum, not a
+// new Reason.
+func TestDecode_RecurrenceRule(t *testing.T) {
+	tests := map[string]struct {
+		payload string
+		want    *RecurrenceRule
+		reason  Reason // "" means no degradation reported for this field
+	}{
+		"absent": {
+			payload: `{"type":"recurring_reminder","normalized_content":"water the plants","weight":0.5,"decay_rate":0.02}`,
+			want:    nil,
+			reason:  "",
+		},
+		"present, yearly": {
+			payload: `{"type":"recurring_reminder","normalized_content":"mom's birthday","weight":0.5,"decay_rate":0.02,"recurrence_rule":"yearly"}`,
+			want:    recurrenceRulePtr(RecurrenceRuleYearly),
+			reason:  "",
+		},
+		"present, monthly": {
+			payload: `{"type":"recurring_reminder","normalized_content":"pay rent","weight":0.5,"decay_rate":0.02,"recurrence_rule":"monthly"}`,
+			want:    recurrenceRulePtr(RecurrenceRuleMonthly),
+			reason:  "",
+		},
+		"present, unknown enum": {
+			payload: `{"type":"recurring_reminder","normalized_content":"water the plants","weight":0.5,"decay_rate":0.02,"recurrence_rule":"weekly"}`,
+			want:    nil,
+			reason:  ReasonUnknownEnum,
+		},
+		"present, wrong type": {
+			payload: `{"type":"recurring_reminder","normalized_content":"water the plants","weight":0.5,"decay_rate":0.02,"recurrence_rule":12}`,
+			want:    nil,
+			reason:  ReasonWrongType,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			c, err := Decode(tc.payload, testNow)
+			if err != nil {
+				t.Fatalf("Decode error = %v, want nil", err)
+			}
+
+			if tc.reason == "" {
+				for _, d := range c.Degradations {
+					if d.Field == "recurrence_rule" {
+						t.Fatalf("recurrence_rule degraded with %q, want no degradation at all", d.Reason)
+					}
+				}
+			} else {
+				assertOnlyDegraded(t, c, "recurrence_rule", tc.reason)
+			}
+
+			switch {
+			case tc.want == nil && c.RecurrenceRule != nil:
+				t.Errorf("RecurrenceRule = %v, want nil", *c.RecurrenceRule)
+			case tc.want != nil && (c.RecurrenceRule == nil || *c.RecurrenceRule != *tc.want):
+				t.Errorf("RecurrenceRule = %v, want %v", c.RecurrenceRule, *tc.want)
+			}
+		})
+	}
+}
+
+func recurrenceRulePtr(r RecurrenceRule) *RecurrenceRule { return &r }

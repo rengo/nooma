@@ -49,6 +49,13 @@ type Classification struct {
 	// this struct.
 	InterruptLevel *float64 // doc 02 §7, [0,1]
 
+	// RecurrenceRule is prospection's other capture field — doc 02 §7's
+	// closed vocabulary as classify decodes it, not opaque structured_data
+	// (§5.1: "structured_data ... is opaque to the brain and stays
+	// opaque"). It is classify's own vocabulary, never *prospection.Rule
+	// (see RecurrenceRule's own doc comment below).
+	RecurrenceRule *RecurrenceRule
+
 	// Degradations records what was lost and why, in fieldSpecs' order. It
 	// exists because I12 requires internal/brain to write a rationale into
 	// decision_log: a decoder that discarded *why* a field vanished would
@@ -84,4 +91,33 @@ const (
 type Degradation struct {
 	Field  string
 	Reason Reason
+}
+
+// RecurrenceRule is doc 02 §7's recurrence vocabulary as classify decodes
+// it. It is declared here, beside the field that carries it, rather than in
+// outcomes.go — it is a capture field, not one of that file's six orthogonal
+// resolutions — in exactly the shape outcomes.go uses for each of those six:
+// a ~string type, its members, and an AllX() the decoder matches against.
+// There is deliberately no ParseX; decodeEnum serves all of them (design
+// D11 point 2).
+//
+// It is classify's own type, never *prospection.Rule: internal/core/
+// prospection imports internal/core/classify (design.md §4), so the
+// reverse — a classify field typed from prospection — would be the import
+// cycle Go refuses to compile (m3a-prospection Finding F3). PR 7's
+// prospection.Arm converts one vocabulary into the other at its own call
+// site, on the legal side of that edge; nothing is lost across it, since a
+// recurrence_rule classify could not decode is already nil and already
+// means "no recurrence was claimed".
+type RecurrenceRule string
+
+const (
+	RecurrenceRuleYearly  RecurrenceRule = "yearly"
+	RecurrenceRuleMonthly RecurrenceRule = "monthly"
+)
+
+// AllRecurrenceRules returns a fresh slice of the RecurrenceRule vocabulary,
+// in doc 02's declared order — the closed set decodeEnum matches against.
+func AllRecurrenceRules() []RecurrenceRule {
+	return []RecurrenceRule{RecurrenceRuleYearly, RecurrenceRuleMonthly}
 }
