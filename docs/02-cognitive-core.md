@@ -794,7 +794,24 @@ box can audit it):
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery (anti-starvation).
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
-    layer picks the words. Urgent push is NOT softened.
+    layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
+    one exemption to the softening above.
+
+**Degradation** (owner ruling 1; `internal/core/prospection.ResolveInterrupt`,
+`Interrupt.Route`): classify emits `interrupt_level` per message. A `NULL` or unparseable
+reading — absent, non-finite, or outside `[0,1]` — resolves to `default_interrupt_level` (0.0,
+`internal/core/prospection.DefaultInterruptLevel`), never clamped: clamping a corrupt 1.7 to 1.0
+would manufacture a push out of a number core cannot vouch for. The resolution itself is marked
+degraded, a fact `Interrupt` carries separately from the level it resolved to — not an invented
+sentinel weight (§5.1's own warning against reading a degraded number as a claimed zero). **A
+degraded classification never produces a push**, structurally rather than arithmetically:
+`Interrupt.Route()` checks the degraded flag before comparing the level against the push
+threshold, so the guarantee survives a future recalibration of either number, and even a
+forgotten resolution — an `Interrupt` nobody explicitly built — still cannot reach push. `brain`
+persists `triggers.interrupt_level` as `NULL` exactly when the resolution degraded, and as the
+claimed float otherwise; the round trip is exact in both directions, so an auditor reading the
+glass box can always tell a claimed 0.0 from an absent reading. This is `m3a`'s contract to
+state; `m3b` implements the store-layer round trip.
 
 **Pattern watchers buildable from day one**:
 
@@ -927,7 +944,8 @@ module):
 | `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — `config.goal_stagnation_days` is this knob's one schema home for the whole of M2; `ports.ConfigRepo` reads it, never `calibration`'s own generic key/value row (`m2c` spec R2.5, discharging `m2b design.md` §9 Q3). `calibration` stays unused through `m2c`, verified by a source-tree scan (`test/conformance`); it remains reserved for M5's learning module to write arbitrary future per-user knobs that have no dedicated `config` column |
 | `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
-| Push threshold (`interrupt_level`) | 0.70 |
+| Push threshold (`internal/core/prospection.PushThreshold`) | 0.70 — `interrupt_level >= this value` routes to push (R3.2), inclusive; gains a constant here, value unchanged |
+| `default_interrupt_level` (`internal/core/prospection.DefaultInterruptLevel`) | 0.0 — fills a degraded or out-of-range `interrupt_level`; behaviourally inert below the push threshold, chosen so an audit reads "no claim was made" (design §3.4) |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
 | Event lead time | 7 days |

@@ -237,7 +237,7 @@ Independent of PR 1/2/4. Ships `delivery.go` — `Interrupt`, `ResolveInterrupt`
 constants. See **Finding F2**: this PR ships design's opaque `Interrupt` type, not spec's bare
 `ResolveInterruptLevel`/`DecideDelivery` pair.
 
-- [ ] **3.1** Commit 1 (RED): `internal/core/prospection/delivery_test.go` — `ResolveInterrupt`:
+- [x] **3.1** Commit 1 (RED): `internal/core/prospection/delivery_test.go` — `ResolveInterrupt`:
       `nil` → `{DefaultInterruptLevel, degraded: true}`; `NaN`/`+Inf`/`-Inf`/`-0.1`/`1.1` → the same
       degraded default (five shapes, individually — spec R3.1's own enumeration); an in-range value
       passes through non-degraded; the zero value `Interrupt{}` also reports `Degraded() == true`
@@ -249,11 +249,11 @@ constants. See **Finding F2**: this PR ships design's opaque `Interrupt` type, n
       bool }`; `func ResolveInterrupt(level *float64) Interrupt { return Interrupt{} }` — compiles;
       the `nil` case fails first (C14 guard).
       Requirement: R3.1, resolved per **Finding F2**.
-- [ ] **3.2** Commit 2 (GREEN): implement `ResolveInterrupt` — `nil`, non-finite, or outside
+- [x] **3.2** Commit 2 (GREEN): implement `ResolveInterrupt` — `nil`, non-finite, or outside
       `[0,1]` → `{DefaultInterruptLevel, true}`; else → `{level, false}`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R3.1; design §3.4.
-- [ ] **3.3** Commit 1 (RED): `delivery_test.go` (continued) — `Route()`: a degraded `Interrupt` →
+- [x] **3.3** Commit 1 (RED): `delivery_test.go` (continued) — `Route()`: a degraded `Interrupt` →
       `RouteDigest` regardless of `level`, even a corrupt level far above `PushThreshold`; `level ==
       PushThreshold` exactly → `RoutePush` (spec R3.2's inclusive boundary); one ulp below →
       `RouteDigest`; `1.0` → `RoutePush`; the composed scenario `ResolveInterrupt(nil).Route()` →
@@ -262,29 +262,29 @@ constants. See **Finding F2**: this PR ships design's opaque `Interrupt` type, n
       Stub: the two `Route` consts; `func (i Interrupt) Route() Route { return RoutePush }` —
       compiles; the degraded-always-digest case fails first.
       Requirement: R3.2.
-- [ ] **3.4** Commit 2 (GREEN): implement `Route()` — degraded short-circuit first, then `level >=
+- [x] **3.4** Commit 2 (GREEN): implement `Route()` — degraded short-circuit first, then `level >=
       PushThreshold`.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R3.2; design §3.4.
-- [ ] **3.5** `delivery_test.go` (continued) — `Level()`/`Degraded()` accessor round-trip for every
+- [x] **3.5** `delivery_test.go` (continued) — `Level()`/`Degraded()` accessor round-trip for every
       constructed `Interrupt`; an in-package structural assertion that `Interrupt`'s fields are
       unexported, so no caller outside this package can construct a non-degraded `Interrupt` with an
       out-of-range level.
       **Not a missing-symbol red**: `Level`/`Degraded` already compile (task 3.2) — disclosed per
       `m2a` C9.
       Requirement: design §3.4 (the type-safety argument).
-- [ ] **3.6** `docs/02-cognitive-core.md` §7 amendment: the degradation path (a degraded
+- [x] **3.6** `docs/02-cognitive-core.md` §7 amendment: the degradation path (a degraded
       classification never produces a push); the NULL↔degraded round trip `brain` must persist
       (`m3a`'s contract to state, `m3b`'s to implement); the tone exemption (`Route() == RoutePush`
       is the "urgent push is NOT softened" exemption).
       Requirement: design §3.4.
-- [ ] **3.7** §13: row 912 (`Push threshold`) amended with `prospection.PushThreshold`; new row
+- [x] **3.7** §13: row 912 (`Push threshold`) amended with `prospection.PushThreshold`; new row
       `default_interrupt_level` (0.0, chosen — "no claim was made," behaviourally inert below the
       push threshold).
       Requirement: R0; design §3.4.
-- [ ] **3.8** Purity/lint: `golangci-lint run`.
+- [x] **3.8** Purity/lint: `golangci-lint run`.
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/delivery{,_test}.go`, `docs/02-cognitive-core.md`. Target ≤300
       impl+docs lines.
 
@@ -658,3 +658,36 @@ before apply.
 - **F7 — `internal/core/classify` inside `m3a`.** `spec.md`'s scope box and R3.1 declared the
   package out of scope while PR 4 ships it. `spec.md` was corrected; the task list, which already
   carried PR 4 in full, did not change.
+
+---
+
+## Reconciliation note — 2026-08-20 (F8, found at apply time)
+
+**F8 — `Interrupt`'s degraded field is inverted from the design's snippet.** `design.md` §3.4's
+illustrative Go declares `type Interrupt struct { level float64; degraded bool }`, and this
+document's own task 3.1 stub repeats it. PR 3 ships `confirmed bool` instead, with
+`Degraded()` returning `!confirmed`. Recorded here because F1-F7 set the convention that a
+deviation from a planning artifact is written down, not just implemented.
+
+**Why the inversion.** With `degraded bool`, an `Interrupt` that never passed through
+`ResolveInterrupt` reports `Degraded() == false` — it claims a provenance it does not have.
+Three consequences, of which only the first is harmless:
+
+1. *Routing is unaffected.* A zero-value `Interrupt{}` carries `level == 0.0`, below
+   `PushThreshold`, so it routes to the digest under either polarity. Judgment Day's first judge
+   verified this and was right to.
+2. *An in-package literal is not.* `Interrupt{level: 0.9}` written by hand reports itself
+   non-degraded and routes to **push**, having never been validated. Today `prospection` is one
+   author's package; PRs 5 and 7 add files to it.
+3. *The audit trail is not.* `Degraded()` does not only feed routing — doc 02 §7, as amended by
+   this same PR, makes it decide persistence: `brain` writes `triggers.interrupt_level` as `NULL`
+   exactly when the resolution degraded. Under the old polarity a forgotten resolution would
+   persist `0.0` as a **claimed** value, which is the precise distinction §5.1 warns about ("a
+   degraded weight is not a zero weight") written into the database.
+
+With `confirmed bool`, `confirmed` is set only inside `ResolveInterrupt` on a validated in-range
+value, so the zero value and every hand-written literal are degraded by construction. The
+property the design stated is preserved; only the field expressing it changed.
+
+**F8's own scope note.** This is not a correction to `design.md` §3.4's decision — that decision
+is implemented faithfully. It corrects the snippet that illustrated it.
