@@ -790,7 +790,13 @@ have N nudges; a pattern watcher does not hang off any unit):
   re-armed, which is what lets re-arming be a pure function of `(rule, anchor, now)` rather than
   of the trigger's own history. Skipping the months that lack the day is rejected for the obvious
   reason: a day-31 reminder would fire seven times a year and never in February.
-  Occurrences land at `recurrence_anchor_hour` local, which is deliberately not midnight.
+  Occurrences land at `recurrence_anchor_hour` local, which is deliberately not midnight. How many
+  days a month has is read from the calendar, never from the user's zone: a zone that deleted the
+  very day being looked up would otherwise report the wrong length — Pacific/Kiritimati skipped
+  1994-12-31, so asking it for December's last day answers "the 1st", and every anchor above the
+  first would clamp there. An anchor whose month or day is out of range is clamped into range
+  rather than normalised, because normalising moves the occurrence into a month, or a year, the
+  user never named.
 - **Lead time**: default 7 days before the event, stored in `payload.lead_days` (the re-arm
   propagates it). Policy per event class; migrating it to a self-model preference is a
   deferred decision.

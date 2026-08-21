@@ -89,9 +89,31 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 // which time.Date normalises backwards to the previous month's last — the
 // one normalisation this file uses on purpose, because it is exact for every
 // month and leap year and needs no table.
+//
+// The probe runs in UTC, deliberately, and this is not an optimisation. How
+// many days a month has is a property of the calendar, not of a zone, and
+// asking a zone is wrong wherever that zone deleted the very day being
+// looked up: Pacific/Kiritimati skipped 1994-12-31, so a zone-local probe
+// for December 1994 normalises forward into January and reports 1. Every
+// anchor above the first would then clamp to the first — a 25 December
+// anniversary firing on 1 December, silently, in one zone. Only the
+// resulting date is built in the caller's location.
 func clampedDate(year int, month time.Month, day int, loc *time.Location) time.Time {
+	// Month is clamped for the reason Day is, and the cost is higher: the
+	// zero Anchor carries month 0, which time.Date normalises BACKWARD into
+	// December of the PREVIOUS YEAR — an anniversary landing in a year the
+	// user never named. Clamped into [January, December] before anything
+	// reads it, so a degenerate anchor stays a wrong day rather than
+	// becoming a wrong year.
+	if month < time.January {
+		month = time.January
+	}
+	if month > time.December {
+		month = time.December
+	}
+
 	ny, nm := nextMonth(year, month)
-	last := time.Date(ny, nm, 0, RecurrenceAnchorHour, 0, 0, 0, loc).Day()
+	last := time.Date(ny, nm, 0, RecurrenceAnchorHour, 0, 0, 0, time.UTC).Day()
 
 	// Clamped at both ends, because both ends are reachable.
 	//

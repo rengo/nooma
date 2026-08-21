@@ -242,6 +242,18 @@ func TestNextOccurrence_DegenerateAnchorStaysInsideItsMonth(t *testing.T) {
 			anchor: Anchor{Month: time.June, Day: 99},
 			want:   recAt(2027, time.June, 30, RecurrenceAnchorHour),
 		},
+		// Month has the same shape as Day and the same reachability: the
+		// zero Anchor carries month 0, which time.Date normalises BACKWARD
+		// into December of the previous year — an anniversary landing in a
+		// year the user never named, which is worse than the wrong day.
+		"month zero is January": {
+			anchor: Anchor{Month: 0, Day: 15},
+			want:   recAt(2028, time.January, 15, RecurrenceAnchorHour),
+		},
+		"a month past December is December": {
+			anchor: Anchor{Month: time.Month(14), Day: 15},
+			want:   recAt(2027, time.December, 15, RecurrenceAnchorHour),
+		},
 	}
 
 	for name, tt := range tests {
@@ -252,9 +264,13 @@ func TestNextOccurrence_DegenerateAnchorStaysInsideItsMonth(t *testing.T) {
 					"function cannot honour must stay inside the month it names",
 					tt.anchor, after, got, tt.want)
 			}
-			if got.Month() != tt.anchor.Month {
-				t.Errorf("occurrence landed in %v, want %v — a degenerate day must never move "+
-					"the occurrence into another month", got.Month(), tt.anchor.Month)
+			if got.Month() != tt.want.Month() {
+				t.Errorf("occurrence landed in %v, want %v — a degenerate anchor must never "+
+					"move the occurrence into another month or another year",
+					got.Month(), tt.want.Month())
+			}
+			if got.Year() != tt.want.Year() {
+				t.Errorf("occurrence landed in %d, want %d", got.Year(), tt.want.Year())
 			}
 		})
 	}
