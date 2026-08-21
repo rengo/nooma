@@ -1,0 +1,12 @@
+{
+  "id": "recurring-reminder-moms-birthday",
+  "input": "remind me every year on August 20th that it's mom's birthday",
+  "expected": {
+    "type": "recurring_reminder",
+    "normalized_content": "Mom's birthday",
+    "weight": 0.8,
+    "decay_rate": 0.01,
+    "event_at": "2026-08-20",
+    "recurrence_rule": "yearly"
+  }
+}
