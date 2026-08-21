@@ -176,6 +176,26 @@ The finding worth carrying past this change: the sweep caught it because it is e
 the shape design §3.5 explicitly warned against — would have contained only the cells someone
 thought of, and every one of those cells armed successfully.
 
+**G15 — PR 5a came in at 254 implementation-and-docs lines against its ~340 budget, so design §7's
+pre-drawn ninth PR (`feat/brain-due-scan-timers`) is NOT taken.** Reported before not-splitting,
+per the house convention owner ruling R6 asks for: the trigger/timer split was named as a
+contingency to fire only if the measurement threatened 400, and it did not come close. The runner
+is smaller than budgeted because it delegates every decision — no staleness arithmetic, no
+quiet-hours logic and no boundary lives in `internal/brain/check.go`.
+
+**G16 — an overdue trigger inside quiet hours is DEFERRED, not expired, and no artifact says so.**
+`verdict` evaluates quiet hours before staleness deliberately (`staleness.go`'s own step 2: "an item
+is never declared stale during a window in which it was refused delivery"), so a trigger six hours
+overdue at 06:00 returns `VerdictDefer`, writes nothing, stays `armed`, and expires on the first
+pass after the window ends. Neither spec R5.3, design §3.3 nor doc 02 §7 stated the interaction —
+each described I15 and I16 separately. **Found by sweeping the whole overdue window rather than
+sampling it**: task 5a.4's own text ("expired past the window and never fired at any swept
+instant") would have been false as literally written, and a single sampled overdue instant outside
+the window would have passed while hiding the rule. The behavioural test now makes two claims over
+two domains — outside quiet hours an overdue trigger expires; at every overdue instant, window or
+not, it never fires — and doc 02 §7 states the interaction. This is a documentation gap being
+closed, not a behaviour change: `prospection` already worked this way and `m3a` tested it at L1.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -514,14 +534,14 @@ Depends on PR 1+2. **Finding G1's own correction governs this PR's action count 
 four due-scan `DecisionAction` members ship here (`check.trigger.expired`, `check.timer.fired`,
 `check.timer.cancelled`, `check.conflict_skipped` — `check.trigger.fired` has no producer in `m3b`).
 
-- [ ] **5a.1** Commit 1: `internal/core/prospection/staleness.go` — add `AllVerdicts() []Verdict`
+- [x] **5a.1** Commit 1: `internal/core/prospection/staleness.go` — add `AllVerdicts() []Verdict`
       (four members, declared order — the `AllKinds`/`AllDecisionActions`/`AllCaptureOutcomes`
       pattern, twelve lines). **G3**: the one `internal/core` line in `m3b`, against R0's literal
       text; resolved because this states no new decision (§3.3 layer 3's own completeness accessor).
       Ships with its own inline existence check (`len(AllVerdicts()) == 4`) — the trivial-red case
       `m2a` C9 covers.
       Requirement: design §3.3 (layer 3); **G3**.
-- [ ] **5a.2** Commit 2 (RED): `internal/brain/check_test.go` — `triggerTransition`/`timerTransition`,
+- [x] **5a.2** Commit 2 (RED): `internal/brain/check_test.go` — `triggerTransition`/`timerTransition`,
       **iterated over `prospection.AllVerdicts()`**, never a hand-written switch: `VerdictPending`→
       `(_, false)` both; `VerdictDefer`→`(_, false)` trigger, and `timerTransition(VerdictDefer)`
       (the unreachable case per `TimerVerdict`) still returns a defined `(_, false)` rather than
@@ -534,7 +554,7 @@ four due-scan `DecisionAction` members ship here (`check.trigger.expired`, `chec
       **Mutation**: hand-write the test's own four-case switch instead of iterating `AllVerdicts()`
       — a fifth `Verdict` added later to `staleness.go` compiles and is silently unchecked by a
       hand-written switch; the iterated test's fifth loop pass fails on the undefined mapping.
-- [ ] **5a.3** Commit 3 (GREEN): implement `triggerTransition`/`timerTransition` per the corrected
+- [x] **5a.3** Commit 3 (GREEN): implement `triggerTransition`/`timerTransition` per the corrected
       table; implement `CheckService`/`checkRunner` mirroring `ConsolidateService`'s split (one
       `ports.Clock` on `CheckService`, clockless `checkRunner.at(ctx, now)`); pipeline **per §3.6 as
       corrected by G1**: trigger `Stale`→`Expire`+`check.trigger.expired`; trigger
@@ -542,26 +562,26 @@ four due-scan `DecisionAction` members ship here (`check.trigger.expired`, `chec
       timer `Deliver`→`Fire`+`check.timer.fired`; timer `Pending`→no write, no row.
       Verify: `go test ./internal/brain/...`.
       Requirement: R5.1, R5.2, R5.3; design §3.3 (corrected), §3.6 (corrected, **G1**).
-- [ ] **5a.4** `test/conformance/i15_trigger_expires_not_fires_test.go` (extend, behavioural half) —
+- [x] **5a.4** `test/conformance/i15_trigger_expires_not_fires_test.go` (extend, behavioural half) —
       a trigger swept across the staleness window through a real `checkRunner.at` over `memrepo`
       fakes: `expired` past the window and **never** `fired` at any swept instant.
       Requirement: R5.3 (I15 behavioural half).
       **Mutation**: route `VerdictStale`→`Fire` instead of `Expire` — the sweep fails at every
       instant past the window, not only at one sampled point.
-- [ ] **5a.5** `test/conformance/check_effect_completeness_test.go` (new, I12 both directions) — for
+- [x] **5a.5** `test/conformance/check_effect_completeness_test.go` (new, I12 both directions) — for
       every `Verdict` **iterated via `AllVerdicts()`** crossed with {trigger, timer}: a writing
       outcome (`Stale`, timer-`Deliver`) writes **exactly one** row; a non-writing outcome
       (`Pending`, `Defer`, trigger-`Deliver`) writes **zero** — I12's symmetric half.
       Requirement: R5.1–R5.3; I12.
       **Mutation**: any branch writing a row for `VerdictDefer` or trigger-`VerdictDeliver` — caught
       by the zero-row assertion on exactly those cells.
-- [ ] **5a.6** `docs/02-cognitive-core.md` §7 amendment: the due-scan's shape (one clock read,
+- [x] **5a.6** `docs/02-cognitive-core.md` §7 amendment: the due-scan's shape (one clock read,
       delegates every decision to `m3a`'s gates); the corrected trigger-`Deliver` behavior (**F1**:
       stays armed, no row — nothing in `m3b` can surface a fired trigger); `AllVerdicts()` as the
       completeness accessor.
       Requirement: R0 (this PR's `internal/core` touch, **G3** — same-PR delta per the ordering rule);
       design §3.3, §3.6.
-- [ ] **5a.7** `test/integration/due_scan_status_vocabulary_test.go` (new, L3, Risk A's own
+- [x] **5a.7** `test/integration/due_scan_status_vocabulary_test.go` (new, L3, Risk A's own
       mitigation) — after a scan over a real migrated vault seeded with fixtures across every
       `Verdict`, `SELECT DISTINCT status FROM triggers` and `FROM timers` return only members of
       `AllTriggerStatuses()`/`AllTimerStatuses()` — the constraint the schema does not carry (§1,
@@ -570,9 +590,9 @@ four due-scan `DecisionAction` members ship here (`check.trigger.expired`, `chec
       **Mutation**: map `VerdictStale`→`"stale"` in `triggerTransition` instead of
       `TriggerStatusExpired` — every other test in the suite stays green; only this L3 test fails,
       exactly the RED design names as the one to watch.
-- [ ] **5a.8** Purity/lint: `golangci-lint run` (`brain-boundary` — one `Now()` in `check.go`).
+- [x] **5a.8** Purity/lint: `golangci-lint run` (`brain-boundary` — one `Now()` in `check.go`).
       Requirement: `docs/06-harness.md`'s single-clock-read rule.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/staleness{,_test}.go`, `internal/brain/check{,_test}.go`,
       `test/conformance/{i15_trigger_expires_not_fires,check_effect_completeness}_test.go`,
       `test/integration/due_scan_status_vocabulary_test.go`, `docs/02-cognitive-core.md`. Target
