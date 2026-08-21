@@ -1,6 +1,11 @@
 package prospection
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"go/types"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,37 +215,87 @@ func TestArm(t *testing.T) {
 		}
 	})
 
-	t.Run("nothing is armed, and the two reasons are distinguishable", func(t *testing.T) {
-		cases := map[string]classify.Classification{
+	t.Run("nothing is armed, and each refusal says which one it was", func(t *testing.T) {
+		// Spec R6.1 requires the causes to be distinguishable, not merely
+		// for all of them to arm nothing: m3b writes decision_log from this
+		// plan, so a refusal that cannot say why is a hole in the glass box.
+		// An undated event is a decoding failure worth surfacing; a chitchat
+		// capture arming nothing is the system working correctly. Collapsing
+		// the two makes the first invisible.
+		cases := map[string]struct {
+			c       classify.Classification
+			wantWhy Refusal
+		}{
 			"a kind that arms nothing": {
-				Kind: kind(classify.KindTask), DueAt: armPtr(at(time.June, 20)),
+				c:       classify.Classification{Kind: kind(classify.KindTask), DueAt: armPtr(at(time.June, 20))},
+				wantWhy: RefusalKindNotArming,
 			},
 			"an undated event": {
-				Kind: kind(classify.KindEvent),
+				c:       classify.Classification{Kind: kind(classify.KindEvent)},
+				wantWhy: RefusalNoDate,
 			},
 			"an event already over": {
-				Kind: kind(classify.KindEvent), EventAt: armPtr(at(time.May, 1)),
+				c:       classify.Classification{Kind: kind(classify.KindEvent), EventAt: armPtr(at(time.May, 1))},
+				wantWhy: RefusalAlreadyPast,
 			},
 			"a timer already due": {
-				Kind: kind(classify.KindTimer), DueAt: armPtr(at(time.May, 1)),
+				c:       classify.Classification{Kind: kind(classify.KindTimer), DueAt: armPtr(at(time.May, 1))},
+				wantWhy: RefusalAlreadyPast,
+			},
+			"a timer with no due_at": {
+				c:       classify.Classification{Kind: kind(classify.KindTimer)},
+				wantWhy: RefusalNoDate,
 			},
 			"a recurring reminder with no date": {
-				Kind:           kind(classify.KindRecurringReminder),
-				RecurrenceRule: armPtr(classify.RecurrenceRuleMonthly),
+				c: classify.Classification{
+					Kind:           kind(classify.KindRecurringReminder),
+					RecurrenceRule: armPtr(classify.RecurrenceRuleMonthly),
+				},
+				wantWhy: RefusalNoDate,
 			},
-			"no kind at all": {},
+			"no kind at all": {
+				c:       classify.Classification{},
+				wantWhy: RefusalNoKind,
+			},
 		}
 
-		for name, c := range cases {
+		seen := map[Refusal]int{}
+		for name, tc := range cases {
 			t.Run(name, func(t *testing.T) {
-				plan, ok := Arm(c, now)
+				plan, ok := Arm(tc.c, now)
 				if ok {
 					t.Errorf("Arm = (%+v, true), want false", plan)
 				}
 				if plan.What != ArmNothing {
 					t.Errorf("What = %q, want %q", plan.What, ArmNothing)
 				}
+				if plan.Why != tc.wantWhy {
+					t.Errorf("Why = %q, want %q — different causes must be auditable apart, "+
+						"since m3b's decision_log write consumes this field", plan.Why, tc.wantWhy)
+				}
 			})
+			seen[tc.wantWhy]++
+		}
+
+		// The property behind the table: the refusals are genuinely several
+		// values. A Why that always returned one constant would satisfy any
+		// single row above.
+		if len(seen) < 4 {
+			t.Errorf("the fixtures cover only %d distinct refusals (%v); the point of the field "+
+				"is that causes differ", len(seen), seen)
+		}
+	})
+
+	t.Run("an armed plan carries no refusal", func(t *testing.T) {
+		plan, ok := Arm(classify.Classification{
+			Kind: kind(classify.KindEvent), EventAt: armPtr(at(time.June, 20)),
+		}, now)
+		if !ok {
+			t.Fatal("Arm returned false for a dated event")
+		}
+		if plan.Why != RefusalNone {
+			t.Errorf("Why = %q on an armed plan, want %q — the field answers why NOT, and a "+
+				"plan that armed something has no answer to give", plan.Why, RefusalNone)
 		}
 	})
 
@@ -402,5 +457,54 @@ func TestPlanAndArmamentVocabulary(t *testing.T) {
 	// And with no Kind at all, which is its own path.
 	if plan, _ := Arm(classify.Classification{}, now); plan.What != ArmNothing {
 		t.Errorf("a classification with no Kind produced What = %q, want %q", plan.What, ArmNothing)
+	}
+}
+
+// TestArmingNeverProducesAUnit is spec R6.1's own structural obligation and
+// I04's pure half: arming plans a trigger or a timer, never a unit.
+//
+// "A timer is NEVER a unit" (doc 02 §8) is stated in prose across two
+// documents and, in this package, would otherwise be true only by nobody
+// having tried. The scan reads the package's own syntax rather than its
+// behaviour, so it fails on the declaration rather than waiting for a call
+// that constructs one.
+//
+// go/parser, not a string search: a comment mentioning unit.Unit — this one
+// does, three lines up — must not trip it, and a scan defeated by its own
+// documentation is the defect this repository already corrected once in
+// scheduler_boundary_scan_test.go.
+func TestArmingNeverProducesAUnit(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
+	if err != nil {
+		t.Fatalf("parsing internal/core/prospection: %v", err)
+	}
+
+	var checked int
+	for name, pkg := range pkgs {
+		for path, file := range pkg.Files {
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Type.Results == nil {
+					continue
+				}
+				checked++
+				for _, result := range fn.Type.Results.List {
+					if typ := types.ExprString(result.Type); strings.Contains(typ, "unit.") {
+						t.Errorf("%s.%s returns %s — arming decides a trigger or a timer, and "+
+							"a timer is NEVER a unit (doc 02 §8, I04). This package plans; it "+
+							"does not construct what gets stored", name, fn.Name.Name, typ)
+					}
+				}
+			}
+		}
+	}
+
+	if checked == 0 {
+		t.Fatal("the scan inspected no function signatures at all — it would pass on an empty " +
+			"package, which is not the same as passing on a correct one")
 	}
 }

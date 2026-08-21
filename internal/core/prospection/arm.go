@@ -36,6 +36,33 @@ const (
 	ArmRecurring Armament = "recurring_trigger"
 )
 
+// Refusal is why Arm armed nothing. Spec R6.1 requires the causes to be
+// told apart rather than collapsed into one branch, and the reason is not
+// bookkeeping: m3b writes decision_log from this plan, so a refusal that
+// cannot say why is a hole in the glass box. An undated event is a decoding
+// failure worth surfacing; a chitchat capture arming nothing is the system
+// working correctly. They must not read alike.
+type Refusal string
+
+const (
+	// RefusalNone is the zero value, carried by every plan that armed
+	// something. The field answers "why not", and an armed plan has no
+	// answer to give.
+	RefusalNone Refusal = ""
+	// RefusalNoKind — the classification carries no type at all, so there
+	// is nothing to decide from (doc 02 §5.1: no unit is created either).
+	RefusalNoKind Refusal = "no_kind"
+	// RefusalKindNotArming — this kind arms nothing by design. Ten of the
+	// thirteen are in this group, and it is the system working.
+	RefusalKindNotArming Refusal = "kind_not_arming"
+	// RefusalNoDate — the arming instant degraded to absent. doc 02 §5.1:
+	// "arming a trigger on a guessed date is worse than not arming one."
+	RefusalNoDate Refusal = "no_date"
+	// RefusalAlreadyPast — the instant exists and is behind now. The same
+	// refusal pointing the other way: a nudge for something already over.
+	RefusalAlreadyPast Refusal = "already_past"
+)
+
 // Plan is Arm's decision: what to arm and with what.
 //
 // Rule and Anchor are meaningful only for ArmRecurring, and LeadDays only
@@ -43,6 +70,7 @@ const (
 // with no horizon in front of it.
 type Plan struct {
 	What      Armament
+	Why       Refusal // RefusalNone unless What == ArmNothing
 	FireAt    time.Time
 	LeadDays  int
 	Rule      Rule
@@ -60,10 +88,12 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 	// resolution keeps a claimed 0.0 apart from an absent reading, and doc
 	// 02 §7 makes that distinction decide whether brain persists NULL.
 	interrupt := ResolveInterrupt(c.InterruptLevel)
-	nothing := Plan{What: ArmNothing, Interrupt: interrupt}
+	nothing := func(why Refusal) (Plan, bool) {
+		return Plan{What: ArmNothing, Why: why, Interrupt: interrupt}, false
+	}
 
 	if c.Kind == nil {
-		return nothing, false
+		return nothing(RefusalNoKind)
 	}
 
 	switch *c.Kind {
@@ -71,14 +101,17 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 		// due_at, never event_at (I18). event_at is when a thing happens in
 		// the world and a timer has no world event; due_at is when this is
 		// owed, and a timer is owed at its fire instant.
-		if c.DueAt == nil || !c.DueAt.After(now) {
-			return nothing, false
+		if c.DueAt == nil {
+			return nothing(RefusalNoDate)
+		}
+		if !c.DueAt.After(now) {
+			return nothing(RefusalAlreadyPast)
 		}
 		return Plan{What: ArmTimer, FireAt: *c.DueAt, Interrupt: interrupt}, true
 
 	case classify.KindRecurringReminder:
 		if c.EventAt == nil {
-			return nothing, false
+			return nothing(RefusalNoDate)
 		}
 		if c.RecurrenceRule == nil {
 			// The rule degraded, or the model never claimed one. The capture
@@ -100,12 +133,12 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 
 	case classify.KindEvent:
 		if c.EventAt == nil {
-			return nothing, false
+			return nothing(RefusalNoDate)
 		}
 		return datedTrigger(*c.EventAt, now, interrupt)
 	}
 
-	return nothing, false
+	return nothing(RefusalKindNotArming)
 }
 
 // datedTrigger arms the one-shot trigger a dated event owns, or nothing
@@ -114,7 +147,7 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 // refusal pointing the other way.
 func datedTrigger(eventAt, now time.Time, interrupt Interrupt) (Plan, bool) {
 	if !eventAt.After(now) {
-		return Plan{What: ArmNothing, Interrupt: interrupt}, false
+		return Plan{What: ArmNothing, Why: RefusalAlreadyPast, Interrupt: interrupt}, false
 	}
 	return Plan{
 		What:      ArmTrigger,
