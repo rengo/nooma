@@ -394,6 +394,37 @@ func TestNextOccurrence_RealZoneTransitions(t *testing.T) {
 		}
 	})
 
+	t.Run("a month whose own last day was deleted still clamps correctly", func(t *testing.T) {
+		// Pacific/Kiritimati skipped 1994-12-31 entirely when it crossed the
+		// date line — and 31 December is December's own last day, which is
+		// exactly what the clamp has to look up.
+		//
+		// Asking the ZONE for that length is the trap: the probe lands on a
+		// date that does not exist there, normalises forward into January,
+		// and reports "1" as December's last day. Every anchor above the 1st
+		// would then clamp to the 1st, so a 25 December anniversary fires on
+		// 1 December — three weeks early, once, in one zone, silently.
+		//
+		// A month's length is a property of the calendar, not of a zone.
+		kiritimati, err := time.LoadLocation("Pacific/Kiritimati")
+		if err != nil {
+			t.Fatalf("Pacific/Kiritimati: %v", err)
+		}
+		if probe := time.Date(1995, time.January, 0, RecurrenceAnchorHour, 0, 0, 0, kiritimati); probe.Day() != 1 {
+			t.Fatalf("fixture is stale: the zone-local probe for December 1994's last day "+
+				"resolved to day %d, want 1 — this test's premise is that it is wrong there",
+				probe.Day())
+		}
+
+		got := NextOccurrence(RuleYearly, Anchor{Month: time.December, Day: 25},
+			time.Date(1994, time.December, 1, 0, 0, 0, 0, kiritimati))
+
+		if got.Day() != 25 || got.Month() != time.December {
+			t.Errorf("occurrence = %v, want 25 December 1994 — a deleted day elsewhere in the "+
+				"month must not change how many days the month has", got)
+		}
+	})
+
 	t.Run("a fixed-offset zone is unaffected", func(t *testing.T) {
 		got := NextOccurrence(RuleYearly, Anchor{Month: time.March, Day: 8},
 			time.Date(2026, time.January, 1, 0, 0, 0, 0, recLoc))
