@@ -154,11 +154,25 @@ func assignString(set func(*Classification, *string)) func(json.RawMessage, *Cla
 
 func assignFloat(set func(*Classification, *float64)) func(json.RawMessage, *Classification, time.Time) Reason {
 	return func(raw json.RawMessage, c *Classification, _ time.Time) Reason {
-		var f float64
+		// Into a *float64, not a float64. An explicit `"weight": null` is
+		// present rather than absent — Salvage stores any decodable value
+		// under its key — so the missing-field branch never runs, and
+		// json.Unmarshal accepts null for a non-pointer destination without
+		// error, leaving the zero value. Reading into a float64 and taking
+		// its address therefore yields a non-nil pointer to 0.0 with no
+		// Reason: a claimed zero the model never asked for, which is
+		// precisely the collapse Classification's pointer fields exist to
+		// prevent (§5.1: "a degraded weight is not a zero weight"). For
+		// decay_rate the cost is larger — a λ of 0 never decays, so §6's
+		// archiving pass can never reach the unit.
+		var f *float64
 		if err := json.Unmarshal(raw, &f); err != nil {
 			return ReasonWrongType
 		}
-		set(c, &f)
+		if f == nil {
+			return ReasonWrongType
+		}
+		set(c, f)
 		return ""
 	}
 }
