@@ -796,8 +796,29 @@ box can audit it):
   explicit instruction outranks the quiet-hours policy window; an inference does not. Mutually
   exclusive with the digest (no double delivery).
 - Below that → **digest** (pull, accumulates): with a cadence, and two care gates:
+  - **Cadence**: once daily, at `digest_hour` (`internal/core/prospection.DigestHour`), decided by
+    the instant the last digest went out rather than by a queue — so a vault that was off for three
+    days owes one digest, never three. The hour is not free: before quiet hours end, every digest
+    would be born deferred and the cadence would be decorative; after, a dead window opens in which
+    quiet-hours-deferred pushes have resurfaced and the digest has not, making the user's first
+    morning contact the lane this design says should be rarer. The hour quiet hours end is the only
+    one that is neither, and `digest_hour` is a separate knob from `quiet_hours_end_hour` with the
+    relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality.
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery (anti-starvation).
+    **Low** is `energy < low_energy_max`, strict — this gate suppresses delivery, so the burden of
+    proof is on low, and no reading at all is not low: silence is not an observation of depletion.
+    **Recent** is within `energy_reading_max_age_hours`, one digest cycle, because a reading from
+    two digests ago would hold items back on a day it never observed. **Important** cannot be an
+    absolute cut: `focus.Priority` is homogeneous in effective weight, so a fixed threshold means
+    something different in every vault. It is a relative truncation to `low_energy_digest_size`
+    items by `focus.Priority` (owner ruling 4), and a trigger with no source unit — a pattern
+    watcher, whose `unit_id` is NULL — has priority zero and therefore ranks last, so *"still on
+    this goal, or shall we let it rest?"* is the first thing a depleted user stops being asked.
+    **Anti-starvation** is a bound, not a delay: an item held back `max_digest_deferrals` times is
+    carried regardless of rank, and carried *in addition to* the truncation rather than inside it —
+    if it competed for the same slots, a low-ranked item could be starved by fresher ones forever,
+    which is the thing the rule exists to prevent.
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.
@@ -951,6 +972,11 @@ module):
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`internal/core/prospection.PushThreshold`) | 0.70 — `interrupt_level >= this value` routes to push (R3.2), inclusive; gains a constant here, value unchanged |
 | `default_interrupt_level` (`internal/core/prospection.DefaultInterruptLevel`) | 0.0 — fills a degraded or out-of-range `interrupt_level`; behaviourally inert below the push threshold, chosen so an audit reads "no claim was made" (design §3.4) |
+| `digest_hour` (`internal/core/prospection.DigestHour`) | 7 — the local hour the daily digest becomes due (owner ruling 2). Equals `quiet_hours_end_hour` today and is deliberately a separate knob: one is a delivery window's edge, the other a cadence. The asserted relation is `digest_hour >= quiet_hours_end_hour`, not their equality |
+| `low_energy_max` (`internal/core/prospection.LowEnergyMax`) | 0.5 — chosen: `energy` is declared on [0,1] with no calibration data behind it, and the midpoint is the only point on such a scale that is not an invention. The comparison is strict, because the gate suppresses delivery |
+| `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
+| `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |
+| `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
 | Event lead time | 7 days |
