@@ -216,6 +216,24 @@ resolves the disagreement by covering it rather than by picking a side, and it b
 neither artifact asked for: the conflict arm exists in two separate loops, and "it works for
 triggers" is not evidence about the other one.
 
+**G19 — task 6.4 puts the `commit` gate on `checkRunner.at`, which changes a signature PR 5a
+shipped; recorded as this PR's own scope addition rather than folded back silently.** The task says
+so itself, and it is done as written: `checkRunner.at(ctx, now, commit bool)`, with the flag surfaced
+as `brain.CheckRequest{DryRun bool}` — `ConsolidateRequest`'s own convention, so the zero value is an
+ordinary writing scan. `commit` gates the persistence calls and the `decision_log` writes and
+nothing else: every read, every verdict and every count is identical in both modes, which is Q1
+("suppresses the effect, never branches the logic") satisfied literally rather than approximately.
+
+**G20 — the L4 scope-boundary scan cannot make the claim task 6.5 asks for, and says so in its own
+doc comment.** The task asks for "a source-tree grep … asserting no file under
+`internal/channels/**`/`internal/scheduler/**` and no Telegram credential anywhere **in this PR's
+diff**". A Go test reads the tree, not a diff. What ships instead is the strongest true version: no
+file under `internal/**` mentions the Telegram API host or the two methods ADR-0014 names, and
+`internal/channels` still holds only its package doc. Telegram's *configuration* surface
+(`bot_token_env`, `allowed_chat_ids`) has been in `internal/config` since M0 and is deliberately
+**not** scanned for — config declaring a field is not the binary speaking, and a scan that flagged
+it would be noise that gets the whole test deleted.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -669,7 +687,7 @@ Depends on PR 5a. **R6/R7** (proposal), double-firing guard.
 
 Depends on PR 5a+5b.
 
-- [ ] **6.1** Commit 1 (RED): `cmd/nooma/check_test.go` — `runCheck`'s flag/lock/open shape mirroring
+- [x] **6.1** Commit 1 (RED): `cmd/nooma/check_test.go` — `runCheck`'s flag/lock/open shape mirroring
       `runConsolidate`'s own test: a nonexistent vault fails with `ResolveVault`'s own error; a held
       lock fails with `vaultlock.InUseError` naming the holder; more than one positional argument is
       refused before anything is opened.
@@ -679,7 +697,7 @@ Depends on PR 5a+5b.
       Requirement: R6.1.
       **Mutation**: make the >1-argument case a silent no-op (uses the first arg) instead of a
       refusal — caught directly by the fixture's specific "too many arguments" error assertion.
-- [ ] **6.2** Commit 2 (GREEN): implement `cmd/nooma/check.go` — flags, `config.ResolveVault`,
+- [x] **6.2** Commit 2 (GREEN): implement `cmd/nooma/check.go` — flags, `config.ResolveVault`,
       `loadVaultConfig`, `vaultlock.Acquire`, `sqlite.Open`, `wireCheck` (new in
       `cmd/nooma/wiring.go`), run `CheckService.Check(ctx)`, render `renderConsolidateReport`'s
       posture (one unconditional scanned-count line, then one line per non-empty outcome, silence
@@ -688,7 +706,7 @@ Depends on PR 5a+5b.
       in a doc comment against reflexive copy-paste.
       Verify: `go test ./cmd/nooma/... -run Check`.
       Requirement: R6.1; design §3.8.
-- [ ] **6.3** Commit 1 (RED, Q1): `cmd/nooma/check_test.go` (continued) — `--dry-run`, seeded with a
+- [x] **6.3** Commit 1 (RED, Q1): `cmd/nooma/check_test.go` (continued) — `--dry-run`, seeded with a
       due timer + a stale trigger: `nooma check --dry-run` reports the same counts and the same
       "would fire"/"would expire" lines as a wet run's own report, and a subsequent real `nooma
       check` (no flag) against the **same, untouched** vault still finds both rows in their original
@@ -702,14 +720,14 @@ Depends on PR 5a+5b.
       **Mutation**: implement `--dry-run` as a second, independently-derived report function
       instead of gating `checkRunner`'s own persistence calls — this task's own fixture (identical
       report content between dry and wet runs) is shaped to catch exactly that divergence.
-- [ ] **6.4** Commit 2 (GREEN): thread a `commit bool` into `checkRunner.at(ctx, now, commit)` that
+- [x] **6.4** Commit 2 (GREEN): thread a `commit bool` into `checkRunner.at(ctx, now, commit)` that
       gates only `Fire`/`Expire`/`Cancel`/`record` — verdict evaluation and report construction are
       identical in both modes, satisfying Q1 literally.
       Verify: `go test ./cmd/nooma/... -run DryRun` and `go test ./internal/brain/... -run
       CheckDryRun`.
       Requirement: Q1; design §3.6, extended by this task beyond its original snippet — recorded
       here as this task's own scope addition, not folded silently into PR 5a.
-- [ ] **6.5** `test/e2e/check_demo_test.go` (new, L4) — a real migrated vault seeded with one
+- [x] **6.5** `test/e2e/check_demo_test.go` (new, L4) — a real migrated vault seeded with one
       due-not-stale timer and one overdue-past-threshold trigger; run the compiled `nooma check`
       binary; read `decision_log` and assert the timer fired, the trigger expired, both carrying a
       human-readable `Rationale` — the change's own exit criterion, executable; a source-tree grep
@@ -718,13 +736,13 @@ Depends on PR 5a+5b.
       Requirement: R6.1; spec's Exit criterion; §9's Telegram-boundary note.
       **Mutation**: seed only the due timer, drop the trigger fixture — the "expired" half becomes
       unfalsifiable; both fixtures are required together for exactly this reason.
-- [ ] **6.6** `docs/01-architecture.md:157-161` command-table amendment: one new row after `nooma
+- [x] **6.6** `docs/01-architecture.md:157-161` command-table amendment: one new row after `nooma
       consolidate`, per design §3.8's exact text.
       Requirement: R6.1.
-- [ ] **6.7** Purity/lint: `golangci-lint run` (confirm `--dry-run` is a plain boolean, no untrusted
+- [x] **6.7** Purity/lint: `golangci-lint run` (confirm `--dry-run` is a plain boolean, no untrusted
       vocabulary string routed through it).
       Requirement: design §9 (the one applicable threat-matrix row).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `cmd/nooma/{check,check_test,wiring,main}.go`, `internal/brain/check{,_test}.go` (the
       `commit bool` widening), `test/e2e/check_demo_test.go`, `docs/01-architecture.md`. Target
       ≤220 impl+docs lines (widened from design's 180 to cover Q1's `--dry-run`, reported here).
