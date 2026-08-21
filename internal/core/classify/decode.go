@@ -46,6 +46,8 @@ func fieldSpecs() []fieldSpec {
 		{"list_op", false, assignEnum(AllListOps, func(c *Classification, v *ListOp) { c.ListOp = v })},
 		{"person_ref_status", false, assignEnum(AllPersonRefStatuses, func(c *Classification, v *PersonRefStatus) { c.PersonRefStatus = v })},
 		{"interrupt_level", false, assignInterruptLevel},
+		{"recurrence_rule", false, assignEnum(AllRecurrenceRules,
+			func(c *Classification, v *RecurrenceRule) { c.RecurrenceRule = v })},
 	}
 }
 
