@@ -61,6 +61,13 @@ func TestI17_EveryOccurrenceCarriesTheAnchorNotThePrevious(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cursor := time.Date(2027, time.January, 1, 0, 0, 0, 0, loc)
 
+			// 26 steps, derived rather than picked: the monthly case needs
+			// two Februaries to show that a day-31 reminder returns to the
+			// 31st after clamping rather than sticking at 28, and two
+			// Februaries is 14 months. The yearly case needs to cross a
+			// leap cycle twice for the same reason, which is 8 years. 26 is
+			// the smaller bound that satisfies both when the same number
+			// serves both walks, with a margin either side.
 			for step := range 26 {
 				next := prospection.NextOccurrence(tc.rule, tc.anchor, cursor)
 

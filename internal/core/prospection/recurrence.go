@@ -49,6 +49,14 @@ const RecurrenceAnchorHour = 12
 //
 // The result lands at RecurrenceAnchorHour in after's own location — the
 // zone travels inside the instant, as everywhere else in this package.
+//
+// An unrecognised Rule resolves as yearly rather than panicking or returning
+// a zero instant, and that is a decision rather than a fallthrough: this is
+// a pure function with no error return, a zero time.Time would arm a trigger
+// in year 1, and classify already degrades an unknown recurrence_rule to nil
+// upstream — so a value arriving here at all means a row that predates that
+// decoding, whose anchor is still the user's own stated month and day.
+// TestNextOccurrence_UnknownRuleFallsBackToYearly pins it.
 func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 	loc := after.Location()
 

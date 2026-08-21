@@ -128,7 +128,19 @@ func TestNextOccurrence_IsStrictlyAfter(t *testing.T) {
 func TestNextOccurrence_AnchorIsIdempotent(t *testing.T) {
 	anchor := Anchor{Month: time.February, Day: 29}
 
-	cursor := recAt(2027, time.January, 1, 0)
+	// Two walks: one over an ordinary run of years, and one crossing 2100,
+	// which is NOT a leap year despite being divisible by four. Without the
+	// second, the century rule in this test's own expectation below is a
+	// branch the suite never reaches — an expectation nothing checks.
+	for _, start := range []int{2027, 2098} {
+		assertLeapCycle(t, anchor, start)
+	}
+}
+
+func assertLeapCycle(t *testing.T, anchor Anchor, startYear int) {
+	t.Helper()
+
+	cursor := recAt(startYear, time.January, 1, 0)
 	seen := map[int]int{} // year -> day of month
 
 	for range 6 {
@@ -151,8 +163,8 @@ func TestNextOccurrence_AnchorIsIdempotent(t *testing.T) {
 	// The same instant, computed twice from two different starting points
 	// that precede it, must agree — re-arming is a pure function of
 	// (rule, anchor, now), never of the trigger's own history.
-	fromJanuary := NextOccurrence(RuleYearly, anchor, recAt(2028, time.January, 1, 0))
-	fromFebruary := NextOccurrence(RuleYearly, anchor, recAt(2028, time.February, 1, 0))
+	fromJanuary := NextOccurrence(RuleYearly, anchor, recAt(startYear+1, time.January, 1, 0))
+	fromFebruary := NextOccurrence(RuleYearly, anchor, recAt(startYear+1, time.February, 1, 0))
 	if !fromJanuary.Equal(fromFebruary) {
 		t.Errorf("the same occurrence computed from January (%v) and February (%v) disagree — "+
 			"re-arming must not depend on when it is asked", fromJanuary, fromFebruary)
@@ -364,6 +376,24 @@ func TestNextOccurrence_RealZoneTransitions(t *testing.T) {
 		}
 	})
 
+	t.Run("clamping and a real zone's normalisation compose", func(t *testing.T) {
+		// Neither mandatory fixture above is out of range for its month, so
+		// neither reaches the clamp. This one does both at once: a 29
+		// February anchor in a common year, in a zone with real transitions,
+		// so the clamped day and the zone's own normalisation are exercised
+		// together rather than one at a time.
+		got := NextOccurrence(RuleYearly, Anchor{Month: time.February, Day: 29},
+			time.Date(2027, time.January, 1, 0, 0, 0, 0, havana))
+
+		if got.Month() != time.February || got.Day() != 28 {
+			t.Errorf("occurrence = %v, want 28 February 2027 — a 29 February anchor clamps in a "+
+				"common year, and the zone must not move it out of its own month", got)
+		}
+		if got.Hour() != RecurrenceAnchorHour {
+			t.Errorf("occurrence = %v, want hour %d", got, RecurrenceAnchorHour)
+		}
+	})
+
 	t.Run("a fixed-offset zone is unaffected", func(t *testing.T) {
 		got := NextOccurrence(RuleYearly, Anchor{Month: time.March, Day: 8},
 			time.Date(2026, time.January, 1, 0, 0, 0, 0, recLoc))
@@ -371,4 +401,136 @@ func TestNextOccurrence_RealZoneTransitions(t *testing.T) {
 			t.Errorf("control zone: occurrence = %v, want %v", got, want)
 		}
 	})
+}
+
+// TestNextOccurrence_OrdinaryAnchorBaseline is spec R5.1's own sanity
+// baseline, and the test this file most needed: every other case here is an
+// edge — 29 February, day 31, a DST gap — and a suite made only of corners
+// can be green while the middle is broken.
+//
+// An anchor that exists in every month and every year should simply advance,
+// one step at a time, landing on its own day each time.
+func TestNextOccurrence_OrdinaryAnchorBaseline(t *testing.T) {
+	t.Run("yearly, 15 March across five years", func(t *testing.T) {
+		anchor := Anchor{Month: time.March, Day: 15}
+		cursor := recAt(2027, time.January, 1, 0)
+
+		for year := 2027; year < 2032; year++ {
+			got := NextOccurrence(RuleYearly, anchor, cursor)
+			want := recAt(year, time.March, 15, RecurrenceAnchorHour)
+			if !got.Equal(want) {
+				t.Fatalf("year %d: NextOccurrence = %v, want %v", year, got, want)
+			}
+			cursor = got
+		}
+	})
+
+	t.Run("monthly, day 10 across fourteen months", func(t *testing.T) {
+		anchor := Anchor{Day: 10}
+		cursor := recAt(2027, time.January, 1, 0)
+
+		year, month := 2027, time.January
+		for range 14 {
+			got := NextOccurrence(RuleMonthly, anchor, cursor)
+			want := time.Date(year, month, 10, RecurrenceAnchorHour, 0, 0, 0, recLoc)
+			if !got.Equal(want) {
+				t.Fatalf("NextOccurrence = %v, want %v — an ordinary day-10 reminder should "+
+					"land on the 10th of every month, including across the year boundary",
+					got, want)
+			}
+			cursor = got
+			year, month = nextMonth(year, month)
+		}
+	})
+}
+
+// TestNextOccurrence_IsDeterministic is spec R5.1's determinism clause: the
+// same (rule, anchor, after) computed twice returns the same instant.
+//
+// It is a different property from TestNextOccurrence_AnchorIsIdempotent's
+// tail, which shows two DIFFERENT starting points converging. This one
+// pins that the function reads nothing outside its arguments — no clock, no
+// package state, no map iteration order — which is what makes it safe for
+// a caller to recompute an occurrence instead of storing it.
+func TestNextOccurrence_IsDeterministic(t *testing.T) {
+	cases := []struct {
+		rule   Rule
+		anchor Anchor
+		after  time.Time
+	}{
+		{RuleYearly, Anchor{Month: time.February, Day: 29}, recAt(2027, time.January, 1, 0)},
+		{RuleMonthly, Anchor{Day: 31}, recAt(2027, time.February, 1, 0)},
+		{RuleYearly, Anchor{Month: time.March, Day: 15}, recAt(2031, time.December, 31, 23)},
+	}
+
+	for _, c := range cases {
+		first := NextOccurrence(c.rule, c.anchor, c.after)
+		for range 5 {
+			if again := NextOccurrence(c.rule, c.anchor, c.after); !again.Equal(first) {
+				t.Errorf("NextOccurrence(%v, %+v, %v) returned %v then %v — the same arguments "+
+					"must give the same instant, or a caller cannot recompute an occurrence "+
+					"instead of storing it", c.rule, c.anchor, c.after, first, again)
+			}
+		}
+	}
+}
+
+// TestNextOccurrence_MonthlyBoundaryIsAlsoStrict mirrors
+// TestNextOccurrence_IsStrictlyAfter for the monthly branch, which runs its
+// own independent loop and its own comparison — the yearly test proves
+// nothing about it.
+func TestNextOccurrence_MonthlyBoundaryIsAlsoStrict(t *testing.T) {
+	anchor := Anchor{Day: 10}
+	occurrence := recAt(2027, time.June, 10, RecurrenceAnchorHour)
+
+	got := NextOccurrence(RuleMonthly, anchor, occurrence)
+	if !got.After(occurrence) {
+		t.Fatalf("at the occurrence itself, NextOccurrence = %v, want strictly after %v — a "+
+			"trigger that re-arms onto its own instant fires forever", got, occurrence)
+	}
+	if want := recAt(2027, time.July, 10, RecurrenceAnchorHour); !got.Equal(want) {
+		t.Errorf("NextOccurrence = %v, want %v", got, want)
+	}
+}
+
+// TestNextOccurrence_MonthlyIgnoresTheAnchorMonth proves what Anchor's own
+// doc comment asserts. Every other monthly fixture in this file leaves
+// Month at its zero value, so a regression that started reading it on the
+// monthly path would go unnoticed.
+func TestNextOccurrence_MonthlyIgnoresTheAnchorMonth(t *testing.T) {
+	after := recAt(2027, time.March, 1, 0)
+	want := recAt(2027, time.March, 20, RecurrenceAnchorHour)
+
+	for _, month := range []time.Month{0, time.January, time.July, time.December} {
+		got := NextOccurrence(RuleMonthly, Anchor{Month: month, Day: 20}, after)
+		if !got.Equal(want) {
+			t.Errorf("with Anchor.Month = %v, NextOccurrence = %v, want %v — a monthly "+
+				"recurrence is \"this day, every month\" and must not read the anchor's month",
+				month, got, want)
+		}
+	}
+}
+
+// TestNextOccurrence_UnknownRuleFallsBackToYearly pins what an
+// out-of-vocabulary Rule does, because a corrupt or future row can carry
+// one and silence is the worst answer.
+//
+// It resolves as yearly rather than panicking or returning a zero instant.
+// The reasoning: this is a pure function with no error return, a zero
+// time.Time would arm a trigger in year 1, and classify already degrades an
+// unknown recurrence_rule to nil upstream — so a value reaching here at all
+// means the row predates that decoding, and the anchor it carries is still
+// the user's own stated month and day.
+func TestNextOccurrence_UnknownRuleFallsBackToYearly(t *testing.T) {
+	anchor := Anchor{Month: time.September, Day: 4}
+	after := recAt(2027, time.January, 1, 0)
+	want := recAt(2027, time.September, 4, RecurrenceAnchorHour)
+
+	for _, rule := range []Rule{"", "weekly", "YEARLY", "daily"} {
+		if got := NextOccurrence(rule, anchor, after); !got.Equal(want) {
+			t.Errorf("Rule(%q): NextOccurrence = %v, want %v — an unrecognised rule resolves as "+
+				"yearly, which keeps the user's own anchor rather than inventing a cadence",
+				rule, got, want)
+		}
+	}
 }
