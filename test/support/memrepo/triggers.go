@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
@@ -32,6 +33,14 @@ var _ ports.TriggerRepo = (*Triggers)(nil)
 func NewTriggers() *Triggers {
 	return &Triggers{triggers: make(map[string]storedTrigger)}
 }
+
+// EnsureUnit implements repocontract.TriggerHarness. It enforces no
+// foreign key — every unit id is already a valid trigger target over this
+// fake — so it does nothing at all. The store's own EnsureUnit
+// (internal/store/sqlite/triggerrepo_integration_test.go) inserts a real
+// units row instead; see repocontract.TriggerHarness for why the store
+// needs the hook and this fake does not.
+func (r *Triggers) EnsureUnit(_ *testing.T, _ string) {}
 
 // Create implements ports.TriggerRepo. The row is stored armed, and every
 // pointer field is copied by value: a caller that mutates its own
