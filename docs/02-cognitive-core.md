@@ -488,8 +488,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    - Recording is not undoing. The previous value is retrievable; no surface offers it back until
      the UI exists.
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a
-   recurring `event` (a birthday) arms a recurring trigger; ambiguous references to people
-   leave the unit `incomplete` until the disambiguation answer arrives.
+   `recurring_reminder` (a birthday) arms a recurring trigger — a distinct `type` from `event`,
+   not an `event` with a flag; ambiguous references to people leave the unit `incomplete` until
+   the disambiguation answer arrives.
    What each kind arms is decided by `internal/core/prospection.Arm`, a pure function of the
    classification and one instant: a `timer` with a `due_at` still ahead arms a timer at exactly
    that instant; a dated `event` arms a trigger at `event_lead_days` before it; a
@@ -810,6 +811,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   before it happens has its horizon five days behind, and arming there would hand §7's own
   staleness gate a trigger born expired. The lead time says how much warning is wanted; the
   system is not late for an event it only just learned about.
+  A recurring reminder's `event_at` is an **anchor**, not a spent instant: its year is discarded
+  and only the month and day survive, so a birth date decades past still arms. The at-or-before-now
+  refusal above governs a one-shot occurrence — the same date is a spent instant without a
+  recurrence rule and a live anchor with one. The anchor's month and day are read in the zone the
+  event was stated in, because an anniversary is a calendar date rather than an instant.
   A **timer** carries its instant in `due_at` and never in `event_at`: `event_at` is when a thing
   happens in the world and a timer has no world event, while `due_at` is when something is owed
   and a timer is owed at its fire instant. The classify prompt states it, so the model is not

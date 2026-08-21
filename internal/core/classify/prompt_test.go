@@ -131,6 +131,16 @@ func TestBuildPrompt_RendersEveryVocabularyFromItsOwnSource(t *testing.T) {
 func TestBuildPrompt_RendersProspectionFields(t *testing.T) {
 	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires))
 
+	// The timer's own field rule (design §3.7 decision 1). A model left to
+	// guess which of the two date fields a reminder belongs in will
+	// sometimes guess event_at, and I18 forbids the two being
+	// interchanged — so the prompt states it rather than hoping.
+	for _, want := range []string{"due_at", "never in event_at"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt does not state the timer's field rule: missing %q", want)
+		}
+	}
+
 	for _, want := range []string{"interrupt_level", "recurrence_rule", "0-1"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("prompt does not mention %q", want)

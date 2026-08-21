@@ -1,11 +1,6 @@
 package prospection
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"go/types"
-	"strings"
 	"testing"
 	"time"
 
@@ -460,51 +455,92 @@ func TestPlanAndArmamentVocabulary(t *testing.T) {
 	}
 }
 
-// TestArmingNeverProducesAUnit is spec R6.1's own structural obligation and
-// I04's pure half: arming plans a trigger or a timer, never a unit.
+// TestArm_RecurringIgnoresHowOldItsAnchorIs resolves Finding F9: spec R6.1
+// says "a dated event or recurring_reminder whose instant is at or before
+// now arms nothing", while design §3.7's table applies that refusal only to
+// the one-shot rows. They disagree, and the design is right.
 //
-// "A timer is NEVER a unit" (doc 02 §8) is stated in prose across two
-// documents and, in this package, would otherwise be true only by nobody
-// having tried. The scan reads the package's own syntax rather than its
-// behaviour, so it fails on the declaration rather than waiting for a call
-// that constructs one.
+// A birthday's event_at is the birth date. It is ALWAYS in the past, by
+// decades. Applying the past-instant refusal to a rule-bearing recurring
+// reminder would make recurring reminders unrepresentable — the feature
+// would refuse every input it exists to serve.
 //
-// go/parser, not a string search: a comment mentioning unit.Unit — this one
-// does, three lines up — must not trip it, and a scan defeated by its own
-// documentation is the defect this repository already corrected once in
-// scheduler_boundary_scan_test.go.
-func TestArmingNeverProducesAUnit(t *testing.T) {
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
-	if err != nil {
-		t.Fatalf("parsing internal/core/prospection: %v", err)
+// The refusal governs a one-shot instant, which is a thing that happens
+// once and can be over. A recurrence's event_at is not that: it is the
+// ANCHOR, a month and a day the occurrence is re-derived from, and its year
+// is discarded.
+func TestArm_RecurringIgnoresHowOldItsAnchorIs(t *testing.T) {
+	loc := time.FixedZone("UTC+2", 2*60*60)
+	now := time.Date(2027, time.June, 1, 9, 0, 0, 0, loc)
+	kind := func(k classify.Kind) *classify.Kind { return &k }
+
+	born := time.Date(1985, time.September, 4, 6, 15, 0, 0, loc)
+	plan, ok := Arm(classify.Classification{
+		Kind:           kind(classify.KindRecurringReminder),
+		EventAt:        &born,
+		RecurrenceRule: armPtr(classify.RecurrenceRuleYearly),
+	}, now)
+
+	if !ok || plan.What != ArmRecurring {
+		t.Fatalf("Arm = (%+v, %v), want an ArmRecurring plan — a birthday's event_at is the "+
+			"birth date and is always decades past; refusing it would make the feature "+
+			"refuse every input it exists for", plan, ok)
+	}
+	if plan.Anchor.Month != time.September || plan.Anchor.Day != 4 {
+		t.Errorf("Anchor = %+v, want {September, 4} — the year is discarded, the month and day "+
+			"are the whole point", plan.Anchor)
+	}
+	if !plan.FireAt.After(now) {
+		t.Errorf("FireAt = %v, want a future instant", plan.FireAt)
 	}
 
-	var checked int
-	for name, pkg := range pkgs {
-		for path, file := range pkg.Files {
-			if strings.HasSuffix(path, "_test.go") {
-				continue
-			}
-			for _, decl := range file.Decls {
-				fn, ok := decl.(*ast.FuncDecl)
-				if !ok || fn.Type.Results == nil {
-					continue
-				}
-				checked++
-				for _, result := range fn.Type.Results.List {
-					if typ := types.ExprString(result.Type); strings.Contains(typ, "unit.") {
-						t.Errorf("%s.%s returns %s — arming decides a trigger or a timer, and "+
-							"a timer is NEVER a unit (doc 02 §8, I04). This package plans; it "+
-							"does not construct what gets stored", name, fn.Name.Name, typ)
-					}
-				}
-			}
-		}
+	// The contrast, in the same test so the boundary is visible: without a
+	// rule, the same classification IS a one-shot occurrence, and a one-shot
+	// occurrence decades past arms nothing.
+	oneShot, ok := Arm(classify.Classification{
+		Kind:    kind(classify.KindRecurringReminder),
+		EventAt: &born,
+	}, now)
+	if ok || oneShot.Why != RefusalAlreadyPast {
+		t.Errorf("without a rule the same input gave (%+v, %v), want a refusal with %q — a "+
+			"date that is an anchor when a rule accompanies it is a spent instant when one "+
+			"does not", oneShot, ok, RefusalAlreadyPast)
+	}
+}
+
+// TestArm_AnchorIsTheDateAsStated pins which frame the anchor's month and
+// day are read in, because two are in play: classify may decode an RFC3339
+// event_at carrying its own offset, while NextOccurrence builds every
+// occurrence in now's location.
+//
+// The anchor is read in the event's OWN zone, which is the date the user
+// stated. An anniversary is a calendar date, not an instant: "4 September"
+// means 4 September wherever the person later happens to be, and the
+// occurrence is then materialised in the zone they are in now.
+func TestArm_AnchorIsTheDateAsStated(t *testing.T) {
+	nowLoc := time.FixedZone("UTC+2", 2*60*60)
+	now := time.Date(2027, time.June, 1, 9, 0, 0, 0, nowLoc)
+	kind := func(k classify.Kind) *classify.Kind { return &k }
+
+	// Late on 4 September in Hawaii is already 5 September in the user's
+	// current zone. The anniversary is the date as stated: the 4th.
+	stated := time.Date(1985, time.September, 4, 23, 30, 0, 0, time.FixedZone("UTC-10", -10*60*60))
+	if stated.In(nowLoc).Day() != 5 {
+		t.Fatalf("fixture is broken: the instant should read as the 5th in now's zone, got %d",
+			stated.In(nowLoc).Day())
 	}
 
-	if checked == 0 {
-		t.Fatal("the scan inspected no function signatures at all — it would pass on an empty " +
-			"package, which is not the same as passing on a correct one")
+	plan, ok := Arm(classify.Classification{
+		Kind:           kind(classify.KindRecurringReminder),
+		EventAt:        &stated,
+		RecurrenceRule: armPtr(classify.RecurrenceRuleYearly),
+	}, now)
+	if !ok {
+		t.Fatal("Arm returned false")
+	}
+	if plan.Anchor.Day != 4 {
+		t.Errorf("Anchor.Day = %d, want 4 — the anniversary is the date the user stated, read "+
+			"in the zone they stated it in, not the date that instant falls on somewhere else",
+			plan.Anchor.Day)
 	}
 }

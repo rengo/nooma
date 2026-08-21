@@ -736,3 +736,37 @@ only about what it shipped.
   label describes an explicit null imprecisely. No data is miscoded, so it is pinned as-is with
   the imprecision stated rather than a sixth `Reason` invented for it (owner-review R3's own
   argument).
+
+---
+
+## Reconciliation note — 2026-08-21 (F9, found by Judgment Day on PR 7)
+
+**F9 — spec R6.1 and design §3.7 disagree about a past-dated recurring reminder.** R6.1's MUST
+reads *"a dated `event` or `recurring_reminder` whose instant is at or before `now` arms
+nothing"*, with no exception for a rule-bearing recurrence. Design §3.7's table applies that
+refusal only to the one-shot rows, and its "three decisions" note scopes it to *"a dated event"*.
+`Arm` follows the design; no test pinned which reading governed.
+
+**Resolved in the design's favour, and the spec's phrasing is the error.** A birthday's `event_at`
+is the birth date — always in the past, usually by decades. Applying the refusal to a rule-bearing
+recurring reminder would make the feature refuse every input it exists to serve.
+
+The distinction the spec's wording loses: a **one-shot instant** is a thing that happens once and
+can be over, and arming a nudge for it afterwards is doc 02 §5.1's refusal pointing the other way.
+A **recurrence's `event_at` is an anchor** — a month and a day the next occurrence is re-derived
+from, with its year discarded. The same date is a spent instant without a rule and a live anchor
+with one, and `TestArm_RecurringIgnoresHowOldItsAnchorIs` asserts both halves in one test so the
+boundary is visible rather than inferred.
+
+**Also pinned while resolving it**: which frame the anchor's month and day are read in. `classify`
+may decode an RFC3339 `event_at` carrying its own offset, while `NextOccurrence` builds occurrences
+in `now`'s location — two frames, and near midnight they disagree on the calendar date. The anchor
+is read in the **event's own zone**, because an anniversary is a calendar date rather than an
+instant: "4 September" means 4 September wherever the person later happens to be, and the
+occurrence is materialised in the zone they are in now. `TestArm_AnchorIsTheDateAsStated` pins it.
+
+**F10 — the `unit.Unit` scan cannot be an L1 test.** Spec R6.1 lists it under *"Verified by: L1"*,
+and depguard's `core-purity` rule forbids importing `os` anywhere under `internal/core`, its own
+tests included. A scan that reads the package's files therefore cannot live beside them. It ships
+as `test/conformance/i04_arming_never_produces_a_unit_test.go` instead. The rule is right and the
+spec's layer assignment was optimistic; nothing about the assertion changed, only where it runs.
