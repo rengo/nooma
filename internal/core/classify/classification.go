@@ -82,8 +82,13 @@ const (
 	ReasonUnknownEnum Reason = "unknown_enum"
 	// ReasonTruncated — the stream ended before a required field arrived.
 	ReasonTruncated Reason = "truncated"
-	// ReasonBadFormat — a string field that parses, e.g. a date matching
-	// neither RFC3339 nor 2006-01-02.
+	// ReasonBadFormat — the JSON type was right and the value is not one
+	// this field reads: a date matching neither RFC3339 nor 2006-01-02, or
+	// a number outside the range its field accepts (interrupt_level's
+	// [0,1]). It is deliberately not split per shape — §9's learning loop
+	// has no separate use for "wrong shape of string" versus "wrong range
+	// of number" today, and a Reason with no consumer is a vocabulary
+	// addition smuggled in (m3a-prospection owner-review R3).
 	ReasonBadFormat Reason = "bad_format"
 )
 
