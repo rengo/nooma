@@ -25,7 +25,86 @@ type Anchor struct {
 // RecurrenceAnchorHour is the local wall clock an anniversary lands on.
 const RecurrenceAnchorHour = 12
 
-// NextOccurrence returns the first occurrence strictly after `after`.
+// NextOccurrence returns the first occurrence strictly after `after`,
+// always re-derived from the anchor and never advanced from the previous
+// occurrence (design §3.6; I17's arithmetic half).
+//
+// Two rules, and they depend on each other.
+//
+// **Clamp to the last day of the target month.** A 29 February anchor is 28
+// February in a common year; a day-31 monthly anchor is 30 April and 28 or
+// 29 February. Go's own time.Date normalisation is rejected here: it turns
+// Feb 31 into 3 March, so a monthly reminder wanders forward and can miss a
+// month entirely, and a February anniversary lands in March. Skipping the
+// months that lack the day is rejected too — a day-31 reminder would fire
+// seven times a year and never in February.
+//
+// **Always re-derive from the anchor.** This is what makes the clamp safe.
+// Advancing 29 February by one year gives 28 February, and advancing that
+// gives 28 February forever: the anniversary drifts off its own date after
+// one leap cycle, and a day-31 monthly reminder does the same after its
+// first February. Re-deriving means occurrence N is the same instant however
+// many times the trigger has re-armed, so re-arming is a pure function of
+// (rule, anchor, now) and never of the trigger's own history.
+//
+// The result lands at RecurrenceAnchorHour in after's own location — the
+// zone travels inside the instant, as everywhere else in this package.
 func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
-	return time.Time{}
+	loc := after.Location()
+
+	switch rule {
+	case RuleMonthly:
+		// Walk months from after's own, so the first candidate is either
+		// this month's occurrence (when it is still ahead) or next month's.
+		y, m := after.Year(), after.Month()
+		for {
+			if candidate := clampedDate(y, m, anchor.Day, loc); candidate.After(after) {
+				return candidate
+			}
+			y, m = nextMonth(y, m)
+		}
+	default:
+		year := after.Year()
+		for {
+			if candidate := clampedDate(year, anchor.Month, anchor.Day, loc); candidate.After(after) {
+				return candidate
+			}
+			year++
+		}
+	}
+}
+
+// clampedDate builds the anchor's instant in the given month, with the day
+// clamped to that month's last rather than overflowing into the next.
+//
+// The last day is found by asking for the zeroth day of the following month,
+// which time.Date normalises backwards to the previous month's last — the
+// one normalisation this file uses on purpose, because it is exact for every
+// month and leap year and needs no table.
+func clampedDate(year int, month time.Month, day int, loc *time.Location) time.Time {
+	ny, nm := nextMonth(year, month)
+	last := time.Date(ny, nm, 0, RecurrenceAnchorHour, 0, 0, 0, loc).Day()
+
+	// Clamped at both ends, because both ends are reachable.
+	//
+	// recurrence_anchor is nullable and Arm builds it from a classification
+	// that may carry no day, so the zero Anchor arrives here. A day of 0 or
+	// less is not merely odd under time.Date: it normalises BACKWARD, the
+	// same mechanism this function uses two lines up on purpose, and would
+	// put the occurrence in the previous month — a reminder firing in a
+	// month the user never named.
+	if day < 1 {
+		day = 1
+	}
+	if day > last {
+		day = last
+	}
+	return time.Date(year, month, day, RecurrenceAnchorHour, 0, 0, 0, loc)
+}
+
+func nextMonth(year int, month time.Month) (int, time.Month) {
+	if month == time.December {
+		return year + 1, time.January
+	}
+	return year, month + 1
 }

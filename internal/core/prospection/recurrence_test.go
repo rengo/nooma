@@ -181,3 +181,49 @@ func TestNextOccurrence_LandsAtNoonInTheInstantsOwnZone(t *testing.T) {
 			got.Location(), recLoc)
 	}
 }
+
+// TestNextOccurrence_DegenerateAnchorStaysInsideItsMonth covers the anchor
+// values that reach this function from a row rather than from a person.
+//
+// recurrence_anchor is nullable, and Arm builds it from a classification
+// that may not carry one, so the zero Anchor is reachable. Without a guard
+// it is actively wrong rather than merely odd: time.Date(y, m, 0, …)
+// normalises BACKWARD to the last day of the previous month, so a day-0
+// anchor would silently fire in a month the user never named. A day past
+// the month's end clamps, which is rule 1 doing its job.
+func TestNextOccurrence_DegenerateAnchorStaysInsideItsMonth(t *testing.T) {
+	after := recAt(2027, time.March, 5, 0)
+
+	tests := map[string]struct {
+		anchor Anchor
+		want   time.Time
+	}{
+		"day zero is the first of the month": {
+			anchor: Anchor{Month: time.June, Day: 0},
+			want:   recAt(2027, time.June, 1, RecurrenceAnchorHour),
+		},
+		"a negative day is the first of the month": {
+			anchor: Anchor{Month: time.June, Day: -3},
+			want:   recAt(2027, time.June, 1, RecurrenceAnchorHour),
+		},
+		"a day past the month's end clamps to its last": {
+			anchor: Anchor{Month: time.June, Day: 99},
+			want:   recAt(2027, time.June, 30, RecurrenceAnchorHour),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := NextOccurrence(RuleYearly, tt.anchor, after)
+			if !got.Equal(tt.want) {
+				t.Errorf("NextOccurrence(yearly, %+v, %v) = %v, want %v — an anchor this "+
+					"function cannot honour must stay inside the month it names",
+					tt.anchor, after, got, tt.want)
+			}
+			if got.Month() != tt.anchor.Month {
+				t.Errorf("occurrence landed in %v, want %v — a degenerate day must never move "+
+					"the occurrence into another month", got.Month(), tt.anchor.Month)
+			}
+		})
+	}
+}
