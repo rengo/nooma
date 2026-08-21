@@ -57,6 +57,9 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 	b.WriteString("Optional fields — omit any that do not apply\n")
 	b.WriteString("  structured_data      free-form JSON object, shape follows from type\n")
 	b.WriteString("  event_at, due_at     absolute; \"YYYY-MM-DD\" or a full RFC3339 timestamp\n")
+	b.WriteString("                       event_at is when a thing happens in the world; due_at is\n")
+	b.WriteString("                       when something is owed. A timer has no world event, so its\n")
+	b.WriteString("                       instant belongs in due_at and never in event_at\n")
 	b.WriteString("  interrupt_level      0-1, how urgently this should interrupt the user " +
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +

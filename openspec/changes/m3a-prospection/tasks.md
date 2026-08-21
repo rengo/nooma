@@ -450,7 +450,7 @@ spec R4.2 and R4.3 into one function.
       `internal/core/focus` from outside `focus` itself; confirm `depguard` allows the core-to-core
       edge, per design §4's own claim).
       Requirement: `nooma-core` hard rule 1; design §4 (Risk C).
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/digest{,_test}.go`, `docs/02-cognitive-core.md`. Target ≤400
       impl+docs lines — **at the ceiling before code is written, highest risk in this chain**. **If
       `Carry`'s own test table or its four-part doc-02 amendment run long**, split at `DigestDue` +
@@ -522,7 +522,7 @@ Depends on PR 4 (classify fields) and PR 6 (`NextOccurrence`). Ships `arm.go` �
 constant. See **Finding F5**: ships an exported, unclamped lead-time function (spec R5.2) plus
 `Arm`'s own internal now-clamp (design), as two composed layers rather than one.
 
-- [ ] **7.1** Commit 1 (RED): `internal/core/prospection/arm_test.go` — the standalone lead-time
+- [x] **7.1** Commit 1 (RED): `internal/core/prospection/arm_test.go` — the standalone lead-time
       function: `eventAt` nine days out → `fireAt` exactly two days out (spec R5.2's own scenario);
       `eventAt - EventLeadDays*24h` landing in the past → returned **unclamped** (spec's explicit
       "no clamping at this layer").
@@ -531,11 +531,11 @@ constant. See **Finding F5**: ships an exported, unclamped lead-time function (s
       Stub: `const EventLeadDays = 7`; the lead-time func returning `eventAt` unchanged — compiles;
       the nine-days-out case fails first.
       Requirement: R5.2, resolved per **Finding F5**.
-- [ ] **7.2** Commit 2 (GREEN): implement the lead-time arithmetic via `time.Date` with a negative
+- [x] **7.2** Commit 2 (GREEN): implement the lead-time arithmetic via `time.Date` with a negative
       day offset (house pattern), no clamp.
       Verify: `go test ./internal/core/prospection/...`.
       Requirement: R5.2; design §3.7.
-- [ ] **7.3** Commit 1 (RED): `arm_test.go` (continued) — `Arm`: the four-way outcome table from
+- [x] **7.3** Commit 1 (RED): `arm_test.go` (continued) — `Arm`: the four-way outcome table from
       every `classify.Kind` (design §3.7's table) — `timer` with a resolved `DueAt` after `now` →
       `ArmTimer`, `FireAt = *DueAt` (never reading `EventAt` — I18's pure half); dated `event` after
       `now` → `ArmTrigger`, `FireAt` = the clamped lead-time result; `recurring_reminder` with
@@ -554,37 +554,37 @@ constant. See **Finding F5**: ships an exported, unclamped lead-time function (s
       the `timer` case fails first.
       Requirement: R6.1, resolved per **Finding F2** (`DecideArming`→`Arm`) and **Finding F3**
       (`RecurrenceRule`'s classify-side value converted into `prospection.Rule` at this call site).
-- [ ] **7.4** Commit 2 (GREEN): implement `Arm` per design's five-row table; `DueAt` read only for
+- [x] **7.4** Commit 2 (GREEN): implement `Arm` per design's five-row table; `DueAt` read only for
       `timer`, `EventAt` read only for `event`/`recurring_reminder` (I18); the now-clamp applied
       only at this call site, composing task 7.2's unclamped function.
       Verify: `go test ./internal/core/prospection/...` (now imports `internal/core/classify`).
       Requirement: R6.1; design §3.7.
-- [ ] **7.5** `arm_test.go` (continued) — I18 as a property of `Arm`'s body: for a fixture carrying
+- [x] **7.5** `arm_test.go` (continued) — I18 as a property of `Arm`'s body: for a fixture carrying
       distinct `EventAt`/`DueAt`/`CreatedAt`, `Arm` never reads `CreatedAt` and reads exactly one of
       `EventAt`/`DueAt` per `Kind`, never both; a sweep over every `classify.Kind` confirms no
       function in this file returns `unit.Unit`, `*unit.Unit`, or `[]unit.Unit`.
       **Not a missing-symbol red**: `Arm` already compiles and passes (task 7.4) — disclosed per
       `m2a` C9.
       Requirement: R6.1 (I18 half, the `unit.Unit`-absence property).
-- [ ] **7.6** `internal/core/classify/prompt.go`: state that a timer's instant lives in `due_at`,
+- [x] **7.6** `internal/core/classify/prompt.go`: state that a timer's instant lives in `due_at`,
       never `event_at`.
       Requirement: design §3.7 (decision 1).
-- [ ] **7.7** `docs/02-cognitive-core.md` §5 step 5 amendment: retire the M1 note deferring
+- [x] **7.7** `docs/02-cognitive-core.md` §5 step 5 amendment: retire the M1 note deferring
       timer/trigger arming; state what `Arm` does for each `Kind`.
       Requirement: design §3.7.
-- [ ] **7.8** `docs/02-cognitive-core.md` §7 amendment: the lead-time clamp rule (arming at `now` is
+- [x] **7.8** `docs/02-cognitive-core.md` §7 amendment: the lead-time clamp rule (arming at `now` is
       honest for an event whose lead window has already partly elapsed); the timer's
       `due_at`-not-`event_at` rule (cross-referencing task 7.6).
       Requirement: design §3.7 (decisions 1–2).
-- [ ] **7.9** §13: row 914 (`Event lead time`) amended with `prospection.EventLeadDays`; confirm
+- [x] **7.9** §13: row 914 (`Event lead time`) amended with `prospection.EventLeadDays`; confirm
       row 899's note that `focus.UrgencyLeadDays` is a separate knob stays true and is now
       checkable on both ends (no new row).
       Requirement: R0; design §3.7.
-- [ ] **7.10** Purity/lint: `golangci-lint run` (`core-purity` — `prospection` now imports
+- [x] **7.10** Purity/lint: `golangci-lint run` (`core-purity` — `prospection` now imports
       `internal/core/classify`; confirm no cycle, i.e. `classify` imports `prospection` nowhere in
       the tree after this PR).
       Requirement: `nooma-core` hard rule 1; design §4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/prospection/arm{,_test}.go`, `internal/core/classify/prompt.go`,
       `docs/02-cognitive-core.md`. Target ≤350 impl+docs lines. **Chain's last link** — after merge,
       `rg` over `internal/ports`, `internal/store`, `internal/brain`, `internal/scheduler`,
@@ -736,3 +736,37 @@ only about what it shipped.
   label describes an explicit null imprecisely. No data is miscoded, so it is pinned as-is with
   the imprecision stated rather than a sixth `Reason` invented for it (owner-review R3's own
   argument).
+
+---
+
+## Reconciliation note — 2026-08-21 (F9, found by Judgment Day on PR 7)
+
+**F9 — spec R6.1 and design §3.7 disagree about a past-dated recurring reminder.** R6.1's MUST
+reads *"a dated `event` or `recurring_reminder` whose instant is at or before `now` arms
+nothing"*, with no exception for a rule-bearing recurrence. Design §3.7's table applies that
+refusal only to the one-shot rows, and its "three decisions" note scopes it to *"a dated event"*.
+`Arm` follows the design; no test pinned which reading governed.
+
+**Resolved in the design's favour, and the spec's phrasing is the error.** A birthday's `event_at`
+is the birth date — always in the past, usually by decades. Applying the refusal to a rule-bearing
+recurring reminder would make the feature refuse every input it exists to serve.
+
+The distinction the spec's wording loses: a **one-shot instant** is a thing that happens once and
+can be over, and arming a nudge for it afterwards is doc 02 §5.1's refusal pointing the other way.
+A **recurrence's `event_at` is an anchor** — a month and a day the next occurrence is re-derived
+from, with its year discarded. The same date is a spent instant without a rule and a live anchor
+with one, and `TestArm_RecurringIgnoresHowOldItsAnchorIs` asserts both halves in one test so the
+boundary is visible rather than inferred.
+
+**Also pinned while resolving it**: which frame the anchor's month and day are read in. `classify`
+may decode an RFC3339 `event_at` carrying its own offset, while `NextOccurrence` builds occurrences
+in `now`'s location — two frames, and near midnight they disagree on the calendar date. The anchor
+is read in the **event's own zone**, because an anniversary is a calendar date rather than an
+instant: "4 September" means 4 September wherever the person later happens to be, and the
+occurrence is materialised in the zone they are in now. `TestArm_AnchorIsTheDateAsStated` pins it.
+
+**F10 — the `unit.Unit` scan cannot be an L1 test.** Spec R6.1 lists it under *"Verified by: L1"*,
+and depguard's `core-purity` rule forbids importing `os` anywhere under `internal/core`, its own
+tests included. A scan that reads the package's files therefore cannot live beside them. It ships
+as `test/conformance/i04_arming_never_produces_a_unit_test.go` instead. The rule is right and the
+spec's layer assignment was optimistic; nothing about the assertion changed, only where it runs.

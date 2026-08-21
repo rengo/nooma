@@ -488,14 +488,21 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    - Recording is not undoing. The previous value is retrievable; no surface offers it back until
      the UI exists.
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a
-   recurring `event` (a birthday) arms a recurring trigger; ambiguous references to people
-   leave the unit `incomplete` until the disambiguation answer arrives.
-   - **M1 note**: M1 classifies `timer`, `recurring_reminder`, and `person_ref_status:
-     ambiguous` per this contract, but arms nothing and creates no `incomplete` unit —
-     arming a timer or trigger is M3, and the `incomplete` promotion path is M2. Until
-     then, a `timer`/`recurring_reminder` capture is refused outright (no `units` row —
-     §8's "a timer is NEVER a unit"), and an ambiguous person reference persists as an
-     ordinary `pool` unit with the ambiguity logged, not held as `incomplete`.
+   `recurring_reminder` (a birthday) arms a recurring trigger — a distinct `type` from `event`,
+   not an `event` with a flag; ambiguous references to people leave the unit `incomplete` until
+   the disambiguation answer arrives.
+   What each kind arms is decided by `internal/core/prospection.Arm`, a pure function of the
+   classification and one instant: a `timer` with a `due_at` still ahead arms a timer at exactly
+   that instant; a dated `event` arms a trigger at `event_lead_days` before it; a
+   `recurring_reminder` carrying both a date and a rule arms a recurring trigger anchored on the
+   event's own month and day; the same kind with the rule degraded arms the one-shot dated
+   occurrence instead, because the capture is honoured and the recurrence is not invented; and
+   anything undated, already past, or of another kind arms nothing.
+   - **Status note**: the decision above exists and is tested; the *effect* — writing the
+     `triggers` or `timers` row — is `m3b`'s. Until it lands, a `timer`/`recurring_reminder`
+     capture is still refused outright (no `units` row — §8's "a timer is NEVER a unit"), and an
+     ambiguous person reference persists as an ordinary `pool` unit with the ambiguity logged,
+     rather than held as `incomplete`.
 
 **Product rule: asking is the EXCEPTION.** Nooma captures with what it has, decides on its
 own, leaves an auditable trace, and only asks when ambiguity blocks it (e.g. two different
@@ -800,6 +807,19 @@ have N nudges; a pattern watcher does not hang off any unit):
 - **Lead time**: default 7 days before the event, stored in `payload.lead_days` (the re-arm
   propagates it). Policy per event class; migrating it to a self-model preference is a
   deferred decision.
+  The horizon is **clamped to `now`, never offset into the past**. An event captured two days
+  before it happens has its horizon five days behind, and arming there would hand §7's own
+  staleness gate a trigger born expired. The lead time says how much warning is wanted; the
+  system is not late for an event it only just learned about.
+  A recurring reminder's `event_at` is an **anchor**, not a spent instant: its year is discarded
+  and only the month and day survive, so a birth date decades past still arms. The at-or-before-now
+  refusal above governs a one-shot occurrence — the same date is a spent instant without a
+  recurrence rule and a live anchor with one. The anchor's month and day are read in the zone the
+  event was stated in, because an anniversary is a calendar date rather than an instant.
+  A **timer** carries its instant in `due_at` and never in `event_at`: `event_at` is when a thing
+  happens in the world and a timer has no world event, while `due_at` is when something is owed
+  and a timer is owed at its fire instant. The classify prompt states it, so the model is not
+  left to guess which field a reminder belongs in.
 
 **Delivery — digest vs push** (`interrupt_level` 0–1, persisted on the trigger so the glass
 box can audit it):
@@ -1000,7 +1020,7 @@ module):
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
-| Event lead time | 7 days |
+| `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a dated event its trigger fires. A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
