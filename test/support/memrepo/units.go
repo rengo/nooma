@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -274,4 +275,9 @@ func deepCopy(u unit.Unit) unit.Unit {
 	}
 
 	return cp
+}
+
+// LiveFocusCandidates implements ports.UnitRepo — red-step stub.
+func (r *Units) LiveFocusCandidates(_ context.Context, _ []string) ([]focus.Candidate, error) {
+	return nil, nil
 }

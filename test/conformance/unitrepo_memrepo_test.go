@@ -60,3 +60,13 @@ func TestUnitRepo_MemRepo_LiveDecayStates(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_LiveFocusCandidates runs
+// repocontract.RunLiveFocusCandidates — spec R3.1's contract suite —
+// against the same fake.
+func TestUnitRepo_MemRepo_LiveFocusCandidates(t *testing.T) {
+	repocontract.RunLiveFocusCandidates(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}

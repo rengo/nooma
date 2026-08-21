@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 )
@@ -14,7 +15,7 @@ import (
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Eleven methods, and two absences that are deliberate:
+// Twelve methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -159,6 +160,45 @@ type UnitRepo interface {
 	// O(vault) memory per call and there is no paging (design §4.1, named
 	// as a risk rather than mitigated).
 	LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error)
+
+	// LiveFocusCandidates returns, for every id among ids whose status is
+	// pool, that unit's focus.Candidate — ordered by id. An id that is
+	// absent or not live is omitted, not an error, and an empty ids
+	// returns an empty slice, LiveByIDs' own posture.
+	//
+	// ORDER BY id is a deterministic tie-break, not a ranking, and the
+	// distinction is the whole reason this method returns a set rather
+	// than a top-k. focus.Priority is a multiplicative envelope over
+	// weight.Effective at an instant (focus/priority.go:168-198): no SQL
+	// expression can order by it, and weight DESC LIMIT k cannot
+	// approximate it either, because Priority is not monotone in raw
+	// weight once urgency and age enter — a LIMIT would drop a
+	// high-urgency low-weight item. So the ranking stays in focus.Rank,
+	// where it is already reviewed and covered, and ordering here exists
+	// only so two runs over one vault agree. Ordering in SQL would be the
+	// drift IncompleteOlderThan's own doc comment warns about: one rule in
+	// two languages.
+	//
+	// Why a second live read beside LiveByIDs rather than a shape
+	// parameter on it: LiveByIDs returns unit.Unit and this returns
+	// focus.Candidate, which is m2a D9's rule — a narrow read shape for
+	// the core decision that consumes it — held one layer up. The name
+	// carries both halves, UnitRepo's own convention: Live is the status,
+	// FocusCandidates is the shape.
+	//
+	// It ships with no production caller. m3d's digest assembly is the
+	// consumer; declaring a port ahead of it inside one chain is house
+	// practice and is said out loud rather than hidden — ports.StateRepo
+	// was declared before both its migration and its implementation
+	// (staterepo.go:31-39). It is not untested: repocontract runs it
+	// against the fake and the SQLite implementation alike.
+	//
+	// A NULL triggers.unit_id — a pattern_based trigger — must never reach
+	// this method as an id to resolve. focus.Candidate has no
+	// representation for "no source unit", and prospection's own Carry
+	// already expects a nil *focus.Candidate for that case. That is the
+	// caller's obligation, not something this signature can enforce.
+	LiveFocusCandidates(ctx context.Context, ids []string) ([]focus.Candidate, error)
 }
 
 // Sentinel errors ports.UnitRepo implementations return — design D5.

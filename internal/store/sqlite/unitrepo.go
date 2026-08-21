@@ -13,6 +13,7 @@ import (
 	"github.com/ncruces/go-sqlite3"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -429,4 +430,9 @@ func requireRowAffected(res sql.Result, notFound error) error {
 		return notFound
 	}
 	return nil
+}
+
+// LiveFocusCandidates implements ports.UnitRepo — red-step stub.
+func (r *UnitRepo) LiveFocusCandidates(_ context.Context, _ []string) ([]focus.Candidate, error) {
+	return nil, nil
 }
