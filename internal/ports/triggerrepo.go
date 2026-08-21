@@ -8,14 +8,25 @@ import (
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
-// TriggerStatus, TriggerKind and the TriggerRepo shape below are the red
-// step's minimal declarations (PR 1, commit 1): enough for the contract
-// suite to compile, nothing more. The vocabularies answer with no members
-// and the fake answers with zero values, so every substantive assertion in
-// test/support/repocontract/triggerrepo.go fails for its own reason.
+// TriggerStatus is triggers.status's vocabulary (migration 0001:46).
+//
+// It lives in internal/ports, not in internal/core/prospection, because
+// core "states only this neutral vocabulary — never a schema status"
+// (prospection/staleness.go:30-34) and no core function reads a trigger
+// status: a core type here would be a type with no core consumer. It is
+// therefore outside test/conformance/calibration_doc_test.go's reach too
+// (§13 covers internal/core symbols only) — exactly
+// StateSourceConsolidation's own situation, and pinned the same way, to
+// migration 0001's column comment by an L2 test
+// (test/conformance/trigger_timer_vocabulary_ddl_test.go).
 type TriggerStatus string
 
-// The triggers.status vocabulary (migration 0001:46).
+// The triggers.status vocabulary, in migration 0001:46's own order.
+//
+// TriggerStatusDismissed is declared and never written here: dismissal is
+// a user's answer to a delivered trigger, and delivery is m3d's. It sits
+// beside the three this slice does write the way StateSourceUser sits
+// beside a StateSourceConsolidation that is the only one anything writes.
 const (
 	TriggerStatusArmed     TriggerStatus = "armed"
 	TriggerStatusFired     TriggerStatus = "fired"
@@ -23,43 +34,102 @@ const (
 	TriggerStatusExpired   TriggerStatus = "expired"
 )
 
-// TriggerKind is triggers.kind's vocabulary.
+// AllTriggerStatuses returns a fresh slice holding the four TriggerStatus
+// members, in the order the constants above declare them.
+//
+// A function, not an exported var (AllDecisionActions's own reasoning,
+// decisionlog.go:98-106): an exported slice is mutable by any importer,
+// and a mutated result could defeat a completeness check run from outside
+// this package.
+func AllTriggerStatuses() []TriggerStatus {
+	return []TriggerStatus{
+		TriggerStatusArmed, TriggerStatusFired, TriggerStatusDismissed, TriggerStatusExpired,
+	}
+}
+
+// TriggerKind is triggers.kind's vocabulary (migration 0001:45) — see
+// TriggerStatus for why it lives here.
 type TriggerKind string
 
-// The triggers.kind vocabulary (migration 0001:45).
+// The triggers.kind vocabulary, in migration 0001:45's own order.
+// TriggerKindEventBased and TriggerKindPatternBased are declared and never
+// written: prospection.Arm produces only time-based armaments, and
+// producing the other two is a stated non-goal of this slice.
 const (
 	TriggerKindTimeBased    TriggerKind = "time_based"
 	TriggerKindEventBased   TriggerKind = "event_based"
 	TriggerKindPatternBased TriggerKind = "pattern_based"
 )
 
-// AllTriggerStatuses is unimplemented in the red step.
-func AllTriggerStatuses() []TriggerStatus { return nil }
-
-// AllTriggerKinds is unimplemented in the red step.
-func AllTriggerKinds() []TriggerKind { return nil }
-
-// TriggerPayload is triggers.payload's declared shape.
-type TriggerPayload struct {
-	ActionText string
-	Rationale  string
-	LeadDays   int
+// AllTriggerKinds returns a fresh slice holding the three TriggerKind
+// members — see AllTriggerStatuses for why it is a function.
+func AllTriggerKinds() []TriggerKind {
+	return []TriggerKind{TriggerKindTimeBased, TriggerKindEventBased, TriggerKindPatternBased}
 }
 
-// Trigger is the write shape.
+// TriggerPayload is triggers.payload's declared shape, and the reason it
+// is declared rather than opaque is that something reads it back: doc 02
+// §7 says a recurring trigger's re-arm propagates lead_days, so LeadDays
+// has a reader and therefore a type. Decision.Context is a
+// json.RawMessage for the opposite reason (decisionlog.go:128-135) —
+// nothing reads it structurally, so nothing guarantees its keys.
+type TriggerPayload struct {
+	// ActionText is what the trigger will say when it is delivered.
+	ActionText string
+	// Rationale is why it was armed — doc 02 §11's glass box.
+	Rationale string
+	// LeadDays is how far ahead of the event the trigger fires. A
+	// recurring trigger's re-arm propagates it (doc 02 §7).
+	LeadDays int
+}
+
+// Trigger is TriggerRepo's write shape: every triggers column this slice
+// writes, and none it does not. Write shape and read shape are different
+// types, following LiveDecayStates's own rule (unitrepo.go:141-161).
+//
+// No Status field. Create only ever writes an armed row — arming is what
+// it is — so a status parameter would be the one channel through which a
+// prospection.Verdict string could reach a column that carries no CHECK
+// constraint. The literal lives in one SQL string inside
+// internal/store/sqlite and never crosses this boundary.
+//
+// No Condition field. condition is JSON for event_based and pattern_based
+// triggers, and this slice produces neither.
 type Trigger struct {
-	ID               string
-	UnitID           *string
-	Kind             TriggerKind
-	InterruptLevel   *float64
-	Payload          TriggerPayload
-	FireAt           *time.Time
+	// ID is the trigger's own id, generated by the caller.
+	ID string
+	// UnitID is the unit the trigger hangs off, or nil for a
+	// pattern_based trigger, which hangs off nothing (migration 0001:44).
+	UnitID *string
+	// Kind is time_based for everything prospection.Arm produces.
+	Kind TriggerKind
+	// InterruptLevel is the already-converted float, never a
+	// prospection.Interrupt: the conversion lives in internal/brain, so
+	// internal/ports does not import that vocabulary. nil is the
+	// degraded case — the column is nullable and the absence is
+	// meaningful, not a zero.
+	InterruptLevel *float64
+	// Payload is marshalled to triggers.payload by the implementation.
+	Payload TriggerPayload
+	// FireAt is when the trigger comes due, or nil for a trigger that
+	// does not come due on a clock (migration 0001:50).
+	FireAt *time.Time
+	// RecurrenceRule and RecurrenceAnchor are nil for a one-shot trigger.
+	// prospection.Rule crosses this boundary on purpose: doc 02 §7 and
+	// triggers.recurrence_rule's column comment name the same two strings
+	// by design, so there is one vocabulary and no mapping to get wrong.
 	RecurrenceRule   *prospection.Rule
 	RecurrenceAnchor *prospection.Anchor
-	CreatedAt        time.Time
+	// CreatedAt arrives as data — no method on this port reads a clock.
+	CreatedAt time.Time
 }
 
-// DueTrigger is the read shape.
+// DueTrigger is TriggerRepo's read shape: what the due scan needs to
+// decide, and nothing else.
+//
+// No Status field: Due returns armed rows only, so it would have no
+// reader. FireAt is not a pointer here for the same reason — Due's
+// predicate includes fire_at IS NOT NULL, so a due trigger always has one.
 type DueTrigger struct {
 	ID               string
 	UnitID           *string
@@ -70,16 +140,73 @@ type DueTrigger struct {
 }
 
 // TriggerRepo is the repository port over triggers.
+//
+// Four methods, and three absences that are deliberate:
+//
+//   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
+//     — I03's strengthened prefix set, asserted over this interface's own
+//     method set by the shared contract suite
+//     (test/support/repocontract/triggerrepo.go).
+//   - No Due(status, …) parameterized read. UnitRepo's own rule: a status
+//     parameter is precisely how a live read surface accidentally becomes
+//     a non-live one, so every read here is named for what it returns.
+//   - No Cancel-by-user and no List. doc 02 §8 promises both; chat is
+//     m3c/m3d's and the UI is M4's, and a method with no caller is what
+//     UpdateEventAt's doc comment refuses.
+//
+// Every transition is its own method taking no target status, which keeps
+// the status literal inside one SQL string per method — StateRepo.
+// OpenHypothesis sets its own source column literal for the same reason
+// (staterepo.go:34-44). M4's dismissed adds a fourth method rather than a
+// new argument.
+//
+// No method reads a clock: every timestamp arrives as an explicit
+// parameter.
 type TriggerRepo interface {
+	// Create persists t. It returns ErrTriggerExists if a trigger with
+	// t.ID already exists. The row is created armed.
 	Create(ctx context.Context, t Trigger) error
+
+	// Due returns every armed trigger whose fire_at is non-NULL and at or
+	// before at, ordered by (fire_at, id). fire_at IS NOT NULL is part of
+	// the predicate, not a defensive scan guard — a pattern_based trigger
+	// legitimately has none (migration 0001:44, :50).
+	//
+	// This is an unbounded read: every trigger that has come due must be
+	// seen, which is what the scan is. On a personal vault that is
+	// O(due) memory per call and there is no paging.
 	Due(ctx context.Context, at time.Time) ([]DueTrigger, error)
+
+	// Fire moves id from armed to fired and writes fired_at = at in one
+	// statement, so a fired row without a fired_at is unrepresentable.
+	// surfaced_at is untouched and stays NULL — "pending delivery"
+	// (migration 0001:52) is m3d's to close.
+	//
+	// It returns ErrTriggerStatusConflict if id is no longer armed, and
+	// ErrTriggerNotFound if no trigger with id exists. The armed
+	// precondition is optimistic concurrency, not validation: two scans
+	// racing over one due trigger must produce exactly one fired row.
 	Fire(ctx context.Context, id string, at time.Time) error
+
+	// Expire moves id from armed to expired (I15: a trigger past its
+	// window expires, it does not fire late). triggers carries no
+	// expired_at column, so no timestamp is written and none is invented.
+	//
+	// It returns the same two errors as Fire, for the same reasons.
 	Expire(ctx context.Context, id string) error
 }
 
 // Sentinel errors ports.TriggerRepo implementations return.
 var (
-	ErrTriggerNotFound       = errors.New("trigger not found")
-	ErrTriggerExists         = errors.New("trigger already exists")
+	// ErrTriggerNotFound is returned by Fire and Expire when no trigger
+	// with the given id exists.
+	ErrTriggerNotFound = errors.New("trigger not found")
+
+	// ErrTriggerExists is returned by Create when a trigger with t.ID
+	// already exists.
+	ErrTriggerExists = errors.New("trigger already exists")
+
+	// ErrTriggerStatusConflict is returned by Fire and Expire when the
+	// trigger's current status is not armed.
 	ErrTriggerStatusConflict = errors.New("trigger is not in the expected status")
 )

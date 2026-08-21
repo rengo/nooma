@@ -42,6 +42,14 @@ import (
 //     belong to the same invariant and had no removal verb to begin
 //     with — widening the sweep makes the doc comment's claim true
 //     instead of narrowing the claim to match a partial sweep.
+//     TriggerRepo and TimerRepo joined the sweep in the PR that declared
+//     them, for that same reason: the list's claim is "every ports
+//     repository interface", and a port left out of it would make the
+//     claim false the moment it landed. Their own contract suite asserts
+//     the identical prefix set over the identical method sets
+//     (test/support/repocontract/triggerrepo.go) — redundant on purpose,
+//     since that suite runs once per implementation while this one runs
+//     over the declaration itself.
 //  2. Tree scan: no Go source file under internal/ or cmd/ issues a literal
 //     DELETE FROM units statement (migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this Go-source
@@ -119,6 +127,8 @@ var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.StateRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.SignalRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.EmbeddingRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.TriggerRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.TimerRepo)(nil)).Elem(),
 }
 
 // containsUnitsDeleteStatement reports whether line contains the exact
