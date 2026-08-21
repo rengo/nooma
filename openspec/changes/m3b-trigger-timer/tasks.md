@@ -51,6 +51,28 @@ the whole change; PR 5a carries its `docs/02-cognitive-core.md` §7 delta in the
 non-negotiable ordering rule. `spec.md` R0 is not edited by this artifact; the deviation is recorded
 here for owner awareness, the same posture `m3a`'s F1–F9 took toward `design.md`.
 
+**G4 — task 1.3's placement of the vocabulary tests contradicts design §8's own table.**
+Task 1.3 puts `AllTriggerStatuses()`/`AllTriggerKinds()`'s migration-comment pin inside
+`test/support/repocontract/triggerrepo.go`; design §8's testing table puts it at
+`test/conformance/` (PR 1). **Resolved in design's favour.** The vocabularies are properties of
+`internal/ports`, not of any implementation of the port, so running the pin once at L2 proves
+exactly as much as running it again per implementation would, and `migrationSQLText`
+(`i13_learning_signal_test.go:24`) already lives in `test/conformance`. Shipped as
+`test/conformance/trigger_timer_vocabulary_ddl_test.go`, which also holds the fresh-slice check
+`AllDecisionActions`'s doc comment argues for. Task 1.1's `RunTriggerRepoContract(t, repo, clock)`
+signature went the same way: the house shape is `Run<Port>(t, newRepo func(t) ports.<Port>)` —
+every one of the seven existing suites — and no case in this contract reads a clock, so a `clock`
+parameter would have had no reader. Shipped as `RunTriggerRepo` / `RunTimerRepo`.
+
+**G5 — design §3.1's claim that "the I03 scan stays scoped to `ports.UnitRepo`" is stale.**
+`test/conformance/i03_units_never_deleted_test.go:118-137` has swept **seven** ports interfaces
+since `m2c` PR 3, and its own comment states the list's claim as "every ports repository
+interface". Leaving `TriggerRepo` and `TimerRepo` out would have falsified that claim the moment
+they landed, so both were added to `sweptPortsRepoTypes` — a strengthening, which
+`docs/06-harness.md` §4 permits (weakening is what it forbids). The contract suite's own
+reflection check stays: it runs per implementation, this one runs over the declaration, and the
+redundancy is stated in both places rather than left to look accidental.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
@@ -74,7 +96,7 @@ here for owner awareness, the same posture `m3a`'s F1–F9 took toward `design.m
 Depends on nothing outside this change. Ships both ports, three vocabularies + `AllX()`, write/read
 shapes, sentinels, `memrepo` fakes, `repocontract` shared suites.
 
-- [ ] **1.1** Commit 1 (RED): `test/support/repocontract/triggerrepo.go` (new) — a shared
+- [x] **1.1** Commit 1 (RED): `test/support/repocontract/triggerrepo.go` (new) — a shared
       `RunTriggerRepoContract(t, repo, clock)`: Create+Due round trip (armed trigger appears in
       `Due` at/after `fire_at`, absent before); the conflict scenario (spec R1.1's own: stored
       status `expired`, call the `armed→fired` transition, expect the named conflict error, row
@@ -91,14 +113,14 @@ shapes, sentinels, `memrepo` fakes, `repocontract` shared suites.
       with the empty set — a hypothetical sixth `DeleteBy…` method would then compile and pass
       undetected; also flip `memrepo`'s `Due` filter from `status == armed` to "return everything" —
       the expired-row-absent-from-Due assertion must fail.
-- [ ] **1.2** Commit 2 (GREEN): implement `internal/ports/triggerrepo.go` (`TriggerStatus`,
+- [x] **1.2** Commit 2 (GREEN): implement `internal/ports/triggerrepo.go` (`TriggerStatus`,
       `TriggerKind`, `AllTriggerStatuses()`, `AllTriggerKinds()`, `Trigger`, `TriggerPayload`,
       `DueTrigger`, `TriggerRepo`, sentinels — design §3.1's exact shape) and
       `test/support/memrepo/triggers.go` (the `armed` precondition enforced under a mutex,
       `UnitRepo`'s own fake pattern).
       Verify: `go test ./test/support/repocontract/... ./test/support/memrepo/...`.
       Requirement: R1.1; design §3.1, §3.2.
-- [ ] **1.3** Commit 1 (RED): `repocontract/triggerrepo.go` (continued) — `AllTriggerStatuses()`
+- [x] **1.3** Commit 1 (RED): `repocontract/triggerrepo.go` (continued) — `AllTriggerStatuses()`
       returns exactly `armed|fired|dismissed|expired` in migration `0001:42-58`'s own comment
       order; `AllTriggerKinds()` returns exactly `time_based|event_based|pattern_based` — pinned to
       the literal comment text, `relation.AllCreatedBy`'s own shape against `0001:37`.
@@ -107,7 +129,7 @@ shapes, sentinels, `memrepo` fakes, `repocontract` shared suites.
       Requirement: design §3.2; **R2**.
       **Mutation**: reorder one member in the Go-side slice — fails; the test also asserts
       `len(AllTriggerStatuses()) == 4` so a silently-dropped member is caught independent of order.
-- [ ] **1.4** Commit 1 (RED): `test/support/repocontract/timerrepo.go` (new) — mirrors 1.1 for
+- [x] **1.4** Commit 1 (RED): `test/support/repocontract/timerrepo.go` (new) — mirrors 1.1 for
       `TimerRepo`: Create+Due, `pending→cancelled` conflict scenario, `Cancel` drops from `Due`,
       the same reflection-based no-forbidden-prefix check, `AllTimerStatuses()` pinned to
       `pending|fired|cancelled` at `0001:61-70`.
@@ -115,12 +137,12 @@ shapes, sentinels, `memrepo` fakes, `repocontract` shared suites.
       Stub: zero-value stubs — compiles; Create+Due round trip fails first.
       Requirement: R1.2.
       **Mutation**: identical shape to 1.1's — reflection-emptying and always-return-all.
-- [ ] **1.5** Commit 2 (GREEN): implement `internal/ports/timerrepo.go` (`Create`/`Due`/`Fire`/
+- [x] **1.5** Commit 2 (GREEN): implement `internal/ports/timerrepo.go` (`Create`/`Due`/`Fire`/
       `Cancel`, no `interrupt_level` field — `timers` has none) and `test/support/memrepo/timers.go`.
       `Fire` is 3-arg per **G2**'s resolution: `at` writes `surfaced_at`; `rendered_text` untouched.
       Verify: `go test ./test/support/repocontract/... ./test/support/memrepo/...`.
       Requirement: R1.2; design §3.1; **G2**.
-- [ ] **1.6** `repocontract/triggerrepo.go` (continued) — R1.3's Go-level half: `Create` with
+- [x] **1.6** `repocontract/triggerrepo.go` (continued) — R1.3's Go-level half: `Create` with
       `InterruptLevel: nil` → `Due` returns `nil`; `Create` with a pointer to `0.37` → `Due` returns
       a **freshly allocated** pointer to `0.37`, never the same pointer (a caller mutating the
       returned value must not corrupt the fake's own store).
@@ -131,10 +153,10 @@ shapes, sentinels, `memrepo` fakes, `repocontract` shared suites.
       **Mutation**: have `memrepo` store the caller's pointer directly instead of copying the float
       — a test that mutates the pointer after `Create` and re-reads via `Due` must observe the
       mutation and fail the "unaffected" assertion.
-- [ ] **1.7** Purity/lint: `golangci-lint run` (`ports-purity` — `internal/ports` imports only
+- [x] **1.7** Purity/lint: `golangci-lint run` (`ports-purity` — `internal/ports` imports only
       `internal/core/prospection` for `Rule`/`Anchor`, no `internal/store` import).
       Requirement: `nooma-core` hard rules 1–2; design §4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/ports/{triggerrepo,timerrepo}.go`, `test/support/memrepo/{triggers,timers}.go`,
       `test/support/repocontract/{triggerrepo,timerrepo}.go`. No `docs/02-cognitive-core.md` delta
       (no `internal/core` touch here). Target ≤250 impl+docs lines.
