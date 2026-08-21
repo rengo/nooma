@@ -146,6 +146,50 @@ func TestArm(t *testing.T) {
 		}
 	})
 
+	t.Run("both recurrence rules convert, not just the default one", func(t *testing.T) {
+		// The conversion Finding F3 left to this call site has two members,
+		// and a switch that returned RuleYearly for both would pass every
+		// other test in this file. Caught by mutation before review, and
+		// pinned here so it stays caught.
+		event := at(time.September, 4)
+
+		for _, tc := range []struct {
+			from classify.RecurrenceRule
+			want Rule
+		}{
+			{classify.RecurrenceRuleYearly, RuleYearly},
+			{classify.RecurrenceRuleMonthly, RuleMonthly},
+		} {
+			c := classify.Classification{
+				Kind:           kind(classify.KindRecurringReminder),
+				EventAt:        armPtr(event),
+				RecurrenceRule: armPtr(tc.from),
+			}
+
+			plan, ok := Arm(c, now)
+			if !ok || plan.What != ArmRecurring {
+				t.Fatalf("%q: Arm = (%+v, %v), want an ArmRecurring plan", tc.from, plan, ok)
+			}
+			if plan.Rule != tc.want {
+				t.Errorf("classify rule %q became %q, want %q", tc.from, plan.Rule, tc.want)
+			}
+			// Clamped, and for the monthly rule that clamp is the ordinary
+			// case rather than the exception: the next occurrence of a given
+			// day is at most a month out, so a seven-day horizon in front of
+			// it frequently lands before now. A monthly reminder therefore
+			// arms at now more often than not, which is the correct reading
+			// of "the system is not late for something it just learned".
+			want := clampToNow(LeadTime(NextOccurrence(tc.want, plan.Anchor, now)), now)
+			if !plan.FireAt.Equal(want) {
+				t.Errorf("%q: FireAt = %v, want %v — a monthly reminder must not be scheduled "+
+					"a year out", tc.from, plan.FireAt, want)
+			}
+			if plan.FireAt.Before(now) {
+				t.Errorf("%q: FireAt = %v is before now", tc.from, plan.FireAt)
+			}
+		}
+	})
+
 	t.Run("a recurring reminder with a degraded rule arms the one-shot occurrence", func(t *testing.T) {
 		event := at(time.September, 4)
 		c := classify.Classification{
