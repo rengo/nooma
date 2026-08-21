@@ -35,6 +35,7 @@ internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit)
 internal/store/sqlite: func (*UnitRepo) IncompleteOlderThan(ctx context.Context, cutoff time.Time) ([]consolidation.Incomplete, error)
 internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error)
+internal/store/sqlite: func (*UnitRepo) LiveFocusCandidates(ctx context.Context, ids []string) ([]focus.Candidate, error)
 internal/store/sqlite: func (*UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) UpdateContent(ctx context.Context, id, content string, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) UpdateDueAt(ctx context.Context, id string, dueAt, at time.Time) error

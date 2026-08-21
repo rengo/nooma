@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -277,7 +278,36 @@ func deepCopy(u unit.Unit) unit.Unit {
 	return cp
 }
 
-// LiveFocusCandidates implements ports.UnitRepo — red-step stub.
-func (r *Units) LiveFocusCandidates(_ context.Context, _ []string) ([]focus.Candidate, error) {
-	return nil, nil
+// LiveFocusCandidates implements ports.UnitRepo. The filter is positive
+// (status == pool via unit.Status.IsLive) rather than an exclusion list —
+// I02, and the port's own rule.
+//
+// DueAt is copied out rather than shared: the real repository allocates a
+// fresh *time.Time per row by construction, and a fake that handed back its
+// own stored pointer would let a caller mutate the store through the
+// result — a difference between the two implementations that the contract
+// would not otherwise catch.
+func (r *Units) LiveFocusCandidates(_ context.Context, ids []string) ([]focus.Candidate, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	candidates := make([]focus.Candidate, 0, len(ids))
+	for _, id := range ids {
+		u, ok := r.units[id]
+		if !ok || !u.Status.IsLive() {
+			continue
+		}
+		candidates = append(candidates, focus.Candidate{
+			ID:            u.ID,
+			Type:          u.Type,
+			Weight:        u.Weight,
+			DecayRate:     u.WeightDecayRate,
+			LastTouchedAt: u.LastTouchedAt,
+			CreatedAt:     u.CreatedAt,
+			DueAt:         copyTime(u.DueAt),
+		})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].ID < candidates[j].ID })
+	return candidates, nil
 }
