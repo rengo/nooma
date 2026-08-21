@@ -68,5 +68,11 @@ type EnergyReading struct {
 // The level comparison is strict for the same reason: the burden of proof
 // is on "low", and exactly the midpoint is not low.
 func LowEnergy(r *EnergyReading, now time.Time) bool {
-	return true
+	if r == nil {
+		return false
+	}
+	if r.Level >= LowEnergyMax {
+		return false
+	}
+	return now.Sub(r.RecordedAt) <= EnergyReadingMaxAgeHours*time.Hour
 }
