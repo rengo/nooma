@@ -183,6 +183,9 @@ type captureCLIResponse struct {
 	Outcome  string `json:"outcome"`
 	UnitID   string `json:"unit_id,omitempty"`
 	Embedded bool   `json:"embedded,omitempty"`
+	Armed    string `json:"armed,omitempty"`
+	ArmedID  string `json:"armed_id,omitempty"`
+	FireAt   string `json:"fire_at,omitempty"`
 	Units    []struct {
 		Content string `json:"content"`
 	} `json:"units,omitempty"`
@@ -201,6 +204,10 @@ func renderCaptureResponse(out io.Writer, resp captureCLIResponse) error {
 			state = "embedded"
 		}
 		_, err := fmt.Fprintf(out, "captured: unit %s stored (%s)\n", resp.UnitID, state)
+		return err
+
+	case brain.OutcomeArmed:
+		_, err := fmt.Fprintf(out, "captured: armed %s %s — fires at %s\n", resp.Armed, resp.ArmedID, resp.FireAt)
 		return err
 
 	case brain.OutcomeDiscarded:

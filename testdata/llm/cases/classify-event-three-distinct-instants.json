@@ -1,0 +1,8 @@
+{
+  "id": "classify-event-three-distinct-instants",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "the contract meeting is on 4 September, and the paperwork is due on the 20th",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Contract meeting\",\"weight\":0.6,\"decay_rate\":0.03,\"due_at\":\"2026-08-20T15:00:00Z\",\"event_at\":\"2026-09-04T09:00:00Z\"}"
+}

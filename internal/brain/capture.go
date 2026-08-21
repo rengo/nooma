@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
@@ -181,6 +182,19 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			}
 		}
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
+	}
+
+	// The arming fork (design §3.5), in the position the retired timer
+	// refusal held: before classify.ToUnit, so a timer never reaches it
+	// and I04 stays structural rather than remembered. Arm takes the
+	// instant Capture already read — there is no second clock read here,
+	// and captureRunner holds no clock to make one with.
+	if plan, armed := prospection.Arm(c, now); armed {
+		result, err := r.arm(ctx, c, plan, now)
+		if err != nil {
+			return CaptureResult{}, err
+		}
+		return result, nil
 	}
 
 	// The correction fork (design D7/D8, spec R1.1): a correction never
@@ -614,6 +628,180 @@ func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u u
 		return fmt.Errorf("capture: record ambiguous-person-ref decision for unit %q: %w", u.ID, err)
 	}
 	return nil
+}
+
+// arm persists what one Plan decided and reports it back to the caller.
+//
+// One row, in one table, per Plan — never both, which is why the switch
+// has no shared tail: a timer and a trigger disagree about almost every
+// column, and a merged writer would have to carry the union of two shapes
+// and decide which half to leave zero.
+//
+// The id is generated here rather than inside prospection: Plan is a
+// decision about what to arm, and an id is a fact about a row that does
+// not exist yet.
+func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan prospection.Plan, now time.Time) (CaptureResult, error) {
+	id := r.ids.New()
+
+	switch plan.What {
+	case prospection.ArmTimer:
+		// action_text is the request VERBATIM — doc 02 §8: "the request is
+		// stored verbatim and only worded at delivery time". Wording it
+		// here would spend an LLM call at capture on text that may never
+		// be shown, and would lose the user's own words for good.
+		//
+		// c.NormalizedContent is a *string because classify degrades a
+		// missing field to nil, and that nil is passed through rather than
+		// flattened to "": timers.action_text's own NULL already means
+		// "generic nudge" (migration 0001:65), which is exactly what a
+		// timer with no salvaged text is.
+		if err := r.timers.Create(ctx, ports.Timer{
+			ID:         id,
+			FireAt:     plan.FireAt,
+			ActionText: c.NormalizedContent,
+			CreatedAt:  now,
+		}); err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: arm timer: %w", err)
+		}
+		if err := r.recordArmedDecision(ctx, ports.ActionCaptureArmedTimer, id, plan, now); err != nil {
+			return CaptureResult{}, err
+		}
+
+	case prospection.ArmTrigger, prospection.ArmRecurring:
+		fireAt := plan.FireAt
+		trigger := ports.Trigger{
+			ID:             id,
+			Kind:           ports.TriggerKindTimeBased,
+			InterruptLevel: interruptColumn(plan.Interrupt),
+			Payload: ports.TriggerPayload{
+				// The trigger payload is JSON, not a nullable column, so
+				// a degraded normalized_content lands as the empty string
+				// here rather than as a key meaning "generic nudge" —
+				// triggers have no such concept, and inventing one for
+				// them would give payload.action two readings.
+				ActionText: derefString(c.NormalizedContent),
+				Rationale:  armRationale(plan),
+				LeadDays:   plan.LeadDays,
+			},
+			FireAt:    &fireAt,
+			CreatedAt: now,
+		}
+
+		action := ports.ActionCaptureArmedTrigger
+		if plan.What == prospection.ArmRecurring {
+			// The recurrence columns are written only for ArmRecurring.
+			// Plan.Rule and Plan.Anchor carry zero values for the one-shot
+			// case, and writing those would claim a recurrence the user
+			// never asked for.
+			rule, anchor := plan.Rule, plan.Anchor
+			trigger.RecurrenceRule = &rule
+			trigger.RecurrenceAnchor = &anchor
+			action = ports.ActionCaptureArmedRecurring
+		}
+
+		if err := r.triggers.Create(ctx, trigger); err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: arm trigger: %w", err)
+		}
+		if err := r.recordArmedDecision(ctx, action, id, plan, now); err != nil {
+			return CaptureResult{}, err
+		}
+
+	default:
+		// Unreachable while Arm's second return value is the guard: it is
+		// false for ArmNothing. A default that returned a zero
+		// CaptureResult would answer a caller with an outcome of "", so
+		// this fails loudly instead.
+		return CaptureResult{}, fmt.Errorf("capture: arm: unhandled armament %q", plan.What)
+	}
+
+	return CaptureResult{
+		Outcome: OutcomeArmed,
+		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt},
+	}, nil
+}
+
+// recordArmedDecision writes decision_log's account of one arming (doc 02
+// §11's glass box).
+//
+// Three actions rather than one carrying the armament in context, following
+// the rule that effects split when their Context shapes differ: a timer row
+// has no lead days, no recurrence and no interrupt level, so a merged
+// action would produce rows whose keys mean "absent" for one armament and
+// "missing" for another with nothing to tell them apart. m3d's re-arm needs
+// its own action too, which would read oddly beside a merged capture.armed.
+func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.DecisionAction, id string, plan prospection.Plan, now time.Time) error {
+	rationale := armRationale(plan)
+
+	type armedContext struct {
+		ArmedID        string   `json:"armed_id"`
+		What           string   `json:"what"`
+		FireAt         string   `json:"fire_at"`
+		LeadDays       *int     `json:"lead_days,omitempty"`
+		RecurrenceRule *string  `json:"recurrence_rule,omitempty"`
+		InterruptLevel *float64 `json:"interrupt_level,omitempty"`
+		// InterruptDegraded travels beside the level rather than being
+		// inferred from its absence: a NULL level and a level the store
+		// could not use look identical downstream, and the glass box
+		// should show both what was stored and what was made of it.
+		InterruptDegraded bool `json:"interrupt_degraded"`
+	}
+
+	ctxValue := armedContext{
+		ArmedID:           id,
+		What:              string(plan.What),
+		FireAt:            plan.FireAt.UTC().Format(time.RFC3339),
+		InterruptLevel:    interruptColumn(plan.Interrupt),
+		InterruptDegraded: plan.Interrupt.Degraded(),
+	}
+	if plan.What != prospection.ArmTimer {
+		leadDays := plan.LeadDays
+		ctxValue.LeadDays = &leadDays
+	}
+	if plan.What == prospection.ArmRecurring {
+		rule := string(plan.Rule)
+		ctxValue.RecurrenceRule = &rule
+	}
+
+	contextJSON, err := json.Marshal(ctxValue)
+	if err != nil {
+		return fmt.Errorf("capture: encode armed decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     action,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record armed decision for %q: %w", id, err)
+	}
+	return nil
+}
+
+// derefString reads a possibly-degraded classify field into the plain
+// string a JSON payload needs.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// armRationale is doc 02 §11's human-readable sentence for one arming — a
+// sentence, not a code a reader has to look up.
+func armRationale(plan prospection.Plan) string {
+	switch plan.What {
+	case prospection.ArmTimer:
+		return fmt.Sprintf("armed a timer to fire at %s", plan.FireAt.UTC().Format(time.RFC3339))
+	case prospection.ArmRecurring:
+		return fmt.Sprintf("armed a %s recurring trigger, first firing at %s, %d days ahead of the occurrence",
+			plan.Rule, plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
+	default:
+		return fmt.Sprintf("armed a trigger to fire at %s, %d days ahead of the event",
+			plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
+	}
 }
 
 // recordOrphanDecision writes one of design D8's three orphan-action rows

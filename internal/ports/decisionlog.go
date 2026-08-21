@@ -50,6 +50,9 @@ const (
 	ActionCaptureEmbeddingFailed    DecisionAction = "capture.embedding.failed"
 	ActionCaptureDedupFailed        DecisionAction = "capture.dedup.failed"
 	ActionCapturePersonRefAmbiguous DecisionAction = "capture.person_ref.ambiguous"
+	ActionCaptureArmedTimer         DecisionAction = "capture.armed.timer"
+	ActionCaptureArmedTrigger       DecisionAction = "capture.armed.trigger"
+	ActionCaptureArmedRecurring     DecisionAction = "capture.armed.recurring_trigger"
 	ActionCaptureDedupJudged        DecisionAction = "capture.dedup.judged"
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
@@ -95,7 +98,7 @@ const (
 	ActionPatternEvalLoadHypothesisOpened DecisionAction = "consolidate.pattern_eval.load_hypothesis_opened"
 )
 
-// AllDecisionActions returns a fresh slice holding the twenty-four
+// AllDecisionActions returns a fresh slice holding the twenty-seven
 // DecisionAction vocabulary members, in the order the constants above
 // declare them.
 //
@@ -107,7 +110,9 @@ func AllDecisionActions() []DecisionAction {
 	return []DecisionAction{
 		ActionCaptureClassify, ActionCaptureUnparseable, ActionCaptureUnclassifiable,
 		ActionCaptureDiscarded, ActionCaptureUnitCreated, ActionCaptureEmbeddingFailed,
-		ActionCaptureDedupFailed, ActionCapturePersonRefAmbiguous, ActionCaptureDedupJudged,
+		ActionCaptureDedupFailed, ActionCapturePersonRefAmbiguous,
+		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
+		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,
 		ActionExpireIncompleteTransitioned, ActionArchiveArchived, ActionArchiveConflictSkipped,
