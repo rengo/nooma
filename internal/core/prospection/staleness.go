@@ -47,6 +47,20 @@ const (
 	VerdictDeliver Verdict = "deliver"
 )
 
+// AllVerdicts returns a fresh slice holding the four Verdict members, in
+// the order the constants above declare them — classify.AllKinds's own
+// house pattern, and a function rather than an exported var so a caller
+// mutating one call's result cannot affect another.
+//
+// It states no new decision: the vocabulary above is already the whole of
+// it. What this adds is the ability to iterate it from outside, which is
+// what lets brain's own verdict-to-status mapping be tested by sweeping
+// every member instead of by a hand-written switch that a fifth Verdict
+// would silently slip past.
+func AllVerdicts() []Verdict {
+	return []Verdict{VerdictPending, VerdictDefer, VerdictStale, VerdictDeliver}
+}
+
 // verdict is the one decision shared by TriggerVerdict and TimerVerdict
 // (design §3.3), evaluated in this fixed order:
 //

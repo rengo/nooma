@@ -294,3 +294,68 @@ func TestDelayCaveat_AboveThreshold(t *testing.T) {
 		t.Errorf("DelayCaveat(%v) = %v, want true", overdue, got)
 	}
 }
+
+// TestAllVerdicts_HasExactlyTheFourMembers is AllVerdicts's own existence
+// check: four members, in declared order, in a fresh slice.
+//
+// The order matters because it is the order every caller sweeping the
+// vocabulary will report failures in, and the freshness matters because a
+// completeness check run from outside this package must not be defeatable
+// by an importer that scribbled on an earlier call's result.
+func TestAllVerdicts_HasExactlyTheFourMembers(t *testing.T) {
+	want := []Verdict{VerdictPending, VerdictDefer, VerdictStale, VerdictDeliver}
+
+	got := AllVerdicts()
+	if len(got) != len(want) {
+		t.Fatalf("AllVerdicts() returned %d members, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	first := AllVerdicts()
+	first[0] = "scribbled"
+	if second := AllVerdicts(); second[0] == "scribbled" {
+		t.Fatal("AllVerdicts() shares its backing array across calls")
+	}
+}
+
+// TestAllVerdicts_CoversEveryVerdictThatVerdictCanReturn is the half that
+// keeps the accessor honest. A member added to the vocabulary and forgotten
+// in AllVerdicts would make every sweep built on it quietly partial, and
+// nothing else in the package would notice.
+//
+// It cannot enumerate the constants — that is what it is checking — so it
+// drives the decision function across every input shape that reaches a
+// distinct branch and asserts every verdict it observes is a member.
+func TestAllVerdicts_CoversEveryVerdictThatVerdictCanReturn(t *testing.T) {
+	members := map[Verdict]bool{}
+	for _, v := range AllVerdicts() {
+		members[v] = true
+	}
+
+	// Noon on a Wednesday, well outside quiet hours.
+	fireAt := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	quiet := time.Date(2026, 8, 5, QuietHoursStartHour, 30, 0, 0, time.UTC)
+
+	observed := map[Verdict]bool{}
+	for _, now := range []time.Time{
+		fireAt.Add(-time.Hour),                              // pending
+		fireAt.Add(time.Minute),                             // deliver
+		fireAt.Add((TriggerStalenessHours + 1) * time.Hour), // stale
+		quiet, // defer, quiet hours
+	} {
+		for _, v := range []Verdict{TriggerVerdict(fireAt, now), TimerVerdict(fireAt, now)} {
+			if !members[v] {
+				t.Errorf("verdict %q is reachable but absent from AllVerdicts()", v)
+			}
+			observed[v] = true
+		}
+	}
+
+	if len(observed) < 3 {
+		t.Fatalf("only %d distinct verdicts were reached (%v) — this test stopped covering what it claims to", len(observed), observed)
+	}
+}
