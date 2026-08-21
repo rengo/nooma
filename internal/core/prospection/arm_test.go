@@ -282,3 +282,125 @@ func TestArm(t *testing.T) {
 		}
 	})
 }
+
+// TestArm_ReadsOneTimestampPerKind is I18 as a property of Arm's own body
+// rather than as a set of examples: the three timestamps are never
+// interchanged, and each Kind reads exactly the one that belongs to it.
+//
+// The fixture makes every timestamp distinct and every wrong answer
+// obvious. Reading CreatedAt would arm in the past; reading the wrong one
+// of EventAt/DueAt would arm six months out. A test that only checked the
+// right answer would pass on an implementation that happened to agree by
+// coincidence on one fixture — this one names what each wrong read looks
+// like.
+//
+// Disclosed per m2a C9: Arm already compiles and passes by this point, so
+// there is no missing-symbol red available.
+func TestArm_ReadsOneTimestampPerKind(t *testing.T) {
+	loc := time.FixedZone("UTC+2", 2*60*60)
+	now := time.Date(2027, time.June, 1, 9, 0, 0, 0, loc)
+
+	created := time.Date(2020, time.January, 1, 0, 0, 0, 0, loc) // long past
+	event := time.Date(2027, time.July, 10, 18, 0, 0, 0, loc)    // ~6 weeks out
+	due := time.Date(2027, time.June, 1, 17, 0, 0, 0, loc)       // 8 hours out
+	kind := func(k classify.Kind) *classify.Kind { return &k }
+
+	t.Run("a timer reads due_at only", func(t *testing.T) {
+		plan, ok := Arm(classify.Classification{
+			Kind: kind(classify.KindTimer), DueAt: &due, EventAt: &event,
+		}, now)
+		if !ok {
+			t.Fatal("Arm returned false for a due timer")
+		}
+		switch {
+		case plan.FireAt.Equal(event):
+			t.Errorf("FireAt = %v, the EVENT instant — a timer that reads event_at fires six "+
+				"weeks late", plan.FireAt)
+		case plan.FireAt.Equal(created):
+			t.Errorf("FireAt = %v, the CREATED instant", plan.FireAt)
+		case !plan.FireAt.Equal(due):
+			t.Errorf("FireAt = %v, want the due instant %v", plan.FireAt, due)
+		}
+	})
+
+	t.Run("an event reads event_at only", func(t *testing.T) {
+		plan, ok := Arm(classify.Classification{
+			Kind: kind(classify.KindEvent), EventAt: &event, DueAt: &due,
+		}, now)
+		if !ok {
+			t.Fatal("Arm returned false for a dated event")
+		}
+		if plan.FireAt.Equal(due) || plan.FireAt.Equal(LeadTime(due)) {
+			t.Errorf("FireAt = %v, derived from the DUE instant — an event that reads due_at "+
+				"arms against a timestamp that means something else", plan.FireAt)
+		}
+		if want := LeadTime(event); !plan.FireAt.Equal(want) {
+			t.Errorf("FireAt = %v, want %v", plan.FireAt, want)
+		}
+	})
+
+	t.Run("no Kind arms from a value Arm was never given", func(t *testing.T) {
+		// Arm takes no created_at at all — Classification has no such field,
+		// so two thirds of I18 are unrepresentable here rather than merely
+		// untested. Swept across the whole vocabulary so a Kind added later
+		// cannot quietly reach for one.
+		for _, k := range classify.AllKinds() {
+			c := classify.Classification{Kind: kind(k), EventAt: &event, DueAt: &due}
+			plan, ok := Arm(c, now)
+			if !ok {
+				continue
+			}
+			if plan.FireAt.Before(now) {
+				t.Errorf("Kind %q armed at %v, before now — no timestamp Arm reads can be in "+
+					"the past after clamping", k, plan.FireAt)
+			}
+			if plan.FireAt.Year() == created.Year() {
+				t.Errorf("Kind %q armed in %d, the created year", k, plan.FireAt.Year())
+			}
+		}
+	})
+}
+
+// TestPlanAndArmamentVocabulary pins the two exported types Arm hands back,
+// and one distinction a caller could otherwise get wrong.
+//
+// A zero Plan carries What == "", which is NOT ArmNothing. That matters
+// because the two mean different things: ArmNothing is a decision Arm made
+// and stands behind, while "" is a Plan nobody produced. A caller writing
+// `if plan.What != ArmNothing { arm(plan) }` would arm a zero Plan — so
+// this asserts that every value Arm returns, on every path including its
+// refusals, carries a named Armament.
+func TestPlanAndArmamentVocabulary(t *testing.T) {
+	loc := time.FixedZone("UTC+2", 2*60*60)
+	now := time.Date(2027, time.June, 1, 9, 0, 0, 0, loc)
+	kind := func(k classify.Kind) *classify.Kind { return &k }
+
+	named := map[Armament]bool{ArmNothing: true, ArmTimer: true, ArmTrigger: true, ArmRecurring: true}
+
+	var zero Plan
+	if named[zero.What] {
+		t.Errorf("a zero Plan reports What = %q, a named Armament — the zero value must be "+
+			"distinguishable from a decision Arm actually made", zero.What)
+	}
+
+	// Every Kind, armed or refused, through the real function.
+	for _, k := range classify.AllKinds() {
+		for _, c := range []classify.Classification{
+			{Kind: kind(k)},
+			{Kind: kind(k), EventAt: &now, DueAt: &now},
+			{Kind: kind(k), EventAt: armPtr(now.AddDate(0, 2, 0)), DueAt: armPtr(now.Add(time.Hour))},
+		} {
+			plan, _ := Arm(c, now)
+			if !named[plan.What] {
+				t.Errorf("Kind %q produced What = %q, which is not one of the four named "+
+					"Armament values — every path out of Arm is a decision, including a refusal",
+					k, plan.What)
+			}
+		}
+	}
+
+	// And with no Kind at all, which is its own path.
+	if plan, _ := Arm(classify.Classification{}, now); plan.What != ArmNothing {
+		t.Errorf("a classification with no Kind produced What = %q, want %q", plan.What, ArmNothing)
+	}
+}
