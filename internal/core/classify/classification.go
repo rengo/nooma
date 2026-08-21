@@ -40,6 +40,15 @@ type Classification struct {
 	ListOp             *ListOp
 	PersonRefStatus    *PersonRefStatus
 
+	// InterruptLevel is prospection's own capture field
+	// (docs/02-cognitive-core.md §7), not part of the six orthogonal
+	// resolutions above: it carries no answer to a pending question, it
+	// feeds internal/core/prospection's delivery split instead (design.md
+	// §3.8, m3a-prospection). It degrades independently of every field
+	// above, the same posture I14 already requires of everything else in
+	// this struct.
+	InterruptLevel *float64 // doc 02 §7, [0,1]
+
 	// Degradations records what was lost and why, in fieldSpecs' order. It
 	// exists because I12 requires internal/brain to write a rationale into
 	// decision_log: a decoder that discarded *why* a field vanished would
