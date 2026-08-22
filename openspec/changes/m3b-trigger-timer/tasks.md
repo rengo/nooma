@@ -257,11 +257,21 @@ fully met: an undated event writes `capture.arm.refused` and a chitchat capture 
 distinction `arm.go`'s doc comment asks for. What is not met is R4.2's literal *mechanism*, one
 shared action carrying all four `Refusal` values.
 
-**Why this is flagged rather than filed**: a spec MUST going unmet is the owner's call to ratify, not
-an implementer's to decide quietly. The two candidate resolutions are (a) amend R4.2 to the derived
-rule the design and doc 02 now both carry, or (b) implement R4.2 literally and reopen design §3.5's
-argument about audit noise. Nothing in the code depends on which is chosen; the change ships (a)'s
-behaviour today.
+**Why this was flagged rather than filed**: a spec MUST going unmet is the owner's call to ratify,
+not an implementer's to decide quietly. The two candidate resolutions were (a) amend R4.2 to the
+derived rule the design and doc 02 now both carry, or (b) implement R4.2 literally and reopen design
+§3.5's argument about audit noise.
+
+**RESOLVED — owner ruling, 2026-08-21: (a).** `spec.md` R4.2 is amended to the derived rule, carrying
+a note naming what it originally said and why it changed, so the amendment is legible rather than
+invisible. No code changes: the shipped behaviour was already (a)'s. The requirement's own obligation
+— an undated event and a chitchat capture must not read alike — is discharged more strongly than the
+original text asked, because the two are now **different actions** (`capture.arm.refused` versus
+`capture.discarded`) rather than one action carrying different sentences.
+
+R4.2's secondary point is settled the same way: the amended text states that an arming row carries no
+`why` key, because there is no refusal to name and a `"why": "none"` field would mean nothing on
+every row that carried it.
 
 Secondary, and much smaller: R4.2's second MUST asks an arming row to carry `Plan.Why ==
 RefusalNone`. The arming rows carry `armed_id`, `what`, `fire_at`, and where applicable `lead_days`,
@@ -321,8 +331,8 @@ verification section was first written — by CI, on the documentation-only PR t
 is recorded above rather than folded away, because a verification pass that missed a defect should
 say so.
 
-**Not done, and deliberately**: this change is not archived. Archiving merges the delta spec into the
-main specs, and G21 is an open question about what that delta should say.
+**Archive**: G21 was the one thing holding it. The owner ruled on 2026-08-21, `spec.md` R4.2 carries
+the amendment, and the change is ready to archive.
 
 ---
 
