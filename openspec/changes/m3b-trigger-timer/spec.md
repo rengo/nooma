@@ -196,27 +196,56 @@ change is the PR where that sentence becomes false and must be corrected in the 
 
 ### R4.2 — `Plan.Why` reaches `decision_log`, so an undated event is told apart from a chitchat capture
 
-**MUST**: every `Arm` call that returns `(_, false)` (nothing armed) writes exactly one
-`decision_log` row whose `Context` carries `Plan.Why` (`prospection.Refusal` —
-`RefusalNoKind`/`RefusalKindNotArming`/`RefusalNoDate`/`RefusalAlreadyPast`) verbatim, and whose
-`Rationale` is a distinct human-readable sentence per `Refusal` value — never one shared sentence
-for all four. This is `m3a`'s own stated obligation (`arm.go:39-44`'s doc comment: *"an undated
-event is a decoding failure worth surfacing; a chitchat capture arming nothing is the system
-working correctly. They must not read alike"*), and this change is where it is discharged: the
-`decision_log` write is `m3b`'s, `Refusal` is `m3a`'s.
+> **Amended 2026-08-21, owner ruling on finding G21.** This requirement originally read: *every*
+> `Arm` call returning `(_, false)` writes a `decision_log` row carrying `Plan.Why`, for all four
+> `Refusal` members, and its scenario had a `chitchat` capture writing one. Design §3.5 rejected that
+> for two of the four with reasons, `tasks.md` task 4b.1 encoded the design's version, and the
+> design's version shipped. The owner ratified the derived rule; the requirement below is that rule,
+> and the obligation it discharges is unchanged.
 
-**MUST**: a classification that arms something (`Arm` returns `true`) also writes exactly one
-`decision_log` row — the arming itself is an effect (I12) — with `Plan.Why == RefusalNone`.
+**MUST**: a refused arming writes a `decision_log` row **exactly when the capture would otherwise
+leave no trace at all** — the rule `docs/02-cognitive-core.md` §11 states, derived rather than
+chosen. It follows from doc 02 §11's own scope ("every automatic decision **with an effect**"):
 
-**Scenario: an undated event and a chitchat capture write different rationales**
+- `RefusalNoDate` and `RefusalAlreadyPast` on a classification that persists no unit — a `timer` or
+  a `recurring_reminder` — write one `capture.arm.refused` row. **The user asked for a nudge and did
+  not get one**, and nothing else about that capture leaves a record: it never becomes a unit (I04)
+  and never reaches `recordClassifyDecision`, so this row is the only trace there will be.
+- The same two refusals on a classification that DOES persist a unit — a dated `event` with no date —
+  write no row. The unit is the trace, and a second record would double-count one fact.
+- `RefusalNoKind` writes no row. It is already recorded, by `ActionCaptureUnclassifiable`.
+- `RefusalKindNotArming` writes no row. Ten of the thirteen kinds land here; a row per capture saying
+  "this was not a timer" is noise that defeats the glass box, and it is the system working rather
+  than a decision with an effect.
+
+**MUST**: the row's `Context` carries `Plan.Why` verbatim, and its `Rationale` is a distinct
+human-readable sentence per `Refusal` value — never one shared sentence. This is `m3a`'s own stated
+obligation (`arm.go:39-44`'s doc comment: *"an undated event is a decoding failure worth surfacing;
+a chitchat capture arming nothing is the system working correctly. They must not read alike"*), and
+it is discharged here in full: the two read differently because they are **different actions**, not
+merely different sentences under one.
+
+**MUST**: a classification that arms something (`Arm` returns `true`) writes exactly one
+`decision_log` row — the arming itself is an effect (I12). Its `Context` carries what was armed
+(`armed_id`, `what`, `fire_at`, and where applicable `lead_days`, `recurrence_rule`,
+`interrupt_level` and `interrupt_degraded`) and no `why` key: there is no refusal to name, and a
+`"why": "none"` field would be a key that means nothing on every row that carries it.
+
+**Scenario: an undated event and a chitchat capture are told apart**
 - GIVEN two classifications: one `Kind = event` with `EventAt = nil` (decoding failed), one
   `Kind = chitchat`
-- WHEN each is armed
-- THEN both write a `decision_log` row with `Plan.Why` set (`RefusalNoDate` and
-  `RefusalKindNotArming` respectively), and the two `Rationale` strings differ
+- WHEN each is captured
+- THEN the event persists its unit and writes `capture.unit.created`, the chitchat writes
+  `capture.discarded`, and the two records read differently — which is the distinction this
+  requirement exists for
+- AND GIVEN a `Kind = timer` with no date, WHEN it is captured, THEN it writes exactly one
+  `capture.arm.refused` row naming `RefusalNoDate`, because that capture would otherwise leave no
+  trace at all
 
-**Verified by**: L2 — one fixture per `Refusal` member, asserting `Context.why` and a distinct
-`Rationale` substring per member.
+**Verified by**: L2 — a sweep over `classify.AllKinds()` × {undated, dated future, dated past} ×
+{recurrence rule, none}, asserting the biconditional (a refusal row is present if and only if the
+kind can arm and the capture wrote nothing else) without enumerating which refusals qualify, so a
+fourteenth `Kind` is covered with no test edit.
 
 ### R4.3 — arming reads `EventAt`/`DueAt` only through `Arm`; `brain` computes no date itself (I18)
 
