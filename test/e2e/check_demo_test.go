@@ -24,6 +24,10 @@ import (
 // are also each other's control: a scan that expired the timer or fired the
 // trigger would satisfy neither assertion, so the two rows pin each other's
 // verdict rather than merely coexisting.
+//
+// The trigger's half is asserted only outside quiet hours — see the
+// comment at the assertion. Inside the window the assertion inverts rather
+// than being skipped: the trigger must NOT have expired.
 func TestCheckDemo_FiresATimerAndExpiresATrigger(t *testing.T) {
 	home, work := t.TempDir(), t.TempDir()
 	vault := initVault(t, home, work, "demo.nooma")
@@ -35,10 +39,29 @@ func TestCheckDemo_FiresATimerAndExpiresATrigger(t *testing.T) {
 		t.Fatalf("check: %v\nstderr: %s", err, stderr)
 	}
 
-	for _, want := range []string{"scanned", "expired 1 trigger(s)", "fired 1 timer(s)"} {
+	// The timer half holds at any hour; the trigger half does not, and the
+	// reason is I15/I16's interaction. Quiet hours are evaluated BEFORE
+	// staleness, so inside the window an overdue trigger is deferred
+	// rather than expired and the scan correctly leaves it armed. A timer
+	// is the one push exception to quiet hours (doc 02 §7).
+	//
+	// This test asserted both unconditionally when it was written, which
+	// made it fail every night between QuietHoursStartHour and
+	// QuietHoursEndHour — found by CI at 01:45 UTC, not by the author at
+	// his desk in the afternoon.
+	inQuietHours := prospection.InQuietHours(time.Now())
+
+	for _, want := range []string{"scanned", "fired 1 timer(s)"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("check output does not report %q:\n%s", want, stdout)
 		}
+	}
+	if inQuietHours {
+		if strings.Contains(stdout, "expired") {
+			t.Errorf("check expired a trigger during quiet hours:\n%s", stdout)
+		}
+	} else if !strings.Contains(stdout, "expired 1 trigger(s)") {
+		t.Errorf("check output does not report %q:\n%s", "expired 1 trigger(s)", stdout)
 	}
 
 	// The story, in the vault's own words.
@@ -48,10 +71,11 @@ func TestCheckDemo_FiresATimerAndExpiresATrigger(t *testing.T) {
 		byAction[row.Action] = row
 	}
 
-	for _, want := range []ports.DecisionAction{
-		ports.ActionCheckTriggerExpired,
-		ports.ActionCheckTimerFired,
-	} {
+	wantActions := []ports.DecisionAction{ports.ActionCheckTimerFired}
+	if !inQuietHours {
+		wantActions = append(wantActions, ports.ActionCheckTriggerExpired)
+	}
+	for _, want := range wantActions {
 		row, found := byAction[want]
 		if !found {
 			t.Errorf("decision_log has no %q row; it holds %v", want, actionsOf(rows))
@@ -65,8 +89,9 @@ func TestCheckDemo_FiresATimerAndExpiresATrigger(t *testing.T) {
 		}
 	}
 
-	if len(rows) != 2 {
-		t.Errorf("decision_log holds %d rows, want exactly 2: %v", len(rows), actionsOf(rows))
+	if len(rows) != len(wantActions) {
+		t.Errorf("decision_log holds %d rows, want exactly %d (in quiet hours: %v): %v",
+			len(rows), len(wantActions), inQuietHours, actionsOf(rows))
 	}
 }
 
@@ -83,7 +108,12 @@ func TestCheckDemo_DryRunChangesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check --dry-run: %v\nstderr: %s", err, stderr)
 	}
-	for _, want := range []string{"dry run", "would expire 1 trigger(s)", "would fire 1 timer(s)"} {
+	inQuietHours := prospection.InQuietHours(time.Now())
+	wantLines := []string{"dry run", "would fire 1 timer(s)"}
+	if !inQuietHours {
+		wantLines = append(wantLines, "would expire 1 trigger(s)")
+	}
+	for _, want := range wantLines {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("dry-run output does not report %q:\n%s", want, stdout)
 		}
@@ -98,7 +128,11 @@ func TestCheckDemo_DryRunChangesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v\nstderr: %s", err, stderr)
 	}
-	for _, want := range []string{"expired 1 trigger(s)", "fired 1 timer(s)"} {
+	wantWet := []string{"fired 1 timer(s)"}
+	if !inQuietHours {
+		wantWet = append(wantWet, "expired 1 trigger(s)")
+	}
+	for _, want := range wantWet {
 		if !strings.Contains(wet, want) {
 			t.Errorf("the real run does not report %q — the dry run did not leave the vault alone:\n%s", want, wet)
 		}

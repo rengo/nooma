@@ -126,11 +126,26 @@ func TestCheckDryRunTakesTheSameDecisionsAndWritesNothing(t *testing.T) {
 	}
 
 	// The preview said what it would do, in words that do not claim it did.
+	//
+	// Only the timer half is asserted unconditionally, and the reason is
+	// I15/I16's own interaction: quiet hours are evaluated BEFORE
+	// staleness, so during the window an overdue trigger is deferred
+	// rather than expired and this scan correctly leaves it alone. A timer
+	// is the one push exception to quiet hours (doc 02 §7), so it fires
+	// whatever the hour. Asserting the trigger half unconditionally makes
+	// this test fail every night between QuietHoursStartHour and
+	// QuietHoursEndHour — which is exactly what it did.
 	dry := dryOut.String()
-	for _, want := range []string{"would expire", "would fire"} {
-		if !strings.Contains(dry, want) {
-			t.Errorf("dry-run output %q does not contain %q", dry, want)
+	if !strings.Contains(dry, "would fire") {
+		t.Errorf("dry-run output %q does not contain %q", dry, "would fire")
+	}
+	inQuietHours := prospection.InQuietHours(time.Now())
+	if inQuietHours {
+		if strings.Contains(dry, "would expire") {
+			t.Errorf("dry-run output %q says it would expire a trigger during quiet hours — an item is never declared stale inside a window in which it was refused delivery", dry)
 		}
+	} else if !strings.Contains(dry, "would expire") {
+		t.Errorf("dry-run output %q does not contain %q", dry, "would expire")
 	}
 
 	var wetOut, wetErr bytes.Buffer
@@ -147,18 +162,19 @@ func TestCheckDryRunTakesTheSameDecisionsAndWritesNothing(t *testing.T) {
 			dryCounts, wetCounts)
 	}
 
-	// And this time it happened, to both rows.
+	// And this time it happened — to the timer always, and to the trigger
+	// only outside quiet hours, for the reason stated above.
 	got := decisionActions(t, dbPath)
-	want := map[ports.DecisionAction]bool{
-		ports.ActionCheckTriggerExpired: true,
-		ports.ActionCheckTimerFired:     true,
+	want := map[ports.DecisionAction]bool{ports.ActionCheckTimerFired: true}
+	if !inQuietHours {
+		want[ports.ActionCheckTriggerExpired] = true
 	}
 	if len(got) != len(want) {
-		t.Fatalf("the real run wrote %v, want exactly one expiry and one firing", got)
+		t.Fatalf("the real run wrote %v, want exactly %d effect(s) (in quiet hours: %v)", got, len(want), inQuietHours)
 	}
 	for _, action := range got {
 		if !want[action] {
-			t.Errorf("the real run wrote %q, which is not one of the two expected effects", action)
+			t.Errorf("the real run wrote %q, which is not one of the expected effects", action)
 		}
 	}
 }
