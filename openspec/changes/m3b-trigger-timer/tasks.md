@@ -234,6 +234,29 @@ file under `internal/**` mentions the Telegram API host or the two methods ADR-0
 **not** scanned for — config declaring a field is not the binary speaking, and a scan that flagged
 it would be noise that gets the whole test deleted.
 
+**G22 — PR 6 shipped two time-of-day-dependent tests, and CI found them at 01:45 UTC.** The CLI
+dry-run test and both L4 demos seed a stale trigger and a due timer against the **real system
+clock** — the shipped binary reads it and no test can inject one, which is the point of running at
+that layer — then asserted "expired 1 trigger(s)" unconditionally.
+
+That assertion is false for seven hours a day. It is G16 again, from the other side: quiet hours are
+evaluated **before** staleness, so inside `[QuietHoursStartHour, QuietHoursEndHour)` an overdue
+trigger is deferred rather than expired and the scan correctly leaves it armed. A timer is the one
+push exception to quiet hours (doc 02 §7), so its half held at any hour and hid the problem.
+
+Written in the afternoon, green. Run by CI at 01:45 UTC, red — on a documentation-only PR, which is
+how it surfaced at all.
+
+**Fixed by inverting rather than skipping**: inside the window the tests now assert the trigger must
+NOT have expired, and that the `decision_log` holds exactly the one timer row. A skip would have made
+every night's CI run prove less; this way both branches are real assertions. Both were exercised
+against real timezones before merging — `TZ=UTC` (01h, inside) and `TZ=Asia/Tokyo` (10h, outside) —
+and `make check-all` was run under `TZ=UTC` end to end.
+
+The lesson worth keeping past this change: **G16 was recorded as a finding and still bit twice**,
+because the second bite was in a test whose fixture reads the wall clock rather than a fake one. A
+documented interaction is not a guarded one.
+
 ---
 
 ## Owner-review items carried forward (design §11 / "Owner decisions — 2026-08-21" — not reopened)
