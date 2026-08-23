@@ -89,6 +89,22 @@ An exported-but-empty variable is as unusable as an absent one and is a plausibl
 what sends a reader to the right place — the variable exists and holds nothing. **A divergence from
 the validator, not a copy of it**, recorded because the two are meant to agree.
 
+**H10 — the runner takes a `Handler` func rather than calling `brain.CaptureService` inline as
+design §3.6 sketches.** The sketch shows `capture.Capture(...)` inside the loop, which would put
+`internal/brain` in `internal/channels`'s import list. A function parameter keeps the loop
+**consumer-independent as well as transport-independent** — the same boundary `internal/ports` keeps
+one layer down — and costs one type declaration. PR 5 supplies the closure that captures and
+replies. Design §4's dependency map listed `internal/brain` as an import of the runner; it is not
+one, and the change is a tightening rather than a divergence.
+
+**H11 — the L2 shutdown test cannot prove what R4.3 actually claims, and both tests ship.** The fake
+channel's `Receive` blocks on `ctx` by construction, so cancelling it is guaranteed to work — L2
+proves the *loop* reacts. Reaching a real HTTP request in flight is a property of
+`http.NewRequestWithContext` and nothing else. **Verified by swapping it for `http.NewRequest`: the
+L2 test still passes and the L3 one waits 45 seconds**, far past its 5-second bound. Recorded
+because two tests with similar names asserting different things is exactly the shape someone later
+deletes one of as redundant.
+
 ---
 
 ## Owner-review items carried forward (design §10 — decided defaults, ship if the owner is silent)
@@ -264,7 +280,7 @@ Depends on PR 2. Ships admission, the token, and the refusal record.
 
 Depends on PR 3. Ships backoff, the offset rule, the dedup ring, and shutdown.
 
-- [ ] **4.1** Commit 1 (RED): `internal/channels/telegram/backoff_test.go` — `backoffFor(n int)
+- [x] **4.1** Commit 1 (RED): `internal/channels/telegram/backoff_test.go` — `backoffFor(n int)
       time.Duration` is a pure function: `n = 0` is the base, it doubles, it is capped at
       `pollBackoffMax`, and it never returns a negative or zero duration for any `n` in `[0, 64]`
       (the overflow leg — doubling a duration 64 times overflows `int64`, and a negative sleep is a
@@ -273,10 +289,10 @@ Depends on PR 3. Ships backoff, the offset rule, the dedup ring, and shutdown.
       Requirement: R4.2.
       **Mutation**: implement it as `base << n` with no cap — the overflow leg fails at the `n`
       where the shift wraps negative, which a three-value table would not reach.
-- [ ] **4.2** Commit 2 (GREEN): `backoffFor` plus `pollBackoffBase` and `pollBackoffMax` as named
+- [x] **4.2** Commit 2 (GREEN): `backoffFor` plus `pollBackoffBase` and `pollBackoffMax` as named
       constants with doc comments deriving them.
       Requirement: R4.2, R6.3.
-- [ ] **4.3** Commit 1 (RED, L2): the loop's failure classification — a `401` **stops** the loop and
+- [x] **4.3** Commit 1 (RED, L2): the loop's failure classification — a `401` **stops** the loop and
       returns; every other failure backs off and continues. Asserted over a fake `Channel` whose
       `Receive` returns a scripted error sequence, with an injected sleep function so no test sleeps.
       **Red**: no classification exists; the `401` case loops forever (the test asserts the loop
@@ -285,23 +301,23 @@ Depends on PR 3. Ships backoff, the offset rule, the dedup ring, and shutdown.
       **Mutation**: treat `401` as transient — the loop does not return and the bounded-iteration
       assertion fails rather than the test hanging, which is why the bound is written as an
       assertion and not as a timeout.
-- [ ] **4.4** Commit 2 (GREEN): `internal/channels/runner.go` — `channelRunner` with the loop of
+- [x] **4.4** Commit 2 (GREEN): `internal/channels/runner.go` — `channelRunner` with the loop of
       design §3.6, the sleep injectable, `ctx` cancellation recognised as shutdown rather than as a
       transport failure.
       Verify: `go test ./internal/channels/...`.
       Requirement: R4.2, R4.3.
-- [ ] **4.5** Commit 1 (RED, L1): `internal/channels/runner_test.go` — the dedup ring: it remembers
+- [x] **4.5** Commit 1 (RED, L1): `internal/channels/runner_test.go` — the dedup ring: it remembers
       the last `dedupWindow` ids, evicts oldest-first, reports a repeat as seen and a fresh id as
       not, and **its memory does not grow** past the window over 10× the window's worth of ids.
       **Red**: `undefined` — no ring exists.
       Requirement: **Q1**'s ruling (2026-08-23); design §3.5.
       **Mutation**: implement it as an unbounded `map[string]bool` — every behavioural leg passes
       and only the growth leg fails, which is why the growth leg is written.
-- [ ] **4.6** Commit 2 (GREEN): the ring, `dedupWindow` as a named constant whose doc comment
+- [x] **4.6** Commit 2 (GREEN): the ring, `dedupWindow` as a named constant whose doc comment
       derives it from the confirm cadence (one batch plus whatever failed in it, with headroom) and
       **states plainly that it does not survive a restart** (design §3.5, risk A).
       Requirement: **Q1**; R4.1.
-- [ ] **4.7** Commit 1 (RED, L3): `runner_integration_test.go` — the offset rule against a fake
+- [x] **4.7** Commit 1 (RED, L3): `runner_integration_test.go` — the offset rule against a fake
       Telegram server: a capture that **fails** leaves the offset unadvanced and the update is
       returned again on the next poll; a capture that **succeeds** advances it and the update is
       not. Both legs in one test, because either alone is satisfied by an implementation that never
@@ -309,15 +325,15 @@ Depends on PR 3. Ships backoff, the offset rule, the dedup ring, and shutdown.
       Requirement: R4.1.
       **Mutation**: confirm before capturing — the failed-capture leg fails, and it is the leg that
       encodes "losing a capture is unrecoverable and duplicating one is not".
-- [ ] **4.8** Commit 1 (RED, L3): shutdown — a `Stop`/context cancel issued **while a poll is in
+- [x] **4.8** Commit 1 (RED, L3): shutdown — a `Stop`/context cancel issued **while a poll is in
       flight** returns within a bound well under the poll timeout, and the in-flight update is
       either confirmed-and-captured or unconfirmed, never confirmed-without-capture.
       Requirement: R4.3.
       **Mutation**: build the request with `http.NewRequest` instead of
       `http.NewRequestWithContext` — cancellation no longer reaches the in-flight call and the
       bounded-return assertion fails after the full poll timeout.
-- [ ] **4.9** Purity/lint: `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all` **with `-race`** on the runner's tests specifically — the
+- [x] **4.9** Purity/lint: `golangci-lint run`.
+- [x] Verify (PR-level): `make check-all` **with `-race`** on the runner's tests specifically — the
       loop plus a shutdown path is `m2d`'s JD-5-01 shape, and that finding was a real data race on
       an unguarded `io.Writer`. Diff touches only `internal/channels/**`. Target ≤350.
 
