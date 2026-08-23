@@ -36,40 +36,10 @@ var vendorMarkers = []string{"telegram", "whatsapp", "slack", "discord"}
 // code or be weakened until it proved nothing. This walks identifiers.
 func TestChannelPortNamesNoVendor(t *testing.T) {
 	root := repoRootFromCaller(t)
-	dir := filepath.Join(root, "internal", "ports")
 
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, nil, 0)
-	if err != nil {
-		t.Fatalf("parsing %s: %v", dir, err)
-	}
-	if len(pkgs) == 0 {
-		t.Fatal("parsed zero packages under internal/ports — nothing to check yet")
-	}
-
-	scanned := 0
-	for _, pkg := range pkgs {
-		for path, file := range pkg.Files {
-			scanned++
-			ast.Inspect(file, func(n ast.Node) bool {
-				ident, ok := n.(*ast.Ident)
-				if !ok {
-					return true
-				}
-				lower := strings.ToLower(ident.Name)
-				for _, marker := range vendorMarkers {
-					if strings.Contains(lower, marker) {
-						rel, _ := filepath.Rel(root, path)
-						t.Errorf("%s declares the identifier %s: internal/ports names no vendor, or doc 02's own claim that nothing above the adapter does is false",
-							rel, ident.Name)
-					}
-				}
-				return true
-			})
-		}
-	}
+	scanned := scanTreeForVendorIdentifiers(t, root, filepath.Join(root, "internal", "ports"))
 	if scanned == 0 {
-		t.Fatal("scanned zero files — nothing was checked")
+		t.Fatal("scanned zero files under internal/ports — nothing was checked")
 	}
 }
 
