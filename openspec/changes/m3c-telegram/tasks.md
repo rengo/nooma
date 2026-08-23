@@ -343,7 +343,7 @@ Depends on PR 3. Ships backoff, the offset rule, the dedup ring, and shutdown.
 
 Depends on PR 4. Ships capture, reply, wiring, and the L4 demo.
 
-- [ ] **5.1** Commit 1 (RED, L2): `test/conformance/channel_reply_totality_test.go` (new) — the
+- [x] **5.1** Commit 1 (RED, L2): `test/conformance/channel_reply_totality_test.go` (new) — the
       reply rendering is **total over `brain.AllCaptureOutcomes()`**: every one of the seven
       outcomes renders to a non-empty, distinguishable reply, and the test asserts
       `len(AllCaptureOutcomes()) == 7` at its top so a silently narrowed vocabulary is caught too.
@@ -353,36 +353,36 @@ Depends on PR 4. Ships capture, reply, wiring, and the L4 demo.
       **Mutation**: drop one `case` from the rendering switch — the outcome's reply becomes empty
       and the totality leg fails. A hand-written seven-case test would pass after an eighth outcome
       is added; iterating `AllCaptureOutcomes()` is what makes it fail.
-- [ ] **5.2** Commit 2 (GREEN): `renderReply(brain.CaptureResult) string` plus the runner's capture
+- [x] **5.2** Commit 2 (GREEN): `renderReply(brain.CaptureResult) string` plus the runner's capture
       step: `CaptureInput{Text: msg.Text, Channel: ch.Name()}`, a capture error **breaks the batch**
       (owner item R4) and confirms nothing.
       Verify: `go test ./internal/channels/... ./test/conformance/... -run Reply`.
       Requirement: R5.1, R4.1.
-- [ ] **5.3** Commit 1 (RED, L2): a failed `Send` does **not** block the `Confirm` (owner item R3) —
+- [x] **5.3** Commit 1 (RED, L2): a failed `Send` does **not** block the `Confirm` (owner item R3) —
       over a fake channel whose `Send` always errors, the message is still confirmed and the log
       holds the failure. The reply is not durable; the capture is.
       Requirement: design §3.6; owner item R3.
       **Mutation**: return early on a `Send` error — the message is never confirmed, is redelivered,
       and captures a second time, which is the duplicate this ordering exists to prevent.
-- [ ] **5.4** `test/conformance/brain_names_no_channel_test.go` (new) — parses `internal/brain/**`
+- [x] **5.4** `test/conformance/brain_names_no_channel_test.go` (new) — parses `internal/brain/**`
       and asserts no identifier names a channel or a vendor. **R0's experiment, made checkable**:
       doc 02:653 claims nothing in the decision layer names a channel, and this is the first change
       that could have falsified it.
       Requirement: R5.2, R0.
       **Mutation**: add a `telegramReply` helper to `internal/brain` — the scan fails. Without this
       test, R0 is a claim nobody re-checks after the change that could break it.
-- [ ] **5.5** Commit 2 (GREEN): `cmd/nooma/wiring.go` — `wireChannel(cfg, lookup) (ports.Channel,
+- [x] **5.5** Commit 2 (GREEN): `cmd/nooma/wiring.go` — `wireChannel(cfg, lookup) (ports.Channel,
       error)`, returning `(nil, nil)` when Telegram is disabled so a caller need not branch on
       configuration.
       Requirement: R6.2.
-- [ ] **5.6** `cmd/nooma/wiring_test.go` (extend) — `wireChannel` is unit-tested, **and a source
+- [x] **5.6** `cmd/nooma/wiring_test.go` (extend) — `wireChannel` is unit-tested, **and a source
       scan asserts `runServe` does not reference it** (R6.2, finding **H2**): this PR ships a
       constructor with no production caller, deliberately, and the absence is asserted rather than
       left to be noticed. `m3b` PR 3 shipped `LiveFocusCandidates` the same way.
       Requirement: R6.2; **H2**.
       **Mutation**: call `wireChannel` from `runServe` — the scan fails. Starting a poller that has
       nothing to deliver is what this assertion prevents until `m3d`.
-- [ ] **5.7** Commit 1 (RED, L4): `test/e2e/telegram_demo_test.go` (new) — **the change's own exit
+- [x] **5.7** Commit 1 (RED, L4): `test/e2e/telegram_demo_test.go` (new) — **the change's own exit
       criterion**: a fake Telegram server; a message from an **allowed** chat becomes a unit and
       produces a reply posted back to its conversation; a message from a **non-allowed** chat
       produces zero units, zero replies, and one log line naming the refused chat id. Both fixtures
@@ -391,14 +391,27 @@ Depends on PR 4. Ships capture, reply, wiring, and the L4 demo.
       Requirement: R5.1, R3.1; the Exit criterion.
       **Mutation**: seed only the allowed message — the refusal half becomes unfalsifiable, which is
       exactly why both fixtures ship together.
-- [ ] **5.8** `docs/01-architecture.md` — the channel's row in the command/component table, per
+- [x] **5.8** `docs/01-architecture.md` — the channel's row in the command/component table, per
       design §5.
       Requirement: R6.2.
-- [ ] **5.9** Purity/lint: `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all`; diff touches only `internal/channels/**`,
+- [x] **5.9** Purity/lint: `golangci-lint run`.
+- [x] Verify (PR-level): `make check-all`; diff touches only `internal/channels/**`,
       `cmd/nooma/wiring{,_test}.go`, `test/conformance/**`, `test/e2e/telegram_demo_test.go`,
       `docs/01-architecture.md`. **No `docs/02-cognitive-core.md` delta — R0's file-list form.**
       Target ≤350.
+
+**H12 — task 5.4's brain scan was already shipped by PR 1, so PR 5 adds a different assertion
+instead.** `TestBrainNamesNoChannel` landed with the port, because that is where R0's experiment
+first became answerable. What PR 5 adds in its place is `TestTelegramDemo_ShipsNoInboundListener`: a
+scan asserting `internal/channels` stands up no `http.Server`, no `ListenAndServe` and no
+`net.Listen`. ADR-0014's decision is that Nooma needs **no inbound port at all** to be fully
+functional, and a webhook transport arriving later would need exactly one of those three. The claim
+is about the whole binary and had no check anywhere.
+
+**H13 — `RenderReply` needed a case the spec did not name: a recall with no results.** R5.1 requires
+every outcome to render "a distinguishable reply", and `OutcomeRecalled` with an empty `Recalled`
+slice would otherwise render a list header and nothing under it. "I could not find anything about
+that" is an answer; an empty list is a message a person reads as a bug.
 
 ---
 

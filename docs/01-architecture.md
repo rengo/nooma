@@ -160,6 +160,14 @@ messages through an interface. **Adding a channel = one new adapter, zero core c
 | `nooma capture <text> [vault]` | Sends text to a running `nooma serve` instance's `POST /capture` over HTTP and prints the result — an HTTP client, never a second direct-vault writer; fails if no server answers |
 | `nooma consolidate [vault]` | Runs consolidation once and exits (a pure subcommand, also used by the scheduler) |
 | `nooma check [vault]` | Scans once for due triggers and timers and exits: expires what is past its window, fires what is due, records each in `decision_log`. `--dry-run` reports the same decisions and writes nothing. Calls no model |
+
+The **Telegram channel** (`internal/channels/telegram`, ADR-0006, ADR-0014) is an adapter behind
+`ports.Channel`, not a command. It reaches Telegram by long polling and Telegram never reaches it:
+no inbound port, no DNS name, no certificate, no public address. A message from a chat id in
+`allowed_chat_ids` becomes an ordinary capture — the same `CaptureService` the HTTP route calls —
+and its result is answered back into the conversation; a message from anywhere else becomes nothing,
+with one log line naming the chat id and not its text. `nooma serve` does not start it yet: delivery
+is M3's next phase, and a poller with nothing to deliver is a poller nobody should be running.
 | `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
 | `nooma export [vault]` | Packages the vault into a portable `.noomabundle` |
 | `nooma import <bundle>` | Unpacks a bundle into a vault |

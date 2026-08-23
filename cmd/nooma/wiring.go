@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/channels/telegram"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/providers/anthropic"
@@ -231,6 +232,27 @@ func wireConsolidate(ctx context.Context, db *sqlite.Vault, cfg *config.Config, 
 	recall := brain.NewRecallService(index, lex, units, embed)
 
 	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state), nil
+}
+
+// wireChannel builds the configured channel, or nothing.
+//
+// It returns (nil, nil) when Telegram is disabled, so a caller need not
+// branch on configuration to find out whether there is a channel — the
+// zero case is a nil Channel, not an error and not a channel that polls
+// nothing.
+//
+// **Nothing calls this yet, deliberately.** Starting a poller in this
+// change would mean every later PR runs against a live channel that has
+// nothing to deliver — there is no delivery path until m3d, which wires it
+// into runServe alongside the proactive_check tick. wiring_test.go asserts
+// runServe does not reference it, so the absence is checked rather than
+// remembered. ports.StateRepo was declared ahead of its own consumer the
+// same way.
+func wireChannel(cfg *config.Config, lookup func(string) (string, bool), log io.Writer) (ports.Channel, error) {
+	if !cfg.Channels.Telegram.Enabled {
+		return nil, nil
+	}
+	return telegram.New(cfg.Channels.Telegram, lookup, nil, "", log)
 }
 
 // wireCheck builds a *brain.CheckService over db. It resolves no provider
