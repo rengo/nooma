@@ -185,60 +185,69 @@ func actionsOf(rows []ports.Decision) []ports.DecisionAction {
 }
 
 // TestCheckDemo_ShipsNoTelegramTransport is §9's boundary note, made
-// structural: this change opens no channel and speaks to no network.
+// structural — narrowed by m3c, and the narrowing is the point.
 //
-// It scans the Go source tree for the Telegram transport's own markers —
-// the API host and the two methods ADR-0014 names — and for a channel
-// implementation under internal/channels beyond its package doc. Telegram
-// is m3c's, and a due scan that quietly grew a way to speak would be a
-// scope breach this repository has no other gate against.
+// As m3b wrote it, this scanned all of internal/** for the Telegram
+// transport's markers and asserted zero occurrences, because m3b opened no
+// channel. m3c opens one, so that claim is now false by design and the
+// test would fail for the right reason on correct code.
 //
-// One limit, stated rather than implied: this reads the tree, not a diff.
-// It cannot say "this PR added no channel file" — only that none exists.
-// Telegram's CONFIGURATION surface (bot_token_env, allowed_chat_ids) has
-// existed in internal/config since M0 and is deliberately not scanned for:
-// config declaring a field is not the binary speaking.
+// **Narrowed rather than deleted**, because the half still worth holding
+// is the one that was always the real subject: a channel adapter existing
+// must not mean the DECISION layer learned a vendor's name. So the scan
+// keeps internal/brain, internal/scheduler and internal/core — where doc
+// 02:653's claim lives — and gives up internal/channels, where naming
+// Telegram is the whole job.
+//
+// The host literal itself moved out of this file for the same reason it
+// moved out of every test file: telegram_host_literal_test.go asserts the
+// literal appears in NO _test.go anywhere, and this file used to be the
+// one exception. The markers below are assembled from parts, as that test
+// does, and its doc comment explains why the seam is correct there.
+//
+// Two limits, stated rather than implied. This reads the tree, not a diff:
+// it cannot say "this PR added no channel file", only that none exists in
+// the paths it covers. And Telegram's CONFIGURATION surface
+// (bot_token_env, allowed_chat_ids) has been in internal/config since M0
+// and is deliberately not scanned for — config declaring a field is not
+// the binary speaking.
 func TestCheckDemo_ShipsNoTelegramTransport(t *testing.T) {
 	root := repoRootForCheckDemo(t)
-	markers := []string{"api.telegram.org", "getUpdates", "sendMessage"}
+	markers := []string{"api." + "telegram" + ".org", "get" + "Updates", "send" + "Message"}
 
 	scanned := 0
-	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		body, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		scanned++
-		for _, marker := range markers {
-			if strings.Contains(string(body), marker) {
-				rel, _ := filepath.Rel(root, path)
-				t.Errorf("%s mentions %q — the Telegram transport is m3c's, and this change opens no channel", rel, marker)
+	walk := func(dir string) error {
+		return filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") {
+				return nil
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			scanned++
+			for _, marker := range markers {
+				if strings.Contains(string(body), marker) {
+					rel, _ := filepath.Rel(root, path)
+					t.Errorf("%s mentions %q — the Telegram transport is m3c's, and this change opens no channel", rel, marker)
+				}
+			}
+			return nil
+		})
+	}
+
+	// The decision layer, and only it. internal/channels is deliberately
+	// absent — see this test's doc comment.
+	for _, rel := range []string{"brain", "scheduler", "core"} {
+		if err := walk(filepath.Join(root, "internal", rel)); err != nil {
+			t.Fatalf("scanning internal/%s: %v", rel, err)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scanning internal/: %v", err)
 	}
 	if scanned == 0 {
 		t.Fatal("scanned zero Go files — nothing was checked")
-	}
-
-	// internal/channels holds its package doc and nothing else yet.
-	entries, err := os.ReadDir(filepath.Join(root, "internal", "channels"))
-	if err != nil {
-		t.Fatalf("reading internal/channels: %v", err)
-	}
-	for _, entry := range entries {
-		if entry.Name() != "doc.go" {
-			t.Errorf("internal/channels holds %s — a channel implementation is m3c's, not this change's", entry.Name())
-		}
 	}
 }
 
