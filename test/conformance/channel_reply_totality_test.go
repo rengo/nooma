@@ -86,9 +86,11 @@ func TestChannelReplyCarriesWhatTheOutcomeNames(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reply := channels.RenderReply(tc.result)
+			// Case-insensitive: what is asserted is that the fact
+			// reaches the reader, not how the sentence capitalises it.
+			reply := strings.ToLower(channels.RenderReply(tc.result))
 			for _, want := range tc.wants {
-				if !strings.Contains(reply, want) {
+				if !strings.Contains(reply, strings.ToLower(want)) {
 					t.Errorf("reply %q does not carry %q", reply, want)
 				}
 			}

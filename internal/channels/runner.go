@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -166,4 +167,59 @@ func (r *Runner) logf(format string, args ...any) {
 	r.logMu.Lock()
 	defer r.logMu.Unlock()
 	_, _ = fmt.Fprintf(r.log, format+"\n", args...)
+}
+
+// Capturer is the half of brain.CaptureService this runner uses.
+//
+// An interface rather than the concrete type, and it is deliberately one
+// method wide: internal/channels depends on "text goes in, a result comes
+// out" and on nothing else a CaptureService can do. It also lets the
+// handler's own tests run with no vault, no provider and no index.
+type Capturer interface {
+	Capture(ctx context.Context, in brain.CaptureInput) (brain.CaptureResult, error)
+}
+
+// CaptureHandler builds the Handler that turns an admitted message into a
+// capture and answers it.
+//
+// **The order is capture, reply, and then the caller confirms** — and a
+// failed reply does not stop the confirm, which is why this returns nil
+// after logging one. The capture is the durable thing; the reply is not.
+// Re-running the capture to retry a reply would duplicate the unit,
+// trading an unrecoverable loss for a recoverable one, backwards.
+//
+// Only a capture error is returned, because only a capture error means the
+// message was not handled.
+func CaptureHandler(capture Capturer, ch ports.Channel, log io.Writer) Handler {
+	if log == nil {
+		log = io.Discard
+	}
+	var mu sync.Mutex
+
+	return func(ctx context.Context, msg ports.ChannelMessage) error {
+		result, err := capture.Capture(ctx, brain.CaptureInput{
+			Text: msg.Text,
+			// The channel's own name, carried in from the adapter rather
+			// than hardcoded here: provenance is the caller's fact.
+			Channel: msg.Channel,
+		})
+		if err != nil {
+			return fmt.Errorf("capturing %s: %w", msg.ID, err)
+		}
+
+		reply := RenderReply(result)
+		if reply == "" {
+			// An outcome with no rendering. The totality test exists to
+			// stop this reaching production; if it ever does, saying
+			// nothing is worse than saying something plain.
+			reply = "Done."
+		}
+
+		if err := ch.Send(ctx, msg.Conversation, reply); err != nil {
+			mu.Lock()
+			_, _ = fmt.Fprintf(log, "channels: %s: replying to %s failed, the capture stands: %v\n", ch.Name(), msg.ID, err)
+			mu.Unlock()
+		}
+		return nil
+	}
 }
