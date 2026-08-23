@@ -50,6 +50,13 @@ import (
 //     (test/support/repocontract/triggerrepo.go) — redundant on purpose,
 //     since that suite runs once per implementation while this one runs
 //     over the declaration itself.
+//     ports.Channel joined the sweep in the PR that declared it, and it is
+//     the first member that is not a repository — so the list's own claim,
+//     "every ports repository interface", either widens or the port stays
+//     out. It widens. I03's subject is that nothing is deleted, and a
+//     channel offering to delete a conversation would be the same failure
+//     in a different table; keeping it out to protect the wording of a
+//     variable name would be the wrong half to preserve.
 //  2. Tree scan: no Go source file under internal/ or cmd/ issues a literal
 //     DELETE FROM units statement (migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this Go-source
@@ -129,6 +136,7 @@ var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.EmbeddingRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.TriggerRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.TimerRepo)(nil)).Elem(),
+	reflect.TypeOf((*ports.Channel)(nil)).Elem(),
 }
 
 // containsUnitsDeleteStatement reports whether line contains the exact
