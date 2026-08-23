@@ -70,6 +70,25 @@ assumed the client and the error taxonomy together would fill the ceiling; they 
 `sanitize` and `APIError` are twenty lines of code carrying most of their weight in doc comments,
 which are docs but are not the ~400 lines the ceiling was protecting a reviewer from.
 
+**H8 — the cursor rule needed a second case the spec did not name: a refused update must not pin
+it.** R4.1 says the offset advances only after a capture is durable, and design §3.3 says a refused
+message still advances it. Neither states what happens when both rules meet — and the naive reading
+of R4.1 alone (never advance past anything unconfirmed) would let **one message from a stranger
+stall the channel forever**, since a refused message is never confirmed by anyone. `nextOffset`
+therefore tracks admitted-but-unconfirmed ids specifically, not "everything seen", and there is a
+test for the stall.
+
+Its own consequence is stated in the doc comment rather than discovered later: a refused update
+arriving *after* an unconfirmed admitted one is re-read on every poll until that one clears. It
+costs a map lookup and cannot be avoided with the single cursor Telegram gives.
+
+**H9 — `New` also refuses a `bot_token_env` that is set but empty, which `internal/config`'s
+validator does not.** `checkTelegram` (`validate.go:89-92`) checks only that the variable is *set*.
+An exported-but-empty variable is as unusable as an absent one and is a plausible shape for a
+`.env` file with a blank value. The channel refuses it with the "not set" message, because that is
+what sends a reader to the right place — the variable exists and holds nothing. **A divergence from
+the validator, not a copy of it**, recorded because the two are meant to agree.
+
 ---
 
 ## Owner-review items carried forward (design §10 — decided defaults, ship if the owner is silent)
@@ -193,7 +212,7 @@ Depends on PR 1. Ships the Bot API client, the error taxonomy, and the host-lite
 
 Depends on PR 2. Ships admission, the token, and the refusal record.
 
-- [ ] **3.1** Commit 1 (RED): `internal/channels/telegram/channel_test.go` — `New` with
+- [x] **3.1** Commit 1 (RED): `internal/channels/telegram/channel_test.go` — `New` with
       `Enabled: true` and an **empty** `AllowedChatIDs` returns an error naming the configuration
       key `allowed_chat_ids`; `New` with an empty `BotTokenEnv`, and with a `BotTokenEnv` naming an
       unset variable, each fail naming what is missing.
@@ -204,13 +223,13 @@ Depends on PR 2. Ships admission, the token, and the refusal record.
       **Mutation**: make the empty-allow-list case a warning that still constructs — the assertion
       fails. The point of a second refusal beside `internal/config`'s is a caller that skipped
       validation, so a test that only exercised the validator would not cover this.
-- [ ] **3.2** Commit 2 (GREEN): `internal/channels/telegram/channel.go` — `New(cfg config.Telegram,
+- [x] **3.2** Commit 2 (GREEN): `internal/channels/telegram/channel.go` — `New(cfg config.Telegram,
       lookup func(string) (string, bool), httpClient *http.Client, baseURL string, log io.Writer)`,
       reading the token via `lookup` (never `os.Getenv` directly, so a test injects without touching
       the process environment) and refusing the three invalid shapes.
       Verify: `go test ./internal/channels/telegram/...`.
       Requirement: R3.2, R3.3; design §3.4.
-- [ ] **3.3** Commit 1 (RED): `internal/channels/telegram/token_leak_test.go` (new) — the token is a
+- [x] **3.3** Commit 1 (RED): `internal/channels/telegram/token_leak_test.go` (new) — the token is a
       known sentinel (`"SENTINEL-TOKEN-DO-NOT-LEAK"`); across a transport failure, an `APIError` and
       a **successful** call, the sentinel appears in **no returned error** and in **no byte written
       to the channel's log**.
@@ -220,14 +239,14 @@ Depends on PR 2. Ships admission, the token, and the refusal record.
       **Mutation**: this test IS the mutation's detector — reverting `sanitize` to `%w` reproduces
       the original leak. The successful-call leg exists so a future error path added elsewhere is
       also covered by the log half.
-- [ ] **3.4** Commit 2 (GREEN): `sanitize(err) error` in `errors.go`, applied on **every** error
+- [x] **3.4** Commit 2 (GREEN): `sanitize(err) error` in `errors.go`, applied on **every** error
       path in `client.go`; admission inside `Receive` — an update whose chat id is not in the
       allow-list is dropped before a `ports.ChannelMessage` is built, **and its offset is still
       advanced** (owner item R2: a refused message has no capture to lose); one log line naming the
       refused chat id and **not the message text** (design §3.3).
       Verify: `go test ./internal/channels/telegram/...`.
       Requirement: R3.1, R3.3.
-- [ ] **3.5** Commit 1 (RED, L3): `channel_integration_test.go` — over `httptest`: an update from an
+- [x] **3.5** Commit 1 (RED, L3): `channel_integration_test.go` — over `httptest`: an update from an
       allowed chat becomes a `ports.ChannelMessage`; an update from a non-allowed chat yields
       **zero** messages, and the log holds one line containing the refused chat id and **not** the
       message body.
@@ -235,8 +254,8 @@ Depends on PR 2. Ships admission, the token, and the refusal record.
       **Mutation**: log the refused message's text alongside its chat id — the "not the body" leg
       fails. That leg is the one this task exists for: the refusal itself is easy, and logging the
       body is the natural thing to write.
-- [ ] **3.6** Purity/lint: `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all`; diff touches only `internal/channels/telegram/**`.
+- [x] **3.6** Purity/lint: `golangci-lint run`.
+- [x] Verify (PR-level): `make check-all`; diff touches only `internal/channels/telegram/**`.
       Target ≤300.
 
 ---
