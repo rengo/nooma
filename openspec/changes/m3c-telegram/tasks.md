@@ -39,6 +39,21 @@ necessary and is recorded here rather than smuggled**: that test asserts zero oc
 `internal/brain`, `internal/scheduler`, `internal/core`) preserves the claim still worth holding.
 Leaving it would make PR 2 red; deleting it would drop a real guard.
 
+**H4 — `parser.ParseDir` is deprecated as of Go 1.25, and the first version of task 1.3's scan used
+it.** Deprecated for not considering build tags when associating files with packages — which for a
+scan over `internal/ports` (no build tags anywhere) changes nothing about the result, but
+`staticcheck` is in the lint gate and a deprecation is a deprecation. Rewritten to reuse the
+per-file `parser.ParseFile` walker task 5.4's brain scan already needed, so the two scans share one
+implementation instead of having two. **Falsifiability was re-verified after the rewrite rather than
+carried over from the first version** — a probe passing before a refactor says nothing about after.
+
+**H5 — the harness's `Sent` returns `repocontract.SentMessage`, a type the port does not declare.**
+A sent message has a conversation and a text and no id or channel, so `ports.ChannelMessage` is the
+wrong shape for it, and adding an outbound type to `internal/ports` would put a type there with no
+production reader — `Send` takes its two fields as parameters. `SentMessage` therefore lives in
+`repocontract`, beside the harness that is its only consumer, the same way `EmbeddingHarness`'s own
+helpers do.
+
 ---
 
 ## Owner-review items carried forward (design §10 — decided defaults, ship if the owner is silent)
@@ -59,7 +74,7 @@ Leaving it would make PR 2 red; deleting it would drop a real guard.
 
 Depends on nothing. Ships the port, the fake, the shared contract, and the I03 widening.
 
-- [ ] **1.1** Commit 1 (RED): `test/support/repocontract/channel.go` (new) — `RunChannel(t, newChannel
+- [x] **1.1** Commit 1 (RED): `test/support/repocontract/channel.go` (new) — `RunChannel(t, newChannel
       func(t *testing.T) ports.Channel)`: `Send` then the fake's own inspection shows the text and
       the conversation; `Receive` on a quiet channel returns an empty slice and a **nil error**
       (the ordinary case, asserted as not-an-error); `Name()` is non-empty; a `Receive` after
@@ -75,13 +90,13 @@ Depends on nothing. Ships the port, the fake, the shared contract, and the I03 w
       **Mutation**: empty the reflection scan's prefix set — a hypothetical `DeleteConversation`
       would then compile and pass undetected; also make the fake's `Receive` ignore `Confirm` — the
       confirmed-message-not-returned assertion must fail.
-- [ ] **1.2** Commit 2 (GREEN): implement `internal/ports/channel.go` — `ConversationID`,
+- [x] **1.2** Commit 2 (GREEN): implement `internal/ports/channel.go` — `ConversationID`,
       `ChannelMessage{ID, Conversation, Text, Channel}`, `Channel{Name, Receive, Confirm, Send,
       Close}` with design §3.1's exact doc comments, **including the paragraph explaining why
       `Confirm` is its own method** (owner item R1); and `test/support/fakechannel/fakechannel.go`.
       Verify: `go test ./test/conformance/... -run Channel`.
       Requirement: R1.1, R1.2; design §3.1.
-- [ ] **1.3** `test/conformance/channel_port_names_no_vendor_test.go` (new) — parses every file
+- [x] **1.3** `test/conformance/channel_port_names_no_vendor_test.go` (new) — parses every file
       under `internal/ports/**` with `go/parser` and asserts no **identifier** contains "telegram"
       case-insensitively. Parses rather than greps: a doc comment may legitimately name Telegram as
       the first implementation, and a byte scan cannot tell that from a leaked type name.
@@ -89,17 +104,17 @@ Depends on nothing. Ships the port, the fake, the shared contract, and the I03 w
       **Mutation**: rename `ChannelMessage.Conversation` to `TelegramChatID` — the scan fails; a
       byte-grep version would also fail on the doc comment and therefore could not be written this
       way at all.
-- [ ] **1.4** `test/conformance/i03_units_never_deleted_test.go` (extend) — add
+- [x] **1.4** `test/conformance/i03_units_never_deleted_test.go` (extend) — add
       `reflect.TypeOf((*ports.Channel)(nil)).Elem()` to `sweptPortsRepoTypes`, and extend that
       variable's doc comment: the list's claim is "every ports repository interface", and a channel
       is not a repository — so either the claim widens or the port stays out. **It widens**: I03's
       subject is "nothing is deleted", and a channel that could delete a conversation would be the
       same failure in a different table.
       Requirement: I03, applied.
-- [ ] **1.5** Purity/lint: `golangci-lint run`. `internal/ports/channel.go` imports the standard
+- [x] **1.5** Purity/lint: `golangci-lint run`. `internal/ports/channel.go` imports the standard
       library only.
       Requirement: design §4.
-- [ ] Verify (PR-level): `make check-all`; diff touches only `internal/ports/channel.go`,
+- [x] Verify (PR-level): `make check-all`; diff touches only `internal/ports/channel.go`,
       `test/support/{fakechannel,repocontract}/**`, `test/conformance/{channel_port_names_no_vendor,
       i03_units_never_deleted}_test.go`. No `docs/02-cognitive-core.md` delta. Target ≤250.
 
