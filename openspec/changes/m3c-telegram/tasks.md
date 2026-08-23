@@ -54,6 +54,22 @@ production reader — `Send` takes its two fields as parameters. `SentMessage` t
 `repocontract`, beside the harness that is its only consumer, the same way `EmbeddingHarness`'s own
 helpers do.
 
+**H6 — H3 understated the conflict: `m3b`'s scan did not merely assert about the host literal, it
+CONTAINED it.** H3 predicted PR 2 would have to narrow the assertion in
+`test/e2e/check_demo_test.go` because this change makes "zero occurrences under `internal/**`" false
+by design. What the red step actually showed is that the old test's own marker list holds
+`"api.telegram.org"` as a literal — so the new scan's "zero occurrences in any `_test.go`" leg failed
+on the old test itself, and narrowing the assertion alone would have left the two tests in direct
+conflict. Both tests now assemble the host from parts at runtime, each with a doc comment saying why
+the seam is correct there and nowhere else. **A scan for a literal cannot contain the literal**, and
+that is a general property of this kind of test rather than a quirk of this one.
+
+**H7 — PR 2 measured 237 implementation-and-docs lines against its ~400 budget, so design §6's
+pre-drawn cut is NOT taken.** Reported before not-splitting, per the house convention. The budget
+assumed the client and the error taxonomy together would fill the ceiling; they did not, because
+`sanitize` and `APIError` are twenty lines of code carrying most of their weight in doc comments,
+which are docs but are not the ~400 lines the ceiling was protecting a reviewer from.
+
 ---
 
 ## Owner-review items carried forward (design §10 — decided defaults, ship if the owner is silent)
@@ -124,7 +140,7 @@ Depends on nothing. Ships the port, the fake, the shared contract, and the I03 w
 
 Depends on PR 1. Ships the Bot API client, the error taxonomy, and the host-literal guard.
 
-- [ ] **2.1** Commit 1 (RED): `test/conformance/telegram_host_literal_test.go` (new) — parses the
+- [x] **2.1** Commit 1 (RED): `test/conformance/telegram_host_literal_test.go` (new) — parses the
       whole repository with `go/ast` and asserts the literal `api.telegram.org` appears **exactly
       once** in a non-test `.go` file, at the identifier the test names (`telegram.defaultBaseURL`),
       and **zero times** in any `_test.go` file. Written before the constant exists, so its first
@@ -134,13 +150,13 @@ Depends on PR 1. Ships the Bot API client, the error taxonomy, and the host-lite
       **Mutation**: add the literal to any test file — the zero-in-tests leg fails; add a second
       non-test occurrence — the exactly-once leg fails. A byte-grep version passes on a comment
       mentioning the host, which is `m2d`'s JD-4-01 defect and why this parses.
-- [ ] **2.2** Commit 2 (GREEN): `internal/channels/telegram/client.go` — `defaultBaseURL`,
+- [x] **2.2** Commit 2 (GREEN): `internal/channels/telegram/client.go` — `defaultBaseURL`,
       `pollTimeoutSeconds = 30` (owner item R6, doc comment deriving it), `NewClient(baseURL string,
       token string, httpClient *http.Client)` following `ollama.NewClient`'s shape exactly
       (`""` means the default), `getUpdates(ctx, offset)` and `sendMessage(ctx, chatID, text)`.
       Verify: `go test ./test/conformance/... -run TelegramHostLiteral`.
       Requirement: R2.1; design §1's `ollama` precedent.
-- [ ] **2.3** Commit 1 (RED): `internal/channels/telegram/client_integration_test.go` (build tag
+- [x] **2.3** Commit 1 (RED): `internal/channels/telegram/client_integration_test.go` (build tag
       `integration`) — four `httptest` fixtures, each asserting a **distinguishable** error: a
       transport failure (server closed), `{"ok": false, "error_code": 400, …}`, a `401`, and a
       malformed body. `errors.As` reaches an `*APIError` carrying the code and description for the
@@ -150,12 +166,12 @@ Depends on PR 1. Ships the Bot API client, the error taxonomy, and the host-lite
       **Mutation**: collapse `401` into the general `APIError` path with no distinguishing
       predicate — PR 4's backoff test then cannot tell a permanent failure from a transient one,
       and this test's own "distinguishable without string-matching" leg fails first.
-- [ ] **2.4** Commit 2 (GREEN): `internal/channels/telegram/errors.go` — `APIError{Code int;
+- [x] **2.4** Commit 2 (GREEN): `internal/channels/telegram/errors.go` — `APIError{Code int;
       Description string}` with `Error()` and an `Unauthorized()` predicate (or a sentinel
       `ErrUnauthorized` reached by `errors.Is`; the implementation picks one and says why).
       Verify: `go test -tags=integration ./internal/channels/telegram/...`.
       Requirement: R2.2.
-- [ ] **2.5** `test/e2e/check_demo_test.go` (modify) — narrow
+- [x] **2.5** `test/e2e/check_demo_test.go` (modify) — narrow
       `TestCheckDemo_ShipsNoTelegramTransport`'s scan from `internal/**` to `internal/brain/**`,
       `internal/scheduler/**` and `internal/core/**`, and rewrite its doc comment to say what the
       narrowed claim is and why it narrowed. **Finding H3**: this file is outside the scope box and
@@ -163,8 +179,8 @@ Depends on PR 1. Ships the Bot API client, the error taxonomy, and the host-lite
       Requirement: design §3.2; **H3**.
       **Mutation**: leave the scan at `internal/**` — PR 2 cannot merge, which is the point: the
       narrowing is forced by the change and must be visible in the diff rather than discovered by CI.
-- [ ] **2.6** Purity/lint: `golangci-lint run`.
-- [ ] Verify (PR-level): `make check-all`; diff touches only
+- [x] **2.6** Purity/lint: `golangci-lint run`.
+- [x] Verify (PR-level): `make check-all`; diff touches only
       `internal/channels/telegram/{client,errors}{,_integration_test}.go`,
       `test/conformance/telegram_host_literal_test.go`, `test/e2e/check_demo_test.go`. Target ≤400.
       **If measured lines exceed 400**, design §6's pre-drawn cut applies: the client (2.1–2.2) from
