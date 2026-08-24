@@ -63,41 +63,74 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		msgs, err := r.ch.Receive(ctx)
-		switch {
-		case err == nil:
-			failures = 0
-		case ctx.Err() != nil:
-			// Cancellation reaching an in-flight poll surfaces as a
-			// transport error. It is shutdown, not a failure to back off
-			// from — treating it as one would make every clean stop log a
-			// spurious error.
-			return nil
-		case isPermanent(err):
-			// A wrong or revoked credential never becomes right by
-			// waiting. A channel that retried it forever would look alive
-			// while being permanently deaf, which is the failure the
-			// "does not start" posture exists to avoid, one layer later.
-			return fmt.Errorf("channels: %s stopped: %w", r.ch.Name(), err)
-		default:
+		if err != nil {
+			switch {
+			case ctx.Err() != nil:
+				// Cancellation reaching an in-flight poll surfaces as a
+				// transport error. It is shutdown, not a failure to back
+				// off from — treating it as one would make every clean
+				// stop log a spurious error.
+				return nil
+			case isPermanent(err):
+				// A wrong or revoked credential never becomes right by
+				// waiting. A channel that retried it forever would look
+				// alive while being permanently deaf, which is the failure
+				// the "does not start" posture exists to avoid, one layer
+				// later.
+				return fmt.Errorf("channels: %s stopped: %w", r.ch.Name(), err)
+			}
+
 			failures++
 			r.logf("channels: %s: poll failed (%d consecutive): %v", r.ch.Name(), failures, err)
 			r.sleepFn(ctx, backoffForFailures(failures))
 			continue
 		}
 
-		r.handleBatch(ctx, msgs)
+		// **The counter resets on progress, not on a successful poll.** A
+		// poll that succeeds and then confirms nothing has moved the
+		// transport's cursor nowhere, so the next one returns the same
+		// pending batch with no delay at all — see handleBatch.
+		if r.handleBatch(ctx, msgs) {
+			failures = 0
+			continue
+		}
+
+		// One counter for both causes, deliberately. This loop decides one
+		// thing — how long before trying again — and a dead provider and a
+		// dead transport are the same emergency from where it stands.
+		// Separate counters would let a failure alternating between the two
+		// sit at the base delay forever, which is the hot loop again
+		// wearing a backoff.
+		failures++
+		r.logf("channels: %s: batch confirmed nothing (%d consecutive), the cursor did not advance", r.ch.Name(), failures)
+		r.sleepFn(ctx, backoffForFailures(failures))
 	}
 }
 
 // handleBatch runs one batch, stopping at the first message that did not
-// stick.
+// stick, and reports whether the batch made progress.
 //
 // **A handler error breaks the batch rather than skipping the message**,
 // and that is deliberate: whatever failed is likely to fail for the next
 // message too — a closed vault, a dead provider — and confirming past a
 // failure is how the "never lose a capture" rule gets violated one message
 // at a time.
-func (r *Runner) handleBatch(ctx context.Context, msgs []ports.ChannelMessage) {
+//
+// **Progress means a confirm landed**, because a confirm is the only thing
+// that moves the transport's cursor. Returning "no error occurred" instead
+// would miss the batch whose every message was already handled: each one is
+// skipped, none is confirmed, nobody fails, and the cursor stays exactly
+// where it was.
+//
+// An empty batch counts as progress. It is what an idle channel returns all
+// day, and its poll already blocked for the transport's full timeout —
+// which is the waiting a backoff would otherwise add on top.
+func (r *Runner) handleBatch(ctx context.Context, msgs []ports.ChannelMessage) bool {
+	if len(msgs) == 0 {
+		return true
+	}
+
+	progressed := false
 	for _, msg := range msgs {
 		if r.seen.seen(msg.ID) {
 			// A redelivery of something already handled. The transport
@@ -109,7 +142,7 @@ func (r *Runner) handleBatch(ctx context.Context, msgs []ports.ChannelMessage) {
 
 		if err := r.handle(ctx, msg); err != nil {
 			r.logf("channels: %s: handling %s failed, not confirmed: %v", r.ch.Name(), msg.ID, err)
-			return
+			return progressed
 		}
 
 		// Marked BEFORE the confirm, because the confirm is what can fail
@@ -119,9 +152,11 @@ func (r *Runner) handleBatch(ctx context.Context, msgs []ports.ChannelMessage) {
 
 		if err := r.ch.Confirm(ctx, msg.ID); err != nil {
 			r.logf("channels: %s: confirming %s failed: %v", r.ch.Name(), msg.ID, err)
-			return
+			return progressed
 		}
+		progressed = true
 	}
+	return progressed
 }
 
 func isPermanent(err error) bool {

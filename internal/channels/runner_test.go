@@ -234,6 +234,132 @@ func TestRunner_SkipsARedeliveredMessage(t *testing.T) {
 	}
 }
 
+// TestRunner_HandlerFailureBacksOffAndRecovers is the liveness half of
+// R4.1's durability rule.
+//
+// Breaking the batch without confirming is what keeps a capture from being
+// lost — and it is also what pins the transport's cursor, because
+// telegram.Channel.nextOffset sits at the lowest unconfirmed id
+// (internal/channels/telegram/channel.go:190). So the very next Receive
+// returns the same pending batch immediately: a long poll only blocks when
+// there is nothing pending. Polling again with no pause is therefore a
+// closed loop at full speed against both the transport and whatever the
+// handler failed on, for as long as the failure lasts.
+//
+// The counter still resets on progress, so one dead provider does not leave
+// the channel slow once it comes back.
+//
+// Mutation: have Run treat a stalled batch as progress (skip the backoff)
+// and this fails with 0 sleeps.
+func TestRunner_HandlerFailureBacksOffAndRecovers(t *testing.T) {
+	ch := newScripted(
+		scriptStep{msgs: []ports.ChannelMessage{msg("1")}},
+		scriptStep{msgs: []ports.ChannelMessage{msg("2")}},
+		scriptStep{msgs: []ports.ChannelMessage{msg("3")}},
+		scriptStep{msgs: []ports.ChannelMessage{msg("4")}},
+	)
+	r, slept := newTestRunner(t, ch, func(_ context.Context, m ports.ChannelMessage) error {
+		if m.ID == "3" {
+			return nil
+		}
+		return errors.New("the provider is down")
+	})
+
+	runUntilDrained(t, r, ch)
+
+	if len(*slept) != 3 {
+		t.Fatalf("backed off %d time(s) %v, want 3 — a handler failure confirms nothing, so the transport redelivers the same batch at once and polling again with no pause is a hot loop", len(*slept), *slept)
+	}
+	if (*slept)[1] <= (*slept)[0] {
+		t.Errorf("the second backoff %s is not longer than the first %s — a failure that persists must cost more each time", (*slept)[1], (*slept)[0])
+	}
+	if (*slept)[2] != (*slept)[0] {
+		t.Errorf("after a batch that made progress the backoff is %s, want it reset to %s — a recovered provider must not leave the channel slow", (*slept)[2], (*slept)[0])
+	}
+}
+
+// TestRunner_FullyRedeliveredBatchBacksOff is the second way the cursor
+// stalls, and the one no error is reported for.
+//
+// Every message in the batch was already handled, so every one is skipped —
+// and a skipped message is never confirmed. The batch ends without a single
+// error and without advancing the transport's cursor, which is the same hot
+// loop as a handler failure while looking, from the handler's side, like a
+// batch that went fine.
+//
+// This is why the loop asks "did anything get confirmed?" rather than "did
+// anything return an error?": a batch can fail to make progress without
+// anybody failing.
+//
+// Mutation: return true from handleBatch whenever no error occurred and
+// this fails with 0 sleeps.
+func TestRunner_FullyRedeliveredBatchBacksOff(t *testing.T) {
+	ch := newScripted(
+		scriptStep{msgs: []ports.ChannelMessage{msg("1")}},
+		scriptStep{msgs: []ports.ChannelMessage{msg("1")}},
+	)
+	r, slept := newTestRunner(t, ch, func(context.Context, ports.ChannelMessage) error { return nil })
+
+	runUntilDrained(t, r, ch)
+
+	if len(*slept) != 1 {
+		t.Fatalf("backed off %d time(s) %v, want 1 — a batch whose every message was already handled confirms nothing, so the cursor cannot advance", len(*slept), *slept)
+	}
+}
+
+// TestRunner_EmptyBatchIsProgress guards the fix from overreaching.
+//
+// An empty batch is what an idle channel returns all day: the long poll
+// blocked for its full timeout and came back with nothing. Backing off
+// there would add a growing delay to an idle brain and eventually leave it
+// answering minutes late for no reason at all.
+//
+// Mutation: treat an empty batch as a stall and this fails.
+func TestRunner_EmptyBatchIsProgress(t *testing.T) {
+	ch := newScripted(scriptStep{}, scriptStep{}, scriptStep{})
+	r, slept := newTestRunner(t, ch, func(context.Context, ports.ChannelMessage) error { return nil })
+
+	runUntilDrained(t, r, ch)
+
+	if len(*slept) != 0 {
+		t.Fatalf("an idle channel backed off %v — an empty batch means the poll already blocked for its timeout, which is exactly what waiting is for", *slept)
+	}
+}
+
+// TestRunner_StallAndPollFailureShareOneCounter pins a design decision
+// rather than a behaviour, because two counters would look correct in every
+// single-cause test.
+//
+// The loop has one thing to decide — how long before trying again — and a
+// dead provider and a dead transport are the same emergency from where it
+// stands. Separate counters would let a failure that alternates between the
+// two stay at the base delay forever, which is the hot loop again wearing a
+// backoff.
+//
+// Mutation: count stalls in their own variable and the third sleep drops
+// back to the base, failing the escalation assertion.
+func TestRunner_StallAndPollFailureShareOneCounter(t *testing.T) {
+	ch := newScripted(
+		scriptStep{msgs: []ports.ChannelMessage{msg("1")}},
+		scriptStep{err: errors.New("connection reset")},
+		scriptStep{msgs: []ports.ChannelMessage{msg("2")}},
+	)
+	r, slept := newTestRunner(t, ch, func(context.Context, ports.ChannelMessage) error {
+		return errors.New("the provider is down")
+	})
+
+	runUntilDrained(t, r, ch)
+
+	if len(*slept) != 3 {
+		t.Fatalf("backed off %d time(s) %v, want 3", len(*slept), *slept)
+	}
+	for i := 1; i < len(*slept); i++ {
+		if (*slept)[i] <= (*slept)[i-1] {
+			t.Fatalf("backoff %v does not escalate across alternating causes — a failure that alternates between transport and handler must not sit at the base delay forever", *slept)
+		}
+	}
+}
+
 // TestRunner_ShutdownIsPromptAndCleanlyReported: a cancelled context is
 // shutdown, not a transport failure. Reporting it as one would make every
 // clean stop log a spurious error and back off on the way out.
