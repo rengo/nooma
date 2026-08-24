@@ -40,6 +40,11 @@ type Deps struct {
 	Clock       ports.Clock
 	Config      ports.ConfigRepo
 	Consolidate Consolidator
+	// Proactive is the five-minute delivery pass. Optional, unlike
+	// Consolidate: a vault that wants only the nightly pass is an
+	// ordinary vault, and a nil checker means the job simply does not
+	// run.
+	Proactive ProactiveChecker
 	// Log is the process log; serve passes its errOut. nil defaults to
 	// io.Discard. It is written from multiple goroutines: the cron and
 	// catch-up goroutines both call runPass, and their fires can
@@ -58,11 +63,15 @@ type Scheduler struct {
 	clock       ports.Clock
 	config      ports.ConfigRepo
 	consolidate Consolidator
+	proactive   ProactiveChecker
 	log         io.Writer
 	logMu       sync.Mutex // guards every write to log; see logf (JD-5-01)
 	timer       timer
 	wg          sync.WaitGroup
 	slot        chan struct{} // capacity 1: the non-blocking try-lock, design §3.4 (D4)
+	// proactiveSlot is the proactive job's OWN try-lock. Deliberately not
+	// s.slot — see runProactivePass.
+	proactiveSlot chan struct{}
 }
 
 // New validates d's three required dependencies and returns a *Scheduler
@@ -89,12 +98,14 @@ func New(d Deps) (*Scheduler, error) {
 	}
 
 	return &Scheduler{
-		clock:       d.Clock,
-		config:      d.Config,
-		consolidate: d.Consolidate,
-		log:         log,
-		timer:       t,
-		slot:        make(chan struct{}, 1),
+		clock:         d.Clock,
+		config:        d.Config,
+		consolidate:   d.Consolidate,
+		proactive:     d.Proactive,
+		log:           log,
+		timer:         t,
+		slot:          make(chan struct{}, 1),
+		proactiveSlot: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -144,6 +155,14 @@ func (s *Scheduler) Start(ctx context.Context) {
 		defer s.wg.Done()
 		s.runCatchUp(ctx)
 	}()
+
+	if s.proactive != nil {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.runProactive(ctx)
+		}()
+	}
 }
 
 // Wait blocks until every goroutine Start spawned has unwound, or until
