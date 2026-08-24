@@ -330,7 +330,47 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 //
 // log is the scheduler's process log (scheduler.Deps.Log) — serve passes
 // its errOut, per that field's own doc comment.
-func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer) (*scheduler.Scheduler, error) {
+// proactiveCheck adapts brain.CheckService to scheduler.ProactiveChecker.
+//
+// The scheduler asks for one method and gets one; it holds no
+// brain.CheckRequest and cannot ask for a dry run. A scheduled pass that
+// could be a preview would be a pass that silently did nothing on a
+// misconfigured vault.
+type proactiveCheck struct{ svc *brain.CheckService }
+
+func (p proactiveCheck) ProactiveCheck(ctx context.Context) error {
+	_, err := p.svc.Check(ctx, brain.CheckRequest{})
+	return err
+}
+
+// wireProactive builds the delivery pass the scheduler ticks.
+//
+// Unlike wireCheck, this one gets the channel: a scheduled pass is
+// precisely the thing that should speak, where `nooma check` is a
+// subcommand a person ran to look.
+func wireProactive(db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel) (*brain.CheckService, error) {
+	llm, _, _, err := resolveConsolidateProviders(cfg, lookup)
+	if err != nil {
+		// No provider bound. The pass still runs: a timer delivers the
+		// user's own words, which is what the rephrasing degrades to
+		// anyway (R4.1), and every other decision is pure.
+		llm = nil
+	}
+
+	return brain.NewCheckService(
+		systemClock{},
+		sqlite.NewTriggerRepo(db),
+		sqlite.NewTimerRepo(db),
+		uuidGen{},
+		sqlite.NewDecisionLog(db),
+		channel,
+		sqlite.NewUnitRepo(db),
+		sqlite.NewStateRepo(db),
+		llm,
+	), nil
+}
+
+func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel) (*scheduler.Scheduler, error) {
 	if _, _, _, err := resolveConsolidateProviders(cfg, lookup); err != nil {
 		_, _ = fmt.Fprintf(log, "scheduler: consolidation not scheduled: %v\n", err)
 		return nil, nil
@@ -341,10 +381,16 @@ func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lo
 		return nil, fmt.Errorf("wiring the scheduler: %w", err)
 	}
 
+	check, err := wireProactive(db, cfg, lookup, channel)
+	if err != nil {
+		return nil, fmt.Errorf("wiring the proactive pass: %w", err)
+	}
+
 	sched, err := scheduler.New(scheduler.Deps{
 		Clock:       systemClock{},
 		Config:      sqlite.NewConfigRepo(db),
 		Consolidate: consolidate,
+		Proactive:   proactiveCheck{svc: check},
 		Log:         log,
 	})
 	if err != nil {

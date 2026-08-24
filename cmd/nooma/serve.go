@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/httpapi"
 	"github.com/rengo/nooma/internal/store/sqlite"
@@ -103,7 +104,19 @@ func runServe(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("wiring the capture/recall pipeline: %w", err)
 	}
 
-	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut)
+	// The channel, if this vault has one. wireChannel returns (nil, nil)
+	// when Telegram is disabled, so nothing below needs a branch: a nil
+	// channel means the delivery pass has nowhere to speak, which is
+	// exactly what an unconfigured vault is.
+	channel, err := wireChannel(cfg, os.LookupEnv, errOut)
+	if err != nil {
+		return fmt.Errorf("wiring the channel: %w", err)
+	}
+	if channel != nil {
+		defer func() { _ = channel.Close() }()
+	}
+
+	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut, channel)
 	if err != nil {
 		return fmt.Errorf("wiring the scheduler: %w", err)
 	}
@@ -129,6 +142,27 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// already uses — not a second window.
 	sched.Start(ctx)
 
+	// The inbound poller, on the same signal-aware ctx. It is joined
+	// FIRST at shutdown (see below), because it is the only thing here
+	// that accepts new work.
+	pollerDone := make(chan struct{})
+	if channel != nil {
+		runner := channels.NewRunner(channel, channels.CaptureHandler(capture, channel, errOut), errOut)
+		go func() {
+			defer close(pollerDone)
+			if err := runner.Run(ctx); err != nil {
+				// A permanent failure — a revoked bot token — stops the
+				// poller and says so. It does not stop serve: the HTTP
+				// surface, the scheduler and the vault are all still
+				// working, and a brain that cannot hear Telegram is not
+				// a brain that should exit.
+				_, _ = fmt.Fprintf(errOut, "channel stopped: %v\n", err)
+			}
+		}()
+	} else {
+		close(pollerDone)
+	}
+
 	errc := make(chan error, 1)
 	go func() {
 		_, _ = fmt.Fprintf(out, "nooma serving %s on http://%s\n", vault, addr)
@@ -153,6 +187,22 @@ func runServe(args []string, out, errOut io.Writer) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
+
+	// The poller is joined FIRST, and that is design §3.8's own ordering
+	// with one correction recorded as finding J25: §3.8 said poller,
+	// scheduler, server. The server-then-scheduler pair below is JD-7-01's
+	// and shares ONE shutdownGrace budget deliberately, so reordering it
+	// would reopen a Judgment Day finding to satisfy a sentence written
+	// without reading it. What §3.8 actually decided — that the poller
+	// goes first — holds, because the poller is the only thing here that
+	// accepts new work, and stopping it first bounds what the rest have
+	// to finish.
+	select {
+	case <-pollerDone:
+	case <-shutdownCtx.Done():
+		_, _ = fmt.Fprintln(errOut, "channel did not stop within the shutdown grace")
+	}
+
 	shutdownErr := server.Shutdown(shutdownCtx)
 
 	// sched.Wait takes the SAME shutdownCtx server.Shutdown just used, not

@@ -188,6 +188,22 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 				fmt.Sprintf("timer %q came due and fired", t.ID), detail); err != nil {
 				return CheckReport{}, err
 			}
+
+			// The delivery itself. A timer's firing IS its delivery — it
+			// waits for no digest and no quiet-hours window — so unlike a
+			// trigger there is no route to consult and nothing to hold
+			// back. A send failure is recorded and the pass continues:
+			// the timer is already fired, and failing here would cost
+			// every timer behind it for a transport problem.
+			if r.channel != nil {
+				if err := r.channel.Send(ctx, "", delivery.text); err != nil {
+					if logErr := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+						fmt.Sprintf("timer %q fired but could not be delivered: %v", t.ID, err),
+						detail); logErr != nil {
+						return CheckReport{}, logErr
+					}
+				}
+			}
 			report.TimersFired++
 
 		case ports.TimerStatusCancelled:
