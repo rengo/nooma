@@ -24,7 +24,7 @@ internal/store/sqlite: func (*StateRepo) OpenHypothesis(ctx context.Context, h p
 internal/store/sqlite: func (*TimerRepo) Cancel(ctx context.Context, id string) error
 internal/store/sqlite: func (*TimerRepo) Create(ctx context.Context, t ports.Timer) error
 internal/store/sqlite: func (*TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, error)
-internal/store/sqlite: func (*TimerRepo) Fire(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*TimerRepo) Fire(ctx context.Context, id string, at time.Time, rendered *string) error
 internal/store/sqlite: func (*TriggerRepo) Create(ctx context.Context, t ports.Trigger) error
 internal/store/sqlite: func (*TriggerRepo) Delivered(ctx context.Context) ([]ports.DueTrigger, error)
 internal/store/sqlite: func (*TriggerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTrigger, error)

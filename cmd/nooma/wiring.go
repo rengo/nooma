@@ -273,6 +273,12 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		nil,
 		sqlite.NewUnitRepo(db),
 		sqlite.NewStateRepo(db),
+		// No provider either: a subcommand that spent an LLM call to
+		// reword a timer nobody is listening to would be paying for a
+		// sentence with no reader. The delivered text falls back to the
+		// user's own words, which is what the rephrasing degrades to
+		// anyway.
+		nil,
 	)
 }
 

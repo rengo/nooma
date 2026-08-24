@@ -87,12 +87,12 @@ func RunTimerRepo(t *testing.T, newRepo func(t *testing.T) ports.TimerRepo) {
 		}
 		assertDueTimerIDs(t, dueTimers(t, repo, contractNow), "tmr-fire")
 
-		if err := repo.Fire(ctx, "tmr-fire", contractNow.Add(time.Minute)); err != nil {
+		if err := repo.Fire(ctx, "tmr-fire", contractNow.Add(time.Minute), nil); err != nil {
 			t.Fatalf("Fire: %v", err)
 		}
 		assertDueTimerIDs(t, dueTimers(t, repo, contractNow.Add(time.Hour)))
 
-		if err := repo.Fire(ctx, "tmr-fire", contractNow.Add(2*time.Minute)); !errors.Is(err, ports.ErrTimerStatusConflict) {
+		if err := repo.Fire(ctx, "tmr-fire", contractNow.Add(2*time.Minute), nil); !errors.Is(err, ports.ErrTimerStatusConflict) {
 			t.Fatalf("second Fire: got %v, want ErrTimerStatusConflict", err)
 		}
 	})
@@ -123,7 +123,7 @@ func RunTimerRepo(t *testing.T, newRepo func(t *testing.T) ports.TimerRepo) {
 			t.Fatalf("Cancel: %v", err)
 		}
 
-		if err := repo.Fire(ctx, "tmr-conflict", contractNow); !errors.Is(err, ports.ErrTimerStatusConflict) {
+		if err := repo.Fire(ctx, "tmr-conflict", contractNow, nil); !errors.Is(err, ports.ErrTimerStatusConflict) {
 			t.Fatalf("Fire on a cancelled timer: got %v, want ErrTimerStatusConflict", err)
 		}
 
@@ -137,7 +137,7 @@ func RunTimerRepo(t *testing.T, newRepo func(t *testing.T) ports.TimerRepo) {
 		repo := newRepo(t)
 		ctx := context.Background()
 
-		if err := repo.Fire(ctx, "does-not-exist", contractNow); !errors.Is(err, ports.ErrTimerNotFound) {
+		if err := repo.Fire(ctx, "does-not-exist", contractNow, nil); !errors.Is(err, ports.ErrTimerNotFound) {
 			t.Errorf("Fire: got %v, want ErrTimerNotFound", err)
 		}
 		if err := repo.Cancel(ctx, "does-not-exist"); !errors.Is(err, ports.ErrTimerNotFound) {

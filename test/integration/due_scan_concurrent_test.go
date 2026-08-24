@@ -89,11 +89,11 @@ func TestDueScan_ConcurrentPassesTransitionExactlyOnce(t *testing.T) {
 	svcA := brain.NewCheckService(fixedClock{now: now},
 		barrierTriggers{TriggerRepo: triggers, barrier: triggerReads},
 		barrierTimers{TimerRepo: timers, barrier: timerReads},
-		&prefixedIDs{prefix: "a"}, decisions, nil, nil, nil)
+		&prefixedIDs{prefix: "a"}, decisions, nil, nil, nil, nil)
 	svcB := brain.NewCheckService(fixedClock{now: now},
 		barrierTriggers{TriggerRepo: triggers, barrier: triggerReads},
 		barrierTimers{TimerRepo: timers, barrier: timerReads},
-		&prefixedIDs{prefix: "b"}, decisions, nil, nil, nil)
+		&prefixedIDs{prefix: "b"}, decisions, nil, nil, nil, nil)
 
 	var wg sync.WaitGroup
 	errs := make([]error, 2)

@@ -41,7 +41,7 @@ func TestTimerRepo_FireWritesSurfacedAtAndLeavesRenderedTextNull(t *testing.T) {
 	}
 
 	firedAt := triggerFixtureTime.Add(30 * time.Second)
-	if err := repo.Fire(ctx, "tmr-fired", firedAt); err != nil {
+	if err := repo.Fire(ctx, "tmr-fired", firedAt, nil); err != nil {
 		t.Fatalf("Fire: %v", err)
 	}
 

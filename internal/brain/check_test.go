@@ -218,7 +218,7 @@ func (r *conflictingTimers) Due(context.Context, time.Time) ([]ports.DueTimer, e
 	return r.due, nil
 }
 
-func (r *conflictingTimers) Fire(_ context.Context, id string, _ time.Time) error {
+func (r *conflictingTimers) Fire(_ context.Context, id string, _ time.Time, _ *string) error {
 	if id == r.conflictOnID {
 		return ports.ErrTimerStatusConflict
 	}
@@ -313,7 +313,7 @@ type emptyTimers struct{}
 
 func (emptyTimers) Create(context.Context, ports.Timer) error                { return nil }
 func (emptyTimers) Due(context.Context, time.Time) ([]ports.DueTimer, error) { return nil, nil }
-func (emptyTimers) Fire(context.Context, string, time.Time) error            { return nil }
+func (emptyTimers) Fire(context.Context, string, time.Time, *string) error   { return nil }
 func (emptyTimers) Cancel(context.Context, string) error                     { return nil }
 
 // recordingLog is a ports.DecisionLog that only counts, because that is all

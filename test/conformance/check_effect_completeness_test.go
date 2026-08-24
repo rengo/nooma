@@ -136,7 +136,7 @@ func freshCheckFakes(t *testing.T) (*memrepo.Triggers, *memrepo.Timers, *memrepo
 func runCheck(t *testing.T, now time.Time, triggers ports.TriggerRepo, timers ports.TimerRepo, decisions ports.DecisionLog) brain.CheckReport {
 	t.Helper()
 
-	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions, nil, nil, nil).
+	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions, nil, nil, nil, nil).
 		Check(context.Background(), brain.CheckRequest{})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
