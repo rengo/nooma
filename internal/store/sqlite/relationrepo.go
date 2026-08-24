@@ -229,3 +229,18 @@ func (r *RelationRepo) ExistingPairs(ctx context.Context, pairs []consolidation.
 	}
 	return out, nil
 }
+
+// Delete implements ports.RelationRepo — I10's own requirement.
+//
+// One statement, and no soft-delete column: relations carries none, and
+// inventing one would be a migration to avoid an invariant that says
+// plainly the row goes. The caller emits relation_reject first, so the
+// learning signal survives the row it was about — which is I13's own
+// shape, one table over.
+func (r *RelationRepo) Delete(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM relations WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete relation %q: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrRelationNotFound)
+}

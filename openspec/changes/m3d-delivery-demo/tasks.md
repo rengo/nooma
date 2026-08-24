@@ -294,12 +294,13 @@ whose meaning depends on the wall clock is fragile even when the assertion looks
 
 ## PR 7 — `feat/brain-checkin-relation-state` (~400 impl+docs)
 
-- [ ] **7.1** Commit 1 (RED, **I10**): a denied relation is **weakened, never deleted** — asserted
-      against the relation's own row, plus the I03-shaped reflection check that `RelationRepo`
-      offers no removal verb.
-      Requirement: R5.2; I10.
-      **Mutation**: delete the relation on denial — I10's own invariant, and the reflection half
-      cannot catch a `DELETE` in SQL, which is why the row assertion exists beside it.
+- [ ] **7.1** Commit 1 (RED, **I10**): a rejected relation is **deleted, and its `relation_reject`
+      signal is emitted first** — asserted as an ordering, not as two separate facts. Plus the I03
+      sweep narrowed to exclude `ports.RelationRepo`, with the reason recorded at the sweep.
+      Requirement: R5.2; I10; owner ruling 2026-08-24.
+      **Mutation**: emit the signal after the delete — the ordering assertion fails, and it is the
+      one that matters: a signal written after a delete that failed halfway is evidence for a
+      rejection that did not happen.
 - [ ] **7.2** Commit 2 (GREEN): `relation_outcome` resolution.
 - [ ] **7.3** `state_outcome` resolution writing into `current_state`; `ports.StateRepo` widened
       (R5.3), no removal-prefixed method.

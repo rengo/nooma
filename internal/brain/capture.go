@@ -78,6 +78,7 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			recall:   sharedRecall,
 			triggers: triggers,
 			timers:   timers,
+			signals:  signals,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
 			},
@@ -128,6 +129,10 @@ type captureRunner struct {
 	// construction rather than by a reviewer noticing.
 	triggers ports.TriggerRepo
 	timers   ports.TimerRepo
+	// signals is the learning trail. m3d's relation rejection writes to
+	// it BEFORE deleting the relation the signal is about (I10), which is
+	// the one ordering in this package that an invariant names.
+	signals ports.SignalRepo
 }
 
 // at runs one capture given the instant CaptureService.Capture already
@@ -190,6 +195,12 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// me to call the dentist tomorrow" is one message that both resolves
 	// a nudge and arms a timer.
 	if _, err := r.resolveCheckIn(ctx, c, now); err != nil {
+		return CaptureResult{}, err
+	}
+	if err := r.resolveStateCheckIn(ctx, c, now); err != nil {
+		return CaptureResult{}, err
+	}
+	if err := r.resolveRelationCheckIn(ctx, c, now); err != nil {
 		return CaptureResult{}, err
 	}
 

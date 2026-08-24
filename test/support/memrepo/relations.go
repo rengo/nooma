@@ -186,3 +186,24 @@ func (r *Relations) ExistingPairs(_ context.Context, pairs []consolidation.Pair)
 	}
 	return out, nil
 }
+
+// Delete implements ports.RelationRepo — I10's own requirement. See the
+// port's doc comment for why this is the one deletion any repository
+// declares.
+func (r *Relations) Delete(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// The fake is keyed by the schema's own uniqueness (from, to, type),
+	// not by id, so a delete-by-id scans. That is the fake's shape
+	// serving the real schema's constraint rather than a convenience of
+	// its own — and a linear scan over a personal vault's relations costs
+	// nothing a test would notice.
+	for key, rel := range r.byKey {
+		if rel.ID == id {
+			delete(r.byKey, key)
+			return nil
+		}
+	}
+	return ports.ErrRelationNotFound
+}

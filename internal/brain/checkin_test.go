@@ -2,6 +2,9 @@ package brain
 
 import (
 	"context"
+	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,5 +183,142 @@ func TestCheckIn_AClassificationWithNoOutcomeTouchesNothing(t *testing.T) {
 	if resolved || len(triggers.resolved) != 0 || len(log.actions) != 0 {
 		t.Fatalf("a capture answering nothing resolved %v and wrote %v — most captures answer no check-in and must cost nothing",
 			triggers.resolved, log.actions)
+	}
+}
+
+// recordingSignals records what was written and when, so an ordering can
+// be asserted rather than just two facts.
+type recordingSignals struct {
+	events *[]string
+}
+
+func (s *recordingSignals) Record(_ context.Context, sig ports.Signal) error {
+	*s.events = append(*s.events, "signal:"+string(sig.Type))
+	return nil
+}
+
+func (s *recordingSignals) Since(context.Context, time.Time, int) ([]ports.Signal, error) {
+	return nil, nil
+}
+
+// deletingRelations records deletions into the same event log.
+type deletingRelations struct {
+	ports.RelationRepo
+	events  *[]string
+	deleted []string
+	err     error
+}
+
+func (r *deletingRelations) Delete(_ context.Context, id string) error {
+	if r.err != nil {
+		return r.err
+	}
+	*r.events = append(*r.events, "delete:"+id)
+	r.deleted = append(r.deleted, id)
+	return nil
+}
+
+// TestRejectRelation_EmitsTheSignalBeforeDeleting is I10, asserted as an
+// ORDERING rather than as two independent facts.
+//
+// The ordering is the invariant's own wording, and it is not a
+// convenience: a signal written after a delete that failed halfway would
+// be evidence for a rejection that did not happen, and the learning module
+// would tune on it forever. Emitted first, the worst case is a signal for
+// a relation that survived — recoverable in the direction that matters.
+func TestRejectRelation_EmitsTheSignalBeforeDeleting(t *testing.T) {
+	var events []string
+	rels := &deletingRelations{events: &events}
+	r := captureRunner{
+		ids:     &countingIDs{},
+		log:     &recordingLog{},
+		signals: &recordingSignals{events: &events},
+		rels:    rels,
+	}
+
+	err := r.RejectRelation(context.Background(), ports.Relation{ID: "rel-1"}, checkInNow)
+	if err != nil {
+		t.Fatalf("RejectRelation: %v", err)
+	}
+
+	want := []string{"signal:" + string(ports.SignalRelationReject), "delete:rel-1"}
+	if len(events) != 2 || events[0] != want[0] || events[1] != want[1] {
+		t.Fatalf("events = %v, want %v — I10 names the ordering, and a signal written after a half-failed delete is evidence for a rejection that did not happen", events, want)
+	}
+}
+
+// TestRejectRelation_AFailedDeleteStillLeftItsSignal is the direction the
+// ordering was chosen for: the recoverable failure.
+func TestRejectRelation_AFailedDeleteStillLeftItsSignal(t *testing.T) {
+	var events []string
+	rels := &deletingRelations{events: &events, err: errors.New("the vault is closed")}
+	r := captureRunner{
+		ids:     &countingIDs{},
+		log:     &recordingLog{},
+		signals: &recordingSignals{events: &events},
+		rels:    rels,
+	}
+
+	if err := r.RejectRelation(context.Background(), ports.Relation{ID: "rel-1"}, checkInNow); err == nil {
+		t.Fatal("RejectRelation returned nil for a failed delete")
+	}
+	if len(events) != 1 || !strings.HasPrefix(events[0], "signal:") {
+		t.Fatalf("events = %v, want only the signal — it is written first precisely so this case leaves evidence rather than silence", events)
+	}
+	if len(rels.deleted) != 0 {
+		t.Errorf("the relation was recorded as deleted: %v", rels.deleted)
+	}
+}
+
+// TestStateCheckIn_CoversEveryStateOutcome, iterated over the vocabulary.
+func TestStateCheckIn_CoversEveryStateOutcome(t *testing.T) {
+	want := map[classify.StateOutcome]ports.SignalType{
+		classify.StateOutcomeConfirmed: ports.SignalStateConfirmed,
+		classify.StateOutcomeDenied:    ports.SignalStateDenied,
+	}
+
+	outcomes := classify.AllStateOutcomes()
+	if len(outcomes) == 0 {
+		t.Fatal("classify.AllStateOutcomes() is empty")
+	}
+
+	for _, o := range outcomes {
+		expected, known := want[o]
+		if !known {
+			t.Errorf("state outcome %q has no signal — a member was added and this mapping was not revisited", o)
+			continue
+		}
+
+		var events []string
+		outcome := o
+		r := captureRunner{
+			ids: &countingIDs{}, log: &recordingLog{},
+			signals: &recordingSignals{events: &events},
+		}
+		if err := r.resolveStateCheckIn(context.Background(), classify.Classification{StateOutcome: &outcome}, checkInNow); err != nil {
+			t.Fatalf("resolveStateCheckIn(%q): %v", o, err)
+		}
+
+		if len(events) != 1 || events[0] != "signal:"+string(expected) {
+			t.Errorf("%q wrote %v, want the %q signal", o, events, expected)
+		}
+	}
+}
+
+// TestStateCheckIn_DoesNotEditTheHypothesisRow: current_state is
+// append-only (doc 02 §10), and the answer is a new observation rather
+// than a correction of the old one.
+func TestStateCheckIn_DoesNotEditTheHypothesisRow(t *testing.T) {
+	// ports.StateRepo declares no update path at all, so this is
+	// structural rather than behavioural — asserted by reflection so it
+	// stays true when the port widens.
+	stateRepo := reflect.TypeOf((*ports.StateRepo)(nil)).Elem()
+	for i := 0; i < stateRepo.NumMethod(); i++ {
+		name := stateRepo.Method(i).Name
+		for _, forbidden := range []string{"Update", "Edit", "Set", "Amend"} {
+			if strings.HasPrefix(name, forbidden) {
+				t.Errorf("ports.StateRepo declares %s — current_state is append-only (doc 02 §10), and an answer is a new observation rather than a correction of the old one", name)
+			}
+		}
 	}
 }
