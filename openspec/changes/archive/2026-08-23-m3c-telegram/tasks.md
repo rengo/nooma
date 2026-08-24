@@ -415,6 +415,35 @@ that" is an answer; an empty list is a message a person reads as a bug.
 
 ---
 
+## Verification — 2026-08-23
+
+All five PRs merged; every task above ticked. `main` at the merge of PR #221, `make check-all` green
+end to end (lint, L1/L2 under `-race`, build, L3, the schema-golden regeneration diff,
+`internal/core` coverage at **100%** against a 90% floor, the seven-target cross-compile matrix, L4).
+
+| Requirement | Discharged by | Note |
+|---|---|---|
+| **R0** | all five | **Verified directly**: `git diff --name-only` over the whole change returns **zero** files under `internal/core/**`. Doc 02:653's claim held |
+| R1.1, R1.2 | PR 1 (#217) | Contract answered by the fake at L2; the vendor scans keep R0 checkable |
+| R2.1, R2.2 | PR 2 (#218) | The host literal appears once, at `defaultBaseURL`, and in no test |
+| R3.1, R3.2, R3.3 | PR 3 (#219) | Admission at receipt; two independent refusals; the token in no error and no log |
+| R4.1, R4.2, R4.3 | PR 4 (#220) | Offset, backoff, dedup, shutdown — three mutations verified |
+| R5.1, R5.2 | PR 5 (#221) | Reply totality over `AllCaptureOutcomes()`; no channel-specific branch in `internal/brain` |
+| R6.1 | PR 2 | Structural, via R2.1's scan |
+| R6.2 | PR 5 | `wireChannel` exists; `runServe` does not reference it, asserted |
+| R6.3 | PRs 2, 4 | Named constants with derivations; no §13 row |
+| Exit criterion | PR 5 | `test/e2e/telegram_demo_test.go` |
+
+**Five mutations verified rather than reasoned about**: a vendor identifier in `internal/ports`; the
+host literal in a test; `fmt.Errorf("%w", err)` leaking the token; `base << n` overflowing the
+backoff; an unbounded dedup map; `http.NewRequest` losing cancellation. Each failed the test that
+claims to catch it.
+
+Thirteen findings recorded, H1–H13. **None needed an owner ruling** — Q1 was answered before the
+design was written, which is why this change has no open question at archive time and `m3b` did.
+
+---
+
 ## Review Workload Forecast
 
 | Field | Value |
