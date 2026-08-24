@@ -214,20 +214,41 @@ than assumed: the cut was assembly-and-send from care-gates-and-counting.
 
 ## PR 5 — `feat/brain-timer-fire-rephrase` (~300 impl+docs)
 
-- [ ] **5.1** Commit 1 (RED): with `fakeprovider` — a fired timer's `action_text` is rephrased into
+- [x] **5.1** Commit 1 (RED): with `fakeprovider` — a fired timer's `action_text` is rephrased into
       `rendered_text` and the rephrasing is delivered; `action_text` is **unchanged**; a provider
       failure delivers `action_text` verbatim and records the degradation; a NULL `action_text`
       makes **zero** provider calls.
       Requirement: R4.1.
       **Mutation**: overwrite `action_text` with the rephrasing — doc 02 §8's "stored verbatim" is
       lost and the user's own words are gone for good.
-- [ ] **5.2** Commit 2 (GREEN): the rephrasing call, its fallback, the generic-nudge short circuit.
-- [ ] **5.3** Commit 1 (RED): the delay caveat **swept** across `DelayCaveatMinutes`, appearing at
+- [x] **5.2** Commit 2 (GREEN): the rephrasing call, its fallback, the generic-nudge short circuit.
+- [x] **5.3** Commit 1 (RED): the delay caveat **swept** across `DelayCaveatMinutes`, appearing at
       and above it and not below.
       Requirement: R4.2.
       **Mutation**: make the comparison strict — the boundary instant fails, and `m3a`'s F6 already
       decided this boundary is inclusive on purpose.
-- [ ] **5.4** Purity/lint. Verify (PR-level). Target ≤300.
+- [x] **5.4** Purity/lint. Verify (PR-level). Target ≤300.
+
+**J15 — `TimerRepo.Fire` grew the parameter `m3b`'s finding G2 predicted, and grew it rather than
+gaining a sibling method.** G2 resolved a spec/design disagreement in the design's favour on the
+grounds that `rendered_text` had *"no caller [that] would ever pass a value through"*, and said
+plainly: *"m3d's fire-time rephrasing adds the write when it has a real caller."* This is that
+caller. The parameter beat a separate `Render(id, text)` for the same reason `fired_at` is written
+BY `Fire` and not after it — one statement moving `status`, `surfaced_at` and `rendered_text`
+together makes a fired row with no delivered wording **unrepresentable**, where two statements would
+make it merely unlikely.
+
+**J16 — an empty provider answer counts as a failed rephrasing, and no artifact said so.** R4.1
+covers "a rephrasing failure" and the natural reading is a returned error. A provider that answers
+with whitespace has returned no error and worded nothing; delivering that would be worse than
+delivering nothing, since the user would get a blank where their own reminder should be. Treated as
+the failure path, which delivers `action_text` verbatim and records the degradation.
+
+**J17 — the delay caveat lives in two places, deliberately, and the split is the finding.** A
+successful rephrasing is ASKED (in the prompt) to acknowledge the delay in its own sentence; the
+fallback paths APPEND one. Appending to a rephrasing that was already asked for it would say the
+same thing twice, in two voices. Neither spec nor design named the interaction — R4.2 says "the
+delivered text mentions the delay" and is silent on which layer does it when there are two.
 
 ---
 
