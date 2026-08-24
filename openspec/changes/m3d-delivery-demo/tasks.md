@@ -294,16 +294,47 @@ whose meaning depends on the wall clock is fragile even when the assertion looks
 
 ## PR 7 — `feat/brain-checkin-relation-state` (~400 impl+docs)
 
-- [ ] **7.1** Commit 1 (RED, **I10**): a denied relation is **weakened, never deleted** — asserted
-      against the relation's own row, plus the I03-shaped reflection check that `RelationRepo`
-      offers no removal verb.
-      Requirement: R5.2; I10.
-      **Mutation**: delete the relation on denial — I10's own invariant, and the reflection half
-      cannot catch a `DELETE` in SQL, which is why the row assertion exists beside it.
-- [ ] **7.2** Commit 2 (GREEN): `relation_outcome` resolution.
-- [ ] **7.3** `state_outcome` resolution writing into `current_state`; `ports.StateRepo` widened
+- [x] **7.1** Commit 1 (RED, **I10**): a rejected relation is **deleted, and its `relation_reject`
+      signal is emitted first** — asserted as an ordering, not as two separate facts. Plus the I03
+      sweep narrowed to exclude `ports.RelationRepo`, with the reason recorded at the sweep.
+      Requirement: R5.2; I10; owner ruling 2026-08-24.
+      **Mutation**: emit the signal after the delete — the ordering assertion fails, and it is the
+      one that matters: a signal written after a delete that failed halfway is evidence for a
+      rejection that did not happen.
+- [x] **7.2** Commit 2 (GREEN): `relation_outcome` resolution.
+- [x] **7.3** `state_outcome` resolution writing into `current_state`; `ports.StateRepo` widened
       (R5.3), no removal-prefixed method.
-- [ ] **7.4** Purity/lint. Verify (PR-level). Target ≤400.
+- [x] **7.4** Purity/lint. Verify (PR-level). Target ≤400.
+
+**J21 — this change's own spec had I10 backwards, and reading the invariant before implementing
+against it is what caught it.** R5.2 read *"a denied relation is weakened, never deleted"*.
+`docs/06-harness.md:250` and `docs/02-cognitive-core.md:331` both say the opposite: rejecting
+**deletes** the relation and emits `relation_reject` **before** deleting. The error was the spec's
+and the invariant never moved. `spec.md` and this file carry the correction **with what they
+originally said**, so the amendment is legible rather than invisible. The lesson is small and
+repeatable: an invariant quoted from memory into a spec is a claim, and the source is one `rg` away.
+
+**J22 — I03's sweep and I10 had been in direct contradiction for two milestones, and nothing
+noticed because nothing had needed to delete a relation.** The sweep forbids any removal-prefixed
+method on every ports repository interface; `m2c` widened it to include `ports.RelationRepo`; I10
+requires exactly such a method. **Owner ruling 2026-08-24: `RelationRepo` leaves the sweep**, with
+the reason recorded at the sweep itself. Renaming the method to something the prefix set does not
+match was rejected outright — a check satisfied by a synonym is a check nobody should trust. What
+survives is the claim I03 actually makes, which its own name says: nothing is deleted from **units**.
+
+**J23 — the ordering in I10 is the invariant, so the test asserts an ordering rather than two
+facts.** Both events into one log, compared as a sequence, and verified by inverting them. The
+direction was chosen for its failure mode, and the doc comment says which: a signal written after a
+half-failed delete is evidence for a rejection that did not happen and the learning module tunes on
+it forever, while a signal before a delete that fails leaves evidence for a relation that survived —
+which the next rejection corrects.
+
+**J24 — naming WHICH relation an inbound answer is about is not built, and is said rather than
+stubbed.** A digest that asked "I linked X with Y, are they related?" knows the id; carrying it back
+through a later message is conversational state neither M3 nor M2 built. `resolveRelationCheckIn`
+records that an answer arrived and names the gap; `RejectRelation` ships complete, with its
+ordering, exercised by its own tests. Deferred to `m3e` in the same breath the proposal's Q3 defers
+the ambiguous-person-reference producer, and for the same reason: it needs a pending-question store.
 
 ---
 

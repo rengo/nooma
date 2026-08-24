@@ -209,21 +209,38 @@ nothing open writing one row and no transition.
 ### R5.2 — `task_checkin_outcome`, `relation_outcome` and `state_outcome` each resolve their own thing
 
 **MUST**: a `task_checkin_outcome` resolves an open task check-in. A `relation_outcome` confirms or
-denies a derived relation (**I10**: a denied relation is weakened, never deleted). A
-`state_outcome` confirms or denies the load hypothesis `m2`'s `pattern_eval` opened, writing the
-answer into `current_state`.
+rejects a derived relation. A `state_outcome` confirms or denies the load hypothesis `m2`'s
+`pattern_eval` opened, writing the answer into `current_state`.
+
+> **Corrected 2026-08-24.** This requirement originally read *"(**I10**: a denied relation is
+> weakened, never deleted)"*, which is **backwards**. `docs/06-harness.md:250` and
+> `docs/02-cognitive-core.md:331` both say the opposite: rejecting **deletes** the relation and emits
+> a `relation_reject` signal **before** deleting. The error was this spec's; the invariant never
+> moved. Found by reading the invariant before implementing against it.
 
 **MUST**: each is exhaustive over its own `classify.AllXOutcomes()` vocabulary, iterated rather than
 listed, so a member added later fails a test.
 
 **Verified by**: L2 per vocabulary; L3 for the `current_state` write.
 
-### R5.3 — `StateRepo` widens for the answer, and nothing is deleted (I10)
+### R5.3 — `StateRepo` widens for the answer, and `RelationRepo` leaves the I03 sweep
 
 **MUST**: `ports.StateRepo` gains what R3.3's read and R5.2's write need, and no method whose name
 begins `Delete`, `Remove`, `Purge`, `Drop` or `Destroy`.
 
-**Verified by**: the I03 sweep, which already covers `ports.StateRepo`.
+**MUST**: `ports.RelationRepo` gains a delete, because I10 requires one — and is therefore **removed
+from the I03 sweep**, with the reason recorded at the sweep itself (owner ruling 2026-08-24). I03's
+subject is units, which its own name says; `m2c` widened the sweep to every repository interface and
+the conflict went unnoticed because nothing had ever needed to delete a relation. Renaming the
+method to slip past the prefix set was rejected: it is exactly the "guard entered from underneath"
+this repository keeps closing.
+
+**MUST**: the `relation_reject` signal is emitted **before** the delete — I10's own wording, and not
+an ordering convenience. A signal written after a delete that failed halfway would be evidence for a
+rejection that did not happen.
+
+**Verified by**: the I03 sweep for `ports.StateRepo`; an L2 test asserting the signal precedes the
+delete.
 
 ---
 

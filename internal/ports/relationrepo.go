@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -104,4 +105,31 @@ type RelationRepo interface {
 	// entry — so a caller cannot mistake "never checked" for "checked and
 	// absent" by inspecting the zero value.
 	ExistingPairs(ctx context.Context, pairs []consolidation.Pair) (map[consolidation.Pair]bool, error)
+
+	// Delete removes the relation with id. It returns
+	// ErrRelationNotFound if none exists.
+	//
+	// **This is the one deletion any repository port declares, and it is
+	// I10's own requirement rather than an exception carved out for
+	// convenience** — docs/02-cognitive-core.md:331: "rejecting deletes
+	// the relation and emits a relation_reject signal", and
+	// docs/06-harness.md:250 names the ordering. A caller emits the
+	// signal FIRST: a signal written after a delete that failed halfway
+	// would be evidence for a rejection that did not happen.
+	//
+	// It is named Delete rather than something the I03 sweep's prefix set
+	// does not match. That sweep dropped ports.RelationRepo on 2026-08-24
+	// by owner ruling, with its reason recorded at the sweep — a check
+	// satisfied by a synonym is a check nobody should trust, and I03's
+	// subject was always units.
+	//
+	// A relation is not a unit and never was: it is an inference the
+	// system made, and the user rejecting it is the system being told it
+	// inferred wrongly. Keeping a rejected inference would mean the graph
+	// arguing with its owner.
+	Delete(ctx context.Context, id string) error
 }
+
+// ErrRelationNotFound is returned by Delete when no relation with the given
+// id exists.
+var ErrRelationNotFound = errors.New("relation not found")

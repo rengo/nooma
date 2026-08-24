@@ -50,6 +50,24 @@ import (
 //     (test/support/repocontract/triggerrepo.go) — redundant on purpose,
 //     since that suite runs once per implementation while this one runs
 //     over the declaration itself.
+//
+//     **ports.RelationRepo left this list on 2026-08-24, by owner ruling,
+//     and the reason is a collision this sweep had been hiding.** I10
+//     (docs/06-harness.md:250, docs/02-cognitive-core.md:331) requires
+//     that rejecting a relation DELETES it, emitting relation_reject
+//     first. m2c widened this sweep from ports.UnitRepo alone to every
+//     repository interface, and the conflict went unnoticed for two
+//     milestones because nothing had ever needed to delete a relation.
+//     When m3d did, the sweep forbade the method I10 demands.
+//
+//     The alternative — naming the method something the prefix set does
+//     not match — was rejected outright: it is exactly the "correct guard
+//     entered from underneath" this repository keeps closing, and a check
+//     that can be satisfied by a synonym is a check nobody should trust.
+//
+//     What survives is the claim I03 actually makes, which its own name
+//     says: nothing is deleted from UNITS. Relations are deletable by
+//     design and by an invariant of their own.
 //     ports.Channel joined the sweep in the PR that declared it, and it is
 //     the first member that is not a repository — so the list's own claim,
 //     "every ports repository interface", either widens or the port stays
@@ -57,6 +75,7 @@ import (
 //     channel offering to delete a conversation would be the same failure
 //     in a different table; keeping it out to protect the wording of a
 //     variable name would be the wrong half to preserve.
+//
 //  2. Tree scan: no Go source file under internal/ or cmd/ issues a literal
 //     DELETE FROM units statement (migrations are .sql files, embedded via
 //     the go:embed directive, and are naturally outside this Go-source
@@ -128,7 +147,6 @@ var deniedMethodPrefixes = []string{"Delete", "Remove", "Purge", "Drop", "Destro
 // exists, not what the package doc comment alone says.
 var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.UnitRepo)(nil)).Elem(),
-	reflect.TypeOf((*ports.RelationRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.SelfModelRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.ConfigRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.StateRepo)(nil)).Elem(),

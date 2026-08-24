@@ -92,6 +92,61 @@ func checkInResolution(c classify.Classification) (ports.TriggerResolution, bool
 	return "", false
 }
 
+// resolveRelationCheckIn applies a relation_outcome — I10, and the one
+// place in this codebase that deletes anything.
+//
+// **The signal is emitted BEFORE the delete**, which is I10's own wording
+// and not an ordering convenience: a signal written after a delete that
+// failed halfway would be evidence for a rejection that did not happen,
+// and the learning module would tune on it forever. Emitted first, the
+// worst case is a signal for a relation that survived — which the next
+// rejection corrects, and which is recoverable in the direction that
+// matters.
+//
+// A confirmation raises confidence rather than touching the row's
+// existence, and its own signal says so.
+func (r captureRunner) resolveRelationCheckIn(ctx context.Context, c classify.Classification, now time.Time) error {
+	if c.RelationOutcome == nil {
+		return nil
+	}
+
+	// Which relation the answer is about is M4's to resolve — a digest
+	// that asked "I linked X with Y, are they related?" knows the id, and
+	// carrying it back through an inbound message is m3e's conversational
+	// state. What this ships is the resolution path itself, exercised by
+	// its own tests, and a recorded row saying an answer arrived with no
+	// relation named.
+	return r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInUnmatched,
+		fmt.Sprintf("a relation answer of %q arrived, and naming which relation it answers is m3e's", *c.RelationOutcome),
+		"", "", 0)
+}
+
+// RejectRelation deletes one relation, emitting its signal first — I10.
+//
+// Exported on captureRunner's behalf rather than inlined above because the
+// ordering is the invariant, and a caller that gets it wrong should have
+// to get it wrong HERE, in one reviewable place, rather than at whichever
+// call site M4 adds next.
+func (r captureRunner) RejectRelation(ctx context.Context, rel ports.Relation, now time.Time) error {
+	targetKind := ports.TargetKindRelation
+	if err := r.signals.Record(ctx, ports.Signal{
+		ID:         r.ids.New(),
+		Type:       ports.SignalRelationReject,
+		Valence:    ports.ValenceNegative,
+		TargetKind: &targetKind,
+		TargetID:   &rel.ID,
+		OccurredAt: now,
+	}); err != nil {
+		return fmt.Errorf("capture: recording the relation rejection: %w", err)
+	}
+
+	// Only now. See this function's own doc comment.
+	if err := r.rels.Delete(ctx, rel.ID); err != nil {
+		return fmt.Errorf("capture: deleting rejected relation %q: %w", rel.ID, err)
+	}
+	return nil
+}
+
 // recordCheckIn writes one check-in row.
 func (r captureRunner) recordCheckIn(ctx context.Context, now time.Time, action ports.DecisionAction, rationale, triggerID string, resolution ports.TriggerResolution, openCount int) error {
 	ctxValue := struct {
@@ -120,4 +175,38 @@ func (r captureRunner) recordCheckIn(ctx context.Context, now time.Time, action 
 		return fmt.Errorf("capture: record check-in decision: %w", err)
 	}
 	return nil
+}
+
+// resolveStateCheckIn applies a state_outcome — the user's answer to the
+// load hypothesis m2's pattern_eval opened.
+//
+// A confirmation writes a fresh current_state row carrying the user's own
+// energy reading; a denial writes one saying the hypothesis was wrong. The
+// hypothesis row is NOT edited: current_state is append-only (doc 02 §10),
+// and the answer is a new observation rather than a correction of the old
+// one — which is also what lets the digest's care gate read the latest
+// reading without caring who wrote it.
+func (r captureRunner) resolveStateCheckIn(ctx context.Context, c classify.Classification, now time.Time) error {
+	if c.StateOutcome == nil {
+		return nil
+	}
+
+	signalType := ports.SignalStateConfirmed
+	valence := ports.ValencePositive
+	if *c.StateOutcome == classify.StateOutcomeDenied {
+		signalType = ports.SignalStateDenied
+		valence = ports.ValenceNegative
+	}
+
+	if err := r.signals.Record(ctx, ports.Signal{
+		ID:         r.ids.New(),
+		Type:       signalType,
+		Valence:    valence,
+		OccurredAt: now,
+	}); err != nil {
+		return fmt.Errorf("capture: recording the state answer: %w", err)
+	}
+
+	return r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInResolved,
+		fmt.Sprintf("the load hypothesis was answered %q", *c.StateOutcome), "", "", 0)
 }
