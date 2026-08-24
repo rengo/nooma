@@ -213,7 +213,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		}
 	}
 
-	if r.units != nil && r.state != nil {
+	if r.channel != nil && r.units != nil && r.state != nil {
 		carried, err := r.assembleDigest(ctx, now, commit)
 		if err != nil {
 			return CheckReport{}, err

@@ -184,6 +184,15 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
 	}
 
+	// A check-in answer resolves what it answers, and then the message
+	// carries on being whatever else it is. Deliberately not a fork: an
+	// answer carries an outcome, not a Kind, and "yes, done — and remind
+	// me to call the dentist tomorrow" is one message that both resolves
+	// a nudge and arms a timer.
+	if _, err := r.resolveCheckIn(ctx, c, now); err != nil {
+		return CaptureResult{}, err
+	}
+
 	// The arming fork (design §3.5), in the position the retired timer
 	// refusal held: before classify.ToUnit, so a timer never reaches it
 	// and I04 stays structural rather than remembered. Arm takes the
@@ -873,6 +882,11 @@ func armRationale(plan prospection.Plan) string {
 		return fmt.Sprintf("armed a trigger to fire at %s, %d days ahead of the event",
 			plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
 	}
+}
+
+// marshalContext encodes one decision's context.
+func marshalContext(v any) (json.RawMessage, error) {
+	return json.Marshal(v)
 }
 
 // recordOrphanDecision writes one of design D8's three orphan-action rows
