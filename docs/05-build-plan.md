@@ -176,6 +176,19 @@ Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel),
   loaded?"), task check-in — the orthogonal classify fields from §5.
 - **Demo**: "remind me in 15 min about X" over Telegram, and a real morning digest.
 
+**M3 closed 2026-08-24**, across four chained changes: `m3a-prospection` (when to speak),
+`m3b-trigger-timer` (what comes due, and writing it down), `m3c-telegram` (a mouth and an ear), and
+`m3d-delivery-demo` (speaking first, and hearing the answer). The demo above runs as
+`test/e2e/m3_demo_test.go` — one vault and one simulated day carrying a pushed trigger, a held one
+arriving in the morning digest, and a timer worded at delivery that says it was late.
+
+Two items on this list are **deliberately not closed**, and are named rather than left to be
+noticed. A timer's **list and cancel** from chat is M4's surface, not M3's: doc 02 §8 promises both,
+and `ports.TimerRepo` declares neither, because a method with no caller is what this repository
+refuses to ship. And a **relation confirmation** knows how to reject a relation but not yet which
+relation an inbound answer is about — carrying a question's identity back through a later message is
+conversational state neither M2 nor M3 built (`m3d` finding J24).
+
 ## M4 — The mirror: complete UI
 
 Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),

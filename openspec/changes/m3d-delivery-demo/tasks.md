@@ -340,16 +340,16 @@ the ambiguous-person-reference producer, and for the same reason: it needs a pen
 
 ## PR 8 — `feat/serve-wiring-and-demo` (~300 impl+docs)
 
-- [ ] **8.1** Commit 1 (RED): `runServe` starts the channel and the tick; **a vault with Telegram
+- [x] **8.1** Commit 1 (RED): `runServe` starts the channel and the tick; **a vault with Telegram
       disabled starts and runs unchanged**.
       Requirement: R6.1.
       **Mutation**: make the channel required — a disabled-Telegram vault fails to start, which is
       every existing deployment.
-- [ ] **8.2** Commit 2 (GREEN): the wiring, and shutdown in the order poller → scheduler → server
+- [x] **8.2** Commit 2 (GREEN): the wiring, and shutdown in the order poller → scheduler → server
       (design §3.8, D6).
       **Mutation**: stop the server first — a pass mid-delivery can send without recording, because
       `Surface` needs the store the shutdown just closed.
-- [ ] **8.3** Commit 1 (RED, L4): **the exit criterion** — one simulated day against a fake Telegram
+- [x] **8.3** Commit 1 (RED, L4): **the exit criterion** — one simulated day against a fake Telegram
       and a fake provider: a capture arms; a push is delivered; a quieter one is held and arrives in
       the digest at the digest hour; a timer fires, is worded at delivery and mentions its delay; an
       answer resolves the check-in. `decision_log` tells all of it, and **nothing is delivered during
@@ -357,8 +357,30 @@ the ambiguous-person-reference producer, and for the same reason: it needs a pen
       Requirement: R7.1; the Exit criterion.
       **Mutation**: drop any one of the five acts — the demo is the only place they are asserted
       together, and together is the claim.
-- [ ] **8.4** `docs/05-build-plan.md` — M3's own success criteria ticked.
-- [ ] **8.5** Purity/lint. Verify (PR-level): `make check-all`. Target ≤300.
+- [x] **8.4** `docs/05-build-plan.md` — M3's own success criteria ticked.
+- [x] **8.5** Purity/lint. Verify (PR-level): `make check-all`. Target ≤300.
+
+**J25 — design §3.8's shutdown order was written without reading the one `serve.go` already has.**
+§3.8 says "poller, then scheduler drain, then server close". `serve.go` closes the server and *then*
+joins the scheduler, and that pair is JD-7-01's own finding: both share **one** `shutdownGrace`
+budget deliberately, and `sched.Wait` is called unconditionally so a slow client cannot leave the
+scheduler unjoined. Reordering it would reopen a Judgment Day finding to satisfy a sentence written
+without reading it. **What §3.8 actually decided holds and shipped**: the poller is joined first,
+because it is the only thing in `serve` that accepts new work. The rest of the order is left alone,
+and the deviation is recorded at the code as well as here.
+
+**J26 — the demo found a hole nothing below L4 was looking at: a fired timer was never sent.** The
+timer path recorded its `decision_log` row, wrote `rendered_text`, and had **no `Send` at all**.
+Every smaller test passed — `renderTimer`'s tests assert what it *returns*, and `CheckReport` counts
+a firing rather than a delivery — so no test below the demo was asking whether the user received
+anything. Second time in this change that "together" was the claim no smaller test made (the first
+was J9). **A layer that only ever asserts its own return value cannot notice that nobody called it.**
+
+**J27 — the demo's own first run earned a fixture lesson: one id generator across the whole day.** A
+fresh `demoIDs` per pass restarts its counter and collides with the previous pass's `decision_log`
+rows — `decision already exists`. A simulated day is several passes against **one** vault, not
+several vaults, and any fixture that models time by calling the same constructor repeatedly has to
+decide which of its parts are the vault and which are the day.
 
 ---
 

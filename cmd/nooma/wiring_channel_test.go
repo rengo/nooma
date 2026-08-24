@@ -54,35 +54,45 @@ func TestWireChannel_PropagatesAnUnsafeConfiguration(t *testing.T) {
 	}
 }
 
-// TestRunServeDoesNotStartTheChannel is R6.2, and finding H2's own
-// assertion.
+// TestRunServeStartsTheChannelAndJoinsItFirst replaces m3c's
+// TestRunServeDoesNotStartTheChannel, and the replacement is the point.
 //
-// This PR ships a constructor with no production caller, deliberately:
-// starting a poller before there is anything to deliver would make every
-// later PR in M3 run against a live channel that says nothing. m3d wires
-// it into runServe alongside the proactive_check tick.
+// That test asserted an ABSENCE: m3c shipped wireChannel with no
+// production caller on purpose, because starting a poller with nothing to
+// deliver would have made every later PR run against a live channel that
+// said nothing. It failed the moment this PR wired it in — which is
+// exactly what it was written to do, and why it is replaced here rather
+// than deleted quietly.
 //
-// The absence is asserted rather than remembered, because "we will wire it
-// later" is not a property anything checks. It parses rather than greps so
-// this test's own doc comment, which names the function, does not satisfy
-// or trip it.
-func TestRunServeDoesNotStartTheChannel(t *testing.T) {
+// What replaces it asserts the shape m3d actually promises: serve starts
+// the channel, and joins the poller BEFORE the server and the scheduler,
+// because the poller is the only thing that accepts new work.
+func TestRunServeStartsTheChannelAndJoinsItFirst(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "serve.go", nil, 0)
 	if err != nil {
 		t.Fatalf("parsing serve.go: %v", err)
 	}
 
-	found := false
+	var wiresChannel, joinsPoller bool
 	ast.Inspect(file, func(n ast.Node) bool {
 		ident, ok := n.(*ast.Ident)
-		if ok && ident.Name == "wireChannel" {
-			found = true
+		if !ok {
+			return true
+		}
+		switch ident.Name {
+		case "wireChannel":
+			wiresChannel = true
+		case "pollerDone":
+			joinsPoller = true
 		}
 		return true
 	})
 
-	if found {
-		t.Fatal("serve.go references wireChannel — the channel is constructed but not started until m3d gives it something to deliver")
+	if !wiresChannel {
+		t.Error("serve.go does not reference wireChannel — m3d is the change that turns the channel on")
+	}
+	if !joinsPoller {
+		t.Error("serve.go does not join the poller at shutdown — a poller left running past the vault's close accepts work nothing can persist")
 	}
 }
