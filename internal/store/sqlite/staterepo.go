@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -68,4 +69,34 @@ LIMIT 1`
 		return nil, fmt.Errorf("current_state.recorded_at: %w", err)
 	}
 	return &at, nil
+}
+
+// LatestEnergy implements ports.StateRepo.
+//
+// It reads the most recent row that HAS an energy value, not the most
+// recent row: current_state.energy is nullable and the load watcher writes
+// rows with it NULL by design (m2's own OpenHypothesis). Taking the latest
+// row and finding NULL would report "no reading" on a vault that has one,
+// every time a hypothesis was opened after the user last answered.
+func (r *StateRepo) LatestEnergy(ctx context.Context) (*prospection.EnergyReading, error) {
+	var (
+		level      float64
+		recordedAt string
+	)
+	err := r.db.QueryRowContext(ctx,
+		`SELECT energy, recorded_at FROM current_state
+		 WHERE energy IS NOT NULL ORDER BY recorded_at DESC LIMIT 1`).
+		Scan(&level, &recordedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select latest energy: %w", err)
+	}
+
+	at, err := time.Parse(unitTimeLayout, recordedAt)
+	if err != nil {
+		return nil, fmt.Errorf("latest energy: recorded_at: %w", err)
+	}
+	return &prospection.EnergyReading{Level: level, RecordedAt: at}, nil
 }

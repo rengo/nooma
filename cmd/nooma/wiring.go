@@ -271,6 +271,8 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		// serve-time pass's job, and a subcommand that messaged the user
 		// as a side effect of being run manually would be a surprise.
 		nil,
+		sqlite.NewUnitRepo(db),
+		sqlite.NewStateRepo(db),
 	)
 }
 

@@ -158,32 +158,57 @@ with the swept hour, so the only thing changing across the sweep is the window.
 
 ## PR 4 — `feat/brain-digest-assembly` (~400, watch the ceiling)
 
-- [ ] **4.1** Commit 1 (RED): one digest per day — two passes after `DigestHour` on one day produce
+- [x] **4.1** Commit 1 (RED): one digest per day — two passes after `DigestHour` on one day produce
       one `Send`; a pass the next day produces another; a pass before the hour produces none.
       Requirement: R3.1.
       **Mutation**: drop `DigestDue`'s last-digest check — the same-day case sends twice, and at a
       five-minute cadence that is 288 messages a day (design §6's amplification row).
-- [ ] **4.2** Commit 2 (GREEN): assembly from `Undelivered`, one `Send`, `Surface` per included item.
+- [x] **4.2** Commit 2 (GREEN): assembly from `Undelivered`, one `Send`, `Surface` per included item.
       Requirement: R3.1.
-- [ ] **4.3** Commit 1 (RED, I09): `Carry`'s outcome persisted — a low-energy day carries
+- [x] **4.3** Commit 1 (RED, I09): `Carry`'s outcome persisted — a low-energy day carries
       `LowEnergyDigestSize` and holds the rest; a held item's count rises; an item held
       `MaxDigestDeferrals` times is carried **regardless of energy**.
       Requirement: R3.2; **J3**.
       **Mutation**: count deferrals in memory — the anti-starvation leg passes until a restart, so
       the test drives the count through the `decision_log` read rather than through the service's
       own state.
-- [ ] **4.4** Commit 2 (GREEN): `LiveFocusCandidates` for the ordering (owner ruling 4), the
+- [x] **4.4** Commit 2 (GREEN): `LiveFocusCandidates` for the ordering (owner ruling 4), the
       `decision_log`-derived deferral count (design §3.4), a nil `Candidate` for `pattern_based`.
       Requirement: R3.2.
       **Mutation**: pass a NULL `unit_id` to `LiveFocusCandidates` — `m3b`'s port doc comment names
       this as the caller's obligation and this is the caller.
-- [ ] **4.5** `ports.StateRepo` gains the energy read; **nil is not low**.
+- [x] **4.5** `ports.StateRepo` gains the energy read; **nil is not low**.
       Requirement: R3.3.
       **Mutation**: return a zero `EnergyReading` instead of nil for "no reading" — a vault with no
       check-ins silently stops speaking, and only the no-reading case fails.
-- [ ] **4.6** Purity/lint. Verify (PR-level). Target ≤400. **If measured lines exceed 400**, design
+- [x] **4.6** Purity/lint. Verify (PR-level). Target ≤400. **If measured lines exceed 400**, design
       §4's cut applies: assembly and send (4a) from the care gates and deferral counting (4b).
       **Report before splitting.**
+
+**J11 — `m3a` left one question explicitly for `m3d`, and it is now decided: an empty digest is not
+sent.** `Carry`'s own doc comment says *"Carry takes no position on whether an empty result is
+delivered … Whether a digest carrying nothing is sent at all is m3d's decision."* **Decided: not
+sent.** A message every morning saying nothing happened is a message people learn to ignore — and
+then the one that matters arrives in the shape they learned to ignore. Recorded as this PR's own
+decision rather than as an implementation detail, because it is the question `m3a` deliberately did
+not answer.
+
+**J12 — `LatestEnergy` must read the most recent row that HAS an energy value, not the most recent
+row.** `current_state.energy` is nullable and `m2`'s load watcher writes rows with it NULL **by
+design** (`OpenHypothesis` sets energy NULL). `ORDER BY recorded_at DESC LIMIT 1` alone would return
+a hypothesis row and report "no reading" on a vault that has one — every time a hypothesis was
+opened after the user last answered, which is exactly when the care gate matters. The `WHERE energy
+IS NOT NULL` is the whole fix and would have been invisible without reading `m2`'s writer.
+
+**J13 — the deferral count makes `decision_log` load-bearing rather than decorative, and a mutation
+proves it.** Suppressing the `check.digest.held` rows leaves every behavioural assertion green and
+fails only the count leg: a held item would reset its own patience every morning and never reach
+`MaxDigestDeferrals`. Design §3.4 chose the derivation over a column; what this PR adds is that the
+choice has a test which fails when the rows stop being written, so nobody can later "tidy up" the
+held rows as noise.
+
+**J14 — PR 4 measured under budget and design §4's pre-drawn cut was not taken.** Reported rather
+than assumed: the cut was assembly-and-send from care-gates-and-counting.
 
 ---
 

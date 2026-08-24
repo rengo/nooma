@@ -26,10 +26,13 @@ type CheckService struct {
 
 // NewCheckService wires a CheckService over the ports one scan needs.
 // clock is read exactly once per Check call; run never sees it.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel) *CheckService {
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo) *CheckService {
 	return &CheckService{
 		clock: clock,
-		run:   checkRunner{triggers: triggers, timers: timers, ids: ids, log: log, channel: channel},
+		run: checkRunner{
+			triggers: triggers, timers: timers, ids: ids, log: log,
+			channel: channel, units: units, state: state,
+		},
 	}
 }
 
@@ -50,6 +53,9 @@ type CheckReport struct {
 	// TriggersExpired, TimersFired and TimersCancelled are the effects.
 	// Their sum is the number of decision_log rows this scan wrote, which
 	// is I12 stated as arithmetic rather than as a promise.
+	// DigestCarried is how many items the daily digest delivered, or 0
+	// when none was due.
+	DigestCarried   int
 	TriggersExpired int
 	TimersFired     int
 	TimersCancelled int
@@ -203,6 +209,14 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		}
 	}
 
+	if r.units != nil && r.state != nil {
+		carried, err := r.assembleDigest(ctx, now, commit)
+		if err != nil {
+			return CheckReport{}, err
+		}
+		report.DigestCarried = carried
+	}
+
 	return report, nil
 }
 
@@ -218,6 +232,12 @@ type checkRunner struct {
 	// simply has nowhere to speak, which is what `nooma check` on a
 	// Telegram-less vault is.
 	channel ports.Channel
+	// units and state are the digest's own reads: the focus candidates it
+	// ranks by, and the energy reading its care gate consults. Both are
+	// nil-tolerant in the same way channel is — a pass without them still
+	// fires and expires.
+	units ports.UnitRepo
+	state ports.StateRepo
 }
 
 // checkDetail is every check.* row's context shape. One shape for all
@@ -236,6 +256,14 @@ type checkDetail struct {
 	// table into Verdict instead would have made one field mean two
 	// things and read as a lie in the audit trail.
 	Table string `json:"table,omitempty"`
+}
+
+// unmarshalCheckDetail reads a check.* row's own context back.
+func unmarshalCheckDetail(raw json.RawMessage, into *checkDetail) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, into)
 }
 
 // record is this pass's one decision_log call site — consolidateRunner's
