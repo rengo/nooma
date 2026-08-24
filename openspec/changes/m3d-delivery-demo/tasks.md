@@ -113,24 +113,46 @@ finding is that it is not zero, and a fourth widening would pay it again.
 
 ## PR 3 — `feat/brain-push-delivery` (~350 impl+docs)
 
-- [ ] **3.1** Commit 1 (RED): `internal/brain/deliver_test.go` — a fired trigger with a push-routed
+- [x] **3.1** Commit 1 (RED): `internal/brain/deliver_test.go` — a fired trigger with a push-routed
       interrupt produces exactly one `Send` and one `Surface`; a digest-routed one produces neither;
       a **failing** `Send` produces no `Surface` and one `decision_log` row.
       **Red**: `CheckService` sends nothing today.
       Requirement: R2.1.
       **Mutation**: write `Surface` before the `Send` — the failing-send case then records a
       delivery the user never saw, which is the whole reason `m3b` left the column NULL.
-- [ ] **3.2** Commit 2 (GREEN): the delivery step inside `checkRunner.at`, gated by `commit` so
+- [x] **3.2** Commit 2 (GREEN): the delivery step inside `checkRunner.at`, gated by `commit` so
       `--dry-run` suppresses sends (design §3.1, D5).
       Requirement: R2.1; design §3.1.
-- [ ] **3.3** Commit 1 (RED, I16): `test/conformance/i16_*_test.go` (extend) — a trigger **swept**
+- [x] **3.3** Commit 1 (RED, I16): `test/conformance/i16_*_test.go` (extend) — a trigger **swept**
       across the quiet-hours boundary is deferred inside and delivered on the first pass outside; a
       timer at the same instants is delivered throughout.
       Requirement: R2.2.
       **Mutation**: pass `deferInQuietHours = true` for timers — the timer half fails at every swept
       instant inside the window. **Sweep, not sample**: `m3b`'s G16 and G22 both came from sampling
       a boundary that has two regimes.
-- [ ] **3.4** Purity/lint. Verify (PR-level). Target ≤350.
+- [x] **3.4** Purity/lint. Verify (PR-level). Target ≤350.
+
+**J8 — `ports.DueTrigger` could not carry a delivery's text, and `m3b` had a stated reason for that
+which no longer holds.** `m3b` §3.1 made the read shape narrow deliberately: *"the core decision
+consumes `(fireAt, now)`, so there is no core struct to reach for."* A payload would have been a
+field with no reader. Delivery is a reader. `DueTrigger` gains `Payload`, and the alternative — a
+second query per trigger to fetch text the first query already had in hand — is worse in the way
+that matters. Recorded because the field looks like scope creep and is the opposite: the narrow
+shape was correct exactly until this PR.
+
+**J9 — the first implementation reported a failed send as a delivery, and only the failed-send test
+caught it.** `deliver` returned `error`, and `fireAndDeliver` counted a delivery whenever it returned
+nil — which it does after *recording* a failure, since a recorded failure is not an error the pass
+stops for. `deliver` now reports whether the message actually went out. **Every other test in the PR
+passed through the bug**: the happy path sends and counts one, the digest path never reaches
+`deliver` at all. The count was only wrong in the case the count exists for.
+
+**J10 — I16's sweep caught its own fixture before it caught any code.** Written with a fixed
+`fire_at`, every swept hour outside quiet hours was past `TriggerStalenessHours` and so returned
+`VerdictStale`, not `VerdictDeliver` — the sweep covered seven hours inside the window and **zero**
+outside. Its own closing guard ("a sweep that only reaches one regime is a sample") failed the test
+rather than letting it pass with seven-tenths of the claim untested. The fixture now moves `fire_at`
+with the swept hour, so the only thing changing across the sweep is the window.
 
 ---
 
