@@ -26,10 +26,10 @@ type CheckService struct {
 
 // NewCheckService wires a CheckService over the ports one scan needs.
 // clock is read exactly once per Check call; run never sees it.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog) *CheckService {
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel) *CheckService {
 	return &CheckService{
 		clock: clock,
-		run:   checkRunner{triggers: triggers, timers: timers, ids: ids, log: log},
+		run:   checkRunner{triggers: triggers, timers: timers, ids: ids, log: log, channel: channel},
 	}
 }
 
@@ -40,6 +40,13 @@ type CheckReport struct {
 	// TriggersDue and TimersDue are how many came due, before any verdict.
 	TriggersDue int
 	TimersDue   int
+	// TriggersFired counts triggers this pass moved armed -> fired, and
+	// TriggersDelivered how many of those reached the user. They differ
+	// on purpose: firing is a decision this pass made, delivering is an
+	// outcome it may not have achieved — a digest-routed trigger fires
+	// and waits, and a failed send fires and is retried later.
+	TriggersFired     int
+	TriggersDelivered int
 	// TriggersExpired, TimersFired and TimersCancelled are the effects.
 	// Their sum is the number of decision_log rows this scan wrote, which
 	// is I12 stated as arithmetic rather than as a promise.
@@ -95,9 +102,15 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		if !writes {
 			continue
 		}
-		// Expired is the only writing verdict a trigger has in this
-		// change, so the switch a later one will need is not written yet:
-		// a branch with no producer is a branch nothing can be said about.
+		if status == ports.TriggerStatusFired {
+			fired, delivered, err := r.fireAndDeliver(ctx, t, now, commit)
+			if err != nil {
+				return CheckReport{}, err
+			}
+			report.TriggersFired += fired
+			report.TriggersDelivered += delivered
+			continue
+		}
 		if status != ports.TriggerStatusExpired {
 			return CheckReport{}, fmt.Errorf("check: trigger %q: no write path for status %q", t.ID, status)
 		}
@@ -200,6 +213,11 @@ type checkRunner struct {
 	timers   ports.TimerRepo
 	ids      ports.IDGen
 	log      ports.DecisionLog
+	// channel is where a delivery goes. Nil is legal and means this vault
+	// has no channel configured — the pass still fires and expires, it
+	// simply has nowhere to speak, which is what `nooma check` on a
+	// Telegram-less vault is.
+	channel ports.Channel
 }
 
 // checkDetail is every check.* row's context shape. One shape for all
@@ -279,15 +297,24 @@ func (r checkRunner) skipOnConflict(ctx context.Context, now time.Time, err, sen
 // would put dozens of rows a night into the audit trail for a decision
 // with no effect.
 //
-// Deliver writes nothing either, and that one is worth stating plainly:
-// nothing in this change can surface a fired trigger, so moving it to
-// fired here would record a delivery that never happened and lose the row
-// from the next scan's Due. It stays armed until something can deliver it.
+// Deliver now fires, and this REVERSES what m3b wrote here — exactly as
+// m3b's own comment said it would. That comment read: "nothing in this
+// change can surface a fired trigger, so moving it to fired here would
+// record a delivery that never happened … It stays armed until something
+// can deliver it."
+//
+// Something can now. fireAndDeliver sends it and writes surfaced_at only
+// after the send succeeds, so a fired row no longer claims a delivery that
+// did not happen. The precondition changed; the decision follows it.
 func triggerTransition(v prospection.Verdict) (ports.TriggerStatus, bool) {
-	if v == prospection.VerdictStale {
+	switch v {
+	case prospection.VerdictStale:
 		return ports.TriggerStatusExpired, true
+	case prospection.VerdictDeliver:
+		return ports.TriggerStatusFired, true
+	default:
+		return "", false
 	}
-	return "", false
 }
 
 // timerTransition is the timer's half. Stale cancels rather than expires —

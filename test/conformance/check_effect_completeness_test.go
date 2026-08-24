@@ -49,10 +49,10 @@ func TestCheckEffectCompleteness(t *testing.T) {
 		prospection.VerdictPending: 0,
 		prospection.VerdictDefer:   0,
 		prospection.VerdictStale:   1,
-		// Nothing in this change can surface a fired trigger, so there is
-		// no effect to record and no row. This is the cell that would
-		// silently gain a row the day someone "completed" the mapping.
-		prospection.VerdictDeliver: 0,
+		// One row now: the firing. Delivery adds a second only when a
+		// channel is wired and the route is push — this sweep wires
+		// none, so a digest-routed firing is all that happens here.
+		prospection.VerdictDeliver: 1,
 	}
 	wantTimerRows := map[prospection.Verdict]int{
 		prospection.VerdictPending: 0,
@@ -86,8 +86,11 @@ func TestCheckEffectCompleteness(t *testing.T) {
 			assertRowCount(t, decisions, fireAt.Add(-24*time.Hour), want)
 
 			// The report's own arithmetic must agree with the row count:
-			// I12 stated twice, from two independent observations.
-			if effects := report.TriggersExpired; effects != want {
+			// I12 stated twice, from two independent observations. A
+			// trigger effect is now either an expiry or a firing, and the
+			// report counts them separately because they are different
+			// facts — the sum is what I12 is about.
+			if effects := report.TriggersExpired + report.TriggersFired; effects != want {
 				t.Errorf("report says %d trigger effect(s), decision_log says %d", effects, want)
 			}
 		})
@@ -133,7 +136,7 @@ func freshCheckFakes(t *testing.T) (*memrepo.Triggers, *memrepo.Timers, *memrepo
 func runCheck(t *testing.T, now time.Time, triggers ports.TriggerRepo, timers ports.TimerRepo, decisions ports.DecisionLog) brain.CheckReport {
 	t.Helper()
 
-	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions).
+	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions, nil).
 		Check(context.Background(), brain.CheckRequest{})
 	if err != nil {
 		t.Fatalf("Check: %v", err)

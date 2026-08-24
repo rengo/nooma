@@ -266,6 +266,11 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		sqlite.NewTimerRepo(db),
 		uuidGen{},
 		sqlite.NewDecisionLog(db),
+		// No channel: `nooma check` is a one-shot subcommand that reports
+		// what it did on stdout. Delivering through a channel is the
+		// serve-time pass's job, and a subcommand that messaged the user
+		// as a side effect of being run manually would be a surprise.
+		nil,
 	)
 }
 

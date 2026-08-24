@@ -58,6 +58,9 @@ const (
 	ActionCheckTimerFired           DecisionAction = "check.timer.fired"
 	ActionCheckTimerCancelled       DecisionAction = "check.timer.cancelled"
 	ActionCheckConflictSkipped      DecisionAction = "check.conflict_skipped"
+	ActionCheckTriggerFired         DecisionAction = "check.trigger.fired"
+	ActionCheckTriggerDelivered     DecisionAction = "check.trigger.delivered"
+	ActionCheckDeliveryFailed       DecisionAction = "check.delivery_failed"
 	ActionCaptureDedupJudged        DecisionAction = "capture.dedup.judged"
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
@@ -103,7 +106,7 @@ const (
 	ActionPatternEvalLoadHypothesisOpened DecisionAction = "consolidate.pattern_eval.load_hypothesis_opened"
 )
 
-// AllDecisionActions returns a fresh slice holding the thirty-two
+// AllDecisionActions returns a fresh slice holding the thirty-five
 // DecisionAction vocabulary members, in the order the constants above
 // declare them.
 //
@@ -119,7 +122,8 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
 		ActionCaptureArmRefused,
 		ActionCheckTriggerExpired, ActionCheckTimerFired, ActionCheckTimerCancelled,
-		ActionCheckConflictSkipped,
+		ActionCheckConflictSkipped, ActionCheckTriggerFired,
+		ActionCheckTriggerDelivered, ActionCheckDeliveryFailed,
 		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,

@@ -82,6 +82,7 @@ func (r *Triggers) Due(_ context.Context, at time.Time) ([]ports.DueTrigger, err
 			ID:               t.ID,
 			UnitID:           copyString(t.UnitID),
 			FireAt:           *t.FireAt,
+			Payload:          t.Payload,
 			InterruptLevel:   copyFloat64(t.InterruptLevel),
 			RecurrenceRule:   copyRule(t.RecurrenceRule),
 			RecurrenceAnchor: copyAnchor(t.RecurrenceAnchor),
@@ -179,6 +180,7 @@ func (r *Triggers) fired(keep func(storedTrigger) bool) []ports.DueTrigger {
 		d := ports.DueTrigger{
 			ID:               t.ID,
 			UnitID:           copyString(t.UnitID),
+			Payload:          t.Payload,
 			InterruptLevel:   copyFloat64(t.InterruptLevel),
 			RecurrenceRule:   copyRule(t.RecurrenceRule),
 			RecurrenceAnchor: copyAnchor(t.RecurrenceAnchor),
