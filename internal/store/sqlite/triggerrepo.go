@@ -100,7 +100,7 @@ func (r *TriggerRepo) Create(ctx context.Context, t ports.Trigger) error {
 // has none.
 func (r *TriggerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTrigger, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor
+		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor, payload
 		 FROM triggers
 		 WHERE status = ? AND fire_at IS NOT NULL AND fire_at <= ?
 		 ORDER BY fire_at, id`,
@@ -204,7 +204,7 @@ func (r *TriggerRepo) Delivered(ctx context.Context) ([]ports.DueTrigger, error)
 // must see in full would be paging for its own sake.
 func (r *TriggerRepo) firedWhere(ctx context.Context, where, order string) ([]ports.DueTrigger, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor
+		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor, payload
 		 FROM triggers WHERE status = ? AND `+where+` ORDER BY `+order,
 		string(ports.TriggerStatusFired))
 	if err != nil {
@@ -271,9 +271,10 @@ func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
 		fireAt                         string
 		interruptLevel                 any
 		recurrenceRule, recurrenceAnch sql.NullString
+		payload                        sql.NullString
 	)
 
-	if err := rows.Scan(&d.ID, &unitID, &fireAt, &interruptLevel, &recurrenceRule, &recurrenceAnch); err != nil {
+	if err := rows.Scan(&d.ID, &unitID, &fireAt, &interruptLevel, &recurrenceRule, &recurrenceAnch, &payload); err != nil {
 		return ports.DueTrigger{}, fmt.Errorf("scan due trigger: %w", err)
 	}
 
@@ -291,6 +292,18 @@ func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
 		rule := prospection.Rule(recurrenceRule.String)
 		d.RecurrenceRule = &rule
 	}
+	if payload.Valid && payload.String != "" {
+		var stored payloadJSON
+		if err := json.Unmarshal([]byte(payload.String), &stored); err != nil {
+			return ports.DueTrigger{}, fmt.Errorf("trigger %q: payload: %w", d.ID, err)
+		}
+		d.Payload = ports.TriggerPayload{
+			ActionText: stored.Action,
+			Rationale:  stored.Rationale,
+			LeadDays:   stored.LeadDays,
+		}
+	}
+
 	if recurrenceAnch.Valid {
 		var stored anchorJSON
 		if err := json.Unmarshal([]byte(recurrenceAnch.String), &stored); err != nil {

@@ -156,9 +156,16 @@ type Trigger struct {
 // reader. FireAt is not a pointer here for the same reason — Due's
 // predicate includes fire_at IS NOT NULL, so a due trigger always has one.
 type DueTrigger struct {
-	ID               string
-	UnitID           *string
-	FireAt           time.Time
+	ID     string
+	UnitID *string
+	FireAt time.Time
+	// Payload is what the trigger will say. It joined this shape when
+	// delivery arrived: m3b made DueTrigger narrow because the only
+	// reader was a core decision over (fireAt, now), and a payload would
+	// have been a field with no reader. Delivery is a reader, and a
+	// second read to fetch the text of a row this one already returned
+	// would be a query per trigger for data the first query had in hand.
+	Payload          TriggerPayload
 	InterruptLevel   *float64
 	RecurrenceRule   *prospection.Rule
 	RecurrenceAnchor *prospection.Anchor

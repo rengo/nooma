@@ -34,11 +34,10 @@ func TestTriggerTransition_MapsEveryVerdict(t *testing.T) {
 		prospection.VerdictPending: {writes: false},
 		prospection.VerdictDefer:   {writes: false},
 		prospection.VerdictStale:   {status: ports.TriggerStatusExpired, writes: true},
-		// Deliver writes nothing for a trigger, and that is not an
-		// oversight: nothing in this change can surface a fired trigger,
-		// so firing one here would record a delivery that never happened.
-		// It stays armed and Due returns it again next pass.
-		prospection.VerdictDeliver: {writes: false},
+		// Deliver fires, now that m3d can deliver. m3b mapped this to no
+		// write and said in the same breath that it would change when
+		// something could surface a fired trigger; this is that.
+		prospection.VerdictDeliver: {status: ports.TriggerStatusFired, writes: true},
 	}
 
 	for _, v := range verdicts {

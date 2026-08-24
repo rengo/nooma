@@ -165,7 +165,7 @@ func TestI15_OverdueTriggerExpiresAndNeverFiresThroughAScan(t *testing.T) {
 				t.Fatalf("Create: %v", err)
 			}
 
-			svc := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions)
+			svc := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, decisions, nil)
 			report, err := svc.Check(ctx, brain.CheckRequest{})
 			if err != nil {
 				t.Fatalf("Check: %v", err)

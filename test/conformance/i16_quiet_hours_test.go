@@ -2,9 +2,14 @@
 package conformance
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 
 	"github.com/rengo/nooma/internal/core/prospection"
 )
@@ -94,4 +99,92 @@ func TestI16_InQuietHoursTakesNoKindParameter(t *testing.T) {
 	if got := fn.In(0); got != reflect.TypeOf(time.Time{}) {
 		t.Fatalf("InQuietHours's one parameter is %v, want time.Time", got)
 	}
+}
+
+// TestI16_DeliveryIsDeferredInQuietHoursExceptATimer is I16's behavioural
+// half at the delivery layer — the pure gate is asserted above, this is
+// the pass acting on it.
+//
+// **Swept, not sampled.** m3b's G16 and G22 were the same defect found
+// twice: a boundary with two regimes, checked at one point. The sweep
+// walks every hour of a day and asserts the trigger is delivered outside
+// the window and not inside, and that the timer is delivered at every hour
+// — I16's one exception, and the only one.
+func TestI16_DeliveryIsDeferredInQuietHoursExceptATimer(t *testing.T) {
+	sweptInside, sweptOutside := 0, 0
+
+	for hour := 0; hour < 24; hour++ {
+		now := time.Date(2026, 8, 5, hour, 30, 0, 0, time.UTC)
+
+		// Due one minute ago at every swept hour, so the trigger is
+		// always deliverable and never stale: the ONLY thing changing
+		// across the sweep is whether the window is open. A fixed fire_at
+		// would make the late hours fail on staleness, which is I15's
+		// subject and not this one's — and the guard at the end is what
+		// caught that when this test was first written that way.
+		fireAt := now.Add(-time.Minute)
+
+		t.Run(now.Format("15h"), func(t *testing.T) {
+			triggers := memrepo.NewTriggers()
+			timers := memrepo.NewTimers()
+			ch := &countingChannel{}
+
+			ctx := context.Background()
+			at := fireAt
+			level := 0.9
+			if err := triggers.Create(ctx, ports.Trigger{
+				ID: "trg", Kind: ports.TriggerKindTimeBased, FireAt: &at,
+				InterruptLevel: &level, CreatedAt: fireAt.Add(-time.Hour),
+			}); err != nil {
+				t.Fatalf("Create trigger: %v", err)
+			}
+			// The timer is due at this hour, so it is never stale.
+			if err := timers.Create(ctx, ports.Timer{
+				ID: "tmr", FireAt: now.Add(-time.Minute), CreatedAt: fireAt,
+			}); err != nil {
+				t.Fatalf("Create timer: %v", err)
+			}
+
+			report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, memrepo.NewDecisionLog(), ch).
+				Check(ctx, brain.CheckRequest{})
+			if err != nil {
+				t.Fatalf("Check: %v", err)
+			}
+
+			// The timer is the exception, at every hour.
+			if report.TimersFired != 1 {
+				t.Errorf("TimersFired = %d at %s, want 1 — a timer is the one push exception to quiet hours (doc 02 §7)",
+					report.TimersFired, now.Format("15:04"))
+			}
+
+			if prospection.InQuietHours(now) {
+				sweptInside++
+				if report.TriggersDelivered != 0 {
+					t.Errorf("a trigger was delivered at %s, inside quiet hours", now.Format("15:04"))
+				}
+				return
+			}
+			sweptOutside++
+			if report.TriggersDelivered != 1 {
+				t.Errorf("TriggersDelivered = %d at %s, outside quiet hours, want 1", report.TriggersDelivered, now.Format("15:04"))
+			}
+		})
+	}
+
+	if sweptInside == 0 || sweptOutside == 0 {
+		t.Fatalf("the sweep covered %d hour(s) inside the window and %d outside — a sweep that only reaches one regime is a sample",
+			sweptInside, sweptOutside)
+	}
+}
+
+// countingChannel counts sends and nothing else.
+type countingChannel struct{ sent int }
+
+func (c *countingChannel) Name() string                                            { return "test" }
+func (c *countingChannel) Receive(context.Context) ([]ports.ChannelMessage, error) { return nil, nil }
+func (c *countingChannel) Confirm(context.Context, string) error                   { return nil }
+func (c *countingChannel) Close() error                                            { return nil }
+func (c *countingChannel) Send(context.Context, ports.ConversationID, string) error {
+	c.sent++
+	return nil
 }
