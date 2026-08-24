@@ -420,3 +420,12 @@ func rawTypeof(t *testing.T, v *Vault, column, id string) string {
 
 // ptrTo is the fixtures' one-line address-of helper.
 func ptrTo[T any](v T) *T { return &v }
+
+// TestTriggerRepo_DeliveryContract runs the same delivery suite the
+// in-memory fake answers at L2, over a real migrated vault.
+func TestTriggerRepo_DeliveryContract(t *testing.T) {
+	repocontract.RunTriggerDelivery(t, func(t *testing.T) repocontract.TriggerHarness {
+		v := openTestVault(t)
+		return triggerHarness{TriggerRepo: NewTriggerRepo(v), v: v}
+	})
+}

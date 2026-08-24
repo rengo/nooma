@@ -141,6 +141,17 @@ func (r *TriggerRepo) Expire(ctx context.Context, id string) error {
 	return r.transition(ctx, id, ports.TriggerStatusExpired, nil)
 }
 
+// Surface, Undelivered, Delivered and Resolve are the red step's stubs.
+func (r *TriggerRepo) Surface(context.Context, string, time.Time) error { return nil }
+
+func (r *TriggerRepo) Undelivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+
+func (r *TriggerRepo) Delivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+
+func (r *TriggerRepo) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+	return nil
+}
+
 // transition moves id out of armed, optionally stamping fired_at.
 //
 // Two statements, and both are load-bearing. The SELECT distinguishes "no

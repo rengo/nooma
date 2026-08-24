@@ -67,6 +67,31 @@ func AllTriggerKinds() []TriggerKind {
 	return []TriggerKind{TriggerKindTimeBased, TriggerKindEventBased, TriggerKindPatternBased}
 }
 
+// TriggerResolution is triggers.resolution's vocabulary (migration
+// 0001:54) — how a delivered nudge ended, in the user's own answer.
+//
+// The fourth vocabulary this port declares, and the first whose members a
+// user chooses rather than the system. See TriggerStatus for why they all
+// live in internal/ports.
+type TriggerResolution string
+
+// The triggers.resolution vocabulary, in migration 0001:54's own order.
+const (
+	// ResolutionEngaged: the user acted on it.
+	ResolutionEngaged TriggerResolution = "engaged"
+	// ResolutionDeclined: the user said no.
+	ResolutionDeclined TriggerResolution = "declined"
+	// ResolutionSelfHealed: fresh activity resolved it before the user
+	// answered — doc 02 §7's own third case, and the one nobody types.
+	ResolutionSelfHealed TriggerResolution = "self_healed"
+)
+
+// AllTriggerResolutions returns a fresh slice holding the three members —
+// see AllTriggerStatuses for why it is a function.
+func AllTriggerResolutions() []TriggerResolution {
+	return []TriggerResolution{ResolutionEngaged, ResolutionDeclined, ResolutionSelfHealed}
+}
+
 // TriggerPayload is triggers.payload's declared shape, and the reason it
 // is declared rather than opaque is that something reads it back: doc 02
 // §7 says a recurring trigger's re-arm propagates lead_days, so LeadDays
@@ -141,7 +166,7 @@ type DueTrigger struct {
 
 // TriggerRepo is the repository port over triggers.
 //
-// Four methods, and three absences that are deliberate:
+// Eight methods, and three absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     — I03's strengthened prefix set, asserted over this interface's own
@@ -187,6 +212,48 @@ type TriggerRepo interface {
 	// precondition is optimistic concurrency, not validation: two scans
 	// racing over one due trigger must produce exactly one fired row.
 	Fire(ctx context.Context, id string, at time.Time) error
+
+	// Surface records that id reached the user at at, writing
+	// surfaced_at.
+	//
+	// Separate from Fire because firing and delivering are different
+	// facts with different failure modes: a trigger can fire and then
+	// fail to send. m3b left surfaced_at NULL precisely so this could be
+	// the thing that fills it, and a caller writes it only AFTER a
+	// successful send — a trigger the user never saw must not be recorded
+	// as delivered.
+	//
+	// It returns ErrTriggerStatusConflict if id is not fired, and
+	// ErrTriggerNotFound if it does not exist.
+	Surface(ctx context.Context, id string, at time.Time) error
+
+	// Undelivered returns every trigger that fired and has not reached
+	// the user, ordered by (fired_at, id) — the digest's own source.
+	//
+	// Named for what it returns, like every other read here. A
+	// Fired(status, surfaced bool) would be the parameterized read
+	// UnitRepo's rule forbids, wearing two parameters instead of one.
+	Undelivered(ctx context.Context) ([]DueTrigger, error)
+
+	// Delivered returns every trigger that reached the user and has no
+	// answer yet — doc 02 §5's "open check-ins", ordered most recent
+	// first so a caller resolving one answer takes the head.
+	Delivered(ctx context.Context) ([]DueTrigger, error)
+
+	// Resolve records the user's answer: responded_at = at and
+	// resolution = to, under a surfaced-and-unanswered precondition.
+	//
+	// It takes a `to` where Fire and Expire do not, and the asymmetry is
+	// deliberate rather than an inconsistency. Those two reject a status
+	// parameter because every call site has exactly one legal value, so
+	// the parameter would only ever be a channel for a wrong one. Here
+	// every call site has three, and they come from the user's own
+	// answer through classify's vocabulary — a value, not a status the
+	// transition implies.
+	//
+	// It returns ErrTriggerStatusConflict if id is not surfaced or is
+	// already answered, and ErrTriggerNotFound if it does not exist.
+	Resolve(ctx context.Context, id string, to TriggerResolution, at time.Time) error
 
 	// Expire moves id from armed to expired (I15: a trigger past its
 	// window expires, it does not fire late). triggers carries no

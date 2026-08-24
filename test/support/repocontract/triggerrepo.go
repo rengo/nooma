@@ -419,3 +419,158 @@ func assertDueTriggerIDs(t *testing.T, got []ports.DueTrigger, wantIDs ...string
 		}
 	}
 }
+
+// RunTriggerDelivery runs the delivery half of the ports.TriggerRepo
+// contract — Surface, Undelivered, Delivered and Resolve.
+//
+// Separate from RunTriggerRepo because it needs a trigger that has already
+// fired, and threading that setup through every case in the arming suite
+// would make each one carry a precondition it does not use.
+func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
+	t.Helper()
+
+	// fire creates an armed trigger and fires it, returning its id.
+	fire := func(t *testing.T, repo TriggerHarness, id string) string {
+		t.Helper()
+		at := contractNow
+		createTrigger(t, repo, fixtureTrigger(id, &at))
+		if err := repo.Fire(context.Background(), id, contractNow); err != nil {
+			t.Fatalf("Fire %s: %v", id, err)
+		}
+		return id
+	}
+
+	t.Run("a fired trigger is undelivered until it is surfaced", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-1")
+
+		assertDueTriggerIDs(t, undelivered(t, repo), "trg-1")
+		assertDueTriggerIDs(t, delivered(t, repo))
+
+		if err := repo.Surface(ctx, "trg-1", contractNow.Add(time.Minute)); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+
+		assertDueTriggerIDs(t, undelivered(t, repo))
+		assertDueTriggerIDs(t, delivered(t, repo), "trg-1")
+	})
+
+	t.Run("Surface on an unfired trigger is refused", func(t *testing.T) {
+		repo := newRepo(t)
+		at := contractNow
+		createTrigger(t, repo, fixtureTrigger("trg-armed", &at))
+
+		// The trigger is armed, not fired. Surfacing it would record a
+		// delivery of something that never came due.
+		if err := repo.Surface(context.Background(), "trg-armed", contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("Surface on an armed trigger: got %v, want ErrTriggerStatusConflict", err)
+		}
+	})
+
+	t.Run("Surface twice is refused, so two passes cannot both deliver one trigger", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-1")
+
+		if err := repo.Surface(ctx, "trg-1", contractNow); err != nil {
+			t.Fatalf("first Surface: %v", err)
+		}
+		if err := repo.Surface(ctx, "trg-1", contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("second Surface: got %v, want ErrTriggerStatusConflict", err)
+		}
+	})
+
+	t.Run("Resolve records the answer and closes the check-in", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-1")
+		if err := repo.Surface(ctx, "trg-1", contractNow); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+
+		if err := repo.Resolve(ctx, "trg-1", ports.ResolutionEngaged, contractNow.Add(time.Hour)); err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+
+		// It is no longer an open check-in.
+		assertDueTriggerIDs(t, delivered(t, repo))
+	})
+
+	t.Run("Resolve on an unsurfaced trigger is refused", func(t *testing.T) {
+		repo := newRepo(t)
+		fire(t, repo, "trg-1")
+
+		// A check-in cannot resolve something the user never saw.
+		if err := repo.Resolve(context.Background(), "trg-1", ports.ResolutionEngaged, contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("Resolve on an unsurfaced trigger: got %v, want ErrTriggerStatusConflict", err)
+		}
+	})
+
+	t.Run("Resolve twice is refused", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-1")
+		if err := repo.Surface(ctx, "trg-1", contractNow); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+		if err := repo.Resolve(ctx, "trg-1", ports.ResolutionEngaged, contractNow); err != nil {
+			t.Fatalf("first Resolve: %v", err)
+		}
+		if err := repo.Resolve(ctx, "trg-1", ports.ResolutionDeclined, contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("second Resolve: got %v, want ErrTriggerStatusConflict — an answer already given is not overwritten by a later one", err)
+		}
+	})
+
+	t.Run("Surface and Resolve on an unknown id return ErrTriggerNotFound", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		if err := repo.Surface(ctx, "nope", contractNow); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Errorf("Surface: got %v, want ErrTriggerNotFound", err)
+		}
+		if err := repo.Resolve(ctx, "nope", ports.ResolutionEngaged, contractNow); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Errorf("Resolve: got %v, want ErrTriggerNotFound", err)
+		}
+	})
+
+	t.Run("Delivered is most recent first", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		for i, id := range []string{"trg-a", "trg-b", "trg-c"} {
+			fire(t, repo, id)
+			if err := repo.Surface(ctx, id, contractNow.Add(time.Duration(i)*time.Hour)); err != nil {
+				t.Fatalf("Surface %s: %v", id, err)
+			}
+		}
+
+		// A caller resolving one answer takes the head, so the head must
+		// be the one the user most likely just answered.
+		assertDueTriggerIDs(t, delivered(t, repo), "trg-c", "trg-b", "trg-a")
+	})
+
+	t.Run("both reads are empty on a repository with nothing fired", func(t *testing.T) {
+		repo := newRepo(t)
+		assertDueTriggerIDs(t, undelivered(t, repo))
+		assertDueTriggerIDs(t, delivered(t, repo))
+	})
+}
+
+func undelivered(t *testing.T, repo ports.TriggerRepo) []ports.DueTrigger {
+	t.Helper()
+	got, err := repo.Undelivered(context.Background())
+	if err != nil {
+		t.Fatalf("Undelivered: %v", err)
+	}
+	return got
+}
+
+func delivered(t *testing.T, repo ports.TriggerRepo) []ports.DueTrigger {
+	t.Helper()
+	got, err := repo.Delivered(context.Background())
+	if err != nil {
+		t.Fatalf("Delivered: %v", err)
+	}
+	return got
+}

@@ -25,6 +25,12 @@ type Triggers struct {
 type storedTrigger struct {
 	trigger ports.Trigger
 	status  ports.TriggerStatus
+	// surfacedAt, respondedAt and resolution are the delivery half of the
+	// row. ports.Trigger carries none of them: Create only ever writes an
+	// armed row, and every one of these is written by a later transition.
+	surfacedAt  *time.Time
+	respondedAt *time.Time
+	resolution  ports.TriggerResolution
 }
 
 var _ ports.TriggerRepo = (*Triggers)(nil)
@@ -123,6 +129,17 @@ func (r *Triggers) transition(id string, to ports.TriggerStatus) error {
 	}
 	stored.status = to
 	r.triggers[id] = stored
+	return nil
+}
+
+// Surface, Undelivered, Delivered and Resolve are the red step's stubs.
+func (r *Triggers) Surface(context.Context, string, time.Time) error { return nil }
+
+func (r *Triggers) Undelivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+
+func (r *Triggers) Delivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+
+func (r *Triggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
 	return nil
 }
 
