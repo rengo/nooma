@@ -254,17 +254,41 @@ delivered text mentions the delay" and is silent on which layer does it when the
 
 ## PR 6 — `feat/brain-checkin-nudge-task` (~350 impl+docs)
 
-- [ ] **6.1** Commit 1 (RED): a capture carrying a `nudge_outcome` resolves the most recent open
+- [x] **6.1** Commit 1 (RED): a capture carrying a `nudge_outcome` resolves the most recent open
       check-in — `responded_at` and `resolution` written — **iterated over
       `classify.AllNudgeOutcomes()`**, never listed; an answer with nothing open writes one row and
       changes nothing.
       Requirement: R5.1.
       **Mutation**: hand-write the outcome switch — a fifth member added later is silently unhandled;
       the iterated test fails on the loop pass with no expectation.
-- [ ] **6.2** Commit 2 (GREEN): the resolution path in the capture pipeline, ambiguity resolved to
+- [x] **6.2** Commit 2 (GREEN): the resolution path in the capture pipeline, ambiguity resolved to
       the most recent with the choice recorded (design §3.6, D4).
-- [ ] **6.3** The same for `task_checkin_outcome`, iterated over its own `AllX()`.
-- [ ] **6.4** Purity/lint. Verify (PR-level). Target ≤350.
+- [x] **6.3** The same for `task_checkin_outcome`, iterated over its own `AllX()`.
+- [x] **6.4** Purity/lint. Verify (PR-level). Target ≤350.
+
+**J18 — `snooze` resolves nothing, and spec R5.2's wording does not cover it.** R5.2 says *"a
+`task_checkin_outcome` resolves an open task check-in"*. Two of the three do. **Snooze means "ask me
+later"**: the check-in is neither engaged nor declined, and `ports.AllTriggerResolutions()` has no
+member for it — deliberately, since the vocabulary is what a nudge *ended as*. Forcing snooze into
+`declined` would record an answer the user did not give; forcing it into `engaged` is worse. It
+leaves the check-in open, so the next digest or push asks again, which is what was requested.
+Recorded because "resolves" reads as total over the vocabulary and is not.
+
+**J19 — a channel-less digest was marking items delivered, and `nooma check` is what found it.** The
+push path already declines to `Surface` anything when `r.channel == nil`; the digest did not, and
+the asymmetry was worse there: a channel-less digest surfaces **every carried item at once**,
+recording a delivery nobody received and removing them from tomorrow's digest forever. Found by the
+CLI test, because `wireCheck` passes a nil channel by design (a subcommand that messaged the user as
+a side effect of being run manually would be a surprise) — so the one caller that exercises the
+nil-channel path is a subcommand nobody thought of as a delivery test.
+
+**J20 — G22's wall-clock fragility recurred at a different offset, in two more fixtures.** Both the
+CLI dry-run test and the L4 demo seeded a "stale" trigger at `TriggerStalenessHours + 2` hours ago.
+`DeliverableFrom` shifts a `fire_at` that fell inside quiet hours to that day's 07:00, so that offset
+is only reliably overdue at *some* hours of the day — at others the trigger is deliverable, fires,
+and the expiry assertion fails. Both now seed two days back, which is stale from any shift, and both
+were verified under `TZ=UTC` and `TZ=Asia/Tokyo`. **Third occurrence of the same class**: a fixture
+whose meaning depends on the wall clock is fragile even when the assertion looks absolute.
 
 ---
 

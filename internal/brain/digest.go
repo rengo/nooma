@@ -30,6 +30,17 @@ const digestHistoryDays = prospection.MaxDigestDeferrals + 2
 // is owed, LowEnergy reads the care gate, and Carry splits what goes out
 // from what waits. This supplies their inputs and persists their outcome.
 func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit bool) (int, error) {
+	if r.channel == nil {
+		// No channel, no digest. The push path already declines to mark
+		// anything delivered without one; the digest must too, and the
+		// asymmetry would have been worse here — a digest with no channel
+		// would surface every carried item at once, recording a delivery
+		// nobody received and removing them from tomorrow's digest
+		// forever. `nooma check` on a Telegram-less vault is exactly this
+		// case, and it is what caught it.
+		return 0, nil
+	}
+
 	history, err := r.log.Since(ctx, now.AddDate(0, 0, -digestHistoryDays), -1)
 	if err != nil {
 		return 0, fmt.Errorf("check: reading digest history: %w", err)
@@ -75,12 +86,10 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return len(carry), nil
 	}
 
-	if r.channel != nil {
-		if err := r.channel.Send(ctx, "", renderDigest(carry, pending)); err != nil {
-			return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
-				fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
-				checkDetail{})
-		}
+	if err := r.channel.Send(ctx, "", renderDigest(carry, pending)); err != nil {
+		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
+			checkDetail{})
 	}
 
 	for _, item := range carry {

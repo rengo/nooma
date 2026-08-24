@@ -161,7 +161,12 @@ func seedDueWork(t *testing.T, dbPath string) {
 	defer func() { _ = db.Close() }()
 
 	now := time.Now().UTC()
-	staleAt := now.Add(-time.Duration(prospection.TriggerStalenessHours+2) * time.Hour)
+	// Two days back, not staleness+2h. DeliverableFrom shifts a fire_at
+	// that fell inside quiet hours to that day's 07:00, so a
+	// staleness+2h offset is only reliably stale at some hours of the
+	// day. Two days is stale from any shift — the same wall-clock
+	// fragility G22 recorded, met again at a different offset.
+	staleAt := now.Add(-48 * time.Hour)
 	dueAt := now.Add(-time.Minute)
 
 	if err := sqlite.NewTriggerRepo(db).Create(ctx, ports.Trigger{
