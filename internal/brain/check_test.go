@@ -395,3 +395,32 @@ func TestCheckDryRun_ReachesTheSameVerdictsAndWritesNothing(t *testing.T) {
 		t.Fatal("the wet run wrote nothing — this test's own premise is gone")
 	}
 }
+
+// The delivery half of ports.TriggerRepo, which these fixtures do not
+// exercise: m3d PR 2 widened the port and these tests are about the scan.
+func (r *conflictingTriggers) Surface(context.Context, string, time.Time) error { return nil }
+func (r *conflictingTriggers) Undelivered(context.Context) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
+func (r *conflictingTriggers) Delivered(context.Context) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
+func (r *conflictingTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+	return nil
+}
+
+func (r *failingTriggers) Surface(context.Context, string, time.Time) error { return nil }
+func (r *failingTriggers) Undelivered(context.Context) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
+func (r *failingTriggers) Delivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+func (r *failingTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+	return nil
+}
+
+func (emptyTriggers) Surface(context.Context, string, time.Time) error        { return nil }
+func (emptyTriggers) Undelivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+func (emptyTriggers) Delivered(context.Context) ([]ports.DueTrigger, error)   { return nil, nil }
+func (emptyTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+	return nil
+}

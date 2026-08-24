@@ -138,3 +138,28 @@ func assertVocabularyMatches(t *testing.T, name string, got, want []string) {
 		}
 	}
 }
+
+// TestTriggerResolutionMatchesMigration0001Comment pins the fourth
+// vocabulary to migration 0001:54's own column comment, the same way the
+// other three are pinned.
+//
+// It is a separate test rather than a fourth subtest above because that
+// one's name says "trigger and timer vocabularies" and this is a
+// resolution — a value the user supplies, not a state the system moves
+// through. Same mechanism, different claim.
+func TestTriggerResolutionMatchesMigration0001Comment(t *testing.T) {
+	want := columnCommentMembers(t, migrationSQLText(t),
+		"resolution        TEXT,                        -- ")
+
+	got := make([]string, 0, len(ports.AllTriggerResolutions()))
+	for _, r := range ports.AllTriggerResolutions() {
+		got = append(got, string(r))
+	}
+	assertVocabularyMatches(t, "ports.AllTriggerResolutions()", got, want)
+
+	first := ports.AllTriggerResolutions()
+	first[0] = "scribbled"
+	if second := ports.AllTriggerResolutions(); second[0] == "scribbled" {
+		t.Fatal("ports.AllTriggerResolutions() shares its backing array across calls")
+	}
+}

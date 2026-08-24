@@ -18,3 +18,12 @@ func TestTriggerRepo_MemRepo(t *testing.T) {
 		return memrepo.NewTriggers()
 	})
 }
+
+// TestTriggerDelivery_MemRepo runs repocontract.RunTriggerDelivery against
+// the in-memory fake, at L2.
+func TestTriggerDelivery_MemRepo(t *testing.T) {
+	repocontract.RunTriggerDelivery(t, func(t *testing.T) repocontract.TriggerHarness {
+		t.Helper()
+		return memrepo.NewTriggers()
+	})
+}
