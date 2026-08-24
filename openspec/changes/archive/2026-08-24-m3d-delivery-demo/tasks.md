@@ -384,6 +384,31 @@ decide which of its parts are the vault and which are the day.
 
 ---
 
+## Verification — 2026-08-24
+
+All eight PRs merged; every task above ticked. `main` at the merge of PR #231, `make check-all`
+green end to end (lint, L1/L2 under `-race`, build, L3, the schema-golden regeneration diff,
+`internal/core` coverage at 100% against a 90% floor, the seven-target cross-compile matrix, L4).
+
+| Requirement | Discharged by | Note |
+|---|---|---|
+| R0 | all | `internal/core` untouched: `m3a` shipped every gate this change runs |
+| R1.1, R1.2 | PR 1 (#224) | Separate guards; §13's row 918 corrected, and its diagnosis was wrong (**J6**) |
+| R2.1, R2.2 | PRs 2–3 (#225, #226) | Send-then-Surface; I16 swept over 24 hours |
+| R3.1–R3.3 | PR 4 (#227) | One digest a day; the deferral counter is the audit trail; nil is not low |
+| R4.1, R4.2 | PR 5 (#228) | `action_text` never modified; the caveat swept across its boundary |
+| R5.1–R5.3 | PRs 6–7 (#229, #230) | Vocabularies iterated; **I10 read the right way round after correcting this spec** |
+| R6.1 | PR 8 (#231) | Poller joined first; a dead channel does not kill `serve` |
+| R7.1 | PR 8 (#231) | `test/e2e/m3_demo_test.go` — and it found J26 |
+
+**Verified by mutation rather than by assertion**: the shared scheduler guard, the held-digest rows,
+the signal/delete ordering, and `deliver`'s success reporting. Each was made, run, and reverted.
+
+**Twenty-seven findings, J1–J27.** Three needed an owner decision and got one; two were defects this
+change introduced and fixed itself (J9, J26); one was an error in this change's own spec (J21).
+
+---
+
 ## Review Workload Forecast
 
 | Field | Value |
