@@ -429,3 +429,50 @@ func TestTriggerRepo_DeliveryContract(t *testing.T) {
 		return triggerHarness{TriggerRepo: NewTriggerRepo(v), v: v}
 	})
 }
+
+// TestTriggerRepo_ResolutionColumnHoldsOnlyVocabularyMembers is the
+// constraint the schema does not carry, for the fourth vocabulary.
+//
+// triggers.resolution is plain TEXT with no CHECK, so a mistyped literal
+// anywhere in the write path persists happily. Every L2 case above stays
+// green through exactly that mutation — the fake has no column to hold a
+// wrong value in — and only a read of what SQLite actually stored fails.
+func TestTriggerRepo_ResolutionColumnHoldsOnlyVocabularyMembers(t *testing.T) {
+	v := openTestVault(t)
+	ctx := context.Background()
+	repo := NewTriggerRepo(v)
+	seedFixtureUnit(t, v, "unit-trg-resolved")
+
+	if err := repo.Create(ctx, fixtureStoreTrigger("trg-resolved")); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	for _, step := range []func() error{
+		func() error { return repo.Fire(ctx, "trg-resolved", triggerFixtureTime) },
+		func() error { return repo.Surface(ctx, "trg-resolved", triggerFixtureTime) },
+		func() error {
+			return repo.Resolve(ctx, "trg-resolved", ports.ResolutionSelfHealed, triggerFixtureTime)
+		},
+	} {
+		if err := step(); err != nil {
+			t.Fatalf("transition: %v", err)
+		}
+	}
+
+	var stored, respondedAt sql.NullString
+	if err := v.db.QueryRowContext(ctx,
+		`SELECT resolution, responded_at FROM triggers WHERE id = ?`, "trg-resolved").
+		Scan(&stored, &respondedAt); err != nil {
+		t.Fatalf("select resolution: %v", err)
+	}
+
+	vocabulary := map[string]bool{}
+	for _, r := range ports.AllTriggerResolutions() {
+		vocabulary[string(r)] = true
+	}
+	if !stored.Valid || !vocabulary[stored.String] {
+		t.Fatalf("resolution = %v, which is not a member of ports.AllTriggerResolutions() — the column has no CHECK constraint, so this test is the constraint", stored)
+	}
+	if !respondedAt.Valid {
+		t.Error("responded_at is NULL on a resolved trigger — an answer without an instant is unrepresentable by design")
+	}
+}

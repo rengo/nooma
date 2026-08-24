@@ -25,9 +25,13 @@ internal/store/sqlite: func (*TimerRepo) Create(ctx context.Context, t ports.Tim
 internal/store/sqlite: func (*TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, error)
 internal/store/sqlite: func (*TimerRepo) Fire(ctx context.Context, id string, at time.Time) error
 internal/store/sqlite: func (*TriggerRepo) Create(ctx context.Context, t ports.Trigger) error
+internal/store/sqlite: func (*TriggerRepo) Delivered(ctx context.Context) ([]ports.DueTrigger, error)
 internal/store/sqlite: func (*TriggerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTrigger, error)
 internal/store/sqlite: func (*TriggerRepo) Expire(ctx context.Context, id string) error
 internal/store/sqlite: func (*TriggerRepo) Fire(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*TriggerRepo) Resolve(ctx context.Context, id string, to ports.TriggerResolution, at time.Time) error
+internal/store/sqlite: func (*TriggerRepo) Surface(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*TriggerRepo) Undelivered(ctx context.Context) ([]ports.DueTrigger, error)
 internal/store/sqlite: func (*UnitRepo) ApplyBoosts(ctx context.Context, boosts []weight.Boost, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) CountLiveByType(ctx context.Context, t unit.Type) (int, error)

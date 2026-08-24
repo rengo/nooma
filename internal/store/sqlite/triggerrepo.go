@@ -141,15 +141,89 @@ func (r *TriggerRepo) Expire(ctx context.Context, id string) error {
 	return r.transition(ctx, id, ports.TriggerStatusExpired, nil)
 }
 
-// Surface, Undelivered, Delivered and Resolve are the red step's stubs.
-func (r *TriggerRepo) Surface(context.Context, string, time.Time) error { return nil }
+// Surface implements ports.TriggerRepo. One UPDATE under a
+// fired-and-unsurfaced precondition, so two passes racing to deliver one
+// trigger produce exactly one surfaced_at — the same shape every other
+// transition on this port has, and for the same reason.
+func (r *TriggerRepo) Surface(ctx context.Context, id string, at time.Time) error {
+	return r.guardedUpdate(ctx, id,
+		`UPDATE triggers SET surfaced_at = ? WHERE id = ? AND status = ? AND surfaced_at IS NULL`,
+		func(current string) bool { return current == string(ports.TriggerStatusFired) },
+		formatUnitTime(at), id, string(ports.TriggerStatusFired))
+}
 
-func (r *TriggerRepo) Undelivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+// Resolve implements ports.TriggerRepo.
+func (r *TriggerRepo) Resolve(ctx context.Context, id string, to ports.TriggerResolution, at time.Time) error {
+	return r.guardedUpdate(ctx, id,
+		`UPDATE triggers SET responded_at = ?, resolution = ?
+		 WHERE id = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
+		func(string) bool { return true },
+		formatUnitTime(at), string(to), id)
+}
 
-func (r *TriggerRepo) Delivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+// guardedUpdate runs one conditional UPDATE, distinguishing "no such
+// trigger" from "the precondition did not hold" — the two-statement shape
+// transition uses, factored because four methods now need it.
+//
+// statusOK is checked against the pre-read only to keep the not-found half
+// honest; the PRECONDITION THAT DECIDES A RACE is the UPDATE's own WHERE
+// and nowhere else.
+func (r *TriggerRepo) guardedUpdate(ctx context.Context, id, query string, statusOK func(string) bool, args ...any) error {
+	var current string
+	err := r.db.QueryRowContext(ctx, `SELECT status FROM triggers WHERE id = ?`, id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ports.ErrTriggerNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("read trigger %q status: %w", id, err)
+	}
+	if !statusOK(current) {
+		return ports.ErrTriggerStatusConflict
+	}
 
-func (r *TriggerRepo) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
-	return nil
+	res, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update trigger %q: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrTriggerStatusConflict)
+}
+
+// Undelivered implements ports.TriggerRepo.
+func (r *TriggerRepo) Undelivered(ctx context.Context) ([]ports.DueTrigger, error) {
+	return r.firedWhere(ctx, `surfaced_at IS NULL`, `fired_at, id`)
+}
+
+// Delivered implements ports.TriggerRepo. Most recent first.
+func (r *TriggerRepo) Delivered(ctx context.Context) ([]ports.DueTrigger, error) {
+	return r.firedWhere(ctx, `surfaced_at IS NOT NULL AND responded_at IS NULL`, `surfaced_at DESC, id DESC`)
+}
+
+// firedWhere is the shared read behind Undelivered and Delivered. Both are
+// unbounded, the same posture LiveDecayStates already carries: a personal
+// vault's fired-and-unanswered set is small, and paging a set the digest
+// must see in full would be paging for its own sake.
+func (r *TriggerRepo) firedWhere(ctx context.Context, where, order string) ([]ports.DueTrigger, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor
+		 FROM triggers WHERE status = ? AND `+where+` ORDER BY `+order,
+		string(ports.TriggerStatusFired))
+	if err != nil {
+		return nil, fmt.Errorf("select fired triggers: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := make([]ports.DueTrigger, 0)
+	for rows.Next() {
+		d, err := scanDueTrigger(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select fired triggers: %w", err)
+	}
+	return out, nil
 }
 
 // transition moves id out of armed, optionally stamping fired_at.

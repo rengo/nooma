@@ -132,14 +132,82 @@ func (r *Triggers) transition(id string, to ports.TriggerStatus) error {
 	return nil
 }
 
-// Surface, Undelivered, Delivered and Resolve are the red step's stubs.
-func (r *Triggers) Surface(context.Context, string, time.Time) error { return nil }
+// Surface implements ports.TriggerRepo.
+func (r *Triggers) Surface(_ context.Context, id string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-func (r *Triggers) Undelivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+	stored, ok := r.triggers[id]
+	if !ok {
+		return ports.ErrTriggerNotFound
+	}
+	if stored.status != ports.TriggerStatusFired || stored.surfacedAt != nil {
+		return ports.ErrTriggerStatusConflict
+	}
+	when := at
+	stored.surfacedAt = &when
+	r.triggers[id] = stored
+	return nil
+}
 
-func (r *Triggers) Delivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+// Undelivered implements ports.TriggerRepo.
+func (r *Triggers) Undelivered(_ context.Context) ([]ports.DueTrigger, error) {
+	return r.fired(func(s storedTrigger) bool { return s.surfacedAt == nil }), nil
+}
 
-func (r *Triggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+// Delivered implements ports.TriggerRepo. Most recent first, so a caller
+// resolving one answer takes the head.
+func (r *Triggers) Delivered(_ context.Context) ([]ports.DueTrigger, error) {
+	out := r.fired(func(s storedTrigger) bool { return s.surfacedAt != nil && s.respondedAt == nil })
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
+// fired collects every fired trigger matching keep, ordered by id.
+func (r *Triggers) fired(keep func(storedTrigger) bool) []ports.DueTrigger {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]ports.DueTrigger, 0, len(r.triggers))
+	for _, stored := range r.triggers {
+		if stored.status != ports.TriggerStatusFired || !keep(stored) {
+			continue
+		}
+		t := stored.trigger
+		d := ports.DueTrigger{
+			ID:               t.ID,
+			UnitID:           copyString(t.UnitID),
+			InterruptLevel:   copyFloat64(t.InterruptLevel),
+			RecurrenceRule:   copyRule(t.RecurrenceRule),
+			RecurrenceAnchor: copyAnchor(t.RecurrenceAnchor),
+		}
+		if t.FireAt != nil {
+			d.FireAt = *t.FireAt
+		}
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// Resolve implements ports.TriggerRepo.
+func (r *Triggers) Resolve(_ context.Context, id string, to ports.TriggerResolution, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, ok := r.triggers[id]
+	if !ok {
+		return ports.ErrTriggerNotFound
+	}
+	if stored.surfacedAt == nil || stored.respondedAt != nil {
+		return ports.ErrTriggerStatusConflict
+	}
+	when := at
+	stored.respondedAt = &when
+	stored.resolution = to
+	r.triggers[id] = stored
 	return nil
 }
 
