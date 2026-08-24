@@ -83,7 +83,7 @@ verified nor marked reads as coverage**, which is the state both scheduler rows 
 
 ## PR 2 — `feat/ports-trigger-delivery` (~350 impl+docs) — **J1's own PR**
 
-- [ ] **2.1** Commit 1 (RED): `test/support/repocontract/triggerrepo.go` (extend) — `Surface` writes
+- [x] **2.1** Commit 1 (RED): `test/support/repocontract/triggerrepo.go` (extend) — `Surface` writes
       `surfaced_at` and the row leaves `Undelivered` and enters `Delivered`; `Resolve` writes
       `responded_at` and `resolution` under a surfaced-and-unanswered precondition, returning the
       named conflict otherwise; `AllTriggerResolutions()` pinned to migration `0001:54`'s comment.
@@ -91,14 +91,23 @@ verified nor marked reads as coverage**, which is the state both scheduler rows 
       Requirement: design §3.2, §3.3.
       **Mutation**: let `Resolve` succeed on an unsurfaced trigger — a check-in could resolve
       something the user never saw.
-- [ ] **2.2** Commit 2 (GREEN): `internal/ports/triggerrepo.go` + `memrepo` + `internal/store/sqlite`,
+- [x] **2.2** Commit 2 (GREEN): `internal/ports/triggerrepo.go` + `memrepo` + `internal/store/sqlite`,
       the precondition in the `UPDATE`'s `WHERE` and nowhere else (`m3b` §3.6's rule).
       Requirement: design §3.2.
-- [ ] **2.3** `testdata/schema/store_api.golden` regenerated.
-- [ ] **2.4** L3: the four methods over a real vault; `SELECT DISTINCT resolution` yields only
+- [x] **2.3** `testdata/schema/store_api.golden` regenerated.
+- [x] **2.4** L3: the four methods over a real vault; `SELECT DISTINCT resolution` yields only
       vocabulary members — the constraint the schema does not carry.
       **Mutation**: map an outcome to a literal outside the vocabulary — only this test fails.
-- [ ] **2.5** Purity/lint. Verify (PR-level). Target ≤350.
+- [x] **2.5** Purity/lint. Verify (PR-level). Target ≤350.
+
+**J7 — widening a port breaks every hand-written fake that implements it, and this one broke three
+inside `internal/brain`.** `conflictingTriggers`, `failingTriggers` and `emptyTriggers` (m3b PR 5b's
+own fixtures for the conflict arm) stopped compiling the moment `ports.TriggerRepo` grew four
+methods. They gain the four as no-ops with a comment saying why — they are about the due scan, not
+about delivery. **Not a defect, and worth recording as a cost**: the alternative to hand-written
+fakes is `memrepo`, which those tests deliberately do not use because they need a repository that
+fails on command. The cost of that choice is paid every time the port widens, and it is small; the
+finding is that it is not zero, and a fourth widening would pay it again.
 
 ---
 
