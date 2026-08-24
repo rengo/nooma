@@ -3,6 +3,8 @@ package ports
 import (
 	"context"
 	"time"
+
+	"github.com/rengo/nooma/internal/core/prospection"
 )
 
 // StateSourceUser, StateSourceConsolidation and MoodLoaded are the
@@ -50,4 +52,16 @@ type StateRepo interface {
 	// none. It feeds consolidation.EvaluateLoad's lastHypothesisAt
 	// parameter directly (m2b §9 Q6).
 	LastHypothesisAt(ctx context.Context) (*time.Time, error)
+
+	// LatestEnergy returns the most recent current_state energy reading
+	// with the instant it was recorded, or nil when there is none.
+	//
+	// **nil, never a zero value.** prospection.LowEnergy treats a missing
+	// or stale reading as NOT low, because that gate suppresses delivery
+	// and anything core cannot vouch for must not be grounds to suppress.
+	// A zero EnergyReading would read as level 0.0 recorded at the zero
+	// instant — low and ancient — and a vault whose owner has never
+	// answered a check-in would silently stop speaking. The pointer is
+	// what keeps "no reading" from becoming "a bad reading".
+	LatestEnergy(ctx context.Context) (*prospection.EnergyReading, error)
 }

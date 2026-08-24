@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -18,6 +19,8 @@ type State struct {
 	// ports.StateSourceConsolidation (the port declares no other write),
 	// so it needs no separate source field to filter on.
 	consolidationRows []ports.StateHypothesis
+	// energy holds every reading RecordEnergy appended, in append order.
+	energy []prospection.EnergyReading
 }
 
 // Assert at compile time, following internal/store/sqlite/unitrepo.go:33's
@@ -60,4 +63,31 @@ func (s *State) LastHypothesisAt(_ context.Context) (*time.Time, error) {
 		}
 	}
 	return &latest, nil
+}
+
+// LatestEnergy implements ports.StateRepo. nil when nothing was recorded —
+// see the port's doc comment for why that is not a zero value.
+func (s *State) LatestEnergy(_ context.Context) (*prospection.EnergyReading, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.energy) == 0 {
+		return nil, nil
+	}
+	latest := s.energy[0]
+	for _, r := range s.energy[1:] {
+		if r.RecordedAt.After(latest.RecordedAt) {
+			latest = r
+		}
+	}
+	return &latest, nil
+}
+
+// RecordEnergy seeds a reading. Test-only: nothing in m3d writes energy
+// yet — the check-in that does is PR 7's — and a digest test needs one to
+// exist without waiting for it.
+func (s *State) RecordEnergy(r prospection.EnergyReading) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.energy = append(s.energy, r)
 }

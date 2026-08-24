@@ -19,6 +19,7 @@ internal/store/sqlite: func (*SelfModelRepo) UpsertByTopicKey(ctx context.Contex
 internal/store/sqlite: func (*SignalRepo) Record(ctx context.Context, s ports.Signal) error
 internal/store/sqlite: func (*SignalRepo) Since(ctx context.Context, t time.Time, limit int) ([]ports.Signal, error)
 internal/store/sqlite: func (*StateRepo) LastHypothesisAt(ctx context.Context) (*time.Time, error)
+internal/store/sqlite: func (*StateRepo) LatestEnergy(ctx context.Context) (*prospection.EnergyReading, error)
 internal/store/sqlite: func (*StateRepo) OpenHypothesis(ctx context.Context, h ports.StateHypothesis) error
 internal/store/sqlite: func (*TimerRepo) Cancel(ctx context.Context, id string) error
 internal/store/sqlite: func (*TimerRepo) Create(ctx context.Context, t ports.Timer) error
