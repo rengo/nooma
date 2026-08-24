@@ -950,6 +950,15 @@ func (d *discriminatingTimer) After(dur time.Duration) <-chan time.Time {
 	return ch
 }
 
+// chanFor reports dur's channel if a caller has asked for it, or nil.
+// Test-only: it exists so a test can wait until a specific loop has
+// reached its own wait, rather than sleeping and hoping.
+func (d *discriminatingTimer) chanFor(dur time.Duration) chan time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.chans[dur]
+}
+
 // fire sends t on dur's own channel, creating it first if no caller has
 // asked for dur yet.
 func (d *discriminatingTimer) fire(dur time.Duration, t time.Time) {

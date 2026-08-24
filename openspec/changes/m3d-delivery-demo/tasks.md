@@ -41,23 +41,43 @@ check-ins stay, and this is reported rather than silently assumed.
 
 ## PR 1 — `feat/scheduler-proactive-tick` (~300 impl+docs)
 
-- [ ] **1.1** Commit 1 (RED): `internal/scheduler/proactive_test.go` — over the existing fake timer:
+- [x] **1.1** Commit 1 (RED): `internal/scheduler/proactive_test.go` — over the existing fake timer:
       a tick calls the injected `ProactiveChecker`; a second tick while one is running is skipped and
       logged; **a running consolidation does NOT skip a proactive tick**.
       **Red**: `undefined: scheduler.ProactiveChecker`.
       Requirement: R1.1.
       **Mutation**: share one guard between the two jobs — the third assertion fails, and it is the
       one that matters: a shared guard lets a nightly pass suppress twelve hours of checks.
-- [ ] **1.2** Commit 2 (GREEN): the second cron job, its own guard, `Deps.ProactiveCheck`, failure
+- [x] **1.2** Commit 2 (GREEN): the second cron job, its own guard, `Deps.ProactiveCheck`, failure
       and panic posture matching the consolidation job's.
       Requirement: R1.1.
-- [ ] **1.3** `docs/02-cognitive-core.md` §13 row 918 splits; the `proactive_check` half names its
+- [x] **1.3** `docs/02-cognitive-core.md` §13 row 918 splits; the `proactive_check` half names its
       constant, the consolidation half's prose states **why it is unchecked** (the gate's regex never
       reaches `internal/scheduler`).
       Requirement: R1.2; owner ruling 5.
       **Mutation**: write the consolidation half as though splitting fixed it — the new L2 test
       asserting the prose names the blind spot fails.
-- [ ] **1.4** Purity/lint. Verify (PR-level): `make check-all`. Target ≤300.
+- [x] **1.4** Purity/lint. Verify (PR-level): `make check-all`. Target ≤300.
+
+**J5 — nothing in this repository parses a cron expression, and two config keys look like they
+control scheduling while controlling nothing.** Spec R1.1 says the tick is "driven by
+`schedules.proactive_check`". It cannot be: `internal/scheduler` hardcodes `ConsolidationHour = 3`
+and `runCron` computes its next instant from that constant, never from `schedules.consolidate` —
+which is decoded by `internal/config` and read by **nobody**, and has been since M0. Adding a cron
+parser for one five-minute interval the docs already fix would be inventing a configuration surface
+nobody asked for, so `ProactiveCheckInterval` is a constant beside `ConsolidationHour`, exactly as
+the existing shape does it. **The pre-existing gap is the finding**: `schedules.consolidate` and
+`schedules.proactive_check` are inert keys in a real config file, and a user editing one would
+change nothing and be told nothing. Recorded for the owner rather than fixed here — fixing it is
+either a parser or a deprecation, and both are their own work unit.
+
+**J6 — §13's row 918 blamed the wrong thing, and splitting it proved that rather than fixing it.**
+The row said the consolidation half is unchecked because the Default cell's leading `03:00` parses
+as `03`, and that splitting the row so the half "can be checked" was M3's job. Split, the half still
+cannot be checked: `calibration_doc_test.go`'s regex matches `internal/core/…` only and never reaches
+`internal/scheduler` at any value. Proposal §4.3 had already spotted this; what this PR adds is the
+correction landing in the row itself, plus a test that keeps it corrected. **A row which is neither
+verified nor marked reads as coverage**, which is the state both scheduler rows were in.
 
 ---
 
