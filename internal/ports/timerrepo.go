@@ -65,16 +65,24 @@ type TimerRepo interface {
 	// full scan — accepted for v1 and named rather than mitigated.
 	Due(ctx context.Context, at time.Time) ([]DueTimer, error)
 
-	// Fire moves id from pending to fired and writes surfaced_at = at in
-	// one statement. A timer's firing is its delivery — there is no
-	// separate rendering step for it to wait on — so surfaced_at is
-	// written here and not left NULL as a trigger's is. rendered_text is
-	// untouched, not defaulted: m3d's fire-time rephrasing writes it when
-	// it has a caller.
+	// Fire moves id from pending to fired and writes surfaced_at = at and
+	// rendered_text = rendered, all in one statement.
+	//
+	// **rendered is the parameter m3b's finding G2 said this method would
+	// grow once it had a caller**, and it grew here rather than becoming a
+	// second method for the same reason fired_at is written BY Fire and
+	// not after it: a timer's firing is its delivery, so a fired row whose
+	// delivered wording is missing would be a state nothing can say
+	// anything about. One statement makes it unrepresentable.
+	//
+	// nil leaves rendered_text NULL, which is what a generic nudge and a
+	// failed rephrasing both are: the column's "not yet worded" and
+	// "worded as itself" collapse to one absence, and the text the user
+	// receives is action_text either way.
 	//
 	// It returns ErrTimerStatusConflict if id is no longer pending, and
 	// ErrTimerNotFound if no timer with id exists.
-	Fire(ctx context.Context, id string, at time.Time) error
+	Fire(ctx context.Context, id string, at time.Time, rendered *string) error
 
 	// Cancel moves id from pending to cancelled — doc 02 §8's own
 	// vocabulary for a timer too stale to deliver. timers carries no

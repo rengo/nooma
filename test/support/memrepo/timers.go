@@ -18,8 +18,9 @@ type Timers struct {
 }
 
 type storedTimer struct {
-	timer  ports.Timer
-	status ports.TimerStatus
+	timer    ports.Timer
+	status   ports.TimerStatus
+	rendered *string
 }
 
 var _ ports.TimerRepo = (*Timers)(nil)
@@ -69,8 +70,25 @@ func (r *Timers) Due(_ context.Context, at time.Time) ([]ports.DueTimer, error) 
 }
 
 // Fire implements ports.TimerRepo.
-func (r *Timers) Fire(_ context.Context, id string, _ time.Time) error {
-	return r.transition(id, ports.TimerStatusFired)
+func (r *Timers) Fire(_ context.Context, id string, _ time.Time, rendered *string) error {
+	if err := r.transition(id, ports.TimerStatusFired); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stored := r.timers[id]
+	stored.rendered = copyString(rendered)
+	r.timers[id] = stored
+	return nil
+}
+
+// Rendered returns what Fire stored as the delivered wording — test-only,
+// because ports.TimerRepo offers no read for it and the column's whole
+// point is that it is written once, at delivery.
+func (r *Timers) Rendered(id string) *string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return copyString(r.timers[id].rendered)
 }
 
 // Cancel implements ports.TimerRepo.

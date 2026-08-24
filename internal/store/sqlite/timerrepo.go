@@ -97,8 +97,32 @@ func (r *TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, er
 // rendered_text is untouched, not defaulted. m3d's fire-time rephrasing
 // writes it when it has a caller; writing "" here would make the column's
 // own NULL meaning unrecoverable.
-func (r *TimerRepo) Fire(ctx context.Context, id string, at time.Time) error {
-	return r.transition(ctx, id, ports.TimerStatusFired, &at)
+func (r *TimerRepo) Fire(ctx context.Context, id string, at time.Time, rendered *string) error {
+	var current string
+	err := r.db.QueryRowContext(ctx, `SELECT status FROM timers WHERE id = ?`, id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ports.ErrTimerNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("read timer %q status: %w", id, err)
+	}
+	if current != string(ports.TimerStatusPending) {
+		return ports.ErrTimerStatusConflict
+	}
+
+	// One statement: status, surfaced_at and rendered_text move together,
+	// so a fired timer whose delivered wording is missing is
+	// unrepresentable rather than merely unlikely — fired_at's own
+	// argument, applied to the column m3b left for this.
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE timers SET status = ?, surfaced_at = ?, rendered_text = ?
+		 WHERE id = ? AND status = ?`,
+		string(ports.TimerStatusFired), formatUnitTime(at), stringPtrToNull(rendered),
+		id, string(ports.TimerStatusPending))
+	if err != nil {
+		return fmt.Errorf("update timer %q status: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrTimerStatusConflict)
 }
 
 // Cancel implements ports.TimerRepo — doc 02 §8's own vocabulary for a

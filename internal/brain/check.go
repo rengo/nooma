@@ -26,12 +26,12 @@ type CheckService struct {
 
 // NewCheckService wires a CheckService over the ports one scan needs.
 // clock is read exactly once per Check call; run never sees it.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo) *CheckService {
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider) *CheckService {
 	return &CheckService{
 		clock: clock,
 		run: checkRunner{
 			triggers: triggers, timers: timers, ids: ids, log: log,
-			channel: channel, units: units, state: state,
+			channel: channel, units: units, state: state, llm: llm,
 		},
 	}
 }
@@ -170,7 +170,11 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		}
 		switch status {
 		case ports.TimerStatusFired:
-			if err := r.timers.Fire(ctx, t.ID, now); err != nil {
+			delivery, err := r.renderTimer(ctx, t, now)
+			if err != nil {
+				return CheckReport{}, err
+			}
+			if err := r.timers.Fire(ctx, t.ID, now, delivery.rendered); err != nil {
 				skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTimerStatusConflict, "timers", t.ID, t.FireAt)
 				if skipErr != nil {
 					return CheckReport{}, skipErr
@@ -238,6 +242,10 @@ type checkRunner struct {
 	// fires and expires.
 	units ports.UnitRepo
 	state ports.StateRepo
+	// llm words a timer at delivery. Nil is legal: a vault with no
+	// provider bound delivers the user's own words, which is what the
+	// rephrasing falls back to anyway.
+	llm ports.LLMProvider
 }
 
 // checkDetail is every check.* row's context shape. One shape for all
