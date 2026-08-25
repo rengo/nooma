@@ -199,7 +199,7 @@ func populateVault(dir string, choices []providerChoice, bindings map[string]str
 	if err := os.WriteFile(filepath.Join(dir, config.ConfigFileName), []byte(yml), 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", config.ConfigFileName, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(envSkeleton()), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(envSkeleton(choices)), 0o600); err != nil {
 		return fmt.Errorf("writing .env: %w", err)
 	}
 
@@ -435,7 +435,7 @@ func readLine(reader *bufio.Reader) string {
 // name, so the rules belong here rather than only in a doc: a user who writes
 // `export FOO=bar` should find out from the file they are editing, not from an
 // error after a restart.
-func envSkeleton() string {
+func envSkeleton(_ []providerChoice) string {
 	return `# Secrets for this vault. Never commit this file.
 #
 # Accepted, and nothing else:

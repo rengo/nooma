@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -181,5 +182,113 @@ func TestWizardPopulatedVaultDecodesAndValidates(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestEnvSkeletonNamesTheKeysTheWizardConfigured is the coherence the
+// skeleton owes the wizard that just ran.
+//
+// The file is written for one purpose: to be the place the user pastes the
+// key into. A hint naming a variable nothing reads sends them to edit a
+// line that will never be looked up, and the failure surfaces much later
+// as an unconfigured provider rather than as a typo they can see.
+//
+// Mutation: return to a fixed skeleton naming one vendor and the cloud
+// cases fail — both the default name and the overridden one.
+func TestEnvSkeletonNamesTheKeysTheWizardConfigured(t *testing.T) {
+	tests := []struct {
+		name   string
+		in     string
+		want   []string
+		absent []string
+	}{
+		{
+			// "1" chooses Cloud; the blank line accepts the default name.
+			name:   "cloud, default name",
+			in:     "1\n\n",
+			want:   []string{"# OPENAI_API_KEY="},
+			absent: []string{"ANTHROPIC_API_KEY"},
+		},
+		{
+			// A name the user chose. Nothing can guess this one, which is
+			// exactly why the skeleton has to be built from the choices
+			// rather than written in advance.
+			name:   "cloud, overridden name",
+			in:     "1\nMY_OWN_KEY\n",
+			want:   []string{"# MY_OWN_KEY="},
+			absent: []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"},
+		},
+		{
+			// Ollama runs locally and needs no key at all. Suggesting one
+			// invents a requirement this vault does not have.
+			name:   "ollama needs no provider key",
+			in:     "2\n",
+			absent: []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY"},
+		},
+		{
+			name:   "skipped setup names no vendor",
+			in:     "\n",
+			absent: []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			choices, _ := promptProviderSetup(strings.NewReader(tt.in), &out)
+			skeleton := envSkeleton(choices)
+
+			for _, want := range tt.want {
+				if !strings.Contains(skeleton, want) {
+					t.Errorf("the .env skeleton does not offer %q — the wizard configured it and this file is where the value goes:\n%s", want, skeleton)
+				}
+			}
+			for _, absent := range tt.absent {
+				if strings.Contains(skeleton, absent) {
+					t.Errorf("the .env skeleton names %q, which this wizard path never configured:\n%s", absent, skeleton)
+				}
+			}
+		})
+	}
+}
+
+// TestEnvSkeletonOffersTheVariableTheWizardPrinted pins the two outputs to
+// each other rather than to a constant.
+//
+// The cloud path tells the user, on stdout, exactly which variable to add.
+// Asserting that both name the same thing is what keeps them from drifting
+// apart again — a test comparing each to its own hardcoded expectation
+// would pass with the two disagreeing, which is the state this fixes.
+//
+// Mutation: change either the printed name or the skeleton's independently
+// and this fails.
+func TestEnvSkeletonOffersTheVariableTheWizardPrinted(t *testing.T) {
+	var out strings.Builder
+	choices, _ := promptProviderSetup(strings.NewReader("1\nCHOSEN_BY_THE_USER\n"), &out)
+
+	printed := regexp.MustCompile(`as ([A-Za-z_][A-Za-z0-9_]*)=`).FindStringSubmatch(out.String())
+	if printed == nil {
+		t.Fatalf("the cloud path printed no variable name to add to .env:\n%s", out.String())
+	}
+
+	if want := "# " + printed[1] + "="; !strings.Contains(envSkeleton(choices), want) {
+		t.Errorf("the wizard told the user to add %s= but the .env skeleton offers no %q line:\n%s", printed[1], want, envSkeleton(choices))
+	}
+}
+
+// TestEnvSkeletonAlwaysOffersTheBotToken guards the one hint that is not
+// derived from the wizard.
+//
+// There is no wizard step for Telegram, so nothing in choices can carry
+// this name. It stays a fixed suggestion precisely because nothing
+// contradicts it — and it has to survive every path, including the ones
+// that configure no provider key at all.
+func TestEnvSkeletonAlwaysOffersTheBotToken(t *testing.T) {
+	for _, in := range []string{"1\n\n", "2\n", "\n"} {
+		var out strings.Builder
+		choices, _ := promptProviderSetup(strings.NewReader(in), &out)
+		if s := envSkeleton(choices); !strings.Contains(s, "# TELEGRAM_BOT_TOKEN=") {
+			t.Errorf("input %q: the .env skeleton offers no bot-token line:\n%s", in, s)
+		}
 	}
 }
