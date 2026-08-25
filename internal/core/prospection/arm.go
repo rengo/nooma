@@ -120,7 +120,14 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 			return datedTrigger(*c.EventAt, now, interrupt)
 		}
 
-		anchor := Anchor{Month: c.EventAt.Month(), Day: c.EventAt.Day()}
+		// The weekday is always stated, derived from the capture's own
+		// dated occurrence — "every Sunday" arrives as an event_at that is
+		// a Sunday. Set for every rule rather than only for weekly: it
+		// costs nothing, and an anchor whose weekday depends on which rule
+		// was decoded is an anchor that means different things in
+		// different rows.
+		weekday := c.EventAt.Weekday()
+		anchor := Anchor{Month: c.EventAt.Month(), Day: c.EventAt.Day(), Weekday: &weekday}
 		rule := recurrenceRule(*c.RecurrenceRule)
 		return Plan{
 			What:      ArmRecurring,
@@ -196,6 +203,8 @@ func recurrenceRule(r classify.RecurrenceRule) Rule {
 		return RuleMonthly
 	case classify.RecurrenceRuleDaily:
 		return RuleDaily
+	case classify.RecurrenceRuleWeekly:
+		return RuleWeekly
 	}
 	return RuleYearly
 }

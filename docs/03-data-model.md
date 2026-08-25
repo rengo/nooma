@@ -71,8 +71,8 @@ CREATE TABLE triggers (
   surfaced_at       TEXT,                        -- NULL = pending delivery
   responded_at      TEXT,
   resolution        TEXT,                        -- engaged|declined|self_healed
-  recurrence_rule   TEXT,                        -- yearly|monthly|daily|NULL
-  recurrence_anchor TEXT,                        -- JSON {month, day}
+  recurrence_rule   TEXT,                        -- yearly|monthly|daily|weekly|NULL
+  recurrence_anchor TEXT,                        -- JSON {month, day, weekday?}
   created_at        TEXT NOT NULL
 );
 CREATE INDEX idx_triggers_status_fire ON triggers(status, fire_at);

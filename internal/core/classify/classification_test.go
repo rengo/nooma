@@ -125,15 +125,22 @@ func TestDecode_RecurrenceRule(t *testing.T) {
 			want:    recurrenceRulePtr(RecurrenceRuleDaily),
 			reason:  "",
 		},
-		"present, unknown enum": {
-			// "weekly" is still outside the vocabulary at this point in the
-			// chain, and is the value doctor's live quality gate rejected on
-			// "remind me to water the plants every Sunday". It stops being a
-			// valid example here the moment weekly is added, and this case
-			// then needs a value no vocabulary will claim — the same
-			// re-picking TestNextOccurrence_UnknownRuleFallsBackToYearly just
-			// went through.
+		"present, weekly": {
+			// The value doctor's live quality gate rejected on "remind me to
+			// water the plants every Sunday", back when the vocabulary could
+			// not express the most ordinary recurrence there is.
 			payload: `{"type":"recurring_reminder","normalized_content":"water the plants","weight":0.5,"decay_rate":0.02,"recurrence_rule":"weekly"}`,
+			want:    recurrenceRulePtr(RecurrenceRuleWeekly),
+			reason:  "",
+		},
+		"present, unknown enum": {
+			// "fortnightly" rather than a real cadence: this case needs a
+			// value no vocabulary will ever claim. It held "weekly" until
+			// weekly became legal, at which point it stopped exercising the
+			// degradation and started asserting the wrong answer for a real
+			// rule — the same re-picking the prospection fallback test went
+			// through one PR earlier.
+			payload: `{"type":"recurring_reminder","normalized_content":"water the plants","weight":0.5,"decay_rate":0.02,"recurrence_rule":"fortnightly"}`,
 			want:    nil,
 			reason:  ReasonUnknownEnum,
 		},

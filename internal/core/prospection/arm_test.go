@@ -593,3 +593,46 @@ func TestArm_AnchorIsTheDateAsStated(t *testing.T) {
 			plan.Anchor.Day)
 	}
 }
+
+// TestArm_WeeklyAnchorsOnTheEventsOwnWeekday: the anchor is derived from
+// the capture's own dated occurrence, never defaulted. "Remind me to water
+// the plants every Sunday" arrives as an event_at that IS a Sunday, and the
+// weekday the rule repeats on is that date's weekday and nothing else.
+//
+// This is what keeps the pointer's nil case out of the ordinary path: Arm
+// always states a weekday, so a nil one can only reach NextOccurrence from
+// a stored row written before weekly existed.
+//
+// Mutation: hard-code any weekday in Arm and the sweep across event dates
+// fails on six of seven.
+func TestArm_WeeklyAnchorsOnTheEventsOwnWeekday(t *testing.T) {
+	loc := time.FixedZone("UTC+2", 2*60*60)
+	now := time.Date(2027, time.June, 1, 9, 0, 0, 0, loc)
+	kind := func(k classify.Kind) *classify.Kind { return &k }
+
+	for offset := 0; offset < 7; offset++ {
+		event := now.AddDate(0, 0, 10+offset)
+
+		c := classify.Classification{
+			Kind:           kind(classify.KindRecurringReminder),
+			EventAt:        armPtr(event),
+			RecurrenceRule: armPtr(classify.RecurrenceRuleWeekly),
+		}
+
+		plan, ok := Arm(c, now)
+		if !ok || plan.What != ArmRecurring {
+			t.Fatalf("%s: Arm = (%+v, %v), want an ArmRecurring plan", event.Weekday(), plan, ok)
+		}
+		if plan.Rule != RuleWeekly {
+			t.Errorf("%s: Rule = %q, want %q", event.Weekday(), plan.Rule, RuleWeekly)
+		}
+		if plan.Anchor.Weekday == nil {
+			t.Fatalf("%s: Arm left the weekday unstated — a weekly rule with no weekday "+
+				"falls back to yearly, so the recurrence the user asked for is lost",
+				event.Weekday())
+		}
+		if *plan.Anchor.Weekday != event.Weekday() {
+			t.Errorf("event on a %s anchored on %s", event.Weekday(), *plan.Anchor.Weekday)
+		}
+	}
+}
