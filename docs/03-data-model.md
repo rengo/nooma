@@ -71,7 +71,7 @@ CREATE TABLE triggers (
   surfaced_at       TEXT,                        -- NULL = pending delivery
   responded_at      TEXT,
   resolution        TEXT,                        -- engaged|declined|self_healed
-  recurrence_rule   TEXT,                        -- yearly|monthly|NULL
+  recurrence_rule   TEXT,                        -- yearly|monthly|daily|NULL
   recurrence_anchor TEXT,                        -- JSON {month, day}
   created_at        TEXT NOT NULL
 );

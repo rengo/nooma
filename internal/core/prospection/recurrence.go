@@ -13,6 +13,7 @@ type Rule string
 const (
 	RuleYearly  Rule = "yearly"
 	RuleMonthly Rule = "monthly"
+	RuleDaily   Rule = "daily"
 )
 
 // AllRules returns a fresh slice of the Rule vocabulary, in doc 02's
@@ -25,11 +26,13 @@ const (
 // function rather than a var so no caller can append to the vocabulary the
 // completeness checks sweep.
 func AllRules() []Rule {
-	return []Rule{RuleYearly, RuleMonthly}
+	return []Rule{RuleYearly, RuleMonthly, RuleDaily}
 }
 
-// Anchor is doc 02 §7's recurrence_anchor. Month is ignored by RuleMonthly,
-// whose recurrence is "this day, every month".
+// Anchor is doc 02 §7's recurrence_anchor. Which fields a rule reads is the
+// rule's own business: RuleMonthly ignores Month, whose recurrence is "this
+// day, every month", and RuleDaily reads nothing at all, because "every day"
+// names no day.
 type Anchor struct {
 	Month time.Month
 	Day   int
@@ -74,6 +77,21 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 	loc := after.Location()
 
 	switch rule {
+	case RuleDaily:
+		// No anchor is read: "every day" names no day, so there is nothing
+		// to re-derive from but the calendar itself. Building the candidate
+		// through time.Date rather than adding 24 hours keeps this on the
+		// wall clock — a day on which the zone shifts is still one calendar
+		// day, and the occurrence stays at the anchor hour rather than
+		// sliding by the offset change.
+		candidate := time.Date(after.Year(), after.Month(), after.Day(),
+			RecurrenceAnchorHour, 0, 0, 0, loc)
+		if candidate.After(after) {
+			return candidate
+		}
+		return time.Date(after.Year(), after.Month(), after.Day()+1,
+			RecurrenceAnchorHour, 0, 0, 0, loc)
+
 	case RuleMonthly:
 		// Walk months from after's own, so the first candidate is either
 		// this month's occurrence (when it is still ahead) or next month's.
