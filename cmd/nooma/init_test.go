@@ -221,13 +221,18 @@ func TestEnvSkeletonNamesTheKeysTheWizardConfigured(t *testing.T) {
 		{
 			// Ollama runs locally and needs no key at all. Suggesting one
 			// invents a requirement this vault does not have.
+			// Ollama runs locally and needs no key. The file still has to
+			// say where a key's name would come from, or it silently drops
+			// the only guidance the user gets.
 			name:   "ollama needs no provider key",
 			in:     "2\n",
+			want:   []string{"api_key_env"},
 			absent: []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY"},
 		},
 		{
 			name:   "skipped setup names no vendor",
 			in:     "\n",
+			want:   []string{"api_key_env"},
 			absent: []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY"},
 		},
 	}
@@ -273,6 +278,24 @@ func TestEnvSkeletonOffersTheVariableTheWizardPrinted(t *testing.T) {
 
 	if want := "# " + printed[1] + "="; !strings.Contains(envSkeleton(choices), want) {
 		t.Errorf("the wizard told the user to add %s= but the .env skeleton offers no %q line:\n%s", printed[1], want, envSkeleton(choices))
+	}
+}
+
+// TestEnvSkeletonOffersOneLinePerKeyNotPerProvider: the cloud path writes
+// two providers — a chat model and an embedding model (design D15) — that
+// read the same key. Two identical commented lines read as two different
+// values to paste, which is a worse instruction than one.
+//
+// Mutation: drop the dedup in providerKeyEnvs and this fails with 2.
+func TestEnvSkeletonOffersOneLinePerKeyNotPerProvider(t *testing.T) {
+	var out strings.Builder
+	choices, _ := promptProviderSetup(strings.NewReader("1\n\n"), &out)
+
+	if len(choices) < 2 {
+		t.Fatalf("the cloud path returned %d providers; this test is meaningless below 2", len(choices))
+	}
+	if n := strings.Count(envSkeleton(choices), "# OPENAI_API_KEY="); n != 1 {
+		t.Errorf("the .env skeleton offers %d OPENAI_API_KEY lines, want exactly 1 — %d providers share one key", n, len(choices))
 	}
 }
 

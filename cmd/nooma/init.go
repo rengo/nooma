@@ -429,14 +429,23 @@ func readLine(reader *bufio.Reader) string {
 	return strings.TrimSpace(line)
 }
 
-// envSkeleton documents the accepted format where the user edits it.
+// envSkeleton documents the accepted format where the user edits it, and
+// offers a line for every variable the wizard just configured.
 //
 // The parser accepts a deliberately narrow subset and rejects everything else by
 // name, so the rules belong here rather than only in a doc: a user who writes
 // `export FOO=bar` should find out from the file they are editing, not from an
 // error after a restart.
-func envSkeleton(_ []providerChoice) string {
-	return `# Secrets for this vault. Never commit this file.
+//
+// **The provider lines are derived from choices, never written in advance.**
+// This file exists to be the place the value gets pasted into, so a hint naming
+// a variable nothing reads sends the user to edit a line that will never be
+// looked up — and the cloud path lets them type a name no constant could have
+// guessed. Ollama and a skipped setup configure no key at all, and inventing one
+// there would invent a requirement the vault does not have.
+func envSkeleton(choices []providerChoice) string {
+	var b strings.Builder
+	b.WriteString(`# Secrets for this vault. Never commit this file.
 #
 # Accepted, and nothing else:
 #
@@ -452,7 +461,39 @@ func envSkeleton(_ []providerChoice) string {
 #
 # A variable already set in the environment always wins over this file.
 
-# ANTHROPIC_API_KEY=
-# TELEGRAM_BOT_TOKEN=
-`
+`)
+
+	if keys := providerKeyEnvs(choices); len(keys) > 0 {
+		b.WriteString("# Paste the API key for this vault's provider here.\n")
+		for _, k := range keys {
+			fmt.Fprintf(&b, "# %s=\n", k)
+		}
+	} else {
+		// No provider key to name — a local Ollama needs none, and a skipped
+		// setup has not chosen one yet. The line teaches where the name comes
+		// from instead of guessing a vendor.
+		b.WriteString("# A provider API key goes here, named by the api_key_env you set in nooma.yml.\n")
+	}
+
+	// Telegram has no wizard step, so nothing in choices can carry this name.
+	// It stays a fixed suggestion precisely because nothing contradicts it.
+	b.WriteString("# TELEGRAM_BOT_TOKEN=\n")
+	return b.String()
+}
+
+// providerKeyEnvs returns the distinct API-key variable names in choices, in
+// first-seen order. Distinct because the cloud path writes two providers — a
+// chat model and an embedding model (design D15) — that read one key, and
+// offering the same line twice would read as two different values to paste.
+func providerKeyEnvs(choices []providerChoice) []string {
+	var out []string
+	seen := make(map[EnvVarName]bool, len(choices))
+	for _, c := range choices {
+		if c.APIKeyEnv == "" || seen[c.APIKeyEnv] {
+			continue
+		}
+		seen[c.APIKeyEnv] = true
+		out = append(out, string(c.APIKeyEnv))
+	}
+	return out
 }
