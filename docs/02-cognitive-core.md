@@ -377,7 +377,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      answer. Symmetrically, an imperative that moves an existing thing ("move the renewal to
      the 20th") is a `correction`, not a new `task`. The prompt states all three, because a
      bare vocabulary list lets a model match the topic word instead of the act.
-   - Injected context: active self-beliefs, local date + user timezone (to resolve "tomorrow",
+   - Injected context: active self-beliefs, local date + UTC offset (to resolve "tomorrow",
      "on Friday"), open check-ins.
    - One message can resolve a check-in **and** be a capture at the same time ("yes, I
      practiced yesterday" → `nudge_outcome: engaged` + a `knowledge` unit). These are
@@ -589,10 +589,17 @@ belonging to *some* vocabulary is not the test; belonging to *this field's* voca
 
 **A date is degraded in two distinguishable ways**, and they are recorded separately: a value
 that is not text at all, and text that is not a date Nooma reads. Only two date formats are
-accepted — a full timestamp with its own zone, and a bare calendar date. A bare date has no zone
-of its own, so it becomes midnight **in the user's timezone**, which is supplied with the
+accepted — a full timestamp carrying its own offset, and a bare calendar date. A bare date has no
+offset of its own, so it becomes midnight **in the user's timezone**, which is supplied with the
 request (§5 step 1's injected context) and never read from the machine Nooma happens to run on.
 The same vault syncing between two machines in two zones must classify a date identically.
+
+**The prompt shows the timestamp format rather than naming the standard**, and shows it as a
+literal rendered from the injected instant itself. "A full RFC3339 timestamp" is a standard's
+name; a model that answers `2026-08-04T15:00:00` has obeyed that sentence and is still rejected,
+because the offset RFC3339 requires is exactly what the sentence never mentioned. Rendering the
+example through the same layout the decoder parses means the shown shape and the accepted shape
+are one decision rather than two that happen to agree.
 
 **Absent and truncated are different events**, and the record says which. "The model did not
 emit this field" is a fact about the model; "the stream ended before this field arrived" is a
@@ -621,10 +628,18 @@ archiving pass can never reach it. Both look like ordinary data and neither viol
 constraint.
 
 **The user's timezone reaches the model inside the instant, never from the environment.** §5
-step 1 injects the local date and zone so the model can resolve "tomorrow" and "on Friday", and
-the brain is forbidden from reading either from the machine it runs on. Both travel inside the
-single timestamp the pipeline reads once per capture: its calendar date is the local date, its
-location is the user's zone.
+step 1 injects the local date and the UTC offset so the model can resolve "tomorrow" and "on
+Friday", and the brain is forbidden from reading either from the machine it runs on. Both travel
+inside the single timestamp the pipeline reads once per capture: its calendar date is the local
+date, its offset is the user's offset.
+
+**It is the offset that is injected, not the zone's name**, and the distinction is not
+cosmetic. Go's `time.Local` is a sentinel `Location` whose `String()` is the literal `"Local"` on
+every machine, whatever zone that machine is in — so a prompt rendering the zone's *name* told
+every model `User timezone: Local` and then asked it for absolute instants, which is a label no
+offset can be derived from. The offset is the half of the zone an instant genuinely carries, and
+the half the model has to write. A named zone is only ever available in a test fixture built with
+one, which is why no test that asserted the name could observe the defect.
 
 This is why there is no timezone setting anywhere in Nooma's configuration. Adding one would
 create a second source of truth for a fact the timestamp already carries, and the two would

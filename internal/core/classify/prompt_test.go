@@ -39,12 +39,23 @@ func TestBuildPrompt_CarriesTheInstantsOwnZone(t *testing.T) {
 			"reaching the prompt, so the model cannot resolve \"tomorrow\" correctly (design D4)")
 	}
 
-	if !strings.Contains(inBuenosAires, buenosAires.String()) {
-		t.Errorf("prompt does not name the zone %q — doc 02 §5 injects the user timezone",
-			buenosAires.String())
+	// **The offset, not the zone's name.** This assertion used to read
+	// strings.Contains(inBuenosAires, buenosAires.String()), and it was
+	// checking a property production never has: every caller supplies
+	// time.Local, whose String() is the literal "Local" on every machine, so
+	// a passing name assertion here proved nothing about the prompt anyone
+	// actually receives. The offset is what the instant genuinely carries in
+	// both fixtures and in production, which makes this the stricter check
+	// rather than the looser one.
+	//
+	// Kolkata's +05:30 earns its keep here: a half-hour offset catches an
+	// implementation that renders whole hours and calls it a zone.
+	if want := instant.In(buenosAires).Format(offsetLayout); !strings.Contains(inBuenosAires, want) {
+		t.Errorf("prompt does not carry the offset %q — doc 02 §5's injected zone reaches the "+
+			"model as an offset it can write, or it does not reach it at all", want)
 	}
-	if !strings.Contains(inKolkata, kolkata.String()) {
-		t.Errorf("prompt does not name the zone %q", kolkata.String())
+	if want := instant.In(kolkata).Format(offsetLayout); !strings.Contains(inKolkata, want) {
+		t.Errorf("prompt does not carry the offset %q", want)
 	}
 }
 

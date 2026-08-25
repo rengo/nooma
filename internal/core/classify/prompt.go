@@ -10,6 +10,20 @@ import (
 // the shape it is asked to answer in.
 const localDateLayout = "2006-01-02"
 
+// offsetLayout renders the instant's UTC offset, and exampleLayout renders
+// the whole instant in the exact shape Decode's assignTime accepts.
+//
+// Both are built from now rather than written as literals so the example can
+// never drift from a format the decoder would reject — the same anti-drift
+// property joinVocabulary gives the closed sets, applied to a layout instead
+// of a vocabulary. exampleLayout IS time.RFC3339: naming it here says that
+// the shown example and the accepted format are one decision, not two that
+// happen to agree.
+const (
+	offsetLayout  = "Z07:00"
+	exampleLayout = time.RFC3339
+)
+
 // Belief is a projection of one row of self_beliefs — design D4.
 //
 // Nothing in M1 reads that table (derive is M2, seeding is M4), so brain
@@ -40,9 +54,16 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 
 	b.WriteString("Context\n")
 	b.WriteString("  Local date: " + now.Format(localDateLayout) + "\n")
-	b.WriteString("  User timezone: " + now.Location().String() + "\n")
+	// **The offset, not the zone's name.** Every caller supplies an instant
+	// whose Location is time.Local, and time.Local.String() is the literal
+	// string "Local" on every machine — a sentinel Location rather than a
+	// named one. Rendering the name told the model "User timezone: Local"
+	// and then asked it for absolute instants, which is a label no offset
+	// can be derived from. The offset is the half of the zone the instant
+	// genuinely carries, and it is the half the model has to write.
+	b.WriteString("  UTC offset: " + now.Format(offsetLayout) + "\n")
 	b.WriteString("  Resolve every relative reference (\"tomorrow\", \"on Friday\") against " +
-		"that date and zone, and answer with absolute dates.\n")
+		"that date and offset, and answer with absolute dates.\n")
 	writeBeliefs(&b, beliefs)
 	b.WriteString("\n")
 
@@ -56,7 +77,9 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 
 	b.WriteString("Optional fields — omit any that do not apply\n")
 	b.WriteString("  structured_data      free-form JSON object, shape follows from type\n")
-	b.WriteString("  event_at, due_at     absolute; \"YYYY-MM-DD\" or a full RFC3339 timestamp\n")
+	b.WriteString("  event_at, due_at     absolute; either \"YYYY-MM-DD\" or an RFC3339 timestamp\n")
+	b.WriteString("                       carrying its offset, e.g. " + now.Format(exampleLayout) + ".\n")
+	b.WriteString("                       A timestamp without an offset is not accepted.\n")
 	b.WriteString("                       event_at is when a thing happens in the world; due_at is\n")
 	b.WriteString("                       when something is owed. A timer has no world event, so its\n")
 	b.WriteString("                       instant belongs in due_at and never in event_at\n")
