@@ -573,11 +573,102 @@ func TestNextOccurrence_UnknownRuleFallsBackToYearly(t *testing.T) {
 	after := recAt(2027, time.January, 1, 0)
 	want := recAt(2027, time.September, 4, RecurrenceAnchorHour)
 
-	for _, rule := range []Rule{"", "weekly", "YEARLY", "daily"} {
+	// "daily" and "weekly" were sentinels here until the vocabulary
+	// grew to hold them. A test whose "unrecognised" examples become
+	// recognised stops testing the fallback and starts asserting the
+	// wrong answer for a real rule, so they are replaced rather than
+	// kept: what is needed is a value no vocabulary will ever claim.
+	for _, rule := range []Rule{"", "fortnightly", "YEARLY", "every-other-tuesday"} {
 		if got := NextOccurrence(rule, anchor, after); !got.Equal(want) {
 			t.Errorf("Rule(%q): NextOccurrence = %v, want %v — an unrecognised rule resolves as "+
 				"yearly, which keeps the user's own anchor rather than inventing a cadence",
 				rule, got, want)
+		}
+	}
+}
+
+// TestNextOccurrence_DailyIsTheNextAnchorHour is the daily rule's whole
+// arithmetic: the next RecurrenceAnchorHour strictly after `after`, which
+// is today's when today's is still ahead and tomorrow's when it is not.
+//
+// Strictly after matters as much here as for the other rules and is easier
+// to get wrong, because for a daily rule the boundary is crossed every
+// single day rather than once a month or once a year. A rule returning
+// `after` itself would re-arm a trigger onto the instant that just fired.
+//
+// Mutation: use !candidate.Before(after) instead of candidate.After(after)
+// and the exactly-at-the-anchor-hour case fails.
+func TestNextOccurrence_DailyIsTheNextAnchorHour(t *testing.T) {
+	anchor := Anchor{Month: time.September, Day: 4}
+
+	for _, tc := range []struct {
+		name  string
+		after time.Time
+		want  time.Time
+	}{
+		{
+			name:  "before today's anchor hour, it is today",
+			after: recAt(2027, time.March, 10, 9),
+			want:  recAt(2027, time.March, 10, RecurrenceAnchorHour),
+		},
+		{
+			name:  "after today's anchor hour, it is tomorrow",
+			after: recAt(2027, time.March, 10, 13),
+			want:  recAt(2027, time.March, 11, RecurrenceAnchorHour),
+		},
+		{
+			name:  "exactly at the anchor hour, it is tomorrow",
+			after: recAt(2027, time.March, 10, RecurrenceAnchorHour),
+			want:  recAt(2027, time.March, 11, RecurrenceAnchorHour),
+		},
+		{
+			name:  "across a month boundary",
+			after: recAt(2027, time.March, 31, 13),
+			want:  recAt(2027, time.April, 1, RecurrenceAnchorHour),
+		},
+		{
+			name:  "across a year boundary",
+			after: recAt(2027, time.December, 31, 13),
+			want:  recAt(2028, time.January, 1, RecurrenceAnchorHour),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := NextOccurrence(RuleDaily, anchor, tc.after)
+			if !got.Equal(tc.want) {
+				t.Errorf("NextOccurrence = %v, want %v", got, tc.want)
+			}
+			if !got.After(tc.after) {
+				t.Errorf("NextOccurrence = %v is not strictly after %v — a rule that "+
+					"returns the instant that just fired re-arms onto itself", got, tc.after)
+			}
+		})
+	}
+}
+
+// TestNextOccurrence_DailyReadsNoAnchor states the thing that separates
+// daily from every other rule: "every day" names no day, so the anchor is
+// not consulted at all.
+//
+// The anchors here are deliberately hostile — a zero anchor is the one
+// clampedDate documents as normalising backward into the previous
+// December, so a daily arm that leaked into the yearly path would land a
+// year away rather than merely a day away, and the failure would be loud.
+//
+// Mutation: fall the daily case through to the yearly arm and this fails.
+func TestNextOccurrence_DailyReadsNoAnchor(t *testing.T) {
+	after := recAt(2027, time.March, 10, 9)
+	want := recAt(2027, time.March, 10, RecurrenceAnchorHour)
+
+	for _, anchor := range []Anchor{
+		{},
+		{Month: time.September, Day: 4},
+		{Month: time.February, Day: 29},
+		{Month: time.Month(0), Day: 31},
+		{Month: time.Month(13), Day: -1},
+	} {
+		if got := NextOccurrence(RuleDaily, anchor, after); !got.Equal(want) {
+			t.Errorf("Anchor%+v: NextOccurrence = %v, want %v — a daily rule reads no anchor, "+
+				"so no anchor can move it", anchor, got, want)
 		}
 	}
 }
