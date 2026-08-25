@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -265,5 +266,95 @@ func TestBuildPrompt_SeparatesAskingFromTelling(t *testing.T) {
 		if !strings.Contains(p, want) {
 			t.Errorf("BuildPrompt does not tell the model %q; without it a question about what Nooma knows is captured as knowledge instead of answered", want)
 		}
+	}
+}
+
+// TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone is the production
+// case the FixedZone fixtures above cannot reach.
+//
+// Every caller in the repo supplies an instant whose Location is time.Local
+// — cmd/nooma/wiring.go's systemClock and cmd/nooma/doctor.go's quality gate
+// both pass time.Now(). time.Local.String() is the literal string "Local" on
+// every machine, whatever the zone actually is, because time.Local is a
+// sentinel Location rather than a named one. So a prompt that renders the
+// zone's NAME tells the model "User timezone: Local" and then asks it to
+// answer with absolute instants — a zone label from which no offset can be
+// written.
+//
+// The fix is not configuration: doc 02 §5.1 forbids a timezone key on
+// purpose, because the instant already carries the fact. What the instant
+// genuinely carries is the OFFSET, so that is what the prompt must render.
+//
+// The FixedZone tests pass today and would keep passing forever, because a
+// test zone constructed with a real IANA name is the one shape production
+// never produces.
+//
+// Mutation: render now.Location().String() again and this fails.
+func TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone(t *testing.T) {
+	now := time.Date(2026, 8, 4, 9, 30, 0, 0, time.Local)
+
+	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil, now)
+
+	if strings.Contains(prompt, "timezone: Local") {
+		t.Error("the prompt renders the zone as \"Local\" — time.Local.String() is that " +
+			"literal string on every machine, so the model is told a zone it cannot turn " +
+			"into an offset")
+	}
+	if want := now.Format(time.RFC3339); !strings.Contains(prompt, want) {
+		t.Errorf("the prompt does not carry the instant %q — the offset is the half of the "+
+			"zone the model can actually use, and now.Format already has it", want)
+	}
+}
+
+// TestBuildPrompt_ShowsADateFormatTheDecoderAccepts closes the gap between
+// what the prompt asks for and what Decode takes.
+//
+// assignTime accepts exactly time.RFC3339 or "2006-01-02" and nothing else,
+// and Go's RFC3339 parser REQUIRES an offset or a Z. The prompt named the
+// standard without ever showing one, so a model answering
+// "2026-08-04T15:00:00" has followed the prompt as written and is still
+// degraded as bad_format — which is two of doctor's three live failures.
+//
+// The assertion is that some literal in the prompt actually parses, rather
+// than that the prompt contains particular bytes: the point is that an
+// example EXISTS and is valid, not that it is worded one way.
+//
+// Mutation: drop the example from the event_at/due_at line and this fails.
+func TestBuildPrompt_ShowsADateFormatTheDecoderAccepts(t *testing.T) {
+	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil,
+		time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
+
+	line := ""
+	for _, l := range strings.Split(prompt, "\n") {
+		if strings.Contains(l, "event_at, due_at") || strings.Contains(l, "e.g.") {
+			line += l + "\n"
+		}
+	}
+	if line == "" {
+		t.Fatal("no event_at/due_at line in the prompt at all")
+	}
+
+	timestamps := regexp.MustCompile(`\d{4}-\d{2}-\d{2}T[0-9:]+(?:Z|[+-]\d{2}:\d{2})`).FindAllString(line, -1)
+	if len(timestamps) == 0 {
+		t.Fatalf("the date-format line shows no timestamp example, so \"a full RFC3339 "+
+			"timestamp\" is a standard's name and nothing more:\n%s", line)
+	}
+	for _, ts := range timestamps {
+		if _, err := time.Parse(time.RFC3339, ts); err != nil {
+			t.Errorf("the prompt offers %q as an example, which the decoder itself rejects: %v", ts, err)
+		}
+	}
+}
+
+// TestBuildPrompt_SaysTheOffsetIsMandatory: an example alone can be read as
+// one of several accepted shapes. The decoder accepts no zone-less
+// timestamp at all, so the prompt has to say so rather than leave it to be
+// inferred from a sample.
+func TestBuildPrompt_SaysTheOffsetIsMandatory(t *testing.T) {
+	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
+
+	if !strings.Contains(prompt, "offset") {
+		t.Error("the prompt never mentions the offset, which Go's RFC3339 parser requires " +
+			"and which a model has no other way to know is mandatory")
 	}
 }
