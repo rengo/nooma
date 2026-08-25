@@ -15,6 +15,19 @@ const (
 	RuleMonthly Rule = "monthly"
 )
 
+// AllRules returns a fresh slice of the Rule vocabulary, in doc 02's
+// declared order.
+//
+// It exists for the same reason classify.AllRecurrenceRules() does, and it
+// is the other half of the same set: Finding F3 split one vocabulary across
+// a package boundary, and a closed set that only one side can enumerate is
+// a set the two sides can drift apart on without anything noticing. A
+// function rather than a var so no caller can append to the vocabulary the
+// completeness checks sweep.
+func AllRules() []Rule {
+	return []Rule{RuleYearly, RuleMonthly}
+}
+
 // Anchor is doc 02 §7's recurrence_anchor. Month is ignored by RuleMonthly,
 // whose recurrence is "this day, every month".
 type Anchor struct {

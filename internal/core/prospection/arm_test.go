@@ -146,46 +146,95 @@ func TestArm(t *testing.T) {
 		}
 	})
 
-	t.Run("both recurrence rules convert, not just the default one", func(t *testing.T) {
-		// The conversion Finding F3 left to this call site has two members,
-		// and a switch that returned RuleYearly for both would pass every
-		// other test in this file. Caught by mutation before review, and
-		// pinned here so it stays caught.
+	t.Run("every classify rule converts to its own prospection rule", func(t *testing.T) {
+		// **A sweep over classify.AllRecurrenceRules(), not a hand-written
+		// table.** The previous version of this subtest listed the two
+		// members by hand and its own comment said "the conversion has two
+		// members" — a sentence that stops being true the moment the
+		// vocabulary grows, and a table that cannot notice when it does.
+		//
+		// recurrenceRule was an `if r == Monthly { … }; return RuleYearly`,
+		// total only by the accident of the set having exactly two members.
+		// A third would have collapsed into RuleYearly with no error, no
+		// degradation and no decision_log row: a weekly reminder armed once
+		// a year. The defect was not waiting to appear on its own — it was
+		// waiting for someone to extend the vocabulary, which is the very
+		// next thing this repository intends to do.
+		//
+		// The assertion compares the two vocabularies by their string
+		// values, which is exact rather than approximate: both spell the
+		// same words, so a member that converts to a rule spelling
+		// something else has been mapped wrong, not merely mapped.
+		//
+		// Mutation: add a member to classify.AllRecurrenceRules() without
+		// adding a case to recurrenceRule, and this fails.
 		event := at(time.September, 4)
 
-		for _, tc := range []struct {
-			from classify.RecurrenceRule
-			want Rule
-		}{
-			{classify.RecurrenceRuleYearly, RuleYearly},
-			{classify.RecurrenceRuleMonthly, RuleMonthly},
-		} {
+		rules := classify.AllRecurrenceRules()
+		if len(rules) == 0 {
+			t.Fatal("classify.AllRecurrenceRules() is empty — this sweep proves nothing")
+		}
+
+		for _, from := range rules {
 			c := classify.Classification{
 				Kind:           kind(classify.KindRecurringReminder),
 				EventAt:        armPtr(event),
-				RecurrenceRule: armPtr(tc.from),
+				RecurrenceRule: armPtr(from),
 			}
 
 			plan, ok := Arm(c, now)
 			if !ok || plan.What != ArmRecurring {
-				t.Fatalf("%q: Arm = (%+v, %v), want an ArmRecurring plan", tc.from, plan, ok)
+				t.Fatalf("%q: Arm = (%+v, %v), want an ArmRecurring plan", from, plan, ok)
 			}
-			if plan.Rule != tc.want {
-				t.Errorf("classify rule %q became %q, want %q", tc.from, plan.Rule, tc.want)
+			if string(plan.Rule) != string(from) {
+				t.Errorf("classify rule %q became prospection rule %q — a member with no case "+
+					"of its own falls through to the default and is armed as the wrong "+
+					"recurrence entirely", from, plan.Rule)
 			}
-			// Clamped, and for the monthly rule that clamp is the ordinary
-			// case rather than the exception: the next occurrence of a given
-			// day is at most a month out, so a seven-day horizon in front of
-			// it frequently lands before now. A monthly reminder therefore
+
+			// Carried over from the hand-written table this sweep replaced.
+			// For the monthly rule the clamp is the ordinary case rather
+			// than the exception: the next occurrence of a given day is at
+			// most a month out, so a seven-day horizon in front of it
+			// frequently lands before now. A monthly reminder therefore
 			// arms at now more often than not, which is the correct reading
 			// of "the system is not late for something it just learned".
-			want := clampToNow(LeadTime(NextOccurrence(tc.want, plan.Anchor, now)), now)
-			if !plan.FireAt.Equal(want) {
-				t.Errorf("%q: FireAt = %v, want %v — a monthly reminder must not be scheduled "+
-					"a year out", tc.from, plan.FireAt, want)
+			wantFire := clampToNow(LeadTime(NextOccurrence(plan.Rule, plan.Anchor, now)), now)
+			if !plan.FireAt.Equal(wantFire) {
+				t.Errorf("%q: FireAt = %v, want %v", from, plan.FireAt, wantFire)
 			}
 			if plan.FireAt.Before(now) {
-				t.Errorf("%q: FireAt = %v is before now", tc.from, plan.FireAt)
+				t.Errorf("%q: FireAt = %v is before now", from, plan.FireAt)
+			}
+		}
+	})
+
+	t.Run("the two vocabularies have the same members", func(t *testing.T) {
+		// The sweep above proves every classify member maps somewhere
+		// correct. This proves prospection declares no rule classify cannot
+		// produce, and vice versa — the two halves of one vocabulary that
+		// Finding F3 split across a package boundary, checked in both
+		// directions so neither side can grow alone.
+		//
+		// Mutation: add a member to either AllX() alone and this fails.
+		fromClassify := map[string]bool{}
+		for _, r := range classify.AllRecurrenceRules() {
+			fromClassify[string(r)] = true
+		}
+		fromProspection := map[string]bool{}
+		for _, r := range AllRules() {
+			fromProspection[string(r)] = true
+		}
+
+		for m := range fromClassify {
+			if !fromProspection[m] {
+				t.Errorf("classify declares %q and prospection does not — Arm would convert it "+
+					"to something else", m)
+			}
+		}
+		for m := range fromProspection {
+			if !fromClassify[m] {
+				t.Errorf("prospection declares %q and classify cannot produce it", m)
 			}
 		}
 	})

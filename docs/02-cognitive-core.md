@@ -830,6 +830,13 @@ have N nudges; a pattern watcher does not hang off any unit):
 - **Recurrence**: `recurrence_rule` (`yearly` | `monthly`) + `recurrence_anchor`
   (`{month, day}`). On firing, the next one is created automatically pointing at the SAME
   source unit — memory is not duplicated, only the nudge is re-armed.
+  **The vocabulary is declared twice and must stay one set.** Classification decodes it and
+  prospection acts on it, and prospection imports classification rather than the reverse, so
+  the conversion between them lives at prospection's own call site. That conversion is written
+  with one case per member and is swept against both `AllX()` declarations in both directions
+  — a member added to either side alone fails the sweep. Written as a fallthrough it would be
+  total only for as long as the set does not grow: an unhandled member becomes `yearly`
+  silently, which arms a weekly reminder once a year with nothing recorded anywhere to say so.
   The next occurrence is **always re-derived from the anchor**, never advanced from the previous
   one, and a day the target month does not have **clamps to that month's last** rather than
   overflowing into the next. The two rules hold each other up: 29 February advanced by a year is
