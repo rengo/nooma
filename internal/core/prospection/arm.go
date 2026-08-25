@@ -171,11 +171,28 @@ func clampToNow(fireAt, now time.Time) time.Time {
 
 // recurrenceRule converts classify's own vocabulary into this package's.
 // The conversion lives here because prospection imports classify and never
-// the reverse (Finding F3), and it is total: classify has already degraded
-// anything outside its own closed set to nil, and a nil rule never reaches
-// this function.
+// the reverse (Finding F3).
+//
+// **One case per member, and the default is for a value that is in neither
+// vocabulary.** This was an `if r == Monthly { … }; return RuleYearly`,
+// described as total. It was total only because the set had exactly two
+// members and the `if` covered both: a third would have fallen through to
+// RuleYearly with no error, no degradation and no decision_log row, arming
+// a weekly reminder once a year. A conversion between two closed sets has
+// to be written so that adding a member somewhere else breaks something
+// here, and the sweep in arm_test.go over classify.AllRecurrenceRules() is
+// what breaks.
+//
+// The default remains yearly rather than panicking or returning a zero
+// value — this is a pure function with no error return, and classify has
+// already degraded anything outside its own set to nil, so a value reaching
+// the default at all is a stored row predating that decoding, whose anchor
+// is still the user's own stated month and day.
 func recurrenceRule(r classify.RecurrenceRule) Rule {
-	if r == classify.RecurrenceRuleMonthly {
+	switch r {
+	case classify.RecurrenceRuleYearly:
+		return RuleYearly
+	case classify.RecurrenceRuleMonthly:
 		return RuleMonthly
 	}
 	return RuleYearly
