@@ -306,10 +306,19 @@ func TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone(t *testing.T) {
 
 	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil, now)
 
-	if strings.Contains(prompt, "timezone: Local") {
-		t.Error("the prompt renders the zone as \"Local\" — time.Local.String() is that " +
-			"literal string on every machine, so the model is told a zone it cannot turn " +
-			"into an offset")
+	// The injected line is parsed back as an offset rather than compared to
+	// a string. A Contains check against the old "timezone: Local" wording
+	// pinned a label this change deletes, so it went on passing while the
+	// zone name was restored under a new label — the mutation that found
+	// this survived exactly that way.
+	m := regexp.MustCompile(`(?m)^\s*UTC offset: (.+)$`).FindStringSubmatch(prompt)
+	if m == nil {
+		t.Fatalf("the prompt injects no UTC offset line at all:\n%s", prompt)
+	}
+	if _, err := time.Parse(offsetLayout, m[1]); err != nil {
+		t.Errorf("the prompt injects %q as the offset, which is not one: %v — "+
+			"time.Local.String() renders that literal on every machine, so the model is "+
+			"handed a label it cannot turn into an offset", m[1], err)
 	}
 	if want := now.Format(time.RFC3339); !strings.Contains(prompt, want) {
 		t.Errorf("the prompt does not carry the instant %q — the offset is the half of the "+
@@ -361,11 +370,17 @@ func TestBuildPrompt_ShowsADateFormatTheDecoderAccepts(t *testing.T) {
 // one of several accepted shapes. The decoder accepts no zone-less
 // timestamp at all, so the prompt has to say so rather than leave it to be
 // inferred from a sample.
+//
+// The assertion looks for the CLAIM, not the word. An earlier version of
+// this test asserted the prompt contains "offset" — which "UTC offset:" and
+// "carrying its offset" both satisfy, so deleting the sentence outright
+// left it green. That mutation is what this wording catches.
 func TestBuildPrompt_SaysTheOffsetIsMandatory(t *testing.T) {
 	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
 
-	if !strings.Contains(prompt, "offset") {
-		t.Error("the prompt never mentions the offset, which Go's RFC3339 parser requires " +
-			"and which a model has no other way to know is mandatory")
+	if !regexp.MustCompile(`(?i)without an offset is not accepted`).MatchString(prompt) {
+		t.Error("the prompt never states that a timestamp without an offset is rejected. " +
+			"Go's RFC3339 parser requires one, and a model shown only an example has no " +
+			"way to know the offset was the mandatory part of it")
 	}
 }
