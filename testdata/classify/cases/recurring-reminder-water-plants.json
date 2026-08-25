@@ -6,8 +6,7 @@
     "normalized_content": "Water the plants every Sunday",
     "weight": 0.5,
     "decay_rate": 0.02,
-    "structured_data": {
-      "rrule": "FREQ=WEEKLY;BYDAY=SU"
-    }
+    "event_at": "2026-08-09",
+    "recurrence_rule": "weekly"
   }
 }

@@ -147,12 +147,29 @@ inside `weight` or `decay_rate` instead.
   pointer fields internally so an absent value and an explicit `null` are
   both rejected, distinct from a legitimately present `0`.
 
+- `expected` decodes through `classify.Decode` with **zero degradations**
+  (`test/conformance/classify_golden_cases_decode_clean_test.go`). A case
+  states what classify must produce, so it must state something classify
+  CAN produce: a value outside a closed vocabulary — `expected.type`'s
+  membership, the six `*_outcome` / `list_op` / `person_ref_status` fields,
+  `expected.recurrence_rule`, `expected.interrupt_level`'s range — fails
+  there rather than in review. That test and
+  `TestI14_ClassifyFieldDegradesToNull` partition this directory: I14 reads
+  the cases WITH an `llm_case_id`, whose `expected` mirrors a deliberately
+  malformed wire payload, and the other reads the rest.
+
 **Not checked**:
 
-- `expected.type` enum membership, the six `expected.*_outcome` /
-  `list_op` / `person_ref_status` fields' allowed values, `expected.
-  recurrence_rule`'s vocabulary, and `expected.interrupt_level`'s `[0,1]`
-  range — a review-time concern, not a mechanized one.
+- Whether the expectation is a GOOD answer to the input — that a weight of
+  0.5 is right for this message, that this is the normalization a reader
+  would write, that the type chosen is the one the message deserves. No
+  mechanized check reaches judgement, which is what review is for.
+- A case that answers by AVOIDING a decoded field — putting a recurrence
+  into `structured_data` rather than into `recurrence_rule`, say. The bytes
+  are legal, `structured_data` is free-form by design, and only a reader can
+  tell the difference. `recurring-reminder-water-plants` did exactly this
+  for months, because the vocabulary at the time could not express a weekly
+  recurrence; it read as a normal case throughout.
 - `llm_case_id` resolving to a real, existing `testdata/llm/` case file —
   proven only for the two checked-in `format_example.json` fixtures today
   (see "Cross-field constraint" above); a future, separate check would be
