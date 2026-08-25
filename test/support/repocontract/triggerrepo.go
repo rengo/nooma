@@ -328,11 +328,48 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		if got[0].RecurrenceRule == nil || *got[0].RecurrenceRule != prospection.RuleYearly {
 			t.Errorf("RecurrenceRule: got %v, want %q", got[0].RecurrenceRule, prospection.RuleYearly)
 		}
-		if got[0].RecurrenceAnchor == nil || *got[0].RecurrenceAnchor != anchor {
+		if !sameAnchor(got[0].RecurrenceAnchor, &anchor) {
 			t.Errorf("RecurrenceAnchor: got %v, want %+v", got[0].RecurrenceAnchor, anchor)
 		}
 		if got[0].RecurrenceAnchor == &anchor {
 			t.Error("RecurrenceAnchor: Due handed back the caller's own pointer")
+		}
+	})
+
+	t.Run("a weekly anchor's Sunday survives the round trip", func(t *testing.T) {
+		// Sunday specifically, because it is time.Weekday's ZERO value and
+		// therefore the one a storage encoding drops by accident: a plain
+		// int field with omitempty writes nothing for it, and the row reads
+		// back as a weekly rule with no weekday, which falls back to yearly.
+		// The user asked for every Sunday and would be reminded once a year,
+		// with nothing anywhere recording the loss.
+		//
+		// Every other weekday would survive that bug untouched, so a test
+		// picking any of them proves nothing about the one that matters.
+		repo := newRepo(t)
+		fireAt := contractNow
+
+		rule := prospection.RuleWeekly
+		sunday := time.Sunday
+		anchor := prospection.Anchor{Month: time.September, Day: 4, Weekday: &sunday}
+		trg := fixtureTrigger("trg-weekly-sunday", &fireAt)
+		trg.RecurrenceRule = &rule
+		trg.RecurrenceAnchor = &anchor
+		createTrigger(t, repo, trg)
+
+		got := dueTriggers(t, repo, fireAt)
+		if len(got) != 1 {
+			t.Fatalf("Due: got %d triggers, want 1", len(got))
+		}
+		back := got[0].RecurrenceAnchor
+		if back == nil || back.Weekday == nil {
+			t.Fatalf("RecurrenceAnchor: got %v — a stated Sunday came back unstated", back)
+		}
+		if *back.Weekday != time.Sunday {
+			t.Errorf("Weekday: got %s, want Sunday", *back.Weekday)
+		}
+		if back.Weekday == &sunday {
+			t.Error("Weekday: Due handed back the caller's own pointer")
 		}
 	})
 
@@ -573,4 +610,29 @@ func delivered(t *testing.T, repo ports.TriggerRepo) []ports.DueTrigger {
 		t.Fatalf("Delivered: %v", err)
 	}
 	return got
+}
+
+// sameAnchor compares two anchors by value.
+//
+// prospection.Anchor carries a *time.Weekday, so Go's own == compares that
+// field by ADDRESS: two anchors naming the same weekday through different
+// pointers are unequal, and two naming different weekdays through the same
+// pointer are equal. A round-trip assertion written with == therefore says
+// nothing about the weekday it is meant to be checking, and would have kept
+// passing while the value was mangled.
+func sameAnchor(got, want *prospection.Anchor) bool {
+	if got == nil || want == nil {
+		return got == want
+	}
+	if got.Month != want.Month || got.Day != want.Day {
+		return false
+	}
+	switch {
+	case got.Weekday == nil && want.Weekday == nil:
+		return true
+	case got.Weekday == nil || want.Weekday == nil:
+		return false
+	default:
+		return *got.Weekday == *want.Weekday
+	}
 }

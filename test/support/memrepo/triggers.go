@@ -255,11 +255,23 @@ func copyRule(p *prospection.Rule) *prospection.Rule {
 	return &v
 }
 
+// copyAnchor deep-copies an anchor, weekday included.
+//
+// `v := *p` copies the struct, and for a struct of plain values that is a
+// deep copy. prospection.Anchor holds a *time.Weekday, so the shallow copy
+// hands back the caller's own pointer inside a fresh struct: a caller
+// mutating it reaches into what this fake is storing. The SQLite repository
+// cannot have that bug — it re-decodes JSON on every read — so the shared
+// contract case is what forces the two to agree here.
 func copyAnchor(p *prospection.Anchor) *prospection.Anchor {
 	if p == nil {
 		return nil
 	}
 	v := *p
+	if p.Weekday != nil {
+		wd := *p.Weekday
+		v.Weekday = &wd
+	}
 	return &v
 }
 

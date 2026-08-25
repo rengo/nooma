@@ -14,6 +14,7 @@ const (
 	RuleYearly  Rule = "yearly"
 	RuleMonthly Rule = "monthly"
 	RuleDaily   Rule = "daily"
+	RuleWeekly  Rule = "weekly"
 )
 
 // AllRules returns a fresh slice of the Rule vocabulary, in doc 02's
@@ -26,7 +27,7 @@ const (
 // function rather than a var so no caller can append to the vocabulary the
 // completeness checks sweep.
 func AllRules() []Rule {
-	return []Rule{RuleYearly, RuleMonthly, RuleDaily}
+	return []Rule{RuleYearly, RuleMonthly, RuleDaily, RuleWeekly}
 }
 
 // Anchor is doc 02 §7's recurrence_anchor. Which fields a rule reads is the
@@ -36,6 +37,17 @@ func AllRules() []Rule {
 type Anchor struct {
 	Month time.Month
 	Day   int
+	// Weekday is the day RuleWeekly repeats on, and it is a pointer
+	// because time.Weekday's zero value is Sunday — a perfectly legal
+	// answer. A plain value could not tell "the user said Sunday" from
+	// "nobody said anything", so one of those two would silently take the
+	// other's behaviour. nil is the second, and a weekly rule reaching
+	// NextOccurrence with nil falls back rather than repeating on a Sunday
+	// nobody asked for.
+	//
+	// Arm always states it, derived from the capture's own event_at, so
+	// nil can only arrive from a row stored before weekly existed.
+	Weekday *time.Weekday
 }
 
 // RecurrenceAnchorHour is the local wall clock an anniversary lands on.
@@ -76,8 +88,12 @@ const RecurrenceAnchorHour = 12
 func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 	loc := after.Location()
 
-	switch rule {
-	case RuleDaily:
+	// A boolean switch rather than one on rule alone, so "a weekly rule
+	// with no weekday" is not a case that falls out of the weekly arm
+	// halfway through — it simply never enters it, and lands in the same
+	// default an unrecognised rule does.
+	switch {
+	case rule == RuleDaily:
 		// No anchor is read: "every day" names no day, so there is nothing
 		// to re-derive from but the calendar itself. Building the candidate
 		// through time.Date rather than adding 24 hours keeps this on the
@@ -92,7 +108,22 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 		return time.Date(after.Year(), after.Month(), after.Day()+1,
 			RecurrenceAnchorHour, 0, 0, 0, loc)
 
-	case RuleMonthly:
+	case rule == RuleWeekly && anchor.Weekday != nil:
+		// Step forward to the named weekday, then past it if today's
+		// occurrence has already gone. The +7 before the modulo is what
+		// makes the step non-negative for every pair of weekdays; without
+		// it a target earlier in the week than today's yields a negative
+		// step and the occurrence lands in the past.
+		step := (int(*anchor.Weekday) - int(after.Weekday()) + 7) % 7
+		candidate := time.Date(after.Year(), after.Month(), after.Day()+step,
+			RecurrenceAnchorHour, 0, 0, 0, loc)
+		if candidate.After(after) {
+			return candidate
+		}
+		return time.Date(after.Year(), after.Month(), after.Day()+step+7,
+			RecurrenceAnchorHour, 0, 0, 0, loc)
+
+	case rule == RuleMonthly:
 		// Walk months from after's own, so the first candidate is either
 		// this month's occurrence (when it is still ahead) or next month's.
 		y, m := after.Year(), after.Month()

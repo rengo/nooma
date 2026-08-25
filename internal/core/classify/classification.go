@@ -130,10 +130,11 @@ const (
 	RecurrenceRuleYearly  RecurrenceRule = "yearly"
 	RecurrenceRuleMonthly RecurrenceRule = "monthly"
 	RecurrenceRuleDaily   RecurrenceRule = "daily"
+	RecurrenceRuleWeekly  RecurrenceRule = "weekly"
 )
 
 // AllRecurrenceRules returns a fresh slice of the RecurrenceRule vocabulary,
 // in doc 02's declared order — the closed set decodeEnum matches against.
 func AllRecurrenceRules() []RecurrenceRule {
-	return []RecurrenceRule{RecurrenceRuleYearly, RecurrenceRuleMonthly, RecurrenceRuleDaily}
+	return []RecurrenceRule{RecurrenceRuleYearly, RecurrenceRuleMonthly, RecurrenceRuleDaily, RecurrenceRuleWeekly}
 }

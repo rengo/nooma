@@ -43,6 +43,23 @@ var _ ports.TriggerRepo = (*TriggerRepo)(nil)
 type anchorJSON struct {
 	Month int `json:"month"`
 	Day   int `json:"day"`
+	// Weekday is RuleWeekly's day, a pointer for prospection.Anchor's own
+	// reason: time.Weekday's zero is Sunday, so a value field cannot tell a
+	// stated Sunday from an unstated weekday.
+	//
+	// omitempty on a POINTER omits nil only — a pointer to 0 still encodes
+	// as "weekday":0, which is what keeps Sunday from vanishing on the way
+	// to disk. omitempty on a plain int would have dropped it, and the row
+	// would read back as a weekly rule with no weekday and fall back to
+	// yearly. Verified rather than assumed.
+	//
+	// It is absent from migration 0001's column comment, which says
+	// {month, day} and stays that way: SQLite keeps the literal CREATE
+	// TABLE text in sqlite_master, so editing a published migration's
+	// comment gives two vaults at the same schema_version different schema
+	// text. The column is TEXT holding JSON and needs no DDL change to
+	// carry another key.
+	Weekday *int `json:"weekday,omitempty"`
 }
 
 // payloadJSON is ports.TriggerPayload's storage encoding, declared here for
@@ -309,7 +326,12 @@ func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
 		if err := json.Unmarshal([]byte(recurrenceAnch.String), &stored); err != nil {
 			return ports.DueTrigger{}, fmt.Errorf("trigger %q: recurrence_anchor: %w", d.ID, err)
 		}
-		d.RecurrenceAnchor = &prospection.Anchor{Month: time.Month(stored.Month), Day: stored.Day}
+		anchor := &prospection.Anchor{Month: time.Month(stored.Month), Day: stored.Day}
+		if stored.Weekday != nil {
+			wd := time.Weekday(*stored.Weekday)
+			anchor.Weekday = &wd
+		}
+		d.RecurrenceAnchor = anchor
 	}
 
 	return d, nil
@@ -352,7 +374,12 @@ func marshalAnchor(a *prospection.Anchor) (any, error) {
 	if a == nil {
 		return nil, nil
 	}
-	encoded, err := json.Marshal(anchorJSON{Month: int(a.Month), Day: a.Day})
+	stored := anchorJSON{Month: int(a.Month), Day: a.Day}
+	if a.Weekday != nil {
+		wd := int(*a.Weekday)
+		stored.Weekday = &wd
+	}
+	encoded, err := json.Marshal(stored)
 	if err != nil {
 		return nil, err
 	}

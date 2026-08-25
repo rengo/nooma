@@ -64,7 +64,7 @@ own `id` field verbatim (e.g. `id: "remind-me-tomorrow"` →
 | `expected.list_op` | string | no | `append \| delete \| mark_done \| remove` |
 | `expected.person_ref_status` | string | no | `resolved \| new \| ambiguous` |
 | `expected.interrupt_level` | number | no | `docs/02-cognitive-core.md` §7's push/digest split, `0-1`. A pointer internally, for the same reason `expected.weight`/`expected.decay_rate` are — an absent reading and a claimed `0.0` must stay distinguishable |
-| `expected.recurrence_rule` | string | no | `yearly \| monthly \| daily`, `docs/02-cognitive-core.md` §7's recurrence vocabulary — a decoded field, not part of `structured_data` (§5.1: "opaque to the brain and stays opaque") |
+| `expected.recurrence_rule` | string | no | `yearly \| monthly \| daily \| weekly`, `docs/02-cognitive-core.md` §7's recurrence vocabulary — a decoded field, not part of `structured_data` (§5.1: "opaque to the brain and stays opaque") |
 | `llm_case_id` | string | no | The `id` of a `testdata/llm/` case that recorded the malformed provider response this case's `expected` degrades from — the structural link I14 needs between the JSON gate corpus and the recorded-response corpus (see "Cross-field constraint" below) |
 
 ## Cross-field constraint
