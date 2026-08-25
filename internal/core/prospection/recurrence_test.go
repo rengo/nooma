@@ -672,3 +672,102 @@ func TestNextOccurrence_DailyReadsNoAnchor(t *testing.T) {
 		}
 	}
 }
+
+// TestNextOccurrence_WeeklyLandsOnItsOwnWeekday sweeps all seven rather
+// than picking one, so no weekday can be handled by accident — an
+// arithmetic that works for Wednesday and wraps wrong for Sunday is the
+// ordinary bug in modular date code, and Sunday is the one a
+// zero-is-a-legal-value weekday is most likely to get wrong.
+//
+// The assertions are properties rather than dates: the right weekday, the
+// anchor hour, strictly after, and within a week. A test naming seven
+// literal dates would pin the same thing while being unreadable and
+// wrong the moment the fixture moves.
+//
+// Mutation: drop the +7 from the modular step and the same-weekday cases
+// stop being strictly after.
+func TestNextOccurrence_WeeklyLandsOnItsOwnWeekday(t *testing.T) {
+	after := recAt(2027, time.March, 10, 9)
+
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		wd := d
+		anchor := Anchor{Month: time.September, Day: 4, Weekday: &wd}
+
+		got := NextOccurrence(RuleWeekly, anchor, after)
+
+		if got.Weekday() != d {
+			t.Errorf("%s: landed on %s", d, got.Weekday())
+		}
+		if got.Hour() != RecurrenceAnchorHour {
+			t.Errorf("%s: landed at hour %d, want %d", d, got.Hour(), RecurrenceAnchorHour)
+		}
+		if !got.After(after) {
+			t.Errorf("%s: %v is not strictly after %v", d, got, after)
+		}
+		if got.Sub(after) > 7*24*time.Hour {
+			t.Errorf("%s: %v is more than a week after %v — a weekly rule that skips a week "+
+				"is a reminder the user never gets", d, got, after)
+		}
+	}
+}
+
+// TestNextOccurrence_WeeklyOnItsOwnDayRespectsTheAnchorHour is the boundary
+// the sweep above cannot reach: the day the rule names IS today.
+//
+// Mutation: use !candidate.Before(after) and the at-the-hour case returns
+// the instant that just fired instead of next week's.
+func TestNextOccurrence_WeeklyOnItsOwnDayRespectsTheAnchorHour(t *testing.T) {
+	day := recAt(2027, time.March, 10, 0)
+	wd := day.Weekday()
+	anchor := Anchor{Weekday: &wd}
+
+	if got, want := NextOccurrence(RuleWeekly, anchor, recAt(2027, time.March, 10, 9)),
+		recAt(2027, time.March, 10, RecurrenceAnchorHour); !got.Equal(want) {
+		t.Errorf("before the anchor hour on its own day: got %v, want today's %v", got, want)
+	}
+	if got, want := NextOccurrence(RuleWeekly, anchor, recAt(2027, time.March, 10, RecurrenceAnchorHour)),
+		recAt(2027, time.March, 17, RecurrenceAnchorHour); !got.Equal(want) {
+		t.Errorf("exactly at the anchor hour on its own day: got %v, want next week's %v", got, want)
+	}
+}
+
+// TestNextOccurrence_WeeklySundayIsNotAMissingWeekday is why Anchor.Weekday
+// is a pointer.
+//
+// time.Weekday's zero value is Sunday, a perfectly legal answer, so a
+// plain time.Weekday field cannot tell "the user said Sunday" from "nobody
+// said anything". The pointer makes that distinction representable, and
+// this test is the one that would fail if the field were ever flattened
+// back to a value — Sunday would become indistinguishable from the
+// degraded case and silently take its fallback.
+func TestNextOccurrence_WeeklySundayIsNotAMissingWeekday(t *testing.T) {
+	after := recAt(2027, time.March, 10, 9)
+	sunday := time.Sunday
+
+	stated := NextOccurrence(RuleWeekly, Anchor{Month: time.September, Day: 4, Weekday: &sunday}, after)
+	unstated := NextOccurrence(RuleWeekly, Anchor{Month: time.September, Day: 4}, after)
+
+	if stated.Weekday() != time.Sunday {
+		t.Errorf("a stated Sunday landed on %s", stated.Weekday())
+	}
+	if stated.Equal(unstated) {
+		t.Error("a weekly rule anchored on Sunday and one anchored on nothing produced the " +
+			"same instant — the zero weekday is Sunday, so a value field cannot tell them apart")
+	}
+}
+
+// TestNextOccurrence_WeeklyWithNoWeekdayKeepsTheUsersOwnDate: a weekly rule
+// whose weekday never arrived has nothing to re-derive a week from. It
+// falls back exactly the way an unrecognised rule does — to the yearly
+// reading of the anchor the user did state — rather than inventing a
+// cadence out of a zero value.
+func TestNextOccurrence_WeeklyWithNoWeekdayKeepsTheUsersOwnDate(t *testing.T) {
+	anchor := Anchor{Month: time.September, Day: 4}
+	after := recAt(2027, time.January, 1, 0)
+	want := recAt(2027, time.September, 4, RecurrenceAnchorHour)
+
+	if got := NextOccurrence(RuleWeekly, anchor, after); !got.Equal(want) {
+		t.Errorf("NextOccurrence = %v, want %v — a weekly rule with no weekday keeps the "+
+			"user's own stated date instead of inventing Sunday", got, want)
+	}
+}
