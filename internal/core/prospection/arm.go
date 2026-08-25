@@ -194,6 +194,8 @@ func recurrenceRule(r classify.RecurrenceRule) Rule {
 		return RuleYearly
 	case classify.RecurrenceRuleMonthly:
 		return RuleMonthly
+	case classify.RecurrenceRuleDaily:
+		return RuleDaily
 	}
 	return RuleYearly
 }

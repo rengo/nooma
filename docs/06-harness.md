@@ -113,7 +113,7 @@ This is **not** a style preference. Look at how much of Nooma's behavior is a fu
 
 decay and `effective_weight` · temporal urgency in priority · `incomplete` units expiring at
 24 h · trigger `fire_at` · the boot staleness gate (6 h / 3 h) · quiet hours · event lead time
-· yearly and monthly recurrence · digest cadence · `goal_stagnation_days` · the learning
+· yearly, monthly and daily recurrence · digest cadence · `goal_stagnation_days` · the learning
 module's cooldown · the incremental `learn` checkpoint
 
 That is nearly everything. A `time.Now()` scattered through the core turns every one of those
