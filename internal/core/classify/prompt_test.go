@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -38,12 +39,23 @@ func TestBuildPrompt_CarriesTheInstantsOwnZone(t *testing.T) {
 			"reaching the prompt, so the model cannot resolve \"tomorrow\" correctly (design D4)")
 	}
 
-	if !strings.Contains(inBuenosAires, buenosAires.String()) {
-		t.Errorf("prompt does not name the zone %q — doc 02 §5 injects the user timezone",
-			buenosAires.String())
+	// **The offset, not the zone's name.** This assertion used to read
+	// strings.Contains(inBuenosAires, buenosAires.String()), and it was
+	// checking a property production never has: every caller supplies
+	// time.Local, whose String() is the literal "Local" on every machine, so
+	// a passing name assertion here proved nothing about the prompt anyone
+	// actually receives. The offset is what the instant genuinely carries in
+	// both fixtures and in production, which makes this the stricter check
+	// rather than the looser one.
+	//
+	// Kolkata's +05:30 earns its keep here: a half-hour offset catches an
+	// implementation that renders whole hours and calls it a zone.
+	if want := instant.In(buenosAires).Format(offsetLayout); !strings.Contains(inBuenosAires, want) {
+		t.Errorf("prompt does not carry the offset %q — doc 02 §5's injected zone reaches the "+
+			"model as an offset it can write, or it does not reach it at all", want)
 	}
-	if !strings.Contains(inKolkata, kolkata.String()) {
-		t.Errorf("prompt does not name the zone %q", kolkata.String())
+	if want := instant.In(kolkata).Format(offsetLayout); !strings.Contains(inKolkata, want) {
+		t.Errorf("prompt does not carry the offset %q", want)
 	}
 }
 
@@ -265,5 +277,110 @@ func TestBuildPrompt_SeparatesAskingFromTelling(t *testing.T) {
 		if !strings.Contains(p, want) {
 			t.Errorf("BuildPrompt does not tell the model %q; without it a question about what Nooma knows is captured as knowledge instead of answered", want)
 		}
+	}
+}
+
+// TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone is the production
+// case the FixedZone fixtures above cannot reach.
+//
+// Every caller in the repo supplies an instant whose Location is time.Local
+// — cmd/nooma/wiring.go's systemClock and cmd/nooma/doctor.go's quality gate
+// both pass time.Now(). time.Local.String() is the literal string "Local" on
+// every machine, whatever the zone actually is, because time.Local is a
+// sentinel Location rather than a named one. So a prompt that renders the
+// zone's NAME tells the model "User timezone: Local" and then asks it to
+// answer with absolute instants — a zone label from which no offset can be
+// written.
+//
+// The fix is not configuration: doc 02 §5.1 forbids a timezone key on
+// purpose, because the instant already carries the fact. What the instant
+// genuinely carries is the OFFSET, so that is what the prompt must render.
+//
+// The FixedZone tests pass today and would keep passing forever, because a
+// test zone constructed with a real IANA name is the one shape production
+// never produces.
+//
+// Mutation: render now.Location().String() again and this fails.
+func TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone(t *testing.T) {
+	now := time.Date(2026, 8, 4, 9, 30, 0, 0, time.Local)
+
+	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil, now)
+
+	// The injected line is parsed back as an offset rather than compared to
+	// a string. A Contains check against the old "timezone: Local" wording
+	// pinned a label this change deletes, so it went on passing while the
+	// zone name was restored under a new label — the mutation that found
+	// this survived exactly that way.
+	m := regexp.MustCompile(`(?m)^\s*UTC offset: (.+)$`).FindStringSubmatch(prompt)
+	if m == nil {
+		t.Fatalf("the prompt injects no UTC offset line at all:\n%s", prompt)
+	}
+	if _, err := time.Parse(offsetLayout, m[1]); err != nil {
+		t.Errorf("the prompt injects %q as the offset, which is not one: %v — "+
+			"time.Local.String() renders that literal on every machine, so the model is "+
+			"handed a label it cannot turn into an offset", m[1], err)
+	}
+	if want := now.Format(time.RFC3339); !strings.Contains(prompt, want) {
+		t.Errorf("the prompt does not carry the instant %q — the offset is the half of the "+
+			"zone the model can actually use, and now.Format already has it", want)
+	}
+}
+
+// TestBuildPrompt_ShowsADateFormatTheDecoderAccepts closes the gap between
+// what the prompt asks for and what Decode takes.
+//
+// assignTime accepts exactly time.RFC3339 or "2006-01-02" and nothing else,
+// and Go's RFC3339 parser REQUIRES an offset or a Z. The prompt named the
+// standard without ever showing one, so a model answering
+// "2026-08-04T15:00:00" has followed the prompt as written and is still
+// degraded as bad_format — which is two of doctor's three live failures.
+//
+// The assertion is that some literal in the prompt actually parses, rather
+// than that the prompt contains particular bytes: the point is that an
+// example EXISTS and is valid, not that it is worded one way.
+//
+// Mutation: drop the example from the event_at/due_at line and this fails.
+func TestBuildPrompt_ShowsADateFormatTheDecoderAccepts(t *testing.T) {
+	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil,
+		time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
+
+	line := ""
+	for _, l := range strings.Split(prompt, "\n") {
+		if strings.Contains(l, "event_at, due_at") || strings.Contains(l, "e.g.") {
+			line += l + "\n"
+		}
+	}
+	if line == "" {
+		t.Fatal("no event_at/due_at line in the prompt at all")
+	}
+
+	timestamps := regexp.MustCompile(`\d{4}-\d{2}-\d{2}T[0-9:]+(?:Z|[+-]\d{2}:\d{2})`).FindAllString(line, -1)
+	if len(timestamps) == 0 {
+		t.Fatalf("the date-format line shows no timestamp example, so \"a full RFC3339 "+
+			"timestamp\" is a standard's name and nothing more:\n%s", line)
+	}
+	for _, ts := range timestamps {
+		if _, err := time.Parse(time.RFC3339, ts); err != nil {
+			t.Errorf("the prompt offers %q as an example, which the decoder itself rejects: %v", ts, err)
+		}
+	}
+}
+
+// TestBuildPrompt_SaysTheOffsetIsMandatory: an example alone can be read as
+// one of several accepted shapes. The decoder accepts no zone-less
+// timestamp at all, so the prompt has to say so rather than leave it to be
+// inferred from a sample.
+//
+// The assertion looks for the CLAIM, not the word. An earlier version of
+// this test asserted the prompt contains "offset" — which "UTC offset:" and
+// "carrying its offset" both satisfy, so deleting the sentence outright
+// left it green. That mutation is what this wording catches.
+func TestBuildPrompt_SaysTheOffsetIsMandatory(t *testing.T) {
+	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
+
+	if !regexp.MustCompile(`(?i)without an offset is not accepted`).MatchString(prompt) {
+		t.Error("the prompt never states that a timestamp without an offset is rejected. " +
+			"Go's RFC3339 parser requires one, and a model shown only an example has no " +
+			"way to know the offset was the mandatory part of it")
 	}
 }
