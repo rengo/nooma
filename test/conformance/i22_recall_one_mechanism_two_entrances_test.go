@@ -82,9 +82,32 @@ func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 		t.Fatalf("seeding vector-match's embedding: %v", err)
 	}
 
+	// normalized-vector-match is findable only via the vector leg, for
+	// normalizedText specifically. It is what keeps the divergence subtest
+	// below meaningful now that ADR-0020 admits on the vector alone: the
+	// two entrances must differ among results that CLEAR the floor, and
+	// before this unit existed the only thing distinguishing them was
+	// lexical-match — which the answering path no longer admits.
+	nvec, err := embed.Embed(ctx, ports.EmbedRequest{Text: normalizedText})
+	if err != nil {
+		t.Fatalf("deriving normalizedText's vector: %v", err)
+	}
+	if err := units.Create(ctx, poolUnit("normalized-vector-match", "other unrelated words")); err != nil {
+		t.Fatalf("seeding normalized-vector-match: %v", err)
+	}
+	if err := embeddings.Put(ctx, ports.Embedding{UnitID: "normalized-vector-match", Model: embedFakeModel, Vector: nvec.Vector}); err != nil {
+		t.Fatalf("seeding normalized-vector-match's embedding: %v", err)
+	}
+
 	// lexicalMatch is findable only via the lexical leg, seeded under
 	// rawText's own tokens and embedded under nothing the vector leg could
 	// ever return.
+	//
+	// It no longer reaches the ANSWERING entrance: ADR-0020 made the vector
+	// the admission and the lexical leg the ranker, and this unit has no
+	// vector evidence at all. It stays seeded because ScoredFor — the
+	// generous net dedup and the nightly connect phase use — still admits
+	// it, and that is the half of hybrid recall the decision left intact.
 	if err := units.Create(ctx, poolUnit("lexical-match", rawText)); err != nil {
 		t.Fatalf("seeding lexical-match: %v", err)
 	}

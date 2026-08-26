@@ -117,7 +117,18 @@ type ScoredUnit struct {
 // Scores survive the live filter by a join, not a second fusion: LiveByIDs
 // returns survivors in the caller's id order, so this walks them once
 // against an id -> score map built from FuseScored.
+// ScoredFor is the generous net: everything either leg found, fused. Its
+// callers ask "what MIGHT be related" — correction referent resolution and
+// the nightly connect phase — and a judge decides afterwards. ADR-0010's
+// own warning is why it is left alone: its fusion feeds the relation
+// graph, and a bias here propagates into all of it.
 func (s *RecallService) ScoredFor(ctx context.Context, text string) ([]ScoredUnit, bool, error) {
+	return s.scoredFor(ctx, text, false)
+}
+
+// scoredFor gathers both legs. admit applies ADR-0020's floor, which only
+// the reader-facing answer wants.
+func (s *RecallService) scoredFor(ctx context.Context, text string, admit bool) ([]ScoredUnit, bool, error) {
 	var vectorIDs []string
 	semanticLegAvailable := false
 
@@ -131,8 +142,15 @@ func (s *RecallService) ScoredFor(ctx context.Context, text string) ([]ScoredUni
 			if serr != nil {
 				return nil, false, fmt.Errorf("recall: vector leg: %w", serr)
 			}
-			vectorIDs = make([]string, len(scored))
-			for i, sc := range scored {
+			// **The vector admits** (ADR-0020), for the reader-facing
+			// answer only. Everything below the floor stops being an
+			// answer here rather than being ranked low and printed anyway.
+			admitted := scored
+			if admit {
+				admitted = recall.Admit(scored)
+			}
+			vectorIDs = make([]string, len(admitted))
+			for i, sc := range admitted {
 				vectorIDs[i] = sc.ID
 			}
 			semanticLegAvailable = true
@@ -142,6 +160,18 @@ func (s *RecallService) ScoredFor(ctx context.Context, text string) ([]ScoredUni
 	lexicalIDs, err := s.lex.SearchLexical(ctx, recall.Tokenize(text), recall.RecallTopK)
 	if err != nil {
 		return nil, false, fmt.Errorf("recall: lexical leg: %w", err)
+	}
+
+	// **The lexical leg ranks, it does not admit** (ADR-0020). It kept
+	// admitting on function words — Tokenize has no stopword handling, so
+	// "cuando tengo gym" matched the dentist on "tengo" — which is why a
+	// similarity floor on the vector leg alone would have changed nothing.
+	//
+	// It is intersected rather than dropped: an admitted unit that also
+	// matches lexically still ranks above one that does not, which is what
+	// the fusion is for once admission is settled.
+	if admit && semanticLegAvailable {
+		lexicalIDs = intersect(lexicalIDs, vectorIDs)
 	}
 
 	fused := recall.FuseScored(vectorIDs, lexicalIDs)
@@ -183,7 +213,11 @@ func (s *RecallService) LiveByIDs(ctx context.Context, ids []string) ([]unit.Uni
 // ScoredFor, not a second implementation, for the same reason recall.Fuse is
 // a projection of recall.FuseScored (design D1).
 func (s *RecallService) ForText(ctx context.Context, text string) ([]unit.Unit, bool, error) {
-	scored, ok, err := s.ScoredFor(ctx, text)
+	// **The answering entrance, and the only one that admits** — ADR-0020.
+	// Both callers of ForText are reader-facing: the HTTP recall endpoint
+	// and the chat's own recall Kind. A bad match reaching either is
+	// presented to a person as a fact.
+	scored, ok, err := s.scoredFor(ctx, text, true)
 	if err != nil {
 		return nil, false, err
 	}
@@ -192,4 +226,27 @@ func (s *RecallService) ForText(ctx context.Context, text string) ([]unit.Unit, 
 		units[i] = su.Unit
 	}
 	return units, ok, nil
+}
+
+// intersect keeps the members of keep that appear in admitted, in keep's
+// own order — the lexical leg's ranking, restricted to what was admitted.
+//
+// A map rather than a nested loop because both lists are RecallTopK long
+// and this runs on every recall; a slice scan would be fine today and is
+// the kind of thing that stops being fine quietly.
+func intersect(keep, admitted []string) []string {
+	if len(keep) == 0 || len(admitted) == 0 {
+		return nil
+	}
+	ok := make(map[string]bool, len(admitted))
+	for _, id := range admitted {
+		ok[id] = true
+	}
+	out := make([]string, 0, len(keep))
+	for _, id := range keep {
+		if ok[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }

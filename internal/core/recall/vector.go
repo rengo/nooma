@@ -155,3 +155,34 @@ func Normalize(v []float32) ([]float32, error) {
 	}
 	return out, nil
 }
+
+// RecallMinSimilarity is the cosine a unit must reach to be worth
+// answering with — ADR-0020, and doc 02 §13's own row.
+//
+// Vectors are unit-normalised at the storage boundary, so Search's dot
+// product IS a cosine in [-1, 1] and this threshold means something. The
+// value is set from reasoning rather than measurement: there is no recall
+// golden set carrying similarity scores yet, so the first honest
+// calibration comes from use. Too high silences legitimate answers, which
+// is the failure mode to watch for.
+const RecallMinSimilarity = 0.35
+
+// Admit keeps the results near enough to say out loud, in the order given.
+//
+// **Membership only.** Reordering here would silently overrule the fusion
+// ADR-0010 owns, and the two decisions are separate: what may be answered
+// with, and in what order. The floor is inclusive — it reads as "at least
+// this similar", which is how someone tuning it will think about it.
+func Admit(scored []Scored) []Scored {
+	out := make([]Scored, 0, len(scored))
+	for _, s := range scored {
+		// Compared as float32, which is what Scored.Score is. Widening to
+		// float64 first makes the boundary inexact — float64(float32(0.35))
+		// is not 0.35 — so a result sitting exactly on the floor falls
+		// outside it. Caught by the boundary case rather than by review.
+		if s.Score >= RecallMinSimilarity {
+			out = append(out, s)
+		}
+	}
+	return out
+}
