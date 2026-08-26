@@ -113,7 +113,13 @@ func TestDoctorMakesNoNetworkCall(t *testing.T) {
 		"tasks:\n" +
 		"  capture_processing:\n    provider: audio\n" +
 		"  relation_evaluation:\n    provider: audio\n" +
-		"  embedding:\n    provider: local\n"
+		"  embedding:\n    provider: local\n" +
+		// belief_derivation joined the coverage check when `nooma init`
+		// started binding every task the binary runs: a vault missing it
+		// starts and captures, and then refuses to schedule consolidation.
+		// Bound to audio for this fixture's own reason — whisper_cpp has no
+		// client, so checkLLMQuality never dials it.
+		"  belief_derivation:\n    provider: audio\n"
 	if err := os.WriteFile(filepath.Join(vault, "nooma.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

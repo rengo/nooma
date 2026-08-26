@@ -42,3 +42,34 @@ var tasksM1Consumes = []string{"capture_processing", "relation_evaluation", "emb
 // list, two readers, the same D18a shape tasksM1Consumes already
 // establishes above.
 var tasksConsolidateConsumes = []string{"relation_evaluation", "belief_derivation", "embedding"}
+
+// tasksTheBinaryRuns is the union of the two lists above, in first-seen
+// order, and it is what a vault must bind to be fully usable.
+//
+// Both lists are already read live by their own consumers — that is design
+// D18a, and neither was wrong. What nobody owned was the gap BETWEEN them:
+// `nooma init` bound M1's three, the scheduler needed belief_derivation,
+// and the wizard wrote vaults whose sleep phase could not start while
+// `nooma doctor` reported "ok task coverage" over them.
+//
+// A function rather than a var, for the reason every AllX() in this
+// repository is one: a package-level slice is mutable by any caller, and a
+// mutated union would defeat the coverage check that reads it. Derived
+// rather than written out, so a task added to either list reaches the
+// wizard and doctor with no second edit — the same property joinVocabulary
+// gives the prompt.
+func tasksTheBinaryRuns() []string {
+	size := len(tasksM1Consumes) + len(tasksConsolidateConsumes)
+	seen := make(map[string]bool, size)
+	union := make([]string, 0, size)
+	for _, list := range [][]string{tasksM1Consumes, tasksConsolidateConsumes} {
+		for _, task := range list {
+			if seen[task] {
+				continue
+			}
+			seen[task] = true
+			union = append(union, task)
+		}
+	}
+	return union
+}

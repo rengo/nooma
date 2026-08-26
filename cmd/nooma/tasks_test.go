@@ -91,11 +91,19 @@ func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
 
 	bindings := bindTasks("embed-entry", "chat-entry")
 
-	if len(bindings) != 1 {
-		t.Fatalf("bindTasks returned %d bindings, want exactly 1 for the swapped-in list: %+v", len(bindings), bindings)
+	// The liveness claim is unchanged: swapping the var must change what
+	// bindTasks produces. What moved is the count — bindTasks now reads the
+	// union of both task lists, so the swapped-in member arrives ALONGSIDE
+	// tasksConsolidateConsumes rather than instead of everything.
+	if len(bindings) != len(tasksTheBinaryRuns()) {
+		t.Fatalf("bindTasks returned %d bindings for a union of %d: %+v",
+			len(bindings), len(tasksTheBinaryRuns()), bindings)
 	}
 	if bindings["chat"] != "chat-entry" {
 		t.Errorf(`bindTasks["chat"] = %q, want "chat-entry" — a hardcoded copy of the original three-task list would not have bound "chat" at all`, bindings["chat"])
+	}
+	if _, bound := bindings["capture_processing"]; bound {
+		t.Error(`bindTasks bound "capture_processing", which the swapped-in list no longer names — it is reading a hardcoded copy`)
 	}
 }
 
@@ -152,4 +160,206 @@ func TestResolveTaskProvidersFailsClosedWhenTheProviderCannotEmbed(t *testing.T)
 	if ok {
 		t.Fatal("resolveTaskProviders resolved embedding against an anthropic-typed provider, which does not implement ports.EmbeddingProvider")
 	}
+}
+
+// TestTasksTheBinaryRunsIsTheUnionOfBothLists is design D18a applied to the
+// gap between the two lists, rather than within each of them.
+//
+// tasksM1Consumes is what capture and recall need; tasksConsolidateConsumes
+// is what one consolidation pass needs. Both were already read live by
+// their own consumers, and neither list was wrong. What nobody owned was
+// their UNION — so `nooma init` bound M1's three tasks, the scheduler
+// needed belief_derivation, and the wizard produced a vault whose sleep
+// phase could not start.
+//
+// Mutation: return tasksM1Consumes and this fails on belief_derivation.
+func TestTasksTheBinaryRunsIsTheUnionOfBothLists(t *testing.T) {
+	got := map[string]bool{}
+	for _, task := range tasksTheBinaryRuns() {
+		if got[task] {
+			t.Errorf("task %q appears twice — the union is a set, and a caller building a "+
+				"map from it would silently absorb the duplicate", task)
+		}
+		got[task] = true
+	}
+
+	for _, list := range [][]string{tasksM1Consumes, tasksConsolidateConsumes} {
+		for _, task := range list {
+			if !got[task] {
+				t.Errorf("task %q is consumed by the binary and missing from the union — a "+
+					"vault the wizard writes would leave it unbound", task)
+			}
+		}
+	}
+	if len(got) != len(tasksTheBinaryRuns()) {
+		t.Errorf("the union has %d distinct members across %d entries", len(got), len(tasksTheBinaryRuns()))
+	}
+}
+
+// TestBindTasksBindsEveryTaskTheBinaryRuns is the wizard half of the
+// defect, and it is stated as the property rather than as a list of four
+// names: what the wizard owes a new vault is that nothing the binary runs
+// is left unbound, whatever that set becomes.
+//
+// Reported by a maintainer starting `nooma serve` on a freshly-initialised
+// vault and getting "scheduler: consolidation not scheduled: task
+// belief_derivation has no provider bound" — a message that is correct,
+// actionable, and should never have been reachable from the wizard's own
+// output.
+//
+// Mutation: bind only tasksM1Consumes and belief_derivation fails.
+func TestBindTasksBindsEveryTaskTheBinaryRuns(t *testing.T) {
+	bindings := bindTasks("embed-entry", "chat-entry")
+
+	for _, task := range tasksTheBinaryRuns() {
+		provider, bound := bindings[task]
+		if !bound {
+			t.Errorf("bindTasks left %q unbound — a wizard-written vault cannot run it", task)
+			continue
+		}
+		if provider == "" {
+			t.Errorf("bindTasks bound %q to an empty provider name", task)
+		}
+	}
+
+	// embedding is the one task that must not take the chat entry: a chat
+	// model is not an embedding model (design D15).
+	if bindings["embedding"] != "embed-entry" {
+		t.Errorf(`bindTasks["embedding"] = %q, want the embedding entry`, bindings["embedding"])
+	}
+	if bindings["belief_derivation"] != "chat-entry" {
+		t.Errorf(`bindTasks["belief_derivation"] = %q, want the chat entry`, bindings["belief_derivation"])
+	}
+}
+
+// TestCheckTaskCoverageCoversEveryTaskTheBinaryRuns is the doctor half.
+//
+// doctor reported "ok task coverage" on the very vault whose scheduler
+// refused to start, because the check was scoped to M1's three tasks. A
+// health check that passes a vault the binary cannot fully run is worse
+// than no check: it is a check that says the opposite of the truth.
+//
+// Mutation: scope the check back to tasksM1Consumes and this fails.
+func TestCheckTaskCoverageCoversEveryTaskTheBinaryRuns(t *testing.T) {
+	// Every task bound EXCEPT belief_derivation — exactly the vault
+	// `nooma init` used to write.
+	tasks := map[string]config.TaskBinding{}
+	for _, task := range tasksM1Consumes {
+		tasks[task] = config.TaskBinding{Provider: "local"}
+	}
+
+	cfg := &config.Config{
+		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
+		Tasks:     tasks,
+	}
+
+	err := checkTaskCoverage("", cfg)
+	if err == nil {
+		t.Fatal("checkTaskCoverage reported ok for a vault with belief_derivation unbound — " +
+			"that is the vault the wizard wrote, and its scheduler refuses to start")
+	}
+	if !strings.Contains(err.Error(), "belief_derivation") {
+		t.Errorf("error %q does not name belief_derivation", err.Error())
+	}
+}
+
+// TestRenderProvidersWritesEveryTaskTheBinaryRuns asserts on the YAML the
+// wizard actually writes, not on the bindings it computes.
+//
+// Those are different claims, and the difference is this defect's whole
+// shape. bindTasks was fixed to return the union and its own test went
+// green while `nooma init` kept writing three tasks — because
+// renderProviders iterates the task list AGAIN, twice, and was still
+// reading M1's. A test on the function that computes a value cannot notice
+// that the function which writes it out drops half.
+//
+// Found by running the real command against a temp vault and reading the
+// file, after the unit test said everything was fine.
+//
+// Mutation: point either loop in renderProviders back at tasksM1Consumes
+// and this fails on belief_derivation.
+func TestRenderProvidersWritesEveryTaskTheBinaryRuns(t *testing.T) {
+	choices, bindings := promptProviderSetup(strings.NewReader("1\n\n"), &strings.Builder{})
+	yml := renderProviders(choices, bindings)
+
+	for _, task := range tasksTheBinaryRuns() {
+		if !strings.Contains(yml, task+":") {
+			t.Errorf("the generated tasks: block never names %q, so a wizard-written vault "+
+				"leaves it unbound:\n%s", task, yml)
+		}
+	}
+
+	// And the block must be decodable and complete as config, not merely
+	// contain the right substrings — the same posture
+	// TestWizardPopulatedVaultDecodesAndValidates already takes.
+	cfg, err := config.Decode(strings.NewReader(defaultConfig(yml)))
+	if err != nil {
+		t.Fatalf("the generated config does not decode: %v\n%s", err, yml)
+	}
+	cfg.ApplyDefaults()
+	for _, task := range tasksTheBinaryRuns() {
+		binding, bound := cfg.Tasks[task]
+		if !bound {
+			t.Errorf("task %q is not bound in the decoded config", task)
+			continue
+		}
+		if _, present := cfg.Providers[binding.Provider]; !present {
+			t.Errorf("task %q binds provider %q, which the config does not declare", task, binding.Provider)
+		}
+	}
+}
+
+// TestTaskCoverageNamesTheRightConsequencePerTask: widening the check
+// without widening its message made the message wrong.
+//
+// An unbound capture_processing answers 503 on POST /capture. An unbound
+// belief_derivation does not — capture and recall work fine, and what
+// stops is the consolidation pass, on a line printed to the serve console
+// and nowhere else. Telling a user their captures will 503 when they will
+// not sends them to debug the wrong half of the binary.
+//
+// This is R5.4's Refinement 2 applied one layer out: "a formatting failure
+// and a vocabulary failure call for different advice, and a gate that
+// merges them throws away the distinction". Same here, for two failures
+// that share a check.
+//
+// Mutation: return one consequence for every task and this fails.
+func TestTaskCoverageNamesTheRightConsequencePerTask(t *testing.T) {
+	providers := map[string]config.Provider{"local": {Type: "ollama", Model: "m"}}
+
+	bindAllBut := func(missing string) *config.Config {
+		tasks := map[string]config.TaskBinding{}
+		for _, task := range tasksTheBinaryRuns() {
+			if task != missing {
+				tasks[task] = config.TaskBinding{Provider: "local"}
+			}
+		}
+		return &config.Config{Providers: providers, Tasks: tasks}
+	}
+
+	t.Run("an M1 task names capture and recall", func(t *testing.T) {
+		got := checkTaskCoverage("", bindAllBut("capture_processing"))
+		if got == nil {
+			t.Fatal("checkTaskCoverage reported ok with capture_processing unbound")
+		}
+		if !strings.Contains(got.Error(), "503") {
+			t.Errorf("message %q does not mention the 503 that capture and recall answer", got.Error())
+		}
+	})
+
+	t.Run("a consolidation-only task names consolidation", func(t *testing.T) {
+		got := checkTaskCoverage("", bindAllBut("belief_derivation"))
+		if got == nil {
+			t.Fatal("checkTaskCoverage reported ok with belief_derivation unbound")
+		}
+		if strings.Contains(got.Error(), "503") {
+			t.Errorf("message %q claims capture and recall will answer 503, which they will "+
+				"not — an unbound belief_derivation stops the consolidation pass and nothing "+
+				"else: %q", "503", got.Error())
+		}
+		if !strings.Contains(got.Error(), "consolidat") {
+			t.Errorf("message %q never mentions consolidation, which is what actually stops",
+				got.Error())
+		}
+	})
 }

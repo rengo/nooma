@@ -464,13 +464,19 @@ func TestCheckTaskCoverageReportsOKOnAFreshVault(t *testing.T) {
 // TestCheckTaskCoverageReportsOKWhenEveryTaskIsBound is design D18b row 1's
 // "providers configured, every member of tasksM1Consumes bound" case.
 func TestCheckTaskCoverageReportsOKWhenEveryTaskIsBound(t *testing.T) {
+	// Built from tasksTheBinaryRuns() rather than named literally, so this
+	// test's own name stays true. It used to bind M1's three by hand and
+	// call that "every task" — which was accurate until the union grew, and
+	// then quietly was not: the vault it described is exactly the one whose
+	// scheduler refuses to start.
+	tasks := map[string]config.TaskBinding{}
+	for _, task := range tasksTheBinaryRuns() {
+		tasks[task] = config.TaskBinding{Provider: "local"}
+	}
+
 	cfg := &config.Config{
 		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
-		Tasks: map[string]config.TaskBinding{
-			"capture_processing":  {Provider: "local"},
-			"relation_evaluation": {Provider: "local"},
-			"embedding":           {Provider: "local"},
-		},
+		Tasks:     tasks,
 	}
 	if err := checkTaskCoverage("", cfg); err != nil {
 		t.Errorf("checkTaskCoverage with every task bound = %v, want nil", err)

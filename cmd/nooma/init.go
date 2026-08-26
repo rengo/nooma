@@ -312,13 +312,13 @@ func renderProviders(choices []providerChoice, bindings map[string]string) strin
 	}
 
 	maxLen := 0
-	for _, task := range tasksM1Consumes {
+	for _, task := range tasksTheBinaryRuns() {
 		if len(task) > maxLen {
 			maxLen = len(task)
 		}
 	}
 	b.WriteString("\ntasks:\n")
-	for _, task := range tasksM1Consumes {
+	for _, task := range tasksTheBinaryRuns() {
 		fmt.Fprintf(&b, "  %-*s { provider: %s }\n", maxLen+1, task+":", bindings[task])
 	}
 	return b.String()
@@ -333,8 +333,12 @@ func renderProviders(choices []providerChoice, bindings map[string]string) strin
 // way wiring.go's own resolveTaskProviders is already proven — D18a's
 // second reader.
 func bindTasks(embedProvider, chatProvider string) map[string]string {
-	bindings := make(map[string]string, len(tasksM1Consumes))
-	for _, task := range tasksM1Consumes {
+	// Every task the binary runs, not just M1's. A vault the wizard writes
+	// with belief_derivation unbound starts, captures, recalls — and then
+	// refuses to schedule consolidation, which is the whole of M2's sleep
+	// phase, with an error the user only ever sees on the serve console.
+	bindings := make(map[string]string, len(tasksTheBinaryRuns()))
+	for _, task := range tasksTheBinaryRuns() {
 		if task == "embedding" {
 			bindings[task] = embedProvider
 		} else {
