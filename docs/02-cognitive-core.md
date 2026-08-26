@@ -389,6 +389,20 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      brings down the whole classification.
 2. **hybrid recall**: top-K by vector similarity + top-K by FTS, fused. Same mechanism serves
    both answering a `recall` and finding connection candidates.
+   - **Answering admits; searching for candidates does not** (ADR-0020). The two questions are
+     different. "What might be related" wants a generous net, because a judge decides
+     afterwards and a missed pair is a relation never considered. "What do I tell the reader"
+     wants a floor, because there is no judge after it: whatever comes back is presented to a
+     person as a fact. So the answering entrance keeps only what clears
+     `recall_min_similarity`, and candidate search keeps everything both legs found.
+   - **On the answering path the vector admits and the lexical leg ranks.** Nearest is not the
+     same as near enough: with one unit in a vault, every question is answered with that unit,
+     and the shape of the failure changes rather than improving as the vault grows — five
+     hundred units return a page of plausible things, confidently. The lexical leg cannot admit
+     on its own there because tokenisation carries no stopword handling, so a query's function
+     words match almost anything; it still ranks what the vector admitted. The cost is stated
+     rather than hidden: a rare proper noun or code whose embedding is poor no longer surfaces
+     on lexical evidence alone when answering. It still does when searching for candidates.
    - **One model per search.** Vector similarity is only defined between embeddings produced by
      the same model. A vault can hold two models at once while a reindex is in progress, so
      every vector search filters by model, and vectors from two models are never compared or
@@ -1147,6 +1161,7 @@ module):
 | `delay_caveat_minutes` (`internal/core/prospection.DelayCaveatMinutes`) | 15 — chosen: three shipped `proactive_check` ticks (`*/5 * * * *`), so scheduler granularity never produces a caveat on its own; the relation `delay_caveat_minutes >= 3 × proactive_check period` cannot be asserted yet — `internal/config/defaults.go` declares no schedule default today — and lands as an L2 test in `m3d` #1 once the tick has a Go home |
 | RRF `k` | 60 |
 | `recall_top_k` | 20 |
+| `recall_min_similarity` (`internal/core/recall.RecallMinSimilarity`) | 0.35 |
 | RRF vector-leg weight (`weight_vector`) | 1.0 |
 | RRF lexical-leg weight (`weight_lexical`) | 1.0 |
 | `dedup_candidate_k` | 5 |
