@@ -199,7 +199,7 @@ func TestArm(t *testing.T) {
 			// frequently lands before now. A monthly reminder therefore
 			// arms at now more often than not, which is the correct reading
 			// of "the system is not late for something it just learned".
-			wantFire := clampToNow(LeadTime(NextOccurrence(plan.Rule, plan.Anchor, now)), now)
+			wantFire, _ := clampToNow(LeadTime(NextOccurrence(plan.Rule, plan.Anchor, now)), now)
 			if !plan.FireAt.Equal(wantFire) {
 				t.Errorf("%q: FireAt = %v, want %v", from, plan.FireAt, wantFire)
 			}

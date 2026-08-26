@@ -69,9 +69,28 @@ const (
 // for the two trigger kinds — a timer fires at the instant the user named,
 // with no horizon in front of it.
 type Plan struct {
-	What      Armament
-	Why       Refusal // RefusalNone unless What == ArmNothing
-	FireAt    time.Time
+	What Armament
+	Why  Refusal // RefusalNone unless What == ArmNothing
+	// FireAt is when the nudge goes out. About is what it is about — the
+	// due instant of a timer, the event a trigger watches, the next
+	// occurrence a recurrence lands on.
+	//
+	// **They are routinely different, and reporting one as the other is
+	// how a correct reading looks like a misparse.** LeadTime moves a
+	// firing days ahead of its event and clampToNow can pull it to the
+	// capture instant, so "Reminder set for <FireAt>" answers a question
+	// nobody asked. Zero when What is ArmNothing.
+	FireAt time.Time
+	About  time.Time
+	// Immediate is true when clampToNow moved the firing to the capture
+	// instant, because the notification horizon was already behind.
+	//
+	// It is carried rather than re-derived: a reader comparing FireAt to
+	// About sees a gap of hours or days and describes the nudge as
+	// arriving "the day before", when it arrives NOW. The duration is
+	// right and the promise is false — which is exactly the class of
+	// defect this whole change exists to end.
+	Immediate bool
 	LeadDays  int
 	Rule      Rule
 	Anchor    Anchor
@@ -107,7 +126,7 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 		if !c.DueAt.After(now) {
 			return nothing(RefusalAlreadyPast)
 		}
-		return Plan{What: ArmTimer, FireAt: *c.DueAt, Interrupt: interrupt}, true
+		return Plan{What: ArmTimer, FireAt: *c.DueAt, About: *c.DueAt, Interrupt: interrupt}, true
 
 	case classify.KindRecurringReminder:
 		if c.EventAt == nil {
@@ -129,9 +148,17 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 		weekday := c.EventAt.Weekday()
 		anchor := Anchor{Month: c.EventAt.Month(), Day: c.EventAt.Day(), Weekday: &weekday}
 		rule := recurrenceRule(*c.RecurrenceRule)
+		// The next occurrence, re-derived from the anchor rather than the
+		// date the user stated: a birthday captured after this year's has
+		// passed arms for next year's, and About must name the instant the
+		// nudge is actually about.
+		next := NextOccurrence(rule, anchor, now)
+		fireAt, immediate := clampToNow(LeadTime(next), now)
 		return Plan{
 			What:      ArmRecurring,
-			FireAt:    clampToNow(LeadTime(NextOccurrence(rule, anchor, now)), now),
+			FireAt:    fireAt,
+			About:     next,
+			Immediate: immediate,
 			LeadDays:  EventLeadDays,
 			Rule:      rule,
 			Anchor:    anchor,
@@ -156,9 +183,12 @@ func datedTrigger(eventAt, now time.Time, interrupt Interrupt) (Plan, bool) {
 	if !eventAt.After(now) {
 		return Plan{What: ArmNothing, Why: RefusalAlreadyPast, Interrupt: interrupt}, false
 	}
+	fireAt, immediate := clampToNow(LeadTime(eventAt), now)
 	return Plan{
 		What:      ArmTrigger,
-		FireAt:    clampToNow(LeadTime(eventAt), now),
+		FireAt:    fireAt,
+		About:     eventAt,
+		Immediate: immediate,
 		LeadDays:  EventLeadDays,
 		Interrupt: interrupt,
 	}, true
@@ -169,11 +199,11 @@ func datedTrigger(eventAt, now time.Time, interrupt Interrupt) (Plan, bool) {
 // the past, and arming there hands the staleness gate something born
 // expired. The lead time is a notification horizon, and the system is not
 // late for an event it only just learned about.
-func clampToNow(fireAt, now time.Time) time.Time {
+func clampToNow(fireAt, now time.Time) (time.Time, bool) {
 	if fireAt.Before(now) {
-		return now
+		return now, true
 	}
-	return fireAt
+	return fireAt, false
 }
 
 // recurrenceRule converts classify's own vocabulary into this package's.

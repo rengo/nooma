@@ -124,6 +124,17 @@ type Armed struct {
 	// FireAt is when it will fire — the Plan's own instant, not a
 	// re-derivation.
 	FireAt time.Time
+	// About is what it is about: the appointment, the deadline, the next
+	// birthday. Carried separately because a reply that names FireAt
+	// answers a question nobody asked — the two differ whenever a lead
+	// time or a clamp moved the firing, which for a dated event is most
+	// of the time.
+	About time.Time
+	// Immediate says the nudge goes out now rather than at some remove
+	// from About — the plan's own fact, not a re-derivation from the two
+	// instants above, which would read a gap of hours and describe a
+	// reminder arriving "the day before" when it arrives at once.
+	Immediate bool
 }
 
 // ArmRefused is what CaptureResult carries when a capture classified as

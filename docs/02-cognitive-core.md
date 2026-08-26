@@ -514,6 +514,18 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    `recurring_reminder`'s unit is an `event`: what recurs is the nudge, not what is remembered.
    The capture reports what it armed, because that is the answer the user asked for, and names
    the unit it also stored.
+   **What it reports is the instant the armament is ABOUT, never the instant the nudge fires.**
+   Those differ for most dated things: the firing sits `event_lead_days` before the event, and is
+   pulled forward to the capture instant when that horizon is already behind. A reply naming the
+   firing answers a question nobody asked — "Reminder set for Wed 26 Aug, 15:26" is what a
+   correct reading of "el viernes a las 9am" looks like, and it was read as a misparse twice by
+   the person who wrote the message. A recurrence reports its NEXT occurrence rather than the
+   date the user stated, which for a birthday already past this year is a different year. A
+   timer is the one exception and needs no rule: it fires AT its subject, so the two instants
+   are the same one.
+   Whether the firing was pulled forward is carried as its own fact rather than inferred from
+   the two instants. Subtracting them gives a true duration and a false promise — 41 hours reads
+   as "the day before" for a reminder that arrives at once.
    Each arming writes exactly one `decision_log` row: `capture.armed.timer`,
    `capture.armed.trigger` or `capture.armed.recurring_trigger`. Three actions rather than one,
    because their contexts carry different facts — a timer has no lead days, no recurrence and no
@@ -1036,6 +1048,12 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
 `decision_log`: ONE table for all modules (`action`, `rationale`, `context` JSON,
 `occurred_at`). Every automatic decision with an effect is recorded with its reasoning.
 
+- **A rationale states what happened, never what was configured.** The distance between a
+  firing and the thing it is about is measured from the two instants, not read off
+  `event_lead_days`: a trigger armed for an event two days out fires at the capture instant, and
+  a rationale saying "7 days ahead of the event" records a gap that never existed. A table whose
+  purpose is evidence must not restate settings back as observations — that is the one way this
+  table can be worse than empty, because an empty one misleads nobody.
 - **Pull**: everything is recorded and explorable in the activity UI.
 - **Push**: only the big or the uncertain is proactively mentioned (low confidence or
   high-impact decision). "Cautious to capture, selective to speak", applied to its own

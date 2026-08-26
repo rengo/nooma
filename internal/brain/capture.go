@@ -788,7 +788,7 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 
 	return CaptureResult{
 		Outcome: OutcomeArmed,
-		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt},
+		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate},
 	}, nil
 }
 
@@ -921,11 +921,41 @@ func armRationale(plan prospection.Plan) string {
 	case prospection.ArmTimer:
 		return fmt.Sprintf("armed a timer to fire at %s", plan.FireAt.UTC().Format(time.RFC3339))
 	case prospection.ArmRecurring:
-		return fmt.Sprintf("armed a %s recurring trigger, first firing at %s, %d days ahead of the occurrence",
-			plan.Rule, plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
+		return fmt.Sprintf("armed a %s recurring trigger for %s, firing at %s%s",
+			plan.Rule, plan.About.UTC().Format(time.RFC3339),
+			plan.FireAt.UTC().Format(time.RFC3339), leadPhrase(plan))
 	default:
-		return fmt.Sprintf("armed a trigger to fire at %s, %d days ahead of the event",
-			plan.FireAt.UTC().Format(time.RFC3339), plan.LeadDays)
+		return fmt.Sprintf("armed a trigger for %s, firing at %s%s",
+			plan.About.UTC().Format(time.RFC3339),
+			plan.FireAt.UTC().Format(time.RFC3339), leadPhrase(plan))
+	}
+}
+
+// leadPhrase says how far ahead of its subject a firing actually lands,
+// which is not always the configured lead.
+//
+// The rationale used to state plan.LeadDays outright — "7 days ahead of
+// the event" — and clampToNow makes that false whenever the horizon was
+// already behind: an event two days out fires at the capture instant, and
+// the glass box recorded a seven-day gap that never existed. Doc 02 §11's
+// table is evidence, and evidence that restates configuration instead of
+// what happened is not evidence.
+func leadPhrase(plan prospection.Plan) string {
+	if plan.Immediate {
+		return ", firing at once because that horizon was already behind"
+	}
+	gap := plan.About.Sub(plan.FireAt)
+	switch {
+	case gap <= 0:
+		return ", which has already arrived"
+	case gap < 24*time.Hour:
+		return fmt.Sprintf(", %s ahead of it", gap.Round(time.Minute))
+	default:
+		days := int(gap.Hours() / 24)
+		if days == 1 {
+			return ", 1 day ahead of it"
+		}
+		return fmt.Sprintf(", %d days ahead of it", days)
 	}
 }
 
