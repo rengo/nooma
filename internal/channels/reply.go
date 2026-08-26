@@ -33,13 +33,20 @@ func RenderReply(result brain.CaptureResult) string {
 		if result.Armed == nil {
 			return ""
 		}
+		// **About, not FireAt.** The reply names the appointment, not the
+		// nudge. A dated event's firing is a lead time before it and can
+		// be clamped to the capture instant, so "Reminder set for <now>"
+		// is what a correct reading of "el viernes a las 9am" looked
+		// like — twice read as a misparse by the person who wrote it.
 		switch result.Armed.What {
 		case prospection.ArmTimer:
+			// A timer fires AT its subject: one instant, said once.
 			return fmt.Sprintf("Timer set for %s.", localTime(result.Armed.FireAt))
 		case prospection.ArmRecurring:
-			return fmt.Sprintf("Recurring reminder set — the next one is %s.", localTime(result.Armed.FireAt))
+			return fmt.Sprintf("Recurring reminder set for %s.", localTime(result.Armed.About))
 		default:
-			return fmt.Sprintf("Reminder set for %s.", localTime(result.Armed.FireAt))
+			return fmt.Sprintf("Noted for %s. I will remind you%s.",
+				localTime(result.Armed.About), nudgeWhen(result.Armed))
 		}
 
 	case brain.OutcomeArmRefused:
@@ -69,6 +76,27 @@ func RenderReply(result brain.CaptureResult) string {
 // instant's own zone, not the process's: the classification carried the
 // user's offset in, and re-rendering it in the server's zone would tell
 // someone in Buenos Aires about a reminder at a time nobody set.
+// nudgeWhen says when the reminder itself arrives, and says it in
+// relation to now rather than as a second date. Two absolute times in one
+// sentence is what made the original unreadable: the reader has to work
+// out which one is theirs.
+func nudgeWhen(a *brain.Armed) string {
+	if a.Immediate {
+		return " right away"
+	}
+	gap := a.About.Sub(a.FireAt)
+	switch {
+	case gap <= 0:
+		return " right away"
+	case gap < 24*time.Hour:
+		return " a few hours before"
+	case gap < 48*time.Hour:
+		return " the day before"
+	default:
+		return fmt.Sprintf(" %d days before", int(gap.Hours()/24))
+	}
+}
+
 func localTime(t time.Time) string {
 	return t.Format("Mon 2 Jan, 15:04")
 }
