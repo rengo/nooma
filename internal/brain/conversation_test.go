@@ -128,8 +128,8 @@ func TestDelivery_WithNoConversationRecordsWhyAndSendsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("at: %v", err)
 	}
-	if report.Delivered != 0 {
-		t.Errorf("report claims %d delivered with nowhere to deliver to", report.Delivered)
+	if report.TriggersDelivered != 0 {
+		t.Errorf("report claims %d trigger(s) delivered with nowhere to deliver to", report.TriggersDelivered)
 	}
 	if len(ch.sent) != 0 {
 		t.Errorf("the channel was asked to send %d message(s) with no conversation: %q",

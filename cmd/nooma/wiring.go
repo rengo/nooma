@@ -279,6 +279,9 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		// user's own words, which is what the rephrasing degrades to
 		// anyway.
 		nil,
+		// No conversation, for the same reason as the nil channel above:
+		// there is nowhere for this subcommand to push to.
+		"",
 	)
 }
 
@@ -367,6 +370,10 @@ func wireProactive(db *sqlite.Vault, cfg *config.Config, lookup func(string) (st
 		sqlite.NewUnitRepo(db),
 		sqlite.NewStateRepo(db),
 		llm,
+		// The vault's one push destination, or none. Empty whenever the
+		// config cannot name exactly one conversation — see
+		// brain.ProactiveConversation for why it refuses to pick.
+		brain.ProactiveConversation(cfg.Channels.Telegram.AllowedChatIDs),
 	), nil
 }
 

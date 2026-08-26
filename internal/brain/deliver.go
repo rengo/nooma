@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
@@ -90,8 +91,22 @@ func (r checkRunner) deliver(ctx context.Context, t ports.DueTrigger, now time.T
 		return false, nil
 	}
 
+	conversation := r.conversationFor(t)
+	if conversation == "" {
+		// A channel with nowhere to address. Recorded rather than silent,
+		// because unlike a missing channel this is a config the user
+		// meant to work: they enabled Telegram and the vault still cannot
+		// name one conversation to push to. Sending anyway is what
+		// produced a five-minute loop reporting a strconv parse error,
+		// which names the symptom and hides the cause.
+		return false, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+			fmt.Sprintf("trigger %q fired but this vault has no conversation to push to; "+
+				"allowed_chat_ids must name exactly one for a nudge to have a destination", t.ID),
+			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)})
+	}
+
 	text := renderPush(t, now)
-	if err := r.channel.Send(ctx, conversationFor(t), text); err != nil {
+	if err := r.channel.Send(ctx, conversation, text); err != nil {
 		return false, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("trigger %q fired but could not be delivered; it stays undelivered and a later pass will try again: %v", t.ID, err),
 			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)})
@@ -111,12 +126,36 @@ func (r checkRunner) deliver(ctx context.Context, t ports.DueTrigger, now time.T
 
 // conversationFor is where a trigger's delivery goes.
 //
-// One conversation for now, and the reason it is a function rather than a
-// field is that it is the seam a multi-conversation vault would widen. A
-// trigger carries a unit id, not a chat id: nothing in the schema links a
-// nudge to a conversation, because doc 02's model is one person and one
-// brain.
-func conversationFor(ports.DueTrigger) ports.ConversationID { return "" }
+// One conversation, resolved once at wiring time and carried by the runner
+// — a trigger carries a unit id, not a chat id, because doc 02's model is
+// one person and one brain. It stays a method taking a trigger rather than
+// a bare field read: that is the seam a multi-conversation vault would
+// widen, and the argument is what such a vault would dispatch on.
+//
+// Empty means this vault has no proactive destination, which callers check
+// BEFORE sending. It returned the empty string unconditionally until a live
+// vault spent five minutes at a time asking a transport to parse "" as a
+// chat id.
+func (r checkRunner) conversationFor(ports.DueTrigger) ports.ConversationID {
+	return r.conversation
+}
+
+// ProactiveConversation resolves a vault's one push destination from its
+// allowed chat ids, or nothing.
+//
+// **Exactly one, or none.** allowed_chat_ids is a list, and a vault that
+// allows a person AND a group has no single obvious destination; taking the
+// first would send a private nudge to whichever the YAML happened to name
+// first. Doc 02's model is one person and one brain, so a vault that cannot
+// name one conversation has no proactive destination — it keeps capturing
+// and answering, and it does not guess. Non-negotiable #7: the safety is
+// structural, because with no conversation the send is never attempted.
+func ProactiveConversation(allowedChatIDs []int64) ports.ConversationID {
+	if len(allowedChatIDs) != 1 {
+		return ""
+	}
+	return ports.ConversationID(strconv.FormatInt(allowedChatIDs[0], 10))
+}
 
 // renderPush is what a pushed trigger says.
 func renderPush(t ports.DueTrigger, now time.Time) string {
