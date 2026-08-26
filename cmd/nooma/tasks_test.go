@@ -153,3 +153,104 @@ func TestResolveTaskProvidersFailsClosedWhenTheProviderCannotEmbed(t *testing.T)
 		t.Fatal("resolveTaskProviders resolved embedding against an anthropic-typed provider, which does not implement ports.EmbeddingProvider")
 	}
 }
+
+// TestTasksTheBinaryRunsIsTheUnionOfBothLists is design D18a applied to the
+// gap between the two lists, rather than within each of them.
+//
+// tasksM1Consumes is what capture and recall need; tasksConsolidateConsumes
+// is what one consolidation pass needs. Both were already read live by
+// their own consumers, and neither list was wrong. What nobody owned was
+// their UNION — so `nooma init` bound M1's three tasks, the scheduler
+// needed belief_derivation, and the wizard produced a vault whose sleep
+// phase could not start.
+//
+// Mutation: return tasksM1Consumes and this fails on belief_derivation.
+func TestTasksTheBinaryRunsIsTheUnionOfBothLists(t *testing.T) {
+	got := map[string]bool{}
+	for _, task := range tasksTheBinaryRuns() {
+		if got[task] {
+			t.Errorf("task %q appears twice — the union is a set, and a caller building a "+
+				"map from it would silently absorb the duplicate", task)
+		}
+		got[task] = true
+	}
+
+	for _, list := range [][]string{tasksM1Consumes, tasksConsolidateConsumes} {
+		for _, task := range list {
+			if !got[task] {
+				t.Errorf("task %q is consumed by the binary and missing from the union — a "+
+					"vault the wizard writes would leave it unbound", task)
+			}
+		}
+	}
+	if len(got) != len(tasksTheBinaryRuns()) {
+		t.Errorf("the union has %d distinct members across %d entries", len(got), len(tasksTheBinaryRuns()))
+	}
+}
+
+// TestBindTasksBindsEveryTaskTheBinaryRuns is the wizard half of the
+// defect, and it is stated as the property rather than as a list of four
+// names: what the wizard owes a new vault is that nothing the binary runs
+// is left unbound, whatever that set becomes.
+//
+// Reported by a maintainer starting `nooma serve` on a freshly-initialised
+// vault and getting "scheduler: consolidation not scheduled: task
+// belief_derivation has no provider bound" — a message that is correct,
+// actionable, and should never have been reachable from the wizard's own
+// output.
+//
+// Mutation: bind only tasksM1Consumes and belief_derivation fails.
+func TestBindTasksBindsEveryTaskTheBinaryRuns(t *testing.T) {
+	bindings := bindTasks("embed-entry", "chat-entry")
+
+	for _, task := range tasksTheBinaryRuns() {
+		provider, bound := bindings[task]
+		if !bound {
+			t.Errorf("bindTasks left %q unbound — a wizard-written vault cannot run it", task)
+			continue
+		}
+		if provider == "" {
+			t.Errorf("bindTasks bound %q to an empty provider name", task)
+		}
+	}
+
+	// embedding is the one task that must not take the chat entry: a chat
+	// model is not an embedding model (design D15).
+	if bindings["embedding"] != "embed-entry" {
+		t.Errorf(`bindTasks["embedding"] = %q, want the embedding entry`, bindings["embedding"])
+	}
+	if bindings["belief_derivation"] != "chat-entry" {
+		t.Errorf(`bindTasks["belief_derivation"] = %q, want the chat entry`, bindings["belief_derivation"])
+	}
+}
+
+// TestCheckTaskCoverageCoversEveryTaskTheBinaryRuns is the doctor half.
+//
+// doctor reported "ok task coverage" on the very vault whose scheduler
+// refused to start, because the check was scoped to M1's three tasks. A
+// health check that passes a vault the binary cannot fully run is worse
+// than no check: it is a check that says the opposite of the truth.
+//
+// Mutation: scope the check back to tasksM1Consumes and this fails.
+func TestCheckTaskCoverageCoversEveryTaskTheBinaryRuns(t *testing.T) {
+	// Every task bound EXCEPT belief_derivation — exactly the vault
+	// `nooma init` used to write.
+	tasks := map[string]config.TaskBinding{}
+	for _, task := range tasksM1Consumes {
+		tasks[task] = config.TaskBinding{Provider: "local"}
+	}
+
+	cfg := &config.Config{
+		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
+		Tasks:     tasks,
+	}
+
+	err := checkTaskCoverage("", cfg)
+	if err == nil {
+		t.Fatal("checkTaskCoverage reported ok for a vault with belief_derivation unbound — " +
+			"that is the vault the wizard wrote, and its scheduler refuses to start")
+	}
+	if !strings.Contains(err.Error(), "belief_derivation") {
+		t.Errorf("error %q does not name belief_derivation", err.Error())
+	}
+}
