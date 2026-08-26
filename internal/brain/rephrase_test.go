@@ -168,3 +168,38 @@ func TestRephrasePrompt_AsksForTheDelayOnlyWhenItIsLate(t *testing.T) {
 		t.Errorf("a late prompt does not ask for a delay note:\n%s", late)
 	}
 }
+
+// TestRephrase_DoesNotAskForJSONMode is the negative half of
+// ports.LLMRequest.JSONOnly, and the only call site in the repository that
+// needs one.
+//
+// Every other LLM call parses its answer with a decoder that has a closed
+// contract, so every other call sets the flag. This one reads the answer as
+// a sentence and hands it to a human. Forced into JSON mode it would come
+// back as an object, and the "did the rephrasing fail?" fallback below it
+// tests for an EMPTY string — a JSON object is not empty, so the object
+// would sail through and be delivered to the user verbatim, braces and all.
+//
+// A defect that ships a broken message rather than an error is the shape
+// worth a test of its own.
+//
+// Mutation: set JSONOnly on the rephrase request and this fails.
+func TestRephrase_DoesNotAskForJSONMode(t *testing.T) {
+	llm := &scriptedLLM{text: "Time to take the bread out"}
+	r := checkRunner{ids: &countingIDs{}, log: &recordingLog{}, llm: llm}
+
+	if _, err := r.renderTimer(context.Background(),
+		dueTimer("t1", "take the bread out", rephraseFireAt),
+		rephraseFireAt.Add(time.Minute)); err != nil {
+		t.Fatalf("renderTimer: %v", err)
+	}
+
+	if len(llm.seen) != 1 {
+		t.Fatalf("the rephraser made %d calls, want 1", len(llm.seen))
+	}
+	if llm.seen[0].JSONOnly {
+		t.Error("the rephrasing asks for JSON mode — this answer is a sentence for a human, " +
+			"and an object would pass the empty-string fallback and reach the user with its " +
+			"braces on")
+	}
+}

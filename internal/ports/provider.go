@@ -15,6 +15,32 @@ type LLMRequest struct {
 	// Task names which pipeline call this request feeds (e.g. "classify"),
 	// matching testdata/llm/format.md's task field.
 	Task string
+	// JSONOnly says the caller will parse the response as JSON, and asks
+	// the provider to guarantee it can.
+	//
+	// **It states the caller's intent, never a vendor's mechanism.** OpenAI
+	// spells that guarantee response_format, Ollama spells it format,
+	// Anthropic's Messages API cannot spell it at all — and Anthropic
+	// rejects unknown body fields with a 400, so an adapter that cannot
+	// honour this must send nothing rather than guess. Each adapter renders
+	// the intent in its own dialect or declines; none of that reaches here.
+	//
+	// This does not weaken LLMResponse.Text's "bytes-as-string, never
+	// parsed" rule below. Asking a provider to emit JSON is not parsing it:
+	// the degradation rule stays a pure function of the returned bytes, in
+	// internal/core, where it is testable at L1 and proved once rather than
+	// once per provider.
+	//
+	// **A prompt sent with this set must contain the word "json".** OpenAI
+	// refuses json_object mode without it, and its documented behaviour is
+	// not a clean 400 but an unending stream of whitespace until the token
+	// budget is exhausted. TestJSONOnlyPromptsSayJSON pins that coupling,
+	// which otherwise lives between two files that never mention each other.
+	//
+	// False for a free-text task. timer_rephrase writes a sentence for a
+	// human, and a sentence forced into JSON mode answers in a shape nothing
+	// downstream parses.
+	JSONOnly bool
 }
 
 // LLMResponse is what an LLMProvider.Complete call returns on success.

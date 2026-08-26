@@ -470,7 +470,7 @@ func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []con
 // weight.Edge declares (see ConsolidateReport.newRelationEdges' own doc
 // comment for why this accumulates here rather than through a repo read).
 func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, target unit.Unit, report *ConsolidateReport, now time.Time) error {
-	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(source, []unit.Unit{target}), Task: taskRelationEvaluation})
+	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(source, []unit.Unit{target}), Task: taskRelationEvaluation, JSONOnly: true})
 	if err != nil {
 		return fmt.Errorf("consolidate: connect: judge relation for unit %q: %w", source.ID, err)
 	}
@@ -570,8 +570,9 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 	existingBeliefs := beliefsToConsolidation(active)
 
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{
-		Prompt: consolidation.BuildDerivePrompt(sources, existingBeliefs),
-		Task:   taskBeliefDerivation,
+		Prompt:   consolidation.BuildDerivePrompt(sources, existingBeliefs),
+		Task:     taskBeliefDerivation,
+		JSONOnly: true,
 	})
 	if err != nil {
 		return fmt.Errorf("consolidate: derive: judge belief derivation: %w", err)

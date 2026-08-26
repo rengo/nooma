@@ -43,7 +43,26 @@ func NewClient(baseURL, apiKey, model string, httpClient *http.Client) *Client {
 type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
+	// ResponseFormat is omitted entirely unless the caller asked for JSON.
+	// A pointer rather than a value with omitempty, because an empty struct
+	// is not empty to encoding/json and would serialise as
+	// "response_format":{"type":""} — a field the vendor would reject on a
+	// request that never wanted it.
+	ResponseFormat *responseFormat `json:"response_format,omitempty"`
 }
+
+// responseFormat is OpenAI's JSON-mode envelope. json_object rather than
+// json_schema: a schema would have to declare every property as required
+// (strict mode admits no optional fields), which turns eleven of
+// classify's optional absences into present-nulls the decoder degrades —
+// and classify's structured_data accepts any JSON value by contract, a
+// shape strict mode cannot express at all.
+type responseFormat struct {
+	Type string `json:"type"`
+}
+
+// jsonObjectFormat is the one value this adapter sends.
+const jsonObjectFormat = "json_object"
 
 type chatMessage struct {
 	Role    string `json:"role"`
@@ -63,10 +82,15 @@ type choice struct {
 // vendor's raw message content — never parsed into a classification
 // (design D7; I14's degradation rule is core/classify's, Phase B's).
 func (c *Client) Complete(ctx context.Context, req ports.LLMRequest) (ports.LLMResponse, error) {
-	body, err := json.Marshal(chatRequest{
+	request := chatRequest{
 		Model:    c.model,
 		Messages: []chatMessage{{Role: "user", Content: req.Prompt}},
-	})
+	}
+	if req.JSONOnly {
+		request.ResponseFormat = &responseFormat{Type: jsonObjectFormat}
+	}
+
+	body, err := json.Marshal(request)
 	if err != nil {
 		return ports.LLMResponse{}, fmt.Errorf("openai: encoding request: %w", err)
 	}
