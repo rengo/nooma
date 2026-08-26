@@ -503,9 +503,17 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    classification's own `due_at`; a dated `event` and a `recurring_reminder` each become one
    `triggers` row, `kind = time_based`, carrying `payload.lead_days` and the resolved
    `interrupt_level` (§7's `NULL` ↔ degraded contract), the recurring one adding
-   `recurrence_rule` and `recurrence_anchor`. A capture that arms something persists no unit at
-   all — §8's "a timer is NEVER a unit" is what routes it before the unit is ever built — and
-   the capture reports what it armed, not that it stored something.
+   `recurrence_rule` and `recurrence_anchor`.
+   **What arms is not what decides whether a unit is kept — the kind is.** A `timer` persists no
+   unit, and §8's "a timer is NEVER a unit" is what routes it before the unit is ever built. A
+   dated `event` and a `recurring_reminder` are memory that also carries a nudge: their unit is
+   built, persisted and embedded first, and the `triggers` row then hangs off it by `unit_id`.
+   That is what §7's "the SAME source unit" and I17 both require in order to mean anything —
+   stated here because an earlier reading generalised §8's rule to everything armable, and left
+   a vault holding triggers whose `unit_id` was NULL, which no foreign key rejects. A
+   `recurring_reminder`'s unit is an `event`: what recurs is the nudge, not what is remembered.
+   The capture reports what it armed, because that is the answer the user asked for, and names
+   the unit it also stored.
    Each arming writes exactly one `decision_log` row: `capture.armed.timer`,
    `capture.armed.trigger` or `capture.armed.recurring_trigger`. Three actions rather than one,
    because their contexts carry different facts — a timer has no lead days, no recurrence and no

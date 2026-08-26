@@ -210,12 +210,25 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// instant Capture already read — there is no second clock read here,
 	// and captureRunner holds no clock to make one with.
 	plan, armable := prospection.Arm(c, now)
+
+	// **A kind that persists NO unit arms and returns here.** That is the
+	// timer, and only the timer: I04 stays structural because ToUnit is
+	// never reached for it, which is what this fork's position bought.
+	//
+	// Everything else armable keeps going. A dated event and a recurring
+	// reminder are memory that also carries a nudge, and the nudge hangs
+	// off the memory — doc 02 §7's "the SAME source unit" and I17 both
+	// require that unit to exist. This fork used to return for every
+	// armable kind, so it did not: a live vault held two triggers, zero
+	// units, and a NULL unit_id that no foreign key rejects.
 	if armable {
-		result, err := r.arm(ctx, c, plan, now)
-		if err != nil {
-			return CaptureResult{}, err
+		if _, persistsUnit := c.Kind.UnitType(); !persistsUnit {
+			result, err := r.arm(ctx, c, plan, now, nil)
+			if err != nil {
+				return CaptureResult{}, err
+			}
+			return result, nil
 		}
-		return result, nil
 	}
 
 	// A classification that asked to arm something and could not still has
@@ -341,6 +354,22 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	candidates := make([]string, len(candidateUnits))
 	for i, cu := range candidateUnits {
 		candidates[i] = cu.ID
+	}
+
+	// Arming happens AFTER the memory is whole — persisted, embedded and
+	// judged against its neighbours — because the armament points at it.
+	// The result reports the arming, since that is the fact the user
+	// asked for, and carries the unit id so the caller can name what was
+	// also stored.
+	if armable {
+		armed, err := r.arm(ctx, c, plan, now, &u.ID)
+		if err != nil {
+			return CaptureResult{}, err
+		}
+		armed.UnitID = u.ID
+		armed.Embedded = embedded
+		armed.Candidates = candidates
+		return armed, nil
 	}
 
 	return CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
@@ -678,7 +707,7 @@ func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u u
 // The id is generated here rather than inside prospection: Plan is a
 // decision about what to arm, and an id is a fact about a row that does
 // not exist yet.
-func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan prospection.Plan, now time.Time) (CaptureResult, error) {
+func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan prospection.Plan, now time.Time, unitID *string) (CaptureResult, error) {
 	id := r.ids.New()
 
 	switch plan.What {
@@ -708,7 +737,12 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 	case prospection.ArmTrigger, prospection.ArmRecurring:
 		fireAt := plan.FireAt
 		trigger := ports.Trigger{
-			ID:             id,
+			ID: id,
+			// The unit this nudge hangs off. nil only reaches here from a
+			// kind that persists none, and no such kind builds a trigger —
+			// ports.Trigger.UnitID is nil for a pattern_based trigger,
+			// which this never is.
+			UnitID:         unitID,
 			Kind:           ports.TriggerKindTimeBased,
 			InterruptLevel: interruptColumn(plan.Interrupt),
 			Payload: ports.TriggerPayload{

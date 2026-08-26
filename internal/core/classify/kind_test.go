@@ -45,7 +45,7 @@ func TestAllKinds(t *testing.T) {
 // TestKind_UnitType covers R1.1's own "MUST NOT be confused with unit.Type"
 // half: the seven Kind values that persist a unit map to unit.Type's
 // same-named member, and the six that never persist a unit — chitchat,
-// out_of_scope, recall, correction, timer, recurring_reminder
+// out_of_scope, recall, correction and timer
 // (docs/02-cognitive-core.md §8: "a timer is NEVER a unit") — return false,
 // leaving the caller (classify.ToUnit, PR 7b) unable to forget the check.
 func TestKind_UnitType(t *testing.T) {
@@ -57,6 +57,10 @@ func TestKind_UnitType(t *testing.T) {
 		KindProcedural: unit.TypeProcedural,
 		KindEmotional:  unit.TypeEmotional,
 		KindList:       unit.TypeList,
+		// A birthday is an event that repeats. The recurrence lives on the
+		// trigger; the memory is the same shape as any other dated thing,
+		// so no new units.type member is needed and no migration with it.
+		KindRecurringReminder: unit.TypeEvent,
 	}
 	for k, want := range persisting {
 		got, ok := k.UnitType()
@@ -65,9 +69,13 @@ func TestKind_UnitType(t *testing.T) {
 		}
 	}
 
+	// Five, not six. recurring_reminder moved into the persisting table
+	// above: a birthday is memory, and what recurs is the nudge. It had
+	// been excluded on the strength of §8's "a timer is NEVER a unit" — a
+	// rule about timers, applied to a kind that is not one.
 	nonPersisting := []Kind{
 		KindChitchat, KindOutOfScope, KindRecall, KindCorrection,
-		KindTimer, KindRecurringReminder,
+		KindTimer,
 	}
 	for _, k := range nonPersisting {
 		if _, ok := k.UnitType(); ok {
