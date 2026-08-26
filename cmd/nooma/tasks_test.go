@@ -91,11 +91,19 @@ func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
 
 	bindings := bindTasks("embed-entry", "chat-entry")
 
-	if len(bindings) != 1 {
-		t.Fatalf("bindTasks returned %d bindings, want exactly 1 for the swapped-in list: %+v", len(bindings), bindings)
+	// The liveness claim is unchanged: swapping the var must change what
+	// bindTasks produces. What moved is the count — bindTasks now reads the
+	// union of both task lists, so the swapped-in member arrives ALONGSIDE
+	// tasksConsolidateConsumes rather than instead of everything.
+	if len(bindings) != len(tasksTheBinaryRuns()) {
+		t.Fatalf("bindTasks returned %d bindings for a union of %d: %+v",
+			len(bindings), len(tasksTheBinaryRuns()), bindings)
 	}
 	if bindings["chat"] != "chat-entry" {
 		t.Errorf(`bindTasks["chat"] = %q, want "chat-entry" — a hardcoded copy of the original three-task list would not have bound "chat" at all`, bindings["chat"])
+	}
+	if _, bound := bindings["capture_processing"]; bound {
+		t.Error(`bindTasks bound "capture_processing", which the swapped-in list no longer names — it is reading a hardcoded copy`)
 	}
 }
 
@@ -252,5 +260,51 @@ func TestCheckTaskCoverageCoversEveryTaskTheBinaryRuns(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "belief_derivation") {
 		t.Errorf("error %q does not name belief_derivation", err.Error())
+	}
+}
+
+// TestRenderProvidersWritesEveryTaskTheBinaryRuns asserts on the YAML the
+// wizard actually writes, not on the bindings it computes.
+//
+// Those are different claims, and the difference is this defect's whole
+// shape. bindTasks was fixed to return the union and its own test went
+// green while `nooma init` kept writing three tasks — because
+// renderProviders iterates the task list AGAIN, twice, and was still
+// reading M1's. A test on the function that computes a value cannot notice
+// that the function which writes it out drops half.
+//
+// Found by running the real command against a temp vault and reading the
+// file, after the unit test said everything was fine.
+//
+// Mutation: point either loop in renderProviders back at tasksM1Consumes
+// and this fails on belief_derivation.
+func TestRenderProvidersWritesEveryTaskTheBinaryRuns(t *testing.T) {
+	choices, bindings := promptProviderSetup(strings.NewReader("1\n\n"), &strings.Builder{})
+	yml := renderProviders(choices, bindings)
+
+	for _, task := range tasksTheBinaryRuns() {
+		if !strings.Contains(yml, task+":") {
+			t.Errorf("the generated tasks: block never names %q, so a wizard-written vault "+
+				"leaves it unbound:\n%s", task, yml)
+		}
+	}
+
+	// And the block must be decodable and complete as config, not merely
+	// contain the right substrings — the same posture
+	// TestWizardPopulatedVaultDecodesAndValidates already takes.
+	cfg, err := config.Decode(strings.NewReader(defaultConfig(yml)))
+	if err != nil {
+		t.Fatalf("the generated config does not decode: %v\n%s", err, yml)
+	}
+	cfg.ApplyDefaults()
+	for _, task := range tasksTheBinaryRuns() {
+		binding, bound := cfg.Tasks[task]
+		if !bound {
+			t.Errorf("task %q is not bound in the decoded config", task)
+			continue
+		}
+		if _, present := cfg.Providers[binding.Provider]; !present {
+			t.Errorf("task %q binds provider %q, which the config does not declare", task, binding.Provider)
+		}
 	}
 }

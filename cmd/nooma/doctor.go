@@ -533,7 +533,11 @@ func checkTaskCoverage(_ string, cfg *config.Config) error {
 	}
 
 	var problems []string
-	for _, task := range tasksM1Consumes {
+	// The same union the wizard binds. Scoped to tasksM1Consumes this check
+	// reported "ok task coverage" over the very vault whose scheduler
+	// refused to start — a health check that passes a vault the binary
+	// cannot fully run says the opposite of the truth.
+	for _, task := range tasksTheBinaryRuns() {
 		if _, bound := cfg.Tasks[task]; !bound {
 			problems = append(problems, fmt.Sprintf("%s is unbound — %s", task, taskCoverageConsequence))
 		}
