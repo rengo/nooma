@@ -214,11 +214,13 @@ func TestToUnit_PriorsFillDegradedWeightAndDecay(t *testing.T) {
 // there are exactly two (design D4 as C10.2 corrected it).
 func TestToUnit_ErrorsOnTheTwoUnbuildableCases(t *testing.T) {
 	t.Run("a Kind that persists no unit", func(t *testing.T) {
-		// The six Kind values that map to no unit.Type — a timer is NEVER a
-		// unit (doc 02 §8), and neither is chitchat or a recall request.
+		// The five Kind values that map to no unit.Type — a timer is NEVER
+		// a unit (doc 02 §8), and neither is chitchat or a recall request.
+		// recurring_reminder is not among them: it persists a unit.TypeEvent,
+		// and only its nudge recurs.
 		for _, k := range []Kind{
 			KindChitchat, KindOutOfScope, KindRecall,
-			KindCorrection, KindTimer, KindRecurringReminder,
+			KindCorrection, KindTimer,
 		} {
 			c := wholeClassification()
 			c.Kind = &k

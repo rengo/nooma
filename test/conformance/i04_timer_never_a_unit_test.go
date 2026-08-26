@@ -17,7 +17,7 @@ import (
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
-// TestI04_TimerAndRecurringReminderNeverPersistAUnit is I04's own
+// TestI04_TimerNeverPersistsAUnit is I04's own
 // conformance test (docs/06-harness.md §4).
 //
 // docs/02-cognitive-core.md §8 states in bold "A timer is NEVER a unit: no
@@ -28,13 +28,24 @@ import (
 // under real load for the first time and this test asserts it against what
 // was actually persisted.
 //
-// A timer or recurring_reminder classification MUST leave:
+// **Timers only.** This test was named for two kinds and asserted the
+// MUST below for both, but I04's own row (docs/06-harness.md §4) reads "A
+// timer is never a unit", and doc 02 §8 reads "A timer is NEVER a unit".
+// Neither mentions a recurring reminder. The second case came from §5's
+// broader "a capture that arms something persists no unit at all" — a
+// different claim, borrowing this invariant's name for authority it never
+// granted, and one doc 02 now states the other way: a birthday is memory
+// whose nudge repeats. Narrowing this back to timers restores it to the
+// invariant it is named for; the recurring case lives in
+// arming_capture_keeps_its_unit_test.go, asserting the opposite.
+//
+// A timer classification MUST leave:
 //   - zero units rows,
 //   - exactly one row in the table its armament belongs to and zero in the
 //     other, and
 //   - a CaptureResult naming what was armed (Outcome: OutcomeArmed, Armed
 //     carrying the armament, the created id, and the fire instant).
-func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
+func TestI04_TimerNeverPersistsAUnit(t *testing.T) {
 	tests := []struct {
 		name         string
 		llmCase      string
@@ -50,14 +61,6 @@ func TestI04_TimerAndRecurringReminderNeverPersistAUnit(t *testing.T) {
 			wantArmament: prospection.ArmTimer,
 			wantTimers:   1,
 			wantTriggers: 0,
-		},
-		{
-			name:         "recurring_reminder",
-			llmCase:      "classify-recurring-reminder-armed-mothers-birthday",
-			wantKind:     classify.KindRecurringReminder,
-			wantArmament: prospection.ArmRecurring,
-			wantTimers:   0,
-			wantTriggers: 1,
 		},
 	}
 

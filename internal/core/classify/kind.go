@@ -40,17 +40,24 @@ func AllKinds() []Kind {
 }
 
 // UnitType maps k onto unit.Type where a persisted unit exists. It returns
-// false for the six Kind values that never persist a unit — chitchat,
-// out_of_scope, recall, correction, timer, recurring_reminder
-// (docs/02-cognitive-core.md §8: "a timer is NEVER a unit") — so the
-// caller (classify.ToUnit, PR 7b) cannot forget to check.
+// false for the five Kind values that never persist a unit — chitchat,
+// out_of_scope, recall, correction and timer — so the caller
+// (classify.ToUnit) cannot forget to check.
+//
+// **recurring_reminder maps to unit.TypeEvent.** It was in the false list,
+// justified by §8's "a timer is NEVER a unit" — a rule about timers,
+// applied to a kind that is not one. A birthday is memory; what recurs is
+// the nudge, and recurrence is a property of the trigger rather than of
+// what is remembered. Nothing new is added to units.type: doc 02 §5's
+// "a distinct type from event, not an event with a flag" is about THIS
+// vocabulary, which stays distinct because it decides what gets armed.
 func (k Kind) UnitType() (unit.Type, bool) {
 	switch k {
 	case KindTask:
 		return unit.TypeTask, true
 	case KindMentalLoad:
 		return unit.TypeMentalLoad, true
-	case KindEvent:
+	case KindEvent, KindRecurringReminder:
 		return unit.TypeEvent, true
 	case KindKnowledge:
 		return unit.TypeKnowledge, true
