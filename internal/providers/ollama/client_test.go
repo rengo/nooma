@@ -93,3 +93,49 @@ func TestClient_CompleteSurfacesVendorErrorStatus(t *testing.T) {
 		t.Fatal("Complete returned a nil error for a 500 vendor response")
 	}
 }
+
+// TestClient_JSONOnlyAsksForOllamasOwnFormatField is the same intent in
+// this vendor's dialect.
+//
+// Ollama's /api/generate takes a top-level `format`, not OpenAI's nested
+// response_format envelope. Copying the OpenAI shape here would be silently
+// ignored — Ollama drops unknown top-level keys — which is the worst
+// available outcome: a request that looks constrained and is not.
+//
+// Mutation: rename the field to response_format and this fails.
+func TestClient_JSONOnlyAsksForOllamasOwnFormatField(t *testing.T) {
+	bodyFor := func(t *testing.T, req ports.LLMRequest) map[string]any {
+		t.Helper()
+
+		var gotBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+				t.Errorf("decoding request body: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"model":"llama3.1","response":"{}","done":true}`))
+		}))
+		defer server.Close()
+
+		if _, err := NewClient(server.URL, "llama3.1", server.Client()).
+			Complete(context.Background(), req); err != nil {
+			t.Fatalf("Complete: %v", err)
+		}
+		return gotBody
+	}
+
+	t.Run("asked for", func(t *testing.T) {
+		body := bodyFor(t, ports.LLMRequest{Prompt: "answer with one JSON object", Task: "classify", JSONOnly: true})
+		if body["format"] != "json" {
+			t.Errorf("request body format = %v, want %q — Ollama's own field, not OpenAI's "+
+				"response_format, which it would ignore without erroring", body["format"], "json")
+		}
+	})
+
+	t.Run("not asked for", func(t *testing.T) {
+		body := bodyFor(t, ports.LLMRequest{Prompt: "say something", Task: "timer_rephrase"})
+		if _, ok := body["format"]; ok {
+			t.Errorf("request body carries format for a caller that never asked for JSON: %v", body["format"])
+		}
+	})
+}
