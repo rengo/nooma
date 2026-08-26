@@ -86,7 +86,18 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return len(carry), nil
 	}
 
-	if err := r.channel.Send(ctx, "", renderDigest(carry, pending)); err != nil {
+	if r.conversation == "" {
+		// Same rule the pushed path takes: no destination, no send. The
+		// items stay undelivered and tomorrow's digest carries them,
+		// which is exactly what a failed send would have left behind —
+		// without asking the transport to parse an empty chat id first.
+		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+			fmt.Sprintf("the digest could not be delivered; this vault has no conversation to "+
+				"push to, so its %d item(s) stay undelivered and tomorrow's digest carries them", len(carry)),
+			checkDetail{})
+	}
+
+	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending)); err != nil {
 		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})

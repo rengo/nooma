@@ -92,7 +92,7 @@ func TestDeliver_APushRoutedTriggerIsSentAndMarked(t *testing.T) {
 	ch := &sendingChannel{}
 	log := &recordingLog{}
 
-	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: log, channel: ch}.
+	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: log, channel: ch, conversation: testConversation}.
 		at(context.Background(), deliverNow, true)
 	if err != nil {
 		t.Fatalf("at: %v", err)
@@ -117,7 +117,7 @@ func TestDeliver_ADigestRoutedTriggerFiresAndWaits(t *testing.T) {
 	}}
 	ch := &sendingChannel{}
 
-	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}, channel: ch}.
+	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}, channel: ch, conversation: testConversation}.
 		at(context.Background(), deliverNow, true)
 	if err != nil {
 		t.Fatalf("at: %v", err)
@@ -148,7 +148,7 @@ func TestDeliver_AFailedSendLeavesItUndelivered(t *testing.T) {
 	ch := &sendingChannel{err: errors.New("telegram is down")}
 	log := &recordingLog{}
 
-	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: log, channel: ch}.
+	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: log, channel: ch, conversation: testConversation}.
 		at(context.Background(), deliverNow, true)
 	if err != nil {
 		t.Fatalf("at: %v — a transport failure must not fail the pass; every trigger behind this one would pay for it", err)
@@ -175,7 +175,7 @@ func TestDeliver_ASentButUnrecordedDeliveryIsLoud(t *testing.T) {
 		surfaceErr: errors.New("the vault is closed"),
 	}
 
-	_, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}, channel: &sendingChannel{}}.
+	_, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}, channel: &sendingChannel{}, conversation: testConversation}.
 		at(context.Background(), deliverNow, true)
 	if err == nil {
 		t.Fatal("at returned nil after a send that could not be recorded — the same nudge would be re-delivered every pass")
@@ -211,7 +211,7 @@ func TestDeliver_DryRunSendsNothing(t *testing.T) {
 	ch := &sendingChannel{}
 	log := &recordingLog{}
 
-	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: log, channel: ch}.
+	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: log, channel: ch, conversation: testConversation}.
 		at(context.Background(), deliverNow, false)
 	if err != nil {
 		t.Fatalf("dry run: %v", err)

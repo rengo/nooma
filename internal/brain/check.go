@@ -26,12 +26,15 @@ type CheckService struct {
 
 // NewCheckService wires a CheckService over the ports one scan needs.
 // clock is read exactly once per Check call; run never sees it.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider) *CheckService {
+// NewCheckService builds the scan. conversation is the vault's one push
+// destination (brain.ProactiveConversation), empty when it has none.
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID) *CheckService {
 	return &CheckService{
 		clock: clock,
 		run: checkRunner{
 			triggers: triggers, timers: timers, ids: ids, log: log,
 			channel: channel, units: units, state: state, llm: llm,
+			conversation: conversation,
 		},
 	}
 }
@@ -195,8 +198,8 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 			// back. A send failure is recorded and the pass continues:
 			// the timer is already fired, and failing here would cost
 			// every timer behind it for a transport problem.
-			if r.channel != nil {
-				if err := r.channel.Send(ctx, "", delivery.text); err != nil {
+			if r.channel != nil && r.conversation != "" {
+				if err := r.channel.Send(ctx, r.conversation, delivery.text); err != nil {
 					if logErr := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 						fmt.Sprintf("timer %q fired but could not be delivered: %v", t.ID, err),
 						detail); logErr != nil {
@@ -252,6 +255,13 @@ type checkRunner struct {
 	// simply has nowhere to speak, which is what `nooma check` on a
 	// Telegram-less vault is.
 	channel ports.Channel
+	// conversation is WHO a delivery goes to, and empty is legal for the
+	// same reason a nil channel is: a vault that cannot name exactly one
+	// conversation has no proactive destination. It is checked before
+	// every send rather than passed through — an empty id reaches the
+	// transport as an unparseable chat and fails every pass, which is
+	// exactly what it did.
+	conversation ports.ConversationID
 	// units and state are the digest's own reads: the focus candidates it
 	// ranks by, and the energy reading its care gate consults. Both are
 	// nil-tolerant in the same way channel is — a pass without them still

@@ -316,12 +316,17 @@ func (emptyTimers) Due(context.Context, time.Time) ([]ports.DueTimer, error) { r
 func (emptyTimers) Fire(context.Context, string, time.Time, *string) error   { return nil }
 func (emptyTimers) Cancel(context.Context, string) error                     { return nil }
 
-// recordingLog is a ports.DecisionLog that only counts, because that is all
-// these cases assert.
-type recordingLog struct{ actions []ports.DecisionAction }
+// recordingLog is a ports.DecisionLog that counts actions and keeps their
+// rationales — the count is all most cases assert, and a case about WHY a
+// delivery did not happen needs the sentence a reader would see.
+type recordingLog struct {
+	actions    []ports.DecisionAction
+	rationales []string
+}
 
 func (l *recordingLog) Record(_ context.Context, d ports.Decision) error {
 	l.actions = append(l.actions, d.Action)
+	l.rationales = append(l.rationales, d.Rationale)
 	return nil
 }
 
