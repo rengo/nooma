@@ -125,6 +125,13 @@ type Trigger struct {
 	ID string
 	// UnitID is the unit the trigger hangs off, or nil for a
 	// pattern_based trigger, which hangs off nothing (migration 0001:44).
+	//
+	// A time_based trigger from a capture always has one: the capture
+	// stores its unit first and the trigger points at it (doc 02 §5). A
+	// NULL here for such a row satisfies the foreign key — a NULL
+	// reference violates nothing — while making §7's "the SAME source
+	// unit" and I17 unrepresentable, which is how a live vault came to
+	// hold two triggers and zero units.
 	UnitID *string
 	// Kind is time_based for everything prospection.Arm produces.
 	Kind TriggerKind
