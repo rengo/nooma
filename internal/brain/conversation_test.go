@@ -46,9 +46,15 @@ func (c *recordingChannel) Close() error { return nil }
 // once at wiring time and carried by the runner.
 //
 // Mutation: return "" again and every subtest fails.
+// testConversation is the destination every delivery fixture speaks to. A
+// scan wired with a channel needs one: doc 02's model is one person and one
+// brain, and a runner with a channel and no conversation is a vault that
+// cannot push, which is its own case below rather than the default.
+const testConversation = ports.ConversationID("12449194")
+
 func TestDelivery_AddressesTheVaultsOwnConversation(t *testing.T) {
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
-	const conv = ports.ConversationID("12449194")
+	const conv = testConversation
 
 	t.Run("a pushed trigger goes to it", func(t *testing.T) {
 		ch := &recordingChannel{}

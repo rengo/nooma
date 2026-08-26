@@ -64,8 +64,7 @@ func digestRunner(t *testing.T, triggers ports.TriggerRepo, units ports.UnitRepo
 	t.Helper()
 	return checkRunner{
 		triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{},
-		log: log, channel: ch, units: units, state: state,
-	}
+		log: log, channel: ch, units: units, state: state, conversation: testConversation}
 }
 
 // TestDigest_IsSentOnceADay is R3.1.
