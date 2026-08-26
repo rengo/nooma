@@ -76,6 +76,11 @@ func (r checkRunner) renderTimer(ctx context.Context, t ports.DueTimer, now time
 		return timerDelivery{text: withCaveat(verbatim, overdue)}, nil
 	}
 
+	// **JSONOnly is deliberately not set.** This is the one LLM call in the
+	// repository whose answer is read as a sentence rather than parsed, and
+	// a free-text task forced into JSON mode answers in a shape nothing
+	// downstream reads — the fallback below would then fire on every timer,
+	// silently, since a JSON object is not an empty string.
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{
 		Prompt: rephrasePrompt(verbatim, overdue),
 		Task:   rephraseTask,

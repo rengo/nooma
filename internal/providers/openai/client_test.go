@@ -92,3 +92,59 @@ func TestClient_CompleteSurfacesVendorErrorStatus(t *testing.T) {
 		t.Fatal("Complete returned a nil error for a 429 vendor response")
 	}
 }
+
+// TestClient_JSONOnlyAsksForJSONMode is ports.LLMRequest.JSONOnly reaching
+// the wire, and its absence staying absent.
+//
+// The flag says what the CALLER will do with the answer — parse it as JSON
+// — not how a vendor should be asked. Each adapter renders that intent in
+// its own dialect; this one uses response_format, which is OpenAI's, and a
+// request without the flag must not carry the field at all. The absence
+// assertion follows embed_test.go's "dimensions" precedent: a knob that
+// appears when nobody asked for it is as wrong as one that never appears.
+//
+// Mutation: send response_format unconditionally and the second subtest
+// fails; drop it entirely and the first does.
+func TestClient_JSONOnlyAsksForJSONMode(t *testing.T) {
+	bodyFor := func(t *testing.T, req ports.LLMRequest) map[string]any {
+		t.Helper()
+
+		var gotBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+				t.Errorf("decoding request body: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"model":"gpt-4o","choices":[{"message":{"role":"assistant","content":"{}"}}]}`))
+		}))
+		defer server.Close()
+
+		if _, err := NewClient(server.URL, "sk-test-key", "gpt-4o", server.Client()).
+			Complete(context.Background(), req); err != nil {
+			t.Fatalf("Complete: %v", err)
+		}
+		return gotBody
+	}
+
+	t.Run("asked for", func(t *testing.T) {
+		body := bodyFor(t, ports.LLMRequest{Prompt: "answer with one JSON object", Task: "classify", JSONOnly: true})
+
+		rf, ok := body["response_format"].(map[string]any)
+		if !ok {
+			t.Fatalf("request body carries no response_format object: %v", body["response_format"])
+		}
+		if rf["type"] != "json_object" {
+			t.Errorf("response_format.type = %v, want %q", rf["type"], "json_object")
+		}
+	})
+
+	t.Run("not asked for", func(t *testing.T) {
+		body := bodyFor(t, ports.LLMRequest{Prompt: "say something", Task: "timer_rephrase"})
+
+		if _, ok := body["response_format"]; ok {
+			t.Errorf("request body carries response_format for a caller that never asked for "+
+				"JSON — a free-text task forced into JSON mode answers in a shape nothing "+
+				"parses: %v", body["response_format"])
+		}
+	})
+}

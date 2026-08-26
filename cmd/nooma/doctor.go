@@ -412,7 +412,7 @@ func evaluateTask(ctx context.Context, provider ports.LLMProvider, task string, 
 			continue
 		}
 		callCtx, cancel := context.WithTimeout(ctx, timeout)
-		resp, err := provider.Complete(callCtx, ports.LLMRequest{Prompt: qualityGatePrompt(task, c, now), Task: task})
+		resp, err := provider.Complete(callCtx, ports.LLMRequest{Prompt: qualityGatePrompt(task, c, now), Task: task, JSONOnly: true})
 		cancel()
 		if err != nil {
 			result.unreachable = fmt.Sprintf("unreachable — %v (doctor waits up to %s per prompt)", err, timeout)

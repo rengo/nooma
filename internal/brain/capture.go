@@ -170,7 +170,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
 	prompt := classify.BuildPrompt(in.Text, nil, now)
 
-	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: prompt, Task: taskCaptureProcessing})
+	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: prompt, Task: taskCaptureProcessing, JSONOnly: true})
 	if err != nil {
 		return CaptureResult{}, fmt.Errorf("capture: classify completion: %w", err)
 	}
@@ -468,7 +468,7 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 		candidates = candidates[:relation.DedupCandidateK]
 	}
 
-	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(u, candidates), Task: taskRelationEvaluation})
+	resp, err := r.judge.Complete(ctx, ports.LLMRequest{Prompt: JudgePrompt(u, candidates), Task: taskRelationEvaluation, JSONOnly: true})
 	if err != nil {
 		return r.recordDedupFailedDecision(ctx, u, now, err)
 	}

@@ -50,6 +50,12 @@ type generateRequest struct {
 	// object — a decode error at runtime, not a request-shape one, which is
 	// exactly why this field has no `omitempty`.
 	Stream bool `json:"stream"`
+	// Format is Ollama's own constrained-output field, and it is a
+	// TOP-LEVEL string — not OpenAI's nested response_format envelope.
+	// Ollama drops unknown top-level keys silently, so sending the OpenAI
+	// shape here would produce a request that looks constrained and is not:
+	// the one outcome worse than sending nothing.
+	Format string `json:"format,omitempty"`
 }
 
 type generateResponse struct {
@@ -62,11 +68,16 @@ type generateResponse struct {
 // vendor's raw text — never parsed into a classification (design D7; I14's
 // degradation rule is core/classify's, Phase B's).
 func (c *Client) Complete(ctx context.Context, req ports.LLMRequest) (ports.LLMResponse, error) {
-	body, err := json.Marshal(generateRequest{
+	request := generateRequest{
 		Model:  c.model,
 		Prompt: req.Prompt,
 		Stream: false,
-	})
+	}
+	if req.JSONOnly {
+		request.Format = "json"
+	}
+
+	body, err := json.Marshal(request)
 	if err != nil {
 		return ports.LLMResponse{}, fmt.Errorf("ollama: encoding request: %w", err)
 	}
