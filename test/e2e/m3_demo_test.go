@@ -101,7 +101,7 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 	check := func(now time.Time) brain.CheckReport {
 		t.Helper()
 		report, err := brain.NewCheckService(demoClock{now: now}, triggers, timers,
-			ids, decisions, channel, units, state, nil).
+			ids, decisions, channel, units, state, nil, "12449194").
 			Check(ctx, brain.CheckRequest{})
 		if err != nil {
 			t.Fatalf("check at %s: %v", now.Format("15:04"), err)

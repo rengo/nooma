@@ -145,7 +145,7 @@ func TestI16_DeliveryIsDeferredInQuietHoursExceptATimer(t *testing.T) {
 				t.Fatalf("Create timer: %v", err)
 			}
 
-			report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, memrepo.NewDecisionLog(), ch, nil, nil, nil).
+			report, err := brain.NewCheckService(fixedClock{now: now}, triggers, timers, &counterIDs{}, memrepo.NewDecisionLog(), ch, nil, nil, nil, "12449194").
 				Check(ctx, brain.CheckRequest{})
 			if err != nil {
 				t.Fatalf("Check: %v", err)
