@@ -308,3 +308,58 @@ func TestRenderProvidersWritesEveryTaskTheBinaryRuns(t *testing.T) {
 		}
 	}
 }
+
+// TestTaskCoverageNamesTheRightConsequencePerTask: widening the check
+// without widening its message made the message wrong.
+//
+// An unbound capture_processing answers 503 on POST /capture. An unbound
+// belief_derivation does not — capture and recall work fine, and what
+// stops is the consolidation pass, on a line printed to the serve console
+// and nowhere else. Telling a user their captures will 503 when they will
+// not sends them to debug the wrong half of the binary.
+//
+// This is R5.4's Refinement 2 applied one layer out: "a formatting failure
+// and a vocabulary failure call for different advice, and a gate that
+// merges them throws away the distinction". Same here, for two failures
+// that share a check.
+//
+// Mutation: return one consequence for every task and this fails.
+func TestTaskCoverageNamesTheRightConsequencePerTask(t *testing.T) {
+	providers := map[string]config.Provider{"local": {Type: "ollama", Model: "m"}}
+
+	bindAllBut := func(missing string) *config.Config {
+		tasks := map[string]config.TaskBinding{}
+		for _, task := range tasksTheBinaryRuns() {
+			if task != missing {
+				tasks[task] = config.TaskBinding{Provider: "local"}
+			}
+		}
+		return &config.Config{Providers: providers, Tasks: tasks}
+	}
+
+	t.Run("an M1 task names capture and recall", func(t *testing.T) {
+		got := checkTaskCoverage("", bindAllBut("capture_processing"))
+		if got == nil {
+			t.Fatal("checkTaskCoverage reported ok with capture_processing unbound")
+		}
+		if !strings.Contains(got.Error(), "503") {
+			t.Errorf("message %q does not mention the 503 that capture and recall answer", got.Error())
+		}
+	})
+
+	t.Run("a consolidation-only task names consolidation", func(t *testing.T) {
+		got := checkTaskCoverage("", bindAllBut("belief_derivation"))
+		if got == nil {
+			t.Fatal("checkTaskCoverage reported ok with belief_derivation unbound")
+		}
+		if strings.Contains(got.Error(), "503") {
+			t.Errorf("message %q claims capture and recall will answer 503, which they will "+
+				"not — an unbound belief_derivation stops the consolidation pass and nothing "+
+				"else: %q", "503", got.Error())
+		}
+		if !strings.Contains(got.Error(), "consolidat") {
+			t.Errorf("message %q never mentions consolidation, which is what actually stops",
+				got.Error())
+		}
+	})
+}

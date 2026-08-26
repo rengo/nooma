@@ -496,7 +496,29 @@ func qualityGateError(results []taskQualityResult) error {
 // vector." Tracked in tasks.md's own C21.1 — spec.md and design.md both
 // still carry the stale wording as of this fix; this doctor row is the
 // corrected one.
-const taskCoverageConsequence = "POST /capture and POST /recall will answer 503 — nothing is captured, not a degraded capture — until every one of tasksM1Consumes is bound"
+const taskCoverageConsequence = "POST /capture and POST /recall will answer 503 — nothing is captured, not a degraded capture — until every task capture and recall need is bound"
+
+// taskCoverageConsolidateConsequence is what an unbound consolidation-only
+// task actually costs, and it is a different thing entirely.
+//
+// Capture and recall keep working; what stops is the nightly pass, on one
+// line printed to the serve console and nowhere else. Telling a user their
+// captures will 503 when they will not sends them to debug the half of the
+// binary that is fine — R5.4's Refinement 2, one layer out: two failures
+// sharing a check still owe the reader their own advice.
+const taskCoverageConsolidateConsequence = "consolidation will not be scheduled — capture and recall keep working, and the nightly pass that derives beliefs and merges duplicates does not run"
+
+// taskCoverageConsequenceFor picks the consequence a given unbound task
+// actually has. A task capture and recall need answers 503; one only a
+// consolidation pass reads stops the scheduler.
+func taskCoverageConsequenceFor(task string) string {
+	for _, m1 := range tasksM1Consumes {
+		if m1 == task {
+			return taskCoverageConsequence
+		}
+	}
+	return taskCoverageConsolidateConsequence
+}
 
 // taskCoverageDetail marks checkTaskCoverage's own success-with-something-
 // to-say state (design D18b row 1's "no providers configured at all" row) —
@@ -539,7 +561,7 @@ func checkTaskCoverage(_ string, cfg *config.Config) error {
 	// cannot fully run says the opposite of the truth.
 	for _, task := range tasksTheBinaryRuns() {
 		if _, bound := cfg.Tasks[task]; !bound {
-			problems = append(problems, fmt.Sprintf("%s is unbound — %s", task, taskCoverageConsequence))
+			problems = append(problems, fmt.Sprintf("%s is unbound — %s", task, taskCoverageConsequenceFor(task)))
 		}
 	}
 	if len(problems) == 0 {
