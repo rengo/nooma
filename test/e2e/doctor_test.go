@@ -93,7 +93,7 @@ func TestDoctorExitCodeIsUsableInAScript(t *testing.T) {
 // implemented honestly is worse than an absent one, because its passing means
 // nothing.
 //
-// tasks: binds all three of tasksM1Consumes — design D18b row 1 (16b) now
+// tasks: binds every member of tasksM1Consumes — design D18b row 1 (16b) now
 // FAILs a configured-but-partially-bound vault (the exact C9 shape), so a
 // fixture naming providers: with no tasks: at all would trip that new check
 // and fail this test for an unrelated reason. capture_processing and
@@ -113,6 +113,10 @@ func TestDoctorMakesNoNetworkCall(t *testing.T) {
 		"tasks:\n" +
 		"  capture_processing:\n    provider: audio\n" +
 		"  relation_evaluation:\n    provider: audio\n" +
+		// chat joined the coverage check with ADR-0021, which gave the
+		// task its first caller. Bound to audio for this fixture's own
+		// reason, like the two above it.
+		"  chat:\n    provider: audio\n" +
 		"  embedding:\n    provider: local\n" +
 		// belief_derivation joined the coverage check when `nooma init`
 		// started binding every task the binary runs: a vault missing it

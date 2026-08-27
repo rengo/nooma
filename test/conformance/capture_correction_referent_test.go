@@ -46,7 +46,7 @@ func TestCapture_CorrectionExplicitReferentWinsWithoutRecall(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 		}
-		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 		result, err := svc.Capture(ctx, brain.CaptureInput{
 			Text:       "irrelevant — the fake replays by case id, not prompt text",
@@ -99,7 +99,7 @@ func TestCapture_CorrectionExplicitReferentWinsWithoutRecall(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 		}
-		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 		_, err = svc.Capture(ctx, brain.CaptureInput{
 			Text:       "irrelevant — the fake replays by case id, not prompt text",
@@ -161,7 +161,7 @@ func TestCapture_CorrectionChatPathReferentResolution(t *testing.T) {
 		relations := memrepo.NewRelations()
 		llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-correction-dentist-date")
 		embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 		result, err := svc.Capture(ctx, brain.CaptureInput{Text: rawText, Channel: "chat"})
 		if err != nil {
@@ -235,7 +235,7 @@ func TestCapture_CorrectionChatPathReferentResolution(t *testing.T) {
 		relations := memrepo.NewRelations()
 		llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-correction-dentist-date")
 		embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 		result, err := svc.Capture(ctx, brain.CaptureInput{Text: rawText, Channel: "chat"})
 		if err != nil {
@@ -332,7 +332,7 @@ func TestCapture_CorrectionChatPathReferentResolution(t *testing.T) {
 		relations := memrepo.NewRelations()
 		llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-correction-dentist-date")
 		embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+		svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
 		result, err := svc.Capture(ctx, brain.CaptureInput{Text: rawText, Channel: "chat"})
 		if err != nil {

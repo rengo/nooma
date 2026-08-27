@@ -47,7 +47,16 @@ const (
 	// OutcomeArmRefused: the capture asked for a nudge and could not get
 	// one — an undated timer, or a date already behind us.
 	OutcomeArmRefused CaptureOutcome = "arm_refused"
-	OutcomeDiscarded  CaptureOutcome = "discarded" // chitchat / out_of_scope
+	// OutcomeConversed: a chitchat, answered by the chat task
+	// (ADR-0021). It replaces half of the retired "discarded", which said
+	// only that nothing was stored — true of this too, and not the part
+	// the person is waiting to hear.
+	OutcomeConversed CaptureOutcome = "conversed"
+	// OutcomeOutOfScope: the person asked for something Nooma does not
+	// do. The other half of the retired "discarded", and separate from
+	// OutcomeConversed for the reason ADR-0021 gives: this one must never
+	// be answered by a model, because a model answers it with a promise.
+	OutcomeOutOfScope CaptureOutcome = "out_of_scope"
 	OutcomeRecalled   CaptureOutcome = "recalled"  // a recall, answered
 	OutcomeCorrected  CaptureOutcome = "corrected" // a correction, applied
 	OutcomeAsked      CaptureOutcome = "asked"     // a correction whose referent or plan was ambiguous
@@ -58,7 +67,8 @@ const (
 // var, for the same mutability reason ports.AllDecisionActions is one.
 func AllCaptureOutcomes() []CaptureOutcome {
 	return []CaptureOutcome{
-		OutcomeStored, OutcomeArmed, OutcomeArmRefused, OutcomeDiscarded,
+		OutcomeStored, OutcomeArmed, OutcomeArmRefused,
+		OutcomeConversed, OutcomeOutOfScope,
 		OutcomeRecalled, OutcomeCorrected, OutcomeAsked,
 	}
 }
@@ -67,9 +77,21 @@ func AllCaptureOutcomes() []CaptureOutcome {
 // over Outcome (design D8): only the fields naming that outcome are ever
 // populated; every other field stays its zero value.
 type CaptureResult struct {
-	// Outcome names which of the seven ways this capture ended — the one
+	// Outcome names which of the eight ways this capture ended — the one
 	// field every caller switches on.
 	Outcome CaptureOutcome
+
+	// Reply is the model's own answer to a chitchat. Set only for
+	// Outcome == OutcomeConversed, and **empty on that outcome means the
+	// chat task did not answer** — a provider outage, or a completion that
+	// came back blank. That is not a second outcome: nothing was going to
+	// be stored either way, so an outage loses nothing and the capture is
+	// not a failure (doc 02 §5's product rule). It is a real state a
+	// renderer must handle, which is why it is documented here rather than
+	// left for a renderer to discover, and why RenderReply carries an
+	// explicit branch for it instead of falling through to an empty
+	// message.
+	Reply string
 
 	// UnitID is the ID of the unit this capture persisted. Set only for
 	// Outcome == OutcomeStored.

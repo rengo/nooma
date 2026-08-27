@@ -12,18 +12,21 @@ import (
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
-// TestCapture_OrphanActionsNowHaveCallers is design D8's own half of this PR
-// (13a.2): three decision_log actions — capture.discarded,
-// capture.classify.unparseable, capture.classify.unclassifiable — have been
-// declared since PR 10a and never called outside
-// test/support/repocontract's own fixture data. This proves each now has a
-// real production caller inside captureRunner.at, before classify.ToUnit is
-// ever reached (the same "route before ToUnit" shape
+// TestCapture_OrphanActionsNowHaveCallers is design D8's own half of
+// 13a.2: decision_log actions declared since PR 10a and never called
+// outside test/support/repocontract's own fixture data. This proves each
+// has a real production caller inside captureRunner.at, before
+// classify.ToUnit is ever reached (the same "route before ToUnit" shape
 // m1b-pipeline's R4.6 established for the timer refusal).
 //
-// The correction/recall Kind forks (design D8's other half) are 12g's, not
-// this PR's — chitchat, out_of_scope, an unparseable response and a
-// typeless classification are the only four cases this table drives.
+// **It used to drive four cases, and drives two.** chitchat and
+// out_of_scope both landed on capture.discarded here, which is precisely
+// the collapse ADR-0021 undid: they now leave different rows, answer
+// differently, and only one of them calls a provider — none of which this
+// table's shape can express, since it asserts one action and nothing about
+// the reply. TestI25_ChitchatIsAnsweredAndOutOfScopeIsRefused owns them
+// now. What is left here is the pair this test was always the right shape
+// for: a response that could not be parsed, and one with no type in it.
 func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -31,8 +34,6 @@ func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 		wantAction ports.DecisionAction
 		wantErr    bool
 	}{
-		{"chitchat is discarded, not stored", "classify-chitchat-hello", ports.ActionCaptureDiscarded, false},
-		{"out_of_scope is discarded, not stored", "classify-out-of-scope-weather", ports.ActionCaptureDiscarded, false},
 		{"an unparseable response is capture.classify.unparseable", "classify-empty-response", ports.ActionCaptureUnparseable, true},
 		{"an out-of-vocabulary type degrades to unclassifiable", "classify-unknown-enum-value", ports.ActionCaptureUnclassifiable, true},
 	}
@@ -53,9 +54,9 @@ func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 
-			result, err := svc.Capture(ctx, brain.CaptureInput{
+			_, err = svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the scripted LLM case drives the classification",
 				Channel: "chat",
 			})
@@ -63,13 +64,8 @@ func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 				if err == nil {
 					t.Fatal("Capture error = nil, want an error — nothing can be built from this classification")
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("Capture error = %v, want nil — a discarded classification is not a failure", err)
-				}
-				if result.Outcome != brain.OutcomeDiscarded {
-					t.Errorf("Outcome = %q, want %q — a discarded classification persists no unit", result.Outcome, brain.OutcomeDiscarded)
-				}
+			} else if err != nil {
+				t.Fatalf("Capture error = %v, want nil", err)
 			}
 			if got := units.Count(); got != 0 {
 				t.Errorf("units.Count() = %d, want 0 — none of this table's cases ever reach classify.ToUnit", got)

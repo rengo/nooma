@@ -74,6 +74,8 @@ tasks:
     provider: local
   relation_evaluation:
     provider: local
+  chat:
+    provider: local
   belief_derivation:
     provider: local
   embedding:
@@ -373,6 +375,8 @@ tasks:
   capture_processing:
     provider: local
   relation_evaluation:
+    provider: local
+  chat:
     provider: local
   belief_derivation:
     provider: local

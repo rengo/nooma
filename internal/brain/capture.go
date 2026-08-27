@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/chat"
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/recall"
@@ -28,6 +29,13 @@ const taskCaptureProcessing = "capture_processing"
 // entry, restated as a literal for the same reason taskCaptureProcessing is
 // (spec R5.5, design D7).
 const taskRelationEvaluation = "relation_evaluation"
+
+// taskChat is the LLMRequest.Task value a chitchat reply sends —
+// internal/config.DocumentedTaskNames' own "chat" entry, restated as a
+// literal for the same reason the two above are. It has been a documented,
+// wizard-bound, doctor-reported task since M1 with no caller at all; this
+// is the caller (ADR-0021).
+const taskChat = "chat"
 
 // CaptureService is the one entry point into the capture pipeline, and the
 // only place in this package holding a ports.Clock — design D4 Layer 1.
@@ -60,7 +68,7 @@ type CaptureService struct {
 // index is the in-memory Index ADR-0012 requires be loaded once at vault
 // open — NewCaptureService never builds one itself, it only holds the one
 // its caller already loaded.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo) *CaptureService {
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, chatter ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo) *CaptureService {
 	sharedRecall := NewRecallService(index, lex, units, embed)
 	return &CaptureService{
 		clock: clock,
@@ -73,6 +81,7 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			log:      log,
 			llm:      llm,
 			judge:    judge,
+			chat:     chatter,
 			embed:    embed,
 			index:    index,
 			recall:   sharedRecall,
@@ -112,8 +121,13 @@ type captureRunner struct {
 	log    ports.DecisionLog
 	llm    ports.LLMProvider // capture_processing
 	judge  ports.LLMProvider // relation_evaluation
-	embed  ports.EmbeddingProvider
-	index  *Index
+	// chat is the pipeline's third ports.LLMProvider use, and the only
+	// one whose answer is shown to a person verbatim rather than decoded
+	// (ADR-0021). Nothing is parsed out of it, so nothing about it lives
+	// in internal/core beyond the prompt.
+	chat  ports.LLMProvider // chat
+	embed ports.EmbeddingProvider
+	index *Index
 	// recall is design D9's one shared RecallService instance — built once
 	// by NewCaptureService, not per capture (fixing a per-call construction
 	// this field replaces below). correction holds the same instance
@@ -279,19 +293,32 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{Outcome: OutcomeRecalled, Recalled: units}, nil
 	}
 
-	// The discard fork (design D8, 13a's own half of it): chitchat and
-	// out_of_scope are not memory, so they never reach classify.ToUnit at
-	// all — the same "route before ToUnit" shape the retired timer refusal
-	// established.
-	if c.Kind != nil && (*c.Kind == classify.KindChitchat || *c.Kind == classify.KindOutOfScope) {
-		rationale := fmt.Sprintf("classified as %q — not memory content, nothing was stored", string(*c.Kind))
+	// The two kinds that are not memory (design D8's discard fork, split
+	// in two by ADR-0021): neither reaches classify.ToUnit at all — the
+	// same "route before ToUnit" shape the retired timer refusal
+	// established — and they part company on what the person is owed.
+	//
+	// They were one fork returning one outcome until a Spanish greeting
+	// came back as "Nothing to keep there.". Merging them was never a
+	// language bug: it was one decision ("nothing was stored") standing in
+	// for a different one ("nothing needs answering"), and only one of
+	// those two is true of a greeting.
+	if c.Kind != nil && *c.Kind == classify.KindChitchat {
+		return r.converse(ctx, in.Text, now)
+	}
+
+	// An out_of_scope makes no completion, deliberately. Handing it to a
+	// model is handing it a request for a capability nobody built, and a
+	// model with no tools answers that with a promise (ADR-0021).
+	if c.Kind != nil && *c.Kind == classify.KindOutOfScope {
+		rationale := "classified as \"out_of_scope\" — nothing was stored, and the request is not something Nooma does"
 		ctxValue := struct {
 			Kind string `json:"kind"`
 		}{Kind: string(*c.Kind)}
-		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureDiscarded, rationale, now, ctxValue); err != nil {
+		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureOutOfScope, rationale, now, ctxValue); err != nil {
 			return CaptureResult{}, err
 		}
-		return CaptureResult{Outcome: OutcomeDiscarded}, nil
+		return CaptureResult{Outcome: OutcomeOutOfScope}, nil
 	}
 
 	// A classification with no type at all has nothing left to decide from
@@ -965,7 +992,9 @@ func marshalContext(v any) (json.RawMessage, error) {
 }
 
 // recordOrphanDecision writes one of design D8's three orphan-action rows
-// this PR gives a caller — capture.discarded, capture.classify.unparseable,
+// this PR gives a caller — capture.discarded (retired by ADR-0021, whose
+// capture.chitchat.answered, capture.out_of_scope and capture.chat.failed
+// took the same shape), capture.classify.unparseable,
 // capture.classify.unclassifiable — sharing one shape (a rationale plus a
 // context value, nothing else) unlike this file's other record* methods,
 // none of which have a unit or a full classification to embed.
@@ -980,6 +1009,59 @@ func (r captureRunner) recordOrphanDecision(ctx context.Context, action ports.De
 		return fmt.Errorf("capture: record %s decision: %w", action, err)
 	}
 	return nil
+}
+
+// converse answers a chitchat — the one path in this pipeline whose reply
+// is a model's own sentence rather than one written here (ADR-0021,
+// doc 02 §5 step 1).
+//
+// It takes the raw message, never the classification's normalized_content:
+// the reply's language is the message's language, and a normalization is a
+// paraphrase written for storage that may already have changed it.
+//
+// **An outage degrades to silence, it never fails the capture.** There was
+// nothing to store, so there is nothing for the failure to lose — doc 02
+// §5's product rule, applied here exactly as ActionCaptureDedupFailed
+// applies it to a judge outage. The empty Reply is a documented state of
+// CaptureResult, not an accident, and the renderer has an explicit branch
+// for it.
+//
+// A completion that succeeds but comes back blank takes the same path as
+// an outage, for the reason the two are indistinguishable to the person:
+// no answer arrived. Recording it under the same action would be the only
+// lie available here, so the rationale says which of the two it was.
+func (r captureRunner) converse(ctx context.Context, message string, now time.Time) (CaptureResult, error) {
+	resp, err := r.chat.Complete(ctx, ports.LLMRequest{Prompt: chat.BuildPrompt(message), Task: taskChat})
+
+	reply := ""
+	if err == nil {
+		reply = strings.TrimSpace(resp.Text)
+	}
+
+	if reply == "" {
+		rationale := "the chat task returned an empty completion — the chitchat went unanswered"
+		failure := ""
+		if err != nil {
+			rationale = "the chat task did not answer — the chitchat went unanswered"
+			failure = err.Error()
+		}
+		ctxValue := struct {
+			Error string `json:"error"`
+		}{Error: failure}
+		if logErr := r.recordOrphanDecision(ctx, ports.ActionCaptureChatFailed, rationale, now, ctxValue); logErr != nil {
+			return CaptureResult{}, logErr
+		}
+		return CaptureResult{Outcome: OutcomeConversed}, nil
+	}
+
+	ctxValue := struct {
+		Model string `json:"model"`
+	}{Model: resp.Model}
+	rationale := "classified as \"chitchat\" — nothing was stored, and the chat task answered it"
+	if err := r.recordOrphanDecision(ctx, ports.ActionCaptureConversed, rationale, now, ctxValue); err != nil {
+		return CaptureResult{}, err
+	}
+	return CaptureResult{Outcome: OutcomeConversed, Reply: reply}, nil
 }
 
 // recordEmbeddingFailedDecision writes decision_log's account of design

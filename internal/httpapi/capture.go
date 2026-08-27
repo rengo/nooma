@@ -194,7 +194,14 @@ func renderCaptureResult(result brain.CaptureResult) (int, captureResponse) {
 			Message: result.ArmRefused.Message,
 		}
 
-	case brain.OutcomeDiscarded:
+	case brain.OutcomeConversed:
+		// The reply travels in Message, the field ArmRefused already uses
+		// for "the caller-visible sentence" — one meaning, one field. An
+		// empty Message on this outcome is the documented did-not-answer
+		// state of CaptureResult.Reply, not a missing field.
+		return http.StatusOK, captureResponse{Outcome: string(result.Outcome), Message: result.Reply}
+
+	case brain.OutcomeOutOfScope:
 		return http.StatusOK, captureResponse{Outcome: string(result.Outcome)}
 
 	case brain.OutcomeRecalled:

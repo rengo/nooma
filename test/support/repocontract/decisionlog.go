@@ -102,7 +102,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 
 		third := fixtureDecision("decision-third", ports.ActionCaptureUnitCreated, base.Add(3*time.Minute))
 		first := fixtureDecision("decision-first", ports.ActionCaptureClassify, base.Add(1*time.Minute))
-		second := fixtureDecision("decision-second", ports.ActionCaptureDiscarded, base.Add(2*time.Minute))
+		second := fixtureDecision("decision-second", ports.ActionCaptureOutOfScope, base.Add(2*time.Minute))
 		for _, d := range []ports.Decision{third, first, second} {
 			if err := repo.Record(ctx, d); err != nil {
 				t.Fatalf("Record %s: %v", d.ID, err)
@@ -130,15 +130,17 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 	// but lives here because it is part of what design D9 calls "the
 	// DecisionLog contract" and this suite is where 10a's single RED
 	// ("undefined: ports.DecisionLog") is meant to come from.
-	t.Run("AllDecisionActions returns exactly the forty design D9/D5/§7.5 members", func(t *testing.T) {
+	t.Run("AllDecisionActions returns exactly the forty-two design D9/D5/§7.5/ADR-0021 members", func(t *testing.T) {
 		want := map[ports.DecisionAction]bool{
 			ports.ActionCaptureClassify:                 true,
 			ports.ActionCaptureUnparseable:              true,
 			ports.ActionCaptureUnclassifiable:           true,
-			ports.ActionCaptureDiscarded:                true,
+			ports.ActionCaptureConversed:                true,
+			ports.ActionCaptureOutOfScope:               true,
 			ports.ActionCaptureUnitCreated:              true,
 			ports.ActionCaptureEmbeddingFailed:          true,
 			ports.ActionCaptureDedupFailed:              true,
+			ports.ActionCaptureChatFailed:               true,
 			ports.ActionCapturePersonRefAmbiguous:       true,
 			ports.ActionCaptureArmedTimer:               true,
 			ports.ActionCaptureArmedTrigger:             true,

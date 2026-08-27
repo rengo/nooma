@@ -243,9 +243,33 @@ func runCaptureForRefusalSweep(t *testing.T, now time.Time, decisions ports.Deci
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
+	// Only a chitchat reaches the chat task (ADR-0021), so only a chitchat
+	// sweep scripts it. Scripting it unconditionally would fail every
+	// other kind at cleanup with an uncalled case, which is the same
+	// unscripted-call guard working in the other direction.
+	chatScript := []string(nil)
+	if kind == "chitchat" {
+		chatCaseJSON, err := json.Marshal(map[string]any{
+			"id":       "swept-chat",
+			"provider": "anthropic",
+			"model":    "claude-sonnet",
+			"task":     "chat",
+			"message":  "swept",
+			"response": "swept chat reply",
+		})
+		if err != nil {
+			t.Fatalf("marshal generated chat case: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "swept-chat.json"), chatCaseJSON, 0o600); err != nil {
+			t.Fatalf("write generated chat case: %v", err)
+		}
+		chatScript = []string{"swept-chat"}
+	}
+
 	llm := fakeprovider.New(t, dir, "swept")
+	chat := fakeprovider.New(t, dir, chatScript...)
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(), embeddings,
-		memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm,
+		memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm, chat,
 		fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), memrepo.NewSignals(),
 		memrepo.NewTriggers(), memrepo.NewTimers())
 

@@ -19,6 +19,17 @@ import (
 // as an example ('capture.classify', 0001:97).
 type DecisionAction string
 
+// ADR-0021 retired ActionCaptureDiscarded and put three members in its
+// place. "capture.discarded" answered chitchat and out_of_scope with one
+// row, which is the same collapse that answered a Spanish greeting with
+// "Nothing to keep there.": the two kinds do different things now, so they
+// leave different rows — capture.chitchat.answered and capture.out_of_scope
+// — and capture.chat.failed records the outage that degrades the first one
+// to silence, exactly as ActionCaptureDedupFailed beside it records a
+// judge-provider outage. A vault written before this change still holds
+// "capture.discarded" rows; nothing reads the vocabulary to interpret them,
+// so they stay readable as the plain strings they always were.
+//
 // The fourteen capture/relation/correction members of the DecisionAction
 // vocabulary — design D9, plus ActionCaptureDedupFailed (C14a: a
 // judge-provider outage degrades the capture the same way
@@ -45,10 +56,12 @@ const (
 	ActionCaptureClassify           DecisionAction = "capture.classify"
 	ActionCaptureUnparseable        DecisionAction = "capture.classify.unparseable"
 	ActionCaptureUnclassifiable     DecisionAction = "capture.classify.unclassifiable"
-	ActionCaptureDiscarded          DecisionAction = "capture.discarded"
+	ActionCaptureConversed          DecisionAction = "capture.chitchat.answered"
+	ActionCaptureOutOfScope         DecisionAction = "capture.out_of_scope"
 	ActionCaptureUnitCreated        DecisionAction = "capture.unit.created"
 	ActionCaptureEmbeddingFailed    DecisionAction = "capture.embedding.failed"
 	ActionCaptureDedupFailed        DecisionAction = "capture.dedup.failed"
+	ActionCaptureChatFailed         DecisionAction = "capture.chat.failed"
 	ActionCapturePersonRefAmbiguous DecisionAction = "capture.person_ref.ambiguous"
 	ActionCaptureArmedTimer         DecisionAction = "capture.armed.timer"
 	ActionCaptureArmedTrigger       DecisionAction = "capture.armed.trigger"
@@ -111,7 +124,7 @@ const (
 	ActionPatternEvalLoadHypothesisOpened DecisionAction = "consolidate.pattern_eval.load_hypothesis_opened"
 )
 
-// AllDecisionActions returns a fresh slice holding the forty
+// AllDecisionActions returns a fresh slice holding the forty-two
 // DecisionAction vocabulary members, in the order the constants above
 // declare them.
 //
@@ -122,8 +135,9 @@ const (
 func AllDecisionActions() []DecisionAction {
 	return []DecisionAction{
 		ActionCaptureClassify, ActionCaptureUnparseable, ActionCaptureUnclassifiable,
-		ActionCaptureDiscarded, ActionCaptureUnitCreated, ActionCaptureEmbeddingFailed,
-		ActionCaptureDedupFailed, ActionCapturePersonRefAmbiguous,
+		ActionCaptureConversed, ActionCaptureOutOfScope, ActionCaptureUnitCreated,
+		ActionCaptureEmbeddingFailed, ActionCaptureDedupFailed, ActionCaptureChatFailed,
+		ActionCapturePersonRefAmbiguous,
 		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
 		ActionCaptureArmRefused,
 		ActionCheckTriggerExpired, ActionCheckTimerFired, ActionCheckTimerCancelled,

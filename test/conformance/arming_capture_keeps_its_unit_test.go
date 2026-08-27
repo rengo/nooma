@@ -135,7 +135,7 @@ func captureAndArmWithUnits(t *testing.T, now time.Time, llmCase string) (
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings,
-		memrepo.NewLexical(), memrepo.NewRelations(), memrepo.NewDecisionLog(), llm, llm, embed,
+		memrepo.NewLexical(), memrepo.NewRelations(), memrepo.NewDecisionLog(), llm, llm, llm, embed,
 		brain.NewIndex(idx), memrepo.NewSignals(), triggers, timers)
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{Text: "replayed by case id", Channel: "chat"})

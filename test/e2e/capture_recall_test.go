@@ -142,6 +142,8 @@ tasks:
     provider: local
   relation_evaluation:
     provider: local
+  chat:
+    provider: local
   embedding:
     provider: local
 `, port, llm.URL))
