@@ -1,0 +1,8 @@
+{
+  "id": "chat-hello-reply",
+  "provider": "openai",
+  "model": "gpt-5.6-luna",
+  "task": "chat",
+  "message": "hola, todo bien?",
+  "response": "¡Todo bien! Acá estoy, listo para lo que quieras guardar o preguntar."
+}
