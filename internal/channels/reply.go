@@ -57,8 +57,22 @@ func RenderReply(result brain.CaptureResult) string {
 		// is a refusal they will send again.
 		return "I did not set that: " + result.ArmRefused.Message
 
-	case brain.OutcomeDiscarded:
-		return "Nothing to keep there."
+	case brain.OutcomeConversed:
+		// The model's own sentence, verbatim. This is the one reply in
+		// this switch not written here, and that is the point: it comes
+		// back in the language the message was written in, which no fixed
+		// string in a Go file can do (ADR-0021).
+		if result.Reply == "" {
+			// A documented state, not a fallback for an unknown outcome:
+			// the chat task did not answer. Saying so is the honest
+			// version of the silence — and it is still English, which is
+			// exactly the surface ADR-0021 leaves open.
+			return "I could not answer that just now."
+		}
+		return result.Reply
+
+	case brain.OutcomeOutOfScope:
+		return "That is not something I can do."
 
 	case brain.OutcomeRecalled:
 		return renderRecall(result)

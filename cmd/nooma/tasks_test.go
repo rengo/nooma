@@ -30,24 +30,26 @@ func TestTasksM1ConsumesAreAllDocumented(t *testing.T) {
 // path names, bind ONLY that member to a provider, and leave the real
 // three (capture_processing, relation_evaluation, embedding) entirely
 // unconfigured. A hardcoded copy would ignore the swap and fail to resolve
-// (none of the real three tasks are bound in this config); reading the
+// (none of the real tasks are bound in this config); reading the
 // var live resolves successfully, because the one task it actually asked
 // about — the swapped-in name — IS bound.
 func TestResolveTaskProvidersReadsTheSharedListNotACopy(t *testing.T) {
 	original := tasksM1Consumes
 	t.Cleanup(func() { tasksM1Consumes = original })
-	// "chat" is a real config.DocumentedTaskNames member with no M1
-	// consumer (design D15) — deliberately distinct from all three of
+	// "image_description" is a real config.DocumentedTaskNames member with
+	// no consumer — deliberately distinct from every one of
 	// tasksM1Consumes' own real members, so a hardcoded copy of the
-	// original list cannot accidentally still satisfy this swap.
-	tasksM1Consumes = []string{"chat"}
+	// original list cannot accidentally still satisfy this swap. This
+	// stand-in used to be "chat"; ADR-0021 gave "chat" a consumer and put
+	// it in the real list, which is exactly what disqualifies it here.
+	tasksM1Consumes = []string{"image_description"}
 
 	cfg := &config.Config{
 		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
-		Tasks:     map[string]config.TaskBinding{"chat": {Provider: "local"}},
+		Tasks:     map[string]config.TaskBinding{"image_description": {Provider: "local"}},
 	}
 
-	_, _, _, _, ok := resolveTaskProviders(cfg, func(string) (string, bool) { return "", false })
+	_, _, _, _, _, ok := resolveTaskProviders(cfg, func(string) (string, bool) { return "", false })
 	if !ok {
 		t.Fatal("resolveTaskProviders did not resolve against the overridden tasksM1Consumes — it reads a hardcoded list instead of the package var")
 	}
@@ -55,7 +57,7 @@ func TestResolveTaskProvidersReadsTheSharedListNotACopy(t *testing.T) {
 
 // TestResolveTaskProvidersFailsClosedWhenATaskIsUnbound pins the "all or
 // nothing" half of resolveTaskProviders' own contract (wiring.go): a
-// config binding only two of the three real tasks must not resolve a
+// config binding only some of the real tasks must not resolve a
 // partial *brain.RecallService — RecallService.ScoredFor dereferences its
 // own embed field unconditionally (it has no nil guard the way Candidates'
 // vector argument does), so a nil ports.EmbeddingProvider reaching it is
@@ -66,11 +68,12 @@ func TestResolveTaskProvidersFailsClosedWhenATaskIsUnbound(t *testing.T) {
 		Tasks: map[string]config.TaskBinding{
 			"capture_processing":  {Provider: "local"},
 			"relation_evaluation": {Provider: "local"},
+			"chat":                {Provider: "local"},
 			// embedding is deliberately left unbound.
 		},
 	}
 
-	_, _, _, _, ok := resolveTaskProviders(cfg, func(string) (string, bool) { return "", false })
+	_, _, _, _, _, ok := resolveTaskProviders(cfg, func(string) (string, bool) { return "", false })
 	if ok {
 		t.Fatal("resolveTaskProviders resolved with embedding unbound — this must fail closed, not hand back a partial wiring")
 	}
@@ -87,7 +90,7 @@ func TestResolveTaskProvidersFailsClosedWhenATaskIsUnbound(t *testing.T) {
 func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
 	original := tasksM1Consumes
 	t.Cleanup(func() { tasksM1Consumes = original })
-	tasksM1Consumes = []string{"chat"}
+	tasksM1Consumes = []string{"image_description"}
 
 	bindings := bindTasks("embed-entry", "chat-entry")
 
@@ -99,8 +102,8 @@ func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
 		t.Fatalf("bindTasks returned %d bindings for a union of %d: %+v",
 			len(bindings), len(tasksTheBinaryRuns()), bindings)
 	}
-	if bindings["chat"] != "chat-entry" {
-		t.Errorf(`bindTasks["chat"] = %q, want "chat-entry" — a hardcoded copy of the original three-task list would not have bound "chat" at all`, bindings["chat"])
+	if bindings["image_description"] != "chat-entry" {
+		t.Errorf(`bindTasks["image_description"] = %q, want "chat-entry" — a hardcoded copy of the original task list would not have bound "image_description" at all`, bindings["image_description"])
 	}
 	if _, bound := bindings["capture_processing"]; bound {
 		t.Error(`bindTasks bound "capture_processing", which the swapped-in list no longer names — it is reading a hardcoded copy`)
@@ -110,33 +113,35 @@ func TestBindTasksReadsTheSharedListNotACopy(t *testing.T) {
 // TestCheckTaskCoverageReadsTheSharedListNotACopy is design D18a's third
 // reader (16b), made structural the same way the two tests above already
 // are for the first two: temporarily replace tasksM1Consumes with one
-// member no real path names, bind the REAL three tasks (so a hardcoded copy
+// member no real path names, bind the REAL tasks (so a hardcoded copy
 // of the original list would report every one of them satisfied) and leave
-// the swapped-in member "chat" deliberately unbound. A hardcoded copy would
-// report ok (its own three tasks are all bound); reading the var live
-// reports the swapped-in task, "chat", as unbound instead.
+// the swapped-in member "image_description" deliberately unbound. A
+// hardcoded copy would report ok (its own tasks are all bound); reading the
+// var live reports the swapped-in task, "image_description", as unbound
+// instead.
 func TestCheckTaskCoverageReadsTheSharedListNotACopy(t *testing.T) {
 	original := tasksM1Consumes
 	t.Cleanup(func() { tasksM1Consumes = original })
-	tasksM1Consumes = []string{"chat"}
+	tasksM1Consumes = []string{"image_description"}
 
 	cfg := &config.Config{
 		Providers: map[string]config.Provider{"local": {Type: "ollama", Model: "test-model"}},
 		Tasks: map[string]config.TaskBinding{
 			"capture_processing":  {Provider: "local"},
 			"relation_evaluation": {Provider: "local"},
+			"chat":                {Provider: "local"},
 			"embedding":           {Provider: "local"},
-			// "chat" — the swapped-in list's only member — deliberately
-			// left unbound.
+			// "image_description" — the swapped-in list's only member —
+			// deliberately left unbound.
 		},
 	}
 
 	err := checkTaskCoverage("", cfg)
 	if err == nil {
-		t.Fatal("checkTaskCoverage reported ok with the swapped-in task \"chat\" left unbound — it reads a hardcoded copy of the original three tasks instead of the package var")
+		t.Fatal("checkTaskCoverage reported ok with the swapped-in task \"image_description\" left unbound — it reads a hardcoded copy of the original task list instead of the package var")
 	}
-	if !strings.Contains(err.Error(), "chat") {
-		t.Errorf("error %q does not name %q, the swapped-in task", err.Error(), "chat")
+	if !strings.Contains(err.Error(), "image_description") {
+		t.Errorf("error %q does not name %q, the swapped-in task", err.Error(), "image_description")
 	}
 }
 
@@ -156,7 +161,7 @@ func TestResolveTaskProvidersFailsClosedWhenTheProviderCannotEmbed(t *testing.T)
 		},
 	}
 
-	_, _, _, _, ok := resolveTaskProviders(cfg, func(string) (string, bool) { return "test-key-value", true })
+	_, _, _, _, _, ok := resolveTaskProviders(cfg, func(string) (string, bool) { return "test-key-value", true })
 	if ok {
 		t.Fatal("resolveTaskProviders resolved embedding against an anthropic-typed provider, which does not implement ports.EmbeddingProvider")
 	}

@@ -77,7 +77,7 @@ func newTestCaptureService(t *testing.T, now time.Time, llmCase string) *brain.C
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
 
-	return brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+	return brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
 }
 
 func postCapture(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {

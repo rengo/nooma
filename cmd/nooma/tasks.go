@@ -22,7 +22,19 @@ package main
 //
 // Every member is one of config.DocumentedTaskNames — TestTasksM1ConsumesAreAllDocumented
 // (tasks_test.go) pins it.
-var tasksM1Consumes = []string{"capture_processing", "relation_evaluation", "embedding"}
+// "chat" joined the list with ADR-0021, which gave it its first caller:
+// until then it was a documented task the wizard could bind and doctor
+// could report, that no code ever asked a provider for. Adding it here is
+// the whole wiring change — the wizard binds it and doctor reports it
+// because both read this slice, which is the property D18a was built for.
+//
+// **A vault configured before that ADR does not bind it, and will not
+// serve until it does.** That is the loud failure this list exists to
+// produce: the alternative is a brain whose conversational half is
+// silently absent, which is the same shape as the permanently-unembedded
+// vault in the paragraph above. `nooma doctor` names the unbound task, and
+// `nooma init` binds it.
+var tasksM1Consumes = []string{"capture_processing", "relation_evaluation", "chat", "embedding"}
 
 // tasksConsolidateConsumes are the three tasks one consolidation pass
 // needs bound — design §7.2 (m2c-consolidation-runtime). capture_processing

@@ -27,8 +27,8 @@ import (
 // CLI.
 func TestChannelReplyIsTotalOverEveryCaptureOutcome(t *testing.T) {
 	outcomes := brain.AllCaptureOutcomes()
-	if len(outcomes) != 7 {
-		t.Fatalf("brain.AllCaptureOutcomes() has %d members, want 7 — this test's own claim to be exhaustive is what changed", len(outcomes))
+	if len(outcomes) != 8 {
+		t.Fatalf("brain.AllCaptureOutcomes() has %d members, want 8 — this test's own claim to be exhaustive is what changed", len(outcomes))
 	}
 
 	seen := map[string]brain.CaptureOutcome{}
@@ -47,6 +47,11 @@ func TestChannelReplyIsTotalOverEveryCaptureOutcome(t *testing.T) {
 			result.Correction = &brain.Correction{UnitID: "u-1"}
 		case brain.OutcomeStored:
 			result.UnitID = "u-1"
+		case brain.OutcomeConversed:
+			// The model's sentence. Its empty case is a real state of
+			// this outcome, and TestChannelReply_ConversedWithNoAnswer
+			// below covers it — here it would only collide with nothing.
+			result.Reply = "All good, I'm here."
 		}
 
 		reply := channels.RenderReply(result)
@@ -95,5 +100,29 @@ func TestChannelReplyCarriesWhatTheOutcomeNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestChannelReply_ConversedWithNoAnswer covers the one state the totality
+// test above cannot: OutcomeConversed with an empty Reply, which is what a
+// chat-task outage produces (brain.CaptureResult.Reply's own contract,
+// ADR-0021).
+//
+// The totality test hands every outcome a populated result, because its
+// question is whether the switch is exhaustive. This one's question is
+// different: an outcome with a documented empty-field state has two
+// renderings, and the empty one is the one that would silently become the
+// empty string if the branch were ever dropped — the exact failure the
+// switch's missing default clause exists to make visible for unknown
+// outcomes, and cannot make visible for a known one.
+func TestChannelReply_ConversedWithNoAnswer(t *testing.T) {
+	degraded := channels.RenderReply(brain.CaptureResult{Outcome: brain.OutcomeConversed})
+	if strings.TrimSpace(degraded) == "" {
+		t.Fatal("a conversed capture whose chat task did not answer renders an empty reply — the person cannot tell that from being ignored")
+	}
+
+	refusal := channels.RenderReply(brain.CaptureResult{Outcome: brain.OutcomeOutOfScope})
+	if degraded == refusal {
+		t.Errorf("a chat outage and an out-of-scope request render the identical reply %q — one is temporary and one is permanent, and the person is told the same thing", degraded)
 	}
 }

@@ -82,7 +82,7 @@ func TestI04_TimerNeverPersistsAUnit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), triggers, timers)
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), triggers, timers)
 
 			result, err := svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the fake replays by case id, not prompt text",

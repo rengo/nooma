@@ -96,44 +96,50 @@ func buildProvider(p config.Provider, lookup func(string) (string, bool)) (any, 
 // defaults are structural" (CLAUDE.md non-negotiable #7) means applied to a
 // half-configured provider set, the same posture it already takes toward
 // the auth token.
-func resolveTaskProviders(cfg *config.Config, lookup func(string) (string, bool)) (llm, judge ports.LLMProvider, embed ports.EmbeddingProvider, embedModel string, ok bool) {
+func resolveTaskProviders(cfg *config.Config, lookup func(string) (string, bool)) (llm, judge, chatter ports.LLMProvider, embed ports.EmbeddingProvider, embedModel string, ok bool) {
 	for _, task := range tasksM1Consumes {
 		binding, bound := cfg.Tasks[task]
 		if !bound {
-			return nil, nil, nil, "", false
+			return nil, nil, nil, nil, "", false
 		}
 		provider, present := cfg.Providers[binding.Provider]
 		if !present {
-			return nil, nil, nil, "", false
+			return nil, nil, nil, nil, "", false
 		}
 		client, err := buildProvider(provider, lookup)
 		if err != nil {
-			return nil, nil, nil, "", false
+			return nil, nil, nil, nil, "", false
 		}
 
 		switch task {
 		case "capture_processing":
 			p, isLLM := client.(ports.LLMProvider)
 			if !isLLM {
-				return nil, nil, nil, "", false
+				return nil, nil, nil, nil, "", false
 			}
 			llm = p
 		case "relation_evaluation":
 			p, isLLM := client.(ports.LLMProvider)
 			if !isLLM {
-				return nil, nil, nil, "", false
+				return nil, nil, nil, nil, "", false
 			}
 			judge = p
+		case "chat":
+			p, isLLM := client.(ports.LLMProvider)
+			if !isLLM {
+				return nil, nil, nil, nil, "", false
+			}
+			chatter = p
 		case "embedding":
 			p, isEmbed := client.(ports.EmbeddingProvider)
 			if !isEmbed {
-				return nil, nil, nil, "", false
+				return nil, nil, nil, nil, "", false
 			}
 			embed = p
 			embedModel = provider.Model
 		}
 	}
-	return llm, judge, embed, embedModel, true
+	return llm, judge, chatter, embed, embedModel, true
 }
 
 // wireBrain builds the real CaptureService/RecallService pair over db and
@@ -286,7 +292,7 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 }
 
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
-	llm, judge, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
+	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -306,7 +312,7 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 	}
 	index := brain.NewIndex(loaded)
 
-	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, embed, index, signals, triggers, timers)
+	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, chatter, embed, index, signals, triggers, timers)
 	recall := brain.NewRecallService(index, lex, units, embed)
 	return capture, recall, nil
 }

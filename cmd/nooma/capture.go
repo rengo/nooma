@@ -216,8 +216,19 @@ func renderCaptureResponse(out io.Writer, resp captureCLIResponse) error {
 		_, err := fmt.Fprintf(out, "captured: not scheduled — %s\n", resp.Message)
 		return err
 
-	case brain.OutcomeDiscarded:
-		_, err := fmt.Fprintln(out, "captured: discarded — nothing worth keeping")
+	case brain.OutcomeConversed:
+		// Not prefixed "captured:", because nothing was. The other
+		// non-capturing outcome in this switch, recall, already prints
+		// under its own label for the same reason.
+		if resp.Message == "" {
+			_, err := fmt.Fprintln(out, "chat: no answer — the chat task did not respond")
+			return err
+		}
+		_, err := fmt.Fprintf(out, "chat: %s\n", resp.Message)
+		return err
+
+	case brain.OutcomeOutOfScope:
+		_, err := fmt.Fprintln(out, "captured: nothing to do — that is not something Nooma does")
 		return err
 
 	case brain.OutcomeRecalled:
