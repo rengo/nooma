@@ -179,7 +179,7 @@ type captureRunner struct {
 // fork to their own mechanism before ToUnit is ever reached (12g, below) —
 // only a classification with no Kind at all still propagates as a plain Go
 // error here.
-func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
+func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (result CaptureResult, err error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
 	prompt := classify.BuildPrompt(in.Text, nil, now)
@@ -202,6 +202,18 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		}
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
 	}
+
+	// **Every outcome below is answered in the same language, so it is
+	// stamped once here rather than at each of the eleven returns.** A
+	// deferred write to the named result is the only shape that survives
+	// a return added later without remembering this line — and a language
+	// missing from one branch is not a visible bug, it is one sentence in
+	// English among Spanish ones.
+	//
+	// Registered after Decode on purpose: the returns above it carry an
+	// error and a zero result, which no renderer ever sees.
+	lang := c.Language.Or()
+	defer func() { result.Language = lang }()
 
 	// A check-in answer resolves what it answers, and then the message
 	// carries on being whatever else it is. Deliberately not a fork: an
