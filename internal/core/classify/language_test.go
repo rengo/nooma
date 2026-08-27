@@ -57,10 +57,11 @@ func TestFallback_IsEnglishAndReadsNothing(t *testing.T) {
 	if Fallback() != LanguageEN {
 		t.Errorf("Fallback() = %q, want %q — English is the one language every fixed sentence exists in", Fallback(), LanguageEN)
 	}
-	// Same answer twice: no clock, no environment, no state behind it.
-	if Fallback() != Fallback() {
-		t.Error("Fallback() is not a function of nothing")
-	}
+	// That it reads nothing is not asserted here, because a Go test
+	// cannot prove it: calling it twice only shows it is deterministic.
+	// The guarantee is the lint over internal/core — forbidigo denies
+	// time.Now and os.Getenv, depguard denies internal/config — which is
+	// a stronger check than any assertion in this file could be.
 }
 
 // TestDecode_Language covers the decoder row, including the case that

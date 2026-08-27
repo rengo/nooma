@@ -26,8 +26,9 @@ type fieldSpec struct {
 // wire field, and one loop over it in Decode, so statement count is O(1) in
 // the number of fields rather than O(fields): adding a field adds a row
 // (data, zero statements) and a three-line assigner, not a branch. That is
-// what turns "13 fields × 3 malformation shapes" from 39 branches into one
-// loop.
+// what turns "every field × 3 malformation shapes" from a branch per pair
+// into one loop. A count is deliberately not written here: it was "13"
+// through two field additions and was wrong for both.
 //
 // The order is doc 02 §5's, and Degradations reports in it.
 func fieldSpecs() []fieldSpec {
