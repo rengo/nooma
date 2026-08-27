@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -135,5 +137,80 @@ func TestI26_TheGlassBoxStaysEnglish(t *testing.T) {
 				t.Errorf("action %q renders a person-facing Spanish sentence into the trail: %q", row.Action, row.Rationale)
 			}
 		}
+	}
+}
+
+// TestI26_TheTrailRecordsWhatLanguageWasRead is the instrument, not the
+// feature — and it exists because the feature shipped without it.
+//
+// `language` is optional (ADR-0022), so its absence is not a Degradation
+// and leaves no other trace. The first live Spanish capture after that
+// decision came back "Noted.", and the decision_log could not say whether
+// the model had omitted the field, named something outside the
+// vocabulary, or named "en". Three different facts about the provider,
+// one indistinguishable row.
+//
+// It asserts the RAW reading rather than the resolved one. A stamped "en"
+// and an absent language render the identical sentence and are different
+// facts, which is exactly the distinction the trail exists to keep.
+func TestI26_TheTrailRecordsWhatLanguageWasRead(t *testing.T) {
+	tests := []struct {
+		name    string
+		llmCase string
+		want    string
+	}{
+		{"a named language is recorded as itself", "classify-spanish-task", "es"},
+		{"an absent language is recorded as empty, not as the fallback", "classify-pick-up-dry-cleaning", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			now := time.Date(2026, 8, 27, 9, 30, 0, 0, time.UTC)
+			decisions := memrepo.NewDecisionLog()
+			embeddings := memrepo.NewEmbeddings()
+			llm := fakeprovider.New(t, testdataLLMCasesDir(t), tt.llmCase)
+
+			idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+			if err != nil {
+				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
+			}
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(),
+				embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions,
+				llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
+				memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+
+			if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "acordate de comprar café", Channel: "chat"}); err != nil {
+				t.Fatalf("Capture: %v", err)
+			}
+
+			rows, err := decisions.Since(ctx, now.Add(-time.Hour), -1)
+			if err != nil {
+				t.Fatalf("decisions.Since: %v", err)
+			}
+
+			found := false
+			for _, row := range rows {
+				if row.Action != ports.ActionCaptureClassify {
+					continue
+				}
+				found = true
+				var ctxValue struct {
+					Language *string `json:"language"`
+				}
+				if err := json.Unmarshal(row.Context, &ctxValue); err != nil {
+					t.Fatalf("decoding %s context %s: %v", row.Action, row.Context, err)
+				}
+				if ctxValue.Language == nil {
+					t.Fatalf("%s context has no language key at all: %s — an absent key and an empty one are the same silence this test exists to end", row.Action, row.Context)
+				}
+				if *ctxValue.Language != tt.want {
+					t.Errorf("%s context language = %q, want %q", row.Action, *ctxValue.Language, tt.want)
+				}
+			}
+			if !found {
+				t.Fatalf("no %s row was written", ports.ActionCaptureClassify)
+			}
+		})
 	}
 }

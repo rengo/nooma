@@ -642,11 +642,33 @@ func JudgePrompt(u unit.Unit, candidates []unit.Unit) string {
 // capture actually happened.
 func (r captureRunner) recordClassifyDecision(ctx context.Context, c classify.Classification, u unit.Unit, now time.Time) error {
 	rationale := fmt.Sprintf("classified as %q and persisted a %s unit", string(*c.Kind), u.Status)
+	// **language is written even when it is absent, and "" is the answer
+	// that matters.** It is an optional field (ADR-0022), so its absence
+	// is not a Degradation and leaves no other trace — which made the
+	// first live Spanish capture after ADR-0022 answer "Noted." with
+	// nothing in the trail to say whether the model had omitted the
+	// field, named something outside the vocabulary, or named "en".
+	// Three different facts about the provider, one indistinguishable
+	// row. A field whose failure is invisible is one doc 02 §11 does not
+	// tolerate.
+	//
+	// Fixed here rather than by making the field required: required
+	// would report a degradation for every recording in
+	// testdata/llm/cases/, all of which predate the field, and turn
+	// `nooma doctor`'s 22/22 into 0/22.
+	//
+	// The RAW reading, before Or() resolves it — a stamped "en" and an
+	// absent language render the same sentence and are different facts.
+	language := ""
+	if c.Language != nil {
+		language = string(*c.Language)
+	}
 	contextJSON, err := json.Marshal(struct {
-		Kind   string `json:"kind"`
-		UnitID string `json:"unit_id"`
-		Source string `json:"source"`
-	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source})
+		Kind     string `json:"kind"`
+		UnitID   string `json:"unit_id"`
+		Source   string `json:"source"`
+		Language string `json:"language"`
+	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source, Language: language})
 	if err != nil {
 		return fmt.Errorf("capture: encode decision context: %w", err)
 	}
