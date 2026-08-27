@@ -66,6 +66,17 @@ type Classification struct {
 	// (see RecurrenceRule's own doc comment below).
 	RecurrenceRule *RecurrenceRule
 
+	// Language is what language the message was written in — doc 02 §5
+	// step 1, ADR-0022. It answers a question no other field here does:
+	// every field above describes what the message MEANT, and this one
+	// describes how to answer it.
+	//
+	// Nil is the ordinary case rather than a failure: the field is
+	// optional on the wire, so a model that omits it costs nothing.
+	// Language.Or() is what turns nil into something a renderer can
+	// switch on.
+	Language *Language
+
 	// Degradations records what was lost and why, in fieldSpecs' order. It
 	// exists because I12 requires internal/brain to write a rationale into
 	// decision_log: a decoder that discarded *why* a field vanished would

@@ -87,6 +87,15 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
 		" — only for a recurring reminder\n")
+	// **The language of the message, never the language of this prompt.**
+	// The instruction says so outright because the model is reading two
+	// languages at once here — these English instructions and, often, a
+	// message in something else — and the field it is being asked for is
+	// about the second one.
+	b.WriteString("  language             one of: " + joinVocabulary(AllLanguages()) +
+		" — the language the MESSAGE is written in, not the language of\n")
+	b.WriteString("                       these instructions. Omit it if the message is in " +
+		"neither\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
 	}

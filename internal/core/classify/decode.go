@@ -48,6 +48,17 @@ func fieldSpecs() []fieldSpec {
 		{"interrupt_level", false, assignInterruptLevel},
 		{"recurrence_rule", false, assignEnum(AllRecurrenceRules,
 			func(c *Classification, v *RecurrenceRule) { c.RecurrenceRule = v })},
+		// Optional, not required, and the reason is the corpus rather than
+		// the field's importance. Marking it required would report a
+		// Degradation for every recording in testdata/llm/cases/ — all of
+		// them predate this field — and `nooma doctor`'s quality gate
+		// counts a clean case as one with zero degradations, so a green
+		// 22/22 would read 0/22 overnight. The alternative is editing
+		// twenty-two files whose whole value is being real recorded
+		// responses. An absent language is not a quality defect the way an
+		// absent weight is: it falls back and nothing is lost.
+		{"language", false, assignEnum(AllLanguages,
+			func(c *Classification, v *Language) { c.Language = v })},
 	}
 }
 
