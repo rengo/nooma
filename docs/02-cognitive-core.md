@@ -387,6 +387,28 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `person_ref_status (resolved|new|ambiguous)`.
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
      brings down the whole classification.
+   - **Two of the thirteen are not memory, and they route before anything is built**
+     ([ADR-0021](adr/0021-conversation-boundary.md)) — `chitchat` and `out_of_scope`. Neither
+     persists a unit, neither is embedded, neither reaches the relation judge, and each writes
+     one `decision_log` row. What separates them is not whether something is kept — nothing is,
+     either way — but whether Nooma still owes the person an answer.
+     - A **`chitchat` is answered**, by a second model call on the `chat` task, and that
+       model's sentence is the reply. The cost is stated rather than hidden: saying hello to
+       Nooma spends a completion. The alternative is a fixed sentence, and a fixed sentence has
+       to be written in *some* language — which is how a message written in Spanish came to be
+       answered "Nothing to keep there.". A model answering the message it was handed answers
+       in the language it was handed, and no locale setting has to exist anywhere for that to
+       be true.
+     - An **`out_of_scope` is refused**, in a fixed sentence, with no model call. The asymmetry
+       is the entire reason the two are separated. The person asked for something Nooma does
+       not do; a model handed that message writes a plausible sentence, and a plausible
+       sentence about a capability nobody built is a promise — "I'll check the weather for
+       you", from a system with no way to check the weather. A refusal cannot overpromise, and
+       a refusal is what is true.
+     - **A `chat` outage degrades to the refusal; it never fails the capture.** The product
+       rule below governs this call exactly as it governs every other capture-time provider
+       outage: the person is told Nooma cannot answer right now, and the outage is recorded in
+       the trail. Nothing was going to be stored, so there is nothing for the outage to lose.
 2. **hybrid recall**: top-K by vector similarity + top-K by FTS, fused. Same mechanism serves
    both answering a `recall` and finding connection candidates.
    - **Answering admits; searching for candidates does not** (ADR-0020). The two questions are
