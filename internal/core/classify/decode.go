@@ -26,8 +26,9 @@ type fieldSpec struct {
 // wire field, and one loop over it in Decode, so statement count is O(1) in
 // the number of fields rather than O(fields): adding a field adds a row
 // (data, zero statements) and a three-line assigner, not a branch. That is
-// what turns "13 fields × 3 malformation shapes" from 39 branches into one
-// loop.
+// what turns "every field × 3 malformation shapes" from a branch per pair
+// into one loop. A count is deliberately not written here: it was "13"
+// through two field additions and was wrong for both.
 //
 // The order is doc 02 §5's, and Degradations reports in it.
 func fieldSpecs() []fieldSpec {
@@ -48,6 +49,17 @@ func fieldSpecs() []fieldSpec {
 		{"interrupt_level", false, assignInterruptLevel},
 		{"recurrence_rule", false, assignEnum(AllRecurrenceRules,
 			func(c *Classification, v *RecurrenceRule) { c.RecurrenceRule = v })},
+		// Optional, not required, and the reason is the corpus rather than
+		// the field's importance. Marking it required would report a
+		// Degradation for every recording in testdata/llm/cases/ — all of
+		// them predate this field — and `nooma doctor`'s quality gate
+		// counts a clean case as one with zero degradations, so a green
+		// 22/22 would read 0/22 overnight. The alternative is editing
+		// twenty-two files whose whole value is being real recorded
+		// responses. An absent language is not a quality defect the way an
+		// absent weight is: it falls back and nothing is lost.
+		{"language", false, assignEnum(AllLanguages,
+			func(c *Classification, v *Language) { c.Language = v })},
 	}
 }
 

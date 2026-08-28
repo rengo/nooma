@@ -73,6 +73,7 @@ order, with no correspondence to anything.
 | [0019](0019-graph-library.md) | Graph rendering: Cytoscape.js over a server-bounded neighbourhood | Proposed | M4 |
 | [0020](0020-recall-admission.md) | Recall admission: the vector admits, the lexical leg ranks | Accepted | M3e |
 | [0021](0021-conversation-boundary.md) | Conversation and its boundary: chitchat answers, out of scope refuses | Accepted | M3e |
+| [0022](0022-reply-language.md) | The reply language follows the message, not a setting | Accepted | M3e |
 
 ## Template
 

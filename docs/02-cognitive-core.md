@@ -366,7 +366,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    `structured_data` + initial weight/λ + fields resolving pending answers +
    prospection's two capture fields, `interrupt_level` (0-1, §7's push/digest split) and
    `recurrence_rule` (`yearly | monthly | daily | weekly`, §7's recurrence, decoded rather than left inside
-   `structured_data`). Classification
+   `structured_data`), plus `language` (§5's own bullet below). Classification
    taxonomy: `task | mental_load | event | knowledge | procedural | emotional | chitchat |
    out_of_scope | recall | correction | timer | recurring_reminder | list`.
    - `recall`, `knowledge` and `correction` are separated by **what the message does, not
@@ -387,6 +387,24 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `person_ref_status (resolved|new|ambiguous)`.
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
      brings down the whole classification.
+   - **`language` is what the message was written in, and it decides how the answer is
+     written** ([ADR-0022](adr/0022-reply-language.md)). Every other field on this list says
+     what the message MEANT; this one says how to answer it.
+     - **The vocabulary is the languages Nooma can speak, not the languages a person can
+       write.** A fixed sentence exists in the binary or it does not, so a classification
+       naming a language no sentence exists in is a value nothing can act on. Widening the
+       list means writing the sentences first.
+     - **The field is optional and its absence costs nothing.** An absent or out-of-vocabulary
+       language degrades to null like every other field (I14) and the answer is rendered in
+       the fallback. This is not the same posture as `weight`, whose absence is a quality
+       signal about the provider: a missing language is a sentence in English, and a missing
+       weight is a unit that cannot be ranked.
+     - **It follows the message, not a setting.** The person who writes in Spanish today and
+       English tomorrow is answered in each, with nothing to configure and nothing to keep in
+       sync. What this does not cover is anything Nooma says on its own initiative — the
+       digest arises from a clock, not from a message, and has no classification to read.
+       Until a language is carried on the unit itself, those speak the fallback.
+
    - **Two of the thirteen are not memory, and they route before anything is built**
      ([ADR-0021](adr/0021-conversation-boundary.md)) — `chitchat` and `out_of_scope`. Neither
      persists a unit, neither is embedded, neither reaches the relation judge, and each writes
@@ -642,6 +660,7 @@ belonging to *some* vocabulary is not the test; belonging to *this field's* voca
 | the six orthogonal fields | absent | The resolution that field carried is ignored — the pending check-in, relation or state question stays open. The capture still becomes a unit |
 | `interrupt_level` | no value | Absent or out-of-range degrades like any other field (owner ruling 1's Option A); `internal/core/prospection.ResolveInterrupt` (§7) then supplies `default_interrupt_level`, never this decoder — a degraded reading is never coerced into a claimed number here, only at that later layer, and it stays marked degraded there too |
 | `recurrence_rule` | no value | A value outside `yearly \| monthly \| daily \| weekly` degrades like any closed vocabulary; `internal/core/prospection.Arm` (§7) still arms the dated occurrence as a one-shot trigger — the capture is honoured, the recurrence itself is not invented |
+| `language` | no language | Absent or outside `en \| es` degrades like any closed vocabulary, and the answer renders in `classify.Fallback()` (ADR-0022). This is the one field whose loss is fully absorbed: no unit is worse off, no decision is deferred, and the only visible consequence is a sentence in English. That is why it is optional on the wire where `weight` is required — a missing weight is a unit that cannot be ranked, a missing language is a reply someone can still read |
 
 **A date is degraded in two distinguishable ways**, and they are recorded separately: a value
 that is not text at all, and text that is not a date Nooma reads. Only two date formats are
