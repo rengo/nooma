@@ -394,11 +394,21 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        write.** A fixed sentence exists in the binary or it does not, so a classification
        naming a language no sentence exists in is a value nothing can act on. Widening the
        list means writing the sentences first.
-     - **The field is optional and its absence costs nothing.** An absent or out-of-vocabulary
-       language degrades to null like every other field (I14) and the answer is rendered in
-       the fallback. This is not the same posture as `weight`, whose absence is a quality
-       signal about the provider: a missing language is a sentence in English, and a missing
-       weight is a unit that cannot be ranked.
+     - **The prompt asks for it always; the wire contract survives without it.** Those are two
+       decisions and collapsing them into one word cost a live capture: listed among the
+       optional fields, under "omit any that do not apply", a real model simply did not emit
+       it and a message in Spanish came back answered in English. The instruction was fair for
+       `event_at`, which genuinely does not apply to a greeting — but every message is written
+       in *some* language, so the same framing asked the model to skip a field that always
+       applies. It is asked for as a required field, and an absent value means "neither of
+       these languages", never "I did not bother".
+     - **Its absence still costs nothing downstream.** An absent or out-of-vocabulary language
+       degrades to null like every other field (I14) and the answer renders in the fallback.
+       That is not the posture `weight` takes, whose absence is a quality signal about the
+       provider: a missing language is a sentence in English, and a missing weight is a unit
+       that cannot be ranked. What keeps the two honest is §11 — the reading is written to the
+       trail either way, so "the model said nothing" stays distinguishable from "the model
+       said English".
      - **It follows the message, not a setting.** The person who writes in Spanish today and
        English tomorrow is answered in each, with nothing to configure and nothing to keep in
        sync. What this does not cover is anything Nooma says on its own initiative — the
