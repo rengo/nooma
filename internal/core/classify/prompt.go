@@ -73,7 +73,37 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 		"statement\n")
 	b.WriteString("  weight               0-1, how much this matters to the user\n")
 	b.WriteString("  decay_rate           per-day forgetting rate; low for emotional or " +
-		"identity-shaped content, high for routine tasks\n\n")
+		"identity-shaped content, high for routine tasks\n")
+	// **Required here, optional in the decoder — two decisions, not one.**
+	// Listing it below as optional was a real defect: a live capture in
+	// Spanish came back answered in English, and the trail showed the
+	// model had simply not emitted the field. It was obeying the prompt.
+	// "Optional fields — omit any that do not apply" is a fair
+	// instruction for event_at, which genuinely does not apply to a
+	// greeting; every message is written in SOME language, so the same
+	// framing asked the model to skip a field that always applies.
+	//
+	// What stays optional is the wire contract (decode.go): a response
+	// without this field still decodes, because every recording in
+	// testdata/llm/cases/ predates it and `nooma doctor` counts a clean
+	// case as one with zero degradations. Asking for it and surviving
+	// without it are independent, and collapsing them into one "optional"
+	// is what produced the defect.
+	//
+	// **The language of the message, never the language of this prompt.**
+	// Said outright because the model is reading two languages at once
+	// here — these English instructions and, often, a message in
+	// something else — and the field is about the second one.
+	b.WriteString("  language             one of: " + joinVocabulary(AllLanguages()) +
+		" — the language the MESSAGE is written in, not the language\n")
+	b.WriteString("                       of these instructions. Every message is written in " +
+		"some\n")
+	b.WriteString("                       language, so this always applies. Leave it out only " +
+		"if the\n")
+	b.WriteString("                       message is in neither of them — an absent value means " +
+		"\"not\n")
+	b.WriteString("                       one of these\", and naming one you did not read is " +
+		"worse\n\n")
 
 	b.WriteString("Optional fields — omit any that do not apply\n")
 	b.WriteString("  structured_data      free-form JSON object, shape follows from type\n")
@@ -87,15 +117,6 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
 		" — only for a recurring reminder\n")
-	// **The language of the message, never the language of this prompt.**
-	// The instruction says so outright because the model is reading two
-	// languages at once here — these English instructions and, often, a
-	// message in something else — and the field it is being asked for is
-	// about the second one.
-	b.WriteString("  language             one of: " + joinVocabulary(AllLanguages()) +
-		" — the language the MESSAGE is written in, not the language of\n")
-	b.WriteString("                       these instructions. Omit it if the message is in " +
-		"neither\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
 	}

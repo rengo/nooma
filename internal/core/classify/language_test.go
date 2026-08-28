@@ -118,10 +118,25 @@ func TestDecode_Language(t *testing.T) {
 func TestBuildPrompt_AsksForTheMessagesLanguage(t *testing.T) {
 	got := BuildPrompt("hola, todo bien?", nil, time.Date(2026, 8, 27, 9, 0, 0, 0, time.UTC))
 
-	if !strings.Contains(got, "language") {
-		t.Fatalf("BuildPrompt never mentions the language field:\n%s", got)
+	// **Where it is asked, not merely that it is asked.** The first
+	// version of this test checked only that the word appeared, and
+	// passed while the field sat under "Optional fields — omit any that
+	// do not apply" — where a real model read the instruction, obeyed it,
+	// and answered a Spanish message in English. A test that cannot tell
+	// those two prompts apart is not testing the thing that broke.
+	required, _, found := strings.Cut(got, "Optional fields")
+	if !found {
+		t.Fatalf("BuildPrompt has no optional-fields section to divide on:\n%s", got)
 	}
-	if !strings.Contains(got, "not the language of") {
+	if !strings.Contains(required, "language") {
+		t.Errorf("language is not among the required fields — every message is written in some language, so it always applies:\n%s", got)
+	}
+	// Whitespace-normalised before matching: the prompt is hard-wrapped
+	// for the model to read, and a clause that moves across a line break
+	// is the same instruction. A test that broke on rewrapping would
+	// train its next reader to weaken it rather than fix the prompt.
+	flat := strings.Join(strings.Fields(got), " ")
+	if !strings.Contains(flat, "not the language of these instructions") {
 		t.Errorf("BuildPrompt does not distinguish the message's language from the prompt's — the model has both in front of it:\n%s", got)
 	}
 	for _, l := range AllLanguages() {
