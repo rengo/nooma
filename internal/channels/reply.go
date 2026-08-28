@@ -2,11 +2,9 @@ package channels
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
@@ -15,6 +13,14 @@ import (
 // It renders brain.CaptureResult and nothing else: no second
 // classification, no second recall, no opinion about what the outcome
 // meant. The capture already decided; this says so.
+//
+// **It chooses which sentence, never what the sentence says.** The words
+// live in internal/core/phrase, keyed by the language the classification
+// read off the message (ADR-0022). That split is what lets this switch
+// stay a routing table — one line per outcome — while the vocabulary
+// grows a language without this file changing at all. It also moves the
+// sentences somewhere they can be tested at L1, which they could not be
+// while they were string literals in a channel.
 //
 // The switch has no default clause on purpose. A default would answer a
 // new outcome with something plausible and wrong, which is exactly the
@@ -25,9 +31,11 @@ import (
 // The sentences are plain and short because they are read on a phone, in a
 // chat, by someone who just typed one line.
 func RenderReply(result brain.CaptureResult) string {
+	say := phrase.For(result.Language)
+
 	switch result.Outcome {
 	case brain.OutcomeStored:
-		return "Noted."
+		return say.Noted
 
 	case brain.OutcomeArmed:
 		if result.Armed == nil {
@@ -41,96 +49,79 @@ func RenderReply(result brain.CaptureResult) string {
 		switch result.Armed.What {
 		case prospection.ArmTimer:
 			// A timer fires AT its subject: one instant, said once.
-			return fmt.Sprintf("Timer set for %s.", localTime(result.Armed.FireAt))
+			return fmt.Sprintf(say.TimerSet, say.Time(result.Armed.FireAt))
 		case prospection.ArmRecurring:
-			return fmt.Sprintf("Recurring reminder set for %s.", localTime(result.Armed.About))
+			return fmt.Sprintf(say.RecurringSet, say.Time(result.Armed.About))
 		default:
-			return fmt.Sprintf("Noted for %s. I will remind you%s.",
-				localTime(result.Armed.About), nudgeWhen(result.Armed))
+			// Immediate is the plan's own fact, never re-derived from the
+			// two instants: subtracting them gives a true duration and a
+			// false promise — 41 hours reads as "the day before" for a
+			// reminder that arrives at once.
+			lead := say.Lead(result.Armed.Immediate, result.Armed.About.Sub(result.Armed.FireAt))
+			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), lead)
 		}
 
 	case brain.OutcomeArmRefused:
 		if result.ArmRefused == nil {
 			return ""
 		}
-		// The reason travels verbatim. A refusal a person cannot act on
-		// is a refusal they will send again.
-		return "I did not set that: " + result.ArmRefused.Message
+		// **The reason travels, and now it travels typed.** A refusal a
+		// person cannot act on is a refusal they will send again, so the
+		// reason still reaches them — but as prospection.Refusal rather
+		// than as brain's English sentence. That sentence still exists
+		// and still goes to the trail, where its audience is an auditor
+		// and English is correct (ADR-0022).
+		return fmt.Sprintf(say.NotScheduled, refusalReason(say, result.ArmRefused))
 
 	case brain.OutcomeConversed:
 		// The model's own sentence, verbatim. This is the one reply in
-		// this switch not written here, and that is the point: it comes
-		// back in the language the message was written in, which no fixed
-		// string in a Go file can do (ADR-0021).
+		// this switch Nooma did not write, and that is the point: it comes
+		// back in the language the message was written in, which is the
+		// same property the table above buys for everything else.
 		if result.Reply == "" {
 			// A documented state, not a fallback for an unknown outcome:
-			// the chat task did not answer. Saying so is the honest
-			// version of the silence — and it is still English, which is
-			// exactly the surface ADR-0021 leaves open.
-			return "I could not answer that just now."
+			// the chat task did not answer.
+			return say.NoAnswer
 		}
 		return result.Reply
 
 	case brain.OutcomeOutOfScope:
-		return "That is not something I can do."
+		return say.OutOfScope
 
 	case brain.OutcomeRecalled:
-		return renderRecall(result)
+		// "No results" is an answer; an empty message is not.
+		if len(result.Recalled) == 0 {
+			return say.NothingFound
+		}
+		contents := make([]string, len(result.Recalled))
+		for i, u := range result.Recalled {
+			contents[i] = u.Content
+		}
+		return say.List(contents)
 
 	case brain.OutcomeCorrected:
-		return "Corrected."
+		return say.Corrected
 
 	case brain.OutcomeAsked:
-		return "I need one more thing before I can change that — which one did you mean?"
+		return say.AskWhichOne
 	}
 	return ""
 }
 
-// localTime renders an instant the way a person reads one. It is the
-// instant's own zone, not the process's: the classification carried the
-// user's offset in, and re-rendering it in the server's zone would tell
-// someone in Buenos Aires about a reminder at a time nobody set.
-// nudgeWhen says when the reminder itself arrives, and says it in
-// relation to now rather than as a second date. Two absolute times in one
-// sentence is what made the original unreadable: the reader has to work
-// out which one is theirs.
-func nudgeWhen(a *brain.Armed) string {
-	if a.Immediate {
-		return " right away"
-	}
-	gap := a.About.Sub(a.FireAt)
-	switch {
-	case gap <= 0:
-		return " right away"
-	case gap < 24*time.Hour:
-		return " a few hours before"
-	case gap < 48*time.Hour:
-		return " the day before"
+// refusalReason renders why nothing was scheduled, in the person's
+// language.
+//
+// An unrecognised refusal falls back to brain's own English sentence
+// rather than to silence. That is a deliberate ordering of two bad
+// outcomes: a reason in the wrong language is still actionable, and a
+// refusal carrying no reason is one the person will simply send again.
+func refusalReason(say phrase.Set, refused *brain.ArmRefused) string {
+	switch refused.Why {
+	case prospection.RefusalNoDate:
+		return say.RefusalNoDate
+	case prospection.RefusalAlreadyPast:
+		return say.RefusalPast
 	default:
-		return fmt.Sprintf(" %d days before", int(gap.Hours()/24))
+		return refused.Message
 	}
-}
-
-func localTime(t time.Time) string {
-	return t.Format("Mon 2 Jan, 15:04")
-}
-
-// renderRecall lists what recall found, or says plainly that it found
-// nothing. "No results" is an answer; an empty message is not.
-func renderRecall(result brain.CaptureResult) string {
-	if len(result.Recalled) == 0 {
-		return "I could not find anything about that."
-	}
-
-	var b strings.Builder
-	b.WriteString("Found " + strconv.Itoa(len(result.Recalled)))
-	if len(result.Recalled) == 1 {
-		b.WriteString(" thing:")
-	} else {
-		b.WriteString(" things:")
-	}
-	for _, u := range result.Recalled {
-		b.WriteString("\n• " + u.Content)
-	}
-	return b.String()
 }

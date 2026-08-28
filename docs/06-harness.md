@@ -263,6 +263,7 @@ Initial extraction:
 | I23 | A correction's pre-image is recorded before its edit is applied; a failed audit write leaves the unit untouched | §5 step 4 |
 | I24 | A weight write moves `weight` and `last_touched_at` together; neither is written alone | §2 |
 | I25 | A capture that is not memory persists no unit and still answers: `chitchat` through the `chat` task, `out_of_scope` with a fixed refusal | §5, ADR-0021 |
+| I26 | A capture is answered in the language its classification named; an absent or unknown language renders in the fallback, never in nothing | §5, ADR-0022 |
 
 Four of these are better verified with a structural test than a behavioral one:
 

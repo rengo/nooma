@@ -3,6 +3,7 @@ package brain
 import (
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
@@ -80,6 +81,16 @@ type CaptureResult struct {
 	// Outcome names which of the eight ways this capture ended — the one
 	// field every caller switches on.
 	Outcome CaptureOutcome
+
+	// Language is what language to answer this capture in — the
+	// classification's own reading of the message, already resolved
+	// against classify.Fallback() so a renderer never handles nil
+	// (ADR-0022).
+	//
+	// It belongs beside Outcome rather than inside one of the pointers
+	// below because it is true of every outcome: a refusal, a recall and
+	// a stored capture are all answered, and all in the same language.
+	Language classify.Language
 
 	// Reply is the model's own answer to a chitchat. Set only for
 	// Outcome == OutcomeConversed, and **empty on that outcome means the

@@ -1109,6 +1109,19 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   a rationale saying "7 days ahead of the event" records a gap that never existed. A table whose
   purpose is evidence must not restate settings back as observations — that is the one way this
   table can be worse than empty, because an empty one misleads nobody.
+- **The trail is written in English, whatever language the reply was written in**
+  ([ADR-0022](adr/0022-reply-language.md)). A rationale answers an auditor, not the person who
+  sent the message — a contributor reading a bug report, a maintainer reading someone else's
+  vault. A trail that followed the message would be readable only by people who speak every
+  language its owner does. Where one sentence used to serve both audiences, it splits: the
+  typed reason travels to the reply, and the English sentence stays here.
+- **An optional field records what was read, including nothing.** A field whose absence is not
+  a degradation leaves no other trace, so the value the model actually produced is written to
+  `context` — empty when it produced none. The distinction is load-bearing rather than tidy:
+  a field the model omitted and a field it filled with the default render the identical
+  sentence and are different facts about the provider, and only one of them is worth changing
+  a prompt over. This is the general form of a gap `language` produced first: a reply came
+  back in the wrong language and the table could not say why.
 - **Pull**: everything is recorded and explorable in the activity UI.
 - **Push**: only the big or the uncertain is proactively mentioned (low confidence or
   high-impact decision). "Cautious to capture, selective to speak", applied to its own

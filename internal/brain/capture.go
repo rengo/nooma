@@ -179,7 +179,7 @@ type captureRunner struct {
 // fork to their own mechanism before ToUnit is ever reached (12g, below) —
 // only a classification with no Kind at all still propagates as a plain Go
 // error here.
-func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (CaptureResult, error) {
+func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (result CaptureResult, err error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
 	prompt := classify.BuildPrompt(in.Text, nil, now)
@@ -202,6 +202,18 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		}
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
 	}
+
+	// **Every outcome below is answered in the same language, so it is
+	// stamped once here rather than at each of the eleven returns.** A
+	// deferred write to the named result is the only shape that survives
+	// a return added later without remembering this line — and a language
+	// missing from one branch is not a visible bug, it is one sentence in
+	// English among Spanish ones.
+	//
+	// Registered after Decode on purpose: the returns above it carry an
+	// error and a zero result, which no renderer ever sees.
+	lang := c.Language.Or()
+	defer func() { result.Language = lang }()
 
 	// A check-in answer resolves what it answers, and then the message
 	// carries on being whatever else it is. Deliberately not a fork: an
@@ -630,11 +642,33 @@ func JudgePrompt(u unit.Unit, candidates []unit.Unit) string {
 // capture actually happened.
 func (r captureRunner) recordClassifyDecision(ctx context.Context, c classify.Classification, u unit.Unit, now time.Time) error {
 	rationale := fmt.Sprintf("classified as %q and persisted a %s unit", string(*c.Kind), u.Status)
+	// **language is written even when it is absent, and "" is the answer
+	// that matters.** It is an optional field (ADR-0022), so its absence
+	// is not a Degradation and leaves no other trace — which made the
+	// first live Spanish capture after ADR-0022 answer "Noted." with
+	// nothing in the trail to say whether the model had omitted the
+	// field, named something outside the vocabulary, or named "en".
+	// Three different facts about the provider, one indistinguishable
+	// row. A field whose failure is invisible is one doc 02 §11 does not
+	// tolerate.
+	//
+	// Fixed here rather than by making the field required: required
+	// would report a degradation for every recording in
+	// testdata/llm/cases/, all of which predate the field, and turn
+	// `nooma doctor`'s 22/22 into 0/22.
+	//
+	// The RAW reading, before Or() resolves it — a stamped "en" and an
+	// absent language render the same sentence and are different facts.
+	language := ""
+	if c.Language != nil {
+		language = string(*c.Language)
+	}
 	contextJSON, err := json.Marshal(struct {
-		Kind   string `json:"kind"`
-		UnitID string `json:"unit_id"`
-		Source string `json:"source"`
-	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source})
+		Kind     string `json:"kind"`
+		UnitID   string `json:"unit_id"`
+		Source   string `json:"source"`
+		Language string `json:"language"`
+	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source, Language: language})
 	if err != nil {
 		return fmt.Errorf("capture: encode decision context: %w", err)
 	}
