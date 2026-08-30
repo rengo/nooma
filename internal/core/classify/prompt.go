@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -46,7 +47,7 @@ type Belief struct {
 // nooma.yml, and the real Clock adapter's time.Now() already carries the
 // process zone. A test Clock fixing a Location is what makes these assertions
 // stable.
-func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
+func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold float64) string {
 	var b strings.Builder
 
 	b.WriteString("You classify a single message into Nooma's memory model.\n")
@@ -71,9 +72,38 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time) string {
 	b.WriteString("  type                 one of: " + joinVocabulary(AllKinds()) + "\n")
 	b.WriteString("  normalized_content   the message rewritten as a clean, self-contained " +
 		"statement\n")
-	b.WriteString("  weight               0-1, how much this matters to the user\n")
-	b.WriteString("  decay_rate           per-day forgetting rate; low for emotional or " +
-		"identity-shaped content, high for routine tasks\n")
+	// **The scale, not just the question.** These two were asked for as
+	// bare 0-1 floats — "how much this matters", "per-day forgetting
+	// rate" — and a real model answered 0.5 and 0.3 for "buy coffee",
+	// which are reasonable answers to the questions as posed and which
+	// deleted the memory sixty-two seconds later. Nothing told the model
+	// that the low end of one scale is a delete, or that a rate of 0.3
+	// empties a memory in days.
+	//
+	// doc 02 §2 puts this decision with the model on purpose, and this
+	// does not take it back: the model still chooses. It stops choosing
+	// blind, which is the actual defect — §2's other half, the self-model
+	// beliefs that personalize the value, is not wired yet, so the model
+	// has been asked to personalize with nothing to personalize from.
+	b.WriteString("  weight               0-1, how much this matters to the user. **A unit " +
+		"whose weight\n")
+	b.WriteString("                       falls below " + trimFloat(archiveThreshold) +
+		" is archived on the next nightly pass and\n")
+	b.WriteString("                       leaves active memory.** Anything worth keeping " +
+		"belongs\n")
+	b.WriteString("                       well above that; use the low end only for something " +
+		"genuinely\n")
+	b.WriteString("                       disposable\n")
+	b.WriteString("  decay_rate           per-day forgetting rate, applied as " +
+		"weight * exp(-rate * days).\n")
+	b.WriteString("                       0.01 halves a memory in about 70 days; 0.1 in 7; " +
+		"0.3 in 2.\n")
+	b.WriteString("                       Low for emotional or identity-shaped content, " +
+		"higher for a\n")
+	b.WriteString("                       routine task — but a task worth remembering next " +
+		"week needs\n")
+	b.WriteString("                       a rate that still leaves it above the archive " +
+		"threshold then\n")
 	// **Required here, optional in the decoder — two decisions, not one.**
 	// Listing it below as optional was a real defect: a live capture in
 	// Spanish came back answered in English, and the trail showed the
@@ -203,4 +233,12 @@ func pad(name string, width int) string {
 		return name
 	}
 	return name + strings.Repeat(" ", width-len(name))
+}
+
+// trimFloat renders a threshold the way a person writes one — "0.5", not
+// "0.500000". strconv with -1 precision gives the shortest representation
+// that round-trips, which is what a prompt wants: a model shown
+// "0.5000000000000001" reads noise where a boundary was meant.
+func trimFloat(f float64) string {
+	return strconv.FormatFloat(f, 'g', -1, 64)
 }

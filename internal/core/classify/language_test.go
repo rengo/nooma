@@ -116,7 +116,7 @@ func TestDecode_Language(t *testing.T) {
 // — so a prompt that merely named the field would be asking an ambiguous
 // question, and the ambiguity resolves toward the instructions.
 func TestBuildPrompt_AsksForTheMessagesLanguage(t *testing.T) {
-	got := BuildPrompt("hola, todo bien?", nil, time.Date(2026, 8, 27, 9, 0, 0, 0, time.UTC))
+	got := BuildPrompt("hola, todo bien?", nil, time.Date(2026, 8, 27, 9, 0, 0, 0, time.UTC), 0.5)
 
 	// **Where it is asked, not merely that it is asked.** The first
 	// version of this test checked only that the word appeared, and

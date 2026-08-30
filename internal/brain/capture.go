@@ -68,7 +68,7 @@ type CaptureService struct {
 // index is the in-memory Index ADR-0012 requires be loaded once at vault
 // open — NewCaptureService never builds one itself, it only holds the one
 // its caller already loaded.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, chatter ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo) *CaptureService {
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, chatter ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo, archiveThreshold float64) *CaptureService {
 	sharedRecall := NewRecallService(index, lex, units, embed)
 	return &CaptureService{
 		clock: clock,
@@ -87,7 +87,9 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			recall:   sharedRecall,
 			triggers: triggers,
 			timers:   timers,
-			signals:  signals,
+
+			archiveThreshold: archiveThreshold,
+			signals:          signals,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
 			},
@@ -143,6 +145,20 @@ type captureRunner struct {
 	// construction rather than by a reviewer noticing.
 	triggers ports.TriggerRepo
 	timers   ports.TimerRepo
+	// archiveThreshold is §6's weight_threshold, resolved once at vault
+	// open rather than read per capture — the same posture the resident
+	// vector index takes (ADR-0012), and for the same reason: a
+	// per-capture ConfigRepo read would put a database round trip on the
+	// hot path to render a prompt. A vault whose threshold changes while
+	// the server runs keeps the old value until restart, which is stated
+	// rather than hidden.
+	//
+	// It exists here at all because the classification prompt has to tell
+	// the model what its weight actually does (ADR-0023): §5 asking for a
+	// number that §6 uses as a delete boundary, without ever naming the
+	// boundary, is what archived a live capture sixty-two seconds after
+	// it was made.
+	archiveThreshold float64
 	// signals is the learning trail. m3d's relation rejection writes to
 	// it BEFORE deleting the relation the signal is about (I10), which is
 	// the one ordering in this package that an invariant names.
@@ -182,7 +198,7 @@ type captureRunner struct {
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (result CaptureResult, err error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
-	prompt := classify.BuildPrompt(in.Text, nil, now)
+	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold)
 
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: prompt, Task: taskCaptureProcessing, JSONOnly: true})
 	if err != nil {

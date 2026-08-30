@@ -89,7 +89,7 @@ func TestExpireIncomplete_RealCapturePathProducesNoIncompleteUnits(t *testing.T)
 	llm := fakeprovider.New(t, filepath.Join(repoRootForConsolidateIT(t), "testdata", "llm", "cases"), "classify-pick-up-dry-cleaning")
 	embed := fakeprovider.NewEmbeddingFake(consolidateITEmbedModel)
 
-	captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), signals, triggers, timers)
+	captureSvc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), signals, triggers, timers, 0.5)
 
 	result, err := captureSvc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",

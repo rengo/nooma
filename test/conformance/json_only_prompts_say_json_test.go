@@ -40,7 +40,7 @@ func TestJSONOnlyPromptsSayJSON(t *testing.T) {
 	// asserted below, against the number of JSON-parsing tasks the brain
 	// actually has.
 	prompts := map[string]string{
-		"classify (capture_processing)": classify.BuildPrompt("pick up the dry cleaning", nil, now),
+		"classify (capture_processing)": classify.BuildPrompt("pick up the dry cleaning", nil, now, consolidation.DefaultWeightThreshold),
 		"judge (relation_evaluation)": brain.JudgePrompt(
 			unit.Unit{ID: "u1", Content: "the new one"},
 			[]unit.Unit{{ID: "u2", Content: "a candidate"}},

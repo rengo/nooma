@@ -54,7 +54,7 @@ func TestCapture_OrphanActionsNowHaveCallers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 			_, err = svc.Capture(ctx, brain.CaptureInput{
 				Text:    "irrelevant — the scripted LLM case drives the classification",

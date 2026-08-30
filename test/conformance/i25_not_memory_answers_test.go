@@ -87,7 +87,7 @@ func TestI25_ChitchatIsAnsweredAndOutOfScopeIsRefused(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 			}
-			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, classifier, classifier, chat, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, classifier, classifier, chat, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 			const message = "hola, todo bien?"
 			result, err := svc.Capture(ctx, brain.CaptureInput{Text: message, Channel: "chat"})

@@ -11,6 +11,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels/telegram"
 	"github.com/rengo/nooma/internal/config"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/providers/anthropic"
 	"github.com/rengo/nooma/internal/providers/ollama"
@@ -312,7 +313,24 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 	}
 	index := brain.NewIndex(loaded)
 
-	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, chatter, embed, index, signals, triggers, timers)
+	// §6's weight_threshold, resolved once here rather than per capture —
+	// the same "resolved at vault open, not per request" posture the
+	// resident index above already takes. The classification prompt needs
+	// it because §5 asks the model for a weight that §6 treats as a
+	// delete boundary (ADR-0023), and until now the prompt never named
+	// that boundary.
+	//
+	// A Load failure falls back to the calibrated default rather than
+	// refusing to wire the brain: an unwritten config row is the normal
+	// state of a vault (ports.ConfigRepo.Load's own contract), and a
+	// prompt naming 0.5 when the vault configured 0.4 is a worse
+	// classification, not a broken capture.
+	archiveThreshold := consolidation.DefaultWeightThreshold
+	if stored, err := sqlite.NewConfigRepo(db).Load(ctx); err == nil {
+		archiveThreshold = consolidation.ResolveWeightThreshold(stored.WeightThreshold)
+	}
+
+	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, chatter, embed, index, signals, triggers, timers, archiveThreshold)
 	recall := brain.NewRecallService(index, lex, units, embed)
 	return capture, recall, nil
 }

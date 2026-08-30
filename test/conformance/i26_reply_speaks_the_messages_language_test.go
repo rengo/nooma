@@ -68,7 +68,7 @@ func TestI26_ACaptureIsAnsweredInTheMessagesLanguage(t *testing.T) {
 			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(),
 				embeddings, memrepo.NewLexical(), memrepo.NewRelations(), memrepo.NewDecisionLog(),
 				llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(),
-				memrepo.NewTriggers(), memrepo.NewTimers())
+				memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 			result, err := svc.Capture(ctx, brain.CaptureInput{Text: "acordate de comprar café", Channel: "chat"})
 			if err != nil {
@@ -111,7 +111,7 @@ func TestI26_TheGlassBoxStaysEnglish(t *testing.T) {
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(),
 		embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions,
 		llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
-		memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+		memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "acordate de comprar café", Channel: "chat"}); err != nil {
 		t.Fatalf("Capture: %v", err)
@@ -178,7 +178,7 @@ func TestI26_TheTrailRecordsWhatLanguageWasRead(t *testing.T) {
 			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(),
 				embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions,
 				llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
-				memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+				memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 			if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "acordate de comprar café", Channel: "chat"}); err != nil {
 				t.Fatalf("Capture: %v", err)
