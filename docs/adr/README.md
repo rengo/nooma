@@ -75,6 +75,7 @@ order, with no correspondence to anything.
 | [0021](0021-conversation-boundary.md) | Conversation and its boundary: chitchat answers, out of scope refuses | Accepted | M3e |
 | [0022](0022-reply-language.md) | The reply language follows the message, not a setting | Accepted | M3e |
 | [0023](0023-the-prompt-states-the-scale.md) | The prompt states the scale: the model still decides, it stops deciding blind | Accepted | M3e |
+| [0024](0024-the-vault-keeps-your-words.md) | The vault keeps your words: a memory is stored in the language it was written in | Accepted | M3e |
 
 ## Template
 

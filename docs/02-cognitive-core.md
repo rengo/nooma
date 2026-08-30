@@ -408,6 +408,26 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `person_ref_status (resolved|new|ambiguous)`.
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
      brings down the whole classification.
+   - **`normalized_content` is written in the message's own language, never translated**
+     ([ADR-0024](adr/0024-the-vault-keeps-your-words.md)). Normalization cleans a message into a
+     self-contained statement; it does not move it between languages.
+     - **A vault holds what its owner wrote.** Without this rule the model rewrites into the
+       language of the prompt, which is English — "recordame comprar cafe" was stored as
+       "Record to buy coffee.", translated *and* mistranslated, since "recordame" is "remind
+       me". A mistranslation is a corruption nothing downstream can detect, because no field
+       records what the original said.
+     - **It is also what recall compares against.** A unit's embedding is built from its
+       content, while a recall query is embedded **raw** (I22 — same mechanism, same raw text,
+       never `normalized_content`). Storing a translation therefore put every vector comparison
+       across a language boundary, underneath ADR-0020's admission floor — the leg that decides
+       whether an answer is given at all — and left the lexical leg matching words that are not
+       in the stored text. Keeping the language is what makes query and content land in the same
+       one.
+     - **Mixed-language vaults are accepted, not solved.** Someone writing in two languages gets
+       two regions of their own vault that recall each other poorly. That cost is smaller than
+       the one it replaces: a translated store makes *every* recall cross-language, including
+       for a person who only ever writes one.
+
    - **`language` is what the message was written in, and it decides how the answer is
      written** ([ADR-0022](adr/0022-reply-language.md)). Every other field on this list says
      what the message MEANT; this one says how to answer it.

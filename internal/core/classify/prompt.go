@@ -70,8 +70,25 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 
 	b.WriteString("Required fields\n")
 	b.WriteString("  type                 one of: " + joinVocabulary(AllKinds()) + "\n")
+	// **In the message's own language.** Without this line the model
+	// rewrites into the language of these instructions, and a vault
+	// stopped holding what its owner wrote: "recordame comprar cafe" was
+	// stored as "Record to buy coffee." — translated, and mistranslated,
+	// since "recordame" is "remind me" and not "record".
+	//
+	// The cost is not only fidelity. This string is what gets embedded
+	// (brain.embedAndStore sends u.Content), while a recall query is
+	// embedded raw (I22 — never normalized_content). Translating the
+	// stored side put every vector comparison across a language boundary,
+	// under ADR-0020's admission floor, which is the leg that decides
+	// whether an answer is given at all.
 	b.WriteString("  normalized_content   the message rewritten as a clean, self-contained " +
-		"statement\n")
+		"statement,\n")
+	b.WriteString("                       **in the same language the message was written " +
+		"in**. Do not\n")
+	b.WriteString("                       translate it — this is what the person will read " +
+		"back later,\n")
+	b.WriteString("                       and what their own words are searched against\n")
 	// **The scale, not just the question.** These two were asked for as
 	// bare 0-1 floats — "how much this matters", "per-day forgetting
 	// rate" — and a real model answered 0.5 and 0.3 for "buy coffee",

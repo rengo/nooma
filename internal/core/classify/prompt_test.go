@@ -437,3 +437,37 @@ func TestBuildPrompt_ThresholdIsRenderedAsAPersonWritesIt(t *testing.T) {
 		t.Errorf("the threshold is not rendered as 0.5:\n%s", got)
 	}
 }
+
+// TestBuildPrompt_KeepsTheMessagesLanguageInTheContent guards ADR-0024.
+//
+// Without the instruction the model rewrites into the prompt's language,
+// and a live vault stored "recordame comprar cafe" as "Record to buy
+// coffee." — translated, and mistranslated. The absence of this line was
+// invisible: normalization is supposed to change the text, so a changed
+// text looks like the feature working.
+//
+// It also asserts the *reason* travels, not only the rule. The stored
+// content is what a recall query is compared against (I22 embeds the query
+// raw), so a model shown only "do not translate" has been told a
+// constraint; one shown why has been told a purpose, and purposes survive
+// paraphrase in a way bare constraints do not.
+func TestBuildPrompt_KeepsTheMessagesLanguageInTheContent(t *testing.T) {
+	got := BuildPrompt("recordame comprar cafe", nil, time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC), 0.5)
+	flat := strings.Join(strings.Fields(got), " ")
+
+	// The rule must sit on normalized_content itself, not merely somewhere
+	// in a prompt that already discusses language for a different field.
+	head, _, found := strings.Cut(flat, "weight 0-1")
+	if !found {
+		t.Fatalf("cannot locate the normalized_content block:\n%s", got)
+	}
+	if !strings.Contains(head, "same language the message was written in") {
+		t.Errorf("normalized_content does not carry the language rule — the model rewrites into the prompt's language:\n%s", got)
+	}
+	if !strings.Contains(head, "Do not translate") {
+		t.Errorf("normalized_content does not forbid translation outright:\n%s", got)
+	}
+	if !strings.Contains(head, "searched against") {
+		t.Errorf("the rule is stated without its reason — the stored text is what a raw query is compared against (I22, ADR-0020):\n%s", got)
+	}
+}
