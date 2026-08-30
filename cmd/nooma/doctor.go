@@ -14,6 +14,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
@@ -380,7 +381,13 @@ func qualityGatePrompt(task string, c llm.Case, now time.Time) string {
 		// beliefs is always nil here, the same way captureRunner.at passes
 		// nil (internal/brain/capture.go): nothing reads self_beliefs yet
 		// (design D4 — derive is M2, seeding is M4).
-		return classify.BuildPrompt(c.Message, nil, now)
+		// The quality gate builds the prompt production builds, so it
+		// needs §6's threshold too. The calibrated default rather than a
+		// vault's configured one: doctor judges whether a provider can
+		// answer this prompt's SHAPE, and a per-vault number would make
+		// two vaults score the same provider differently on a question
+		// that is not about them (ADR-0023).
+		return classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold)
 	case "relation_evaluation":
 		candidates := make([]unit.Unit, len(c.Candidates))
 		for i, cand := range c.Candidates {

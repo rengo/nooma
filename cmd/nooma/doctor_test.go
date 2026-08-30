@@ -14,6 +14,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
@@ -179,7 +180,7 @@ func TestCheckLLMQuality_SendsClassifyBuildPromptForCaptureProcessing(t *testing
 	if len(seen) != 1 {
 		t.Fatalf("provider saw %d Complete call(s) for one corpus case, want exactly 1 — spec R5.4 forbids a retry", len(seen))
 	}
-	want := classify.BuildPrompt(c.Message, nil, now)
+	want := classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold)
 	if seen[0] != want {
 		t.Errorf("sent prompt %q, want classify.BuildPrompt's own output %q — spec R5.3: the gate must build the real prompt, never replay a corpus field", seen[0], want)
 	}

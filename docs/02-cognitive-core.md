@@ -171,6 +171,27 @@ direction (`emotional` → low λ, `task` → high λ); the active beliefs of th
 high weight and very low λ. Type acts as a prior when the self-model is empty (cold start) and
 improves as beliefs get derived.
 
+**The model is told what the two numbers do** ([ADR-0023](adr/0023-the-prompt-states-the-scale.md)).
+The decision stays where the paragraph above puts it — the model assigns both — but it stops
+assigning blind. `weight` is asked for alongside §6's `weight_threshold`, named with the value
+the vault actually uses, and alongside what crossing it costs; λ is asked for alongside its own
+half-lives, because a per-day rate is uncalibratable without them.
+
+This was earned. Asked for as bare 0-1 floats, a real model answered `weight: 0.5` and
+`decay_rate: 0.3` for "buy coffee" — reasonable answers to "how much does this matter" and
+"high for routine tasks" — and the capture was archived **sixty-two seconds later**: 0.5 is
+exactly the archive threshold, and any elapsed time makes the effective weight strictly less.
+Two consequences worth stating plainly. §6's promise that a unit sitting *exactly* at the
+threshold is not archived holds for zero seconds and no longer. And answering was worse than
+not answering: a degraded weight falls back to the base prior of 1.0 and lives, so the model
+was punished for responding to the question it was asked.
+
+**The cold start is colder than this paragraph reads.** "Type acts as a prior when the
+self-model is empty" describes half a mechanism that is currently the whole of it: nothing
+injects beliefs into the classification yet, so the model has been asked to *personalize* a
+value with nothing to personalize from. Naming the scale is what makes the remaining half —
+type, alone — answerable rather than a guess.
+
 **Thermal zones** — emergent, not persisted:
 
 | Zone | Determination |
@@ -800,7 +821,12 @@ boot catch-up — the two are one body of work behind two triggers.
    (`internal/core/consolidation.ExpireIncomplete`).
 2. **archive**: `effective_weight < weight_threshold` (default 0.5) → `archived` — the
    comparison is **strictly** less than; a unit sitting at exactly `weight_threshold` is not
-   archived. At the shipped defaults, this composes with §2's revive and resurface guarantees:
+   archived. **That protection lasts zero seconds and no longer**, which is worth knowing
+   before relying on it: `effective_weight` decays continuously with elapsed time (§2), so a
+   unit stored at exactly the threshold is strictly below it by the next instant. The strict
+   comparison is a boundary rule, never a safe harbour — §2's own scale paragraph and
+   [ADR-0023](adr/0023-the-prompt-states-the-scale.md) exist because a real capture landed on
+   that boundary and was archived sixty-two seconds later. At the shipped defaults, this composes with §2's revive and resurface guarantees:
    one direct revive always clears the archive band (`revive_gain * weight_ceiling >
    weight_threshold`), and spreading activation alone, at maximum hop distance, never does
    (`resurface_attenuation ^ resurface_max_hops * weight_ceiling <= weight_threshold`) — both

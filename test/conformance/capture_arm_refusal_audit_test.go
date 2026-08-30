@@ -271,7 +271,7 @@ func runCaptureForRefusalSweep(t *testing.T, now time.Time, decisions ports.Deci
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(), embeddings,
 		memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm, chat,
 		fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), memrepo.NewSignals(),
-		memrepo.NewTriggers(), memrepo.NewTimers())
+		memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "swept", Channel: "chat"}); err != nil {
 		t.Fatalf("Capture: %v", err)

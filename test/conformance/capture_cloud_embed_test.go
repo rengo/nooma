@@ -46,7 +46,7 @@ func TestCapture_CloudEmbedderMakesTheDistinctionObservable(t *testing.T) {
 		}
 		return brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(),
 			embeddings, memrepo.NewLexical(), memrepo.NewRelations(), memrepo.NewDecisionLog(),
-			llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+			llm, llm, llm, embed, brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 	}
 
 	t.Run("the openai embeddings endpoint answers", func(t *testing.T) {

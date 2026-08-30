@@ -74,6 +74,7 @@ order, with no correspondence to anything.
 | [0020](0020-recall-admission.md) | Recall admission: the vector admits, the lexical leg ranks | Accepted | M3e |
 | [0021](0021-conversation-boundary.md) | Conversation and its boundary: chitchat answers, out of scope refuses | Accepted | M3e |
 | [0022](0022-reply-language.md) | The reply language follows the message, not a setting | Accepted | M3e |
+| [0023](0023-the-prompt-states-the-scale.md) | The prompt states the scale: the model still decides, it stops deciding blind | Accepted | M3e |
 
 ## Template
 

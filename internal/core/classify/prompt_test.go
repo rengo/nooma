@@ -31,8 +31,8 @@ var (
 func TestBuildPrompt_CarriesTheInstantsOwnZone(t *testing.T) {
 	instant := time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC)
 
-	inBuenosAires := BuildPrompt("pick up the dry cleaning on Friday", nil, instant.In(buenosAires))
-	inKolkata := BuildPrompt("pick up the dry cleaning on Friday", nil, instant.In(kolkata))
+	inBuenosAires := BuildPrompt("pick up the dry cleaning on Friday", nil, instant.In(buenosAires), 0.5)
+	inKolkata := BuildPrompt("pick up the dry cleaning on Friday", nil, instant.In(kolkata), 0.5)
 
 	if inBuenosAires == inKolkata {
 		t.Fatal("the same instant in two zones produced identical prompts — the zone is not " +
@@ -67,7 +67,7 @@ func TestBuildPrompt_RendersTheLocalDate(t *testing.T) {
 	// 01:00 UTC on the 5th is still 22:00 on the 4th in Buenos Aires.
 	instant := time.Date(2026, 8, 5, 1, 0, 0, 0, time.UTC).In(buenosAires)
 
-	prompt := BuildPrompt("remind me tomorrow", nil, instant)
+	prompt := BuildPrompt("remind me tomorrow", nil, instant, 0.5)
 
 	if !strings.Contains(prompt, "2026-08-04") {
 		t.Errorf("prompt does not carry the local date 2026-08-04; it is 01:00 UTC on the 5th "+
@@ -86,7 +86,7 @@ func TestBuildPrompt_RendersTheLocalDate(t *testing.T) {
 func TestBuildPrompt_CarriesTheMessage(t *testing.T) {
 	const message = `she said "call me Friday" — and I said ok`
 
-	prompt := BuildPrompt(message, nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires))
+	prompt := BuildPrompt(message, nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires), 0.5)
 
 	if !strings.Contains(prompt, message) {
 		t.Errorf("prompt does not contain the message verbatim, quotes and dashes included.\n\n%s",
@@ -101,7 +101,7 @@ func TestBuildPrompt_CarriesTheMessage(t *testing.T) {
 // test iterates the same AllX() rather than a literal list, so a value added
 // later is checked without editing this file.
 func TestBuildPrompt_RendersEveryVocabularyFromItsOwnSource(t *testing.T) {
-	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires))
+	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires), 0.5)
 
 	for _, k := range AllKinds() {
 		if !strings.Contains(prompt, string(k)) {
@@ -141,7 +141,7 @@ func TestBuildPrompt_RendersEveryVocabularyFromItsOwnSource(t *testing.T) {
 // AllRecurrenceRules(), the same "no drift" property the six orthogonal
 // fields already have (TestBuildPrompt_RendersEveryVocabularyFromItsOwnSource).
 func TestBuildPrompt_RendersProspectionFields(t *testing.T) {
-	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires))
+	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires), 0.5)
 
 	// The timer's own field rule (design §3.7 decision 1). A model left to
 	// guess which of the two date fields a reminder belongs in will
@@ -183,11 +183,11 @@ func asStrings[T ~string](vs []T) []string {
 func TestBuildPrompt_BeliefsAreOptionalAndRendered(t *testing.T) {
 	now := time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires)
 
-	withoutBeliefs := BuildPrompt("anything", nil, now)
+	withoutBeliefs := BuildPrompt("anything", nil, now, 0.5)
 	withBeliefs := BuildPrompt("anything", []Belief{
 		{Facet: "goal", Content: "ship Nooma's first milestone"},
 		{Facet: "habit", Content: "practices guitar most evenings"},
-	}, now)
+	}, now, 0.5)
 
 	if withoutBeliefs == withBeliefs {
 		t.Fatal("beliefs changed nothing in the prompt — the parameter is decorative, and M2 " +
@@ -217,9 +217,9 @@ func TestBuildPrompt_IsPure(t *testing.T) {
 	now := time.Date(2026, 8, 4, 9, 0, 0, 0, buenosAires)
 	beliefs := []Belief{{Facet: "goal", Content: "ship it"}}
 
-	first := BuildPrompt("anything", beliefs, now)
+	first := BuildPrompt("anything", beliefs, now, 0.5)
 	for i := range 20 {
-		if got := BuildPrompt("anything", beliefs, now); got != first {
+		if got := BuildPrompt("anything", beliefs, now, 0.5); got != first {
 			t.Fatalf("call %d differed from the first — BuildPrompt is not deterministic, "+
 				"most likely a map iterated in place of a slice", i+2)
 		}
@@ -235,7 +235,7 @@ func TestBuildPrompt_IsPure(t *testing.T) {
 // load-bearing: naming the date without restating the required fields made
 // the same model drop weight and decay_rate to make room.
 func TestBuildPrompt_AsksACorrectionForTheCorrectedValue(t *testing.T) {
-	p := BuildPrompt("no, the dentist is on the 15th, not the 14th", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC))
+	p := BuildPrompt("no, the dentist is on the 15th, not the 14th", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC), 0.5)
 
 	for _, want := range []string{
 		"corrected VALUE",
@@ -265,7 +265,7 @@ func TestBuildPrompt_AsksACorrectionForTheCorrectedValue(t *testing.T) {
 // decode quality, not which type came back, so even that is a human reading
 // the output.
 func TestBuildPrompt_SeparatesAskingFromTelling(t *testing.T) {
-	p := BuildPrompt("what do you know about my passport?", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC))
+	p := BuildPrompt("what do you know about my passport?", nil, time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC), 0.5)
 
 	for _, want := range []string{
 		"what the message DOES",
@@ -304,7 +304,7 @@ func TestBuildPrompt_SeparatesAskingFromTelling(t *testing.T) {
 func TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone(t *testing.T) {
 	now := time.Date(2026, 8, 4, 9, 30, 0, 0, time.Local)
 
-	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil, now)
+	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil, now, 0.5)
 
 	// The injected line is parsed back as an offset rather than compared to
 	// a string. A Contains check against the old "timezone: Local" wording
@@ -342,7 +342,7 @@ func TestBuildPrompt_CarriesAUsableOffsetForTheProcessZone(t *testing.T) {
 // Mutation: drop the example from the event_at/due_at line and this fails.
 func TestBuildPrompt_ShowsADateFormatTheDecoderAccepts(t *testing.T) {
 	prompt := BuildPrompt("take the bread out of the oven in 40 minutes", nil,
-		time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
+		time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC), 0.5)
 
 	line := ""
 	for _, l := range strings.Split(prompt, "\n") {
@@ -376,11 +376,64 @@ func TestBuildPrompt_ShowsADateFormatTheDecoderAccepts(t *testing.T) {
 // "carrying its offset" both satisfy, so deleting the sentence outright
 // left it green. That mutation is what this wording catches.
 func TestBuildPrompt_SaysTheOffsetIsMandatory(t *testing.T) {
-	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC))
+	prompt := BuildPrompt("anything", nil, time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC), 0.5)
 
 	if !regexp.MustCompile(`(?i)without an offset is not accepted`).MatchString(prompt) {
 		t.Error("the prompt never states that a timestamp without an offset is rejected. " +
 			"Go's RFC3339 parser requires one, and a model shown only an example has no " +
 			"way to know the offset was the mandatory part of it")
+	}
+}
+
+// TestBuildPrompt_TellsTheModelWhatTheNumbersDo guards ADR-0023, and it
+// exists because the absence of these lines was invisible.
+//
+// The prompt asked for weight and decay_rate as bare 0-1 floats. A real
+// model answered 0.5 and 0.3 for "buy coffee" — reasonable answers to the
+// questions as posed — and the capture was archived sixty-two seconds
+// later, because 0.5 IS the archive threshold and 0.3/day empties a memory
+// in two days. Nothing in the prompt said so.
+//
+// It asserts the threshold is named with the value BuildPrompt was handed,
+// not a constant: the number is per-vault configurable (§6), and a prompt
+// hardcoding 0.5 would quietly lie to every vault that configured
+// something else.
+func TestBuildPrompt_TellsTheModelWhatTheNumbersDo(t *testing.T) {
+	now := time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC)
+
+	for _, threshold := range []float64{0.5, 0.4, 0.25} {
+		got := BuildPrompt("buy coffee", nil, now, threshold)
+		flat := strings.Join(strings.Fields(got), " ")
+
+		want := "falls below " + trimFloat(threshold)
+		if !strings.Contains(flat, want) {
+			t.Errorf("BuildPrompt(threshold=%v) never names it — the model is choosing a number whose meaning it was not told:\n%s", threshold, got)
+		}
+		if !strings.Contains(flat, "archived on the next nightly pass") {
+			t.Errorf("BuildPrompt(threshold=%v) names the boundary without saying what crossing it costs", threshold)
+		}
+	}
+
+	// The decay rate needs its own scale for the same reason. "0-1
+	// per-day forgetting rate" is not something a model can calibrate
+	// against a threshold it now knows: half-lives are.
+	flat := strings.Join(strings.Fields(BuildPrompt("buy coffee", nil, now, 0.5)), " ")
+	for _, want := range []string{"exp(-rate * days)", "0.01 halves", "0.3 in 2"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("BuildPrompt does not give decay_rate a scale (%q missing) — a rate is uncalibratable without one", want)
+		}
+	}
+}
+
+// TestBuildPrompt_ThresholdIsRenderedAsAPersonWritesIt pins the formatting,
+// because the alternative is noise where a boundary was meant: a model
+// shown "0.5000000000000001" reads a number nobody chose.
+func TestBuildPrompt_ThresholdIsRenderedAsAPersonWritesIt(t *testing.T) {
+	got := BuildPrompt("buy coffee", nil, time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC), 0.5)
+	if strings.Contains(got, "0.500000") {
+		t.Errorf("the threshold is rendered with trailing zeros:\n%s", got)
+	}
+	if !strings.Contains(got, "0.5") {
+		t.Errorf("the threshold is not rendered as 0.5:\n%s", got)
 	}
 }

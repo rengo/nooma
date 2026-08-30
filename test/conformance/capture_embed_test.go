@@ -40,7 +40,7 @@ func TestCapture_EmbedsThePersistedUnitExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(initialIdx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, lexical, relations, decisions, llm, llm, llm, embed, brain.NewIndex(initialIdx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
@@ -105,7 +105,7 @@ func TestCapture_NoEmbeddingWrittenForAUnitNotPersisted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm, llm, embed, brain.NewIndex(initialIdx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm, llm, embed, brain.NewIndex(initialIdx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 	_, err = svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
@@ -149,7 +149,7 @@ func TestCapture_EmbeddingProviderFailureLeavesUnitPersisted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddings.LoadIndex(%q): %v", embedFakeModel, err)
 	}
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm, llm, embed, brain.NewIndex(initialIdx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers())
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(), decisions, llm, llm, llm, embed, brain.NewIndex(initialIdx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5)
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{
 		Text:    "Pick up the dry cleaning on Friday",
