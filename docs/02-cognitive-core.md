@@ -818,8 +818,8 @@ division always defined, for any candidate set the gate ever sees.
 
 ## 6. Nightly consolidation ("sleep")
 
-One pass per night (default 03:00), phases IN ORDER — each one a pure function over the
-vault, individually invocable:
+One pass per night at 03:00 local — a constant, not a setting ([ADR-0025](adr/0025-the-schedule-is-not-a-setting.md)) —
+phases IN ORDER, each one a pure function over the vault, individually invocable:
 
 ```
 expire_incomplete → archive → strengthen → connect → derive → reweight → pattern_eval → learn

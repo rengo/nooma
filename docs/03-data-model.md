@@ -198,8 +198,10 @@ CREATE TABLE config (
 );
 ```
 
-(Cron schedules live in `nooma.yml`, not in the DB: they are operational config, not brain
-state.)
+(The schedule is neither here nor in `nooma.yml`: it is two constants in `internal/scheduler`,
+retired from configuration by [ADR-0025](adr/0025-the-schedule-is-not-a-setting.md). What this
+table does hold is `consolidation_enabled`, which suppresses the nightly pass and its boot
+catch-up together.)
 
 ## Search: embeddings + FTS5
 

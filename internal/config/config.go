@@ -18,7 +18,6 @@ type Config struct {
 	Providers map[string]Provider    `yaml:"providers"`
 	Tasks     map[string]TaskBinding `yaml:"tasks"`
 	Channels  Channels               `yaml:"channels"`
-	Schedules Schedules              `yaml:"schedules"`
 }
 
 // Server is the HTTP surface. Bind, HTTPPort and UI are pointers because
@@ -80,13 +79,16 @@ type Telegram struct {
 	AllowedChatIDs []int64 `yaml:"allowed_chat_ids"`
 }
 
-// Schedules are cron expressions. They live here rather than in the database
-// because they are operational configuration, not brain state
-// (docs/03-data-model.md).
-type Schedules struct {
-	Consolidate    string `yaml:"consolidate"`
-	ProactiveCheck string `yaml:"proactive_check"`
-}
+// There is deliberately no Schedules type. It existed here from M0 until
+// 2026-08-31, holding two cron expressions that nothing in this repository ever
+// read — no code parses a cron expression at all. ADR-0025 retires the keys
+// rather than building the parser: the schedule is
+// `internal/scheduler.ConsolidationHour` and `ProactiveCheckInterval`, both
+// carried as calibration rows in docs/02-cognitive-core.md §13.
+//
+// A field here with no reader is the same defect as a port method with no
+// caller, and this repository refuses to ship those. See decode.go's
+// retiredKeys for what a vault that still carries the block is told.
 
 // The defaults themselves, the validator's list of documented provider types and
 // task names, and the resolution of `database.path` all arrive in the next two

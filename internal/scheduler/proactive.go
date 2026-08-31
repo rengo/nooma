@@ -7,13 +7,15 @@ import (
 
 // ProactiveCheckInterval is how often the proactive pass runs.
 //
-// Five minutes, which is `docs/01-architecture.md:227`'s own `*/5 * * * *`
-// expressed as a duration. **It is a constant here rather than a parsed
-// cron expression, and that is the existing shape rather than a new
-// decision**: nothing in this repository parses a cron expression at all.
-// `ConsolidationHour` is a constant beside it for the same reason, and
-// `schedules.consolidate` has been a decoded-and-unread config key since
-// M0 (finding J5).
+// Five minutes, as a duration and not as a parsed cron expression, because
+// nothing in this repository parses a cron expression at all.
+// `ConsolidationHour` is a constant beside it for the same reason.
+//
+// This was the existing shape long before it was a decision. `nooma.yml`
+// carried `schedules.proactive_check` and `schedules.consolidate` from M0,
+// decoded and read by nobody — `m3d` finding J5. ADR-0025 retires both keys
+// rather than building the parser, which makes this constant the schedule
+// rather than a stand-in for one.
 //
 // The number is bounded from both sides. Longer, and an item deferred out
 // of quiet hours waits past 07:00 by up to that long, every morning.

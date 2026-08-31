@@ -34,7 +34,7 @@ configuration lives **inside** each vault, so a vault stays one self-contained o
 ```
 pablo.nooma/
 ├── nooma.db              # SQLite: units, relations, triggers, beliefs, decision_log…
-├── nooma.yml             # user config (channels, providers, schedules)
+├── nooma.yml             # user config (server, providers, tasks, channels)
 ├── .env                  # secrets (API keys) — never committable
 ├── attachments/          # immutable originals (PDFs, photos, audio)
 ├── derived/              # recomputable (OCR, transcriptions) — skippable in backup
@@ -230,14 +230,17 @@ channels:
     enabled: true
     bot_token_env: TELEGRAM_BOT_TOKEN
     allowed_chat_ids: [123456789]
-
-schedules:
-  consolidate: "0 3 * * *"        # nightly
-  proactive_check: "*/5 * * * *"  # scan for due triggers + urgent push
 ```
 
 Philosophy: reusable providers (one key, N tasks), explicit tasks (nothing hidden in
 defaults), free cloud+local mixing, separated secrets.
+
+**There is no `schedules:` block, and there used to be.** It documented two cron expressions
+that nothing ever read — Nooma consolidates at 03:00 local and runs its proactive check every
+five minutes, both as constants, and no code here parses a cron expression at all. The keys are
+retired by [ADR-0025](adr/0025-the-schedule-is-not-a-setting.md); a `nooma.yml` that still
+carries the block is told so by name when it loads. To stop the nightly pass, the vault's
+`config` table has `consolidation_enabled` ([`02-cognitive-core.md`](02-cognitive-core.md) §6).
 
 ### The three kinds of LLM work
 
