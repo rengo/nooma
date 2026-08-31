@@ -1,10 +1,10 @@
 # Proposal — M3: the mouth (Telegram + prospection)
 
-Deliver M3 as laid out in [`docs/05-build-plan.md`](../../../docs/05-build-plan.md) §M3
+Deliver M3 as laid out in [`docs/05-build-plan.md`](../../../../docs/05-build-plan.md) §M3
 (lines 163-177): the Telegram adapter over long polling
-([ADR-0014](../../../docs/adr/0014-telegram-transport.md)), triggers armed at capture with a due
+([ADR-0014](../../../../docs/adr/0014-telegram-transport.md)), triggers armed at capture with a due
 scan, digest and interruptive push, ephemeral timers end to end, and the conversational check-ins
-driven by [`docs/02-cognitive-core.md`](../../../docs/02-cognitive-core.md) §5's orthogonal
+driven by [`docs/02-cognitive-core.md`](../../../../docs/02-cognitive-core.md) §5's orthogonal
 classify fields.
 
 M1 made the binary answer when spoken to. M2 made it act while nobody is looking. **M3 is the

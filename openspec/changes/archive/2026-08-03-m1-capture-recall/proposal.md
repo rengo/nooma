@@ -1,8 +1,8 @@
 # Proposal — M1: the brain gets written
 
-Deliver M1 as laid out in [`docs/05-build-plan.md`](../../../docs/05-build-plan.md): the
+Deliver M1 as laid out in [`docs/05-build-plan.md`](../../../../docs/05-build-plan.md): the
 `LLMProvider` / `EmbeddingProvider` interfaces and their implementations, `tasks:` routing, the
-synchronous capture pipeline of [`docs/02-cognitive-core.md`](../../../docs/02-cognitive-core.md)
+synchronous capture pipeline of [`docs/02-cognitive-core.md`](../../../../docs/02-cognitive-core.md)
 §5, hybrid recall with RRF fusion, the dedup/relation judge with its thresholds, in-place
 corrections, and the HTTP surface for capture, recall and read-only units.
 
@@ -45,7 +45,7 @@ The change is done when:
       classification survives, proven by real recorded cases in `testdata/classify/cases/`
       covering all three shapes `format.md` names: truncated JSON, a wrong-typed field, an
       unknown enum value (**I14**).
-- [ ] Hybrid recall returns a fused ranking (RRF, `k = 60`, [ADR-0010](../../../docs/adr/0010-hybrid-recall-fusion.md))
+- [ ] Hybrid recall returns a fused ranking (RRF, `k = 60`, [ADR-0010](../../../../docs/adr/0010-hybrid-recall-fusion.md))
       whose order is pinned by `testdata/recall/cases/`, with at least one distractor, one
       near-duplicate pair and one lexical/vector disagreement across the corpus.
 - [ ] Every vector search filters on `model`; two models' embeddings never enter the same
@@ -106,7 +106,7 @@ M1 arms no hook and refuses the capture outright.
 3. **`internal/core/classify`** (new package, see §4.1) — the tolerant decoder that turns a raw
    provider response into a classification with per-field degradation.
 4. **`internal/core/recall`** — `VectorQuery`, `VectorIndex`, brute-force top-K
-   ([ADR-0012](../../../docs/adr/0012-vector-proximity-search.md)), and RRF fusion.
+   ([ADR-0012](../../../../docs/adr/0012-vector-proximity-search.md)), and RRF fusion.
 5. **`internal/core/relation`** — the threshold decision: discard, persist silently, persist as
    uncertain, or assert.
 6. **`internal/ports`** — `UnitRepo`, `RelationRepo`, `SignalRepo`, `DecisionLog`,
@@ -132,7 +132,7 @@ M1 arms no hook and refuses the capture outright.
     `testdata/llm/cases/`.
 
 **Items 14 and 15 were added on 2026-07-31, after the proposal was already merged**, and how they
-were missing is the part worth keeping. Both are [ADR-0002](../../../docs/adr/0002-default-llm-preset.md)'s
+were missing is the part worth keeping. Both are [ADR-0002](../../../../docs/adr/0002-default-llm-preset.md)'s
 own deliverables — an ADR `Accepted` on 2026-07-27 whose Decision section names them in plain
 words. Neither appeared in any milestone's bullets, in this proposal's scope, or in any task list.
 They surfaced because the owner asked an ordinary product question — *"is using a cloud LLM
@@ -176,7 +176,7 @@ supported, but M1 is judged on the cloud path running end to end.
 - **No `reindex`.** ADR-0003's amendment makes it an ordinary `UPDATE` loop; it is an M6 command.
   M1 must nonetheless behave correctly on a vault holding two models, because that is what I21
   exists for.
-- **No perception, no measurements.** v2, per [ADR-0005](../../../docs/adr/0005-v1-scope.md).
+- **No perception, no measurements.** v2, per [ADR-0005](../../../../docs/adr/0005-v1-scope.md).
 
 ### 3.4 Invariants in scope, traced
 
@@ -465,7 +465,7 @@ numbers are per-PR budgets chosen to respect it, not predictions — see the not
 > existed since M0 with no quality gate, and `nooma init` has no Cloud or Ollama path at all.
 >
 > The failure shape is worth more than the fix. §3.2's own note already records that these two
-> items are [ADR-0002](../../../docs/adr/0002-default-llm-preset.md)'s deliverables, that the ADR
+> items are [ADR-0002](../../../../docs/adr/0002-default-llm-preset.md)'s deliverables, that the ADR
 > was `Accepted` on 2026-07-27, and that *"neither appeared in any milestone's bullets, in this
 > proposal's scope, or in any task list"*. That note was written — and then the items were added to
 > the scope section and to nothing else. **Writing down why something was missed is not scheduling
@@ -712,7 +712,7 @@ in place and never says which one it is.
 > All three are now closed.
 >
 > **3c-ii, is a wrong referent recoverable? CLOSED — yes.**
-> [ADR-0016](../../../docs/adr/0016-correction-pre-image.md): the values a correction is about to
+> [ADR-0016](../../../../docs/adr/0016-correction-pre-image.md): the values a correction is about to
 > overwrite are written to `decision_log.context` first, and a failed audit write blocks the edit.
 > This resolved a contradiction inside doc 02 — §4 argues that inferring-and-destroying in one act
 > is forbidden, while §5 step 4 mandates an in-place edit. The distinction neither paragraph drew:

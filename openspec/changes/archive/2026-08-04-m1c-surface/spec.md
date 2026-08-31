@@ -62,7 +62,7 @@ document more than anything else:
 - **Q3c-i** (2026-08-02): which unit a correction edits is resolved by an explicit `unit_id`
   override when the caller has one, and otherwise by hybrid recall against the correction text
   gated on the **ratio** of the top two fused scores (`correction_referent_margin`, default 1.5).
-- **Q3c-ii** (2026-08-02, [ADR-0016](../../../docs/adr/0016-correction-pre-image.md)): the values a
+- **Q3c-ii** (2026-08-02, [ADR-0016](../../../../docs/adr/0016-correction-pre-image.md)): the values a
   correction is about to overwrite are written to `decision_log.context` before the overwrite; a
   failed audit write blocks the edit.
 - **Q3c-iii** (2026-08-02): `ports.UnitRepo` gains one update method per correctable field
@@ -120,7 +120,7 @@ it (§6 below).
 
 Traced to `docs/02-cognitive-core.md` §4 (the duplicate/correction distinction), §5 step 4
 (corrections), §9 (I13), §13 (`correction_referent_margin`), and
-[ADR-0016](../../../docs/adr/0016-correction-pre-image.md).
+[ADR-0016](../../../../docs/adr/0016-correction-pre-image.md).
 
 ### R1.1 — Capture routes a `correction` classification away from `classify.ToUnit`
 

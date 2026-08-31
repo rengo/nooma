@@ -33,3 +33,26 @@ requirement freezes when **the PR that implements it** merges and is verified, n
 change directory finally closes. While the implementing branch is still under review, that
 requirement's text is mutable and gets corrected in place. Once its PR has merged, further
 corrections are recorded as annotations — not rewrites — alongside the frozen text.
+
+## Archive
+
+A closed change moves to `changes/archive/<YYYY-MM-DD>-<change-name>/`, dated by the day it
+closed, and gains one file it did not have while open:
+
+| File | What it holds |
+|---|---|
+| `archive-report.md` | What the change was, the evidence that it closed, and **what that evidence cannot prove** |
+
+`changes/` therefore holds only what is in flight. An empty `changes/` means nothing is open, and
+that is a legible state rather than an ambiguous one.
+
+The report's last section is not a formality. Merge-time CI state, for instance, cannot be
+recovered after the fact: `gh pr view` reports a rollup today, and no read proves that no required
+check was waived at merge time. A report that omits that limit reads as a stronger guarantee than
+it is.
+
+**Moving a directory changes what its relative links mean.** An artifact one level deeper needs
+`../../../../docs/…` where it used `../../../docs/…`. Adjusting that depth is a mechanical
+consequence of the move and is not the editing this document forbids above — the link's target is
+preserved, not rewritten. Leaving it is how twenty-nine links in this tree came to point at
+nothing.

@@ -1,7 +1,7 @@
 # Proposal — M0: the binary becomes runnable
 
-Deliver [`docs/06-harness.md`](../../../docs/06-harness.md) §9 step 5 — M0 as laid out in
-[`docs/05-build-plan.md`](../../../docs/05-build-plan.md): the configuration loader (`nooma.yml`
+Deliver [`docs/06-harness.md`](../../../../docs/06-harness.md) §9 step 5 — M0 as laid out in
+[`docs/05-build-plan.md`](../../../../docs/05-build-plan.md): the configuration loader (`nooma.yml`
 plus `.env`), vault resolution, the single-writer lockfile, and the CLI commands `init`,
 `serve`, `status` and `doctor`.
 
@@ -47,7 +47,7 @@ The change is done when:
 - [ ] Every key in `docs/01-architecture.md`'s `nooma.yml` block decodes into the config struct,
       and an unknown key is a **load error**, proven by a test.
 - [ ] A non-loopback `server.bind` without `server.auth_token_env` refuses to start
-      ([ADR-0007](../../../docs/adr/0007-http-auth.md)).
+      ([ADR-0007](../../../../docs/adr/0007-http-auth.md)).
 - [ ] `docs/01-architecture.md` no longer contradicts itself on where `nooma.yml` lives or how a
       vault is discovered.
 - [ ] `make check-all` green; L4 covers all five commands; the cross-compile matrix builds
@@ -136,7 +136,7 @@ belong in the same PR. All five are settled, and the reasoning is recorded outsi
    pointing at `nooma init`. Two or more → an error listing every candidate and requiring an
    explicit argument. The binary never chooses.
 4. **The `server:` block gains `bind` and `auth_token_env`.** It documents only `http_port` and
-   `ui`, but [ADR-0007](../../../docs/adr/0007-http-auth.md) requires
+   `ui`, but [ADR-0007](../../../../docs/adr/0007-http-auth.md) requires
    `server.bind` (defaulting to `127.0.0.1`) and `server.auth_token_env`. Neither key is
    documented anywhere in the schema. An `Accepted` ADR is never edited, so the config block is
    what gets corrected — and the config↔doc gate of §4.4 would have failed on its first run

@@ -1,10 +1,10 @@
 # Proposal — M2: sleep and weight
 
-Deliver M2 as laid out in [`docs/05-build-plan.md`](../../../docs/05-build-plan.md) §M2:
+Deliver M2 as laid out in [`docs/05-build-plan.md`](../../../../docs/05-build-plan.md) §M2:
 `effective_weight` and the decay model, priority and the two focuses with anti-jitter hysteresis,
-the eight-phase nightly consolidation of [`docs/02-cognitive-core.md`](../../../docs/02-cognitive-core.md)
+the eight-phase nightly consolidation of [`docs/02-cognitive-core.md`](../../../../docs/02-cognitive-core.md)
 §6 with each phase individually invocable, and the in-process scheduler with
-[ADR-0009](../../../docs/adr/0009-scheduler-downtime.md)'s boot catch-up.
+[ADR-0009](../../../../docs/adr/0009-scheduler-downtime.md)'s boot catch-up.
 
 M1 made the binary a brain that answers when spoken to. M2 is the change where the brain does
 something while nobody is looking — and therefore the change where **time becomes a first-class
@@ -87,7 +87,7 @@ The change is done when:
       `decision_log` tells the story end to end.
 
 That last bullet is the build plan's own wording and it is the exit criterion. It is also
-[`docs/06-harness.md`](../../../docs/06-harness.md) §2's own worked example of why the clock is a
+[`docs/06-harness.md`](../../../../docs/06-harness.md) §2's own worked example of why the clock is a
 port: *"the M2 demo is 'a vault with simulated weeks of data'. That demo is literally impossible
 without an injected clock."* The harness committed to this shape a milestone in advance.
 
