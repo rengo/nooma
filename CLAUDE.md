@@ -3,11 +3,18 @@
 A personal digital brain: a self-contained Go binary over a portable per-user vault (a folder
 with SQLite inside). Licensed AGPL-3.0.
 
-**Status**: M1 closed (2026-08-03). The binary captures and recalls: `nooma init`, configure a
-provider, `nooma serve`, capture via the API and via `nooma capture`, ask a real question and get
-a real recall, correct what was captured — all against a real migrated vault, on Linux and
-Windows. `internal/core/` now holds the brain's decision logic; M2 is sleep and weight
-([`docs/05-build-plan.md`](docs/05-build-plan.md)).
+**Status**: M3 closed (2026-08-24). The binary captures, recalls, sleeps and speaks. It captures
+and recalls (M1): `nooma init`, configure a provider, `nooma serve`, capture via the API and via
+`nooma capture`, ask a real question and get a real recall, correct what was captured. It sleeps
+(M2, closed 2026-08-19): a scheduled nightly consolidation that archives what went cold, connects
+what belongs together and derives beliefs, with the `decision_log` telling the story. It speaks
+(M3): a Telegram channel that pushes a due trigger, delivers a morning digest, fires an ephemeral
+timer and asks its own check-ins. All against a real migrated vault, on Linux and Windows.
+
+Two M3 list items are deliberately open rather than left to be noticed — a timer's list and cancel
+from chat, and which relation an inbound confirmation answers; both are named in
+[`docs/05-build-plan.md`](docs/05-build-plan.md). `internal/core/` holds the brain's decision
+logic; **M4 is the mirror: the complete UI**.
 
 ## Documentation
 
