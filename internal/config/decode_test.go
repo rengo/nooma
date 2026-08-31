@@ -29,9 +29,6 @@ channels:
     enabled: true
     bot_token_env: TELEGRAM_BOT_TOKEN
     allowed_chat_ids: [123456789]
-schedules:
-  consolidate: "0 3 * * *"
-  proactive_check: "*/5 * * * *"
 `
 
 // TestDecodeAcceptsTheDocumentedShape is the control for every rejection test
@@ -105,11 +102,6 @@ func TestDecodeRejectsUnknownKey(t *testing.T) {
 			document: "channels:\n  telegram:\n    enabled: true\n    allowed_chats: [1]\n",
 			wantKey:  "allowed_chats",
 		},
-		{
-			name:     "inside schedules",
-			document: "schedules:\n  consolidat: \"0 3 * * *\"\n",
-			wantKey:  "consolidat",
-		},
 	}
 
 	for _, tc := range cases {
@@ -125,6 +117,73 @@ func TestDecodeRejectsUnknownKey(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.wantKey) {
 				t.Errorf("error does not name the offending key %q, so the user cannot find it:\n%v", tc.wantKey, err)
+			}
+		})
+	}
+}
+
+// TestDecodeExplainsTheRetiredScheduleKeys covers ADR-0025.
+//
+// `schedules.consolidate` and `schedules.proactive_check` were decoded and read
+// by nobody from M0 until 2026-08-31, and docs/01-architecture.md documented
+// them with working-looking cron expressions the whole time. Removing the fields
+// is what makes the schema honest — but on its own it turns every vault that
+// copied the documented example into a vault that will not start, reporting an
+// unknown key, which reads as "you made a typo" rather than "this setting is
+// gone".
+//
+// So the rejection stays and the message changes. The distinction this test
+// exists to hold is that a retired key is not a mistyped one, and the error has
+// to say which of the two happened.
+func TestDecodeExplainsTheRetiredScheduleKeys(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		document string
+	}{
+		{
+			name:     "the documented example, copied verbatim",
+			document: "schedules:\n  consolidate: \"0 3 * * *\"\n  proactive_check: \"*/5 * * * *\"\n",
+		},
+		{
+			name:     "only the nightly key",
+			document: "schedules:\n  consolidate: \"0 3 * * *\"\n",
+		},
+		{
+			name:     "the block with nothing under it",
+			document: "schedules:\n",
+		},
+		{
+			name:     "alongside keys that are still real",
+			document: validDocument + "schedules:\n  consolidate: \"0 3 * * *\"\n",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, err := Decode(strings.NewReader(tc.document))
+			if err == nil {
+				t.Fatal("Decode accepted `schedules` — a key nothing reads must not load")
+			}
+			if cfg != nil {
+				t.Errorf("Decode returned a non-nil config alongside an error; R3.3 forbids a partially applied result")
+			}
+
+			msg := err.Error()
+			if !strings.Contains(msg, "schedules") {
+				t.Errorf("error does not name `schedules`, so the user cannot find the block to delete:\n%v", err)
+			}
+			if !strings.Contains(msg, "ADR-0025") {
+				t.Errorf("error does not point at ADR-0025, so the user is told to delete something without being told why:\n%v", err)
+			}
+			if !strings.Contains(msg, "03:00") || !strings.Contains(msg, "5 minutes") {
+				t.Errorf("error does not state the values that are now fixed, so the user cannot tell whether the schedule they wanted is the schedule they get:\n%v", err)
+			}
+			if strings.Contains(msg, "unknown field") {
+				t.Errorf("error still reads as a typo report; a retired key is not a mistyped one:\n%v", err)
 			}
 		})
 	}

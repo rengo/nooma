@@ -76,6 +76,7 @@ order, with no correspondence to anything.
 | [0022](0022-reply-language.md) | The reply language follows the message, not a setting | Accepted | M3e |
 | [0023](0023-the-prompt-states-the-scale.md) | The prompt states the scale: the model still decides, it stops deciding blind | Accepted | M3e |
 | [0024](0024-the-vault-keeps-your-words.md) | The vault keeps your words: a memory is stored in the language it was written in | Accepted | M3e |
+| [0025](0025-the-schedule-is-not-a-setting.md) | The schedule is not a setting: a key nobody reads is retired, not parsed | Accepted | M3e |
 
 ## Template
 
