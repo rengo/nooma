@@ -1,8 +1,8 @@
 # Proposal — Complete the build harness
 
-Finish [`docs/06-harness.md`](../../../docs/06-harness.md) §9 step 4 so that every rule the
+Finish [`docs/06-harness.md`](../../../../docs/06-harness.md) §9 step 4 so that every rule the
 harness declares is executed by a machine: embedded migrations producing exactly the schema of
-[`docs/03-data-model.md`](../../../docs/03-data-model.md), a schema golden that stops drift, the
+[`docs/03-data-model.md`](../../../../docs/03-data-model.md), a schema golden that stops drift, the
 four test levels wired with their tags, the golden-set formats defined, conformance tests for
 the structural invariants, and the CI gates of §6 that are still listed as comments today.
 
@@ -35,7 +35,7 @@ the implementation* — becomes unprovable retroactively.
 
 ## 2. Success criteria
 
-The change is done when [`docs/06-harness.md`](../../../docs/06-harness.md) §8 is satisfied for
+The change is done when [`docs/06-harness.md`](../../../../docs/06-harness.md) §8 is satisfied for
 every point that step 4 owns:
 
 - [ ] §8.4 — the four levels run with their tags: `make test` (L1+L2), `make test-integration`

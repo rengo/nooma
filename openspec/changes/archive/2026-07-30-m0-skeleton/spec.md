@@ -60,7 +60,7 @@ present, and the phrase "next to the executable" no longer appears.
 
 **MUST**: the `nooma.yml` example in `docs/01-architecture.md` includes `server.bind` (with
 `127.0.0.1` as the documented default) and `server.auth_token_env`, both required by
-[ADR-0007](../../../docs/adr/0007-http-auth.md).
+[ADR-0007](../../../../docs/adr/0007-http-auth.md).
 
 **MUST NOT**: `docs/adr/0007-http-auth.md` be edited. It is `Accepted`; the doc that was
 incomplete is doc 01 (non-negotiable #2).

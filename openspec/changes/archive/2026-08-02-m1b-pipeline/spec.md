@@ -212,8 +212,8 @@ this same gate).
 ## 2. `internal/core/recall` (PR8 — `feat/core-recall`)
 
 Traced to `docs/02-cognitive-core.md` §5 (step 2, "hybrid recall") and §13,
-[ADR-0010](../../../docs/adr/0010-hybrid-recall-fusion.md),
-[ADR-0012](../../../docs/adr/0012-vector-proximity-search.md).
+[ADR-0010](../../../../docs/adr/0010-hybrid-recall-fusion.md),
+[ADR-0012](../../../../docs/adr/0012-vector-proximity-search.md).
 
 ### R2.1 — `recall.VectorQuery` and `recall.VectorIndex` exist, each carrying a string-kind `Model` field
 
@@ -282,7 +282,7 @@ This is I21's behavioral half; R2.1 above proves only that the invariant is *exp
 
 **MUST**: `internal/core/recall` exposes a pure fusion function taking two ranked lists of unit
 IDs (a vector-leg ranking and a lexical-leg ranking) and returning one fused ranking, computed
-per [ADR-0010](../../../docs/adr/0010-hybrid-recall-fusion.md)'s formula:
+per [ADR-0010](../../../../docs/adr/0010-hybrid-recall-fusion.md)'s formula:
 `score(d) = Σ 1/(k + rank_i(d))` over the lists `d` appears in, 1-indexed ranks, `k = 60`.
 
 **MUST**: `k = 60` is a single named constant in `internal/core/recall`, not a literal repeated
