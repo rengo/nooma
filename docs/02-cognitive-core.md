@@ -379,6 +379,20 @@ degrades so far that the outcome, its confidence or its target is missing, no re
 and no decision is recorded. There is no effect to record — the same reason a read writes no row
 (§11).
 
+**The judge answers about what it was shown.** A judgment whose target is not one of the
+candidates rendered into its own prompt stores no relation
+([ADR-0026](adr/0026-the-judge-answers-about-what-it-was-shown.md)). Both judge call sites hand
+the model a specific list — capture at most `DedupCandidateK` units, the nightly `connect` pass
+exactly one per call — and an answer naming anything else is about a comparison that never
+happened.
+
+**And unlike the rule above it, this one is recorded.** The two are different faults and the
+`decision_log` keeps them apart: a judgment that decided nothing said too little, while this one
+said something impossible, and a model naming a unit it was never given is a fact about the model
+worth seeing. The row carries both halves — what was offered and what came back — because
+neither is evidence alone (`relation.target_unknown`, and `consolidate.connect.target_unknown`
+for the nightly pass).
+
 ## 5. Capture
 
 Synchronous pipeline on receiving a message (from any channel or the UI):

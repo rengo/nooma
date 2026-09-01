@@ -136,11 +136,18 @@ type ProposedRelation struct {
 // the nullable relation_thresholds row, which belongs to whichever caller
 // owns that read (m2c's brain wiring), not to core. An earlier revision of
 // this comment claimed both were called — Judgment Day round 1, both judges.
-// It returns (_, false) — no plan, no decision_log row —
-// for outcome "new", for relation.Discard (I08), and for a judgment
-// missing any of TargetUnitID, Type, Strength or Confidence after
-// tolerant decode ("a judgment that decided nothing writes nothing", doc
-// 02 §4). relation.Uncertain and relation.Asserted return (_, true): the
+// It returns (_, false) — no plan — for outcome "new", for
+// relation.Discard (I08), and for a judgment missing any of TargetUnitID,
+// Type, Strength or Confidence after tolerant decode ("a judgment that
+// decided nothing writes nothing", doc 02 §4).
+//
+// It also returns (_, false) for a TargetUnitID that is not in offered —
+// the IDs the judge was actually shown (doc 02 §4, ADR-0026). This one is
+// different in kind from the refusals above: they are judgments that said
+// too little, and this is a judgment that said something impossible. The
+// caller records it, because a model naming a unit it was never given is
+// worth seeing in the vault; this function still refuses it structurally,
+// so a future third caller that forgets to check cannot persist one. relation.Uncertain and relation.Asserted return (_, true): the
 // Uncertain band is stored AND asked about (I09), and the asking is M3's.
 // The returned ProposedRelation.CreatedBy is always
 // relation.CreatedByConsolidation.
@@ -154,11 +161,14 @@ type ProposedRelation struct {
 // outcome as an ordinary degraded response, not a caller error, so this
 // branch is reachable in normal use and is pinned by
 // TestProposeRelation_NilOutcomeWritesNothing.
-func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds) (ProposedRelation, bool) {
+func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds, offered []string) (ProposedRelation, bool) {
 	if j.Outcome == nil || *j.Outcome == relation.OutcomeNew {
 		return ProposedRelation{}, false
 	}
 	if j.TargetUnitID == nil || j.Type == nil || j.Strength == nil || j.Confidence == nil {
+		return ProposedRelation{}, false
+	}
+	if !relation.TargetOffered(*j.TargetUnitID, offered) {
 		return ProposedRelation{}, false
 	}
 	if relation.Decide(*j.Confidence, t) == relation.Discard {

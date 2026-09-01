@@ -480,12 +480,22 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 		return nil
 	}
 
+	// ADR-0026, before the threshold read rather than after it: exactly one
+	// candidate went into the prompt, so any other ID is wrong by
+	// construction, and a wrong ID does not deserve a repo round trip. The
+	// row is recorded here because ProposeRelation cannot — it is pure, and
+	// refusing is all it can do.
+	offered := []string{target.ID}
+	if j.TargetUnitID != nil && !relation.TargetOffered(*j.TargetUnitID, offered) {
+		return r.recordConnectTargetUnknownDecision(ctx, source, *j.TargetUnitID, offered, now)
+	}
+
 	row, err := r.rels.ThresholdsFor(ctx, *j.Type)
 	if err != nil {
 		return fmt.Errorf("consolidate: connect: resolve relation thresholds for %q: %w", *j.Type, err)
 	}
 
-	proposed, ok := consolidation.ProposeRelation(source.ID, j, relation.Resolve(row))
+	proposed, ok := consolidation.ProposeRelation(source.ID, j, relation.Resolve(row), offered)
 	if !ok {
 		return nil
 	}
@@ -507,6 +517,23 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 
 	rationale := fmt.Sprintf("connect: judged unit %q related to %q as %q", rel.FromUnitID, rel.ToUnitID, rel.Type)
 	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
+}
+
+// recordConnectTargetUnknownDecision writes ADR-0026's row for connect.
+//
+// The Context carries both halves — what was offered and what came back —
+// because neither alone is evidence. "The judge named unit X" is unremarkable
+// until you can see that X was not on the list, and a list with no answer
+// beside it says nothing about the model at all.
+func (r consolidateRunner) recordConnectTargetUnknownDecision(ctx context.Context, source unit.Unit, answered string, offered []string, now time.Time) error {
+	rationale := fmt.Sprintf(
+		"connect: the relation judge for unit %q answered about unit %q, which was not among the %d candidate(s) it was shown — nothing stored",
+		source.ID, answered, len(offered))
+	return r.record(ctx, now, ports.ActionConnectTargetUnknown, rationale, map[string]any{
+		"from_unit_id":     source.ID,
+		"answered_unit_id": answered,
+		"offered_unit_ids": offered,
+	})
 }
 
 // taskBeliefDerivation is the LLMRequest.Task value derive's own judge

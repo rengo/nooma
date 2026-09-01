@@ -1501,6 +1501,96 @@ func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 	}
 }
 
+// TestConsolidateRunner_Connect_UnofferedTargetIsRefusedAndRecorded covers
+// ADR-0026 on the phase where the fault is least ambiguous: connect renders
+// exactly ONE candidate per judge call, so any other ID in the answer is wrong
+// by construction.
+//
+// The scripted judge answers with "u-source" — the source of the pair itself.
+// That unit exists, so `relations.to_unit_id REFERENCES units(id)` is satisfied
+// and the database would have accepted the write; ConnectPairs excludes the
+// source from its own candidate list, so it was never offered. Confidence is
+// 0.95, well above Surface, so before ADR-0026 this persisted a unit's relation
+// to itself and said nothing about it.
+//
+// The row is the point, and it is why this test is not simply the discard test
+// with a different fixture: a discard writes no row for connect (design §7.1)
+// and an unoffered target writes one, because they are different faults.
+func TestConsolidateRunner_Connect_UnofferedTargetIsRefusedAndRecorded(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+	const candidateID = "ce8d8460-dfb3-42bf-9cd0-0fc74f3dab42"
+
+	units := memrepo.NewUnits()
+	for _, seed := range []struct {
+		id, content   string
+		lastTouchedAt time.Time
+	}{
+		{"u-source", "thinking about repainting the kitchen this weekend", now},
+		{candidateID, "kitchen renovation ideas from last spring", since.Add(-time.Hour)},
+	} {
+		if err := units.Create(ctx, unit.Unit{
+			ID: seed.id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+			Content: seed.content, Source: "chat",
+			Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: seed.lastTouchedAt, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", seed.id, err)
+		}
+	}
+
+	lex := memrepo.NewLexical()
+	lex.SeedLexical(t, "u-source", "kitchen repaint weekend")
+	lex.SeedLexical(t, candidateID, "kitchen renovation")
+
+	rels := memrepo.NewRelations()
+	for _, id := range []string{"u-source", candidateID} {
+		rels.EnsureUnit(t, id)
+	}
+
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatalf("seed since: %v", err)
+	}
+
+	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), lex, units, fakeprovider.NewEmbeddingFake("test-model"))
+	log := memrepo.NewDecisionLog()
+	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-target-never-offered")
+	phase := consolidation.PhaseConnect
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState())
+
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate(PhaseConnect): %v", err)
+	}
+
+	got, err := rels.ByUnit(ctx, "u-source")
+	if err != nil {
+		t.Fatalf("relations.ByUnit(u-source): %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("relations.ByUnit(u-source) = %v, want none — the judge named a unit it was never shown (ADR-0026)", got)
+	}
+
+	rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("log.Since: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("decision_log rows = %d, want exactly 1 (consolidate.connect.target_unknown): %+v", len(rows), rows)
+	}
+	if rows[0].Action != ports.ActionConnectTargetUnknown {
+		t.Errorf("row Action = %s, want %s", rows[0].Action, ports.ActionConnectTargetUnknown)
+	}
+	if rows[0].Rationale == "" {
+		t.Error("consolidate.connect.target_unknown Rationale is empty — doc 02 §11 requires a legible sentence")
+	}
+	for _, want := range []string{"u-source", candidateID} {
+		if !strings.Contains(string(rows[0].Context), want) {
+			t.Errorf("Context does not carry %q:\n%s", want, rows[0].Context)
+		}
+	}
+}
+
 // TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState
 // is spec R5.6's own dedup-defense-1 wiring proof (design §6.3 slot 5,
 // §7.3): derive's belief_derivation call always sends

@@ -1,0 +1,11 @@
+{
+  "id": "relation-target-never-offered",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "relation_evaluation",
+  "message": "Thinking about repainting the kitchen this weekend",
+  "candidates": [
+    {"id": "ce8d8460-dfb3-42bf-9cd0-0fc74f3dab42", "content": "Kitchen renovation ideas from last spring"}
+  ],
+  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"u-source\",\"type\":\"same_topic\",\"strength\":0.8,\"confidence\":0.95}"
+}
