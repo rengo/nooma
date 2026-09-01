@@ -294,3 +294,81 @@ func TestCapture_RelationJudgeProviderFailureLeavesUnitPersisted(t *testing.T) {
 		t.Errorf("capture.dedup.failed Context.error = %q, want the provider error %q", ctx.Error, wantErr)
 	}
 }
+
+// TestCapture_RelationJudgeUnofferedTargetIsRefusedAndRecorded covers
+// ADR-0026 on the path a person exercises with every message.
+//
+// "relation-target-never-offered" scripts confidence 0.95 — comfortably inside
+// the Asserted band — and a target_unit_id that was never rendered into the
+// prompt. Before ADR-0026 the pipeline took that ID at face value, and the two
+// outcomes were both bad:
+//
+//   - an ID no unit has hits `relations.to_unit_id REFERENCES units(id)` under
+//     `foreign_keys=on`. The error propagates out of judgeRelation and fails
+//     Capture itself — for a message whose unit is already stored. The user is
+//     told their capture failed; the vault says otherwise.
+//   - an ID that is real but was never offered satisfies the foreign key, and
+//     an edge appears between two units the judge never compared.
+//
+// So the assertions are: the unit survives, no relation is stored, Capture does
+// NOT return an error, and exactly one relation.target_unknown row explains it.
+// The last one is what separates this from a silent discard: the whole method
+// this project debugs by is reading the decision_log of a real vault, and a
+// model answering about something it was never shown is precisely the kind of
+// thing that has to be visible there.
+func TestCapture_RelationJudgeUnofferedTargetIsRefusedAndRecorded(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	result, units, relations, decisions := judgeTestFixture(t, "3f2a7c19-5b8e-4d61-9a03-71c4e8f2b5da", "relation-target-never-offered")
+
+	if _, err := units.ByID(context.Background(), result.UnitID); err != nil {
+		t.Fatalf("units.ByID(%q): %v — the unit must survive a judgment about a unit that was never offered", result.UnitID, err)
+	}
+
+	rels, err := relations.ByUnit(context.Background(), result.UnitID)
+	if err != nil {
+		t.Fatalf("relations.ByUnit(%q): %v", result.UnitID, err)
+	}
+	if len(rels) != 0 {
+		t.Fatalf("relations.ByUnit(%q) = %v, want none — the judge answered about a unit it was never shown", result.UnitID, rels)
+	}
+
+	rows := decisionRows(t, decisions, now)
+	if len(rows) != 2 {
+		t.Fatalf("decision_log has %d rows, want exactly 2 (capture.classify + relation.target_unknown): %+v", len(rows), rows)
+	}
+	var unknownRow *ports.Decision
+	for i := range rows {
+		if rows[i].Action == ports.ActionRelationTargetUnknown {
+			unknownRow = &rows[i]
+		}
+	}
+	if unknownRow == nil {
+		t.Fatalf("no %q row found among %+v", ports.ActionRelationTargetUnknown, rows)
+	}
+	if unknownRow.Rationale == "" {
+		t.Error("relation.target_unknown Rationale is empty — doc 02 §11 requires a human-readable sentence")
+	}
+	if !unknownRow.OccurredAt.Equal(now) {
+		t.Errorf("relation.target_unknown OccurredAt = %v, want the single clock read %v", unknownRow.OccurredAt, now)
+	}
+
+	var ctx struct {
+		FromUnitID     string   `json:"from_unit_id"`
+		AnsweredUnitID string   `json:"answered_unit_id"`
+		OfferedUnitIDs []string `json:"offered_unit_ids"`
+	}
+	if err := json.Unmarshal(unknownRow.Context, &ctx); err != nil {
+		t.Fatalf("relation.target_unknown Context is not valid JSON: %v (%s)", err, unknownRow.Context)
+	}
+	if ctx.FromUnitID != result.UnitID {
+		t.Errorf("Context.from_unit_id = %q, want %q", ctx.FromUnitID, result.UnitID)
+	}
+	if ctx.AnsweredUnitID != "u-source" {
+		t.Errorf("Context.answered_unit_id = %q, want the ID the judge actually returned", ctx.AnsweredUnitID)
+	}
+	// Both halves, or the row is not evidence: an answer with no list beside
+	// it cannot be recognised as wrong by anyone reading the vault later.
+	if len(ctx.OfferedUnitIDs) != 1 || ctx.OfferedUnitIDs[0] != "3f2a7c19-5b8e-4d61-9a03-71c4e8f2b5da" {
+		t.Errorf("Context.offered_unit_ids = %v, want exactly the one candidate that was rendered into the prompt", ctx.OfferedUnitIDs)
+	}
+}

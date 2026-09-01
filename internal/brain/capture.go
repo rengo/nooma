@@ -562,6 +562,22 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 		return nil
 	}
 
+	// ADR-0026. This runs before the threshold read and before the Upsert,
+	// and the ordering is the fix, not a micro-optimisation: an ID no unit
+	// has reaches `relations.to_unit_id REFERENCES units(id)` under
+	// `foreign_keys=on`, and the error that comes back propagates out of
+	// this function to line ~404, where it fails the whole capture — for a
+	// message whose unit is already persisted. An ID that is real but was
+	// never offered passes that foreign key and stores an edge between two
+	// units the judge never compared.
+	offered := make([]string, len(candidates))
+	for i, c := range candidates {
+		offered[i] = c.ID
+	}
+	if !relation.TargetOffered(*j.TargetUnitID, offered) {
+		return r.recordRelationTargetUnknownDecision(ctx, u, *j.TargetUnitID, offered, now)
+	}
+
 	relType := "duplicate"
 	if *j.Outcome == relation.OutcomeRelated {
 		if j.Type == nil {
@@ -1215,6 +1231,43 @@ func (r captureRunner) recordRelationDiscardedDecision(ctx context.Context, u un
 	}
 	if err := r.log.Record(ctx, d); err != nil {
 		return fmt.Errorf("capture: record relation-discarded decision for unit %q: %w", u.ID, err)
+	}
+	return nil
+}
+
+// recordRelationTargetUnknownDecision writes ADR-0026's row for capture.
+//
+// It is a separate recorder from recordRelationDiscardedDecision, and a
+// separate action, because the two describe different faults: a discard is a
+// judgment about a real candidate that the thresholds rejected, and this is a
+// judgment about a unit the judge was never shown. Folding them together would
+// file a model naming something impossible under "low confidence", where
+// nobody reading the vault would ever find it.
+//
+// The Context carries both halves — what was offered and what came back —
+// because neither alone is evidence.
+func (r captureRunner) recordRelationTargetUnknownDecision(ctx context.Context, u unit.Unit, answered string, offered []string, now time.Time) error {
+	rationale := fmt.Sprintf(
+		"the relation judge for unit %q answered about unit %q, which was not among the %d candidate(s) it was shown — no relation stored",
+		u.ID, answered, len(offered))
+	contextJSON, err := json.Marshal(struct {
+		FromUnitID     string   `json:"from_unit_id"`
+		AnsweredUnitID string   `json:"answered_unit_id"`
+		OfferedUnitIDs []string `json:"offered_unit_ids"`
+	}{FromUnitID: u.ID, AnsweredUnitID: answered, OfferedUnitIDs: offered})
+	if err != nil {
+		return fmt.Errorf("capture: encode relation-target-unknown decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     ports.ActionRelationTargetUnknown,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record relation-target-unknown decision for unit %q: %w", u.ID, err)
 	}
 	return nil
 }

@@ -83,6 +83,14 @@ const (
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
 	ActionRelationDuplicateRecorded DecisionAction = "relation.duplicate.recorded"
+	// ActionRelationTargetUnknown is capture's half of ADR-0026, and it is
+	// deliberately not ActionRelationDiscarded. A discard is a judgment the
+	// thresholds rejected — the model answered about a real candidate and
+	// the answer was too weak. This one is a judgment about a unit the judge
+	// was never shown, which no threshold can express. The Context carries
+	// both halves, what was offered and what came back, because the pair is
+	// the evidence. Connect's own is ActionConnectTargetUnknown.
+	ActionRelationTargetUnknown DecisionAction = "relation.target_unknown"
 	// ActionCorrectionApplied carries ADR-0016's pre-image: written before
 	// the edit it describes, never after (design D5).
 	ActionCorrectionApplied DecisionAction = "correction.applied"
@@ -107,6 +115,13 @@ const (
 	// second action for a discard, unlike capture's ActionRelationDiscarded
 	// (design §7.1).
 	ActionConnectRelationPersisted DecisionAction = "consolidate.connect.relation_persisted"
+	// ActionConnectTargetUnknown is connect's half of ADR-0026. The comment
+	// above says connect has no second action for a discard, and that still
+	// holds: §7.1's divergence is about judgments the thresholds rejected.
+	// This is not one. Connect renders exactly one candidate per judge call,
+	// so any other ID is wrong by construction — which makes it the phase
+	// where an unoffered target is least ambiguous and most worth seeing.
+	ActionConnectTargetUnknown DecisionAction = "consolidate.connect.target_unknown"
 	// ActionDeriveBeliefCreated and ActionDeriveBeliefReinforced are
 	// derive's two distinguishable vault effects (R5.8's own create/
 	// reinforce split).
