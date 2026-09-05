@@ -127,6 +127,15 @@ type ProposedRelation struct {
 	Strength   float64
 	Confidence float64
 	CreatedBy  relation.CreatedBy
+	// Band is the relation.Decide verdict ProposeRelation already computes
+	// over (Confidence, t) — never re-derived by a caller (m3e design §3.4,
+	// Finding F2: "one rule in two languages" is the drift a second,
+	// independent comparison in internal/brain would risk the day
+	// relation.Decide's own boundary moves). It is always Uncertain or
+	// Asserted on a returned plan: ProposeRelation refuses relation.Discard
+	// outright (below), so that verdict never reaches a caller through this
+	// field.
+	Band relation.Verdict
 }
 
 // ProposeRelation applies doc 02 §4's persist decision — unchanged, through
@@ -147,8 +156,12 @@ type ProposedRelation struct {
 // too little, and this is a judgment that said something impossible. The
 // caller records it, because a model naming a unit it was never given is
 // worth seeing in the vault; this function still refuses it structurally,
-// so a future third caller that forgets to check cannot persist one. relation.Uncertain and relation.Asserted return (_, true): the
-// Uncertain band is stored AND asked about (I09), and the asking is M3's.
+// so a future third caller that forgets to check cannot persist one.
+// relation.Uncertain and relation.Asserted return (_, true): the Uncertain
+// band is stored AND asked about (I09) — the asking is
+// m3e-pending-question's, built in internal/brain off the returned Band
+// field below, which is what lets that caller decide whether to queue a
+// question without recomputing relation.Decide a second time.
 // The returned ProposedRelation.CreatedBy is always
 // relation.CreatedByConsolidation.
 //
@@ -171,7 +184,8 @@ func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds, of
 	if !relation.TargetOffered(*j.TargetUnitID, offered) {
 		return ProposedRelation{}, false
 	}
-	if relation.Decide(*j.Confidence, t) == relation.Discard {
+	band := relation.Decide(*j.Confidence, t)
+	if band == relation.Discard {
 		return ProposedRelation{}, false
 	}
 
@@ -182,5 +196,6 @@ func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds, of
 		Strength:   *j.Strength,
 		Confidence: *j.Confidence,
 		CreatedBy:  relation.CreatedByConsolidation,
+		Band:       band,
 	}, true
 }
