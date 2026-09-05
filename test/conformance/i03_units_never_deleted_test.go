@@ -155,6 +155,11 @@ var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.TriggerRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.TimerRepo)(nil)).Elem(),
 	reflect.TypeOf((*ports.Channel)(nil)).Elem(),
+	// PendingQuestionRepo joins the sweep with no carve-out (m3e,
+	// ADR-0027) — RelationRepo remains the sweep's one carve-out
+	// (RelationRepo.Delete, 2026-08-24 owner ruling), and a pending
+	// question is a state machine, never a removal.
+	reflect.TypeOf((*ports.PendingQuestionRepo)(nil)).Elem(),
 }
 
 // containsUnitsDeleteStatement reports whether line contains the exact
