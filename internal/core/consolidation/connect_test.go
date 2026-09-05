@@ -339,9 +339,10 @@ func TestProposeRelation_UncertainAndAssertedWriteAPlan(t *testing.T) {
 	tests := []struct {
 		name       string
 		confidence float64
+		wantBand   relation.Verdict
 	}{
-		{"Uncertain", 0.40}, // Persist (0.30) <= 0.40 < Surface (0.50)
-		{"Asserted", 0.90},  // >= Surface
+		{"Uncertain", 0.40, relation.Uncertain}, // Persist (0.30) <= 0.40 < Surface (0.50)
+		{"Asserted", 0.90, relation.Asserted},   // >= Surface
 	}
 
 	for _, tc := range tests {
@@ -359,9 +360,57 @@ func TestProposeRelation_UncertainAndAssertedWriteAPlan(t *testing.T) {
 				Strength:   0.5,
 				Confidence: tc.confidence,
 				CreatedBy:  relation.CreatedByConsolidation,
+				Band:       tc.wantBand,
 			}
 			if got != want {
 				t.Errorf("ProposeRelation() = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+// TestProposeRelation_BandMatchesRelationDecide is Finding F2's own RED
+// task (2.3): ProposedRelation.Band must never be a second, independently
+// written comparison — it must be exactly what relation.Decide computes
+// over the same confidence and thresholds ProposeRelation already reads, a
+// future edit to Decide's own boundary desyncing the two otherwise. Swept
+// over the band boundaries themselves (m3a's own boundary-table style),
+// and every fixture asserts against relation.Decide's live return value,
+// never a re-derived literal.
+//
+// ok is always true here (never relation.Discard, per ProposeRelation's own
+// contract of refusing a Discard verdict outright) — so Band is only ever
+// Uncertain or Asserted on a returned plan.
+func TestProposeRelation_BandMatchesRelationDecide(t *testing.T) {
+	thresholds := connectPairsThresholds()
+
+	cases := []struct {
+		name       string
+		confidence float64
+	}{
+		{"at the persist boundary, inclusive toward uncertain", thresholds.Persist},
+		{"inside the uncertain band", (thresholds.Persist + thresholds.Surface) / 2},
+		{"just below the surface boundary", thresholds.Surface - 0.01},
+		{"at the surface boundary, inclusive toward asserted", thresholds.Surface},
+		{"well above surface", thresholds.Surface + 0.4},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			j := completeJudgment(relation.OutcomeDuplicate, tc.confidence)
+
+			got, ok := ProposeRelation("source-unit", j, thresholds, offeredTarget())
+			if !ok {
+				t.Fatalf("ProposeRelation() returned false for confidence %v, want true", tc.confidence)
+			}
+
+			want := relation.Decide(tc.confidence, thresholds)
+			if want == relation.Discard {
+				t.Fatalf("test bug: confidence %v decides Discard, which ProposeRelation refuses outright — this case proves nothing about Band", tc.confidence)
+			}
+			if got.Band != want {
+				t.Errorf("ProposeRelation(confidence=%v).Band = %v, want %v (relation.Decide's own live return value)",
+					tc.confidence, got.Band, want)
 			}
 		})
 	}
