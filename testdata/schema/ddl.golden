@@ -68,6 +68,16 @@ CREATE TABLE measurements (
   updated_at     TEXT NOT NULL
 );
 
+CREATE TABLE pending_questions (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,   -- relation (the only member m3e writes)
+  relation_id  TEXT NOT NULL,   -- relations(id); deliberately NOT a foreign key
+  created_at   TEXT NOT NULL,   -- when consolidation decided to ask
+  asked_at     TEXT,            -- NULL = not yet surfaced in a digest
+  resolved_at  TEXT,            -- NULL = still open
+  resolution   TEXT             -- confirmed|rejected|expired; NULL while open
+);
+
 CREATE TABLE relation_thresholds (
   id                         TEXT PRIMARY KEY,
   relation_type              TEXT NOT NULL UNIQUE,
@@ -167,6 +177,12 @@ CREATE INDEX idx_learning_signals_occurred ON learning_signals(occurred_at);
 CREATE INDEX idx_measurements_metric ON measurements(domain, metric_key, measured_at);
 
 CREATE INDEX idx_measurements_ref_unit ON measurements(ref_unit_id);
+
+CREATE INDEX idx_pending_questions_open ON pending_questions(asked_at)
+  WHERE asked_at IS NOT NULL AND resolved_at IS NULL;
+
+CREATE INDEX idx_pending_questions_unasked ON pending_questions(created_at)
+  WHERE asked_at IS NULL AND resolved_at IS NULL;
 
 CREATE INDEX idx_triggers_status_fire ON triggers(status, fire_at);
 

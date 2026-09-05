@@ -141,6 +141,9 @@ func TestSchemaDocAnchorsExpectedObjectCount(t *testing.T) {
 		"table current_state",
 		"table decision_log",
 		"index idx_decision_log_occurred",
+		"table pending_questions",
+		"index idx_pending_questions_unasked",
+		"index idx_pending_questions_open",
 		// Learning
 		"table learning_signals",
 		"index idx_learning_signals_occurred",
