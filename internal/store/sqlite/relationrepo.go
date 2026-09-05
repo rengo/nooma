@@ -230,6 +230,36 @@ func (r *RelationRepo) ExistingPairs(ctx context.Context, pairs []consolidation.
 	return out, nil
 }
 
+// ByID implements ports.RelationRepo. The confirm path (m3e) needs the
+// WHOLE row back: Upsert revises confidence in place (I07) and takes a
+// complete ports.Relation, so strength, created_by and created_at must
+// travel back unchanged for that later Upsert call to leave them alone.
+func (r *RelationRepo) ByID(ctx context.Context, id string) (ports.Relation, error) {
+	const q = `
+SELECT id, from_unit_id, to_unit_id, type, strength, confidence, created_by, created_at
+FROM relations
+WHERE id = ?`
+
+	var (
+		rel         ports.Relation
+		createdAtTx string
+	)
+	err := r.db.QueryRowContext(ctx, q, id).Scan(&rel.ID, &rel.FromUnitID, &rel.ToUnitID, &rel.Type,
+		&rel.Strength, &rel.Confidence, &rel.CreatedBy, &createdAtTx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ports.Relation{}, ports.ErrRelationNotFound
+		}
+		return ports.Relation{}, fmt.Errorf("reading relation %q: %w", id, err)
+	}
+	at, err := time.Parse(unitTimeLayout, createdAtTx)
+	if err != nil {
+		return ports.Relation{}, fmt.Errorf("relation %q: created_at: %w", id, err)
+	}
+	rel.CreatedAt = at
+	return rel, nil
+}
+
 // Delete implements ports.RelationRepo — I10's own requirement.
 //
 // One statement, and no soft-delete column: relations carries none, and
