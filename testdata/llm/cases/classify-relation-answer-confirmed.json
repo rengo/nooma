@@ -1,0 +1,8 @@
+{
+  "id": "classify-relation-answer-confirmed",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "yes, they're related",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"yes, they're related\",\"weight\":0.1,\"decay_rate\":0.5,\"relation_outcome\":\"confirmed\",\"language\":\"en\"}"
+}

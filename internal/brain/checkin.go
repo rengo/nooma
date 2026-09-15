@@ -127,23 +127,35 @@ func (r captureRunner) resolveRelationCheckIn(ctx context.Context, c classify.Cl
 // ordering is the invariant, and a caller that gets it wrong should have
 // to get it wrong HERE, in one reviewable place, rather than at whichever
 // call site M4 adds next.
-func (r captureRunner) RejectRelation(ctx context.Context, rel ports.Relation, now time.Time) error {
+//
+// It takes the id and not the whole ports.Relation: it read only rel.ID
+// before it had a caller, and a parameter with no reader is what
+// UpdateEventAt's own doc comment refuses (unitrepo.go:57-65).
+func (r captureRunner) RejectRelation(ctx context.Context, relationID string, now time.Time) error {
 	targetKind := ports.TargetKindRelation
 	if err := r.signals.Record(ctx, ports.Signal{
 		ID:         r.ids.New(),
 		Type:       ports.SignalRelationReject,
 		Valence:    ports.ValenceNegative,
 		TargetKind: &targetKind,
-		TargetID:   &rel.ID,
+		TargetID:   &relationID,
 		OccurredAt: now,
 	}); err != nil {
 		return fmt.Errorf("capture: recording the relation rejection: %w", err)
 	}
 
 	// Only now. See this function's own doc comment.
-	if err := r.rels.Delete(ctx, rel.ID); err != nil {
-		return fmt.Errorf("capture: deleting rejected relation %q: %w", rel.ID, err)
+	if err := r.rels.Delete(ctx, relationID); err != nil {
+		return fmt.Errorf("capture: deleting rejected relation %q: %w", relationID, err)
 	}
+	return nil
+}
+
+// ConfirmRelation raises one relation's confidence out of the uncertain
+// band and emits relation_confirm.
+//
+// STUB (task 6.3/6.4): does nothing.
+func (r captureRunner) ConfirmRelation(ctx context.Context, q ports.RelationQuestion, now time.Time) error {
 	return nil
 }
 

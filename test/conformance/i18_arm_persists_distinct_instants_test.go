@@ -108,7 +108,7 @@ func captureAndArm(t *testing.T, now time.Time, llmCase string) (*memrepo.Timers
 	}
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(), embeddings,
 		memrepo.NewLexical(), memrepo.NewRelations(), memrepo.NewDecisionLog(), llm, llm, llm, embed,
-		brain.NewIndex(idx), memrepo.NewSignals(), triggers, timers, 0.5)
+		brain.NewIndex(idx), memrepo.NewSignals(), triggers, timers, 0.5, nil)
 
 	result, err := svc.Capture(ctx, brain.CaptureInput{Text: "replayed by case id", Channel: "chat"})
 	if err != nil {

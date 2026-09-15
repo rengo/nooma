@@ -1,0 +1,8 @@
+{
+  "id": "classify-relation-answer-unknown-outcome",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "hmm, maybe? hard to say",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"hmm, maybe? hard to say\",\"weight\":0.1,\"decay_rate\":0.5,\"relation_outcome\":\"maybe\",\"language\":\"en\"}"
+}
