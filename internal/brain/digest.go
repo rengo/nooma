@@ -50,16 +50,49 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, nil
 	}
 
+	energy, err := r.state.LatestEnergy(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("check: reading energy: %w", err)
+	}
+	// Read once, used twice: Carry's own truncation, and the gate on
+	// asking. Recomputing it at the second site would be the same rule in
+	// two places, which is the drift this file already refuses elsewhere.
+	low := prospection.LowEnergy(energy, now)
+
 	pending, err := r.triggers.Undelivered(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("check: undelivered triggers: %w", err)
 	}
-	if len(pending) == 0 {
+
+	// The digest's SECOND item source, and it does not enter Carry's
+	// candidate list: a relation has two endpoints and focus.Priority
+	// ranks one unit, so inventing a candidate to make a question
+	// rankable would be the invented number this repository refuses.
+	// It is appended instead, competing with nothing (owner ruling Q2).
+	//
+	// **No question on a low-energy morning.** Doc 02 §7's care gate holds
+	// back non-urgent items and a graph question is the most non-urgent
+	// thing this system produces — expressed as a rule rather than a rank,
+	// which is the same trade Q2 already took.
+	var question *ports.RelationQuestion
+	if !low {
+		question, err = r.nextQuestion(ctx)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	if len(pending) == 0 && question == nil {
 		// **An empty digest is not sent**, and m3a left this to m3d
 		// explicitly ("Carry takes no position on whether an empty result
 		// is delivered"). A message every morning saying nothing happened
 		// is a message people learn to ignore, and the one that matters
 		// arrives in the same shape they learned to ignore.
+		//
+		// m3e widens the test rather than the rule: a digest that asks "I
+		// linked X with Y, are they related?" is not empty. It has content
+		// and it wants something, and without this a vault with an
+		// uncertain relation and no triggers would stay silent forever.
 		return 0, nil
 	}
 
@@ -68,18 +101,13 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, err
 	}
 
-	energy, err := r.state.LatestEnergy(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("check: reading energy: %w", err)
-	}
-
 	// Adjacency is M4's — focus.Rank accepts an empty map and scores
 	// every candidate on its own terms, which is the honest input until
 	// something computes it. Passing a made-up one would be worse than
 	// passing none.
-	carry, held := prospection.Carry(items, map[string]float64{}, prospection.LowEnergy(energy, now), now)
+	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
-	if len(carry) == 0 {
+	if len(carry) == 0 && question == nil {
 		return 0, nil
 	}
 	if !commit {
@@ -97,7 +125,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 			checkDetail{})
 	}
 
-	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, nil)); err != nil {
+	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, question)); err != nil {
 		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})
@@ -106,6 +134,19 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	for _, item := range carry {
 		if err := r.triggers.Surface(ctx, item.ID, now); err != nil {
 			return 0, fmt.Errorf("check: digest was sent but trigger %q was not marked delivered: %w", item.ID, err)
+		}
+	}
+	if question != nil {
+		// After the send, exactly as Surface is: MarkAsked is one-way
+		// (asked_at IS NULL is its precondition), so a question marked
+		// before a failed send would be a question nobody was ever asked.
+		if err := r.questions.MarkAsked(ctx, question.ID, now); err != nil {
+			return 0, fmt.Errorf("check: digest was sent but question %q was not marked asked: %w", question.ID, err)
+		}
+		if err := r.record(ctx, now, ports.ActionCheckDigestQuestionAsked,
+			fmt.Sprintf("the daily digest asked about the relation between %q and %q", question.FromContent, question.ToContent),
+			checkDetail{ID: question.ID}); err != nil {
+			return 0, err
 		}
 	}
 	if err := r.record(ctx, now, ports.ActionCheckDigestSent,
@@ -223,16 +264,50 @@ func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, qu
 	}
 
 	var b strings.Builder
-	b.WriteString("Here " + plural(len(carry)) + ":")
-	for _, item := range carry {
-		line := text[item.ID]
-		if line == "" {
-			line = "something you asked me to remind you about"
+	if len(carry) > 0 {
+		b.WriteString("Here " + plural(len(carry)) + ":")
+		for _, item := range carry {
+			line := text[item.ID]
+			if line == "" {
+				line = "something you asked me to remind you about"
+			}
+			b.WriteString("\n• " + line)
 		}
-		b.WriteString("\n• " + line)
 	}
-	_ = question // STUB (task 5.3/5.4): the question paragraph is not rendered yet.
+
+	if question != nil {
+		// "One more" only when there IS something before it. A digest sent
+		// for a question alone cannot open with a header counting items it
+		// does not have — "Here are 0 things for today" is a sentence that
+		// is simply false, and the item header counts Carry's output.
+		//
+		// The question itself is written once, in questionLine, so the two
+		// shapes cannot drift into two different questions.
+		if b.Len() > 0 {
+			b.WriteString("\n\nOne more \u2014 ")
+		}
+		b.WriteString(questionLine(*question))
+	}
 	return b.String()
+}
+
+// questionLine is the digest's relation question, in doc 02 §4's own
+// wording ("I linked X with Y, are they related?").
+func questionLine(q ports.RelationQuestion) string {
+	return "I linked \"" + snippet(q.FromContent) + "\" with \"" + snippet(q.ToContent) + "\". Are they related?"
+}
+
+// snippet is one endpoint's own text, bounded to questionSnippetRunes.
+//
+// Rune-aware, not byte-aware: units.content is free text and a byte-wise
+// cut lands inside a multi-byte rune often enough that the digest would
+// render a replacement character for it.
+func snippet(s string) string {
+	runes := []rune(s)
+	if len(runes) <= questionSnippetRunes {
+		return s
+	}
+	return string(runes[:questionSnippetRunes]) + "\u2026"
 }
 
 func plural(n int) string {
@@ -251,3 +326,27 @@ func plural(n int) string {
 // docs/02 §13 calibration row, digestHistoryDays being the shipped
 // precedent for a brain-side bound.
 const questionSnippetRunes = 60
+
+// nextQuestion is the one queued relation question this digest may ask, or
+// nil when the queue is empty or this vault has no question store.
+//
+// The head of Unasked, and nothing more: the port already returns oldest
+// created_at first, then id, so FIFO is a contract of the read rather than
+// a rule re-derived here. FIFO and not confidence — ranking by confidence
+// would ask first about the relation closest to asserting itself anyway,
+// which is the question that matters least, and FIFO also drains the queue
+// in order, so a question created today cannot wait behind one created
+// tomorrow (design §3.5).
+func (r checkRunner) nextQuestion(ctx context.Context) (*ports.RelationQuestion, error) {
+	if r.questions == nil {
+		return nil, nil
+	}
+	queued, err := r.questions.Unasked(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check: unasked questions: %w", err)
+	}
+	if len(queued) == 0 {
+		return nil, nil
+	}
+	return &queued[0], nil
+}
