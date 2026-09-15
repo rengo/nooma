@@ -59,6 +59,14 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// two places, which is the drift this file already refuses elsewhere.
 	low := prospection.LowEnergy(energy, now)
 
+	// BEFORE anything is sent, and before the queue is read: a question
+	// this pass expires must not also be a question this pass asks, and
+	// the digest going out now must not count against the question it may
+	// be carrying.
+	if _, err := r.expireStaleQuestions(ctx, history, now, commit); err != nil {
+		return 0, err
+	}
+
 	pending, err := r.triggers.Undelivered(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("check: undelivered triggers: %w", err)
@@ -352,9 +360,78 @@ func (r checkRunner) nextQuestion(ctx context.Context) (*ports.RelationQuestion,
 }
 
 // expireStaleQuestions closes every open question that MaxDigestDeferrals
-// digests have gone out on without an answer.
+// digests have gone out on without an answer, as a state transition
+// (resolution = expired). Nothing is deleted — non-negotiable #6.
 //
-// STUB (task 5.5/5.6): expires nothing.
+// It runs HERE and not in nightly consolidation, because the bound is
+// counted in DIGESTS and the digest path is the only one that reads
+// decision_log's ActionCheckDigestSent rows. Consolidation would need a
+// second reader of the same audit rows to answer a question it does not
+// otherwise ask — heldCounts' own argument, applied to a second counter.
+//
+// digestHistoryDays is already MaxDigestDeferrals + 2, so the window this
+// pass has ALREADY read is exactly wide enough to count them, and this
+// costs no additional read.
+//
+// Two properties fall out of the port rather than out of a second rule. A
+// question is asked exactly once (MarkAsked's asked_at IS NULL
+// precondition, and Unasked never returns an asked row), so the open pool
+// is bounded at MaxDigestDeferrals by arithmetic. And a vault whose
+// digests stop going out expires nothing, which is correct: it also asked
+// nothing.
 func (r checkRunner) expireStaleQuestions(ctx context.Context, history []ports.Decision, now time.Time, commit bool) (int, error) {
-	return 0, nil
+	if r.questions == nil {
+		return 0, nil
+	}
+
+	open, err := r.questions.Open(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("check: open questions: %w", err)
+	}
+
+	expired := 0
+	for _, q := range open {
+		if q.AskedAt == nil {
+			// Open returns none, by contract. Skipped rather than fatal:
+			// a row that cannot be counted must not stop the digest, and
+			// undercounting only leaves a question open one pass longer.
+			continue
+		}
+		if digestsSince(history, *q.AskedAt) < prospection.MaxDigestDeferrals {
+			continue
+		}
+		expired++
+		if !commit {
+			continue
+		}
+		if err := r.questions.Expire(ctx, q.ID, now); err != nil {
+			return 0, fmt.Errorf("check: expire question %q: %w", q.ID, err)
+		}
+		if err := r.record(ctx, now, ports.ActionCheckQuestionExpired,
+			fmt.Sprintf("the question about %q and %q went unanswered through %d digest(s) and expired",
+				q.FromContent, q.ToContent, prospection.MaxDigestDeferrals),
+			checkDetail{ID: q.ID}); err != nil {
+			return 0, err
+		}
+	}
+	return expired, nil
+}
+
+// digestsSince is how many digests went out strictly after at, counted
+// from the audit trail — heldCounts' own form, for the second counter
+// design §3.5 needed.
+//
+// Strictly after, and that is the whole of two rules at once: the digest
+// that asked a question writes its ActionCheckDigestSent row at the same
+// instant MarkAsked stamps asked_at, so it does not count against the
+// question it asked; and the sweep runs before this pass sends, so neither
+// does the digest going out now.
+func digestsSince(history []ports.Decision, at time.Time) int {
+	n := 0
+	for i := range history {
+		if history[i].Action == ports.ActionCheckDigestSent && history[i].OccurredAt.After(at) {
+			n++
+		}
+	}
+	return n
 }

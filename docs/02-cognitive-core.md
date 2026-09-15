@@ -371,6 +371,14 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
     this system produces. A digest with an open question is sent **even when it carries no
     items**: "an empty digest is not sent" is about there being nothing to say, and a question is
     not nothing to say.
+  - **When the asking stops**: a question that `prospection.MaxDigestDeferrals` digests have gone
+    out on without an answer transitions to `resolution = expired` — a **state transition, never
+    a delete** (nothing is deleted in the vault). The count is digests, not elapsed days, read
+    from `decision_log`'s own digest rows the way a held item's deferrals already are: a vault
+    whose digests stopped going out expires nothing, which is correct, because it also asked
+    nothing. An expired question is never re-surfaced and never answers an inbound confirmation.
+    Since a question is asked exactly once, the open pool is bounded at `MaxDigestDeferrals` by
+    arithmetic rather than by a second rule.
   - These thresholds are what the learning module tunes per user (§9).
   - When `relation_thresholds` holds no row yet for a given type — relation type is open text,
     so no seed could ever be exhaustive — the two defaults above come from named constants in
