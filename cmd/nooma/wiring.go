@@ -290,6 +290,12 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		// No conversation, for the same reason as the nil channel above:
 		// there is nowhere for this subcommand to push to.
 		"",
+		// The real question store, even though this pass has no channel to
+		// ask through: the reason `nooma check` stays silent is the nil
+		// channel above, not a missing repository, and handing it a nil
+		// here would state the same refusal twice in two places that could
+		// later disagree.
+		sqlite.NewPendingQuestionRepo(db),
 	)
 }
 
@@ -399,6 +405,8 @@ func wireProactive(db *sqlite.Vault, cfg *config.Config, lookup func(string) (st
 		// config cannot name exactly one conversation — see
 		// brain.ProactiveConversation for why it refuses to pick.
 		brain.ProactiveConversation(cfg.Channels.Telegram.AllowedChatIDs),
+		// The digest's second item source, and the expiry sweep's store.
+		sqlite.NewPendingQuestionRepo(db),
 	), nil
 }
 

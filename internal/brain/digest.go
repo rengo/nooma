@@ -97,7 +97,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 			checkDetail{})
 	}
 
-	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending)); err != nil {
+	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, nil)); err != nil {
 		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})
@@ -216,7 +216,7 @@ func heldCounts(history []ports.Decision) map[string]int {
 // Held items are not mentioned. A digest that listed what it withheld
 // would defeat the low-energy gate it came from — the point of holding
 // something back is that the person does not have to think about it today.
-func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger) string {
+func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) string {
 	text := make(map[string]string, len(pending))
 	for _, t := range pending {
 		text[t.ID] = t.Payload.ActionText
@@ -231,6 +231,7 @@ func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger) st
 		}
 		b.WriteString("\n• " + line)
 	}
+	_ = question // STUB (task 5.3/5.4): the question paragraph is not rendered yet.
 	return b.String()
 }
 
@@ -240,3 +241,13 @@ func plural(n int) string {
 	}
 	return "are " + strconv.Itoa(n) + " things for today"
 }
+
+// questionSnippetRunes bounds how much of a unit's own text a digest
+// question quotes. units.content is unbounded and a digest line is not, so
+// both endpoints are truncated to this many runes with an ellipsis.
+//
+// A rendering bound with no decision behind it — nothing branches on it —
+// so it lives in internal/brain rather than internal/core and carries no
+// docs/02 §13 calibration row, digestHistoryDays being the shipped
+// precedent for a brain-side bound.
+const questionSnippetRunes = 60

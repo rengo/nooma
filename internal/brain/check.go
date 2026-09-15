@@ -28,13 +28,16 @@ type CheckService struct {
 // clock is read exactly once per Check call; run never sees it.
 // NewCheckService builds the scan. conversation is the vault's one push
 // destination (brain.ProactiveConversation), empty when it has none.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID) *CheckService {
+// questions is last for the same reason NewConsolidateService puts it
+// last: it is m3e's own addition to a signature every other caller in this
+// tree already spells out, and appending it keeps that diff mechanical.
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo) *CheckService {
 	return &CheckService{
 		clock: clock,
 		run: checkRunner{
 			triggers: triggers, timers: timers, ids: ids, log: log,
 			channel: channel, units: units, state: state, llm: llm,
-			conversation: conversation,
+			conversation: conversation, questions: questions,
 		},
 	}
 }
@@ -272,6 +275,12 @@ type checkRunner struct {
 	// provider bound delivers the user's own words, which is what the
 	// rephrasing falls back to anyway.
 	llm ports.LLMProvider
+	// questions is the digest's SECOND item source — the queue it asks one
+	// relation question from — and the expiry sweep's own store. Nil is
+	// legal in exactly the way channel, units and state are: a pass
+	// without it still fires, delivers and expires triggers, it simply
+	// asks nothing and expires no question.
+	questions ports.PendingQuestionRepo
 }
 
 // checkDetail is every check.* row's context shape. One shape for all

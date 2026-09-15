@@ -19,9 +19,10 @@ import (
 )
 
 // i09SourceContent and i09CandidateContent are the two endpoints part (b)
-// must find named in the digest's rendered text, once PR5 ships that
-// (task 5.7). Named as constants so both subtests below read the identical
-// strings rather than two copies that could quietly drift apart.
+// finds named in the digest's rendered text. Named as constants so both
+// subtests below read the identical strings rather than two copies that
+// could quietly drift apart, and both kept under questionSnippetRunes so
+// what this test asserts is I09 and not the snippet bound.
 const (
 	i09SourceContent    = "plan the quarterly offsite in Lisbon"
 	i09CandidateContent = "quarterly offsite travel budget"
@@ -136,22 +137,25 @@ func TestI09_UncertainBandStoresRelationAndQueuesQuestion(t *testing.T) {
 	}
 }
 
-// TestI09_QuestionIsNotYetNamedInTheDigest is I09's asking half (design
-// §8, task 4.2 part (b)): the next due digest's rendered text is supposed
-// to name both endpoints of an open relation question. It genuinely does
-// not yet — checkRunner has no pending_questions read at all until PR5
-// wires the digest's second item source (task 5.1-5.4) and
-// checkRunner.questions (task 5.9, 5.12) — so this subtest fails on
-// purpose. Task 4.2's own instruction: created RED here, turned GREEN in
-// PR5 (task 5.7), disclosed rather than weakened or skipped.
+// TestI09_TheDigestNamesBothEndpointsOfTheQueuedQuestion is I09's asking
+// half (design §8, task 4.2 part (b), turned GREEN by task 5.7): the next
+// due digest's rendered text names both endpoints of the relation the
+// Uncertain band queued a question about — end to end, from
+// judgeAndPersistPair through assembleDigest, over the one fixture its
+// storing sibling above also asserts on.
 //
-// The trigger fixture below exists only so a digest is sent AT ALL today
-// ("an empty digest is not sent" — digest.go's own rule): with zero due
-// trigger items and nothing else that can put an item in the digest yet,
-// assembleDigest would return before ever reaching renderDigest, and this
-// subtest would prove nothing about I09's asking half specifically.
-func TestI09_QuestionIsNotYetNamedInTheDigest(t *testing.T) {
-	units, _, _, _ := i09QueueUncertainRelation(t)
+// It was created RED in PR4 and stayed RED through that PR on purpose,
+// because the digest had no pending_questions read at all until PR5 wired
+// its second item source. That is now built, so the assertion is inverted
+// rather than the test rewritten: the same fixture, the same two contents,
+// the opposite verdict.
+//
+// The trigger fixture below no longer decides whether a digest is sent —
+// PR5's own R3 rule is that a question alone is enough — but it stays,
+// because it is what makes this test prove the question is appended to a
+// real digest rather than rendered into an otherwise empty one.
+func TestI09_TheDigestNamesBothEndpointsOfTheQueuedQuestion(t *testing.T) {
+	units, _, questions, _ := i09QueueUncertainRelation(t)
 	ctx := context.Background()
 
 	triggers := memrepo.NewTriggers()
@@ -166,7 +170,7 @@ func TestI09_QuestionIsNotYetNamedInTheDigest(t *testing.T) {
 
 	ch := fakechannel.New()
 	now := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
-	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), &counterIDs{}, memrepo.NewDecisionLog(), ch, units, memrepo.NewState(), nil, "12449194").
+	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), &counterIDs{}, memrepo.NewDecisionLog(), ch, units, memrepo.NewState(), nil, "12449194", questions).
 		Check(ctx, brain.CheckRequest{})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -180,12 +184,26 @@ func TestI09_QuestionIsNotYetNamedInTheDigest(t *testing.T) {
 		t.Fatalf("channel received %d message(s), want exactly 1 digest: %+v", len(sent), sent)
 	}
 
-	namesBoth := strings.Contains(sent[0].Text, i09SourceContent) && strings.Contains(sent[0].Text, i09CandidateContent)
-	if namesBoth {
-		t.Fatalf("digest text = %q already names both endpoints — I09's asking half is GREEN; "+
-			"update this subtest's own doc comment (task 5.7) instead of leaving it claiming RED", sent[0].Text)
+	if !strings.Contains(sent[0].Text, i09SourceContent) || !strings.Contains(sent[0].Text, i09CandidateContent) {
+		t.Fatalf("digest text = %q does not name both endpoints (%q and %q) — I09 is the band being "+
+			"stored AND asked about, and a digest that stores without asking discharges half of it",
+			sent[0].Text, i09SourceContent, i09CandidateContent)
 	}
-	t.Logf("expected RED (I09's asking half ships in PR5): digest text = %q does not yet name %q or %q",
-		sent[0].Text, i09SourceContent, i09CandidateContent)
-	t.Fatal("I09's asking half is not built yet (task 5.1-5.4, 5.9, 5.12) — the digest does not read pending_questions, so its rendered text cannot name the relation's two endpoints. Expected to fail until PR5 (task 5.7 turns this GREEN); disclosed in tasks.md, not a defect.")
+
+	// Asked exactly once: the queue this pass drained must not hand the
+	// same question to tomorrow's digest.
+	unasked, err := questions.Unasked(ctx)
+	if err != nil {
+		t.Fatalf("questions.Unasked: %v", err)
+	}
+	if len(unasked) != 0 {
+		t.Errorf("questions.Unasked() = %+v after the digest, want empty — a question the digest asked is marked asked", unasked)
+	}
+	open, err := questions.Open(ctx)
+	if err != nil {
+		t.Fatalf("questions.Open: %v", err)
+	}
+	if len(open) != 1 {
+		t.Fatalf("questions.Open() = %+v, want exactly the one question this digest asked", open)
+	}
 }
