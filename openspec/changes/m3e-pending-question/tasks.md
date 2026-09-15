@@ -56,7 +56,22 @@ this document's own instruction to use design's exact fixed signatures: `t.Surfa
 design's body reads, and the struct carries `Persist` alongside `Surface` for no cost to this
 function's one comparison. Task 2.1 tests the struct-taking form.
 
-No other disagreement was found: R2 (state machine), R3 (digest cap), R4 (disambiguation), R6
+**F4 — spec R3 and design §3.5 disagree about which column orders the digest's queue, found
+while implementing PR 5.** Spec R3's MUST reads: *"exactly one — the oldest by `asked_at` — is
+appended"*, and its own scenario is written over *"two `pending_questions` rows open at digest
+time, asked at different instants."* Design §3.5 ships the opposite key: *"the tie-break is
+`created_at`, then `id` — FIFO, not confidence."* **Resolved in design's favor**, and the
+disagreement is not a preference — spec R3's wording is unreachable. The digest reads
+`Unasked` (queued rows), whose `asked_at` is NULL by construction, and `MarkAsked`'s own
+`asked_at IS NULL` precondition means a question is asked exactly once and never re-rendered, so
+two questions "asked at different instants" can never compete for one digest line. Ordering a
+set of NULLs by `asked_at` orders nothing. Tasks 5.1–5.2 ship `created_at`, then `id`, which is
+also what `ports.PendingQuestionRepo.Unasked`'s own doc comment already promised when PR 3
+shipped it. Spec R3's scenario maps onto the shipped behaviour as *two queued questions, created
+at different instants → the older is asked; the newer stays queued for a later digest*, which is
+what `TestDigest_AsksExactlyOneQuestionOldestFirst` asserts.
+
+No other disagreement was found: R2 (state machine), R3's cap itself, R4 (disambiguation), R6
 (reject), R7 (expiry), R8 (unmatched), R9 (stale comment) and R10 (doc sync) are consistent
 between the two artifacts as read.
 
@@ -362,7 +377,7 @@ Depends on PR 3 (the port) and PR 4 (questions exist to ask about). Ships the di
 source, the one-question cap (Q2), the low-energy rule, the FIFO tie-break, `renderDigest`'s
 question paragraph, the expiry sweep (Q4). **I09's asking half — `i09_*.go` turns GREEN here.**
 
-- [ ] **5.1** Commit 1 (RED): `internal/brain/digest_test.go` (extend) — zero open questions →
+- [x] **5.1** Commit 1 (RED): `internal/brain/digest_test.go` (extend) — zero open questions →
       the digest is unchanged from today's trigger-only shape; N queued questions → exactly one
       surfaced, the **oldest by `created_at`, then `id`** (FIFO, never confidence — design §3.5's
       own rationale: ranking by confidence would ask first about the relation closest to
@@ -379,7 +394,7 @@ question paragraph, the expiry sweep (Q4). **I09's asking half — `i09_*.go` tu
       tie-break — a fixture with two questions created in the same millisecond but distinct ids in
       reverse creation order must still surface the actually-oldest one; catches an
       id-only-sort regression the FIFO property depends on.
-- [ ] **5.2** Commit 2 (GREEN): restructure `assembleDigest` per design §3.5's pipeline —
+- [x] **5.2** Commit 2 (GREEN): restructure `assembleDigest` per design §3.5's pipeline —
       `expireStaleQuestions` runs BEFORE anything is sent; `question := nil; if !low { question =
       r.nextQuestion(ctx) }`; the "0 items AND no question" early-return check widens to include
       `question == nil`; `channel.Send(renderDigest(carry, pending, question))`; on success,
@@ -387,7 +402,7 @@ question paragraph, the expiry sweep (Q4). **I09's asking half — `i09_*.go` tu
       `ActionCheckDigestQuestionAsked`.
       Verify: `go test ./internal/brain/... -run Digest`.
       Requirement: R3; design §3.5.
-- [ ] **5.3** Commit 1 (RED): `digest_test.go` (continued) — `renderDigest(carry, pending,
+- [x] **5.3** Commit 1 (RED): `digest_test.go` (continued) — `renderDigest(carry, pending,
       question)` appends the exact line shape naming both endpoints, matching doc 02 §4's own
       wording: `"One more — I linked \"<from>\" with \"<to>\". Are they related?"`; both
       `FromContent`/`ToContent` truncated to `questionSnippetRunes` (rune-aware, ellipsis on
@@ -395,13 +410,13 @@ question paragraph, the expiry sweep (Q4). **I09's asking half — `i09_*.go` tu
       **Red**: `undefined: questionSnippetRunes`; `renderDigest`'s signature does not yet accept a
       question argument.
       Requirement: R3's line-shape MUST.
-- [ ] **5.4** Commit 2 (GREEN): implement `renderDigest`'s question paragraph and
+- [x] **5.4** Commit 2 (GREEN): implement `renderDigest`'s question paragraph and
       `questionSnippetRunes` (brain-side, not core — `calibration_doc_test.go` matches only
       `internal/core/<pkg>.<Symbol>`, `digestHistoryDays` the shipped precedent for a brain-side
       bound needing no §13 row).
       Verify: `go test ./internal/brain/... -run RenderDigest`.
       Requirement: R3; design §3.5.
-- [ ] **5.5** Commit 1 (RED): `digest_test.go` (continued) — `expireStaleQuestions`: a question
+- [x] **5.5** Commit 1 (RED): `digest_test.go` (continued) — `expireStaleQuestions`: a question
       surfaced in `MaxDigestDeferrals - 1` digests stays open (still asked, still unresolved);
       surfaced in `MaxDigestDeferrals` digests transitions to `resolution = expired`, `resolved_at`
       set — a state transition, never a delete (non-negotiable #6); an expired question is
@@ -415,7 +430,7 @@ question paragraph, the expiry sweep (Q4). **I09's asking half — `i09_*.go` tu
       `decision_log`'s own `ActionCheckDigestSent` rows — a fixture whose digests were sent on
       three consecutive mornings but with an artificially shifted `now` between the count and the
       assertion must still expire correctly only under the row-count form, never a duration form.
-- [ ] **5.6** Commit 2 (GREEN): implement `expireStaleQuestions(ctx, history, now, commit)` per
+- [x] **5.6** Commit 2 (GREEN): implement `expireStaleQuestions(ctx, history, now, commit)` per
       design §3.5 — count is `len(rows where Action == ActionCheckDigestSent && OccurredAt.After(
       *q.AskedAt))` over the `history` slice this pass already read
       (`digestHistoryDays = MaxDigestDeferrals + 2`, no additional read); `>= MaxDigestDeferrals`
@@ -424,38 +439,70 @@ question paragraph, the expiry sweep (Q4). **I09's asking half — `i09_*.go` tu
       Record `ActionCheckQuestionExpired` per expired question (I12).
       Verify: `go test ./internal/brain/... -run Expire`.
       Requirement: R7; design §3.5.
-- [ ] **5.7** `test/conformance/i09_uncertain_band_asked_test.go` — confirm part (b) is now GREEN:
+- [x] **5.7** `test/conformance/i09_uncertain_band_asked_test.go` — confirm part (b) is now GREEN:
       a question's next due digest names both endpoints, end to end from `judgeAndPersistPair`
       through `assembleDigest`.
       Requirement: I09; R1, R3.
-- [ ] **5.8** L3 (`test/integration/` or equivalent): `SELECT DISTINCT resolution FROM
+- [x] **5.8** L3 (`test/integration/` or equivalent): `SELECT DISTINCT resolution FROM
       pending_questions` after a real pass yields only `AllQuestionResolutions()` members — the
       constraint the schema does not carry (`m3b`'s Risk A posture, applied to this new table).
       Requirement: R2 (vocabulary pin, no `CHECK`).
-- [ ] **5.9** `checkRunner` gains one field, `questions ports.PendingQuestionRepo`,
+- [x] **5.9** `checkRunner` gains one field, `questions ports.PendingQuestionRepo`,
       **nil-tolerant** exactly as `channel`/`units`/`state` already are — a pass without it still
       fires and expires, it simply asks nothing.
       Requirement: design §3.5.
-- [ ] **5.10** `docs/02-cognitive-core.md` §4 amendment — the digest's asking mechanism: at most
+- [x] **5.10** `docs/02-cognitive-core.md` §4 amendment — the digest's asking mechanism: at most
       one relation question per digest, appended after `prospection.Carry`'s ranked items (Q2);
       the low-energy gate; the FIFO tie-break; the expiry rule (Q4) as a state transition, never a
       delete.
       Requirement: R10; non-negotiable #1.
-- [ ] **5.11** `docs/06-harness.md` — correct the I09 row if its wording needs to name the
+- [x] **5.11** `docs/06-harness.md` — correct the I09 row if its wording needs to name the
       surfacing mechanism (spec R10's conditional clause).
       Requirement: R10.
-- [ ] **5.12** `cmd/nooma/wiring.go` — wire `questions` into `checkRunner`'s constructor.
+- [x] **5.12** `cmd/nooma/wiring.go` — wire `questions` into `checkRunner`'s constructor.
       Requirement: design §4.
-- [ ] **5.13** Purity/lint: `golangci-lint run` (`brain-boundary`).
+- [x] **5.13** Purity/lint: `golangci-lint run` (`brain-boundary`).
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/brain/{digest,check}{,_test}.go`, `internal/ports/decisionlog.go`,
-      `cmd/nooma/wiring.go`, `test/conformance/i09_uncertain_band_asked_test.go`,
-      `docs/02-cognitive-core.md`, `docs/06-harness.md`. Target ≤300 impl+docs lines — **genuine
-      risk, flagged by design §7**. **If measured lines threaten 400**, apply design's own
-      pre-drawn cut: the second source/asking (tasks 5.1–5.4, 5.7, 5.9–5.10) \| the expiry sweep
-      (tasks 5.5–5.6, 5.8), an autonomous property with its own rollback — report before
-      splitting.
+- [x] Verify (PR-level): `make check-all` — **fully green**, including L3, the schema-golden
+      regeneration diff, the `internal/core` coverage floor (99%), the seven-target matrix and L4.
+      `TestI09_QuestionIsNotYetNamedInTheDigest`, PR 4's deliberately-red conformance test, is
+      closed here as task 5.7 planned.
+      **Measured: 311 impl+docs lines** (`+293/-18`, tests counted separately at `+772/-34`) —
+      under the 400 ceiling and close to the ~300 budget, so design §7's pre-drawn cut was **not
+      applied**. It was nonetheless preserved in the commit shape: the four commits are
+      `RED asking → GREEN asking → RED expiry → GREEN expiry`, and the asking half is green on
+      its own, so the cut stays available as a clean `git` boundary if review asks for it.
+      **Deviations from this section's own idealized list, all reported rather than papered over:**
+      - `internal/ports/decisionlog.go` is **untouched**: PR 4 already added all five m3e
+        `DecisionAction` members at once (its own disclosed deviation), so
+        `ActionCheckDigestQuestionAsked` and `ActionCheckQuestionExpired` were already in the
+        vocabulary and in `AllDecisionActions`.
+      - `docs/06-harness.md` is **untouched** (task 5.11's own clause is conditional: *"correct
+        the I09 row **if** its wording needs to name the surfacing mechanism"*). The row reads
+        *"The `[persist, surface)` band → stored **and** asked about in the digest | §4"* and
+        already names it; the §4 pointer now resolves to the two paragraphs this PR added there.
+        Editing it would have been churn, not sync.
+      - `test/support/repocontract/pendingquestionrepo.go` gained a case (+45): `Unasked`'s
+        `created_at`-then-`id` order was the one half of the port's contract nothing asserted —
+        `Open`'s order had a case, `Unasked`'s did not — and the FIFO tie-break task 5.1's own
+        `Mutation:` line names lives in the repository, not in `brain`. Asserted at the layer it
+        lives in, so it covers `memrepo` and real SQLite at once.
+      - The mechanical fallout of `NewCheckService`'s widened signature: `cmd/nooma/wiring.go`
+        (both call sites — `wireCheck` gets the real repo too, since what keeps that subcommand
+        silent is its nil channel, not a missing repository) plus one-argument additions in
+        `test/conformance/{i15,i16,check_effect_completeness}_*.go`,
+        `test/integration/due_scan_{concurrent,status_vocabulary}_test.go` and
+        `test/e2e/m3_demo_test.go`.
+      - `renderDigest` gained a shape this section did not anticipate: with zero carried items it
+        **drops the item header entirely** rather than writing *"Here are 0 things for today"*.
+        R3's own "a question alone is still sent" MUST is what makes that case reachable, and the
+        header counts `Carry`'s output. The question sentence itself is written once
+        (`questionLine`), so the appended and standalone forms cannot drift into two different
+        questions.
+      - Task 5.8's L3 test reaches `confirmed` and `rejected` by calling the repository directly,
+        not through a real pass: the check-in path that will call them is PR 6's, and a
+        vocabulary test that asserted only `expired` would leave two thirds of the vocabulary
+        unchecked until then. Stated in the test's own doc comment.
 
 ---
 
