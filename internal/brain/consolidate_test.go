@@ -169,7 +169,7 @@ func (s *spyConfig) RecordConsolidationRun(ctx context.Context, at time.Time) er
 func TestConsolidate_WholePassReachesEveryPhaseInOrder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -209,7 +209,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 
 	t.Run("reaches exactly the requested phase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 		phase := consolidation.PhaseArchive
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
@@ -229,7 +229,7 @@ func TestConsolidate_PerPhase(t *testing.T) {
 	})
 
 	t.Run("an unknown phase errors through Consolidate itself, not just runPhase", func(t *testing.T) {
-		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 		unknown := consolidation.Phase(99)
 
 		report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &unknown})
@@ -283,7 +283,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a whole pass", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -294,7 +294,7 @@ func TestConsolidate_SinceReadOnceBeforeAnyPhase(t *testing.T) {
 
 	t.Run("Load is called exactly once for a per-phase run too", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 		phase := consolidation.PhaseStrengthen
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -315,7 +315,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("whole pass records exactly once with the pass's own now", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
 		}
@@ -329,7 +329,7 @@ func TestConsolidate_RecordsConsolidationRunOnce(t *testing.T) {
 
 	t.Run("per-phase run never records", func(t *testing.T) {
 		cfg := newSpyConfig()
-		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 		phase := consolidation.PhaseLearn
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate: %v", err)
@@ -441,7 +441,7 @@ func TestConsolidate_NoEffects(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 10, 3, 0, 0, 0, time.UTC)
 	log := memrepo.NewDecisionLog()
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), memrepo.NewUnits(), memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
@@ -595,7 +595,7 @@ func TestConsolidateRunner_ExpireIncomplete_DerivesCutoffFromConstant(t *testing
 	units := &spyUnits{Units: memrepo.NewUnits()}
 	phase := consolidation.PhaseExpireIncomplete
 
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
 	}
@@ -640,7 +640,7 @@ func TestConsolidateRunner_ExpireIncomplete_TransitionsAndRecords(t *testing.T) 
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseExpireIncomplete
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -797,7 +797,7 @@ func TestConsolidateRunner_Archive_ResolvesConfiguredThreshold(t *testing.T) {
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseArchive
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -843,7 +843,7 @@ func TestConsolidateRunner_Archive_RefusesNonFiniteBeforeArchiveSees(t *testing.
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseArchive
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
 	if err != nil {
@@ -913,7 +913,7 @@ func TestConsolidateRunner_Archive_RealWiringSkipsAndLogsConflict(t *testing.T) 
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseArchive
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -1001,7 +1001,7 @@ func TestConsolidateRunner_Strengthen_SincePropagatesAndPersists(t *testing.T) {
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseStrengthen
-	svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), rels, &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, cfg, memrepo.NewUnits(), rels, &fakeIDs{}, log, testRecall(), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -1085,7 +1085,7 @@ func TestConsolidateRunner_Connect_CallsRecallServiceScoredFor(t *testing.T) {
 
 	log := memrepo.NewDecisionLog()
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, rec, noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, log, rec, noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
@@ -1191,7 +1191,7 @@ func TestConnect_RefusesNonFiniteSources(t *testing.T) {
 	}
 
 	archivePhase := consolidation.PhaseArchive
-	archiveSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	archiveSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 	archiveReport, err := archiveSvc.Consolidate(ctx, ConsolidateRequest{Phase: &archivePhase})
 	if err != nil {
 		t.Fatalf("Consolidate(PhaseArchive): %v", err)
@@ -1210,7 +1210,7 @@ func TestConnect_RefusesNonFiniteSources(t *testing.T) {
 	}
 
 	connectPhase := consolidation.PhaseConnect
-	connectSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState())
+	connectSvc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), noJudge(t), memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 	connectReport, err := connectSvc.Consolidate(ctx, ConsolidateRequest{Phase: &connectPhase})
 	if err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1268,7 +1268,7 @@ func TestConsolidate_WholePassReportsEachCorruptedIDOnce(t *testing.T) {
 	writeDeriveCase(t, dir, "derive-corrupted-fixture", `{"beliefs":[]}`)
 	judge := fakeprovider.New(t, dir, "derive-corrupted-fixture")
 
-	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, memrepo.NewConfig(), units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 	report, err := svc.Consolidate(ctx, ConsolidateRequest{})
 	if err != nil {
 		t.Fatalf("Consolidate(whole pass): %v", err)
@@ -1364,7 +1364,15 @@ func TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch(t
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-related-uncertain-band")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState())
+	// The fixture's own confidence (0.40) lands inside [Persist, Surface) —
+	// the Uncertain band (defaults 0.30/0.50) — so judgeAndPersistPair also
+	// queues a pending question for the relation it just persisted. &fakeIDs{}
+	// is deterministic (decision-1, decision-2, ...) and rel.ID is the first
+	// ID it hands out in this codepath, so the fake's own relation-existence
+	// set is seeded under that exact id ahead of the run.
+	questions := memrepo.NewPendingQuestions()
+	questions.EnsureRelation(t, "decision-1", "same_topic", "u-source", candidateID, "plan the quarterly offsite in Lisbon", "quarterly offsite travel budget")
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState(), questions)
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1400,14 +1408,137 @@ func TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch(t
 	if err != nil {
 		t.Fatalf("log.Since: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("decision_log rows = %d, want exactly 1 (consolidate.connect.relation_persisted): %+v", len(rows), rows)
+	// Two rows, not one: the fixture's confidence (0.40) lands in the
+	// Uncertain band, so relation_persisted is followed by m3e's own
+	// question_created row in the same pass (I09's storing half).
+	if len(rows) != 2 {
+		t.Fatalf("decision_log rows = %d, want exactly 2 (consolidate.connect.relation_persisted, consolidate.connect.question_created): %+v", len(rows), rows)
 	}
 	if rows[0].Action != ports.ActionConnectRelationPersisted {
-		t.Errorf("row Action = %s, want %s", rows[0].Action, ports.ActionConnectRelationPersisted)
+		t.Errorf("row[0] Action = %s, want %s", rows[0].Action, ports.ActionConnectRelationPersisted)
 	}
 	if rows[0].Rationale == "" {
 		t.Error("consolidate.connect.relation_persisted Rationale is empty — doc 02 §11 requires a legible sentence")
+	}
+	if rows[1].Action != ports.ActionConnectQuestionCreated {
+		t.Errorf("row[1] Action = %s, want %s", rows[1].Action, ports.ActionConnectQuestionCreated)
+	}
+	if rows[1].Rationale == "" {
+		t.Error("consolidate.connect.question_created Rationale is empty — doc 02 §11 requires a legible sentence")
+	}
+}
+
+// TestConsolidateRunner_Connect_UncertainBandQueuesQuestionAssertedDoesNot
+// is task 4.1's own scenario (I09's storing half, design §3.4): a judged
+// pair landing in the Uncertain band writes exactly one pending_questions
+// row, in the same pass as Upsert + ActionConnectRelationPersisted,
+// recorded by ActionConnectQuestionCreated; a pair landing in the Asserted
+// band writes none.
+//
+// Table-driven over both bands in one test on purpose: the mutation task
+// 4.1 names ("gate the branch on proposed.Band == relation.Asserted
+// (inverted) instead of != relation.Uncertain") flips which band sees the
+// question rather than removing the question entirely, so a test asserting
+// only one band would still pass against the inverted gate. Only a test
+// that checks both halves in the same run catches it.
+func TestConsolidateRunner_Connect_UncertainBandQueuesQuestionAssertedDoesNot(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		judgeCase    string
+		wantConf     float64
+		wantRows     int
+		wantQuestion bool
+	}{
+		{"Uncertain band queues a question", "relation-related-uncertain-band", 0.40, 2, true},
+		{"Asserted band queues none", "relation-related-asserted-band", 0.65, 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+			since := now.Add(-time.Hour)
+			const candidateID = "3527ca73-93c4-4688-a680-145243ce1e04"
+
+			units := memrepo.NewUnits()
+			for _, seed := range []struct {
+				id, content   string
+				lastTouchedAt time.Time
+			}{
+				{"u-source", "plan the quarterly offsite in Lisbon", now},
+				{candidateID, "quarterly offsite travel budget", since.Add(-time.Hour)},
+			} {
+				if err := units.Create(ctx, unit.Unit{
+					ID: seed.id, Type: unit.TypeKnowledge, Status: unit.StatusPool,
+					Content: seed.content, Source: "chat",
+					Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: seed.lastTouchedAt, CreatedAt: now, UpdatedAt: now,
+				}); err != nil {
+					t.Fatalf("seed %s: %v", seed.id, err)
+				}
+			}
+
+			lex := memrepo.NewLexical()
+			lex.SeedLexical(t, "u-source", "quarterly offsite Lisbon")
+			lex.SeedLexical(t, candidateID, "quarterly offsite budget")
+
+			rels := memrepo.NewRelations()
+			rels.EnsureUnit(t, "u-source")
+			rels.EnsureUnit(t, candidateID)
+
+			cfg := memrepo.NewConfig()
+			if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+				t.Fatalf("seed since: %v", err)
+			}
+
+			rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), lex, units, fakeprovider.NewEmbeddingFake("test-model"))
+			log := memrepo.NewDecisionLog()
+			judge := fakeprovider.New(t, testdataLLMCasesDir(t), tc.judgeCase)
+
+			// &fakeIDs{}'s deterministic sequence ("decision-1", ...) and
+			// rel.ID's call-order position are the same fact
+			// TestConsolidateRunner_Connect_PersistsAcceptedJudgmentThroughRealDispatch
+			// relies on — see that test's own comment.
+			questions := memrepo.NewPendingQuestions()
+			questions.EnsureRelation(t, "decision-1", "same_topic", "u-source", candidateID, "plan the quarterly offsite in Lisbon", "quarterly offsite travel budget")
+
+			phase := consolidation.PhaseConnect
+			svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState(), questions)
+			if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+				t.Fatalf("Consolidate(PhaseConnect): %v", err)
+			}
+
+			got, err := rels.ByUnit(ctx, "u-source")
+			if err != nil {
+				t.Fatalf("relations.ByUnit(u-source): %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("relations.ByUnit(u-source) = %v, want exactly 1", got)
+			}
+			if got[0].Confidence != tc.wantConf {
+				t.Fatalf("Confidence = %v, want the judge's recorded %v", got[0].Confidence, tc.wantConf)
+			}
+
+			rows, err := log.Since(ctx, now.Add(-time.Hour), 10)
+			if err != nil {
+				t.Fatalf("log.Since: %v", err)
+			}
+			if len(rows) != tc.wantRows {
+				t.Fatalf("decision_log rows = %d, want %d: %+v", len(rows), tc.wantRows, rows)
+			}
+
+			unasked, err := questions.Unasked(ctx)
+			if err != nil {
+				t.Fatalf("questions.Unasked: %v", err)
+			}
+			wantUnasked := 0
+			if tc.wantQuestion {
+				wantUnasked = 1
+			}
+			if len(unasked) != wantUnasked {
+				t.Fatalf("questions.Unasked() = %+v, want %d row(s)", unasked, wantUnasked)
+			}
+			if tc.wantQuestion && unasked[0].RelationID != got[0].ID {
+				t.Errorf("Unasked()[0].RelationID = %q, want the persisted relation's own id %q", unasked[0].RelationID, got[0].ID)
+			}
+		})
 	}
 }
 
@@ -1478,7 +1609,7 @@ func TestConsolidateRunner_Connect_DiscardWritesNoDecisionLogRow(t *testing.T) {
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-discard-low-confidence")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1557,7 +1688,7 @@ func TestConsolidateRunner_Connect_UnofferedTargetIsRefusedAndRecorded(t *testin
 	log := memrepo.NewDecisionLog()
 	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-target-never-offered")
 	phase := consolidation.PhaseConnect
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, log, rec, judge, memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)
@@ -1628,7 +1759,7 @@ func TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState(t
 			t.Fatalf("seed since: %v", err)
 		}
 		phase := consolidation.PhaseDerive
-		svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, selfModel, memrepo.NewState())
+		svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), testRecallOver(units), judge, selfModel, memrepo.NewState(), memrepo.NewPendingQuestions())
 
 		if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 			t.Fatalf("Consolidate(PhaseDerive): %v", err)
@@ -1728,7 +1859,7 @@ func TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief(t *testing.T)
 	judge := fakeprovider.New(t, dir, "derive-embed-count")
 
 	phase := consolidation.PhaseDerive
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel, memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel, memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseDerive): %v", err)
@@ -1822,7 +1953,7 @@ func TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite(t *testing
 	judge := fakeprovider.New(t, dir, "derive-create-and-merge")
 
 	phase := consolidation.PhaseDerive
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel, memrepo.NewState())
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel, memrepo.NewState(), memrepo.NewPendingQuestions())
 
 	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseDerive): %v", err)

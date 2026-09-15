@@ -137,11 +137,37 @@ const (
 	// separately, since they carry different Context shapes.
 	ActionPatternEvalStagnationFound      DecisionAction = "consolidate.pattern_eval.stagnation_found"
 	ActionPatternEvalLoadHypothesisOpened DecisionAction = "consolidate.pattern_eval.load_hypothesis_opened"
+
+	// ActionConnectQuestionCreated is m3e's own addition (I09's storing
+	// half): an Uncertain-band relation was stored and a pending_questions
+	// row queued for it, in the same connect pass that persisted the
+	// relation.
+	ActionConnectQuestionCreated DecisionAction = "consolidate.connect.question_created"
+	// ActionCheckDigestQuestionAsked records the digest surfacing one open
+	// relation question (m3e, design §3.5).
+	ActionCheckDigestQuestionAsked DecisionAction = "check.digest.question_asked"
+	// ActionCheckQuestionExpired records a pending question closing as
+	// resolution=expired after MaxDigestDeferrals digests with no answer
+	// (m3e, design §3.5, spec R7) — a state transition, never a delete.
+	ActionCheckQuestionExpired DecisionAction = "check.question.expired"
+	// ActionCaptureRelationCheckInResolved and
+	// ActionCaptureRelationCheckInUnmatched are m3e's own relation
+	// check-in actions (design §3.7) — deliberately not
+	// ActionCaptureCheckInResolved/Unmatched: a relation answer's Context
+	// shape ({question_id, relation_id, resolution,
+	// open_relation_questions}) differs from recordCheckIn's own
+	// ({trigger_id, resolution, open_check_ins}), and m2c §7.5's rule
+	// splits effects when their Context shapes differ.
+	ActionCaptureRelationCheckInResolved  DecisionAction = "capture.relation_checkin.resolved"
+	ActionCaptureRelationCheckInUnmatched DecisionAction = "capture.relation_checkin.unmatched"
 )
 
-// AllDecisionActions returns a fresh slice holding the forty-two
+// AllDecisionActions returns a fresh slice holding the forty-seven
 // DecisionAction vocabulary members, in the order the constants above
-// declare them.
+// declare them. The last five are m3e's own: ActionConnectQuestionCreated,
+// ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
+// ActionCaptureRelationCheckInResolved and
+// ActionCaptureRelationCheckInUnmatched.
 //
 // A function, not an exported var (design D1's reasoning, applied to this
 // vocabulary too): an exported slice is mutable by any importer, and a
@@ -167,6 +193,8 @@ func AllDecisionActions() []DecisionAction {
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
 		ActionDeriveBeliefReinforced, ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
 		ActionPatternEvalLoadHypothesisOpened,
+		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
+		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 	}
 }
 

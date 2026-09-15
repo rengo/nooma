@@ -54,10 +54,14 @@ type ConsolidateService struct {
 // PR 11's own addition (design §3.2 Q6, §6.3 slot 7): pattern_eval's load
 // half reads StateRepo.LastHypothesisAt and writes OpenHypothesis, the same
 // widen-at-the-end-of-the-parameter-list convention selfModel already set.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo) *ConsolidateService {
+// questions is PR 9b's own m3e widening (design §3.4, §4's layout table):
+// connect's persist step queues a pending question when ProposeRelation's
+// Band is Uncertain — the same widen-at-the-end-of-the-parameter-list
+// convention state (above) already established.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo, questions ports.PendingQuestionRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state, questions: questions},
 	}
 }
 
@@ -189,6 +193,9 @@ type consolidateRunner struct {
 	judge     ports.LLMProvider
 	selfModel ports.SelfModelRepo
 	state     ports.StateRepo
+	// questions is connect's own m3e widening: a pending question is
+	// queued when ProposeRelation's Band is Uncertain (design §3.4).
+	questions ports.PendingQuestionRepo
 }
 
 // record persists one decision_log row — the one call site every effect a

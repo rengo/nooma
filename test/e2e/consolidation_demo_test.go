@@ -174,6 +174,7 @@ type demoVault struct {
 	config    *sqlite.ConfigRepo
 	selfModel *sqlite.SelfModelRepo
 	state     *sqlite.StateRepo
+	questions *sqlite.PendingQuestionRepo
 	lexical   *sqlite.Search
 	index     *brain.Index
 	embed     *fakeprovider.Fake
@@ -261,6 +262,7 @@ func driveDemoCorpus(t *testing.T, ex goldenset.ConsolidationExample) demoVault 
 		vault: v, units: units, relations: relations, decisions: decisions,
 		config: sqlite.NewConfigRepo(v), selfModel: sqlite.NewSelfModelRepo(v), state: sqlite.NewStateRepo(v),
 		lexical: lexical, index: index, embed: embed, ids: ids, unitIDs: unitIDs,
+		questions: sqlite.NewPendingQuestionRepo(v),
 	}
 }
 
@@ -386,7 +388,7 @@ func buildDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample
 	judgeDir := connectJudgeCase(t, dv, ex)
 	passJudge := fakeprovider.New(t, judgeDir, connectJudgeCaseID, "derive-team-meeting-preference")
 	clock := &steppingClock{now: now}
-	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state)
+	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state, dv.questions)
 
 	return consolidateSvc, passJudge
 }
