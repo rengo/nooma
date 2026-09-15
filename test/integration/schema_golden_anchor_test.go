@@ -117,6 +117,10 @@ func TestSchemaGoldenAnchorsExpectedObjects(t *testing.T) {
 		"trigger units_fts_ai",
 		"trigger units_fts_ad",
 		"trigger units_fts_au",
+		// 0004_pending_questions.sql
+		"table pending_questions",
+		"index idx_pending_questions_unasked",
+		"index idx_pending_questions_open",
 	}
 
 	requiredSet := make(map[string]bool, len(required))
