@@ -301,6 +301,23 @@ type checkDetail struct {
 	Table string `json:"table,omitempty"`
 }
 
+// questionDetail is every relation-question row's context shape, and it is
+// deliberately not checkDetail.
+//
+// checkDetail's four fields are {id, fire_at, verdict, table}, and three of
+// them would be empty on every question row while the one that matters —
+// which relation the question is about — has nowhere to go. An audit row
+// whose fields are mostly empty and whose one real fact is missing is the
+// row that misdescribes what happened, which doc 02 §11 forbids by name.
+// m2c §7.5's rule states the general form: effects split when their
+// Context shapes differ.
+type questionDetail struct {
+	QuestionID string `json:"question_id"`
+	RelationID string `json:"relation_id"`
+	// Resolution is empty on the asked row, where nothing is resolved yet.
+	Resolution string `json:"resolution,omitempty"`
+}
+
 // unmarshalCheckDetail reads a check.* row's own context back.
 func unmarshalCheckDetail(raw json.RawMessage, into *checkDetail) error {
 	if len(raw) == 0 {
@@ -312,6 +329,20 @@ func unmarshalCheckDetail(raw json.RawMessage, into *checkDetail) error {
 // record is this pass's one decision_log call site — consolidateRunner's
 // own shape.
 func (r checkRunner) record(ctx context.Context, now time.Time, action ports.DecisionAction, rationale string, detail checkDetail) error {
+	return r.recordDetail(ctx, now, action, rationale, detail)
+}
+
+// recordQuestion is record's sibling for the two rows a relation question
+// writes on this pass — see questionDetail for why they do not share a
+// context shape with the trigger and timer rows.
+func (r checkRunner) recordQuestion(ctx context.Context, now time.Time, action ports.DecisionAction, rationale string, detail questionDetail) error {
+	return r.recordDetail(ctx, now, action, rationale, detail)
+}
+
+// recordDetail is the one place a check.* row is actually written. The two
+// wrappers above exist so a caller cannot hand this the wrong context
+// shape for its action by accident.
+func (r checkRunner) recordDetail(ctx context.Context, now time.Time, action ports.DecisionAction, rationale string, detail any) error {
 	detailJSON, err := json.Marshal(detail)
 	if err != nil {
 		return fmt.Errorf("check: encode decision context: %w", err)

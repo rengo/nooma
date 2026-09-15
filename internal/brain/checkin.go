@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -92,33 +93,104 @@ func checkInResolution(c classify.Classification) (ports.TriggerResolution, bool
 	return "", false
 }
 
-// resolveRelationCheckIn applies a relation_outcome — I10, and the one
-// place in this codebase that deletes anything.
+// resolveRelationCheckIn applies a relation_outcome to the relation
+// question it answers — I10's path, and the one place in this codebase
+// that deletes anything.
 //
-// **The signal is emitted BEFORE the delete**, which is I10's own wording
-// and not an ordering convenience: a signal written after a delete that
-// failed halfway would be evidence for a rejection that did not happen,
-// and the learning module would tune on it forever. Emitted first, the
-// worst case is a signal for a relation that survived — which the next
-// rejection corrects, and which is recoverable in the direction that
-// matters.
+// **Which relation an answer is about is resolved from the STORE, never
+// from the model** (owner ruling Q3). The digest asked exactly one
+// question and marked it asked; this reads what is open and takes the most
+// recently asked, exactly as resolveCheckIn does over Delivered. The
+// classify prompt is never widened to carry open check-ins into the
+// model's context — a model asked to pick an id can pick a plausible wrong
+// one, and the wrong pick here is a deletion.
 //
-// A confirmation raises confidence rather than touching the row's
-// existence, and its own signal says so.
+// It mirrors resolveCheckIn shape for shape, including the two orderings
+// that look inconsistent and are not: RejectRelation emits its signal
+// BEFORE deleting (I10 — the effect is irreversible, so the recoverable
+// error is a signal for a relation that survived), and ConfirmRelation
+// emits AFTER raising (the effect is idempotent, so the recoverable error
+// is a raise with no signal). Both follow the same rule — never leave
+// evidence for an effect that may not have happened — pointed at the
+// direction each effect can fail in.
 func (r captureRunner) resolveRelationCheckIn(ctx context.Context, c classify.Classification, now time.Time) error {
 	if c.RelationOutcome == nil {
+		// Including an answer the model worded outside the vocabulary:
+		// classify.Decode degrades an unknown enum to null (I14), and a
+		// near-miss coerced into "rejected" would be a guess with no undo.
 		return nil
 	}
+	outcome := *c.RelationOutcome
 
-	// Which relation the answer is about is M4's to resolve — a digest
-	// that asked "I linked X with Y, are they related?" knows the id, and
-	// carrying it back through an inbound message is m3e's conversational
-	// state. What this ships is the resolution path itself, exercised by
-	// its own tests, and a recorded row saying an answer arrived with no
-	// relation named.
-	return r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInUnmatched,
-		fmt.Sprintf("a relation answer of %q arrived, and naming which relation it answers is m3e's", *c.RelationOutcome),
-		"", "", 0)
+	open, err := r.openRelationQuestions(ctx)
+	if err != nil {
+		return err
+	}
+	if len(open) == 0 {
+		// Owner ruling Q5, and it covers the rejection too. An answer
+		// that matches no open question gives disambiguation nothing to
+		// work with, and deletion is the one irreversible act in this
+		// vault — refusing to guess which relation to delete is the only
+		// safe direction. Recorded, because a question that vanished
+		// between the asking and the answer is a thing an auditor would
+		// want to see.
+		return r.recordRelationCheckIn(ctx, now, ports.ActionCaptureRelationCheckInUnmatched,
+			fmt.Sprintf("a relation answer of %q arrived with no open relation question", outcome),
+			"", "", outcome, 0)
+	}
+
+	// The most recent, because Open orders that way and an answer carries
+	// no id. Ambiguity is not resolved by guessing at meaning: the choice
+	// is recorded with how many there were, so the audit trail shows a
+	// choice was made rather than implying there was only one.
+	target := open[0]
+	switch outcome {
+	case classify.RelationOutcomeConfirmed:
+		if err := r.ConfirmRelation(ctx, target, now); err != nil {
+			return err
+		}
+		if err := r.questions.Confirm(ctx, target.ID, now); err != nil {
+			return fmt.Errorf("capture: closing confirmed relation question %q: %w", target.ID, err)
+		}
+	case classify.RelationOutcomeRejected:
+		if err := r.RejectRelation(ctx, target.RelationID, now); err != nil {
+			return err
+		}
+		// Only after the delete returned. Reversed, a reject that failed
+		// halfway would have closed the one question still able to ask
+		// again — and both of this port's reads inner-join relations, so
+		// a question whose relation IS gone is invisible rather than
+		// stuck (the digest's own sweep closes it as expired).
+		if err := r.questions.Reject(ctx, target.ID, now); err != nil {
+			return fmt.Errorf("capture: closing rejected relation question %q: %w", target.ID, err)
+		}
+	default:
+		// Unreachable while AllRelationOutcomes has two members, and
+		// given an answer rather than left to fall through into a silent
+		// success that resolved nothing.
+		return fmt.Errorf("capture: no resolution path for relation outcome %q", outcome)
+	}
+
+	return r.recordRelationCheckIn(ctx, now, ports.ActionCaptureRelationCheckInResolved,
+		fmt.Sprintf("relation question %q about relation %q resolved as %q", target.ID, target.RelationID, outcome),
+		target.ID, target.RelationID, outcome, len(open))
+}
+
+// openRelationQuestions is the disambiguation pool, or empty.
+//
+// A nil questions repo reads as "nothing open" rather than as a crash —
+// checkRunner.questions' own nil-tolerance, for the same reason: a vault
+// wired without a question store has nothing to disambiguate against, and
+// that is a true statement about it rather than a failure of this capture.
+func (r captureRunner) openRelationQuestions(ctx context.Context) ([]ports.RelationQuestion, error) {
+	if r.questions == nil {
+		return nil, nil
+	}
+	open, err := r.questions.Open(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("capture: reading open relation questions: %w", err)
+	}
+	return open, nil
 }
 
 // RejectRelation deletes one relation, emitting its signal first — I10.
@@ -152,10 +224,58 @@ func (r captureRunner) RejectRelation(ctx context.Context, relationID string, no
 }
 
 // ConfirmRelation raises one relation's confidence out of the uncertain
-// band and emits relation_confirm.
+// band and emits relation_confirm — doc 02 §4, and that signal's first
+// call site anywhere in this tree.
 //
-// STUB (task 6.3/6.4): does nothing.
+// **The signal is emitted AFTER the raise, which is the OPPOSITE of I10's
+// order, for the same underlying reason pointed the other way.** I10 emits
+// first because its effect is a DELETE: irreversible, so the recoverable
+// error (a signal for a relation that survived) is the one to prefer. Here
+// the effect is idempotent — ConfirmedConfidence applied twice is
+// ConfirmedConfidence applied once — so re-running the raise costs nothing,
+// while a signal emitted for a raise that then failed is evidence the
+// learning module would tune on forever. Same principle (never emit
+// evidence for an effect that may not have happened), opposite direction,
+// and the two are stated together so the next reader harmonises neither
+// into the other.
+//
+// The floor is the relation type's OWN min_confidence_to_surface, read
+// through ThresholdsFor — doc 02 §4's confirmed_floor is an alias for it,
+// not a constant of its own (ADR-0027's Related decision).
 func (r captureRunner) ConfirmRelation(ctx context.Context, q ports.RelationQuestion, now time.Time) error {
+	rel, err := r.rels.ByID(ctx, q.RelationID)
+	if err != nil {
+		return fmt.Errorf("capture: reading relation %q to confirm: %w", q.RelationID, err)
+	}
+
+	row, err := r.rels.ThresholdsFor(ctx, rel.Type)
+	if err != nil {
+		return fmt.Errorf("capture: thresholds for relation type %q: %w", rel.Type, err)
+	}
+
+	// Only Confidence is replaced. Strength, CreatedBy and CreatedAt
+	// travel back on the row ByID returned — belt and braces beside
+	// Upsert's own contract, which already refuses to rewrite them, and
+	// I07's "revised in place" rather than re-created.
+	rel.Confidence = relation.ConfirmedConfidence(rel.Confidence, relation.Resolve(row))
+	if err := r.rels.Upsert(ctx, rel); err != nil {
+		return fmt.Errorf("capture: raising confirmed relation %q: %w", rel.ID, err)
+	}
+
+	// Only now. See this function's own doc comment — and note the signal
+	// is emitted even when the raise was a no-op, because it records the
+	// CONFIRMATION and not the delta.
+	targetKind := ports.TargetKindRelation
+	if err := r.signals.Record(ctx, ports.Signal{
+		ID:         r.ids.New(),
+		Type:       ports.SignalRelationConfirm,
+		Valence:    ports.ValencePositive,
+		TargetKind: &targetKind,
+		TargetID:   &rel.ID,
+		OccurredAt: now,
+	}); err != nil {
+		return fmt.Errorf("capture: recording the relation confirmation: %w", err)
+	}
 	return nil
 }
 
@@ -185,6 +305,55 @@ func (r captureRunner) recordCheckIn(ctx context.Context, now time.Time, action 
 	}
 	if err := r.log.Record(ctx, d); err != nil {
 		return fmt.Errorf("capture: record check-in decision: %w", err)
+	}
+	return nil
+}
+
+// recordRelationCheckIn writes one relation check-in row.
+//
+// Beside recordCheckIn rather than through it, and the two actions are
+// distinct for the same reason: recordCheckIn's Context is
+// {trigger_id, resolution, open_check_ins}, and a relation answer's is
+// {question_id, relation_id, resolution, open_relation_questions}. m2c
+// §7.5's rule splits effects when their Context shapes differ, and putting
+// a question id into a field named trigger_id would be the audit row that
+// misdescribes what happened — which doc 02 §11 forbids by name.
+// relationCheckInDetail is questionDetail plus the count only an inbound
+// answer has: how many questions were open when it arrived.
+//
+// OpenRelationQuestions carries no omitempty, unlike questionDetail's own
+// Resolution: a zero here is the unmatched row's whole point (there was
+// nothing to choose from), and omitting it would erase exactly the fact
+// the field exists to record.
+type relationCheckInDetail struct {
+	questionDetail
+	OpenRelationQuestions int `json:"open_relation_questions"`
+}
+
+func (r captureRunner) recordRelationCheckIn(ctx context.Context, now time.Time, action ports.DecisionAction, rationale, questionID, relationID string, outcome classify.RelationOutcome, openCount int) error {
+	ctxValue := relationCheckInDetail{
+		questionDetail: questionDetail{
+			QuestionID: questionID,
+			RelationID: relationID,
+			Resolution: string(outcome),
+		},
+		OpenRelationQuestions: openCount,
+	}
+
+	contextJSON, err := marshalContext(ctxValue)
+	if err != nil {
+		return fmt.Errorf("capture: encode relation check-in decision context: %w", err)
+	}
+
+	d := ports.Decision{
+		ID:         r.ids.New(),
+		Action:     action,
+		Rationale:  rationale,
+		Context:    contextJSON,
+		OccurredAt: now,
+	}
+	if err := r.log.Record(ctx, d); err != nil {
+		return fmt.Errorf("capture: record relation check-in decision: %w", err)
 	}
 	return nil
 }

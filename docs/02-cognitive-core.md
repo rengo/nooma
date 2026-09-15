@@ -448,8 +448,20 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `relation_outcome (confirmed|rejected)`, `state_outcome (confirmed|denied)`,
      `task_checkin_outcome (done|snooze|drop)`, `list_op (append|delete|mark_done|remove)`,
      `person_ref_status (resolved|new|ambiguous)`.
+   - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
+     `nudge_outcome` closes the most recently delivered open check-in; a `relation_outcome`
+     closes the most recently asked open relation question (§4). The classify prompt is never
+     widened to inject open relation questions so the model can name an id: a model asked to
+     pick one can pick a plausible wrong one, and for `relation_outcome: rejected` the wrong
+     pick is a deleted relation — the only irreversible act in the vault. Where several are
+     open, the choice and the count are both written to `decision_log`
+     (`open_relation_questions: N`), so the audit trail shows a choice was made rather than
+     implying there was only one. **An answer matching nothing open resolves nothing and,
+     above all, deletes nothing.**
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
-     brings down the whole classification.
+     brings down the whole classification. For `relation_outcome` this is load-bearing rather
+     than merely tidy: an answer worded outside the vocabulary degrades to null and deletes
+     nothing, instead of a near-miss being coerced into `rejected`.
    - **`normalized_content` is written in the message's own language, never translated**
      ([ADR-0024](adr/0024-the-vault-keeps-your-words.md)). Normalization cleans a message into a
      self-contained statement; it does not move it between languages.
