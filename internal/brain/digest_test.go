@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -551,5 +552,221 @@ func TestRenderDigest_TruncatesEndpointsToTheSnippetBound(t *testing.T) {
 	}
 	if strings.Contains(got, "short…") {
 		t.Errorf("renderDigest() = %q — an endpoint shorter than the bound was given an ellipsis anyway", got)
+	}
+}
+
+// --- m3e: the expiry sweep (R7, Q4) -----------------------------------
+
+// askedQuestion seeds one question and marks it asked at askedAt, which is
+// the only state expireStaleQuestions looks at.
+func askedQuestion(t *testing.T, id string, askedAt time.Time) *memrepo.PendingQuestions {
+	t.Helper()
+	repo := queuedQuestions(t, question(id, askedAt.Add(-time.Hour), "the from side", "the to side"))
+	if err := repo.MarkAsked(context.Background(), id, askedAt); err != nil {
+		t.Fatalf("MarkAsked(%s): %v", id, err)
+	}
+	return repo
+}
+
+// digestsSentAt is a decision_log history holding one digest_sent row per
+// instant — the rows the surfaced-count is derived from.
+func digestsSentAt(at ...time.Time) []ports.Decision {
+	rows := make([]ports.Decision, 0, len(at))
+	for i, when := range at {
+		rows = append(rows, ports.Decision{
+			ID: "dec-" + strconv.Itoa(i), Action: ports.ActionCheckDigestSent, OccurredAt: when,
+		})
+	}
+	return rows
+}
+
+// TestExpireStaleQuestions_ExpiresAtTheDeferralBoundAndNotBefore is R7.
+//
+// The bound is MaxDigestDeferrals digests since the question was asked —
+// the digest that asked it is not one of them (its digest_sent row shares
+// the asking instant, and the count is strictly After), and neither is the
+// digest going out now, because the sweep runs before the send.
+func TestExpireStaleQuestions_ExpiresAtTheDeferralBoundAndNotBefore(t *testing.T) {
+	askedAt := digestNow.AddDate(0, 0, -5)
+
+	for _, tc := range []struct {
+		name    string
+		digests int
+		expired bool
+	}{
+		{"one short of the bound stays open", prospection.MaxDigestDeferrals - 1, false},
+		{"at the bound it expires", prospection.MaxDigestDeferrals, true},
+		{"past the bound it still expires", prospection.MaxDigestDeferrals + 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			questions := askedQuestion(t, "q-1", askedAt)
+			sent := make([]time.Time, 0, tc.digests)
+			for i := 0; i < tc.digests; i++ {
+				sent = append(sent, askedAt.AddDate(0, 0, i+1))
+			}
+			log := memrepo.NewDecisionLog()
+			r := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, &sendingChannel{}, questions)
+
+			ctx := context.Background()
+			n, err := r.expireStaleQuestions(ctx, digestsSentAt(sent...), digestNow, true)
+			if err != nil {
+				t.Fatalf("expireStaleQuestions: %v", err)
+			}
+
+			want := 0
+			if tc.expired {
+				want = 1
+			}
+			if n != want {
+				t.Fatalf("expireStaleQuestions() = %d, want %d after %d digest(s) — the bound is MaxDigestDeferrals (%d)",
+					n, want, tc.digests, prospection.MaxDigestDeferrals)
+			}
+
+			open, err := questions.Open(ctx)
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			if tc.expired && len(open) != 0 {
+				t.Errorf("Open() = %+v, want empty — an expired question leaves R4's disambiguation pool", open)
+			}
+			if !tc.expired && len(open) != 1 {
+				t.Errorf("Open() = %+v, want the question still open and still asked", open)
+			}
+			if n := countAction(t, log, digestNow, ports.ActionCheckQuestionExpired); n != want {
+				t.Errorf("%d question_expired row(s), want %d — I12 is one row per effect", n, want)
+			}
+		})
+	}
+}
+
+// TestExpireStaleQuestions_CountsDigestsNotElapsedTime is R7's own MUST
+// about WHERE the count comes from, and the reason it is a separate test.
+//
+// A duration-shaped rule ("expire after three days") agrees with the
+// row-shaped one on a vault that sends a digest every morning and disagrees
+// on every other vault — one that was off for a week, one whose owner
+// muted it. The fixture below is exactly that disagreement: two digests,
+// one short of the bound, a month of wall-clock between the ask and now.
+// Only the row-count form leaves it open.
+func TestExpireStaleQuestions_CountsDigestsNotElapsedTime(t *testing.T) {
+	askedAt := digestNow.AddDate(0, 0, -30)
+	questions := askedQuestion(t, "q-1", askedAt)
+
+	sent := make([]time.Time, 0, prospection.MaxDigestDeferrals-1)
+	for i := 0; i < prospection.MaxDigestDeferrals-1; i++ {
+		sent = append(sent, askedAt.AddDate(0, 0, i+1))
+	}
+
+	ctx := context.Background()
+	n, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), &sendingChannel{}, questions).
+		expireStaleQuestions(ctx, digestsSentAt(sent...), digestNow, true)
+	if err != nil {
+		t.Fatalf("expireStaleQuestions: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expireStaleQuestions() = %d after %d digest(s) spread over 30 days, want 0 — the bound is counted in DIGESTS, "+
+			"and a vault whose digests stopped going out expires nothing, because it also asked nothing", n, prospection.MaxDigestDeferrals-1)
+	}
+}
+
+// TestExpireStaleQuestions_IgnoresDigestsOlderThanTheAsk: a vault that ran
+// for months before this question was created must not expire it on the
+// first pass out of rows that predate it.
+func TestExpireStaleQuestions_IgnoresDigestsOlderThanTheAsk(t *testing.T) {
+	askedAt := digestNow.AddDate(0, 0, -1)
+	questions := askedQuestion(t, "q-1", askedAt)
+
+	sent := []time.Time{
+		askedAt.AddDate(0, 0, -3), askedAt.AddDate(0, 0, -2), askedAt.AddDate(0, 0, -1),
+		askedAt, // the digest that asked it — same instant, not After
+	}
+
+	n, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), &sendingChannel{}, questions).
+		expireStaleQuestions(context.Background(), digestsSentAt(sent...), digestNow, true)
+	if err != nil {
+		t.Fatalf("expireStaleQuestions: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expireStaleQuestions() = %d, want 0 — only digests sent AFTER the question was asked count against it, "+
+			"and the digest that asked it is not one of them", n)
+	}
+}
+
+// TestExpireStaleQuestions_DryRunCountsAndWritesNothing is Q1's
+// suppression rule on this arm: the same reads, the same verdict, no
+// writes.
+func TestExpireStaleQuestions_DryRunCountsAndWritesNothing(t *testing.T) {
+	askedAt := digestNow.AddDate(0, 0, -5)
+	questions := askedQuestion(t, "q-1", askedAt)
+	sent := make([]time.Time, 0, prospection.MaxDigestDeferrals)
+	for i := 0; i < prospection.MaxDigestDeferrals; i++ {
+		sent = append(sent, askedAt.AddDate(0, 0, i+1))
+	}
+	log := memrepo.NewDecisionLog()
+
+	ctx := context.Background()
+	n, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, &sendingChannel{}, questions).
+		expireStaleQuestions(ctx, digestsSentAt(sent...), digestNow, false)
+	if err != nil {
+		t.Fatalf("expireStaleQuestions(dry run): %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expireStaleQuestions(dry run) = %d, want 1 — a preview reaches the same verdict, it only holds the write back", n)
+	}
+	open, err := questions.Open(ctx)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if len(open) != 1 {
+		t.Errorf("Open() = %+v after a dry run, want the question untouched", open)
+	}
+	if n := countAction(t, log, digestNow, ports.ActionCheckQuestionExpired); n != 0 {
+		t.Errorf("a dry run wrote %d question_expired row(s)", n)
+	}
+}
+
+// TestDigest_ExpiresBeforeItSends is the ordering design §3.5 fixes: the
+// sweep runs before the send, so the digest going out now is not counted
+// against the question it may be carrying — and a question expired by this
+// pass is not also asked by it.
+func TestDigest_ExpiresBeforeItSends(t *testing.T) {
+	askedAt := digestNow.AddDate(0, 0, -5)
+	questions := queuedQuestions(t,
+		question("q-stale", askedAt.Add(-time.Hour), "the stale from", "the stale to"),
+		question("q-fresh", digestQuestionNow, "the fresh from", "the fresh to"),
+	)
+	ctx := context.Background()
+	if err := questions.MarkAsked(ctx, "q-stale", askedAt); err != nil {
+		t.Fatalf("MarkAsked: %v", err)
+	}
+
+	// MaxDigestDeferrals digests since the ask, already in the log.
+	log := memrepo.NewDecisionLog()
+	for i := 0; i < prospection.MaxDigestDeferrals; i++ {
+		if err := log.Record(ctx, ports.Decision{
+			ID: "dec-" + strconv.Itoa(i), Action: ports.ActionCheckDigestSent,
+			OccurredAt: askedAt.AddDate(0, 0, i+1),
+		}); err != nil {
+			t.Fatalf("seeding digest history: %v", err)
+		}
+	}
+
+	ch := &sendingChannel{}
+	if _, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, ch, questions).
+		assembleDigest(ctx, digestNow, true); err != nil {
+		t.Fatalf("assembleDigest: %v", err)
+	}
+
+	if ch.count() != 1 {
+		t.Fatalf("sent %d digest(s), want 1", ch.count())
+	}
+	if strings.Contains(ch.sent[0], "the stale from") {
+		t.Errorf("the digest asked about an expired question:\n%s", ch.sent[0])
+	}
+	if !strings.Contains(ch.sent[0], "the fresh from") {
+		t.Errorf("the digest asked nothing, though a fresh question was queued:\n%s", ch.sent[0])
+	}
+	if n := countAction(t, log, digestNow, ports.ActionCheckQuestionExpired); n != 1 {
+		t.Errorf("%d question_expired row(s), want 1", n)
 	}
 }

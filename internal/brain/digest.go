@@ -350,3 +350,11 @@ func (r checkRunner) nextQuestion(ctx context.Context) (*ports.RelationQuestion,
 	}
 	return &queued[0], nil
 }
+
+// expireStaleQuestions closes every open question that MaxDigestDeferrals
+// digests have gone out on without an answer.
+//
+// STUB (task 5.5/5.6): expires nothing.
+func (r checkRunner) expireStaleQuestions(ctx context.Context, history []ports.Decision, now time.Time, commit bool) (int, error) {
+	return 0, nil
+}
