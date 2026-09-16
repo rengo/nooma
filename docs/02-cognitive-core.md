@@ -351,6 +351,16 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
     linked X with Y, are they related?"). Confirming raises confidence
     (`GREATEST(current, confirmed_floor)`); rejecting deletes the relation and emits a
     `relation_reject` signal.
+  - **`confirmed_floor` is an alias for the relation type's own resolved
+    `min_confidence_to_surface`** — no separate constant, no third column on
+    `relation_thresholds`, no `§13` calibration row (ADR-0027's "Related decision" section). A
+    confirmed relation therefore lands at or above the edge of the band it was in and leaves it
+    by construction, since the uncertain band's own upper boundary is inclusive toward
+    "asserted." `internal/core/relation.ConfirmedConfidence(current, t)` is the pure function;
+    `internal/brain` supplies `t` from the same `ThresholdsFor` → `relation.Resolve` pair every
+    other confidence decision here already reads. A confirmation's own signal
+    (`relation_confirm`) is still emitted even when the raise is a no-op — the signal records the
+    confirmation, not the delta.
   - These thresholds are what the learning module tunes per user (§9).
   - When `relation_thresholds` holds no row yet for a given type — relation type is open text,
     so no seed could ever be exhaustive — the two defaults above come from named constants in
