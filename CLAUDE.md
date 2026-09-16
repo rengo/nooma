@@ -9,12 +9,16 @@ and recalls (M1): `nooma init`, configure a provider, `nooma serve`, capture via
 (M2, closed 2026-08-19): a scheduled nightly consolidation that archives what went cold, connects
 what belongs together and derives beliefs, with the `decision_log` telling the story. It speaks
 (M3): a Telegram channel that pushes a due trigger, delivers a morning digest, fires an ephemeral
-timer and asks its own check-ins. All against a real migrated vault, on Linux and Windows.
+timer and asks its own check-ins. And it **asks about what it is not sure of** (`m3e`, closed
+2026-09-16): a relation the nightly job judged into the uncertain band reaches the morning digest
+as a question naming both endpoints, and the answer raises its confidence or deletes it. All
+against a real migrated vault, on Linux and Windows.
 
-Two M3 list items are deliberately open rather than left to be noticed — a timer's list and cancel
-from chat, and which relation an inbound confirmation answers; both are named in
-[`docs/05-build-plan.md`](docs/05-build-plan.md). `internal/core/` holds the brain's decision
-logic; **M4 is the mirror: the complete UI**.
+**One** M3 list item is still deliberately open rather than left to be noticed — a timer's list
+and cancel from chat, named in [`docs/05-build-plan.md`](docs/05-build-plan.md) and owned by M4,
+since `ports.TimerRepo` declares neither method and a method with no caller is not shipped here.
+Its sibling — which relation an inbound confirmation answers — closed with `m3e`.
+`internal/core/` holds the brain's decision logic; **M4 is the mirror: the complete UI**.
 
 ## Documentation
 
