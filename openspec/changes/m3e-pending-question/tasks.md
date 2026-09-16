@@ -168,10 +168,18 @@ rule. Ships `ConfirmedConfidence`, `ProposedRelation.Band`, `connect.go:151`'s c
       compiles; property (a) fails first for `c` below `t.Surface`.
       Requirement: R5 (spec), resolved per **Finding F3** (takes `Thresholds`, not a bare
       `floor float64`).
-      **Mutation**: swap the body to `return math.Max(current, t.Surface)` — the NaN sweep in
-      property (a) must fail, since `math.Max` propagates NaN while the shipped `!(current >
-      t.Surface)` form lands NaN on the floor (design §3.3's own stated reason for the unusual
-      form).
+      **Mutation**: swap the body to `return math.Max(current, t.Surface)` — `math.Max`
+      propagates NaN while the shipped `!(current > t.Surface)` form lands NaN on the floor
+      (design §3.3's own stated reason for the unusual form).
+      **Corrected in PR 6, against an actually-run probe**: this line used to claim the NaN
+      sweep in **property (a)** catches it. It does not. Under the mutation,
+      `TestConfirmedConfidence_AlwaysLeavesTheBand` **passes** — `relation.Decide` compares with
+      `<`, every NaN comparison is false, so a NaN falls through its switch to `Asserted` and
+      property (a) holds vacuously for exactly the input the mutation corrupts. What catches it
+      is the dedicated fourth test, `TestConfirmedConfidence_NaNLandsOnTheFloor`, which asserts
+      the returned value rather than the band it lands in. **The gate was real; the traceability
+      line was prose nobody had run.** Found by `sdd-verify`, which was told not to take this
+      file's own claims at face value.
 - [x] **2.2** Commit 2 (GREEN): implement `internal/core/relation/confirm.go` — exactly design
       §3.3's body: `if !(current > t.Surface) { return t.Surface }; return current`. No I/O, no
       `time.Time` parameter, imports nothing but its own package (non-negotiable #3).
