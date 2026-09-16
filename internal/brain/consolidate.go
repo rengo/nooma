@@ -54,10 +54,14 @@ type ConsolidateService struct {
 // PR 11's own addition (design §3.2 Q6, §6.3 slot 7): pattern_eval's load
 // half reads StateRepo.LastHypothesisAt and writes OpenHypothesis, the same
 // widen-at-the-end-of-the-parameter-list convention selfModel already set.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo) *ConsolidateService {
+// questions is PR 9b's own m3e widening (design §3.4, §4's layout table):
+// connect's persist step queues a pending question when ProposeRelation's
+// Band is Uncertain — the same widen-at-the-end-of-the-parameter-list
+// convention state (above) already established.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo, questions ports.PendingQuestionRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state, questions: questions},
 	}
 }
 
@@ -189,6 +193,9 @@ type consolidateRunner struct {
 	judge     ports.LLMProvider
 	selfModel ports.SelfModelRepo
 	state     ports.StateRepo
+	// questions is connect's own m3e widening: a pending question is
+	// queued when ProposeRelation's Band is Uncertain (design §3.4).
+	questions ports.PendingQuestionRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -516,7 +523,25 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 	report.newRelationEdges = append(report.newRelationEdges, weight.Edge{From: proposed.From, To: proposed.To, Strength: proposed.Strength})
 
 	rationale := fmt.Sprintf("connect: judged unit %q related to %q as %q", rel.FromUnitID, rel.ToUnitID, rel.Type)
-	return r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel)
+	if err := r.record(ctx, now, ports.ActionConnectRelationPersisted, rationale, rel); err != nil {
+		return err
+	}
+
+	// m3e — I09's storing half. proposed.Band is the relation.Decide
+	// verdict ProposeRelation already computed (design §3.4, Finding F2):
+	// never a second, independently-derived comparison here. An
+	// Asserted-band relation writes no question; ProposeRelation refuses
+	// relation.Discard outright, so Band is only ever Uncertain or Asserted
+	// on a returned plan.
+	if proposed.Band != relation.Uncertain {
+		return nil
+	}
+	q := ports.PendingQuestion{ID: r.ids.New(), Kind: ports.QuestionKindRelation, RelationID: rel.ID, CreatedAt: now}
+	if err := r.questions.Create(ctx, q); err != nil {
+		return fmt.Errorf("consolidate: connect: queue a pending question for relation %q: %w", rel.ID, err)
+	}
+	questionRationale := fmt.Sprintf("connect: relation %q landed in the Uncertain band (confidence %.2f) — a question was queued", rel.ID, rel.Confidence)
+	return r.record(ctx, now, ports.ActionConnectQuestionCreated, questionRationale, q)
 }
 
 // recordConnectTargetUnknownDecision writes ADR-0026's row for connect.

@@ -361,6 +361,24 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
     other confidence decision here already reads. A confirmation's own signal
     (`relation_confirm`) is still emitted even when the raise is a no-op — the signal records the
     confirmation, not the delta.
+  - **How the asking happens**: the daily digest (§7) carries **at most one** relation question,
+    appended after `prospection.Carry`'s ranked items and competing with none of them — a
+    relation has two endpoints and `focus.Priority` ranks one unit, so there is no honest way to
+    make a question rankable. The queue drains **FIFO** (oldest first), never by confidence:
+    ranking by confidence would ask first about the relation closest to asserting itself anyway,
+    which is the question that matters least. **No question is asked on a low-energy morning** —
+    §7's care gate holds back non-urgent items, and a graph question is the most non-urgent thing
+    this system produces. A digest with an open question is sent **even when it carries no
+    items**: "an empty digest is not sent" is about there being nothing to say, and a question is
+    not nothing to say.
+  - **When the asking stops**: a question that `prospection.MaxDigestDeferrals` digests have gone
+    out on without an answer transitions to `resolution = expired` — a **state transition, never
+    a delete** (nothing is deleted in the vault). The count is digests, not elapsed days, read
+    from `decision_log`'s own digest rows the way a held item's deferrals already are: a vault
+    whose digests stopped going out expires nothing, which is correct, because it also asked
+    nothing. An expired question is never re-surfaced and never answers an inbound confirmation.
+    Since a question is asked exactly once, the open pool is bounded at `MaxDigestDeferrals` by
+    arithmetic rather than by a second rule.
   - These thresholds are what the learning module tunes per user (§9).
   - When `relation_thresholds` holds no row yet for a given type — relation type is open text,
     so no seed could ever be exhaustive — the two defaults above come from named constants in

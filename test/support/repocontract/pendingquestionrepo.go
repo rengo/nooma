@@ -143,6 +143,51 @@ func RunPendingQuestionRepo(t *testing.T, newRepo func(t *testing.T) PendingQues
 		}
 	})
 
+	// The digest's FIFO tie-break (design §3.5): oldest created_at first,
+	// then id. Ranking by confidence would ask first about the relation
+	// closest to asserting itself anyway, which is the question that
+	// matters least — so the order is a contract of this port, asserted
+	// here rather than re-derived by whoever reads it.
+	//
+	// The fixture is built so an id-only sort gets it wrong: q-a is the
+	// NEWER row, and "q-a" < "q-b". A repository that dropped the
+	// created_at key and ordered by id alone would return q-a first and
+	// the digest would ask out of order, oldest question last.
+	t.Run("Unasked orders oldest created_at first, then id", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		for _, rel := range []string{"rel-a", "rel-b", "rel-c"} {
+			repo.EnsureRelation(t, rel, "same_topic", "unit-"+rel, "unit-"+rel+"-to", rel, rel+"-to")
+		}
+		for _, q := range []ports.PendingQuestion{
+			{ID: "q-a", Kind: ports.QuestionKindRelation, RelationID: "rel-a", CreatedAt: pendingQuestionNow.Add(time.Hour)},
+			{ID: "q-b", Kind: ports.QuestionKindRelation, RelationID: "rel-b", CreatedAt: pendingQuestionNow},
+			// Same instant as q-b: the id key is what separates them, and
+			// "q-b" < "q-c" puts q-b first.
+			{ID: "q-c", Kind: ports.QuestionKindRelation, RelationID: "rel-c", CreatedAt: pendingQuestionNow},
+		} {
+			if err := repo.Create(ctx, q); err != nil {
+				t.Fatalf("Create(%s): %v", q.ID, err)
+			}
+		}
+
+		got, err := repo.Unasked(ctx)
+		if err != nil {
+			t.Fatalf("Unasked: %v", err)
+		}
+		want := []string{"q-b", "q-c", "q-a"}
+		if len(got) != len(want) {
+			t.Fatalf("Unasked() returned %d row(s), want %d: %+v", len(got), len(want), got)
+		}
+		for i, id := range want {
+			if got[i].ID != id {
+				t.Fatalf("Unasked()[%d].ID = %q, want %q — the order is created_at then id, "+
+					"never id alone (an id-only sort would start at %q)", i, got[i].ID, id, "q-a")
+			}
+		}
+	})
+
 	t.Run("Open orders most recently asked first", func(t *testing.T) {
 		repo := newRepo(t)
 		ctx := context.Background()
