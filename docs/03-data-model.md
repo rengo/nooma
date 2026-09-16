@@ -120,6 +120,33 @@ CREATE TABLE decision_log (
   occurred_at TEXT NOT NULL
 );
 CREATE INDEX idx_decision_log_occurred ON decision_log(occurred_at);
+
+-- A question the brain asked and is waiting on (§4's Uncertain band, ADR-0027).
+-- Three states, each a column rather than an inference: (asked_at NULL,
+-- resolved_at NULL) = queued; (asked_at set, resolved_at NULL) = open;
+-- (asked_at set, resolved_at set) = closed (resolution confirmed|rejected|
+-- expired). relation_id carries deliberately NO foreign key: an audit row
+-- must outlive its subject (RejectRelation deletes the relation the
+-- question was about), so the referential check moves to INSERT time
+-- instead (`WHERE EXISTS`), never a constraint that could cascade or block
+-- a delete.
+CREATE TABLE pending_questions (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,   -- relation (the only member m3e writes)
+  relation_id  TEXT NOT NULL,   -- relations(id); deliberately NOT a foreign key
+  created_at   TEXT NOT NULL,   -- when consolidation decided to ask
+  asked_at     TEXT,            -- NULL = not yet surfaced in a digest
+  resolved_at  TEXT,            -- NULL = still open
+  resolution   TEXT             -- confirmed|rejected|expired; NULL while open
+);
+
+-- The digest's queue: unasked, oldest first.
+CREATE INDEX idx_pending_questions_unasked ON pending_questions(created_at)
+  WHERE asked_at IS NULL AND resolved_at IS NULL;
+
+-- The disambiguation pool and the expiry sweep: asked, unanswered.
+CREATE INDEX idx_pending_questions_open ON pending_questions(asked_at)
+  WHERE asked_at IS NOT NULL AND resolved_at IS NULL;
 ```
 
 ## Learning
