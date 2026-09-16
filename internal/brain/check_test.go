@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -322,12 +323,35 @@ func (emptyTimers) Cancel(context.Context, string) error                     { r
 type recordingLog struct {
 	actions    []ports.DecisionAction
 	rationales []string
+	// contexts is each row's own Context, kept alongside its action so a
+	// test can assert the audit row's SHAPE and not only that a row was
+	// written — m3e's open_relation_questions count is exactly the field
+	// that would be invisible otherwise.
+	contexts []json.RawMessage
 }
 
 func (l *recordingLog) Record(_ context.Context, d ports.Decision) error {
 	l.actions = append(l.actions, d.Action)
 	l.rationales = append(l.rationales, d.Rationale)
+	l.contexts = append(l.contexts, d.Context)
 	return nil
+}
+
+// contextFor returns the Context of the single row with action, failing
+// unless there is exactly one — a test asserting on "the row" must not
+// silently read the first of several.
+func (l *recordingLog) contextFor(t *testing.T, action ports.DecisionAction) json.RawMessage {
+	t.Helper()
+	var found []json.RawMessage
+	for i, a := range l.actions {
+		if a == action {
+			found = append(found, l.contexts[i])
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("%d %q row(s), want exactly 1: actions = %v", len(found), action, l.actions)
+	}
+	return found[0]
 }
 
 func (l *recordingLog) Since(context.Context, time.Time, int) ([]ports.Decision, error) {

@@ -68,7 +68,7 @@ type CaptureService struct {
 // index is the in-memory Index ADR-0012 requires be loaded once at vault
 // open — NewCaptureService never builds one itself, it only holds the one
 // its caller already loaded.
-func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, chatter ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo, archiveThreshold float64) *CaptureService {
+func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo, embeds ports.EmbeddingRepo, lex ports.LexicalSearch, rels ports.RelationRepo, log ports.DecisionLog, llm ports.LLMProvider, judge ports.LLMProvider, chatter ports.LLMProvider, embed ports.EmbeddingProvider, index *Index, signals ports.SignalRepo, triggers ports.TriggerRepo, timers ports.TimerRepo, archiveThreshold float64, questions ports.PendingQuestionRepo) *CaptureService {
 	sharedRecall := NewRecallService(index, lex, units, embed)
 	return &CaptureService{
 		clock: clock,
@@ -90,6 +90,7 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 
 			archiveThreshold: archiveThreshold,
 			signals:          signals,
+			questions:        questions,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
 			},
@@ -163,6 +164,13 @@ type captureRunner struct {
 	// it BEFORE deleting the relation the signal is about (I10), which is
 	// the one ordering in this package that an invariant names.
 	signals ports.SignalRepo
+	// questions is the store an inbound relation answer disambiguates
+	// against — m3e, and the reason resolveRelationCheckIn can now name
+	// WHICH relation an answer is about instead of recording that it
+	// cannot. Nil is legal, exactly as checkRunner.questions is: a vault
+	// with no question store has nothing open, which is the honest reading
+	// rather than a crash.
+	questions ports.PendingQuestionRepo
 }
 
 // at runs one capture given the instant CaptureService.Capture already

@@ -9,6 +9,25 @@ I10, I12, I03; `internal/brain/checkin.go` (`resolveCheckIn`'s disambiguation pa
 22–54; `RejectRelation`, lines 130–148); `internal/core/relation/thresholds.go` (`Thresholds`,
 `Resolve`); `internal/core/relation/verdict.go` (`Decide`, `Uncertain`); `internal/core/consolidation/connect.go:150-151`.
 
+## Annotation — four MUSTs below were superseded by `design.md`, and are left standing
+
+Added after implementation, per this repository's **annotate, don't edit** convention for
+OpenSpec artifacts: a spec records what was required *when it was written*, and rewriting it
+after the fact destroys the evidence that a decision was revisited at all.
+
+Four of the MUSTs below do **not** describe the shipped code. Each was overruled by `design.md`
+during implementation, each disagreement is argued in full in `tasks.md`'s own **Findings**
+section (F1–F4), and each resolution was independently re-verified against running code by
+`sdd-verify`. **Read `tasks.md` F1–F4 before treating any of these four as binding:**
+
+| Requirement | What this spec says | What ships, and why |
+|---|---|---|
+| **R1** | the Uncertain verdict is computed by the caller, *"never inside `core/consolidation` or `core/relation`"* | `ProposedRelation.Band`, computed inside `core/consolidation` — `ProposeRelation` already calls `relation.Decide` and discarded the result; two computations of one rule is the drift design refused (**F2**) |
+| **R3** | the digest surfaces *"the oldest by `asked_at`"* | oldest by `created_at`, then `id`. This spec's wording is **unreachable**, not merely different: the digest reads queued rows, whose `asked_at` is NULL by construction (**F4**) |
+| **R5** | `ConfirmedConfidence(current, floor float64) float64`, signal emitted **before** the `Upsert` | `ConfirmedConfidence(current float64, t Thresholds) float64`, signal emitted **after** the raise — the raise is idempotent, so the recoverable error points the other way than I10's (**F1**, **F3**) |
+
+Everything else below describes the shipped code as written.
+
 ## Scope boundary (binding)
 
 > `m3e` builds the loop from an uncertain relation to a resolved one: surfacing a pending

@@ -129,12 +129,12 @@ func assertVocabularyMatches(t *testing.T, name string, got, want []string) {
 		t.Fatalf("%s returned zero members — nothing to check yet", name)
 	}
 	if len(got) != len(want) {
-		t.Fatalf("migration 0001's column comment lists %d members %v, %s lists %d %v",
+		t.Fatalf("the migration's column comment lists %d members %v, %s lists %d %v",
 			len(want), want, name, len(got), got)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Errorf("position %d: migration comment says %q, %s says %q", i, want[i], name, got[i])
+			t.Errorf("position %d: the migration comment says %q, %s says %q", i, want[i], name, got[i])
 		}
 	}
 }

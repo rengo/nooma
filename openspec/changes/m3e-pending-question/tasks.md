@@ -91,12 +91,22 @@ between the two artifacts as read.
 
 ---
 
+## Note on PR 1–PR 3's checkboxes
+
+Ticked in one pass while closing PR 6, not as each PR landed — the commits for all three are in
+`git log` (`d53a4f4`, `90a2ec0`/`1ae46c1`, `e51c512`/`29b2c80`), and every artifact each task
+names was verified present in the tree before its box was ticked. **One was not**: task 3.3, the
+vocabulary pin, which was never written. It is shipped in PR 6 and its own entry below records
+what changed about it and why.
+
+---
+
 ## PR 1 — `feat/store-pending-questions-migration` (~180 impl+docs)
 
 Depends on nothing outside this change. Forward-only and inert — nothing reads the table until
 PR 3. **Must land first and alone** (proposal §9's rollback asymmetry).
 
-- [ ] **1.1** `internal/store/sqlite/migrations/0004_pending_questions.sql` (new) — table
+- [x] **1.1** `internal/store/sqlite/migrations/0004_pending_questions.sql` (new) — table
       `pending_questions(id TEXT PRIMARY KEY, kind TEXT NOT NULL, relation_id TEXT NOT NULL,
       created_at TEXT NOT NULL, asked_at TEXT, resolved_at TEXT, resolution TEXT)`; partial index
       `idx_pending_questions_unasked` on `(created_at)` `WHERE asked_at IS NULL AND resolved_at IS
@@ -107,20 +117,20 @@ PR 3. **Must land first and alone** (proposal §9's rollback asymmetry).
       of a deletion, RESTRICT strands an emitted signal, SET NULL destroys the one column the
       table exists for).
       Requirement: R1, R2 (spec); ADR-0027.
-- [ ] **1.2** `docs/03-data-model.md` — add the `pending_questions` table section, matching `0004`
+- [x] **1.2** `docs/03-data-model.md` — add the `pending_questions` table section, matching `0004`
       exactly (column names, types, both partial indexes, the no-FK note).
       Requirement: R10.
-- [ ] **1.3** `test/conformance/schema_doc_test.go` — extend the anchor list with
+- [x] **1.3** `test/conformance/schema_doc_test.go` — extend the anchor list with
       `pending_questions`'s entry.
       Requirement: R10; design §3.1.
       **Mutation**: remove the new anchor row without removing the table from `docs/03` — the
       anchor test must fail on the drift, proving the anchor is load-bearing rather than
       decorative.
-- [ ] **1.4** Regenerate `internal/store/sqlite/testdata/schema/*.golden` via its make target;
+- [x] **1.4** Regenerate `internal/store/sqlite/testdata/schema/*.golden` via its make target;
       confirm the diff is limited to the one new table's rows — never hand-edited.
       Verify: `make store-schema-golden && git diff --stat internal/store/sqlite/testdata/schema/`.
       Requirement: R2; design §3.1.
-- [ ] **1.5** `docs/adr/0027-pending-question-store.md` (new), `Accepted` — Decision: a question
+- [x] **1.5** `docs/adr/0027-pending-question-store.md` (new), `Accepted` — Decision: a question
       the brain asked lives in a dedicated `pending_questions` store while it waits for an
       answer, not `triggers` and not `decision_log` (proposal §5). Alternatives: `triggers`
       (resolution vocabulary `engaged|declined|self_healed` would misdescribe a confirmation;
@@ -131,9 +141,9 @@ PR 3. **Must land first and alone** (proposal §9's rollback asymmetry).
       own min_confidence_to_surface`) rather than a separate `0028` — owner-review **R1**'s
       decided default.
       Requirement: ADR-0027; proposal §5.
-- [ ] **1.6** `docs/adr/README.md` — add the `0027` index row.
+- [x] **1.6** `docs/adr/README.md` — add the `0027` index row.
       Requirement: ADR-0027.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/store/sqlite/migrations/0004_pending_questions.sql`, `docs/03-data-model.md`,
       `test/conformance/schema_doc_test.go`, `internal/store/sqlite/testdata/schema/*.golden`,
       `docs/adr/0027-pending-question-store.md`, `docs/adr/README.md`. No `docs/02-cognitive-core.md`
@@ -147,7 +157,7 @@ Independent of PR 1's runtime effect; ordered after it only by the migration's o
 rule. Ships `ConfirmedConfidence`, `ProposedRelation.Band`, `connect.go:151`'s correction. Triggers
 `docs-sync` (proposal R7).
 
-- [ ] **2.1** Commit 1 (RED): `internal/core/relation/confirm_test.go` (new) — three properties,
+- [x] **2.1** Commit 1 (RED): `internal/core/relation/confirm_test.go` (new) — three properties,
       swept over `c` and `t` including NaN: (a) `Decide(ConfirmedConfidence(c, t), t) == Asserted`
       for every input — *confirming always leaves the band*; (b)
       `ConfirmedConfidence(ConfirmedConfidence(c, t), t) == ConfirmedConfidence(c, t)` —
@@ -158,16 +168,24 @@ rule. Ships `ConfirmedConfidence`, `ProposedRelation.Band`, `connect.go:151`'s c
       compiles; property (a) fails first for `c` below `t.Surface`.
       Requirement: R5 (spec), resolved per **Finding F3** (takes `Thresholds`, not a bare
       `floor float64`).
-      **Mutation**: swap the body to `return math.Max(current, t.Surface)` — the NaN sweep in
-      property (a) must fail, since `math.Max` propagates NaN while the shipped `!(current >
-      t.Surface)` form lands NaN on the floor (design §3.3's own stated reason for the unusual
-      form).
-- [ ] **2.2** Commit 2 (GREEN): implement `internal/core/relation/confirm.go` — exactly design
+      **Mutation**: swap the body to `return math.Max(current, t.Surface)` — `math.Max`
+      propagates NaN while the shipped `!(current > t.Surface)` form lands NaN on the floor
+      (design §3.3's own stated reason for the unusual form).
+      **Corrected in PR 6, against an actually-run probe**: this line used to claim the NaN
+      sweep in **property (a)** catches it. It does not. Under the mutation,
+      `TestConfirmedConfidence_AlwaysLeavesTheBand` **passes** — `relation.Decide` compares with
+      `<`, every NaN comparison is false, so a NaN falls through its switch to `Asserted` and
+      property (a) holds vacuously for exactly the input the mutation corrupts. What catches it
+      is the dedicated fourth test, `TestConfirmedConfidence_NaNLandsOnTheFloor`, which asserts
+      the returned value rather than the band it lands in. **The gate was real; the traceability
+      line was prose nobody had run.** Found by `sdd-verify`, which was told not to take this
+      file's own claims at face value.
+- [x] **2.2** Commit 2 (GREEN): implement `internal/core/relation/confirm.go` — exactly design
       §3.3's body: `if !(current > t.Surface) { return t.Surface }; return current`. No I/O, no
       `time.Time` parameter, imports nothing but its own package (non-negotiable #3).
       Verify: `go test ./internal/core/relation/...`.
       Requirement: R5; design §3.3.
-- [ ] **2.3** Commit 1 (RED): `internal/core/consolidation/connect_test.go` (extend) —
+- [x] **2.3** Commit 1 (RED): `internal/core/consolidation/connect_test.go` (extend) —
       `ProposeRelation` returns `Band ∈ {Uncertain, Asserted}` and never `Discard` on `ok == true`,
       table-driven over the band boundaries (`m3a`'s own boundary-table style).
       **Red**: `undefined: ProposedRelation.Band`.
@@ -179,21 +197,21 @@ rule. Ships `ConfirmedConfidence`, `ProposedRelation.Band`, `connect.go:151`'s c
       instead of the value `ProposeRelation` already computes at `connect.go:174-176` — a future
       edit to `Decide`'s own boundary would silently desync the two; this task's fixture pins
       `Band` against `relation.Decide`'s own output, not a re-derived literal.
-- [ ] **2.4** Commit 2 (GREEN): assign `Band` from the `relation.Decide` call `ProposeRelation`
+- [x] **2.4** Commit 2 (GREEN): assign `Band` from the `relation.Decide` call `ProposeRelation`
       already makes and today discards (`connect.go:164-186`).
       Verify: `go test ./internal/core/consolidation/...`.
       Requirement: R1; design §3.4.
-- [ ] **2.5** `internal/core/consolidation/connect.go:150-151` — correct the stale doc comment
+- [x] **2.5** `internal/core/consolidation/connect.go:150-151` — correct the stale doc comment
       (*"the asking is M3's"*) to name `m3e`, in this PR (R9's own MUST: same PR as the code that
       discharges it).
       Requirement: R9.
-- [ ] **2.6** `docs/02-cognitive-core.md` §4 amendment — `confirmed_floor` reads as an alias for
+- [x] **2.6** `docs/02-cognitive-core.md` §4 amendment — `confirmed_floor` reads as an alias for
       the relation type's own `min_confidence_to_surface` (Q1's ruling), not an undefined term.
       Requirement: R10; non-negotiable #1 (same-PR doc delta for an `internal/core` change).
-- [ ] **2.7** Purity/lint: `golangci-lint run` (`core-purity` — `confirm.go` imports nothing beyond
+- [x] **2.7** Purity/lint: `golangci-lint run` (`core-purity` — `confirm.go` imports nothing beyond
       its own package; `forbidigo` — no `time.Now`/`rand.*`).
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/core/relation/confirm{,_test}.go`,
       `internal/core/consolidation/connect{,_test}.go`, `docs/02-cognitive-core.md`. Target ≤120
       impl+docs lines.
@@ -206,7 +224,7 @@ Depends on PR 1 (migration). Ships the port, both vocabularies, `RelationRepo.By
 implementation with both joins and the `WHERE EXISTS` insert guard, memrepo + repocontract,
 `store_api.golden`. **L3 owns N1** (design §3.4/§3.1) and the FK's deliberate absence.
 
-- [ ] **3.1** Commit 1 (RED): `test/support/repocontract/pendingquestionrepo.go` (new) —
+- [x] **3.1** Commit 1 (RED): `test/support/repocontract/pendingquestionrepo.go` (new) —
       `RunPendingQuestionRepo(t, newRepo)`: `Create`+`Unasked` round trip; `Create` with an unknown
       `relation_id` returns `ErrRelationNotFound` and inserts nothing (N1's structural guard);
       `MarkAsked` moves a row from `Unasked` into `Open`, precondition `asked_at IS NULL` in the
@@ -222,7 +240,7 @@ implementation with both joins and the `WHERE EXISTS` insert guard, memrepo + re
       Requirement: R1, R2.
       **Mutation**: replace the reflection scan's forbidden-prefix set with the empty set — a
       hypothetical `DeleteExpired` method would then compile and pass undetected.
-- [ ] **3.2** Commit 2 (GREEN): implement `internal/ports/pendingquestionrepo.go` per design
+- [x] **3.2** Commit 2 (GREEN): implement `internal/ports/pendingquestionrepo.go` per design
       §3.2's exact shape — `QuestionKind` (`QuestionKindRelation`), `AllQuestionKinds()`;
       `QuestionResolution` (`QuestionConfirmed`/`QuestionRejected`/`QuestionExpired`),
       `AllQuestionResolutions()`; `PendingQuestion{ID, Kind, RelationID, CreatedAt}` (write shape,
@@ -235,24 +253,39 @@ implementation with both joins and the `WHERE EXISTS` insert guard, memrepo + re
       — the fake, preconditions enforced under a mutex (`UnitRepo`'s own fake pattern).
       Verify: `go test ./test/support/repocontract/... ./test/support/memrepo/...`.
       Requirement: R1, R2; design §3.2.
-- [ ] **3.3** `repocontract/pendingquestionrepo.go` (continued) — `AllQuestionKinds()`/
-      `AllQuestionResolutions()` pinned to `0004`'s own column comment vocabulary, with `len()`
-      assertions guarding against a silently dropped member.
+- [x] **3.3** `AllQuestionKinds()`/`AllQuestionResolutions()` pinned to `0004`'s own column
+      comment vocabulary, with `len()` assertions guarding against a silently dropped member.
       Requirement: R2; design §3.1 (the vocabulary-pin discipline `m3b`'s G4 established).
       **Mutation**: reorder or drop one member in the Go-side slice — fails on the pinned
       comment-order match, independent of the `len()` guard.
-- [ ] **3.4** Commit 1 (RED): `test/support/repocontract/relationrepo.go` (extend) —
+      **Done late, in PR 6.** This task shipped as unchecked and unwritten with PR 3, and was
+      found only when closing PR 6 out against this list — nothing anywhere in the tree read
+      `AllQuestionKinds()` and the only reader of `AllQuestionResolutions()` was PR 5's own L3
+      vocabulary test. **It also lands in a different file than this line named**: `m3b`'s G4
+      discipline is shipped in `test/conformance/trigger_timer_vocabulary_ddl_test.go`, not in
+      `repocontract` — a comment-order pin does not vary by repository implementation and running
+      it once per implementation would assert the same thing twice.
+      **And the mechanism needed widening, for a reason worth recording**: `0001`'s column
+      comments are bare pipe-separated vocabularies, so `columnCommentMembers` splits and stops.
+      `0004`'s are not — `-- relation (the only member m3e writes)` and
+      `-- confirmed|rejected|expired; NULL while open`. A published migration is never modified
+      (`CLAUDE.md`), so reformatting `0004` into `0001`'s shape was not available;
+      `columnCommentVocabulary` reads what is actually there, cutting the vocabulary at the first
+      `;` or ` (`. Two delimiters and no more, stated in its own doc comment.
+      **Probed, not assumed**: dropping `QuestionExpired` from the Go slice fails on the length
+      guard, and reordering `QuestionConfirmed`/`QuestionRejected` fails on the position match.
+- [x] **3.4** Commit 1 (RED): `test/support/repocontract/relationrepo.go` (extend) —
       `RelationRepo.ByID` returns the WHOLE row (`Strength`, `CreatedBy`, `CreatedAt` included, not
       only `Confidence`) or `ErrRelationNotFound` for an unknown id.
       **Red**: `undefined: ports.RelationRepo.ByID`.
       Stub: add the method returning the zero `Relation` unconditionally — compiles; the
       known-id case fails first (all fields zero instead of the fixture's own values).
       Requirement: design §3.2 (the confirm path's full-row need, I07).
-- [ ] **3.5** Commit 2 (GREEN): implement `ByID` in `test/support/memrepo/relations.go` and
+- [x] **3.5** Commit 2 (GREEN): implement `ByID` in `test/support/memrepo/relations.go` and
       `internal/store/sqlite/relationrepo.go`.
       Verify: `go test ./test/support/repocontract/...`.
       Requirement: design §3.2.
-- [ ] **3.6** Commit 1 (RED): `internal/store/sqlite/pendingquestionrepo_integration_test.go`
+- [x] **3.6** Commit 1 (RED): `internal/store/sqlite/pendingquestionrepo_integration_test.go`
       (build tag `integration`) — `RunPendingQuestionRepo` against a real migrated vault; a
       dedicated case asserting `Create` against an unknown `relation_id` returns
       `ErrRelationNotFound` and the raw table stays empty (N1's guard, proven at the one place it
@@ -266,7 +299,7 @@ implementation with both joins and the `WHERE EXISTS` insert guard, memrepo + re
       **Mutation**: drop the `WHERE EXISTS(SELECT 1 FROM relations WHERE id = ?)` guard from
       `Create`'s `INSERT` — the unknown-`relation_id` case must then insert successfully instead
       of returning `ErrRelationNotFound`, the exact regression N1 exists to catch.
-- [ ] **3.7** Commit 2 (GREEN): implement `internal/store/sqlite/pendingquestionrepo.go` —
+- [x] **3.7** Commit 2 (GREEN): implement `internal/store/sqlite/pendingquestionrepo.go` —
       `Create` via `INSERT ... SELECT ... WHERE EXISTS(SELECT 1 FROM relations WHERE id = ?)`,
       `ErrRelationNotFound` on zero rows affected; `Unasked`/`Open` both inner-join `relations`
       (R8's mitigation — a question whose relation is gone is skipped, not failed, on either read);
@@ -274,22 +307,22 @@ implementation with both joins and the `WHERE EXISTS` insert guard, memrepo + re
       + `requireRowAffected(res, ports.ErrQuestionStatusConflict)`.
       Verify: `go test -tags=integration ./internal/store/sqlite/... -run PendingQuestion`.
       Requirement: R1, R2, R8; design §3.1, §3.2.
-- [ ] **3.8** L3: `EXPLAIN QUERY PLAN` on `Unasked` and `Open` confirms both partial indexes are
+- [x] **3.8** L3: `EXPLAIN QUERY PLAN` on `Unasked` and `Open` confirms both partial indexes are
       used.
       Requirement: design §3.1 (the two indexes' own purpose).
-- [ ] **3.9** `test/conformance/i03_units_never_deleted_test.go` — extend `sweptPortsRepoTypes`
+- [x] **3.9** `test/conformance/i03_units_never_deleted_test.go` — extend `sweptPortsRepoTypes`
       with `PendingQuestionRepo` (`m3b`'s own precedent for a freshly added port); confirm no
       `Delete`-prefixed method is found, `RelationRepo.Delete` staying the one carve-out (2026-08-24
       owner ruling).
       Requirement: R2 (spec — I03, "no carve-out" for the new port).
-- [ ] **3.10** `testdata/schema/store_api.golden` — regenerate; diff limited to
+- [x] **3.10** `testdata/schema/store_api.golden` — regenerate; diff limited to
       `PendingQuestionRepo`'s new `type`/`func` lines plus `RelationRepo.ByID`.
       Verify: `make store-api-golden && git diff --stat testdata/schema/store_api.golden`.
       Requirement: R2.1's regeneration discipline, applied here.
-- [ ] **3.11** Purity/lint: `golangci-lint run` (`ports-purity` — `internal/ports` imports no new
+- [x] **3.11** Purity/lint: `golangci-lint run` (`ports-purity` — `internal/ports` imports no new
       package; `internal/store` remains the only importer of `internal/store/sqlite`).
       Requirement: `nooma-core` hard rules 1–2; design §4.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
+- [x] Verify (PR-level): `make check-all`; confirm diff touches only
       `internal/ports/{pendingquestionrepo,relationrepo}.go`,
       `internal/store/sqlite/{pendingquestionrepo,relationrepo}{,_integration_test}.go`,
       `test/support/memrepo/{pendingquestions,relations}.go`,
@@ -513,7 +546,7 @@ exist and can already be asked). Ships `resolveRelationCheckIn`, `ConfirmRelatio
 `RejectRelation`'s narrowing, `recordRelationCheckIn`. **I10 reachable with a real relation on the
 end; `relation_confirm`'s first emission anywhere in this tree.**
 
-- [ ] **6.1** Commit 1 (RED): `internal/brain/checkin_test.go` (extend) —
+- [x] **6.1** Commit 1 (RED): `internal/brain/checkin_test.go` (extend) —
       `resolveRelationCheckIn`, mirroring `resolveCheckIn`'s own test shape: zero open questions +
       either outcome value → one `decision_log` row (`ActionCaptureRelationCheckInUnmatched`) with
       `open_relation_questions: 0`, no `RejectRelation`/confirm-path call whatsoever (R8, both
@@ -529,7 +562,7 @@ end; `relation_confirm`'s first emission anywhere in this tree.**
       **Mutation**: change the disambiguation pick from `open[0]` (design's `Open` ordering:
       most-recent-asked first) to the LAST element of the slice — a three-open-questions fixture
       whose most-recent is not the slice's last element must fail.
-- [ ] **6.2** Commit 2 (GREEN): implement `resolveRelationCheckIn` exactly per design §3.6's
+- [x] **6.2** Commit 2 (GREEN): implement `resolveRelationCheckIn` exactly per design §3.6's
       snippet — reads `c.RelationOutcome`, `r.questions.Open(ctx)`; `len(open) == 0` →
       `recordRelationCheckIn(ctx, now, ActionCaptureRelationCheckInUnmatched, "", "", *outcome,
       0)`; else `target := open[0]`, switch on `*c.RelationOutcome` to `ConfirmRelation`/
@@ -537,7 +570,7 @@ end; `relation_confirm`'s first emission anywhere in this tree.**
       ActionCaptureRelationCheckInResolved, target.ID, target.RelationID, *outcome, len(open))`.
       Verify: `go test ./internal/brain/... -run RelationCheckIn`.
       Requirement: R4, R8; design §3.6.
-- [ ] **6.3** Commit 1 (RED): `checkin_test.go` (continued) — `ConfirmRelation`: reads the relation
+- [x] **6.3** Commit 1 (RED): `checkin_test.go` (continued) — `ConfirmRelation`: reads the relation
       via `RelationRepo.ByID`, `ThresholdsFor`, applies `relation.ConfirmedConfidence`; persists
       through `Upsert` with **only `Confidence` replaced** (`Strength`/`CreatedBy`/`CreatedAt`
       travel back unchanged); `SignalRelationConfirm` emitted **AFTER** the raise (design §3.6's
@@ -553,7 +586,7 @@ end; `relation_confirm`'s first emission anywhere in this tree.**
       assertion, which asserts call sequence rather than merely "both happened", must fail; this
       is the mutation that would make the test pass under spec R5's original (superseded) wording,
       named explicitly so the test is checkable against the ruling actually shipped.
-- [ ] **6.4** Commit 2 (GREEN): implement `ConfirmRelation` exactly per design §3.6's snippet —
+- [x] **6.4** Commit 2 (GREEN): implement `ConfirmRelation` exactly per design §3.6's snippet —
       `rel, err := r.rels.ByID(ctx, q.RelationID)`; `row, err := r.rels.ThresholdsFor(ctx,
       rel.Type)`; `rel.Confidence = relation.ConfirmedConfidence(rel.Confidence,
       relation.Resolve(row))`; `err = r.rels.Upsert(ctx, rel)` (I07: revises in place); `err =
@@ -562,7 +595,7 @@ end; `relation_confirm`'s first emission anywhere in this tree.**
       now})`.
       Verify: `go test ./internal/brain/... -run ConfirmRelation`.
       Requirement: R5; design §3.6.
-- [ ] **6.5** Commit 1 (RED): `checkin_test.go` (continued) — `RejectRelation` narrows to
+- [x] **6.5** Commit 1 (RED): `checkin_test.go` (continued) — `RejectRelation` narrows to
       `(ctx context.Context, relationID string, now time.Time) error` (owner-review **R5**);
       `checkin_test.go:221`'s existing assertions extended by one argument in the call expression;
       I10's ordering stays unchanged (signal emitted before delete).
@@ -570,7 +603,7 @@ end; `relation_confirm`'s first emission anywhere in this tree.**
       signature until this task's fixture is updated in lock-step with 6.6's implementation —
       recorded as the shape of this particular RED (a signature narrowing, not a missing symbol).
       Requirement: R6 (spec); design §3.6.
-- [ ] **6.6** Commit 2 (GREEN): narrow `RejectRelation`'s parameter list to `(ctx, relationID
+- [x] **6.6** Commit 2 (GREEN): narrow `RejectRelation`'s parameter list to `(ctx, relationID
       string, now)` — it reads only `rel.ID` today (`checkin.go:130-148`), and a parameter with no
       reader is refused (`UpdateEventAt`'s own doc-comment rule). `resolveRelationCheckIn`'s
       rejected branch resolves the `pending_questions` row (`resolution = rejected`) after
@@ -580,42 +613,77 @@ end; `relation_confirm`'s first emission anywhere in this tree.**
       **Mutation**: resolve the `pending_questions` row BEFORE calling `RejectRelation` instead of
       after — a fixture whose `RejectRelation` fails mid-way must show the question still open
       (retry-safe); reversing the order makes a failed reject silently close its own question.
-- [ ] **6.7** `internal/brain/checkin.go` — `recordRelationCheckIn` beside `recordCheckIn`, and a
+- [x] **6.7** `internal/brain/checkin.go` — `recordRelationCheckIn` beside `recordCheckIn`, and a
       `questionDetail{question_id, relation_id, resolution}` context shape beside `checkDetail`
       (design §3.7) — a distinct `Context` shape from `recordCheckIn`'s own
       `{trigger_id, resolution, open_check_ins}`, per m2c §7.5's rule that effects split when their
       Context shapes differ (design's own argument, applied one level down from the proposal's
       argument against reusing `triggers`).
       Requirement: design §3.7.
-- [ ] **6.8** `internal/ports/decisionlog.go` — add `ActionCaptureRelationCheckInResolved`
+- [x] **6.8** `internal/ports/decisionlog.go` — add `ActionCaptureRelationCheckInResolved`
       (`"capture.relation_checkin.resolved"`) and `ActionCaptureRelationCheckInUnmatched`
       (`"capture.relation_checkin.unmatched"`); extend `AllDecisionActions()`.
       Requirement: design §3.7.
-- [ ] **6.9** `captureRunner` gains one field, `questions ports.PendingQuestionRepo` (`signals` is
+- [x] **6.9** `captureRunner` gains one field, `questions ports.PendingQuestionRepo` (`signals` is
       already present, `RejectRelation`'s own existing field). `cmd/nooma/wiring.go` wires it.
       Requirement: design §3.6.
-- [ ] **6.10** `test/conformance/` (new, threat-matrix §9's one applicable row — untrusted inbound
+- [x] **6.10** `test/conformance/` (new, threat-matrix §9's one applicable row — untrusted inbound
       text → an irreversible delete) — an unknown/undecodable outcome resolves nothing and deletes
       nothing; a `rejected` outcome with nothing open writes one row and deletes nothing (R8); a
       `rejected` outcome with three open questions deletes exactly **one** relation and records
       `open_relation_questions: 3`.
       Requirement: design §9 (the applicable threat-matrix case); R6, R8.
-- [ ] **6.11** `test/e2e/` (L4) — the proposal's own demo, end to end: a vault with one
+- [x] **6.11** `test/e2e/` (L4) — the proposal's own demo, end to end: a vault with one
       Uncertain-band relation produces a digest naming both endpoints; a reply of "yes, they're
       related" raises its confidence via `GREATEST(current, min_confidence_to_surface)` and emits
       `relation_confirm`; a reply of "no" emits `relation_reject` and deletes it, signal first.
       Requirement: proposal §2 (Demo); spec's own Exit criterion.
-- [ ] **6.12** `docs/02-cognitive-core.md` §5 amendment — state the store-based (never
+- [x] **6.12** `docs/02-cognitive-core.md` §5 amendment — state the store-based (never
       model-based) disambiguation rule for `relation_outcome` (Q3): the pending-question store
       resolves which relation, the classify prompt is never widened to inject open check-ins.
       Requirement: R10; non-negotiable #1.
-- [ ] **6.13** Purity/lint: `golangci-lint run` (`brain-boundary`).
+- [x] **6.13** Purity/lint: `golangci-lint run` (`brain-boundary`).
       Requirement: `nooma-core` hard rules 1–2.
-- [ ] Verify (PR-level): `make check-all`; confirm diff touches only
-      `internal/brain/{checkin,capture}{,_test}.go`, `internal/brain/check.go` (the
-      `questionDetail` addition), `internal/ports/decisionlog.go`, `cmd/nooma/wiring.go`,
-      `test/conformance/*.go` (the threat-matrix case), `test/e2e/*.go`,
-      `docs/02-cognitive-core.md`. Target ≤250 impl+docs lines.
+- [x] Verify (PR-level): `make check-all` — **fully green**, including L3, the schema-golden
+      regeneration diff, the `internal/core` coverage floor (99%), the seven-target matrix and L4.
+      **Measured: 294 impl+docs lines** (`+263/-31`; tests and `testdata/llm/cases/` counted
+      separately at `+1,020/-34`) — over the ~250 budget, under the 400 ceiling, so no split.
+      **Deviations from this section's own idealized list, reported rather than papered over:**
+      - **Task 6.8 was already done.** PR 4 added all five m3e `DecisionAction` members at once
+        (its own disclosed deviation), so `ActionCaptureRelationCheckInResolved` and
+        `ActionCaptureRelationCheckInUnmatched` were already in the vocabulary and in
+        `AllDecisionActions()`. `internal/ports/decisionlog.go` is untouched by this PR.
+      - **`internal/brain/digest.go` is touched (+4/-4), which this list did not anticipate.**
+        Task 6.7's `questionDetail` is the shape PR 5's two digest question rows needed and did
+        not have — they were written against `checkDetail{ID: …}`, which serialises
+        `{"id":…,"fire_at":""}`: three of `checkDetail`'s four fields empty, and the one fact
+        that matters (which relation) with nowhere to go. Moved onto `questionDetail` in the same
+        commit that introduces it, rather than left as a known-wrong audit shape across two PRs.
+      - **`internal/brain/check.go` gains `recordQuestion`/`recordDetail` beside `record`**, not
+        only the `questionDetail` type: `record` took a `checkDetail` by value, so a second
+        context shape needed a second entry point. The two thin wrappers over one writer keep a
+        caller from handing the wrong shape for its action by accident.
+      - **`resolveRelationCheckIn` has a `default:` arm returning an error** for an outcome
+        outside `AllRelationOutcomes()`. Unreachable while the vocabulary has two members, and
+        given a defined answer rather than left to fall through into a silent success that
+        resolved nothing — `triggerTransition`'s own posture toward its unreachable case.
+      - **`captureRunner.questions` is nil-tolerant**, which design §3.6 does not state.
+        `resolveRelationCheckIn` reads a nil repo as "nothing open" rather than crashing —
+        `checkRunner.questions`' own rule, for the same reason: a vault wired without a question
+        store has nothing to disambiguate against, and that is a true statement about it.
+      - **Task 6.11's L4 seeds the uncertain relation through the real repositories** rather than
+        producing it with a real connect pass. That half is I09's own conformance test, already
+        proven against connect's real dispatch; this test's claim is that ONE vault carries the
+        question out through a real digest and back in through a real capture. **Probed, not
+        assumed**: with `resolveRelationCheckIn` short-circuited both subtests fail, and with
+        `ConfirmRelation`'s signal suppressed the "yes" branch fails.
+      - Four recordings join `testdata/llm/cases/` (three `classify`, one `chat`): an inbound
+        answer arrives as a **chitchat carrying a `relation_outcome`**, which is the shape a real
+        reply has, and one of them words the outcome outside the vocabulary so the
+        degrade-to-null path (I14) has a fixture of its own.
+      - Mechanical fallout of `NewCaptureService`'s widened signature: 33 call sites across
+        `cmd/nooma/wiring.go`, `internal/httpapi`, `test/conformance`, `test/integration` and
+        `test/e2e`, one appended argument each.
 
 ---
 

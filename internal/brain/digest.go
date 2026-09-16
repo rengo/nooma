@@ -151,9 +151,9 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		if err := r.questions.MarkAsked(ctx, question.ID, now); err != nil {
 			return 0, fmt.Errorf("check: digest was sent but question %q was not marked asked: %w", question.ID, err)
 		}
-		if err := r.record(ctx, now, ports.ActionCheckDigestQuestionAsked,
+		if err := r.recordQuestion(ctx, now, ports.ActionCheckDigestQuestionAsked,
 			fmt.Sprintf("the daily digest asked about the relation between %q and %q", question.FromContent, question.ToContent),
-			checkDetail{ID: question.ID}); err != nil {
+			questionDetail{QuestionID: question.ID, RelationID: question.RelationID}); err != nil {
 			return 0, err
 		}
 	}
@@ -407,10 +407,10 @@ func (r checkRunner) expireStaleQuestions(ctx context.Context, history []ports.D
 		if err := r.questions.Expire(ctx, q.ID, now); err != nil {
 			return 0, fmt.Errorf("check: expire question %q: %w", q.ID, err)
 		}
-		if err := r.record(ctx, now, ports.ActionCheckQuestionExpired,
+		if err := r.recordQuestion(ctx, now, ports.ActionCheckQuestionExpired,
 			fmt.Sprintf("the question about %q and %q went unanswered through %d digest(s) and expired",
 				q.FromContent, q.ToContent, prospection.MaxDigestDeferrals),
-			checkDetail{ID: q.ID}); err != nil {
+			questionDetail{QuestionID: q.ID, RelationID: q.RelationID, Resolution: string(ports.QuestionExpired)}); err != nil {
 			return 0, err
 		}
 	}

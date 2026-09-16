@@ -1,0 +1,8 @@
+{
+  "id": "classify-relation-answer-rejected",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "no, those two aren't related",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"no, those two aren't related\",\"weight\":0.1,\"decay_rate\":0.5,\"relation_outcome\":\"rejected\",\"language\":\"en\"}"
+}
