@@ -7,6 +7,14 @@ internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Tim
 internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error)
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
+internal/store/sqlite: func (*PendingQuestionRepo) Confirm(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*PendingQuestionRepo) Create(ctx context.Context, q ports.PendingQuestion) error
+internal/store/sqlite: func (*PendingQuestionRepo) Expire(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*PendingQuestionRepo) MarkAsked(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*PendingQuestionRepo) Open(ctx context.Context) ([]ports.RelationQuestion, error)
+internal/store/sqlite: func (*PendingQuestionRepo) Reject(ctx context.Context, id string, at time.Time) error
+internal/store/sqlite: func (*PendingQuestionRepo) Unasked(ctx context.Context) ([]ports.RelationQuestion, error)
+internal/store/sqlite: func (*RelationRepo) ByID(ctx context.Context, id string) (ports.Relation, error)
 internal/store/sqlite: func (*RelationRepo) ByUnit(ctx context.Context, unitID string) ([]ports.Relation, error)
 internal/store/sqlite: func (*RelationRepo) Delete(ctx context.Context, id string) error
 internal/store/sqlite: func (*RelationRepo) Evidence(ctx context.Context) ([]consolidation.RelationEvidence, error)
@@ -56,6 +64,7 @@ internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func NewConfigRepo(v *Vault) *ConfigRepo
 internal/store/sqlite: func NewDecisionLog(v *Vault) *DecisionLog
 internal/store/sqlite: func NewEmbeddingRepo(v *Vault) *EmbeddingRepo
+internal/store/sqlite: func NewPendingQuestionRepo(v *Vault) *PendingQuestionRepo
 internal/store/sqlite: func NewRelationRepo(v *Vault) *RelationRepo
 internal/store/sqlite: func NewSearch(v *Vault) *Search
 internal/store/sqlite: func NewSelfModelRepo(v *Vault) *SelfModelRepo
@@ -68,6 +77,7 @@ internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, er
 internal/store/sqlite: type ConfigRepo
 internal/store/sqlite: type DecisionLog
 internal/store/sqlite: type EmbeddingRepo
+internal/store/sqlite: type PendingQuestionRepo
 internal/store/sqlite: type RelationRepo
 internal/store/sqlite: type Search
 internal/store/sqlite: type SelfModelRepo

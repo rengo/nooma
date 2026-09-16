@@ -229,6 +229,39 @@ func RunRelationRepo(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
 		}
 	})
 
+	// ByID's own contract (m3e design §3.2): the confirm path needs the
+	// WHOLE row back — Upsert revises confidence in place (I07) and takes a
+	// complete ports.Relation, so Strength, CreatedBy and CreatedAt must
+	// travel back unchanged.
+	t.Run("ByID returns the whole stored row", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.EnsureUnit(t, "byid-from")
+		repo.EnsureUnit(t, "byid-to")
+		ctx := context.Background()
+
+		want := fixtureRelation("byid-rel", "byid-from", "byid-to", "reference", 0.4, 0.5)
+		if err := repo.Upsert(ctx, want); err != nil {
+			t.Fatalf("Upsert: %v", err)
+		}
+
+		got, err := repo.ByID(ctx, "byid-rel")
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		if got != want {
+			t.Errorf("ByID(%q) = %+v, want %+v — every column must travel back, not only Confidence", want.ID, got, want)
+		}
+	})
+
+	t.Run("ByID for an unknown id returns ErrRelationNotFound", func(t *testing.T) {
+		repo := newRepo(t)
+
+		_, err := repo.ByID(context.Background(), "no-such-relation")
+		if err == nil {
+			t.Fatal("ByID(unknown) returned nil error, want ErrRelationNotFound")
+		}
+	})
+
 	t.Run("ThresholdsFor for one type does not see another type's row", func(t *testing.T) {
 		repo := newRepo(t)
 		repo.SeedThreshold(t, "reference", 0.42, 0.77)

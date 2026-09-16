@@ -106,6 +106,13 @@ type RelationRepo interface {
 	// absent" by inspecting the zero value.
 	ExistingPairs(ctx context.Context, pairs []consolidation.Pair) (map[consolidation.Pair]bool, error)
 
+	// ByID returns the relation with id, or ErrRelationNotFound. The confirm
+	// path (m3e) needs the WHOLE row: Upsert revises confidence in place
+	// (I07) and takes a complete Relation, so Strength, CreatedBy and
+	// CreatedAt must travel back unchanged. A narrow read would force the
+	// caller to invent values for three columns it must not change.
+	ByID(ctx context.Context, id string) (Relation, error)
+
 	// Delete removes the relation with id. It returns
 	// ErrRelationNotFound if none exists.
 	//
