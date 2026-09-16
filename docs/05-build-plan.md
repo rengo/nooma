@@ -182,12 +182,21 @@ Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel),
 `test/e2e/m3_demo_test.go` — one vault and one simulated day carrying a pushed trigger, a held one
 arriving in the morning digest, and a timer worded at delivery that says it was late.
 
-Two items on this list are **deliberately not closed**, and are named rather than left to be
-noticed. A timer's **list and cancel** from chat is M4's surface, not M3's: doc 02 §8 promises both,
-and `ports.TimerRepo` declares neither, because a method with no caller is what this repository
-refuses to ship. And a **relation confirmation** knows how to reject a relation but not yet which
-relation an inbound answer is about — carrying a question's identity back through a later message is
-conversational state neither M2 nor M3 built (`m3d` finding J24).
+Two items on this list were **deliberately not closed**, and were named rather than left to be
+noticed. **One of them is now closed.**
+
+A timer's **list and cancel** from chat is still open, and is M4's surface rather than M3's: doc 02
+§8 promises both, and `ports.TimerRepo` declares neither, because a method with no caller is what
+this repository refuses to ship.
+
+The other — a **relation confirmation** that knew how to reject a relation but not yet *which*
+relation an inbound answer was about (`m3d` finding J24) — **closed on 2026-09-16 with
+`m3e-pending-question`**, a fifth chained change landed after M3's own close. The conversational
+state neither M2 nor M3 had built turned out not to be conversational state at all: the answer is
+disambiguated against a `pending_questions` store, never against the model, because a model asked
+to name an id can name a plausible wrong one and the wrong pick for `relation_outcome: rejected` is
+a deleted relation. That change also gave **I09** its first real conformance test. Its archive is
+`openspec/changes/archive/2026-09-16-m3e-pending-question/`.
 
 ## M4 — The mirror: complete UI
 
