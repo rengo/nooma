@@ -1,0 +1,24 @@
+package ui
+
+// Page is internal/ui's one layout: the <html> shell every view renders
+// inside. The htmx-config meta tag is CSP-compatible (no inline script),
+// per design m4a §3.5; the stylesheet is a static asset served from
+// /ui/static, never inlined, for the same reason.
+templ Page(title string, body templ.Component) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="htmx-config" content={ `{"allowEval":false,"includeIndicatorStyles":false}` }/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/ui/static/app.css"/>
+		</head>
+		<body>
+			<main>
+				@body
+			</main>
+			<script src="/ui/static/htmx.min.js"></script>
+		</body>
+	</html>
+}
