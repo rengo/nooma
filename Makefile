@@ -47,7 +47,7 @@ LDFLAGS := -X main.version=$(VERSION)
 check: lint test build ## The fast loop: lint + L1/L2 tests + build — NOT full CI parity, see check-all
 
 .PHONY: check-all
-check-all: check test-integration schema-golden-clean cover cross-compile test-e2e ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
+check-all: check test-integration schema-golden-clean cover cross-compile test-e2e templ-clean ## Every gate CI blocks on that a Makefile can run locally (docs-sync excluded — see header) — run before opening a PR
 
 .PHONY: lint
 lint: $(GOBIN)/golangci-lint ## Dependency rule + clock port + standard linters
@@ -79,6 +79,14 @@ schema-golden: ## Regenerate testdata/schema/{structure,ddl}.golden from the emb
 .PHONY: schema-golden-clean
 schema-golden-clean: schema-golden ## Fail if regenerating the schema golden leaves a dirty tree — mirrors the second half of ci.yml's integration job
 	git diff --exit-code -- testdata/schema
+
+.PHONY: templ
+templ: ## Regenerate internal/ui's *_templ.go files from their .templ sources
+	go tool templ generate -path ./internal/ui
+
+.PHONY: templ-clean
+templ-clean: templ ## Fail if regenerating templ output leaves a dirty tree — schema-golden-clean's shape, for internal/ui/*_templ.go
+	git diff --exit-code -- 'internal/ui/*_templ.go'
 
 .PHONY: build
 build: ## Compile every package

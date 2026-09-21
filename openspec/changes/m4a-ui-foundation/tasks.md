@@ -65,7 +65,7 @@ below carries a named overflow cut, not only those two.
 **Overflow cut** (if over 400): trim `layout.templ`'s nav markup to one `<main>` slot — nothing
 exists yet for a nav to link to; the gate needs one committed template, not a finished shell.
 
-- [ ] **1.1** RED — `.golangci.yml`: add the `ui-boundary` `depguard` rule, an **allow-list**
+- [x] **1.1** RED — `.golangci.yml`: add the `ui-boundary` `depguard` rule, an **allow-list**
       (design §3.1's exact block: `$gostd`, `internal/core`, `internal/brain`, `internal/ports`,
       `internal/ui`, `github.com/a-h/templ`; four named `deny` entries whose message a
       contributor needs first). Add a scratch `internal/ui/probe.go` importing `internal/store`.
@@ -73,11 +73,11 @@ exists yet for a nav to link to; the gate needs one committed template, not a fi
       on before the first template exists (design §3.8 "watching the boundary rule fail",
       proposal §6 order 1).
       Requirement: R7.
-- [ ] **1.2** GREEN — delete `internal/ui/probe.go`. `golangci-lint run` passes with
+- [x] **1.2** GREEN — delete `internal/ui/probe.go`. `golangci-lint run` passes with
       `internal/ui/doc.go` as the package's only file.
       Verify: `golangci-lint run ./internal/ui/...`.
       Requirement: R7; design §3.1, §3.8.
-- [ ] **1.3** RED — add `internal/ui/layout.templ` (`Page(title, body)`, `<meta name="htmx-config"
+- [x] **1.3** RED — add `internal/ui/layout.templ` (`Page(title, body)`, `<meta name="htmx-config"
       content='{"allowEval":false,"includeIndicatorStyles":false}'>` per §3.5, stylesheet
       `<link>`, `<script>` tag); `Makefile` gains `templ` (`go tool templ generate -path
       ./internal/ui`) and `templ-clean` (`templ` then `git diff --exit-code -- 'internal/ui/*_templ.go'`,
@@ -87,7 +87,7 @@ exists yet for a nav to link to; the gate needs one committed template, not a fi
       run `make templ-clean`; record the failure in the PR body (design §3.8 "watching the gate
       fail", proposal §6 order 1).
       Requirement: R7.
-- [ ] **1.4** GREEN — regenerate `layout_templ.go` via `make templ`; `make templ-clean` passes;
+- [x] **1.4** GREEN — regenerate `layout_templ.go` via `make templ`; `make templ-clean` passes;
       delete `ci.yml:125-127`'s "not enforced" line for real. `go.mod`/`go.sum`: `require
       github.com/a-h/templ`; `tool github.com/a-h/templ/cmd/templ` (design §3.8's pinning
       choice — one file, one version, for the binary and the runtime). `.gitattributes`:
@@ -96,16 +96,49 @@ exists yet for a nav to link to; the gate needs one committed template, not a fi
       Verify: `go build ./...` needs no `templ` binary; the seven-target cross-compile matrix is
       untouched (generated `_templ.go` is plain Go, `templ`'s own runtime has no cgo).
       Requirement: R7; design §3.8.
-- [ ] Verify (PR-level): `docs/06-harness.md` §6's templ-gate row needs no wording change — it
-      already states the gate as blocking; PR 1 makes that true in CI, not in prose. `GET /ui` at
-      this tip is unchanged: `200`, `uiPlaceholder`, with or without a token — PR 1 never touches
-      `internal/httpapi` (§7.2's PR 1 row). No test is modified; `TestHandlerServesBothSurfaces`,
-      `TestOpenRoutesStayOpenRegardlessOfToken` and `TestServeAnswersBothSurfaces` all stay as
-      they are. `make check-all` in an isolated worktree at this branch's tip. Open
-      `feat/ui-toolchain-gates` against `main`; wait for all 17 required contexts; merge only on
-      `mergeStateStatus: CLEAN`; confirm `git ls-remote --heads origin feat/ui-toolchain-gates`
-      returns nothing before branching PR 2 from the new `main`. Target ≤190 impl+docs lines
-      (`go.sum`, `layout_templ.go` reported beside it, not inside).
+- [x] Verify (PR-level, local part) — confirmed at tip `5e2aab1` (the last code commit; its tree hash `c242e65` is what `make check-all` ran against): `GET /ui` is untouched, no
+      `internal/httpapi`/`test/e2e` file changed (`git diff --stat 8a7232e..HEAD -- internal/httpapi
+      test/e2e` is empty); no test modified (no `_test.go` in the diff);
+      `TestHandlerServesBothSurfaces`, `TestOpenRoutesStayOpenRegardlessOfToken` and
+      `TestServeAnswersBothSurfaces` all stay as they are. `make check-all` green in an isolated
+      worktree at this tip (lint, L1/L2, build, L3, `schema-golden-clean`, coverage 99%, the
+      seven-target matrix, L4, `templ-clean`). Impl+docs measured at 97 lines (well under ≤190;
+      `go.sum` 41 and `layout_templ.go` 78 reported beside it, not inside).
+      **Still open** (out of this apply batch's scope, per the executing agent's own
+      instructions): opening `feat/ui-toolchain-gates` against `main`, waiting for the 17
+      required contexts, merging only on `mergeStateStatus: CLEAN`, and confirming
+      `git ls-remote --heads origin feat/ui-toolchain-gates` returns nothing before branching
+      PR 2.
+
+**Deviations** (recorded, not silent):
+- Task 1.2's GREEN commit also updated `internal/ui/doc.go`'s charter sentence to "it renders
+  view models, it decides nothing" (design §3.1's tree; §7.1's landing-order table attributes it
+  to PR 1, "inferred — §3.1's tree carries no explicit PR tag for this line"). Not itemized as
+  its own bullet in this file's 1.x list; folded into 1.2 since it touches the same file the task
+  already names as "the package's only file" and carries zero risk.
+- Task 1.3's RED commit, as first committed, left out `go.mod`'s `tool`/`require` directive
+  (design's own table places that in the GREEN commit, task 1.4), reproducing the recorded
+  `templ-clean` diff failure by staging the tool directive locally — never committed at that
+  point — to make `go tool templ` resolvable, then reverting `go.mod`/`go.sum` before committing.
+  A judgment-day review of the committed tree (not the staged state that produced the evidence)
+  found that tree fails earlier, at `go: no such tool "templ"`, because the pin does not exist in
+  that commit — not at the `templ-clean` gate's own `git diff --exit-code` step the RED commit's
+  body claims to have watched. Strict TDD (nooma-testing skill, rule 3) requires watching red for
+  the right reason from the committed tree, not from an uncommitted staged state, so PR 1's task
+  1.3/1.4 commits were rebuilt: the `tool`/`require` pin (and `.gitattributes`'s
+  generated/vendored lines, which describe the same toolchain) now land in the RED commit
+  alongside the stale hand-edited `layout_templ.go`, deviating from design's task split (pin in
+  GREEN, task 1.4) for that reason. The rebuilt RED commit was verified failing at the
+  `templ-clean` diff step from an isolated worktree at that exact commit, with `go build ./...`
+  succeeding there since the stale file is still valid Go; the GREEN commit is now a pure
+  regeneration of `layout_templ.go` with no toolchain change. The resulting tree at PR 1's tip is
+  byte-identical to the tree this deviation note originally described (verified by tree hash).
+- Design §3.1's prose and task 1.1 both say the `ui-boundary` `depguard` rule has "four" named
+  `deny` entries; the YAML block in both design §3.1 and the implemented `.golangci.yml` has six
+  (`internal/store`, `internal/httpapi`, `internal/config`, `database/sql`, `os`, `os/exec`).
+  Implemented the YAML, which is the executable artifact and predates this apply; the prose count
+  is stale in both documents and is left for correction at the next docs touch rather than edited
+  here, out of scope for a PR 1 apply.
 
 ---
 

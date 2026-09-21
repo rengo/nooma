@@ -24,3 +24,9 @@
 *.db binary
 *.sqlite binary
 *.wasm binary
+
+# ADR-0008's mitigation for the templ toolchain: generated Go is diffed but
+# never reviewed as hand-written code, and the vendored htmx asset (landing
+# in PR 2) is diffed but never authored here.
+internal/ui/*_templ.go linguist-generated=true
+internal/ui/static/htmx.min.js linguist-vendored=true
