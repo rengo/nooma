@@ -252,17 +252,19 @@ func TestUISubtreeSetsSecurityHeaders(t *testing.T) {
 	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{})})
 
 	cases := []struct {
-		name             string
-		method           string
-		path             string
-		crossSite        bool
-		wantStatus       int
-		wantCacheControl string
+		name              string
+		method            string
+		path              string
+		crossSite         bool
+		wantStatus        int
+		wantCacheControl  string
+		wantAllowContains string
 	}{
 		{name: "the shell", method: http.MethodGet, path: "/ui", wantStatus: http.StatusOK, wantCacheControl: "no-store"},
 		{name: "a static asset", method: http.MethodGet, path: "/ui/static/app.css", wantStatus: http.StatusOK, wantCacheControl: "no-cache"},
 		{name: "an unmatched /ui path", method: http.MethodGet, path: "/ui/does-not-exist", wantStatus: http.StatusNotFound, wantCacheControl: "no-store"},
 		{name: "a refused cross-origin POST", method: http.MethodPost, path: "/ui", crossSite: true, wantStatus: http.StatusForbidden, wantCacheControl: "no-store"},
+		{name: "a same-origin POST to a GET-only leaf", method: http.MethodPost, path: "/ui", wantStatus: http.StatusMethodNotAllowed, wantCacheControl: "no-store", wantAllowContains: "GET"},
 	}
 
 	for _, tc := range cases {
@@ -280,6 +282,14 @@ func TestUISubtreeSetsSecurityHeaders(t *testing.T) {
 				t.Fatalf("%s %s = %d, want %d", tc.method, tc.path, rec.Code, tc.wantStatus)
 			}
 			assertUISecurityHeaders(t, rec.Header(), tc.wantCacheControl)
+			if tc.wantAllowContains != "" {
+				if allow := rec.Header().Get("Allow"); !strings.Contains(allow, tc.wantAllowContains) {
+					t.Errorf("Allow = %q, want it to contain %q", allow, tc.wantAllowContains)
+				}
+			}
+			if rec.Header().Get("Set-Cookie") != "" {
+				t.Errorf("%s %s set a cookie", tc.method, tc.path)
+			}
 		})
 	}
 }
@@ -433,4 +443,30 @@ func TestUIRootIsNeverRedirectedByTheMux(t *testing.T) {
 			}
 		})
 	}
+
+	// The outer mux (Handler's own mux, not newUIMux) registers both "/ui"
+	// and "/ui/" as siblings (server.go's mux.Handle("/ui", uiSubtree) and
+	// mux.Handle("/ui/", uiSubtree)) precisely so that neither form triggers
+	// net/http.ServeMux's own subtree-root redirect. This drives Handler(d)
+	// end to end with httptest.ResponseRecorder, which never follows a
+	// redirect on its own, so a 301/307 shows up here as exactly that status
+	// with a Location header — not as a followed 200.
+	t.Run("the outer mux mounts both /ui and /ui/ with no redirect", func(t *testing.T) {
+		t.Parallel()
+
+		h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{})})
+
+		for _, path := range []string{"/ui", "/ui/"} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("GET %s = %d, want 200 (no redirect)", path, rec.Code)
+			}
+			if loc := rec.Header().Get("Location"); loc != "" {
+				t.Errorf("GET %s set Location: %q — want no redirect", path, loc)
+			}
+		}
+	})
 }
