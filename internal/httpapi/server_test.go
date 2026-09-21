@@ -252,19 +252,19 @@ func TestUISubtreeSetsSecurityHeaders(t *testing.T) {
 	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{})})
 
 	cases := []struct {
-		name              string
-		method            string
-		path              string
-		crossSite         bool
-		wantStatus        int
-		wantCacheControl  string
-		wantAllowContains string
+		name             string
+		method           string
+		path             string
+		crossSite        bool
+		wantStatus       int
+		wantCacheControl string
+		wantAllow        string
 	}{
 		{name: "the shell", method: http.MethodGet, path: "/ui", wantStatus: http.StatusOK, wantCacheControl: "no-store"},
 		{name: "a static asset", method: http.MethodGet, path: "/ui/static/app.css", wantStatus: http.StatusOK, wantCacheControl: "no-cache"},
 		{name: "an unmatched /ui path", method: http.MethodGet, path: "/ui/does-not-exist", wantStatus: http.StatusNotFound, wantCacheControl: "no-store"},
 		{name: "a refused cross-origin POST", method: http.MethodPost, path: "/ui", crossSite: true, wantStatus: http.StatusForbidden, wantCacheControl: "no-store"},
-		{name: "a same-origin POST to a GET-only leaf", method: http.MethodPost, path: "/ui", wantStatus: http.StatusMethodNotAllowed, wantCacheControl: "no-store", wantAllowContains: "GET"},
+		{name: "a same-origin POST to a GET-only leaf", method: http.MethodPost, path: "/ui", wantStatus: http.StatusMethodNotAllowed, wantCacheControl: "no-store", wantAllow: "GET, HEAD"},
 	}
 
 	for _, tc := range cases {
@@ -282,9 +282,9 @@ func TestUISubtreeSetsSecurityHeaders(t *testing.T) {
 				t.Fatalf("%s %s = %d, want %d", tc.method, tc.path, rec.Code, tc.wantStatus)
 			}
 			assertUISecurityHeaders(t, rec.Header(), tc.wantCacheControl)
-			if tc.wantAllowContains != "" {
-				if allow := rec.Header().Get("Allow"); !strings.Contains(allow, tc.wantAllowContains) {
-					t.Errorf("Allow = %q, want it to contain %q", allow, tc.wantAllowContains)
+			if tc.wantAllow != "" {
+				if allow := rec.Header().Get("Allow"); allow != tc.wantAllow {
+					t.Errorf("Allow = %q, want %q", allow, tc.wantAllow)
 				}
 			}
 			if rec.Header().Get("Set-Cookie") != "" {

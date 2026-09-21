@@ -1,10 +1,12 @@
-package ui
+package ui_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/rengo/nooma/internal/ui"
 )
 
 // doGet runs one GET against h without opening a real socket.
@@ -30,7 +32,7 @@ func doGet(h http.Handler, path string) *httptest.ResponseRecorder {
 func TestAssetsServesTheThreeEmbeddedLeaves(t *testing.T) {
 	t.Parallel()
 
-	h := Assets()
+	h := ui.Assets()
 
 	t.Run("app.css", func(t *testing.T) {
 		t.Parallel()
