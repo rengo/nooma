@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/ui"
 )
 
 // Deps is everything Handler needs to build nooma's HTTP surface — ADR-0017's
@@ -37,6 +38,16 @@ type Deps struct {
 	// token configured" — see ResolveToken (auth.go), the one function that
 	// produces this value from server.auth_token_env.
 	Token string
+	// UI is the mirror's own handler. Nil means the /ui subtree is not
+	// mounted at all: neither "/ui" nor "/ui/" are registered on the open
+	// mux, and a request falls through to the guarded mux exactly as any
+	// other unknown path does — 404 with no token, 401 with one (design
+	// m4a §3.9's --no-ui state, PR 3). cmd/nooma/serve.go wires
+	// ui.New(ui.Deps{}) into this field unconditionally from this PR
+	// onward (§3.9's "landing this across PR 2 and PR 3" correction); a
+	// caller that constructs Deps directly — this package's own tests — is
+	// free to leave it nil.
+	UI *ui.Handler
 }
 
 // apiRoute is one entry of the guarded API surface — pattern and handler
@@ -63,21 +74,21 @@ func apiRoutes(d Deps) []apiRoute {
 }
 
 // Handler builds nooma's HTTP surface: an open mux for the root and the UI
-// placeholder, and a guarded mux for every API route — design D10's "two
+// subtree, and a guarded mux for every API route — design D10's "two
 // muxes" shape. There is no exported way to reach the inner, guarded mux
-// directly: every request that is not GET /{$} or GET /ui falls through to
-// it wrapped in requireToken(d.Token), so a route registered in apiRoutes
-// cannot be reached without the check already having run.
+// directly: every request that is not GET /{$} or under /ui falls through
+// to it wrapped in requireToken(d.Token), so a route registered in
+// apiRoutes cannot be reached without the check already having run.
 //
-// M0 served two things and admitted to being early about both: an API root
-// that reports what is running, and a UI placeholder. docs/01-architecture.md's
-// Layer 2 promises the binary serves the user's complete frontend from the
-// same process — the real views arrive in M4 (ADR-0008), but the route exists
-// now because a /ui that 404s would make that promise untrue on day one.
+// docs/01-architecture.md's Layer 2 promises the binary serves the user's
+// complete frontend from the same process. M0 served an API root and a
+// placeholder that said the interface would arrive in M4; design m4a §3.1
+// replaces it with the mirror's real shell — the layout, no Today content
+// yet, the paragraph that says why.
 //
-// Neither open route is guarded (ADR-0017, spec R2.12): the UI's own
-// authentication is ADR-0007's cookie handshake, which this PR does not
-// implement.
+// Neither open route is guarded by requireToken (ADR-0017, spec R2.12):
+// the UI's own authentication is ADR-0007's cookie handshake (PR 4a), not
+// implemented here.
 func Handler(d Deps) http.Handler {
 	guardedMux := http.NewServeMux()
 	for _, rt := range apiRoutes(d) {
@@ -92,17 +103,51 @@ func Handler(d Deps) http.Handler {
 		_, _ = fmt.Fprintf(w, "{\"name\":\"nooma\",\"version\":%q,\"status\":\"ok\"}\n", d.Version)
 	})
 
-	mux.HandleFunc("GET /ui", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, uiPlaceholder)
-	})
+	// The UI subtree mounts only when a handler was built for it. Both
+	// forms of the path are registered on THIS open mux so that neither
+	// triggers ServeMux's own subtree-root redirect: the exact "/ui"
+	// pattern answers GET /ui directly, and the "/ui/" subtree forwards
+	// everything below it — /ui/static/*, and from PR 4b /ui/login — to
+	// the same handler, which does its own leaf-level routing inside
+	// newUIMux (design m4a §3.2). Headers wrap outermost, then
+	// cross-origin, then (from PR 4a) the cookie check.
+	if d.UI != nil {
+		xo := http.NewCrossOriginProtection()
+		uiSubtree := securityHeaders(xo.Handler(newUIMux(d)))
+		mux.Handle("/ui", uiSubtree)
+		mux.Handle("/ui/", uiSubtree)
+	}
 
-	// Every path that is neither the open root nor the open UI placeholder
+	// Every path that is neither the open root nor the open UI subtree
 	// falls through to the guarded mux — including a path the guarded mux
 	// itself does not recognize, which the guarded mux answers with its own
 	// 404 (TestUnknownPathIs404 pins this: an unmatched path is still a 404,
 	// never a catch-all).
 	mux.Handle("/", guarded)
+
+	return mux
+}
+
+// newUIMux builds the UI subtree's own inner mux — one http.ServeMux whose
+// every route is an explicit method+path leaf, never a bare-trailing-slash
+// or "..." subtree, so none of them can trigger ServeMux's own subtree-root
+// redirect (design m4a §3.2: the class that let GET /ui 307 to /ui/ from
+// the mux itself, before any handler this package writes ever ran). PR 2
+// registers the three static leaves and the two guarded leaves; the two
+// /ui/login leaves land in PR 4b, once loginPage/loginSubmit exist to back
+// them, and the two guarded leaves gain requireCookie's wrap in PR 4a —
+// until then they dispatch straight to d.UI, which renders PR 2's shell
+// (§3.1, §7.2's PR 2 tip row).
+func newUIMux(d Deps) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	assets := ui.Assets()
+	mux.Handle("GET /ui/static/app.css", assets)
+	mux.Handle("GET /ui/static/htmx.min.js", assets)
+	mux.Handle("GET /ui/static/htmx.LICENSE", assets)
+
+	mux.Handle("GET /ui", d.UI)
+	mux.Handle("GET /ui/{$}", d.UI)
 
 	return mux
 }
@@ -115,17 +160,3 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
-
-// uiPlaceholder says what it is. A blank page would leave the user wondering
-// whether something failed; this one tells them the truth — the server is
-// running and this surface is not built yet.
-const uiPlaceholder = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>nooma</title></head>
-<body>
-<h1>nooma is running</h1>
-<p>The interface arrives in M4. Until then, use the CLI:
-<code>nooma status</code> and <code>nooma doctor</code>.</p>
-</body>
-</html>
-`

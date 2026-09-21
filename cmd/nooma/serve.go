@@ -17,6 +17,7 @@ import (
 	"github.com/rengo/nooma/internal/httpapi"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/vaultlock"
+	"github.com/rengo/nooma/internal/ui"
 )
 
 // shutdownGrace is how long an in-flight request has to finish once a signal
@@ -121,9 +122,16 @@ func runServe(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("wiring the scheduler: %w", err)
 	}
 
+	// ui.New(ui.Deps{}) is wired unconditionally here, with no flag and no
+	// conditional around it yet — design m4a §3.9's own correction: PR 3
+	// wraps this exact call in --no-ui's conditional, it does not
+	// introduce it. Without this, d.UI is nil in the compiled binary and
+	// GET /ui falls through to the guarded mux, failing
+	// TestServeAnswersBothSurfaces (e2e). PR 2 has no TodayReader yet, so
+	// ui.Deps{} is empty — ServeHTTP renders the shell, not Today.
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token}),
+		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: ui.New(ui.Deps{})}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

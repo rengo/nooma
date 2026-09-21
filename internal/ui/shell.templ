@@ -1,0 +1,10 @@
+package ui
+
+// shellBody is PR 2 through PR 6's own <main> content — Today does not
+// exist yet (design m4a §3.1, §7.2's PR 2 tip row: "no SYSTEM section...
+// the shell, not a stub of Today's own markup"). Superseded once PR 7 wires
+// a TodayReader into Deps and ServeHTTP starts rendering today.templ
+// instead.
+templ shellBody() {
+	<p>Today arrives in a later PR.</p>
+}
