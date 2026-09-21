@@ -147,7 +147,7 @@ exists yet for a nav to link to; the gate needs one committed template, not a fi
 **Overflow cut** (if over 400): `app.css` beyond the token layer moves to PR 7, landing beside the
 first view that actually uses it.
 
-- [ ] **2.1** RED — `internal/httpapi`: `TestUISubtreeSetsSecurityHeaders`,
+- [x] **2.1** RED — `internal/httpapi`: `TestUISubtreeSetsSecurityHeaders`,
       `TestUICrossOriginPostIsRefused`, `TestUIStaticServesStylesheetAndHtmx`,
       `TestUIRootIsNeverRedirectedByTheMux` (new, §8).
       Mutations these catch: a header dropped from one response arm, or a handler writing its own
@@ -161,7 +161,7 @@ first view that actually uses it.
       the mux itself, before `requireCookie` or any handler ran
       (`TestUIRootIsNeverRedirectedByTheMux`).
       Requirement: R1, R3 (spec's cross-origin/handshake scope), R7.
-- [ ] **2.2** RED — rename `TestHandlerServesBothSurfaces` → `TestHandlerServesAPIRootAndUIShell`,
+- [x] **2.2** RED — rename `TestHandlerServesBothSurfaces` → `TestHandlerServesAPIRootAndUIShell`,
       given a `Deps.UI` fixture: `GET /` and `GET /ui` both `200`; the `/ui` body carries the
       layout (nav, headers) and PR 2's own shell paragraph — *"Today arrives in a later PR"* —
       never a FOCUS/PENDING DIGEST/SYSTEM section or any other vault-shaped content (§3.1's PR 2
@@ -170,7 +170,7 @@ first view that actually uses it.
       Mutation: a shell that leaks Today's own markup before `TodayReader` exists; a shell missing
       the layout or the five security headers.
       Requirement: R5 (the shell is not Today yet); design §3.1, §7.2, §8.
-- [ ] **2.3** GREEN — `internal/ui/ui.go` (`Deps{}`, `Serving{}`, `New`, `(*Handler).ServeHTTP`
+- [x] **2.3** GREEN — `internal/ui/ui.go` (`Deps{}`, `Serving{}`, `New`, `(*Handler).ServeHTTP`
       rendering `layout.Page` with an empty `<main>` and the shell paragraph, no SYSTEM section —
       §3.1's PR 2 shell state); `internal/ui/assets.go` (`Assets()` — a small `*http.ServeMux`
       carrying exactly three exact leaf patterns over `http.ServeFileFS`, no wildcard, §3.2's
@@ -181,7 +181,7 @@ first view that actually uses it.
       `XMLHttpRequest` by design and is not the graph island).
       Verify: `go test ./internal/ui/...`.
       Requirement: R5, R7; design §3.1, §3.8.
-- [ ] **2.4** GREEN — `internal/httpapi/headers.go` (`securityHeaders`: the CSP string, `nosniff`,
+- [x] **2.4** GREEN — `internal/httpapi/headers.go` (`securityHeaders`: the CSP string, `nosniff`,
       `same-origin` referrer, `X-Frame-Options: DENY`, `Cache-Control: no-store` on views /
       `no-cache` on `/ui/static/*`, §3.5's exact table); the cross-origin wrap
       (`http.NewCrossOriginProtection()`, constructed once, no trusted origins, no bypass
@@ -189,37 +189,76 @@ first view that actually uses it.
       cross-origin, then (from PR 4a) the cookie check (§3.2's ordering rule).
       Verify: `go test ./internal/httpapi/...`.
       Requirement: R3, R7; design §3.4, §3.5.
-- [ ] **2.5** GREEN — `internal/httpapi/server.go`: `Deps.UI *ui.Handler`; the `uiMux` with its
+- [x] **2.5** GREEN — `internal/httpapi/server.go`: `Deps.UI *ui.Handler`; the `uiMux` with its
       five leaf patterns from this PR (`GET /ui`, `GET /ui/{$}`, `GET /ui/static/app.css`, `GET
       /ui/static/htmx.min.js`, `GET /ui/static/htmx.LICENSE` — none subtree-shaped; the two
       `/ui/login` leaves land PR 4b, once their handlers exist); mount the subtree on the open mux
       only when `d.UI != nil`; delete `uiPlaceholder`.
       Verify: `go test ./internal/httpapi/...`.
       Requirement: R1, R4; design §3.2.
-- [ ] **2.6** GREEN — `cmd/nooma/serve.go`: wire `ui.New(ui.Deps{})` into `Deps.UI`
+- [x] **2.6** GREEN — `cmd/nooma/serve.go`: wire `ui.New(ui.Deps{})` into `Deps.UI`
       **unconditionally**, no flag and no conditional around it yet (§3.9's "landing this across
       PR 2 and PR 3" correction — this is the call PR 3 later wraps, not a call PR 3
       introduces). Without this, `d.UI` is nil in the compiled binary and `TestServeAnswersBothSurfaces`
       (e2e) fails.
       Verify: `go test ./test/e2e/... -run TestServeAnswersBothSurfaces`.
       Requirement: R4; design §3.9.
-- [ ] **2.7** GREEN, fixture-only, no assertion change — `TestHandlerServesDistinctSurfaces` and
+- [x] **2.7** GREEN, fixture-only, no assertion change — `TestHandlerServesDistinctSurfaces` and
       `TestOpenRoutesStayOpenRegardlessOfToken`'s existing `Deps` fixtures gain `UI` so `/ui`
       stays reachable once `d.UI != nil` gates the mount (§7.2's own note that this is plumbing,
       not a new claim).
       Requirement: design §7's PR 2 row.
-- [ ] Verify (PR-level): `GET /ui` at this tip is `200`, PR 2's shell, **with or without a
-      token** — `requireCookie` does not exist until 4a, so a configured token changes nothing
-      here (§7.2's PR 2 row). Tests modified for the tip to stay green:
-      `TestHandlerServesBothSurfaces` renamed and rewritten (task 2.2);
+- [x] Verify (PR-level) — confirmed at tip `25cfd5b` (RED `9987de5`, GREEN `25cfd5b`, branched
+      from `feat/ui-toolchain-gates`'s merged tip `79d05e8`): `GET /ui` at this tip is `200`, PR
+      2's shell (*"Today arrives in a later PR"*, five security headers, no FOCUS/PENDING
+      DIGEST/SYSTEM), **with or without a token** — `requireCookie` does not exist until 4a, so a
+      configured token changes nothing here (§7.2's PR 2 row). Tests modified for the tip to stay
+      green: `TestHandlerServesBothSurfaces` renamed and rewritten (task 2.2);
       `TestHandlerServesDistinctSurfaces` and `TestOpenRoutesStayOpenRegardlessOfToken` gain a
       `UI` fixture field (task 2.7) with no assertion change. `test/e2e/serve_test.go`'s
-      `TestServeAnswersBothSurfaces` is **not** modified — task 2.6's wiring alone keeps it green.
-      `make check-all` in an isolated worktree at this branch's tip. Open
-      `feat/ui-base-layout` against `main` (rebased on PR 1's merged tip); merge only on
-      `mergeStateStatus: CLEAN`; confirm the branch is deleted before branching PR 3. Target
-      ≤400 impl+docs lines (htmx.min.js reported beside it, not inside) — **measure before
-      opening; this PR is the closest to the ceiling in the whole chain**.
+      `TestServeAnswersBothSurfaces` is **not** modified — task 2.6's wiring alone keeps it green
+      (confirmed green at this tip). `make check-all` green in an isolated worktree at this tip
+      (lint 0 issues, `go vet`, L1/L2, build, L3, `schema-golden-clean`, `internal/core` coverage
+      99% (990/992, unchanged — PR 2 touches no `internal/core` file), the seven-target
+      cross-compile matrix all OK, L4 e2e 141s, `templ-clean` clean). Impl+docs measured at 286
+      lines added / 32 deleted (well under ≤400, and under design's own ~350 estimate — no
+      overflow cut needed); `shell_templ.go` (45), `htmx.min.js` (1, ~51 KB) and `htmx.LICENSE`
+      (13) reported beside it, not inside; `internal/httpapi/server_test.go` (287 added / 35
+      deleted) reported separately as test lines; no `go.sum` change (no new Go module — htmx is
+      vendored as a static asset, not a dependency). htmx vendored at v2.0.10 (current 2.x stable
+      tag), fetched once from the tagged GitHub raw content, byte sizes (51238, 642) verified
+      against the tagged release's own asset sizes; SHA-256 recorded in the GREEN commit body.
+      **Still open** (out of this apply batch's scope, per the executing agent's own
+      instructions): opening `feat/ui-base-layout` against `main` (rebased on PR 1's merged tip),
+      waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, and confirming
+      `git ls-remote --heads origin feat/ui-base-layout` returns nothing before branching PR 3.
+
+**Deviations** (recorded, not silent):
+- Task 2.1's mutation description and design §8's own test-catalogue entry for
+  `TestUICrossOriginPostIsRefused` are both written against `POST /ui/login` — a route that does
+  not exist until PR 4b (`loginPage`/`loginSubmit` are PR 4b's GREEN, design §3.2, §7's PR 4b
+  row). Implemented the test against `POST /ui` instead: `http.CrossOriginProtection` wraps the
+  *whole* `/ui` subtree before any inner-mux routing happens (design §3.4 — "wraps the whole UI
+  subtree ... a route added later cannot forget it"), so the refusal fires identically for any
+  method+path pair under `/ui`, whether or not that specific pattern is registered yet. Using
+  `/ui` — a leaf that does exist at this tip — proves the same middleware behavior design §8
+  describes without waiting for PR 4b's routes; the design's own route name is stale for this
+  PR's own RED commit, corrected here rather than left unimplementable.
+- Task 2.3's own text says "no `fetch`/`XMLHttpRequest`/`WebSocket`/`eval` scan recorded, not
+  asserted" (matching design §3.8's audit note), but design §3.8's own prose the task paraphrases
+  actually says the scan result *is* "recorded, not asserted" — i.e., the scan is run and its
+  result written down, not skipped. Ran the scan (`rg` over the vendored `htmx.min.js`) and
+  recorded its result in the GREEN commit body: `XMLHttpRequest` (2 matches) and `eval(` (1
+  match) present, by design (htmx uses `XMLHttpRequest`; `allowEval:false` in
+  `layout.templ`'s own `htmx-config` meta neutralizes the `eval` path); no `fetch(` or
+  `WebSocket` found. Implemented per design §3.8's actual meaning, not per the task's own
+  slightly compressed restatement of it.
+- Task 2.5 names `uiMux` as the identifier holding the five leaf patterns; implemented as
+  `newUIMux(d Deps) *http.ServeMux`, a constructor function rather than a bare variable, so
+  `TestUIRootIsNeverRedirectedByTheMux` (task 2.1) can call it directly and inspect
+  `mux.Handler(r)` without needing package-private access to a value scoped inside `Handler`'s
+  own body. Same mux, same five patterns, same behavior — a naming/shape choice for
+  testability, not a deviation from §3.2's routing design.
 
 ---
 
