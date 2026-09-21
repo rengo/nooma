@@ -165,11 +165,16 @@ first view that actually uses it.
       defect §3.2 corrected — stays green here but fails there, confirmed by mutation); registering
       `/ui/` as a subtree pattern instead of the exact leaf `GET /ui/{$}` — the class that let `GET
       /ui` `307`-redirect from the mux itself, before `requireCookie` or any handler ran
-      (`TestUIRootIsNeverRedirectedByTheMux`).
+      (`TestUIRootIsNeverRedirectedByTheMux`). Two cases added at review: a same-origin `POST /ui`
+      answers `405` with `Allow: GET, HEAD` and every security header — catches a header
+      middleware placed inside the mux instead of around it (`TestUISubtreeSetsSecurityHeaders`);
+      and `Handler(d)` end-to-end serves `GET /ui` and `GET /ui/` with no `Location` — catches
+      the outer mount registering only `/ui/` (`TestUIRootIsNeverRedirectedByTheMux`, second
+      subtest; confirmed by mutation, `307 Location: /ui/`).
       Requirement: R1, R3 (spec's cross-origin/handshake scope), R7.
 - [x] **2.2** RED — rename `TestHandlerServesBothSurfaces` → `TestHandlerServesAPIRootAndUIShell`,
       given a `Deps.UI` fixture: `GET /` and `GET /ui` both `200`; the `/ui` body carries the
-      layout (headers, shell paragraph) and PR 2's own shell paragraph — *"Today arrives in a
+      layout (headers) and PR 2's own shell paragraph — *"Today arrives in a
       later PR"* — never a FOCUS/PENDING DIGEST/SYSTEM section or any other vault-shaped content
       (§3.1's PR 2 shell state; this test's own scope is PR 2 through PR 6 only, per §7.2 — it is
       superseded at PR 7 by `TestTodayView_NilTodayReaderAnswers503`, task 7.3).
@@ -265,7 +270,7 @@ first view that actually uses it.
   `mux.Handler(r)` without needing package-private access to a value scoped inside `Handler`'s
   own body. Same mux, same five patterns, same behavior — a naming/shape choice for
   testability, not a deviation from §3.2's routing design.
-- Design §7.1's PR 1 row and §7.2/§8's own prose describe PR 2's shell body as carrying "the
+- Design §7's PR 1 row and §8's testing-strategy row describe PR 2's shell body as carrying "the
   layout (nav, headers)". `layout.templ` ships no `<nav>` in this PR, and neither task 2.2's own
   test nor any other PR 2 test asserts one. Deferred `<nav>` to PR 7 (`feat/ui-today-view`):
   design §7's PR 1 row already conditions it on "once a second route exists", and PR 2 through
@@ -557,8 +562,9 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
 loops (FOCUS's task and load sections) into one shared partial before the tip, recovering their
 near-duplicate markup from within this PR.
 
-**Deferred from PR 2**: add `<nav>` to `layout.templ` (deferred from PR 2) and assert it in the
-shell/Today tests — this is the first PR with a second route for a nav to link to.
+- [ ] **7.0** Deferred from PR 2 — add `<nav>` to `layout.templ` and assert it in the shell/Today
+      tests; this is the first PR with a navigable view for a nav to link to (design §7 PR 1 row,
+      §8 shell row and the §3.1 tree all say PR 7 now).
 
 - [ ] **7.1** RED — `internal/ui`: `TestTodayView_RendersThreeSectionsFromTheModel` — a fixed
       `brain.Today` renders each focus member's id, content and `Score` (two decimals) in rank
