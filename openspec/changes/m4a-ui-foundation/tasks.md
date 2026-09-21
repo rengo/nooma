@@ -154,19 +154,25 @@ first view that actually uses it.
       `Cache-Control`, or the chain wrapped in the wrong order so a `403` escapes with no headers
       (`TestUISubtreeSetsSecurityHeaders`); the cross-origin wrap removed, placed inside
       `requireCookie` instead of outside it, or a bypass pattern added
-      (`TestUICrossOriginPostIsRefused`); wrong content-type, truncated/swapped embedded bytes, or
-      a directory listing served — the `{file...}`/`http.FileServerFS` defect §3.2 already
-      corrected (`TestUIStaticServesStylesheetAndHtmx`); registering `/ui/` as a subtree pattern
-      instead of the exact leaf `GET /ui/{$}` — the class that let `GET /ui` `307`-redirect from
-      the mux itself, before `requireCookie` or any handler ran
+      (`TestUICrossOriginPostIsRefused`); wrong content-type or truncated/swapped embedded bytes,
+      caught by driving `newUIMux`'s three registered leaves through `Handler(d)`
+      (`TestUIStaticServesStylesheetAndHtmx`) — this test does **not** catch a directory listing
+      served by `Assets()` itself, because `newUIMux`'s leaves never route a bare `/ui/static` or
+      `/ui/static/` into `Assets()` at all; that construction is pinned separately, directly
+      against `Assets()`, by `internal/ui/assets_test.go`'s
+      `TestAssetsServesTheThreeEmbeddedLeaves` (mutation: reverting `Assets()` to
+      `http.StripPrefix("/ui/static/", http.FileServerFS(sub))` — the `{file...}`/`FileServerFS`
+      defect §3.2 corrected — stays green here but fails there, confirmed by mutation); registering
+      `/ui/` as a subtree pattern instead of the exact leaf `GET /ui/{$}` — the class that let `GET
+      /ui` `307`-redirect from the mux itself, before `requireCookie` or any handler ran
       (`TestUIRootIsNeverRedirectedByTheMux`).
       Requirement: R1, R3 (spec's cross-origin/handshake scope), R7.
 - [x] **2.2** RED — rename `TestHandlerServesBothSurfaces` → `TestHandlerServesAPIRootAndUIShell`,
       given a `Deps.UI` fixture: `GET /` and `GET /ui` both `200`; the `/ui` body carries the
-      layout (nav, headers) and PR 2's own shell paragraph — *"Today arrives in a later PR"* —
-      never a FOCUS/PENDING DIGEST/SYSTEM section or any other vault-shaped content (§3.1's PR 2
-      shell state; this test's own scope is PR 2 through PR 6 only, per §7.2 — it is superseded at
-      PR 7 by `TestTodayView_NilTodayReaderAnswers503`, task 7.3).
+      layout (headers, shell paragraph) and PR 2's own shell paragraph — *"Today arrives in a
+      later PR"* — never a FOCUS/PENDING DIGEST/SYSTEM section or any other vault-shaped content
+      (§3.1's PR 2 shell state; this test's own scope is PR 2 through PR 6 only, per §7.2 — it is
+      superseded at PR 7 by `TestTodayView_NilTodayReaderAnswers503`, task 7.3).
       Mutation: a shell that leaks Today's own markup before `TodayReader` exists; a shell missing
       the layout or the five security headers.
       Requirement: R5 (the shell is not Today yet); design §3.1, §7.2, §8.
@@ -259,6 +265,13 @@ first view that actually uses it.
   `mux.Handler(r)` without needing package-private access to a value scoped inside `Handler`'s
   own body. Same mux, same five patterns, same behavior — a naming/shape choice for
   testability, not a deviation from §3.2's routing design.
+- Design §7.1's PR 1 row and §7.2/§8's own prose describe PR 2's shell body as carrying "the
+  layout (nav, headers)". `layout.templ` ships no `<nav>` in this PR, and neither task 2.2's own
+  test nor any other PR 2 test asserts one. Deferred `<nav>` to PR 7 (`feat/ui-today-view`):
+  design §7's PR 1 row already conditions it on "once a second route exists", and PR 2 through
+  PR 6 render only the one shell route (§7.2's tip table) — Today, PR 7's own page, is the first
+  route a nav would actually link to. Added a note to PR 7's own task list (below) so the nav
+  lands there instead of silently staying missing.
 
 ---
 
@@ -543,6 +556,9 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
 **Overflow cut** (if over 400, no PR 8 to receive it): factor `today.templ`'s two `AllKinds()`
 loops (FOCUS's task and load sections) into one shared partial before the tip, recovering their
 near-duplicate markup from within this PR.
+
+**Deferred from PR 2**: add `<nav>` to `layout.templ` (deferred from PR 2) and assert it in the
+shell/Today tests — this is the first PR with a second route for a nav to link to.
 
 - [ ] **7.1** RED — `internal/ui`: `TestTodayView_RendersThreeSectionsFromTheModel` — a fixed
       `brain.Today` renders each focus member's id, content and `Score` (two decimals) in rank
