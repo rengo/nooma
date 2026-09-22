@@ -487,18 +487,26 @@ body, not hidden.
       worktree at tip `7cb1de1` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
       `schema-golden-clean`, `internal/core` coverage 99% unchanged — this PR touches no
       `internal/core` file — seven-target cross-compile matrix all OK, L4 e2e 141.8s,
-      `templ-clean` clean). **Final counts after both Judgment Day rounds** (`git diff --numstat
+      `templ-clean` clean). **Final counts after four Judgment Day rounds** (`git diff --numstat
       origin/main..HEAD`, churn = added+deleted, the chain's own rule: `_test.go` and
-      `openspec/` excluded from impl+docs): impl+docs **219** (`cookie.go` 90, `server.go`
-      +14/-9, ADR-0028 89, `docs/adr/README.md` 1, `docs/06-harness.md` 8,
-      `test/conformance/doc.go` +7/-1) — at the ~220 budget, well under the 400 ceiling; tests
-      **629**; `openspec/` bookkeeping **109** (`design.md` 32, `tasks.md` 77), reported
-      separately as in every earlier link. An earlier report of "321 impl+docs" folded the
-      `openspec/` churn into that bucket, which no other link in this chain does; corrected here.
-      A later report of "102" for that same `openspec/` bookkeeping figure undercounted it —
-      two independent Judgment Day reviewers recomputed `git diff --numstat origin/main..HEAD --
-      openspec/` at tip `068ad44` and got 109 (`design.md` +22/-10 = 32, `tasks.md` +67/-10 = 77);
-      corrected here. **Still open** (out of this apply batch's scope, per the executing
+      `openspec/` excluded from impl+docs). Recomputed here at tip `fe5a9d3` — the commit
+      immediately before this bookkeeping edit, to break the self-reference an edit to this same
+      file would otherwise introduce into its own diffstat: impl+docs **238** (`cookie.go` 107,
+      `server.go` +14/-9 = 23, `docs/adr/0028-ui-cookie-handshake.md` 89,
+      `docs/adr/README.md` 1, `docs/06-harness.md` 10, `test/conformance/doc.go` +7/-1 = 8) —
+      **over the ~220 budget** (by 18 lines, ~8%), still well under the 400-line ceiling; the
+      overage is round 4's own doc-comment correction pass, landed across `cookie.go` and
+      `docs/06-harness.md` once the gate itself was rewritten, not new production behaviour.
+      Tests **863** (`cookie_test.go` 69, `server_test.go` 197/13 = 210,
+      `httpapi_secret_compare_test.go` 584 — this file itself **shrank**, 588 → 584, the
+      whitelist-template rewrite's own stated goal, even though the PR's total test churn against
+      `origin/main` still counts its full replacement diff); `openspec/` bookkeeping **160**
+      (`design.md` 47/10 = 57, `tasks.md` 93/10 = 103), reported separately as in every earlier
+      link. Three earlier reports in this same paragraph (321, then 219 corrected from 102) each
+      undercounted or miscategorized against the tip they were taken at; this one is the fourth,
+      taken at a later tip after this gate's own fourth rewrite, and is expected to need
+      recomputing again if `openspec/` bookkeeping is edited after it, for the same self-reference
+      reason stated above. **Still open** (out of this apply batch's scope, per the executing
       agent's own instructions): opening `feat/httpapi-ui-cookie-middleware` against `main`,
       waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch
       deletion before branching PR 4b.
