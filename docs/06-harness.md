@@ -285,6 +285,14 @@ break without noticing eight months from now, with the best intentions.
 code, or change doc 02 **and** the corresponding ADR in the same PR. Weakening the test so it
 passes is not one of the two.
 
+**A second, narrower class lives in the same package, deliberately not given an `I##` number**:
+an ADR-anchored structural gate, proving a shape a specific `Accepted` ADR requires rather than a
+doc-02 invariant. `test/conformance/httpapi_secret_compare_test.go` is the first of these —
+`requireCookie` and `requireToken` (ADR-0007, ADR-0028) must each reach
+`crypto/subtle.ConstantTimeCompare`, and the decode step must have no signature through which an
+early-return-on-error could be written — proven on the AST, the same maintenance rule applying:
+fix the code, or supersede the ADR in the same PR.
+
 ---
 
 ## 5. Golden sets and fixtures
