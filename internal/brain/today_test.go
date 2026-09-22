@@ -250,10 +250,19 @@ func TestToday_FocusMemberScoreCarriesANaNWithoutCoercion(t *testing.T) {
 // one that never called Today, one that called it repeatedly — so
 // TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical can compare
 // what each run's real assembleDigest sends.
-func newDigestParityFixture(t *testing.T) (*undeliveredTriggers, *digestUnits, *memrepo.PendingQuestions, *memrepo.DecisionLog, *memrepo.State, *memrepo.Config) {
+//
+// Every port the digest reads is backed by a real memrepo implementation
+// here, not digest_test.go's own inert undeliveredTriggers/digestUnits
+// stubs — those replay a fixed slice regardless of what Surface writes to
+// them, which would make a write performed during a Today request unable
+// to ever reach the later assembleDigest read, and the parity test exists
+// to detect exactly that write. seedTodayTrigger seeds through the same
+// Create+Fire production write path test/conformance's I27 guard uses.
+func newDigestParityFixture(t *testing.T) (*memrepo.Triggers, *memrepo.Units, *memrepo.PendingQuestions, *memrepo.DecisionLog, *memrepo.State, *memrepo.Config) {
 	t.Helper()
-	triggers := &undeliveredTriggers{pending: []ports.DueTrigger{digestTrigger("trg-1", "u-1", "renew the passport")}}
-	units := &digestUnits{byID: map[string]focus.Candidate{"u-1": {ID: "u-1", Weight: 1}}}
+	triggers := memrepo.NewTriggers()
+	units := memrepo.NewUnits()
+	seedTodayTrigger(t, triggers, units, "trg-1", "u-1", "renew the passport", digestNow.Add(-time.Hour))
 	questions := queuedQuestions(t, question("q-1", digestQuestionNow, "plan the offsite", "the travel budget"))
 	log := memrepo.NewDecisionLog()
 	return triggers, units, questions, log, memrepo.NewState(), memrepo.NewConfig()
@@ -266,6 +275,15 @@ func newDigestParityFixture(t *testing.T) (*undeliveredTriggers, *digestUnits, *
 // assembleDigest run over a zero-request baseline — both seeded the same
 // way from newDigestParityFixture, so the only difference between the two
 // runs is whether Today was ever called.
+//
+// newDigestParityFixture backs every port with a real memrepo
+// implementation, so this test can actually detect a write Today makes
+// during those five requests, on any of TriggerRepo, PendingQuestionRepo,
+// StateRepo, ConfigRepo or DecisionLog — not just replay a fixed slice
+// past it. A TriggerRepo.Surface or PendingQuestionRepo.MarkAsked
+// injected into todayRunner.at both turn this red (confirmed by hand,
+// reverted before commit); TriggerRepo write-avoidance specifically is
+// also I27's job (test/conformance), which this test does not replace.
 func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) {
 	ctx := context.Background()
 
