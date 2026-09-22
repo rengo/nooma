@@ -324,14 +324,28 @@ own count is unchanged from the proposal's estimate.
       identical to the UI-mounted case). Impl+docs measured at 35 lines (`cmd/nooma/serve.go`
       33, `docs/01-architecture.md` 2 — `git diff --numstat` on the GREEN commit, well under
       ≤110, no overflow cut needed); test lines reported separately:
-      `internal/httpapi/server_test.go` +44 (GREEN commit); `test/e2e/serve_test.go` +88/-2,
-      `cmd/nooma/serve_test.go` +28 new file (RED commit). `make check` green after the GREEN
-      commit; `make check-all` green in an isolated worktree at tip `78d85ab` (lint 0 issues, go
-      vet, L1/L2 race+shuffle, build, L3 integration, `schema-golden-clean`, `internal/core`
-      coverage 99% unchanged, seven-target cross-compile matrix all OK, L4 e2e green, `templ-clean`
-      clean). **Still open** (out of this apply batch's scope): opening `feat/serve-no-ui` against
-      `main`, waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming
-      branch deletion before branching PR 4a.
+      `internal/httpapi/server_test.go` +44 (GREEN commit); `test/e2e/serve_test.go` +60/-2,
+      `cmd/nooma/serve_test.go` +30 new file (RED commit — corrected here; the figures originally
+      recorded in this line, `test/e2e/serve_test.go` +88/-2 and `cmd/nooma/serve_test.go` +28,
+      were wrong: `git diff --numstat 42f2644..46d3fdc` on the actual RED commit gives +60/-2 and
+      +30/-0). `make check` green after the GREEN commit; `make check-all` green in an isolated
+      worktree at tip `78d85ab` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
+      `schema-golden-clean`, `internal/core` coverage 99% unchanged, seven-target cross-compile
+      matrix all OK, L4 e2e green, `templ-clean` clean). **Still open** (out of this apply batch's
+      scope): opening `feat/serve-no-ui` against `main`, waiting for required contexts, merging
+      only on `mergeStateStatus: CLEAN`, confirming branch deletion before branching PR 4a.
+
+      **Judgment-day fixes, post-GREEN** (recorded, not silent): `1fd11f9` adds
+      `fs.PrintDefaults()` to `runServe`'s `fs.Usage` so `nooma serve -h` actually shows
+      `--no-ui` and its precedence wording, plus `TestServeUsageShowsNoUIPrecedence`
+      (`cmd/nooma/serve.go` +8/-1, `cmd/nooma/serve_test.go` +33/-1). `2ddb1ea` adds a third
+      `TestServeNoUI` case composing `--no-ui` with a configured token end to end — R4's second
+      arm, until now only verified by hand (`test/e2e/serve_test.go` +46/-4). Final split at this
+      branch's tip against `main` (`42f2644`), `git diff --numstat 42f2644..HEAD`: impl+docs 42
+      lines (`cmd/nooma/serve.go` 40, `docs/01-architecture.md` 2 — churn, added+deleted per
+      file, the same convention this block already used), well under ≤110, no overflow cut
+      needed; test lines 210 (`cmd/nooma/serve_test.go` 62, `test/e2e/serve_test.go` 104,
+      `internal/httpapi/server_test.go` 44).
 
 **Deviations** (recorded, not silent):
 - Task 3.1's RED commit was not written as RED. Probed against PR 2's merged tree before writing
