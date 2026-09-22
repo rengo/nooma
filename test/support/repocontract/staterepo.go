@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -104,6 +105,90 @@ func RunLastHypothesisAt(t *testing.T, newRepo func(t *testing.T) ports.StateRep
 		if got == nil || !got.Equal(newer.RecordedAt) {
 			t.Errorf("LastHypothesisAt() = %v, want %v (the greatest recorded_at, not the last "+
 				"row appended)", got, newer.RecordedAt)
+		}
+	})
+}
+
+// RunLatestEnergy runs the ports.StateRepo.LatestEnergy contract against a
+// fresh repository instance, built by newRepo for every subtest.
+// ports.StateRepo declares no method that writes an energy reading —
+// OpenHypothesis always leaves energy NULL (design §4.4) — so seed writes
+// one current_state row directly against the repo newRepo just built, from
+// a (level, recordedAt, source) triple; each caller of this suite supplies
+// its own way to do that (memrepo.State.RecordEnergy, or a raw SQL INSERT
+// against the vault).
+//
+// Design §3.6 (owner ruling 2026-09-16): prospection.EnergyReading.Source
+// carries the raw current_state.source value beside Level and RecordedAt.
+//
+// One branch this suite does not exercise: a real energy reading that is
+// older than a newer current_state row OpenHypothesis wrote with energy
+// left NULL (StateRepo.LatestEnergy's own doc comment names why the SQL
+// filters on energy IS NOT NULL rather than taking the newest row
+// unconditionally). memrepo.State cannot host that fixture honestly — it
+// keeps consolidationRows (OpenHypothesis's writes) and energy (seed's
+// writes) in two separate slices with no shared ordering
+// (test/support/memrepo/state.go), so there is no way to interleave a
+// NULL-energy row between two energy rows without restructuring the fake,
+// which is out of this PR's scope. That branch is covered at L3 only:
+// internal/store/sqlite/staterepo_integration_test.go's
+// TestStateRepo_LatestEnergySkipsNewerNullEnergyRow, which writes the NULL
+// row through the real OpenHypothesis, the production path that produces
+// it.
+func RunLatestEnergy(
+	t *testing.T,
+	newRepo func(t *testing.T) ports.StateRepo,
+	seed func(t *testing.T, repo ports.StateRepo, level float64, recordedAt time.Time, source string),
+) {
+	t.Helper()
+
+	t.Run("no reading returns nil", func(t *testing.T) {
+		repo := newRepo(t)
+
+		got, err := repo.LatestEnergy(context.Background())
+		if err != nil {
+			t.Fatalf("LatestEnergy: %v", err)
+		}
+		if got != nil {
+			t.Errorf("LatestEnergy() = %v, want nil", got)
+		}
+	})
+
+	t.Run("pins Source beside Level and RecordedAt for a user-sourced reading", func(t *testing.T) {
+		repo := newRepo(t)
+		at := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
+		seed(t, repo, 0.42, at, ports.StateSourceUser)
+
+		got, err := repo.LatestEnergy(context.Background())
+		if err != nil {
+			t.Fatalf("LatestEnergy: %v", err)
+		}
+		if got == nil {
+			t.Fatalf("LatestEnergy() = nil, want a reading")
+		}
+		want := prospection.EnergyReading{Level: 0.42, RecordedAt: at, Source: ports.StateSourceUser}
+		if got.Level != want.Level || got.Source != want.Source || !got.RecordedAt.Equal(want.RecordedAt) {
+			t.Fatalf("LatestEnergy() = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("pins Source beside Level and RecordedAt for a consolidation-sourced reading, returning the most recent row", func(t *testing.T) {
+		repo := newRepo(t)
+		older := time.Date(2026, 8, 19, 7, 0, 0, 0, time.UTC)
+		newer := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
+		seed(t, repo, 0.10, older, ports.StateSourceUser)
+		seed(t, repo, 0.55, newer, ports.StateSourceConsolidation)
+
+		got, err := repo.LatestEnergy(context.Background())
+		if err != nil {
+			t.Fatalf("LatestEnergy: %v", err)
+		}
+		if got == nil {
+			t.Fatalf("LatestEnergy() = nil, want a reading")
+		}
+		want := prospection.EnergyReading{Level: 0.55, RecordedAt: newer, Source: ports.StateSourceConsolidation}
+		if got.Level != want.Level || got.Source != want.Source || !got.RecordedAt.Equal(want.RecordedAt) {
+			t.Fatalf("LatestEnergy() = %+v, want %+v (the most recent row, source included)", got, want)
 		}
 	})
 }

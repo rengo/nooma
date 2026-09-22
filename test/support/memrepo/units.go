@@ -311,3 +311,36 @@ func (r *Units) LiveFocusCandidates(_ context.Context, ids []string) ([]focus.Ca
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].ID < candidates[j].ID })
 	return candidates, nil
 }
+
+// LiveFocusCandidatesByType implements ports.UnitRepo. The filter is
+// positive (status == pool via unit.Status.IsLive) and by membership in
+// types — I02's rule, the same one LiveFocusCandidates already follows,
+// applied by type instead of by id.
+func (r *Units) LiveFocusCandidatesByType(_ context.Context, types []unit.Type) ([]focus.Candidate, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	wanted := make(map[unit.Type]bool, len(types))
+	for _, t := range types {
+		wanted[t] = true
+	}
+
+	candidates := []focus.Candidate{}
+	for _, u := range r.units {
+		if !u.Status.IsLive() || !wanted[u.Type] {
+			continue
+		}
+		candidates = append(candidates, focus.Candidate{
+			ID:            u.ID,
+			Type:          u.Type,
+			Weight:        u.Weight,
+			DecayRate:     u.WeightDecayRate,
+			LastTouchedAt: u.LastTouchedAt,
+			CreatedAt:     u.CreatedAt,
+			DueAt:         copyTime(u.DueAt),
+		})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].ID < candidates[j].ID })
+	return candidates, nil
+}

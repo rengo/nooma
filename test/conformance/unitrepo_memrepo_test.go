@@ -70,3 +70,13 @@ func TestUnitRepo_MemRepo_LiveFocusCandidates(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_LiveFocusCandidatesByType runs
+// repocontract.RunLiveFocusCandidatesByType — spec R5's one new read
+// (design §3.7) — against the same fake.
+func TestUnitRepo_MemRepo_LiveFocusCandidatesByType(t *testing.T) {
+	repocontract.RunLiveFocusCandidatesByType(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}

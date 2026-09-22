@@ -56,12 +56,20 @@ const LowEnergyMax = 0.5
 // by coincidence, not by relation, and no test ties them.
 const EnergyReadingMaxAgeHours = 24
 
-// EnergyReading is one current_state row as the care gate sees it. Both
-// fields are required because doc 02 §7's gate is "low (recent reading)" —
-// two conditions, not one.
+// EnergyReading is one current_state row as the care gate sees it. Level
+// and RecordedAt are required because doc 02 §7's gate is "low (recent
+// reading)" — two conditions, not one.
+//
+// Source carries the raw current_state.source value ("user" or
+// "consolidation", ports.StateSourceUser/StateSourceConsolidation — doc 02
+// §10's own column list) for display only: LowEnergy reads only Level and
+// RecordedAt and is unchanged by this field (design §3.6, owner ruling
+// 2026-09-16). It is the literal string, never the ports constant, so this
+// package takes no new import and stays pure.
 type EnergyReading struct {
 	Level      float64
 	RecordedAt time.Time
+	Source     string
 }
 
 // LowEnergy reports doc 02 §7's own two-part condition.

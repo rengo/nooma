@@ -671,7 +671,7 @@ no `no-spec-change` label claimed.
 needs first (positive filter, id order); the SQL-vs-`ORDER BY` rationale stays here as its only
 copy.
 
-- [ ] **5.1** RED — `test/support/repocontract/unitrepo.go`: `RunLiveFocusCandidatesByType` — a
+- [x] **5.1** RED — `test/support/repocontract/unitrepo.go`: `RunLiveFocusCandidatesByType` — a
       `pool` unit of each wanted type returns; a `pool` unit of an unwanted type, and an
       `archived`, a `superseded` and an `incomplete` unit of a wanted type, do not; id order;
       empty `types` → empty slice, never an error. Run first against `memrepo` (compile-red, then
@@ -680,13 +680,13 @@ copy.
       `status = 'pool'` I02 requires — fails the day a fifth status arrives; a `LIMIT` added; the
       type filter applied to the wrong column.
       Requirement: R5 — "excludes `superseded`/`incomplete` (I02) ... rather than by count."
-- [ ] **5.2** RED — `test/support/repocontract/staterepo.go`: `RunLatestEnergy` (new, alongside
+- [x] **5.2** RED — `test/support/repocontract/staterepo.go`: `RunLatestEnergy` (new, alongside
       `RunOpenHypothesis`/`RunLastHypothesisAt`) — pins `Source` beside `Level`/`RecordedAt` for a
       `user`-sourced and a `consolidation`-sourced row.
       **Red**: `undefined: prospection.EnergyReading.Source` — the field does not exist yet.
       Requirement: R5's SYSTEM energy line, "carries its source" (design §3.6, owner ruling
       2026-09-16).
-- [ ] **5.3** GREEN — `internal/ports/unitrepo.go`: `LiveFocusCandidatesByType(ctx
+- [x] **5.3** GREEN — `internal/ports/unitrepo.go`: `LiveFocusCandidatesByType(ctx
       context.Context, types []unit.Type) ([]focus.Candidate, error)` (§3.7's exact doc comment:
       bounded by status and type, never by count; `ORDER BY id`; the type filter lives in SQL, not
       re-derived in `brain`). `internal/store/sqlite/unitrepo.go`: the SQL (`WHERE status = ? AND
@@ -694,27 +694,27 @@ copy.
       `LiveFocusCandidates`'s own scan. `test/support/memrepo/units.go`: the fake.
       Verify: `go test ./test/support/repocontract/... ./test/support/memrepo/...`.
       Requirement: R5; design §3.7. This is the **one port change** this slice makes.
-- [ ] **5.4** GREEN — `internal/core/prospection/digest.go`: `EnergyReading` gains `Source
+- [x] **5.4** GREEN — `internal/core/prospection/digest.go`: `EnergyReading` gains `Source
       string` (the raw `current_state.source` value, never the `ports` constant — `prospection`
       stays pure). `internal/store/sqlite/staterepo.go`'s `LatestEnergy` SELECT and `Scan` gain
       `source`; the method's signature is unchanged, so this is a struct widening, not a second
       port change (§3.6's own ruling).
       Verify: `go test ./internal/core/prospection/... ./test/support/repocontract/...`.
       Requirement: R5; design §3.6.
-- [ ] **5.5** `docs/02-cognitive-core.md` §7 — **one sentence, same commit as 5.4**: the energy
+- [x] **5.5** `docs/02-cognitive-core.md` §7 — **one sentence, same commit as 5.4**: the energy
       reading now carries its source (`user` or `consolidation`) for display; the low-energy gate
       (`LowEnergy`) is itself unchanged; cross-reference §10's `current_state` column list, where
       `source` is already named.
       Requirement: R10-class doc parity (non-negotiable #1); `docs-sync` fires on this PR (design
       §4's correction to an earlier claim that no PR touched `internal/core`).
-- [ ] **5.6** `testdata/schema/store_api.golden` — regenerate; diff limited to
+- [x] **5.6** `testdata/schema/store_api.golden` — regenerate; diff limited to
       `LiveFocusCandidatesByType`'s one new line.
       Verify: `make store-api-golden && git diff --stat testdata/schema/store_api.golden`.
       Requirement: R5.
-- [ ] **5.7** L3: `EXPLAIN QUERY PLAN` on `LiveFocusCandidatesByType` names the status index if
+- [x] **5.7** L3: `EXPLAIN QUERY PLAN` on `LiveFocusCandidatesByType` names the status index if
       one exists.
       Requirement: design §8's L3 row.
-- [ ] Verify (PR-level): `GET /ui` at this tip is unchanged from PR 4b's own row on both arms —
+- [x] Verify (PR-level): `GET /ui` at this tip is unchanged from PR 4b's own row on both arms —
       PR 5 touches no `internal/httpapi`/`internal/ui` file (§7.2's PR 5 row: "None new for `/ui`'s
       own HTTP state"). No existing HTTP test is modified; `RunLiveFocusCandidatesByType` and
       `RunLatestEnergy` cover the new read, not the route. `make check-all` in an isolated
@@ -722,6 +722,119 @@ copy.
       target) has the doc 02 §7 delta to find once the PR is open. Open
       `feat/ports-store-live-focus-by-type` against `main`; merge only on `mergeStateStatus:
       CLEAN`; confirm branch deletion before branching PR 6. Target ≤170 impl+docs lines.
+      **Confirmed** at tip `9fa31d0` (RED `25bf9c6`, GREEN `9fa31d0`, branched from
+      `origin/main`'s tip `de314fa`, `feat/httpapi-ui-login-screen`'s merged commit): `GET /ui` is
+      untouched — `git diff --stat de314fa..HEAD -- internal/httpapi internal/ui` is empty, no
+      `_test.go` in either of those packages changed. `TestUnitRepo_MemRepo_LiveFocusCandidatesByType`,
+      `TestUnitRepo_LiveFocusCandidatesByType` (L3), `TestStateRepo_MemRepo_LatestEnergy`,
+      `TestStateRepo_LatestEnergy` (L3) and `TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex`
+      (L3, `EXPLAIN QUERY PLAN` names `idx_units_status_touched`) all pass. `make check` green
+      after each commit (lint 0 issues, go vet, L1/L2 race+shuffle, build). `make check-all` green
+      in an isolated worktree at tip `9fa31d0` (lint 0 issues, go vet, L1/L2 race+shuffle, build,
+      L3 integration, `schema-golden-clean`, `internal/core` coverage 99% (990/992, unchanged —
+      this PR's only `internal/core` touch is `EnergyReading`'s field widening, no new branch),
+      seven-target cross-compile matrix all OK, L4 e2e 144.5s, `templ-clean` clean — PR 5 touches
+      no `internal/ui/*.templ` file, the gate is vacuously clean here). Impl+docs measured at
+      **155 lines** (`git diff --numstat origin/main..HEAD`, churn = added+deleted, excluding
+      `_test.go` and `openspec/` per this chain's own convention): `internal/ports/unitrepo.go`
+      23, `internal/store/sqlite/unitrepo.go` 103, `internal/store/sqlite/staterepo.go` 11,
+      `internal/core/prospection/digest.go` 14, `docs/02-cognitive-core.md` 3,
+      `testdata/schema/store_api.golden` 1 — well under the ~170 budget (design's own prediction
+      that `scanCandidate`'s factoring would keep this lower than the proposal's ~250 estimate
+      holds; no overflow cut needed, so the doc-comment trim named above was not applied). Test
+      lines reported separately: **283** (`test/support/repocontract/unitrepo.go` 73,
+      `test/support/repocontract/staterepo.go` 70, `test/support/memrepo/units.go` 33 — the fake,
+      not literally `_test.go`-suffixed but test-support infrastructure per design's own RED/GREEN
+      column split, reported as tests rather than against the impl+docs budget —
+      `internal/store/sqlite/staterepo_integration_test.go` 35,
+      `internal/store/sqlite/unitrepo_integration_test.go` 42,
+      `test/conformance/staterepo_memrepo_test.go` 20, `test/conformance/unitrepo_memrepo_test.go`
+      10). **Still open** (out of this apply batch's scope, per the executing agent's own
+      instructions): opening `feat/ports-store-live-focus-by-type` against `main`, waiting for
+      required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch deletion
+      before branching PR 6.
+- [x] **Judgment-day fix round** (reviewer-confirmed, addressed after the Confirmed tip above, at
+      `25efcf6`): one WARNING and two SUGGESTIONs.
+      - WARNING — `LatestEnergy`'s own doc comment names why its SQL filters on
+        `energy IS NOT NULL` (a newer `OpenHypothesis` row would otherwise shadow the last real
+        reading), but nothing tested that branch; a reviewer deleted the `WHERE` clause and the
+        full `-tags=integration` suite stayed green. Fixed by commit `d50514c`:
+        `TestStateRepo_LatestEnergySkipsNewerNullEnergyRow`
+        (`internal/store/sqlite/staterepo_integration_test.go`) seeds an older real-energy row via
+        `seedEnergyReading` and a newer NULL-energy row via the real `OpenHypothesis`, asserting
+        `LatestEnergy` still returns the older reading. Mutation proof: reverting `WHERE energy IS
+        NOT NULL` and rerunning the new test alone failed with `sql: Scan error on column index 0,
+        name "energy": converting NULL to float64 is unsupported`; reverted immediately after
+        (`git diff --stat` empty before committing).
+      - SUGGESTION — `RunLiveFocusCandidatesByType` had a case for a type not requested and for an
+        empty/nil types set, but none for a requested type with zero live matches (the branch where
+        the SQL's `IN (...)` actually runs and returns nothing, as opposed to the nil/empty-types
+        short circuit that never reaches the query). Fixed by commit `25efcf6`: a new subtest in
+        `test/support/repocontract/unitrepo.go` asserting a non-nil empty slice, catching a mutation
+        that returns `nil` instead of `[]focus.Candidate{}` once `len(types) > 0`.
+      - SUGGESTION — `TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex` asserted
+        `EXPLAIN QUERY PLAN` against a hand-copied SQL literal rather than the query
+        `LiveFocusCandidatesByType` actually builds. Fixed by commit `25efcf6`: extracted
+        `buildLiveFocusCandidatesByTypeQuery` (`internal/store/sqlite/unitrepo.go`, same
+        placeholder/args construction, behavior unchanged) so the method and the test both call it —
+        both live in package `sqlite`, so no interface contortion was needed to reach it.
+      - `make check` green after each of the two fix commits; `make check-all` at the final tip in
+        an isolated worktree (see below).
+      - Churn **as of `25efcf6`** (`git diff --numstat origin/main..HEAD`, same convention as the
+        Confirmed paragraph above — churn = added+deleted, excluding `_test.go`,
+        `test/support/repocontract/**`, `test/support/memrepo/**` and `openspec/` from impl+docs):
+        impl+docs **167 lines** (`docs/02-cognitive-core.md` 3, `internal/core/prospection/digest.go`
+        14, `internal/ports/unitrepo.go` 23, `internal/store/sqlite/staterepo.go` 11,
+        `internal/store/sqlite/unitrepo.go` 115, `testdata/schema/store_api.golden` 1); tests
+        **371 lines** (`internal/store/sqlite/staterepo_integration_test.go` 78,
+        `internal/store/sqlite/unitrepo_integration_test.go` 46,
+        `test/conformance/staterepo_memrepo_test.go` 20, `test/conformance/unitrepo_memrepo_test.go`
+        10, `test/support/memrepo/units.go` 33, `test/support/repocontract/staterepo.go` 85,
+        `test/support/repocontract/unitrepo.go` 99); `openspec/changes/m4a-ui-foundation/tasks.md`
+        **80 lines**, measured immediately before this bookkeeping edit.
+
+**Deviations** (recorded, not silent):
+- `RunLatestEnergy`'s signature is `RunLatestEnergy(t, newRepo, seed)`, not the plain
+  `RunLatestEnergy(t, newRepo)` shape every other `repocontract.Run*` function in this file uses.
+  `ports.StateRepo` declares no method that writes an energy reading — `OpenHypothesis` always
+  leaves `energy` NULL (design §4.4) — so there is no interface call this suite could make to seed
+  a `(level, recordedAt, source)` row for either implementation. `seed` lets each caller supply its
+  own write path: `test/conformance/staterepo_memrepo_test.go` type-asserts to `*memrepo.State`
+  and calls its existing test-only `RecordEnergy`; `internal/store/sqlite/staterepo_integration_test.go`
+  runs a raw SQL `INSERT INTO current_state` against the vault, the same shape
+  `unitrepo_integration_test.go`'s `seedRawUnit` already established for a port with no matching
+  write method. Both `newRepo` closures still open a fresh vault/fake per subtest, preserving every
+  other `Run*` function's isolation guarantee.
+- Task 5.1's text says "Run first against `memrepo` (compile-red, then a stub returning nothing)."
+  The RED commit does not add a stub: `repo.LiveFocusCandidatesByType(...)` in
+  `RunLiveFocusCandidatesByType`, called against `repo` typed as the `ports.UnitRepo` interface,
+  fails to compile on its own (`ports.UnitRepo has no field or method LiveFocusCandidatesByType`)
+  without touching the interface at all — the same class of compile-red task 5.2 independently
+  describes for `EnergyReading.Source`. Adding a stub first and only widening the interface in the
+  GREEN commit would have meant a second, unrecorded intermediate state; going straight from "the
+  interface doesn't declare the method" (RED) to "the interface declares it, every implementation
+  answers it" (GREEN) is the same net behavior with one fewer undocumented step, and the RED
+  commit's own body states this exact reason, reproduced from an isolated worktree at that commit.
+- Task 5.7 is listed after task 5.6 in this file and after the GREEN commit in design §7's own PR
+  chain table; implemented in the GREEN commit rather than a separate one, since
+  `TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex` calls the concrete `*UnitRepo` method
+  directly and has no meaningful RED state of its own (it is not part of either compile-red cause
+  task 5.1/5.2 name) — adding it as a third commit would have split one deliverable read model
+  across three commits for no strict-TDD reason.
+- `store_api.golden`'s one new line is counted inside the ~155 impl+docs figure above, not reported
+  as a test line: it is a committed surface-tracking fixture regenerated by `make
+  store-api-golden`, closer to a doc delta than to test code, and this PR's own overflow-cut clause
+  treats it as part of the same deliverable as the port method it records.
+- `RunLatestEnergy`'s "older energy row shadowed by a newer NULL-energy `OpenHypothesis` row"
+  branch is not covered by the shared `repocontract` suite, unlike every other case that suite
+  states. `memrepo.State` keeps `OpenHypothesis`'s writes (`consolidationRows`) and energy readings
+  (`energy`) in two separate slices with no shared ordering, so there is no way to interleave a
+  NULL-energy row between two energy rows without restructuring the fake — out of this PR's scope
+  (the fix round did not touch `test/support/memrepo/state.go`). Coverage for that branch lives at
+  L3 only: `internal/store/sqlite/staterepo_integration_test.go`'s
+  `TestStateRepo_LatestEnergySkipsNewerNullEnergyRow`, which writes the NULL row through the real
+  `OpenHypothesis`. `RunLatestEnergy`'s own doc comment in `test/support/repocontract/staterepo.go`
+  states this explicitly, naming where the coverage lives instead.
 
 ---
 

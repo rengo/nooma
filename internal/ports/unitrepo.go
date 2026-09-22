@@ -15,7 +15,7 @@ import (
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Twelve methods, and two absences that are deliberate:
+// Thirteen methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -199,6 +199,27 @@ type UnitRepo interface {
 	// already expects a nil *focus.Candidate for that case. That is the
 	// caller's obligation, not something this signature can enforce.
 	LiveFocusCandidates(ctx context.Context, ids []string) ([]focus.Candidate, error)
+
+	// LiveFocusCandidatesByType returns every unit.StatusPool unit whose Type
+	// is among types, as focus.Candidate, ordered by id. An empty types
+	// returns an empty slice, never an error — LiveFocusCandidates' own
+	// posture, and what focus.Types(k) returns for an unknown Kind.
+	//
+	// Bounded by status and type, never by count: focus.Priority cannot be
+	// expressed as an ORDER BY (LiveFocusCandidates' doc comment, above), so a
+	// LIMIT here would drop a high-urgency low-weight unit before the ranking
+	// ever saw it. The ranking stays in focus.Rank; ORDER BY id exists only so
+	// two runs over one vault agree.
+	//
+	// This is an unbounded read — O(live units of those types) per call, no
+	// paging — LiveDecayStates' own shape and its own named risk.
+	//
+	// types is a []unit.Type, not a status: CountLiveByType's own ruling
+	// applies — unit.Type has no live/non-live axis, so this does not reopen
+	// the "no List(status)" rule. The name carries both halves, UnitRepo's own
+	// convention: Live is the status, FocusCandidates is the shape, ByType is
+	// the bound.
+	LiveFocusCandidatesByType(ctx context.Context, types []unit.Type) ([]focus.Candidate, error)
 }
 
 // Sentinel errors ports.UnitRepo implementations return — design D5.

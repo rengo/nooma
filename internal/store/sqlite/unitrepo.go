@@ -461,30 +461,9 @@ func (r *UnitRepo) LiveFocusCandidates(ctx context.Context, ids []string) ([]foc
 
 	candidates := make([]focus.Candidate, 0, len(ids))
 	for rows.Next() {
-		var (
-			c                        focus.Candidate
-			typ                      string
-			lastTouchedAt, createdAt string
-			dueAt                    sql.NullString
-		)
-		if err := rows.Scan(&c.ID, &typ, &c.Weight, &c.DecayRate, &lastTouchedAt, &createdAt, &dueAt); err != nil {
+		c, err := scanCandidate(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan focus candidate: %w", err)
-		}
-		if c.Type, err = unit.ParseType(typ); err != nil {
-			return nil, fmt.Errorf("unit %q: %w", c.ID, err)
-		}
-		if c.LastTouchedAt, err = time.Parse(unitTimeLayout, lastTouchedAt); err != nil {
-			return nil, fmt.Errorf("unit %q: last_touched_at: %w", c.ID, err)
-		}
-		if c.CreatedAt, err = time.Parse(unitTimeLayout, createdAt); err != nil {
-			return nil, fmt.Errorf("unit %q: created_at: %w", c.ID, err)
-		}
-		if dueAt.Valid {
-			t, err := time.Parse(unitTimeLayout, dueAt.String)
-			if err != nil {
-				return nil, fmt.Errorf("unit %q: due_at: %w", c.ID, err)
-			}
-			c.DueAt = &t
 		}
 		candidates = append(candidates, c)
 	}
@@ -492,4 +471,94 @@ func (r *UnitRepo) LiveFocusCandidates(ctx context.Context, ids []string) ([]foc
 		return nil, fmt.Errorf("select focus candidates: %w", err)
 	}
 	return candidates, nil
+}
+
+// LiveFocusCandidatesByType implements ports.UnitRepo. The SQL filters
+// positively on status = 'pool' (I02) and type IN (...), never a negative
+// exclusion, and orders by id — the same deterministic tie-break
+// LiveFocusCandidates uses and not a ranking (see the port's own doc
+// comment). Shares scanCandidate with LiveFocusCandidates so the two reads
+// cannot disagree about a column (design §3.7).
+func (r *UnitRepo) LiveFocusCandidatesByType(ctx context.Context, types []unit.Type) ([]focus.Candidate, error) {
+	if len(types) == 0 {
+		return []focus.Candidate{}, nil
+	}
+
+	query, args := buildLiveFocusCandidatesByTypeQuery(types)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("select focus candidates by type: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	candidates := []focus.Candidate{}
+	for rows.Next() {
+		c, err := scanCandidate(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan focus candidate: %w", err)
+		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select focus candidates by type: %w", err)
+	}
+	return candidates, nil
+}
+
+// buildLiveFocusCandidatesByTypeQuery renders LiveFocusCandidatesByType's
+// parameterized SQL and its bound args for the positive status = 'pool' AND
+// type IN (...) filter (I02). Factored out of the method itself so
+// TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex can run EXPLAIN
+// QUERY PLAN against the exact query production sends — both live in
+// package sqlite, so the test calls this function directly rather than
+// keeping its own hand-copied literal that could drift from it unnoticed.
+func buildLiveFocusCandidatesByTypeQuery(types []unit.Type) (string, []any) {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(types)), ",")
+	args := make([]any, 0, len(types)+1)
+	args = append(args, string(unit.StatusPool))
+	for _, t := range types {
+		args = append(args, string(t))
+	}
+
+	query := `SELECT id, type, weight, weight_decay_rate, last_touched_at, created_at, due_at
+		 FROM units
+		 WHERE status = ? AND type IN (` + placeholders + `)
+		 ORDER BY id`
+	return query, args
+}
+
+// scanCandidate reads one units row into a focus.Candidate, in the exact
+// column order LiveFocusCandidates and LiveFocusCandidatesByType both
+// SELECT (id, type, weight, weight_decay_rate, last_touched_at, created_at,
+// due_at) — factored out so the two reads cannot disagree about a column.
+func scanCandidate(row unitRow) (focus.Candidate, error) {
+	var (
+		c                        focus.Candidate
+		typ                      string
+		lastTouchedAt, createdAt string
+		dueAt                    sql.NullString
+	)
+	if err := row.Scan(&c.ID, &typ, &c.Weight, &c.DecayRate, &lastTouchedAt, &createdAt, &dueAt); err != nil {
+		return focus.Candidate{}, err
+	}
+
+	var err error
+	if c.Type, err = unit.ParseType(typ); err != nil {
+		return focus.Candidate{}, fmt.Errorf("unit %q: %w", c.ID, err)
+	}
+	if c.LastTouchedAt, err = time.Parse(unitTimeLayout, lastTouchedAt); err != nil {
+		return focus.Candidate{}, fmt.Errorf("unit %q: last_touched_at: %w", c.ID, err)
+	}
+	if c.CreatedAt, err = time.Parse(unitTimeLayout, createdAt); err != nil {
+		return focus.Candidate{}, fmt.Errorf("unit %q: created_at: %w", c.ID, err)
+	}
+	if dueAt.Valid {
+		t, err := time.Parse(unitTimeLayout, dueAt.String)
+		if err != nil {
+			return focus.Candidate{}, fmt.Errorf("unit %q: due_at: %w", c.ID, err)
+		}
+		c.DueAt = &t
+	}
+
+	return c, nil
 }
