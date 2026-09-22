@@ -479,9 +479,13 @@ body, not hidden.
       `openspec/` excluded from impl+docs): impl+docs **219** (`cookie.go` 90, `server.go`
       +14/-9, ADR-0028 89, `docs/adr/README.md` 1, `docs/06-harness.md` 8,
       `test/conformance/doc.go` +7/-1) — at the ~220 budget, well under the 400 ceiling; tests
-      **629**; `openspec/` bookkeeping **102**, reported separately as in every earlier link.
-      An earlier report of "321 impl+docs" folded the `openspec/` churn into that bucket,
-      which no other link in this chain does; corrected here. **Still open** (out of this apply batch's scope, per the executing
+      **629**; `openspec/` bookkeeping **109** (`design.md` 32, `tasks.md` 77), reported
+      separately as in every earlier link. An earlier report of "321 impl+docs" folded the
+      `openspec/` churn into that bucket, which no other link in this chain does; corrected here.
+      A later report of "102" for that same `openspec/` bookkeeping figure undercounted it —
+      two independent Judgment Day reviewers recomputed `git diff --numstat origin/main..HEAD --
+      openspec/` at tip `068ad44` and got 109 (`design.md` +22/-10 = 32, `tasks.md` +67/-10 = 77);
+      corrected here. **Still open** (out of this apply batch's scope, per the executing
       agent's own instructions): opening `feat/httpapi-ui-cookie-middleware` against `main`,
       waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch
       deletion before branching PR 4b.
