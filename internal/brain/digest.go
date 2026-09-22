@@ -104,7 +104,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, nil
 	}
 
-	items, err := r.digestItems(ctx, pending, history)
+	items, err := digestItems(ctx, r.units, pending, history)
 	if err != nil {
 		return 0, err
 	}
@@ -181,7 +181,14 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 // digestItems turns undelivered triggers into what Carry consumes: a
 // candidate for ranking, and how many digests each has already waited
 // through.
-func (r checkRunner) digestItems(ctx context.Context, pending []ports.DueTrigger, history []ports.Decision) ([]prospection.DigestItem, error) {
+//
+// A package function, not a checkRunner method: Today (today.go) needs
+// the identical read for the identical reason — its own PENDING DIGEST
+// mirrors what assembleDigest would carry — and a second copy on
+// todayRunner would be the same rule in two places, which is how the
+// digest's Carry order and Today's Carry order would drift apart (design
+// §3.6).
+func digestItems(ctx context.Context, units ports.UnitRepo, pending []ports.DueTrigger, history []ports.Decision) ([]prospection.DigestItem, error) {
 	// A trigger with no source unit — a pattern watcher — has no
 	// candidate, and m3b's LiveFocusCandidates doc comment names not
 	// passing it a NULL unit id as the caller's obligation. This is the
@@ -193,7 +200,7 @@ func (r checkRunner) digestItems(ctx context.Context, pending []ports.DueTrigger
 		}
 	}
 
-	candidates, err := r.units.LiveFocusCandidates(ctx, ids)
+	candidates, err := units.LiveFocusCandidates(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("check: focus candidates: %w", err)
 	}

@@ -61,7 +61,7 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 		t.Fatalf("fire trigger: %v", err)
 	}
 	const relID = "rel-1"
-	questions.PendingQuestions.EnsureRelation(t, relID, "same_topic", "u-a", "u-b", "plan the offsite", "book the venue")
+	questions.EnsureRelation(t, relID, "same_topic", "u-a", "u-b", "plan the offsite", "book the venue")
 	if err := questions.PendingQuestions.Create(ctx, ports.PendingQuestion{
 		ID: "q-1", Kind: ports.QuestionKindRelation, RelationID: relID, CreatedAt: now.Add(-time.Hour),
 	}); err != nil {
@@ -70,11 +70,11 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 
 	svc := brain.NewTodayService(fixedClock{now: now}, units, cfg, state, triggers, questions, log)
 
-	beforeUndelivered, err := triggers.Triggers.Undelivered(ctx)
+	beforeUndelivered, err := triggers.Undelivered(ctx)
 	if err != nil {
 		t.Fatalf("Undelivered (before): %v", err)
 	}
-	beforeUnasked, err := questions.PendingQuestions.Unasked(ctx)
+	beforeUnasked, err := questions.Unasked(ctx)
 	if err != nil {
 		t.Fatalf("Unasked (before): %v", err)
 	}
@@ -83,11 +83,11 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 		t.Fatalf("Today: %v", err)
 	}
 
-	afterUndelivered, err := triggers.Triggers.Undelivered(ctx)
+	afterUndelivered, err := triggers.Undelivered(ctx)
 	if err != nil {
 		t.Fatalf("Undelivered (after): %v", err)
 	}
-	afterUnasked, err := questions.PendingQuestions.Unasked(ctx)
+	afterUnasked, err := questions.Unasked(ctx)
 	if err != nil {
 		t.Fatalf("Unasked (after): %v", err)
 	}

@@ -299,6 +299,27 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 	)
 }
 
+// wireToday builds a *brain.TodayService over db. It resolves no
+// provider, wireCheck's own reason: a read-only view calls no model.
+//
+// Wired unconditionally at vault open — never from inside wireScheduler's
+// LLM-gated path, whose resolveConsolidateProviders gate skips
+// NewCheckService on a vault with no LLM bindings for an unrelated
+// reason (design §3.6's own "wireToday must not copy that shape").
+// serve.go's own call site is PR 7's (task 7.7), once ui.Deps.Today
+// exists to receive it.
+func wireToday(db *sqlite.Vault) *brain.TodayService {
+	return brain.NewTodayService(
+		systemClock{},
+		sqlite.NewUnitRepo(db),
+		sqlite.NewConfigRepo(db),
+		sqlite.NewStateRepo(db),
+		sqlite.NewTriggerRepo(db),
+		sqlite.NewPendingQuestionRepo(db),
+		sqlite.NewDecisionLog(db),
+	)
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {
