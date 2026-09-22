@@ -104,11 +104,23 @@ func TestServeAnswersBothSurfaces(t *testing.T) {
 // TestServeNoUI is spec R4's exit criterion, end to end: `--no-ui` and
 // `server.ui: false` each unmount `/ui` on the compiled binary, with
 // `POST /capture` unaffected (design m4a §3.9, §7's PR 3 row).
+//
+// The third case composes R4's second arm end to end: `--no-ui` AND a token
+// configured together, which the first two cases never combine (m4a
+// tasks.md's PR 3 Verify block named this gap; both reviewers had to verify
+// it by hand instead of a test proving it). Mutation that third case
+// catches: `runServe` not passing the resolved token through to
+// `httpapi.Deps` when `noUI` is true — `POST /capture` would then wrongly
+// answer 401 for a valid token, because `requireToken` would have become a
+// no-op instead of checking it; or the unmounted `/ui` falling through to
+// the mux's own 404 instead of `requireToken`'s 401 for that token state
+// (spec R4, `server.go`'s existing token-state truth table).
 func TestServeNoUI(t *testing.T) {
 	cases := []struct {
 		name      string
 		config    string
 		extraArgs []string
+		token     string
 	}{
 		{
 			name:      "--no-ui flag",
@@ -119,10 +131,20 @@ func TestServeNoUI(t *testing.T) {
 			name:   "server.ui: false",
 			config: "server:\n  bind: 127.0.0.1\n  http_port: %d\n  ui: false\n",
 		},
+		{
+			name:      "--no-ui with a token configured",
+			config:    "server:\n  bind: 127.0.0.1\n  http_port: %d\n  auth_token_env: NOOMA_SERVE_NO_UI_TEST_TOKEN\n",
+			extraArgs: []string{"--no-ui"},
+			token:     "no-ui-e2e-token",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.token != "" {
+				t.Setenv("NOOMA_SERVE_NO_UI_TEST_TOKEN", tc.token)
+			}
+
 			home, work := t.TempDir(), t.TempDir()
 			vault := initVault(t, home, work, "pablo.nooma")
 			port := freePort(t)
@@ -135,20 +157,40 @@ func TestServeNoUI(t *testing.T) {
 				t.Fatalf("GET /ui: %v", err)
 			}
 			defer func() { _ = uiResp.Body.Close() }()
-			if uiResp.StatusCode != http.StatusNotFound {
-				t.Errorf("GET /ui = %d, want 404 (no token configured, unmounted like an unknown path)", uiResp.StatusCode)
+			wantUIStatus := http.StatusNotFound
+			if tc.token != "" {
+				wantUIStatus = http.StatusUnauthorized
+			}
+			if uiResp.StatusCode != wantUIStatus {
+				t.Errorf("GET /ui = %d, want %d (unmounted, same status an unknown path gets for this token state)", uiResp.StatusCode, wantUIStatus)
 			}
 
 			captureBody, err := json.Marshal(map[string]string{"text": "pick up the dry cleaning"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			captureResp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/capture", port), "application/json", bytes.NewReader(captureBody))
+			captureReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d/capture", port), bytes.NewReader(captureBody))
+			if err != nil {
+				t.Fatal(err)
+			}
+			captureReq.Header.Set("Content-Type", "application/json")
+			if tc.token != "" {
+				captureReq.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			captureResp, err := http.DefaultClient.Do(captureReq)
 			if err != nil {
 				t.Fatalf("POST /capture: %v", err)
 			}
 			defer func() { _ = captureResp.Body.Close() }()
-			if captureResp.StatusCode != http.StatusServiceUnavailable {
+			if tc.token != "" {
+				// The API still behaves under --no-ui with a token
+				// configured: a valid token must not be rejected. A 503
+				// (no providers configured) is expected and fine — 401
+				// is the only wrong answer here.
+				if captureResp.StatusCode == http.StatusUnauthorized {
+					t.Errorf("POST /capture with a valid token = 401, want anything but 401 (--no-ui must not drop the token)")
+				}
+			} else if captureResp.StatusCode != http.StatusServiceUnavailable {
 				t.Errorf("POST /capture = %d, want %d (Capture is nil — no providers configured; --no-ui must not change this)", captureResp.StatusCode, http.StatusServiceUnavailable)
 			}
 		})
