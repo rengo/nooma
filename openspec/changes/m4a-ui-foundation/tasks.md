@@ -388,14 +388,14 @@ body, not hidden.
 (proposal §8 already argues each in full) rather than restating the reasoning; `requireCookie`,
 `uiCookieName` and the wrap do not move — 4b's handlers depend on all three landing whole here.
 
-- [ ] **4a.1** RED (strict TDD order 2, proposal §6) — `internal/httpapi/server_test.go`:
+- [x] **4a.1** RED (strict TDD order 2, proposal §6) — `internal/httpapi/server_test.go`:
       **invert** `TestOpenRoutesStayOpenRegardlessOfToken`'s `/ui` leg — with a token configured
       and no cookie, `GET /ui` now answers `303 See Other, Location: /ui/login`, carries no vault
       data, sets no cookie; the `/` leg (API root) is untouched at `200`. Rename the test
       `TestOpenRoutesAndUIRoutesUnderAToken`.
       Requirement: R1's own MUST — "a request with no cookie or a wrong one never reaches vault
       data."
-- [ ] **4a.2** RED — `TestUIViewsRequireCookie` — missing cookie, a wrong cookie, and a cookie
+- [x] **4a.2** RED — `TestUIViewsRequireCookie` — missing cookie, a wrong cookie, and a cookie
       that fails `base64.RawURLEncoding` decoding all give byte-identical `GET` responses (`303
       /ui/login`); the right cookie reaches the view; `POST /ui` against `Handler(d)` answers
       `405 Method Not Allowed`, `Allow: GET, HEAD`, no `Set-Cookie`, no body (the mux's own answer
@@ -406,11 +406,11 @@ body, not hidden.
       comparing anyway (§3.3's own timing-oracle argument); a method-agnostic pattern that would
       route `POST` into the view instead of the mux's `405`.
       Requirement: R1, R2.
-- [ ] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
+- [x] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
       (`TestRequireTokenNoOpOnlyOnLoopback`'s own shape).
       Mutation: a cookie check that fires with no token, or does not fire with one.
       Requirement: R1's `Token == ""` case; design §3.2.
-- [ ] **4a.4** GREEN — `internal/httpapi/cookie.go`: `uiCookieName = "nooma_token"`;
+- [x] **4a.4** GREEN — `internal/httpapi/cookie.go`: `uiCookieName = "nooma_token"`;
       `requireCookie(token string) func(http.Handler) http.Handler` — decode the cookie's value,
       compare against `token` with `subtle.ConstantTimeCompare` even on a decode error (never an
       early return), no-op when `token == ""`; wrap the two guarded leaves (`GET /ui`, `GET
@@ -418,7 +418,7 @@ body, not hidden.
       open/guarded split).
       Verify: `go test ./internal/httpapi/...`.
       Requirement: R1, R2; design §3.3.
-- [ ] **4a.5** `docs/adr/0028-ui-cookie-handshake.md` (new, `Accepted`) — the cookie's value is the
+- [x] **4a.5** `docs/adr/0028-ui-cookie-handshake.md` (new, `Accepted`) — the cookie's value is the
       configured token (base64url), compared in constant time; a session cookie, `Path=/ui`,
       `HttpOnly`, `SameSite=Strict`, `Secure` from `r.TLS`; no session table, no logout; every
       non-safe UI request passes `net/http.CrossOriginProtection` with no trusted origins.
@@ -426,7 +426,7 @@ body, not hidden.
       `SameSite=Strict` alone (Q2-C). `docs/adr/README.md` gains the `0028` index row.
       Requirement: R2; design §3.10 (OR6's decided default — a new ADR, not a note inside
       `Accepted` ADR-0007 or ADR-0017).
-- [ ] Verify (PR-level): `GET /ui` at this tip with no token is unchanged, `200` shell — `Token ==
+- [x] Verify (PR-level): `GET /ui` at this tip with no token is unchanged, `200` shell — `Token ==
       ""` keeps `requireCookie` a no-op. With a token configured and no cookie: **`303 Location:
       /ui/login`** (inverted); `/ui/login` itself still `404`s until 4b (N2) — this is the stated,
       accepted gap, not a bug found late. Tests modified for the tip to stay green:
@@ -436,6 +436,42 @@ body, not hidden.
       `feat/httpapi-ui-cookie-middleware` against `main`; the PR body names N2 explicitly; merge
       only on `mergeStateStatus: CLEAN`; confirm branch deletion before branching PR 4b. Target
       ≤220 impl+docs lines.
+      **Confirmed** at tip `7cb1de1` (RED `591de90`, GREEN `7cb1de1`, branched from
+      `feat/serve-no-ui`'s merged tip `75b0175`): `GET /ui` with no token unchanged (`200`, PR 2's
+      shell); with a token configured and no cookie, `303 Location: /ui/login`, no `Set-Cookie`,
+      no vault-shaped body; the right cookie reaches the shell (`200`); `POST /ui` (no route
+      declares it) `405 Method Not Allowed`, `Allow: GET, HEAD`, no `Set-Cookie`, before
+      `requireCookie` ever runs. `TestRequireCookieNoOpOnlyOnLoopback` confirms the no-op holds
+      exactly on the loopback rows of `bindTokenTruthTable`. Tests modified for the tip to stay
+      green: `TestOpenRoutesStayOpenRegardlessOfToken` renamed to
+      `TestOpenRoutesAndUIRoutesUnderAToken` with its `/ui` leg inverted (task 4a.1);
+      `TestHandlerServesAPIRootAndUIShell`/`TestHandlerServesDistinctSurfaces` (both token-less)
+      stay green, unmodified. Impl+docs measured at 185 lines (`git diff --numstat` on the GREEN
+      commit against `origin/main`, excluding `server_test.go`: `cookie.go` 60, `server.go`
+      +14/-9, `docs/adr/0028-ui-cookie-handshake.md` 101, `docs/adr/README.md` 1 — well under the
+      ~220 budget and the 400-line ceiling; no overflow cut needed). Test lines reported
+      separately: `server_test.go` 191 (RED 183 + an 8-line fix landed in the GREEN commit, see
+      Deviations). `make check` green after each commit; `make check-all` green in an isolated
+      worktree at tip `7cb1de1` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
+      `schema-golden-clean`, `internal/core` coverage 99% unchanged — this PR touches no
+      `internal/core` file — seven-target cross-compile matrix all OK, L4 e2e 141.8s,
+      `templ-clean` clean). **Still open** (out of this apply batch's scope, per the executing
+      agent's own instructions): opening `feat/httpapi-ui-cookie-middleware` against `main`,
+      waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch
+      deletion before branching PR 4b.
+
+      **Deviations** (recorded, not silent): design m4a §3.2 and §5 both claim `POST /ui`'s `405`
+      carries "no body". Probed against this tree: `net/http.ServeMux`'s own default
+      method-not-allowed handler is `http.Error`, which writes `"Method Not Allowed\n"` —
+      confirmed by running `TestUIViewsRequireCookie`'s own subtest before adjusting it.
+      `requireCookie` never runs on this path (the mux answers before it), so nothing this PR
+      wrote produced the body — it is `net/http`'s own stdlib behavior design's prose did not
+      probe before asserting. What actually matters for R1 — that nothing vault-shaped leaks
+      through an unauthenticated method mismatch — still holds and is what the test now asserts
+      (the literal generic stdlib message), landed as an 8-line fix inside the GREEN commit
+      (`7cb1de1`) rather than a second RED/GREEN pair, since the RED commit's own claim (405,
+      `Allow: GET, HEAD`, no cookie) was otherwise correct and already red for the right reason —
+      only the "no body" sub-assertion needed correcting once the real response was observed.
 
 ---
 
