@@ -40,11 +40,31 @@ import (
 // subtle.ConstantTimeCompare(...) != 1 comparison, and the middleware must
 // return http.HandlerFunc(<literal>) directly, never a wrapping call.
 //
-// Scope: checks requireCookie and requireToken BY NAME against a template
-// declared here, not a generic scan — not presentedSecret's own body beyond
-// its signature, not a move to another package (fails the template,
-// correctly), never real timing (no test here measures a wall clock; this
-// proves the structure timing-safety depends on, not the timing itself).
+// Both checks resolve their function by NAME through parsePackageFuncDecls,
+// which is exactly what round 5 attacked: that function listed every
+// non-_test.go file in the package and let a later file's declaration win
+// over an earlier one's with no duplicate check at all, so a second
+// declaration of requireCookie or presentedSecret — a decoy shadowing a
+// backdoored real file, or a build-tag-disabled real file shadowing a
+// shipped backdoor, in either direction — silently substituted for the one
+// this gate inspects. parsePackageFuncDecls now fails loudly, by file and
+// name, the moment it sees a second top-level declaration of any name this
+// gate checks; it does not attempt to evaluate build constraints to decide
+// which declaration is "real" — a legitimate same-name GOOS split would
+// need its own explicit, reviewed allowance here, not a guess.
+//
+// Scope: checks requireCookie, requireToken and presentedSecret BY NAME
+// against a template (the first two) or a signature (the third) declared
+// here, not a generic scan — not presentedSecret's own body beyond its
+// signature (a busy loop inside it is invisible to this gate; that stays a
+// reviewed property, not an enforced one), not a move to another package
+// (fails the template, correctly), never real timing (no test here measures
+// a wall clock; this proves the structure timing-safety depends on, not the
+// timing itself). The gate is vacuity-guarded two ways, not one: it fails
+// loudly when it finds NOTHING to check (zero functions in the package, or
+// the checked name absent), and — since round 5 — it fails loudly when it
+// finds TWO declarations of a checked name, rather than silently checking
+// whichever one a file-listing order happened to pick last.
 //
 // Inversion, on purpose: an earlier round required staying sound under
 // in-package helper extraction "in either direction" — moving the compare
@@ -56,7 +76,7 @@ func TestHTTPAPISecretCompareStructure(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	httpapiDir := filepath.Join(repoRoot, "internal", "httpapi")
 
-	funcs, fset := parsePackageFuncDecls(t, httpapiDir)
+	funcs, fset := parsePackageFuncDecls(t, httpapiDir, checkedFuncNames)
 	if len(funcs) == 0 {
 		t.Fatal("found zero top-level functions under internal/httpapi — D10's guard: nothing to check yet")
 	}
@@ -454,11 +474,38 @@ func indent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
+// checkedFuncNames is the set of package-level function names this gate
+// resolves by string lookup — requireCookie's and requireToken's own
+// templates, plus presentedSecret's signature check. Passed into
+// parsePackageFuncDecls so its duplicate-declaration guard knows exactly
+// which names a second declaration would be dangerous for.
+var checkedFuncNames = []string{"requireCookie", "requireToken", "presentedSecret"}
+
 // parsePackageFuncDecls parses every non-test .go file directly inside dir
 // and returns its top-level, non-method function declarations keyed by
 // name, plus the *token.FileSet they were parsed with.
-func parsePackageFuncDecls(t *testing.T, dir string) (map[string]*ast.FuncDecl, *token.FileSet) {
+//
+// parser.ParseFile does not evaluate build constraints, so a file this
+// package's real build excludes — a different GOOS, or one disabled
+// outright by a //go:build tag — is still parsed here and its declarations
+// still counted. That is deliberate for everything this gate does NOT
+// check by name; for the names in checked, a second declaration is exactly
+// the shape round 5 exploited (a decoy shadowing a backdoored real file, or
+// a build-tag-disabled real file shadowing a shipped backdoor, in either
+// direction — map assignment silently keeps whichever file os.ReadDir
+// visits last). t.Fatalf the moment that happens, naming both files and the
+// name, rather than silently resolving to whichever declaration lexical
+// order happened to pick: this test does not attempt to evaluate build
+// constraints to decide which declaration is the "real" one — a legitimate
+// same-name GOOS split would need its own explicit, reviewed allowance
+// here, not a guess.
+func parsePackageFuncDecls(t *testing.T, dir string, checked []string) (map[string]*ast.FuncDecl, *token.FileSet) {
 	t.Helper()
+
+	isChecked := make(map[string]bool, len(checked))
+	for _, name := range checked {
+		isChecked[name] = true
+	}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -467,6 +514,7 @@ func parsePackageFuncDecls(t *testing.T, dir string) (map[string]*ast.FuncDecl, 
 
 	fset := token.NewFileSet()
 	funcs := map[string]*ast.FuncDecl{}
+	declaredIn := map[string]string{}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
 			continue
@@ -480,6 +528,20 @@ func parsePackageFuncDecls(t *testing.T, dir string) (map[string]*ast.FuncDecl, 
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Recv != nil {
 				continue
+			}
+			if isChecked[fn.Name.Name] {
+				if prevPath, dup := declaredIn[fn.Name.Name]; dup {
+					t.Fatalf(
+						"internal/httpapi declares %s twice — %s and %s both declare a "+
+							"top-level func %s; this gate resolves the name by string lookup, "+
+							"so a second declaration (a build-tag-disabled file, a "+
+							"GOOS-suffixed one, or anything else parser.ParseFile still parses "+
+							"regardless of build constraints) could silently substitute for the "+
+							"one actually shipped — refusing to guess which one is real",
+						fn.Name.Name, prevPath, path, fn.Name.Name,
+					)
+				}
+				declaredIn[fn.Name.Name] = path
 			}
 			funcs[fn.Name.Name] = fn
 		}

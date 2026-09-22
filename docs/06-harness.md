@@ -294,6 +294,21 @@ literal, declared template exactly, statement by statement, which is what pins t
 signature through which an early-return-on-error could be written — proven on the AST, the same
 maintenance rule applying: fix the code, or supersede the ADR in the same PR. Any change to either
 handler's shape, refactor or otherwise, means updating the matching template in the same commit.
+It resolves `requireCookie`, `requireToken` and `presentedSecret` by name, so it also fails
+loudly — naming both files — the moment a second top-level declaration of any of those three
+names appears anywhere else in the package, including one a build tag excludes from the real
+build: `go/parser` parses it regardless, and until that guard existed it silently won or lost the
+name lookup with no signal either way.
+
+A sibling gate, `test/conformance/httpapi_ui_wiring_test.go`, checks the wiring
+`httpapi_secret_compare_test.go` does not: that `newUIMux`'s two guarded leaves (`GET /ui`,
+`GET /ui/{$}`) are each wrapped in exactly `requireCookie(d.Token)`, and that its open leaves
+(the three `/ui/static/*` assets) are not wrapped at all — an expected-wiring table matched
+against the AST, so swapping in a different guard function, leaving a guarded leaf unwrapped, or
+wrapping an open one, all fail with expected-vs-found. Scoped to the UI subtree: the API side's
+`apiRoutes` is guarded once, for the whole `guardedMux`, by the single
+`requireToken(d.Token)(guardedMux)` wrap in `Handler` — there is no per-route wiring for a route
+in `apiRoutes` to omit, so the same per-leaf check does not apply there.
 
 ---
 
