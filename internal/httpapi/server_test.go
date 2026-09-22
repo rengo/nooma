@@ -869,6 +869,17 @@ func TestLoginRejectionIsByteIdentical(t *testing.T) {
 // the bound fires before the comparison is ever reached — not merely that an
 // oversized body happens to fail for some unrelated reason. Catches: the
 // MaxBytesReader line removed, or its limit widened past the body sent here.
+//
+// The two leak assertions below are structural guards, not part of that
+// proof: ui.LoginView carries no token field and http.Error writes a fixed
+// string, so no mutation to the bound can make either fail. They are kept
+// for the day one of those two facts changes — do not read a passing run of
+// them as evidence the bound itself holds.
+//
+// The 400 is the status loginSubmit's generic ParseForm-error branch already
+// answers, not a bound-specific contract: giving an oversized body its own
+// 413 would be a legitimate change that fails this test without regressing
+// the bound. Update the expectation in that commit, deliberately.
 func TestLoginSubmitBodyIsBounded(t *testing.T) {
 	t.Parallel()
 
