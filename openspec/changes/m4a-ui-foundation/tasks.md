@@ -388,29 +388,61 @@ body, not hidden.
 (proposal §8 already argues each in full) rather than restating the reasoning; `requireCookie`,
 `uiCookieName` and the wrap do not move — 4b's handlers depend on all three landing whole here.
 
-- [ ] **4a.1** RED (strict TDD order 2, proposal §6) — `internal/httpapi/server_test.go`:
+- [x] **4a.1** RED (strict TDD order 2, proposal §6) — `internal/httpapi/server_test.go`:
       **invert** `TestOpenRoutesStayOpenRegardlessOfToken`'s `/ui` leg — with a token configured
       and no cookie, `GET /ui` now answers `303 See Other, Location: /ui/login`, carries no vault
       data, sets no cookie; the `/` leg (API root) is untouched at `200`. Rename the test
       `TestOpenRoutesAndUIRoutesUnderAToken`.
       Requirement: R1's own MUST — "a request with no cookie or a wrong one never reaches vault
       data."
-- [ ] **4a.2** RED — `TestUIViewsRequireCookie` — missing cookie, a wrong cookie, and a cookie
+- [x] **4a.2** RED — `TestUIViewsRequireCookie` — missing cookie, a wrong cookie, and a cookie
       that fails `base64.RawURLEncoding` decoding all give byte-identical `GET` responses (`303
       /ui/login`); the right cookie reaches the view; `POST /ui` against `Handler(d)` answers
       `405 Method Not Allowed`, `Allow: GET, HEAD`, no `Set-Cookie`, no body (the mux's own answer
       for a method-specific pattern with no match, asserted rather than assumed, §3.2's "method
       posture" correction).
-      Mutation: a branch that distinguishes missing from wrong; `==` instead of
-      `subtle.ConstantTimeCompare`; an early `return unauthorized` on the decode error instead of
-      comparing anyway (§3.3's own timing-oracle argument); a method-agnostic pattern that would
-      route `POST` into the view instead of the mux's `405`.
+      Mutation: a branch that distinguishes missing from wrong; a method-agnostic pattern that
+      would route `POST` into the view instead of the mux's `405`. **Not** `==` instead of
+      `subtle.ConstantTimeCompare`, nor an early `return unauthorized` on the decode error
+      (§3.3's own timing-oracle argument): both produce the identical byte-for-byte response this
+      response-level test observes, and only their timing differs — caught instead by
+      `test/conformance/httpapi_secret_compare_test.go`, added later this same PR (correction
+      recorded here after judgment-day found the original claim did not hold). That gate itself
+      was rewritten a further **four** rounds after that. Round 2: a version that inspected only
+      each target function's own body missed the same bug once moved into a same-package helper
+      (false negative) and separately flagged a same-package helper that still called
+      `subtle.ConstantTimeCompare` (false positive) — closed by reshaping `cookie.go` so the bug
+      has no signature to be written in (`presentedSecret` returns `[]byte`, no `error`, no
+      `http.ResponseWriter`, making the decode-error branch unexpressible **inside
+      `presentedSecret` itself**) and by rewriting the gate to check that signature plus a
+      transitive, same-package call closure instead of one function's own statements. Round 3 (two
+      independently blind reviewers, same PR) found that signature check said nothing about
+      `requireCookie`'s or `requireToken`'s own body: a caller can re-derive the same
+      missing/malformed fact itself and branch on it with an early `return` ahead of
+      `presentedSecret`, compiling, gate-green, response-test-green, and only timing differing —
+      closed by a third check on the same gate, a control-flow rule: the only `return` statement
+      permitted inside the per-request `http.HandlerFunc` literal either function returns had to be
+      guarded by an `if` that REACHES the `subtle.ConstantTimeCompare` comparison. Round 4's blind
+      judges broke that rule three further ways, all compiling, all gate-green: a `||`-joined
+      condition (`cookieLooksBad(r) || subtle.ConstantTimeCompare(...) != 1`) reaches the compare
+      without ever running it, since Go short-circuits `||`; the handler literal wrapped by another
+      same-package function one call away from the `return` the rule inspected; and a conditional
+      busy loop with **no** `return` at all ahead of the compare — a real timing oracle a
+      return-only rule cannot see in the first place. The ruling after round 4: stop blacklisting
+      bug shapes (a property that does not terminate) and whitelist the one permitted GOOD shape
+      instead — a literal template, declared in the gate's own test file, that `requireCookie`'s
+      and `requireToken`'s handler bodies must match exactly, statement by statement, with the
+      compare `if`'s condition required to BE (not merely reach) the comparison. This inverts
+      round 2's own requirement: staying sound under in-package helper extraction "in either
+      direction" was the fix then; under the template it is now the failure — moving the compare or
+      the decode into a helper changes the pinned statement sequence and is expected to fail,
+      deliberately.
       Requirement: R1, R2.
-- [ ] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
+- [x] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
       (`TestRequireTokenNoOpOnlyOnLoopback`'s own shape).
       Mutation: a cookie check that fires with no token, or does not fire with one.
       Requirement: R1's `Token == ""` case; design §3.2.
-- [ ] **4a.4** GREEN — `internal/httpapi/cookie.go`: `uiCookieName = "nooma_token"`;
+- [x] **4a.4** GREEN — `internal/httpapi/cookie.go`: `uiCookieName = "nooma_token"`;
       `requireCookie(token string) func(http.Handler) http.Handler` — decode the cookie's value,
       compare against `token` with `subtle.ConstantTimeCompare` even on a decode error (never an
       early return), no-op when `token == ""`; wrap the two guarded leaves (`GET /ui`, `GET
@@ -418,7 +450,7 @@ body, not hidden.
       open/guarded split).
       Verify: `go test ./internal/httpapi/...`.
       Requirement: R1, R2; design §3.3.
-- [ ] **4a.5** `docs/adr/0028-ui-cookie-handshake.md` (new, `Accepted`) — the cookie's value is the
+- [x] **4a.5** `docs/adr/0028-ui-cookie-handshake.md` (new, `Accepted`) — the cookie's value is the
       configured token (base64url), compared in constant time; a session cookie, `Path=/ui`,
       `HttpOnly`, `SameSite=Strict`, `Secure` from `r.TLS`; no session table, no logout; every
       non-safe UI request passes `net/http.CrossOriginProtection` with no trusted origins.
@@ -426,7 +458,7 @@ body, not hidden.
       `SameSite=Strict` alone (Q2-C). `docs/adr/README.md` gains the `0028` index row.
       Requirement: R2; design §3.10 (OR6's decided default — a new ADR, not a note inside
       `Accepted` ADR-0007 or ADR-0017).
-- [ ] Verify (PR-level): `GET /ui` at this tip with no token is unchanged, `200` shell — `Token ==
+- [x] Verify (PR-level): `GET /ui` at this tip with no token is unchanged, `200` shell — `Token ==
       ""` keeps `requireCookie` a no-op. With a token configured and no cookie: **`303 Location:
       /ui/login`** (inverted); `/ui/login` itself still `404`s until 4b (N2) — this is the stated,
       accepted gap, not a bug found late. Tests modified for the tip to stay green:
@@ -436,6 +468,71 @@ body, not hidden.
       `feat/httpapi-ui-cookie-middleware` against `main`; the PR body names N2 explicitly; merge
       only on `mergeStateStatus: CLEAN`; confirm branch deletion before branching PR 4b. Target
       ≤220 impl+docs lines.
+      **Confirmed** at tip `7cb1de1` (RED `591de90`, GREEN `7cb1de1`, branched from
+      `feat/serve-no-ui`'s merged tip `75b0175`): `GET /ui` with no token unchanged (`200`, PR 2's
+      shell); with a token configured and no cookie, `303 Location: /ui/login`, no `Set-Cookie`,
+      no vault-shaped body; the right cookie reaches the shell (`200`); `POST /ui` (no route
+      declares it) `405 Method Not Allowed`, `Allow: GET, HEAD`, no `Set-Cookie`, before
+      `requireCookie` ever runs. `TestRequireCookieNoOpOnlyOnLoopback` confirms the no-op holds
+      exactly on the loopback rows of `bindTokenTruthTable`. Tests modified for the tip to stay
+      green: `TestOpenRoutesStayOpenRegardlessOfToken` renamed to
+      `TestOpenRoutesAndUIRoutesUnderAToken` with its `/ui` leg inverted (task 4a.1);
+      `TestHandlerServesAPIRootAndUIShell`/`TestHandlerServesDistinctSurfaces` (both token-less)
+      stay green, unmodified. Impl+docs measured at 185 lines (`git diff --numstat` on the GREEN
+      commit against `origin/main`, excluding `server_test.go`: `cookie.go` 60, `server.go`
+      +14/-9, `docs/adr/0028-ui-cookie-handshake.md` 101, `docs/adr/README.md` 1 — well under the
+      ~220 budget and the 400-line ceiling; no overflow cut needed). Test lines reported
+      separately: `server_test.go` 191 (RED 183 + an 8-line fix landed in the GREEN commit, see
+      Deviations). `make check` green after each commit; `make check-all` green in an isolated
+      worktree at tip `7cb1de1` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
+      `schema-golden-clean`, `internal/core` coverage 99% unchanged — this PR touches no
+      `internal/core` file — seven-target cross-compile matrix all OK, L4 e2e 141.8s,
+      `templ-clean` clean). **Final counts after five Judgment Day rounds** (`git diff --numstat
+      origin/main..HEAD`, churn = added+deleted, the chain's own rule: `_test.go` and
+      `openspec/` excluded from impl+docs). Recomputed here at tip `ad6b8eb` — the commit
+      immediately before this bookkeeping edit, to break the self-reference an edit to this same
+      file would otherwise introduce into its own diffstat: impl+docs **253 lines (as of
+      `ad6b8eb`, not this commit's own edit)** (`cookie.go` 107, `server.go` +14/-9 = 23,
+      `docs/adr/0028-ui-cookie-handshake.md` 89, `docs/adr/README.md` 1, `docs/06-harness.md` 25,
+      `test/conformance/doc.go` +7/-1 = 8) — **over the ~220 budget** (by 33 lines, ~15%), still
+      well under the 400-line ceiling; the overage over round 4's own **238** is round 5's own
+      correction pass in `docs/06-harness.md` (10 → 25 lines of churn), restating the gate's
+      vacuity claim precisely now that the duplicate-declaration guard and the sibling UI-wiring
+      gate exist to describe — `cookie.go` and `server.go` are unchanged by round 5, no new
+      production behaviour. Tests **1220 lines (as of `ad6b8eb`, not this commit's own edit)**
+      (`cookie_test.go` 69, `server_test.go` 217/12 = 229 — the table-driven rewrite now driving
+      every guarded leaf, not only `/ui`; `httpapi_secret_compare_test.go` 646 — this file itself
+      **grew**, 584 → 646, the duplicate-declaration guard's own cost; `httpapi_ui_wiring_test.go`
+      276 — new this round, the structural sibling gate judge B's finding required); `openspec/`
+      bookkeeping **169 lines (as of `ad6b8eb`, not this commit's own edit)** (`design.md`
+      48/10 = 58, `tasks.md` 101/10 = 111), reported separately as in every earlier link. Four
+      earlier reports in this same paragraph (321, then 219 corrected from 102, then
+      238/863/160 at round 4's tip `fe5a9d3`) each undercounted, miscategorized, or went stale
+      against a later round's edits; this one is the fifth, taken at tip `ad6b8eb` after round 5's
+      two fixes (the duplicate-declaration guard in `httpapi_secret_compare_test.go`; the
+      `httpapi_ui_wiring_test.go` gate plus `TestUIViewsRequireCookie`'s table-driven rewrite), and
+      is expected to need recomputing again if `openspec/` bookkeeping is edited after it, for the
+      same self-reference reason stated above. **Still open** (out of this apply batch's scope, per the executing
+      agent's own instructions): opening `feat/httpapi-ui-cookie-middleware` against `main`,
+      waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch
+      deletion before branching PR 4b.
+
+      **Deviations** (recorded, not silent): design m4a §3.2 and §5 both claim `POST /ui`'s `405`
+      carries "no body". Probed against this tree: `net/http.ServeMux`'s own default
+      method-not-allowed handler is `http.Error`, which writes `"Method Not Allowed\n"` —
+      confirmed by running `TestUIViewsRequireCookie`'s own subtest before adjusting it.
+      `requireCookie` never runs on this path (the mux answers before it), so nothing this PR
+      wrote produced the body — it is `net/http`'s own stdlib behavior design's prose did not
+      probe before asserting. What actually matters for R1 — that nothing vault-shaped leaks
+      through an unauthenticated method mismatch — still holds and is what the test now asserts
+      (the literal generic stdlib message), landed as an 8-line fix inside the GREEN commit
+      (`7cb1de1`) rather than a second RED/GREEN pair, since the RED commit's own claim (405,
+      `Allow: GET, HEAD`, no cookie) was otherwise correct and already red for the right reason —
+      only the "no body" sub-assertion needed correcting once the real response was observed.
+      Disclosed for the next reader rather than left implied: a stricter reading of strict TDD
+      order would have wanted this correction as its own RED/GREEN pair, since the fix changed
+      what the test asserts, not merely the code under it; landing it inside the GREEN commit is
+      the precedent this note records, not a claim that no stricter option existed.
 
 ---
 

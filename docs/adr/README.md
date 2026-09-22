@@ -79,6 +79,7 @@ order, with no correspondence to anything.
 | [0025](0025-the-schedule-is-not-a-setting.md) | The schedule is not a setting: a key nobody reads is retired, not parsed | Accepted | M3e |
 | [0026](0026-the-judge-answers-about-what-it-was-shown.md) | The judge answers about what it was shown: a target that was never a candidate stores nothing | Accepted | M3e |
 | [0027](0027-pending-question-store.md) | Where a question the brain asked lives while it waits for an answer: a dedicated `pending_questions` store, not `triggers` and not `decision_log` | Accepted | M3e |
+| [0028](0028-ui-cookie-handshake.md) | The UI cookie carries the token itself; cross-origin UI requests are refused structurally | Accepted | M4a |
 
 ## Template
 

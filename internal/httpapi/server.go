@@ -87,8 +87,9 @@ func apiRoutes(d Deps) []apiRoute {
 // yet, the paragraph that says why.
 //
 // Neither open route is guarded by requireToken (ADR-0017, spec R2.12):
-// the UI's own authentication is ADR-0007's cookie handshake (PR 4a), not
-// implemented here.
+// the UI's own authentication is ADR-0007's cookie handshake — requireCookie,
+// wrapping the two guarded leaves inside newUIMux, never requireToken at
+// this level (design m4a §3.2, §3.3; ADR-0028).
 func Handler(d Deps) http.Handler {
 	guardedMux := http.NewServeMux()
 	for _, rt := range apiRoutes(d) {
@@ -110,7 +111,8 @@ func Handler(d Deps) http.Handler {
 	// everything below it — /ui/static/*, and from PR 4b /ui/login — to
 	// the same handler, which does its own leaf-level routing inside
 	// newUIMux (design m4a §3.2). Headers wrap outermost, then
-	// cross-origin, then (from PR 4a) the cookie check.
+	// cross-origin, then the cookie check (requireCookie, inside
+	// newUIMux).
 	if d.UI != nil {
 		xo := http.NewCrossOriginProtection()
 		uiSubtree := securityHeaders(xo.Handler(newUIMux(d)))
@@ -133,11 +135,13 @@ func Handler(d Deps) http.Handler {
 // or "..." subtree, so none of them can trigger ServeMux's own subtree-root
 // redirect (design m4a §3.2: the class that let GET /ui 307 to /ui/ from
 // the mux itself, before any handler this package writes ever ran). PR 2
-// registers the three static leaves and the two guarded leaves; the two
+// registered the three static leaves and the two guarded leaves; the two
 // /ui/login leaves land in PR 4b, once loginPage/loginSubmit exist to back
-// them, and the two guarded leaves gain requireCookie's wrap in PR 4a —
-// until then they dispatch straight to d.UI, which renders PR 2's shell
-// (§3.1, §7.2's PR 2 tip row).
+// them. The two guarded leaves are wrapped in requireCookie(d.Token) here
+// (PR 4a, design m4a §3.2, §3.3): with no token configured that wrap is a
+// no-op and dispatches straight to d.UI, which renders PR 2's shell until
+// PR 7 (§3.1, §7.2's PR 2 tip row); with a token configured and no valid
+// cookie it answers 303 to /ui/login instead of reaching d.UI at all.
 func newUIMux(d Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -146,8 +150,9 @@ func newUIMux(d Deps) *http.ServeMux {
 	mux.Handle("GET /ui/static/htmx.min.js", assets)
 	mux.Handle("GET /ui/static/htmx.LICENSE", assets)
 
-	mux.Handle("GET /ui", d.UI)
-	mux.Handle("GET /ui/{$}", d.UI)
+	guardedUI := requireCookie(d.Token)(d.UI)
+	mux.Handle("GET /ui", guardedUI)
+	mux.Handle("GET /ui/{$}", guardedUI)
 
 	return mux
 }

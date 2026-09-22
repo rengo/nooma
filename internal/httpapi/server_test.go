@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -255,29 +256,240 @@ func TestGuardedRoutesRequireToken(t *testing.T) {
 	}
 }
 
-// TestOpenRoutesStayOpenRegardlessOfToken is R2.12's own review checkpoint,
-// made executable: GET / and GET /ui stay reachable without a token even
-// when one is configured, and neither sets a cookie — ADR-0017's scope is
-// the API's bearer-token header only, never the UI's cookie handshake
-// (ADR-0007, PR 4a's own requireCookie inverts the /ui leg of this test).
-func TestOpenRoutesStayOpenRegardlessOfToken(t *testing.T) {
+// TestOpenRoutesAndUIRoutesUnderAToken is R2.12's own review checkpoint,
+// made executable, and R1's own MUST for the UI. Renamed from
+// TestOpenRoutesStayOpenRegardlessOfToken, and its /ui leg inverted (design
+// m4a §3.2, PR 4a): GET / stays reachable without a token even when one is
+// configured, and never sets a cookie — ADR-0017's scope is the API's
+// bearer-token header only, never the UI's cookie handshake (ADR-0007). GET
+// /ui with a token configured and no cookie no longer answers 200 with the
+// shell — it answers 303 to the handshake screen, carrying no vault data
+// and no Set-Cookie. /ui/login itself still 404s until PR 4b lands (the
+// accepted gap, N2, design §12), so this test's own scope stops at the
+// redirect, not the screen behind it.
+func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 	t.Parallel()
 
 	h := Handler(Deps{Version: "test", Token: "the-real-token", UI: ui.New(ui.Deps{})})
 
-	for _, path := range []string{"/", "/ui"} {
-		t.Run(path, func(t *testing.T) {
+	t.Run("/", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET / with a token configured and no Authorization header: status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if rec.Header().Get("Set-Cookie") != "" {
+			t.Error("GET / set a cookie — ADR-0017's scope is the API header only, not a UI session")
+		}
+	})
+
+	t.Run("/ui", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequest(http.MethodGet, "/ui", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("GET /ui with a token configured and no cookie: status = %d, want %d", rec.Code, http.StatusSeeOther)
+		}
+		if loc := rec.Header().Get("Location"); loc != "/ui/login" {
+			t.Errorf("GET /ui Location = %q, want %q", loc, "/ui/login")
+		}
+		if rec.Header().Get("Set-Cookie") != "" {
+			t.Error("GET /ui set a cookie before the handshake ran")
+		}
+		if strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
+			t.Error("GET /ui with no cookie leaked the shell's own body — it must carry no vault-shaped content")
+		}
+	})
+}
+
+// guardedUILeafRequestPaths is every request path newUIMux's guarded
+// leaves actually answer — "/ui" for the "GET /ui" pattern, "/ui/" for the
+// "GET /ui/{$}" pattern ({$} is net/http.ServeMux's exact-end wildcard, so
+// that pattern's real request path is "/ui/", probed and confirmed against
+// this tree, not assumed). TestUIViewsRequireCookie iterates this list, not
+// only "/ui": round 5's review wired a second guard function into GET
+// /ui/{$} in place of requireCookie, leaving requireCookie itself
+// untouched, and this test stayed green because it only ever drove GET
+// /ui. Iterating closes the half of that gap this test can see — a guard
+// that answers a leaf differently, or lets a request through. It does NOT
+// close the other half: a swapped guard whose refusals are byte-identical
+// is invisible here by construction, and was re-probed to confirm it
+// (the swap leaves this test green and fails only
+// test/conformance/httpapi_ui_wiring_test.go). Which function a route
+// actually uses is that gate's job, not this one's.
+// A leaf added to newUIMux (internal/httpapi/server.go) must be
+// added here too, in the same commit — the structural sibling of this
+// requirement is test/conformance/httpapi_ui_wiring_test.go's
+// wantUIMuxWiring table, which pins newUIMux's registrations themselves
+// against an AST, so a leaf silently added to one without the other is
+// still two separate, deliberate edits away from being missed by both.
+var guardedUILeafRequestPaths = []string{"/ui", "/ui/"}
+
+// TestUIViewsRequireCookie is design m4a §3.3's own MUST NOT: a missing
+// cookie, a wrong cookie and a cookie whose value fails
+// base64.RawURLEncoding decoding all answer every guarded UI leaf
+// identically — 303 to /ui/login, no Set-Cookie — and the right cookie
+// reaches the view, on each leaf in guardedUILeafRequestPaths. POST /ui,
+// which no route under a guarded leaf declares, answers 405 from the mux
+// itself, never from requireCookie (design m4a §3.2's "method posture"
+// correction: m4a registers no non-GET pattern under a guarded view, so
+// requireCookie carries no such arm to intercept it with).
+func TestUIViewsRequireCookie(t *testing.T) {
+	t.Parallel()
+
+	const token = "the-real-token"
+	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{})})
+
+	for _, leaf := range guardedUILeafRequestPaths {
+		leaf := leaf
+
+		t.Run(leaf+": missing, wrong and malformed cookies answer byte-identically", func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			wrongValue := base64.RawURLEncoding.EncodeToString([]byte("not-the-token"))
+			// sameLengthWrongValue is 14 bytes decoded, exactly like token itself
+			// (spec R2's own "Verified by": "exercised with a same-length wrong
+			// value and a different-length value, both rejected"). wrongValue
+			// above is 13 bytes, so subtle.ConstantTimeCompare short-circuits on
+			// the length mismatch alone and never walks the full comparison —
+			// this case is what actually exercises that path.
+			sameLengthWrongValue := base64.RawURLEncoding.EncodeToString([]byte("the-fake-token"))
+			cases := []struct {
+				name   string
+				cookie *http.Cookie
+			}{
+				{name: "missing cookie", cookie: nil},
+				{name: "wrong cookie", cookie: &http.Cookie{Name: uiCookieName, Value: wrongValue}},
+				{name: "wrong cookie, same length as the real token", cookie: &http.Cookie{Name: uiCookieName, Value: sameLengthWrongValue}},
+				{name: "malformed cookie", cookie: &http.Cookie{Name: uiCookieName, Value: "not-valid-base64!!!"}},
+			}
+
+			var first *httptest.ResponseRecorder
+			for _, tc := range cases {
+				req := httptest.NewRequest(http.MethodGet, leaf, nil)
+				if tc.cookie != nil {
+					req.AddCookie(tc.cookie)
+				}
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusSeeOther {
+					t.Errorf("%s: status = %d, want %d", tc.name, rec.Code, http.StatusSeeOther)
+				}
+				if loc := rec.Header().Get("Location"); loc != "/ui/login" {
+					t.Errorf("%s: Location = %q, want %q", tc.name, loc, "/ui/login")
+				}
+				if rec.Header().Get("Set-Cookie") != "" {
+					t.Errorf("%s: response set a cookie", tc.name)
+				}
+				if first == nil {
+					first = rec
+				} else if rec.Code != first.Code || rec.Body.String() != first.Body.String() {
+					t.Errorf("%s: response is not byte-identical to %q's — %d %q vs %d %q",
+						tc.name, cases[0].name, rec.Code, rec.Body.String(), first.Code, first.Body.String())
+				}
+			}
+		})
+
+		t.Run(leaf+": the right cookie reaches the view", func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, leaf, nil)
+			req.AddCookie(&http.Cookie{Name: uiCookieName, Value: base64.RawURLEncoding.EncodeToString([]byte(token))})
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
-				t.Errorf("GET %s with a token configured and no Authorization header: status = %d, want %d", path, rec.Code, http.StatusOK)
+				t.Fatalf("GET %s with the right cookie = %d, want 200", leaf, rec.Code)
 			}
-			if rec.Header().Get("Set-Cookie") != "" {
-				t.Errorf("GET %s set a cookie — ADR-0017's scope is the API header only, not a UI session", path)
+			if !strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
+				t.Errorf("GET %s with the right cookie does not carry the shell:\n%s", leaf, rec.Body.String())
+			}
+		})
+	}
+
+	t.Run("POST /ui answers 405 from the mux, not from requireCookie", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequest(http.MethodPost, "/ui", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("POST /ui = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+		}
+		if allow := rec.Header().Get("Allow"); allow != "GET, HEAD" {
+			t.Errorf("POST /ui Allow = %q, want %q", allow, "GET, HEAD")
+		}
+		if rec.Header().Get("Set-Cookie") != "" {
+			t.Error("POST /ui set a cookie")
+		}
+		// Probed, not assumed (design m4a §3.2, §5 claim "no body" for this
+		// arm; net/http.ServeMux's own default 405 handler is http.Error,
+		// which does write one — "Method Not Allowed\n", confirmed against
+		// this tree). What actually matters for R1 is that nothing
+		// vault-shaped leaks through an unauthenticated method mismatch;
+		// asserted against the generic stdlib message, not against silence.
+		if body := rec.Body.String(); body != "Method Not Allowed\n" {
+			t.Errorf("POST /ui body = %q, want the generic stdlib 405 message (no vault-shaped content)", body)
+		}
+	})
+}
+
+// TestRequireCookieNoOpOnlyOnLoopback sweeps binding_test.go's own
+// bindTokenTruthTable — TestRequireTokenNoOpOnlyOnLoopback's exact shape
+// (auth_test.go) — asserting that for every row where DecideBinding
+// actually succeeds, requireCookie is a no-op if and only if the effective
+// bind is loopback (design m4a §3.2: "When Token == \"\"").
+func TestRequireCookieNoOpOnlyOnLoopback(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range bindTokenTruthTable {
+		if tc.wantErr {
+			// Not a state a live request could ever reach: DecideBinding
+			// itself refuses to start the server, so nothing here is
+			// reachable through the middleware at all.
+			continue
+		}
+
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := cfg(t, tc.document)
+			lookup := func(k string) (string, bool) { v, ok := tc.env[k]; return v, ok }
+
+			if _, err := DecideBinding(c, lookup); err != nil {
+				t.Fatalf("DecideBinding: %v (this row must be one where it succeeds)", err)
+			}
+
+			token, _ := ResolveToken(c, lookup)
+			wantLoopback := isLoopback(*c.Server.Bind)
+
+			called := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+			})
+
+			guarded := requireCookie(token)(next)
+
+			// A request carrying no cookie at all reaches the handler
+			// exactly when the middleware is a no-op — which must be
+			// exactly when the bind is loopback.
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			guarded.ServeHTTP(rec, req)
+
+			if called != wantLoopback {
+				t.Errorf("bind %q: a cookie-less request reached the handler = %v, want %v",
+					*c.Server.Bind, called, wantLoopback)
 			}
 		})
 	}
