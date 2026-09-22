@@ -285,31 +285,96 @@ first view that actually uses it.
 **Overflow cut**: none named — this PR wraps an existing call rather than adding one, and design's
 own count is unchanged from the proposal's estimate.
 
-- [ ] **3.1** RED — `internal/httpapi`: `TestNoUIUnmountsTheSubtree` — `Deps.UI == nil`: `/ui` and
+- [x] **3.1** RED — `internal/httpapi`: `TestNoUIUnmountsTheSubtree` — `Deps.UI == nil`: `/ui` and
       `/ui/login` answer exactly as `/does-not-exist` does under the same token state (`404`
       without a token, `401` with one).
       Mutation: a stub "UI is off" page mounted instead of leaving the pattern unregistered; a
       `404` returned when the API's own posture for that token state would be `401`.
       Requirement: R4.
-- [ ] **3.2** RED — `test/e2e/serve_test.go`: `TestServeNoUI` (L4) — the `--no-ui` flag and
+      **Reframed at apply time (recorded under Deviations below): this test is already true on
+      PR 2's tree — probed before any PR 3 code change (`go test -run
+      TestNoUIUnmountsTheSubtreeProbe`), confirmed 404/404/404 with no token and
+      401/401/401 with one, matching `/does-not-exist` exactly. Committed as a pinning test in
+      the GREEN commit, not as its own RED — writing it as RED here would have meant claiming a
+      failure that does not exist, which this project's own strict-TDD rule forbids.**
+- [x] **3.2** RED — `test/e2e/serve_test.go`: `TestServeNoUI` (L4) — the `--no-ui` flag and
       `server.ui: false` alone, each unmounting `/ui` with `POST /capture` unaffected.
       Requirement: R4.
-- [ ] **3.3** GREEN — `cmd/nooma/serve.go`: `noUI := fs.Bool("no-ui", false, ...)`; `uiEnabled :=
+- [x] **3.3** GREEN — `cmd/nooma/serve.go`: `noUI := fs.Bool("no-ui", false, ...)`; `uiEnabled :=
       *cfg.Server.UI && !*noUI`; wrap PR 2's already-wired `ui.New(ui.Deps{})` call in that
       conditional (§3.9's exact correction — the call is not introduced here, only guarded);
       `Deps.UI`'s nil path falls through to `requireToken(guardedMux)`.
       Verify: `go test ./cmd/nooma/... -run NoUI`, `go test -tags=e2e ./test/e2e/... -run
       TestServeNoUI`.
       Requirement: R4; design §3.9.
-- [ ] **3.4** `docs/01-architecture.md` — the `--no-ui` sentence gains "or `server.ui: false`".
+- [x] **3.4** `docs/01-architecture.md` — the `--no-ui` sentence gains "or `server.ui: false`".
       Requirement: R4 (doc parity with the flag's actual reach).
-- [ ] Verify (PR-level): default (`--no-ui` absent) tip is unchanged from PR 2's own row — `200`,
+- [x] Verify (PR-level): default (`--no-ui` absent) tip is unchanged from PR 2's own row — `200`,
       shell, with or without a token. With `--no-ui` or `server.ui: false`: `404` without a token,
       `401` with one (§7.2's PR 3 row). Tests modified: none besides the two new ones — the
       default-flag state needs no change to any existing test. `make check-all` in an isolated
       worktree at this branch's tip. Open `feat/serve-no-ui` against `main`; merge on
       `mergeStateStatus: CLEAN`; confirm branch deletion before branching PR 4a. Target ≤110
       impl+docs lines.
+      **Confirmed** at tip `78d85ab` (RED `46d3fdc`, GREEN `78d85ab`, branched from
+      `feat/ui-base-layout`'s merged tip `42f2644`): default `GET /ui` unchanged from PR 2's row
+      on both arms (`TestHandlerServesAPIRootAndUIShell`, `TestOpenRoutesStayOpenRegardlessOfToken`
+      untouched, unmodified). With `--no-ui` or `server.ui: false`, confirmed by `TestServeNoUI`
+      (e2e): `404` without a token; `POST /capture` unaffected (`503`, no providers configured,
+      identical to the UI-mounted case). Impl+docs measured at 35 lines (`cmd/nooma/serve.go`
+      33, `docs/01-architecture.md` 2 — `git diff --numstat` on the GREEN commit, well under
+      ≤110, no overflow cut needed); test lines reported separately:
+      `internal/httpapi/server_test.go` +44 (GREEN commit); `test/e2e/serve_test.go` +60/-2,
+      `cmd/nooma/serve_test.go` +30 new file (RED commit — corrected here; the figures originally
+      recorded in this line, `test/e2e/serve_test.go` +88/-2 and `cmd/nooma/serve_test.go` +28,
+      were wrong: `git diff --numstat 42f2644..46d3fdc` on the actual RED commit gives +60/-2 and
+      +30/-0). `make check` green after the GREEN commit; `make check-all` green in an isolated
+      worktree at tip `78d85ab` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
+      `schema-golden-clean`, `internal/core` coverage 99% unchanged, seven-target cross-compile
+      matrix all OK, L4 e2e green, `templ-clean` clean). **Still open** (out of this apply batch's
+      scope): opening `feat/serve-no-ui` against `main`, waiting for required contexts, merging
+      only on `mergeStateStatus: CLEAN`, confirming branch deletion before branching PR 4a.
+
+      **Judgment-day fixes, post-GREEN** (recorded, not silent): `1fd11f9` adds
+      `fs.PrintDefaults()` to `runServe`'s `fs.Usage` so `nooma serve -h` actually shows
+      `--no-ui` and its precedence wording, plus `TestServeUsageShowsNoUIPrecedence`
+      (`cmd/nooma/serve.go` +8/-1, `cmd/nooma/serve_test.go` +33/-1). `2ddb1ea` adds a third
+      `TestServeNoUI` case composing `--no-ui` with a configured token end to end — R4's second
+      arm, until now only verified by hand (`test/e2e/serve_test.go` +46/-4). Final split at this
+      branch's tip against `main` (`42f2644`), `git diff --numstat 42f2644..HEAD`: impl+docs 42
+      lines (`cmd/nooma/serve.go` 40, `docs/01-architecture.md` 2 — churn, added+deleted per
+      file, the same convention this block already used), well under ≤110, no overflow cut
+      needed; test lines 210 (churn too, `cmd/nooma/serve_test.go` 62, `test/e2e/serve_test.go` 104,
+      `internal/httpapi/server_test.go` 44).
+
+**Deviations** (recorded, not silent):
+- Task 3.1's RED commit was not written as RED. Probed against PR 2's merged tree before writing
+  any PR 3 code (`Handler(Deps{Token: token})` with `UI` left nil, for both `token == ""` and a
+  configured token): `/ui`, `/ui/login` and `/does-not-exist` already answered identically in
+  every case (404/404/404, then 401/401/401) — PR 2's task 2.5 `if d.UI != nil` mux gate already
+  implements the whole of this behavior; nothing in `internal/httpapi` needed to change for PR 3.
+  The genuine gap PR 3 closes is entirely in `cmd/nooma/serve.go`, which wired `ui.New(ui.Deps{})`
+  into `Deps.UI` **unconditionally** until this PR (PR 2's own task 2.6) — that gap is real and is
+  what `TestServeNoUI` (task 3.2, e2e) and a new `cmd/nooma` unit test genuinely fail against
+  before this PR's GREEN commit. `TestNoUIUnmountsTheSubtree` was therefore committed as a
+  pinning/completeness test inside the GREEN commit (`78d85ab`) rather than as its own RED commit,
+  with the probe result stated in both the commit body and here — this project's own strict-TDD
+  rule ("watching red for the right reason from the committed tree, not from an uncommitted staged
+  state") forbids claiming a RED that does not exist, the same lesson PR 1's task 1.3/1.4 rebuild
+  recorded for the opposite mistake (a RED that failed for the wrong reason).
+- Added `cmd/nooma/serve_test.go`'s `TestResolveUIEnabled_NoUIFlagOverridesConfig`, not named in
+  design or this task list, because the orchestrator's own hard rule for this PR ("an explicit
+  `--no-ui` flag beats `ui: true` in the config... state the rule in the flag's help text and test
+  it") asks for the precedence rule to be tested directly. Design §3.9's own code block computes
+  `uiEnabled` as an inline local (`*cfg.Server.UI && !*noUI`) inside `runServe`, which cannot be
+  unit-tested without starting a real server and delivering it an OS signal to stop — expensive and
+  fragile for a boolean AND-NOT. Pulled the expression into a small package-level pure function,
+  `resolveUIEnabled(serverUI, noUIFlag bool) bool`, with an identical implementation and identical
+  call-site behavior: the same naming/shape-for-testability choice PR 2's `newUIMux` extraction
+  already set precedent for (design §3.2's own note on that deviation). This function was
+  genuinely RED (compile-red, `cmd/nooma/serve_test.go:25:14: undefined: resolveUIEnabled`,
+  confirmed in commit `46d3fdc`'s own isolated-worktree check) before the GREEN commit introduced
+  it.
 
 ---
 
