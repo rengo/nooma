@@ -487,26 +487,32 @@ body, not hidden.
       worktree at tip `7cb1de1` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
       `schema-golden-clean`, `internal/core` coverage 99% unchanged — this PR touches no
       `internal/core` file — seven-target cross-compile matrix all OK, L4 e2e 141.8s,
-      `templ-clean` clean). **Final counts after four Judgment Day rounds** (`git diff --numstat
+      `templ-clean` clean). **Final counts after five Judgment Day rounds** (`git diff --numstat
       origin/main..HEAD`, churn = added+deleted, the chain's own rule: `_test.go` and
-      `openspec/` excluded from impl+docs). Recomputed here at tip `fe5a9d3` — the commit
+      `openspec/` excluded from impl+docs). Recomputed here at tip `ad6b8eb` — the commit
       immediately before this bookkeeping edit, to break the self-reference an edit to this same
-      file would otherwise introduce into its own diffstat: impl+docs **238** (`cookie.go` 107,
-      `server.go` +14/-9 = 23, `docs/adr/0028-ui-cookie-handshake.md` 89,
-      `docs/adr/README.md` 1, `docs/06-harness.md` 10, `test/conformance/doc.go` +7/-1 = 8) —
-      **over the ~220 budget** (by 18 lines, ~8%), still well under the 400-line ceiling; the
-      overage is round 4's own doc-comment correction pass, landed across `cookie.go` and
-      `docs/06-harness.md` once the gate itself was rewritten, not new production behaviour.
-      Tests **863** (`cookie_test.go` 69, `server_test.go` 197/13 = 210,
-      `httpapi_secret_compare_test.go` 584 — this file itself **shrank**, 588 → 584, the
-      whitelist-template rewrite's own stated goal, even though the PR's total test churn against
-      `origin/main` still counts its full replacement diff); `openspec/` bookkeeping **160**
-      (`design.md` 47/10 = 57, `tasks.md` 93/10 = 103), reported separately as in every earlier
-      link. Three earlier reports in this same paragraph (321, then 219 corrected from 102) each
-      undercounted or miscategorized against the tip they were taken at; this one is the fourth,
-      taken at a later tip after this gate's own fourth rewrite, and is expected to need
-      recomputing again if `openspec/` bookkeeping is edited after it, for the same self-reference
-      reason stated above. **Still open** (out of this apply batch's scope, per the executing
+      file would otherwise introduce into its own diffstat: impl+docs **253 lines (as of
+      `ad6b8eb`, not this commit's own edit)** (`cookie.go` 107, `server.go` +14/-9 = 23,
+      `docs/adr/0028-ui-cookie-handshake.md` 89, `docs/adr/README.md` 1, `docs/06-harness.md` 25,
+      `test/conformance/doc.go` +7/-1 = 8) — **over the ~220 budget** (by 33 lines, ~15%), still
+      well under the 400-line ceiling; the overage over round 4's own **238** is round 5's own
+      correction pass in `docs/06-harness.md` (10 → 25 lines of churn), restating the gate's
+      vacuity claim precisely now that the duplicate-declaration guard and the sibling UI-wiring
+      gate exist to describe — `cookie.go` and `server.go` are unchanged by round 5, no new
+      production behaviour. Tests **1220 lines (as of `ad6b8eb`, not this commit's own edit)**
+      (`cookie_test.go` 69, `server_test.go` 217/12 = 229 — the table-driven rewrite now driving
+      every guarded leaf, not only `/ui`; `httpapi_secret_compare_test.go` 646 — this file itself
+      **grew**, 584 → 646, the duplicate-declaration guard's own cost; `httpapi_ui_wiring_test.go`
+      276 — new this round, the structural sibling gate judge B's finding required); `openspec/`
+      bookkeeping **169 lines (as of `ad6b8eb`, not this commit's own edit)** (`design.md`
+      48/10 = 58, `tasks.md` 101/10 = 111), reported separately as in every earlier link. Four
+      earlier reports in this same paragraph (321, then 219 corrected from 102, then
+      238/863/160 at round 4's tip `fe5a9d3`) each undercounted, miscategorized, or went stale
+      against a later round's edits; this one is the fifth, taken at tip `ad6b8eb` after round 5's
+      two fixes (the duplicate-declaration guard in `httpapi_secret_compare_test.go`; the
+      `httpapi_ui_wiring_test.go` gate plus `TestUIViewsRequireCookie`'s table-driven rewrite), and
+      is expected to need recomputing again if `openspec/` bookkeeping is edited after it, for the
+      same self-reference reason stated above. **Still open** (out of this apply batch's scope, per the executing
       agent's own instructions): opening `feat/httpapi-ui-cookie-middleware` against `main`,
       waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch
       deletion before branching PR 4b.
