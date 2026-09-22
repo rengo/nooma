@@ -962,7 +962,7 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
       injected — fails, digest text after five requests drops the appended question line; (3)
       clean tree — passes. `TriggerRepo` write-avoidance itself is still I27's job alone
       (`test/conformance`); this test detects a write's effect on the rendered digest, not every
-      write I27 already guards. Full `internal/brain` suite (18 pre-existing digest tests
+      write I27 already guards. Full `internal/brain` suite (21 pre-existing digest tests
       included) and `test/conformance`'s `TestI27_ViewingIsNotDelivering` both still pass. `make
       check` green.
 

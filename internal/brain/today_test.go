@@ -279,10 +279,13 @@ func newDigestParityFixture(t *testing.T) (*memrepo.Triggers, *memrepo.Units, *m
 // newDigestParityFixture backs every port with a real memrepo
 // implementation rather than a stub replaying a fixed slice, so a write
 // Today makes during those five requests can reach the later digest —
-// but only on the ports assembleDigest actually reads. Injecting a
-// TriggerRepo.Surface, a PendingQuestionRepo.MarkAsked or a
-// DecisionLog.Record into todayRunner.at each turn this red (all three
-// confirmed by injection, reverted before commit).
+// but only on the ports assembleDigest actually reads, and only where
+// the write changes what it renders. Injecting a TriggerRepo.Surface or
+// a PendingQuestionRepo.MarkAsked into todayRunner.at turns this red;
+// both confirmed by injection, reverted before commit. A DecisionLog
+// write turns it red only in one shape — an ActionCheckDigestHeld record
+// carrying a held trigger's ID, which heldCounts reads; a Record of any
+// other action passes unnoticed, also confirmed by injection.
 //
 // Two of the ports Today reads are invisible here, structurally, and this
 // test does not pretend otherwise: checkRunner carries no ConfigRepo at
