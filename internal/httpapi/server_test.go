@@ -327,12 +327,20 @@ func TestUIViewsRequireCookie(t *testing.T) {
 		t.Parallel()
 
 		wrongValue := base64.RawURLEncoding.EncodeToString([]byte("not-the-token"))
+		// sameLengthWrongValue is 14 bytes decoded, exactly like token itself
+		// (spec R2's own "Verified by": "exercised with a same-length wrong
+		// value and a different-length value, both rejected"). wrongValue
+		// above is 13 bytes, so subtle.ConstantTimeCompare short-circuits on
+		// the length mismatch alone and never walks the full comparison —
+		// this case is what actually exercises that path.
+		sameLengthWrongValue := base64.RawURLEncoding.EncodeToString([]byte("the-fake-token"))
 		cases := []struct {
 			name   string
 			cookie *http.Cookie
 		}{
 			{name: "missing cookie", cookie: nil},
 			{name: "wrong cookie", cookie: &http.Cookie{Name: uiCookieName, Value: wrongValue}},
+			{name: "wrong cookie, same length as the real token", cookie: &http.Cookie{Name: uiCookieName, Value: sameLengthWrongValue}},
 			{name: "malformed cookie", cookie: &http.Cookie{Name: uiCookieName, Value: "not-valid-base64!!!"}},
 		}
 
