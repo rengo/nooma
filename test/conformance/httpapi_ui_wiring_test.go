@@ -143,11 +143,13 @@ func (w uiLeafWiring) describe() string {
 
 // wantUIMuxWiring is newUIMux's declared expected wiring: every pattern it
 // registers must appear here, and every pattern here must be registered —
-// the whitelist this gate matches the AST against. GET /ui/login is not
-// yet in this table because newUIMux does not register it yet (it lands in
-// PR 4b, design m4a §3.2); adding that registration means adding its row
-// here in the same commit, saying whether it must be guarded (it must
-// not — the login screen cannot require the cookie it exists to issue).
+// the whitelist this gate matches the AST against. GET/POST /ui/login are
+// unguarded (PR 4b, design m4a §3.2): the login screen cannot require the
+// cookie it exists to issue. newUIMux registers both only inside an `if
+// d.Token != ""` block — uiMuxHandleCalls walks into an *ast.IfStmt's body
+// for exactly this reason (below), so a route conditionally registered is
+// still found, not silently skipped by a gate written before this PR had
+// any conditional to look inside.
 var wantUIMuxWiring = []struct {
 	pattern string
 	guarded bool
@@ -155,6 +157,8 @@ var wantUIMuxWiring = []struct {
 	{pattern: "GET /ui/static/app.css", guarded: false},
 	{pattern: "GET /ui/static/htmx.min.js", guarded: false},
 	{pattern: "GET /ui/static/htmx.LICENSE", guarded: false},
+	{pattern: "GET /ui/login", guarded: false},
+	{pattern: "POST /ui/login", guarded: false},
 	{pattern: "GET /ui", guarded: true},
 	{pattern: "GET /ui/{$}", guarded: true},
 }
@@ -178,8 +182,22 @@ func uiMuxHandleCalls(t *testing.T, fset *token.FileSet, fn *ast.FuncDecl) []uiL
 
 	varExpr := map[string]ast.Expr{}
 	var leaves []uiLeafWiring
+	walkUIMuxStmts(t, fset, fn.Body.List, varExpr, &leaves)
+	return leaves
+}
 
-	for _, stmt := range fn.Body.List {
+// walkUIMuxStmts processes stmts in order and recurses into an *ast.IfStmt's
+// body (newUIMux's own `if d.Token != "" { ... }`, PR 4b) so a route
+// registered inside a branch is still found — this gate's job is to catch
+// what newUIMux actually wires, not only what it wires unconditionally at
+// the top level. Local var assignments are tracked across the whole
+// function via the shared varExpr map, not scoped per-block, matching
+// newUIMux's own flat style: nothing inside its `if` shadows guardedUI or
+// assets.
+func walkUIMuxStmts(t *testing.T, fset *token.FileSet, stmts []ast.Stmt, varExpr map[string]ast.Expr, leaves *[]uiLeafWiring) {
+	t.Helper()
+
+	for _, stmt := range stmts {
 		switch s := stmt.(type) {
 		case *ast.AssignStmt:
 			if s.Tok != token.DEFINE || len(s.Lhs) != 1 || len(s.Rhs) != 1 {
@@ -212,10 +230,17 @@ func uiMuxHandleCalls(t *testing.T, fset *token.FileSet, fn *ast.FuncDecl) []uiL
 			if err != nil {
 				t.Fatalf("newUIMux: unquote route pattern %s: %v", lit.Value, err)
 			}
-			leaves = append(leaves, classifyUILeaf(fset, pattern, resolveLocalVar(call.Args[1], varExpr)))
+			*leaves = append(*leaves, classifyUILeaf(fset, pattern, resolveLocalVar(call.Args[1], varExpr)))
+
+		case *ast.IfStmt:
+			if s.Body != nil {
+				walkUIMuxStmts(t, fset, s.Body.List, varExpr, leaves)
+			}
+			if block, ok := s.Else.(*ast.BlockStmt); ok {
+				walkUIMuxStmts(t, fset, block.List, varExpr, leaves)
+			}
 		}
 	}
-	return leaves
 }
 
 // resolveLocalVar follows e through varExpr while e is an identifier bound

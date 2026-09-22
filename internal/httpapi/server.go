@@ -135,9 +135,12 @@ func Handler(d Deps) http.Handler {
 // or "..." subtree, so none of them can trigger ServeMux's own subtree-root
 // redirect (design m4a §3.2: the class that let GET /ui 307 to /ui/ from
 // the mux itself, before any handler this package writes ever ran). PR 2
-// registered the three static leaves and the two guarded leaves; the two
-// /ui/login leaves land in PR 4b, once loginPage/loginSubmit exist to back
-// them. The two guarded leaves are wrapped in requireCookie(d.Token) here
+// registered the three static leaves and the two guarded leaves; PR 4b adds
+// the two /ui/login leaves, registered only when a token is configured —
+// with no token there is nothing to hand out and no screen to show, a
+// property of the mux itself rather than a branch inside a handler, the
+// same shape d.UI == nil already gives /ui at Handler's own level (PR 3,
+// §3.9). The two guarded leaves are wrapped in requireCookie(d.Token) here
 // (PR 4a, design m4a §3.2, §3.3): with no token configured that wrap is a
 // no-op and dispatches straight to d.UI, which renders PR 2's shell until
 // PR 7 (§3.1, §7.2's PR 2 tip row); with a token configured and no valid
@@ -149,6 +152,11 @@ func newUIMux(d Deps) *http.ServeMux {
 	mux.Handle("GET /ui/static/app.css", assets)
 	mux.Handle("GET /ui/static/htmx.min.js", assets)
 	mux.Handle("GET /ui/static/htmx.LICENSE", assets)
+
+	if d.Token != "" {
+		mux.Handle("GET /ui/login", http.HandlerFunc(loginPage))
+		mux.Handle("POST /ui/login", loginSubmit(d))
+	}
 
 	guardedUI := requireCookie(d.Token)(d.UI)
 	mux.Handle("GET /ui", guardedUI)

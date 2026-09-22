@@ -861,3 +861,29 @@ func TestLoginRejectionIsByteIdentical(t *testing.T) {
 		}
 	}
 }
+
+// TestLoginRoutesAbsentWithoutAToken is design m4a §3.2's "no screen, no
+// cookie" state: with Token == "" (loopback, no token), GET /ui/login is a
+// 404 — a property of the mux, not a branch inside a handler, mirroring how
+// d.UI == nil leaves /ui itself unregistered (PR 3).
+//
+// Committed here, in the GREEN commit, rather than in PR 4b's RED commit:
+// probed against that commit's own tree before writing any PR 4b code and
+// already true there — no route named /ui/login exists yet at all, with or
+// without a token — so writing it as RED would have claimed a failure that
+// did not exist (PR 3's task 3.1 precedent for the same situation). It is a
+// pinning test now that newUIMux's conditional registration is what makes
+// it true.
+func TestLoginRoutesAbsentWithoutAToken(t *testing.T) {
+	t.Parallel()
+
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{})})
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/login", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /ui/login with no token configured: status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}

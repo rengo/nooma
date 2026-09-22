@@ -4,6 +4,8 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
+
+	"github.com/rengo/nooma/internal/ui"
 )
 
 // uiCookieName is the one cookie this binary sets. It says what it holds
@@ -104,4 +106,61 @@ func presentedSecret(r *http.Request, name string, want int) []byte {
 		return make([]byte, want)
 	}
 	return decoded
+}
+
+// setUICookie issues ADR-0028's session cookie. The value IS the token
+// itself (owner ruling Q1), base64url-encoded so that no byte a token may
+// contain is one net/http's cookie sanitiser would silently drop. No
+// Max-Age, no Expires: "session cookie" means what it says, and a lifetime
+// would be a number nobody calibrated.
+func setUICookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     uiCookieName,
+		Value:    base64.RawURLEncoding.EncodeToString([]byte(token)),
+		Path:     "/ui",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   r.TLS != nil,
+	})
+}
+
+// loginPage renders the handshake screen (design m4a §3.3). newUIMux
+// registers GET /ui/login only when a token is configured — the login
+// screen cannot require the cookie it exists to issue (§3.2), and with no
+// token there is nothing to hand out.
+func loginPage(w http.ResponseWriter, r *http.Request) {
+	_ = ui.RenderLogin(r.Context(), w, http.StatusOK, ui.LoginView{Rejected: false})
+}
+
+// loginSubmit reads the submitted token and compares it against d.Token
+// with the same constant-time comparison requireToken uses on the
+// Authorization header (auth.go): the form value is plaintext, never
+// base64-encoded, so there is no decode step and no decode-error branch to
+// keep unexpressible the way presentedSecret's signature does for the
+// cookie. On a match it issues the cookie and redirects to /ui; on a
+// mismatch — an empty field and a wrong token are the same mismatch — it
+// re-renders the screen at 401 with Rejected: true, never naming which one
+// it was (design m4a §3.3).
+func loginSubmit(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		presented := r.PostFormValue("token")
+
+		// subtle.ConstantTimeCompare requires equal-length inputs to compare
+		// in constant time; a length mismatch already returns 0 immediately,
+		// which leaks only the submitted token's own length — the same
+		// trade-off requireToken's own comparison accepts (auth.go).
+		if subtle.ConstantTimeCompare([]byte(presented), []byte(d.Token)) != 1 {
+			_ = ui.RenderLogin(r.Context(), w, http.StatusUnauthorized, ui.LoginView{Rejected: true})
+			return
+		}
+
+		setUICookie(w, r, d.Token)
+		http.Redirect(w, r, "/ui", http.StatusSeeOther)
+	}
 }
