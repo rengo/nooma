@@ -844,7 +844,7 @@ copy.
 call-site update in `brain/digest.go` off into `feat/brain-digest-items-refactor` (a new PR 5b,
 landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc amendments in PR 6.
 
-- [ ] **6.1** RED (strict TDD order 4, proposal §6) — `test/conformance/i27_viewing_is_not_delivering_test.go`
+- [x] **6.1** RED (strict TDD order 4, proposal §6) — `test/conformance/i27_viewing_is_not_delivering_test.go`
       (new): `TodayService` over `memrepo` fakes wrapped in a `writeGuard` that fails the test on
       any call to `Surface`, `Fire`, `Expire`, `Resolve`, `Create`, `MarkAsked`, `Confirm`,
       `Reject`, `Record`, `RecordConsolidationRun`, `OpenHypothesis`, `SetStatus`, `ApplyBoosts`,
@@ -852,14 +852,14 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
       before and after the call. Written against a `TodayService` that does not compile yet.
       Mutation: the one mutation the milestone is named for — a view that delivers.
       Requirement: R6; design §3.6, §8 — I27 (OR7's decided default).
-- [ ] **6.2** RED — `TestToday_PriorityOnlyTopNPerKind` — `focus.DefaultSize + 2` task units and
+- [x] **6.2** RED — `TestToday_PriorityOnlyTopNPerKind` — `focus.DefaultSize + 2` task units and
       `focus.DefaultSize + 1` load units with distinct weights; each focus holds exactly
       `focus.DefaultSize` in `focus.Rank`'s order; the task focus contains no `mental_load`, the
       load focus contains no `task`/`event`; adjacency is never non-zero.
       Mutation: a `focus.Select` call with a real margin instead of bare `focus.Rank` +
       `[:DefaultSize]`; a type leak between focuses; a truncation at the wrong N.
       Requirement: R5's FOCUS section — "Priority-only ... no call to `focus.Select`."
-- [ ] **6.3** RED — `TestToday_DigestMirrorsCarry` — with a low-energy reading, `Items` equals
+- [x] **6.3** RED — `TestToday_DigestMirrorsCarry` — with a low-energy reading, `Items` equals
       `Carry`'s carry slice joined to `pending` by ID for the same inputs, `Held` equals
       `len(held)`, `Question` is nil; without one, `Items` is every undelivered trigger in
       `(fired_at, id)` order and `Question` is `Unasked()[0]`.
@@ -867,13 +867,20 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
       decided default); a question shown on a low-energy day; a second, independent sort; a join
       that drops a trigger `Carry` still names.
       Requirement: R5 — PENDING DIGEST section; design §3.6 (OR2, OR3's decided defaults).
-- [ ] **6.4** RED — extend the existing `test/conformance/brain_single_clock_read_test.go` to scan
+- [x] **6.4** RED — extend the existing `test/conformance/brain_single_clock_read_test.go` to scan
       `today.go` as a second file.
       Mutation: a second `clock.Now()` call inside `todayRunner.at`, or a `Now()` call inside a
       function that already takes a `now time.Time` parameter.
       Requirement: R5's single-clock-read MUST — "all nine reads ... use a single
       `ports.Clock.Now()` call."
-- [ ] **6.5** GREEN — `internal/brain/today.go`: `TodayService`, `NewTodayService`, `Today`,
+      **Reframed at apply time (recorded under Deviations below): the gate already scans every
+      non-test `.go` file under `internal/brain` via `filepath.WalkDir` — no line of
+      `brain_single_clock_read_test.go` names a specific file — so it covers `today.go`
+      automatically, with no code change, the moment the file exists. Confirmed by mutation: with
+      `today.go` committed, injecting a second `clock.Now()` call into `TodayService.Today` and
+      running the existing test unmodified fails with "2 Now() call expressions in one file, want
+      at most 1"; reverted before the GREEN commit.**
+- [x] **6.5** GREEN — `internal/brain/today.go`: `TodayService`, `NewTodayService`, `Today`,
       `Focus`, `FocusMember`, `PendingDigest`, `DigestLine`, `VaultStatus`, `todayRunner.at`
       implementing §3.6's exact 8-step read order (`cfg.Load` → `state.LatestEnergy` →
       `triggers.Undelivered` → `log.Since` → `digestItems` + `Carry` → `questions.Unasked` (if
@@ -882,25 +889,25 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
       inside `wireScheduler`'s LLM-gated path (§3.6's "the service needs no provider").
       Verify: `go test ./internal/brain/... -run Today`.
       Requirement: R5, R6; design §3.6.
-- [ ] **6.6** GREEN — `internal/brain/digest.go`: `digestItems` becomes a package function;
+- [x] **6.6** GREEN — `internal/brain/digest.go`: `digestItems` becomes a package function;
       `checkRunner.digestItems` deleted, its one call site updated to the package function.
       Verify: `go test ./internal/brain/...`.
       Requirement: design §3.6 — "the same rule in two places... is how Today's Carry order and
       the digest's Carry order would drift apart."
-- [ ] **6.7** `cmd/nooma/wiring.go`: `wireToday`.
+- [x] **6.7** `cmd/nooma/wiring.go`: `wireToday`.
       Requirement: design §4.
-- [ ] **6.8** `docs/02-cognitive-core.md` §3 — one sentence: Priority-only, no incumbent, until
+- [x] **6.8** `docs/02-cognitive-core.md` §3 — one sentence: Priority-only, no incumbent, until
       `m4c`. §7 — one sentence: viewing is not delivering.
       Requirement: R10-class doc parity; non-negotiable #1. (This PR's `internal/core` touch is
       none — `today.go` lives under `internal/brain` — so `docs-sync` does **not** fire on PR 6;
       these two sentences are still required by this design and checked by `sdd-verify`, not by
       the gate, per design §4's own correction.)
-- [ ] **6.9** `docs/06-harness.md` §4 — add the **I27** row (next free invariant number, design
+- [x] **6.9** `docs/06-harness.md` §4 — add the **I27** row (next free invariant number, design
       §1's ground truth: I01–I26 run today).
       Requirement: OR7's decided default — a numbered invariant, not an unrowed conformance test.
-- [ ] **6.10** `docs/01-architecture.md` — the `/ui` row names SYSTEM's six lines.
+- [x] **6.10** `docs/01-architecture.md` — the `/ui` row names SYSTEM's six lines.
       Requirement: R5.
-- [ ] Verify (PR-level): `GET /ui` at this tip is unchanged from PR 5's own row on both arms —
+- [x] Verify (PR-level): `GET /ui` at this tip is unchanged from PR 5's own row on both arms —
       `ui.TodayReader`/`Deps.Today` are PR 7's, so `ServeHTTP` still renders the PR 2 shell
       (§7.2's PR 6 row). No existing HTTP test is modified;
       `i27_viewing_is_not_delivering_test.go`, `TestToday_PriorityOnlyTopNPerKind` and
@@ -908,6 +915,94 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
       `make check-all` in an isolated worktree at this branch's tip. Open `feat/brain-today`
       against `main`; merge only on `mergeStateStatus: CLEAN`; confirm branch deletion before
       branching PR 7. Target ≤260 impl+docs lines — **measure before opening**.
+      **Confirmed** at tip `7a9e82c` (RED `7cab892`, GREEN `7a9e82c`, branched from `origin/main`'s
+      tip `77db3ce`, `feat/ports-store-live-focus-by-type`'s merged commit): `GET /ui` at this tip
+      is untouched — `git diff --stat 77db3ce..HEAD -- internal/httpapi internal/ui` is empty, no
+      `_test.go` in either package changed. `TestI27_ViewingIsNotDelivering`,
+      `TestToday_PriorityOnlyTopNPerKind`, `TestToday_DigestMirrorsCarry` and
+      `TestBrainReadsTheClockAtMostOnceAndNeverAgainstAnInstantItAlreadyHas` (unmodified, now
+      scanning `today.go` too) all pass; `TestWireToday_BuildsAWorkingService` proves the wiring
+      over a real migrated vault. Three mutations confirmed discriminating, each reverted before
+      committing (see Deviations for the clock-read one): (1) a `TriggerRepo.Surface` call added
+      inside `todayRunner.at` — `TestI27_ViewingIsNotDelivering` fails,
+      "TodayService called TriggerRepo.Surface — a view must not write (I27, ...)"; (2) the
+      per-Kind truncation widened to `focus.DefaultSize+1` — `TestToday_PriorityOnlyTopNPerKind`
+      fails, "task focus has 8 members, want focus.DefaultSize (7)"; (3) `Items` built from
+      `carry` **and** `held` together — `TestToday_DigestMirrorsCarry`'s low-energy subtest fails,
+      "len(Items) = 5, want LowEnergyDigestSize (3)". `make check` green after each commit (lint 0
+      issues, go vet, L1/L2 race+shuffle, build). `make check-all` green in an isolated worktree at
+      tip `7a9e82c` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
+      `schema-golden-clean`, `internal/core` coverage 99% (990/992, unchanged — this PR touches no
+      `internal/core` file), seven-target cross-compile matrix all OK, L4 e2e 140.985s,
+      `templ-clean` clean). Impl+docs measured at **303 lines** (`git diff --numstat
+      origin/main..HEAD`, churn = added+deleted, excluding `_test.go` and `openspec/` per this
+      chain's own convention): `cmd/nooma/wiring.go` 21, `docs/01-architecture.md` 2,
+      `docs/02-cognitive-core.md` 9, `docs/06-harness.md` 1, `internal/brain/digest.go` 13,
+      `internal/brain/today.go` 257 — **over the ~260 budget by 43 lines (~16.6%)**, well under the
+      400-line ceiling; design's own overflow rule for this PR fires only "if over 400" (the
+      `digestItems` split into a PR 5b), so no cut was applied — the same precedent PR 4a's own
+      253-vs-~220 overage set. Test lines reported separately: **492**
+      (`cmd/nooma/wiring_today_test.go` 42, `internal/brain/today_test.go` 216,
+      `test/conformance/i27_viewing_is_not_delivering_test.go` 234). **Still open** (out of this
+      apply batch's scope, per the executing agent's own instructions): opening `feat/brain-today`
+      against `main`, waiting for required contexts, merging only on `mergeStateStatus: CLEAN`,
+      confirming branch deletion before branching PR 7.
+      **Post-hoc fix (judgment-day, this branch's tip):**
+      `TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical` (added `f453e26`) originally
+      seeded `newDigestParityFixture` from `digest_test.go`'s own `undeliveredTriggers`/
+      `digestUnits` stubs, which replay a fixed `Undelivered()` slice regardless of what `Surface`
+      writes to them — a write Today performed during its five requests could never reach the
+      later `assembleDigest` read, so the test could not detect the one write class its doc
+      comment claimed to prove absent. `internal/brain/today_test.go`'s `newDigestParityFixture`
+      now seeds `memrepo.Triggers`/`memrepo.Units` through the same `Create`+`Fire` write path
+      `i27_viewing_is_not_delivering_test.go` uses; `digest_test.go`'s own stubs are untouched.
+      Confirmed discriminating with three mutations against `todayRunner.at`, each reverted before
+      committing: (1) `r.triggers.Surface(ctx, pending[0].ID, now)` injected — fails, "carried 0
+      after five Today requests, want 1"; (2) `r.questions.MarkAsked(ctx, unasked[0].ID, now)`
+      injected — fails, digest text after five requests drops the appended question line; (3)
+      clean tree — passes. `TriggerRepo` write-avoidance itself is still I27's job alone
+      (`test/conformance`); this test detects a write's effect on the rendered digest, not every
+      write I27 already guards. Full `internal/brain` suite (21 pre-existing digest tests
+      included) and `test/conformance`'s `TestI27_ViewingIsNotDelivering` both still pass. `make
+      check` green.
+
+**Deviations** (recorded, not silent):
+- Task 6.4's RED commit was not written as RED — see the note under 6.4 above.
+  `brain_single_clock_read_test.go`'s scan is directory-driven
+  (`filepath.WalkDir(filepath.Join(repoRoot, "internal", "brain"), ...)`), not file-name-driven,
+  so it already covered `today.go` the instant that file was committed, with zero edits to the
+  test itself; "extend the gate" turned out to mean "add the file the existing gate already
+  watches", proven by the mutation recorded under this PR's own Verify block rather than claimed
+  from memory.
+- `wireToday` (task 6.7) is not called from `cmd/nooma/serve.go` in this PR — design §7.1's own
+  landing-order table lists no serve.go row for it, and task 7.7 explicitly names widening "the
+  existing `ui.New(...)` call" once `wireToday` exists, not introducing this call site. An
+  unexported, uncalled `wireToday` would fail golangci-lint's `unused` check (`.golangci.yml`'s
+  `unused` linter, confirmed enabled), so `cmd/nooma/wiring_today_test.go`'s
+  `TestWireToday_BuildsAWorkingService` was added, not named in design or this task list, to give
+  it a caller inside this PR's own package — the same class of addition PR 3's
+  `TestResolveUIEnabled_NoUIFlagOverridesConfig` and PR 4b's `TestLoginSubmitBodyIsBounded`
+  recorded for the identical reason (a real gate this PR's own code would otherwise trip).
+- `internal/brain/today.go`'s own inline comments are noticeably shorter than design.md's and this
+  file's own prose for PRs 1–5. A pragmatic trade-off for this apply batch's own time budget, not
+  a claim that design's own comment density was wrong to ask for — every non-obvious rule
+  (single-clock-read, the trigger-ID-not-unit-ID join inside `Carry`, "held is counted never
+  listed", the N7 archived-between-two-reads race) is still stated once, just not re-argued at
+  design.md's own length.
+- The `nooma-testing` skill's execution step 2 ("for a new invariant: add it to the table in
+  `docs/06-harness.md` §4 ... and only then write the test") was not followed in the order it
+  states, for I27. Task 6.9 put the `docs/06-harness.md` §4 row in this PR's GREEN commit
+  (`7a9e82c`), and the RED commit (`7cab892`) already carries
+  `TestI27_ViewingIsNotDelivering`'s own doc comment citing "I27 (`docs/06-harness.md` §4, doc 02
+  §7)" — a forward reference to a row and a doc 02 §7 sentence that did not exist yet in the
+  repository: `git show 7cab892:docs/06-harness.md | rg I27` and
+  `git show 7cab892:docs/02-cognitive-core.md | rg I27` both return nothing at that commit, and
+  both are present only from `7a9e82c` on. The final tip is correct — the row, the doc 02
+  sentence and the test all agree once GREEN lands — but the RED commit was watched red with a
+  citation to a forward reference: documentation that resolved only in the very next commit,
+  `7a9e82c`, not the ordering the skill requires. Next time: the harness row (and its doc 02
+  sentence, when non-negotiable #1 also requires one) lands in the same commit as the RED test, or
+  earlier — never in the GREEN commit that follows it.
 
 ---
 

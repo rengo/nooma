@@ -333,6 +333,10 @@ section rejects above.
   what `relation_to_active_focus` reads (above), so that same first ranking after a restart has
   `previous` empty for both mechanisms at once: `relation_to_active_focus` is 0 for every unit
   and the term vanishes entirely, not only hysteresis. Two effects from one restart, not one.
+  Until `m4c` gives `focus.Select` its first caller, `/ui`'s Today mirror computes each focus
+  with `focus.Rank` alone — top-N by score, no `hysteresis_margin` and no incumbent — the same
+  shape a first ranking after a restart already has above, held here as Today's own steady state
+  rather than a transient one.
 
 ## 4. Relations
 
@@ -1108,6 +1112,11 @@ box can audit it):
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.
+
+**Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
+now, computed from the same reads and the same `Carry`, but rendering it writes nothing:
+`surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET` (I27,
+`docs/06-harness.md` §4).
 
 **Degradation** (owner ruling 1; `internal/core/prospection.ResolveInterrupt`,
 `Interrupt.Route`): classify emits `interrupt_level` per message. A `NULL` or unparseable
