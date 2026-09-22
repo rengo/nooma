@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -198,6 +199,74 @@ func TestServeNoUI(t *testing.T) {
 				t.Errorf("POST /capture = %d, want %d (Capture is nil — no providers configured; --no-ui must not change this)", captureResp.StatusCode, http.StatusServiceUnavailable)
 			}
 		})
+	}
+}
+
+// noRedirectClient is an *http.Client that never follows a redirect on its
+// own, so a 303 from the handshake shows up here as exactly that status
+// with a Location header, not as an already-followed 200.
+func noRedirectClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// TestServeHandshake is spec m4a's exit criterion end to end
+// (docs/06-harness.md:181-183): token on loopback, GET /ui redirects to the
+// handshake, POST /ui/login with the right token issues the cookie, and GET
+// /ui with that cookie reaches the mirror.
+func TestServeHandshake(t *testing.T) {
+	home, work := t.TempDir(), t.TempDir()
+	vault := initVault(t, home, work, "pablo.nooma")
+	port := freePort(t)
+	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n  auth_token_env: NOOMA_SERVE_HANDSHAKE_TEST_TOKEN\n", port))
+	const token = "handshake-e2e-token"
+	t.Setenv("NOOMA_SERVE_HANDSHAKE_TEST_TOKEN", token)
+
+	startServe(t, home, vault, port)
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	client := noRedirectClient()
+
+	uiResp, err := client.Get(base + "/ui")
+	if err != nil {
+		t.Fatalf("GET /ui: %v", err)
+	}
+	_ = uiResp.Body.Close()
+	if uiResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("GET /ui with no cookie = %d, want %d", uiResp.StatusCode, http.StatusSeeOther)
+	}
+	if loc := uiResp.Header.Get("Location"); loc != "/ui/login" {
+		t.Fatalf("GET /ui Location = %q, want %q", loc, "/ui/login")
+	}
+
+	loginResp, err := client.PostForm(base+"/ui/login", url.Values{"token": {token}})
+	if err != nil {
+		t.Fatalf("POST /ui/login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("POST /ui/login with the right token = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
+	}
+	cookies := loginResp.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("POST /ui/login Set-Cookie count = %d, want 1", len(cookies))
+	}
+
+	authedReq, err := http.NewRequest(http.MethodGet, base+"/ui", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authedReq.AddCookie(cookies[0])
+	authedResp, err := client.Do(authedReq)
+	if err != nil {
+		t.Fatalf("GET /ui with the cookie: %v", err)
+	}
+	defer func() { _ = authedResp.Body.Close() }()
+	if authedResp.StatusCode != http.StatusOK {
+		t.Errorf("GET /ui with the cookie = %d, want %d", authedResp.StatusCode, http.StatusOK)
 	}
 }
 

@@ -1,0 +1,22 @@
+package ui
+
+// Login is the handshake screen (design m4a §3.3): one token field, one
+// submit button, and — on a rejected submission — a message that names
+// nothing about why an empty field and a wrong token look identical, since
+// both reach the same comparison. Minimal by design: the overflow cut
+// design §7's PR 4b row names for this template, taken from the start
+// rather than after the fact.
+templ Login(view LoginView) {
+	@Page("nooma — sign in", loginBody(view))
+}
+
+templ loginBody(view LoginView) {
+	<form method="post" action="/ui/login">
+		<label for="token">Token</label>
+		<input type="password" id="token" name="token" autocomplete="off" required autofocus/>
+		<button type="submit">Sign in</button>
+		if view.Rejected {
+			<p>That token was not accepted.</p>
+		}
+	</form>
+}
