@@ -79,8 +79,15 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 		t.Fatalf("Unasked (before): %v", err)
 	}
 
-	if _, err := svc.Today(ctx); err != nil {
-		t.Fatalf("Today: %v", err)
+	// R6's own scenario wording: "/ui is requested three times ...
+	// surfaced_at and asked_at remain NULL after all three" — looped
+	// rather than called once. TodayService is stateless, so a single call
+	// proves the identical postcondition, but this matches the spec's own
+	// scenario as written rather than a weaker paraphrase of it.
+	for i := 0; i < 3; i++ {
+		if _, err := svc.Today(ctx); err != nil {
+			t.Fatalf("Today request %d: %v", i+1, err)
+		}
 	}
 
 	afterUndelivered, err := triggers.Undelivered(ctx)

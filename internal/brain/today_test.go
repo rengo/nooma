@@ -3,6 +3,8 @@ package brain
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,4 +215,92 @@ func TestToday_DigestMirrorsCarry(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestToday_FocusMemberScoreCarriesANaNWithoutCoercion is FocusMember's own
+// doc comment made into a test: Score is the literal value focus.Rank
+// produced — NaN included — never coerced (PR 7 renders it; this package
+// only carries it).
+//
+// The NaN reaches focus.Rank the honest way — a unit whose stored weight is
+// already NaN, one of weight.Effective's own four documented NaN-producing
+// shapes (internal/core/weight/decay.go) — rather than hand-written into a
+// FocusMember the service never computes.
+func TestToday_FocusMemberScoreCarriesANaNWithoutCoercion(t *testing.T) {
+	units := memrepo.NewUnits()
+	seedTodayUnit(t, units, "task-nan", unit.TypeTask, math.NaN())
+
+	svc := newTodayService(units, memrepo.NewConfig(), memrepo.NewState(), memrepo.NewTriggers(), memrepo.NewPendingQuestions(), memrepo.NewDecisionLog())
+	today, err := svc.Today(context.Background())
+	if err != nil {
+		t.Fatalf("Today: %v", err)
+	}
+
+	taskFocus := today.Focuses[0]
+	if len(taskFocus.Members) != 1 {
+		t.Fatalf("task focus has %d members, want 1", len(taskFocus.Members))
+	}
+	if got := taskFocus.Members[0].Score; !math.IsNaN(got) {
+		t.Fatalf("FocusMember.Score = %v, want NaN — focus.Rank's own literal Score, never coerced to 0", got)
+	}
+}
+
+// newDigestParityFixture seeds one undelivered trigger and one queued
+// relation question, identically, for two independent runs of the digest —
+// one that never called Today, one that called it repeatedly — so
+// TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical can compare
+// what each run's real assembleDigest sends.
+func newDigestParityFixture(t *testing.T) (*undeliveredTriggers, *digestUnits, *memrepo.PendingQuestions, *memrepo.DecisionLog, *memrepo.State, *memrepo.Config) {
+	t.Helper()
+	triggers := &undeliveredTriggers{pending: []ports.DueTrigger{digestTrigger("trg-1", "u-1", "renew the passport")}}
+	units := &digestUnits{byID: map[string]focus.Candidate{"u-1": {ID: "u-1", Weight: 1}}}
+	questions := queuedQuestions(t, question("q-1", digestQuestionNow, "plan the offsite", "the travel budget"))
+	log := memrepo.NewDecisionLog()
+	return triggers, units, questions, log, memrepo.NewState(), memrepo.NewConfig()
+}
+
+// TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical is R6's
+// second half: "the morning delivery ... is unaffected by any number of
+// Today requests, including zero." A real assembleDigest run over five
+// prior Today requests is compared, byte for byte, against the identical
+// assembleDigest run over a zero-request baseline — both seeded the same
+// way from newDigestParityFixture, so the only difference between the two
+// runs is whether Today was ever called.
+func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) {
+	ctx := context.Background()
+
+	// Baseline: zero Today requests before the digest assembles.
+	baseTriggers, baseUnits, baseQuestions, baseLog, baseState, _ := newDigestParityFixture(t)
+	baseCh := &sendingChannel{}
+	baseCarried, err := questionRunner(t, baseTriggers, baseUnits, baseState, baseLog, baseCh, baseQuestions).
+		assembleDigest(ctx, digestNow, true)
+	if err != nil {
+		t.Fatalf("baseline assembleDigest: %v", err)
+	}
+
+	// Five Today requests, with no morning digest run in between, over an
+	// identically seeded fixture.
+	triggers, units, questions, log, state, cfg := newDigestParityFixture(t)
+	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log)
+	for i := 0; i < 5; i++ {
+		if _, err := svc.Today(ctx); err != nil {
+			t.Fatalf("Today request %d: %v", i+1, err)
+		}
+	}
+	ch := &sendingChannel{}
+	carried, err := questionRunner(t, triggers, units, state, log, ch, questions).
+		assembleDigest(ctx, digestNow, true)
+	if err != nil {
+		t.Fatalf("assembleDigest after five Today requests: %v", err)
+	}
+
+	if carried != baseCarried {
+		t.Fatalf("carried %d after five Today requests, want %d — the zero-request baseline", carried, baseCarried)
+	}
+	if got, want := ch.count(), baseCh.count(); got != want {
+		t.Fatalf("sent %d digest(s) after five Today requests, want %d — the zero-request baseline", got, want)
+	}
+	if got, want := strings.Join(ch.sent, "\x00"), strings.Join(baseCh.sent, "\x00"); got != want {
+		t.Fatalf("digest text after five Today requests =\n%q\nwant byte-identical to the zero-request baseline:\n%q", got, want)
+	}
 }
