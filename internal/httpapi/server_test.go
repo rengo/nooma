@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -264,9 +265,11 @@ func TestGuardedRoutesRequireToken(t *testing.T) {
 // bearer-token header only, never the UI's cookie handshake (ADR-0007). GET
 // /ui with a token configured and no cookie no longer answers 200 with the
 // shell — it answers 303 to the handshake screen, carrying no vault data
-// and no Set-Cookie. /ui/login itself still 404s until PR 4b lands (the
-// accepted gap, N2, design §12), so this test's own scope stops at the
-// redirect, not the screen behind it.
+// and no Set-Cookie.
+//
+// Its third leg is PR 4b's own RED commit (design m4a §3.2): GET /ui/login
+// is now 200 with no Set-Cookie — this leg could not be asserted in PR 4a
+// because loginPage is PR 4b's own GREEN, and PR 4a's tip must stay green.
 func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 	t.Parallel()
 
@@ -305,6 +308,21 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 		}
 		if strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
 			t.Error("GET /ui with no cookie leaked the shell's own body — it must carry no vault-shaped content")
+		}
+	})
+
+	t.Run("/ui/login", func(t *testing.T) {
+		t.Parallel()
+
+		req := httptest.NewRequest(http.MethodGet, "/ui/login", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET /ui/login with a token configured and no cookie: status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if rec.Header().Get("Set-Cookie") != "" {
+			t.Error("GET /ui/login set a cookie before any credentials were submitted")
 		}
 	})
 }
@@ -725,4 +743,121 @@ func TestUIRootIsNeverRedirectedByTheMux(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestLoginIssuesTheCookieOnlyOnTheRightToken is design m4a §3.3's own
+// contract for POST /ui/login on success: exactly one Set-Cookie, every flag
+// ADR-0028 fixes, a 303 back to /ui — and Secure follows the request's own
+// TLS state rather than a hard-coded value (spec R2's "Verified by": "cookie
+// flags asserted on the Set-Cookie header").
+func TestLoginIssuesTheCookieOnlyOnTheRightToken(t *testing.T) {
+	t.Parallel()
+
+	const token = "the-real-token"
+
+	for _, tc := range []struct {
+		name       string
+		newServer  func(http.Handler) *httptest.Server
+		wantSecure bool
+	}{
+		{name: "plain HTTP", newServer: httptest.NewServer, wantSecure: false},
+		{name: "TLS", newServer: httptest.NewTLSServer, wantSecure: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{})})
+			srv := tc.newServer(h)
+			defer srv.Close()
+
+			client := srv.Client()
+			client.CheckRedirect = func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			}
+
+			resp, err := client.PostForm(srv.URL+"/ui/login", url.Values{"token": {token}})
+			if err != nil {
+				t.Fatalf("POST /ui/login: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusSeeOther {
+				t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusSeeOther)
+			}
+			if loc := resp.Header.Get("Location"); loc != "/ui" {
+				t.Errorf("Location = %q, want %q", loc, "/ui")
+			}
+
+			cookies := resp.Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("Set-Cookie count = %d, want 1 (%v)", len(cookies), cookies)
+			}
+			c := cookies[0]
+
+			if c.Name != uiCookieName {
+				t.Errorf("cookie name = %q, want %q", c.Name, uiCookieName)
+			}
+			decoded, err := base64.RawURLEncoding.DecodeString(c.Value)
+			if err != nil {
+				t.Fatalf("cookie value does not decode as base64url: %v", err)
+			}
+			if string(decoded) != token {
+				t.Errorf("decoded cookie value = %q, want %q", decoded, token)
+			}
+			if c.Path != "/ui" {
+				t.Errorf("cookie Path = %q, want %q", c.Path, "/ui")
+			}
+			if !c.HttpOnly {
+				t.Error("cookie is not HttpOnly")
+			}
+			if c.SameSite != http.SameSiteStrictMode {
+				t.Errorf("cookie SameSite = %v, want Strict", c.SameSite)
+			}
+			if c.Secure != tc.wantSecure {
+				t.Errorf("cookie Secure = %v, want %v", c.Secure, tc.wantSecure)
+			}
+			if c.MaxAge != 0 || !c.Expires.IsZero() {
+				t.Errorf("cookie has a lifetime (MaxAge=%d, Expires=%v), want a session cookie", c.MaxAge, c.Expires)
+			}
+		})
+	}
+}
+
+// TestLoginRejectionIsByteIdentical is design m4a §3.3's own MUST: an empty
+// token field and a wrong one produce the same 401 body and headers, because
+// both reach the same comparison — telling them apart would be an oracle for
+// whether a submission was even attempted.
+func TestLoginRejectionIsByteIdentical(t *testing.T) {
+	t.Parallel()
+
+	const token = "the-real-token"
+	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{})})
+
+	cases := []struct {
+		name      string
+		formToken string
+	}{
+		{name: "empty field", formToken: ""},
+		{name: "wrong token", formToken: "not-the-token"},
+	}
+
+	var first *httptest.ResponseRecorder
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodPost, "/ui/login", strings.NewReader(url.Values{"token": {tc.formToken}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s: status = %d, want %d", tc.name, rec.Code, http.StatusUnauthorized)
+		}
+		if rec.Header().Get("Set-Cookie") != "" {
+			t.Errorf("%s: response set a cookie on a rejected submission", tc.name)
+		}
+		if first == nil {
+			first = rec
+		} else if rec.Code != first.Code || rec.Body.String() != first.Body.String() {
+			t.Errorf("%s: response is not byte-identical to %q's", tc.name, cases[0].name)
+		}
+	}
 }
