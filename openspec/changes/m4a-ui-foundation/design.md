@@ -372,21 +372,26 @@ func requireCookie(token string) func(http.Handler) http.Handler
 | **Logout** | **None in m4a** | A `POST /ui/logout` clearing the cookie is ~15 lines and a mutation with no vault effect. It has no user story until the UI has something to walk away from; closing the browser ends a session cookie, rotating `server.token` ends every cookie (Q1). Owner-review item OR1; the natural home is m4e's admin view |
 | **Body bound on the login POST** | `http.MaxBytesReader(w, r.Body, 4096)` before `ParseForm` | A token is short; an unbounded form parse on an open route is the one denial-of-service this PR would otherwise introduce |
 
-**A cookie that fails to decode is a wrong cookie, not a third outcome.** `requireCookie`
-attempts `base64.RawURLEncoding.DecodeString` on the cookie's value; on a decode error it
-compares a fixed-length zero-value byte slice against `token` with the same
-`subtle.ConstantTimeCompare` call every other arm uses, instead of returning early. Comparing
-anyway — rather than short-circuiting — is what keeps "missing", "wrong" and "fails to decode"
-byte-identical in both timing and response, matching `requireToken`'s own MUST NOT (§3.2).
-`TestUIViewsRequireCookie` (§8) gains an explicit case for a cookie value that is not valid
-base64url, asserting the same 303/401 arms as "wrong" — the byte-identical-over-HTTP half of the
-claim, the only half a response recorder can observe. It does **not** catch an early return on
-the decode error or a non-constant-time comparison: both mutations produce that exact same
-byte-identical response, and only their timing differs, which no response-level test measures.
-The timing-relevant structure — the comparison always running through
-`subtle.ConstantTimeCompare`, the decode-error branch never returning early — is instead proven
-by `test/conformance/httpapi_secret_compare_test.go` (§8), an AST-level gate over `requireCookie`
-and `requireToken`.
+**A cookie that fails to decode is a wrong cookie, not a third outcome.** `requireCookie` reads
+its cookie through `presentedSecret` (`cookie.go`), which decodes `base64.RawURLEncoding` and
+always returns exactly `len(token)` bytes — the decoded value when it decodes to that length, a
+fixed-length zero value otherwise — and returns no error and takes no `http.ResponseWriter`.
+That signature is what makes an early return on the decode error **unexpressible**, not merely
+avoided: `requireCookie` has nothing to answer an error with, because `presentedSecret` never
+hands it one. `TestUIViewsRequireCookie` (§8) gains an explicit case for a cookie value that is
+not valid base64url, and a second explicit case for a wrong cookie the same decoded length as the
+real token (exercising the full-length comparison rather than a length-mismatch short-circuit),
+both asserting the same 303/401 arms as "wrong" — the byte-identical-over-HTTP half of the claim,
+the only half a response recorder can observe. It does **not** by itself prove the comparison
+still runs in constant time: a mutation confined to `presentedSecret`'s or a helper's own body
+produces that exact same byte-identical response, and only timing would differ, which no
+response-level test measures. The structural half is proven instead by
+`test/conformance/httpapi_secret_compare_test.go` (§8): `presentedSecret`'s signature check makes
+the early return unexpressible, and a transitive walk over same-package calls from `requireCookie`
+and `requireToken` proves `subtle.ConstantTimeCompare` is still reached — soundly under in-package
+helper extraction in either direction, unlike an earlier version of this gate that inspected only
+each function's own body (Judgment Day: a helper hiding the bug escaped it, and a helper hiding a
+*correct* comparison falsely failed it).
 
 **The handshake.** `GET /ui/login` renders `ui.Login(LoginView{Rejected: false})`, status 200.
 `POST /ui/login` reads `token` from the form, compares, and on success sets the cookie and
@@ -1082,8 +1087,8 @@ Levels per `docs/06-harness.md` §3: `internal/httpapi` and `internal/ui` tests 
 | L1 `httpapi` | `TestUISubtreeSetsSecurityHeaders` — every response under `/ui` (200, 303, 401, 403, 404, static) carries the five headers with the exact CSP string | A header dropped from one arm; a handler that writes its own `Cache-Control`; the chain wrapped in the wrong order so a 403 escapes without headers |
 | L1 `httpapi` | `TestUICrossOriginPostIsRefused` — `POST /ui/login` with `Sec-Fetch-Site: cross-site` → 403; with `same-origin` → not 403; with no `Sec-Fetch-Site` and `Origin: http://evil` → 403; with neither header → not 403; `GET` with `cross-site` → not 403 | The wrap removed; the wrap placed inside `requireCookie` (a cross-site POST would 401 instead of 403); a bypass pattern added |
 | L1 `httpapi` | `TestUIStaticServesStylesheetAndHtmx` — `GET /ui/static/app.css`, `/ui/static/htmx.min.js` and `/ui/static/htmx.LICENSE` each answer 200 with the right `Content-Type` and the embedded bytes; `GET /ui/static` and `GET /ui/static/` both answer 404, asserted against `Handler(d)`, not a 307 or a listing | Wrong content-type; truncated or swapped bytes; a directory listing served (the `{file...}`/`http.FileServerFS` defect §3.2 corrected); the licence file missing from the embed |
-| L1 `httpapi` | `TestUIViewsRequireCookie` — token configured: no cookie, a wrong cookie and a cookie that fails `base64.RawURLEncoding` decoding all give byte-identical `GET` responses (303 `/ui/login`); the right cookie reaches the view; `POST /ui` against `Handler(d)` answers `405 Method Not Allowed` with `Allow: GET, HEAD`, no `Set-Cookie`, no body — the mux's own answer, asserted rather than assumed | A branch that distinguishes missing from wrong; a view reachable by another path; registering a method-agnostic pattern (e.g. a bare `/ui` subtree) that would route `POST` into the view instead of a 405. **Not** an early return on decode error nor `==` instead of `ConstantTimeCompare` — both produce this same byte-identical response over HTTP; see the conformance row below |
-| L2 `test/conformance` | `TestHTTPAPISecretCompareStaysConstantTimeAndDecodeErrorFallsThrough` (`httpapi_secret_compare_test.go`) — an AST-level gate, not a response-level one: `requireCookie` and `requireToken` must each still call `subtle.ConstantTimeCompare`; `requireCookie`'s base64 decode-error branch must contain no `return` statement | `subtle.ConstantTimeCompare` replaced by a plain byte-equality helper (e.g. `bytes.Equal`); an early `return` added to the decode-error branch; either target function renamed or removed (the gate is vacuity-guarded — it fails loudly rather than finding nothing to check) |
+| L1 `httpapi` | `TestUIViewsRequireCookie` — token configured: no cookie, a wrong cookie, a wrong cookie the same decoded length as the real token (exercising the full-length arm of the comparison rather than a length-mismatch short-circuit), and a cookie that fails `base64.RawURLEncoding` decoding all give byte-identical `GET` responses (303 `/ui/login`); the right cookie reaches the view; `POST /ui` against `Handler(d)` answers `405 Method Not Allowed` with `Allow: GET, HEAD`, no `Set-Cookie`, no body — the mux's own answer, asserted rather than assumed | A branch that distinguishes missing from wrong; a view reachable by another path; registering a method-agnostic pattern (e.g. a bare `/ui` subtree) that would route `POST` into the view instead of a 405. **Not** an early return on decode error nor `==` instead of `ConstantTimeCompare` — both produce this same byte-identical response over HTTP; see the conformance row below |
+| L2 `test/conformance` | `TestHTTPAPISecretCompareStructure` (`httpapi_secret_compare_test.go`) — an AST-level gate, not a response-level one, proving exactly two things, both robust to in-package helper extraction in either direction: (1) `cookie.go`'s `presentedSecret` — the decode step — returns a single `[]byte`, no `error`, no `http.ResponseWriter`, so an early return on a decode error has no signature left to be written in; (2) `requireCookie` and `requireToken` each transitively reach `subtle.ConstantTimeCompare` through same-package, unqualified function calls, not necessarily in their own function body | `presentedSecret` grows an `error` result or an `http.ResponseWriter` parameter; `subtle.ConstantTimeCompare` replaced by a plain byte-equality helper anywhere in either function's same-package call closure; `requireCookie` or `requireToken` renamed or removed (the gate is vacuity-guarded — it fails loudly rather than finding nothing to check). **Does not** flag a helper extraction that still calls `subtle.ConstantTimeCompare`, nor a decode step moved into a further in-package helper with `presentedSecret`'s own signature unchanged — both are correct refactors, proven by mutation (`sdd/m4a-ui-foundation/apply-progress`) |
 | L1 `httpapi` | `TestRequireCookieNoOpOnlyOnLoopback` — `bindTokenTruthTable`'s rows, `TestRequireTokenNoOpOnlyOnLoopback`'s exact shape | A cookie check that fires with no token, or does not fire with one |
 | L1 `httpapi` | `TestLoginIssuesTheCookieOnlyOnTheRightToken` — one `Set-Cookie`; name, decoded value, `Path=/ui`, `HttpOnly`, `SameSite=Strict`; `Secure` present only under `httptest.NewTLSServer`; 303 to `/ui` | A flag dropped; `Secure` hard-coded either way; `Path=/`; a `Max-Age` added; the raw token as the value (a token with a `;` breaks the round trip) |
 | L1 `httpapi` | `TestLoginRejectionIsByteIdentical` — empty field and wrong token → same 401 body and headers; `TestLoginRoutesAbsentWithoutAToken` — `Token == ""` → `GET /ui/login` is 404 | An oracle; a screen shown on loopback |

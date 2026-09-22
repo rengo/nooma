@@ -405,9 +405,16 @@ body, not hidden.
       would route `POST` into the view instead of the mux's `405`. **Not** `==` instead of
       `subtle.ConstantTimeCompare`, nor an early `return unauthorized` on the decode error
       (§3.3's own timing-oracle argument): both produce the identical byte-for-byte response this
-      response-level test observes, and only their timing differs — caught instead by the
-      AST-level gate `test/conformance/httpapi_secret_compare_test.go`, added later this same PR
-      (correction recorded here after judgment-day found the original claim did not hold).
+      response-level test observes, and only their timing differs — caught instead by
+      `test/conformance/httpapi_secret_compare_test.go`, added later this same PR (correction
+      recorded here after judgment-day found the original claim did not hold). That gate itself
+      was rewritten a further two rounds after that: a version that inspected only each target
+      function's own body missed the same bug once moved into a same-package helper (false
+      negative) and separately flagged a same-package helper that still called
+      `subtle.ConstantTimeCompare` (false positive) — closed by reshaping `cookie.go` so the bug
+      has no signature to be written in (`presentedSecret` returns `[]byte`, no `error`, no
+      `http.ResponseWriter`) and by rewriting the gate to check that signature plus a transitive,
+      same-package call closure instead of one function's own statements.
       Requirement: R1, R2.
 - [x] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
       (`TestRequireTokenNoOpOnlyOnLoopback`'s own shape).

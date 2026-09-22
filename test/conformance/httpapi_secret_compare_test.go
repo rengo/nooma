@@ -2,234 +2,349 @@
 package conformance
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// TestHTTPAPISecretCompareStaysConstantTimeAndDecodeErrorFallsThrough is the
-// structural gate TestUIViewsRequireCookie (internal/httpapi/server_test.go)
-// cannot be: that test only ever sees requireCookie's response over HTTP,
-// and both mutations judgment-day found on requireCookie produce a
-// byte-identical 303 — only their TIMING differs, and no response-level
-// test measures timing. What this test proves instead, on the AST rather
-// than on any response:
+// TestHTTPAPISecretCompareStructure is the structural gate
+// TestUIViewsRequireCookie (internal/httpapi/server_test.go) cannot be: that
+// test only ever sees requireCookie's response over HTTP, and a mutation
+// that changes only requireCookie's TIMING — never its response — is
+// invisible to it. What this test proves instead, on the AST rather than on
+// any response, is exactly two things:
 //
-//  1. requireToken (internal/httpapi/auth.go) and requireCookie
-//     (internal/httpapi/cookie.go) each still call
-//     crypto/subtle.ConstantTimeCompare — a plain `bytes.Equal` or other
-//     byte-equality helper standing in for it leaks timing information
-//     about a partial match (ADR-0007, ADR-0028) with no other observable
-//     difference.
-//  2. requireCookie's base64 decode-error branch contains no `return`
-//     statement — it falls through to the comparison, exactly as design
-//     m4a §3.3 requires, so "missing", "wrong" and "malformed" stay
-//     timing-indistinguishable, not merely response-indistinguishable.
+//  1. Signature: internal/httpapi/cookie.go's presentedSecret — the decode
+//     step requireCookie calls to read its cookie — returns a single
+//     []byte, with no error result and no http.ResponseWriter parameter.
+//     This is what makes an early return on a decode error UNEXPRESSIBLE,
+//     not merely avoided: a function with no error to return and no
+//     response writer to answer with has no decode-error branch left to
+//     write one in. (Judgment Day: two independent rounds each defeated an
+//     earlier version of this gate that instead walked requireCookie's own
+//     ast.FuncDecl body for a `return` inside an if-err-!=-nil branch — one
+//     round moved the decode, and the bug inside it, into a same-package
+//     helper the walk never followed, a false negative; a later round found
+//     the walk also had no way to name WHICH function should carry
+//     subtle.ConstantTimeCompare once a same-package helper existed, so a
+//     correct extraction that still called subtle.ConstantTimeCompare
+//     failed the gate, a false positive. Restructuring the production code
+//     so the bug cannot be expressed in any shape — rather than hardening a
+//     walk that inspects one function's own statements — is what closes
+//     both classes at once; see cookie.go's presentedSecret doc comment.)
 //
-// Scope, stated plainly rather than implied: this checks requireCookie and
-// requireToken by name — it does not generalize to "every secret
-// comparison anywhere in this module" the way a generic scan would, and it
-// does not measure actual timing (no test in this repository does — non-
-// negotiable #5 forbids the network and real wall-clock timing assertions
-// are inherently flaky). It proves the STRUCTURE that timing-safety
-// depends on, the same relationship i01's own "returns or embeds a
-// unit.Status" check has to I01: a static proof of shape, not a dynamic
-// proof of the property the shape exists to guarantee.
-func TestHTTPAPISecretCompareStaysConstantTimeAndDecodeErrorFallsThrough(t *testing.T) {
+//  2. Transitive compare: requireCookie (cookie.go) and requireToken
+//     (auth.go) must each reach a call to crypto/subtle.ConstantTimeCompare
+//     — not necessarily in their own ast.FuncDecl.Body, but somewhere in
+//     the closure of same-package, unqualified function calls reachable
+//     from them. This is what stays sound under in-package helper
+//     extraction in EITHER direction: a helper that still calls
+//     subtle.ConstantTimeCompare is not a violation (fixes the false
+//     positive above), and a plain byte-equality helper standing in for it
+//     anywhere in the closure — extracted or not — is (fixes the false
+//     negative the original, single-function-body walk could not see past
+//     a helper boundary).
+//
+// # Scope, stated plainly
+//
+// This checks requireCookie and requireToken by name, walking only
+// SAME-PACKAGE, UNQUALIFIED function calls (an *ast.Ident naming a
+// top-level, non-method function declared somewhere in
+// internal/httpapi's own non-test .go files) — not a generic scan of
+// "every secret comparison anywhere in this module." It does NOT cover:
+//
+//   - A call into another package (e.g. a helper moved to an internal
+//     subpackage) — invisible to this walk, which only ever resolves an
+//     unqualified *ast.Ident against internal/httpapi's own top-level
+//     functions.
+//   - A method call (`x.Method(...)`) or any other dynamic dispatch — an
+//     *ast.SelectorExpr call target is never treated as a same-package
+//     function reference here, deliberately: resolving it soundly would
+//     need a receiver's static type, which this AST-only walk does not
+//     compute (the same boundary go/ast-only tooling in this repository
+//     already accepts elsewhere, e.g. i23's applyWithPreImage gate).
+//   - Real timing. No test in this repository measures actual timing (non-
+//     negotiable #5 forbids the network, and a wall-clock timing assertion
+//     is inherently flaky). This proves the STRUCTURE timing-safety depends
+//     on, the same relationship i01's own "returns or embeds a
+//     unit.Status" check has to I01: a static proof of shape, not a dynamic
+//     proof of the property the shape exists to guarantee.
+func TestHTTPAPISecretCompareStructure(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
-	fset := token.NewFileSet()
+	httpapiDir := filepath.Join(repoRoot, "internal", "httpapi")
 
-	t.Run("requireToken and requireCookie both compare via subtle.ConstantTimeCompare", func(t *testing.T) {
-		for _, tc := range []struct {
-			relPath string
-			fn      string
-		}{
-			{"internal/httpapi/auth.go", "requireToken"},
-			{"internal/httpapi/cookie.go", "requireCookie"},
-		} {
-			path := filepath.Join(repoRoot, tc.relPath)
-			file, err := parser.ParseFile(fset, path, nil, 0)
-			if err != nil {
-				t.Fatalf("parse %s: %v", path, err)
+	funcs := parsePackageFuncDecls(t, httpapiDir)
+	if len(funcs) == 0 {
+		t.Fatal("found zero top-level functions under internal/httpapi — D10's guard: nothing to check yet")
+	}
+
+	t.Run("presentedSecret's signature makes an early return on decode error unexpressible", func(t *testing.T) {
+		fn, ok := funcs["presentedSecret"]
+		if !ok {
+			// A renamed or removed target function must break this gate,
+			// not silently pass it — there is nothing left to check the
+			// property against.
+			t.Fatal("internal/httpapi declares no func presentedSecret — renamed or removed; this gate has nothing to check")
+		}
+		if ok, reason := decodeHelperSignatureIsSound(fn); !ok {
+			t.Errorf("internal/httpapi/cookie.go's presentedSecret: %s", reason)
+		}
+	})
+
+	t.Run("requireCookie and requireToken each transitively reach subtle.ConstantTimeCompare", func(t *testing.T) {
+		for _, name := range []string{"requireCookie", "requireToken"} {
+			fn, ok := funcs[name]
+			if !ok {
+				// Same vacuity guard as above: a renamed or removed
+				// requireCookie/requireToken leaves nothing to check.
+				t.Fatalf("internal/httpapi declares no top-level func %s — renamed or removed; this gate has nothing to check", name)
 			}
-			fn := findFuncDecl(file, tc.fn)
-			if fn == nil {
-				// A renamed or removed target function must break this
-				// gate, not silently pass it — there is nothing left to
-				// check the property against.
-				t.Fatalf("%s declares no func %s — renamed or removed; this gate has nothing to check", tc.relPath, tc.fn)
-			}
-			if !callsSubtleConstantTimeCompare(fn) {
+
+			closure := transitiveSamePackageCallClosure(fn, funcs)
+			if !anyReachesSubtleConstantTimeCompare(closure) {
+				var walked []string
+				for reached := range closure {
+					walked = append(walked, reached)
+				}
 				t.Errorf(
-					"%s's %s no longer calls subtle.ConstantTimeCompare — a secret comparison "+
-						"must run in constant time (ADR-0007, ADR-0028); a plain byte-equality "+
-						"helper leaks timing information about a partial match",
-					tc.relPath, tc.fn,
+					"%s (transitively through %v) never calls subtle.ConstantTimeCompare — a "+
+						"secret comparison must run in constant time (ADR-0007, ADR-0028); a plain "+
+						"byte-equality helper, anywhere in that call closure, leaks timing "+
+						"information about a partial match",
+					name, walked,
 				)
 			}
 		}
 	})
+}
 
-	t.Run("requireCookie's decode-error branch falls through to the comparison, never returns early", func(t *testing.T) {
-		path := filepath.Join(repoRoot, "internal/httpapi/cookie.go")
+// parsePackageFuncDecls parses every non-test .go file directly inside dir
+// and returns its top-level, non-method function declarations keyed by
+// name. Only top-level functions are indexed (fn.Recv == nil) — a method's
+// receiver would need a static type resolution this AST-only walk does not
+// perform, the same boundary this file's own scope note above states.
+func parsePackageFuncDecls(t *testing.T, dir string) map[string]*ast.FuncDecl {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", dir, err)
+	}
+
+	fset := token.NewFileSet()
+	funcs := map[string]*ast.FuncDecl{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
 			t.Fatalf("parse %s: %v", path, err)
 		}
-		fn := findFuncDecl(file, "requireCookie")
-		if fn == nil {
-			t.Fatal("internal/httpapi/cookie.go declares no func requireCookie — renamed or removed; this gate has nothing to check")
-		}
-		if ret := returnInsideDecodeErrorBranch(fn); ret != nil {
-			t.Errorf(
-				"%s: requireCookie returns early on a base64 decode error instead of falling "+
-					"through to the comparison — a decode error must stay indistinguishable from "+
-					"a wrong cookie in both response and timing (design m4a §3.3, ADR-0028)",
-				fset.Position(ret.Pos()),
-			)
-		}
-	})
-}
-
-// findFuncDecl returns file's top-level function declaration named name, or
-// nil if file declares no such function.
-func findFuncDecl(file *ast.File, name string) *ast.FuncDecl {
-	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == name {
-			return fn
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil {
+				continue
+			}
+			funcs[fn.Name.Name] = fn
 		}
 	}
-	return nil
+	return funcs
 }
 
-// callsSubtleConstantTimeCompare reports whether fn's body contains a call
-// expression of the exact shape subtle.ConstantTimeCompare(...).
-func callsSubtleConstantTimeCompare(fn *ast.FuncDecl) bool {
-	if fn.Body == nil {
+// decodeHelperSignatureIsSound reports whether fn's signature is exactly
+// "returns a single []byte, no error, no http.ResponseWriter parameter" —
+// the shape that leaves no decode-error branch to write an early return in.
+// The reason string, non-empty only when ok is false, names which part of
+// the signature failed so a contributor who adds an error return (the exact
+// shape that reopened this bug twice before, see this file's own doc
+// comment) sees why immediately rather than re-deriving it.
+func decodeHelperSignatureIsSound(fn *ast.FuncDecl) (ok bool, reason string) {
+	var resultTypes []ast.Expr
+	if fn.Type.Results != nil {
+		for _, field := range fn.Type.Results.List {
+			n := len(field.Names)
+			if n == 0 {
+				n = 1
+			}
+			for i := 0; i < n; i++ {
+				resultTypes = append(resultTypes, field.Type)
+			}
+		}
+	}
+
+	if len(resultTypes) == 2 && exprIsErrorType(resultTypes[1]) {
+		return false, fmt.Sprintf(
+			"returns (%s, error) — it must return a single []byte with no error result, so a "+
+				"caller has no decode-error branch to answer from",
+			exprString(resultTypes[0]),
+		)
+	}
+	if len(resultTypes) != 1 {
+		return false, fmt.Sprintf("returns %d values, want exactly 1 ([]byte)", len(resultTypes))
+	}
+	if !exprIsByteSliceType(resultTypes[0]) {
+		return false, fmt.Sprintf("result type is %s, want []byte", exprString(resultTypes[0]))
+	}
+
+	if fn.Type.Params != nil {
+		for _, field := range fn.Type.Params.List {
+			if exprIsHTTPResponseWriterType(field.Type) {
+				return false, "takes an http.ResponseWriter parameter — it must not, so it has " +
+					"no response to write an early decode-error answer to"
+			}
+		}
+	}
+	return true, ""
+}
+
+// exprIsByteSliceType reports whether e is exactly the type []byte — an
+// *ast.ArrayType with no Len (a slice, not an array) whose element is the
+// identifier "byte".
+func exprIsByteSliceType(e ast.Expr) bool {
+	arr, ok := e.(*ast.ArrayType)
+	if !ok || arr.Len != nil {
 		return false
 	}
-	found := false
+	ident, ok := arr.Elt.(*ast.Ident)
+	return ok && ident.Name == "byte"
+}
+
+// exprIsErrorType reports whether e is the predeclared identifier error,
+// parsed by go/ast as a plain *ast.Ident (error is a predeclared type, not a
+// keyword, so it carries no dedicated node kind of its own).
+func exprIsErrorType(e ast.Expr) bool {
+	ident, ok := e.(*ast.Ident)
+	return ok && ident.Name == "error"
+}
+
+// exprIsHTTPResponseWriterType reports whether e names http.ResponseWriter,
+// directly (`http.ResponseWriter`) or through a pointer
+// (`*http.ResponseWriter`) — ResponseWriter is itself an interface, so a
+// pointer to one is not idiomatic Go, but this check does not rely on that
+// convention holding.
+func exprIsHTTPResponseWriterType(e ast.Expr) bool {
+	if star, ok := e.(*ast.StarExpr); ok {
+		e = star.X
+	}
+	sel, ok := e.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "http" && sel.Sel.Name == "ResponseWriter"
+}
+
+// exprString renders e back to source text for an error message — best-
+// effort (a type shape this function does not special-case renders as its
+// Go syntax node type name instead of source text), which is acceptable
+// here since every shape this gate's own test cases exercise (identifiers,
+// selectors, slices, pointers) is covered.
+func exprString(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.SelectorExpr:
+		if pkg, ok := t.X.(*ast.Ident); ok {
+			return pkg.Name + "." + t.Sel.Name
+		}
+	case *ast.ArrayType:
+		return "[]" + exprString(t.Elt)
+	case *ast.StarExpr:
+		return "*" + exprString(t.X)
+	}
+	return fmt.Sprintf("%T", e)
+}
+
+// transitiveSamePackageCallClosure returns every function reachable from
+// start by following same-package, unqualified function calls (an
+// *ast.CallExpr whose Fun is a plain *ast.Ident naming a function present in
+// funcs), to fixpoint, keyed by name and including start itself. visited
+// (implicit in the returned map) doubles as the cycle guard: a function is
+// added to the result, and so skipped on rediscovery, before its own body is
+// walked for further callees — the same discover-before-explore shape any
+// sound DFS/BFS reachability walk over a possibly cyclic graph needs.
+func transitiveSamePackageCallClosure(start *ast.FuncDecl, funcs map[string]*ast.FuncDecl) map[string]*ast.FuncDecl {
+	closure := map[string]*ast.FuncDecl{start.Name.Name: start}
+	queue := []*ast.FuncDecl{start}
+	for len(queue) > 0 {
+		fn := queue[0]
+		queue = queue[1:]
+		for _, calleeName := range sameUnqualifiedCallNames(fn) {
+			if _, already := closure[calleeName]; already {
+				continue
+			}
+			callee, ok := funcs[calleeName]
+			if !ok {
+				// Not a same-package top-level function this walk can
+				// follow (stdlib, cross-package, a method, or a variable
+				// holding a func value) — outside this gate's stated
+				// scope, not an error.
+				continue
+			}
+			closure[calleeName] = callee
+			queue = append(queue, callee)
+		}
+	}
+	return closure
+}
+
+// sameUnqualifiedCallNames returns the name of every function fn's body
+// calls through a bare identifier (`f(...)`, never `pkg.f(...)` or
+// `x.Method(...)`), in the order ast.Inspect visits them; duplicates are
+// possible and harmless, since the caller de-duplicates via its own
+// closure map.
+func sameUnqualifiedCallNames(fn *ast.FuncDecl) []string {
+	if fn.Body == nil {
+		return nil
+	}
+	var names []string
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		pkg, ok := sel.X.(*ast.Ident)
-		if ok && pkg.Name == "subtle" && sel.Sel.Name == "ConstantTimeCompare" {
-			found = true
+		if ident, ok := call.Fun.(*ast.Ident); ok {
+			names = append(names, ident.Name)
 		}
 		return true
 	})
-	return found
+	return names
 }
 
-// returnInsideDecodeErrorBranch returns the first ast.ReturnStmt found
-// inside the error-handling branch of an if-statement that guards a
-// *Decode()-family call's error result (e.g.
-// base64.RawURLEncoding.DecodeString), or nil if no such return exists.
-//
-// It works in two passes over fn's body so the decode call and the error
-// check do not need to sit in the same statement: pass 1 collects the name
-// of every variable assigned from the second return value of a call whose
-// selector ends in "DecodeString" — whichever statement form binds it,
-// whether that is a plain `decoded, decErr := ...` or the same assignment
-// living in an if-statement's own Init clause, since ast.Inspect walks both
-// the same way. Pass 2 then finds every if-statement whose condition
-// compares one of those names against `nil`, works out which branch (Body
-// for `!= nil`, Else for `== nil`) is the error-handling one, and reports
-// the first return statement found anywhere in that branch's subtree.
-func returnInsideDecodeErrorBranch(fn *ast.FuncDecl) *ast.ReturnStmt {
-	if fn.Body == nil {
-		return nil
-	}
-
-	decodeErrVars := map[string]bool{}
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		assign, ok := n.(*ast.AssignStmt)
-		if !ok || len(assign.Lhs) < 2 || len(assign.Rhs) != 1 {
-			return true
+// anyReachesSubtleConstantTimeCompare reports whether any function in
+// closure contains a call expression of the exact shape
+// subtle.ConstantTimeCompare(...).
+func anyReachesSubtleConstantTimeCompare(closure map[string]*ast.FuncDecl) bool {
+	for _, fn := range closure {
+		if fn.Body == nil {
+			continue
 		}
-		call, ok := assign.Rhs[0].(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !strings.HasSuffix(sel.Sel.Name, "DecodeString") {
-			return true
-		}
-		if errIdent, ok := assign.Lhs[len(assign.Lhs)-1].(*ast.Ident); ok {
-			decodeErrVars[errIdent.Name] = true
-		}
-		return true
-	})
-	if len(decodeErrVars) == 0 {
-		return nil
-	}
-
-	var found *ast.ReturnStmt
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if found != nil {
-			return false
-		}
-		ifStmt, ok := n.(*ast.IfStmt)
-		if !ok {
-			return true
-		}
-		bin, ok := ifStmt.Cond.(*ast.BinaryExpr)
-		if !ok {
-			return true
-		}
-		ident, isNilLit := binaryExprAgainstNil(bin)
-		if ident == nil || !isNilLit || !decodeErrVars[ident.Name] {
-			return true
-		}
-
-		var errorBranch ast.Stmt
-		switch bin.Op {
-		case token.NEQ: // decErr != nil: the error path is the if's own Body.
-			errorBranch = ifStmt.Body
-		case token.EQL: // decErr == nil: the error path, if any, is the Else.
-			errorBranch = ifStmt.Else
-		}
-		if errorBranch == nil {
-			return true
-		}
-		ast.Inspect(errorBranch, func(m ast.Node) bool {
-			if ret, ok := m.(*ast.ReturnStmt); ok && found == nil {
-				found = ret
+		found := false
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if ok && pkg.Name == "subtle" && sel.Sel.Name == "ConstantTimeCompare" {
+				found = true
 			}
 			return true
 		})
-		return true
-	})
-	return found
-}
-
-// binaryExprAgainstNil reports whether bin is of the shape `ident == nil`
-// or `ident != nil` (in either operand order), returning the identifier
-// operand when it is.
-func binaryExprAgainstNil(bin *ast.BinaryExpr) (*ast.Ident, bool) {
-	if bin.Op != token.EQL && bin.Op != token.NEQ {
-		return nil, false
+		if found {
+			return true
+		}
 	}
-	identOperand, nilOperand := bin.X, bin.Y
-	ident, identOK := identOperand.(*ast.Ident)
-	nilIdent, nilOK := nilOperand.(*ast.Ident)
-	if identOK && nilOK && nilIdent.Name == "nil" {
-		return ident, true
-	}
-	// Try the reversed operand order (`nil == ident`).
-	ident, identOK = nilOperand.(*ast.Ident)
-	nilIdent, nilOK = identOperand.(*ast.Ident)
-	if identOK && nilOK && nilIdent.Name == "nil" {
-		return ident, true
-	}
-	return nil, false
+	return false
 }
