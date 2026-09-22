@@ -288,10 +288,12 @@ passes is not one of the two.
 **A second, narrower class lives in the same package, deliberately not given an `I##` number**:
 an ADR-anchored structural gate, proving a shape a specific `Accepted` ADR requires rather than a
 doc-02 invariant. `test/conformance/httpapi_secret_compare_test.go` is the first of these —
-`requireCookie` and `requireToken` (ADR-0007, ADR-0028) must each reach
-`crypto/subtle.ConstantTimeCompare`, and the decode step must have no signature through which an
-early-return-on-error could be written — proven on the AST, the same maintenance rule applying:
-fix the code, or supersede the ADR in the same PR.
+`requireCookie`'s and `requireToken`'s (ADR-0007, ADR-0028) own handler bodies must match a
+literal, declared template exactly, statement by statement, which is what pins the
+`crypto/subtle.ConstantTimeCompare` comparison in place; separately, the decode step must have no
+signature through which an early-return-on-error could be written — proven on the AST, the same
+maintenance rule applying: fix the code, or supersede the ADR in the same PR. Any change to either
+handler's shape, refactor or otherwise, means updating the matching template in the same commit.
 
 ---
 

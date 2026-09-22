@@ -36,12 +36,15 @@ const uiCookieName = "nooma_token"
 // returns through. That signature says nothing about THIS function's own
 // body, though: requireCookie could still re-derive the same fact itself
 // (call r.Cookie or decode the value a second time) and branch on it before
-// ever calling presentedSecret. What forbids that is a separate,
-// control-flow rule
-// (test/conformance/httpapi_secret_compare_test.go): the only `return`
-// permitted inside this handler's http.HandlerFunc literal is the one
-// guarded by the subtle.ConstantTimeCompare comparison below — any other
-// early exit fails that gate, whatever fact it branches on.
+// ever calling presentedSecret. What forbids that is a separate gate
+// (test/conformance/httpapi_secret_compare_test.go) that pins this
+// function's own body, statement by statement, against an exact template
+// declared in that file: the only `return` the template permits inside this
+// handler's http.HandlerFunc literal is the one whose `if` condition IS the
+// subtle.ConstantTimeCompare comparison below — any other statement, branch
+// or early exit deviates from the template and fails that gate, whatever
+// fact it branches on. Changing this handler's shape, refactor or
+// otherwise, means changing that template in the same commit, deliberately.
 //
 // Three different artifacts prove three different halves of the timing
 // claim. TestUIViewsRequireCookie (server_test.go) proves "missing",
@@ -49,15 +52,14 @@ const uiCookieName = "nooma_token"
 // same Location, same absence of Set-Cookie — because that is what a
 // response recorder can observe; it cannot observe timing.
 // test/conformance/httpapi_secret_compare_test.go proves the structural
-// half instead, in two parts: presentedSecret's signature makes the
-// decode-error branch unexpressible inside presentedSecret, and a
-// transitive walk from requireCookie and requireToken over same-package
-// calls proves subtle.ConstantTimeCompare is still reached, even through an
-// in-package helper like this one; separately, its control-flow rule proves
-// this handler itself carries no OTHER early return, guarding against a
-// caller-level early exit that the signature check alone cannot see. None
-// of the three measures real elapsed time — they prove the structure that
-// timing-safety depends on, never the timing itself.
+// half instead: presentedSecret's signature makes the decode-error branch
+// unexpressible inside presentedSecret, and the template match pins this
+// handler's own statements exactly, so a bug hidden behind a `||`, moved
+// into a helper, or added as a return-free branch ahead of the compare all
+// fail to match the declared shape, by construction — the gate does not
+// need to have seen that exact bug shape before to catch it. Neither
+// artifact, alone or together, measures real elapsed time — they prove the
+// structure timing-safety depends on, never the timing itself.
 func requireCookie(token string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if token == "" {
@@ -91,7 +93,7 @@ func requireCookie(token string) func(http.Handler) http.Handler {
 // reach its return by the same path because there is no other path inside
 // this function to take. This signature is silent on what a CALLER does
 // with the result — requireCookie's own doc comment names the separate
-// control-flow rule that closes that gap.
+// template-matching gate that closes that gap.
 func presentedSecret(r *http.Request, name string, want int) []byte {
 	c, err := r.Cookie(name)
 	if err != nil {

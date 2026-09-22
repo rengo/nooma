@@ -408,22 +408,35 @@ body, not hidden.
       response-level test observes, and only their timing differs — caught instead by
       `test/conformance/httpapi_secret_compare_test.go`, added later this same PR (correction
       recorded here after judgment-day found the original claim did not hold). That gate itself
-      was rewritten a further **three** rounds after that: a version that inspected only each
-      target function's own body missed the same bug once moved into a same-package helper (false
-      negative) and separately flagged a same-package helper that still called
+      was rewritten a further **four** rounds after that. Round 2: a version that inspected only
+      each target function's own body missed the same bug once moved into a same-package helper
+      (false negative) and separately flagged a same-package helper that still called
       `subtle.ConstantTimeCompare` (false positive) — closed by reshaping `cookie.go` so the bug
       has no signature to be written in (`presentedSecret` returns `[]byte`, no `error`, no
       `http.ResponseWriter`, making the decode-error branch unexpressible **inside
       `presentedSecret` itself**) and by rewriting the gate to check that signature plus a
-      transitive, same-package call closure instead of one function's own statements. A third
-      round (two independently blind reviewers, same PR) found that signature check said nothing
-      about `requireCookie`'s or `requireToken`'s own body: a caller can re-derive the same
+      transitive, same-package call closure instead of one function's own statements. Round 3 (two
+      independently blind reviewers, same PR) found that signature check said nothing about
+      `requireCookie`'s or `requireToken`'s own body: a caller can re-derive the same
       missing/malformed fact itself and branch on it with an early `return` ahead of
       `presentedSecret`, compiling, gate-green, response-test-green, and only timing differing —
       closed by a third check on the same gate, a control-flow rule: the only `return` statement
-      permitted inside the per-request `http.HandlerFunc` literal either function returns is the
-      one guarded by the `subtle.ConstantTimeCompare` comparison; any other early exit fails it,
-      whatever fact it branches on.
+      permitted inside the per-request `http.HandlerFunc` literal either function returns had to be
+      guarded by an `if` that REACHES the `subtle.ConstantTimeCompare` comparison. Round 4's blind
+      judges broke that rule three further ways, all compiling, all gate-green: a `||`-joined
+      condition (`cookieLooksBad(r) || subtle.ConstantTimeCompare(...) != 1`) reaches the compare
+      without ever running it, since Go short-circuits `||`; the handler literal wrapped by another
+      same-package function one call away from the `return` the rule inspected; and a conditional
+      busy loop with **no** `return` at all ahead of the compare — a real timing oracle a
+      return-only rule cannot see in the first place. The ruling after round 4: stop blacklisting
+      bug shapes (a property that does not terminate) and whitelist the one permitted GOOD shape
+      instead — a literal template, declared in the gate's own test file, that `requireCookie`'s
+      and `requireToken`'s handler bodies must match exactly, statement by statement, with the
+      compare `if`'s condition required to BE (not merely reach) the comparison. This inverts
+      round 2's own requirement: staying sound under in-package helper extraction "in either
+      direction" was the fix then; under the template it is now the failure — moving the compare or
+      the decode into a helper changes the pinned statement sequence and is expected to fail,
+      deliberately.
       Requirement: R1, R2.
 - [x] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
       (`TestRequireTokenNoOpOnlyOnLoopback`'s own shape).
