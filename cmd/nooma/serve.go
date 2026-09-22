@@ -43,7 +43,14 @@ const shutdownGrace = 10 * time.Second
 func runServe(args []string, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(errOut)
-	fs.Usage = func() { _, _ = fmt.Fprint(errOut, "usage: nooma serve [--no-ui] [vault]\n") }
+	fs.Usage = func() {
+		_, _ = fmt.Fprint(errOut, "usage: nooma serve [--no-ui] [vault]\n")
+		// PrintDefaults, not a restated sentence: the flag's own
+		// description below is already the one place the --no-ui/
+		// server.ui precedence rule lives, so `nooma serve -h` cannot
+		// drift from it the way a second, hand-written copy could.
+		fs.PrintDefaults()
+	}
 	var noUI bool
 	fs.BoolVar(&noUI, "no-ui", false, "serve the API only; do not mount /ui. Overrides server.ui when both are set")
 	if err := fs.Parse(args); err != nil {
