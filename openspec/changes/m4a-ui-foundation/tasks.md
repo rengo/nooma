@@ -401,10 +401,13 @@ body, not hidden.
       `405 Method Not Allowed`, `Allow: GET, HEAD`, no `Set-Cookie`, no body (the mux's own answer
       for a method-specific pattern with no match, asserted rather than assumed, §3.2's "method
       posture" correction).
-      Mutation: a branch that distinguishes missing from wrong; `==` instead of
-      `subtle.ConstantTimeCompare`; an early `return unauthorized` on the decode error instead of
-      comparing anyway (§3.3's own timing-oracle argument); a method-agnostic pattern that would
-      route `POST` into the view instead of the mux's `405`.
+      Mutation: a branch that distinguishes missing from wrong; a method-agnostic pattern that
+      would route `POST` into the view instead of the mux's `405`. **Not** `==` instead of
+      `subtle.ConstantTimeCompare`, nor an early `return unauthorized` on the decode error
+      (§3.3's own timing-oracle argument): both produce the identical byte-for-byte response this
+      response-level test observes, and only their timing differs — caught instead by the
+      AST-level gate `test/conformance/httpapi_secret_compare_test.go`, added later this same PR
+      (correction recorded here after judgment-day found the original claim did not hold).
       Requirement: R1, R2.
 - [x] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
       (`TestRequireTokenNoOpOnlyOnLoopback`'s own shape).

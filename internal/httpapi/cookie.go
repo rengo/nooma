@@ -25,11 +25,24 @@ const uiCookieName = "nooma_token"
 // A cookie value that fails to decode is a wrong cookie, not a third,
 // faster-answering outcome (design m4a §3.3): on a decode error, the
 // comparison runs anyway against a fixed-length zero-value slice instead
-// of returning early, so "missing", "wrong" and "malformed" stay
-// byte-identical in both timing and response — an early return on the
-// decode error would be a timing and code-path oracle telling a caller
-// their cookie failed to decode rather than failed to match, the same
-// MUST NOT requireToken already holds for a missing vs. a wrong header.
+// of returning early — an early return on the decode error would be a
+// timing and code-path oracle telling a caller their cookie failed to
+// decode rather than failed to match, the same MUST NOT requireToken
+// already holds for a missing vs. a wrong header.
+//
+// Two different artifacts prove two different halves of that claim.
+// TestUIViewsRequireCookie (server_test.go) proves "missing", "wrong" and
+// "malformed" answer byte-identically over HTTP — same status, same
+// Location, same absence of Set-Cookie — because that is what a response
+// recorder can observe. It cannot observe timing, and a mutated
+// requireCookie that returns early on the decode error, or that compares
+// with a plain byte-equality helper instead of subtle.ConstantTimeCompare,
+// produces that exact same byte-identical response — so this test alone
+// does not catch either mutation. The structural half — that the
+// comparison always runs through subtle.ConstantTimeCompare and the
+// decode-error branch never returns early — is what
+// test/conformance/httpapi_secret_compare_test.go proves instead, on the
+// AST rather than on a response.
 func requireCookie(token string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if token == "" {
