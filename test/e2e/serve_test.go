@@ -3,6 +3,8 @@
 package e2e
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -39,10 +41,12 @@ func freePort(t *testing.T) int {
 // Waiting for a response rather than sleeping is what keeps this from being flaky
 // by construction: the test proceeds when the server is genuinely up, or fails
 // saying it never came up.
-func startServe(t *testing.T, home, vault string, port int) *exec.Cmd {
+func startServe(t *testing.T, home, vault string, port int, extraArgs ...string) *exec.Cmd {
 	t.Helper()
 
-	cmd := exec.Command(binaryPath(t), "serve", vault)
+	args := append([]string{"serve"}, extraArgs...)
+	args = append(args, vault)
+	cmd := exec.Command(binaryPath(t), args...)
 	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
 	var errOut strings.Builder
 	cmd.Stderr = &errOut
@@ -94,6 +98,60 @@ func TestServeAnswersBothSurfaces(t *testing.T) {
 			t.Errorf("GET %s = %d, want 200", path, resp.StatusCode)
 		}
 		_ = resp.Body.Close()
+	}
+}
+
+// TestServeNoUI is spec R4's exit criterion, end to end: `--no-ui` and
+// `server.ui: false` each unmount `/ui` on the compiled binary, with
+// `POST /capture` unaffected (design m4a §3.9, §7's PR 3 row).
+func TestServeNoUI(t *testing.T) {
+	cases := []struct {
+		name      string
+		config    string
+		extraArgs []string
+	}{
+		{
+			name:      "--no-ui flag",
+			config:    "server:\n  bind: 127.0.0.1\n  http_port: %d\n",
+			extraArgs: []string{"--no-ui"},
+		},
+		{
+			name:   "server.ui: false",
+			config: "server:\n  bind: 127.0.0.1\n  http_port: %d\n  ui: false\n",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home, work := t.TempDir(), t.TempDir()
+			vault := initVault(t, home, work, "pablo.nooma")
+			port := freePort(t)
+			writeConfig(t, vault, fmt.Sprintf(tc.config, port))
+
+			startServe(t, home, vault, port, tc.extraArgs...)
+
+			uiResp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/ui", port))
+			if err != nil {
+				t.Fatalf("GET /ui: %v", err)
+			}
+			defer func() { _ = uiResp.Body.Close() }()
+			if uiResp.StatusCode != http.StatusNotFound {
+				t.Errorf("GET /ui = %d, want 404 (no token configured, unmounted like an unknown path)", uiResp.StatusCode)
+			}
+
+			captureBody, err := json.Marshal(map[string]string{"text": "pick up the dry cleaning"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			captureResp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/capture", port), "application/json", bytes.NewReader(captureBody))
+			if err != nil {
+				t.Fatalf("POST /capture: %v", err)
+			}
+			defer func() { _ = captureResp.Body.Close() }()
+			if captureResp.StatusCode != http.StatusServiceUnavailable {
+				t.Errorf("POST /capture = %d, want %d (Capture is nil — no providers configured; --no-ui must not change this)", captureResp.StatusCode, http.StatusServiceUnavailable)
+			}
+		})
 	}
 }
 
