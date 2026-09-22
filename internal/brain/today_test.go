@@ -277,13 +277,20 @@ func newDigestParityFixture(t *testing.T) (*memrepo.Triggers, *memrepo.Units, *m
 // runs is whether Today was ever called.
 //
 // newDigestParityFixture backs every port with a real memrepo
-// implementation, so this test can actually detect a write Today makes
-// during those five requests, on any of TriggerRepo, PendingQuestionRepo,
-// StateRepo, ConfigRepo or DecisionLog — not just replay a fixed slice
-// past it. A TriggerRepo.Surface or PendingQuestionRepo.MarkAsked
-// injected into todayRunner.at both turn this red (confirmed by hand,
-// reverted before commit); TriggerRepo write-avoidance specifically is
-// also I27's job (test/conformance), which this test does not replace.
+// implementation rather than a stub replaying a fixed slice, so a write
+// Today makes during those five requests can reach the later digest —
+// but only on the ports assembleDigest actually reads. Injecting a
+// TriggerRepo.Surface, a PendingQuestionRepo.MarkAsked or a
+// DecisionLog.Record into todayRunner.at each turn this red (all three
+// confirmed by injection, reverted before commit).
+//
+// Two of the ports Today reads are invisible here, structurally, and this
+// test does not pretend otherwise: checkRunner carries no ConfigRepo at
+// all, so no ConfigRepo write can ever reach assembleDigest; and
+// StateRepo's only write, OpenHypothesis, appends to a row set
+// LatestEnergy never reads. I27 (test/conformance) is the guard for
+// those, and for write-avoidance in general — this test proves the
+// narrower thing its name says, that the delivery itself is unchanged.
 func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) {
 	ctx := context.Background()
 
