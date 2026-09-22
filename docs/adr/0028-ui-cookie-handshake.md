@@ -87,15 +87,3 @@ header.
 A genuine multi-user vault — ADR-0007's own reversal criterion — would also force this ADR open:
 a session id decoupled from the token, revocable per session rather than only by rotating the one
 shared secret, is what that mode needs and what this design deliberately does not build.
-
-## Alternatives
-
-Argued in full in `openspec/changes/m4-mirror-ui/proposal.md` §8; shortened here to the one line
-each needs beside the tables above:
-
-- **An opaque session id (Q1-B)**: a table with no owner, rejected the same way ADR-0007 rejected
-  "users + sessions".
-- **A synchronizer token per form (Q2-B)**: state per session and no protection on the one route
-  — the handshake — that has no cookie yet to bind a token to.
-- **`SameSite=Strict` alone (Q2-C)**: zero protection on the default, cookie-less configuration,
-  which non-negotiable #7 forbids.

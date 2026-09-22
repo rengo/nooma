@@ -475,6 +475,10 @@ body, not hidden.
       (`7cb1de1`) rather than a second RED/GREEN pair, since the RED commit's own claim (405,
       `Allow: GET, HEAD`, no cookie) was otherwise correct and already red for the right reason —
       only the "no body" sub-assertion needed correcting once the real response was observed.
+      Disclosed for the next reader rather than left implied: a stricter reading of strict TDD
+      order would have wanted this correction as its own RED/GREEN pair, since the fix changed
+      what the test asserts, not merely the code under it; landing it inside the GREEN commit is
+      the precedent this note records, not a claim that no stricter option existed.
 
 ---
 
