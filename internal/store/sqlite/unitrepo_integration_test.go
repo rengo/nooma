@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,6 +198,37 @@ func TestUnitRepo_LiveFocusCandidatesByType(t *testing.T) {
 	repocontract.RunLiveFocusCandidatesByType(t, func(t *testing.T) ports.UnitRepo {
 		return NewUnitRepo(openTestVault(t))
 	})
+}
+
+// TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex confirms the query
+// planner actually uses idx_units_status_touched (migration 0001) for the
+// status = ? equality this method's SQL leads with — design §8's L3 row.
+func TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex(t *testing.T) {
+	v := openTestVault(t)
+	const query = `SELECT id, type, weight, weight_decay_rate, last_touched_at, created_at, due_at
+		FROM units WHERE status = 'pool' AND type IN ('task', 'event') ORDER BY id`
+
+	rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query)
+	if err != nil {
+		t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	var plan string
+	for rows.Next() {
+		var id, parent, notused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+			t.Fatalf("scanning query plan row: %v", err)
+		}
+		plan += detail + "\n"
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("query plan rows: %v", err)
+	}
+	if !strings.Contains(plan, "idx_units_status_touched") {
+		t.Errorf("query plan for %q does not mention idx_units_status_touched:\n%s", query, plan)
+	}
 }
 
 // TestUnitRepo_LiveFocusCandidatesFiltersPositively seeds its non-pool rows

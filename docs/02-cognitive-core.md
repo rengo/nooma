@@ -1102,6 +1102,9 @@ box can audit it):
     carried regardless of rank, and carried *in addition to* the truncation rather than inside it —
     if it competed for the same slots, a low-ranked item could be starved by fresher ones forever,
     which is the thing the rule exists to prevent.
+    **Source, for display.** An energy reading now carries `source` (`user` | `consolidation`)
+    alongside `level` and `recorded_at` — §10's `current_state` columns, where `source` is already
+    named. This gate (`LowEnergy`) reads only `level` and `recorded_at` and is unchanged by it.
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.

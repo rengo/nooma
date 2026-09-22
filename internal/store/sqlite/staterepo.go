@@ -78,15 +78,20 @@ LIMIT 1`
 // rows with it NULL by design (m2's own OpenHypothesis). Taking the latest
 // row and finding NULL would report "no reading" on a vault that has one,
 // every time a hypothesis was opened after the user last answered.
+//
+// source rides along for display (design §3.6): it is a struct widening of
+// prospection.EnergyReading, not a second port change — this method's
+// signature is unchanged.
 func (r *StateRepo) LatestEnergy(ctx context.Context) (*prospection.EnergyReading, error) {
 	var (
 		level      float64
 		recordedAt string
+		source     string
 	)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT energy, recorded_at FROM current_state
+		`SELECT energy, recorded_at, source FROM current_state
 		 WHERE energy IS NOT NULL ORDER BY recorded_at DESC LIMIT 1`).
-		Scan(&level, &recordedAt)
+		Scan(&level, &recordedAt, &source)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -98,5 +103,5 @@ func (r *StateRepo) LatestEnergy(ctx context.Context) (*prospection.EnergyReadin
 	if err != nil {
 		return nil, fmt.Errorf("latest energy: recorded_at: %w", err)
 	}
-	return &prospection.EnergyReading{Level: level, RecordedAt: at}, nil
+	return &prospection.EnergyReading{Level: level, RecordedAt: at, Source: source}, nil
 }
