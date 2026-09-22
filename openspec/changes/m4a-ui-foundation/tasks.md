@@ -465,7 +465,14 @@ body, not hidden.
       worktree at tip `7cb1de1` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
       `schema-golden-clean`, `internal/core` coverage 99% unchanged — this PR touches no
       `internal/core` file — seven-target cross-compile matrix all OK, L4 e2e 141.8s,
-      `templ-clean` clean). **Still open** (out of this apply batch's scope, per the executing
+      `templ-clean` clean). **Final counts after both Judgment Day rounds** (`git diff --numstat
+      origin/main..HEAD`, churn = added+deleted, the chain's own rule: `_test.go` and
+      `openspec/` excluded from impl+docs): impl+docs **219** (`cookie.go` 90, `server.go`
+      +14/-9, ADR-0028 89, `docs/adr/README.md` 1, `docs/06-harness.md` 8,
+      `test/conformance/doc.go` +7/-1) — at the ~220 budget, well under the 400 ceiling; tests
+      **629**; `openspec/` bookkeeping **102**, reported separately as in every earlier link.
+      An earlier report of "321 impl+docs" folded the `openspec/` churn into that bucket,
+      which no other link in this chain does; corrected here. **Still open** (out of this apply batch's scope, per the executing
       agent's own instructions): opening `feat/httpapi-ui-cookie-middleware` against `main`,
       waiting for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch
       deletion before branching PR 4b.
