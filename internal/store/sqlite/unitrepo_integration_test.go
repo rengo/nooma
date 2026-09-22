@@ -189,6 +189,16 @@ func TestUnitRepo_LiveFocusCandidates(t *testing.T) {
 	})
 }
 
+// TestUnitRepo_LiveFocusCandidatesByType runs the same
+// repocontract.RunLiveFocusCandidatesByType suite the in-memory fake
+// answers at L2, now against a real migrated vault — design D6's "answered
+// twice" standing rule.
+func TestUnitRepo_LiveFocusCandidatesByType(t *testing.T) {
+	repocontract.RunLiveFocusCandidatesByType(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
 // TestUnitRepo_LiveFocusCandidatesFiltersPositively seeds its non-pool rows
 // through raw SQL rather than UnitRepo.Create, so the fixture cannot
 // accidentally depend on the repository's own write path already excluding

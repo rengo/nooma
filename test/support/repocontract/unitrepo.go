@@ -766,3 +766,76 @@ func RunLiveFocusCandidates(t *testing.T, newRepo func(t *testing.T) ports.UnitR
 // value in that suite is an offset from it, so no case carries a second
 // literal date.
 var focusFixtureTime = time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+
+// RunLiveFocusCandidatesByType runs the ports.UnitRepo.LiveFocusCandidatesByType
+// contract against a fresh repository instance, built by newRepo for every
+// subtest.
+//
+// Like RunLiveFocusCandidates, this suite cannot distinguish a positive
+// status = 'pool' filter from a negative exclusion list built out of
+// today's four statuses — I02 requires the positive filter, and the
+// difference only appears once a fifth status exists. Named here, not
+// re-derived: the same limitation RunLiveFocusCandidates' own doc comment
+// states.
+func RunLiveFocusCandidatesByType(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("returns pool units of the wanted types only, excluding archived/superseded/incomplete and unwanted types", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		wantedTask := fixtureUnit("byType-pool-task", unit.StatusPool)
+		wantedTask.Type = unit.TypeTask
+		wantedEvent := fixtureUnit("byType-pool-event", unit.StatusPool)
+		wantedEvent.Type = unit.TypeEvent
+		unwantedType := fixtureUnit("byType-pool-knowledge", unit.StatusPool)
+		unwantedType.Type = unit.TypeKnowledge
+		archived := fixtureUnit("byType-archived", unit.StatusArchived)
+		archived.Type = unit.TypeTask
+		superseded := fixtureUnit("byType-superseded", unit.StatusSuperseded)
+		superseded.Type = unit.TypeTask
+		incomplete := fixtureUnit("byType-incomplete", unit.StatusIncomplete)
+		incomplete.Type = unit.TypeTask
+
+		for _, u := range []unit.Unit{wantedTask, wantedEvent, unwantedType, archived, superseded, incomplete} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		got, err := repo.LiveFocusCandidatesByType(ctx, []unit.Type{unit.TypeTask, unit.TypeEvent})
+		if err != nil {
+			t.Fatalf("LiveFocusCandidatesByType: %v", err)
+		}
+		gotIDs := focusCandidateIDs(got)
+		wantIDs := []string{wantedEvent.ID, wantedTask.ID} // id order: "byType-pool-event" < "byType-pool-task"
+		if !reflect.DeepEqual(gotIDs, wantIDs) {
+			t.Fatalf("LiveFocusCandidatesByType ids = %v, want %v (id order, wanted types only, live only)", gotIDs, wantIDs)
+		}
+	})
+
+	t.Run("an empty types set returns an empty slice, never an error", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		if err := repo.Create(ctx, fixtureUnit("byType-any", unit.StatusPool)); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		got, err := repo.LiveFocusCandidatesByType(ctx, nil)
+		if err != nil {
+			t.Fatalf("LiveFocusCandidatesByType: %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("LiveFocusCandidatesByType(nil) = %v, want empty", got)
+		}
+	})
+}
+
+// focusCandidateIDs extracts the id of every focus.Candidate, in order.
+func focusCandidateIDs(cs []focus.Candidate) []string {
+	ids := make([]string, len(cs))
+	for i, c := range cs {
+		ids[i] = c.ID
+	}
+	return ids
+}

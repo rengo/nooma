@@ -3,7 +3,9 @@ package conformance
 
 import (
 	"testing"
+	"time"
 
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 	"github.com/rengo/nooma/test/support/repocontract"
@@ -29,4 +31,22 @@ func TestStateRepo_MemRepo_LastHypothesisAt(t *testing.T) {
 		t.Helper()
 		return memrepo.NewState()
 	})
+}
+
+// TestStateRepo_MemRepo_LatestEnergy runs repocontract.RunLatestEnergy —
+// design §3.6's Source-widening contract — against the same fake, seeding
+// through memrepo.State's own test-only RecordEnergy.
+func TestStateRepo_MemRepo_LatestEnergy(t *testing.T) {
+	repocontract.RunLatestEnergy(t,
+		func(t *testing.T) ports.StateRepo {
+			t.Helper()
+			return memrepo.NewState()
+		},
+		func(t *testing.T, repo ports.StateRepo, level float64, recordedAt time.Time, source string) {
+			t.Helper()
+			repo.(*memrepo.State).RecordEnergy(prospection.EnergyReading{
+				Level: level, RecordedAt: recordedAt, Source: source,
+			})
+		},
+	)
 }
