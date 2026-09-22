@@ -395,8 +395,14 @@ func TestUIViewsRequireCookie(t *testing.T) {
 		if rec.Header().Get("Set-Cookie") != "" {
 			t.Error("POST /ui set a cookie")
 		}
-		if rec.Body.Len() != 0 {
-			t.Errorf("POST /ui returned a body: %q", rec.Body.String())
+		// Probed, not assumed (design m4a §3.2, §5 claim "no body" for this
+		// arm; net/http.ServeMux's own default 405 handler is http.Error,
+		// which does write one — "Method Not Allowed\n", confirmed against
+		// this tree). What actually matters for R1 is that nothing
+		// vault-shaped leaks through an unauthenticated method mismatch;
+		// asserted against the generic stdlib message, not against silence.
+		if body := rec.Body.String(); body != "Method Not Allowed\n" {
+			t.Errorf("POST /ui body = %q, want the generic stdlib 405 message (no vault-shaped content)", body)
 		}
 	})
 }
