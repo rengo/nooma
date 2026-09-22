@@ -309,12 +309,29 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 	})
 }
 
+// guardedUILeafRequestPaths is every request path newUIMux's guarded
+// leaves actually answer — "/ui" for the "GET /ui" pattern, "/ui/" for the
+// "GET /ui/{$}" pattern ({$} is net/http.ServeMux's exact-end wildcard, so
+// that pattern's real request path is "/ui/", probed and confirmed against
+// this tree, not assumed). TestUIViewsRequireCookie iterates this list, not
+// only "/ui": round 5, judge B added a second guard function and wired it
+// into GET /ui/{$} in place of requireCookie while leaving requireCookie
+// itself untouched, and this test stayed green because it only ever drove
+// GET /ui. A leaf added to newUIMux (internal/httpapi/server.go) must be
+// added here too, in the same commit — the structural sibling of this
+// requirement is test/conformance/httpapi_ui_wiring_test.go's
+// wantUIMuxWiring table, which pins newUIMux's registrations themselves
+// against an AST, so a leaf silently added to one without the other is
+// still two separate, deliberate edits away from being missed by both.
+var guardedUILeafRequestPaths = []string{"/ui", "/ui/"}
+
 // TestUIViewsRequireCookie is design m4a §3.3's own MUST NOT: a missing
 // cookie, a wrong cookie and a cookie whose value fails
-// base64.RawURLEncoding decoding all answer GET /ui identically — 303 to
-// /ui/login, no Set-Cookie — and the right cookie reaches the view. POST
-// /ui, which no route under a guarded leaf declares, answers 405 from the
-// mux itself, never from requireCookie (design m4a §3.2's "method posture"
+// base64.RawURLEncoding decoding all answer every guarded UI leaf
+// identically — 303 to /ui/login, no Set-Cookie — and the right cookie
+// reaches the view, on each leaf in guardedUILeafRequestPaths. POST /ui,
+// which no route under a guarded leaf declares, answers 405 from the mux
+// itself, never from requireCookie (design m4a §3.2's "method posture"
 // correction: m4a registers no non-GET pattern under a guarded view, so
 // requireCookie carries no such arm to intercept it with).
 func TestUIViewsRequireCookie(t *testing.T) {
@@ -323,69 +340,73 @@ func TestUIViewsRequireCookie(t *testing.T) {
 	const token = "the-real-token"
 	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{})})
 
-	t.Run("missing, wrong and malformed cookies answer byte-identically", func(t *testing.T) {
-		t.Parallel()
+	for _, leaf := range guardedUILeafRequestPaths {
+		leaf := leaf
 
-		wrongValue := base64.RawURLEncoding.EncodeToString([]byte("not-the-token"))
-		// sameLengthWrongValue is 14 bytes decoded, exactly like token itself
-		// (spec R2's own "Verified by": "exercised with a same-length wrong
-		// value and a different-length value, both rejected"). wrongValue
-		// above is 13 bytes, so subtle.ConstantTimeCompare short-circuits on
-		// the length mismatch alone and never walks the full comparison —
-		// this case is what actually exercises that path.
-		sameLengthWrongValue := base64.RawURLEncoding.EncodeToString([]byte("the-fake-token"))
-		cases := []struct {
-			name   string
-			cookie *http.Cookie
-		}{
-			{name: "missing cookie", cookie: nil},
-			{name: "wrong cookie", cookie: &http.Cookie{Name: uiCookieName, Value: wrongValue}},
-			{name: "wrong cookie, same length as the real token", cookie: &http.Cookie{Name: uiCookieName, Value: sameLengthWrongValue}},
-			{name: "malformed cookie", cookie: &http.Cookie{Name: uiCookieName, Value: "not-valid-base64!!!"}},
-		}
+		t.Run(leaf+": missing, wrong and malformed cookies answer byte-identically", func(t *testing.T) {
+			t.Parallel()
 
-		var first *httptest.ResponseRecorder
-		for _, tc := range cases {
-			req := httptest.NewRequest(http.MethodGet, "/ui", nil)
-			if tc.cookie != nil {
-				req.AddCookie(tc.cookie)
+			wrongValue := base64.RawURLEncoding.EncodeToString([]byte("not-the-token"))
+			// sameLengthWrongValue is 14 bytes decoded, exactly like token itself
+			// (spec R2's own "Verified by": "exercised with a same-length wrong
+			// value and a different-length value, both rejected"). wrongValue
+			// above is 13 bytes, so subtle.ConstantTimeCompare short-circuits on
+			// the length mismatch alone and never walks the full comparison —
+			// this case is what actually exercises that path.
+			sameLengthWrongValue := base64.RawURLEncoding.EncodeToString([]byte("the-fake-token"))
+			cases := []struct {
+				name   string
+				cookie *http.Cookie
+			}{
+				{name: "missing cookie", cookie: nil},
+				{name: "wrong cookie", cookie: &http.Cookie{Name: uiCookieName, Value: wrongValue}},
+				{name: "wrong cookie, same length as the real token", cookie: &http.Cookie{Name: uiCookieName, Value: sameLengthWrongValue}},
+				{name: "malformed cookie", cookie: &http.Cookie{Name: uiCookieName, Value: "not-valid-base64!!!"}},
 			}
+
+			var first *httptest.ResponseRecorder
+			for _, tc := range cases {
+				req := httptest.NewRequest(http.MethodGet, leaf, nil)
+				if tc.cookie != nil {
+					req.AddCookie(tc.cookie)
+				}
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusSeeOther {
+					t.Errorf("%s: status = %d, want %d", tc.name, rec.Code, http.StatusSeeOther)
+				}
+				if loc := rec.Header().Get("Location"); loc != "/ui/login" {
+					t.Errorf("%s: Location = %q, want %q", tc.name, loc, "/ui/login")
+				}
+				if rec.Header().Get("Set-Cookie") != "" {
+					t.Errorf("%s: response set a cookie", tc.name)
+				}
+				if first == nil {
+					first = rec
+				} else if rec.Code != first.Code || rec.Body.String() != first.Body.String() {
+					t.Errorf("%s: response is not byte-identical to %q's — %d %q vs %d %q",
+						tc.name, cases[0].name, rec.Code, rec.Body.String(), first.Code, first.Body.String())
+				}
+			}
+		})
+
+		t.Run(leaf+": the right cookie reaches the view", func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, leaf, nil)
+			req.AddCookie(&http.Cookie{Name: uiCookieName, Value: base64.RawURLEncoding.EncodeToString([]byte(token))})
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 
-			if rec.Code != http.StatusSeeOther {
-				t.Errorf("%s: status = %d, want %d", tc.name, rec.Code, http.StatusSeeOther)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET %s with the right cookie = %d, want 200", leaf, rec.Code)
 			}
-			if loc := rec.Header().Get("Location"); loc != "/ui/login" {
-				t.Errorf("%s: Location = %q, want %q", tc.name, loc, "/ui/login")
+			if !strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
+				t.Errorf("GET %s with the right cookie does not carry the shell:\n%s", leaf, rec.Body.String())
 			}
-			if rec.Header().Get("Set-Cookie") != "" {
-				t.Errorf("%s: response set a cookie", tc.name)
-			}
-			if first == nil {
-				first = rec
-			} else if rec.Code != first.Code || rec.Body.String() != first.Body.String() {
-				t.Errorf("%s: response is not byte-identical to %q's — %d %q vs %d %q",
-					tc.name, cases[0].name, rec.Code, rec.Body.String(), first.Code, first.Body.String())
-			}
-		}
-	})
-
-	t.Run("the right cookie reaches the view", func(t *testing.T) {
-		t.Parallel()
-
-		req := httptest.NewRequest(http.MethodGet, "/ui", nil)
-		req.AddCookie(&http.Cookie{Name: uiCookieName, Value: base64.RawURLEncoding.EncodeToString([]byte(token))})
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("GET /ui with the right cookie = %d, want 200", rec.Code)
-		}
-		if !strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
-			t.Errorf("GET /ui with the right cookie does not carry the shell:\n%s", rec.Body.String())
-		}
-	})
+		})
+	}
 
 	t.Run("POST /ui answers 405 from the mux, not from requireCookie", func(t *testing.T) {
 		t.Parallel()
