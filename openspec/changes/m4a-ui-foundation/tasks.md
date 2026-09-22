@@ -408,13 +408,22 @@ body, not hidden.
       response-level test observes, and only their timing differs — caught instead by
       `test/conformance/httpapi_secret_compare_test.go`, added later this same PR (correction
       recorded here after judgment-day found the original claim did not hold). That gate itself
-      was rewritten a further two rounds after that: a version that inspected only each target
-      function's own body missed the same bug once moved into a same-package helper (false
+      was rewritten a further **three** rounds after that: a version that inspected only each
+      target function's own body missed the same bug once moved into a same-package helper (false
       negative) and separately flagged a same-package helper that still called
       `subtle.ConstantTimeCompare` (false positive) — closed by reshaping `cookie.go` so the bug
       has no signature to be written in (`presentedSecret` returns `[]byte`, no `error`, no
-      `http.ResponseWriter`) and by rewriting the gate to check that signature plus a transitive,
-      same-package call closure instead of one function's own statements.
+      `http.ResponseWriter`, making the decode-error branch unexpressible **inside
+      `presentedSecret` itself**) and by rewriting the gate to check that signature plus a
+      transitive, same-package call closure instead of one function's own statements. A third
+      round (two independently blind reviewers, same PR) found that signature check said nothing
+      about `requireCookie`'s or `requireToken`'s own body: a caller can re-derive the same
+      missing/malformed fact itself and branch on it with an early `return` ahead of
+      `presentedSecret`, compiling, gate-green, response-test-green, and only timing differing —
+      closed by a third check on the same gate, a control-flow rule: the only `return` statement
+      permitted inside the per-request `http.HandlerFunc` literal either function returns is the
+      one guarded by the `subtle.ConstantTimeCompare` comparison; any other early exit fails it,
+      whatever fact it branches on.
       Requirement: R1, R2.
 - [x] **4a.3** RED — `TestRequireCookieNoOpOnlyOnLoopback` over `bindTokenTruthTable`
       (`TestRequireTokenNoOpOnlyOnLoopback`'s own shape).

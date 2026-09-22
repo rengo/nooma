@@ -29,23 +29,35 @@ const uiCookieName = "nooma_token"
 // telling a caller their cookie failed to decode rather than failed to
 // match, the same MUST NOT requireToken already holds for a missing vs. a
 // wrong header. presentedSecret (below) is what makes that early return
-// unexpressible rather than merely avoided: it has no error result and no
-// http.ResponseWriter parameter, so requireCookie itself has no
-// decode-error branch left to write one in — "missing", "wrong" and
+// unexpressible INSIDE presentedSecret ITSELF: it has no error result and
+// no http.ResponseWriter parameter, so presentedSecret has no decode-error
+// branch of its own left to write one in — "missing", "wrong" and
 // "malformed" all reach the comparison by the one path presentedSecret
-// returns through.
+// returns through. That signature says nothing about THIS function's own
+// body, though: requireCookie could still re-derive the same fact itself
+// (call r.Cookie or decode the value a second time) and branch on it before
+// ever calling presentedSecret. What forbids that is a separate,
+// control-flow rule
+// (test/conformance/httpapi_secret_compare_test.go): the only `return`
+// permitted inside this handler's http.HandlerFunc literal is the one
+// guarded by the subtle.ConstantTimeCompare comparison below — any other
+// early exit fails that gate, whatever fact it branches on.
 //
-// Two different artifacts prove two different halves of the timing claim.
-// TestUIViewsRequireCookie (server_test.go) proves "missing", "wrong" and
-// "malformed" answer byte-identically over HTTP — same status, same
-// Location, same absence of Set-Cookie — because that is what a response
-// recorder can observe; it cannot observe timing.
+// Three different artifacts prove three different halves of the timing
+// claim. TestUIViewsRequireCookie (server_test.go) proves "missing",
+// "wrong" and "malformed" answer byte-identically over HTTP — same status,
+// same Location, same absence of Set-Cookie — because that is what a
+// response recorder can observe; it cannot observe timing.
 // test/conformance/httpapi_secret_compare_test.go proves the structural
-// half instead: presentedSecret's signature (no error, no
-// http.ResponseWriter) makes the early return unexpressible, and a
+// half instead, in two parts: presentedSecret's signature makes the
+// decode-error branch unexpressible inside presentedSecret, and a
 // transitive walk from requireCookie and requireToken over same-package
 // calls proves subtle.ConstantTimeCompare is still reached, even through an
-// in-package helper like this one.
+// in-package helper like this one; separately, its control-flow rule proves
+// this handler itself carries no OTHER early return, guarding against a
+// caller-level early exit that the signature check alone cannot see. None
+// of the three measures real elapsed time — they prove the structure that
+// timing-safety depends on, never the timing itself.
 func requireCookie(token string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if token == "" {
@@ -74,9 +86,12 @@ func requireCookie(token string) func(http.Handler) http.Handler {
 
 // presentedSecret returns exactly want bytes, always — the decoded cookie
 // value when it decodes to that length, a zero value otherwise. It returns
-// no error and takes no http.ResponseWriter, so a caller has no decode-error
-// branch to answer from: "missing", "wrong" and "malformed" reach the
-// comparison by the same path because there is no other path to take.
+// no error and takes no http.ResponseWriter, so presentedSecret itself has
+// no decode-error branch to answer from: "missing", "wrong" and "malformed"
+// reach its return by the same path because there is no other path inside
+// this function to take. This signature is silent on what a CALLER does
+// with the result — requireCookie's own doc comment names the separate
+// control-flow rule that closes that gap.
 func presentedSecret(r *http.Request, name string, want int) []byte {
 	c, err := r.Cookie(name)
 	if err != nil {

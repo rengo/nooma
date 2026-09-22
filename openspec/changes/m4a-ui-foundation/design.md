@@ -376,22 +376,34 @@ func requireCookie(token string) func(http.Handler) http.Handler
 its cookie through `presentedSecret` (`cookie.go`), which decodes `base64.RawURLEncoding` and
 always returns exactly `len(token)` bytes — the decoded value when it decodes to that length, a
 fixed-length zero value otherwise — and returns no error and takes no `http.ResponseWriter`.
-That signature is what makes an early return on the decode error **unexpressible**, not merely
-avoided: `requireCookie` has nothing to answer an error with, because `presentedSecret` never
-hands it one. `TestUIViewsRequireCookie` (§8) gains an explicit case for a cookie value that is
+That signature is what makes an early return on the decode error **unexpressible inside
+`presentedSecret` itself**, not merely avoided there: `presentedSecret` has nothing of its own to
+answer an error with. It says nothing about `requireCookie`'s own body, though — a caller can
+still re-derive the same fact (call `r.Cookie` or decode the cookie value a second time, ahead of
+calling `presentedSecret`) and branch on it with an early exit of its own; two independent
+Judgment Day reviewers each reproduced exactly that against an earlier version of this gate.
+What forbids it is a second, control-flow rule the same conformance test also enforces: inside the
+per-request `http.HandlerFunc` literal `requireCookie` (and `requireToken`) return, the only
+`return` statement permitted is the one guarded by the `subtle.ConstantTimeCompare` comparison —
+any other early exit fails the gate, whatever fact it branches on.
+`TestUIViewsRequireCookie` (§8) gains an explicit case for a cookie value that is
 not valid base64url, and a second explicit case for a wrong cookie the same decoded length as the
 real token (exercising the full-length comparison rather than a length-mismatch short-circuit),
 both asserting the same 303/401 arms as "wrong" — the byte-identical-over-HTTP half of the claim,
 the only half a response recorder can observe. It does **not** by itself prove the comparison
-still runs in constant time: a mutation confined to `presentedSecret`'s or a helper's own body
-produces that exact same byte-identical response, and only timing would differ, which no
-response-level test measures. The structural half is proven instead by
-`test/conformance/httpapi_secret_compare_test.go` (§8): `presentedSecret`'s signature check makes
-the early return unexpressible, and a transitive walk over same-package calls from `requireCookie`
-and `requireToken` proves `subtle.ConstantTimeCompare` is still reached — soundly under in-package
-helper extraction in either direction, unlike an earlier version of this gate that inspected only
-each function's own body (Judgment Day: a helper hiding the bug escaped it, and a helper hiding a
-*correct* comparison falsely failed it).
+still runs in constant time: a mutation confined to `presentedSecret`'s or a helper's own body, or
+one that adds an early return elsewhere in `requireCookie`'s handler, produces that exact same
+byte-identical response, and only timing (or a code path that never reaches the compare) would
+differ, which no response-level test measures. The structural half is proven instead by
+`test/conformance/httpapi_secret_compare_test.go` (§8), in three parts: `presentedSecret`'s
+signature check makes the decode-error branch unexpressible inside `presentedSecret`; a transitive
+walk over same-package calls from `requireCookie` and `requireToken` proves
+`subtle.ConstantTimeCompare` is still reached — soundly under in-package helper extraction in
+either direction, unlike an earlier version of this gate that inspected only each function's own
+body (Judgment Day round 1/2: a helper hiding the bug escaped it, and a helper hiding a *correct*
+comparison falsely failed it); and the control-flow rule proves the handler carries no other early
+return (Judgment Day round 3: the shape above). None of the three measures real elapsed time —
+they prove the structure timing-safety depends on, never the timing itself.
 
 **The handshake.** `GET /ui/login` renders `ui.Login(LoginView{Rejected: false})`, status 200.
 `POST /ui/login` reads `token` from the form, compares, and on success sets the cookie and

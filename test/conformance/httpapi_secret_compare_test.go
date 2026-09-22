@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -17,24 +18,28 @@ import (
 // test only ever sees requireCookie's response over HTTP, and a mutation
 // that changes only requireCookie's TIMING — never its response — is
 // invisible to it. What this test proves instead, on the AST rather than on
-// any response, is exactly two things:
+// any response, is exactly three things:
 //
 //  1. Signature: internal/httpapi/cookie.go's presentedSecret — the decode
 //     step requireCookie calls to read its cookie — returns a single
 //     []byte, with no error result and no http.ResponseWriter parameter.
-//     This is what makes an early return on a decode error UNEXPRESSIBLE,
-//     not merely avoided: a function with no error to return and no
-//     response writer to answer with has no decode-error branch left to
-//     write one in. (Judgment Day: two independent rounds each defeated an
-//     earlier version of this gate that instead walked requireCookie's own
+//     This is what makes an early return on a decode error UNEXPRESSIBLE
+//     INSIDE presentedSecret ITSELF, not merely avoided there: a function
+//     with no error to return and no response writer to answer with has no
+//     decode-error branch of its own left to write one in. It says nothing
+//     about presentedSecret's caller — a caller can still re-derive the
+//     same fact (e.g. call r.Cookie or base64.RawURLEncoding.DecodeString a
+//     second time) and branch on that; check 3 below is what closes that
+//     door. (Judgment Day: two independent rounds each defeated an earlier
+//     version of this gate that instead walked requireCookie's own
 //     ast.FuncDecl body for a `return` inside an if-err-!=-nil branch — one
 //     round moved the decode, and the bug inside it, into a same-package
 //     helper the walk never followed, a false negative; a later round found
 //     the walk also had no way to name WHICH function should carry
 //     subtle.ConstantTimeCompare once a same-package helper existed, so a
 //     correct extraction that still called subtle.ConstantTimeCompare
-//     failed the gate, a false positive. Restructuring the production code
-//     so the bug cannot be expressed in any shape — rather than hardening a
+//     failed the gate, a false positive. Restructuring presentedSecret so
+//     the bug cannot be expressed in its own body — rather than hardening a
 //     walk that inspects one function's own statements — is what closes
 //     both classes at once; see cookie.go's presentedSecret doc comment.)
 //
@@ -49,6 +54,23 @@ import (
 //     anywhere in the closure — extracted or not — is (fixes the false
 //     negative the original, single-function-body walk could not see past
 //     a helper boundary).
+//
+//  3. Control flow: inside the per-request http.HandlerFunc literal each of
+//     requireCookie and requireToken returns from its outer closure, the
+//     ONLY `return` statement permitted is the one whose innermost
+//     enclosing `if` reaches subtle.ConstantTimeCompare — directly, or
+//     transitively through the same same-package call resolution check 2
+//     already performs. This is what actually forbids a caller from
+//     re-deriving a decode-error (or any other) fact and branching on it
+//     with an early exit: checks 1 and 2 alone missed exactly this —
+//     duplicating r.Cookie's presence check, or duplicating the base64
+//     decode, in requireCookie's own handler body, ahead of the call to
+//     presentedSecret, both compiled, both left presentedSecret's checked
+//     signature and the transitive compare untouched, and both produced a
+//     provably distinguishable response (an early redirect/401 that never
+//     reaches the constant-time compare) that only this control-flow rule
+//     catches (Judgment Day round 3: two independently blind reviewers each
+//     reproduced a variant of this against round 2's gate).
 //
 // # Scope, stated plainly
 //
@@ -68,17 +90,33 @@ import (
 //     need a receiver's static type, which this AST-only walk does not
 //     compute (the same boundary go/ast-only tooling in this repository
 //     already accepts elsewhere, e.g. i23's applyWithPreImage gate).
+//   - A `return` inside a nested function literal declared within the
+//     handler literal itself — check 3 walks statements, not expressions,
+//     and deliberately does not descend into a nested *ast.FuncLit's own
+//     body; requireCookie and requireToken declare no such nested literal
+//     today, so this is a stated boundary, not an observed gap.
 //   - Real timing. No test in this repository measures actual timing (non-
 //     negotiable #5 forbids the network, and a wall-clock timing assertion
 //     is inherently flaky). This proves the STRUCTURE timing-safety depends
 //     on, the same relationship i01's own "returns or embeds a
 //     unit.Status" check has to I01: a static proof of shape, not a dynamic
-//     proof of the property the shape exists to guarantee.
+//     proof of the property the shape exists to guarantee — never a proof
+//     that the constant-time compare's elapsed wall-clock time is actually
+//     independent of its inputs.
+//
+// Put together: check 1 makes the decode-error branch unexpressible inside
+// presentedSecret; check 3 makes any OTHER early exit from the handler
+// unexpressible too, whatever fact it branches on; and
+// TestUIViewsRequireCookie (internal/httpapi/server_test.go) is the
+// response-level artifact proving the three outcomes this leaves —
+// "missing", "wrong" and "malformed" — really do answer byte-identically
+// over HTTP. None of the three, alone or together, measures real elapsed
+// time.
 func TestHTTPAPISecretCompareStructure(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	httpapiDir := filepath.Join(repoRoot, "internal", "httpapi")
 
-	funcs := parsePackageFuncDecls(t, httpapiDir)
+	funcs, fset := parsePackageFuncDecls(t, httpapiDir)
 	if len(funcs) == 0 {
 		t.Fatal("found zero top-level functions under internal/httpapi — D10's guard: nothing to check yet")
 	}
@@ -121,14 +159,214 @@ func TestHTTPAPISecretCompareStructure(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("the per-request handler's only early return is the one guarded by the compare", func(t *testing.T) {
+		for _, name := range []string{"requireCookie", "requireToken"} {
+			fn := funcs[name]
+
+			lit := handlerFuncLit(fn)
+			if lit == nil {
+				// Same vacuity guard as the two subtests above: a
+				// requireCookie/requireToken that no longer builds its
+				// per-request handler as http.HandlerFunc(func(w, r)
+				// {...}) has been restructured in a way this check has
+				// nothing to walk.
+				t.Fatalf(
+					"%s: found no http.HandlerFunc(func(http.ResponseWriter, *http.Request) {...}) "+
+						"literal — renamed or restructured; this gate has nothing to check", name,
+				)
+			}
+
+			violations := earlyReturnsNotGuardedByCompare(lit, fset, funcs)
+			if len(violations) == 0 {
+				continue
+			}
+			t.Errorf(
+				"%s's per-request handler has a `return` not guarded by an `if` that reaches "+
+					"subtle.ConstantTimeCompare (%s) — the only return statement that literal may "+
+					"contain is the one inside the if that runs the constant-time compare; any other "+
+					"early exit lets a caller re-derive some other fact (a missing cookie, an "+
+					"undecodable value, a missing header, ...) and answer from it before the compare "+
+					"ever runs, which is exactly the timing and code-path oracle ADR-0007/ADR-0028 "+
+					"forbid",
+				name, strings.Join(violations, ", "),
+			)
+		}
+	})
+}
+
+// handlerFuncLit finds the *ast.FuncLit passed to http.HandlerFunc(...)
+// inside fn's body — the per-request handler requireCookie/requireToken
+// each build and return from their outer closure. It returns nil when no
+// such call exists (fn restructured in a way this gate no longer
+// recognizes), never a wrong literal: the first http.HandlerFunc(...) call
+// found is the only one either function builds today.
+func handlerFuncLit(fn *ast.FuncDecl) *ast.FuncLit {
+	if fn.Body == nil {
+		return nil
+	}
+
+	var found *ast.FuncLit
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if found != nil {
+			return false
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || pkg.Name != "http" || sel.Sel.Name != "HandlerFunc" {
+			return true
+		}
+		if len(call.Args) != 1 {
+			return true
+		}
+		lit, ok := call.Args[0].(*ast.FuncLit)
+		if !ok {
+			return true
+		}
+		found = lit
+		return false
+	})
+	return found
+}
+
+// earlyReturnsNotGuardedByCompare returns one formatted "line N" entry per
+// *ast.ReturnStmt in lit's body whose innermost enclosing *ast.IfStmt does
+// not reach subtle.ConstantTimeCompare (directly, or transitively through
+// the same same-package call resolution anyReachesSubtleConstantTimeCompare
+// already uses) — including a return with NO enclosing if at all, which is
+// never guarded by anything. An empty, nil result means every return in the
+// literal is the one permitted return.
+func earlyReturnsNotGuardedByCompare(lit *ast.FuncLit, fset *token.FileSet, funcs map[string]*ast.FuncDecl) []string {
+	var violations []string
+	for ret, enclosingIf := range returnsByEnclosingIf(lit.Body) {
+		if enclosingIf != nil && conditionReachesSubtleConstantTimeCompare(enclosingIf.Cond, funcs) {
+			continue
+		}
+		violations = append(violations, fmt.Sprintf("line %d", fset.Position(ret.Pos()).Line))
+	}
+	sort.Strings(violations)
+	return violations
+}
+
+// returnsByEnclosingIf maps every *ast.ReturnStmt directly inside body to
+// the innermost *ast.IfStmt that lexically contains it — nil when a return
+// sits in body (or in a for/switch/select arm) with no enclosing if at all.
+// It walks statements, not expressions, and deliberately does not descend
+// into a nested *ast.FuncLit's own body: a closure's returns belong to that
+// closure, not to body's (see this file's own "Scope, stated plainly" doc
+// comment).
+func returnsByEnclosingIf(body *ast.BlockStmt) map[*ast.ReturnStmt]*ast.IfStmt {
+	result := map[*ast.ReturnStmt]*ast.IfStmt{}
+
+	var walkList func(list []ast.Stmt, enclosing *ast.IfStmt)
+	var walk func(stmt ast.Stmt, enclosing *ast.IfStmt)
+
+	walkList = func(list []ast.Stmt, enclosing *ast.IfStmt) {
+		for _, s := range list {
+			walk(s, enclosing)
+		}
+	}
+
+	walk = func(stmt ast.Stmt, enclosing *ast.IfStmt) {
+		switch s := stmt.(type) {
+		case *ast.BlockStmt:
+			walkList(s.List, enclosing)
+		case *ast.IfStmt:
+			walk(s.Body, s)
+			if s.Else != nil {
+				walk(s.Else, s)
+			}
+		case *ast.ForStmt:
+			if s.Body != nil {
+				walk(s.Body, enclosing)
+			}
+		case *ast.RangeStmt:
+			if s.Body != nil {
+				walk(s.Body, enclosing)
+			}
+		case *ast.SwitchStmt:
+			for _, c := range s.Body.List {
+				walk(c, enclosing)
+			}
+		case *ast.TypeSwitchStmt:
+			for _, c := range s.Body.List {
+				walk(c, enclosing)
+			}
+		case *ast.SelectStmt:
+			for _, c := range s.Body.List {
+				walk(c, enclosing)
+			}
+		case *ast.CaseClause:
+			walkList(s.Body, enclosing)
+		case *ast.CommClause:
+			walkList(s.Body, enclosing)
+		case *ast.LabeledStmt:
+			walk(s.Stmt, enclosing)
+		case *ast.ReturnStmt:
+			result[s] = enclosing
+		}
+	}
+
+	walkList(body.List, nil)
+	return result
+}
+
+// conditionReachesSubtleConstantTimeCompare reports whether cond contains a
+// call expression that reaches subtle.ConstantTimeCompare — either directly
+// (subtle.ConstantTimeCompare(...) written inline in cond) or transitively,
+// through the identical same-package unqualified-call resolution
+// anyReachesSubtleConstantTimeCompare/transitiveSamePackageCallClosure
+// already use elsewhere in this file: an unqualified call in cond to an
+// in-package function whose own transitive closure reaches
+// subtle.ConstantTimeCompare counts too, so moving the compare into a
+// helper (the shape check 2's own doc comment already treats as sound) does
+// not also break this rule. Consistent with this file's stated scope, a
+// method call or a cross-package call in cond is never resolved here
+// either.
+func conditionReachesSubtleConstantTimeCompare(cond ast.Expr, funcs map[string]*ast.FuncDecl) bool {
+	found := false
+	ast.Inspect(cond, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		switch fun := call.Fun.(type) {
+		case *ast.SelectorExpr:
+			if pkg, ok := fun.X.(*ast.Ident); ok && pkg.Name == "subtle" && fun.Sel.Name == "ConstantTimeCompare" {
+				found = true
+			}
+		case *ast.Ident:
+			if callee, ok := funcs[fun.Name]; ok {
+				if anyReachesSubtleConstantTimeCompare(transitiveSamePackageCallClosure(callee, funcs)) {
+					found = true
+				}
+			}
+		}
+		return true
+	})
+	return found
 }
 
 // parsePackageFuncDecls parses every non-test .go file directly inside dir
 // and returns its top-level, non-method function declarations keyed by
-// name. Only top-level functions are indexed (fn.Recv == nil) — a method's
-// receiver would need a static type resolution this AST-only walk does not
-// perform, the same boundary this file's own scope note above states.
-func parsePackageFuncDecls(t *testing.T, dir string) map[string]*ast.FuncDecl {
+// name, plus the *token.FileSet they were parsed with — callers that need a
+// line number for a diagnostic (earlyReturnsNotGuardedByCompare) resolve it
+// through this same fset, never a fresh one, since a *ast.Node's Pos() is
+// only meaningful against the fset that produced it. Only top-level
+// functions are indexed (fn.Recv == nil) — a method's receiver would need a
+// static type resolution this AST-only walk does not perform, the same
+// boundary this file's own scope note above states.
+func parsePackageFuncDecls(t *testing.T, dir string) (map[string]*ast.FuncDecl, *token.FileSet) {
 	t.Helper()
 
 	entries, err := os.ReadDir(dir)
@@ -155,7 +393,7 @@ func parsePackageFuncDecls(t *testing.T, dir string) map[string]*ast.FuncDecl {
 			funcs[fn.Name.Name] = fn
 		}
 	}
-	return funcs
+	return funcs, fset
 }
 
 // decodeHelperSignatureIsSound reports whether fn's signature is exactly
