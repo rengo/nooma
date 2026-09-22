@@ -829,6 +829,32 @@ func RunLiveFocusCandidatesByType(t *testing.T, newRepo func(t *testing.T) ports
 			t.Fatalf("LiveFocusCandidatesByType(nil) = %v, want empty", got)
 		}
 	})
+
+	t.Run("a requested type with zero live matches returns a non-nil empty slice", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		// Unlike "an unwanted type" above (which never appears in the types
+		// argument at all), TypeKnowledge is named in the request here and
+		// still has no live unit anywhere in the repo — this exercises the
+		// SQL branch itself (WHERE status = ? AND type IN (...) returning
+		// zero rows), which the nil/empty-types case above never reaches:
+		// that one short-circuits before any query runs.
+		if err := repo.Create(ctx, fixtureUnit("byType-zero-archived", unit.StatusArchived)); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		got, err := repo.LiveFocusCandidatesByType(ctx, []unit.Type{unit.TypeKnowledge})
+		if err != nil {
+			t.Fatalf("LiveFocusCandidatesByType: %v", err)
+		}
+		if got == nil {
+			t.Fatal("LiveFocusCandidatesByType() = nil, want a non-nil empty slice")
+		}
+		if len(got) != 0 {
+			t.Fatalf("LiveFocusCandidatesByType() = %v, want empty", got)
+		}
+	})
 }
 
 // focusCandidateIDs extracts the id of every focus.Candidate, in order.

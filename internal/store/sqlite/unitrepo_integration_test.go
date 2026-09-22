@@ -203,12 +203,16 @@ func TestUnitRepo_LiveFocusCandidatesByType(t *testing.T) {
 // TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex confirms the query
 // planner actually uses idx_units_status_touched (migration 0001) for the
 // status = ? equality this method's SQL leads with — design §8's L3 row.
+//
+// query and args come from buildLiveFocusCandidatesByTypeQuery, the same
+// function LiveFocusCandidatesByType itself calls (both in package sqlite),
+// not a hand-copied literal — so this test cannot drift from what
+// production actually sends to SQLite.
 func TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex(t *testing.T) {
 	v := openTestVault(t)
-	const query = `SELECT id, type, weight, weight_decay_rate, last_touched_at, created_at, due_at
-		FROM units WHERE status = 'pool' AND type IN ('task', 'event') ORDER BY id`
+	query, args := buildLiveFocusCandidatesByTypeQuery([]unit.Type{unit.TypeTask, unit.TypeEvent})
 
-	rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query)
+	rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query, args...)
 	if err != nil {
 		t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
 	}

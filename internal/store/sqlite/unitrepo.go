@@ -484,18 +484,8 @@ func (r *UnitRepo) LiveFocusCandidatesByType(ctx context.Context, types []unit.T
 		return []focus.Candidate{}, nil
 	}
 
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(types)), ",")
-	args := make([]any, 0, len(types)+1)
-	args = append(args, string(unit.StatusPool))
-	for _, t := range types {
-		args = append(args, string(t))
-	}
-
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, type, weight, weight_decay_rate, last_touched_at, created_at, due_at
-		 FROM units
-		 WHERE status = ? AND type IN (`+placeholders+`)
-		 ORDER BY id`, args...)
+	query, args := buildLiveFocusCandidatesByTypeQuery(types)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("select focus candidates by type: %w", err)
 	}
@@ -513,6 +503,28 @@ func (r *UnitRepo) LiveFocusCandidatesByType(ctx context.Context, types []unit.T
 		return nil, fmt.Errorf("select focus candidates by type: %w", err)
 	}
 	return candidates, nil
+}
+
+// buildLiveFocusCandidatesByTypeQuery renders LiveFocusCandidatesByType's
+// parameterized SQL and its bound args for the positive status = 'pool' AND
+// type IN (...) filter (I02). Factored out of the method itself so
+// TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex can run EXPLAIN
+// QUERY PLAN against the exact query production sends — both live in
+// package sqlite, so the test calls this function directly rather than
+// keeping its own hand-copied literal that could drift from it unnoticed.
+func buildLiveFocusCandidatesByTypeQuery(types []unit.Type) (string, []any) {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(types)), ",")
+	args := make([]any, 0, len(types)+1)
+	args = append(args, string(unit.StatusPool))
+	for _, t := range types {
+		args = append(args, string(t))
+	}
+
+	query := `SELECT id, type, weight, weight_decay_rate, last_touched_at, created_at, due_at
+		 FROM units
+		 WHERE status = ? AND type IN (` + placeholders + `)
+		 ORDER BY id`
+	return query, args
 }
 
 // scanCandidate reads one units row into a focus.Candidate, in the exact
