@@ -947,6 +947,24 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
       apply batch's scope, per the executing agent's own instructions): opening `feat/brain-today`
       against `main`, waiting for required contexts, merging only on `mergeStateStatus: CLEAN`,
       confirming branch deletion before branching PR 7.
+      **Post-hoc fix (judgment-day, this branch's tip):**
+      `TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical` (added `f453e26`) originally
+      seeded `newDigestParityFixture` from `digest_test.go`'s own `undeliveredTriggers`/
+      `digestUnits` stubs, which replay a fixed `Undelivered()` slice regardless of what `Surface`
+      writes to them — a write Today performed during its five requests could never reach the
+      later `assembleDigest` read, so the test could not detect the one write class its doc
+      comment claimed to prove absent. `internal/brain/today_test.go`'s `newDigestParityFixture`
+      now seeds `memrepo.Triggers`/`memrepo.Units` through the same `Create`+`Fire` write path
+      `i27_viewing_is_not_delivering_test.go` uses; `digest_test.go`'s own stubs are untouched.
+      Confirmed discriminating with three mutations against `todayRunner.at`, each reverted before
+      committing: (1) `r.triggers.Surface(ctx, pending[0].ID, now)` injected — fails, "carried 0
+      after five Today requests, want 1"; (2) `r.questions.MarkAsked(ctx, unasked[0].ID, now)`
+      injected — fails, digest text after five requests drops the appended question line; (3)
+      clean tree — passes. `TriggerRepo` write-avoidance itself is still I27's job alone
+      (`test/conformance`); this test detects a write's effect on the rendered digest, not every
+      write I27 already guards. Full `internal/brain` suite (18 pre-existing digest tests
+      included) and `test/conformance`'s `TestI27_ViewingIsNotDelivering` both still pass. `make
+      check` green.
 
 **Deviations** (recorded, not silent):
 - Task 6.4's RED commit was not written as RED — see the note under 6.4 above.
@@ -981,10 +999,10 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
   `git show 7cab892:docs/02-cognitive-core.md | rg I27` both return nothing at that commit, and
   both are present only from `7a9e82c` on. The final tip is correct — the row, the doc 02
   sentence and the test all agree once GREEN lands — but the RED commit was watched red with a
-  citation to documentation that did not exist for two commits, not the ordering the skill
-  requires. Next time: the harness row (and its doc 02 sentence, when non-negotiable #1 also
-  requires one) lands in the same commit as the RED test, or earlier — never in the GREEN commit
-  that follows it.
+  citation to a forward reference: documentation that resolved only in the very next commit,
+  `7a9e82c`, not the ordering the skill requires. Next time: the harness row (and its doc 02
+  sentence, when non-negotiable #1 also requires one) lands in the same commit as the RED test, or
+  earlier — never in the GREEN commit that follows it.
 
 ---
 
