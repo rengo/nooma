@@ -120,6 +120,21 @@ func RunLastHypothesisAt(t *testing.T, newRepo func(t *testing.T) ports.StateRep
 //
 // Design §3.6 (owner ruling 2026-09-16): prospection.EnergyReading.Source
 // carries the raw current_state.source value beside Level and RecordedAt.
+//
+// One branch this suite does not exercise: a real energy reading that is
+// older than a newer current_state row OpenHypothesis wrote with energy
+// left NULL (StateRepo.LatestEnergy's own doc comment names why the SQL
+// filters on energy IS NOT NULL rather than taking the newest row
+// unconditionally). memrepo.State cannot host that fixture honestly — it
+// keeps consolidationRows (OpenHypothesis's writes) and energy (seed's
+// writes) in two separate slices with no shared ordering
+// (test/support/memrepo/state.go), so there is no way to interleave a
+// NULL-energy row between two energy rows without restructuring the fake,
+// which is out of this PR's scope. That branch is covered at L3 only:
+// internal/store/sqlite/staterepo_integration_test.go's
+// TestStateRepo_LatestEnergySkipsNewerNullEnergyRow, which writes the NULL
+// row through the real OpenHypothesis, the production path that produces
+// it.
 func RunLatestEnergy(
 	t *testing.T,
 	newRepo func(t *testing.T) ports.StateRepo,

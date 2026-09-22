@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/repocontract"
 )
@@ -45,6 +46,48 @@ func TestStateRepo_LatestEnergy(t *testing.T) {
 			seedEnergyReading(t, repo.(*StateRepo).db, level, recordedAt, source)
 		},
 	)
+}
+
+// TestStateRepo_LatestEnergySkipsNewerNullEnergyRow covers the branch
+// repocontract.RunLatestEnergy's own doc comment names as SQLite-only: an
+// older row carrying a real energy value, and a newer row OpenHypothesis
+// wrote with energy left NULL by design (LatestEnergy's own doc comment).
+// memrepo.State cannot host this fixture — it keeps consolidationRows and
+// energy in two separate slices with no shared ordering
+// (test/support/memrepo/state.go), so a mixed timeline cannot be expressed
+// without restructuring the fake, out of this PR's scope. The NULL row is
+// written through the real OpenHypothesis, not a raw INSERT, so this test
+// exercises the exact row shape production writes.
+func TestStateRepo_LatestEnergySkipsNewerNullEnergyRow(t *testing.T) {
+	repo := NewStateRepo(openTestVault(t))
+	ctx := context.Background()
+
+	older := time.Date(2026, 8, 19, 7, 0, 0, 0, time.UTC)
+	newer := older.Add(24 * time.Hour)
+
+	seedEnergyReading(t, repo.db, 0.42, older, ports.StateSourceUser)
+
+	if err := repo.OpenHypothesis(ctx, ports.StateHypothesis{
+		ID:         "hyp-after-energy",
+		Mood:       ports.MoodLoaded,
+		RecordedAt: newer,
+	}); err != nil {
+		t.Fatalf("OpenHypothesis: %v", err)
+	}
+
+	got, err := repo.LatestEnergy(ctx)
+	if err != nil {
+		t.Fatalf("LatestEnergy: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("LatestEnergy() = nil, want the older energy reading — a newer NULL-energy " +
+			"hypothesis row must not shadow it")
+	}
+	want := prospection.EnergyReading{Level: 0.42, RecordedAt: older, Source: ports.StateSourceUser}
+	if got.Level != want.Level || got.Source != want.Source || !got.RecordedAt.Equal(want.RecordedAt) {
+		t.Fatalf("LatestEnergy() = %+v, want %+v (the older reading, unaffected by the newer NULL row)",
+			got, want)
+	}
 }
 
 // seedEnergyReading inserts one current_state row directly via SQL — not
