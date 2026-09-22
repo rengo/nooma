@@ -538,11 +538,11 @@ body, not hidden.
 
 ## PR 4b — `feat/httpapi-ui-login-screen` (~210 impl+docs; risk: Medium)
 
-- [ ] **4b.1** RED — `TestOpenRoutesAndUIRoutesUnderAToken` gains its **third leg** in this PR's
+- [x] **4b.1** RED — `TestOpenRoutesAndUIRoutesUnderAToken` gains its **third leg** in this PR's
       RED commit: `GET /ui/login` is `200` with no `Set-Cookie` — this leg cannot be asserted in
       4a because `loginPage` is 4b's own GREEN and 4a's tip must stay green (§3.2).
       Requirement: R1's "except the handshake screen" clause.
-- [ ] **4b.2** RED — `TestLoginIssuesTheCookieOnlyOnTheRightToken` — one `Set-Cookie`; name,
+- [x] **4b.2** RED — `TestLoginIssuesTheCookieOnlyOnTheRightToken` — one `Set-Cookie`; name,
       decoded value, `Path=/ui`, `HttpOnly`, `SameSite=Strict` asserted one by one; `Secure`
       absent under `httptest.NewServer`, present under `httptest.NewTLSServer`; `303 Location:
       /ui` on success.
@@ -550,16 +550,23 @@ body, not hidden.
       raw token stored as the cookie value instead of base64url-encoded (breaks a token containing
       `;`, `,`, `"`, `\` or a control byte).
       Requirement: R2.
-- [ ] **4b.3** RED — `TestLoginRejectionIsByteIdentical` (an empty field and a wrong token produce
+- [x] **4b.3** RED — `TestLoginRejectionIsByteIdentical` (an empty field and a wrong token produce
       the same `401` body and headers); `TestLoginRoutesAbsentWithoutAToken` (`Token == ""` → `GET
       /ui/login` is `404`, not a screen shown on loopback).
       Mutation: an oracle distinguishing "empty" from "wrong"; a screen shown when `Token == ""`.
       Requirement: R1, R2.
-- [ ] **4b.4** RED — `test/e2e/serve_test.go`: the L4 handshake walk (`docs/06-harness.md:181-183`)
+      **Reframed at apply time (recorded under Deviations below): `TestLoginRoutesAbsentWithoutAToken`
+      is already true on this PR's own tree before any PR 4b code — probed before writing it
+      (`go test -run TestLoginRoutesAbsentWithoutAToken`), confirmed `404` with no token, since no
+      route named `/ui/login` exists anywhere yet at PR 4a's tip. Committed as a pinning test in
+      the GREEN commit, not in this RED commit — writing it here would have meant claiming a
+      failure that does not exist (PR 3's task 3.1 precedent). `TestLoginRejectionIsByteIdentical`
+      stayed in this RED commit — genuinely `404` at this tree, not `401`.**
+- [x] **4b.4** RED — `test/e2e/serve_test.go`: the L4 handshake walk (`docs/06-harness.md:181-183`)
       — token on loopback: `GET /ui` → `303`, `POST /ui/login` → cookie, `GET /ui` with the
       cookie → `200`.
       Requirement: Exit criterion.
-- [ ] **4b.5** GREEN — `internal/ui/login.templ`/`login_templ.go` (`Login(LoginView)`),
+- [x] **4b.5** GREEN — `internal/ui/login.templ`/`login_templ.go` (`Login(LoginView)`),
       `internal/ui/login.go` (`LoginView{Rejected bool}`, `RenderLogin`); `internal/httpapi/cookie.go`
       gains `setUICookie` (base64url-encodes the token, sets the four flags), `loginPage` (renders
       `ui.Login(LoginView{Rejected: false})` at `200`), `loginSubmit` (`http.MaxBytesReader(w,
@@ -568,7 +575,7 @@ body, not hidden.
       the two `GET`/`POST /ui/login` leaf patterns on `uiMux`.
       Verify: `go test ./internal/httpapi/... ./internal/ui/...`.
       Requirement: R1, R2; design §3.3.
-- [ ] Verify (PR-level): `GET /ui` with no token is unchanged, `200` shell. With a token
+- [x] Verify (PR-level): `GET /ui` with no token is unchanged, `200` shell. With a token
       configured and no cookie: `303` unchanged; `GET /ui/login` is now `200`; `POST /ui/login`
       with the right token sets the cookie, after which `GET /ui` with the cookie is `200` —
       **still shell**, `TodayReader` is PR 7's (§7.2's PR 4b row). Test modified:
@@ -577,6 +584,67 @@ body, not hidden.
       `main`; merge only on `mergeStateStatus: CLEAN`; confirm branch deletion before branching
       PR 5 (PR 5 does not depend on 4b, but the chain order is fixed, §7). Target ≤210 impl+docs
       lines.
+      **Confirmed** at tip `06740b1` (RED `720d588`, GREEN `06740b1`, branched from
+      `feat/httpapi-ui-cookie-middleware`'s merged tip `307afb0`): `GET /ui` with no token
+      unchanged (`200`, shell); with a token configured and no cookie, `303 Location: /ui/login`
+      unchanged; `GET /ui/login` now `200`, no `Set-Cookie`, the minimal form; `POST /ui/login`
+      with the right token sets one cookie (`nooma_token`, base64url of the token, `Path=/ui`,
+      `HttpOnly`, `SameSite=Strict`, `Secure` absent under plain HTTP / present under TLS, no
+      `Max-Age`/`Expires`) and answers `303 Location: /ui`; `GET /ui` with that cookie is `200`,
+      still the shell (`TodayReader` is PR 7's); an empty field and a wrong token both answer `401`
+      byte-identically, no cookie set; `Token == ""` leaves `GET /ui/login` a `404`, a mux-level
+      absence (`TestLoginRoutesAbsentWithoutAToken`). L4 `TestServeHandshake` walks the same path
+      end to end against the compiled binary. Tests modified for the tip to stay green:
+      `TestOpenRoutesAndUIRoutesUnderAToken` gains its third leg (task 4b.1);
+      `TestUIMuxWiringMatchesDeclaredGuardTable`'s `wantUIMuxWiring` gains both `/ui/login` rows,
+      unguarded, and its walker (`uiMuxHandleCalls`/`walkUIMuxStmts`) is extended to recurse into
+      an `*ast.IfStmt` body so a conditionally-registered route is still found — new coverage, not
+      a relaxation (see Deviations). Impl+docs measured at **124 lines** (`git diff --numstat
+      origin/main..HEAD`, churn = added+deleted, excluding `_test.go` and generated `_templ.go`
+      per this chain's own rule: `cookie.go` 59, `server.go` 14, `login.go` 29, `login.templ` 22)
+      — well under the ~210 budget; no overflow cut needed, the minimal login form was written
+      that way from the start rather than trimmed after the fact. Test lines reported separately:
+      **277** (`server_test.go` 167, `httpapi_ui_wiring_test.go` 41, `serve_test.go` 69);
+      generated: `login_templ.go` 85, reported not budgeted. `make check` green after each commit
+      (lint 0 issues, go vet, L1/L2 race+shuffle, build). `make check-all` green in an isolated
+      worktree at tip `06740b1` (lint 0 issues, go vet, L1/L2 race+shuffle, build, L3 integration,
+      `schema-golden-clean`, `internal/core` coverage 99% (990/992, unchanged — this PR touches no
+      `internal/core` file), seven-target cross-compile matrix all OK, L4 e2e 141.6s,
+      `templ-clean` clean). **Still open** (out of this apply batch's scope, per the executing
+      agent's own instructions): opening `feat/httpapi-ui-login-screen` against `main`, waiting
+      for required contexts, merging only on `mergeStateStatus: CLEAN`, confirming branch deletion
+      before branching PR 5.
+
+      **Deviations** (recorded, not silent):
+      - Task 4b.3's `TestLoginRoutesAbsentWithoutAToken` was not written as RED — see the note
+        under 4b.3 above. Its sibling in the same task, `TestLoginRejectionIsByteIdentical`,
+        stayed genuinely RED (404 vs. the expected 401) and landed in the RED commit as planned.
+      - `RenderLogin`'s signature is `RenderLogin(ctx, w, status int, view LoginView)`, not the
+        three-argument `ui.RenderLogin(ctx, w, view)` design §3.3's prose names when describing
+        "the seam between httpapi and ui" as "exactly two calls". Implemented with an explicit
+        `status` parameter because `ui` still owns `Content-Type` (§3.1's "renders view models,
+        decides nothing"): if `httpapi` called `w.WriteHeader` itself ahead of `RenderLogin`,
+        `RenderLogin`'s own `w.Header().Set("Content-Type", ...)` call would run after the header
+        was already sent and silently do nothing. The seam is still exactly one call into `ui` for
+        rendering (plus the separate mount of `ui.Assets()`, per §3.3's own count) — only its own
+        argument list gained one field design's illustrative snippet did not show.
+      - `test/conformance/httpapi_ui_wiring_test.go`'s AST walker (`uiMuxHandleCalls`) is extended
+        with a new helper, `walkUIMuxStmts`, so it recurses into an `*ast.IfStmt`'s body. Task 4b.5
+        names only "register the two `GET`/`POST /ui/login` leaf patterns on `uiMux`"; it does not
+        mention that those two patterns had to be registered *conditionally* (`if d.Token != ""`,
+        design §3.2: "the two `/ui/login` routes are not registered at all" when `Token == ""`),
+        and the wiring gate as PR 4a left it only walked `newUIMux`'s top-level statements — every
+        leaf before this PR was unconditional. Without the extension, the two new `/ui/login` rows
+        in `wantUIMuxWiring` would never be matched against anything the walker found, and the
+        gate would fail with "newUIMux no longer registers ..." on routes that are, in fact,
+        registered — a false negative this PR cannot ship with. Probed live via a Python-edited
+        copy of `server.go` (`go build ./...` confirmed compiling, gate/test run, tail captured,
+        restored from a saved copy, `diff` confirmed clean afterward): (1) `GET /ui/login` wrongly
+        wrapped in `requireCookie(d.Token)` — `TestUIMuxWiringMatchesDeclaredGuardTable` FAILED,
+        "expected guarded=false ..., found guarded=true"; (2) both `/ui/login` leaves registered
+        unconditionally (the `if d.Token != ""` guard removed) — `TestLoginRoutesAbsentWithoutAToken`
+        FAILED, "status = 200, want 404" — the extension adds coverage, it does not relax anything
+        the gate already caught.
 
 ---
 
