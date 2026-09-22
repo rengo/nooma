@@ -314,10 +314,17 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 // "GET /ui/{$}" pattern ({$} is net/http.ServeMux's exact-end wildcard, so
 // that pattern's real request path is "/ui/", probed and confirmed against
 // this tree, not assumed). TestUIViewsRequireCookie iterates this list, not
-// only "/ui": round 5, judge B added a second guard function and wired it
-// into GET /ui/{$} in place of requireCookie while leaving requireCookie
-// itself untouched, and this test stayed green because it only ever drove
-// GET /ui. A leaf added to newUIMux (internal/httpapi/server.go) must be
+// only "/ui": round 5's review wired a second guard function into GET
+// /ui/{$} in place of requireCookie, leaving requireCookie itself
+// untouched, and this test stayed green because it only ever drove GET
+// /ui. Iterating closes the half of that gap this test can see — a guard
+// that answers a leaf differently, or lets a request through. It does NOT
+// close the other half: a swapped guard whose refusals are byte-identical
+// is invisible here by construction, and was re-probed to confirm it
+// (the swap leaves this test green and fails only
+// test/conformance/httpapi_ui_wiring_test.go). Which function a route
+// actually uses is that gate's job, not this one's.
+// A leaf added to newUIMux (internal/httpapi/server.go) must be
 // added here too, in the same commit — the structural sibling of this
 // requirement is test/conformance/httpapi_ui_wiring_test.go's
 // wantUIMuxWiring table, which pins newUIMux's registrations themselves
