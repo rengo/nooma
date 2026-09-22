@@ -131,7 +131,7 @@ heavy build tooling. The graph is the only view that may require a dedicated JS 
 (see [ADR-0008](adr/0008-ui-stack.md) for the stack, [ADR-0019](adr/0019-graph-library.md) for
 the library); every other view, `/ui/units` included, is htmx over server-rendered HTML with no
 JavaScript of its own. Styling is hand-written CSS, embedded, no framework
-([ADR-0018](adr/0018-css-approach.md)). Turned off with `--no-ui`.
+([ADR-0018](adr/0018-css-approach.md)). Turned off with `--no-ui` or `server.ui: false`.
 
 ### Layer 3 — Channel adapters (enabled by config)
 

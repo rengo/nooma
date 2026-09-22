@@ -115,6 +115,50 @@ func TestUnknownPathIs404(t *testing.T) {
 	}
 }
 
+// TestNoUIUnmountsTheSubtree is design m4a §3.9's --no-ui state (PR 3):
+// with Deps.UI == nil, /ui and /ui/login answer exactly as /does-not-exist
+// does under the same token state — no stub page, no distinct status.
+//
+// This is a pinning test for behavior PR 2's own mux gate (server.go's
+// `if d.UI != nil`) already produces — verified against this tree before
+// PR 3 added any code: both token states already answer identically to an
+// unmatched path. The gap PR 3 actually closes is entirely in
+// cmd/nooma/serve.go, where Deps.UI was wired unconditionally until this
+// PR; that gap is exercised by cmd/nooma's TestResolveUIEnabled_* and
+// test/e2e's TestServeNoUI, not by this test. Kept here as a completeness
+// check against the class of regression the mutation below names.
+func TestNoUIUnmountsTheSubtree(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{name: "no token configured", token: "", wantStatus: http.StatusNotFound},
+		{name: "a token is configured", token: "the-real-token", wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := Handler(Deps{Version: "test", Token: tc.token}) // UI left nil
+
+			unknown := doGet(h, "/does-not-exist")
+			if unknown.Code != tc.wantStatus {
+				t.Fatalf("GET /does-not-exist = %d, want %d — fixture assumption broken", unknown.Code, tc.wantStatus)
+			}
+
+			for _, path := range []string{"/ui", "/ui/login"} {
+				got := doGet(h, path)
+				if got.Code != unknown.Code || got.Body.String() != unknown.Body.String() {
+					t.Errorf("GET %s = %d %q, want the same answer as /does-not-exist (%d %q) — a stub page or a different status would leak that the UI exists but is off",
+						path, got.Code, got.Body.String(), unknown.Code, unknown.Body.String())
+				}
+			}
+		})
+	}
+}
+
 // TestHandlerServesDistinctSurfaces is a small honesty check: the API
 // reports what it is, the UI carries its own layout, and neither pretends
 // to be the other. It exists so that when a later PR changes the UI, the

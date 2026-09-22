@@ -43,7 +43,9 @@ const shutdownGrace = 10 * time.Second
 func runServe(args []string, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(errOut)
-	fs.Usage = func() { _, _ = fmt.Fprint(errOut, "usage: nooma serve [vault]\n") }
+	fs.Usage = func() { _, _ = fmt.Fprint(errOut, "usage: nooma serve [--no-ui] [vault]\n") }
+	var noUI bool
+	fs.BoolVar(&noUI, "no-ui", false, "serve the API only; do not mount /ui. Overrides server.ui when both are set")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -122,16 +124,21 @@ func runServe(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("wiring the scheduler: %w", err)
 	}
 
-	// ui.New(ui.Deps{}) is wired unconditionally here, with no flag and no
-	// conditional around it yet — design m4a §3.9's own correction: PR 3
-	// wraps this exact call in --no-ui's conditional, it does not
-	// introduce it. Without this, d.UI is nil in the compiled binary and
-	// GET /ui falls through to the guarded mux, failing
-	// TestServeAnswersBothSurfaces (e2e). PR 2 has no TodayReader yet, so
-	// ui.Deps{} is empty — ServeHTTP renders the shell, not Today.
+	// PR 2 wired ui.New(ui.Deps{}) into Deps.UI unconditionally; this PR
+	// wraps that same call in --no-ui's/server.ui's conditional rather
+	// than introducing it (design m4a §3.9's own correction). A nil
+	// Deps.UI falls through to requireToken(guardedMux) exactly as any
+	// other unknown path does — 404 with no token, 401 with one
+	// (internal/httpapi/server.go's own d.UI != nil mount gate, unchanged
+	// since PR 2). PR 2 has no TodayReader yet, so ui.Deps{} is empty —
+	// ServeHTTP renders the shell, not Today.
+	var uiHandler *ui.Handler
+	if resolveUIEnabled(*cfg.Server.UI, noUI) {
+		uiHandler = ui.New(ui.Deps{})
+	}
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: ui.New(ui.Deps{})}),
+		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: uiHandler}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -241,4 +248,12 @@ func runServe(args []string, out, errOut io.Writer) error {
 	}
 
 	return <-errc
+}
+
+// resolveUIEnabled is the one place --no-ui and server.ui's precedence rule
+// lives (design m4a §3.9): an explicit flag beats the config key when both
+// are set. Pulled out of runServe as a pure function so the rule is
+// testable without starting a server.
+func resolveUIEnabled(serverUI, noUIFlag bool) bool {
+	return serverUI && !noUIFlag
 }
