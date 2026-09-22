@@ -971,6 +971,20 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
   (single-clock-read, the trigger-ID-not-unit-ID join inside `Carry`, "held is counted never
   listed", the N7 archived-between-two-reads race) is still stated once, just not re-argued at
   design.md's own length.
+- The `nooma-testing` skill's execution step 2 ("for a new invariant: add it to the table in
+  `docs/06-harness.md` §4 ... and only then write the test") was not followed in the order it
+  states, for I27. Task 6.9 put the `docs/06-harness.md` §4 row in this PR's GREEN commit
+  (`7a9e82c`), and the RED commit (`7cab892`) already carries
+  `TestI27_ViewingIsNotDelivering`'s own doc comment citing "I27 (`docs/06-harness.md` §4, doc 02
+  §7)" — a forward reference to a row and a doc 02 §7 sentence that did not exist yet in the
+  repository: `git show 7cab892:docs/06-harness.md | rg I27` and
+  `git show 7cab892:docs/02-cognitive-core.md | rg I27` both return nothing at that commit, and
+  both are present only from `7a9e82c` on. The final tip is correct — the row, the doc 02
+  sentence and the test all agree once GREEN lands — but the RED commit was watched red with a
+  citation to documentation that did not exist for two commits, not the ordering the skill
+  requires. Next time: the harness row (and its doc 02 sentence, when non-negotiable #1 also
+  requires one) lands in the same commit as the RED test, or earlier — never in the GREEN commit
+  that follows it.
 
 ---
 
