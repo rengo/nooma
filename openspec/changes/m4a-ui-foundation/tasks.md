@@ -344,7 +344,7 @@ own count is unchanged from the proposal's estimate.
       branch's tip against `main` (`42f2644`), `git diff --numstat 42f2644..HEAD`: impl+docs 42
       lines (`cmd/nooma/serve.go` 40, `docs/01-architecture.md` 2 — churn, added+deleted per
       file, the same convention this block already used), well under ≤110, no overflow cut
-      needed; test lines 210 (`cmd/nooma/serve_test.go` 62, `test/e2e/serve_test.go` 104,
+      needed; test lines 210 (churn too, `cmd/nooma/serve_test.go` 62, `test/e2e/serve_test.go` 104,
       `internal/httpapi/server_test.go` 44).
 
 **Deviations** (recorded, not silent):

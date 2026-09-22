@@ -109,12 +109,16 @@ func TestServeAnswersBothSurfaces(t *testing.T) {
 // configured together, which the first two cases never combine (m4a
 // tasks.md's PR 3 Verify block named this gap; both reviewers had to verify
 // it by hand instead of a test proving it). Mutation that third case
-// catches: `runServe` not passing the resolved token through to
-// `httpapi.Deps` when `noUI` is true — `POST /capture` would then wrongly
-// answer 401 for a valid token, because `requireToken` would have become a
-// no-op instead of checking it; or the unmounted `/ui` falling through to
-// the mux's own 404 instead of `requireToken`'s 401 for that token state
-// (spec R4, `server.go`'s existing token-state truth table).
+// catches, reproduced and confirmed: `runServe` not passing the resolved
+// token through to `httpapi.Deps` when `noUI` is true — the unmounted
+// `/ui` then falls through to the mux's own 404 instead of
+// `requireToken`'s 401 for that token state (spec R4, `server.go`'s
+// token-state truth table). That one mutation does NOT move `/capture`:
+// dropping the token makes `requireToken` a no-op for every route it
+// wraps, so `/capture` answers 503, not 401. The `/capture` assertion
+// guards a different, asymmetric bug — a guard that kept rejecting the
+// API while the UI's own token state changed — which no current code
+// path produces.
 func TestServeNoUI(t *testing.T) {
 	cases := []struct {
 		name      string
