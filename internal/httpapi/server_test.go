@@ -862,6 +862,44 @@ func TestLoginRejectionIsByteIdentical(t *testing.T) {
 	}
 }
 
+// TestLoginSubmitBodyIsBounded is design m4a §3.3's stated denial-of-service
+// mitigation (§9's threat matrix "Denial of service" row): loginSubmit bounds
+// the request body with http.MaxBytesReader before ParseForm ever runs. The
+// submitted token here is wrong on top of being oversized, so a pass proves
+// the bound fires before the comparison is ever reached — not merely that an
+// oversized body happens to fail for some unrelated reason. Catches: the
+// MaxBytesReader line removed, or its limit widened past the body sent here.
+func TestLoginSubmitBodyIsBounded(t *testing.T) {
+	t.Parallel()
+
+	const token = "the-real-token"
+	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{})})
+
+	oversized := strings.Repeat("x", 5000) // a wrong token, > 4096 once form-encoded
+	body := url.Values{"token": {oversized}}.Encode()
+	if len(body) <= 4096 {
+		t.Fatalf("test body is %d bytes, want > 4096 to exceed the bound", len(body))
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if rec.Header().Get("Set-Cookie") != "" {
+		t.Error("response set a cookie on a body the bound should have rejected")
+	}
+	if strings.Contains(rec.Body.String(), oversized) {
+		t.Error("response body leaks the submitted value")
+	}
+	if strings.Contains(rec.Body.String(), token) {
+		t.Error("response body leaks the real token")
+	}
+}
+
 // TestLoginRoutesAbsentWithoutAToken is design m4a §3.2's "no screen, no
 // cookie" state: with Token == "" (loopback, no token), GET /ui/login is a
 // 404 — a property of the mux, not a branch inside a handler, mirroring how

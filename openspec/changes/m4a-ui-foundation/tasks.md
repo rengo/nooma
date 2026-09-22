@@ -616,6 +616,18 @@ body, not hidden.
       before branching PR 5.
 
       **Deviations** (recorded, not silent):
+      - `TestLoginSubmitBodyIsBounded` (`server_test.go`) added after the fact, judgment-day
+        round: §3.3's `http.MaxBytesReader(w, r.Body, 4096)` — the one denial-of-service
+        mitigation §9's threat matrix names for this PR — had no test of its own; a reviewer
+        deleted the line, rebuilt, and both `go test ./...` and the `-tags=e2e` suite passed.
+        New test posts a well-formed but wrong `token` field over 4096 bytes and asserts `400`,
+        no `Set-Cookie`, and a body that leaks neither the submitted value nor the real token —
+        proving the bound fires before the comparison is reached. Confirmed discriminating: the
+        `MaxBytesReader` line deleted fails with `status = 401, want 400` (`ParseForm` then
+        succeeds and the wrong token reaches the comparison); widened to `1<<20` fails the same
+        way, since the test's ~5 KB body then parses too. Both mutations restored, `git diff
+        --stat` empty, package compiles, `go test ./internal/httpapi/...` green throughout.
+        Recorded in design §8's PR 4b testing-strategy table.
       - Task 4b.3's `TestLoginRoutesAbsentWithoutAToken` was not written as RED — see the note
         under 4b.3 above. Its sibling in the same task, `TestLoginRejectionIsByteIdentical`,
         stayed genuinely RED (404 vs. the expected 401) and landed in the RED commit as planned.
