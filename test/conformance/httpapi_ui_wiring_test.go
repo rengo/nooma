@@ -44,7 +44,12 @@ import (
 // so the per-leaf check this gate performs does not apply there; a route
 // added to apiRoutes is guarded by construction, already proven by
 // TestGuardedRoutesRequireToken iterating the same slice Handler registers
-// from.
+// from. And not a check that wantUIMuxWiring's own classification is
+// correct: this gate proves newUIMux matches the table, never that the
+// table itself got a leaf right. A new sensitive /ui leaf added as
+// `guarded: false` in the same commit as its own table row passes cleanly —
+// the gate cannot tell a correct classification from a self-consistent
+// wrong one.
 func TestUIMuxWiringMatchesDeclaredGuardTable(t *testing.T) {
 	repoRoot := repoRootFromCaller(t)
 	serverPath := filepath.Join(repoRoot, "internal", "httpapi", "server.go")

@@ -63,7 +63,7 @@ jobs:
       # target by hand, per this job's own comment above. Driven by the
       # three TestServe_SIGTERM_* tests, each waiting on
       # scheduler.BootConsolidationDelay (120s).
-      - run: go test -tags e2e -timeout 20m ./test/e2e/...
+      - run: go test -tags e2e -count=1 -timeout 20m ./test/e2e/...
 
   cross-compile:
     name: cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}
