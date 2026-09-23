@@ -131,17 +131,20 @@ func runServe(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("wiring the scheduler: %w", err)
 	}
 
-	// PR 2 wired ui.New(ui.Deps{}) into Deps.UI unconditionally; this PR
-	// wraps that same call in --no-ui's/server.ui's conditional rather
+	// PR 2 wired ui.New(ui.Deps{}) into Deps.UI unconditionally; PR 3
+	// wrapped that same call in --no-ui's/server.ui's conditional rather
 	// than introducing it (design m4a §3.9's own correction). A nil
 	// Deps.UI falls through to requireToken(guardedMux) exactly as any
 	// other unknown path does — 404 with no token, 401 with one
 	// (internal/httpapi/server.go's own d.UI != nil mount gate, unchanged
-	// since PR 2). PR 2 has no TodayReader yet, so ui.Deps{} is empty —
-	// ServeHTTP renders the shell, not Today.
+	// since PR 2). This PR widens the same call with Today and Serving
+	// (design m4a §3.9): wireToday needs no provider, so it is wired
+	// unconditionally here, the same call site as wireBrain above, never
+	// inside wireScheduler's LLM-gated path (design §3.6).
+	today := wireToday(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
-		uiHandler = ui.New(ui.Deps{})
+		uiHandler = ui.New(ui.Deps{Today: today, Serving: ui.Serving{Bind: addr, CookieAuth: token != ""}})
 	}
 	server := &http.Server{
 		Addr:              addr,

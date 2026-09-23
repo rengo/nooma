@@ -1012,11 +1012,11 @@ landing after 5 and ahead of 6), leaving `today.go`, `wireToday` and the doc ame
 loops (FOCUS's task and load sections) into one shared partial before the tip, recovering their
 near-duplicate markup from within this PR.
 
-- [ ] **7.0** Deferred from PR 2 — add `<nav>` to `layout.templ` and assert it in the shell/Today
+- [x] **7.0** Deferred from PR 2 — add `<nav>` to `layout.templ` and assert it in the shell/Today
       tests; this is the first PR with a navigable view for a nav to link to (design §7 PR 1 row,
       §8 shell row and the §3.1 tree all say PR 7 now).
 
-- [ ] **7.1** RED — `internal/ui`: `TestTodayView_RendersThreeSectionsFromTheModel` — a fixed
+- [x] **7.1** RED — `internal/ui`: `TestTodayView_RendersThreeSectionsFromTheModel` — a fixed
       `brain.Today` renders each focus member's id, content and `Score` (two decimals) in rank
       order; each digest line's text; `Held` as a count, never a list; the question's two
       endpoints; the six status lines with `never`/`no reading` for nils; a member with a `NaN`
@@ -1026,11 +1026,11 @@ near-duplicate markup from within this PR.
       focus; a held list rendered; `Score` dropped from the markup; `NaN` formatted as `0.00`
       instead of the literal string.
       Requirement: R5 (all three sections); Q7's ruling (Score rendered, never coerced).
-- [ ] **7.2** RED — `TestTodayView_I18DatesLabelled` — a member with `DueAt` and one with
+- [x] **7.2** RED — `TestTodayView_I18DatesLabelled` — a member with `DueAt` and one with
       `EventAt` render under different labels, never swapped.
       Mutation: I18's own UI failure mode.
       Requirement: R5 (`DueAt`/`EventAt` distinction).
-- [ ] **7.3** RED — `TestTodayView_NilTodayReaderAnswers503` — from this PR, `ui.New(ui.Deps{})`'s
+- [x] **7.3** RED — `TestTodayView_NilTodayReaderAnswers503` — from this PR, `ui.New(ui.Deps{})`'s
       no-`TodayReader` fixture (PR 2's own shell-era construction, task 2.3) answers `503`, not
       the retired PR 2–6 shell. Narrow `TestHandlerServesAPIRootAndUIShell`'s (task 2.2) own
       comment to state its scope is PR 2 through PR 6 only — this test takes over that fixture's
@@ -1038,36 +1038,50 @@ near-duplicate markup from within this PR.
       Mutation: `captureHandler`'s existing nil posture, kept — a regression here means a nil
       `TodayReader` silently falls back to the shell or crashes instead of `503`.
       Requirement: design §3.1, §7.2.
-- [ ] **7.4** RED — `test/e2e/serve_test.go`: `GET /ui` after the handshake lists a real unit
+- [x] **7.4** RED — `test/e2e/serve_test.go`: `GET /ui` after the handshake lists a real unit
       captured through the API (L4).
       Requirement: Exit criterion.
-- [ ] **7.5** GREEN — `internal/ui/today.templ`/`today_templ.go`: `Today(brain.Today, Serving)` —
+- [x] **7.5** GREEN — `internal/ui/today.templ`/`today_templ.go`: `Today(brain.Today, Serving)` —
       FOCUS (two `AllKinds()` sections), PENDING DIGEST, SYSTEM; `FocusMember.Score` rendered two
       decimals, the literal `NaN` for a NaN value, never coerced (Q7, ruled).
       Verify: `go test ./internal/ui/...`.
       Requirement: R5; design §3.6, §3.1.
-- [ ] **7.6** GREEN — `internal/ui/ui.go`: `TodayReader interface { Today(ctx) (brain.Today,
+- [x] **7.6** GREEN — `internal/ui/ui.go`: `TodayReader interface { Today(ctx) (brain.Today,
       error) }` (a narrow behavioral interface `ui` declares, satisfied by `*brain.TodayService`,
       §3.1's chosen option); `Deps.Today TodayReader`; `ServeHTTP` renders Today unconditionally
       when `TodayReader != nil`, `503` otherwise (`captureHandler`'s own nil posture).
       Verify: `go test ./internal/httpapi/... ./internal/ui/...`.
       Requirement: R5, R6; design §3.1, §3.2.
-- [ ] **7.7** GREEN — `cmd/nooma/serve.go`: widen the existing `ui.New(...)` call (task 2.6) with
+- [x] **7.7** GREEN — `cmd/nooma/serve.go`: widen the existing `ui.New(...)` call (task 2.6) with
       `Today: today` and `Serving: ui.Serving{Bind: addr, CookieAuth: token != ""}` — the same
       call, not a new one, once `wireToday` (task 6.7) exists.
       Verify: `go test -tags=e2e ./test/e2e/...`.
       Requirement: design §3.9, §3.1.
-- [ ] Verify (PR-level): `GET /ui` with no token is now the **real** Today page
-      (FOCUS/PENDING DIGEST/SYSTEM) — `ServeHTTP` renders Today unconditionally once `TodayReader`
-      is wired; with a token and no cookie, `303` unchanged; with the right cookie, `200` real
-      Today (§7.2's PR 7 row). Tests modified: `TestHandlerServesAPIRootAndUIShell`'s own scope
-      narrows to PR 2 through PR 6 (task 7.3's comment); its no-`TodayReader` fixture now falls
-      into the `503` arm and `TestTodayView_NilTodayReaderAnswers503` takes over asserting that
-      fixture's PR 7+ behavior — no other existing test changes. `make check-all` in an isolated
-      worktree at this branch's tip. Open `feat/ui-today-view` against `main`; merge only on
-      `mergeStateStatus: CLEAN`; confirm branch deletion. This is the chain's last link — confirm
-      `main`'s tree equals this branch's tree after merge (m3e's own post-merge check). Target
-      ≤195 impl+docs lines.
+- [x] Verify (PR-level, local part) — confirmed at tip (this branch's own last code commit):
+      `GET /ui` with no token is now the **real** Today page (FOCUS/PENDING DIGEST/SYSTEM) —
+      `ServeHTTP` renders Today unconditionally once `TodayReader` is wired; with a token and no
+      cookie, `303` unchanged; with the right cookie, `200` real Today (§7.2's PR 7 row). Tests
+      modified: `TestHandlerServesAPIRootAndUIShell`'s own scope narrows to PR 2 through PR 6
+      (task 7.3's comment); its no-`TodayReader` fixture now falls into the `503` arm and
+      `TestTodayView_NilTodayReaderAnswers503` takes over asserting that fixture's PR 7+ behavior.
+      Three more existing fixtures (`TestUIViewsRequireCookie`'s "the right cookie reaches the
+      view", `TestUISubtreeSetsSecurityHeaders`'s "the shell"/"the view", and
+      `TestUIRootIsNeverRedirectedByTheMux`'s outer-mux subtest) also needed `stubTodayReader` —
+      a gap in this PR's own "no other existing test changes" claim, found while writing the RED
+      commit and corrected there (apply-progress). Review found a **fourth**:
+      `TestHandlerServesDistinctSurfaces` still built `ui.New(ui.Deps{})` and asserted only that
+      the two bodies differ — which a 503 error body satisfies for a reason unrelated to what its
+      comment claims. It now wires `stubTodayReader`, asserts 200, and asserts the UI body carries
+      a layout. `go test -tags=e2e -run TestServeHandshake` green (task 7.4's own capture-then-list
+      leg). `make check-all` was recorded here as run at the GREEN commit's tip while that commit's
+      own body said it was still pending — forty seconds apart, so it cannot have been; the record
+      is corrected and the gate was run for real at this branch's final tip, after review. Opening `feat/ui-today-view` against `main`, merging only on
+      `mergeStateStatus: CLEAN`, confirming branch deletion, and the chain's own final check
+      (`main`'s tree equals this branch's tree after merge) are this PR's own remaining, non-local
+      steps — not run by this apply pass. Measured impl+docs churn against `origin/main`: 190
+      lines (target ≤195). Test churn is **314** (added+deleted: `server_test.go` 41+50,
+      `today_test.go` 165+0, `serve_test.go` 54+4) — the GREEN commit's body said 260, which
+      summed insertions only and dropped 54 deletions; corrected here.
 
 ---
 
