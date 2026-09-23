@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -215,13 +216,36 @@ func noRedirectClient() *http.Client {
 
 // TestServeHandshake is spec m4a's exit criterion end to end
 // (docs/06-harness.md:181-183): token on loopback, GET /ui redirects to the
-// handshake, POST /ui/login with the right token issues the cookie, and GET
-// /ui with that cookie reaches the mirror.
+// handshake, POST /ui/login with the right token issues the cookie, GET /ui
+// with that cookie reaches the mirror, and — task 7.4, this link's own
+// exit criterion — a unit captured through the API over the same socket
+// shows up on that authenticated GET /ui: the mirror over a real vault, not
+// a fixture.
 func TestServeHandshake(t *testing.T) {
+	llm := mockOllama(t)
+
 	home, work := t.TempDir(), t.TempDir()
 	vault := initVault(t, home, work, "pablo.nooma")
 	port := freePort(t)
-	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n  auth_token_env: NOOMA_SERVE_HANDSHAKE_TEST_TOKEN\n", port))
+	writeConfig(t, vault, fmt.Sprintf(`server:
+  bind: 127.0.0.1
+  http_port: %d
+  auth_token_env: NOOMA_SERVE_HANDSHAKE_TEST_TOKEN
+providers:
+  local:
+    type: ollama
+    model: test-model
+    endpoint: %s
+tasks:
+  capture_processing:
+    provider: local
+  relation_evaluation:
+    provider: local
+  chat:
+    provider: local
+  embedding:
+    provider: local
+`, port, llm.URL))
 	const token = "handshake-e2e-token"
 	t.Setenv("NOOMA_SERVE_HANDSHAKE_TEST_TOKEN", token)
 
@@ -255,6 +279,25 @@ func TestServeHandshake(t *testing.T) {
 		t.Fatalf("POST /ui/login Set-Cookie count = %d, want 1", len(cookies))
 	}
 
+	captureBody, err := json.Marshal(map[string]string{"text": "Pick up the dry cleaning on Friday"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	captureReq, err := http.NewRequest(http.MethodPost, base+"/capture", bytes.NewReader(captureBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	captureReq.Header.Set("Content-Type", "application/json")
+	captureReq.Header.Set("Authorization", "Bearer "+token)
+	captureResp, err := client.Do(captureReq)
+	if err != nil {
+		t.Fatalf("POST /capture: %v", err)
+	}
+	_ = captureResp.Body.Close()
+	if captureResp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /capture = %d, want %d (a fully-wired vault must store this capture)", captureResp.StatusCode, http.StatusCreated)
+	}
+
 	authedReq, err := http.NewRequest(http.MethodGet, base+"/ui", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +309,14 @@ func TestServeHandshake(t *testing.T) {
 	}
 	defer func() { _ = authedResp.Body.Close() }()
 	if authedResp.StatusCode != http.StatusOK {
-		t.Errorf("GET /ui with the cookie = %d, want %d", authedResp.StatusCode, http.StatusOK)
+		t.Fatalf("GET /ui with the cookie = %d, want %d", authedResp.StatusCode, http.StatusOK)
+	}
+	authedBody, err := io.ReadAll(authedResp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(authedBody), "Pick up the dry cleaning") {
+		t.Errorf("GET /ui with the cookie does not list the unit just captured through the API:\n%s", authedBody)
 	}
 }
 

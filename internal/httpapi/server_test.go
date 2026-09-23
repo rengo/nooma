@@ -1,14 +1,15 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/base64"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/ui"
 )
 
@@ -18,11 +19,10 @@ import (
 // that always agrees with itself.
 const wantUICSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
 
-// assertUISecurityHeaders is TestUISubtreeSetsSecurityHeaders' and
-// TestHandlerServesAPIRootAndUIShell's shared check: every response under
-// /ui carries the five headers design m4a §3.5 fixes, with Cache-Control
-// the one value that varies by route class (no-store on a view, no-cache
-// on a static asset).
+// assertUISecurityHeaders is TestUISubtreeSetsSecurityHeaders' own shared
+// check: every response under /ui carries the five headers design m4a §3.5
+// fixes, with Cache-Control the one value that varies by route class
+// (no-store on a view, no-cache on a static asset).
 func assertUISecurityHeaders(t *testing.T, h http.Header, wantCacheControl string) {
 	t.Helper()
 
@@ -48,14 +48,28 @@ func doGet(h http.Handler, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
+// stubTodayReader answers Today unconditionally with a fixed, empty
+// brain.Today. This package's own tests exist to check cookie, header and
+// mux-wiring behavior over a real view, not Today's own markup — that
+// detailed rendering is internal/ui's job (tasks 7.1, 7.2) — so every
+// fixture below that needs GET /ui to reach a 200 wires this instead of
+// leaving Deps.Today nil, which now answers 503 unconditionally
+// (TestTodayView_NilTodayReaderAnswers503, internal/ui).
+type stubTodayReader struct{}
+
+func (stubTodayReader) Today(context.Context) (brain.Today, error) {
+	return brain.Today{}, nil
+}
+
 // TestHandlerServesAPIRootAndUIShell is design m4a §3.1's PR 2 shell state,
-// renamed from TestHandlerServesBothSurfaces (§7.2): GET / and GET /ui both
-// 200; the /ui body carries the layout and PR 2's own shell paragraph —
-// "Today arrives in a later PR" — never a FOCUS/PENDING DIGEST/SYSTEM
-// section or any other vault-shaped content. This test's own scope is PR 2
-// through PR 6 only: from PR 7, ui.New(ui.Deps{})'s own no-TodayReader
-// fixture falls into a 503 arm instead, which
-// TestTodayView_NilTodayReaderAnswers503 takes over asserting (§7.2, §8).
+// renamed from TestHandlerServesBothSurfaces (§7.2). Its own scope is PR 2
+// through PR 6 only: the shell paragraph it used to assert on GET /ui no
+// longer exists at this tip — ServeHTTP renders Today unconditionally once
+// a TodayReader is wired, and answers 503 for the same no-TodayReader
+// fixture (ui.New(ui.Deps{})) this test used to build. That fixture's PR 7+
+// behavior is taken over by TestTodayView_NilTodayReaderAnswers503
+// (internal/ui, §7.2, §8) — this test keeps only the assertion still true
+// at this tip: the API root (task 7.3).
 func TestHandlerServesAPIRootAndUIShell(t *testing.T) {
 	t.Parallel()
 
@@ -69,31 +83,6 @@ func TestHandlerServesAPIRootAndUIShell(t *testing.T) {
 	defer func() { _ = rootResp.Body.Close() }()
 	if rootResp.StatusCode != http.StatusOK {
 		t.Errorf("GET / = %d, want 200", rootResp.StatusCode)
-	}
-
-	uiResp, err := http.Get(srv.URL + "/ui")
-	if err != nil {
-		t.Fatalf("GET /ui: %v", err)
-	}
-	defer func() { _ = uiResp.Body.Close() }()
-	if uiResp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /ui = %d, want 200", uiResp.StatusCode)
-	}
-	assertUISecurityHeaders(t, uiResp.Header, "no-store")
-
-	body, err := io.ReadAll(uiResp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page := string(body)
-
-	if !strings.Contains(page, "Today arrives in a later PR") {
-		t.Errorf("GET /ui does not carry PR 2's shell paragraph:\n%s", page)
-	}
-	for _, section := range []string{"FOCUS", "PENDING DIGEST", "SYSTEM"} {
-		if strings.Contains(page, section) {
-			t.Errorf("GET /ui already carries %q — Today is PR 7's, not PR 2's:\n%s", section, page)
-		}
 	}
 }
 
@@ -306,8 +295,10 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 		if rec.Header().Get("Set-Cookie") != "" {
 			t.Error("GET /ui set a cookie before the handshake ran")
 		}
-		if strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
-			t.Error("GET /ui with no cookie leaked the shell's own body — it must carry no vault-shaped content")
+		for _, section := range []string{"FOCUS", "PENDING DIGEST", "SYSTEM"} {
+			if strings.Contains(rec.Body.String(), section) {
+				t.Errorf("GET /ui with no cookie leaked %q — it must carry no vault-shaped content", section)
+			}
 		}
 	})
 
@@ -363,7 +354,7 @@ func TestUIViewsRequireCookie(t *testing.T) {
 	t.Parallel()
 
 	const token = "the-real-token"
-	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{})})
+	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{Today: stubTodayReader{}})})
 
 	for _, leaf := range guardedUILeafRequestPaths {
 		leaf := leaf
@@ -427,8 +418,8 @@ func TestUIViewsRequireCookie(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("GET %s with the right cookie = %d, want 200", leaf, rec.Code)
 			}
-			if !strings.Contains(rec.Body.String(), "Today arrives in a later PR") {
-				t.Errorf("GET %s with the right cookie does not carry the shell:\n%s", leaf, rec.Body.String())
+			if !strings.Contains(rec.Body.String(), "SYSTEM") {
+				t.Errorf("GET %s with the right cookie does not carry the view:\n%s", leaf, rec.Body.String())
 			}
 		})
 	}
@@ -516,14 +507,14 @@ func TestRequireCookieNoOpOnlyOnLoopback(t *testing.T) {
 // TestUISubtreeSetsSecurityHeaders is design m4a §3.5, §8: every response
 // under /ui — a rendered view, a static asset, an unmatched path, a
 // cross-origin refusal — carries the five fixed headers, with the right
-// Cache-Control for its route class. PR 2's tip has no cookie state yet
-// (303/401 arrive with PR 4a), so this test exercises every arm PR 2's own
-// mux can produce: 200 on the shell and on a static asset, 404 on an
-// unmatched /ui path, 403 on a refused cross-origin POST.
+// Cache-Control for its route class. No token is configured, so
+// requireCookie is a no-op here (303/401 need a token, covered by
+// TestUIViewsRequireCookie): 200 on the view and on a static asset, 404 on
+// an unmatched /ui path, 403 on a refused cross-origin POST.
 func TestUISubtreeSetsSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
-	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{})})
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}})})
 
 	cases := []struct {
 		name             string
@@ -534,7 +525,7 @@ func TestUISubtreeSetsSecurityHeaders(t *testing.T) {
 		wantCacheControl string
 		wantAllow        string
 	}{
-		{name: "the shell", method: http.MethodGet, path: "/ui", wantStatus: http.StatusOK, wantCacheControl: "no-store"},
+		{name: "the view", method: http.MethodGet, path: "/ui", wantStatus: http.StatusOK, wantCacheControl: "no-store"},
 		{name: "a static asset", method: http.MethodGet, path: "/ui/static/app.css", wantStatus: http.StatusOK, wantCacheControl: "no-cache"},
 		{name: "an unmatched /ui path", method: http.MethodGet, path: "/ui/does-not-exist", wantStatus: http.StatusNotFound, wantCacheControl: "no-store"},
 		{name: "a refused cross-origin POST", method: http.MethodPost, path: "/ui", crossSite: true, wantStatus: http.StatusForbidden, wantCacheControl: "no-store"},
@@ -728,7 +719,7 @@ func TestUIRootIsNeverRedirectedByTheMux(t *testing.T) {
 	t.Run("the outer mux mounts both /ui and /ui/ with no redirect", func(t *testing.T) {
 		t.Parallel()
 
-		h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{})})
+		h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}})})
 
 		for _, path := range []string{"/ui", "/ui/"} {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
