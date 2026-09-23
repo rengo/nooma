@@ -245,6 +245,58 @@ func TestToday_FocusMemberScoreCarriesANaNWithoutCoercion(t *testing.T) {
 	}
 }
 
+// unitsArchivedBetweenReads wraps a real memrepo.Units and drops missing
+// from whatever LiveByIDs returns, simulating a candidate
+// LiveFocusCandidatesByType already returned getting archived before
+// rankFocus's second read runs — design §3.7's N7.
+type unitsArchivedBetweenReads struct {
+	*memrepo.Units
+	missing string
+}
+
+func (u unitsArchivedBetweenReads) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error) {
+	kept := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == u.missing {
+			continue
+		}
+		kept = append(kept, id)
+	}
+	return u.Units.LiveByIDs(ctx, kept)
+}
+
+// TestToday_N7ArchivedBetweenReadsDropsOneMemberSilently is design §3.7's
+// N7: LiveFocusCandidatesByType returns a candidate LiveByIDs no longer
+// has, because it was archived in the gap between rankFocus's two reads.
+// The view shows one member fewer and misreports nothing — no zero-value
+// FocusMember standing in for the dropped candidate.
+func TestToday_N7ArchivedBetweenReadsDropsOneMemberSilently(t *testing.T) {
+	base := memrepo.NewUnits()
+	seedTodayUnit(t, base, "task-01", unit.TypeTask, 2)
+	seedTodayUnit(t, base, "task-02", unit.TypeTask, 1)
+	units := unitsArchivedBetweenReads{Units: base, missing: "task-02"}
+
+	svc := newTodayService(units, memrepo.NewConfig(), memrepo.NewState(), memrepo.NewTriggers(), memrepo.NewPendingQuestions(), memrepo.NewDecisionLog())
+	today, err := svc.Today(context.Background())
+	if err != nil {
+		t.Fatalf("Today: %v", err)
+	}
+
+	taskFocus := today.Focuses[0]
+	want := len(wantTopIDs(t, base, focus.KindTask)) - 1
+	if len(taskFocus.Members) != want {
+		t.Fatalf("task focus has %d members, want %d — LiveFocusCandidatesByType found 2, LiveByIDs only 1 (N7)", len(taskFocus.Members), want)
+	}
+	for _, m := range taskFocus.Members {
+		if m.ID == "" || m.Content == "" {
+			t.Fatalf("FocusMember %+v carries a zero value — N7's dropped candidate must vanish, not survive as an empty entry", m)
+		}
+		if m.ID == "task-02" {
+			t.Fatalf("task focus still contains %q, which LiveByIDs no longer has", m.ID)
+		}
+	}
+}
+
 // newDigestParityFixture seeds one undelivered trigger and one queued
 // relation question, identically, for two independent runs of the digest —
 // one that never called Today, one that called it repeatedly — so
