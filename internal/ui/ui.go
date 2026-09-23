@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/rengo/nooma/internal/brain"
@@ -63,7 +64,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	today, err := h.deps.Today.Today(r.Context())
 	if err != nil {
-		http.Error(w, "today: "+err.Error(), http.StatusInternalServerError)
+		// The reader is already the authenticated owner (requireCookie has
+		// run by the time this handler is reached), so this crosses no
+		// trust boundary today — but err may wrap a raw SQL error or a
+		// filesystem path, and reflecting it verbatim would still leak
+		// implementation detail to the browser for no reader-facing
+		// benefit. The detail goes to the server-side log instead;
+		// log/slog is part of $gostd, so this reaches a logger without
+		// widening ui-boundary's allow-list (.golangci.yml).
+		slog.Error("today: rendering failed", "err", err)
+		http.Error(w, "today: internal error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
