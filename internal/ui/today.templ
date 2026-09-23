@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"time"
 
@@ -71,10 +70,11 @@ const dateLayout = "2006-01-02 15:04"
 
 // formatScore renders focus.Rank's own literal Score — NaN included, never
 // coerced (Q7, ruled, design §11): two decimals, or the literal "NaN".
+// No NaN branch lives here — strconv.FormatFloat renders NaN as "NaN"
+// itself, so a branch would be dead code claiming to guard something.
+// The guard is TestTodayView_RendersThreeSectionsFromTheModel asserting
+// the rendered text: coercing NaN to "0.00" fails it (verified).
 func formatScore(s float64) string {
-	if math.IsNaN(s) {
-		return "NaN"
-	}
 	return strconv.FormatFloat(s, 'f', 2, 64)
 }
 

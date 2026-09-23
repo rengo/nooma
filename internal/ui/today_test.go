@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"net/http"
@@ -161,5 +162,35 @@ func TestTodayView_NilTodayReaderAnswers503(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("GET /ui with no TodayReader = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// TestTodayView_EscapesVaultContent is design §9's threat-matrix row on
+// content injection, made executable. A unit's content is vault data: the
+// user's own text, but also whatever a capture pulled in. templ escapes
+// every { expr } by default and no template here uses templ.Raw, so the
+// protection is structural — this test is what keeps it that way, since a
+// later template that reached for templ.Raw would still compile and still
+// render, just unescaped.
+//
+// Catches: a template switching a content field to templ.Raw, or the model
+// carrying pre-rendered HTML.
+func TestTodayView_EscapesVaultContent(t *testing.T) {
+	t.Parallel()
+
+	model := fixedToday()
+	model.Focuses[0].Members[0].Content = `<script>alert(1)</script>`
+
+	var buf bytes.Buffer
+	if err := ui.Today(model, ui.Serving{Bind: "127.0.0.1:8080", CookieAuth: true}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	page := buf.String()
+
+	if strings.Contains(page, "<script>alert(1)</script>") {
+		t.Errorf("vault content reached the page unescaped:\n%s", page)
+	}
+	if !strings.Contains(page, "&lt;script&gt;alert(1)&lt;/script&gt;") {
+		t.Errorf("vault content is not escaped as expected:\n%s", page)
 	}
 }

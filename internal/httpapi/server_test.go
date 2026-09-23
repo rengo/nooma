@@ -157,14 +157,21 @@ func TestNoUIUnmountsTheSubtree(t *testing.T) {
 func TestHandlerServesDistinctSurfaces(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(Handler(Deps{Version: "test-version", UI: ui.New(ui.Deps{})}))
+	srv := httptest.NewServer(Handler(Deps{Version: "test-version", UI: ui.New(ui.Deps{Today: stubTodayReader{}})}))
 	t.Cleanup(srv.Close)
 
 	api := get(t, srv.URL+"/")
-	uiBody := get(t, srv.URL+"/ui")
+	uiResp := doGet(Handler(Deps{Version: "test-version", UI: ui.New(ui.Deps{Today: stubTodayReader{}})}), "/ui")
+	uiBody := uiResp.Body.String()
 
+	if uiResp.Code != http.StatusOK {
+		t.Fatalf("GET /ui = %d, want 200 — without a TodayReader this answers 503, and then the\ncomparison below passes for a reason that has nothing to do with the two\nsurfaces being distinct", uiResp.Code)
+	}
 	if !strings.Contains(api, "test-version") {
 		t.Errorf("the API response does not report the version:\n%s", api)
+	}
+	if !strings.Contains(uiBody, "<main>") {
+		t.Errorf("the UI response does not carry its own layout:\n%s", uiBody)
 	}
 	if api == uiBody {
 		t.Error("the API and the UI return the same body; one of them is not doing its job")

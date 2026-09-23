@@ -10,7 +10,6 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"time"
 
@@ -82,7 +81,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs("FOCUS: " + string(f.Kind))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 26, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 25, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -100,7 +99,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(m.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 30, Col: 12}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 29, Col: 12}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -113,7 +112,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(m.Content)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 30, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 29, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -126,7 +125,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(formatScore(m.Score))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 30, Col: 63}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 29, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -144,7 +143,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(m.DueAt.Format(dateLayout))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 32, Col: 46}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 31, Col: 46}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -163,7 +162,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(m.EventAt.Format(dateLayout))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 35, Col: 50}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 34, Col: 50}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -196,7 +195,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(line.Text)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 46, Col: 19}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 45, Col: 19}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -214,7 +213,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Held: %d", today.Digest.Held))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 49, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 48, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -232,7 +231,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs("Question: " + today.Digest.Question.FromContent + " — " + today.Digest.Question.ToContent)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 51, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 50, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -250,7 +249,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs("Last consolidation: " + formatConsolidation(today.Status.LastConsolidationAt))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 57, Col: 87}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 56, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -263,7 +262,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs("Energy: " + formatEnergy(today.Status.Energy))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 58, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 57, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -276,7 +275,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Undelivered: %d", today.Status.Undelivered))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 59, Col: 65}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 58, Col: 65}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -289,7 +288,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Open questions: %d", today.Status.OpenQuestions))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 60, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 59, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -302,7 +301,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs("Bind: " + serving.Bind)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 61, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 60, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -315,7 +314,7 @@ func todayBody(today brain.Today, serving Serving) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs("Cookie auth: " + formatCookieAuth(serving.CookieAuth))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 62, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `today.templ`, Line: 61, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {
@@ -336,10 +335,11 @@ const dateLayout = "2006-01-02 15:04"
 
 // formatScore renders focus.Rank's own literal Score — NaN included, never
 // coerced (Q7, ruled, design §11): two decimals, or the literal "NaN".
+// No NaN branch lives here — strconv.FormatFloat renders NaN as "NaN"
+// itself, so a branch would be dead code claiming to guard something.
+// The guard is TestTodayView_RendersThreeSectionsFromTheModel asserting
+// the rendered text: coercing NaN to "0.00" fails it (verified).
 func formatScore(s float64) string {
-	if math.IsNaN(s) {
-		return "NaN"
-	}
 	return strconv.FormatFloat(s, 'f', 2, 64)
 }
 

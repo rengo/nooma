@@ -1068,13 +1068,20 @@ near-duplicate markup from within this PR.
       view", `TestUISubtreeSetsSecurityHeaders`'s "the shell"/"the view", and
       `TestUIRootIsNeverRedirectedByTheMux`'s outer-mux subtest) also needed `stubTodayReader` —
       a gap in this PR's own "no other existing test changes" claim, found while writing the RED
-      commit and corrected there (apply-progress). `go test -tags=e2e -run TestServeHandshake`
-      green (task 7.4's own capture-then-list leg). `make check-all` run in an isolated worktree
-      at this branch's tip. Opening `feat/ui-today-view` against `main`, merging only on
+      commit and corrected there (apply-progress). Review found a **fourth**:
+      `TestHandlerServesDistinctSurfaces` still built `ui.New(ui.Deps{})` and asserted only that
+      the two bodies differ — which a 503 error body satisfies for a reason unrelated to what its
+      comment claims. It now wires `stubTodayReader`, asserts 200, and asserts the UI body carries
+      a layout. `go test -tags=e2e -run TestServeHandshake` green (task 7.4's own capture-then-list
+      leg). `make check-all` was recorded here as run at the GREEN commit's tip while that commit's
+      own body said it was still pending — forty seconds apart, so it cannot have been; the record
+      is corrected and the gate was run for real at this branch's final tip, after review. Opening `feat/ui-today-view` against `main`, merging only on
       `mergeStateStatus: CLEAN`, confirming branch deletion, and the chain's own final check
       (`main`'s tree equals this branch's tree after merge) are this PR's own remaining, non-local
       steps — not run by this apply pass. Measured impl+docs churn against `origin/main`: 190
-      lines (target ≤195).
+      lines (target ≤195). Test churn is **314** (added+deleted: `server_test.go` 41+50,
+      `today_test.go` 165+0, `serve_test.go` 54+4) — the GREEN commit's body said 260, which
+      summed insertions only and dropped 54 deletions; corrected here.
 
 ---
 
