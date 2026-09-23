@@ -203,8 +203,10 @@ would:
 - The hand-written island stays under a **stated line budget**, restated in the PR that raises
   it. Growth is allowed; growing quietly is not.
 
-Neither gate exists yet, because neither has a file to scan: `internal/ui/` is a `doc.go` and
-nothing else. **They ship in the same PR as the first line of island JavaScript**, and §6 gains
+Neither gate exists yet, because neither has a file to scan: `internal/ui/` holds server-rendered
+templates and vendored assets, and not one line of hand-written JavaScript — `m4a` filled the
+package without writing any, and htmx arrives vendored under `static/`, which the island budget
+does not count. **They ship in the same PR as the first line of island JavaScript**, and §6 gains
 their row then — a gate listed as blocking before it can run would be the one kind of entry this
 table must never contain.
 
