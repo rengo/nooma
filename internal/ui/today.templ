@@ -1,0 +1,100 @@
+package ui
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/prospection"
+)
+
+// Today is what GET /ui renders once a TodayReader is wired (design m4a
+// §3.6, §7.2's PR 7 tip row): FOCUS over both focus.Kind sections, PENDING
+// DIGEST exactly as Carry left it, and SYSTEM's six lines. It renders
+// brain.Today directly — no second, hand-mapped view-model type between the
+// service and this template (§3.1's own ruling that ui imports brain only
+// for its output types).
+templ Today(today brain.Today, serving Serving) {
+	@Page("nooma", todayBody(today, serving))
+}
+
+templ todayBody(today brain.Today, serving Serving) {
+	for _, f := range today.Focuses {
+		<section>
+			<h2>{ "FOCUS: " + string(f.Kind) }</h2>
+			<ol>
+				for _, m := range f.Members {
+					<li>
+						{ m.ID } — { m.Content } (score: { formatScore(m.Score) })
+						if m.DueAt != nil {
+							<span>Due: { m.DueAt.Format(dateLayout) }</span>
+						}
+						if m.EventAt != nil {
+							<span>Event: { m.EventAt.Format(dateLayout) }</span>
+						}
+					</li>
+				}
+			</ol>
+		</section>
+	}
+	<section>
+		<h2>PENDING DIGEST</h2>
+		<ul>
+			for _, line := range today.Digest.Items {
+				<li>{ line.Text }</li>
+			}
+		</ul>
+		<p>{ fmt.Sprintf("Held: %d", today.Digest.Held) }</p>
+		if today.Digest.Question != nil {
+			<p>{ "Question: " + today.Digest.Question.FromContent + " — " + today.Digest.Question.ToContent }</p>
+		}
+	</section>
+	<section>
+		<h2>SYSTEM</h2>
+		<ul>
+			<li>{ "Last consolidation: " + formatConsolidation(today.Status.LastConsolidationAt) }</li>
+			<li>{ "Energy: " + formatEnergy(today.Status.Energy) }</li>
+			<li>{ fmt.Sprintf("Undelivered: %d", today.Status.Undelivered) }</li>
+			<li>{ fmt.Sprintf("Open questions: %d", today.Status.OpenQuestions) }</li>
+			<li>{ "Bind: " + serving.Bind }</li>
+			<li>{ "Cookie auth: " + formatCookieAuth(serving.CookieAuth) }</li>
+		</ul>
+	</section>
+}
+
+// dateLayout is today.templ's one date format — I18's distinct labels
+// (Due:/Event:) are what keeps the two kinds from being confused; the
+// layout itself just needs to be readable.
+const dateLayout = "2006-01-02 15:04"
+
+// formatScore renders focus.Rank's own literal Score — NaN included, never
+// coerced (Q7, ruled, design §11): two decimals, or the literal "NaN".
+func formatScore(s float64) string {
+	if math.IsNaN(s) {
+		return "NaN"
+	}
+	return strconv.FormatFloat(s, 'f', 2, 64)
+}
+
+func formatConsolidation(t *time.Time) string {
+	if t == nil {
+		return "never"
+	}
+	return t.Format(dateLayout)
+}
+
+func formatEnergy(e *prospection.EnergyReading) string {
+	if e == nil {
+		return "no reading"
+	}
+	return fmt.Sprintf("%.2f (%s, %s)", e.Level, e.Source, e.RecordedAt.Format(dateLayout))
+}
+
+func formatCookieAuth(on bool) string {
+	if on {
+		return "enabled"
+	}
+	return "disabled"
+}
