@@ -70,7 +70,7 @@ test-e2e: ## L4 — the compiled binary
 	# that overlaps into roughly one 120s window, but PR 9a's simulated-weeks
 	# demo is deliberately the slowest test this repo will ever have, and a
 	# stated decision beats quietly riding a language default toward it.
-	go test -tags e2e -timeout 20m ./test/e2e/...
+	go test -tags e2e -count=1 -timeout 20m ./test/e2e/...
 
 .PHONY: schema-golden
 schema-golden: ## Regenerate testdata/schema/{structure,ddl}.golden from the embedded migrations
