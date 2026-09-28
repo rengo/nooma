@@ -312,13 +312,62 @@ func (r *Units) LiveFocusCandidates(_ context.Context, ids []string) ([]focus.Ca
 	return candidates, nil
 }
 
-// LiveBrowsePage implements ports.UnitRepo. Deliberately wrong: task 1.1's
-// RED state, a stub that always returns an empty ports.BrowsePage{} — it
-// compiles against the interface but fails every assertion in
-// repocontract.RunLiveBrowsePage. Task 1.2 replaces this with the real
-// filter/order/page logic.
-func (r *Units) LiveBrowsePage(_ context.Context, _ []unit.Type, _ *ports.BrowseCursor) (ports.BrowsePage, error) {
-	return ports.BrowsePage{}, nil
+// LiveBrowsePage implements ports.UnitRepo. Filters positively on
+// status == pool (I02) and, when types is non-empty, on membership in
+// types — an empty types means no narrowing (ports.UnitRepo's own doc
+// comment: the mirror of LiveFocusCandidatesByType's "empty means none").
+// Orders by (CreatedAt, ID) descending — CreatedAt first, ID breaking ties
+// — and bounds the result to ports.BrowsePageSize, reporting a Next cursor
+// naming the last row whenever more live units remain past this page.
+func (r *Units) LiveBrowsePage(_ context.Context, types []unit.Type, after *ports.BrowseCursor) (ports.BrowsePage, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	wanted := make(map[unit.Type]bool, len(types))
+	for _, t := range types {
+		wanted[t] = true
+	}
+
+	matched := make([]unit.Unit, 0, len(r.units))
+	for _, u := range r.units {
+		if !u.Status.IsLive() {
+			continue
+		}
+		if len(types) > 0 && !wanted[u.Type] {
+			continue
+		}
+		if after != nil && !browseCursorLess(*after, u) {
+			continue
+		}
+		matched = append(matched, deepCopy(u))
+	}
+
+	sort.Slice(matched, func(i, j int) bool {
+		if !matched[i].CreatedAt.Equal(matched[j].CreatedAt) {
+			return matched[i].CreatedAt.After(matched[j].CreatedAt)
+		}
+		return matched[i].ID > matched[j].ID
+	})
+
+	page := ports.BrowsePage{Units: matched}
+	if len(matched) > ports.BrowsePageSize {
+		page.Units = matched[:ports.BrowsePageSize]
+		last := page.Units[len(page.Units)-1]
+		page.Next = &ports.BrowseCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+	return page, nil
+}
+
+// browseCursorLess reports whether u sorts strictly past cursor in
+// LiveBrowsePage's own (CreatedAt, ID) descending order — the row-value
+// predicate `(created_at, id) < (cursor.CreatedAt, cursor.ID)` the SQLite
+// implementation runs, evaluated here against an in-memory unit.Unit
+// instead of a SQL row.
+func browseCursorLess(cursor ports.BrowseCursor, u unit.Unit) bool {
+	if !u.CreatedAt.Equal(cursor.CreatedAt) {
+		return u.CreatedAt.Before(cursor.CreatedAt)
+	}
+	return u.ID < cursor.ID
 }
 
 // LiveFocusCandidatesByType implements ports.UnitRepo. The filter is
