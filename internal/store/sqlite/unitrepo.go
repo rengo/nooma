@@ -505,6 +505,16 @@ func (r *UnitRepo) LiveFocusCandidatesByType(ctx context.Context, types []unit.T
 	return candidates, nil
 }
 
+// LiveBrowsePage implements ports.UnitRepo. Task 1.1's compiling placeholder
+// — TestUnitRepo_ApplyBoosts's own precedent (unitrepo_integration_test.go)
+// for a stacked-to-main chain: the interface gains the method before this
+// package's real implementation lands, so *UnitRepo must keep satisfying
+// ports.UnitRepo (the var _ assertion below) from this commit on. Task 1.3
+// replaces this body with buildLiveBrowsePageQuery + the real scan.
+func (r *UnitRepo) LiveBrowsePage(_ context.Context, _ []unit.Type, _ *ports.BrowseCursor) (ports.BrowsePage, error) {
+	return ports.BrowsePage{}, nil
+}
+
 // buildLiveFocusCandidatesByTypeQuery renders LiveFocusCandidatesByType's
 // parameterized SQL and its bound args for the positive status = 'pool' AND
 // type IN (...) filter (I02). Factored out of the method itself so

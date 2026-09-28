@@ -312,6 +312,15 @@ func (r *Units) LiveFocusCandidates(_ context.Context, ids []string) ([]focus.Ca
 	return candidates, nil
 }
 
+// LiveBrowsePage implements ports.UnitRepo. Deliberately wrong: task 1.1's
+// RED state, a stub that always returns an empty ports.BrowsePage{} — it
+// compiles against the interface but fails every assertion in
+// repocontract.RunLiveBrowsePage. Task 1.2 replaces this with the real
+// filter/order/page logic.
+func (r *Units) LiveBrowsePage(_ context.Context, _ []unit.Type, _ *ports.BrowseCursor) (ports.BrowsePage, error) {
+	return ports.BrowsePage{}, nil
+}
+
 // LiveFocusCandidatesByType implements ports.UnitRepo. The filter is
 // positive (status == pool via unit.Status.IsLive) and by membership in
 // types — I02's rule, the same one LiveFocusCandidates already follows,

@@ -15,7 +15,7 @@ import (
 // §1 ("Nothing is deleted. Archiving is a state transition, not a
 // removal") and CLAUDE.md non-negotiable #6, made structural (design D5).
 //
-// Thirteen methods, and two absences that are deliberate:
+// Fourteen methods, and two absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     (I03's promoted reflection check, strengthened by this PR — design
@@ -220,6 +220,58 @@ type UnitRepo interface {
 	// convention: Live is the status, FocusCandidates is the shape, ByType is
 	// the bound.
 	LiveFocusCandidatesByType(ctx context.Context, types []unit.Type) ([]focus.Candidate, error)
+
+	// LiveBrowsePage returns one page of unit.StatusPool units (I02, the
+	// same positive filter every other Live* method here uses), narrowed to
+	// types when non-empty — an empty types means all types, LiveFocusCandidatesByType's
+	// own posture flipped: there, empty means no candidates: here, empty
+	// means no narrowing (m4b spec R1, design §3.2).
+	//
+	// Ordered created_at DESC, id DESC: created_at is immutable once a unit
+	// exists, so it is the only column a keyset cursor can walk without a
+	// row changing pages out from under it mid-browse; id breaks ties
+	// between two units created in the same second (formatUnitTime's own
+	// whole-second precision makes that collision real, not theoretical).
+	//
+	// after is nil for the first page. A non-nil after resumes strictly
+	// past that cursor's (CreatedAt, ID) pair in the same order — a unit
+	// archived since the previous page was read is simply absent from this
+	// one, I02 applied identically at every page, not a special case this
+	// method handles.
+	//
+	// The returned BrowsePage.Units never exceeds BrowsePageSize. Next is
+	// nil when this page reached the end of the live set; otherwise it
+	// names the last row on this page, ready to pass back as the next
+	// call's after. There is no limit parameter: BrowsePageSize is the one
+	// bound, a transport constant rather than a per-call choice (design
+	// OR2) — the same reasoning LiveFocusCandidatesByType's own doc comment
+	// gives for why no SQL ORDER BY can express a ranking, applied here to
+	// why no caller-supplied limit can widen a page past the bound the UI
+	// layer is built around.
+	LiveBrowsePage(ctx context.Context, types []unit.Type, after *BrowseCursor) (BrowsePage, error)
+}
+
+// BrowsePageSize bounds every LiveBrowsePage call — a transport constant
+// (design OR2), not a §13 calibratable number: it shapes the UI's page
+// size, it does not decide anything doc 02 governs.
+const BrowsePageSize = 50
+
+// BrowseCursor names the last row LiveBrowsePage returned on a page, in the
+// order LiveBrowsePage itself sorts by: CreatedAt breaks no tie on its own,
+// ID does. Passing a BrowseCursor back as the next call's after resumes
+// strictly past this exact row.
+type BrowseCursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
+// BrowsePage is one page of LiveBrowsePage's result: Units, in the same
+// order LiveBrowsePage returns them, and Next — nil when Units reached the
+// end of the live set, otherwise the BrowseCursor the caller passes back to
+// resume.
+type BrowsePage struct {
+	Units []unit.Unit
+	Next  *BrowseCursor
 }
 
 // Sentinel errors ports.UnitRepo implementations return — design D5.

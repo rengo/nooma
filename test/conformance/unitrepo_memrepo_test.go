@@ -80,3 +80,12 @@ func TestUnitRepo_MemRepo_LiveFocusCandidatesByType(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_LiveBrowsePage runs repocontract.RunLiveBrowsePage —
+// m4b spec R1's contract suite (design §3.2) — against the same fake.
+func TestUnitRepo_MemRepo_LiveBrowsePage(t *testing.T) {
+	repocontract.RunLiveBrowsePage(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}
