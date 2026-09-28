@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/httpapi"
@@ -137,14 +138,14 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// Deps.UI falls through to requireToken(guardedMux) exactly as any
 	// other unknown path does — 404 with no token, 401 with one
 	// (internal/httpapi/server.go's own d.UI != nil mount gate, unchanged
-	// since PR 2). This PR widens the same call with Today and Serving
-	// (design m4a §3.9): wireToday needs no provider, so it is wired
-	// unconditionally here, the same call site as wireBrain above, never
-	// inside wireScheduler's LLM-gated path (design §3.6).
+	// since PR 2). Today and Units both need no provider, so both are
+	// wired unconditionally here, the same call site as wireBrain above,
+	// never inside wireScheduler's LLM-gated path (design §3.6).
 	today := wireToday(db)
+	units := wireUnits(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
-		uiHandler = ui.New(ui.Deps{Today: today, Serving: ui.Serving{Bind: addr, CookieAuth: token != ""}})
+		uiHandler = ui.New(uiDeps(today, units, recall, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
 		Addr:              addr,
@@ -266,4 +267,28 @@ func runServe(args []string, out, errOut io.Writer) error {
 // testable without starting a server.
 func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 	return serverUI && !noUIFlag
+}
+
+// uiDeps builds ui.Deps at this binary's one call site (design §3.4). Each
+// pointer is assigned only when non-nil: handing a nil *brain.XService
+// straight to an interface field would produce a non-nil interface
+// wrapping a nil pointer — the typed-nil trap that would make ui.Handler's
+// own "not wired" checks never fire, and the first request panic on a nil
+// receiver instead of answering 503. today and units never actually come
+// back nil in production (both are wired unconditionally, above); recall
+// does, on a vault with no providers configured (wireBrain's own degrade,
+// cmd/nooma/wiring.go) — this function guards all three alike rather than
+// only the one that needs it today.
+func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, serving ui.Serving) ui.Deps {
+	deps := ui.Deps{Serving: serving}
+	if today != nil {
+		deps.Today = today
+	}
+	if units != nil {
+		deps.Units = units
+	}
+	if recall != nil {
+		deps.Search = recall
+	}
+	return deps
 }

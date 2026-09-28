@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
 )
 
 // TodayReader is Today's own entry point, declared here rather than
@@ -18,13 +20,34 @@ type TodayReader interface {
 	Today(ctx context.Context) (brain.Today, error)
 }
 
-// Deps is what New needs to build the mirror's handler. Today is nil until
-// wired (cmd/nooma's own transitional state before wireToday's result
-// reaches this field, and every internal/httpapi test fixture that does
-// not need a real view); ServeHTTP answers 503 for that state rather than
-// PR 2 through PR 6's retired shell (design m4a §3.1, §7.2's PR 7 tip row).
+// UnitsReader is /ui/units' own entry point into the mirror's second read
+// model (design §3.3): Browse for one page of live units, Detail for one
+// unit and its live relations. TodayReader's own split applies here too:
+// Detail returns brain.UnitDetail, an OUTPUT type, never brain.UnitsService
+// itself — the same "narrow behavioural interface" choice (design m4a
+// §3.1). *brain.UnitsService satisfies it.
+type UnitsReader interface {
+	Browse(ctx context.Context, types []unit.Type, after *ports.BrowseCursor) (ports.BrowsePage, error)
+	Detail(ctx context.Context, id string) (brain.UnitDetail, bool, error)
+}
+
+// Searcher is /ui/units' search entrance, and the only brain method this
+// package may call to answer a query — RecallService.ForText, never
+// ScoredFor (I22, spec R2): declaring no ScoredFor here keeps the
+// non-admitting net structurally unreachable from internal/ui.
+type Searcher interface {
+	ForText(ctx context.Context, text string) ([]unit.Unit, bool, error)
+}
+
+// Deps is what New needs to build the mirror's handler. Today, Units and
+// Search are nil until wired (cmd/nooma's own transitional state, and
+// every test fixture that does not need a real view); each nil dependency
+// answers 503 for the routes that need it, rather than panicking on a nil
+// receiver (design m4a §3.1, §3.4's typed-nil gotcha).
 type Deps struct {
 	Today   TodayReader
+	Units   UnitsReader
+	Search  Searcher
 	Serving Serving
 }
 
@@ -50,14 +73,33 @@ func New(deps Deps) *Handler {
 	return &Handler{deps: deps}
 }
 
-// ServeHTTP renders Today unconditionally: it decides nothing else —
+// ServeHTTP switches on r.Pattern (design §3.1) — the same guardedUI
+// target serves every leaf newUIMux registers, so this switch, not the
+// mux, is where each pattern's own view is decided. Go's ServeMux sets
+// r.Pattern to the exact pattern it matched before this handler ever runs;
+// a request driven directly in a test sets it by hand
+// (today_test.go:159). A pattern with no case here 404s — this package's
+// own drift guard against a leaf newUIMux wires but this switch forgot
+// (design N2, TestUIGuardedLeavesEachReachAView).
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Pattern {
+	case "GET /ui", "GET /ui/{$}":
+		h.serveToday(w, r)
+	case "GET /ui/units":
+		h.serveUnits(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// serveToday renders Today unconditionally: it decides nothing else —
 // internal/ui's own charter (doc.go) — and does not itself set any
 // security header; internal/httpapi's securityHeaders wraps the whole /ui
 // subtree from the outside (design m4a §3.2). A nil TodayReader —
 // ui.New(ui.Deps{}), PR 2's own shell-era construction — answers 503
 // instead of reaching a view that no longer exists, captureHandler's own
 // nil posture (internal/httpapi/capture.go).
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serveToday(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Today == nil {
 		http.Error(w, "today: not wired in this build", http.StatusServiceUnavailable)
 		return

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,6 +24,10 @@ import (
 // SearchLexical is called — this test's own proof that /ui/units?q= runs
 // the lexical leg exactly once per request, never twice for a browse
 // reimplementation on top of the shared mechanism.
+// errBelowFloor scripts the embedding-provider failure the "below the
+// admission floor" subtest uses to take the vector leg out of the picture.
+var errBelowFloor = errors.New("embedding provider unreachable")
+
 type countingLexical struct {
 	ports.LexicalSearch
 	calls int
@@ -66,7 +71,7 @@ func TestI22_BrowseSearchIsTheSameMechanism(t *testing.T) {
 	}
 	svc := brain.NewRecallService(brain.NewIndex(idx), lexical, units, embed)
 
-	browseSearch := func(t *testing.T, q string) ([]string, int) {
+	browseSearch := func(t *testing.T, svc *brain.RecallService, q string) ([]string, int) {
 		t.Helper()
 		lexical.calls = 0
 		h := ui.New(ui.Deps{Search: svc})
@@ -80,7 +85,7 @@ func TestI22_BrowseSearchIsTheSameMechanism(t *testing.T) {
 		return extractDataUnitIDs(rec.Body.String()), lexical.calls
 	}
 
-	recallRoute := func(t *testing.T, q string) ([]string, int) {
+	recallRoute := func(t *testing.T, svc *brain.RecallService, q string) ([]string, int) {
 		t.Helper()
 		lexical.calls = 0
 		h := httpapi.Handler(httpapi.Deps{Recall: svc})
@@ -110,8 +115,8 @@ func TestI22_BrowseSearchIsTheSameMechanism(t *testing.T) {
 		return ids, lexical.calls
 	}
 
-	browseIDs, browseCalls := browseSearch(t, query)
-	recallIDs, recallCalls := recallRoute(t, query)
+	browseIDs, browseCalls := browseSearch(t, svc, query)
+	recallIDs, recallCalls := recallRoute(t, svc, query)
 
 	if len(browseIDs) == 0 {
 		t.Fatal("/ui/units?q= found nothing — this test would pass vacuously")
@@ -132,9 +137,20 @@ func TestI22_BrowseSearchIsTheSameMechanism(t *testing.T) {
 	}
 
 	t.Run("below the admission floor both answer empty", func(t *testing.T) {
-		belowFloor := "a query with no vector or lexical match at all"
-		belowIDs, _ := browseSearch(t, belowFloor)
-		belowRecallIDs, _ := recallRoute(t, belowFloor)
+		// The fake embedding provider's 8-dimension vectors do not reliably
+		// separate "related" from "unrelated" text by cosine alone, so this
+		// reproduces "below the floor" the same way
+		// i22_recall_one_mechanism_two_entrances_test.go's own "degrades
+		// identically" subtest does: an embedding-provider failure takes the
+		// vector leg out entirely (design D9), and lexical never found
+		// anything here either — this package's own Lexical fake was never
+		// seeded for any content — so both entrances answer empty for the
+		// same reason: no admitted evidence, on the same shared method.
+		failingEmbed := fakeprovider.NewEmbeddingFakeWithError(embedFakeModel, errBelowFloor)
+		degraded := brain.NewRecallService(brain.NewIndex(idx), lexical, units, failingEmbed)
+
+		belowIDs, _ := browseSearch(t, degraded, query)
+		belowRecallIDs, _ := recallRoute(t, degraded, query)
 		if len(belowIDs) != 0 {
 			t.Errorf("/ui/units?q= below the floor returned %v, want empty", belowIDs)
 		}

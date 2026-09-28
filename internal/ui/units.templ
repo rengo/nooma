@@ -1,0 +1,46 @@
+package ui
+
+import (
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
+)
+
+// UnitsPage is GET /ui/units' full page: the search box and the first page
+// of rows (design §3.2, §3.4). Row anchors linking to each unit's detail
+// path land in PR 4, once that path exists (design §5's own file-change
+// table).
+templ UnitsPage(units []unit.Unit, next *ports.BrowseCursor, types []string) {
+	@Page("nooma — units", unitsBody(units, next, types))
+}
+
+templ unitsBody(units []unit.Unit, next *ports.BrowseCursor, types []string) {
+	<section>
+		<h2>UNITS</h2>
+		<form hx-get="/ui/units" hx-target="#units-rows" hx-swap="innerHTML">
+			<label for="q">Search</label>
+			<input type="search" id="q" name="q" placeholder="search live units"/>
+			<button type="submit">Search</button>
+		</form>
+		<div id="units-rows">
+			@unitsRows(units, next, types)
+		</div>
+	</section>
+}
+
+// unitsRows is the rows fragment alone — what an HX-Request answer carries,
+// and what unitsBody wraps for a full page load. Every row's own unit id
+// travels as data-unit-id, this view's structural marker, not its own
+// escaped text.
+templ unitsRows(units []unit.Unit, next *ports.BrowseCursor, types []string) {
+	<ul>
+		for _, u := range units {
+			<li data-unit-id={ u.ID }>
+				{ u.Content }
+				<span>{ string(u.Type) }</span>
+			</li>
+		}
+	</ul>
+	if next != nil {
+		<a hx-get={ moreURL(types, next) } hx-target="#units-rows" hx-swap="innerHTML">More</a>
+	}
+}

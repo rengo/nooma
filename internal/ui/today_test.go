@@ -157,6 +157,7 @@ func TestTodayView_NilTodayReaderAnswers503(t *testing.T) {
 	h := ui.New(ui.Deps{})
 
 	req := httptest.NewRequest(http.MethodGet, "/ui", nil)
+	req.Pattern = "GET /ui"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
