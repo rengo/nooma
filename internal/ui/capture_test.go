@@ -170,6 +170,34 @@ func TestCaptureView_BodyIsBounded(t *testing.T) {
 	}
 }
 
+// TestCaptureView_EscapesReply is TestUnitsView_EscapesVaultContent's own
+// sibling for the capture result (design §9's threat-matrix row on content
+// injection): OutcomeConversed's Reply is model-generated text, escaped by
+// templ's default { expr } handling — never templ.Raw — the same property
+// unit.templ and units.templ already pin for vault content.
+func TestCaptureView_EscapesReply(t *testing.T) {
+	t.Parallel()
+
+	const payload = `<script>alert(1)</script>`
+	const escaped = `&lt;script&gt;alert(1)&lt;/script&gt;`
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeConversed, Reply: payload}}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest("text=hello"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /ui/capture = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, payload) {
+		t.Errorf("the model's reply reached the response unescaped:\n%s", body)
+	}
+	if !strings.Contains(body, escaped) {
+		t.Errorf("the model's reply is not escaped as expected:\n%s", body)
+	}
+}
+
 // TestCaptureView_NilCapturerIs503 is captureHandler's own nil-dependency
 // posture (internal/httpapi/capture.go), applied to the UI route: a nil
 // Deps.Capture answers 503, never a panic on a nil interface call —
