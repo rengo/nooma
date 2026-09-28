@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -125,6 +126,25 @@ func TestUnitView_NotFoundIs404(t *testing.T) {
 	}
 }
 
+// TestUnitView_DetailErrorIs500 is serveUnit's own error posture — a
+// UnitsService.Detail error (a repo failure, not a not-found) answers 500,
+// never the same 404 found=false answers, and never reflects the raw
+// error into the response body (serveToday's own precedent).
+func TestUnitView_DetailErrorIs500(t *testing.T) {
+	t.Parallel()
+
+	h := ui.New(ui.Deps{Units: stubUnitsReader{detailErr: errors.New("boom")}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, unitRequest("unit-1"))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("GET /ui/units/unit-1 (Detail error) = %d, want 500", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("response reflects the raw error:\n%s", rec.Body.String())
+	}
+}
+
 // TestUnitView_RendersLiveRelations is task 4.1: every relation
 // UnitsService.Detail returns (already filtered to live neighbours by the
 // brain layer, PR 2's own TestUnitsService_DetailDropsNonLiveNeighbours)
@@ -162,8 +182,8 @@ func TestUnitView_RendersLiveRelations(t *testing.T) {
 	}
 	page := rec.Body.String()
 	for _, want := range []string{
-		`data-relation-id="rel-1"`, "relates_to", "Renew the passport",
-		`data-relation-id="rel-2"`, "blocks", "Call the dentist",
+		`data-relation-id="rel-1"`, "relates_to", `<a href="/ui/units/unit-2">Renew the passport</a>`,
+		`data-relation-id="rel-2"`, "blocks", `<a href="/ui/units/unit-3">Call the dentist</a>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page does not contain %q:\n%s", want, page)
