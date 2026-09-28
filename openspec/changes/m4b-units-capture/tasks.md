@@ -59,7 +59,7 @@ PR below carries its own named overflow cut, not only PR 3.
 the L3 plan test (task 1.4) actually requires it — the row-value predicate is the default, not
 assumed to fail.
 
-- [ ] **1.1** RED — `internal/ports/unitrepo.go`: add `BrowsePageSize = 50`,
+- [x] **1.1** RED — `internal/ports/unitrepo.go`: add `BrowsePageSize = 50`,
       `BrowseCursor{CreatedAt time.Time, ID string}`, `BrowsePage{Units []unit.Unit, Next
       *BrowseCursor}`, `LiveBrowsePage(ctx, types []unit.Type, after *BrowseCursor) (BrowsePage,
       error)` (signature only); doc comment "Fourteen" methods.
@@ -74,13 +74,13 @@ assumed to fail.
       stub is deliberately wrong, not the test).
       Mutation: none — this commit's own stub is the red state, no separate probe needed.
       Requirement: R1.
-- [ ] **1.2** GREEN — `test/support/memrepo/units.go`: real `LiveBrowsePage` over the in-memory
+- [x] **1.2** GREEN — `test/support/memrepo/units.go`: real `LiveBrowsePage` over the in-memory
       fixture — filters `status == pool`, the type set, orders by `(created_at, id)` descending,
       compares the keyset cursor, bounds the result to `BrowsePageSize+1` to detect `Next`.
       `RunLiveBrowsePage` green against memrepo.
       Verify: `go test ./test/support/... ./test/conformance/...`.
       Requirement: R1.
-- [ ] **1.3** GREEN — `internal/store/sqlite/unitrepo.go`: `LiveBrowsePage` +
+- [x] **1.3** GREEN — `internal/store/sqlite/unitrepo.go`: `LiveBrowsePage` +
       `buildLiveBrowsePageQuery(types, after)` (`status = ?` bound to `pool`; `type IN (...)`
       when `types` is non-empty; row-value predicate `(created_at, id) < (?, ?)`; `LIMIT
       BrowsePageSize+1`). `internal/store/sqlite/migrations/0005_units_browse_index.sql`:
@@ -89,7 +89,7 @@ assumed to fail.
       `testdata/schema/{store_api,ddl,structure}.golden`.
       Verify: `go test ./internal/store/...`; `make check` (schema-golden diff clean).
       Requirement: R1; design §3.2.
-- [ ] **1.4** RED→GREEN — L3: `TestUnitRepo_LiveBrowsePageUsesBrowseIndex` — EXPLAIN QUERY PLAN
+- [x] **1.4** RED→GREEN — L3: `TestUnitRepo_LiveBrowsePageUsesBrowseIndex` — EXPLAIN QUERY PLAN
       over `buildLiveBrowsePageQuery` names `idx_units_live_browse`, no `USE TEMP B-TREE FOR
       ORDER BY`.
       Mutation: drop the index, or reorder `ORDER BY` onto an unindexed column — the plan test
