@@ -63,18 +63,34 @@ func (stubTodayReader) Today(context.Context) (brain.Today, error) {
 	return brain.Today{}, nil
 }
 
-// stubUnitsReader answers Browse with an empty page — this package's own
-// tests exist to check dispatch (a guarded leaf reaches SOME view, not
-// today_test.go's/units_test.go's own detailed rendering assertions).
-type stubUnitsReader struct{}
+// stubUnitsReader answers Browse with an empty page and Detail
+// configurably — this package's own tests exist to check dispatch (a
+// guarded leaf reaches SOME view, not today_test.go's/units_test.go's own
+// detailed rendering assertions). detailFound defaults to false (the zero
+// value), which keeps every pre-existing fixture's Detail-always-404
+// behaviour unchanged; TestUIGuardedLeavesEachReachAView's and
+// TestUIViewsRequireCookie's own detail-leaf cases wire detailFound: true
+// with stubUnitDetail to reach the real view instead.
+type stubUnitsReader struct {
+	detail      brain.UnitDetail
+	detailFound bool
+}
 
-func (stubUnitsReader) Browse(context.Context, []unit.Type, *ports.BrowseCursor) (ports.BrowsePage, error) {
+func (s stubUnitsReader) Browse(context.Context, []unit.Type, *ports.BrowseCursor) (ports.BrowsePage, error) {
 	return ports.BrowsePage{}, nil
 }
 
-func (stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, error) {
-	return brain.UnitDetail{}, false, nil
+func (s stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, error) {
+	return s.detail, s.detailFound, nil
 }
+
+// stubUnitDetail is the one fixed detail body every guarded-leaf wiring
+// test in this file renders when it needs GET /ui/units/{id} to answer
+// 200 — its own content is irrelevant to these tests (unit_test.go owns
+// detail rendering), only that unitBody's "<h2>UNIT</h2>" heading proves
+// the request actually reached serveUnit rather than falling through to
+// another leaf or the default 404 arm.
+var stubUnitDetail = brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "wiring probe"}}
 
 // TestUIGuardedLeavesEachReachAView is design §3.1's own drift guard (N2):
 // ServeHTTP's r.Pattern switch is a second place newUIMux's own leaves must
@@ -86,23 +102,30 @@ func (stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, 
 func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 	t.Parallel()
 
-	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{}})})
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}})})
 
 	// wantMarker names, per leaf, a string only that leaf's own view
-	// renders from these stubs — Today's "SYSTEM" section and units'
-	// "UNITS" heading are both unconditional, so their presence proves the
-	// request reached the leaf's own view rather than merely a 200
-	// produced by dispatching to the other one (or to any future third
-	// leaf). A misrouted "GET /ui/units" that fell through to
+	// renders from these stubs — Today's "SYSTEM" section, units'
+	// "UNITS" heading and one unit's own "UNIT" heading are all
+	// unconditional, so their presence proves the request reached the
+	// leaf's own view rather than merely a 200 produced by dispatching to
+	// another one. A misrouted "GET /ui/units" that fell through to
 	// serveToday would still answer 200 here — this is the assertion the
 	// doc comment above promises and the plain status check could not
-	// make good on.
+	// make good on. "/ui/units/unit-1" is this file's own probe against a
+	// pattern rename inside newUIMux (e.g. "{id}" -> "{uid}") that leaves
+	// ServeHTTP's switch case untouched: net/http.ServeMux sets r.Pattern
+	// from the pattern the request actually matched, so a rename desynced
+	// from ServeHTTP's case would 404 every real detail request while
+	// still answering true to a request built with the OLD pattern —
+	// only a request driven through the real mux, as doGet does, notices.
 	wantMarker := map[string]string{
-		"/ui":       "<h2>SYSTEM</h2>",
-		"/ui/units": "<h2>UNITS</h2>",
+		"/ui":              "<h2>SYSTEM</h2>",
+		"/ui/units":        "<h2>UNITS</h2>",
+		"/ui/units/unit-1": "<h2>UNIT</h2>",
 	}
 
-	for _, leaf := range []string{"/ui", "/ui/units"} {
+	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()
@@ -402,7 +425,9 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 // wantUIMuxWiring table, which pins newUIMux's registrations themselves
 // against an AST, so a leaf silently added to one without the other is
 // still two separate, deliberate edits away from being missed by both.
-var guardedUILeafRequestPaths = []string{"/ui", "/ui/"}
+// "/ui/units" and "/ui/units/unit-1" are PR 4's own two guarded leaves,
+// added alongside PR 2's original "/ui" and "/ui/".
+var guardedUILeafRequestPaths = []string{"/ui", "/ui/", "/ui/units", "/ui/units/unit-1"}
 
 // TestUIViewsRequireCookie is design m4a §3.3's own MUST NOT: a missing
 // cookie, a wrong cookie and a cookie whose value fails
@@ -417,7 +442,20 @@ func TestUIViewsRequireCookie(t *testing.T) {
 	t.Parallel()
 
 	const token = "the-real-token"
-	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{Today: stubTodayReader{}})})
+	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}})})
+
+	// wantMarker names, per leaf, a string only that leaf's own view
+	// renders — the same split TestUIGuardedLeavesEachReachAView's own
+	// wantMarker draws, needed here because "the right cookie reaches the
+	// view" below no longer holds for every leaf against one fixed
+	// "SYSTEM" string once /ui/units and /ui/units/unit-1 joined the
+	// table.
+	wantMarker := map[string]string{
+		"/ui":              "<h2>SYSTEM</h2>",
+		"/ui/":             "<h2>SYSTEM</h2>",
+		"/ui/units":        "<h2>UNITS</h2>",
+		"/ui/units/unit-1": "<h2>UNIT</h2>",
+	}
 
 	for _, leaf := range guardedUILeafRequestPaths {
 		leaf := leaf
@@ -481,8 +519,8 @@ func TestUIViewsRequireCookie(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("GET %s with the right cookie = %d, want 200", leaf, rec.Code)
 			}
-			if !strings.Contains(rec.Body.String(), "SYSTEM") {
-				t.Errorf("GET %s with the right cookie does not carry the view:\n%s", leaf, rec.Body.String())
+			if want := wantMarker[leaf]; !strings.Contains(rec.Body.String(), want) {
+				t.Errorf("GET %s with the right cookie does not carry %q — its own view:\n%s", leaf, want, rec.Body.String())
 			}
 		})
 	}

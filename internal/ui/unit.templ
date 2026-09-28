@@ -1,0 +1,75 @@
+package ui
+
+import (
+	"strconv"
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+)
+
+// UnitPage is GET /ui/units/{id}'s full page: one live unit, its stored
+// weight and its live relations (spec R3). No fragment mode — unlike
+// /ui/units, this view is neither paginated nor searched, so it has no
+// HX-Request-only rows to answer with, and always renders the full page
+// (design §3.1).
+templ UnitPage(detail brain.UnitDetail) {
+	@Page("nooma — unit", unitBody(detail))
+}
+
+templ unitBody(detail brain.UnitDetail) {
+	<section>
+		<h2>UNIT</h2>
+		<p data-unit-id={ detail.Unit.ID }>{ detail.Unit.Content }</p>
+		<p><span>{ string(detail.Unit.Type) }</span></p>
+		<ul>
+			<li>{ "Stored weight: " + formatWeight(detail.Unit.Weight) }</li>
+			<li>{ "Created: " + detail.Unit.CreatedAt.Format(dateLayout) }</li>
+			<li>{ "Event: " + formatOptionalDate(detail.Unit.EventAt) }</li>
+			<li>{ "Due: " + formatOptionalDate(detail.Unit.DueAt) }</li>
+		</ul>
+	</section>
+	<section>
+		<h2>RELATIONS</h2>
+		<ul>
+			for _, rel := range detail.Relations {
+				<li data-relation-id={ rel.RelationID }>
+					if rel.Outgoing {
+						<span aria-label="outgoing">→</span>
+					} else {
+						<span aria-label="incoming">←</span>
+					}
+					{ rel.Type }
+					<span>{ formatConfidence(rel.Confidence) }</span>
+					<a href={ templ.URL("/ui/units/" + rel.Other.ID) }>{ rel.Other.Content }</a>
+				</li>
+			}
+		</ul>
+	</section>
+}
+
+// formatOptionalDate renders literal "none" for a nil EventAt/DueAt — I18's
+// own explicit-absence rule (spec R3): never an empty string and never the
+// zero time, either of which a reader could mistake for a real value, and
+// never a stand-in for the other date field.
+func formatOptionalDate(t *time.Time) string {
+	if t == nil {
+		return "none"
+	}
+	return t.Format(dateLayout)
+}
+
+// formatWeight renders the unit's own stored Weight — never an effective
+// or decayed weight, which no reusable value exists for outside a focus
+// list (spec R3, design §3.3 OR3) — to the same two decimals formatScore
+// uses for Today's own Score.
+func formatWeight(w float64) string {
+	return strconv.FormatFloat(w, 'f', 2, 64)
+}
+
+// formatConfidence renders a relation's own Confidence to the same two
+// decimals formatWeight/formatScore already use elsewhere on this page —
+// one formatting convention for every score-shaped value this package
+// renders, not a third one invented here.
+func formatConfidence(c float64) string {
+	return strconv.FormatFloat(c, 'f', 2, 64)
+}

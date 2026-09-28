@@ -219,7 +219,7 @@ impl+docs lines.
 **Overflow cut** (if over 400): defer `TestUnitsView_RowsLinkToDetail` to PR 5 — it is a
 convenience assertion on PR 3's own rows fragment, not required for R3 itself.
 
-- [ ] **4.1** RED — `httpapi_ui_wiring_test.go`: `wantUIMuxWiring` gains the `GET
+- [x] **4.1** RED — `httpapi_ui_wiring_test.go`: `wantUIMuxWiring` gains the `GET
       /ui/units/{id}` row (guarded). `internal/ui/unit_test.go` (new):
       `TestUnitView_I18ThreeDatesNeverSwap` (`Created:`/`Event:`/`Due:` each keep their own
       label, a nil value renders the literal `none`), `TestUnitView_NotFoundIs404` (archived,
@@ -228,7 +228,7 @@ convenience assertion on PR 3's own rows fragment, not required for R3 itself.
       a non-live unit is omitted). `internal/ui/units_test.go`: `TestUnitsView_RowsLinkToDetail`.
       Fails — `unit.templ`, the detail handler, and row anchors don't exist yet.
       Requirement: R3.
-- [ ] **4.2** GREEN — `internal/ui/unit.templ` (+`_templ.go`) + a detail handler in
+- [x] **4.2** GREEN — `internal/ui/unit.templ` (+`_templ.go`) + a detail handler in
       `internal/ui/units.go`: renders the unit's content, type, stored `Weight` labelled "stored
       weight", `Relations` via `UnitsService.Detail`, `Created:`/`Event:`/`Due:` as three
       distinct labels, nil `EventAt`/`DueAt` → literal "none"; 404 on `found=false`.

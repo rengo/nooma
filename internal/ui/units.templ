@@ -6,9 +6,8 @@ import (
 )
 
 // UnitsPage is GET /ui/units' full page: the search box and the first page
-// of rows (design §3.2, §3.4). Row anchors linking to each unit's detail
-// path land in PR 4, once that path exists (design §5's own file-change
-// table).
+// of rows (design §3.2, §3.4), each row anchored to its own unit's detail
+// path (design §5, PR 4).
 templ UnitsPage(units []unit.Unit, next *ports.BrowseCursor, types []string) {
 	@Page("nooma — units", unitsBody(units, next, types))
 }
@@ -35,7 +34,7 @@ templ unitsRows(units []unit.Unit, next *ports.BrowseCursor, types []string) {
 	<ul>
 		for _, u := range units {
 			<li data-unit-id={ u.ID }>
-				{ u.Content }
+				<a href={ templ.URL("/ui/units/" + u.ID) }>{ u.Content }</a>
 				<span>{ string(u.Type) }</span>
 			</li>
 		}

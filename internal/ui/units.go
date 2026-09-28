@@ -126,6 +126,34 @@ func parseBrowseCursor(q url.Values) (*ports.BrowseCursor, error) {
 	return &ports.BrowseCursor{CreatedAt: created, ID: idRaw}, nil
 }
 
+// serveUnit answers GET /ui/units/{id}: one live unit, its stored weight
+// and its live relations, via UnitsService.Detail (spec R3). A
+// found=false — archived, superseded, incomplete or an absent id all
+// resolve to it alike, I02 enforced once at UnitRepo.LiveByIDs and never
+// reimplemented here — answers the same 404 class GET /units/{id} already
+// gives.
+func (h *Handler) serveUnit(w http.ResponseWriter, r *http.Request) {
+	if h.deps.Units == nil {
+		http.Error(w, "units: not wired in this build", http.StatusServiceUnavailable)
+		return
+	}
+
+	id := r.PathValue("id")
+	detail, found, err := h.deps.Units.Detail(r.Context(), id)
+	if err != nil {
+		slog.Error("units: detail failed", "err", err)
+		http.Error(w, "units: internal error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = UnitPage(detail).Render(r.Context(), w)
+}
+
 // moreURL builds the "more" link's hx-get target from next and the same
 // type filter the current page used — so paging forward never silently
 // drops a filter the caller already applied.
