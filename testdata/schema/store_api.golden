@@ -47,7 +47,7 @@ internal/store/sqlite: func (*UnitRepo) ByID(ctx context.Context, id string) (un
 internal/store/sqlite: func (*UnitRepo) CountLiveByType(ctx context.Context, t unit.Type) (int, error)
 internal/store/sqlite: func (*UnitRepo) Create(ctx context.Context, u unit.Unit) error
 internal/store/sqlite: func (*UnitRepo) IncompleteOlderThan(ctx context.Context, cutoff time.Time) ([]consolidation.Incomplete, error)
-internal/store/sqlite: func (*UnitRepo) LiveBrowsePage(_ context.Context, _ []unit.Type, _ *ports.BrowseCursor) (ports.BrowsePage, error)
+internal/store/sqlite: func (*UnitRepo) LiveBrowsePage(ctx context.Context, types []unit.Type, after *ports.BrowseCursor) (ports.BrowsePage, error)
 internal/store/sqlite: func (*UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, error)
 internal/store/sqlite: func (*UnitRepo) LiveFocusCandidates(ctx context.Context, ids []string) ([]focus.Candidate, error)

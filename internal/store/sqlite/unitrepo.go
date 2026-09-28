@@ -505,14 +505,69 @@ func (r *UnitRepo) LiveFocusCandidatesByType(ctx context.Context, types []unit.T
 	return candidates, nil
 }
 
-// LiveBrowsePage implements ports.UnitRepo. Task 1.1's compiling placeholder
-// — TestUnitRepo_ApplyBoosts's own precedent (unitrepo_integration_test.go)
-// for a stacked-to-main chain: the interface gains the method before this
-// package's real implementation lands, so *UnitRepo must keep satisfying
-// ports.UnitRepo (the var _ assertion below) from this commit on. Task 1.3
-// replaces this body with buildLiveBrowsePageQuery + the real scan.
-func (r *UnitRepo) LiveBrowsePage(_ context.Context, _ []unit.Type, _ *ports.BrowseCursor) (ports.BrowsePage, error) {
-	return ports.BrowsePage{}, nil
+// LiveBrowsePage implements ports.UnitRepo. Filters positively on
+// status = 'pool' (I02) and, when types is non-empty, on type IN (...);
+// orders by created_at DESC, id DESC — created_at is immutable so a keyset
+// cursor over it is stable across pages, id breaks ties. Bounded to
+// BrowsePageSize+1 rows so the extra row (if any) tells Next apart from the
+// last page without a second COUNT query.
+func (r *UnitRepo) LiveBrowsePage(ctx context.Context, types []unit.Type, after *ports.BrowseCursor) (ports.BrowsePage, error) {
+	query, args := buildLiveBrowsePageQuery(types, after)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return ports.BrowsePage{}, fmt.Errorf("select live browse page: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	units := []unit.Unit{}
+	for rows.Next() {
+		u, err := scanUnit(rows)
+		if err != nil {
+			return ports.BrowsePage{}, fmt.Errorf("scan browse page unit: %w", err)
+		}
+		units = append(units, u)
+	}
+	if err := rows.Err(); err != nil {
+		return ports.BrowsePage{}, fmt.Errorf("select live browse page: %w", err)
+	}
+
+	page := ports.BrowsePage{Units: units}
+	if len(units) > ports.BrowsePageSize {
+		page.Units = units[:ports.BrowsePageSize]
+		last := page.Units[len(page.Units)-1]
+		page.Next = &ports.BrowseCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+	return page, nil
+}
+
+// buildLiveBrowsePageQuery renders LiveBrowsePage's parameterized SQL and
+// its bound args — status = 'pool' (I02) leading, an optional type IN (...)
+// narrowing, an optional (created_at, id) < (?, ?) row-value cursor
+// predicate, ordered created_at DESC, id DESC, bounded to
+// BrowsePageSize+1. Factored out, buildLiveFocusCandidatesByTypeQuery's own
+// precedent, so TestUnitRepo_LiveBrowsePageUsesBrowseIndex runs EXPLAIN
+// QUERY PLAN against the exact query production sends.
+func buildLiveBrowsePageQuery(types []unit.Type, after *ports.BrowseCursor) (string, []any) {
+	args := []any{string(unit.StatusPool)}
+	query := unitSelectColumns + ` FROM units WHERE status = ?`
+
+	if len(types) > 0 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(types)), ",")
+		query += ` AND type IN (` + placeholders + `)`
+		for _, t := range types {
+			args = append(args, string(t))
+		}
+	}
+
+	if after != nil {
+		query += ` AND (created_at, id) < (?, ?)`
+		args = append(args, formatUnitTime(after.CreatedAt), after.ID)
+	}
+
+	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	args = append(args, ports.BrowsePageSize+1)
+
+	return query, args
 }
 
 // buildLiveFocusCandidatesByTypeQuery renders LiveFocusCandidatesByType's

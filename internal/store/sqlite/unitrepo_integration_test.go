@@ -235,6 +235,55 @@ func TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex(t *testing.T) {
 	}
 }
 
+// TestUnitRepo_LiveBrowsePage runs the same repocontract.RunLiveBrowsePage
+// suite the in-memory fake answers at L2 (test/conformance), now against a
+// real migrated vault — design D6's "answered twice" standing rule.
+func TestUnitRepo_LiveBrowsePage(t *testing.T) {
+	repocontract.RunLiveBrowsePage(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
+
+// TestUnitRepo_LiveBrowsePageUsesBrowseIndex confirms the query planner
+// actually uses idx_units_live_browse (migration 0005) for
+// buildLiveBrowsePageQuery's status-leading equality and its ORDER BY —
+// design §3.7's "Index-backed page" row, TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex's
+// own pattern above.
+//
+// query and args come from buildLiveBrowsePageQuery, the same function
+// LiveBrowsePage itself calls — not a hand-copied literal, so this test
+// cannot drift from what production actually sends to SQLite.
+func TestUnitRepo_LiveBrowsePageUsesBrowseIndex(t *testing.T) {
+	v := openTestVault(t)
+	query, args := buildLiveBrowsePageQuery(nil, nil)
+
+	rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query, args...)
+	if err != nil {
+		t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	var plan string
+	for rows.Next() {
+		var id, parent, notused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+			t.Fatalf("scanning query plan row: %v", err)
+		}
+		plan += detail + "\n"
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("query plan rows: %v", err)
+	}
+	if !strings.Contains(plan, "idx_units_live_browse") {
+		t.Errorf("query plan for %q does not mention idx_units_live_browse:\n%s", query, plan)
+	}
+	if strings.Contains(plan, "USE TEMP B-TREE FOR ORDER BY") {
+		t.Errorf("query plan for %q uses a temp b-tree for ORDER BY — the index should already "+
+			"provide created_at DESC, id DESC order:\n%s", query, plan)
+	}
+}
+
 // TestUnitRepo_LiveFocusCandidatesFiltersPositively seeds its non-pool rows
 // through raw SQL rather than UnitRepo.Create, so the fixture cannot
 // accidentally depend on the repository's own write path already excluding

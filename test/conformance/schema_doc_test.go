@@ -132,6 +132,7 @@ func TestSchemaDocAnchorsExpectedObjectCount(t *testing.T) {
 		// Core tables
 		"table units",
 		"index idx_units_status_touched",
+		"index idx_units_live_browse",
 		"unique_index idx_units_unique_active_insight",
 		"table relations",
 		"table triggers",

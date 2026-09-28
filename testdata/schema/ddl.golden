@@ -188,6 +188,8 @@ CREATE INDEX idx_triggers_status_fire ON triggers(status, fire_at);
 
 CREATE INDEX idx_unit_embeddings_model ON unit_embeddings(model);
 
+CREATE INDEX idx_units_live_browse ON units(status, created_at, id);
+
 CREATE INDEX idx_units_status_touched ON units(status, last_touched_at);
 
 CREATE UNIQUE INDEX idx_units_unique_active_insight
