@@ -121,6 +121,8 @@ func TestSchemaGoldenAnchorsExpectedObjects(t *testing.T) {
 		"table pending_questions",
 		"index idx_pending_questions_unasked",
 		"index idx_pending_questions_open",
+		// 0005_units_browse_index.sql
+		"index idx_units_live_browse",
 	}
 
 	requiredSet := make(map[string]bool, len(required))

@@ -40,6 +40,11 @@ CREATE TABLE units (
 );
 CREATE INDEX idx_units_status_touched ON units(status, last_touched_at);
 
+-- LiveBrowsePage's keyset-paginated live-unit read (m4b design §3.2):
+-- status = ? leads, then created_at/id carry the ORDER BY and the
+-- (created_at, id) < (?, ?) cursor predicate.
+CREATE INDEX idx_units_live_browse ON units(status, created_at, id);
+
 -- "one active insight per metric" — partial unique index over JSON expressions
 CREATE UNIQUE INDEX idx_units_unique_active_insight
   ON units(type, json_extract(structured_data,'$.domain'),

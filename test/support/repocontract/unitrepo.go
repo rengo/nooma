@@ -17,8 +17,10 @@ package repocontract
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -864,4 +866,350 @@ func focusCandidateIDs(cs []focus.Candidate) []string {
 		ids[i] = c.ID
 	}
 	return ids
+}
+
+// browseFixtureTime is RunLiveBrowsePage's own anchor instant — fixtureUnit's
+// own default CreatedAt, named here so cases that override CreatedAt with an
+// offset read as offsets from one place.
+var browseFixtureTime = time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+
+// RunLiveBrowsePage runs the ports.UnitRepo.LiveBrowsePage contract against
+// a fresh repository instance, built by newRepo for every subtest.
+//
+// Spec R1; design §3.2. LiveBrowsePage is I02's third live read surface
+// (LiveByIDs, LiveFocusCandidates/ByType and now this one), bounded by
+// ports.BrowsePageSize and keyset-paginated by (CreatedAt, ID) DESC.
+func RunLiveBrowsePage(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+
+	t.Run("excludes archived, superseded and incomplete units (I02)", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		pool := fixtureUnit("browse-pool", unit.StatusPool)
+		archived := fixtureUnit("browse-archived", unit.StatusArchived)
+		superseded := fixtureUnit("browse-superseded", unit.StatusSuperseded)
+		incomplete := fixtureUnit("browse-incomplete", unit.StatusIncomplete)
+		for _, u := range []unit.Unit{pool, archived, superseded, incomplete} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		page, err := repo.LiveBrowsePage(ctx, nil, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage: %v", err)
+		}
+		gotIDs := idsOf(page.Units)
+		wantIDs := []string{pool.ID}
+		if !reflect.DeepEqual(gotIDs, wantIDs) {
+			t.Fatalf("LiveBrowsePage: got %v, want exactly %v (only the pool unit)", gotIDs, wantIDs)
+		}
+		if page.Next != nil {
+			t.Errorf("Next = %+v, want nil — every live unit fit on one page", page.Next)
+		}
+	})
+
+	t.Run("an empty types means all types; a non-empty set narrows", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		task := fixtureUnit("browse-type-task", unit.StatusPool)
+		task.Type = unit.TypeTask
+		knowledge := fixtureUnit("browse-type-knowledge", unit.StatusPool)
+		knowledge.Type = unit.TypeKnowledge
+		for _, u := range []unit.Unit{task, knowledge} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		all, err := repo.LiveBrowsePage(ctx, nil, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage(nil types): %v", err)
+		}
+		wantAll := []string{knowledge.ID, task.ID} // CreatedAt tied; id DESC breaks the tie
+		gotAll := idsOf(all.Units)
+		sortStrings(gotAll)
+		sortStrings(wantAll)
+		if !reflect.DeepEqual(gotAll, wantAll) {
+			t.Fatalf("LiveBrowsePage(nil types) ids = %v, want %v (both units, unnarrowed)", gotAll, wantAll)
+		}
+
+		onlyTask, err := repo.LiveBrowsePage(ctx, []unit.Type{unit.TypeTask}, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage(types=[task]): %v", err)
+		}
+		if got := idsOf(onlyTask.Units); !reflect.DeepEqual(got, []string{task.ID}) {
+			t.Fatalf("LiveBrowsePage(types=[task]) = %v, want exactly [%s]", got, task.ID)
+		}
+
+		onlyKnowledge, err := repo.LiveBrowsePage(ctx, []unit.Type{unit.TypeKnowledge}, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage(types=[knowledge]): %v", err)
+		}
+		if got := idsOf(onlyKnowledge.Units); !reflect.DeepEqual(got, []string{knowledge.ID}) {
+			t.Fatalf("LiveBrowsePage(types=[knowledge]) = %v, want exactly [%s]", got, knowledge.ID)
+		}
+	})
+
+	t.Run("orders created_at DESC, id DESC, ties broken by id", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		older := fixtureUnit("browse-order-older", unit.StatusPool)
+		older.CreatedAt = browseFixtureTime.Add(-time.Hour)
+		newer := fixtureUnit("browse-order-newer", unit.StatusPool)
+		newer.CreatedAt = browseFixtureTime
+		// Two units sharing the newest CreatedAt: only their id decides
+		// which comes first.
+		tieB := fixtureUnit("browse-order-tie-b", unit.StatusPool)
+		tieB.CreatedAt = browseFixtureTime
+		tieA := fixtureUnit("browse-order-tie-a", unit.StatusPool)
+		tieA.CreatedAt = browseFixtureTime
+
+		for _, u := range []unit.Unit{older, newer, tieB, tieA} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		page, err := repo.LiveBrowsePage(ctx, nil, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage: %v", err)
+		}
+		// newer, tieB and tieA all share browseFixtureTime; id DESC among
+		// them puts "browse-order-tie-b" ahead of "browse-order-newer"
+		// ahead of "browse-order-tie-a" (lexical: "tie-b" > "order-newer"
+		// is false — computed below instead of asserted by hand, so this
+		// case cannot drift from Go's own string comparison).
+		tied := []string{newer.ID, tieB.ID, tieA.ID}
+		sortStringsDesc(tied)
+		want := append(append([]string{}, tied...), older.ID)
+
+		got := idsOf(page.Units)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("LiveBrowsePage order = %v, want %v (created_at DESC, id DESC tie-break)", got, want)
+		}
+	})
+
+	t.Run("a page never exceeds BrowsePageSize, and a second page never repeats a row from the first — union equals the live set", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		const total = ports.BrowsePageSize + 5
+		var ids []string
+		for i := range total {
+			id := fmt.Sprintf("browse-bound-%03d", i)
+			ids = append(ids, id)
+			u := fixtureUnit(id, unit.StatusPool)
+			u.CreatedAt = browseFixtureTime.Add(time.Duration(i) * time.Second)
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", id, err)
+			}
+		}
+
+		first, err := repo.LiveBrowsePage(ctx, nil, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage page 1: %v", err)
+		}
+		if len(first.Units) != ports.BrowsePageSize {
+			t.Fatalf("page 1 len = %d, want exactly BrowsePageSize (%d)", len(first.Units), ports.BrowsePageSize)
+		}
+		if first.Next == nil {
+			t.Fatal("page 1 Next = nil, want a cursor — more live units remain")
+		}
+
+		second, err := repo.LiveBrowsePage(ctx, nil, first.Next)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage page 2: %v", err)
+		}
+		if len(second.Units) != total-ports.BrowsePageSize {
+			t.Fatalf("page 2 len = %d, want %d (the remaining live units)", len(second.Units), total-ports.BrowsePageSize)
+		}
+		if second.Next != nil {
+			t.Errorf("page 2 Next = %+v, want nil — this is the last page", second.Next)
+		}
+
+		gotIDs := append(idsOf(first.Units), idsOf(second.Units)...)
+		seen := make(map[string]bool, len(gotIDs))
+		for _, id := range gotIDs {
+			if seen[id] {
+				t.Fatalf("id %s appears on both pages", id)
+			}
+			seen[id] = true
+		}
+		sortStrings(gotIDs)
+		wantIDs := append([]string{}, ids...)
+		sortStrings(wantIDs)
+		if !reflect.DeepEqual(gotIDs, wantIDs) {
+			t.Fatalf("union of both pages = %v, want exactly the seeded live set %v", gotIDs, wantIDs)
+		}
+	})
+
+	t.Run("exactly BrowsePageSize live units fit on one page with no Next cursor", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		for i := range ports.BrowsePageSize {
+			id := fmt.Sprintf("browse-exact-%03d", i)
+			u := fixtureUnit(id, unit.StatusPool)
+			u.CreatedAt = browseFixtureTime.Add(time.Duration(i) * time.Second)
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", id, err)
+			}
+		}
+
+		page, err := repo.LiveBrowsePage(ctx, nil, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage: %v", err)
+		}
+		if len(page.Units) != ports.BrowsePageSize {
+			t.Fatalf("page len = %d, want exactly BrowsePageSize (%d)", len(page.Units), ports.BrowsePageSize)
+		}
+		if page.Next != nil {
+			t.Errorf("Next = %+v, want nil — exactly BrowsePageSize live units fit on one page", page.Next)
+		}
+	})
+
+	t.Run("a cursor resumes correctly when the last unit of one page and the first of the next share an identical CreatedAt", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		const total = ports.BrowsePageSize + 2
+		tieTime := browseFixtureTime
+
+		var allIDs []string
+
+		// BrowsePageSize-1 units strictly newer than the tie instant —
+		// together with the two tied units below, they fill exactly page
+		// 1's BrowsePageSize rows, leaving the tie's second unit and the
+		// one older unit for page 2. This is the case a naive
+		// `created_at < ?` cursor predicate (dropping the id tie-break)
+		// gets wrong: it would exclude the tied unit that belongs on page
+		// 2 as well, since its created_at is not strictly less than the
+		// cursor's.
+		for i := range ports.BrowsePageSize - 1 {
+			id := fmt.Sprintf("browse-tie-newer-%03d", i)
+			allIDs = append(allIDs, id)
+			u := fixtureUnit(id, unit.StatusPool)
+			u.CreatedAt = tieTime.Add(time.Duration(i+1) * time.Second)
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", id, err)
+			}
+		}
+
+		// The two units sharing CreatedAt, on opposite sides of the page
+		// boundary: id DESC breaks the tie, and "browse-tie-z" >
+		// "browse-tie-a" lexically, so tieHigh lands on page 1 (the
+		// boundary's last row) and tieLow on page 2 (the boundary's first
+		// row).
+		tieHigh := fixtureUnit("browse-tie-z", unit.StatusPool)
+		tieHigh.CreatedAt = tieTime
+		tieLow := fixtureUnit("browse-tie-a", unit.StatusPool)
+		tieLow.CreatedAt = tieTime
+		allIDs = append(allIDs, tieHigh.ID, tieLow.ID)
+		for _, u := range []unit.Unit{tieHigh, tieLow} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		older := fixtureUnit("browse-tie-older", unit.StatusPool)
+		older.CreatedAt = tieTime.Add(-time.Second)
+		allIDs = append(allIDs, older.ID)
+		if err := repo.Create(ctx, older); err != nil {
+			t.Fatalf("Create %s: %v", older.ID, err)
+		}
+
+		if len(allIDs) != total {
+			t.Fatalf("fixture seeded %d ids, want %d (BrowsePageSize + 2)", len(allIDs), total)
+		}
+
+		first, err := repo.LiveBrowsePage(ctx, nil, nil)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage page 1: %v", err)
+		}
+		if len(first.Units) != ports.BrowsePageSize {
+			t.Fatalf("page 1 len = %d, want exactly BrowsePageSize (%d)", len(first.Units), ports.BrowsePageSize)
+		}
+		firstIDs := idsOf(first.Units)
+		if firstIDs[len(firstIDs)-1] != tieHigh.ID {
+			t.Fatalf("page 1's last row = %s, want %s (the tied unit that ranks first between the two under id DESC)",
+				firstIDs[len(firstIDs)-1], tieHigh.ID)
+		}
+		if first.Next == nil {
+			t.Fatal("page 1 Next = nil, want a cursor — more live units remain")
+		}
+
+		second, err := repo.LiveBrowsePage(ctx, nil, first.Next)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage page 2: %v", err)
+		}
+		secondIDs := idsOf(second.Units)
+		if len(secondIDs) == 0 || secondIDs[0] != tieLow.ID {
+			t.Fatalf("page 2's first row = %v, want starting with %s (the tied unit's other half, sharing "+
+				"the boundary's CreatedAt but not skipped by the cursor)", secondIDs, tieLow.ID)
+		}
+		if second.Next != nil {
+			t.Errorf("page 2 Next = %+v, want nil — this is the last page", second.Next)
+		}
+
+		gotIDs := append(idsOf(first.Units), idsOf(second.Units)...)
+		seen := make(map[string]bool, len(gotIDs))
+		for _, id := range gotIDs {
+			if seen[id] {
+				t.Fatalf("id %s appears on both pages", id)
+			}
+			seen[id] = true
+		}
+		sortStrings(gotIDs)
+		wantIDs := append([]string{}, allIDs...)
+		sortStrings(wantIDs)
+		if !reflect.DeepEqual(gotIDs, wantIDs) {
+			t.Fatalf("union of both pages = %v, want exactly the seeded live set %v (the tied unit must "+
+				"appear exactly once, not be skipped)", gotIDs, wantIDs)
+		}
+	})
+
+	t.Run("a cursor at a unit archived since the previous page still resumes", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		older := fixtureUnit("browse-resume-older", unit.StatusPool)
+		older.CreatedAt = browseFixtureTime
+		boundary := fixtureUnit("browse-resume-boundary", unit.StatusPool)
+		boundary.CreatedAt = browseFixtureTime.Add(time.Second)
+		newest := fixtureUnit("browse-resume-newest", unit.StatusPool)
+		newest.CreatedAt = browseFixtureTime.Add(2 * time.Second)
+		for _, u := range []unit.Unit{older, boundary, newest} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", u.ID, err)
+			}
+		}
+
+		// Simulate "boundary was the last row of a previously read page":
+		// take its cursor, then change its status — a live-read cursor must
+		// resume by position, not by re-checking the row it names still
+		// exists or is still live.
+		cursor := &ports.BrowseCursor{CreatedAt: boundary.CreatedAt, ID: boundary.ID}
+		if err := repo.SetStatus(ctx, boundary.ID, unit.StatusPool, unit.StatusArchived, browseFixtureTime.Add(time.Hour)); err != nil {
+			t.Fatalf("SetStatus: %v", err)
+		}
+
+		page, err := repo.LiveBrowsePage(ctx, nil, cursor)
+		if err != nil {
+			t.Fatalf("LiveBrowsePage(after=boundary's now-stale cursor): %v", err)
+		}
+		if got := idsOf(page.Units); !reflect.DeepEqual(got, []string{older.ID}) {
+			t.Fatalf("LiveBrowsePage resumed = %v, want exactly [%s] (older, the only live unit strictly past the cursor)", got, older.ID)
+		}
+	})
+}
+
+// sortStrings sorts ss ascending, in place.
+func sortStrings(ss []string) { sort.Strings(ss) }
+
+// sortStringsDesc sorts ss descending, in place.
+func sortStringsDesc(ss []string) {
+	sort.Sort(sort.Reverse(sort.StringSlice(ss)))
 }
