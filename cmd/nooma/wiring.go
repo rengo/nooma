@@ -320,6 +320,20 @@ func wireToday(db *sqlite.Vault) *brain.TodayService {
 	)
 }
 
+// wireUnits builds a *brain.UnitsService over db. It resolves no
+// provider, wireToday's own reason: browsing and inspecting a unit call
+// no model.
+//
+// Wired unconditionally at vault open — wireToday's own precedent, not
+// wireScheduler's LLM-gated path. serve.go's own call site is PR 3's
+// (task 3.2), once ui.Deps.Units exists to receive it.
+func wireUnits(db *sqlite.Vault) *brain.UnitsService {
+	return brain.NewUnitsService(
+		sqlite.NewUnitRepo(db),
+		sqlite.NewRelationRepo(db),
+	)
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {
