@@ -118,7 +118,7 @@ queues nudges that remain visible in the UI.
 |---|---|
 | `/ui` | Today: task focus + load focus, pending digest, system status (last consolidation, the latest energy reading and its source, the undelivered-trigger count, the open-question count, the effective bind, and whether `/ui` sits behind a cookie) |
 | `/ui/capture` | Written capture + file attachment (perception, once it exists) |
-| `/ui/units` | Browse every unit in the vault: search, filters, pagination. The way in — the graph is entered *from* here ([ADR-0019](adr/0019-graph-library.md)) |
+| `/ui/units` | Browse every live unit in the vault: search, filters, pagination. The way in — the graph is entered *from* here ([ADR-0019](adr/0019-graph-library.md)) |
 | `/ui/graph` | Graph of units and relations; edge-level curation (split/confirm connections), over a server-bounded neighbourhood ([ADR-0019](adr/0019-graph-library.md)) |
 | `/ui/beliefs` | Self-model: beliefs by facet, edit/delete (each action emits a learning signal) |
 | `/ui/activity` | Glass box: chronological decision_log, "why did you do that" |

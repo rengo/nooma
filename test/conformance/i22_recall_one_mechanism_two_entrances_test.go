@@ -52,6 +52,11 @@ import (
 // identically" subtest below still proves the shared-method property the
 // boolean pins, calling ForText directly with each entrance's own argument
 // shape.
+//
+// A third production entrance — /ui/units' own search box — reaches this
+// exact ForText call too, since m4b PR 3; that pair is proven separately in
+// i22_browse_search_test.go's TestI22_BrowseSearchIsTheSameMechanism,
+// against POST /recall rather than duplicating capture's own fixture here.
 func TestI22_RecallOneMechanismTwoEntrances(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)

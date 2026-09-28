@@ -153,7 +153,7 @@ branch deletion before branching PR 3. Target ≤150 impl+docs lines.
 `i22_browse_search_test.go`, `TestUnitsView_SearchRendersRecallOrder`/`NilSearchIs503`) splits
 into 3b, landing immediately after 3.
 
-- [ ] **3.0** RED — commit 0, test-only. `test/conformance/httpapi_ui_wiring_test.go`: harden
+- [x] **3.0** RED — commit 0, test-only. `test/conformance/httpapi_ui_wiring_test.go`: harden
       `TestUIMuxWiringMatchesDeclaredGuardTable`'s `ast.Inspect` walk to cover the **whole**
       `newUIMux` body (any `.Handle`/`.HandleFunc` call whose receiver is not `mux`, or whose
       pattern is not a string literal, is `t.Fatal` — closes the non-literal-pattern/
@@ -165,7 +165,7 @@ into 3b, landing immediately after 3.
       hardened gate itself stays green against the current, unwidened tree — the probes prove it
       now discriminates what m4a's narrower walk missed, not that current code is wrong.
       Requirement: design §3.6 (N7), §3.7 row 1.
-- [ ] **3.1** RED — `httpapi_ui_wiring_test.go`: `wantUIMuxWiring` gains the `GET /ui/units` row
+- [x] **3.1** RED — `httpapi_ui_wiring_test.go`: `wantUIMuxWiring` gains the `GET /ui/units` row
       (guarded). `test/conformance/ui_entrances_test.go` (new): part (a) reflects over
       `ui.Deps` — every interface method is in `{Today, Browse, Detail, ForText}` (`Capture`
       named later, harmless while unused); part (b) AST-walks non-test `internal/ui` files — no
@@ -180,7 +180,7 @@ into 3b, landing immediately after 3.
       `cmd/nooma/serve_test.go`: `TestUIDeps_NilServicesStayNilInterfaces` (behavioural, `uiDeps`).
       Fails to compile/fails assertions — `ui.UnitsReader`, `Searcher`, `units.go` don't exist yet.
       Requirement: R1, R2; design §3.1, §3.4, §3.7.
-- [ ] **3.2** GREEN — `internal/ui/ui.go`: `UnitsReader`, `Searcher` interfaces; `Deps` gains
+- [x] **3.2** GREEN — `internal/ui/ui.go`: `UnitsReader`, `Searcher` interfaces; `Deps` gains
       `Units`, `Search` fields; `ServeHTTP` switches on `r.Pattern`, default arm 404.
       `internal/ui/units.go` + `units.templ` (+`_templ.go`): `Browse` parses `unit.ParseType` per
       type (400 on unknown), parses the `(after_created, after_id)` cursor (both-or-neither
@@ -193,14 +193,14 @@ into 3b, landing immediately after 3.
       the `*brain.RecallService` pointer is non-nil (typed-nil gotcha, §3.4); nil `Search` → 503.
       Verify: `go test ./internal/ui/... ./internal/httpapi/... ./cmd/nooma/...`.
       Requirement: R1, R2; design §3.1–§3.4.
-- [ ] **3.3** GREEN — `internal/ui/today_test.go:159`: fixture sets `req.Pattern = "GET /ui"`
+- [x] **3.3** GREEN — `internal/ui/today_test.go:159`: fixture sets `req.Pattern = "GET /ui"`
       (kept green under the new switch-on-pattern dispatch). `docs/01-architecture.md:121`:
       "every unit" → "every live unit". `docs/06-harness.md` §4: I22 row names the `/ui/units`
       search entrance. `test/conformance/i22_recall_one_mechanism_two_entrances_test.go`: doc
       comment gains one line naming the third entrance and pointing at
       `i22_browse_search_test.go`.
       Requirement: I02, I22 doc parity.
-- [ ] **3.4** GREEN — L4: `test/e2e`: `TestServeUIUnitsListsACapturedUnit` (a unit captured via
+- [x] **3.4** GREEN — L4: `test/e2e`: `TestServeUIUnitsListsACapturedUnit` (a unit captured via
       the API appears in `/ui/units`).
       Verify: `go test -tags=e2e ./test/e2e/... -run TestServeUIUnitsListsACapturedUnit`.
       Requirement: exit criterion; design §7.

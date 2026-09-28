@@ -161,6 +161,7 @@ func newUIMux(d Deps) *http.ServeMux {
 	guardedUI := requireCookie(d.Token)(d.UI)
 	mux.Handle("GET /ui", guardedUI)
 	mux.Handle("GET /ui/{$}", guardedUI)
+	mux.Handle("GET /ui/units", guardedUI)
 
 	return mux
 }
