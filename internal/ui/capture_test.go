@@ -148,6 +148,26 @@ func TestCaptureView_RendersEveryOutcome(t *testing.T) {
 	}
 }
 
+// TestCaptureView_EmptyTextIs400 is parseCaptureForm's own bad-body case:
+// an empty (or absent) text field is a 400, and Capture is never reached —
+// the same "no call on a bad body" posture TestCaptureView_BodyIsBounded
+// pins for an oversized one.
+func TestCaptureView_EmptyTextIs400(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest("text="))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /ui/capture with empty text = %d, want 400", rec.Code)
+	}
+	if len(fake.calls) != 0 {
+		t.Errorf("Capture was called %d time(s) for an empty text field, want 0", len(fake.calls))
+	}
+}
+
 // TestCaptureView_BodyIsBounded is design §3.5: a submission larger than
 // captureFormMaxBytes is refused via http.MaxBytesReader, never buffered in
 // full — loginSubmit's own precedent (internal/httpapi/cookie.go), sized
