@@ -83,7 +83,10 @@ func TestUnitsView_OnePageWithNextLink(t *testing.T) {
 		t.Fatalf("GET /ui/units = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	page := rec.Body.String()
-	for _, want := range []string{`data-unit-id="unit-1"`, "Call the dentist", `data-unit-id="unit-2"`, "Recipe for bread"} {
+	for _, want := range []string{
+		`data-unit-id="unit-1"`, "Call the dentist", "<span>task</span>",
+		`data-unit-id="unit-2"`, "Recipe for bread", "<span>knowledge</span>",
+	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page does not contain %q:\n%s", want, page)
 		}
