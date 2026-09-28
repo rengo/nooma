@@ -106,29 +106,51 @@ func TestUnitsService_DetailNotFoundForNonLive(t *testing.T) {
 	}
 }
 
+// neighbourUnit is the exact shape seedUnitsUnit stores, so a RelatedUnit's
+// Other can be compared with reflect.DeepEqual instead of field by field.
+func neighbourUnit(id string, status unit.Status) unit.Unit {
+	return unit.Unit{
+		ID: id, Type: unit.TypeTask, Status: status, Content: id,
+		Weight: 1, LastTouchedAt: unitsNow, CreatedAt: unitsNow, UpdatedAt: unitsNow,
+	}
+}
+
 // TestUnitsService_DetailDropsNonLiveNeighbours is spec R3's own scenario:
 // "a relation to a non-live unit is omitted from a live unit's detail
 // page" — I02 applied to neighbours, enforced through LiveByIDs and not
-// reimplemented as a status check inside Detail.
+// reimplemented as a status check inside Detail. Every non-live status
+// (archived, superseded, incomplete) gets its own neighbour, plus a
+// relation naming a unit that was never seeded at all, so a mutant that
+// only checks one status — or that drops the second LiveByIDs call
+// altogether — cannot pass by accident. The two surviving relations run in
+// opposite directions so Outgoing is pinned both ways, and each carries a
+// distinct Type and Confidence so RelatedUnit's remaining fields are
+// pinned too.
 func TestUnitsService_DetailDropsNonLiveNeighbours(t *testing.T) {
 	ctx := context.Background()
 	units := memrepo.NewUnits()
 	seedUnitsUnit(t, units, "center", unit.StatusPool)
-	seedUnitsUnit(t, units, "live-neighbour", unit.StatusPool)
+	seedUnitsUnit(t, units, "out-neighbour", unit.StatusPool)
+	seedUnitsUnit(t, units, "in-neighbour", unit.StatusPool)
 	seedUnitsUnit(t, units, "archived-neighbour", unit.StatusArchived)
+	seedUnitsUnit(t, units, "superseded-neighbour", unit.StatusSuperseded)
+	seedUnitsUnit(t, units, "incomplete-neighbour", unit.StatusIncomplete)
+	// "absent-neighbour" is deliberately never seeded — a relation naming
+	// it must be dropped exactly like one naming a non-live status.
 
 	rels := memrepo.NewRelations()
-	if err := rels.Upsert(ctx, ports.Relation{
-		ID: "rel-live", FromUnitID: "center", ToUnitID: "live-neighbour",
-		Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow,
-	}); err != nil {
-		t.Fatalf("seed live relation: %v", err)
+	seedRels := []ports.Relation{
+		{ID: "rel-out", FromUnitID: "center", ToUnitID: "out-neighbour", Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow},
+		{ID: "rel-in", FromUnitID: "in-neighbour", ToUnitID: "center", Type: "derived_from", Strength: 0.5, Confidence: 0.75, CreatedBy: "test", CreatedAt: unitsNow.Add(time.Second)},
+		{ID: "rel-archived", FromUnitID: "archived-neighbour", ToUnitID: "center", Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow.Add(2 * time.Second)},
+		{ID: "rel-superseded", FromUnitID: "center", ToUnitID: "superseded-neighbour", Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow.Add(3 * time.Second)},
+		{ID: "rel-incomplete", FromUnitID: "incomplete-neighbour", ToUnitID: "center", Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow.Add(4 * time.Second)},
+		{ID: "rel-absent", FromUnitID: "center", ToUnitID: "absent-neighbour", Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow.Add(5 * time.Second)},
 	}
-	if err := rels.Upsert(ctx, ports.Relation{
-		ID: "rel-archived", FromUnitID: "archived-neighbour", ToUnitID: "center",
-		Type: "same_topic", Strength: 0.5, Confidence: 0.9, CreatedBy: "test", CreatedAt: unitsNow.Add(time.Second),
-	}); err != nil {
-		t.Fatalf("seed archived relation: %v", err)
+	for _, rel := range seedRels {
+		if err := rels.Upsert(ctx, rel); err != nil {
+			t.Fatalf("seed relation %s: %v", rel.ID, err)
+		}
 	}
 
 	svc := brain.NewUnitsService(units, rels)
@@ -143,18 +165,28 @@ func TestUnitsService_DetailDropsNonLiveNeighbours(t *testing.T) {
 	if detail.Unit.ID != "center" {
 		t.Fatalf("Detail(center).Unit.ID = %q, want %q", detail.Unit.ID, "center")
 	}
-	if len(detail.Relations) != 1 {
-		t.Fatalf("len(Relations) = %d, want 1 — the archived neighbour must be dropped: %+v", len(detail.Relations), detail.Relations)
+
+	want := map[string]brain.RelatedUnit{
+		"rel-out": {
+			RelationID: "rel-out", Type: "same_topic", Outgoing: true, Confidence: 0.9,
+			Other: neighbourUnit("out-neighbour", unit.StatusPool),
+		},
+		"rel-in": {
+			RelationID: "rel-in", Type: "derived_from", Outgoing: false, Confidence: 0.75,
+			Other: neighbourUnit("in-neighbour", unit.StatusPool),
+		},
 	}
-	got := detail.Relations[0]
-	if got.RelationID != "rel-live" {
-		t.Fatalf("Relations[0].RelationID = %q, want %q — the surviving relation must be the live-neighbour one", got.RelationID, "rel-live")
+	if len(detail.Relations) != len(want) {
+		t.Fatalf("len(Relations) = %d, want %d — every non-live or absent neighbour must be dropped: %+v", len(detail.Relations), len(want), detail.Relations)
 	}
-	if !got.Outgoing {
-		t.Fatalf("Relations[0].Outgoing = false, want true — center is rel-live's FromUnitID")
-	}
-	if got.Other.ID != "live-neighbour" {
-		t.Fatalf("Relations[0].Other.ID = %q, want %q", got.Other.ID, "live-neighbour")
+	for _, got := range detail.Relations {
+		wantRel, ok := want[got.RelationID]
+		if !ok {
+			t.Fatalf("Relations contains unexpected RelationID %q: %+v", got.RelationID, got)
+		}
+		if !reflect.DeepEqual(got, wantRel) {
+			t.Fatalf("Relations[%q] = %+v, want %+v", got.RelationID, got, wantRel)
+		}
 	}
 }
 
