@@ -1,0 +1,62 @@
+package ui
+
+import (
+	"strconv"
+
+	"github.com/rengo/nooma/internal/brain"
+)
+
+// CapturePage is GET /ui/capture's full page: the capture form and, once a
+// submission has just completed, its own result section (design §3.5).
+// result is nil on a fresh GET.
+templ CapturePage(result *brain.CaptureResult) {
+	@Page("nooma — capture", captureBody(result))
+}
+
+templ captureBody(result *brain.CaptureResult) {
+	<section>
+		<h2>CAPTURE</h2>
+		<form method="post" action="/ui/capture" hx-post="/ui/capture" hx-target="#capture-result" hx-swap="innerHTML">
+			<label for="text">Text</label>
+			<textarea id="text" name="text" required></textarea>
+			<button type="submit">Capture</button>
+		</form>
+		<div id="capture-result">
+			if result != nil {
+				@captureOutcome(*result)
+			}
+		</div>
+	</section>
+}
+
+// captureOutcome is spec R4's own total switch over brain.AllCaptureOutcomes(),
+// mirrored from httpapi's own renderCaptureResult (internal/httpapi/capture.go) —
+// never invents a field brain.CaptureResult does not carry, and reaches no
+// `default` case: a CaptureOutcome added later without a case here is
+// caught the same way TestCaptureView_RendersEveryOutcome (capture_test.go)
+// catches it, by comparing its own case count against
+// brain.AllCaptureOutcomes()'s own length. Every value templ renders here
+// goes through templ's own `{ expr }` escaping — never templ.Raw — since
+// Reply, ArmRefused.Message and a relation's content are all vault- or
+// model-shaped text (design §9's threat-matrix row on content injection,
+// units.templ's and unit.templ's own precedent).
+templ captureOutcome(result brain.CaptureResult) {
+	switch result.Outcome {
+	case brain.OutcomeStored:
+		<p data-outcome="stored">Stored as { result.UnitID }.</p>
+	case brain.OutcomeArmed:
+		<p data-outcome="armed">Armed { string(result.Armed.What) } ({ result.Armed.ID }).</p>
+	case brain.OutcomeArmRefused:
+		<p data-outcome="arm_refused">{ result.ArmRefused.Message }</p>
+	case brain.OutcomeConversed:
+		<p data-outcome="conversed">{ result.Reply }</p>
+	case brain.OutcomeOutOfScope:
+		<p data-outcome="out_of_scope">That is out of scope.</p>
+	case brain.OutcomeRecalled:
+		<p data-outcome="recalled">Recalled { strconv.Itoa(len(result.Recalled)) } unit(s).</p>
+	case brain.OutcomeCorrected:
+		<p data-outcome="corrected">Corrected { result.Correction.UnitID }.</p>
+	case brain.OutcomeAsked:
+		<p data-outcome="asked">That correction was ambiguous.</p>
+	}
+}

@@ -99,6 +99,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveUnits(w, r)
 	case "GET /ui/units/{id}":
 		h.serveUnit(w, r)
+	case "GET /ui/capture":
+		h.serveCaptureForm(w, r)
+	case "POST /ui/capture":
+		h.serveCapture(w, r)
+	case "POST /ui/units/{id}/correct":
+		h.serveCorrect(w, r)
 	default:
 		http.NotFound(w, r)
 	}

@@ -45,6 +45,14 @@ templ unitBody(detail brain.UnitDetail) {
 			}
 		</ul>
 	</section>
+	<section>
+		<h2>CORRECT</h2>
+		<form method="post" action={ templ.URL("/ui/units/" + detail.Unit.ID + "/correct") }>
+			<label for="text">Correction</label>
+			<textarea id="text" name="text" required></textarea>
+			<button type="submit">Submit correction</button>
+		</form>
+	</section>
 }
 
 // formatOptionalDate renders literal "none" for a nil EventAt/DueAt — I18's
