@@ -6,6 +6,8 @@ import (
 	"flag"
 	"strings"
 	"testing"
+
+	"github.com/rengo/nooma/internal/ui"
 )
 
 // TestResolveUIEnabled_NoUIFlagOverridesConfig pins design m4a §3.9's
@@ -58,5 +60,29 @@ func TestServeUsageShowsNoUIPrecedence(t *testing.T) {
 	}
 	if !strings.Contains(got, "Overrides server.ui when both are set") {
 		t.Errorf("usage output does not state the --no-ui/server.ui precedence rule:\n%s", got)
+	}
+}
+
+// TestUIDeps_NilServicesStayNilInterfaces is design §3.4's typed-nil gotcha,
+// made behavioural: assigning a nil *brain.TodayService/*brain.UnitsService/
+// *brain.RecallService straight into ui.Deps' interface fields would produce
+// a NON-nil interface wrapping a nil pointer — deps.Today != nil would be
+// true, so ui.Handler's own nil check (h.deps.Today == nil, "not wired in
+// this build") would never fire, and the first request would panic on a
+// nil-receiver method call instead of answering 503. uiDeps exists to keep
+// every one of its three service parameters out of that trap, at cmd/nooma's
+// one call site — wireToday and wireUnits never actually return nil in
+// production, but this proves the guard holds regardless.
+func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
+	deps := uiDeps(nil, nil, nil, ui.Serving{})
+
+	if deps.Today != nil {
+		t.Error("Today: want a nil interface for a nil *brain.TodayService, got non-nil — the typed-nil trap uiDeps exists to avoid")
+	}
+	if deps.Units != nil {
+		t.Error("Units: want a nil interface for a nil *brain.UnitsService, got non-nil")
+	}
+	if deps.Search != nil {
+		t.Error("Search: want a nil interface for a nil *brain.RecallService, got non-nil")
 	}
 }

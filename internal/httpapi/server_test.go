@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/ui"
 )
 
@@ -59,6 +61,43 @@ type stubTodayReader struct{}
 
 func (stubTodayReader) Today(context.Context) (brain.Today, error) {
 	return brain.Today{}, nil
+}
+
+// stubUnitsReader answers Browse with an empty page — this package's own
+// tests exist to check dispatch (a guarded leaf reaches SOME view, not
+// today_test.go's/units_test.go's own detailed rendering assertions).
+type stubUnitsReader struct{}
+
+func (stubUnitsReader) Browse(context.Context, []unit.Type, *ports.BrowseCursor) (ports.BrowsePage, error) {
+	return ports.BrowsePage{}, nil
+}
+
+func (stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, error) {
+	return brain.UnitDetail{}, false, nil
+}
+
+// TestUIGuardedLeavesEachReachAView is design §3.1's own drift guard (N2):
+// ServeHTTP's r.Pattern switch is a second place newUIMux's own leaves must
+// agree with, and nothing before this test proved the two stayed in sync —
+// TestUIViewsRequireCookie drives GET /ui and GET /ui/{$} today, but a new
+// leaf added to newUIMux without a matching switch case would fall through
+// to the default 404 arm silently. This drives every guarded pattern
+// wantUIMuxWiring declares and asserts none of them 404s.
+func TestUIGuardedLeavesEachReachAView(t *testing.T) {
+	t.Parallel()
+
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{}})})
+
+	for _, leaf := range []string{"/ui", "/ui/units"} {
+		leaf := leaf
+		t.Run(leaf, func(t *testing.T) {
+			t.Parallel()
+			rec := doGet(h, leaf)
+			if rec.Code != http.StatusOK {
+				t.Errorf("GET %s = %d, want 200 — a guarded leaf must dispatch to its own view, not fall through to ServeHTTP's default 404 arm", leaf, rec.Code)
+			}
+		})
+	}
 }
 
 // TestHandlerServesAPIRootAndUIShell is design m4a §3.1's PR 2 shell state,
