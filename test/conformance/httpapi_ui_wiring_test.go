@@ -71,7 +71,7 @@ func TestUIMuxWiringMatchesDeclaredGuardTable(t *testing.T) {
 		t.Fatal("internal/httpapi/server.go declares no func newUIMux — renamed or removed; this gate has nothing to check")
 	}
 
-	found := uiMuxHandleCalls(t, fset, muxFn)
+	found := collectMuxHandleCalls(t, fset, muxFn, "mux", true)
 	if len(found) == 0 {
 		t.Fatal("newUIMux registers zero routes — this gate's own guard: nothing to check")
 	}
@@ -177,75 +177,66 @@ const (
 	wantGuardTargetExpr = "d.UI"
 )
 
-// uiMuxHandleCalls walks fn's body statements in order, tracking local
-// `name := expr` assignments (newUIMux's own `guardedUI := ...` and
-// `assets := ...`) so mux.Handle(pattern, handler) call sites that pass a
-// variable instead of an inline expression still resolve to what that
-// variable was assigned.
-func uiMuxHandleCalls(t *testing.T, fset *token.FileSet, fn *ast.FuncDecl) []uiLeafWiring {
+// collectMuxHandleCalls walks fn's ENTIRE body via ast.Inspect — every
+// statement however nested: an if, a for, a switch, not only the top level
+// and one level of if-branch the narrower walk this replaces used to see —
+// closing design N7's non-literal-pattern, HandleFunc and loop holes at
+// once, rather than adding a special case per hole. It tracks local `name
+// := expr` assignments (newUIMux's own `guardedUI := ...`) across the whole
+// function, matching its flat style, so a call passing a variable still
+// resolves to what that variable was assigned.
+//
+// Two shapes fail the gate immediately, by t.Fatal, rather than being
+// silently skipped the way the narrower walk used to skip them: a pattern
+// argument that is not a string literal (round 5's own class — a route this
+// gate cannot read statically), and — only when requireHandleOnly is true,
+// newUIMux's own case — a call through HandleFunc instead of Handle.
+// requireHandleOnly is false for Handler's own outer mux (server.go), which
+// legitimately mixes both for its two non-UI leaves.
+func collectMuxHandleCalls(t *testing.T, fset *token.FileSet, fn *ast.FuncDecl, receiverName string, requireHandleOnly bool) []uiLeafWiring {
 	t.Helper()
 
 	varExpr := map[string]ast.Expr{}
 	var leaves []uiLeafWiring
-	walkUIMuxStmts(t, fset, fn.Body.List, varExpr, &leaves)
-	return leaves
-}
 
-// walkUIMuxStmts processes stmts in order and recurses into an *ast.IfStmt's
-// body (newUIMux's own `if d.Token != "" { ... }`, PR 4b) so a route
-// registered inside a branch is still found — this gate's job is to catch
-// what newUIMux actually wires, not only what it wires unconditionally at
-// the top level. Local var assignments are tracked across the whole
-// function via the shared varExpr map, not scoped per-block, matching
-// newUIMux's own flat style: nothing inside its `if` shadows guardedUI or
-// assets.
-func walkUIMuxStmts(t *testing.T, fset *token.FileSet, stmts []ast.Stmt, varExpr map[string]ast.Expr, leaves *[]uiLeafWiring) {
-	t.Helper()
-
-	for _, stmt := range stmts {
-		switch s := stmt.(type) {
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		switch s := n.(type) {
 		case *ast.AssignStmt:
-			if s.Tok != token.DEFINE || len(s.Lhs) != 1 || len(s.Rhs) != 1 {
-				continue
+			if s.Tok == token.DEFINE && len(s.Lhs) == 1 && len(s.Rhs) == 1 {
+				if ident, ok := s.Lhs[0].(*ast.Ident); ok {
+					varExpr[ident.Name] = s.Rhs[0]
+				}
 			}
-			ident, ok := s.Lhs[0].(*ast.Ident)
-			if !ok {
-				continue
-			}
-			varExpr[ident.Name] = s.Rhs[0]
 
-		case *ast.ExprStmt:
-			call, ok := s.X.(*ast.CallExpr)
-			if !ok || len(call.Args) != 2 {
-				continue
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Handle" {
-				continue
+		case *ast.CallExpr:
+			sel, ok := s.Fun.(*ast.SelectorExpr)
+			if !ok || (sel.Sel.Name != "Handle" && sel.Sel.Name != "HandleFunc") {
+				return true
 			}
 			recv, ok := sel.X.(*ast.Ident)
-			if !ok || recv.Name != "mux" {
-				continue
+			if !ok || recv.Name != receiverName {
+				return true
 			}
-			lit, ok := call.Args[0].(*ast.BasicLit)
+			if requireHandleOnly && sel.Sel.Name != "Handle" {
+				t.Fatalf("%s: %s.%s(...) registers a route via HandleFunc, not Handle — the hardened wiring gate requires every %s leaf to go through .Handle so a guard wrap stays inspectable (design N7)", fn.Name.Name, receiverName, sel.Sel.Name, receiverName)
+			}
+			if len(s.Args) != 2 {
+				return true
+			}
+			lit, ok := s.Args[0].(*ast.BasicLit)
 			if !ok || lit.Kind != token.STRING {
-				continue
+				t.Fatalf("%s: %s.%s registers a non-literal pattern (%s) — the hardened wiring gate requires every pattern to be a string literal it can read statically (design N7)", fn.Name.Name, receiverName, sel.Sel.Name, normalizedText(fset, s.Args[0]))
 			}
 			pattern, err := strconv.Unquote(lit.Value)
 			if err != nil {
-				t.Fatalf("newUIMux: unquote route pattern %s: %v", lit.Value, err)
+				t.Fatalf("%s: unquote route pattern %s: %v", fn.Name.Name, lit.Value, err)
 			}
-			*leaves = append(*leaves, classifyUILeaf(fset, pattern, resolveLocalVar(call.Args[1], varExpr)))
-
-		case *ast.IfStmt:
-			if s.Body != nil {
-				walkUIMuxStmts(t, fset, s.Body.List, varExpr, leaves)
-			}
-			if block, ok := s.Else.(*ast.BlockStmt); ok {
-				walkUIMuxStmts(t, fset, block.List, varExpr, leaves)
-			}
+			leaves = append(leaves, classifyUILeaf(fset, pattern, resolveLocalVar(s.Args[1], varExpr)))
 		}
-	}
+		return true
+	})
+
+	return leaves
 }
 
 // resolveLocalVar follows e through varExpr while e is an identifier bound
@@ -303,4 +294,63 @@ func classifyUILeaf(fset *token.FileSet, pattern string, handler ast.Expr) uiLea
 	leaf.tokenArg = normalizedText(fset, inner.Args[0])
 	leaf.targetArg = normalizedText(fset, outer.Args[0])
 	return leaf
+}
+
+// wantHandlerOuterMuxPatterns is Handler's own outer mux (server.go) — the
+// one that wraps newUIMux, never the inner guardedMux apiRoutes wires — and
+// design N7's last named hole: a /ui/... leaf registered directly here
+// would bypass newUIMux's xo/requireCookie wrap entirely and appear in no
+// table at all, because TestUIMuxWiringMatchesDeclaredGuardTable only ever
+// parses newUIMux.
+var wantHandlerOuterMuxPatterns = map[string]bool{
+	"GET /{$}": true,
+	"/ui":      true,
+	"/ui/":     true,
+	"/":        true,
+}
+
+// TestUIHandlerOuterMuxRegistersOnlyDeclaredLeaves is TestUIMuxWiringMatchesDeclaredGuardTable's
+// sibling gate (design §3.6, N7): it parses Handler itself, not newUIMux,
+// and asserts its own local var literally named mux registers exactly
+// wantHandlerOuterMuxPatterns — no more, no fewer. A future /ui/... leaf
+// added directly to Handler instead of newUIMux lands here as an unlisted
+// pattern and fails loudly, instead of quietly reaching a browser ungated.
+func TestUIHandlerOuterMuxRegistersOnlyDeclaredLeaves(t *testing.T) {
+	repoRoot := repoRootFromCaller(t)
+	serverPath := filepath.Join(repoRoot, "internal", "httpapi", "server.go")
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, serverPath, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", serverPath, err)
+	}
+
+	var handlerFn *ast.FuncDecl
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "Handler" {
+			handlerFn = fn
+			break
+		}
+	}
+	if handlerFn == nil {
+		t.Fatal("internal/httpapi/server.go declares no func Handler — renamed or removed; this gate has nothing to check")
+	}
+
+	found := collectMuxHandleCalls(t, fset, handlerFn, "mux", false)
+	if len(found) == 0 {
+		t.Fatal("Handler's outer mux registers zero routes — this gate's own guard: nothing to check")
+	}
+
+	seen := make(map[string]bool, len(found))
+	for _, f := range found {
+		seen[f.pattern] = true
+		if !wantHandlerOuterMuxPatterns[f.pattern] {
+			t.Errorf("Handler's outer mux registers %q — not in this gate's declared set %v; a /ui/... leaf registered here bypasses newUIMux's xo/requireCookie wrap entirely (design N7)", f.pattern, wantHandlerOuterMuxPatterns)
+		}
+	}
+	for pattern := range wantHandlerOuterMuxPatterns {
+		if !seen[pattern] {
+			t.Errorf("Handler's outer mux no longer registers %q — this gate's declared set needs the same edit, in this commit", pattern)
+		}
+	}
 }
