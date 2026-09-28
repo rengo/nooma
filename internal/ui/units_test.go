@@ -125,6 +125,118 @@ func TestUnitsView_FragmentOnHXRequest(t *testing.T) {
 	}
 }
 
+// TestUnitsView_LastPageHasNoMoreLink is task 3.1's own last-page case:
+// Browse answering with Next: nil renders no "More" link at all — the
+// mutation that survives without this test is unitsRows' own "if next !=
+// nil" collapsing to an unconditional render, which TestUnitsView_
+// OnePageWithNextLink's Next-cursor fixture can never catch.
+func TestUnitsView_LastPageHasNoMoreLink(t *testing.T) {
+	t.Parallel()
+
+	page := fixedBrowsePage()
+	page.Next = nil
+
+	h := ui.New(ui.Deps{Units: stubUnitsReader{page: page}})
+	req := unitsRequest("")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /ui/units (last page) = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "hx-get") {
+		t.Errorf("last page (Next: nil) still carries a paging hx-get attribute:\n%s", body)
+	}
+	if strings.Contains(body, "More") {
+		t.Errorf("last page (Next: nil) still carries a \"More\" link:\n%s", body)
+	}
+}
+
+// TestUnitsView_MoreLinkForwardsTypeFilter is task 3.1's own filter-paging
+// case: the "more" link's own type-forwarding loop (moreURL) is what keeps
+// a filtered browse from silently dropping its filter on the next page —
+// deleting that loop still passes TestUnitsView_OnePageWithNextLink, which
+// never requests a filtered page.
+func TestUnitsView_MoreLinkForwardsTypeFilter(t *testing.T) {
+	t.Parallel()
+
+	h := ui.New(ui.Deps{Units: stubUnitsReader{page: fixedBrowsePage()}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, unitsRequest("type=task&type=knowledge"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /ui/units?type=task&type=knowledge = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	page := rec.Body.String()
+	for _, want := range []string{
+		"type=task", "type=knowledge",
+		"after_created=2026-09-20T10%3A00%3A00Z", "after_id=unit-2",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("more link does not carry %q:\n%s", want, page)
+		}
+	}
+}
+
+// TestUnitsView_EscapesVaultContent is TestTodayView_EscapesVaultContent's
+// own sibling for /ui/units (design §9's threat-matrix row on content
+// injection): a unit's content is vault data, escaped by templ's default
+// { expr } handling in both the browse list and the search results — the
+// same unitsRows template renders both, so both call sites are pinned here
+// rather than assuming one covers the other.
+func TestUnitsView_EscapesVaultContent(t *testing.T) {
+	t.Parallel()
+
+	const payload = `<script>alert(1)</script>`
+	const escaped = `&lt;script&gt;alert(1)&lt;/script&gt;`
+
+	t.Run("browse", func(t *testing.T) {
+		t.Parallel()
+
+		page := fixedBrowsePage()
+		page.Units[0].Content = payload
+
+		h := ui.New(ui.Deps{Units: stubUnitsReader{page: page}})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, unitsRequest(""))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /ui/units = %d, want 200: %s", rec.Code, rec.Body.String())
+		}
+		body := rec.Body.String()
+		if strings.Contains(body, payload) {
+			t.Errorf("vault content reached the browse page unescaped:\n%s", body)
+		}
+		if !strings.Contains(body, escaped) {
+			t.Errorf("vault content is not escaped as expected on the browse page:\n%s", body)
+		}
+	})
+
+	t.Run("search", func(t *testing.T) {
+		t.Parallel()
+
+		search := stubSearcher{ok: true, units: []unit.Unit{
+			{ID: "first-match", Content: payload},
+		}}
+		h := ui.New(ui.Deps{Search: search})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, unitsRequest("q=plants"))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /ui/units?q=plants = %d, want 200: %s", rec.Code, rec.Body.String())
+		}
+		body := rec.Body.String()
+		if strings.Contains(body, payload) {
+			t.Errorf("vault content reached the search results unescaped:\n%s", body)
+		}
+		if !strings.Contains(body, escaped) {
+			t.Errorf("vault content is not escaped as expected in the search results:\n%s", body)
+		}
+	})
+}
+
 // TestUnitsView_UnknownTypeIs400 is task 3.1: unit.ParseType's own rejection
 // reaches the caller as 400, naming the query's own bad value.
 func TestUnitsView_UnknownTypeIs400(t *testing.T) {

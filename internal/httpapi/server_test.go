@@ -88,6 +88,20 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 
 	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{}})})
 
+	// wantMarker names, per leaf, a string only that leaf's own view
+	// renders from these stubs — Today's "SYSTEM" section and units'
+	// "UNITS" heading are both unconditional, so their presence proves the
+	// request reached the leaf's own view rather than merely a 200
+	// produced by dispatching to the other one (or to any future third
+	// leaf). A misrouted "GET /ui/units" that fell through to
+	// serveToday would still answer 200 here — this is the assertion the
+	// doc comment above promises and the plain status check could not
+	// make good on.
+	wantMarker := map[string]string{
+		"/ui":       "<h2>SYSTEM</h2>",
+		"/ui/units": "<h2>UNITS</h2>",
+	}
+
 	for _, leaf := range []string{"/ui", "/ui/units"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
@@ -95,6 +109,9 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 			rec := doGet(h, leaf)
 			if rec.Code != http.StatusOK {
 				t.Errorf("GET %s = %d, want 200 — a guarded leaf must dispatch to its own view, not fall through to ServeHTTP's default 404 arm", leaf, rec.Code)
+			}
+			if want := wantMarker[leaf]; !strings.Contains(rec.Body.String(), want) {
+				t.Errorf("GET %s does not contain %q — it did not reach its own view:\n%s", leaf, want, rec.Body.String())
 			}
 		})
 	}
