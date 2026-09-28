@@ -306,20 +306,25 @@ func correctRequest(id, body string) *http.Request {
 func TestCorrectView_SetsReferentFromPath(t *testing.T) {
 	t.Parallel()
 
-	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-1"}}}
+	// A deliberately distinctive id — never "unit-1", this file's own
+	// default fixture id used elsewhere — so a handler that hardcodes
+	// "unit-1" instead of actually reading the path cannot pass this test
+	// by coincidence.
+	const id = "unit-77-correction-target"
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: id}}}
 	h := ui.New(ui.Deps{Capture: fake})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, correctRequest("unit-1", "text=It's+due+Friday,+not+Thursday"))
+	h.ServeHTTP(rec, correctRequest(id, "text=It's+due+Friday,+not+Thursday"))
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /ui/units/unit-1/correct = %d, want 200: %s", rec.Code, rec.Body.String())
+		t.Fatalf("POST /ui/units/%s/correct = %d, want 200: %s", id, rec.Code, rec.Body.String())
 	}
 	if len(fake.calls) != 1 {
 		t.Fatalf("Capture was called %d time(s), want exactly 1", len(fake.calls))
 	}
 	got := fake.calls[0]
-	if got.ReferentID != "unit-1" {
-		t.Errorf("ReferentID = %q, want %q (the path's own id)", got.ReferentID, "unit-1")
+	if got.ReferentID != id {
+		t.Errorf("ReferentID = %q, want %q (the path's own id)", got.ReferentID, id)
 	}
 	if got.Channel != "ui" {
 		t.Errorf("Channel = %q, want \"ui\"", got.Channel)
