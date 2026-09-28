@@ -57,18 +57,17 @@ func TestUnitView_I18ThreeDatesNeverSwap(t *testing.T) {
 	}
 	page := rec.Body.String()
 
-	lines := strings.Split(page, "\n")
-	var createdLine, eventLine, dueLine string
-	for _, l := range lines {
-		switch {
-		case strings.Contains(l, "Created:"):
-			createdLine = l
-		case strings.Contains(l, "Event:"):
-			eventLine = l
-		case strings.Contains(l, "Due:"):
-			dueLine = l
-		}
+	// templ's generated output is one unbroken line — today_test.go's own
+	// TestTodayView_I18DatesLabelled precedent slices by label position
+	// instead of by "\n", and this test does the same: each <li> is sliced
+	// from its own label up to the next one.
+	iCreated, iEvent, iDue := strings.Index(page, "Created:"), strings.Index(page, "Event:"), strings.Index(page, "Due:")
+	if iCreated < 0 || iEvent < 0 || iDue < 0 {
+		t.Fatalf("page is missing one of the three date labels:\n%s", page)
 	}
+	createdLine := page[iCreated:iEvent]
+	eventLine := page[iEvent:iDue]
+	dueLine := page[iDue:]
 
 	if !strings.Contains(createdLine, "2026-09-01") || strings.Contains(createdLine, "Due:") || strings.Contains(createdLine, "Event:") {
 		t.Errorf("Created: line wrong or carries another date's label:\n%s", createdLine)

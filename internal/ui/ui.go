@@ -87,6 +87,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveToday(w, r)
 	case "GET /ui/units":
 		h.serveUnits(w, r)
+	case "GET /ui/units/{id}":
+		h.serveUnit(w, r)
 	default:
 		http.NotFound(w, r)
 	}

@@ -162,6 +162,7 @@ func newUIMux(d Deps) *http.ServeMux {
 	mux.Handle("GET /ui", guardedUI)
 	mux.Handle("GET /ui/{$}", guardedUI)
 	mux.Handle("GET /ui/units", guardedUI)
+	mux.Handle("GET /ui/units/{id}", guardedUI)
 
 	return mux
 }
