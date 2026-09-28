@@ -194,75 +194,76 @@ func TestUnitView_DetailErrorIs500(t *testing.T) {
 func TestUnitView_RendersLiveRelations(t *testing.T) {
 	t.Parallel()
 
-	detail := brain.UnitDetail{
-		Unit: unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "Pay the rent", CreatedAt: time.Now()},
-		Relations: []brain.RelatedUnit{
-			{
-				RelationID: "rel-1",
-				Type:       "relates_to",
-				Outgoing:   true,
-				Confidence: 0.8,
-				Other:      unit.Unit{ID: "unit-2", Content: "Renew the passport"},
+	rel1 := brain.RelatedUnit{
+		RelationID: "rel-1",
+		Type:       "relates_to",
+		Outgoing:   true,
+		Confidence: 0.8,
+		Other:      unit.Unit{ID: "unit-2", Content: "Renew the passport"},
+	}
+	rel2 := brain.RelatedUnit{
+		RelationID: "rel-2",
+		Type:       "blocks",
+		Outgoing:   false,
+		Confidence: 0.6,
+		Other:      unit.Unit{ID: "unit-3", Content: "Call the dentist"},
+	}
+
+	// Both orders are rendered: with one order only, direction and
+	// confidence correlate with the loop index, so a template that took
+	// them from the position (i%2) instead of the relation would pass.
+	for _, order := range [][]brain.RelatedUnit{{rel1, rel2}, {rel2, rel1}} {
+		detail := brain.UnitDetail{
+			Unit:      unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "Pay the rent", CreatedAt: time.Now()},
+			Relations: order,
+		}
+		h := ui.New(ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, unitRequest("unit-1"))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /ui/units/unit-1 = %d, want 200: %s", rec.Code, rec.Body.String())
+		}
+		page := rec.Body.String()
+
+		// Direction and confidence are per-relation, so a flat
+		// strings.Contains over the whole page cannot tell "rel-1 rendered
+		// outgoing" from "rel-2 rendered outgoing, rel-1 rendered incoming" —
+		// both produce the same set of substrings somewhere on the page.
+		// Slicing by each relation's own data-relation-id, today_test.go's
+		// and this file's own I18ThreeDatesNeverSwap precedent for
+		// position-based slicing over templ's unbroken-line output, scopes
+		// each assertion to the relation it must belong to.
+		iFirst := strings.Index(page, `data-relation-id="`+order[0].RelationID+`"`)
+		iSecond := strings.Index(page, `data-relation-id="`+order[1].RelationID+`"`)
+		if iFirst < 0 || iSecond < 0 || iSecond < iFirst {
+			t.Fatalf("page is missing %s and/or %s in the expected order:\n%s", order[0].RelationID, order[1].RelationID, page)
+		}
+		blocks := map[string]string{
+			order[0].RelationID: page[iFirst:iSecond],
+			order[1].RelationID: page[iSecond:],
+		}
+
+		for id, c := range map[string]struct{ want, unwanted []string }{
+			"rel-1": {
+				want:     []string{"relates_to", `<a href="/ui/units/unit-2">Renew the passport</a>`, `aria-label="outgoing"`, "→", "0.80"},
+				unwanted: []string{`aria-label="incoming"`, "←", "0.60"},
 			},
-			{
-				RelationID: "rel-2",
-				Type:       "blocks",
-				Outgoing:   false,
-				Confidence: 0.6,
-				Other:      unit.Unit{ID: "unit-3", Content: "Call the dentist"},
+			"rel-2": {
+				want:     []string{"blocks", `<a href="/ui/units/unit-3">Call the dentist</a>`, `aria-label="incoming"`, "←", "0.60"},
+				unwanted: []string{`aria-label="outgoing"`, "→", "0.80"},
 			},
-		},
-	}
-	h := ui.New(ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}})
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, unitRequest("unit-1"))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /ui/units/unit-1 = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	page := rec.Body.String()
-
-	// Direction and confidence are per-relation, so a flat
-	// strings.Contains over the whole page cannot tell "rel-1 rendered
-	// outgoing" from "rel-2 rendered outgoing, rel-1 rendered incoming" —
-	// both produce the same set of substrings somewhere on the page.
-	// Slicing by each relation's own data-relation-id, today_test.go's
-	// and this file's own I18ThreeDatesNeverSwap precedent for
-	// position-based slicing over templ's unbroken-line output, scopes
-	// each assertion to the relation it must belong to.
-	iRel1 := strings.Index(page, `data-relation-id="rel-1"`)
-	iRel2 := strings.Index(page, `data-relation-id="rel-2"`)
-	if iRel1 < 0 || iRel2 < 0 || iRel2 < iRel1 {
-		t.Fatalf("page is missing rel-1 and/or rel-2 in the expected order:\n%s", page)
-	}
-	rel1Block := page[iRel1:iRel2]
-	rel2Block := page[iRel2:]
-
-	for _, want := range []string{
-		"relates_to", `<a href="/ui/units/unit-2">Renew the passport</a>`,
-		`aria-label="outgoing"`, "→", "0.80",
-	} {
-		if !strings.Contains(rel1Block, want) {
-			t.Errorf("rel-1's own block does not contain %q:\n%s", want, rel1Block)
-		}
-	}
-	for _, unwanted := range []string{`aria-label="incoming"`, "←", "0.60"} {
-		if strings.Contains(rel1Block, unwanted) {
-			t.Errorf("rel-1's own block wrongly contains %q — the other relation's direction or confidence:\n%s", unwanted, rel1Block)
-		}
-	}
-
-	for _, want := range []string{
-		"blocks", `<a href="/ui/units/unit-3">Call the dentist</a>`,
-		`aria-label="incoming"`, "←", "0.60",
-	} {
-		if !strings.Contains(rel2Block, want) {
-			t.Errorf("rel-2's own block does not contain %q:\n%s", want, rel2Block)
-		}
-	}
-	for _, unwanted := range []string{`aria-label="outgoing"`, "→", "0.80"} {
-		if strings.Contains(rel2Block, unwanted) {
-			t.Errorf("rel-2's own block wrongly contains %q — the other relation's direction or confidence:\n%s", unwanted, rel2Block)
+		} {
+			for _, w := range c.want {
+				if !strings.Contains(blocks[id], w) {
+					t.Errorf("order %s,%s: %s's own block does not contain %q:\n%s", order[0].RelationID, order[1].RelationID, id, w, blocks[id])
+				}
+			}
+			for _, u := range c.unwanted {
+				if strings.Contains(blocks[id], u) {
+					t.Errorf("order %s,%s: %s's own block wrongly contains %q — the other relation's direction or confidence:\n%s", order[0].RelationID, order[1].RelationID, id, u, blocks[id])
+				}
+			}
 		}
 	}
 }
