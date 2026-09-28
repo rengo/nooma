@@ -14,21 +14,28 @@ import (
 	"github.com/rengo/nooma/internal/ui"
 )
 
-// stubUnitsReader answers Browse with a fixed page and Detail with a fixed
-// (unused, in this file) result — this package's own tests own /ui/units'
-// rendering, not UnitsService's assembly (internal/brain's own tests cover
-// that), the same split today_test.go's fixedToday already takes.
+// stubUnitsReader answers Browse with a fixed page and Detail with a fixed,
+// independently configurable result — this package's own tests own
+// /ui/units' and /ui/units/{id}'s rendering, not UnitsService's assembly
+// (internal/brain's own tests cover that), the same split today_test.go's
+// fixedToday already takes. detailFound defaults to false (unit_test.go's
+// own NotFoundIs404 fixture is the zero value of this struct), so every
+// existing Browse-only test in this file keeps its original Detail-unused
+// behaviour unchanged.
 type stubUnitsReader struct {
-	page ports.BrowsePage
-	err  error
+	page        ports.BrowsePage
+	err         error
+	detail      brain.UnitDetail
+	detailFound bool
+	detailErr   error
 }
 
 func (s stubUnitsReader) Browse(context.Context, []unit.Type, *ports.BrowseCursor) (ports.BrowsePage, error) {
 	return s.page, s.err
 }
 
-func (stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, error) {
-	return brain.UnitDetail{}, false, nil
+func (s stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, error) {
+	return s.detail, s.detailFound, s.detailErr
 }
 
 // stubSearcher answers ForText with a fixed, already-ordered result —
@@ -356,5 +363,31 @@ func TestUnitsView_NilUnitsIs503(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("GET /ui/units with no UnitsReader = %d, want 503", rec.Code)
+	}
+}
+
+// TestUnitsView_RowsLinkToDetail is task 4.1: each browse row anchors to
+// its own unit's detail path (PR 4's own overflow-cut candidate, kept in
+// this PR — spec R3, design §5's units.templ row-anchor entry). A row that
+// still renders its content as bare text, with no link to
+// /ui/units/{id}, is exactly the regression this pins.
+func TestUnitsView_RowsLinkToDetail(t *testing.T) {
+	t.Parallel()
+
+	h := ui.New(ui.Deps{Units: stubUnitsReader{page: fixedBrowsePage()}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, unitsRequest(""))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /ui/units = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	page := rec.Body.String()
+	for _, want := range []string{
+		`<a href="/ui/units/unit-1">Call the dentist</a>`,
+		`<a href="/ui/units/unit-2">Recipe for bread</a>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page does not contain %q:\n%s", want, page)
+		}
 	}
 }

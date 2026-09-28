@@ -167,6 +167,7 @@ var wantUIMuxWiring = []struct {
 	{pattern: "GET /ui", guarded: true},
 	{pattern: "GET /ui/{$}", guarded: true},
 	{pattern: "GET /ui/units", guarded: true},
+	{pattern: "GET /ui/units/{id}", guarded: true},
 }
 
 // wantGuardFuncName, wantGuardTokenExpr and wantGuardTargetExpr are the
