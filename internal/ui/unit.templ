@@ -33,7 +33,13 @@ templ unitBody(detail brain.UnitDetail) {
 		<ul>
 			for _, rel := range detail.Relations {
 				<li data-relation-id={ rel.RelationID }>
+					if rel.Outgoing {
+						<span aria-label="outgoing">→</span>
+					} else {
+						<span aria-label="incoming">←</span>
+					}
 					{ rel.Type }
+					<span>{ formatConfidence(rel.Confidence) }</span>
 					<a href={ templ.URL("/ui/units/" + rel.Other.ID) }>{ rel.Other.Content }</a>
 				</li>
 			}
@@ -58,4 +64,12 @@ func formatOptionalDate(t *time.Time) string {
 // uses for Today's own Score.
 func formatWeight(w float64) string {
 	return strconv.FormatFloat(w, 'f', 2, 64)
+}
+
+// formatConfidence renders a relation's own Confidence to the same two
+// decimals formatWeight/formatScore already use elsewhere on this page —
+// one formatting convention for every score-shaped value this package
+// renders, not a third one invented here.
+func formatConfidence(c float64) string {
+	return strconv.FormatFloat(c, 'f', 2, 64)
 }

@@ -185,7 +185,12 @@ func TestUnitView_DetailErrorIs500(t *testing.T) {
 // brain layer, PR 2's own TestUnitsService_DetailDropsNonLiveNeighbours)
 // appears on the page, by its own relation id and its other endpoint's
 // content — this package's job is rendering completeness, not re-deriving
-// the live filter UnitsService.Detail already applied.
+// the live filter UnitsService.Detail already applied. It also asserts
+// each relation's own direction (Outgoing renders "outgoing"/"→", the
+// reverse renders "incoming"/"←" — an owner decision beyond tasks.md's own
+// letter: a relation's direction is part of what it means, not decoration)
+// and Confidence formatted to two decimals, the same precision
+// formatWeight/formatScore already use elsewhere on this page.
 func TestUnitView_RendersLiveRelations(t *testing.T) {
 	t.Parallel()
 
@@ -216,12 +221,48 @@ func TestUnitView_RendersLiveRelations(t *testing.T) {
 		t.Fatalf("GET /ui/units/unit-1 = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	page := rec.Body.String()
+
+	// Direction and confidence are per-relation, so a flat
+	// strings.Contains over the whole page cannot tell "rel-1 rendered
+	// outgoing" from "rel-2 rendered outgoing, rel-1 rendered incoming" —
+	// both produce the same set of substrings somewhere on the page.
+	// Slicing by each relation's own data-relation-id, today_test.go's
+	// and this file's own I18ThreeDatesNeverSwap precedent for
+	// position-based slicing over templ's unbroken-line output, scopes
+	// each assertion to the relation it must belong to.
+	iRel1 := strings.Index(page, `data-relation-id="rel-1"`)
+	iRel2 := strings.Index(page, `data-relation-id="rel-2"`)
+	if iRel1 < 0 || iRel2 < 0 || iRel2 < iRel1 {
+		t.Fatalf("page is missing rel-1 and/or rel-2 in the expected order:\n%s", page)
+	}
+	rel1Block := page[iRel1:iRel2]
+	rel2Block := page[iRel2:]
+
 	for _, want := range []string{
-		`data-relation-id="rel-1"`, "relates_to", `<a href="/ui/units/unit-2">Renew the passport</a>`,
-		`data-relation-id="rel-2"`, "blocks", `<a href="/ui/units/unit-3">Call the dentist</a>`,
+		"relates_to", `<a href="/ui/units/unit-2">Renew the passport</a>`,
+		`aria-label="outgoing"`, "→", "0.80",
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("page does not contain %q:\n%s", want, page)
+		if !strings.Contains(rel1Block, want) {
+			t.Errorf("rel-1's own block does not contain %q:\n%s", want, rel1Block)
+		}
+	}
+	for _, unwanted := range []string{`aria-label="incoming"`, "←", "0.60"} {
+		if strings.Contains(rel1Block, unwanted) {
+			t.Errorf("rel-1's own block wrongly contains %q — the other relation's direction or confidence:\n%s", unwanted, rel1Block)
+		}
+	}
+
+	for _, want := range []string{
+		"blocks", `<a href="/ui/units/unit-3">Call the dentist</a>`,
+		`aria-label="incoming"`, "←", "0.60",
+	} {
+		if !strings.Contains(rel2Block, want) {
+			t.Errorf("rel-2's own block does not contain %q:\n%s", want, rel2Block)
+		}
+	}
+	for _, unwanted := range []string{`aria-label="outgoing"`, "→", "0.80"} {
+		if strings.Contains(rel2Block, unwanted) {
+			t.Errorf("rel-2's own block wrongly contains %q — the other relation's direction or confidence:\n%s", unwanted, rel2Block)
 		}
 	}
 }
