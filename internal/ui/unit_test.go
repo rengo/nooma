@@ -87,6 +87,32 @@ func TestUnitView_I18ThreeDatesNeverSwap(t *testing.T) {
 	}
 }
 
+// TestUnitView_RendersUnitIdentityAndType is spec R3: the page carries the
+// unit's own id as a stable hook — units.templ's own row anchor and
+// TestUnitsView_OnePageWithNextLink's precedent for data-unit-id, applied
+// here to the detail page's single unit — and its Type, rendered plainly
+// in a <span>, the same shape a browse row's own type span takes.
+func TestUnitView_RendersUnitIdentityAndType(t *testing.T) {
+	t.Parallel()
+
+	detail := brain.UnitDetail{
+		Unit: unit.Unit{ID: "unit-7", Type: unit.TypeKnowledge, Content: "Recipe for bread", CreatedAt: time.Now()},
+	}
+	h := ui.New(ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, unitRequest("unit-7"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /ui/units/unit-7 = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	page := rec.Body.String()
+	for _, want := range []string{`data-unit-id="unit-7"`, "<span>knowledge</span>"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page does not contain %q:\n%s", want, page)
+		}
+	}
+}
+
 // TestUnitView_StoredWeightLabelled is spec R3: the unit's Weight renders
 // labelled as "stored weight" specifically — never "effective weight" or a
 // bare "Weight:", either of which would misrepresent a value this package
@@ -113,16 +139,25 @@ func TestUnitView_StoredWeightLabelled(t *testing.T) {
 // TestUnitView_NotFoundIs404 is task 4.1: UnitsService.Detail's found=false
 // — archived, superseded, incomplete or an absent id all resolve to it
 // alike (I02) — answers the same 404 class GET /units/{id} already gives,
-// not a panic on a zero-value UnitDetail.
+// not a panic on a zero-value UnitDetail. The status code alone cannot
+// distinguish serveUnit's own !found branch from ServeHTTP's unrelated
+// default-404 arm (a routing bug that never reaches serveUnit at all would
+// answer 404 too), so this also asserts Detail was actually called with
+// the request's own id — proof the request reached serveUnit and took the
+// !found branch, not the default arm.
 func TestUnitView_NotFoundIs404(t *testing.T) {
 	t.Parallel()
 
-	h := ui.New(ui.Deps{Units: stubUnitsReader{detailFound: false}})
+	var calledID string
+	h := ui.New(ui.Deps{Units: stubUnitsReader{detailFound: false, calledID: &calledID}})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, unitRequest("archived-unit"))
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("GET /ui/units/archived-unit (found=false) = %d, want 404", rec.Code)
+	}
+	if calledID != "archived-unit" {
+		t.Errorf("Detail was not called with the request's own id (got %q) — the 404 came from somewhere other than serveUnit's own !found branch", calledID)
 	}
 }
 

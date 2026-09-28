@@ -21,20 +21,28 @@ import (
 // fixedToday already takes. detailFound defaults to false (unit_test.go's
 // own NotFoundIs404 fixture is the zero value of this struct), so every
 // existing Browse-only test in this file keeps its original Detail-unused
-// behaviour unchanged.
+// behaviour unchanged. calledID, when non-nil, records the id Detail was
+// last called with — unit_test.go's own TestUnitView_NotFoundIs404 needs
+// this to prove serveUnit's own !found branch ran, not merely that
+// ServeHTTP's unrelated default-404 arm did (both answer the same status
+// code, so the status code alone cannot tell them apart).
 type stubUnitsReader struct {
 	page        ports.BrowsePage
 	err         error
 	detail      brain.UnitDetail
 	detailFound bool
 	detailErr   error
+	calledID    *string
 }
 
 func (s stubUnitsReader) Browse(context.Context, []unit.Type, *ports.BrowseCursor) (ports.BrowsePage, error) {
 	return s.page, s.err
 }
 
-func (s stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool, error) {
+func (s stubUnitsReader) Detail(_ context.Context, id string) (brain.UnitDetail, bool, error) {
+	if s.calledID != nil {
+		*s.calledID = id
+	}
 	return s.detail, s.detailFound, s.detailErr
 }
 
