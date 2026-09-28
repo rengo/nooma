@@ -250,37 +250,60 @@ func TestUnitRepo_LiveBrowsePage(t *testing.T) {
 // design §3.7's "Index-backed page" row, TestUnitRepo_LiveFocusCandidatesByTypeUsesStatusIndex's
 // own pattern above.
 //
+// Table-driven over every argument shape buildLiveBrowsePageQuery accepts —
+// a single nil/nil case only plans the first page's first call; the cursor
+// predicate and the type IN (...) narrowing each rewrite the WHERE clause,
+// and either one could silently fall off the index on its own.
+//
 // query and args come from buildLiveBrowsePageQuery, the same function
 // LiveBrowsePage itself calls — not a hand-copied literal, so this test
 // cannot drift from what production actually sends to SQLite.
 func TestUnitRepo_LiveBrowsePageUsesBrowseIndex(t *testing.T) {
-	v := openTestVault(t)
-	query, args := buildLiveBrowsePageQuery(nil, nil)
+	cursor := &ports.BrowseCursor{CreatedAt: unitFixtureTime, ID: "cursor-unit"}
+	types := []unit.Type{unit.TypeTask, unit.TypeEvent}
 
-	rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query, args...)
-	if err != nil {
-		t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
+	tests := []struct {
+		name  string
+		types []unit.Type
+		after *ports.BrowseCursor
+	}{
+		{name: "no cursor, no types", types: nil, after: nil},
+		{name: "cursor, no types", types: nil, after: cursor},
+		{name: "cursor and non-empty types", types: types, after: cursor},
+		{name: "no cursor, types", types: types, after: nil},
 	}
-	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
 
-	var plan string
-	for rows.Next() {
-		var id, parent, notused int
-		var detail string
-		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
-			t.Fatalf("scanning query plan row: %v", err)
-		}
-		plan += detail + "\n"
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("query plan rows: %v", err)
-	}
-	if !strings.Contains(plan, "idx_units_live_browse") {
-		t.Errorf("query plan for %q does not mention idx_units_live_browse:\n%s", query, plan)
-	}
-	if strings.Contains(plan, "USE TEMP B-TREE FOR ORDER BY") {
-		t.Errorf("query plan for %q uses a temp b-tree for ORDER BY — the index should already "+
-			"provide created_at DESC, id DESC order:\n%s", query, plan)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := openTestVault(t)
+			query, args := buildLiveBrowsePageQuery(tt.types, tt.after)
+
+			rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query, args...)
+			if err != nil {
+				t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
+			}
+			defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+			var plan string
+			for rows.Next() {
+				var id, parent, notused int
+				var detail string
+				if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+					t.Fatalf("scanning query plan row: %v", err)
+				}
+				plan += detail + "\n"
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatalf("query plan rows: %v", err)
+			}
+			if !strings.Contains(plan, "idx_units_live_browse") {
+				t.Errorf("query plan for %q does not mention idx_units_live_browse:\n%s", query, plan)
+			}
+			if strings.Contains(plan, "USE TEMP B-TREE FOR ORDER BY") {
+				t.Errorf("query plan for %q uses a temp b-tree for ORDER BY — the index should already "+
+					"provide created_at DESC, id DESC order:\n%s", query, plan)
+			}
+		})
 	}
 }
 
