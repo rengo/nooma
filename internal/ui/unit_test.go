@@ -284,6 +284,48 @@ func TestUnitView_NilUnitsIs503(t *testing.T) {
 	}
 }
 
+// correctRequest builds a POST /ui/units/{id}/correct request with
+// req.Pattern and the {id} path value set as net/http's own ServeMux would
+// set them — unitRequest's own precedent, extended for the correction
+// route's own pattern.
+func correctRequest(id, body string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/ui/units/"+id+"/correct", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Pattern = "POST /ui/units/{id}/correct"
+	req.SetPathValue("id", id)
+	return req
+}
+
+// TestCorrectView_SetsReferentFromPath is spec R5's own MUST: a correction
+// submitted from the unit detail page sets CaptureInput.ReferentID to that
+// unit's own id, taken from the request path — never from a submitted form
+// field — so it always wins resolveReferent's explicit branch (doc 02 §5
+// step 4) instead of falling into chat's own hybrid-recall/ambiguity-gate
+// path. This is this route's own behavioural proof; ui_entrances_test.go's
+// part (c) is its structural sibling, pinning the composite literal itself.
+func TestCorrectView_SetsReferentFromPath(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-1"}}}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", "text=It's+due+Friday,+not+Thursday"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /ui/units/unit-1/correct = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("Capture was called %d time(s), want exactly 1", len(fake.calls))
+	}
+	got := fake.calls[0]
+	if got.ReferentID != "unit-1" {
+		t.Errorf("ReferentID = %q, want %q (the path's own id)", got.ReferentID, "unit-1")
+	}
+	if got.Channel != "ui" {
+		t.Errorf("Channel = %q, want \"ui\"", got.Channel)
+	}
+}
+
 // TestUnitView_EscapesVaultContent is TestUnitsView_EscapesVaultContent's
 // own sibling for the detail page (design §9's threat-matrix row on
 // content injection): both the unit's own content and a related unit's

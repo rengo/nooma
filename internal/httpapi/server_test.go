@@ -84,6 +84,21 @@ func (s stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool
 	return s.detail, s.detailFound, nil
 }
 
+// stubCapturer answers Capture with a fixed, harmless brain.CaptureResult
+// and counts every call — this package's own tests exist to check cookie
+// and cross-origin posture around the capture/correction routes, not their
+// own rendering (internal/ui's own job).
+type stubCapturer struct {
+	calls *int
+}
+
+func (s stubCapturer) Capture(context.Context, brain.CaptureInput) (brain.CaptureResult, error) {
+	if s.calls != nil {
+		*s.calls++
+	}
+	return brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}, nil
+}
+
 // stubUnitDetail is the one fixed detail body every guarded-leaf wiring
 // test in this file renders when it needs GET /ui/units/{id} to answer
 // 200 — its own content is irrelevant to these tests (unit_test.go owns
@@ -123,9 +138,10 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 		"/ui":              "<h2>SYSTEM</h2>",
 		"/ui/units":        "<h2>UNITS</h2>",
 		"/ui/units/unit-1": "<h2>UNIT</h2>",
+		"/ui/capture":      "<h2>CAPTURE</h2>",
 	}
 
-	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1"} {
+	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/capture"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()
@@ -426,8 +442,12 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 // against an AST, so a leaf silently added to one without the other is
 // still two separate, deliberate edits away from being missed by both.
 // "/ui/units" and "/ui/units/unit-1" are PR 4's own two guarded leaves,
-// added alongside PR 2's original "/ui" and "/ui/".
-var guardedUILeafRequestPaths = []string{"/ui", "/ui/", "/ui/units", "/ui/units/unit-1"}
+// added alongside PR 2's original "/ui" and "/ui/". "/ui/capture" is PR 5's
+// own GET leaf — its POST sibling and the correction route are exercised
+// separately by TestUIMutationsWithoutCookieNeverReachCapture, since a
+// missing cookie answers 303 identically for GET and POST but this list's
+// own "the right cookie reaches the view" case only makes sense for GET.
+var guardedUILeafRequestPaths = []string{"/ui", "/ui/", "/ui/units", "/ui/units/unit-1", "/ui/capture"}
 
 // TestUIViewsRequireCookie is design m4a §3.3's own MUST NOT: a missing
 // cookie, a wrong cookie and a cookie whose value fails
@@ -455,6 +475,7 @@ func TestUIViewsRequireCookie(t *testing.T) {
 		"/ui/":             "<h2>SYSTEM</h2>",
 		"/ui/units":        "<h2>UNITS</h2>",
 		"/ui/units/unit-1": "<h2>UNIT</h2>",
+		"/ui/capture":      "<h2>CAPTURE</h2>",
 	}
 
 	for _, leaf := range guardedUILeafRequestPaths {
@@ -551,6 +572,44 @@ func TestUIViewsRequireCookie(t *testing.T) {
 			t.Errorf("POST /ui body = %q, want the generic stdlib 405 message (no vault-shaped content)", body)
 		}
 	})
+}
+
+// TestUIMutationsWithoutCookieNeverReachCapture is design §3.1's OR5,
+// spec R6's own cookie-side complement to TestUINonGETLeavesRefuseCrossOrigin
+// (test/conformance/ui_cross_origin_test.go): a same-origin POST to
+// /ui/capture or the correction route with no valid cookie answers the same
+// 303-to-/ui/login TestUIViewsRequireCookie already pins for every GET leaf
+// — requireCookie carries no separate arm for a mutating method — and never
+// reaches Capturer.
+func TestUIMutationsWithoutCookieNeverReachCapture(t *testing.T) {
+	t.Parallel()
+
+	const token = "the-real-token"
+
+	for _, path := range []string{"/ui/capture", "/ui/units/unit-1/correct"} {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			var calls int
+			h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{Capture: stubCapturer{calls: &calls}})})
+
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("text=hello"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusSeeOther {
+				t.Errorf("POST %s with no cookie = %d, want %d", path, rec.Code, http.StatusSeeOther)
+			}
+			if loc := rec.Header().Get("Location"); loc != "/ui/login" {
+				t.Errorf("POST %s with no cookie Location = %q, want %q", path, loc, "/ui/login")
+			}
+			if calls != 0 {
+				t.Errorf("POST %s with no cookie reached Capturer %d time(s), want 0", path, calls)
+			}
+		})
+	}
 }
 
 // TestRequireCookieNoOpOnlyOnLoopback sweeps binding_test.go's own

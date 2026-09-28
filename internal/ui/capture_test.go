@@ -1,0 +1,187 @@
+package ui_test
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ui"
+)
+
+// fakeCapturer is capture_test.go's and unit_test.go's own Capturer stub:
+// it records every call's input and answers a fixed, configurable
+// brain.CaptureResult — CaptureService's own assembly is brain's own test's
+// job (internal/brain/capture_test.go), not this package's.
+type fakeCapturer struct {
+	result brain.CaptureResult
+	err    error
+	calls  []brain.CaptureInput
+}
+
+func (f *fakeCapturer) Capture(_ context.Context, in brain.CaptureInput) (brain.CaptureResult, error) {
+	f.calls = append(f.calls, in)
+	return f.result, f.err
+}
+
+// captureRequest builds a POST /ui/capture request with req.Pattern set as
+// net/http's own ServeMux would set it when this handler is reached through
+// the real mux — unitsRequest's own precedent (units_test.go).
+func captureRequest(body string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/ui/capture", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Pattern = "POST /ui/capture"
+	return req
+}
+
+// TestCaptureView_CallsCaptureOnceWithUIChannel is spec R4: the capture
+// form's POST builds a brain.CaptureInput from the submitted text and calls
+// Capturer.Capture exactly once, with Channel "ui" — the UI's own fact,
+// never "api" (httpapi/capture.go's own default for POST /capture) and
+// never empty — and no ReferentID on this route.
+func TestCaptureView_CallsCaptureOnceWithUIChannel(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest("text=Pick+up+the+dry+cleaning"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /ui/capture = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("Capture was called %d time(s), want exactly 1", len(fake.calls))
+	}
+	got := fake.calls[0]
+	if got.Text != "Pick up the dry cleaning" {
+		t.Errorf("Text = %q, want %q", got.Text, "Pick up the dry cleaning")
+	}
+	if got.Channel != "ui" {
+		t.Errorf("Channel = %q, want \"ui\"", got.Channel)
+	}
+	if got.ReferentID != "" {
+		t.Errorf("ReferentID = %q, want empty on the plain capture route", got.ReferentID)
+	}
+}
+
+// TestCaptureView_IgnoresSubmittedUnitID is spec R4's own MUST: a submitted
+// unit_id never reaches CaptureInput.ReferentID on this route — that field
+// is set only by the correction route, from the path (spec R5, design
+// §3.7's gate c).
+func TestCaptureView_IgnoresSubmittedUnitID(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest("text=hello&unit_id=some-other-unit"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /ui/capture = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("Capture was called %d time(s), want exactly 1", len(fake.calls))
+	}
+	if got := fake.calls[0].ReferentID; got != "" {
+		t.Errorf("ReferentID = %q, want empty — a submitted unit_id must be ignored", got)
+	}
+}
+
+// TestCaptureView_RendersEveryOutcome is R4's own total-switch requirement,
+// made behavioural: every brain.CaptureOutcome renders its own
+// distinguishable marker, and no two outcomes render identical bodies for
+// distinct fixtures — the same "never invents a field CaptureResult
+// doesn't carry" property httpapi's own renderCaptureResult holds, proven
+// here for the UI's own rendering instead.
+func TestCaptureView_RendersEveryOutcome(t *testing.T) {
+	t.Parallel()
+
+	fireAt := time.Date(2026, 9, 22, 9, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name   string
+		result brain.CaptureResult
+	}{
+		{"stored", brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}},
+		{"armed", brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &brain.Armed{What: prospection.ArmTimer, ID: "timer-1", FireAt: fireAt}}},
+		{"arm_refused", brain.CaptureResult{Outcome: brain.OutcomeArmRefused, ArmRefused: &brain.ArmRefused{Why: prospection.RefusalNoDate, Message: "no date to arm against"}}},
+		{"conversed", brain.CaptureResult{Outcome: brain.OutcomeConversed, Reply: "Sure thing."}},
+		{"out_of_scope", brain.CaptureResult{Outcome: brain.OutcomeOutOfScope}},
+		{"recalled", brain.CaptureResult{Outcome: brain.OutcomeRecalled, Recalled: []unit.Unit{{ID: "unit-2", Content: "Renew the passport"}}}},
+		{"corrected", brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-3", Fields: []correction.Field{correction.FieldContent}}}},
+		{"asked", brain.CaptureResult{Outcome: brain.OutcomeAsked, Correction: &brain.Correction{UnitID: "unit-4", Ambiguous: true}}},
+	}
+
+	if len(cases) != len(brain.AllCaptureOutcomes()) {
+		t.Fatalf("this test covers %d outcomes, brain.AllCaptureOutcomes() names %d — every outcome must have its own case", len(cases), len(brain.AllCaptureOutcomes()))
+	}
+
+	bodies := make(map[string]string, len(cases))
+	for _, tc := range cases {
+		fake := &fakeCapturer{result: tc.result}
+		h := ui.New(ui.Deps{Capture: fake})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, captureRequest("text=hello"))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: POST /ui/capture = %d, want 200: %s", tc.name, rec.Code, rec.Body.String())
+		}
+		marker := `data-outcome="` + tc.name + `"`
+		if !strings.Contains(rec.Body.String(), marker) {
+			t.Errorf("%s: response does not carry %q:\n%s", tc.name, marker, rec.Body.String())
+		}
+		bodies[tc.name] = rec.Body.String()
+	}
+
+	for name1, body1 := range bodies {
+		for name2, body2 := range bodies {
+			if name1 != name2 && body1 == body2 {
+				t.Errorf("%s and %s render identical bodies — not distinguishable", name1, name2)
+			}
+		}
+	}
+}
+
+// TestCaptureView_BodyIsBounded is design §3.5: a submission larger than
+// captureFormMaxBytes is refused via http.MaxBytesReader, never buffered in
+// full — loginSubmit's own precedent (internal/httpapi/cookie.go), sized
+// for a capture's longer text rather than a login form's short token.
+func TestCaptureView_BodyIsBounded(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}}
+	h := ui.New(ui.Deps{Capture: fake})
+
+	oversized := "text=" + strings.Repeat("a", 70*1024)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest(oversized))
+
+	if rec.Code == http.StatusOK {
+		t.Errorf("an oversized submission was accepted: %d", rec.Code)
+	}
+	if len(fake.calls) != 0 {
+		t.Errorf("Capture was called %d time(s) for an oversized submission, want 0", len(fake.calls))
+	}
+}
+
+// TestCaptureView_NilCapturerIs503 is captureHandler's own nil-dependency
+// posture (internal/httpapi/capture.go), applied to the UI route: a nil
+// Deps.Capture answers 503, never a panic on a nil interface call —
+// TestUnitsView_NilUnitsIs503's own precedent.
+func TestCaptureView_NilCapturerIs503(t *testing.T) {
+	t.Parallel()
+
+	h := ui.New(ui.Deps{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest("text=hello"))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /ui/capture with no Capturer = %d, want 503", rec.Code)
+	}
+}
