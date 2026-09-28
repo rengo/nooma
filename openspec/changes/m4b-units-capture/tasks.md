@@ -109,7 +109,7 @@ branch deletion before branching PR 2. Target ≤200 impl+docs lines.
 fake (every write method overridden) to a minimal subset covering only the methods `Browse`/
 `Detail` actually call — the full fake is a completeness nicety, not required for the property.
 
-- [ ] **2.1** RED — `internal/brain/units_test.go`: `TestUnitsService_BrowsePassesThrough`
+- [x] **2.1** RED — `internal/brain/units_test.go`: `TestUnitsService_BrowsePassesThrough`
       (`Browse` forwards `types`/`after` to `UnitRepo.LiveBrowsePage` unchanged, returns its
       result unchanged), `TestUnitsService_DetailNotFoundForNonLive` (`LiveByIDs` returning an
       empty slice yields `found=false`), `TestUnitsService_DetailDropsNonLiveNeighbours` (one
@@ -120,7 +120,7 @@ fake (every write method overridden) to a minimal subset covering only the metho
       signatures only, returning zero values — compiles, fails on assertions.
       Mutation: none — the zero-value stub is the red state.
       Requirement: R1, R3.
-- [ ] **2.2** GREEN — `internal/brain/units.go`: `NewUnitsService(units ports.UnitRepo, rels
+- [x] **2.2** GREEN — `internal/brain/units.go`: `NewUnitsService(units ports.UnitRepo, rels
       ports.RelationRepo) *UnitsService` — no `ports.Clock` field. `Browse` delegates to
       `UnitRepo.LiveBrowsePage`. `Detail`: one `LiveByIDs([id])` call (`found=false` on empty
       result), one `ByUnit(id)` call, one `LiveByIDs(otherIDs)` call, drops every relation whose
@@ -130,11 +130,11 @@ fake (every write method overridden) to a minimal subset covering only the metho
       (OR3).
       Verify: `go test ./internal/brain/...`.
       Requirement: R1, R3; design §3.3.
-- [ ] **2.3** RED — `cmd/nooma/wiring_units_test.go` (new file, matching
+- [x] **2.3** RED — `cmd/nooma/wiring_units_test.go` (new file, matching
       `wiring_today_test.go`'s precedent): `TestWireUnits_BuildsAWorkingService` — fails,
       `wireUnits` undefined.
       Requirement: design §3.3, §6.1.
-- [ ] **2.4** GREEN — `cmd/nooma/wiring.go`: `wireUnits(db) *brain.UnitsService`, wired
+- [x] **2.4** GREEN — `cmd/nooma/wiring.go`: `wireUnits(db) *brain.UnitsService`, wired
       unconditionally at vault open like `wireToday` (browsing needs no provider) — no call site
       until PR 3 (`wireToday`'s own m4a precedent).
       Verify: `go test ./cmd/nooma/...`.
