@@ -320,6 +320,104 @@ tasks:
 	}
 }
 
+// TestServeUIUnitsListsACapturedUnit is m4b spec R1's exit criterion, end
+// to end: a unit captured through the API appears on the authenticated
+// GET /ui/units — the browse view's own production wiring (uiDeps,
+// wireUnits, UnitsService.Browse) over a real vault, not a fixture.
+// TestServeHandshake's own shape (task 7.4's precedent), retargeted at the
+// browse view PR 3 adds instead of Today.
+func TestServeUIUnitsListsACapturedUnit(t *testing.T) {
+	llm := mockOllama(t)
+
+	home, work := t.TempDir(), t.TempDir()
+	vault := initVault(t, home, work, "pablo.nooma")
+	port := freePort(t)
+	writeConfig(t, vault, fmt.Sprintf(`server:
+  bind: 127.0.0.1
+  http_port: %d
+  auth_token_env: NOOMA_SERVE_UI_UNITS_TEST_TOKEN
+providers:
+  local:
+    type: ollama
+    model: test-model
+    endpoint: %s
+tasks:
+  capture_processing:
+    provider: local
+  relation_evaluation:
+    provider: local
+  chat:
+    provider: local
+  embedding:
+    provider: local
+`, port, llm.URL))
+	const token = "ui-units-e2e-token"
+	t.Setenv("NOOMA_SERVE_UI_UNITS_TEST_TOKEN", token)
+
+	startServe(t, home, vault, port)
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	client := noRedirectClient()
+
+	// mockOllama's own /api/generate response always classifies to this
+	// exact normalized_content, regardless of the submitted text — the
+	// captured unit's stored Content comes from classification, not the
+	// raw request body, so this test submits the same fixture text
+	// TestServeHandshake does and asserts on what the mock actually stores.
+	captureBody, err := json.Marshal(map[string]string{"text": "Pick up the dry cleaning on Friday"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	captureReq, err := http.NewRequest(http.MethodPost, base+"/capture", bytes.NewReader(captureBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	captureReq.Header.Set("Content-Type", "application/json")
+	captureReq.Header.Set("Authorization", "Bearer "+token)
+	captureResp, err := client.Do(captureReq)
+	if err != nil {
+		t.Fatalf("POST /capture: %v", err)
+	}
+	_ = captureResp.Body.Close()
+	if captureResp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /capture = %d, want %d (a fully-wired vault must store this capture)", captureResp.StatusCode, http.StatusCreated)
+	}
+
+	loginResp, err := client.PostForm(base+"/ui/login", url.Values{"token": {token}})
+	if err != nil {
+		t.Fatalf("POST /ui/login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("POST /ui/login with the right token = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
+	}
+	cookies := loginResp.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("POST /ui/login Set-Cookie count = %d, want 1", len(cookies))
+	}
+
+	unitsReq, err := http.NewRequest(http.MethodGet, base+"/ui/units", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unitsReq.AddCookie(cookies[0])
+	unitsResp, err := client.Do(unitsReq)
+	if err != nil {
+		t.Fatalf("GET /ui/units with the cookie: %v", err)
+	}
+	defer func() { _ = unitsResp.Body.Close() }()
+	if unitsResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /ui/units with the cookie = %d, want %d", unitsResp.StatusCode, http.StatusOK)
+	}
+	unitsBody, err := io.ReadAll(unitsResp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(unitsBody), "Pick up the dry cleaning") {
+		t.Errorf("GET /ui/units with the cookie does not list the unit just captured through the API:\n%s", unitsBody)
+	}
+}
+
 // TestServeHoldsTheWriteLock is spec R8.1 and R8.2 from the outside: while serve
 // runs it holds the vault, and a second serve refuses by naming the holder.
 func TestServeHoldsTheWriteLock(t *testing.T) {
