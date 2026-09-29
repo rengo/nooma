@@ -16,13 +16,17 @@ const uiCookieName = "nooma_token"
 // on an empty token, same constant-time comparison, same byte-identical
 // refusal for "missing" and "wrong". It differs in what it reads (the
 // cookie, never the Authorization header — one presentation per surface,
-// ADR-0007) and in how it refuses a GET/HEAD navigation with no valid
-// cookie: a 303 to the handshake screen, /ui/login — a browser navigation
-// cannot carry an Authorization header, so it is sent where the key is,
-// rather than turned away with a bare status. m4a's guarded routes accept
-// no other method: a non-GET request never reaches this middleware, the
-// mux answers 405 first (design m4a §3.2's "method posture" correction) —
-// so there is no second arm here to write.
+// ADR-0007) and in how it refuses a request with no valid cookie: a 303 to
+// the handshake screen, /ui/login, whatever the method — a browser
+// navigation cannot carry an Authorization header, so it is sent where the
+// key is, rather than turned away with a bare status. m4a's own guarded
+// routes accepted no other method than GET/HEAD, so a non-GET request never
+// reached this middleware at all, the mux answering 405 first (design m4a
+// §3.2's "method posture" correction) — m4b's own capture and correction
+// routes are the first guarded leaves to register a POST pattern (design
+// §3.1's OR5), and that same 303 is what a POST with no valid cookie gets
+// here too: this function still carries no second arm, because the
+// refusal it writes was never conditioned on method in the first place.
 //
 // A cookie value that fails to decode is a wrong cookie, not a third,
 // faster-answering outcome (design m4a §3.3): the comparison runs anyway

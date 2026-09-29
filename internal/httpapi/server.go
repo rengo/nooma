@@ -134,17 +134,19 @@ func Handler(d Deps) http.Handler {
 // every route is an explicit method+path leaf, never a bare-trailing-slash
 // or "..." subtree, so none of them can trigger ServeMux's own subtree-root
 // redirect (design m4a §3.2: the class that let GET /ui 307 to /ui/ from
-// the mux itself, before any handler this package writes ever ran). PR 2
-// registered the three static leaves and the two guarded leaves; PR 4b adds
-// the two /ui/login leaves, registered only when a token is configured —
-// with no token there is nothing to hand out and no screen to show, a
-// property of the mux itself rather than a branch inside a handler, the
-// same shape d.UI == nil already gives /ui at Handler's own level (PR 3,
-// §3.9). The two guarded leaves are wrapped in requireCookie(d.Token) here
-// (PR 4a, design m4a §3.2, §3.3): with no token configured that wrap is a
-// no-op and dispatches straight to d.UI, which renders PR 2's shell until
-// PR 7 (§3.1, §7.2's PR 2 tip row); with a token configured and no valid
-// cookie it answers 303 to /ui/login instead of reaching d.UI at all.
+// the mux itself, before any handler this package writes ever ran). The
+// three static leaves and the two /ui/login leaves are open — the latter
+// registered only when a token is configured, since with no token there is
+// nothing to hand out and no screen to show, a property of the mux itself
+// rather than a branch inside a handler, the same shape d.UI == nil already
+// gives /ui at Handler's own level (§3.9). Every other leaf — Today, the
+// units browse and detail views, and m4b's own capture and correction
+// routes (design §3.1, §3.5) — is wrapped in requireCookie(d.Token) here:
+// with no token configured that wrap is a no-op and dispatches straight to
+// d.UI; with a token configured and no valid cookie it answers 303 to
+// /ui/login instead of reaching d.UI at all, for a GET navigation and a
+// mutating POST alike (design §3.1's OR5) — requireCookie carries no
+// separate arm for either method.
 func newUIMux(d Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -163,6 +165,9 @@ func newUIMux(d Deps) *http.ServeMux {
 	mux.Handle("GET /ui/{$}", guardedUI)
 	mux.Handle("GET /ui/units", guardedUI)
 	mux.Handle("GET /ui/units/{id}", guardedUI)
+	mux.Handle("GET /ui/capture", guardedUI)
+	mux.Handle("POST /ui/capture", guardedUI)
+	mux.Handle("POST /ui/units/{id}/correct", guardedUI)
 
 	return mux
 }

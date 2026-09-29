@@ -284,6 +284,121 @@ func TestUnitView_NilUnitsIs503(t *testing.T) {
 	}
 }
 
+// correctRequest builds a POST /ui/units/{id}/correct request with
+// req.Pattern and the {id} path value set as net/http's own ServeMux would
+// set them — unitRequest's own precedent, extended for the correction
+// route's own pattern.
+func correctRequest(id, body string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/ui/units/"+id+"/correct", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Pattern = "POST /ui/units/{id}/correct"
+	req.SetPathValue("id", id)
+	return req
+}
+
+// TestCorrectView_SetsReferentFromPath is spec R5's own MUST: a correction
+// submitted from the unit detail page sets CaptureInput.ReferentID to that
+// unit's own id, taken from the request path — never from a submitted form
+// field — so it always wins resolveReferent's explicit branch (doc 02 §5
+// step 4) instead of falling into chat's own hybrid-recall/ambiguity-gate
+// path. This is this route's own behavioural proof; ui_entrances_test.go's
+// part (c) is its structural sibling, pinning the composite literal itself.
+func TestCorrectView_SetsReferentFromPath(t *testing.T) {
+	t.Parallel()
+
+	// A deliberately distinctive id — never "unit-1", this file's own
+	// default fixture id used elsewhere — so a handler that hardcodes
+	// "unit-1" instead of actually reading the path cannot pass this test
+	// by coincidence.
+	const id = "unit-77-correction-target"
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: id}}}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest(id, "text=It's+due+Friday,+not+Thursday"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /ui/units/%s/correct = %d, want 200: %s", id, rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("Capture was called %d time(s), want exactly 1", len(fake.calls))
+	}
+	got := fake.calls[0]
+	if got.ReferentID != id {
+		t.Errorf("ReferentID = %q, want %q (the path's own id)", got.ReferentID, id)
+	}
+	if got.Channel != "ui" {
+		t.Errorf("Channel = %q, want \"ui\"", got.Channel)
+	}
+}
+
+// TestCorrectView_NilCapturerIs503 is TestCaptureView_NilCapturerIs503's own
+// sibling for the correction route: a nil Deps.Capture answers 503, never a
+// panic on a nil interface call — serveCorrect shares its nil-check with
+// serveCapture, but the check is untested on this route on its own.
+func TestCorrectView_NilCapturerIs503(t *testing.T) {
+	t.Parallel()
+
+	// A nil-Capturer call is exactly the kind of mistake this test exists to
+	// catch: if the guard is removed, h.deps.Capture.Capture panics on a nil
+	// interface. Recovering here turns that into a clean, reported test
+	// failure instead of crashing the whole test binary.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("POST /ui/units/unit-1/correct with no Capturer panicked instead of answering 503: %v", r)
+		}
+	}()
+
+	h := ui.New(ui.Deps{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", "text=It's+due+Friday,+not+Thursday"))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /ui/units/unit-1/correct with no Capturer = %d, want 503", rec.Code)
+	}
+}
+
+// TestCorrectView_CaptureErrorIs500 is TestUnitView_DetailErrorIs500's own
+// pattern applied to serveCorrect: a Capturer.Capture error answers 500 and
+// never reflects the raw error into the response body — serveCorrect's own
+// error branch; TestCaptureView_CaptureErrorIs500 is serveCapture's.
+func TestCorrectView_CaptureErrorIs500(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{err: errors.New("boom")}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", "text=It's+due+Friday,+not+Thursday"))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("POST /ui/units/unit-1/correct (Capture error) = %d, want 500", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("response reflects the raw error:\n%s", rec.Body.String())
+	}
+}
+
+// TestCorrectView_BodyIsBounded is TestCaptureView_BodyIsBounded's own
+// sibling for the correction route: parseCaptureForm's MaxBytesReader bound
+// is shared by serveCapture and serveCorrect, but the correction route's own
+// call is untested on its own.
+func TestCorrectView_BodyIsBounded(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}}
+	h := ui.New(ui.Deps{Capture: fake})
+
+	oversized := "text=" + strings.Repeat("a", 70*1024)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", oversized))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /ui/units/unit-1/correct with an oversized submission = %d, want 400", rec.Code)
+	}
+	if len(fake.calls) != 0 {
+		t.Errorf("Capture was called %d time(s) for an oversized submission, want 0", len(fake.calls))
+	}
+}
+
 // TestUnitView_EscapesVaultContent is TestUnitsView_EscapesVaultContent's
 // own sibling for the detail page (design §9's threat-matrix row on
 // content injection): both the unit's own content and a related unit's

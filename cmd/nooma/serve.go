@@ -145,7 +145,7 @@ func runServe(args []string, out, errOut io.Writer) error {
 	units := wireUnits(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
-		uiHandler = ui.New(uiDeps(today, units, recall, ui.Serving{Bind: addr, CookieAuth: token != ""}))
+		uiHandler = ui.New(uiDeps(today, units, recall, capture, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
 		Addr:              addr,
@@ -276,10 +276,10 @@ func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 // own "not wired" checks never fire, and the first request panic on a nil
 // receiver instead of answering 503. today and units never actually come
 // back nil in production (both are wired unconditionally, above); recall
-// does, on a vault with no providers configured (wireBrain's own degrade,
-// cmd/nooma/wiring.go) — this function guards all three alike rather than
-// only the one that needs it today.
-func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, serving ui.Serving) ui.Deps {
+// and capture do, on a vault with no providers configured (wireBrain's own
+// degrade, cmd/nooma/wiring.go) — this function guards all four alike
+// rather than only the ones that need it today.
+func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, serving ui.Serving) ui.Deps {
 	deps := ui.Deps{Serving: serving}
 	if today != nil {
 		deps.Today = today
@@ -289,6 +289,9 @@ func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.
 	}
 	if recall != nil {
 		deps.Search = recall
+	}
+	if capture != nil {
+		deps.Capture = capture
 	}
 	return deps
 }

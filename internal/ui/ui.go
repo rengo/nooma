@@ -39,15 +39,25 @@ type Searcher interface {
 	ForText(ctx context.Context, text string) ([]unit.Unit, bool, error)
 }
 
-// Deps is what New needs to build the mirror's handler. Today, Units and
-// Search are nil until wired (cmd/nooma's own transitional state, and
-// every test fixture that does not need a real view); each nil dependency
-// answers 503 for the routes that need it, rather than panicking on a nil
-// receiver (design m4a §3.1, §3.4's typed-nil gotcha).
+// Capturer is /ui/capture's and the correction form's one entrance into the
+// brain — brain.CaptureService.Capture unchanged (spec R4, R5), reached
+// through this one-method interface exactly as TodayReader, UnitsReader and
+// Searcher each narrow their own brain service to only what this package
+// calls. *brain.CaptureService satisfies it.
+type Capturer interface {
+	Capture(ctx context.Context, in brain.CaptureInput) (brain.CaptureResult, error)
+}
+
+// Deps is what New needs to build the mirror's handler. Today, Units,
+// Search and Capture are nil until wired (cmd/nooma's own transitional
+// state, and every test fixture that does not need a real view); each nil
+// dependency answers 503 for the routes that need it, rather than
+// panicking on a nil receiver (design m4a §3.1, §3.4's typed-nil gotcha).
 type Deps struct {
 	Today   TodayReader
 	Units   UnitsReader
 	Search  Searcher
+	Capture Capturer
 	Serving Serving
 }
 
@@ -89,6 +99,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveUnits(w, r)
 	case "GET /ui/units/{id}":
 		h.serveUnit(w, r)
+	case "GET /ui/capture":
+		h.serveCaptureForm(w, r)
+	case "POST /ui/capture":
+		h.serveCapture(w, r)
+	case "POST /ui/units/{id}/correct":
+		h.serveCorrect(w, r)
 	default:
 		http.NotFound(w, r)
 	}

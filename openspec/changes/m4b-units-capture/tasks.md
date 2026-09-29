@@ -251,7 +251,7 @@ branch deletion before branching PR 5. Target ≤150 impl+docs lines.
 `unit.templ`'s correction form, its wiring row) splits into 5b, landing immediately after 5 —
 the capture form alone still satisfies R4 and R6's capture scenario.
 
-- [ ] **5.1** RED — `httpapi_ui_wiring_test.go`: `wantUIMuxWiring` gains `GET /ui/capture`,
+- [x] **5.1** RED — `httpapi_ui_wiring_test.go`: `wantUIMuxWiring` gains `GET /ui/capture`,
       `POST /ui/capture`, `POST /ui/units/{id}/correct` (all guarded).
       `test/conformance/ui_cross_origin_test.go` (new): `TestUINonGETLeavesRefuseCrossOrigin` —
       iterates `wantUIMuxWiring`'s own non-GET rows; foreign-origin (`Sec-Fetch-Site:
@@ -269,14 +269,14 @@ the capture form alone still satisfies R4 and R6's capture scenario.
       itself is red first on its own vacuity guard — zero `ReferentID` literals or assignments
       exist in the tree before this PR's code lands — recorded, not silent (PR 3/4 precedent).
       Requirement: R4, R5, R6.
-- [ ] **5.2** RED — `internal/ui/capture_test.go` (new): `TestCaptureView_{CallsCaptureOnceWithUIChannel,
+- [x] **5.2** RED — `internal/ui/capture_test.go` (new): `TestCaptureView_{CallsCaptureOnceWithUIChannel,
       IgnoresSubmittedUnitID, RendersEveryOutcome, BodyIsBounded, NilCapturerIs503}`.
       `internal/ui/unit_test.go`: `TestCorrectView_SetsReferentFromPath`.
       `internal/httpapi/server_test.go`: `TestUIMutationsWithoutCookieNeverReachCapture` (303,
       zero calls). L4: `test/e2e`: `TestServeUICaptureStoresAUnit`.
       Fails — `capture.go`, `capture.templ`, and the correction form don't exist yet.
       Requirement: R4, R5, R6.
-- [ ] **5.3** GREEN — `internal/ui/capture.go` + `capture.templ` (+`_templ.go`): `ui.Capturer`
+- [x] **5.3** GREEN — `internal/ui/capture.go` + `capture.templ` (+`_templ.go`): `ui.Capturer`
       interface, `Deps.Capture` field, `captureFormMaxBytes` constant (64 KiB,
       `http.MaxBytesReader`); `POST /ui/capture` builds `CaptureInput{Text, Channel: "ui"}` (a
       submitted `unit_id` is ignored) and calls `Capturer.Capture`; renders through a total
@@ -293,7 +293,7 @@ the capture form alone still satisfies R4 and R6's capture scenario.
       routes make its "non-GET never reaches the middleware" claim false.
       Verify: `go test ./internal/ui/... ./internal/httpapi/... ./cmd/nooma/... ./test/conformance/...`.
       Requirement: R4, R5, R6; design §3.5.
-- [ ] **5.4** GREEN — L4: `test/e2e`: `TestServeUICaptureStoresAUnit` (a UI capture then appears
+- [x] **5.4** GREEN — L4: `test/e2e`: `TestServeUICaptureStoresAUnit` (a UI capture then appears
       in `/ui/units`).
       Verify: `go test -tags=e2e ./test/e2e/... -run TestServeUICaptureStoresAUnit`.
       Requirement: exit criterion.

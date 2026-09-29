@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -106,4 +107,123 @@ func TestUIEntrances_NoDirectBrainServiceReferences(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no non-test .go file found under internal/ui — this gate's own guard: nothing to check")
 	}
+}
+
+// TestUIEntrances_ReferentIDOnlyFromPath is design §3.7 row 3, part (c),
+// spec R5's own structural half: brain.CaptureInput.ReferentID — the field
+// that makes a correction explicit rather than falling into chat's own
+// hybrid-recall/ambiguity-gate path (doc 02 §5 step 4) — is set from
+// exactly one place in the compiled package: a composite literal whose
+// `ReferentID:` value is the call expression r.PathValue("id") literally,
+// the correction route's own path parameter. Two other shapes are checked
+// for and fail the gate outright: a second composite literal also setting
+// `ReferentID:` (to anything, including the same expression again — a
+// capture-route literal that ALSO sets ReferentID from a submitted
+// unit_id would land here, not only a submitted-unit_id shape
+// specifically), and any assignment statement — including a
+// compound-assignment form (+=, etc.) — whose left-hand side is a
+// `.ReferentID` selector, however it is reached (`in.ReferentID = ...`,
+// `input.ReferentID = ...`).
+//
+// This gate is deliberately RED before this PR's own correction handler
+// lands: a fresh checkout has ZERO ReferentID references anywhere in
+// internal/ui, and wantReferentIDLiterals == 0 fails loudly by the same
+// vacuity-guard shape every other gate in this file uses, rather than
+// silently reporting "0 violations found" as if the property were already
+// satisfied — the i22/wiring gates' own precedent (design §3.7, PR 3/4).
+func TestUIEntrances_ReferentIDOnlyFromPath(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := repoRootFromCaller(t)
+	uiDir := filepath.Join(repoRoot, "internal", "ui")
+
+	entries, err := os.ReadDir(uiDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", uiDir, err)
+	}
+
+	var literalCount int
+	var assignCount int
+	checked := 0
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		checked++
+
+		path := filepath.Join(uiDir, name)
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch expr := n.(type) {
+			case *ast.CompositeLit:
+				for _, elt := range expr.Elts {
+					kv, ok := elt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+					key, ok := kv.Key.(*ast.Ident)
+					if !ok || key.Name != "ReferentID" {
+						continue
+					}
+					literalCount++
+					if !isPathValueIDCall(kv.Value) {
+						t.Errorf("%s: ReferentID: %s — the only value this gate allows is r.PathValue(\"id\") (spec R5, design §3.7)", path, normalizedText(fset, kv.Value))
+					}
+				}
+			case *ast.AssignStmt:
+				for _, lhs := range expr.Lhs {
+					sel, ok := lhs.(*ast.SelectorExpr)
+					if !ok || sel.Sel.Name != "ReferentID" {
+						continue
+					}
+					assignCount++
+					t.Errorf("%s: assigns %s — ReferentID may only be set inside a brain.CaptureInput composite literal, never by assignment after construction (spec R5, design §3.7)", path, normalizedText(fset, lhs))
+				}
+			}
+			return true
+		})
+	}
+
+	if checked == 0 {
+		t.Fatal("no non-test .go file found under internal/ui — this gate's own guard: nothing to check")
+	}
+	if literalCount == 0 {
+		t.Fatal("no ReferentID: composite literal found anywhere in internal/ui — this gate's own vacuity guard: nothing to check yet (expected before the correction route lands)")
+	}
+	if literalCount != 1 {
+		t.Errorf("found %d ReferentID: composite literals, want exactly 1 — the correction route's own", literalCount)
+	}
+	if assignCount != 0 {
+		t.Errorf("found %d ReferentID assignment(s) outside a composite literal, want 0", assignCount)
+	}
+}
+
+// isPathValueIDCall reports whether e is exactly the call expression
+// r.PathValue("id") — the correction route's own request-scoped receiver
+// name, matching every handler in this package (serveUnit, serveCorrect).
+func isPathValueIDCall(e ast.Expr) bool {
+	call, ok := e.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "PathValue" {
+		return false
+	}
+	if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != "r" {
+		return false
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return false
+	}
+	value, err := strconv.Unquote(lit.Value)
+	return err == nil && value == "id"
 }

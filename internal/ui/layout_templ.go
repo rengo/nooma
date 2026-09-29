@@ -11,7 +11,10 @@ import templruntime "github.com/a-h/templ/runtime"
 // Page is internal/ui's one layout: the <html> shell every view renders
 // inside. The htmx-config meta tag is CSP-compatible (no inline script),
 // per design m4a §3.5; the stylesheet is a static asset served from
-// /ui/static, never inlined, for the same reason.
+// /ui/static, never inlined, for the same reason. responseHandling swaps
+// every response into its target regardless of status code (design §3.5,
+// OR7): without it htmx's own default only swaps 2xx/3xx, so a capture
+// form's 400/503/500 fragment would never reach #capture-result at all.
 func Page(title string, body templ.Component) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -38,9 +41,9 @@ func Page(title string, body templ.Component) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
-		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(`{"allowEval":false,"includeIndicatorStyles":false}`)
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(`{"allowEval":false,"includeIndicatorStyles":false,"responseHandling":[{"code":"...","swap":true}]}`)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 13, Col: 90}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 16, Col: 138}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -53,13 +56,13 @@ func Page(title string, body templ.Component) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 14, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 17, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</title><link rel=\"stylesheet\" href=\"/ui/static/app.css\"></head><body><nav><a href=\"/ui\">Today</a> <a href=\"/ui/units\">Units</a></nav><main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</title><link rel=\"stylesheet\" href=\"/ui/static/app.css\"></head><body><nav><a href=\"/ui\">Today</a> <a href=\"/ui/units\">Units</a> <a href=\"/ui/capture\">Capture</a></nav><main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
