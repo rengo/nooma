@@ -182,8 +182,8 @@ func TestCaptureView_BodyIsBounded(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, captureRequest(oversized))
 
-	if rec.Code == http.StatusOK {
-		t.Errorf("an oversized submission was accepted: %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /ui/capture with an oversized submission = %d, want 400", rec.Code)
 	}
 	if len(fake.calls) != 0 {
 		t.Errorf("Capture was called %d time(s) for an oversized submission, want 0", len(fake.calls))

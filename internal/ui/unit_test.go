@@ -331,6 +331,75 @@ func TestCorrectView_SetsReferentFromPath(t *testing.T) {
 	}
 }
 
+// TestCorrectView_NilCapturerIs503 is TestCaptureView_NilCapturerIs503's own
+// sibling for the correction route: a nil Deps.Capture answers 503, never a
+// panic on a nil interface call — serveCorrect shares its nil-check with
+// serveCapture, but the check is untested on this route on its own.
+func TestCorrectView_NilCapturerIs503(t *testing.T) {
+	t.Parallel()
+
+	// A nil-Capturer call is exactly the kind of mistake this test exists to
+	// catch: if the guard is removed, h.deps.Capture.Capture panics on a nil
+	// interface. Recovering here turns that into a clean, reported test
+	// failure instead of crashing the whole test binary.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("POST /ui/units/unit-1/correct with no Capturer panicked instead of answering 503: %v", r)
+		}
+	}()
+
+	h := ui.New(ui.Deps{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", "text=It's+due+Friday,+not+Thursday"))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("POST /ui/units/unit-1/correct with no Capturer = %d, want 503", rec.Code)
+	}
+}
+
+// TestCorrectView_CaptureErrorIs500 is TestUnitView_DetailErrorIs500's own
+// pattern applied to serveCorrect: a Capturer.Capture error answers 500 and
+// never reflects the raw error into the response body — serveCorrect's own
+// error branch, untested on its own even though serveCapture's identical
+// shape is covered by this route's sibling tests.
+func TestCorrectView_CaptureErrorIs500(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{err: errors.New("boom")}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", "text=It's+due+Friday,+not+Thursday"))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("POST /ui/units/unit-1/correct (Capture error) = %d, want 500", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("response reflects the raw error:\n%s", rec.Body.String())
+	}
+}
+
+// TestCorrectView_BodyIsBounded is TestCaptureView_BodyIsBounded's own
+// sibling for the correction route: parseCaptureForm's MaxBytesReader bound
+// is shared by serveCapture and serveCorrect, but the correction route's own
+// call is untested on its own.
+func TestCorrectView_BodyIsBounded(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "unit-1"}}
+	h := ui.New(ui.Deps{Capture: fake})
+
+	oversized := "text=" + strings.Repeat("a", 70*1024)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-1", oversized))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /ui/units/unit-1/correct with an oversized submission = %d, want 400", rec.Code)
+	}
+	if len(fake.calls) != 0 {
+		t.Errorf("Capture was called %d time(s) for an oversized submission, want 0", len(fake.calls))
+	}
+}
+
 // TestUnitView_EscapesVaultContent is TestUnitsView_EscapesVaultContent's
 // own sibling for the detail page (design §9's threat-matrix row on
 // content injection): both the unit's own content and a related unit's
