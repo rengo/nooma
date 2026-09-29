@@ -360,8 +360,7 @@ func TestCorrectView_NilCapturerIs503(t *testing.T) {
 // TestCorrectView_CaptureErrorIs500 is TestUnitView_DetailErrorIs500's own
 // pattern applied to serveCorrect: a Capturer.Capture error answers 500 and
 // never reflects the raw error into the response body — serveCorrect's own
-// error branch, untested on its own even though serveCapture's identical
-// shape is covered by this route's sibling tests.
+// error branch; TestCaptureView_CaptureErrorIs500 is serveCapture's.
 func TestCorrectView_CaptureErrorIs500(t *testing.T) {
 	t.Parallel()
 

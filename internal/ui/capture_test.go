@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -222,8 +223,36 @@ func TestCaptureView_EscapesReply(t *testing.T) {
 // posture (internal/httpapi/capture.go), applied to the UI route: a nil
 // Deps.Capture answers 503, never a panic on a nil interface call —
 // TestUnitsView_NilUnitsIs503's own precedent.
+// TestCaptureView_CaptureErrorIs500 is serveCapture's own error branch: a
+// Capturer.Capture error answers 500 and never reflects the raw error into
+// the response body.
+func TestCaptureView_CaptureErrorIs500(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{err: errors.New("boom")}
+	h := ui.New(ui.Deps{Capture: fake})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, captureRequest("text=hello"))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("POST /ui/capture (Capture error) = %d, want 500", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("response reflects the raw error:\n%s", rec.Body.String())
+	}
+}
+
 func TestCaptureView_NilCapturerIs503(t *testing.T) {
 	t.Parallel()
+
+	// Without the guard, h.deps.Capture.Capture panics on a nil interface;
+	// recovering reports that as this test's failure instead of crashing
+	// the whole test binary (TestCorrectView_NilCapturerIs503's shape).
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("POST /ui/capture with no Capturer panicked instead of answering 503: %v", r)
+		}
+	}()
 
 	h := ui.New(ui.Deps{})
 	rec := httptest.NewRecorder()

@@ -18,9 +18,8 @@ import (
 var htmxConfigMetaRe = regexp.MustCompile(`<meta name="htmx-config" content="([^"]*)"`)
 
 // responseHandlingEntry mirrors one element of htmx's own responseHandling
-// array: code is a glob-style status pattern where "." matches any single
-// digit — which is also valid regexp syntax, so a literal entry can be
-// compiled and matched against a status code directly, as this test does.
+// array: code is a regular expression tested, unanchored, against the
+// status code's decimal string.
 type responseHandlingEntry struct {
 	Code string `json:"code"`
 	Swap bool   `json:"swap"`
@@ -58,22 +57,24 @@ func TestLayout_HTMXConfigSwapsErrorResponses(t *testing.T) {
 	}
 
 	for _, code := range []string{"400", "500", "503"} {
-		if !anyEntrySwaps(cfg.ResponseHandling, code) {
-			t.Errorf("no responseHandling entry swaps status %s — that fragment would be dropped silently (OR7)", code)
+		if !htmxSwaps(cfg.ResponseHandling, code) {
+			t.Errorf("htmx would not swap status %s — the first matching responseHandling entry (or none) drops that fragment silently (OR7)", code)
 		}
 	}
 }
 
-// anyEntrySwaps reports whether some responseHandling entry both matches
-// code and swaps it.
-func anyEntrySwaps(entries []responseHandlingEntry, code string) bool {
+// htmxSwaps reports whether htmx would swap a response with this status,
+// using the vendored htmx.min.js's own rule: the first entry whose code
+// matches (new RegExp(code).test(status), unanchored) decides, and no match
+// means no swap.
+func htmxSwaps(entries []responseHandlingEntry, code string) bool {
 	for _, e := range entries {
-		re, err := regexp.Compile("^" + e.Code + "$")
+		re, err := regexp.Compile(e.Code)
 		if err != nil {
 			continue
 		}
-		if re.MatchString(code) && e.Swap {
-			return true
+		if re.MatchString(code) {
+			return e.Swap
 		}
 	}
 	return false
