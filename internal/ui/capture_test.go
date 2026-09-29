@@ -219,10 +219,6 @@ func TestCaptureView_EscapesReply(t *testing.T) {
 	}
 }
 
-// TestCaptureView_NilCapturerIs503 is captureHandler's own nil-dependency
-// posture (internal/httpapi/capture.go), applied to the UI route: a nil
-// Deps.Capture answers 503, never a panic on a nil interface call —
-// TestUnitsView_NilUnitsIs503's own precedent.
 // TestCaptureView_CaptureErrorIs500 is serveCapture's own error branch: a
 // Capturer.Capture error answers 500 and never reflects the raw error into
 // the response body.
@@ -242,6 +238,10 @@ func TestCaptureView_CaptureErrorIs500(t *testing.T) {
 	}
 }
 
+// TestCaptureView_NilCapturerIs503 is captureHandler's own nil-dependency
+// posture (internal/httpapi/capture.go), applied to the UI route: a nil
+// Deps.Capture answers 503, never a panic on a nil interface call —
+// TestUnitsView_NilUnitsIs503's own precedent.
 func TestCaptureView_NilCapturerIs503(t *testing.T) {
 	t.Parallel()
 
