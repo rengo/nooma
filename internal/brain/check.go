@@ -31,13 +31,13 @@ type CheckService struct {
 // questions is last for the same reason NewConsolidateService puts it
 // last: it is m3e's own addition to a signature every other caller in this
 // tree already spells out, and appending it keeps that diff mechanical.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo) *CheckService {
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo, keeper *FocusKeeper) *CheckService {
 	return &CheckService{
 		clock: clock,
 		run: checkRunner{
 			triggers: triggers, timers: timers, ids: ids, log: log,
 			channel: channel, units: units, state: state, llm: llm,
-			conversation: conversation, questions: questions,
+			conversation: conversation, questions: questions, focus: keeper,
 		},
 	}
 }
@@ -281,6 +281,12 @@ type checkRunner struct {
 	// without it still fires, delivers and expires triggers, it simply
 	// asks nothing and expires no question.
 	questions ports.PendingQuestionRepo
+	// focus is the previous-focus keeper the digest shares with /ui's Today
+	// view: the digest reads adjacency against what it holds and is its
+	// second writer. Nil is legal like every other collaborator here, and
+	// means no incumbent: `nooma check` passes nil, and every digest test
+	// that does not exercise the focus does too.
+	focus *FocusKeeper
 }
 
 // checkDetail is every check.* row's context shape. One shape for all

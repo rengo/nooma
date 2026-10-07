@@ -114,7 +114,7 @@ func (d relationDemo) askTheQuestion(t *testing.T, at time.Time) string {
 	if _, err := brain.NewCheckService(demoClock{now: at},
 		sqlite.NewTriggerRepo(d.db), sqlite.NewTimerRepo(d.db), d.ids, d.decisions,
 		d.channel, sqlite.NewUnitRepo(d.db), sqlite.NewStateRepo(d.db), nil, "12449194",
-		d.questions).Check(ctx, brain.CheckRequest{}); err != nil {
+		d.questions, nil).Check(ctx, brain.CheckRequest{}); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 

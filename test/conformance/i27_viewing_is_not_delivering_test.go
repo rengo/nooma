@@ -17,21 +17,25 @@ import (
 // §7): rendering Today must call no write method on any port it reads —
 // the one mutation this milestone is named for (design §3.6, §8).
 //
-// The forbidden methods below are enumerated from the six port
+// The forbidden methods below are enumerated from the seven port
 // interfaces' own Go source this PR reads against — not from memory —
 // and stated here so a reader can check the list against the same files:
 // internal/ports/unitrepo.go (UnitRepo: Create, UpdateContent,
 // UpdateEventAt, UpdateDueAt, SetStatus, ApplyBoosts are the six methods
 // that mutate a row; ByID, LiveByIDs, CountLiveByType, IncompleteOlderThan,
 // LiveDecayStates, LiveFocusCandidates and LiveFocusCandidatesByType are
-// reads), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
+// reads), relationrepo.go (RelationRepo: Upsert and Delete write; ByUnit,
+// ThresholdsFor, Evidence, ExistingPairs and ByID read — Today reads
+// ByUnit through the focus keeper, and ByID is a read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
 // Expire write; Due, Undelivered, Delivered read),
 // pendingquestionrepo.go (PendingQuestionRepo: Create, MarkAsked,
 // Confirm, Reject, Expire write; Unasked, Open read), staterepo.go
 // (StateRepo: OpenHypothesis writes; LastHypothesisAt, LatestEnergy
 // read), configrepo.go (ConfigRepo: RecordConsolidationRun writes; Load
 // reads), decisionlog.go (DecisionLog: Record writes; Since reads) —
-// sixteen distinct method names in total, design §3.6's own count.
+// eighteen distinct method names in total, recounted from the guards
+// below (m4c added RelationRepo's Upsert and Delete to design §3.6's
+// sixteen).
 func TestI27_ViewingIsNotDelivering(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -42,6 +46,7 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 	state := &i27State{State: memrepo.NewState(), t: t}
 	cfg := &i27Config{Config: memrepo.NewConfig(), t: t}
 	log := &i27DecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: t}
+	rels := &i27Relations{Relations: memrepo.NewRelations(), t: t}
 
 	const unitID = "u-1"
 	if err := units.Units.Create(ctx, unit.Unit{
@@ -68,7 +73,7 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 		t.Fatalf("seed question: %v", err)
 	}
 
-	svc := brain.NewTodayService(fixedClock{now: now}, units, cfg, state, triggers, questions, log)
+	svc := brain.NewTodayService(fixedClock{now: now}, units, cfg, state, triggers, questions, log, brain.NewFocusKeeper(units, cfg, rels))
 
 	beforeUndelivered, err := triggers.Undelivered(ctx)
 	if err != nil {
@@ -81,9 +86,11 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 
 	// R6's own scenario wording: "/ui is requested three times ...
 	// surfaced_at and asked_at remain NULL after all three" — looped
-	// rather than called once. TodayService is stateless, so a single call
-	// proves the identical postcondition, but this matches the spec's own
-	// scenario as written rather than a weaker paraphrase of it.
+	// rather than called once. TodayService keeps only the in-memory incumbent
+	// and writes nothing to the vault, so a single call proves the same
+	// postcondition; the loop matches the spec's own scenario as written
+	// rather than a weaker paraphrase of it, and from the second request on
+	// the keeper reads the relations of the incumbent it holds.
 	for i := 0; i < 3; i++ {
 		if _, err := svc.Today(ctx); err != nil {
 			t.Fatalf("Today request %d: %v", i+1, err)
@@ -109,8 +116,8 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 func strPtrI27(s string) *string { return &s }
 
 // i27Fail fails t naming the port and method a write reached — every
-// override below is one line calling this, so the sixteen names stay a
-// list to read rather than sixteen bespoke messages to keep in sync.
+// override below is one line calling this, so the eighteen names stay a
+// list to read rather than eighteen bespoke messages to keep in sync.
 func i27Fail(t *testing.T, port, method string) {
 	t.Helper()
 	t.Fatalf("TodayService called %s.%s — a view must not write (I27, docs/06-harness.md §4)", port, method)
@@ -237,5 +244,22 @@ type i27DecisionLog struct {
 
 func (g *i27DecisionLog) Record(context.Context, ports.Decision) error {
 	i27Fail(g.t, "DecisionLog", "Record")
+	return nil
+}
+
+// i27Relations wraps memrepo.Relations, failing on RelationRepo's two write
+// methods. Today reads relations through the focus keeper (ByUnit) and must
+// never write one.
+type i27Relations struct {
+	*memrepo.Relations
+	t *testing.T
+}
+
+func (g *i27Relations) Upsert(context.Context, ports.Relation) error {
+	i27Fail(g.t, "RelationRepo", "Upsert")
+	return nil
+}
+func (g *i27Relations) Delete(context.Context, string) error {
+	i27Fail(g.t, "RelationRepo", "Delete")
 	return nil
 }

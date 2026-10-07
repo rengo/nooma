@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/core/focus"
 )
@@ -50,4 +51,22 @@ func TestI19_ChallengerMustExceedRelativeMargin(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestI19_TodayHoldsIncumbentInsideMargin is I19's production caller: the
+// same rule TestI19_ChallengerMustExceedRelativeMargin asserts on
+// focus.Displaces, observed through the brain's Today view, where focus.Select
+// is finally called. The margin is the default, 0.05: a challenger just inside
+// A*(1+margin) does not displace the incumbent, one just beyond it does.
+func TestI19_TodayHoldsIncumbentInsideMargin(t *testing.T) {
+	v := newHysteresisVault(t, time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC))
+	keeper := v.keeper()
+	assertTaskFocus(t, "seeding request", v.taskFocus(t, keeper), "A")
+
+	const incumbent = 1.0
+	v.setWeight(t, "B", incumbent*(1+focus.DefaultHysteresisMargin)*0.99)
+	assertTaskFocus(t, "challenger just inside the margin", v.taskFocus(t, keeper), "A")
+
+	v.setWeight(t, "B", incumbent*(1+focus.DefaultHysteresisMargin)*1.01)
+	assertTaskFocus(t, "challenger just beyond the margin", v.taskFocus(t, keeper), "B")
 }

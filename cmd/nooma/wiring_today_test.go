@@ -32,7 +32,7 @@ func TestWireToday_BuildsAWorkingService(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 
-	today, err := wireToday(db).Today(ctx)
+	today, err := wireToday(db, wireFocus(db)).Today(ctx)
 	if err != nil {
 		t.Fatalf("Today: %v", err)
 	}

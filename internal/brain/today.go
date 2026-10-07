@@ -28,11 +28,13 @@ type TodayService struct {
 }
 
 // NewTodayService wires a TodayService over the ports one Today request
-// needs.
-func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog) *TodayService {
+// needs. The keeper must be non-nil: Today computes through it on every
+// request and panics without one. This differs from NewCheckService, where a
+// nil keeper is legal (the digest then has no incumbent and publishes nothing).
+func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog, keeper *FocusKeeper) *TodayService {
 	return &TodayService{
 		clock: clock,
-		run:   todayRunner{units: units, cfg: cfg, state: state, triggers: triggers, questions: questions, log: log},
+		run:   todayRunner{units: units, cfg: cfg, state: state, triggers: triggers, questions: questions, log: log, focus: keeper},
 	}
 }
 
@@ -51,9 +53,9 @@ type Today struct {
 	Status  VaultStatus
 }
 
-// Focus is one focus.Kind's own top-N, ranked by focus.Priority alone —
-// no focus.Select, no hysteresis, no incumbent (design §3.6's own ruling:
-// Select's first production caller is m4c's, with a real margin).
+// Focus is one focus.Kind's own top-N: focus.Select over the previous focus
+// the keeper holds, so a challenger must beat an incumbent by the configured
+// margin to displace it (I19), ranked with adjacency to that previous focus.
 type Focus struct {
 	Kind    focus.Kind
 	Members []FocusMember
@@ -112,6 +114,7 @@ type todayRunner struct {
 	triggers  ports.TriggerRepo
 	questions ports.PendingQuestionRepo
 	log       ports.DecisionLog
+	focus     *FocusKeeper
 }
 
 // at builds Today at the instant Today already read — design §3.6's own
@@ -120,6 +123,11 @@ type todayRunner struct {
 // (I27, proven by test/conformance's own writeGuard).
 func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	out := Today{Now: now}
+
+	round, err := r.focus.compute(ctx, now)
+	if err != nil {
+		return Today{}, fmt.Errorf("today: %w", err)
+	}
 
 	cfg, err := r.cfg.Load(ctx)
 	if err != nil {
@@ -176,33 +184,24 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 
 	out.Focuses = make([]Focus, 0, len(focus.AllKinds()))
 	for _, k := range focus.AllKinds() {
-		f, err := r.rankFocus(ctx, k, now)
+		f, err := r.focusFrom(ctx, k, round.members[k])
 		if err != nil {
 			return Today{}, err
 		}
 		out.Focuses = append(out.Focuses, f)
 	}
 
+	r.focus.publish(round)
 	return out, nil
 }
 
-// rankFocus is one Kind's own two reads: the port already filters by
-// focus.Types(k), so focus.Rank scores exactly what the type asks for,
-// and LiveByIDs fetches the text focus.Candidate deliberately carries
-// none of, for the top focus.DefaultSize alone rather than for the
-// whole pool (design §3.7's own rejected-alternative table).
-func (r todayRunner) rankFocus(ctx context.Context, k focus.Kind, now time.Time) (Focus, error) {
-	candidates, err := r.units.LiveFocusCandidatesByType(ctx, focus.Types(k))
-	if err != nil {
-		return Focus{}, fmt.Errorf("today: focus candidates for %q: %w", k, err)
-	}
-	ranked := focus.Rank(candidates, map[string]float64{}, now)
-	if len(ranked) > focus.DefaultSize {
-		ranked = ranked[:focus.DefaultSize]
-	}
-
-	ids := make([]string, len(ranked))
-	for i, rk := range ranked {
+// focusFrom turns one Kind's selected members into the Focus a view needs:
+// LiveByIDs fetches the text focus.Candidate deliberately carries none of, for
+// the selected members alone rather than for the whole pool (design §3.7's own
+// rejected-alternative table).
+func (r todayRunner) focusFrom(ctx context.Context, k focus.Kind, selected []focus.Ranked) (Focus, error) {
+	ids := make([]string, len(selected))
+	for i, rk := range selected {
 		ids[i] = rk.Candidate.ID
 	}
 	live, err := r.units.LiveByIDs(ctx, ids)
@@ -214,8 +213,8 @@ func (r todayRunner) rankFocus(ctx context.Context, k focus.Kind, now time.Time)
 		byID[u.ID] = u
 	}
 
-	members := make([]FocusMember, 0, len(ranked))
-	for _, rk := range ranked {
+	members := make([]FocusMember, 0, len(selected))
+	for _, rk := range selected {
 		u, ok := byID[rk.Candidate.ID]
 		if !ok {
 			// Archived between the two reads (design §3.7's N7): the view

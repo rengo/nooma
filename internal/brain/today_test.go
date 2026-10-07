@@ -2,8 +2,10 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +22,7 @@ import (
 var todayNow = time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 
 func newTodayService(units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog) *TodayService {
-	return NewTodayService(fixedClock{now: todayNow}, units, cfg, state, triggers, questions, log)
+	return NewTodayService(fixedClock{now: todayNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()))
 }
 
 func seedTodayUnit(t *testing.T, units *memrepo.Units, id string, typ unit.Type, weight float64) {
@@ -300,7 +302,7 @@ func TestToday_N7ArchivedBetweenReadsDropsOneMemberSilently(t *testing.T) {
 // newDigestParityFixture seeds one undelivered trigger and one queued
 // relation question, identically, for two independent runs of the digest —
 // one that never called Today, one that called it repeatedly — so
-// TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical can compare
+// TestToday_RepeatedRequestsLeaveDeliveryBookkeepingUnchanged can compare
 // what each run's real assembleDigest sends.
 //
 // Every port the digest reads is backed by a real memrepo implementation
@@ -320,13 +322,22 @@ func newDigestParityFixture(t *testing.T) (*memrepo.Triggers, *memrepo.Units, *m
 	return triggers, units, questions, log, memrepo.NewState(), memrepo.NewConfig()
 }
 
-// TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical is R6's
-// second half: "the morning delivery ... is unaffected by any number of
-// Today requests, including zero." A real assembleDigest run over five
-// prior Today requests is compared, byte for byte, against the identical
-// assembleDigest run over a zero-request baseline — both seeded the same
-// way from newDigestParityFixture, so the only difference between the two
-// runs is whether Today was ever called.
+// TestToday_RepeatedRequestsLeaveDeliveryBookkeepingUnchanged is R6's
+// second half, narrowed by m4c: delivery bookkeeping (the surfaced, asked
+// and held rows) is unchanged by any number of Today requests, including
+// zero. A real assembleDigest run over five prior Today requests is
+// compared, byte for byte, against the identical assembleDigest run over a
+// zero-request baseline — both seeded the same way from
+// newDigestParityFixture, so the only difference between the two runs is
+// whether Today was ever called.
+//
+// It no longer claims the whole digest is unaffected. Since m4c, viewing
+// /ui can change a later low-energy digest's order, because Today publishes
+// the focus it selected and the digest reads adjacency against it. This
+// test cannot observe that, and says so: questionRunner builds a keeper-free
+// checkRunner (r.focus == nil), so the digest it runs reads no incumbent at
+// all. The shared-keeper behaviour is pinned where a keeper exists
+// (TestDigest_TodaySeesDigestIncumbent and the wiring test).
 //
 // newDigestParityFixture backs every port with a real memrepo
 // implementation rather than a stub replaying a fixed slice, so a write
@@ -346,7 +357,7 @@ func newDigestParityFixture(t *testing.T) (*memrepo.Triggers, *memrepo.Units, *m
 // LatestEnergy never reads. I27 (test/conformance) is the guard for
 // those, and for write-avoidance in general — this test proves the
 // narrower thing its name says, that the delivery itself is unchanged.
-func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) {
+func TestToday_RepeatedRequestsLeaveDeliveryBookkeepingUnchanged(t *testing.T) {
 	ctx := context.Background()
 
 	// Baseline: zero Today requests before the digest assembles.
@@ -361,7 +372,7 @@ func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) 
 	// Five Today requests, with no morning digest run in between, over an
 	// identically seeded fixture.
 	triggers, units, questions, log, state, cfg := newDigestParityFixture(t)
-	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log)
+	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()))
 	for i := 0; i < 5; i++ {
 		if _, err := svc.Today(ctx); err != nil {
 			t.Fatalf("Today request %d: %v", i+1, err)
@@ -383,4 +394,293 @@ func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) 
 	if got, want := strings.Join(ch.sent, "\x00"), strings.Join(baseCh.sent, "\x00"); got != want {
 		t.Fatalf("digest text after five Today requests =\n%q\nwant byte-identical to the zero-request baseline:\n%q", got, want)
 	}
+}
+
+// focusIDs returns the two Focuses' member ids, task first.
+func focusIDs(today Today) (task, load []string) {
+	return memberIDs(today.Focuses[0]), memberIDs(today.Focuses[1])
+}
+
+// TestToday_IncumbentHeldInsideMargin is R1, both halves, on FX-H: A holds
+// slot 7 from a seeding request; a challenger B inside A's margin (1.03 <
+// 1.0*1.05) does not displace it, and one beyond it (1.06) does.
+func TestToday_IncumbentHeldInsideMargin(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	fill := ids("F", 6)
+
+	seed, _ := focusIDs(f.request(t))
+	assertIDs(t, "seeding request task focus", seed, append(slices.Clone(fill), "A"))
+
+	f.setWeight(t, "B", 1.03)
+	held, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus with B inside the margin", held, append(slices.Clone(fill), "A"))
+
+	f.setWeight(t, "B", 1.06)
+	displaced, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus with B beyond the margin", displaced, append(slices.Clone(fill), "B"))
+}
+
+// TestToday_ConfiguredZeroMarginDisplaces is R2: the margin is read from
+// config on every request, so a configured 0 lets a 1% challenger displace
+// where the 5% default would hold, and a configured 0.5 holds against a
+// challenger the default would let in.
+func TestToday_ConfiguredZeroMarginDisplaces(t *testing.T) {
+	cases := []struct {
+		name   string
+		margin float64
+		b      float64
+		want   string
+	}{
+		{"zero margin: a 1% challenger displaces", 0, 1.01, "B"},
+		{"wide margin: a 40% challenger is held off", 0.5, 1.4, "A"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFxH(t)
+			f.taskContest(t, 1.0, 0.99)
+			f.request(t) // seeds P = {F1..F6, A} under the default margin
+
+			f.cfg.SeedConfig(t, ports.VaultConfig{HysteresisMargin: &tc.margin})
+			f.setWeight(t, "B", tc.b)
+			got, _ := focusIDs(f.request(t))
+			assertIDs(t, "task focus", got, append(ids("F", 6), tc.want))
+		})
+	}
+}
+
+// TestToday_KindsAreIndependent is R4: both Kinds hold inside the margin; then
+// only the load challenger crosses it, and only the load focus changes.
+func TestToday_KindsAreIndependent(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.loadContest(t, 1.0, 0.99)
+	f.request(t)
+
+	f.setWeight(t, "B", 1.03)
+	f.setWeight(t, "D", 1.03)
+	task, load := focusIDs(f.request(t))
+	assertIDs(t, "task focus, both challengers inside their margins", task, append(ids("F", 6), "A"))
+	assertIDs(t, "load focus, both challengers inside their margins", load, append(ids("G", 6), "C"))
+
+	f.setWeight(t, "D", 1.06)
+	task, load = focusIDs(f.request(t))
+	assertIDs(t, "task focus, only the load challenger moved", task, append(ids("F", 6), "A"))
+	assertIDs(t, "load focus, its challenger crossed the margin", load, append(ids("G", 6), "D"))
+}
+
+// TestToday_HeldMemberShowsItsOwnRankScore is R7, on a fixture where Select's
+// order differs from Rank's: A (weight 1.0, adjacent to F1 at strength 0.4, so
+// Rank scores it 1.0*(1+0.25*0.4) = 1.1) is held over D (1.12, not an
+// incumbent). Rank orders D before A; Select, which lifts incumbents by the
+// margin (A: 1.1*1.05 = 1.155 > 1.12), orders A before D. Both are in the top
+// 7 (F1..F5 fill the rest), so the order and the score of each member are the
+// observable.
+func TestToday_HeldMemberShowsItsOwnRankScore(t *testing.T) {
+	f := newFxH(t)
+	f.fillers(t, unit.TypeTask, "F", 5)
+	seedTodayUnit(t, f.units, "A", unit.TypeTask, 1.0)
+	seedTodayUnit(t, f.units, "D", unit.TypeTask, 0.4)
+	seedTodayUnit(t, f.units, "E", unit.TypeTask, 0.5)
+	f.relate(t, "F1", "A", 0.4, 0.4)
+
+	seed, _ := focusIDs(f.request(t))
+	assertIDs(t, "seeding request task focus", seed, []string{"F1", "F2", "F3", "F4", "F5", "A", "E"})
+
+	f.setWeight(t, "D", 1.12)
+	today := f.request(t)
+	got := today.Focuses[0].Members
+	assertIDs(t, "task focus order (Select's)", memberIDs(today.Focuses[0]), []string{"F1", "F2", "F3", "F4", "F5", "A", "D"})
+
+	byID := map[string]float64{}
+	for _, m := range got {
+		byID[m.ID] = m.Score
+	}
+	for id, want := range map[string]float64{"A": 1.1, "D": 1.12, "F1": 11, "F2": 10} {
+		if math.Abs(byID[id]-want) > 1e-9 {
+			t.Errorf("Score of %s = %v, want %v — the literal Rank value, adjacency included", id, byID[id], want)
+		}
+	}
+}
+
+// TestToday_FailedRequestPublishesNothing: a request that fails after its
+// round was computed leaves the incumbent where it was. A holds P; B jumps
+// past the margin on a request that fails at questions.Open; once B falls
+// back inside the margin a successful request must still find A held.
+func TestToday_FailedRequestPublishesNothing(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.request(t)
+
+	f.setWeight(t, "B", 1.06)
+	f.questions.failOpen = true
+	if _, err := f.svc.Today(context.Background()); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("Today err = %v, want the questions error", err)
+	}
+	f.questions.failOpen = false
+
+	f.setWeight(t, "B", 1.03)
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus after a failed request", got, append(ids("F", 6), "A"))
+}
+
+// The R8 fixture: A (1.0) is the incumbent; B and C both weigh 0.9, so on
+// their own neither displaces A (0.9 < 1.0*1.05). B has a relation of
+// strength 0.9 to A, so adjacency lifts it to 0.9*(1+0.25*0.9) = 1.1025,
+// which clears A*(1.05) = 1.05. C has no relation and stays out.
+func r8Fixture(t *testing.T, relate func(f *fxH)) *fxH {
+	t.Helper()
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.9)
+	seedTodayUnit(t, f.units, "C", unit.TypeTask, 0.9)
+	seed, _ := focusIDs(f.request(t))
+	assertIDs(t, "seeding request task focus", seed, append(ids("F", 6), "A"))
+	relate(f)
+	return f
+}
+
+func TestToday_AdjacentCandidateOutranksEqualUnrelatedOne(t *testing.T) {
+	f := r8Fixture(t, func(f *fxH) { f.relate(t, "A", "B", 0.9, 0.9) })
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus: B (related to A) displaces A, C (unrelated) does not", got, append(ids("F", 6), "B"))
+}
+
+// TestToday_AdjacencyUsesStrengthNotConfidence: doc 02 §4 defines strength as
+// relevance and confidence as certainty. 0.9/0.1 lifts B; 0.1/0.9 does not.
+func TestToday_AdjacencyUsesStrengthNotConfidence(t *testing.T) {
+	t.Run("strong and unsure lifts", func(t *testing.T) {
+		f := r8Fixture(t, func(f *fxH) { f.relate(t, "A", "B", 0.9, 0.1) })
+		got, _ := focusIDs(f.request(t))
+		assertIDs(t, "task focus", got, append(ids("F", 6), "B"))
+	})
+	t.Run("weak and certain does not", func(t *testing.T) {
+		f := r8Fixture(t, func(f *fxH) { f.relate(t, "A", "B", 0.1, 0.9) })
+		got, _ := focusIDs(f.request(t))
+		assertIDs(t, "task focus", got, append(ids("F", 6), "A"))
+	})
+}
+
+// TestToday_AdjacencyIsUndirected: a relation stored B -> A lifts B exactly as
+// A -> B does.
+func TestToday_AdjacencyIsUndirected(t *testing.T) {
+	for _, dir := range [][2]string{{"A", "B"}, {"B", "A"}} {
+		t.Run(dir[0]+" to "+dir[1], func(t *testing.T) {
+			f := r8Fixture(t, func(f *fxH) { f.relate(t, dir[0], dir[1], 0.9, 0.9) })
+			got, _ := focusIDs(f.request(t))
+			assertIDs(t, "task focus", got, append(ids("F", 6), "B"))
+		})
+	}
+}
+
+// TestToday_AdjacencyFromSecondMember: the relation joins B to F2, not to the
+// first member of the incumbent or to A. Every member's relations are read.
+func TestToday_AdjacencyFromSecondMember(t *testing.T) {
+	f := r8Fixture(t, func(f *fxH) { f.relate(t, "F2", "B", 0.9, 0.9) })
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus", got, append(ids("F", 6), "B"))
+}
+
+// TestToday_LoadFocusReadsItsOwnMembersRelations: the same shape in the load
+// Kind. The relation joins D to the load incumbent C; the task focus is
+// present and unrelated, so only a sweep that reads the load members' relations
+// can lift D (0.9 -> 1.1025 > 1.0*1.05).
+func TestToday_LoadFocusReadsItsOwnMembersRelations(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.loadContest(t, 1.0, 0.9)
+	seedTodayUnit(t, f.units, "E", unit.TypeMentalLoad, 0.9)
+	f.request(t)
+
+	f.relate(t, "C", "D", 0.9, 0.9)
+	task, load := focusIDs(f.request(t))
+	assertIDs(t, "load focus: D (related to C) displaces C", load, append(ids("G", 6), "D"))
+	assertIDs(t, "task focus is untouched", task, append(ids("F", 6), "A"))
+}
+
+// TestToday_TaskNotLiftedByLoadIncumbent is OQ4: each focus reads adjacency
+// against its OWN incumbent. B (task, 0.9) is related to the load incumbent C
+// at strength 0.9; a union reading would lift B past A, the per-Kind reading
+// must not.
+func TestToday_TaskNotLiftedByLoadIncumbent(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.9)
+	f.loadContest(t, 1.0, 0.9)
+	f.request(t)
+
+	f.relate(t, "C", "B", 0.9, 0.9)
+	task, load := focusIDs(f.request(t))
+	assertIDs(t, "task focus: a load incumbent's relation does not lift a task challenger", task, append(ids("F", 6), "A"))
+	assertIDs(t, "load focus", load, append(ids("G", 6), "C"))
+}
+
+// TestToday_FreshKeeperRanksWithoutAdjacency is R10's own-ranking half: on a
+// fresh keeper there is no incumbent, so the first request ranks with empty
+// adjacency even over a graph full of relations. Every member's Score equals
+// plain focus.Rank's.
+func TestToday_FreshKeeperRanksWithoutAdjacency(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.relate(t, "F1", "A", 0.9, 0.9)
+	f.relate(t, "A", "B", 0.9, 0.9)
+
+	today := f.request(t)
+
+	candidates, err := f.units.LiveFocusCandidatesByType(context.Background(), focus.Types(focus.KindTask))
+	if err != nil {
+		t.Fatalf("candidates: %v", err)
+	}
+	want := focus.Rank(candidates, map[string]float64{}, todayNow)[:focus.DefaultSize]
+	got := today.Focuses[0].Members
+	if len(got) != len(want) {
+		t.Fatalf("task focus has %d members, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].ID != want[i].Candidate.ID || got[i].Score != want[i].Score {
+			t.Fatalf("member %d = (%s, %v), want plain Rank's (%s, %v)", i, got[i].ID, got[i].Score, want[i].Candidate.ID, want[i].Score)
+		}
+	}
+}
+
+// TestToday_FocusComputeErrorFailsTheRequest: Today has no send to protect, so
+// a focus that cannot be computed fails the request (design m4c §3.5, OR2).
+func TestToday_FocusComputeErrorFailsTheRequest(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.flaky.failCandidates = true
+	if _, err := f.svc.Today(context.Background()); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("Today err = %v, want the candidates error", err)
+	}
+}
+
+// TestToday_FailedFocusReadPublishesNothing is the second shape of
+// TestToday_FailedRequestPublishesNothing: the request fails on the read that
+// follows the keeper's own, LiveByIDs, so a publish placed anywhere before the
+// end of the request would still leave a trace.
+func TestToday_FailedFocusReadPublishesNothing(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.request(t)
+
+	f.setWeight(t, "B", 1.06)
+	f.flaky.failLive = true
+	if _, err := f.svc.Today(context.Background()); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("Today err = %v, want the live-read error", err)
+	}
+	f.flaky.failLive = false
+
+	f.setWeight(t, "B", 1.03)
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus after a failed request", got, append(ids("F", 6), "A"))
+}
+
+// TestToday_AdjacencyReadsEveryRelationOfAMember: A has two relations and the
+// lifting one sorts second in ByUnit's order (created_at, then id), behind a
+// decoy to a unit outside the pool.
+func TestToday_AdjacencyReadsEveryRelationOfAMember(t *testing.T) {
+	f := r8Fixture(t, func(f *fxH) {
+		f.relate(t, "A", "A0", 0.1, 0.1)
+		f.relate(t, "A", "B", 0.9, 0.9)
+	})
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus", got, append(ids("F", 6), "B"))
 }

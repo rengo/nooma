@@ -170,7 +170,7 @@ func TestI09_TheDigestNamesBothEndpointsOfTheQueuedQuestion(t *testing.T) {
 
 	ch := fakechannel.New()
 	now := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
-	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), &counterIDs{}, memrepo.NewDecisionLog(), ch, units, memrepo.NewState(), nil, "12449194", questions).
+	report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), &counterIDs{}, memrepo.NewDecisionLog(), ch, units, memrepo.NewState(), nil, "12449194", questions, nil).
 		Check(ctx, brain.CheckRequest{})
 	if err != nil {
 		t.Fatalf("Check: %v", err)

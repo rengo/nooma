@@ -130,7 +130,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 	// but lives here because it is part of what design D9 calls "the
 	// DecisionLog contract" and this suite is where 10a's single RED
 	// ("undefined: ports.DecisionLog") is meant to come from.
-	t.Run("AllDecisionActions returns exactly the forty-seven design D9/D5/§7.5/ADR-0021/m3e members", func(t *testing.T) {
+	t.Run("AllDecisionActions returns exactly the forty-eight design D9/D5/§7.5/ADR-0021/m3e/m4c members", func(t *testing.T) {
 		want := map[ports.DecisionAction]bool{
 			ports.ActionCaptureClassify:                 true,
 			ports.ActionCaptureUnparseable:              true,
@@ -155,6 +155,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCheckDeliveryFailed:             true,
 			ports.ActionCheckDigestSent:                 true,
 			ports.ActionCheckDigestHeld:                 true,
+			ports.ActionCheckFocusUnavailable:           true,
 			ports.ActionCheckTimerRephraseFailed:        true,
 			ports.ActionCaptureCheckInResolved:          true,
 			ports.ActionCaptureCheckInUnmatched:         true,
