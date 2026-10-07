@@ -279,8 +279,10 @@ with an explicit referent from the detail page). Cross-origin protection lands h
 slice with a mutating UI route beyond the handshake. Owns I22, I02 (browse), I18.
 
 **`m4c-focus-hysteresis`** — `focus.Select` with an in-process incumbent per Kind, and
-`AdjacencyStrengths` fed from `RelationRepo.ByUnit`; the same adjacency reaches
-`brain/digest.go:112`. Owns I19's first real load and I01's behavioural half. Depends on m4a.
+`AdjacencyStrengths` fed from `RelationRepo.ByUnit`; Today's per-Kind adjacency lands with the
+incumbent, and the same adjacency reaches the digest's `Carry` (`brain/digest.go:112`) and
+Today's pending-digest mirror in the second link. Both Today and the digest write the incumbent
+(owner ruling 2026-10-07). Owns I19's first real load and I01's behavioural half. Depends on m4a.
 
 **`m4d-graph`** — the neighbourhood bound in `core` with its §13 row, its read, Cytoscape.js
 vendored (a `size:exception` by construction: one 435 KB file), the island and its two structural
@@ -322,8 +324,8 @@ predictions low six times in M0 (1.3x–2.2x) and once at 4.3x in M1 Phase B.
 | | `feat/ui-units-list` | list, filters, pagination as htmx fragments | ~350 |
 | | `feat/ui-unit-detail` | one unit, its relations, its dates (**I18**) | ~250 |
 | | `feat/ui-capture` | the capture form; correction with an explicit referent | ~350 |
-| **m4c** | `feat/brain-focus-incumbent` | `focus.Select` per Kind over an in-process incumbent (**I19**, **I01**) | ~300 |
-| | `feat/brain-focus-adjacency` | `RelationRepo.ByUnit` → `weight.Edge` → `AdjacencyStrengths`; `digest.go:112` fed too | ~300 |
+| **m4c** | `feat/brain-focus-incumbent` | the keeper; `focus.Select` per Kind for Today and the digest over an in-process incumbent; `ByUnit` → `weight.Edge` → Today's per-Kind adjacency (**I19**, **I01**) | ~330 (may cut a 1b) |
+| | `feat/brain-focus-adjacency` | the digest's `Carry` and Today's mirror fed union adjacency (`digest.go:112`, mirror reads P') | ~130 |
 | **m4d** | `feat/core-graph-neighbourhood` | the bound and its §13 render-budget row | ~350 |
 | | `feat/ports-store-neighbourhood` | the read | ~250 |
 | | `feat/ui-vendor-cytoscape` | the bundle (`size:exception`), the recorded audit, the two island gates | ~150 |
