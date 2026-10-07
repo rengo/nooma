@@ -142,6 +142,10 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, err
 	}
 
+	if haveRound {
+		carry, held = prospection.Carry(items, carryAdjacency(round.adjacent, pending), low, now)
+	}
+
 	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, question)); err != nil {
 		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
@@ -218,6 +222,13 @@ func (r checkRunner) digestFocus(ctx context.Context, now time.Time) (round focu
 			checkDetail{})
 	}
 	return round, true, nil
+}
+
+// carryAdjacency maps unit-keyed adjacency onto the trigger ids Carry ranks by.
+// A trigger with no unit gets no entry. Scaffold: returns no adjacency.
+func carryAdjacency(byUnit map[string]float64, pending []ports.DueTrigger) map[string]float64 {
+	_, _ = byUnit, pending
+	return nil
 }
 
 // digestItems turns undelivered triggers into what Carry consumes: a

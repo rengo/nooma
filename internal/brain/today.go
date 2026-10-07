@@ -159,7 +159,7 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	}
 	// Adjacency is M4's — the same reading assembleDigest already gives
 	// this call (digest.go), applied here so the two agree.
-	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
+	carry, held := prospection.Carry(items, carryAdjacency(round.nextAdjacent, pending), low, now)
 	out.Digest.LowEnergy = low
 	out.Digest.Items = joinDigestLines(carry, pending)
 	out.Digest.Held = len(held)

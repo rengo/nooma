@@ -39,6 +39,12 @@ type incumbent struct {
 type focusRound struct {
 	members map[focus.Kind][]focus.Ranked // Select's order; Score is Rank's literal value
 	next    *incumbent                    // both Kinds, always
+
+	// adjacent and nextAdjacent are unit-keyed adjacency for the pending
+	// digest's Carry, against the loaded incumbent P and against the round's
+	// own next incumbent P' (design m4c §3.5). Unset until the second link.
+	adjacent     map[string]float64
+	nextAdjacent map[string]float64
 }
 
 // selection is the held Selection for k, empty when nothing is held.
