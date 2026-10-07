@@ -349,3 +349,23 @@ func TestFocusKeeper_NextRelationsErrorPropagates(t *testing.T) {
 		t.Fatalf("compute err = %v, want the relations error", err)
 	}
 }
+
+// TestDigest_ReadsAdjacencyToTheIncumbentItLoaded: the digest's own Select has
+// not run when its Carry is ranked, so adjacency is to the incumbent it loaded
+// (P, holding A), not to the one it is about to publish (P', holding B, which
+// this very digest's Select picks). trg-2 sits next to A and trg-1 next to B.
+func TestDigest_ReadsAdjacencyToTheIncumbentItLoaded(t *testing.T) {
+	f := newFxH(t)
+	inc, chal := f.contest(t, focus.KindTask)
+	f.fxL(t)
+	f.request(t)
+	f.relate(t, inc, "u-q", 0.9, 0.9)
+	f.relate(t, chal, "u-p", 0.9, 0.9)
+	f.setWeight(t, chal, 1.2) // the digest's own Select displaces the incumbent
+
+	order, _ := f.digestOrder(t)
+	assertIDs(t, "digest order against the loaded incumbent", order, []string{carryHi, carryTwo, carryOne})
+	if got := f.slotSevenAfter(t); got != chal {
+		t.Fatalf("slot 7 after the digest = %s, want %s — the fixture must make the digest's Select displace A", got, chal)
+	}
+}
