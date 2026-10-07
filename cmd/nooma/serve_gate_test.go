@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -8,6 +9,16 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/internal/store/sqlite"
+	"github.com/rengo/nooma/test/support/fakechannel"
 )
 
 // serveGateViolations is the structural check behind
@@ -21,9 +32,15 @@ import (
 // Today never writes. So the gate reads the wiring:
 //
 //	(a) exactly one wireFocus call, in serve.go, assigned to an identifier X;
-//	(b) wireToday is called with X as its last argument;
+//	(b) wireToday and wireScheduler are called with X as their last argument;
 //	(c) NewFocusKeeper is called only inside wireFocus, and wireFocus only
-//	    from serve.go.
+//	    from serve.go;
+//	(d) the keeper then flows serve.go -> wireScheduler -> wireProactive ->
+//	    NewCheckService, and parsing serve.go alone cannot see the last two
+//	    links: every NewCheckService call passes the enclosing function's own
+//	    last parameter, never nil or a call, except wireCheck (`nooma check`
+//	    has no channel, so its digest returns before it reads a focus), which
+//	    passes nil; and every wireProactive call does the same.
 func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -105,7 +122,61 @@ func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 		}
 		return true
 	})
+	ast.Inspect(serve, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || calleeName(call) != "wireScheduler" {
+			return true
+		}
+		if !lastArgIs(call, keeperVar) {
+			add("serve.go: wireScheduler's last argument is not %q, the one shared keeper", keeperVar)
+		}
+		return true
+	})
+
+	for name, f := range files {
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			param := lastParamName(fn)
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				switch calleeName(call) {
+				case "NewCheckService":
+					want := param
+					if fn.Name.Name == "wireCheck" {
+						want = "nil"
+					}
+					if !lastArgIs(call, want) {
+						add("%s: %s hands NewCheckService something other than %q as its keeper", name, fn.Name.Name, want)
+					}
+				case "wireProactive":
+					if !lastArgIs(call, param) {
+						add("%s: %s hands wireProactive something other than its own %q parameter", name, fn.Name.Name, param)
+					}
+				}
+				return true
+			})
+		}
+	}
 	return out
+}
+
+// lastParamName is the name of fn's last parameter, "" when it has none.
+func lastParamName(fn *ast.FuncDecl) string {
+	params := fn.Type.Params
+	if params == nil || len(params.List) == 0 {
+		return ""
+	}
+	last := params.List[len(params.List)-1]
+	if len(last.Names) == 0 {
+		return ""
+	}
+	return last.Names[len(last.Names)-1].Name
 }
 
 // calleeName is the name a call expression invokes: f(...) and pkg.f(...)
@@ -137,8 +208,9 @@ func goodServeSources() map[string]string {
 
 func runServe() {
 	focusKeeper := wireFocus(db)
+	sched, err := wireScheduler(ctx, db, cfg, lookup, errOut, channel, focusKeeper)
 	today := wireToday(db, focusKeeper)
-	_ = today
+	_, _, _ = sched, err, today
 }
 `,
 		"wiring.go": `package main
@@ -149,6 +221,20 @@ func wireFocus(db *sqlite.Vault) *brain.FocusKeeper {
 
 func wireToday(db *sqlite.Vault, keeper *brain.FocusKeeper) *brain.TodayService {
 	return brain.NewTodayService(clock, units, cfg, state, triggers, questions, log, keeper)
+}
+
+func wireCheck(db *sqlite.Vault) *brain.CheckService {
+	return brain.NewCheckService(clock, triggers, timers, ids, log, nil, units, state, nil, "", questions, nil)
+}
+
+func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService, error) {
+	return brain.NewCheckService(clock, triggers, timers, ids, log, channel, units, state, llm, conversation, questions, keeper), nil
+}
+
+func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel, keeper *brain.FocusKeeper) (*scheduler.Scheduler, error) {
+	check, err := wireProactive(systemClock{}, db, cfg, lookup, channel, keeper)
+	_ = check
+	return nil, err
 }
 `,
 	}
@@ -192,6 +278,30 @@ func TestServe_OneFocusKeeperSharedByTodayAndDigest(t *testing.T) {
 		"wireToday passed a different identifier": func(m map[string]string) {
 			m["serve.go"] = strings.Replace(m["serve.go"], "wireToday(db, focusKeeper)", "wireToday(db, otherKeeper)", 1)
 		},
+		"wireScheduler passed a different identifier": func(m map[string]string) {
+			m["serve.go"] = strings.Replace(m["serve.go"], "channel, focusKeeper)", "channel, otherKeeper)", 1)
+		},
+		"wireScheduler passed nil": func(m map[string]string) {
+			m["serve.go"] = strings.Replace(m["serve.go"], "channel, focusKeeper)", "channel, nil)", 1)
+		},
+		"wireScheduler passed a fresh keeper": func(m map[string]string) {
+			m["serve.go"] = strings.Replace(m["serve.go"], "channel, focusKeeper)", "channel, wireFocus(db))", 1)
+		},
+		"wireScheduler hands wireProactive nil": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel, keeper)\n	_ = check", "channel, nil)\n	_ = check", 1)
+		},
+		"wireScheduler hands wireProactive a call": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel, keeper)\n	_ = check", "channel, newKeeper())\n	_ = check", 1)
+		},
+		"wireProactive hands NewCheckService nil": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "conversation, questions, keeper), nil", "conversation, questions, nil), nil", 1)
+		},
+		"wireProactive hands NewCheckService a call": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "conversation, questions, keeper), nil", "conversation, questions, brainKeeper()), nil", 1)
+		},
+		"wireCheck hands NewCheckService a keeper": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], `"", questions, nil)`, `"", questions, wireFocusKeeper)`, 1)
+		},
 		"wireFocus called outside serve.go": func(m map[string]string) {
 			m["wiring.go"] += "\nfunc wireElsewhere(db *sqlite.Vault) { _ = wireFocus(db) }\n"
 		},
@@ -208,4 +318,123 @@ func TestServe_OneFocusKeeperSharedByTodayAndDigest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// gateClock is a ports.Clock fixed at one instant: wireProactive's clock seam
+// is what lets this test land inside DigestDue's window.
+type gateClock struct{ now time.Time }
+
+func (c gateClock) Now() time.Time { return c.now }
+
+// slotSevenAfterDigest is the FX-H fixture (design m4c §6) over a real,
+// migrated vault. Six task fillers, A (1.0) and B (0.99) share one set of
+// timestamps, so `wireToday`'s real clock and the digest's fixed one scale
+// every score together and cannot reorder them: A holds slot 7. One digest is
+// sent through wireProactive with the keeper digestKeeper derives from the
+// shared one, B then rises to 1.03 (inside A's 5% margin), and the first
+// Today request through wireToday reports who holds the task focus's last
+// slot: A when the digest and Today share one incumbent, B when they do not.
+func slotSevenAfterDigest(t *testing.T, digestKeeper func(shared *brain.FocusKeeper, db *sqlite.Vault) *brain.FocusKeeper) string {
+	t.Helper()
+	ctx := context.Background()
+	vault := writeVault(t, "")
+	cfg, err := loadVaultConfig(vault)
+	if err != nil {
+		t.Fatalf("loadVaultConfig: %v", err)
+	}
+	dbPath, err := cfg.DatabasePath(vault)
+	if err != nil {
+		t.Fatalf("DatabasePath: %v", err)
+	}
+	db, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	seededAt := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	units := sqlite.NewUnitRepo(db)
+	seed := func(id string, typ unit.Type, w float64) {
+		if err := units.Create(ctx, unit.Unit{
+			ID: id, Type: typ, Status: unit.StatusPool, Content: id, Source: "chat",
+			Weight: w, WeightDecayRate: 0.01,
+			LastTouchedAt: seededAt, CreatedAt: seededAt, UpdatedAt: seededAt,
+		}); err != nil {
+			t.Fatalf("seed unit %s: %v", id, err)
+		}
+	}
+	for i := 1; i <= 6; i++ {
+		seed(fmt.Sprintf("F%d", i), unit.TypeTask, 10)
+	}
+	seed("A", unit.TypeTask, 1.0)
+	seed("B", unit.TypeTask, 0.99)
+
+	// One pending trigger on a knowledge unit (in neither focus), so a digest
+	// is due and has content.
+	seed("k-1", unit.TypeKnowledge, 1)
+	digestAt := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
+	triggers := sqlite.NewTriggerRepo(db)
+	uid, fireAt := "k-1", digestAt.Add(-time.Hour)
+	if err := triggers.Create(ctx, ports.Trigger{
+		ID: "trg-1", UnitID: &uid, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: "act on k-1"}, FireAt: &fireAt, CreatedAt: seededAt,
+	}); err != nil {
+		t.Fatalf("seed trigger: %v", err)
+	}
+	if err := triggers.Fire(ctx, "trg-1", digestAt); err != nil {
+		t.Fatalf("fire trigger: %v", err)
+	}
+
+	shared := wireFocus(db)
+	cfg.Channels.Telegram.AllowedChatIDs = []int64{12449194}
+	ch := fakechannel.New()
+	check, err := wireProactive(gateClock{now: digestAt}, db, cfg, func(string) (string, bool) { return "", false }, ch, digestKeeper(shared, db))
+	if err != nil {
+		t.Fatalf("wireProactive: %v", err)
+	}
+	if _, err := check.Check(ctx, brain.CheckRequest{}); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if sent := ch.Sent(t); len(sent) != 1 {
+		t.Fatalf("the digest sent %d message(s), want 1", len(sent))
+	}
+
+	if err := units.ApplyBoosts(ctx, []weight.Boost{{UnitID: "B", Weight: 1.03, LastTouchedAt: seededAt}}, seededAt); err != nil {
+		t.Fatalf("raise B: %v", err)
+	}
+	today, err := wireToday(db, shared).Today(ctx)
+	if err != nil {
+		t.Fatalf("Today: %v", err)
+	}
+	members := today.Focuses[0].Members
+	if len(members) != focus.DefaultSize {
+		t.Fatalf("task focus has %d members, want %d", len(members), focus.DefaultSize)
+	}
+	return members[len(members)-1].ID
+}
+
+// TestWireProactive_DigestSharesTodaysKeeper proves the keeper really reaches
+// the digest, which the AST gate can only say is wired: a digest sent through
+// wireProactive leaves A held for Today's first request, and the two controls
+// show the fixture discriminates: a nil keeper, or a second one, leaves
+// nothing for Today to find.
+func TestWireProactive_DigestSharesTodaysKeeper(t *testing.T) {
+	t.Run("the shared keeper", func(t *testing.T) {
+		got := slotSevenAfterDigest(t, func(shared *brain.FocusKeeper, _ *sqlite.Vault) *brain.FocusKeeper { return shared })
+		if got != "A" {
+			t.Fatalf("slot 7 = %s, want A — Today must find the incumbent the digest published", got)
+		}
+	})
+	t.Run("a nil keeper", func(t *testing.T) {
+		got := slotSevenAfterDigest(t, func(*brain.FocusKeeper, *sqlite.Vault) *brain.FocusKeeper { return nil })
+		if got != "B" {
+			t.Fatalf("slot 7 = %s, want B — with no keeper the digest publishes nothing", got)
+		}
+	})
+	t.Run("a second keeper", func(t *testing.T) {
+		got := slotSevenAfterDigest(t, func(_ *brain.FocusKeeper, db *sqlite.Vault) *brain.FocusKeeper { return wireFocus(db) })
+		if got != "B" {
+			t.Fatalf("slot 7 = %s, want B — a second keeper is a second incumbent", got)
+		}
+	})
 }

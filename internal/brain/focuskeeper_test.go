@@ -38,9 +38,29 @@ type fxH struct {
 	flaky     *flakyUnits
 	rels      *memrepo.Relations
 	cfg       *memrepo.Config
+	cfgPort   *flakyConfig
+	triggers  *memrepo.Triggers
+	state     *memrepo.State
+	log       *memrepo.DecisionLog
+	ids       *countingIDs
 	questions *openFailingQuestions
 	keeper    *FocusKeeper
 	svc       *TodayService
+}
+
+// flakyConfig makes ConfigRepo.Load fail on demand. The keeper reads it on
+// every computation, and checkRunner holds no ConfigRepo, so toggling it
+// fails exactly the keeper's compute.
+type flakyConfig struct {
+	*memrepo.Config
+	fail bool
+}
+
+func (c *flakyConfig) Load(ctx context.Context) (ports.VaultConfig, error) {
+	if c.fail {
+		return ports.VaultConfig{}, errKeeperBoom
+	}
+	return c.Config.Load(ctx)
 }
 
 // openFailingQuestions makes PendingQuestionRepo.Open fail on demand: Open is
@@ -87,11 +107,16 @@ func newFxH(t *testing.T) *fxH {
 		units:     memrepo.NewUnits(),
 		rels:      memrepo.NewRelations(),
 		cfg:       memrepo.NewConfig(),
+		triggers:  memrepo.NewTriggers(),
+		state:     memrepo.NewState(),
+		log:       memrepo.NewDecisionLog(),
+		ids:       &countingIDs{},
 		questions: &openFailingQuestions{PendingQuestions: memrepo.NewPendingQuestions()},
 	}
 	f.flaky = &flakyUnits{Units: f.units}
-	f.keeper = NewFocusKeeper(f.flaky, f.cfg, f.rels)
-	f.svc = NewTodayService(fixedClock{now: todayNow}, f.flaky, f.cfg, memrepo.NewState(), memrepo.NewTriggers(), f.questions, memrepo.NewDecisionLog(), f.keeper)
+	f.cfgPort = &flakyConfig{Config: f.cfg}
+	f.keeper = NewFocusKeeper(f.flaky, f.cfgPort, f.rels)
+	f.svc = NewTodayService(fixedClock{now: todayNow}, f.flaky, f.cfgPort, f.state, f.triggers, f.questions, f.log, f.keeper)
 	return f
 }
 
