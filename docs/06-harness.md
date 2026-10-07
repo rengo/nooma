@@ -71,7 +71,8 @@ In `golangci-lint`, not in code review:
 
 - **`depguard`** — `internal/core/**` may not import `internal/store`, `internal/providers`,
   `internal/httpapi`, `database/sql`, `net/http`, or any external dependency that is not pure
-  computation stdlib.
+  computation stdlib. Non-test code may not import `internal/store/sqlite/sqlitetest`
+  (rule `sqlitetest-tests-only`): it seeds rows no port can write, and stays test-only.
 - **`forbidigo`** — inside `internal/core/**`, `time.Now`, `time.Since`, `rand.`, `uuid.New`,
   and `os.Getenv` are forbidden. See §2.
 
