@@ -109,7 +109,8 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, err
 	}
 
-	// Adjacency is M4's — focus.Rank accepts an empty map and scores
+	// The adjacency map is intentionally empty until m4c's adjacency link
+	// (PR 2) feeds the digest: focus.Rank accepts an empty map and scores
 	// every candidate on its own terms, which is the honest input until
 	// something computes it. Passing a made-up one would be worse than
 	// passing none.
@@ -150,6 +151,10 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// incumbent: published only after Send succeeds, because an unsent digest
 	// must not move a focus the user never saw. A question-only digest
 	// publishes too; the carry count is not the criterion, the send is.
+	//
+	// This precedes the Surface loop on purpose: the user has seen the digest
+	// whether or not marking its triggers delivered succeeds, so a Surface
+	// failure must not take the incumbent back.
 	if haveRound {
 		r.focus.publish(round)
 	}

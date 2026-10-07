@@ -112,11 +112,13 @@ func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 		add("serve.go: wireFocus's result is not assigned to one identifier")
 	}
 
+	todayCalls, schedulerCalls := 0, 0
 	ast.Inspect(serve, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok || calleeName(call) != "wireToday" {
 			return true
 		}
+		todayCalls++
 		if !lastArgIs(call, keeperVar) {
 			add("serve.go: wireToday's last argument is not %q, the one shared keeper", keeperVar)
 		}
@@ -127,11 +129,18 @@ func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 		if !ok || calleeName(call) != "wireScheduler" {
 			return true
 		}
+		schedulerCalls++
 		if !lastArgIs(call, keeperVar) {
 			add("serve.go: wireScheduler's last argument is not %q, the one shared keeper", keeperVar)
 		}
 		return true
 	})
+	if todayCalls < 1 {
+		add("serve.go: no wireToday call — Today would not be wired to the shared keeper")
+	}
+	if schedulerCalls < 1 {
+		add("serve.go: no wireScheduler call — the digest would not be wired to the shared keeper")
+	}
 
 	for name, f := range files {
 		for _, decl := range f.Decls {
@@ -140,6 +149,7 @@ func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 				continue
 			}
 			param := lastParamName(fn)
+			keeper := keeperParamName(fn)
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
 				if !ok {
@@ -147,12 +157,16 @@ func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 				}
 				switch calleeName(call) {
 				case "NewCheckService":
-					want := param
+					want := keeper
 					if fn.Name.Name == "wireCheck" {
 						want = "nil"
 					}
 					if !lastArgIs(call, want) {
-						add("%s: %s hands NewCheckService something other than %q as its keeper", name, fn.Name.Name, want)
+						add("%s: %s hands NewCheckService something other than %q as its keeper (its *brain.FocusKeeper parameter named keeper, or nil in wireCheck)", name, fn.Name.Name, want)
+					}
+				case "NewTodayService":
+					if !lastArgIs(call, keeper) {
+						add("%s: %s hands NewTodayService something other than its *brain.FocusKeeper parameter named keeper", name, fn.Name.Name)
 					}
 				case "wireProactive":
 					if !lastArgIs(call, param) {
@@ -177,6 +191,33 @@ func lastParamName(fn *ast.FuncDecl) string {
 		return ""
 	}
 	return last.Names[len(last.Names)-1].Name
+}
+
+// keeperParamName is the name of fn's parameter of type *brain.FocusKeeper,
+// "" when it has none.
+func keeperParamName(fn *ast.FuncDecl) string {
+	if fn.Type.Params == nil {
+		return ""
+	}
+	for _, field := range fn.Type.Params.List {
+		star, ok := field.Type.(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		sel, ok := star.X.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "FocusKeeper" {
+			continue
+		}
+		if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "brain" {
+			continue
+		}
+		for _, n := range field.Names {
+			if n.Name == "keeper" {
+				return n.Name
+			}
+		}
+	}
+	return ""
 }
 
 // calleeName is the name a call expression invokes: f(...) and pkg.f(...)
@@ -301,6 +342,28 @@ func TestServe_OneFocusKeeperSharedByTodayAndDigest(t *testing.T) {
 		},
 		"wireCheck hands NewCheckService a keeper": func(m map[string]string) {
 			m["wiring.go"] = strings.Replace(m["wiring.go"], `"", questions, nil)`, `"", questions, wireFocusKeeper)`, 1)
+		},
+		"wireToday hands NewTodayService nil": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "log, keeper)\n}\n\nfunc wireCheck", "log, nil)\n}\n\nfunc wireCheck", 1)
+		},
+		"wireToday hands NewTodayService a fresh keeper": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "log, keeper)\n}\n\nfunc wireCheck", "log, brain.NewFocusKeeper(units, cfg, rels))\n}\n\nfunc wireCheck", 1)
+		},
+		"no wireToday call in serve.go": func(m map[string]string) {
+			m["serve.go"] = strings.Replace(m["serve.go"], "today := wireToday(db, focusKeeper)", "today := 0", 1)
+		},
+		"no wireScheduler call in serve.go": func(m map[string]string) {
+			m["serve.go"] = strings.Replace(m["serve.go"], "sched, err := wireScheduler(ctx, db, cfg, lookup, errOut, channel, focusKeeper)", "var sched, err = 0, 0", 1)
+		},
+		"wireX passed db instead of the keeper": func(m map[string]string) {
+			m["serve.go"] = strings.Replace(m["serve.go"], "wireToday(db, focusKeeper)", "wireToday(db)", 1)
+		},
+		"NewCheckService handed the last parameter that is not the keeper": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService", "keeper *brain.FocusKeeper, channel ports.Channel) (*brain.CheckService", 1)
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "questions, keeper), nil", "questions, channel), nil", 1)
+		},
+		"NewCheckService parameter named keeper of the wrong type": func(m map[string]string) {
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService", "channel ports.Channel, keeper *brain.Other) (*brain.CheckService", 1)
 		},
 		"wireFocus called outside serve.go": func(m map[string]string) {
 			m["wiring.go"] += "\nfunc wireElsewhere(db *sqlite.Vault) { _ = wireFocus(db) }\n"

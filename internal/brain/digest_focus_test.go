@@ -96,6 +96,29 @@ func TestDigest_FailedSendPublishesNothing(t *testing.T) {
 	}
 }
 
+// surfaceFailingTriggers is the fixture's trigger repo whose Surface fails.
+type surfaceFailingTriggers struct{ ports.TriggerRepo }
+
+func (surfaceFailingTriggers) Surface(context.Context, string, time.Time) error {
+	return errKeeperBoom
+}
+
+// TestDigest_PublishesBeforeSurface pins where the publish sits: the user has
+// seen the digest once Send succeeds, so a later Surface failure must not take
+// the incumbent back. Moving the publish below the Surface loop leaves every
+// other test green; this one is red there.
+func TestDigest_PublishesBeforeSurface(t *testing.T) {
+	f := digestFixture(t)
+	r := f.digestRunner(&sendingChannel{})
+	r.triggers = surfaceFailingTriggers{TriggerRepo: f.triggers}
+	if _, err := r.assembleDigest(context.Background(), digestNow, true); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("assembleDigest error = %v, want the Surface failure", err)
+	}
+	if got := f.slotSevenAfter(t); got != "A" {
+		t.Fatalf("slot 7 = %s, want A — the digest was sent, so its selection is the incumbent even when Surface fails", got)
+	}
+}
+
 func TestDigest_DryRunPublishesNothing(t *testing.T) {
 	f := digestFixture(t)
 	if _, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, false); err != nil {

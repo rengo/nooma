@@ -28,7 +28,9 @@ type TodayService struct {
 }
 
 // NewTodayService wires a TodayService over the ports one Today request
-// needs.
+// needs. The keeper must be non-nil: Today computes through it on every
+// request and panics without one. This differs from NewCheckService, where a
+// nil keeper is legal (the digest then has no incumbent and publishes nothing).
 func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog, keeper *FocusKeeper) *TodayService {
 	return &TodayService{
 		clock: clock,
