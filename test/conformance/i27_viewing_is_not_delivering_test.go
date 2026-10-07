@@ -26,7 +26,9 @@ import (
 // LiveDecayStates, LiveFocusCandidates and LiveFocusCandidatesByType are
 // reads), relationrepo.go (RelationRepo: Upsert and Delete write; ByUnit,
 // ThresholdsFor, Evidence, ExistingPairs and ByID read — Today reads
-// ByUnit through the focus keeper, and ByID is a read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
+// ByUnit through the focus keeper, for the members of the incumbent it holds
+// and of the one it selects (the pending-digest mirror's P'), and ByID is a
+// read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
 // Expire write; Due, Undelivered, Delivered read),
 // pendingquestionrepo.go (PendingQuestionRepo: Create, MarkAsked,
 // Confirm, Reject, Expire write; Unasked, Open read), staterepo.go
@@ -90,7 +92,8 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 	// and writes nothing to the vault, so a single call proves the same
 	// postcondition; the loop matches the spec's own scenario as written
 	// rather than a weaker paraphrase of it, and from the second request on
-	// the keeper reads the relations of the incumbent it holds.
+	// the keeper reads the relations of the incumbent it holds and of the one
+	// it selects for the pending-digest mirror.
 	for i := 0; i < 3; i++ {
 		if _, err := svc.Today(ctx); err != nil {
 			t.Fatalf("Today request %d: %v", i+1, err)

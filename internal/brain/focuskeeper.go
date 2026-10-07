@@ -39,6 +39,12 @@ type incumbent struct {
 type focusRound struct {
 	members map[focus.Kind][]focus.Ranked // Select's order; Score is Rank's literal value
 	next    *incumbent                    // both Kinds, always
+
+	// adjacent and nextAdjacent are unit-keyed adjacency for the pending
+	// digest's Carry, against the loaded incumbent P and against the round's
+	// own next incumbent P' (design m4c §3.5).
+	adjacent     map[string]float64
+	nextAdjacent map[string]float64
 }
 
 // selection is the held Selection for k, empty when nothing is held.
@@ -70,7 +76,8 @@ func (k *FocusKeeper) compute(ctx context.Context, now time.Time) (focusRound, e
 	}
 	margin := focus.ResolveMargin(cfg.HysteresisMargin)
 
-	edges, err := k.edges(ctx, prev)
+	cache := &edgeCache{rels: k.rels, byUnit: make(map[string][]weight.Edge)}
+	edges, err := cache.edges(ctx, prev)
 	if err != nil {
 		return focusRound{}, err
 	}
@@ -99,26 +106,61 @@ func (k *FocusKeeper) compute(ctx context.Context, now time.Time) (focusRound, e
 		round.members[kind] = members
 		round.next.byKind[kind] = selected
 	}
+
+	// The pending digest's Carry ranks items on units of any type, so its
+	// adjacency is to the union of both Kinds' members: against P for the
+	// digest, which has not Selected yet, and against P' for Today's mirror,
+	// which previews the digest a request from now (design m4c §3.5).
+	round.adjacent = focus.AdjacencyStrengths(prev.members(), edges)
+	nextEdges, err := cache.edges(ctx, round.next)
+	if err != nil {
+		return focusRound{}, err
+	}
+	round.nextAdjacent = focus.AdjacencyStrengths(round.next.members(), nextEdges)
 	return round, nil
 }
 
-// edges is the one ByUnit sweep over every member of P, both Kinds, as
-// undirected weight edges. A relation's Strength is its relevance; its
-// Confidence is certainty, and the two are never combined (doc 02 §4).
-func (k *FocusKeeper) edges(ctx context.Context, p *incumbent) ([]weight.Edge, error) {
+// edgeCache is one round's reads of ports.RelationRepo.ByUnit, memoized by unit
+// id: a unit that is a member of both P and P' (the usual case, six of seven
+// slots rarely move) has its relations read once, not twice, so a round costs
+// at most one read per distinct member of either snapshot (design m4c §3.3).
+type edgeCache struct {
+	rels   ports.RelationRepo
+	byUnit map[string][]weight.Edge
+}
+
+// edges is the sweep over every member of p, both Kinds, as undirected weight
+// edges. A relation's Strength is its relevance; its Confidence is certainty,
+// and the two are never combined (doc 02 §4).
+func (c *edgeCache) edges(ctx context.Context, p *incumbent) ([]weight.Edge, error) {
 	var edges []weight.Edge
 	for _, kind := range focus.AllKinds() {
 		for _, id := range p.selection(kind).Members {
-			rels, err := k.rels.ByUnit(ctx, id)
-			if err != nil {
-				return nil, fmt.Errorf("focus: relations of %q: %w", id, err)
+			memberEdges, ok := c.byUnit[id]
+			if !ok {
+				rels, err := c.rels.ByUnit(ctx, id)
+				if err != nil {
+					return nil, fmt.Errorf("focus: relations of %q: %w", id, err)
+				}
+				for _, r := range rels {
+					memberEdges = append(memberEdges, weight.Edge{From: r.FromUnitID, To: r.ToUnitID, Strength: r.Strength})
+				}
+				c.byUnit[id] = memberEdges
 			}
-			for _, r := range rels {
-				edges = append(edges, weight.Edge{From: r.FromUnitID, To: r.ToUnitID, Strength: r.Strength})
-			}
+			edges = append(edges, memberEdges...)
 		}
 	}
 	return edges, nil
+}
+
+// members is every member of p, both Kinds, as one Selection: the "anything
+// currently in focus" reading the digest's Carry takes (design m4c §3.3).
+func (p *incumbent) members() focus.Selection {
+	var all focus.Selection
+	for _, kind := range focus.AllKinds() {
+		all.Members = append(all.Members, p.selection(kind).Members...)
+	}
+	return all
 }
 
 // publish replaces the held incumbent with the round's, whole. The only write

@@ -152,27 +152,27 @@ overflow (decide and report).
 
 ## PR 2 — `feat/brain-focus-adjacency` (after PR 1 / 1b merges)
 
-- [ ] **2.1** SCAFFOLD — `focusRound` gains `adjacent`, `nextAdjacent` (unset); `carryAdjacency(byUnit,
+- [x] **2.1** SCAFFOLD — `focusRound` gains `adjacent`, `nextAdjacent` (unset); `carryAdjacency(byUnit,
   pending)` returns `nil`, in `digest.go`. `make check` and tagged vet green.
-- [ ] **2.2** RED — FX-L fixtures (low energy, >=4 pending, fillers above and below, **trigger
+- [x] **2.2** RED — FX-L fixtures (low energy, >=4 pending, fillers above and below, **trigger
   ids != unit ids**, one nil-`UnitID` trigger, **trigger units typed in neither Kind, e.g.
   knowledge** (Correction 5)): `TestDigest_AdjacentItemCarriedAhead` (asserts the rendered
   digest too), `TestDigest_ItemAdjacentToLoadFocusCarried`, `TestDigest_FreshKeeperHasNoAdjacency`.
-- [ ] **2.3** RED — `TestToday_PendingDigestMatchesDigestOrder`, two table cases (task, load;
+- [x] **2.3** RED — `TestToday_PendingDigestMatchesDigestOrder`, two table cases (task, load;
   P != P'), each asserting (1) mirror order `Y, X`, (2) shared-keeper `CheckService` equals the
   mirror, (3) fresh-keeper control carries `X, Y`; plus
   `TestToday_FirstRequestMirrorUsesNextAdjacencyOnFreshKeeper` (no seed request).
-- [ ] **2.4** RED — wiring: Today -> digest direction in `TestWireProactive_DigestSharesTodaysKeeper`;
+- [x] **2.4** RED — wiring: Today -> digest direction in `TestWireProactive_DigestSharesTodaysKeeper`;
   I27 guard still passes with the mirror's new relation reads.
-- [ ] **2.5** GREEN — `focuskeeper.go`: `adjacent` = union vs P, `nextAdjacent` = union vs P'
+- [x] **2.5** GREEN — `focuskeeper.go`: `adjacent` = union vs P, `nextAdjacent` = union vs P'
   (memoized `ByUnit` covers members of P and P'); `carryAdjacency` re-key, skip nil `UnitID`;
   `today.go` mirror `Carry` gets `carryAdjacency(round.nextAdjacent, …)`; `digest.go` second
   `Carry` gets `round.adjacent` and its result is sent; delete the "Adjacency is M4's" comment.
-- [ ] **2.6** DOCS — delete the interim sentence; add the union/P' sentence; append the restart
+- [x] **2.6** DOCS — delete the interim sentence; add the union/P' sentence; append the restart
   clause after "Two effects from one restart, not one."; §7 consequence ("viewing `/ui` can
   change a later low-energy digest's order"); `docs/06-harness.md` I27 row P' note. Verify
   `scripts/docs-sync.sh`.
-- [ ] **2.7** PROBES from the production diff: L2-7 task only / vs `next`; L2-8 un-re-keyed;
+- [x] **2.7** PROBES from the production diff: L2-7 task only / vs `next`; L2-8 un-re-keyed;
   L2-9 dereference nil `UnitID`; L2-10 empty map / vs P; L2-11 vs P; L2-11b `P'.task`/`P'.load`
   alone; L2-12 swap `adjacent`/`nextAdjacent`; L2-12b mirror reads P; L2-13 memo only P;
   L2-14; L2-15 send step-2 split. Record each in its commit body.
@@ -195,7 +195,22 @@ Deviations from the plan, none behavioural:
   `TestFocusKeeper_ConcurrentTodayAndDigestAreRaceFree`, killed by a plain-pointer mutant
   under `-race`.
 
+### PR 2 apply notes
+
+Measured: implementation + docs = 120 changed lines (impl 104, docs 16), tests ~540 reported
+apart. Deviations from the plan, none behavioural:
+
+- **2.1** the scaffold also wires the two `Carry` call sites to `carryAdjacency` (returning
+  `nil`), because `golangci-lint`'s `unused` rejects fields and a function nothing reads.
+- **2.2/2.3** the pending items are one shared FX-L set (hi, two contested items, lo, a nil-unit
+  trigger), and the P != P' mirror fixture asserts the control digest on a second keeper.
+- **2.4** the Today -> digest wiring test seeds its one low-energy reading through
+  `sqlitetest.SeedEnergy` (inside `internal/store`), since `StateRepo` declares no energy writer.
+- **2.7** a mixed mutant (P' members over P's edges) survived the design's list and forced
+  `TestDigest_ReadsAdjacencyToTheIncumbentItLoaded`; the always-true `haveRound` guard is
+  equivalent.
+
 ## Closing (each link)
 
-- [ ] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh`, all in
+- [x] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh`, all in
   an isolated worktree at the link's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines.

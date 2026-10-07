@@ -91,6 +91,20 @@ linters:
             - pkg: database/sql
               desc: "only internal/store speaks SQL — docs/06-harness.md §1"
 
+        # sqlitetest seeds rows no port can write (an energy reading), so it
+        # must stay a test-only dependency: ports.StateRepo declares no energy
+        # writer on purpose. Prose in its package doc did not stop a non-test
+        # file importing it with lint, conformance and build all green, so
+        # this rule does. $test scopes it to non-test files.
+        sqlitetest-tests-only:
+          files:
+            - $all
+            - "!$test"
+            - "!**/internal/store/sqlite/sqlitetest/**"
+          deny:
+            - pkg: github.com/rengo/nooma/internal/store/sqlite/sqlitetest
+              desc: "test support only; ports.StateRepo has no energy writer on purpose, and production code must not gain one through this package"
+
         # m2c design §10.1: R0.1 claimed the dependency rule held at the new
         # ports/store/brain boundary because "the allow-lists already cover
         # these three directories" — verified false. core-purity and
