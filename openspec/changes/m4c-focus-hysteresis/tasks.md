@@ -204,8 +204,8 @@ apart. Deviations from the plan, none behavioural:
   `nil`), because `golangci-lint`'s `unused` rejects fields and a function nothing reads.
 - **2.2/2.3** the pending items are one shared FX-L set (hi, two contested items, lo, a nil-unit
   trigger), and the P != P' mirror fixture asserts the control digest on a second keeper.
-- **2.4** the Today -> digest wiring test seeds its one low-energy reading with raw SQL, since
-  `StateRepo` declares no energy writer; the import carries an explained `//nolint:depguard`.
+- **2.4** the Today -> digest wiring test seeds its one low-energy reading through
+  `sqlitetest.SeedEnergy` (inside `internal/store`), since `StateRepo` declares no energy writer.
 - **2.7** a mixed mutant (P' members over P's edges) survived the design's list and forced
   `TestDigest_ReadsAdjacencyToTheIncumbentItLoaded`; the always-true `haveRound` guard is
   equivalent.

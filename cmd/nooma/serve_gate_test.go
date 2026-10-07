@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql" //nolint:depguard // StateRepo declares no energy writer; the one low-energy reading this test needs is seeded as a row, as internal/store/sqlite/staterepo_integration_test.go does
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -20,6 +19,7 @@ import (
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
+	"github.com/rengo/nooma/internal/store/sqlite/sqlitetest"
 	"github.com/rengo/nooma/test/support/fakechannel"
 )
 
@@ -585,17 +585,7 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 		t.Fatalf("seed relation: %v", err)
 	}
 
-	// StateRepo declares no energy writer, so the low reading goes in as a row.
-	raw, err := sql.Open("sqlite3", "file:"+db.Path())
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	defer func() { _ = raw.Close() }()
-	if _, err := raw.ExecContext(ctx,
-		`INSERT INTO current_state (id, energy, mood, active, recorded_at, source) VALUES ('e-1', 0.1, '', 0, ?, ?)`,
-		digestAt.Add(-time.Minute).Format(time.RFC3339), ports.StateSourceUser); err != nil {
-		t.Fatalf("seed energy: %v", err)
-	}
+	sqlitetest.SeedEnergy(t, db, "e-1", digestAt.Add(-time.Minute), 0.1)
 
 	shared := wireFocus(db)
 	if _, err := wireToday(db, shared).Today(ctx); err != nil {
