@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql" //nolint:depguard // StateRepo declares no energy writer; the one low-energy reading this test needs is seeded as a row, as internal/store/sqlite/staterepo_integration_test.go does
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
@@ -389,6 +391,42 @@ type gateClock struct{ now time.Time }
 
 func (c gateClock) Now() time.Time { return c.now }
 
+// gateVault opens a real, migrated vault with an empty config, closed when t
+// ends.
+func gateVault(t *testing.T) (*sqlite.Vault, *config.Config) {
+	t.Helper()
+	vault := writeVault(t, "")
+	cfg, err := loadVaultConfig(vault)
+	if err != nil {
+		t.Fatalf("loadVaultConfig: %v", err)
+	}
+	dbPath, err := cfg.DatabasePath(vault)
+	if err != nil {
+		t.Fatalf("DatabasePath: %v", err)
+	}
+	db, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db, cfg
+}
+
+// gateSeeder returns a function that seeds one pool unit stamped at.
+func gateSeeder(t *testing.T, units *sqlite.UnitRepo, at time.Time) func(id string, typ unit.Type, w float64) {
+	t.Helper()
+	return func(id string, typ unit.Type, w float64) {
+		t.Helper()
+		if err := units.Create(context.Background(), unit.Unit{
+			ID: id, Type: typ, Status: unit.StatusPool, Content: id, Source: "chat",
+			Weight: w, WeightDecayRate: 0.01,
+			LastTouchedAt: at, CreatedAt: at, UpdatedAt: at,
+		}); err != nil {
+			t.Fatalf("seed unit %s: %v", id, err)
+		}
+	}
+}
+
 // slotSevenAfterDigest is the FX-H fixture (design m4c §6) over a real,
 // migrated vault. Six task fillers, A (1.0) and B (0.99) share one set of
 // timestamps, so `wireToday`'s real clock and the digest's fixed one scale
@@ -400,32 +438,11 @@ func (c gateClock) Now() time.Time { return c.now }
 func slotSevenAfterDigest(t *testing.T, digestKeeper func(shared *brain.FocusKeeper, db *sqlite.Vault) *brain.FocusKeeper) string {
 	t.Helper()
 	ctx := context.Background()
-	vault := writeVault(t, "")
-	cfg, err := loadVaultConfig(vault)
-	if err != nil {
-		t.Fatalf("loadVaultConfig: %v", err)
-	}
-	dbPath, err := cfg.DatabasePath(vault)
-	if err != nil {
-		t.Fatalf("DatabasePath: %v", err)
-	}
-	db, err := sqlite.Open(ctx, dbPath)
-	if err != nil {
-		t.Fatalf("sqlite.Open: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db, cfg := gateVault(t)
 
 	seededAt := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
 	units := sqlite.NewUnitRepo(db)
-	seed := func(id string, typ unit.Type, w float64) {
-		if err := units.Create(ctx, unit.Unit{
-			ID: id, Type: typ, Status: unit.StatusPool, Content: id, Source: "chat",
-			Weight: w, WeightDecayRate: 0.01,
-			LastTouchedAt: seededAt, CreatedAt: seededAt, UpdatedAt: seededAt,
-		}); err != nil {
-			t.Fatalf("seed unit %s: %v", id, err)
-		}
-	}
+	seed := gateSeeder(t, units, seededAt)
 	for i := 1; i <= 6; i++ {
 		seed(fmt.Sprintf("F%d", i), unit.TypeTask, 10)
 	}
@@ -519,4 +536,112 @@ func TestWireProactive_DigestSharesTodaysKeeper(t *testing.T) {
 			t.Fatalf("slot 7 = %s, want B — a second keeper is a second incumbent", got)
 		}
 	})
+}
+
+// carryOrderAfterToday is the other direction, over a real vault: one Today
+// request first (it publishes the focus {F1..F6, A}), then one low-energy
+// digest sent through wireProactive with the keeper digestKeeper derives from
+// the shared one. The pending items are FX-L (design m4c §6): trg-1 and trg-2
+// are equal in every base term, so with no adjacency Rank's id tie-break puts
+// trg-1 first, and trg-2's unit k-q is related to A. The returned order is the
+// message's: trg-2 ahead of trg-1 exactly when the digest found the incumbent
+// Today published.
+func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKeeper, db *sqlite.Vault) *brain.FocusKeeper) []string {
+	t.Helper()
+	ctx := context.Background()
+	db, cfg := gateVault(t)
+
+	seededAt := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	digestAt := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
+	units := sqlite.NewUnitRepo(db)
+	seed := gateSeeder(t, units, seededAt)
+	for i := 1; i <= 6; i++ {
+		seed(fmt.Sprintf("F%d", i), unit.TypeTask, 10)
+	}
+	seed("A", unit.TypeTask, 1.0)
+	seed("B", unit.TypeTask, 0.99)
+
+	triggers := sqlite.NewTriggerRepo(db)
+	for _, p := range []struct {
+		trig, unit string
+		w          float64
+	}{{"trg-hi", "k-hi", 3}, {"trg-1", "k-p", 1}, {"trg-2", "k-q", 1}, {"trg-lo", "k-lo", 0.2}} {
+		seed(p.unit, unit.TypeKnowledge, p.w)
+		uid, fireAt := p.unit, digestAt.Add(-time.Hour)
+		if err := triggers.Create(ctx, ports.Trigger{
+			ID: p.trig, UnitID: &uid, Kind: ports.TriggerKindTimeBased,
+			Payload: ports.TriggerPayload{ActionText: "act on " + p.trig}, FireAt: &fireAt, CreatedAt: seededAt,
+		}); err != nil {
+			t.Fatalf("seed trigger %s: %v", p.trig, err)
+		}
+		if err := triggers.Fire(ctx, p.trig, digestAt); err != nil {
+			t.Fatalf("fire trigger %s: %v", p.trig, err)
+		}
+	}
+	if err := sqlite.NewRelationRepo(db).Upsert(ctx, ports.Relation{
+		ID: "rel-1", FromUnitID: "A", ToUnitID: "k-q", Type: "related",
+		Strength: 0.9, Confidence: 0.9, CreatedBy: "system", CreatedAt: seededAt,
+	}); err != nil {
+		t.Fatalf("seed relation: %v", err)
+	}
+
+	// StateRepo declares no energy writer, so the low reading goes in as a row.
+	raw, err := sql.Open("sqlite3", "file:"+db.Path())
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer func() { _ = raw.Close() }()
+	if _, err := raw.ExecContext(ctx,
+		`INSERT INTO current_state (id, energy, mood, active, recorded_at, source) VALUES ('e-1', 0.1, '', 0, ?, ?)`,
+		digestAt.Add(-time.Minute).Format(time.RFC3339), ports.StateSourceUser); err != nil {
+		t.Fatalf("seed energy: %v", err)
+	}
+
+	shared := wireFocus(db)
+	if _, err := wireToday(db, shared).Today(ctx); err != nil {
+		t.Fatalf("Today: %v", err)
+	}
+
+	cfg.Channels.Telegram.AllowedChatIDs = []int64{12449194}
+	ch := fakechannel.New()
+	check, err := wireProactive(gateClock{now: digestAt}, db, cfg, func(string) (string, bool) { return "", false }, ch, digestKeeper(shared, db))
+	if err != nil {
+		t.Fatalf("wireProactive: %v", err)
+	}
+	if _, err := check.Check(ctx, brain.CheckRequest{}); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	sent := ch.Sent(t)
+	if len(sent) != 1 {
+		t.Fatalf("the digest sent %d message(s), want 1", len(sent))
+	}
+	var order []string
+	for _, line := range strings.Split(sent[0].Text, "\n\u2022 ")[1:] {
+		order = append(order, strings.TrimPrefix(line, "act on "))
+	}
+	return order
+}
+
+// TestWireProactive_DigestOrdersByTodaysFocus is Today -> digest: a low-energy
+// digest carries the item adjacent to the focus Today last published ahead of
+// its equal, and the two controls show the fixture discriminates: with no
+// keeper, or a second one, there is no focus to be adjacent to.
+func TestWireProactive_DigestOrdersByTodaysFocus(t *testing.T) {
+	cases := []struct {
+		name string
+		keep func(shared *brain.FocusKeeper, db *sqlite.Vault) *brain.FocusKeeper
+		want []string
+	}{
+		{"the shared keeper", func(shared *brain.FocusKeeper, _ *sqlite.Vault) *brain.FocusKeeper { return shared }, []string{"trg-hi", "trg-2", "trg-1"}},
+		{"a nil keeper", func(*brain.FocusKeeper, *sqlite.Vault) *brain.FocusKeeper { return nil }, []string{"trg-hi", "trg-1", "trg-2"}},
+		{"a second keeper", func(_ *brain.FocusKeeper, db *sqlite.Vault) *brain.FocusKeeper { return wireFocus(db) }, []string{"trg-hi", "trg-1", "trg-2"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := carryOrderAfterToday(t, tc.keep)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("digest order = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
