@@ -38,7 +38,7 @@ amendment is removed in link 1 (non-negotiable 1).
 | R6 | Doc 02 loses only the m4a amendment sentence block and gains text naming who writes the incumbent | non-neg. 1 |
 | R7 | Displayed `Score` is the literal `Rank` value, adjacency included | I18 |
 | R8 | Today's ranking is fed adjacency computed from the incumbent's relations | — |
-| R9 | The digest Selects per Kind over the incumbent and reads adjacency against the pre-Select incumbent | I19 |
+| R9 | The digest Selects per Kind over the incumbent and reads adjacency (the union of both Kinds' members of the loaded incumbent, re-keyed to trigger ids) against the pre-Select incumbent | I19 |
 | R10 | With no incumbent, adjacency is empty and hysteresis is off, for each consumer's own focus ranking and for the digest; the pending-digest mirror is carved out (it reads the incumbent its request just selected) | I01 |
 
 ### R1 — Select over an incumbent
@@ -69,7 +69,7 @@ changes the outcome.
 
 ### R3 — In process only
 
-**MUST**: no schema, repo method or file holds the incumbent; a freshly constructed service has
+**MUST**: no schema, repo method or file holds the incumbent; a freshly constructed keeper has
 none.
 
 - GIVEN a service holding incumbent A and a challenger inside the margin
@@ -163,9 +163,10 @@ request's `Select`.
 
 ### R9 — Adjacency reaches the digest
 
-**MUST**: the digest, at `brain/digest.go:112-116`, computes adjacency exactly as R8 does,
-against the incumbent as it stood before its own `Select`, and passes it to `prospection.Carry`
-instead of an empty map. It then calls `focus.Select` per Kind with the resolved margin
+**MUST**: the digest, at `brain/digest.go:112-116`, computes adjacency as the union of both
+Kinds' members of the loaded incumbent, re-keyed to trigger ids (design §3.3), against the
+incumbent as it stood before its own `Select`, and passes it to `prospection.Carry` instead of
+an empty map. It then calls `focus.Select` per Kind with the resolved margin
 (R2) and stores the result as the new incumbent **only after the digest is sent**; an empty
 digest, a dry run, a missing conversation and a failed send store nothing, and a digest that
 carries only a question stores its selection once sent. A failure to compute the focus does
@@ -237,9 +238,8 @@ old.
 
 **OQ4 (closed by design §3.3) — Which incumbent feeds adjacency?** Doc 02 says "active focus", singular; it does not
 say per Kind. Today uses each Kind's own incumbent (matches `AdjacencyStrengths(previous
-Selection)`). Now that the digest Selects per Kind, the per-Kind answer for the digest may fall
-out naturally, with `Carry`'s adjacency being the union or the per-item Kind's. Left open for
-design.
+Selection)`). The digest's `Carry` is fed the union of both Kinds' members of the loaded incumbent,
+re-keyed to trigger ids, because a digest item can sit on a unit of any type.
 
 **OQ5 (closed, owner ruling 2026-10-07)**: a headless or Telegram-only process gets hysteresis
 and adjacency in its digest, because the digest is itself a writer (R9).
@@ -247,7 +247,7 @@ and adjacency in its digest, because the digest is itself a writer (R9).
 **OQ6 (closed by design §3.4) — Digest candidate pool.** The digest's items are trigger-linked units, while `Select`
 ranks a Kind's live candidates. The spec requires the digest to Select per Kind but does not
 say whether over the full live pool (as Today) or over the digest items. Default: the same
-live pool as Today, so both writers produce comparable incumbents. Left open for design.
+live pool as Today, so both writers produce comparable incumbents.
 
 ## Exit criterion
 
