@@ -169,6 +169,33 @@ func TestDigest_FreshKeeperHasNoAdjacency(t *testing.T) {
 	assertIDs(t, "digest order on a fresh keeper", order, []string{carryHi, carryOne, carryTwo})
 }
 
+// TestDigest_AdjacencyNeverChangesHowManyItemsCarry pins the claim assembleDigest's
+// verdict split rests on: that split reads no adjacency, so adjacency may change
+// which items carry and in what order but never how many. The same FX-L set is
+// run with adjacency in force and with none (a fresh keeper), and both the
+// verdict count and the count actually sent must match, and must be the
+// low-energy cap rather than the whole pending set.
+func TestDigest_AdjacencyNeverChangesHowManyItemsCarry(t *testing.T) {
+	with := adjacencyFixture(t, focus.KindTask)
+	withOrder, withCarried := with.digestOrder(t)
+
+	without := newFxH(t)
+	inc, _ := without.contest(t, focus.KindTask)
+	without.fxL(t)
+	without.relate(t, inc, "u-q", 0.9, 0.9)
+	withoutOrder, withoutCarried := without.digestOrder(t)
+
+	if withCarried != withoutCarried {
+		t.Fatalf("verdict carried %d with adjacency, %d without", withCarried, withoutCarried)
+	}
+	if len(withOrder) != len(withoutOrder) {
+		t.Fatalf("sent %d item(s) with adjacency, %d without", len(withOrder), len(withoutOrder))
+	}
+	if len(withOrder) != prospection.LowEnergyDigestSize {
+		t.Fatalf("sent %d item(s), want the low-energy cap %d", len(withOrder), prospection.LowEnergyDigestSize)
+	}
+}
+
 // mirrorFixture is the P != P' fixture (design §6), run once per Kind: the
 // contested Kind's incumbent is displaced by its challenger, trg-1's unit
 // (X) sits next to the incumbent and trg-2's (Y) next to the challenger. A
