@@ -333,12 +333,17 @@ section rejects above.
   what `relation_to_active_focus` reads (above), so that same first ranking after a restart has
   `previous` empty for both mechanisms at once: `relation_to_active_focus` is 0 for every unit
   and the term vanishes entirely, not only hysteresis. Two effects from one restart, not one.
-  The previous focus is held per focus, in process, and written by `/ui`'s Today view on every
-  successful request, each time through its own `focus.Select`; the digest becomes the second
-  writer in 1b. Nothing else writes it, nothing persists it, and it does not expire. Each focus
-  reads `relation_to_active_focus` against its own previous focus, as the strongest relation
-  `strength` joining a unit to a member. Until `m4c`'s second link, the digest and `/ui`'s
-  pending-digest mirror read `relation_to_active_focus` as 0 even while an incumbent is held.
+  The previous focus is held per focus, in process, and written by exactly two computations,
+  each running its own `focus.Select`: `/ui`'s Today view on every successful request, and the
+  morning digest each time one is sent. Nothing else writes it, nothing persists it, and it does
+  not expire. A process with no Today view (headless, or reached only through Telegram) still
+  holds one once a digest has gone out. A writer replaces both focuses at once, so two
+  concurrent writers leave one writer's whole selection, never a mix. A digest whose focus
+  cannot be computed is still sent, without adjacency and without moving the incumbent, and
+  records `check.focus.unavailable`. Each focus reads `relation_to_active_focus` against its own
+  previous focus, as the strongest relation `strength` joining a unit to a member. Until
+  `m4c`'s second link, the digest and `/ui`'s pending-digest mirror read
+  `relation_to_active_focus` as 0 even while an incumbent is held.
 
 ## 4. Relations
 
@@ -1119,7 +1124,7 @@ box can audit it):
 now, computed from the same reads and the same `Carry`, but rendering it writes nothing to the
 vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
 (I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
-(§3).
+(§3), which the next digest then reads.
 
 **Degradation** (owner ruling 1; `internal/core/prospection.ResolveInterrupt`,
 `Interrupt.Route`): classify emits `interrupt_level` per message. A `NULL` or unparseable

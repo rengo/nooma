@@ -133,10 +133,25 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 			checkDetail{})
 	}
 
+	// Only here, past every path that does not send: an empty digest, a dry
+	// run and a missing conversation have all returned, so none of them reads
+	// the keeper, and none can leave a check.focus.unavailable row.
+	round, haveRound, err := r.digestFocus(ctx, now)
+	if err != nil {
+		return 0, err
+	}
+
 	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, question)); err != nil {
 		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})
+	}
+	// The user has now seen this digest, so its selection becomes the
+	// incumbent: published only after Send succeeds, because an unsent digest
+	// must not move a focus the user never saw. A question-only digest
+	// publishes too; the carry count is not the criterion, the send is.
+	if haveRound {
+		r.focus.publish(round)
 	}
 
 	for _, item := range carry {
@@ -176,6 +191,28 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	return len(carry), nil
+}
+
+// digestFocus computes the focus the digest is about to be sent against. A
+// nil keeper means no incumbent and no round (haveRound is false).
+//
+// A compute failure is not fatal: a focus that cannot be computed must not
+// stop a digest the user is owed, and the digest worked without one before
+// m4c. It is recorded as one check.focus.unavailable row, the digest is sent
+// as it stands, and nothing is published. The row repeats on each retry scan
+// while the digest stays unsent, because DigestDue holds until one is sent;
+// nothing de-duplicates it. Only a failure to RECORD the row is returned.
+func (r checkRunner) digestFocus(ctx context.Context, now time.Time) (round focusRound, haveRound bool, err error) {
+	if r.focus == nil {
+		return focusRound{}, false, nil
+	}
+	round, err = r.focus.compute(ctx, now)
+	if err != nil {
+		return focusRound{}, false, r.record(ctx, now, ports.ActionCheckFocusUnavailable,
+			fmt.Sprintf("the focus could not be computed, so the digest is sent without it and the incumbent is left where it was: %v", err),
+			checkDetail{})
+	}
+	return round, true, nil
 }
 
 // digestItems turns undelivered triggers into what Carry consumes: a

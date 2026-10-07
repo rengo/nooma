@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -211,6 +212,9 @@ func TestDigest_FocusErrorStillSendsDigest(t *testing.T) {
 	}
 	if got := f.focusRows(t); got != 1 {
 		t.Fatalf("check.focus.unavailable rows = %d, want exactly 1", got)
+	}
+	if got := string(ports.ActionCheckFocusUnavailable); got != "check.focus.unavailable" {
+		t.Fatalf("the action is %q, want the vocabulary name doc 02 and the glass box show", got)
 	}
 	if got := countAction(t, f.log, digestNow, ports.ActionCheckDigestSent); got != 1 {
 		t.Fatalf("check.digest.sent rows = %d, want 1", got)
@@ -438,5 +442,32 @@ func TestFocusKeeper_ConcurrentTodayAndDigestAreRaceFree(t *testing.T) {
 	}
 	if !consistent(final) {
 		t.Fatalf("the final incumbent mixes two writers' selections: %+v", final.byKind)
+	}
+}
+
+// failingFocusRow is a DecisionLog that refuses to record check.focus.unavailable.
+type failingFocusRow struct{ ports.DecisionLog }
+
+func (l failingFocusRow) Record(ctx context.Context, d ports.Decision) error {
+	if d.Action == ports.ActionCheckFocusUnavailable {
+		return errKeeperBoom
+	}
+	return l.DecisionLog.Record(ctx, d)
+}
+
+// TestDigest_FocusErrorRowWriteFailureIsReturned: the audit row is the one
+// thing a failed focus must still write, so failing to write it fails the
+// pass before anything is sent, as every other audit write does.
+func TestDigest_FocusErrorRowWriteFailureIsReturned(t *testing.T) {
+	f := digestFixture(t)
+	f.cfgPort.fail = true
+	ch := &sendingChannel{}
+	r := f.digestRunner(ch)
+	r.log = failingFocusRow{f.log}
+	if _, err := r.assembleDigest(context.Background(), digestNow, true); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("assembleDigest err = %v, want the audit-write error", err)
+	}
+	if ch.count() != 0 {
+		t.Fatal("the digest was sent although its audit row could not be written")
 	}
 }

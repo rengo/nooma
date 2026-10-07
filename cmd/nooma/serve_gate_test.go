@@ -398,6 +398,25 @@ func slotSevenAfterDigest(t *testing.T, digestKeeper func(shared *brain.FocusKee
 	if sent := ch.Sent(t); len(sent) != 1 {
 		t.Fatalf("the digest sent %d message(s), want 1", len(sent))
 	}
+	// wireProactive's clock seam: the pass must run at the instant it was
+	// given, not at the real one.
+	rows, err := sqlite.NewDecisionLog(db).Since(ctx, digestAt.Add(-time.Hour), -1)
+	if err != nil {
+		t.Fatalf("reading the decision log: %v", err)
+	}
+	sentRows := 0
+	for _, row := range rows {
+		if row.Action != ports.ActionCheckDigestSent {
+			continue
+		}
+		sentRows++
+		if !row.OccurredAt.Equal(digestAt) {
+			t.Fatalf("check.digest.sent was recorded at %s, want the clock wireProactive was given (%s)", row.OccurredAt, digestAt)
+		}
+	}
+	if sentRows != 1 {
+		t.Fatalf("%d check.digest.sent rows, want 1", sentRows)
+	}
 
 	if err := units.ApplyBoosts(ctx, []weight.Boost{{UnitID: "B", Weight: 1.03, LastTouchedAt: seededAt}}, seededAt); err != nil {
 		t.Fatalf("raise B: %v", err)
