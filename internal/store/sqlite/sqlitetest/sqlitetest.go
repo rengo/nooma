@@ -2,7 +2,9 @@
 // row no port can write, kept next to the schema so the column list stays inside
 // internal/store (the sqlite-containment depguard rule exempts this path).
 //
-// It is imported by tests only. No production code may import it: ports.StateRepo
+// It is imported by tests only. No production code may import it (the
+// sqlitetest-tests-only depguard rule in .golangci.yml fails the lint if one
+// does): ports.StateRepo
 // declares no energy writer on purpose (the load watcher is the only writer of
 // energy outside a user's own report), and this package must not become one.
 package sqlitetest
