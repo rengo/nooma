@@ -266,7 +266,7 @@ Initial extraction:
 | I24 | A weight write moves `weight` and `last_touched_at` together; neither is written alone | §2 |
 | I25 | A capture that is not memory persists no unit and still answers: `chitchat` through the `chat` task, `out_of_scope` with a fixed refusal | §5, ADR-0021 |
 | I26 | A capture is answered in the language its classification named; an absent or unknown language renders in the fallback, never in nothing | §5, ADR-0022 |
-| I27 | Rendering `/ui`'s Today writes nothing to the vault: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET. Its in-memory incumbent is the one thing it does write | §7 |
+| I27 | Rendering `/ui`'s Today writes nothing to the vault: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET. Its in-memory incumbent is the one thing it does write, and its relation reads cover the members of the incumbent it holds and of the one it selects (the pending-digest mirror's P') | §7 |
 
 Four of these are better verified with a structural test than a behavioral one:
 

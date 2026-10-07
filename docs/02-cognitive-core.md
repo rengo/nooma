@@ -333,6 +333,9 @@ section rejects above.
   what `relation_to_active_focus` reads (above), so that same first ranking after a restart has
   `previous` empty for both mechanisms at once: `relation_to_active_focus` is 0 for every unit
   and the term vanishes entirely, not only hysteresis. Two effects from one restart, not one.
+  (The one reader that does not start empty is `/ui`'s pending-digest mirror, below: it reads the
+  focus its own request has just published, so even the first request after a restart orders its
+  low-energy digest by adjacency.)
   The previous focus is held per focus, in process, and written by exactly two computations,
   each running its own `focus.Select`: `/ui`'s Today view on every successful request, and the
   morning digest each time one is sent. Nothing else writes it, nothing persists it, and it does
@@ -341,9 +344,11 @@ section rejects above.
   concurrent writers leave one writer's whole selection, never a mix. A digest whose focus
   cannot be computed is still sent, without adjacency and without moving the incumbent, and
   records `check.focus.unavailable`. Each focus reads `relation_to_active_focus` against its own
-  previous focus, as the strongest relation `strength` joining a unit to a member. Until
-  `m4c`'s second link, the digest and `/ui`'s pending-digest mirror read
-  `relation_to_active_focus` as 0 even while an incumbent is held.
+  previous focus, as the strongest relation `strength` joining a unit to a member. The digest's
+  low-energy `Carry` reads it too, but its items sit on units of any type, so there the previous
+  focus is the union of both focuses' members: the digest reads the one it loaded, before its own
+  `Select`, and `/ui`'s pending-digest mirror reads the one its request just published, which is
+  the one the next digest will load.
 
 ## 4. Relations
 
@@ -1124,7 +1129,8 @@ box can audit it):
 now, computed from the same reads and the same `Carry`, but rendering it writes nothing to the
 vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
 (I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
-(§3), which the next digest then reads.
+(§3), which the next digest then reads. Viewing `/ui` can therefore change a later low-energy
+digest's order, and which items it carries, though it still marks nothing delivered.
 
 **Degradation** (owner ruling 1; `internal/core/prospection.ResolveInterrupt`,
 `Interrupt.Route`): classify emits `interrupt_level` per message. A `NULL` or unparseable
