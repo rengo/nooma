@@ -15,6 +15,7 @@ import (
 	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver" // registers the "sqlite3" driver this package opens
+
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
 )
