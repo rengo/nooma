@@ -176,23 +176,41 @@ func TestDigest_FreshKeeperHasNoAdjacency(t *testing.T) {
 // verdict count and the count actually sent must match, and must be the
 // low-energy cap rather than the whole pending set.
 func TestDigest_AdjacencyNeverChangesHowManyItemsCarry(t *testing.T) {
+	// dryRun is the first-split verdict alone (commit=false returns len(carry)
+	// before anything is sent or the focus is computed), read before the
+	// committing run so it cannot be influenced by it.
+	dryRun := func(f *fxH) int {
+		t.Helper()
+		n, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), todayNow, false)
+		if err != nil {
+			t.Fatalf("assembleDigest dry run: %v", err)
+		}
+		return n
+	}
+
 	with := adjacencyFixture(t, focus.KindTask)
+	withVerdict := dryRun(with)
 	withOrder, withCarried := with.digestOrder(t)
 
 	without := newFxH(t)
 	inc, _ := without.contest(t, focus.KindTask)
 	without.fxL(t)
 	without.relate(t, inc, "u-q", 0.9, 0.9)
+	withoutVerdict := dryRun(without)
 	withoutOrder, withoutCarried := without.digestOrder(t)
 
-	if withCarried != withoutCarried {
-		t.Fatalf("verdict carried %d with adjacency, %d without", withCarried, withoutCarried)
-	}
-	if len(withOrder) != len(withoutOrder) {
-		t.Fatalf("sent %d item(s) with adjacency, %d without", len(withOrder), len(withoutOrder))
-	}
-	if len(withOrder) != prospection.LowEnergyDigestSize {
-		t.Fatalf("sent %d item(s), want the low-energy cap %d", len(withOrder), prospection.LowEnergyDigestSize)
+	const cap = prospection.LowEnergyDigestSize
+	for name, n := range map[string]int{
+		"dry-run verdict with adjacency":    withVerdict,
+		"dry-run verdict without adjacency": withoutVerdict,
+		"reported carried with adjacency":   withCarried,
+		"reported carried without":          withoutCarried,
+		"sent with adjacency":               len(withOrder),
+		"sent without adjacency":            len(withoutOrder),
+	} {
+		if n != cap {
+			t.Errorf("%s = %d, want the low-energy cap %d", name, n, cap)
+		}
 	}
 }
 
