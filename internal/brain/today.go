@@ -157,8 +157,9 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	if err != nil {
 		return Today{}, err
 	}
-	// Adjacency is M4's — the same reading assembleDigest already gives
-	// this call (digest.go), applied here so the two agree.
+	// The mirror previews the digest a request from now, and that digest loads
+	// the incumbent this very request publishes, so it reads adjacency against
+	// P' (round.nextAdjacent), not the P this request loaded (design m4c §3.5).
 	carry, held := prospection.Carry(items, carryAdjacency(round.nextAdjacent, pending), low, now)
 	out.Digest.LowEnergy = low
 	out.Digest.Items = joinDigestLines(carry, pending)

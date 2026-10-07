@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -270,5 +271,81 @@ func TestCarryAdjacency_ReKeysUnitStrengthsToTriggerIds(t *testing.T) {
 		if got[id] != w {
 			t.Fatalf("carryAdjacency[%s] = %v, want %v (full map %v)", id, got[id], w, got)
 		}
+	}
+}
+
+// TestDigest_NotLowEnergyCarriesEveryItemWithAKeeper: adjacency only ever
+// reorders and truncates under low energy. With a keeper, a high-energy digest
+// still carries all five items in pending's own order, none held.
+func TestDigest_NotLowEnergyCarriesEveryItemWithAKeeper(t *testing.T) {
+	f := newFxH(t)
+	inc, _ := f.contest(t, focus.KindTask)
+	f.fxL(t)
+	f.state.RecordEnergy(prospection.EnergyReading{Level: 0.9, RecordedAt: todayNow})
+	f.request(t)
+	f.relate(t, inc, "u-q", 0.9, 0.9)
+
+	order, carried := f.digestOrder(t)
+	if carried != 5 {
+		t.Fatalf("carried %d, want all 5 — the care gate is off", carried)
+	}
+	assertIDs(t, "digest order, not low energy", order, []string{carryOne, carryTwo, carryHi, "trg-lo", "trg-nil"})
+}
+
+// countingRelations counts ByUnit reads per unit id.
+type countingRelations struct {
+	ports.RelationRepo
+	reads map[string]int
+}
+
+func (c *countingRelations) ByUnit(ctx context.Context, id string) ([]ports.Relation, error) {
+	c.reads[id]++
+	return c.RelationRepo.ByUnit(ctx, id)
+}
+
+// TestFocusKeeper_ReadsEachMembersRelationsOnce is design §3.3's bound: one
+// round reads the relations of every distinct member of P and P' once, so the
+// six fillers both snapshots share are not read twice.
+func TestFocusKeeper_ReadsEachMembersRelationsOnce(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	cr := &countingRelations{RelationRepo: f.rels, reads: map[string]int{}}
+	k := NewFocusKeeper(f.units, f.cfg, cr)
+
+	first, err := k.compute(context.Background(), todayNow)
+	if err != nil {
+		t.Fatalf("seeding compute: %v", err)
+	}
+	k.publish(first)
+	f.setWeight(t, "B", 1.2)
+	cr.reads = map[string]int{}
+
+	second, err := k.compute(context.Background(), todayNow)
+	if err != nil {
+		t.Fatalf("compute: %v", err)
+	}
+	assertIDs(t, "P' task members", rankedIDs(second.members[focus.KindTask]), append(ids("F", 6), "B"))
+	want := map[string]int{"A": 1, "B": 1}
+	for _, id := range ids("F", 6) {
+		want[id] = 1
+	}
+	if len(cr.reads) != len(want) {
+		t.Fatalf("relations read for %v, want exactly the members of P and P': %v", cr.reads, want)
+	}
+	for id, n := range want {
+		if cr.reads[id] != n {
+			t.Fatalf("ByUnit(%s) read %d time(s), want %d (all reads %v)", id, cr.reads[id], n, cr.reads)
+		}
+	}
+}
+
+// TestFocusKeeper_NextRelationsErrorPropagates: on a fresh keeper P is empty, so
+// the only relation reads are P' members', and a failure there fails the round.
+func TestFocusKeeper_NextRelationsErrorPropagates(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	k := NewFocusKeeper(f.units, f.cfg, failingRelations{f.rels})
+	if _, err := k.compute(context.Background(), todayNow); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("compute err = %v, want the relations error", err)
 	}
 }

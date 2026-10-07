@@ -109,11 +109,11 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, err
 	}
 
-	// The adjacency map is intentionally empty until m4c's adjacency link
-	// (PR 2) feeds the digest: focus.Rank accepts an empty map and scores
-	// every candidate on its own terms, which is the honest input until
-	// something computes it. Passing a made-up one would be worse than
-	// passing none.
+	// This first split is the VERDICT, not what is sent: its length decides the
+	// two returns below, and adjacency changes which items carry and in what
+	// order, never how many, so it needs none. The split that is sent is
+	// re-ranked with adjacency once the focus is computed, after every return
+	// that does not send.
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
 	if len(carry) == 0 && question == nil {
@@ -143,6 +143,8 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	if haveRound {
+		// Adjacency to the incumbent this digest loaded, P: its own Select has
+		// not run yet. A fresh keeper holds none, so R10's empty adjacency.
 		carry, held = prospection.Carry(items, carryAdjacency(round.adjacent, pending), low, now)
 	}
 
@@ -224,11 +226,21 @@ func (r checkRunner) digestFocus(ctx context.Context, now time.Time) (round focu
 	return round, true, nil
 }
 
-// carryAdjacency maps unit-keyed adjacency onto the trigger ids Carry ranks by.
-// A trigger with no unit gets no entry. Scaffold: returns no adjacency.
+// carryAdjacency maps unit-keyed adjacency onto the trigger ids Carry ranks by
+// (prospection/digest.go): Carry sets each candidate's ID to its trigger's id,
+// so a map keyed by unit id would never match. A trigger with no unit, or whose
+// unit has no adjacency entry, gets none.
 func carryAdjacency(byUnit map[string]float64, pending []ports.DueTrigger) map[string]float64 {
-	_, _ = byUnit, pending
-	return nil
+	byTrigger := make(map[string]float64, len(pending))
+	for _, t := range pending {
+		if t.UnitID == nil {
+			continue
+		}
+		if strength, ok := byUnit[*t.UnitID]; ok {
+			byTrigger[t.ID] = strength
+		}
+	}
+	return byTrigger
 }
 
 // digestItems turns undelivered triggers into what Carry consumes: a
