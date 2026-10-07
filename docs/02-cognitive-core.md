@@ -333,10 +333,12 @@ section rejects above.
   what `relation_to_active_focus` reads (above), so that same first ranking after a restart has
   `previous` empty for both mechanisms at once: `relation_to_active_focus` is 0 for every unit
   and the term vanishes entirely, not only hysteresis. Two effects from one restart, not one.
-  Until `m4c` gives `focus.Select` its first caller, `/ui`'s Today mirror computes each focus
-  with `focus.Rank` alone — top-N by score, no `hysteresis_margin` and no incumbent — the same
-  shape a first ranking after a restart already has above, held here as Today's own steady state
-  rather than a transient one.
+  The previous focus is held per focus, in process, and written by `/ui`'s Today view on every
+  successful request, each time through its own `focus.Select`; the digest becomes the second
+  writer in 1b. Nothing else writes it, nothing persists it, and it does not expire. Each focus
+  reads `relation_to_active_focus` against its own previous focus, as the strongest relation
+  `strength` joining a unit to a member. Until `m4c`'s second link, the digest and `/ui`'s
+  pending-digest mirror read `relation_to_active_focus` as 0 even while an incumbent is held.
 
 ## 4. Relations
 
@@ -1114,9 +1116,10 @@ box can audit it):
     one exemption to the softening above.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
-now, computed from the same reads and the same `Carry`, but rendering it writes nothing:
-`surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET` (I27,
-`docs/06-harness.md` §4).
+now, computed from the same reads and the same `Carry`, but rendering it writes nothing to the
+vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
+(I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
+(§3).
 
 **Degradation** (owner ruling 1; `internal/core/prospection.ResolveInterrupt`,
 `Interrupt.Route`): classify emits `interrupt_level` per message. A `NULL` or unparseable

@@ -35,6 +35,7 @@ var errKeeperBoom = errors.New("keeper test: port failed")
 // challenger above 1.05 and keeps its slot against one at or below it.
 type fxH struct {
 	units     *memrepo.Units
+	flaky     *flakyUnits
 	rels      *memrepo.Relations
 	cfg       *memrepo.Config
 	questions *openFailingQuestions
@@ -57,6 +58,29 @@ func (q *openFailingQuestions) Open(ctx context.Context) ([]ports.RelationQuesti
 	return q.PendingQuestions.Open(ctx)
 }
 
+// flakyUnits makes the two reads a Today request makes for its focuses fail on
+// demand: the keeper's candidate read, and the view's LiveByIDs read that
+// follows it.
+type flakyUnits struct {
+	*memrepo.Units
+	failCandidates bool
+	failLive       bool
+}
+
+func (u *flakyUnits) LiveFocusCandidatesByType(ctx context.Context, types []unit.Type) ([]focus.Candidate, error) {
+	if u.failCandidates {
+		return nil, errKeeperBoom
+	}
+	return u.Units.LiveFocusCandidatesByType(ctx, types)
+}
+
+func (u *flakyUnits) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error) {
+	if u.failLive {
+		return nil, errKeeperBoom
+	}
+	return u.Units.LiveByIDs(ctx, ids)
+}
+
 func newFxH(t *testing.T) *fxH {
 	t.Helper()
 	f := &fxH{
@@ -65,8 +89,9 @@ func newFxH(t *testing.T) *fxH {
 		cfg:       memrepo.NewConfig(),
 		questions: &openFailingQuestions{PendingQuestions: memrepo.NewPendingQuestions()},
 	}
-	f.keeper = NewFocusKeeper(f.units, f.cfg, f.rels)
-	f.svc = NewTodayService(fixedClock{now: todayNow}, f.units, f.cfg, memrepo.NewState(), memrepo.NewTriggers(), f.questions, memrepo.NewDecisionLog(), f.keeper)
+	f.flaky = &flakyUnits{Units: f.units}
+	f.keeper = NewFocusKeeper(f.flaky, f.cfg, f.rels)
+	f.svc = NewTodayService(fixedClock{now: todayNow}, f.flaky, f.cfg, memrepo.NewState(), memrepo.NewTriggers(), f.questions, memrepo.NewDecisionLog(), f.keeper)
 	return f
 }
 

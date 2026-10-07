@@ -640,3 +640,47 @@ func TestToday_FreshKeeperRanksWithoutAdjacency(t *testing.T) {
 		}
 	}
 }
+
+// TestToday_FocusComputeErrorFailsTheRequest: Today has no send to protect, so
+// a focus that cannot be computed fails the request (design m4c §3.5, OR2).
+func TestToday_FocusComputeErrorFailsTheRequest(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.flaky.failCandidates = true
+	if _, err := f.svc.Today(context.Background()); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("Today err = %v, want the candidates error", err)
+	}
+}
+
+// TestToday_FailedFocusReadPublishesNothing is the second shape of
+// TestToday_FailedRequestPublishesNothing: the request fails on the read that
+// follows the keeper's own, LiveByIDs, so a publish placed anywhere before the
+// end of the request would still leave a trace.
+func TestToday_FailedFocusReadPublishesNothing(t *testing.T) {
+	f := newFxH(t)
+	f.taskContest(t, 1.0, 0.99)
+	f.request(t)
+
+	f.setWeight(t, "B", 1.06)
+	f.flaky.failLive = true
+	if _, err := f.svc.Today(context.Background()); !errors.Is(err, errKeeperBoom) {
+		t.Fatalf("Today err = %v, want the live-read error", err)
+	}
+	f.flaky.failLive = false
+
+	f.setWeight(t, "B", 1.03)
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus after a failed request", got, append(ids("F", 6), "A"))
+}
+
+// TestToday_AdjacencyReadsEveryRelationOfAMember: A has two relations and the
+// lifting one sorts second in ByUnit's order (created_at, then id), behind a
+// decoy to a unit outside the pool.
+func TestToday_AdjacencyReadsEveryRelationOfAMember(t *testing.T) {
+	f := r8Fixture(t, func(f *fxH) {
+		f.relate(t, "A", "A0", 0.1, 0.1)
+		f.relate(t, "A", "B", 0.9, 0.9)
+	})
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus", got, append(ids("F", 6), "B"))
+}

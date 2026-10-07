@@ -240,7 +240,7 @@ Initial extraction:
 
 | # | Invariant | Doc 02 |
 |---|---|---|
-| I01 | `status='focus'` does not exist. Focus is a query, never persisted | §3 |
+| I01 | `status='focus'` does not exist. Focus is a query, never persisted. The previous focus lives only in one `brain.FocusKeeper`'s memory: `TestI01_IncumbentDoesNotSurviveAFreshService` builds a fresh keeper over the same vault and finds nothing held, and `TestBrain_DeclaresNoPackageLevelVar` keeps it from living in a package variable | §3 |
 | I02 | Every LIVE read surface excludes `superseded` and `incomplete` | §1 |
 | I03 | Nothing is deleted: archiving is a state transition. No path emits `DELETE` on `units` | §1 |
 | I04 | A timer is never a unit: no weight, no decay, no graph, no beliefs | §8 |
@@ -258,7 +258,7 @@ Initial extraction:
 | I16 | Nothing is delivered during quiet hours except the timer, an explicit instruction | §7 |
 | I17 | Firing a recurring trigger creates the next one pointing at the **same** unit | §7 |
 | I18 | `event_at`, `created_at`, and `due_at` are never interchanged | §1 |
-| I19 | A challenger must beat the incumbent by more than `hysteresis_margin` | §3 |
+| I19 | A challenger must beat the incumbent by more than `hysteresis_margin`. `focus.Select`'s production caller is `brain.FocusKeeper.compute`, reached from `/ui`'s Today view: `TestI19_TodayHoldsIncumbentInsideMargin` | §3 |
 | I20 | One active insight per metric; the previous one becomes `superseded` | §12, doc 03 |
 | I21 | Every vector search filters on `model`; embeddings from two models never compare | §5 |
 | I22 | Capture's own recall entrance, the standalone `/recall` route, and `/ui/units`' own search box are one mechanism, called with the same raw text, never `normalized_content` | §5 |
@@ -266,7 +266,7 @@ Initial extraction:
 | I24 | A weight write moves `weight` and `last_touched_at` together; neither is written alone | §2 |
 | I25 | A capture that is not memory persists no unit and still answers: `chitchat` through the `chat` task, `out_of_scope` with a fixed refusal | §5, ADR-0021 |
 | I26 | A capture is answered in the language its classification named; an absent or unknown language renders in the fallback, never in nothing | §5, ADR-0022 |
-| I27 | Rendering `/ui`'s Today writes nothing: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET | §7 |
+| I27 | Rendering `/ui`'s Today writes nothing to the vault: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET. Its in-memory incumbent is the one thing it does write | §7 |
 
 Four of these are better verified with a structural test than a behavioral one:
 
