@@ -29,10 +29,10 @@ type TodayService struct {
 
 // NewTodayService wires a TodayService over the ports one Today request
 // needs.
-func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog) *TodayService {
+func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog, keeper *FocusKeeper) *TodayService {
 	return &TodayService{
 		clock: clock,
-		run:   todayRunner{units: units, cfg: cfg, state: state, triggers: triggers, questions: questions, log: log},
+		run:   todayRunner{units: units, cfg: cfg, state: state, triggers: triggers, questions: questions, log: log, focus: keeper},
 	}
 }
 
@@ -112,6 +112,7 @@ type todayRunner struct {
 	triggers  ports.TriggerRepo
 	questions ports.PendingQuestionRepo
 	log       ports.DecisionLog
+	focus     *FocusKeeper
 }
 
 // at builds Today at the instant Today already read — design §3.6's own
@@ -120,6 +121,11 @@ type todayRunner struct {
 // (I27, proven by test/conformance's own writeGuard).
 func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	out := Today{Now: now}
+
+	round, err := r.focus.compute(ctx, now)
+	if err != nil {
+		return Today{}, err
+	}
 
 	cfg, err := r.cfg.Load(ctx)
 	if err != nil {
@@ -183,6 +189,7 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 		out.Focuses = append(out.Focuses, f)
 	}
 
+	r.focus.publish(round)
 	return out, nil
 }
 

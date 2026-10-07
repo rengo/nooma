@@ -20,7 +20,7 @@ import (
 var todayNow = time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 
 func newTodayService(units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog) *TodayService {
-	return NewTodayService(fixedClock{now: todayNow}, units, cfg, state, triggers, questions, log)
+	return NewTodayService(fixedClock{now: todayNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()))
 }
 
 func seedTodayUnit(t *testing.T, units *memrepo.Units, id string, typ unit.Type, weight float64) {
@@ -361,7 +361,7 @@ func TestToday_RepeatedRequestsLeaveTheMorningDigestByteIdentical(t *testing.T) 
 	// Five Today requests, with no morning digest run in between, over an
 	// identically seeded fixture.
 	triggers, units, questions, log, state, cfg := newDigestParityFixture(t)
-	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log)
+	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()))
 	for i := 0; i < 5; i++ {
 		if _, err := svc.Today(ctx); err != nil {
 			t.Fatalf("Today request %d: %v", i+1, err)

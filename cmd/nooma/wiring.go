@@ -299,6 +299,18 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 	)
 }
 
+// wireFocus builds the one *brain.FocusKeeper a serve process shares between
+// every writer of the previous focus. serve.go calls it exactly once and
+// hands the result to wireToday; TestServe_OneFocusKeeperSharedByTodayAndDigest
+// fails on a second call, an inline one, or a keeper built anywhere else.
+func wireFocus(db *sqlite.Vault) *brain.FocusKeeper {
+	return brain.NewFocusKeeper(
+		sqlite.NewUnitRepo(db),
+		sqlite.NewConfigRepo(db),
+		sqlite.NewRelationRepo(db),
+	)
+}
+
 // wireToday builds a *brain.TodayService over db. It resolves no
 // provider, wireCheck's own reason: a read-only view calls no model.
 //
@@ -308,7 +320,7 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 // reason (design §3.6's own "wireToday must not copy that shape").
 // serve.go's own call site is PR 7's (task 7.7), once ui.Deps.Today
 // exists to receive it.
-func wireToday(db *sqlite.Vault) *brain.TodayService {
+func wireToday(db *sqlite.Vault, keeper *brain.FocusKeeper) *brain.TodayService {
 	return brain.NewTodayService(
 		systemClock{},
 		sqlite.NewUnitRepo(db),
@@ -317,6 +329,7 @@ func wireToday(db *sqlite.Vault) *brain.TodayService {
 		sqlite.NewTriggerRepo(db),
 		sqlite.NewPendingQuestionRepo(db),
 		sqlite.NewDecisionLog(db),
+		keeper,
 	)
 }
 

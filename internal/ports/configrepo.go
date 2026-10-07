@@ -13,7 +13,7 @@ import (
 // C).
 type VaultConfig struct {
 	WeightThreshold        *float64   // → consolidation.ResolveWeightThreshold
-	HysteresisMargin       *float64   // → focus.ResolveMargin — NO reader in m2c
+	HysteresisMargin       *float64   // → focus.ResolveMargin, read by brain.FocusKeeper
 	ConsolidationEnabled   *bool      // → no reader in m2c; m2d's cron gate
 	GoalStagnationDays     *int       // → consolidation.ResolveGoalStagnationDays
 	MentalLoadThreshold    *int       // → consolidation.ResolveMentalLoadThreshold

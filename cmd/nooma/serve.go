@@ -127,6 +127,9 @@ func runServe(args []string, out, errOut io.Writer) error {
 		defer func() { _ = channel.Close() }()
 	}
 
+	// One keeper for the whole process: the previous focus lives in it.
+	focusKeeper := wireFocus(db)
+
 	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut, channel)
 	if err != nil {
 		return fmt.Errorf("wiring the scheduler: %w", err)
@@ -141,7 +144,7 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// since PR 2). Today and Units both need no provider, so both are
 	// wired unconditionally here, the same call site as wireBrain above,
 	// never inside wireScheduler's LLM-gated path (design §3.6).
-	today := wireToday(db)
+	today := wireToday(db, focusKeeper)
 	units := wireUnits(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
