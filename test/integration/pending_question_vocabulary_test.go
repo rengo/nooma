@@ -117,7 +117,7 @@ func TestPendingQuestions_WriteOnlyVocabularyResolutions(t *testing.T) {
 	// runs before anything is sent.
 	if _, err := brain.NewCheckService(fixedClock{now: now},
 		sqlite.NewTriggerRepo(v), sqlite.NewTimerRepo(v), &counterIDs{}, decisions,
-		fakechannel.New(), units, sqlite.NewStateRepo(v), nil, "12449194", questions).
+		fakechannel.New(), units, sqlite.NewStateRepo(v), nil, "12449194", questions, nil).
 		Check(ctx, brain.CheckRequest{}); err != nil {
 		t.Fatalf("Check: %v", err)
 	}

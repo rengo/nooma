@@ -76,6 +76,10 @@ const (
 	ActionCheckDeliveryFailed       DecisionAction = "check.delivery_failed"
 	ActionCheckDigestSent           DecisionAction = "check.digest.sent"
 	ActionCheckDigestHeld           DecisionAction = "check.digest.held"
+	// ActionCheckFocusUnavailable records a digest sent without focus
+	// adjacency because the keeper could not compute one. The digest is owed
+	// to the user, so the failure is logged and not fatal (m4c design §3.5).
+	ActionCheckFocusUnavailable     DecisionAction = "check.focus.unavailable"
 	ActionCheckTimerRephraseFailed  DecisionAction = "check.timer.rephrase_failed"
 	ActionCaptureCheckInResolved    DecisionAction = "capture.checkin.resolved"
 	ActionCaptureCheckInUnmatched   DecisionAction = "capture.checkin.unmatched"
@@ -162,9 +166,10 @@ const (
 	ActionCaptureRelationCheckInUnmatched DecisionAction = "capture.relation_checkin.unmatched"
 )
 
-// AllDecisionActions returns a fresh slice holding the forty-seven
+// AllDecisionActions returns a fresh slice holding the forty-eight
 // DecisionAction vocabulary members, in the order the constants above
-// declare them. The last five are m3e's own: ActionConnectQuestionCreated,
+// declare them. ActionCheckFocusUnavailable is m4c's, listed after
+// ActionCheckDigestHeld. The last five are m3e's own: ActionConnectQuestionCreated,
 // ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 // ActionCaptureRelationCheckInResolved and
 // ActionCaptureRelationCheckInUnmatched.
@@ -184,7 +189,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCheckTriggerExpired, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,
 		ActionCheckTriggerDelivered, ActionCheckDeliveryFailed,
-		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckTimerRephraseFailed,
+		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,
 		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched,
 		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,

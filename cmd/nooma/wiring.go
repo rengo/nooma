@@ -296,6 +296,10 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		// here would state the same refusal twice in two places that could
 		// later disagree.
 		sqlite.NewPendingQuestionRepo(db),
+		// No keeper: a nil channel returns the digest before it ever reads
+		// a focus, and a second keeper beside serve's would be one nothing
+		// reads.
+		nil,
 	)
 }
 
@@ -430,7 +434,7 @@ func (p proactiveCheck) ProactiveCheck(ctx context.Context) error {
 // Unlike wireCheck, this one gets the channel: a scheduled pass is
 // precisely the thing that should speak, where `nooma check` is a
 // subcommand a person ran to look.
-func wireProactive(db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel) (*brain.CheckService, error) {
+func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService, error) {
 	llm, _, _, err := resolveConsolidateProviders(cfg, lookup)
 	if err != nil {
 		// No provider bound. The pass still runs: a timer delivers the
@@ -440,7 +444,7 @@ func wireProactive(db *sqlite.Vault, cfg *config.Config, lookup func(string) (st
 	}
 
 	return brain.NewCheckService(
-		systemClock{},
+		clock,
 		sqlite.NewTriggerRepo(db),
 		sqlite.NewTimerRepo(db),
 		uuidGen{},
@@ -455,10 +459,13 @@ func wireProactive(db *sqlite.Vault, cfg *config.Config, lookup func(string) (st
 		brain.ProactiveConversation(cfg.Channels.Telegram.AllowedChatIDs),
 		// The digest's second item source, and the expiry sweep's store.
 		sqlite.NewPendingQuestionRepo(db),
+		// The keeper serve built once and hands to Today too: the digest
+		// reads and writes the same previous focus.
+		keeper,
 	), nil
 }
 
-func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel) (*scheduler.Scheduler, error) {
+func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel, keeper *brain.FocusKeeper) (*scheduler.Scheduler, error) {
 	if _, _, _, err := resolveConsolidateProviders(cfg, lookup); err != nil {
 		_, _ = fmt.Fprintf(log, "scheduler: consolidation not scheduled: %v\n", err)
 		return nil, nil
@@ -469,7 +476,7 @@ func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lo
 		return nil, fmt.Errorf("wiring the scheduler: %w", err)
 	}
 
-	check, err := wireProactive(db, cfg, lookup, channel)
+	check, err := wireProactive(systemClock{}, db, cfg, lookup, channel, keeper)
 	if err != nil {
 		return nil, fmt.Errorf("wiring the proactive pass: %w", err)
 	}

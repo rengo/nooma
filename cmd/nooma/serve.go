@@ -130,7 +130,7 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// One keeper for the whole process: the previous focus lives in it.
 	focusKeeper := wireFocus(db)
 
-	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut, channel)
+	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut, channel, focusKeeper)
 	if err != nil {
 		return fmt.Errorf("wiring the scheduler: %w", err)
 	}
