@@ -4,7 +4,7 @@ Derived from `spec.md` (R5, R6, the activity part of R9 and R11) and `design.md`
 design is the activity half of the m4e design that was APPROVED after Judgment Day round 3, and
 **§10 carries the round-3 corrections that touch it**). A slice sharing
 `openspec/changes/m4-mirror-ui/proposal.md`. Beliefs are
-[`m4e-beliefs-activity-admin`](../m4e-beliefs-activity-admin/tasks.md); admin is
+[`m4e-beliefs-activity-admin`](../archive/2026-10-08-m4e-beliefs/tasks.md); admin is
 [`m4e2-admin`](../m4e2-admin/tasks.md), which starts after this slice's PR 6 merges. Shape follows
 the archived m4c and m4b tasks.
 

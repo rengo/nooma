@@ -13,7 +13,7 @@ document decides HOW. Shape follows the archived
 > decision). The sections below are the old m4e §3.7, §3.8, the admin rows of §3.9, gates G4 and
 > G5, the admin mutants (C-series) and the old PRs 6-7, with the amendments of the 2026-10-08
 > judgment round marked.
-> Companion: [`../m4e-beliefs-activity-admin/design.md`](../m4e-beliefs-activity-admin/design.md).
+> Companion: [`../archive/2026-10-08-m4e-beliefs/design.md`](../archive/2026-10-08-m4e-beliefs/design.md).
 >
 > **Depends on `m4e-activity` and on m4e (starts after `m4e-activity`'s PR 6 merges, which itself
 > follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
@@ -25,7 +25,7 @@ document decides HOW. Shape follows the archived
 > - the **change decoder** in `ActivityService` (m4e-activity §3.6), which must already accept
 >   `{fields, previous, next}` (m4e-activity's A11 test carries a `config.updated`-shaped row).
 >
-> From [m4e](../m4e-beliefs-activity-admin/design.md):
+> From [m4e](../archive/2026-10-08-m4e-beliefs/design.md):
 > - the action-vocabulary file and its `repocontract` map as m4e leaves them (fifty-two members,
 >   after m4e PR 3; m4e-activity adds none); this slice adds the fifty-third, `config.updated`;
 > - `brain.ErrWriteLanded` and `*brain.WriteLandedError{Record, Signal}` (m4e PR 3, `internal/brain/write_landed.go`);
@@ -38,7 +38,7 @@ document decides HOW. Shape follows the archived
 > and dependency rows gain `m4e2-admin` (after m4e); the umbrella is not edited now. The complete
 > list of umbrella spots that still put admin inside m4e (acceptance line ~:75, §5.2 rows 9-10,
 > the Q5 header "blocking m4e #5", the independence paragraph listing `ConfigRepo` under m4e, and
-> more) is in the header of [`../m4e-beliefs-activity-admin/design.md`](../m4e-beliefs-activity-admin/design.md).
+> more) is in the header of [`../archive/2026-10-08-m4e-beliefs/design.md`](../archive/2026-10-08-m4e-beliefs/design.md).
 
 > **Findings this design made that the spec did not anticipate:**
 > 1. **R8 needs a read on a fourth port.** Relation type is open text

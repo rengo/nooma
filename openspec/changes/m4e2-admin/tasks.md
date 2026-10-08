@@ -2,7 +2,7 @@
 
 Derived from `spec.md` (R7-R11) and `design.md` (§1-§8, APPROVED after Judgment Day round 3;
 **§10 carries the round-3 corrections, applied below**). Split from
-[`m4e-beliefs-activity-admin`](../m4e-beliefs-activity-admin/tasks.md) on 2026-10-08; **starts
+[`m4e-beliefs-activity-admin`](../archive/2026-10-08-m4e-beliefs/tasks.md) on 2026-10-08; **starts
 after `m4e-activity`'s PR 6 merges** (which itself follows m4e's PR 4; activity split off m4e on
 2026-10-08, so `DecisionLog.Before` and the change decoder are `m4e-activity`'s; `WriteLandedError`,
 the I22 whitelist and the `uiDeps` pattern stay m4e's). Shape follows the archived m4c and m4b tasks.
@@ -68,7 +68,7 @@ user is to accept the post-1a cut rule. Apply cannot start until `m4e-activity`'
 
 ## Pre-task 0 — rides m4e's planning PR (docs only)
 
-Tracked in [`../m4e-beliefs-activity-admin/tasks.md`](../m4e-beliefs-activity-admin/tasks.md) 0.6;
+Tracked in [`../archive/2026-10-08-m4e-beliefs/tasks.md`](../archive/2026-10-08-m4e-beliefs/tasks.md) 0.6;
 repeated here so this slice is self-contained.
 
 - [x] **0.1** `design.md` §8: rename risks R1-R6 to RK-1..RK-6 and fix references (`rg '\bR[1-6]\b'`,
