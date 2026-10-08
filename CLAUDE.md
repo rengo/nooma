@@ -62,9 +62,22 @@ Load them with the `Skill` tool when their trigger applies:
 | `nooma-core` | Touching `internal/core/**`, `internal/brain/**`, or `internal/ports/` |
 | `nooma-testing` | Writing or changing tests, invariants, or `testdata/` |
 | `nooma-pr` | Naming a branch, opening a PR, or merging one |
+| `nooma-pm` | Start of every session: the main session's PM role |
 
 Skills are a **pre-gate**: they keep you from reaching the gate. The CI gate is what
 guarantees. If a rule can be an automated gate, it is a gate — not a skill.
+
+## Working mode
+
+The maintainer works as the **client**; the main session acts as **PM** and must load the
+`nooma-pm` skill at the start of every session. The PM delegates to three subagents
+(`.claude/agents/`), merges to main, and the client tests on main.
+
+| Agent | Role |
+|---|---|
+| `nooma-dev` | Implements a work unit (TDD), opens and updates the PR, never merges |
+| `nooma-qa` | Validates behavior on the PR head with no real LLM or network; verdict PASS/FAIL |
+| `nooma-reviewer` | Reviews the diff and posts `Reviewer verdict: APPROVE` or `CHANGES REQUESTED` on the PR |
 
 ## Workflow
 
