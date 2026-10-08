@@ -208,9 +208,13 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
 6. **Captures and corrects.** `/ui/capture` is the same pipeline as every other surface. The
    unit page has a correction form whose target is the unit you are looking at, so the UI never
    has to guess a referent.
+7. **Reviews its beliefs** (`/ui/beliefs`). The active beliefs are listed by facet, each with its
+   confidence, origin and last reinforcement. You can edit one: saving it unchanged claims a
+   derived belief as yours, and the nightly derive then never overwrites it. You can retire one,
+   after a confirm step, and the nightly derive never brings it back.
 
 **You end up with** a product you can use without a terminal, for what exists today. The graph,
-beliefs, activity and admin screens are not built (see below).
+activity and admin screens are not built (see below).
 
 ---
 
@@ -230,8 +234,9 @@ As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in 
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |
 | Graph view with edge curation | Blocked: `m4d` waits on ADR-0019 (still `Proposed`) | ADR-0019; 05 §M4 |
-| Beliefs view (edit, "delete" as a status change) and activity view | In progress: `m4e`, being planned, nothing built | 05 §M4; doc 02 §10, §11 |
-| Admin view (a small set of settings, job status) | In progress: `m4e2`, being planned, nothing built | 05 §M4 |
+| Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
+| Activity view (the `decision_log` told as a story) | In progress: `m4e-activity`, planned, nothing built | 05 §M4; doc 02 §11 |
+| Admin view (a small set of settings, job status) | In progress: `m4e2`, planned, nothing built | 05 §M4 |
 | Timer list and cancel from chat and UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Planned: M5 | doc 02 §9; 05 §M5 |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |

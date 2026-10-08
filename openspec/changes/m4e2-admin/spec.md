@@ -9,7 +9,7 @@ States what MUST be true after this change, in testable form; not how (`design.m
 > rule fired on measurement (owner decision). R7, R8 and R10, the Q5, OQ5 and OQ6 rulings, and the
 > admin part of R9 and R11 were moved here with their text, scenarios and rulings intact (and the
 > amendments of the 2026-10-08 judgment round, marked as such). R-numbers are kept.
-> Source of truth for the split: [`../m4e-beliefs-activity-admin/spec.md`](../m4e-beliefs-activity-admin/spec.md).
+> Source of truth for the split: [`../archive/2026-10-08-m4e-beliefs/spec.md`](../archive/2026-10-08-m4e-beliefs/spec.md).
 >
 > **Depends on `m4e-activity` and on m4e (this slice starts after `m4e-activity`'s last PR, PR 6,
 > merges, which itself follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
@@ -24,7 +24,7 @@ States what MUST be true after this change, in testable form; not how (`design.m
 >   fixture, and this slice adds an integration test that the row it writes decodes through
 >   m4e-activity's service.
 >
-> From **m4e** ([`../m4e-beliefs-activity-admin/spec.md`](../m4e-beliefs-activity-admin/spec.md)):
+> From **m4e** ([`../archive/2026-10-08-m4e-beliefs/spec.md`](../archive/2026-10-08-m4e-beliefs/spec.md)):
 > - **the action vocabulary file** (`internal/ports/decisionlog.go`, its `repocontract` map) as
 >   m4e leaves it after PR 3 (m4e-activity adds no action): this slice adds one action,
 >   `config.updated`;

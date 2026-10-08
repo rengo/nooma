@@ -9,7 +9,7 @@ testable form; not how (`sdd-design`'s job).
 > "activity view" (the umbrella's own estimate: ~200 + ~300) makes eight implementation PRs, so
 > the umbrella rule (proposal.md ~:301, "more than seven PRs or more than 2,400 budgeted lines")
 > fires on measurement. **Admin is now its own slice, `m4e2-admin`**
-> ([`../m4e2-admin/spec.md`](../m4e2-admin/spec.md)), after m4e. R7, R8 and R10, the Q5/OQ5/OQ6
+> ([`../m4e2-admin/spec.md`](../../m4e2-admin/spec.md)), after m4e. R7, R8 and R10, the Q5/OQ5/OQ6
 > rulings, and the admin part of R9 and R11 moved there with their text, scenarios and rulings
 > intact. The directory name `m4e-beliefs-activity-admin` is kept because other artifacts
 > reference it; **its scope was beliefs + activity and is now beliefs only (see the next
@@ -29,7 +29,7 @@ testable form; not how (`sdd-design`'s job).
 > pre-agreed rule was: if m4e passes seven PRs, split beliefs from activity. PR 1 measured 1.2x
 > its forecast and PR 2 measured 2.06x (557 changed lines against ~270; it was cut into 2a,
 > #291, and 2b, #292). At that multiplier PRs 3, 4 and 6 would each need a cut too. **Activity
-> is now its own change, [`m4e-activity`](../m4e-activity/spec.md)**: R5, R6, the activity
+> is now its own change, [`m4e-activity`](../../m4e-activity/spec.md)**: R5, R6, the activity
 > part of R9 and R11, and OQ4 moved there with their text, scenarios and rulings intact.
 > **This change's scope is now beliefs only** (R1-R4, R9 for the beliefs routes, R11's beliefs
 > part, R12, R13). R-numbers are kept (R5 and R6 are absent here by design, as R7, R8 and R10
@@ -67,7 +67,7 @@ R13); new methods on `SelfModelRepo` (no new port, no migration; each widens
 `testdata/schema/store_api.golden`).
 
 **Not this change**: `/ui/activity`, `DecisionLog.Before` and the pre-image rendering
-([`m4e-activity`](../m4e-activity/spec.md)); `/ui/admin`, any `ConfigRepo` write, `RelationRepo.LearnedThresholds`
+([`m4e-activity`](../../m4e-activity/spec.md)); `/ui/admin`, any `ConfigRepo` write, `RelationRepo.LearnedThresholds`
 (all `m4e2-admin`); any reader of `learning_signals` (M5); an undo of a correction (umbrella
 §3.4); timers (m4f); the graph (m4d); `/ui/tracking`; a new migration. Doc 02 lines 663-664 are
 corrected in the activity-view PR of `m4e-activity` (non-negotiable 1).
@@ -188,11 +188,11 @@ when it does, `ActiveBeliefs` is its read and already excludes retired. Re-deriv
 
 ### R5 — Newest-first activity
 
-**Moved to [`m4e-activity`](../m4e-activity/spec.md) (R5).**
+**Moved to [`m4e-activity`](../../m4e-activity/spec.md) (R5).**
 
 ### R6 — Pre-image rendering
 
-**Moved to [`m4e-activity`](../m4e-activity/spec.md) (R6).**
+**Moved to [`m4e-activity`](../../m4e-activity/spec.md) (R6).**
 
 ### R9 — Mutation gates (beliefs routes)
 
@@ -302,7 +302,7 @@ and the whole-second activity fixtures are `m4e-activity`'s.)
 
 Open, for design and tasks:
 
-- **OQ4 — Activity page size and filters.** Moved to [`m4e-activity`](../m4e-activity/spec.md).
+- **OQ4 — Activity page size and filters.** Moved to [`m4e-activity`](../../m4e-activity/spec.md).
 - **OQ8 — Semantic match to a retired belief** (R12): embed retired beliefs each night, or key
   match only. For design.
 
