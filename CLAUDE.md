@@ -14,11 +14,17 @@ timer and asks its own check-ins. And it **asks about what it is not sure of** (
 as a question naming both endpoints, and the answer raises its confidence or deletes it. All
 against a real migrated vault, on Linux and Windows.
 
+**M4 is the mirror: the complete UI**, in progress. Shipped: `m4a` (Today, cookie login,
+`--no-ui`), `m4b` (units browse, search, detail, capture and correction) and `m4c` (a focus held
+by hysteresis and fed by relation adjacency, shared by Today and the digest). Pending: `m4d` graph
+(blocked on ADR-0019 being `Accepted`), `m4e` beliefs and activity, `m4e2` admin, and `m4f`.
+
 **One** M3 list item is still deliberately open rather than left to be noticed — a timer's list
-and cancel from chat, named in [`docs/05-build-plan.md`](docs/05-build-plan.md) and owned by M4,
-since `ports.TimerRepo` declares neither method and a method with no caller is not shipped here.
-Its sibling — which relation an inbound confirmation answers — closed with `m3e`.
-`internal/core/` holds the brain's decision logic; **M4 is the mirror: the complete UI**.
+and cancel from chat, named in [`docs/05-build-plan.md`](docs/05-build-plan.md) and owned by
+`m4f`: `ports.TimerRepo` has `Cancel` (its only caller is the check scan expiring a stale timer)
+but no list read, and a method with no caller is not shipped here. Its sibling — which relation
+an inbound confirmation answers — closed with `m3e`. `internal/core/` holds the brain's decision
+logic.
 
 ## Documentation
 
