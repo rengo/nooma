@@ -147,9 +147,10 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// never inside wireScheduler's LLM-gated path (design §3.6).
 	today := wireToday(db, focusKeeper)
 	units := wireUnits(db)
+	beliefs := wireBeliefs(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
-		uiHandler = ui.New(uiDeps(today, units, recall, capture, ui.Serving{Bind: addr, CookieAuth: token != ""}))
+		uiHandler = ui.New(uiDeps(today, units, recall, capture, beliefs, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: uiHandler}),
@@ -312,7 +313,7 @@ func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 // and capture do, on a vault with no providers configured (wireBrain's own
 // degrade, cmd/nooma/wiring.go) — this function guards all four alike
 // rather than only the ones that need it today.
-func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, serving ui.Serving) ui.Deps {
+func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, serving ui.Serving) ui.Deps {
 	deps := ui.Deps{Serving: serving}
 	if today != nil {
 		deps.Today = today

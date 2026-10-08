@@ -58,6 +58,7 @@ type Deps struct {
 	Units   UnitsReader
 	Search  Searcher
 	Capture Capturer
+	Beliefs Beliefs
 	Serving Serving
 }
 
