@@ -54,7 +54,7 @@ tasks:
     provider: local
 `, port, llm.URL))
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	// Step 1 — capture via the API: R2.1's own entrance.

@@ -25,7 +25,8 @@ import (
 // configures a port nothing else is using. There is a race in principle — the
 // port could be taken between the close and the server's bind — but the
 // alternative is a hardcoded port, which races with every other test and with
-// whatever the developer happens to be running.
+// whatever the developer happens to be running. startServe closes that window
+// after the fact: it detects the lost bind and retries on a fresh port.
 func freePort(t *testing.T) int {
 	t.Helper()
 
@@ -42,35 +43,14 @@ func freePort(t *testing.T) int {
 //
 // Waiting for a response rather than sleeping is what keeps this from being flaky
 // by construction: the test proceeds when the server is genuinely up, or fails
-// saying it never came up.
-func startServe(t *testing.T, home, vault string, port int, extraArgs ...string) *exec.Cmd {
+// saying why it never came up. "Up" means OUR child answered with nooma's own
+// GET / document while still running, and a start that lost its port to another
+// listener is retried on a fresh one (startServeProc). port is a pointer for
+// that reason: read it after startServe returns, not before.
+func startServe(t *testing.T, home, vault string, port *int, extraArgs ...string) *serveProc {
 	t.Helper()
 
-	args := append([]string{"serve"}, extraArgs...)
-	args = append(args, vault)
-	cmd := exec.Command(binaryPath(t), args...)
-	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
-	var errOut strings.Builder
-	cmd.Stderr = &errOut
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-	})
-
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
-		if err == nil {
-			_ = resp.Body.Close()
-			return cmd
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("serve never answered on port %d\nstderr: %s", port, errOut.String())
-	return nil
+	return startServeProc(t, home, vault, port, extraArgs...)
 }
 
 func writeConfig(t *testing.T, vault, document string) {
@@ -89,7 +69,7 @@ func TestServeAnswersBothSurfaces(t *testing.T) {
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n", port))
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	for _, path := range []string{"/", "/ui"} {
 		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d%s", port, path))
@@ -156,7 +136,7 @@ func TestServeNoUI(t *testing.T) {
 			port := freePort(t)
 			writeConfig(t, vault, fmt.Sprintf(tc.config, port))
 
-			startServe(t, home, vault, port, tc.extraArgs...)
+			startServe(t, home, vault, &port, tc.extraArgs...)
 
 			uiResp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/ui", port))
 			if err != nil {
@@ -249,7 +229,7 @@ tasks:
 	const token = "handshake-e2e-token"
 	t.Setenv("NOOMA_SERVE_HANDSHAKE_TEST_TOKEN", token)
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	client := noRedirectClient()
@@ -354,7 +334,7 @@ tasks:
 	const token = "ui-units-e2e-token"
 	t.Setenv("NOOMA_SERVE_UI_UNITS_TEST_TOKEN", token)
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	client := noRedirectClient()
@@ -451,7 +431,7 @@ tasks:
 	const token = "ui-capture-e2e-token"
 	t.Setenv("NOOMA_SERVE_UI_CAPTURE_TEST_TOKEN", token)
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	client := noRedirectClient()
@@ -518,7 +498,7 @@ func TestServeHoldsTheWriteLock(t *testing.T) {
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n", port))
 
-	cmd := startServe(t, home, vault, port)
+	cmd := startServe(t, home, vault, &port)
 
 	pid, held, err := vaultlock.ReadHolder(vault)
 	if err != nil {
@@ -571,7 +551,7 @@ func TestServeReleasesTheLockOnSignal(t *testing.T) {
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n", port))
 
-	cmd := startServe(t, home, vault, port)
+	cmd := startServe(t, home, vault, &port)
 
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatal(err)

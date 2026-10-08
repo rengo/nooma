@@ -39,7 +39,7 @@ func TestServeCaptureAndRecallAreReachableButUnwired(t *testing.T) {
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n", port))
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	captureBody, err := json.Marshal(map[string]string{"text": "pick up the dry cleaning"})
 	if err != nil {
@@ -148,7 +148,7 @@ tasks:
     provider: local
 `, port, llm.URL))
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	captureBody, err := json.Marshal(map[string]string{"text": "Pick up the dry cleaning on Friday"})
 	if err != nil {
