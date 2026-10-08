@@ -31,7 +31,7 @@ are estimates (m4c measured tests at roughly 3.5x impl) and are reported apart.
 |----|--------|------|------|------|------|------|
 | 1 | `feat/ports-store-belief-status` | ~265 | ~345 | ~650 | #289: 318 changed lines when opened (1.2x); tests 1.75x | core `selfmodel` vocabulary + content bound / port + store guards |
 | 2 | `feat/brain-derive-shield` | ~270 | ~351 | ~800 | 557 changed lines (2.06x); tests 1,439 (1.8x) | **cut: 2a / 2b, see below** |
-| 3 | `feat/brain-belief-edit-retire` | ~260 | ~338 | ~650 | not built; at 2.06x ~536 | `ByFacet` + `Edit` / `Retire` + `write_landed.go` |
+| 3 | `feat/brain-belief-edit-retire` | ~260 | ~338 | ~650 | built whole: 393 changed lines (1.51x; 369 without the `tasks.md` edits); tests 1,308 (2.0x). Under 400, no cut | `ByFacet` + `Edit` / `Retire` + `write_landed.go` (unused) |
 | 4 | `feat/ui-beliefs` | ~275 | ~358 | ~450 | not built; at 2.06x ~567 | GET view + wiring / the two POSTs + G6 body table |
 | 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | ~130, ~290 | ~169, ~377 | ~320, ~450 | | **Moved to [`m4e-activity`](../m4e-activity/tasks.md)** |
 | | **Total (4 forecast PRs)** | **~1,070** | **~1,390** | **~2,550** | | |
@@ -295,36 +295,38 @@ Files: `internal/brain/{beliefs,belief_edit,belief_retire,write_landed}.go`(+tes
 `internal/ports/decisionlog.go`, `test/support/repocontract/decisionlog.go`,
 `docs/02-cognitive-core.md` §11, `docs/06-harness.md` §4.
 
-- [ ] **3.1** SCAFFOLD — `write_landed.go`: `ErrWriteLanded`, `*WriteLandedError{Record, Signal
-  bool; Err error}` with `Is`/`Unwrap` (real; reused by m4e2). `beliefs.go`/`belief_edit.go`/
+- [x] **3.1** SCAFFOLD — `write_landed.go`: `ErrWriteLanded`, `*WriteLandedError{Record, Signal
+  bool; Err error}` with `Is`/`Unwrap` (reused by m4e2; *applied as: the type and the sentinel
+  are real, `Error`/`Is`/`Unwrap` start as stubs so their tests are watched failing, GREEN
+  makes them real*). `beliefs.go`/`belief_edit.go`/
   `belief_retire.go`: `BeliefsService{clock, ids, beliefs, signals, log}`, `NewBeliefsService`,
   `ByFacet`, `Edit`, `Retire` returning zero values; one file per operation, one `Now()` each
   (finding 4). `ActionBeliefEdited`, `ActionBeliefRetired` appended last; "fifty" -> "fifty-two";
   repocontract `want` map and title.
-- [ ] **3.2** RED edit (FX-B seeded snapshots, FX-N): B1 `…UnknownIDWritesNothing`, B2
+- [x] **3.2** RED edit (FX-B seeded snapshots, FX-N): B1 `…UnknownIDWritesNothing`, B2
   `…SameContentWritesNothing` and `…CRLFResubmissionWritesNothing`, B3 `…RetiredBeliefWritesNothing`,
   B4 `…LogFailureLeavesBeliefUntouched`, B5 `…WriteFailureEmitsNoSignal`, B6
   `…SignalNamesBeliefAndLogRow` (prior `derived`, prior `user_stated`), B7 JSON keys, B8 bounds
   table, B15 `…SignalFailureAfterWriteIsNonFatal`, B16 normalised storage, B18
   `TestBeliefEdit_OverBoundDerivedBeliefIsEditable`.
-- [ ] **3.3** RED retire: B9 `TestBeliefRetire_TwiceLogsOnce`, B10, B12
+- [x] **3.3** RED retire: B9 `TestBeliefRetire_TwiceLogsOnce`, B10, B12
   `…AlreadyRetiredConflictsBeforeAnyWrite` (counting decorators), B13 `…RetireSignalFields` (three
   origins), B14 `…RecordFailureAfterWriteIsNonFatal`, B17 `…SignalFailureAfterWriteIsNonFatal`,
   **B19 `TestBeliefRetire_RecordAndSignalFailureReportsBoth`: `Record` and the signal both fail;
   `errors.Is(err, ErrWriteLanded)` and `errors.As` gives `Record && Signal`; the belief reads
   `retired`** (design §10 item 8).
-- [ ] **3.4** RED `ByFacet` (B11, B11b-d): all five facets, empty as empty; order fixture over a stub
+- [x] **3.4** RED `ByFacet` (B11, B11b-d): all five facets, empty as empty; order fixture over a stub
   `SelfModelRepo` returning the exact reverse, plus a second permutation, plus the 20-run
   `memrepo` flake detector.
-- [ ] **3.5** GREEN — `ByFacet` (`sort.SliceStable`, confidence desc, `last_reinforced_at` desc,
+- [x] **3.5** GREEN — `ByFacet` (`sort.SliceStable`, confidence desc, `last_reinforced_at` desc,
   `id` asc, in brain); `Edit` (normalise -> read -> no-op against `NormalizeText(stored)` ->
   pre-image `Record` -> `EditContent` -> signal); `Retire` (read -> `SetStatus` -> `Record` ->
   signal, non-fatal follow-ups). Signals: negative valence, `TargetKind` belief, `DecisionAction`
   `ActionDeriveBeliefCreated` only for prior `derived`.
-- [ ] **3.6** DOCS — doc 02 §11 (`:1237-1240`) belief clause ("a user's write through the mirror
+- [x] **3.6** DOCS — doc 02 §11 (`:1237-1240`) belief clause ("a user's write through the mirror
   (a belief edit or retirement) is recorded too, with the value it replaced"); harness §4 I03 and
   I12 rows. Umbrella §5.2 row 9 is satisfied here. Verify `scripts/docs-sync.sh`.
-- [ ] **3.7** PROBES B1-B19, B11b-d each applied from the production diff (record-first swap, signal
+- [x] **3.7** PROBES B1-B19, B11b-d each applied from the production diff (record-first swap, signal
   on failed write, plain-error mutants for windows b and c, compare against `NormalizeContent`,
   drop each sort key, keep only `Record` in the both-fail case).
 
@@ -373,5 +375,7 @@ Files: `internal/ui/{beliefs.go,beliefs.templ,ui.go,layout.templ}`, `internal/ht
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
 - [ ] **C.2** After PR 1 merges: compute actual / estimate; apply the cut rule (Forecast) before
-  PR 2 (done: PR 2 was cut, see the Forecast). Apply it again to PRs 3 and 4. After PR 4 merges,
+  PR 2 (done: PR 2 was cut, see the Forecast). Apply it again to PRs 3 and 4 (PR 3 done: it
+  measured 1.51x, 393 against ~260, under 400, no cut; at 1.51x PR 4 is ~415, so its seam stays
+  pre-defined). After PR 4 merges,
   `m4e-activity` may start; `m4e2-admin` starts after `m4e-activity`'s PR 6 merges.
