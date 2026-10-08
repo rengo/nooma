@@ -243,7 +243,7 @@ Initial extraction:
 |---|---|---|
 | I01 | `status='focus'` does not exist. Focus is a query, never persisted. The previous focus lives only in one `brain.FocusKeeper`'s memory: `TestI01_IncumbentDoesNotSurviveAFreshService` builds a fresh keeper over the same vault and finds nothing held, and `TestBrain_DeclaresNoPackageLevelVar` keeps it from living in a package variable | §3 |
 | I02 | Every LIVE read surface excludes `superseded` and `incomplete` | §1 |
-| I03 | Nothing is deleted: archiving is a state transition. No path emits `DELETE` on `units` or `self_beliefs` (a belief is retired, never removed) | §1, §10 |
+| I03 | Nothing is deleted: archiving is a state transition. No path emits `DELETE` on `units` or `self_beliefs` (a belief is retired, never removed: the user's delete is a status write, `active` to `retired`) | §1, §10 |
 | I04 | A timer is never a unit: no weight, no decay, no graph, no beliefs | §8 |
 | I05 | `effective_weight` is computed on read; decay is not written on every read | §2 |
 | I06 | An `incomplete` unit has no embedding until promoted | §1, doc 03 |
@@ -252,7 +252,7 @@ Initial extraction:
 | I09 | The `[persist, surface)` band → stored **and** asked about in the digest | §4 |
 | I10 | Rejecting a relation deletes it **and** emits `relation_reject` before deleting | §4, §9 |
 | I11 | The 8 consolidation phases run in order, and `learn` is always last | §6 |
-| I12 | Every automatic decision with an effect writes to `decision_log`. Derive's retired shield is one: a skipped proposal writes `consolidate.derive.belief_skipped`, a retired belief left out of a night's comparison writes `consolidate.derive.retired_embed_failed` | §11 |
+| I12 | Every automatic decision with an effect writes to `decision_log`. Derive's retired shield is one: a skipped proposal writes `consolidate.derive.belief_skipped`, a retired belief left out of a night's comparison writes `consolidate.derive.retired_embed_failed`. A user's belief write is recorded too: an edit writes `belief.edited` before the content changes, a retirement writes `belief.retired`, and each emits its learning signal | §11 |
 | I13 | A `learning_signal` outlives the deletion of its target (no FK) | §9 |
 | I14 | A malformed `classify` field degrades to null; it never aborts the classification | §5 |
 | I15 | A trigger overdue past the threshold → `expired`, never `fired` | ADR-0009 |

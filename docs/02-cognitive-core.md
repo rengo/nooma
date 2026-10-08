@@ -1302,6 +1302,14 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   sentence and are different facts about the provider, and only one of them is worth changing
   a prompt over. This is the general form of a gap `language` produced first: a reply came
   back in the wrong language and the table could not say why.
+- **A user's write through the mirror is recorded too, with the value it replaced.** A belief
+  edit or retirement writes its own row (`belief.edited`, `belief.retired`). An edit records the
+  previous and the new content *before* it overwrites the text, the order a correction's
+  pre-image already follows ([ADR-0016](adr/0016-correction-pre-image.md)), because a belief has
+  no history table; a retirement records after its status write, because nothing is overwritten
+  (the row keeps its content). When the write lands and its row or its learning signal cannot be
+  written, the act stands and is not reported as a failure: the mirror says which part is
+  missing.
 - **Pull**: everything is recorded and explorable in the activity UI.
 - **Push**: only the big or the uncertain is proactively mentioned (low confidence or
   high-impact decision). "Cautious to capture, selective to speak", applied to its own
