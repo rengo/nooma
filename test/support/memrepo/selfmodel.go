@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -44,7 +45,7 @@ func (s *SelfModel) ActiveBeliefs(_ context.Context) ([]ports.Belief, error) {
 
 	var out []ports.Belief
 	for _, b := range s.byID {
-		if b.Status == "active" {
+		if b.Status == selfmodel.StatusActive {
 			out = append(out, b)
 		}
 	}
@@ -84,5 +85,25 @@ func (s *SelfModel) ReinforceByID(_ context.Context, id string, confidence float
 	existing.Confidence = confidence
 	existing.LastReinforcedAt = at
 	s.byID[id] = existing
+	return nil
+}
+
+// RetiredBeliefs implements ports.SelfModelRepo.
+func (s *SelfModel) RetiredBeliefs(_ context.Context) ([]ports.Belief, error) {
+	return nil, nil
+}
+
+// BeliefByID implements ports.SelfModelRepo.
+func (s *SelfModel) BeliefByID(_ context.Context, _ string) (ports.Belief, error) {
+	return ports.Belief{}, nil
+}
+
+// SetStatus implements ports.SelfModelRepo.
+func (s *SelfModel) SetStatus(_ context.Context, _ string, _, _ selfmodel.Status, _ time.Time) error {
+	return nil
+}
+
+// EditContent implements ports.SelfModelRepo.
+func (s *SelfModel) EditContent(_ context.Context, _, _, _ string, _ time.Time) error {
 	return nil
 }

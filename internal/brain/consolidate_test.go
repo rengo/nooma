@@ -1771,7 +1771,7 @@ func TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState(t
 		selfModel := memrepo.NewSelfModel()
 		if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
 			ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness",
-			Content: "wants to run more consistently", Confidence: 0.6, Status: "active",
+			Content: "wants to run more consistently", Confidence: 0.6, Origin: "derived", Status: "active",
 			LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatalf("seed belief: %v", err)
@@ -1838,8 +1838,8 @@ func TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief(t *testing.T)
 
 	selfModel := memrepo.NewSelfModel()
 	for _, b := range []ports.Belief{
-		{ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness", Content: "wants to run more consistently", Confidence: 0.6, Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
-		{ID: "b-2", Facet: selfmodel.FacetValue, TopicKey: "derived/value/health", Content: "values staying active", Confidence: 0.5, Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+		{ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness", Content: "wants to run more consistently", Confidence: 0.6, Origin: "derived", Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+		{ID: "b-2", Facet: selfmodel.FacetValue, TopicKey: "derived/value/health", Content: "values staying active", Confidence: 0.5, Origin: "derived", Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
 	} {
 		if err := selfModel.UpsertByTopicKey(ctx, b); err != nil {
 			t.Fatalf("seed belief %s: %v", b.ID, err)
@@ -1929,7 +1929,7 @@ func TestConsolidateRunner_Derive_RoutesCreateAndMergeToTheirOwnWrite(t *testing
 	selfModel := newSpySelfModel()
 	if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
 		ID: "b-existing", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness",
-		Content: existingContent, Confidence: 0.5, Status: "active",
+		Content: existingContent, Confidence: 0.5, Origin: "derived", Status: "active",
 		LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed existing belief: %v", err)
@@ -2160,7 +2160,7 @@ func TestConsolidateRunner_PatternEval_StagnationFindingsEachProduceOneRow(t *te
 	for _, s := range seeds {
 		if err := selfModel.UpsertByTopicKey(ctx, ports.Belief{
 			ID: s.id, Facet: s.facet, TopicKey: s.topicKey,
-			Content: "seed content for " + s.id, Confidence: 0.5, Status: "active",
+			Content: "seed content for " + s.id, Confidence: 0.5, Origin: "derived", Status: "active",
 			LastReinforcedAt: s.lastReinforcedAt, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatalf("seed %s: %v", s.id, err)

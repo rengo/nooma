@@ -55,6 +55,26 @@ func (r *SelfModelRepo) ActiveBeliefs(ctx context.Context) ([]ports.Belief, erro
 	return out, nil
 }
 
+// RetiredBeliefs implements ports.SelfModelRepo.
+func (r *SelfModelRepo) RetiredBeliefs(_ context.Context) ([]ports.Belief, error) {
+	return nil, nil
+}
+
+// BeliefByID implements ports.SelfModelRepo.
+func (r *SelfModelRepo) BeliefByID(_ context.Context, _ string) (ports.Belief, error) {
+	return ports.Belief{}, nil
+}
+
+// SetStatus implements ports.SelfModelRepo.
+func (r *SelfModelRepo) SetStatus(_ context.Context, _ string, _, _ selfmodel.Status, _ time.Time) error {
+	return nil
+}
+
+// EditContent implements ports.SelfModelRepo.
+func (r *SelfModelRepo) EditContent(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 // UpsertByTopicKey implements ports.SelfModelRepo. Conflicts on
 // self_beliefs.topic_key (UNIQUE, migration 0001:75) — RelationRepo.Upsert's
 // own pattern (design §4.3, spec R2.1). id is never SET on conflict, so a
@@ -76,8 +96,8 @@ ON CONFLICT (topic_key) DO UPDATE SET
   updated_at         = excluded.updated_at`
 
 	_, err := r.db.ExecContext(ctx, q,
-		b.ID, string(b.Facet), b.TopicKey, b.Content, b.Confidence, b.Origin,
-		stringPtrToNull(b.SourceUnitID), b.Status, formatUnitTime(b.LastReinforcedAt),
+		b.ID, string(b.Facet), b.TopicKey, b.Content, b.Confidence, string(b.Origin),
+		stringPtrToNull(b.SourceUnitID), string(b.Status), formatUnitTime(b.LastReinforcedAt),
 		formatUnitTime(b.CreatedAt), formatUnitTime(b.UpdatedAt),
 	)
 	if err != nil {
@@ -112,20 +132,22 @@ type selfBeliefRow interface {
 func scanBelief(row selfBeliefRow) (ports.Belief, error) {
 	var (
 		b                                                  ports.Belief
-		facet                                              string
+		facet, origin, status                              string
 		sourceUnitID                                       sql.NullString
 		lastReinforcedAtText, createdAtText, updatedAtText string
 	)
 
 	err := row.Scan(
-		&b.ID, &facet, &b.TopicKey, &b.Content, &b.Confidence, &b.Origin,
-		&sourceUnitID, &b.Status, &lastReinforcedAtText, &createdAtText, &updatedAtText,
+		&b.ID, &facet, &b.TopicKey, &b.Content, &b.Confidence, &origin,
+		&sourceUnitID, &status, &lastReinforcedAtText, &createdAtText, &updatedAtText,
 	)
 	if err != nil {
 		return ports.Belief{}, err
 	}
 
 	b.Facet = selfmodel.Facet(facet)
+	b.Origin = selfmodel.Origin(origin)
+	b.Status = selfmodel.Status(status)
 	if sourceUnitID.Valid {
 		b.SourceUnitID = &sourceUnitID.String
 	}

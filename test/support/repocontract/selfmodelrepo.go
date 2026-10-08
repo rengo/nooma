@@ -30,7 +30,7 @@ func RunActiveBeliefs(t *testing.T, newRepo func(t *testing.T) ports.SelfModelRe
 		wantIDs := make(map[string]bool, len(facets))
 		for _, f := range facets {
 			b := fixtureBelief(string(f)+"-active", f, string(f)+"-active-key")
-			b.Status = "active"
+			b.Status = selfmodel.StatusActive
 			if err := repo.UpsertByTopicKey(ctx, b); err != nil {
 				t.Fatalf("UpsertByTopicKey %s: %v", b.ID, err)
 			}
@@ -40,7 +40,7 @@ func RunActiveBeliefs(t *testing.T, newRepo func(t *testing.T) ports.SelfModelRe
 		// A non-active belief in the same facet set must not appear —
 		// ActiveBeliefs carries no status parameter but still must filter.
 		inactive := fixtureBelief("goal-merged", selfmodel.FacetGoal, "goal-merged-key")
-		inactive.Status = "merged"
+		inactive.Status = selfmodel.StatusRetired
 		if err := repo.UpsertByTopicKey(ctx, inactive); err != nil {
 			t.Fatalf("UpsertByTopicKey %s: %v", inactive.ID, err)
 		}
@@ -58,7 +58,7 @@ func RunActiveBeliefs(t *testing.T, newRepo func(t *testing.T) ports.SelfModelRe
 		for _, b := range got {
 			gotIDs[b.ID] = true
 			gotFacets[b.Facet] = true
-			if b.Status != "active" {
+			if b.Status != selfmodel.StatusActive {
 				t.Errorf("ActiveBeliefs() returned belief %s with status %q, want only status = active", b.ID, b.Status)
 			}
 		}
@@ -244,9 +244,9 @@ func fixtureBelief(id string, facet selfmodel.Facet, topicKey string) ports.Beli
 		TopicKey:         topicKey,
 		Content:          "fixture content for " + id,
 		Confidence:       0.5,
-		Origin:           "derived",
+		Origin:           selfmodel.OriginDerived,
 		SourceUnitID:     nil,
-		Status:           "active",
+		Status:           selfmodel.StatusActive,
 		LastReinforcedAt: at,
 		CreatedAt:        at,
 		UpdatedAt:        at,
