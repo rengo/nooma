@@ -314,6 +314,12 @@ func TestDerive_FXD_RoutesEachProposalAndLogsEachSkip(t *testing.T) {
 	if p6.Ctx["reason"] != "retired_similar" || p6.Ctx["belief_id"] != "r3" {
 		t.Errorf("p6 (tie) context = %+v, want retired_similar against r3: a tie goes to retired", p6.Ctx)
 	}
+	if want := `derive: skipped proposal "derived/goal/marathon": it derives the topic key of retired belief "r1"`; p1.Rationale != want {
+		t.Errorf("p1 rationale = %q, want %q", p1.Rationale, want)
+	}
+	if want := `derive: skipped proposal "derived/goal/new2": retired belief "r2" is at least as similar to it as any active one (0.9500)`; p2.Rationale != want {
+		t.Errorf("p2 rationale = %q, want %q", p2.Rationale, want)
+	}
 	if p6.Rationale == "" {
 		t.Error("belief_skipped rationale is empty: doc 02 §11 wants a legible sentence")
 	}
@@ -813,6 +819,103 @@ func TestDerive_ProposedUnusableVectorOnUserStatedKeyReinforcesAndSaysSo(t *test
 	}
 }
 
+// Fail closed (owner ruling, 2026-10-08): a proposal whose vector cannot be
+// compared, on a night when at least one retired belief exists, is not
+// created and does not reinforce anything: it could be the very belief the
+// user retired, and without a vector nothing can say it is not. It is skipped
+// for the night and recorded.
+func TestDerive_UnusableProposalVectorWithRetiredBeliefSkips(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		vec   []float32
+		cause string
+	}{
+		{"zero", []float32{0, 0, 0}, "zero_vector"},
+		{"non-finite", []float32{float32(math.NaN()), 0, 0}, "non_finite"},
+		{"wrong dimension", []float32{1, 0}, "dimension_mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newShieldWorld(t)
+			w.seed(seedBelief{id: "a", key: "derived/value/health", content: "A content", conf: 0.5, vec: []float32{1, 0, 0}})
+			w.seed(seedBelief{id: "r", key: "derived/goal/swim", content: "R content", conf: 0.6, retired: true, vec: []float32{0, 1, 0}})
+			w.propose("goal", "odd", "ODD content", tc.vec)
+
+			w.mustRun()
+
+			skips := w.rows(ports.ActionDeriveBeliefSkipped)
+			if len(skips) != 1 {
+				t.Fatalf("belief_skipped rows = %+v, want exactly the odd proposal", skips)
+			}
+			ctx := skips[0].Ctx
+			if want := []string{"cause", "proposed_content", "reason", "topic_key"}; !slices.Equal(keysOf(ctx), want) {
+				t.Errorf("context keys = %v, want %v", keysOf(ctx), want)
+			}
+			if ctx["reason"] != "unusable_vector_retired_unchecked" || ctx["cause"] != tc.cause ||
+				ctx["topic_key"] != "derived/goal/odd" || ctx["proposed_content"] != "ODD content" {
+				t.Errorf("context = %+v, want reason unusable_vector_retired_unchecked, cause %q, the proposal's key and content", ctx, tc.cause)
+			}
+			if skips[0].Rationale == "" {
+				t.Error("rationale is empty: doc 02 §11 wants a legible sentence")
+			}
+			if n := len(w.rows(ports.ActionDeriveBeliefCreated)); n != 0 {
+				t.Errorf("belief_created rows = %d, want 0: nothing is created when the retired set cannot be checked", n)
+			}
+			w.wantUnchanged("r")
+			w.wantUnchanged("a")
+		})
+	}
+}
+
+// The same rule on a key the user wrote: it would otherwise reinforce, and
+// that is also a write made without the retired check.
+func TestDerive_UnusableProposalVectorOnUserStatedKeyWithRetiredSkips(t *testing.T) {
+	w := newShieldWorld(t)
+	w.seed(seedBelief{id: "a", key: "derived/value/health", content: "A content", conf: 0.5, vec: []float32{1, 0, 0}})
+	w.seed(seedBelief{id: "u", key: "derived/goal/read", content: "U content", conf: 0.4, origin: selfmodel.OriginUserStated, vec: []float32{0, 1, 0}})
+	w.seed(seedBelief{id: "r", key: "derived/goal/swim", content: "R content", conf: 0.6, retired: true, vec: []float32{0, 0, 1}})
+	w.propose("goal", "read", "READ content", []float32{0, 0, 0})
+
+	w.mustRun()
+
+	if n := len(w.rows(ports.ActionDeriveBeliefSkipped)); n != 1 {
+		t.Errorf("belief_skipped rows = %d, want 1", n)
+	}
+	if n := len(w.rows(ports.ActionDeriveBeliefReinforced)); n != 0 {
+		t.Errorf("belief_reinforced rows = %d, want 0", n)
+	}
+	w.wantUnchanged("u")
+}
+
+// With no retired belief there is nothing to miss: create, with the note.
+func TestDerive_UnusableProposalVectorWithoutRetiredStillCreates(t *testing.T) {
+	w := newShieldWorld(t)
+	w.seed(seedBelief{id: "a", key: "derived/value/health", content: "A content", conf: 0.5, vec: []float32{1, 0, 0}})
+	w.propose("goal", "odd", "ODD content", []float32{0, 0, 0})
+
+	w.mustRun()
+
+	if n := len(w.rows(ports.ActionDeriveBeliefSkipped)); n != 0 {
+		t.Errorf("belief_skipped rows = %d, want 0 with no retired belief", n)
+	}
+	created := w.rows(ports.ActionDeriveBeliefCreated)
+	if len(created) != 1 || !strings.Contains(created[0].Rationale, "zero_vector") {
+		t.Errorf("belief_created rows = %+v, want the odd proposal created with its cause", created)
+	}
+}
+
+// Probe for doc 02 §6 item 5: a zero or non-finite ACTIVE vector is not an
+// embed error and is not screened. It fails the merge, so the phase aborts
+// when some proposal is comparable.
+func TestDerive_UnusableActiveVectorAbortsPhase(t *testing.T) {
+	w := newShieldWorld(t)
+	w.seed(seedBelief{id: "a", key: "derived/value/health", content: "A content", conf: 0.5, vec: []float32{0, 0, 0}})
+	w.propose("goal", "fresh", "P0 content", []float32{1, 0, 0})
+
+	if _, err := w.run(); err == nil {
+		t.Fatal("Consolidate(PhaseDerive) succeeded, want the phase to abort on an unusable active vector")
+	}
+}
+
 // No active beliefs: the first USABLE proposal sets the reference
 // dimension. A zero-vector proposal that is also the wrong length comes
 // first and must not set it, or the healthy retired belief would be dropped
@@ -829,12 +932,17 @@ func TestDerive_NoActiveBeliefsNextUsableProposalSetsDimension(t *testing.T) {
 		t.Fatalf("retired_embed_failed rows = %+v, want none: the retired vector agrees with the first usable proposal", fails)
 	}
 	skips := w.rows(ports.ActionDeriveBeliefSkipped)
-	if len(skips) != 1 || skips[0].Ctx["reason"] != "retired_similar" || skips[0].Ctx["belief_id"] != "r" {
-		t.Errorf("belief_skipped rows = %+v, want SWIM skipped as similar to the retired belief", skips)
+	if len(skips) != 2 {
+		t.Fatalf("belief_skipped rows = %+v, want SWIM (similar to the retired belief) and the odd proposal (fail closed)", skips)
 	}
-	created := w.rows(ports.ActionDeriveBeliefCreated)
-	if len(created) != 1 || !strings.Contains(created[0].Rationale, "zero_vector") {
-		t.Errorf("belief_created rows = %+v, want the odd proposal created with its cause in the rationale", created)
+	if swim := w.rowFor(skips, "derived/goal/swim-again"); swim.Ctx["reason"] != "retired_similar" || swim.Ctx["belief_id"] != "r" {
+		t.Errorf("SWIM row = %+v, want it skipped as similar to the retired belief", swim)
+	}
+	if odd := w.rowFor(skips, "derived/goal/odd"); odd.Ctx["reason"] != "unusable_vector_retired_unchecked" || odd.Ctx["cause"] != "zero_vector" {
+		t.Errorf("odd row = %+v, want it skipped fail-closed with cause zero_vector", odd)
+	}
+	if n := len(w.rows(ports.ActionDeriveBeliefCreated)); n != 0 {
+		t.Errorf("belief_created rows = %d, want 0", n)
 	}
 }
 
@@ -850,16 +958,13 @@ func TestDerive_NoActiveBeliefsFirstUsableProposalFixesDimension(t *testing.T) {
 	w.mustRun()
 
 	created := w.rows(ports.ActionDeriveBeliefCreated)
-	if len(created) != 2 {
-		t.Fatalf("belief_created rows = %+v, want both proposals created", created)
+	if len(created) != 1 || created[0].Ctx["TopicKey"] != "derived/goal/first" || strings.Contains(created[0].Rationale, "skipped") {
+		t.Fatalf("belief_created rows = %+v, want only the first proposal, with no skipped-comparison note: it set the dimension", created)
 	}
-	for _, c := range created {
-		if c.Ctx["TopicKey"] == "derived/goal/short" && !strings.Contains(c.Rationale, "dimension_mismatch") {
-			t.Errorf("short proposal rationale = %q, want the dimension_mismatch note", c.Rationale)
-		}
-		if c.Ctx["TopicKey"] == "derived/goal/first" && strings.Contains(c.Rationale, "skipped") {
-			t.Errorf("first proposal rationale = %q, want no skipped-comparison note: it set the dimension", c.Rationale)
-		}
+	// The short one cannot be checked against the retired belief: fail closed.
+	skips := w.rows(ports.ActionDeriveBeliefSkipped)
+	if len(skips) != 1 || skips[0].Ctx["topic_key"] != "derived/goal/short" || skips[0].Ctx["cause"] != "dimension_mismatch" {
+		t.Errorf("belief_skipped rows = %+v, want the short proposal skipped with cause dimension_mismatch", skips)
 	}
 	fails := w.rows(ports.ActionDeriveRetiredEmbedFailed)
 	if len(fails) != 1 || fails[0].Ctx["cause"] != "dimension_mismatch" {
@@ -879,9 +984,12 @@ func TestDerive_NoUsableProposalSkipsTheMergeEntirely(t *testing.T) {
 
 	w.mustRun()
 
-	created := w.rows(ports.ActionDeriveBeliefCreated)
-	if len(created) != 1 || !strings.Contains(created[0].Rationale, "zero_vector") {
-		t.Errorf("belief_created rows = %+v, want the odd proposal created without a comparison", created)
+	if n := len(w.rows(ports.ActionDeriveBeliefCreated)); n != 0 {
+		t.Errorf("belief_created rows = %d, want 0: retired beliefs exist and the odd proposal could not be checked", n)
+	}
+	skips := w.rows(ports.ActionDeriveBeliefSkipped)
+	if len(skips) != 1 || skips[0].Ctx["reason"] != "unusable_vector_retired_unchecked" {
+		t.Errorf("belief_skipped rows = %+v, want the odd proposal skipped fail-closed", skips)
 	}
 }
 

@@ -682,7 +682,7 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 	}
 
 	routes := consolidation.RouteProposals(activeMerges, retiredMerges, keys, activeKeyed, retiredKeyed)
-	return r.persistRoutes(ctx, routes, proposals, keys, active, unusable, pass.now)
+	return r.persistRoutes(ctx, routes, proposals, keys, active, len(retired), unusable, pass.now)
 }
 
 // keyedBeliefs reduces beliefs to what the shield decides from.
@@ -726,12 +726,18 @@ func mergeAgainstActiveAndRetired(vs mergeEmbeddings) (activeMerges, retiredMerg
 // (doc 02 §11: a scan-time conflict is recorded and skipped, never fatal).
 const skipReasonChangedSinceRead = "changed_since_read"
 
+// skipReasonUnusableVectorRetiredUnchecked is the reason of a skip row written
+// when a proposal's vector could not be compared and a retired belief exists:
+// the proposal might be the belief the user retired, and nothing can say it
+// is not, so derive fails closed and leaves it for another night.
+const skipReasonUnusableVectorRetiredUnchecked = "unusable_vector_retired_unchecked"
+
 // persistRoutes applies every route in proposal order. A store refusal
 // (ErrBeliefProtected from the upsert, ErrBeliefStatusConflict from the
 // reinforce) means the user changed the belief between derive's read and
 // its write: the proposal is skipped and recorded, and the pass goes on.
 // active is indexed once so a reinforce can read its target's confidence.
-func (r consolidateRunner) persistRoutes(ctx context.Context, routes []consolidation.Route, proposals []derivedBeliefProposal, keys []string, active []ports.Belief, unusable map[int]string, now time.Time) error {
+func (r consolidateRunner) persistRoutes(ctx context.Context, routes []consolidation.Route, proposals []derivedBeliefProposal, keys []string, active []ports.Belief, retiredCount int, unusable map[int]string, now time.Time) error {
 	byID := make(map[string]ports.Belief, len(active))
 	for _, b := range active {
 		byID[b.ID] = b
@@ -742,6 +748,17 @@ func (r consolidateRunner) persistRoutes(ctx context.Context, routes []consolida
 		note := ""
 		if cause, ok := unusable[rt.ProposedIndex]; ok {
 			note = fmt.Sprintf("; semantic comparison skipped: proposal vector unusable (%s)", cause)
+		}
+		if cause, ok := unusable[rt.ProposedIndex]; ok && retiredCount > 0 {
+			// Fail closed (doc 02 §6 item 5): without a vector the retired
+			// beliefs cannot be consulted semantically, so neither create nor
+			// reinforce on this proposal tonight.
+			rationale := fmt.Sprintf("derive: skipped proposal %q: its vector is unusable (%s) and retired beliefs exist that it could not be checked against", key, cause)
+			detail := map[string]any{"topic_key": key, "reason": skipReasonUnusableVectorRetiredUnchecked, "proposed_content": proposal.Content, "cause": cause}
+			if err := r.record(ctx, now, ports.ActionDeriveBeliefSkipped, rationale, detail); err != nil {
+				return err
+			}
+			continue
 		}
 		switch rt.Kind {
 		case consolidation.RouteSkipRetired:

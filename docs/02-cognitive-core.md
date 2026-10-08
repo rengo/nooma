@@ -989,11 +989,20 @@ boot catch-up — the two are one body of work behind two triggers.
    change's. **A vector that cannot be compared does not fail the pass.** A retired belief whose
    embedding fails, or is non-finite, zero or of the wrong dimension, is dropped from the
    comparison for that night and logged as `consolidate.derive.retired_embed_failed` with its
-   cause (it is still matched by key, so a failed embedding never makes it re-derivable); a
-   proposal whose vector is unusable is created, or reinforces a user-stated key, without a
-   semantic comparison, and its rationale says so. The reference dimension is the first active
-   belief's vector, else the first usable proposal's. An active belief or a proposal whose
-   embedding call fails, and a cancelled context, still abort the phase.
+   cause (it is still matched by key, so it is never re-derivable under its own key; a
+   paraphrase under another key is caught only semantically). A proposal whose vector is
+   unusable — non-finite, zero or of the wrong dimension — **fails closed when any retired
+   belief exists**: it cannot be checked against what the user retired, so it is skipped for
+   the night with a `consolidate.derive.belief_skipped` row (reason
+   `unusable_vector_retired_unchecked`, with its cause), and neither created nor reinforced.
+   With no retired belief there is nothing to miss: it is created, or reinforces a user-stated
+   key, without a semantic comparison, and its rationale says so. The reference dimension is
+   the first active belief's vector, else the first usable proposal's. An active belief or a
+   proposal whose embedding call fails, and a cancelled context, still abort the phase. An
+   active belief whose vector is zero or non-finite is not an embed
+   error and is not screened: it fails the merge, and the phase aborts, whenever at least one
+   proposal is comparable; a night where no proposal is comparable never builds the merge and
+   does not notice it.
 6. **reweight**: post-connection weight adjustments (decay materialization remains optional and is
    not exercised by M2's `reweight`) — every unit a new relation joined this pass spreads
    activation to its new neighbours through §2's resurface mechanism, over this pass's new edges
