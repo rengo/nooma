@@ -190,12 +190,12 @@ wiring, the vocabulary, the scripted embedder, the D15/D17 rewrite and all of do
 the retired-shield routing text and the embedding-cost amendment that licenses that rewrite — so
 the doc lands with the code it describes.
 
-- [ ] **2.1** SCAFFOLD — `shield.go`: `RouteKind`, `KeyedBelief`, `Route`, `RetiredKeyHits`
+- [x] **2.1** SCAFFOLD — `shield.go`: `RouteKind`, `KeyedBelief`, `Route`, `RetiredKeyHits`
   (returns nil), `RouteProposals` (every proposal -> create). `ports/decisionlog.go`:
   `ActionDeriveBeliefSkipped`, `ActionDeriveRetiredEmbedFailed` after
   `ActionDeriveBeliefReinforced`, `AllDecisionActions` entries, comment "forty-eight" -> "fifty";
   `repocontract/decisionlog.go:133` `want` map and subtest title (two hand edits).
-- [ ] **2.2** SCAFFOLD test helper (correction 12) — `scripted_embedder_test.go`: a test-local
+- [x] **2.2** SCAFFOLD test helper (correction 12) — `scripted_embedder_test.go`: a test-local
   `ports.EmbeddingProvider` with per-text vectors, per-text errors, NaN / zero / empty /
   wrong-dimension vectors, ctx-cancel support and `EmbedCalls()`.
 - [x] **2.3** RED core — `shield_test.go`, precedence **1 retired key, 2 retired nearest (tie to
@@ -203,16 +203,16 @@ the doc lands with the code it describes.
   **p7** (key == U's, cosine 0.95 to active A: reinforce U). Tests:
   `TestRouteProposals_RetiredKeySkipsEvenWhenFar` (p1), p2, p3, p4, p5, p6 (bitwise-equal
   mirror vectors), p7, D6 variant, `RetiredKeyHits`.
-- [ ] **2.4** RED brain — **rewrite, not delete or weaken**, `consolidate_test.go:1824-1871`
+- [x] **2.4** RED brain — **rewrite, not delete or weaken**, `consolidate_test.go:1824-1871`
   `TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief` -> `TestDerive_NoProposalsMakesNoEmbedCalls`
   (same `{"beliefs":[]}` fixture, asserts `EmbedCalls() == 0`, plus a variant with retired
   seeded); sibling D17 (2 active, 1 retired, one pending proposal, `EmbedCalls() == 4`); D16
   `…AllKeyDecidedMakesNoEmbedCalls`. Verify the rewrite fails on the assertion.
-- [ ] **2.5** RED brain — FX-D end to end (p1 not first, so remap is exercised): D7, D9 (exact key
+- [x] **2.5** RED brain — FX-D end to end (p1 not first, so remap is exercised): D7, D9 (exact key
   set per reason, `similarity` omitted on key match, `proposed_content`), D10 snapshots, D8
   `TestDerive_RetiredReadErrorFailsPhase`, D11 `TestDerive_ProtectedRaceSkipsAndContinues`, D12
   `TestDerive_RetiredDuringReinforceSkips`, D14.
-- [ ] **2.6** RED brain — FX-D2 with pA (shares R4's key) **and** pB (new key, far): D18 embed
+- [x] **2.6** RED brain — FX-D2 with pA (shares R4's key) **and** pB (new key, far): D18 embed
   error, D19 NaN, D19b zero and empty, D19c wrong-dimension (one short, and consistently wrong),
   D20 still skipped by key, D21 cancelled ctx aborts, D22 active embed failure aborts. **D19d**
   proposed-side unusable vector: zero, non-finite, wrong-dimension; created with rationale
@@ -220,7 +220,7 @@ the doc lands with the code it describes.
   active beliefs present (it is the one excluded); no active beliefs and a zero-vector proposal
   first (the next usable proposal sets the dimension) (design §10 item 2).
 - [x] **2.7** GREEN core — `shield.go` real `RetiredKeyHits` and `RouteProposals` in the 1-5 order.
-- [ ] **2.8** GREEN brain — `derive`: read active then retired (error aborts); pending list; zero
+- [x] **2.8** GREEN brain — `derive`: read active then retired (error aborts); pending list; zero
   embed calls when pending is empty; embed active (abort on failure), then retired under
   `usableVector(v, dim) cause` (**reference dimension = first active belief's vector, falling
   back to the first usable proposal when there are no active beliefs**), then pending screened
@@ -228,7 +228,14 @@ the doc lands with the code it describes.
   `Kind`; `ErrBeliefProtected` / `ErrBeliefStatusConflict` -> skip row `changed_since_read`,
   continue; `retired_embed_failed` rows. Rewrite `embedForMerge` and its doc comment
   (`:839-852`) to the new rule.
-- [ ] **2.9** DOCS — doc 02 §6 item 5 (`:953-972`) in this same PR as the 2.4 rewrite: third dedup
+  *Applied as: every embed call first (active, retired, pending), then the screen, because a
+  retired vector can only be checked against a dimension that, with no active belief, comes from a
+  proposal embedded after it. `MergeProposals` is not called at all when no proposal is usable
+  (nothing to compare, and the retired vectors have no reference to be screened by). Probes found
+  four behaviours the design left implicit and added their tests: a proposal's own embed error
+  still aborts, any store error other than the two refusals still aborts, the judge is shown
+  active beliefs only, and no usable proposal means no merge.*
+- [x] **2.9** DOCS — doc 02 §6 item 5 (`:953-972`) in this same PR as the 2.4 rewrite: third dedup
   rule (retired shield: key, then nearest at 0.85, tie to retired), precedence order,
   "derive may reinforce a user-stated belief, never rewrite its text", cost note "when a
   proposal still needs a semantic comparison" and "every retired belief, which grows only by
@@ -236,7 +243,7 @@ the doc lands with the code it describes.
   (design §10 item 5): a proposal whose vector is unusable is created, or reinforces a
   user-stated key, without a semantic comparison, and its rationale says so**. `docs/06-harness.md`
   §4 I12 row names the two new actions. Verify `scripts/docs-sync.sh`.
-- [ ] **2.10** PROBES D1 remove rule 1; D2 remove retired-nearest; D3 any-retired-skips; D4 remove
+- [x] **2.10** PROBES D1 remove rule 1; D2 remove retired-nearest; D3 any-retired-skips; D4 remove
   user-stated-key reinforce; D5 scope to `origin != derived`; D6 order 3 before 1; **D23 swap
   user-stated-key rule with active-nearest (killed by p7)**; D7 active-only vectors; D8 swallow
   read error; D9 row shape mutants; D10 fall through to create; D11, D12 return err; D13 `>`;
