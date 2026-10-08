@@ -252,7 +252,7 @@ Initial extraction:
 | I09 | The `[persist, surface)` band → stored **and** asked about in the digest | §4 |
 | I10 | Rejecting a relation deletes it **and** emits `relation_reject` before deleting | §4, §9 |
 | I11 | The 8 consolidation phases run in order, and `learn` is always last | §6 |
-| I12 | Every automatic decision with an effect writes to `decision_log` | §11 |
+| I12 | Every automatic decision with an effect writes to `decision_log`. Derive's retired shield is one: a skipped proposal writes `consolidate.derive.belief_skipped`, a retired belief left out of a night's comparison writes `consolidate.derive.retired_embed_failed` | §11 |
 | I13 | A `learning_signal` outlives the deletion of its target (no FK) | §9 |
 | I14 | A malformed `classify` field degrades to null; it never aborts the classification | §5 |
 | I15 | A trigger overdue past the threshold → `expired`, never `fired` | ADR-0009 |

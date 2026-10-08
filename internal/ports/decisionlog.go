@@ -131,6 +131,21 @@ const (
 	// reinforce split).
 	ActionDeriveBeliefCreated    DecisionAction = "consolidate.derive.belief_created"
 	ActionDeriveBeliefReinforced DecisionAction = "consolidate.derive.belief_reinforced"
+	// ActionDeriveBeliefSkipped is m4e's retired shield: a proposal was
+	// not written because it hits a retired belief (by topic key or by
+	// similarity), because the store refused the write after a
+	// concurrent change (reason changed_since_read), or because its
+	// vector was unusable while a retired belief exists, so the retired
+	// check could not run (reason unusable_vector_retired_unchecked,
+	// fail closed). One row per skip, one shared Context shape:
+	// {topic_key, belief_id?, reason, similarity?, cause?,
+	// proposed_content}.
+	ActionDeriveBeliefSkipped DecisionAction = "consolidate.derive.belief_skipped"
+	// ActionDeriveRetiredEmbedFailed is m4e's other derive row, with a
+	// different Context shape ({belief_id, topic_key, cause}, m2c §7.5's
+	// split rule): a retired belief's vector was unusable that night, so
+	// it matched nothing semantically (it is still matched by key).
+	ActionDeriveRetiredEmbedFailed DecisionAction = "consolidate.derive.retired_embed_failed"
 	// ActionReweightBoostApplied is reweight's one effect kind — its
 	// corrupted entries are never logged (design §3.3(e), spec R4.2's MUST
 	// NOT).
@@ -166,10 +181,12 @@ const (
 	ActionCaptureRelationCheckInUnmatched DecisionAction = "capture.relation_checkin.unmatched"
 )
 
-// AllDecisionActions returns a fresh slice holding the forty-eight
+// AllDecisionActions returns a fresh slice holding the fifty
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCheckFocusUnavailable is m4c's, listed after
-// ActionCheckDigestHeld. The last five are m3e's own: ActionConnectQuestionCreated,
+// ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
+// ActionDeriveRetiredEmbedFailed are m4e's, listed after
+// ActionDeriveBeliefReinforced. The last five are m3e's own: ActionConnectQuestionCreated,
 // ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 // ActionCaptureRelationCheckInResolved and
 // ActionCaptureRelationCheckInUnmatched.
@@ -196,7 +213,8 @@ func AllDecisionActions() []DecisionAction {
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,
 		ActionExpireIncompleteTransitioned, ActionArchiveArchived, ActionArchiveConflictSkipped,
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
-		ActionDeriveBeliefReinforced, ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
+		ActionDeriveBeliefReinforced, ActionDeriveBeliefSkipped, ActionDeriveRetiredEmbedFailed,
+		ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
 		ActionPatternEvalLoadHypothesisOpened,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,

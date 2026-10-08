@@ -962,14 +962,47 @@ boot catch-up — the two are one body of work behind two triggers.
    otherwise. A belief that merges is **reinforced**, not duplicated: its confidence rises toward
    1 by the same asymptotic law `strengthen` uses for relation strength, at
    `belief_reinforce_gain` (default 0.10) — `internal/core/consolidation.Reinforce`.
+   A **third rule, the retired shield**, runs ahead of the two defenses: what the user retired
+   does not come back. A proposal is skipped when (1) its key is a retired belief's key, or (2)
+   a retired belief is its nearest retired neighbour at the same 0.85 and no active belief is
+   strictly nearer — a **tie goes to the retired belief**, because the user's word wins. The
+   skip is a `consolidate.derive.belief_skipped` row naming the reason (`retired_topic_key`,
+   `retired_similar`, `changed_since_read` when the store refused a write the user changed
+   under derive, or `unusable_vector_retired_unchecked` for the fail-closed case below) with the similarity only when a semantic match decided it — a refusal never
+   aborts the pass. Precedence, first match wins: retired key, retired nearest, the key of a
+   belief the user wrote or edited (reinforce it), active nearest (reinforce it), create
+   (`internal/core/consolidation.RouteProposals`). **Derive may reinforce a user-stated belief,
+   never rewrite its text**: the key of a belief that is not `derived` raises its confidence and
+   writes nothing else, even when another active belief is semantically nearer; the upsert of an
+   active `derived` key still overwrites in place, the only overwrite the store permits (§10).
    **The embedding cost, stated rather than left implicit (owner ruling Q2, option A)**: `derive`
-   embeds every **active** belief in memory at the start of the phase and discards the vectors
-   after — no schema change, no `belief_embeddings` table, no stale-vector problem when a belief's
-   text is later edited. The cost is one provider call per active belief, every night, growing
-   with the belief count; this is accepted because the self-model is a handful of facets by
-   construction (§10's five-facet vocabulary), not an open-ended corpus. If belief counts ever
-   reach the hundreds, a persisted `belief_embeddings` table (option B) becomes the right trade —
-   that migration is `m2c`'s to make if it ever becomes true, not this change's.
+   embeds in memory and discards the vectors after — no schema change, no `belief_embeddings`
+   table, no stale-vector problem when a belief's text is later edited — but only **when a
+   proposal still needs a semantic comparison**: a night with no proposal, or whose every
+   proposal is already decided by a retired key, makes no embedding call at all. Otherwise it
+   embeds every active belief, every **retired** belief (which grows only by explicit user
+   action) and each proposal still to be compared. The cost is one provider call per belief
+   per such night, growing with the belief count; this is accepted because the self-model is a
+   handful of facets by construction (§10's five-facet vocabulary), not an open-ended corpus. If
+   belief counts ever reach the hundreds, a persisted `belief_embeddings` table (option B)
+   becomes the right trade — that migration is `m2c`'s to make if it ever becomes true, not this
+   change's. **A vector that cannot be compared does not fail the pass.** A retired belief whose
+   embedding fails, or is non-finite, zero or of the wrong dimension, is dropped from the
+   comparison for that night and logged as `consolidate.derive.retired_embed_failed` with its
+   cause (it is still matched by key, so it is never re-derivable under its own key; a
+   paraphrase under another key is caught only semantically). A proposal whose vector is
+   unusable — non-finite, zero or of the wrong dimension — **fails closed when any retired
+   belief exists**: it cannot be checked against what the user retired, so it is skipped for
+   the night with a `consolidate.derive.belief_skipped` row (reason
+   `unusable_vector_retired_unchecked`, with its cause), and neither created nor reinforced.
+   With no retired belief there is nothing to miss: it is created, or reinforces a user-stated
+   key, without a semantic comparison, and its rationale says so. The reference dimension is
+   the first active belief's vector, else the first usable proposal's. An active belief or a
+   proposal whose embedding call fails, and a cancelled context, still abort the phase. An
+   active belief whose vector is zero or non-finite is not an embed
+   error and is not screened: it fails the merge, and the phase aborts, whenever at least one
+   proposal is comparable; a night where no proposal is comparable never builds the merge and
+   does not notice it.
 6. **reweight**: post-connection weight adjustments (decay materialization remains optional and is
    not exercised by M2's `reweight`) — every unit a new relation joined this pass spreads
    activation to its new neighbours through §2's resurface mechanism, over this pass's new edges

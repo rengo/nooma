@@ -1805,68 +1805,76 @@ func TestConsolidateRunner_Derive_PromptIncludesActiveBeliefsOrNamesEmptyState(t
 	})
 }
 
-// TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief is spec
-// R5.7's own cost proof (design §6.3 slot 5): the runner embeds every
-// active belief exactly once, in memory, per derive phase run — never
-// more, never fewer — and no new port or store method persists the
-// result (owner ruling Q2, option A; task 10b.7's own source-tree scan
-// covers the second half separately).
+// TestDerive_NoProposalsMakesNoEmbedCalls is the explicit rewrite of
+// TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief (m2c spec
+// R5.7: "embeds every active belief at the start of the phase"). The
+// fixture is the same: two active beliefs and a judge that proposes
+// nothing. The assertion changes from 2 embeds to 0.
 //
-// The scripted belief_derivation response below decodes to zero proposed
-// beliefs, so this fixture isolates the EXISTING side of R5.7's embedding
-// cost from the PROPOSED side task 10b.5/10b.6's own merge-routing fixture
-// exercises — MergeProposals's "proposed" vectors are embedded too
-// (task 10b.4's own GREEN), but only when the judge actually proposes
-// something, which this fixture deliberately does not.
-//
-// Red against task 10b.2's own placeholder-embedding derive: it never
-// calls EmbeddingProvider at all, so EmbedCalls() is 0 against a fixture
-// seeding 2 active beliefs.
-func TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	since := now.Add(-time.Hour)
-
-	units := memrepo.NewUnits()
-	if err := units.Create(ctx, unit.Unit{
-		ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
-		Content: "training for a half marathon in October", Source: "chat",
-		Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("seed source unit: %v", err)
-	}
-
-	selfModel := memrepo.NewSelfModel()
-	for _, b := range []ports.Belief{
-		{ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness", Content: "wants to run more consistently", Confidence: 0.6, Origin: "derived", Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
-		{ID: "b-2", Facet: selfmodel.FacetValue, TopicKey: "derived/value/health", Content: "values staying active", Confidence: 0.5, Origin: "derived", Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+// This is nooma-testing rule 4 / non-negotiable 4 done the second way:
+// doc 02 changes in the same PR. §6 item 5 now says the vectors exist to
+// compare a proposal and are computed "when a proposal still needs a
+// semantic comparison"; with no proposal there is nothing to compare, so
+// the unconditional embed was a cost with no reader. The variant seeds a
+// retired belief too: retired beliefs are not embedded either.
+func TestDerive_NoProposalsMakesNoEmbedCalls(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		withRetired bool
+	}{
+		{"two active beliefs", false},
+		{"two active beliefs and a retired one", true},
 	} {
-		if err := selfModel.UpsertByTopicKey(ctx, b); err != nil {
-			t.Fatalf("seed belief %s: %v", b.ID, err)
-		}
-	}
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
 
-	cfg := memrepo.NewConfig()
-	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
-		t.Fatalf("seed since: %v", err)
-	}
+			units := memrepo.NewUnits()
+			if err := units.Create(ctx, unit.Unit{
+				ID: "u-source", Type: unit.TypeKnowledge, Status: unit.StatusPool,
+				Content: "training for a half marathon in October", Source: "chat",
+				Weight: 1.0, WeightDecayRate: 0, LastTouchedAt: now, CreatedAt: now, UpdatedAt: now,
+			}); err != nil {
+				t.Fatalf("seed source unit: %v", err)
+			}
 
-	embed := fakeprovider.NewEmbeddingFake("test-model")
-	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), units, embed)
+			selfModel := memrepo.NewSelfModel()
+			seeds := []ports.Belief{
+				{ID: "b-1", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/fitness", Content: "wants to run more consistently", Confidence: 0.6, Origin: "derived", Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+				{ID: "b-2", Facet: selfmodel.FacetValue, TopicKey: "derived/value/health", Content: "values staying active", Confidence: 0.5, Origin: "derived", Status: "active", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now},
+			}
+			if tc.withRetired {
+				seeds = append(seeds, ports.Belief{ID: "b-3", Facet: selfmodel.FacetGoal, TopicKey: "derived/goal/swim", Content: "wanted to swim", Confidence: 0.4, Origin: "derived", Status: "retired", LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now})
+			}
+			for _, b := range seeds {
+				if err := selfModel.UpsertByTopicKey(ctx, b); err != nil {
+					t.Fatalf("seed belief %s: %v", b.ID, err)
+				}
+			}
 
-	dir := t.TempDir()
-	writeDeriveCase(t, dir, "derive-embed-count", `{"beliefs":[]}`)
-	judge := fakeprovider.New(t, dir, "derive-embed-count")
+			cfg := memrepo.NewConfig()
+			if err := cfg.RecordConsolidationRun(ctx, now.Add(-time.Hour)); err != nil {
+				t.Fatalf("seed since: %v", err)
+			}
 
-	phase := consolidation.PhaseDerive
-	svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel, memrepo.NewState(), memrepo.NewPendingQuestions())
+			embed := fakeprovider.NewEmbeddingFake("test-model")
+			rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), units, embed)
 
-	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
-		t.Fatalf("Consolidate(PhaseDerive): %v", err)
-	}
+			dir := t.TempDir()
+			writeDeriveCase(t, dir, "derive-embed-count", `{"beliefs":[]}`)
+			judge := fakeprovider.New(t, dir, "derive-embed-count")
 
-	if got, want := embed.EmbedCalls(), 2; got != want {
-		t.Fatalf("EmbedCalls() = %d, want exactly len(activeBeliefs) = %d (spec R5.7)", got, want)
+			phase := consolidation.PhaseDerive
+			svc := NewConsolidateService(fixedClock{now}, cfg, units, memrepo.NewRelations(), &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge, selfModel, memrepo.NewState(), memrepo.NewPendingQuestions())
+
+			if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+				t.Fatalf("Consolidate(PhaseDerive): %v", err)
+			}
+
+			if got, want := embed.EmbedCalls(), 0; got != want {
+				t.Fatalf("EmbedCalls() = %d, want %d: with no proposal there is nothing to compare, so nothing is embedded (doc 02 §6 item 5)", got, want)
+			}
+		})
 	}
 }
 
