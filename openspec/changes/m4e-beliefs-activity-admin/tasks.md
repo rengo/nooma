@@ -121,7 +121,7 @@ Files: `internal/core/selfmodel/{status,content}.go`, `internal/ports/selfmodelr
 `testdata/schema/store_api.golden`, `docs/03-data-model.md`, `docs/02-cognitive-core.md` §10,
 `docs/06-harness.md` §4.
 
-- [ ] **1.1** SCAFFOLD — `status.go`: `Status` (`active|retired`), `Origin`
+- [x] **1.1** SCAFFOLD — `status.go`: `Status` (`active|retired`), `Origin`
   (`seed|derived|user_stated`), consts, `AllStatuses()`/`AllOrigins()` (the `Facet` pattern,
   `facet.go:10-43`). `content.go`: `MaxBeliefContentRunes = 1000` (doc comment cites the
   `ports.BrowsePageSize` ruling), `ErrEmptyContent`, `ErrContentTooLong`, `NormalizeText` and
@@ -129,18 +129,18 @@ Files: `internal/core/selfmodel/{status,content}.go`, `internal/ports/selfmodelr
   `RetiredBeliefs`, `SetStatus`, `EditContent`, `ErrBeliefStatusConflict`, `ErrBeliefProtected`;
   `Belief.Status`/`.Origin` typed; rewrite the "Three methods" doc comment. sqlite and memrepo
   bodies return zero values; `scanBelief` scans through local strings.
-- [ ] **1.2** SCAFFOLD ripples (same commit, behaviour-neutral): `repocontract/selfmodelrepo.go:43`
+- [x] **1.2** SCAFFOLD ripples (same commit, behaviour-neutral): `repocontract/selfmodelrepo.go:43`
   `"merged"` -> `selfmodel.StatusRetired`; every `consolidate_test.go` seed that upserts with an
   empty `Origin` (`:1772`, `:1840-1845`, `:1930`, `:2161`) gets `Origin: "derived"` **to avoid
   rule 4 treating an empty-origin seed as non-derived** (design §10 item 14; "rule 4" is the
   edited-key rule in the original numbering, rule 3 after the reorder). Verify: `make check`
   and `go vet -tags integration,e2e ./...` green, no behaviour change.
-- [ ] **1.3** RED core — `status_test.go`, `content_test.go` (FX-N): CRLF, trim, empty, whitespace
+- [x] **1.3** RED core — `status_test.go`, `content_test.go` (FX-N): CRLF, trim, empty, whitespace
   only, bound-exact, bound+1, multibyte at bound, `"  " + Max + "  "` accepted, `"  a\r\nb  "`
   -> `"a\nb"`.
-- [ ] **1.4** RED L3 probe first (RK-1) — a sqlite test that a `DO UPDATE ... WHERE false` upsert
+- [x] **1.4** RED L3 probe first (RK-1) — a sqlite test that a `DO UPDATE ... WHERE false` upsert
   reports `changes() = 0`. If it does not, stop and apply design RK-1's fallback before 1.5.
-- [ ] **1.5** RED contract (both implementations; FX-B with non-default confidence/timestamps and
+- [x] **1.5** RED contract (both implementations; FX-B with non-default confidence/timestamps and
   a retired belief in a touched facet): `RunActiveBeliefs` excludes retired; `RetiredBeliefs`;
   `BeliefByID` found (every column) and unknown; `SetStatus` happy, retire twice -> conflict
   unchanged, missing id, `updated_at = at`; `EditContent` marks `user_stated`, stale `from` ->
@@ -148,20 +148,23 @@ Files: `internal/core/selfmodel/{status,content}.go`, `internal/ports/selfmodelr
   G1: upsert over retired key and over user-stated key -> `ErrBeliefProtected` byte-identical,
   over active derived still overwrites (m2c), `ReinforceByID` retired -> conflict, missing ->
   `ErrBeliefNotFound`.
-- [ ] **1.6** RED conformance — `belief_status_doc_test.go` `TestBeliefStatusDocMatchesAllStatuses`
+- [x] **1.6** RED conformance — `belief_status_doc_test.go` `TestBeliefStatusDocMatchesAllStatuses`
   (G3, fails: doc 03 has no comment yet); strengthen `i03_units_never_deleted_test.go` with a
   `DELETE FROM self_beliefs` marker (G2) and its probe rows (`self_beliefs_x` silent).
-- [ ] **1.7** GREEN core — real `NormalizeText`, `NormalizeContent` (rune count).
-- [ ] **1.8** GREEN sqlite — `SetStatus` and `EditContent` (SELECT first, guarded UPDATE,
+- [x] **1.7** GREEN core — real `NormalizeText`, `NormalizeContent` (rune count).
+- [x] **1.8** GREEN sqlite — `SetStatus` and `EditContent` (SELECT first, guarded UPDATE,
   `requireRowAffected`); `UpsertByTopicKey` `DO UPDATE ... WHERE status='active' AND
   origin='derived'`, zero rows -> `ErrBeliefProtected`; `ReinforceByID ... AND status='active'`
   with disambiguating SELECT; `BeliefByID`; `RetiredBeliefs`. Memrepo mirrors every contract.
-- [ ] **1.9** `make store-api-golden`; review the diff is exactly the four methods (G11).
-- [ ] **1.10** DOCS — `docs/03-data-model.md`: `self_beliefs.status` comment `-- active|retired` and
+  *Applied as: guarded UPDATE first, one disambiguating SELECT only after a zero-row result
+  (`explainZeroRows`) for all three, so each WHERE clause is the single decision and S2/S6/S7
+  are killable (the design's own equivalent ordering, chosen for that reason).*
+- [x] **1.9** `make store-api-golden`; review the diff is exactly the four methods (G11).
+- [x] **1.10** DOCS — `docs/03-data-model.md`: `self_beliefs.status` comment `-- active|retired` and
   the prose line (a transition; nothing removed). `docs/02-cognitive-core.md` §10 (`:1217-1228`):
   status vocabulary, retire semantics, edit semantics, **no sentence claims injection exists**.
   `docs/06-harness.md` §4 I03 row names `self_beliefs`. Verify `scripts/docs-sync.sh`.
-- [ ] **1.11** PROBES from `git diff` of production files, one mutant each, with its killing test:
+- [x] **1.11** PROBES from `git diff` of production files, one mutant each, with its killing test:
   S1 drop `status='active'`; S2 drop `SetStatus` `from` guard; S3 swap not-found/conflict;
   S4 omit `updated_at`; S5 omit `origin='user_stated'`; S6 drop `content = from`; S7 drop
   edit `status='active'`; S8 also write confidence; S9 drop upsert `status` guard; S10 drop
