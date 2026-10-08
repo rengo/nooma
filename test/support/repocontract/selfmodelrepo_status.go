@@ -447,6 +447,23 @@ func RunEditContent(t *testing.T, newRepo func(t *testing.T) ports.SelfModelRepo
 		requireOthersUnchanged(t, repo, "after two edits", seeded, idValueSeed, idGoalUser)
 	})
 
+	t.Run("to equal to from still claims: user_stated, content byte-identical, updated_at bumped", func(t *testing.T) {
+		repo := newRepo(t)
+		seeded := seedFXB(t, repo)
+
+		for _, id := range []string{idGoalDerived, idValueSeed} {
+			target := seeded[id]
+			if err := repo.EditContent(context.Background(), id, target.Content, target.Content, editAt); err != nil {
+				t.Fatalf("EditContent(to == from) %s: %v", id, err)
+			}
+			want := target
+			want.Origin = selfmodel.OriginUserStated
+			want.UpdatedAt = editAt
+			requireBelief(t, repo, "claimed "+id, want)
+		}
+		requireOthersUnchanged(t, repo, "after two claims", seeded, idGoalDerived, idValueSeed)
+	})
+
 	t.Run("a stale from is a conflict and nothing changes", func(t *testing.T) {
 		repo := newRepo(t)
 		seeded := seedFXB(t, repo)

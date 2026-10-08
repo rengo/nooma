@@ -11,6 +11,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // Edit (m4e design §3.4, spec R2, mutants B1-B8, B15, B16, B18).
@@ -180,18 +181,56 @@ func TestBeliefEdit_UnknownIDWritesNothing(t *testing.T) {
 	}
 }
 
-// B2: judged on the normalised value, against the normalised stored text.
-func TestBeliefEdit_SameContentWritesNothing(t *testing.T) {
+// B2: judged on the normalised value, against the normalised stored text. A
+// belief the user already owns (user_stated) is left exactly as it is.
+func TestBeliefEdit_SameContentOnUserStatedBeliefWritesNothing(t *testing.T) {
+	cases := []struct {
+		name, submitted string
+		setup           func(*beliefsWorld)
+	}{
+		{name: "identical text", submitted: "read every day"},
+		{name: "CRLF resubmission of a multi-line belief", submitted: "line one\r\nline two", setup: func(w *beliefsWorld) {
+			w.seed("u2", selfmodel.FacetValue, selfmodel.OriginUserStated, selfmodel.StatusActive, 0.4, "line one\nline two")
+		}},
+		{name: "surrounding whitespace only", submitted: "  read every day \r\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newBeliefsWorld(t)
+			id := "g2"
+			if tc.setup != nil {
+				tc.setup(w)
+				id = "u2"
+			}
+			before := w.snapshot()
+
+			if err := w.service().Edit(context.Background(), id, tc.submitted); err != nil {
+				t.Fatalf("Edit: %v", err)
+			}
+
+			w.wantNothingChanged(before)
+			if w.log.calls != 0 || w.signals.calls != 0 || w.model.editCalls != 0 {
+				t.Errorf("log/signal/edit calls = %d/%d/%d, want 0/0/0", w.log.calls, w.signals.calls, w.model.editCalls)
+			}
+		})
+	}
+}
+
+// Owner ruling 2026-10-08: saving a belief the user does not own yet,
+// unchanged, claims it. The text is kept byte for byte (including a trailing
+// space the user cannot see), origin becomes user_stated so derive stops
+// rewriting it, and the claim is recorded like any other user write.
+func TestBeliefEdit_UnchangedSubmitClaimsANonUserStatedBelief(t *testing.T) {
 	cases := []struct {
 		name, id, submitted string
 		setup               func(*beliefsWorld)
 	}{
-		{name: "identical text", id: "g1", submitted: "run a marathon"},
-		{name: "identical text on a user-stated belief", id: "g2", submitted: "read every day"},
-		{name: "CRLF resubmission of a multi-line belief", id: "v1", submitted: "line one\r\nline two"},
-		{name: "surrounding whitespace only", id: "g1", submitted: "  run a marathon \r\n"},
+		{name: "derived, identical text", id: "g1", submitted: "run a marathon"},
+		{name: "derived, CRLF resubmission of a multi-line belief", id: "v1", submitted: "line one\r\nline two"},
+		{name: "derived, surrounding whitespace only", id: "g1", submitted: "  run a marathon \r\n"},
+		{name: "seed, identical text", id: "v2", submitted: "honesty first"},
 		{
-			name: "stored text has a trailing space and the visible text is resubmitted", id: "t1", submitted: "tea",
+			name: "derived, stored text has a trailing space", id: "t1", submitted: "tea",
 			setup: func(w *beliefsWorld) {
 				w.seed("t1", selfmodel.FacetPreference, selfmodel.OriginDerived, selfmodel.StatusActive, 0.4, "tea ")
 			},
@@ -203,20 +242,114 @@ func TestBeliefEdit_SameContentWritesNothing(t *testing.T) {
 			if tc.setup != nil {
 				tc.setup(w)
 			}
+			prior := w.seeded[tc.id]
 			before := w.snapshot()
 
 			if err := w.service().Edit(context.Background(), tc.id, tc.submitted); err != nil {
 				t.Fatalf("Edit: %v", err)
 			}
 
-			w.wantNothingChanged(before)
-			if got, want := w.belief(tc.id).Origin, w.seeded[tc.id].Origin; got != want {
-				t.Errorf("origin = %q, want it left at %q", got, want)
+			want := prior
+			want.Origin = selfmodel.OriginUserStated
+			want.UpdatedAt = w.now
+			if got := w.belief(tc.id); !reflect.DeepEqual(got, want) {
+				t.Errorf("claimed belief:\n got  %+v\n want %+v (content byte-identical)", got, want)
 			}
-			if w.log.calls != 0 || w.signals.calls != 0 || w.model.editCalls != 0 {
-				t.Errorf("log/signal/edit calls = %d/%d/%d, want 0/0/0", w.log.calls, w.signals.calls, w.model.editCalls)
+			after := w.snapshot()
+			for i, b := range after.Beliefs {
+				if b.ID != tc.id && !reflect.DeepEqual(b, before.Beliefs[i]) {
+					t.Errorf("belief %s changed by a claim of %s: %+v", b.ID, tc.id, b)
+				}
+			}
+
+			rows, sigs := w.newDecisions(), w.newSignals()
+			if len(rows) != 1 || len(sigs) != 1 {
+				t.Fatalf("new rows = %d, new signals = %d, want 1 and 1", len(rows), len(sigs))
+			}
+			r := rows[0]
+			if r.Action != ports.ActionBeliefEdited {
+				t.Errorf("action = %q, want %q", r.Action, ports.ActionBeliefEdited)
+			}
+			if r.Ctx["claimed"] != true {
+				t.Errorf("claimed = %v, want true", r.Ctx["claimed"])
+			}
+			if want := []string{"belief_id", "claimed", "fields", "next", "previous", "topic_key"}; !slices.Equal(keysOf(r.Ctx), want) {
+				t.Errorf("context keys = %v, want %v", keysOf(r.Ctx), want)
+			}
+			previous, _ := r.Ctx["previous"].(map[string]any)
+			next, _ := r.Ctx["next"].(map[string]any)
+			if previous["content"] != prior.Content || previous["origin"] != string(prior.Origin) {
+				t.Errorf("previous = %v, want the stored content and origin exactly", previous)
+			}
+			if next["content"] != prior.Content || next["origin"] != "user_stated" {
+				t.Errorf("next = %v, want the stored content and user_stated", next)
+			}
+			if sigs[0].Type != ports.SignalBeliefEdit || sigs[0].Ctx["decision_id"] != r.ID {
+				t.Errorf("signal = %q linking %v, want belief_edit linking the claim row %s", sigs[0].Type, sigs[0].Ctx["decision_id"], r.ID)
 			}
 		})
+	}
+}
+
+// A real edit is not a claim: the row carries no claimed field.
+func TestBeliefEdit_ChangedContentRowIsNotMarkedClaimed(t *testing.T) {
+	w := newBeliefsWorld(t)
+	if err := w.service().Edit(context.Background(), "g1", "run a half marathon"); err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if _, present := w.newDecisions()[0].Ctx["claimed"]; present {
+		t.Error("an edit row carries a claimed field, want it only on a claim")
+	}
+}
+
+// A claim is record-first like an edit: a failed record means no write, no
+// signal.
+func TestBeliefEdit_ClaimLogFailureLeavesBeliefUntouched(t *testing.T) {
+	w := newBeliefsWorld(t)
+	boom := errBoom("log down")
+	w.log.err = boom
+	before := w.snapshot()
+
+	err := w.service().Edit(context.Background(), "g1", "run a marathon")
+
+	if !errors.Is(err, boom) || errors.Is(err, ErrWriteLanded) {
+		t.Fatalf("Edit error = %v, want the plain log failure", err)
+	}
+	w.wantNothingChanged(before)
+	if w.model.editCalls != 0 || w.signals.calls != 0 {
+		t.Errorf("edit/signal calls = %d/%d, want 0/0", w.model.editCalls, w.signals.calls)
+	}
+}
+
+// The claim is what protects the text: after it, a derive pass whose
+// proposal carries the belief's topic_key reinforces it and cannot overwrite
+// its content, though derive rewrote that content before the claim.
+func TestBeliefEdit_ClaimedBeliefSurvivesALaterDerivePass(t *testing.T) {
+	// Control: unclaimed, the derived belief is overwritten by the proposal.
+	control := newShieldWorld(t)
+	control.seed(seedBelief{id: "d", key: "derived/goal/swim", content: "swim a mile", conf: 0.5, vec: []float32{1, 0, 0}})
+	control.propose("goal", "swim", "swim two miles", []float32{0, 1, 0})
+	control.mustRun()
+	if got := control.belief("d").Content; got != "swim two miles" {
+		t.Fatalf("control: unclaimed derived belief reads %q, want it rewritten by derive", got)
+	}
+
+	w := newShieldWorld(t)
+	w.seed(seedBelief{id: "d", key: "derived/goal/swim", content: "swim a mile", conf: 0.5, vec: []float32{1, 0, 0}})
+	svc := NewBeliefsService(fixedClock{w.now}, &seqIDs{n: 500}, w.base, memrepo.NewSignals(), w.log)
+	if err := svc.Edit(context.Background(), "d", "swim a mile"); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	w.propose("goal", "swim", "swim two miles", []float32{0, 1, 0})
+
+	w.mustRun()
+
+	got := w.belief("d")
+	if got.Content != "swim a mile" || got.Origin != selfmodel.OriginUserStated {
+		t.Errorf("belief after derive = %+v, want the claimed text and user_stated", got)
+	}
+	if n := len(w.rows(ports.ActionDeriveBeliefCreated)); n != 0 {
+		t.Errorf("belief_created rows = %d, want 0: the proposal must not create a duplicate", n)
 	}
 }
 

@@ -1267,6 +1267,10 @@ use `derived/{facet}/{key}`), `content`, `confidence`, `origin`
 - **An edit changes `content` only** and marks `origin = user_stated`; facet, confidence and
   `topic_key` are not editable. The store refuses a derive upsert over a `user_stated` (or
   `seed`) belief, so the user's text is never overwritten; derive may still reinforce it. The
+  Saving a belief the user does not own yet (`derived` or `seed`) with its text unchanged
+  **claims** it: `origin` becomes `user_stated`, the stored text is kept byte for byte, and the
+  claim is recorded and signalled like an edit. Saving a `user_stated` belief unchanged writes
+  nothing. The
   edited text is normalised once (CRLF to LF, surrounding whitespace trimmed) and bounded at
   `MaxBeliefContentRunes` runes: an input bound on what a form may carry, not a §13
   calibration row, because it decides nothing this document governs.
@@ -1307,7 +1311,8 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   previous and the new content *before* it overwrites the text, the order a correction's
   pre-image already follows ([ADR-0016](adr/0016-correction-pre-image.md)), because a belief has
   no history table; a retirement records after its status write, because nothing is overwritten
-  (the row keeps its content). When the write lands and its row or its learning signal cannot be
+  (the row keeps its content). A claim writes the same `belief.edited` row with `claimed: true`
+  and the new content equal to the previous. When the write lands and its row or its learning signal cannot be
   written, the act stands and is not reported as a failure: the mirror says which part is
   missing.
 - **Pull**: everything is recorded and explorable in the activity UI.

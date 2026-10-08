@@ -15,6 +15,10 @@ import (
 // signal (m4e design §3.4). Content is the only thing it can change: there
 // is no facet or confidence parameter to ignore.
 //
+// Saving a derived or seed belief unchanged CLAIMS it: the same writes run
+// with the stored text as the new text. Saving a user_stated belief
+// unchanged writes nothing.
+//
 // The submitted text is normalised and validated once, before any read; the
 // normalised value is what is compared, stored and logged. The comparison
 // target is the stored text normalised WITHOUT validation, so a derived
@@ -40,18 +44,32 @@ func (s *BeliefsService) Edit(ctx context.Context, id, content string) error {
 	if current.Status != selfmodel.StatusActive {
 		return fmt.Errorf("belief edit: belief %q is %s: %w", id, current.Status, ports.ErrBeliefStatusConflict)
 	}
-	if normalised == selfmodel.NormalizeText(current.Content) {
+	// An unchanged submit is a no-op only on a belief the user already owns.
+	// On any other origin it is a claim (owner ruling 2026-10-08): the user
+	// read the text and saved it, which is how a derived belief becomes
+	// user_stated and stops being rewritten by derive. The claim writes the
+	// STORED text back, not the normalised one, so it stays byte for byte.
+	claim := normalised == selfmodel.NormalizeText(current.Content)
+	if claim && current.Origin == selfmodel.OriginUserStated {
 		return nil
+	}
+	to := normalised
+	if claim {
+		to = current.Content
 	}
 
 	now := s.clock.Now()
-	decisionID, err := s.recordEditPreImage(ctx, current, normalised, now)
+	decisionID, err := s.recordEditPreImage(ctx, current, to, claim, now)
 	if err != nil {
 		return err
 	}
-	if err := s.beliefs.EditContent(ctx, id, current.Content, normalised, now); err != nil {
+	if err := s.beliefs.EditContent(ctx, id, current.Content, to, now); err != nil {
 		return fmt.Errorf("belief edit: write content of belief %q: %w", id, err)
 	}
+	// A claim emits the same belief_edit signal: design §3.4 has no exception
+	// for it, the user still acted on a belief the system produced, and M5
+	// should learn that act. The row's "claimed" field is what tells the two
+	// apart when the log is read.
 	if err := s.recordBeliefSignal(ctx, ports.SignalBeliefEdit, current, decisionID, now); err != nil {
 		return &WriteLandedError{Signal: true, Err: err}
 	}
@@ -62,7 +80,11 @@ func (s *BeliefsService) Edit(ctx context.Context, id, content string) error {
 // change with their previous and next values, keyed by column name (the
 // correction pre-image's shape). It returns the row's id for the signal to
 // link.
-func (s *BeliefsService) recordEditPreImage(ctx context.Context, current ports.Belief, content string, now time.Time) (string, error) {
+//
+// A claim (an unchanged submit on a belief the user did not own) is the same
+// row with "claimed": true and next.content equal to previous.content; the
+// field is absent on a real edit.
+func (s *BeliefsService) recordEditPreImage(ctx context.Context, current ports.Belief, content string, claim bool, now time.Time) (string, error) {
 	type value struct {
 		Content string           `json:"content"`
 		Origin  selfmodel.Origin `json:"origin"`
@@ -70,12 +92,14 @@ func (s *BeliefsService) recordEditPreImage(ctx context.Context, current ports.B
 	contextJSON, err := json.Marshal(struct {
 		BeliefID string   `json:"belief_id"`
 		TopicKey string   `json:"topic_key"`
+		Claimed  bool     `json:"claimed,omitempty"`
 		Fields   []string `json:"fields"`
 		Previous value    `json:"previous"`
 		Next     value    `json:"next"`
 	}{
 		BeliefID: current.ID,
 		TopicKey: current.TopicKey,
+		Claimed:  claim,
 		Fields:   []string{"content", "origin"},
 		Previous: value{Content: current.Content, Origin: current.Origin},
 		Next:     value{Content: content, Origin: selfmodel.OriginUserStated},
@@ -84,10 +108,14 @@ func (s *BeliefsService) recordEditPreImage(ctx context.Context, current ports.B
 		return "", fmt.Errorf("belief edit: encode pre-image context: %w", err)
 	}
 
+	rationale := fmt.Sprintf("belief edit about to replace the content of belief %q and mark it user_stated; previous values recorded before the edit", current.ID)
+	if claim {
+		rationale = fmt.Sprintf("belief claim about to mark belief %q user_stated with its content unchanged; previous values recorded before the write", current.ID)
+	}
 	d := ports.Decision{
 		ID:         s.ids.New(),
 		Action:     ports.ActionBeliefEdited,
-		Rationale:  fmt.Sprintf("belief edit about to replace the content of belief %q and mark it user_stated; previous values recorded before the edit", current.ID),
+		Rationale:  rationale,
 		Context:    contextJSON,
 		OccurredAt: now,
 	}
