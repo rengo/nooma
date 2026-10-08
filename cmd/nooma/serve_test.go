@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"net"
 	"strings"
 	"testing"
 
@@ -88,5 +89,55 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 	}
 	if deps.Capture != nil {
 		t.Error("Capture: want a nil interface for a nil *brain.CaptureService, got non-nil")
+	}
+}
+
+// TestListenAndAnnounce_WritesTheBoundAddressAfterABind: the line names the
+// ACTUAL bound address (port 0 resolves to a real port), written to errOut.
+func TestListenAndAnnounce_WritesTheBoundAddressAfterABind(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	ln, err := listenAndAnnounce("127.0.0.1:0", "nooma serving v\n", &out, &errOut)
+	if err != nil {
+		t.Fatalf("listenAndAnnounce: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	want := listeningPrefix + ln.Addr().String() + "\n"
+	if got := errOut.String(); got != want {
+		t.Errorf("errOut = %q, want %q", got, want)
+	}
+	if got := out.String(); got != "nooma serving v\n" {
+		t.Errorf("stdout = %q, want the serving banner once the bind succeeded", got)
+	}
+	if strings.HasSuffix(ln.Addr().String(), ":0") {
+		t.Errorf("announced address %q is not the resolved one", ln.Addr())
+	}
+}
+
+// TestListenAndAnnounce_SaysNothingWhenTheBindFails: announcing a port serve
+// does not hold would defeat the line's only purpose.
+func TestListenAndAnnounce_SaysNothingWhenTheBindFails(t *testing.T) {
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	var out, errOut bytes.Buffer
+
+	ln, err := listenAndAnnounce(taken.Addr().String(), "nooma serving v\n", &out, &errOut)
+
+	if err == nil {
+		_ = ln.Close()
+		t.Fatalf("listenAndAnnounce bound %s, which is taken", taken.Addr())
+	}
+	if !strings.Contains(err.Error(), "bind: ") {
+		t.Errorf("error %q lost its bind context", err)
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("errOut = %q after a failed bind, want nothing", errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout = %q after a failed bind, want no serving banner", out.String())
 	}
 }

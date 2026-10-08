@@ -160,6 +160,44 @@ func TestStartServe_ForeignNoomaShapedListener_RetriesOnAFreshPort(t *testing.T)
 	}
 }
 
+// TestAnnouncedBind_OnlyOurOwnLineForThisPortCounts is the deterministic half
+// of the ownership proof. Whether a stranger's nooma-shaped answer is observed
+// inside serve's lock-to-bind window depends on how fast the child starts, so
+// the end-to-end tests above can pass by luck; this table cannot. A stranger
+// leaves serve's stderr without the line, however it answers and however long
+// the child lives.
+func TestAnnouncedBind_OnlyOurOwnLineForThisPortCounts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		stderr string
+		port   int
+		want   bool
+	}{
+		{"our line", "nooma: listening on 127.0.0.1:8080\n", 8080, true},
+		{"line among other output", "channel up\nnooma: listening on 127.0.0.1:8080\nmore\n", 8080, true},
+		{"localhost host", "nooma: listening on localhost:8080\n", 8080, true},
+		{"IPv6 loopback host", "nooma: listening on [::1]:8080\n", 8080, true},
+		{"CRLF line ending", "nooma: listening on 127.0.0.1:8080\r\n", 8080, true},
+		{"prefix is required", "listening on 127.0.0.1:8080\n", 8080, false},
+		{"port must end the line", "nooma: listening on 127.0.0.1:8080 extra\n", 8080, false},
+		{"nothing yet: lock taken, bind pending", "", 8080, false},
+		{"foreign port in the line", "nooma: listening on 127.0.0.1:9090\n", 8080, false},
+		{"shorter port is not a prefix match", "nooma: listening on 127.0.0.1:8080\n", 80, false},
+		{"longer port is not a suffix match", "nooma: listening on 127.0.0.1:80\n", 8080, false},
+		{"lost bind", "nooma: listen tcp 127.0.0.1:8080: bind: address already in use\n", 8080, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := announcedBind(tt.stderr, tt.port); got != tt.want {
+				t.Errorf("announcedBind(%q, %d) = %v, want %v", tt.stderr, tt.port, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestIsBindFailure_ClassifiesServeStderr table-tests the decision to retry:
 // only the two bind wordings count.
 func TestIsBindFailure_ClassifiesServeStderr(t *testing.T) {

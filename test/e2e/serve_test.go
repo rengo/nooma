@@ -584,6 +584,12 @@ func TestServeRefusesToExposeWithoutAToken(t *testing.T) {
 		t.Errorf("the refusal does not name what the user must set:\n%s", stderr)
 	}
 
+	// The refusal precedes the bind, so serve must never have announced one
+	// (safe defaults are structural: non-negotiable 7).
+	if strings.Contains(stderr, serveListeningPrefix) {
+		t.Errorf("serve announced a bind it was not allowed to make:\n%s", stderr)
+	}
+
 	// Nothing may have been opened, even briefly.
 	if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond); err == nil {
 		_ = conn.Close()

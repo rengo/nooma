@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -151,7 +152,6 @@ func runServe(args []string, out, errOut io.Writer) error {
 		uiHandler = ui.New(uiDeps(today, units, recall, capture, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
-		Addr:              addr,
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: uiHandler}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -194,8 +194,13 @@ func runServe(args []string, out, errOut io.Writer) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		_, _ = fmt.Fprintf(out, "nooma serving %s on http://%s\n", vault, addr)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		banner := fmt.Sprintf("nooma serving %s on http://%s\n", vault, addr)
+		ln, err := listenAndAnnounce(addr, banner, out, errOut)
+		if err != nil {
+			errc <- err
+			return
+		}
+		if err := server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 			return
 		}
@@ -262,6 +267,31 @@ func runServe(args []string, out, errOut io.Writer) error {
 	}
 
 	return <-errc
+}
+
+// listeningPrefix starts the one stderr line serve writes once its socket is
+// bound, followed by the actual bound address (host:port). It is the only
+// signal from outside the process that the port is serve's own: the vault lock
+// is taken BEFORE the bind, so a lock plus an HTTP answer cannot tell a serve
+// that is up from one about to die on a port a stranger holds. Tests (and the
+// e2e readiness check, which cannot import package main) match on this text, so
+// it is stable.
+const listeningPrefix = "nooma: listening on "
+
+// listenAndAnnounce binds addr and, only once the bind has succeeded, writes
+// the listening line to errOut and the serving banner to out, so a journal
+// never reads "serving" for a port serve does not hold. The bind error is
+// returned untouched, so it
+// still reads `listen tcp ...: bind: address already in use` (or the Windows
+// rendering) and nothing is announced for a port serve does not hold.
+func listenAndAnnounce(addr, banner string, out, errOut io.Writer) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = fmt.Fprintf(errOut, "%s%s\n", listeningPrefix, ln.Addr())
+	_, _ = io.WriteString(out, banner)
+	return ln, nil
 }
 
 // resolveUIEnabled is the one place --no-ui and server.ui's precedence rule

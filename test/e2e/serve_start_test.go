@@ -31,13 +31,14 @@ const maxServeAttempts = 3
 // not waiting longer for a live one.
 const serveReadyBudget = 30 * time.Second
 
-// serveOwnershipSettle is how long the child must stay alive, still holding the
-// vault lock and still answering, before the answer is credited to it. serve
-// takes the vault lock BEFORE it binds, and a child that loses the bind dies
-// within microseconds of it, so a stranger can answer in the gap between "the
-// lock is ours" and "the bind failed". The settle outlasts that gap; it is a
-// bound, not a wait for a live child, which pays it once.
-const serveOwnershipSettle = 150 * time.Millisecond
+// serveListeningPrefix is the stable stderr text serve writes once its own bind
+// has succeeded (cmd/nooma/serve.go's listeningPrefix, which package main keeps
+// out of this package's reach); the bound address follows it. It replaces a
+// timed settle: serve takes the vault lock BEFORE it binds, so a lock plus an
+// HTTP answer is also what a child about to die on a stranger's port looks like,
+// and no delay is long enough under load. Only the child's own announcement of a
+// bind that already happened proves the port is its own.
+const serveListeningPrefix = "nooma: listening on "
 
 // serveReapBudget bounds how long cleanup waits for a killed child to be
 // reaped, so a stuck Wait fails the test loudly instead of hanging the suite.
@@ -166,19 +167,20 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 			_ = resp.Body.Close()
 			switch {
 			case decodeErr == nil && body.Name == "nooma":
-				// "nooma" is not proof of WHOSE nooma: parallel tests run many
-				// serves, and one of them can take the port we freed. Ownership
-				// is the vault write lock, which is per test and which serve
-				// takes before it binds: the answer is credited to our child
-				// only while the lock names its pid. (The codebase has no
-				// per-process marker on GET /: every child shares one binary,
-				// so a version string could not tell two of them apart.)
+				// "nooma" is not proof of WHOSE nooma: a stranger can answer
+				// with nooma's own document, and parallel tests run many
+				// serves. The answer is credited to our child only when the
+				// child itself said, on its own stderr, that it bound THIS
+				// port: a bind that succeeded cannot be shared, so the
+				// listener is ours. The vault lock naming its pid stays as a
+				// second, independent check.
+				if !announcedBind(p.stderr.String(), port) {
+					lastSeen = "a nooma answer before our child announced binding this port"
+					break
+				}
 				if !holdsVault(vault, p.Process.Pid) {
 					lastSeen = "a nooma answer while the vault lock is not held by our child"
 					break
-				}
-				if err := p.settled(client, url, vault); err != nil {
-					return fail(err.Error())
 				}
 				return p, nil
 			default:
@@ -190,43 +192,27 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 	return fail(fmt.Sprintf("never became ready within %s (last seen: %s)", serveReadyBudget, lastSeen))
 }
 
+// announcedBind reports whether stderr carries serve's own line saying it bound
+// port: the one proof an answer on that port is the child's and not a
+// stranger's. A line matches when it starts with serveListeningPrefix and ends
+// with ":<port>", whatever host sits between (127.0.0.1, localhost, [::1]), so
+// port 80 never matches 8080 and a caller on another host does not wait out the
+// whole ready budget for a line that never matches.
+func announcedBind(stderr string, port int) bool {
+	suffix := fmt.Sprintf(":%d", port)
+	for _, line := range strings.Split(stderr, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if strings.HasPrefix(line, serveListeningPrefix) && strings.HasSuffix(line, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 // holdsVault reports whether the vault's write lock names pid as its holder.
 func holdsVault(vault string, pid int) bool {
 	holder, held, err := vaultlock.ReadHolder(vault)
 	return err == nil && held && holder == pid
-}
-
-// settled confirms, after serveOwnershipSettle, that the child is still alive,
-// still the lock holder and that the port still answers: a child that lost the
-// bind has exited by then, whatever a stranger on the port kept saying.
-func (p *serveProc) settled(client *http.Client, url, vault string) error {
-	select {
-	case <-p.exited:
-		return fmt.Errorf("exited while the port answered (%v)", p.waitErr)
-	case <-time.After(serveOwnershipSettle):
-	}
-	if !holdsVault(vault, p.Process.Pid) {
-		// A child that lost the bind releases the lock as it dies, a moment
-		// before Wait returns and its stderr is complete. Wait for the exit so
-		// the failure carries serve's bind error instead of racing it.
-		select {
-		case <-p.exited:
-			return fmt.Errorf("exited while the port answered (%v)", p.waitErr)
-		case <-time.After(serveOwnershipSettle):
-		}
-		return errors.New("lost the vault lock while the port answered")
-	}
-	resp, err := client.Get(url)
-	if err != nil {
-		return fmt.Errorf("the port stopped answering during the settle: %v", err)
-	}
-	_ = resp.Body.Close()
-	select {
-	case <-p.exited:
-		return fmt.Errorf("exited while the port answered (%v)", p.waitErr)
-	default:
-		return nil
-	}
 }
 
 // retryable is the one decision startServeProc makes about a failed start: a
