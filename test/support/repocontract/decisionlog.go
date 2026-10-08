@@ -184,6 +184,9 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			// "a_b." must match literally: "_" is a LIKE wildcard, not here.
 			fixtureDecision("d-under", "a_b.x", at.Add(3*time.Second)),
 			fixtureDecision("d-lookalike", "aXb.x", at.Add(4*time.Second)),
+			// "check." occurs inside this action but does not begin it: a
+			// "starts with" read must exclude it, a "contains" read must not.
+			fixtureDecision("d-contains", "x.check.y", at.Add(5*time.Second)),
 		}
 		for _, d := range rows {
 			if err := repo.Record(ctx, d); err != nil {
@@ -199,7 +202,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			{"capture.checkin.", []string{"d-checkin"}},
 			{"a_b.", []string{"d-under"}},
 			{"nomatch.", nil},
-			{"", []string{"d-lookalike", "d-under", "d-check2", "d-checkin", "d-check"}},
+			{"", []string{"d-contains", "d-lookalike", "d-under", "d-check2", "d-checkin", "d-check"}},
 		}
 		for _, c := range cases {
 			got, err := repo.Before(ctx, nil, c.prefix, 10)
