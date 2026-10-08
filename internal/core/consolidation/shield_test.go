@@ -203,6 +203,23 @@ func TestRetiredKeyHits(t *testing.T) {
 	}
 }
 
+// The store keeps topic_key UNIQUE (migration 0001), so two retired beliefs
+// sharing a key cannot occur in production. The pick is still pinned so the
+// function stays deterministic on any input: the first by input order wins.
+func TestRetiredKeyHits_DuplicateRetiredKeyPicksFirstByInputOrder(t *testing.T) {
+	retired := []KeyedBelief{
+		{ID: "first", TopicKey: "derived/goal/dup", Origin: selfmodel.OriginDerived},
+		{ID: "second", TopicKey: "derived/goal/dup", Origin: selfmodel.OriginDerived},
+	}
+
+	got := RetiredKeyHits([]string{"derived/goal/dup"}, retired)
+
+	want := map[int]string{0: "first"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("RetiredKeyHits = %v, want %v (first retired belief by input order)", got, want)
+	}
+}
+
 // RouteKind is a closed set and its strings are what a reader of the code
 // sees: one batch must produce each member, so a member nothing can reach,
 // or a renamed one, shows.

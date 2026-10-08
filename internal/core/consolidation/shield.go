@@ -48,10 +48,16 @@ type Route struct {
 // whose topic key the proposal derives. It is rule 1 of RouteProposals and
 // needs no vectors, so the caller can tell which proposals still need a
 // semantic comparison before it spends a single embedding call.
+//
+// The store keeps topic_key unique, so two retired beliefs never share a
+// key in production. Should the input hold duplicates anyway, the first one
+// by input order wins, so the result does not depend on map iteration.
 func RetiredKeyHits(proposedKeys []string, retired []KeyedBelief) map[int]string {
 	byKey := make(map[string]string, len(retired))
 	for _, b := range retired {
-		byKey[b.TopicKey] = b.ID
+		if _, seen := byKey[b.TopicKey]; !seen {
+			byKey[b.TopicKey] = b.ID
+		}
 	}
 	hits := make(map[int]string)
 	for i, key := range proposedKeys {
