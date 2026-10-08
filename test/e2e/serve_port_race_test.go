@@ -177,6 +177,11 @@ func TestAnnouncedBind_OnlyOurOwnLineForThisPortCounts(t *testing.T) {
 	}{
 		{"our line", "nooma: listening on 127.0.0.1:8080\n", 8080, true},
 		{"line among other output", "channel up\nnooma: listening on 127.0.0.1:8080\nmore\n", 8080, true},
+		{"localhost host", "nooma: listening on localhost:8080\n", 8080, true},
+		{"IPv6 loopback host", "nooma: listening on [::1]:8080\n", 8080, true},
+		{"CRLF line ending", "nooma: listening on 127.0.0.1:8080\r\n", 8080, true},
+		{"prefix is required", "listening on 127.0.0.1:8080\n", 8080, false},
+		{"port must end the line", "nooma: listening on 127.0.0.1:8080 extra\n", 8080, false},
 		{"nothing yet: lock taken, bind pending", "", 8080, false},
 		{"foreign port in the line", "nooma: listening on 127.0.0.1:9090\n", 8080, false},
 		{"shorter port is not a prefix match", "nooma: listening on 127.0.0.1:8080\n", 80, false},

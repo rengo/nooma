@@ -152,7 +152,6 @@ func runServe(args []string, out, errOut io.Writer) error {
 		uiHandler = ui.New(uiDeps(today, units, recall, capture, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
-		Addr:              addr,
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: uiHandler}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -195,8 +194,8 @@ func runServe(args []string, out, errOut io.Writer) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		_, _ = fmt.Fprintf(out, "nooma serving %s on http://%s\n", vault, addr)
-		ln, err := listenAndAnnounce(addr, errOut)
+		banner := fmt.Sprintf("nooma serving %s on http://%s\n", vault, addr)
+		ln, err := listenAndAnnounce(addr, banner, out, errOut)
 		if err != nil {
 			errc <- err
 			return
@@ -280,15 +279,18 @@ func runServe(args []string, out, errOut io.Writer) error {
 const listeningPrefix = "nooma: listening on "
 
 // listenAndAnnounce binds addr and, only once the bind has succeeded, writes
-// the listening line to errOut. The bind error is returned untouched, so it
+// the listening line to errOut and the serving banner to out, so a journal
+// never reads "serving" for a port serve does not hold. The bind error is
+// returned untouched, so it
 // still reads `listen tcp ...: bind: address already in use` (or the Windows
 // rendering) and nothing is announced for a port serve does not hold.
-func listenAndAnnounce(addr string, errOut io.Writer) (net.Listener, error) {
+func listenAndAnnounce(addr, banner string, out, errOut io.Writer) (net.Listener, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 	_, _ = fmt.Fprintf(errOut, "%s%s\n", listeningPrefix, ln.Addr())
+	_, _ = io.WriteString(out, banner)
 	return ln, nil
 }
 

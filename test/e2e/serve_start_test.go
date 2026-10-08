@@ -40,12 +40,6 @@ const serveReadyBudget = 30 * time.Second
 // bind that already happened proves the port is its own.
 const serveListeningPrefix = "nooma: listening on "
 
-// serveListeningLine is the whole line serve prints for a bind on port, on the
-// loopback address every e2e vault configures.
-func serveListeningLine(port int) string {
-	return fmt.Sprintf("%s127.0.0.1:%d\n", serveListeningPrefix, port)
-}
-
 // serveReapBudget bounds how long cleanup waits for a killed child to be
 // reaped, so a stuck Wait fails the test loudly instead of hanging the suite.
 const serveReapBudget = 15 * time.Second
@@ -200,9 +194,19 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 
 // announcedBind reports whether stderr carries serve's own line saying it bound
 // port: the one proof an answer on that port is the child's and not a
-// stranger's. The match is the whole line, so port 80 never matches 8080.
+// stranger's. A line matches when it starts with serveListeningPrefix and ends
+// with ":<port>", whatever host sits between (127.0.0.1, localhost, [::1]), so
+// port 80 never matches 8080 and a caller on another host does not wait out the
+// whole ready budget for a line that never matches.
 func announcedBind(stderr string, port int) bool {
-	return strings.Contains(stderr, serveListeningLine(port))
+	suffix := fmt.Sprintf(":%d", port)
+	for _, line := range strings.Split(stderr, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if strings.HasPrefix(line, serveListeningPrefix) && strings.HasSuffix(line, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // holdsVault reports whether the vault's write lock names pid as its holder.

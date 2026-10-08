@@ -95,9 +95,9 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 // TestListenAndAnnounce_WritesTheBoundAddressAfterABind: the line names the
 // ACTUAL bound address (port 0 resolves to a real port), written to errOut.
 func TestListenAndAnnounce_WritesTheBoundAddressAfterABind(t *testing.T) {
-	var errOut bytes.Buffer
+	var out, errOut bytes.Buffer
 
-	ln, err := listenAndAnnounce("127.0.0.1:0", &errOut)
+	ln, err := listenAndAnnounce("127.0.0.1:0", "nooma serving v\n", &out, &errOut)
 	if err != nil {
 		t.Fatalf("listenAndAnnounce: %v", err)
 	}
@@ -106,6 +106,9 @@ func TestListenAndAnnounce_WritesTheBoundAddressAfterABind(t *testing.T) {
 	want := listeningPrefix + ln.Addr().String() + "\n"
 	if got := errOut.String(); got != want {
 		t.Errorf("errOut = %q, want %q", got, want)
+	}
+	if got := out.String(); got != "nooma serving v\n" {
+		t.Errorf("stdout = %q, want the serving banner once the bind succeeded", got)
 	}
 	if strings.HasSuffix(ln.Addr().String(), ":0") {
 		t.Errorf("announced address %q is not the resolved one", ln.Addr())
@@ -120,9 +123,9 @@ func TestListenAndAnnounce_SaysNothingWhenTheBindFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = taken.Close() }()
-	var errOut bytes.Buffer
+	var out, errOut bytes.Buffer
 
-	ln, err := listenAndAnnounce(taken.Addr().String(), &errOut)
+	ln, err := listenAndAnnounce(taken.Addr().String(), "nooma serving v\n", &out, &errOut)
 
 	if err == nil {
 		_ = ln.Close()
@@ -133,5 +136,8 @@ func TestListenAndAnnounce_SaysNothingWhenTheBindFails(t *testing.T) {
 	}
 	if errOut.Len() != 0 {
 		t.Errorf("errOut = %q after a failed bind, want nothing", errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout = %q after a failed bind, want no serving banner", out.String())
 	}
 }
