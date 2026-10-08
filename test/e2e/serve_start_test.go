@@ -11,10 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rengo/nooma/internal/store/vaultlock"
 )
 
 // maxServeAttempts bounds how often a start that lost its port to a foreign
@@ -27,6 +30,18 @@ const maxServeAttempts = 3
 // unchanged from the loops it replaces: the fix is detecting a dead child,
 // not waiting longer for a live one.
 const serveReadyBudget = 30 * time.Second
+
+// serveOwnershipSettle is how long the child must stay alive, still holding the
+// vault lock and still answering, before the answer is credited to it. serve
+// takes the vault lock BEFORE it binds, and a child that loses the bind dies
+// within microseconds of it, so a stranger can answer in the gap between "the
+// lock is ours" and "the bind failed". The settle outlasts that gap; it is a
+// bound, not a wait for a live child, which pays it once.
+const serveOwnershipSettle = 150 * time.Millisecond
+
+// serveReapBudget bounds how long cleanup waits for a killed child to be
+// reaped, so a stuck Wait fails the test loudly instead of hanging the suite.
+const serveReapBudget = 15 * time.Second
 
 // lockedBuffer is a stderr sink safe to read while the child is still writing:
 // os/exec copies the pipe from its own goroutine, so a bare strings.Builder
@@ -97,6 +112,9 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
 	p := &serveProc{Cmd: cmd, stderr: &lockedBuffer{}, exited: make(chan struct{})}
 	cmd.Stderr = p.stderr
+	// Once the child is gone, Wait must not block on a stderr pipe a
+	// grandchild inherited.
+	cmd.WaitDelay = 10 * time.Second
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +124,11 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 	}()
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
-		<-p.exited
+		select {
+		case <-p.exited:
+		case <-time.After(serveReapBudget):
+			t.Errorf("serve (pid %d) was not reaped within %s of being killed", cmd.Process.Pid, serveReapBudget)
+		}
 	})
 
 	fail := func(reason string) (*serveProc, error) {
@@ -133,14 +155,21 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 			_ = resp.Body.Close()
 			switch {
 			case decodeErr == nil && body.Name == "nooma":
-				// Whoever answered speaks as nooma; confirm it is the child
-				// we started and not a stranger that outlived it.
-				select {
-				case <-p.exited:
-					return fail(fmt.Sprintf("exited while the port answered (%v)", p.waitErr))
-				default:
-					return p, nil
+				// "nooma" is not proof of WHOSE nooma: parallel tests run many
+				// serves, and one of them can take the port we freed. Ownership
+				// is the vault write lock, which is per test and which serve
+				// takes before it binds: the answer is credited to our child
+				// only while the lock names its pid. (The codebase has no
+				// per-process marker on GET /: every child shares one binary,
+				// so a version string could not tell two of them apart.)
+				if !holdsVault(vault, p.Process.Pid) {
+					lastSeen = "a nooma answer while the vault lock is not held by our child"
+					break
 				}
+				if err := p.settled(client, url, vault); err != nil {
+					return fail(err.Error())
+				}
+				return p, nil
 			default:
 				lastSeen = "an answer that is not nooma's GET / document"
 			}
@@ -148,6 +177,45 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 		time.Sleep(50 * time.Millisecond)
 	}
 	return fail(fmt.Sprintf("never became ready within %s (last seen: %s)", serveReadyBudget, lastSeen))
+}
+
+// holdsVault reports whether the vault's write lock names pid as its holder.
+func holdsVault(vault string, pid int) bool {
+	holder, held, err := vaultlock.ReadHolder(vault)
+	return err == nil && held && holder == pid
+}
+
+// settled confirms, after serveOwnershipSettle, that the child is still alive,
+// still the lock holder and that the port still answers: a child that lost the
+// bind has exited by then, whatever a stranger on the port kept saying.
+func (p *serveProc) settled(client *http.Client, url, vault string) error {
+	select {
+	case <-p.exited:
+		return fmt.Errorf("exited while the port answered (%v)", p.waitErr)
+	case <-time.After(serveOwnershipSettle):
+	}
+	if !holdsVault(vault, p.Process.Pid) {
+		return errors.New("lost the vault lock while the port answered")
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("the port stopped answering during the settle: %v", err)
+	}
+	_ = resp.Body.Close()
+	select {
+	case <-p.exited:
+		return fmt.Errorf("exited while the port answered (%v)", p.waitErr)
+	default:
+		return nil
+	}
+}
+
+// retryable is the one decision startServeProc makes about a failed start: a
+// lost bind is fixed by a fresh port, anything else (a held vault lock, a bad
+// config, a crash) would only repeat and must fail at once with its own stderr.
+func retryable(err error) bool {
+	var se *serveStartError
+	return errors.As(err, &se) && se.bind
 }
 
 // startServeProc launches serve and, when it loses its port to a foreign
@@ -165,8 +233,7 @@ func startServeProc(t *testing.T, home, vault string, port *int, extraArgs ...st
 			return p
 		}
 		last = err
-		var se *serveStartError
-		if !errors.As(err, &se) || !se.bind {
+		if !retryable(err) {
 			t.Fatal(err)
 		}
 		if attempt < maxServeAttempts {
@@ -191,11 +258,18 @@ func retargetPort(t *testing.T, vault string, from, to int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old, repl := fmt.Sprintf("http_port: %d", from), fmt.Sprintf("http_port: %d", to)
-	if !bytes.Contains(doc, []byte(old)) {
-		t.Fatalf("cannot retarget %s: no %q line to rewrite", path, old)
+	re := portLine(from)
+	if !re.Match(doc) {
+		t.Fatalf("cannot retarget %s: no whole %q line to rewrite", path, fmt.Sprintf("http_port: %d", from))
 	}
-	if err := os.WriteFile(path, bytes.Replace(doc, []byte(old), []byte(repl), 1), 0o644); err != nil {
+	out := re.ReplaceAll(doc, []byte(fmt.Sprintf("${1}%d", to)))
+	if err := os.WriteFile(path, out, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// portLine matches the http_port line holding exactly port, anchored on the
+// whole line so 8080 never matches inside 80801.
+func portLine(port int) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf(`(?m)^([ \t]*http_port:[ \t]*)%d[ \t]*$`, port))
 }
