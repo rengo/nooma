@@ -72,6 +72,11 @@ func (s *SelfModel) UpsertByTopicKey(_ context.Context, b ports.Belief) error {
 		s.byID[id] = b
 		return nil
 	}
+	// The primary key, mirrored: SQLite refuses an insert whose id is
+	// already held under another topic_key, and so does this fake.
+	if _, taken := s.byID[b.ID]; taken {
+		return fmt.Errorf("upserting belief for topic_key %q: id %q is already held under another topic_key", b.TopicKey, b.ID)
+	}
 	s.byTopicKey[b.TopicKey] = b.ID
 	s.byID[b.ID] = b
 	return nil

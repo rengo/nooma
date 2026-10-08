@@ -521,6 +521,21 @@ func RunBeliefWriteGuards(t *testing.T, newRepo func(t *testing.T) ports.SelfMod
 		})
 	}
 
+	t.Run("an insert whose id is already held under another topic_key is refused and changes nothing", func(t *testing.T) {
+		repo := newRepo(t)
+		seeded := seedFXB(t, repo)
+
+		// SQLite refuses this with a primary-key error; the in-memory fake
+		// must refuse it too instead of silently replacing the other row.
+		clash := fxbBelief(idGoalDerived, selfmodel.FacetGoal, selfmodel.OriginDerived, selfmodel.StatusActive, 0.5, 91)
+		clash.TopicKey = "a-topic-key-nobody-holds"
+		clash.Content = "what derive wanted to write"
+		if err := repo.UpsertByTopicKey(context.Background(), clash); err == nil {
+			t.Fatal("UpsertByTopicKey with an id held under another topic_key returned nil, want an error")
+		}
+		requireOthersUnchanged(t, repo, "after the refused insert", seeded)
+	})
+
 	t.Run("upsert over an active derived key still overwrites in place (m2c R2.1)", func(t *testing.T) {
 		repo := newRepo(t)
 		seeded := seedFXB(t, repo)
