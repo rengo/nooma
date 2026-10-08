@@ -262,12 +262,12 @@ Initial extraction:
 | I19 | A challenger must beat the incumbent by more than `hysteresis_margin`. `focus.Select`'s production caller is `brain.FocusKeeper.compute`, reached from `/ui`'s Today view: `TestI19_TodayHoldsIncumbentInsideMargin` | §3 |
 | I20 | One active insight per metric; the previous one becomes `superseded` | §12, doc 03 |
 | I21 | Every vector search filters on `model`; embeddings from two models never compare | §5 |
-| I22 | Capture's own recall entrance, the standalone `/recall` route, and `/ui/units`' own search box are one mechanism, called with the same raw text, never `normalized_content` | §5 |
+| I22 | Capture's own recall entrance, the standalone `/recall` route, and `/ui/units`' own search box are one mechanism, called with the same raw text, never `normalized_content`. The UI reaches brain only through the interface fields of `ui.Deps`, and a gate whitelists the method names they may expose by exact name: `Today`, `Browse`, `Detail`, `ForText`, `Capture` and, from `m4e`, `ByFacet`, `Edit` and `Retire` (the beliefs interface); each later UI slice adds its own names in its own PR | §5 |
 | I23 | A correction's pre-image is recorded before its edit is applied; a failed audit write leaves the unit untouched | §5 step 4 |
 | I24 | A weight write moves `weight` and `last_touched_at` together; neither is written alone | §2 |
 | I25 | A capture that is not memory persists no unit and still answers: `chitchat` through the `chat` task, `out_of_scope` with a fixed refusal | §5, ADR-0021 |
 | I26 | A capture is answered in the language its classification named; an absent or unknown language renders in the fallback, never in nothing | §5, ADR-0022 |
-| I27 | Rendering `/ui`'s Today writes nothing to the vault: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET. Its in-memory incumbent is the one thing it does write, and its relation reads cover the members of the incumbent it holds and of the one it selects (the pending-digest mirror's P') | §7 |
+| I27 | Rendering `/ui`'s Today writes nothing to the vault: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET. Its in-memory incumbent is the one thing it does write, and its relation reads cover the members of the incumbent it holds and of the one it selects (the pending-digest mirror's P'). The other read views hold the same line: `TestUIReadViewsWriteNothing` drives `GET /ui/beliefs` over write-counting decorators of every repo its service holds | §7 |
 
 Four of these are better verified with a structural test than a behavioral one:
 
