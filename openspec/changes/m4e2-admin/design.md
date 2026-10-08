@@ -15,17 +15,24 @@ document decides HOW. Shape follows the archived
 > judgment round marked.
 > Companion: [`../m4e-beliefs-activity-admin/design.md`](../m4e-beliefs-activity-admin/design.md).
 >
-> **Depends on m4e (starts after m4e's last PR merges):**
-> - `DecisionLog.Before`, `DecisionCursor`, `DecisionRow` (m4e PR 5), used for the recent
->   consolidation effects;
-> - the action-vocabulary file and its `repocontract` map as m4e leaves them (fifty-two members);
->   this slice adds the fifty-third, `config.updated`;
-> - the **change decoder** in `ActivityService` (m4e §3.6), which must already accept
->   `{fields, previous, next}` (m4e's A11 test carries a `config.updated`-shaped row);
+> **Depends on `m4e-activity` and on m4e (starts after `m4e-activity`'s PR 6 merges, which itself
+> follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
+> measured 2.06x): `m4e-activity` now owns what the old m4e PRs 5-6 built.
+>
+> From [`m4e-activity`](../m4e-activity/design.md):
+> - `DecisionLog.Before`, `DecisionCursor`, `DecisionRow` (m4e-activity PR 5), used for the
+>   recent consolidation effects;
+> - the **change decoder** in `ActivityService` (m4e-activity §3.6), which must already accept
+>   `{fields, previous, next}` (m4e-activity's A11 test carries a `config.updated`-shaped row).
+>
+> From [m4e](../m4e-beliefs-activity-admin/design.md):
+> - the action-vocabulary file and its `repocontract` map as m4e leaves them (fifty-two members,
+>   after m4e PR 3; m4e-activity adds none); this slice adds the fifty-third, `config.updated`;
 > - `brain.ErrWriteLanded` and `*brain.WriteLandedError{Record, Signal}` (m4e PR 3, `internal/brain/write_landed.go`);
-> - the cross-origin gate's **body table** `uiCrossOriginBodies` and its coverage test (m4e G6);
+> - the cross-origin gate's **body table** `uiCrossOriginBodies` and its coverage test (m4e G6, PR 4);
 > - the `ui.Deps` / `uiDeps` / `wiring.go` pattern, the layout nav, and the I22 whitelist test
->   `ui_entrances_test.go:32` (m4e G12).
+>   `ui_entrances_test.go:32` (m4e G12, PR 4). `uiDeps` takes its third signature change here,
+>   after m4e's PR 4 (`beliefs`) and m4e-activity's PR 6 (`activity`).
 >
 > **Planning-PR task (recorded, not done here):** the umbrella's slicing paragraph, §5.1 rows
 > and dependency rows gain `m4e2-admin` (after m4e); the umbrella is not edited now. The complete
@@ -163,14 +170,14 @@ a number the caller already holds. Failure windows, stated:
 - (d) two concurrent POSTs: both `Load` the same previous and the last writer wins; two rows may
   carry the same `previous`. Single-user local app; accepted.
 
-**The log row (amendment, fix 1).** Shaped like `belief.edited` so m4e's decoder renders it:
+**The log row (amendment, fix 1).** Shaped like `belief.edited` so m4e-activity's decoder renders it:
 `{fields:["<column>"], previous:{"<column>": <v>}, next:{"<column>": <v>}}`, `previous` being the
 value **in force** (the effective value when the column was unset). The rationale says what
 happened and notes when the previous value was the default or an invalid stored value
 (doc 02 §11: a rationale states what happened, never what was configured). Booleans and numbers
-are JSON booleans and numbers. **Cross-slice dependency:** m4e's decoder is shape-driven and its A11
+are JSON booleans and numbers. **Cross-slice dependency:** m4e-activity's decoder is shape-driven and its A11
 test already carries a `config.updated` row; this slice adds C15, which feeds the row `Update`
-actually wrote through m4e's `ActivityService`.
+actually wrote through m4e-activity's `ActivityService`.
 
 **R10** needs no code. The keeper re-reads the margin per computation. One test pins it (§6, C13).
 
@@ -192,7 +199,7 @@ what it is:
    authoritative "did the job run", written once per full pass (`consolidate.go:1107`).
 2. **Consolidation enabled** = `ResolveConsolidationEnabled(stored)`.
 3. **Recent consolidation effects** = `DecisionLog.Before(nil, "consolidate.", AdminRecentEffectRows)`
-   (m4e's newest-first read), titled "Recent effects of the nightly pass", newest first, each
+   (m4e-activity's newest-first read), titled "Recent effects of the nightly pass", newest first, each
    with its action and rationale. `brain.AdminRecentEffectRows = 10` is a transport constant of
    the `ActivityPageSize` class (shapes a list, decides nothing doc 02 governs).
 
@@ -238,7 +245,7 @@ empty migrated vault and asserts `View` answers (never, enabled, no learned rows
 One action is added: `ActionConfigUpdated` (`config.updated`), appended last, with the two hand
 edits (the `AllDecisionActions` comment count at `internal/ports/decisionlog.go:169`, fifty-two →
 fifty-three, and `test/support/repocontract/decisionlog.go:133`'s `want` map and subtest title).
-`ActivityFamilies` (m4e) then yields the `config` family with no edit.
+`ActivityFamilies` (m4e-activity) then yields the `config` family with no edit.
 
 | Doc | Edit | PR |
 |---|---|---|
@@ -256,7 +263,7 @@ fifty-three, and `test/support/repocontract/decisionlog.go:133`'s `want` map and
 | G6 | The admin POST is guarded and cross-origin protected (R9), **proven with a valid body** | (`POST /ui/login` stays in m4e's explicit exemption map; this slice adds no exemption.) A row in `wantUIMuxWiring`; `Admin` gets a counting stub on m4e's shared counter; `uiCrossOriginBodies["POST /ui/admin"] = "field=weight_threshold&value=0.6"` (a body that passes `ParseConfigField` and the range check, so the stub is reached); m4e's `TestUICrossOriginBodiesCoverEveryPOSTRow` fails if the entry is missing. `TestUIGuardedLeavesEachReachAView` (`internal/httpapi/server_test.go:117`, a hard-coded leaf list over a stub `ui.Deps`, not `test/conformance`) gains the `/ui/admin` leaf, an `ADMIN` marker and a stub `Admin` | the POST unguarded; no body entry; a body the handler rejects (0 calls) | the wiring in §3.3 |
 | G7 | The admin GET writes nothing (R8) | m4e's `TestUIReadViewsWriteNothing` gains the admin GET over write-counting decorators of `ConfigRepo`, `RelationRepo` and `DecisionLog` → zero write calls | a GET that records or seeds config | — |
 | G11 | Store surface widening is reviewed | `testdata/schema/store_api.golden` regenerated in PR 1a (`make store-api-golden`) | an unreviewed method | — |
-| G12 | The I22 entrance whitelist names exactly what this slice adds | `ui_entrances_test.go:32`'s `allowedMethods` gains `View` and `Update` in PR 2 (the `Admin` interface). Already present after m4e: `Today, Browse, Detail, ForText, Capture, ByFacet, Edit, Retire, Page`. The flat-set decision is m4e's G12 | a `ui.Deps` interface exposing an unlisted method (red before the whitelist edit) | the existing names |
+| G12 | The I22 entrance whitelist names exactly what this slice adds | `ui_entrances_test.go:32`'s `allowedMethods` gains `View` and `Update` in PR 2 (the `Admin` interface). Already present after m4e and m4e-activity: `Today, Browse, Detail, ForText, Capture, ByFacet, Edit, Retire, Page`. The flat-set decision is m4e's G12 | a `ui.Deps` interface exposing an unlisted method (red before the whitelist edit) | the existing names |
 
 Each GREEN commit body records its probe (mutation applied, red output, reverted).
 
@@ -323,7 +330,7 @@ incumbent, date-insensitive.
 | C12 | 1b | parse per field (exact `true`/`false`) | `ParseBool` | `"1"` → rejected |
 | C13 | 2 | R10 end to end | (no production branch: a regression pin) | `TestAdmin_MarginWriteReachesNextToday` (FX-H: margin 0.5 holds A; POST margin 0; next Today shows the challenger; the keeper is not reset) |
 | C14 | 1b | log row `{fields:[col], previous:{col:v}, next:{col:v}}`, keyed by column; one row per write | positional; missing `fields`; extra row on a no-op | JSON key assertions, all five fields |
-| C15 | 1b | the row `Update` writes decodes in m4e's `ActivityService` (`Change` non-nil, `column: previous → next`) | a shape the decoder rejects | cross-slice integration test over memrepo |
+| C15 | 1b | the row `Update` writes decodes in m4e-activity's `ActivityService` (`Change` non-nil, `column: previous → next`) | a shape the decoder rejects | cross-slice integration test over memrepo |
 | C16 | 1b | a rejected input writes nothing and logs nothing | log first | `…RejectedInputWritesNothing` (FX-C snapshot) |
 | C17 | 1b | `AdminService` exports only `View` and `Update` | a `Set…` method | `TestAdminServiceExportsOnlyViewAndUpdate` |
 | C18 | 2 | the admin POST body-table entry reaches the stub once | no entry / invalid body | m4e's coverage test and the same-origin subtest |
@@ -374,7 +381,8 @@ the same measured cut rule as m4e applies: after 1a merges, if `estimate x measu
 the record, m4e + m4e2 as one slice would be 9 PRs with this cut (8 with the original two), ~2,095
 points, ~2,720 at 1.3x, ~3,770 at 1.8x, ~4,610 at 2.2x (fires on the PR-count clause only
 at point; the lines clause needs 1.3x), which is why the split exists. m4e's own forecast: 6 PRs, ~1,490 lines, ~1,940 /
-~2,680 / ~3,280 at 1.3x / 1.8x / 2.2x. The "old ~1,890" figure and its reconciliation with
+~2,680 / ~3,280 at 1.3x / 1.8x / 2.2x (since split into m4e, ~1,070 lines, and
+`m4e-activity`, ~420: see their design §7). The "old ~1,890" figure and its reconciliation with
 1,460 + 605 are in m4e design §7.
 
 ## 8. Risks
@@ -383,7 +391,7 @@ at point; the lines clause needs 1.3x), which is why the split exists. m4e's own
 |---|---|---|
 | RK-1 | `memrepo.Config` cannot prove SQL defaults | L3 owns that half (finding 3), as for `RecordConsolidationRun` |
 | RK-2 | A config write whose log row fails is saved but unlogged | Visible to the user, `slog.Warn`ed, never silent (window b); the previous value is a number the user can re-enter |
-| RK-3 | The cross-slice contract with m4e (decoder shape, `ErrWriteLanded`, body table, vocabulary file) | m4e's A11 and this slice's C15 pin both ends; the dependency list is in both headers |
+| RK-3 | The cross-slice contract with m4e-activity (decoder shape) and m4e (`ErrWriteLanded`, body table, vocabulary file) | m4e-activity's A11 and this slice's C15 pin both ends of the decoder; the dependency list is in the headers of all three changes |
 | RK-4 | `ConfigRepo` is now writable by every holder (`FocusKeeper`, `TodayService`, `ConsolidateService`) | G5 fails any call outside the door; G4 closes the method set |
 | RK-5 | "Recent consolidation effects" is not job liveness: a quiet night leaves no rows | Stated on the page; liveness is the `last full consolidation` line from `config` |
 | RK-6 | A relation type learned by M5 later appears in `LearnedThresholds` with no UI to edit it | Intended (Q5): read-only with the "learned" note |

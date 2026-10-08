@@ -1,4 +1,4 @@
-# Spec — M4e: beliefs and activity
+# Spec — M4e: beliefs
 
 Specification for `m4e-beliefs-activity-admin`, fifth of six slices sharing
 `openspec/changes/m4-mirror-ui/proposal.md`. States what MUST be true after this change, in
@@ -12,8 +12,9 @@ testable form; not how (`sdd-design`'s job).
 > ([`../m4e2-admin/spec.md`](../m4e2-admin/spec.md)), after m4e. R7, R8 and R10, the Q5/OQ5/OQ6
 > rulings, and the admin part of R9 and R11 moved there with their text, scenarios and rulings
 > intact. The directory name `m4e-beliefs-activity-admin` is kept because other artifacts
-> reference it; **its scope is beliefs + activity**. R-numbers are kept (R7, R8, R10 are
-> absent here by design) so a citation stays valid across both files.
+> reference it; **its scope was beliefs + activity and is now beliefs only (see the next
+> note)**. R-numbers are kept (R5, R6, R7, R8, R10 are absent here by design) so a citation
+> stays valid across the files.
 >
 > **Planning-PR task (not done by this spec):** the planning PR updates the umbrella proposal's
 > slicing paragraph (`m4e` narrowed, `m4e2-admin` added, OQ7 closed by the split), its §5.1
@@ -23,6 +24,25 @@ testable form; not how (`sdd-design`'s job).
 > includes the ones easy to miss: the §2 acceptance line (~:75), the §5.2 test rows 9-10
 > ("m4e #2/#4", renumbered), the Q5 header ("blocking m4e #5", ~:462), and the independence
 > paragraph that lists `ConfigRepo` under m4e (~:261-262).
+
+> **Split again on 2026-10-08 (the owner's 7-PR rule, after PR 2 measured 2.06x).** The
+> pre-agreed rule was: if m4e passes seven PRs, split beliefs from activity. PR 1 measured 1.2x
+> its forecast and PR 2 measured 2.06x (557 changed lines against ~270; it was cut into 2a,
+> #291, and 2b, #292). At that multiplier PRs 3, 4 and 6 would each need a cut too. **Activity
+> is now its own change, [`m4e-activity`](../m4e-activity/spec.md)**: R5, R6, the activity
+> part of R9 and R11, and OQ4 moved there with their text, scenarios and rulings intact.
+> **This change's scope is now beliefs only** (R1-R4, R9 for the beliefs routes, R11's beliefs
+> part, R12, R13). R-numbers are kept (R5 and R6 are absent here by design, as R7, R8 and R10
+> are) so a citation stays valid across the files. The directory name is kept because other
+> artifacts reference it.
+>
+> **Who depends on what now.** `m4e-activity` depends on this change for PR 4's `ui.Deps` /
+> `uiDeps` / layout-nav pattern and I22 whitelist, and starts after PR 4 merges. `m4e2-admin`
+> depends on `m4e-activity` for `DecisionLog.Before`, the shape-driven change decoder and the
+> `config.updated`-shaped fixture, and on this change for `WriteLandedError` (PR 3), the I22
+> whitelist pattern, the `uiDeps` pattern and the cross-origin body table (PR 4). `m4f` keeps
+> depending on this change for the view shell (layout, nav). The umbrella proposal records the
+> split in the same planning PR that carries this note.
 
 Sources: umbrella §2 (acceptance lines 73-75), §3.2 items 3-4, §3.4 (no learning, no undo), §4.2
 rows "What a belief delete is" and "Newest-first activity", §5 (`m4e` paragraph, lines 292-294,
@@ -42,14 +62,15 @@ the `m4e2-admin` rule at 301), §5.1 `m4e` rows (334-339), §5.2 test rows 9-10,
 
 ## Scope boundary
 
-**In**: `/ui/beliefs` (list, edit, retire), `/ui/activity` (newest-first, pre-image rendering);
-the brain services behind them; the derive shield (R12, R13); new methods on `SelfModelRepo` and
-`DecisionLog` (no new port, no migration; each widens `testdata/schema/store_api.golden`).
+**In**: `/ui/beliefs` (list, edit, retire); the brain services behind it; the derive shield (R12,
+R13); new methods on `SelfModelRepo` (no new port, no migration; each widens
+`testdata/schema/store_api.golden`).
 
-**Not this change**: `/ui/admin`, any `ConfigRepo` write, `RelationRepo.LearnedThresholds`
+**Not this change**: `/ui/activity`, `DecisionLog.Before` and the pre-image rendering
+([`m4e-activity`](../m4e-activity/spec.md)); `/ui/admin`, any `ConfigRepo` write, `RelationRepo.LearnedThresholds`
 (all `m4e2-admin`); any reader of `learning_signals` (M5); an undo of a correction (umbrella
 §3.4); timers (m4f); the graph (m4d); `/ui/tracking`; a new migration. Doc 02 lines 663-664 are
-corrected in the activity-view PR (non-negotiable 1).
+corrected in the activity-view PR of `m4e-activity` (non-negotiable 1).
 
 ## Requirements
 
@@ -59,12 +80,11 @@ corrected in the activity-view PR (non-negotiable 1).
 | R2 | A belief edit changes only `content` (normalised, bounded) and emits `belief_edit` plus a log row | I12 |
 | R3 | A belief "delete" is a status transition guarded by a `from`; never a `DELETE` | I03, I12 |
 | R4 | `ActiveBeliefs` excludes a retired belief; derive and stagnation never see it, and injection will not | I03 |
-| R5 | `/ui/activity` reads `decision_log` newest-first through a new bounded read | I12 (read side) |
-| R6 | The activity view renders a correction's (or any change row's) `previous` read-only | I23 |
+| R5, R6 | **Moved to `m4e-activity`** | — |
 | R7, R8 | **Moved to `m4e2-admin`** | — |
 | R9 | Every mutating beliefs route sits behind the cookie guard and cross-origin protection, proven with a valid body per route | m4a/m4b gates |
 | R10 | **Moved to `m4e2-admin`** | — |
-| R11 | Doc and golden sync: doc 02 lines 663-664 and §10, doc 03 `status` vocabulary, store API golden, umbrella Q4/Q5 rows | non-neg. 1 |
+| R11 | Doc and golden sync: doc 02 §10 (lines 663-664: `m4e-activity`), doc 03 `status` vocabulary, store API golden, umbrella Q4/Q5 rows | non-neg. 1 |
 | R12 | Nightly derive never re-derives a retired belief; the skip is logged | I03, I12 |
 | R13 | An edit marks the belief `user_stated`; the night may reinforce it but never overwrites its text | I12 |
 
@@ -159,40 +179,11 @@ when it does, `ActiveBeliefs` is its read and already excludes retired. Re-deriv
 
 ### R5 — Newest-first activity
 
-**MUST**: `DecisionLog` gains a read returning rows ordered `occurred_at` descending, rows sharing
-one `occurred_at` in **reverse write order** (newest write first), strictly before a cursor,
-bounded by `limit`. `occurred_at` has one-second resolution and ids are random UUIDs, so an id
-tie-break would order a consolidation pass's rows arbitrarily; the tie-break is the row's
-insertion sequence. It is NOT a client-side reverse of `Since` (umbrella R10). `Since`'s
-forward-only contract is unchanged. A page boundary on rows sharing one `occurred_at` neither
-skips nor repeats a row, including a tie group larger than a page. Page size and filters: OQ4.
-
-- GIVEN 5 rows, three sharing an instant (written in a known order, ids not in that order), and
-  page size 2
-- WHEN pages are read by cursor until empty
-- THEN all 5 rows appear exactly once, newest first, the tied three in reverse write order
-- GIVEN a tie group larger than one activity page
-- WHEN the pages are walked
-- THEN every row appears exactly once
+**Moved to [`m4e-activity`](../m4e-activity/spec.md) (R5).**
 
 ### R6 — Pre-image rendering
 
-**MUST**: a `correction.applied` row renders `context.previous` beside `context.next`, keyed by
-column name, read-only: no control offers the previous value back (umbrella §3.4). The rendering
-is **shape-driven**: any row whose context carries `fields`, `previous` and `next` in the
-documented shape is rendered the same way. That covers `belief.edited` (this change) and
-`config.updated` (`m4e2-admin`; its context uses this shape so this decoder renders it with no
-change). A row whose context lacks `previous` or is malformed JSON renders its rationale without
-failing the page. The `go/ast` test asserting `applyWithPreImage` is the only writer is untouched
-and green.
-
-- GIVEN a `correction.applied` row with `previous.event_at`
-- WHEN `/ui/activity` renders it
-- THEN both values are visible and no form or button restores the old one
-- GIVEN a row shaped `{fields:["weight_threshold"], previous:{weight_threshold:0.5},
-  next:{weight_threshold:0.6}}` (the `config.updated` shape)
-- WHEN `/ui/activity` renders it
-- THEN `weight_threshold: 0.5 → 0.6` is shown, read-only
+**Moved to [`m4e-activity`](../m4e-activity/spec.md) (R6).**
 
 ### R9 — Mutation gates (beliefs routes)
 
@@ -213,13 +204,12 @@ than prove the guard.
 
 ### R11 — Sync (m4e's part)
 
-**MUST**: doc 02 lines 663-664 reworded (a surface now shows the previous value; none offers it
-back); doc 02 §10 states the retire/edit semantics (design §3.11); doc 02 §6 item 5 is amended
+**MUST**: doc 02 §10 states the retire/edit semantics (design §3.11); doc 02 §6 item 5 is amended
 (retired shield and conditional embed, PR 2, which licenses the D15/D17 test rewrite); doc 02 §11
 gains the belief clause (PR 3); doc 03 gains the `status`
 vocabulary; `store_api.golden` regenerated; `scripts/docs-sync.sh` passes; umbrella Q4/Q5 rows
-marked Ruled in the planning PR. Admin's doc edits (doc 02 §11 config clause,
-`configrepo.go:17`) belong to `m4e2-admin`.
+marked Ruled in the planning PR. Activity's doc edits (doc 02 lines 663-664, the `Before` golden widening) belong to
+`m4e-activity`; admin's (doc 02 §11 config clause, `configrepo.go:17`) to `m4e2-admin`.
 
 ### R12 — A retired belief is never re-derived
 
@@ -294,19 +284,16 @@ design's.
 
 ## Verified by
 
-L1 brain and `internal/ui` tests over fakes and a fake clock (R1-R4, R6); L3 for the SQL (R3
-`from` guard, R5 tie-break and cursor); umbrella §5.2 row 9 (R3, R4, signal and log row both
-exist) and row 10 (R6, `go/ast` test untouched). Each transition test is watched failing first.
-No test opens a browser, the network or a real LLM. Activity fixtures use whole-second
-timestamps (design FX-A) so the in-memory fake and SQLite agree.
+L1 brain and `internal/ui` tests over fakes and a fake clock (R1-R4); L3 for the SQL (R3 `from`
+guard); umbrella §5.2 row 9 (R3, R4, signal and log row both exist). Each transition test is
+watched failing first. No test opens a browser, the network or a real LLM. (R5, R6, umbrella row 10
+and the whole-second activity fixtures are `m4e-activity`'s.)
 
 ## Open questions (genuine product decisions, not decided here)
 
 Open, for design and tasks:
 
-- **OQ4 — Activity page size and filters.** Page size (umbrella names no number; doc 02 §13 names
-  none, so none may be invented) and filters (by action prefix, date). Default if unruled: fixed
-  page, no filters, "older" cursor link. For design.
+- **OQ4 — Activity page size and filters.** Moved to [`m4e-activity`](../m4e-activity/spec.md).
 - **OQ8 — Semantic match to a retired belief** (R12): embed retired beliefs each night, or key
   match only. For design.
 
@@ -322,6 +309,5 @@ Closed:
 ## Exit criterion
 
 Beliefs can be edited and retired from the UI, each emitting its signal and log row, with no row
-deleted; the activity view pages newest-first and shows pre-images read-only; mutations are gated
-with a valid body per route; docs, golden and umbrella rows are in sync; `make check-all` is green.
-Admin is `m4e2-admin`'s exit.
+deleted; mutations are gated with a valid body per route; docs, golden and umbrella rows are in
+sync; `make check-all` is green. Activity is `m4e-activity`'s exit; admin is `m4e2-admin`'s exit.

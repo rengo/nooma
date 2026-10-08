@@ -1,9 +1,10 @@
-# Tasks — m4e: beliefs and activity
+# Tasks — m4e: beliefs
 
-Derived from `spec.md` (R1-R6, R9, R11-R13) and `design.md` (§1-§8, APPROVED after Judgment Day
+Derived from `spec.md` (R1-R4, R9, R11-R13) and `design.md` (§1-§8, APPROVED after Judgment Day
 round 3; **§10 carries the round-3 corrections, applied below**). Fifth of six slices under
-`openspec/changes/m4-mirror-ui/proposal.md`. Scope is beliefs + activity; admin is
-[`m4e2-admin`](../m4e2-admin/tasks.md), which starts after this slice's PR 6 merges. Shape follows
+`openspec/changes/m4-mirror-ui/proposal.md`. Scope is beliefs only (PRs 1-4; activity, the old PRs 5-6, is
+[`m4e-activity`](../m4e-activity/tasks.md)); admin is [`m4e2-admin`](../m4e2-admin/tasks.md),
+which starts after `m4e-activity`'s PR 6 merges. Shape follows
 the archived m4c and m4b tasks.
 
 **Delivery**: `ask-on-risk`, `stacked-to-main` (each branch targets `main`, rebases after the
@@ -17,58 +18,92 @@ red output, reverted). A probe that never applied is a finding.
 
 ## Review Workload Forecast
 
+> **Split on 2026-10-08 (the owner's pre-agreed 7-PR rule, after PR 2 measured 2.06x).** This
+> section was written for six PRs (beliefs PRs 1-4 and activity PRs 5-6). Activity is now
+> [`m4e-activity`](../m4e-activity/tasks.md), with its old PRs 5 and 6 moved there unchanged
+> (numbers kept). This change is **beliefs only**. The forecast below is the old one for PRs 1-4,
+> with the measurements and the PR 2 cut recorded.
+
 Impl+docs excludes tests, `test/support/**`, the regenerated golden and `*_templ.go`. Test lines
 are estimates (m4c measured tests at roughly 3.5x impl) and are reported apart.
 
-| PR | Branch | Impl+docs (point) | x 1.3 | Tests (apart) | Cut seam if 1.3x > 400 (none is) / pre-defined for 1.8x |
-|----|--------|------|------|------|------|
-| 1 | `feat/ports-store-belief-status` | ~265 | ~345 | ~650 | core `selfmodel` vocabulary + content bound / port + store guards |
-| 2 | `feat/brain-derive-shield` | ~270 | ~351 | ~800 | pure `shield.go` + doc 02 text / `consolidate.go` wiring |
-| 3 | `feat/brain-belief-edit-retire` | ~260 | ~338 | ~650 | `ByFacet` + `Edit` / `Retire` + `write_landed.go` |
-| 4 | `feat/ui-beliefs` | ~275 | ~358 | ~450 | GET view + wiring / the two POSTs + G6 body table |
-| 5 | `feat/ports-store-decisionlog-before` | ~130 | ~169 | ~320 | none needed (largest margin) |
-| 6 | `feat/ui-activity` | ~290 | ~377 | ~450 | `ActivityService` / view + wiring + nav |
-| | **Total (6 PRs)** | **~1,490** | **~1,940** | **~3,320** | |
+| PR | Branch | Impl+docs (point) | x 1.3 | Tests (apart) | Measured | Cut seam if 1.3x > 400 / pre-defined for 1.8x |
+|----|--------|------|------|------|------|------|
+| 1 | `feat/ports-store-belief-status` | ~265 | ~345 | ~650 | #289: 318 changed lines when opened (1.2x); tests 1.75x | core `selfmodel` vocabulary + content bound / port + store guards |
+| 2 | `feat/brain-derive-shield` | ~270 | ~351 | ~800 | 557 changed lines (2.06x); tests 1,439 (1.8x) | **cut: 2a / 2b, see below** |
+| 3 | `feat/brain-belief-edit-retire` | ~260 | ~338 | ~650 | not built; at 2.06x ~536 | `ByFacet` + `Edit` / `Retire` + `write_landed.go` |
+| 4 | `feat/ui-beliefs` | ~275 | ~358 | ~450 | not built; at 2.06x ~567 | GET view + wiring / the two POSTs + G6 body table |
+| 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | ~130, ~290 | ~169, ~377 | ~320, ~450 | | **Moved to [`m4e-activity`](../m4e-activity/tasks.md)** |
+| | **Total (4 forecast PRs)** | **~1,070** | **~1,390** | **~2,550** | | |
 
-Sensitivity (not the umbrella's convention): x 1.8 = ~2,680, x 2.2 = ~3,280. At x 1.8 PRs 1, 2, 3,
-4 and 6 exceed 400 (477, 486, 468, 495, 522); PR 5 does not (234).
+Arithmetic: impl+docs 265 + 270 + 260 + 275 = 1,070; x 1.3: 345 + 351 + 338 + 358 = 1,392; tests
+650 + 800 + 650 + 450 = 2,550. The old six-PR totals were ~1,490 / ~1,940 / ~3,320, and
+`m4e-activity` carries the difference: 1,490 - 1,070 = 420 (130 + 290), 1,938 - 1,392 = 546
+(169 + 377), 3,320 - 2,550 = 770 (320 + 450).
 
-Umbrella split rule (`proposal.md:301`: more than seven PRs or more than 2,400 budgeted lines),
-evaluated on **point** budgeted lines: 6 PRs and ~1,490 lines. **Does not fire.** Sensitivity: at
-x 1.3 (~1,940) it does not fire; at x 1.8 (~2,680) and x 2.2 (~3,280) it fires on lines. **If x 1.8
-growth forces cuts and the PR count exceeds seven (two cuts are enough: 6 + 2 = 8), the next
-remedy is splitting beliefs (PRs 1-4) from activity (PRs 5-6) into two changes**, not more cuts
-inside this one. Re-measure at PR 1, not PR 4: after PR 1 merges compute actual / estimate; if
-`estimate x measured multiplier > 400` for a later PR, cut it at its seam above before `sdd-apply`.
+Sensitivity (not the umbrella's convention): x 1.8 = 477 + 486 + 468 + 495 = 1,926 (~1,930),
+x 2.2 = 583 + 594 + 572 + 605 = 2,354 (~2,350); at x 1.8 all four PRs exceed 400.
+
+### Measured (2026-10-08) and the PR 2 cut
+
+PR 1 (#289, merged `b5a60e6`) measured **318 changed lines against ~265: 1.2x** when it was opened
+(tests 1.75x). Counting the merged diff by file class after review gives 345 (1.3x); the owner's
+ruling and this file use the opening measurement, and the difference does not change any cut.
+PR 2 measured **557 changed lines against ~270: 2.06x** (tests 1,439 against ~800: 1.8x), over the
+400 ceiling, so it was cut at the seam this file named in advance:
+
+| Part | Branch | PR | Impl+docs | Tests (apart) | Label |
+|---|---|---|---|---|---|
+| 2a | `feat/brain-derive-shield` | #291, merged `582659c` | ~140 (the pure `shield.go`, no doc 02) | ~245 | `no-spec-change` (nothing calls `RouteProposals` until 2b) |
+| 2b | `feat/brain-derive-retired-wiring` | #292, merged `8c88db2` | 468 (445 without 23 lines of `tasks.md` ticks) | 1,320 | `size:exception` |
+
+The parts do not sum to 557: 2b gained about 22 lines in review (the fail-closed branch and its
+doc 02 text) and the `tasks.md` ticks add 23. **Why 2b carries `size:exception`**: it measured 468
+lines, about 17% over the 400 ceiling, with its one named seam already used by 2a. What remained
+was one unit, the `consolidate.go` wiring and the doc 02 §6 item 5 text that describes it;
+splitting them would have put the doc ahead of the code, which #291's review had moved this text
+into 2b to avoid. The owner approved the exception on 2026-10-08.
+
+**The 7-PR rule.** The umbrella rule (`proposal.md` §5: more than seven PRs or more than 2,400
+budgeted lines) reads point lines and did not fire for the six-PR plan (6 PRs, ~1,490 lines). This
+file's own earlier forecast named the pre-agreed remedy: if growth forces cuts and the PR count
+passes seven, split beliefs (PRs 1-4) from activity (PRs 5-6). After PR 2's cut the slice was
+seven PRs (1, 2a, 2b, 3, 4, 5, 6). At the measured 2.06x the later PRs are 260 x 2.06 = ~536 (PR
+3), 275 x 2.06 = ~567 (PR 4) and 290 x 2.06 = ~597 (PR 6), each over 400, so three more cuts were
+predicted: 7 + 3 = 10 PRs. PR 5 (130 x 2.06 = ~268) stays under. The owner ruled the split on
+2026-10-08. After it, this change is PR 1, 2a, 2b, 3 and 4 (five PRs), and at most seven if PRs 3
+and 4 are cut at their seams (5 + 2 = 7, which does not pass seven); `m4e-activity` is two PRs
+(~420 lines, three if its PR 6 is cut). **Neither fires the rule at point**, and a cut of PR 3 or
+PR 4 is a measurement-driven decision for `sdd-apply` (cut rule, below), not a new split.
 
 | Field | Value |
 |-------|-------|
-| Estimated changed lines | ~1,490 impl+docs across 6 PRs (~1,940 at x 1.3); tests ~3,320 apart |
-| 400-line budget risk | Medium (all PRs under 400 at x 1.3, largest ~377; five exceed at x 1.8) |
+| Estimated changed lines | ~1,070 impl+docs across 4 forecast PRs (5 after PR 2's cut; ~1,390 at x 1.3); tests ~2,550 apart |
+| 400-line budget risk | High at the measured 2.06x (PR 3 ~536 and PR 4 ~567 exceed 400; Medium at x 1.3, largest ~358) |
 | Chained PRs recommended | Yes |
-| Suggested split | PR 1 -> PR 2 -> PR 3 -> PR 4 -> PR 5 -> PR 6, all stacked to `main` |
+| Suggested split | PR 1 -> 2a -> 2b -> PR 3 -> PR 4, all stacked to `main`; PRs 3 and 4 cut at their seams if the cut rule fires |
 | Delivery strategy | ask-on-risk |
 | Chain strategy | stacked-to-main |
 
-Decision needed before apply: Yes
+Decision needed before apply: Yes (PR 3 and PR 4 are over 400 at the measured multiplier: cut each
+at its pre-defined seam, or take `size:exception`, per `ask-on-risk`; the owner decides)
 Chained PRs recommended: Yes
 Chain strategy: stacked-to-main
-400-line budget risk: Medium
+400-line budget risk: High
 
-The decision is a confirmation: chained PRs and `stacked-to-main` are cached; what remains for the
-user is to accept the post-PR-1 cut rule above. Recommendation: accept it (decide and report).
+The cut rule is unchanged and was exercised once: after a PR is measured, if `estimate x measured
+multiplier > 400` for a later PR, cut it at its seam before `sdd-apply`.
 
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Notes |
 |------|------|-----------|-------|
-| 0 | Planning: umbrella edits, spec/design in-place corrections | PR 0 `plan/m4e-beliefs-activity-admin`, base `main` | Not counted toward the seven-PR rule; also carries the `m4e2-admin` artifacts |
+| 0 | Planning: umbrella edits, spec/design corrections | PR 0 `plan/m4e-beliefs-activity-admin`, base `main` | Not counted toward the seven-PR rule; also carries the `m4e2-admin` artifacts. The activity split is `plan/m4e-activity-split`, also not counted |
 | 1 | Belief status, content bound, store guards | PR 1, base `main` | Compiles and passes alone; no surface can create a retired row yet |
-| 2 | Derive shield: retired never re-derived, edited never overwritten | PR 2, base `main` after PR 1 | Lands before any UI so the night knows how to skip first |
-| 3 | `BeliefsService` edit / retire / `ByFacet` | PR 3, base `main` after PR 2 | Umbrella §5.2 row 9 lands here |
+| 2 | Derive shield: retired never re-derived, edited never overwritten | PR 2a then 2b, base `main` after PR 1 | Lands before any UI so the night knows how to skip first |
+| 3 | `BeliefsService` edit / retire / `ByFacet` | PR 3, base `main` after PR 2b | Umbrella §5.2 row 9 lands here |
 | 4 | `/ui/beliefs` and two POSTs, gates G6/G12 | PR 4, base `main` after PR 3 | Beliefs nav link only |
-| 5 | `DecisionLog.Before` | PR 5, base `main` after PR 4 | Port + store only; independent of 1-4 but serial to avoid vocabulary-file conflicts |
-| 6 | `/ui/activity` | PR 6, base `main` after PR 5 | Umbrella §5.2 row 10; activity nav link |
+| 5, 6 | `DecisionLog.Before`; `/ui/activity` | **`m4e-activity`**, base `main` after PR 4 | Moved; numbers kept |
 
 ---
 
@@ -189,6 +224,9 @@ shield half of 2.1 and 2.10). **Part 2**, `feat/brain-derive-retired-wiring`: th
 wiring, the vocabulary, the scripted embedder, the D15/D17 rewrite and all of doc 02 §6 item 5 —
 the retired-shield routing text and the embedding-cost amendment that licenses that rewrite — so
 the doc lands with the code it describes.
+
+**Shipped as** #291 (part 1, merged `582659c`) and #292 (part 2, merged `8c88db2`,
+`size:exception`; the Forecast section records why).
 
 - [x] **2.1** SCAFFOLD — `shield.go`: `RouteKind`, `KeyedBelief`, `Route`, `RetiredKeyHits`
   (returns nil), `RouteProposals` (every proposal -> create). `ports/decisionlog.go`:
@@ -323,65 +361,9 @@ Files: `internal/ui/{beliefs.go,beliefs.templ,ui.go,layout.templ}`, `internal/ht
   U3 retire -> `Edit`; U4 route with no body entry; U4b drop exemption / empty reason / login
   given a body; G6 unguarded POST; a stub not counted.
 
-## PR 5 — `feat/ports-store-decisionlog-before` (A1-A3, A5, A6, A8, G11)
+## PR 5 — `feat/ports-store-decisionlog-before` and PR 6 — `feat/ui-activity`
 
-Files: `internal/ports/decisionlog.go`, `internal/store/sqlite/decisionlog.go`,
-`test/support/memrepo/decisionlog.go`, `test/support/repocontract/decisionlog.go`,
-`internal/brain/check_test.go:323`, `test/conformance/i27_viewing_is_not_delivering_test.go`,
-`testdata/schema/store_api.golden`.
-
-- [ ] **5.1** SCAFFOLD — `DecisionCursor{OccurredAt, Seq}`, `DecisionRow{Decision; Seq}`, `Before`
-  on the port; sqlite and memrepo return empty; memrepo carries an insertion sequence;
-  `recordingLog` (`check_test.go:323`) gains `Before` returning an empty page; i27 header comment
-  adds `Before` among the reads.
-- [ ] **5.2** RED L3 probe first — `EXPLAIN QUERY PLAN` uses `idx_decision_log_occurred` with no
-  `USE TEMP B-TREE FOR ORDER BY`, unfiltered and cursor forms. If the row-value form fails,
-  switch to `occurred_at < ? OR (occurred_at = ? AND rowid < ?)` (same semantics).
-- [ ] **5.3** RED contract (both implementations; FX-A, whole-second builder fails the test on
-  sub-second input; ids chosen so id order differs from write order; tied group straddles the
-  page boundary): A1 order, A2 exactly-once walk including a group larger than a page, A3 prefix
-  (`capture.checkin.*` absent from `check.`), A5 `limit` 0 empty and 2 over 5, A6 nil vs
-  zero-value cursor, A8 `Seq` strictly increasing with write order.
-- [ ] **5.4** GREEN — sqlite `ORDER BY occurred_at DESC, rowid DESC`, keyset
-  `(occurred_at, rowid) < (?, ?)`, `substr(action, 1, ?) = ?`; memrepo sort by
-  `(OccurredAt, Seq)` desc. `make store-api-golden` (G11).
-- [ ] **5.5** DOCS — none (no doc names the read); `scripts/docs-sync.sh` n/a.
-- [ ] **5.6** PROBES A1 ASC / drop rowid / `id DESC`; A2 `<=` and `occurred_at < ?`; A3 ignore /
-  `LIKE`; A5 `LIMIT -1`; A6 nil as zero cursor; A8 `Seq` 0 or unordered.
-
-## PR 6 — `feat/ui-activity` (A4, A7, A9-A12, G7, G8, G12)
-
-Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.templ,ui.go,layout.templ}`,
-`internal/httpapi/server.go`, `cmd/nooma/{wiring.go,wiring_activity_test.go,serve.go,serve_test.go}`,
-`test/conformance/{ui_entrances_test,httpapi_ui_wiring_test,ui_read_views_write_nothing_test}.go`,
-**`internal/httpapi/server_test.go`**, `docs/02-cognitive-core.md` §5 step 4, `docs/06-harness.md` §4.
-
-- [ ] **6.1** SCAFFOLD — `ActivityPageSize = 50`, `ActivityService`, `NewActivityService`, `Page`,
-  `ActivityFamilies(actions)` returning zero values; `ui.Activity` interface type; `wireActivity(db)`
-  and `uiDeps(..., activity)`; `activity.templ` placeholder; `make templ`.
-- [ ] **6.2** RED brain — FX-A brain cases: pass-sized tie group (`2 x ActivityPageSize + 10`, ids in
-  descending write order) walked exactly once in reverse write order; exactly 50 rows -> no
-  "older" link; 51 -> link and the 51st absent (A4); page one holds the **newest** (A7, not a
-  reversed `Since`); A9 unknown `kind` -> 400 with zero reads; A10
-  `TestActivityView_CorrectionShowsPreviousAndNext` and `…MalformedContextStillRenders`; A11
-  `TestActivityView_ConfigUpdatedShapeRenders` (`goal_stagnation_days: 21 -> 28`,
-  `consolidation_enabled: true -> false`, `weight_threshold: 0.5 -> 0.6`, no trailing `.0`); A12
-  `TestActivityFamilies_DerivedFromVocabulary` (synthetic family `zzz`).
-- [ ] **6.3** RED gates — `Activity` field on `ui.Deps` (G12 red: `Page`); `wantUIMuxWiring` GET row;
-  G7 activity GET; G8 `TestActivityView_HasNoMutatingForm` (no `method="post"`, no `hx-post`;
-  the GET filter form is silent); **`server_test.go:117` gains leaf `/ui/activity`, marker
-  `ACTIVITY` and a stub `Activity`**; `wiring_activity_test.go`; `TestUIDeps_NilServicesStayNilInterfaces`
-  `Activity` case; I23 `go/ast` test untouched and green.
-- [ ] **6.4** GREEN — `ActivityService.Page` (ask `size+1`, cursor = last shown row, shape-driven
-  `Change` decode, number rendering without `.0`); view and handler (400 on bad kind or
-  half/malformed cursor, `parseBrowseCursor` shape); routes; **`layout.templ` gains the activity
-  link (this PR only)** (design §10 item 1); whitelist `Page` (G12).
-- [ ] **6.5** DOCS — doc 02 §5 step 4 `:663-664` -> "Recording is not undoing. `/ui/activity` shows
-  the previous value beside the new one, read-only; no surface offers it back."; harness §4 I23
-  and I22 rows. Umbrella §5.2 row 10 satisfied. `scripts/docs-sync.sh`.
-- [ ] **6.6** PROBES A4 ask `size`, cursor = extra row; A7 reversed `Since`; A9 read all; A10 show
-  `next` only / 500 on bad JSON; A11 action-keyed decoder, `21.0`; A12 hard-coded families; G8 a
-  restore button.
+**Moved to [`m4e-activity`](../m4e-activity/tasks.md)** (tasks 5.1-5.6 and 6.1-6.6, numbers kept).
 
 ---
 
@@ -391,4 +373,5 @@ Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.t
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
 - [ ] **C.2** After PR 1 merges: compute actual / estimate; apply the cut rule (Forecast) before
-  PR 2. After PR 6 merges, `m4e2-admin` may start.
+  PR 2 (done: PR 2 was cut, see the Forecast). Apply it again to PRs 3 and 4. After PR 4 merges,
+  `m4e-activity` may start; `m4e2-admin` starts after `m4e-activity`'s PR 6 merges.

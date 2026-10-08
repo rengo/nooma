@@ -11,17 +11,28 @@ States what MUST be true after this change, in testable form; not how (`design.m
 > amendments of the 2026-10-08 judgment round, marked as such). R-numbers are kept.
 > Source of truth for the split: [`../m4e-beliefs-activity-admin/spec.md`](../m4e-beliefs-activity-admin/spec.md).
 >
-> **Depends on m4e (this slice starts after m4e's last PR merges):**
+> **Depends on `m4e-activity` and on m4e (this slice starts after `m4e-activity`'s last PR, PR 6,
+> merges, which itself follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
+> measured 2.06x): `m4e-activity` now owns what the old m4e PRs 5-6 built.
+>
+> From **`m4e-activity`** ([`../m4e-activity/spec.md`](../m4e-activity/spec.md)):
 > - **the newest-first read** `DecisionLog.Before` and its page cursor (admin lists recent
 >   consolidation effects through it);
+> - **the change decoder** in `ActivityService` (R6 of m4e-activity), which must already accept
+>   the `config.updated` context shape: a row with `fields`, `previous` and `next` objects. This
+>   is a cross-slice dependency: m4e-activity's A11 test carries a `config.updated`-shaped
+>   fixture, and this slice adds an integration test that the row it writes decodes through
+>   m4e-activity's service.
+>
+> From **m4e** ([`../m4e-beliefs-activity-admin/spec.md`](../m4e-beliefs-activity-admin/spec.md)):
 > - **the action vocabulary file** (`internal/ports/decisionlog.go`, its `repocontract` map) as
->   m4e leaves it: this slice adds one action, `config.updated`;
-> - **the change decoder** in `ActivityService` (R6 of m4e), which must already accept the
->   `config.updated` context shape: a row with `fields`, `previous` and `next` objects. This is a
->   cross-slice dependency: m4e's A11 test carries a `config.updated`-shaped fixture, and this
->   slice adds an integration test that the row it writes decodes through m4e's service;
+>   m4e leaves it after PR 3 (m4e-activity adds no action): this slice adds one action,
+>   `config.updated`;
+> - **`brain.ErrWriteLanded` / `*WriteLandedError`** (m4e PR 3): a config write whose log row
+>   fails reports it;
 > - the `ui.Deps` / `uiDeps` / `wiring.go` pattern, the layout nav, the cross-origin conformance
->   gate's **per-route body table** (m4e R9), and the I22 whitelist test (m4e design §3.12, G12).
+>   gate's **per-route body table** (m4e R9), and the I22 whitelist test (m4e design §3.12, G12),
+>   all from m4e's PR 4.
 >
 > **Planning-PR task (not done by this spec):** the umbrella proposal's slicing and dependency rows
 > gain `m4e2-admin` (after m4e) in the planning PR. This spec does not edit the umbrella.
@@ -51,7 +62,7 @@ Sources: umbrella §2, §3.2, §5 (`m4e2-admin` rule at 301), §5.1 `m4e` rows 3
 `testdata/schema/store_api.golden`.
 
 **Not this change**: editing `relation_thresholds` or `consolidation_last_run_at`; a generic
-config writer; any reader of `learning_signals` (M5); beliefs and activity (m4e).
+config writer; any reader of `learning_signals` (M5); beliefs (m4e) and activity (`m4e-activity`).
 
 ## Requirements
 
@@ -78,7 +89,7 @@ unchanged write logs nothing.
 **Amendments (2026-10-08, JD round 1):**
 
 - **Log shape.** The row's context is shaped like `belief.edited`:
-  `{fields:[<column>], previous:{<column>:<v>}, next:{<column>:<v>}}`, so m4e's change decoder
+  `{fields:[<column>], previous:{<column>:<v>}, next:{<column>:<v>}}`, so m4e-activity's change decoder
   renders it with no change. `previous` is the value that was **in force** (the effective value
   when the column was unset), and the rationale says so.
 - **"Unchanged" is judged against the effective value.** A submission equal to the value in force
