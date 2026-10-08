@@ -159,7 +159,7 @@ var (
 // rvwRecorder is an rvwT that counts failures instead of stopping the test.
 type rvwRecorder struct{ fails int }
 
-func (r *rvwRecorder) Helper()               { return }
+func (r *rvwRecorder) Helper()               {}
 func (r *rvwRecorder) Fatalf(string, ...any) { r.fails++ }
 
 // rvwUnclassified returns the methods of port that are neither in reads nor
