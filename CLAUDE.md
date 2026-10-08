@@ -26,6 +26,7 @@ Its sibling — which relation an inbound confirmation answers — closed with `
 |---|---|
 | `docs/02-cognitive-core.md` | **Source of truth for behavior.** The brain's invariants |
 | `docs/03-data-model.md` | Complete SQLite schema |
+| `docs/07-functional.md` | What Nooma does, as flows and a status table (descriptive; doc 02 governs) |
 | `docs/06-harness.md` | How it gets built: layout, tests, CI gates |
 | `docs/adr/` | Architecture decisions in force |
 | `docs/README.md` | Full index and reading order |
