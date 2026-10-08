@@ -86,11 +86,12 @@ Chain strategy: stacked-to-main
 
 ## Pre-task 0 — preconditions (no code)
 
-- [ ] **0.1** Before PR 6: m4e PR 4 is merged, so `ui.Deps` has `Beliefs`, `uiDeps` has the
+- [x] **0.1** Before PR 6: m4e PR 4 is merged, so `ui.Deps` has `Beliefs`, `uiDeps` has the
   `beliefs` parameter, `ui_entrances_test.go` has the I22 whitelist, `wantUIMuxWiring` and
   `TestUIGuardedLeavesEachReachAView` list `/ui/beliefs`, and `layout.templ` has the beliefs link
   (`rg` each on `main`). Before PR 5: `main` carries m4e PR 3, so the action vocabulary is fifty-two
   members. Verify: `scripts/docs-sync.sh` passes on `main`.
+  *Verified 2026-10-08 on `8d7cbc7` before PR 6: each `rg` hit, `docs-sync.sh '[]'` OK.*
 
 ---
 
@@ -99,6 +100,8 @@ Chain strategy: stacked-to-main
 Files: `internal/ports/decisionlog.go`, `internal/store/sqlite/decisionlog.go`,
 `test/support/memrepo/decisionlog.go`, `test/support/repocontract/decisionlog.go`,
 `internal/brain/check_test.go:323`, `test/conformance/i27_viewing_is_not_delivering_test.go`,
+`test/conformance/ui_read_views_write_nothing_test.go` (its `rvwDecisionLog` decorator and the G7
+classification gain `Before` among the reads),
 `testdata/schema/store_api.golden`.
 
 - [x] **5.1** SCAFFOLD — `DecisionCursor{OccurredAt, Seq}`, `DecisionRow{Decision; Seq}`, `Before`
@@ -127,10 +130,10 @@ Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.t
 `test/conformance/{ui_entrances_test,httpapi_ui_wiring_test,ui_read_views_write_nothing_test}.go`,
 **`internal/httpapi/server_test.go`**, `docs/02-cognitive-core.md` §5 step 4, `docs/06-harness.md` §4.
 
-- [ ] **6.1** SCAFFOLD — `ActivityPageSize = 50`, `ActivityService`, `NewActivityService`, `Page`,
+- [x] **6.1** SCAFFOLD — `ActivityPageSize = 50`, `ActivityService`, `NewActivityService`, `Page`,
   `ActivityFamilies(actions)` returning zero values; `ui.Activity` interface type; `wireActivity(db)`
   and `uiDeps(..., activity)`; `activity.templ` placeholder; `make templ`.
-- [ ] **6.2** RED brain — FX-A brain cases: pass-sized tie group (`2 x ActivityPageSize + 10`, ids in
+- [x] **6.2** RED brain — FX-A brain cases: pass-sized tie group (`2 x ActivityPageSize + 10`, ids in
   descending write order) walked exactly once in reverse write order; exactly 50 rows -> no
   "older" link; 51 -> link and the 51st absent (A4); page one holds the **newest** (A7, not a
   reversed `Since`); A9 unknown `kind` -> 400 with zero reads; A10
@@ -138,19 +141,19 @@ Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.t
   `TestActivityView_ConfigUpdatedShapeRenders` (`goal_stagnation_days: 21 -> 28`,
   `consolidation_enabled: true -> false`, `weight_threshold: 0.5 -> 0.6`, no trailing `.0`); A12
   `TestActivityFamilies_DerivedFromVocabulary` (synthetic family `zzz`).
-- [ ] **6.3** RED gates — `Activity` field on `ui.Deps` (G12 red: `Page`); `wantUIMuxWiring` GET row;
+- [x] **6.3** RED gates — `Activity` field on `ui.Deps` (G12 red: `Page`); `wantUIMuxWiring` GET row;
   G7 activity GET; G8 `TestActivityView_HasNoMutatingForm` (no `method="post"`, no `hx-post`;
   the GET filter form is silent); **`server_test.go:117` gains leaf `/ui/activity`, marker
   `ACTIVITY` and a stub `Activity`**; `wiring_activity_test.go`; `TestUIDeps_NilServicesStayNilInterfaces`
   `Activity` case; I23 `go/ast` test untouched and green.
-- [ ] **6.4** GREEN — `ActivityService.Page` (ask `size+1`, cursor = last shown row, shape-driven
+- [x] **6.4** GREEN — `ActivityService.Page` (ask `size+1`, cursor = last shown row, shape-driven
   `Change` decode, number rendering without `.0`); view and handler (400 on bad kind or
   half/malformed cursor, `parseBrowseCursor` shape); routes; **`layout.templ` gains the activity
   link (this PR only)** (design §10 item 1); whitelist `Page` (G12).
-- [ ] **6.5** DOCS — doc 02 §5 step 4 `:663-664` -> "Recording is not undoing. `/ui/activity` shows
+- [x] **6.5** DOCS — doc 02 §5 step 4 `:663-664` -> "Recording is not undoing. `/ui/activity` shows
   the previous value beside the new one, read-only; no surface offers it back."; harness §4 I23
   and I22 rows. Umbrella §5.2 row 10 satisfied. `scripts/docs-sync.sh`.
-- [ ] **6.6** PROBES A4 ask `size`, cursor = extra row; A7 reversed `Since`; A9 read all; A10 show
+- [x] **6.6** PROBES A4 ask `size`, cursor = extra row; A7 reversed `Since`; A9 read all; A10 show
   `next` only / 500 on bad JSON; A11 action-keyed decoder, `21.0`; A12 hard-coded families; G8 a
   restore button.
 
@@ -158,8 +161,11 @@ Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.t
 
 ## Closing (each PR)
 
-- [ ] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
+- [x] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
-- [ ] **C.2** After PR 5 merges: compute actual / estimate; apply the cut rule (Forecast) before
+- [x] **C.2** After PR 5 merges: compute actual / estimate; apply the cut rule (Forecast) before
   PR 6. After PR 6 merges, `m4e2-admin` may start.
+  *PR 5 measured 104 impl+docs against ~130 (0.80x), so PR 6 was not pre-cut. PR 6 measured 391
+  impl+docs (added + deleted, tests, generated code and this file excluded) against ~290: 1.35x,
+  under the ceiling, one PR.*
