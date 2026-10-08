@@ -183,10 +183,12 @@ Files: `internal/core/consolidation/shield.go`(+test), `internal/brain/consolida
 
 **Cut at the named seam (measured 2026-10-08).** The whole of PR 2 measured 557 impl+docs changed
 lines (about 2.1x its ~270 forecast, over 400), so it ships as two stacked PRs. **Part 1**,
-`feat/brain-derive-shield`: the pure `shield.go` and the routing text of doc 02 §6 item 5 (tasks
-2.3, 2.7; the shield half of 2.1 and 2.10). **Part 2**, `feat/brain-derive-retired-wiring`: the
-`consolidate.go` wiring, the vocabulary, the scripted embedder, the D15/D17 rewrite and the rest
-of doc 02 §6 item 5 (the embedding-cost amendment that licenses that rewrite lands with it).
+`feat/brain-derive-shield`: the pure `shield.go` only, with no doc change and the
+`no-spec-change` label, since nothing calls `RouteProposals` until part 2 (tasks 2.3, 2.7; the
+shield half of 2.1 and 2.10). **Part 2**, `feat/brain-derive-retired-wiring`: the `consolidate.go`
+wiring, the vocabulary, the scripted embedder, the D15/D17 rewrite and all of doc 02 §6 item 5 —
+the retired-shield routing text and the embedding-cost amendment that licenses that rewrite — so
+the doc lands with the code it describes.
 
 - [ ] **2.1** SCAFFOLD — `shield.go`: `RouteKind`, `KeyedBelief`, `Route`, `RetiredKeyHits`
   (returns nil), `RouteProposals` (every proposal -> create). `ports/decisionlog.go`:
