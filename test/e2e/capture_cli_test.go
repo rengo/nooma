@@ -45,7 +45,7 @@ tasks:
     provider: local
 `, port, llm.URL))
 
-	startServe(t, home, vault, port)
+	startServe(t, home, vault, &port)
 
 	stdout, stderr, err := nooma(t, home, work, "capture", "Pick up the dry cleaning on Friday", vault)
 	if err != nil {

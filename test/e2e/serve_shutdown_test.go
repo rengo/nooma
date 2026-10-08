@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -116,7 +115,7 @@ func newBlockingConsolidateLLM(t *testing.T, upstream string) *blockingConsolida
 // in low tens of seconds instead of consuming the whole test binary's
 // multi-minute timeout with no diagnosis, and force-kills the child so no
 // process is left running past the failing test.
-func waitForExit(t *testing.T, cmd *exec.Cmd) error {
+func waitForExit(t *testing.T, cmd *serveProc) error {
 	t.Helper()
 
 	done := make(chan error, 1)
@@ -139,8 +138,8 @@ func waitForExit(t *testing.T, cmd *exec.Cmd) error {
 type sigtermFixture struct {
 	home, work, vault string
 	blocking          *blockingConsolidateLLM
-	cmd               *exec.Cmd
-	errOut            *strings.Builder
+	cmd               *serveProc
+	errOut            *lockedBuffer
 	sentAt            time.Time
 }
 
@@ -188,7 +187,7 @@ func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *si
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n%s", port, consolidateConfig(blocking.srv.URL)))
 
-	seed := startServe(t, home, vault, port)
+	seed := startServe(t, home, vault, &port)
 	stdout, stderr, err := nooma(t, home, work, "capture", "Pick up the dry cleaning on Friday", vault)
 	if err != nil {
 		t.Fatalf("seeding capture: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
@@ -204,7 +203,7 @@ func sigtermMidPass(t *testing.T, beforeSignal func(t *testing.T, port int)) *si
 
 	blocking.armed.Store(true)
 
-	cmd, errOut := startServeCapturingStderr(t, home, vault, port)
+	cmd, errOut := startServeCapturingStderr(t, home, vault, &port)
 
 	select {
 	case <-blocking.started:

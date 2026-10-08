@@ -7,11 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
-	"time"
 )
 
 // TestServe_ConcurrentConsolidate_StillRefused is spec R3.1 end to end: a
@@ -43,7 +40,7 @@ func TestServe_ConcurrentConsolidate_StillRefused(t *testing.T) {
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n%s", port, consolidateConfig(llm.URL)))
 
-	cmd := startServe(t, home, vault, port)
+	cmd := startServe(t, home, vault, &port)
 
 	_, stderr, err := nooma(t, home, work, "consolidate", vault)
 	if err == nil {
@@ -54,41 +51,16 @@ func TestServe_ConcurrentConsolidate_StillRefused(t *testing.T) {
 	}
 }
 
-// startServeCapturingStderr mirrors startServe (serve_test.go) but also
-// hands back the running process's stderr buffer, so this file's own
-// unconfigured-vault test can assert on wireScheduler's one-line degrade
-// explanation (design §6; non-negotiable: "a nil scheduler, nil error, one
-// log line naming why") without widening startServe's own shared return
-// shape for every other caller in this package. Small, disclosed
-// duplication over a shared abstraction — the same trade this chain's
-// earlier links already took for a package-local fixture (m2d PR 3a
-// task 3a.2's own errConfigRepo, PR 5's fakeIDGen).
-func startServeCapturingStderr(t *testing.T, home, vault string, port int) (*exec.Cmd, *strings.Builder) {
+// startServeCapturingStderr is startServe that also hands back the running
+// process's stderr, so this file's own unconfigured-vault test can assert on
+// wireScheduler's one-line degrade explanation (design §6; non-negotiable: "a
+// nil scheduler, nil error, one log line naming why") without widening
+// startServe's own shared return shape for every other caller in this package.
+func startServeCapturingStderr(t *testing.T, home, vault string, port *int) (*serveProc, *lockedBuffer) {
 	t.Helper()
 
-	cmd := exec.Command(binaryPath(t), "serve", vault)
-	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
-	var errOut strings.Builder
-	cmd.Stderr = &errOut
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-	})
-
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
-		if err == nil {
-			_ = resp.Body.Close()
-			return cmd, &errOut
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("serve never answered on port %d\nstderr: %s", port, errOut.String())
-	return nil, nil
+	p := startServeProc(t, home, vault, port)
+	return p, p.stderr
 }
 
 // TestServe_UnconfiguredVault_HTTPStillAnswers is spec R3.2 end to end: a
@@ -119,7 +91,7 @@ func TestServe_UnconfiguredVault_HTTPStillAnswers(t *testing.T) {
 	port := freePort(t)
 	writeConfig(t, vault, fmt.Sprintf("server:\n  bind: 127.0.0.1\n  http_port: %d\n", port))
 
-	_, errOut := startServeCapturingStderr(t, home, vault, port)
+	_, errOut := startServeCapturingStderr(t, home, vault, &port)
 
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
 	if err != nil {

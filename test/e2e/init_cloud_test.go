@@ -101,7 +101,7 @@ func TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary(t *testing.T
 		"type: openai\n":  fmt.Sprintf("type: openai\n    endpoint: %s\n", llm.URL),
 	})
 
-	startServe(t, home, target, port)
+	startServe(t, home, target, &port)
 
 	captureBody, err := json.Marshal(map[string]string{"text": "Pick up the dry cleaning on Friday"})
 	if err != nil {

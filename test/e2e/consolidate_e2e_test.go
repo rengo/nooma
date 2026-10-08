@@ -388,7 +388,7 @@ tasks:
 	// to a running nooma serve (design D11) — never a second direct-vault
 	// writer, so this is the identical write path a real user's capture
 	// would take.
-	serve := startServe(t, home, vault, port)
+	serve := startServe(t, home, vault, &port)
 	stdout, stderr, err := nooma(t, home, work, "capture", "Pick up the dry cleaning on Friday", vault)
 	if err != nil {
 		t.Fatalf("capture: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
