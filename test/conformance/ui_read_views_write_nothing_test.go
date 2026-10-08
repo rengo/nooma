@@ -5,6 +5,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -76,7 +78,14 @@ func TestUIReadViewsWriteNothing(t *testing.T) {
 	}
 }
 
-func rvwFail(t *testing.T, port, method string) {
+// rvwT is the slice of *testing.T the decorators use, so the classification
+// check below can hand them a recorder and watch which methods fail.
+type rvwT interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
+func rvwFail(t rvwT, port, method string) {
 	t.Helper()
 	t.Fatalf("a read view called %s.%s — a GET must not write (G7, I27)", port, method)
 }
@@ -85,7 +94,7 @@ func rvwFail(t *testing.T, port, method string) {
 // four write methods and counting the read the beliefs view must make.
 type rvwSelfModel struct {
 	*memrepo.SelfModel
-	t           *testing.T
+	t           rvwT
 	activeReads int
 }
 
@@ -117,7 +126,7 @@ func (g *rvwSelfModel) EditContent(context.Context, string, string, string, time
 // rvwSignals wraps memrepo.Signals, failing on SignalRepo's one write.
 type rvwSignals struct {
 	*memrepo.Signals
-	t *testing.T
+	t rvwT
 }
 
 func (g *rvwSignals) Record(context.Context, ports.Signal) error {
@@ -129,10 +138,123 @@ func (g *rvwSignals) Record(context.Context, ports.Signal) error {
 // write.
 type rvwDecisionLog struct {
 	*memrepo.DecisionLog
-	t *testing.T
+	t rvwT
 }
 
 func (g *rvwDecisionLog) Record(context.Context, ports.Decision) error {
 	rvwFail(g.t, "DecisionLog", "Record")
 	return nil
+}
+
+// The reads each port is allowed to promote from its memrepo, by name. Every
+// other method of the three ports must be overridden by its decorator to fail:
+// the decorators embed memrepo types, so a write method added to a port later
+// would be promoted silently and the gate would stay green.
+var (
+	rvwSelfModelReads = []string{"ActiveBeliefs", "BeliefByID", "RetiredBeliefs"}
+	rvwSignalReads    = []string{"Since"}
+	rvwDecisionReads  = []string{"Since"}
+)
+
+// rvwRecorder is an rvwT that counts failures instead of stopping the test.
+type rvwRecorder struct{ fails int }
+
+func (r *rvwRecorder) Helper()               { return }
+func (r *rvwRecorder) Fatalf(string, ...any) { r.fails++ }
+
+// rvwUnclassified returns the methods of port that are neither in reads nor
+// overridden by decorator to fail, plus allow-list names the port no longer
+// has. A method is probed by calling it with zero arguments: an override fails
+// through rec; a promoted memrepo method does not (a panic on the zero
+// arguments counts as not failing through rec).
+func rvwUnclassified(port reflect.Type, decorator any, rec *rvwRecorder, reads []string) []string {
+	allowed := map[string]bool{}
+	for _, name := range reads {
+		allowed[name] = true
+	}
+	var bad []string
+	dv := reflect.ValueOf(decorator)
+	for i := 0; i < port.NumMethod(); i++ {
+		name := port.Method(i).Name
+		if allowed[name] {
+			delete(allowed, name)
+			continue
+		}
+		m := dv.MethodByName(name)
+		if !m.IsValid() {
+			bad = append(bad, name+" (missing on the decorator)")
+			continue
+		}
+		args := make([]reflect.Value, m.Type().NumIn())
+		for j := range args {
+			args[j] = reflect.Zero(m.Type().In(j))
+		}
+		before := rec.fails
+		func() {
+			defer func() { _ = recover() }()
+			m.Call(args)
+		}()
+		if rec.fails == before {
+			bad = append(bad, name)
+		}
+	}
+	for name := range allowed {
+		bad = append(bad, name+" (in the read allow-list but not a method of "+port.Name()+")")
+	}
+	sort.Strings(bad)
+	return bad
+}
+
+// TestUIReadViewDecoratorsClassifyEveryPortMethod makes the decorators'
+// completeness a gate: a method added to SelfModelRepo, SignalRepo or
+// DecisionLog fails here until it is either allow-listed as a read or
+// overridden to fail.
+func TestUIReadViewDecoratorsClassifyEveryPortMethod(t *testing.T) {
+	rec := &rvwRecorder{}
+	cases := []struct {
+		port      reflect.Type
+		decorator any
+		reads     []string
+	}{
+		{reflect.TypeOf((*ports.SelfModelRepo)(nil)).Elem(), &rvwSelfModel{SelfModel: memrepo.NewSelfModel(), t: rec}, rvwSelfModelReads},
+		{reflect.TypeOf((*ports.SignalRepo)(nil)).Elem(), &rvwSignals{Signals: memrepo.NewSignals(), t: rec}, rvwSignalReads},
+		{reflect.TypeOf((*ports.DecisionLog)(nil)).Elem(), &rvwDecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: rec}, rvwDecisionReads},
+	}
+	for _, c := range cases {
+		if bad := rvwUnclassified(c.port, c.decorator, rec, c.reads); len(bad) > 0 {
+			t.Errorf("%s has methods the read-view gate does not classify: %v — allow-list the read or override the write to fail", c.port.Name(), bad)
+		}
+	}
+}
+
+// rvwProbePort is a port with one write the decorator below does not guard.
+type rvwProbePort interface {
+	ports.DecisionLog
+	Purge(ctx context.Context) error
+}
+
+// rvwProbeDecorator guards Record like the real decorator and forgets Purge,
+// which is how a write added to a port later would look.
+type rvwProbeDecorator struct {
+	*rvwDecisionLog
+}
+
+func (rvwProbeDecorator) Purge(context.Context) error { return nil }
+
+// TestUIReadViewClassificationCheckFiresOnAnUnguardedMethod is the probe of
+// the check above: it must name exactly the method nobody classified.
+func TestUIReadViewClassificationCheckFiresOnAnUnguardedMethod(t *testing.T) {
+	rec := &rvwRecorder{}
+	dec := rvwProbeDecorator{&rvwDecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: rec}}
+	bad := rvwUnclassified(reflect.TypeOf((*rvwProbePort)(nil)).Elem(), dec, rec, rvwDecisionReads)
+	if len(bad) != 1 || bad[0] != "Purge" {
+		t.Errorf("the check named %v, want exactly [Purge]", bad)
+	}
+
+	// And a stale allow-list entry is named too.
+	stale := rvwUnclassified(reflect.TypeOf((*ports.DecisionLog)(nil)).Elem(),
+		&rvwDecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: rec}, rec, []string{"Since", "Gone"})
+	if len(stale) != 1 || !strings.HasPrefix(stale[0], "Gone") {
+		t.Errorf("the check named %v, want the stale Gone entry only", stale)
+	}
 }

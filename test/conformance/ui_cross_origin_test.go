@@ -235,7 +235,10 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 		t.Run(row.pattern, func(t *testing.T) {
 			t.Parallel()
 
-			path := strings.Replace(strings.TrimPrefix(row.pattern, "POST "), "{id}", "unit-1", 1)
+			// The pattern is "METHOD path": the request uses the row's own method,
+			// so a PUT or DELETE leaf is driven as that, not as a POST.
+			method, rawPath, _ := strings.Cut(row.pattern, " ")
+			path := strings.Replace(rawPath, "{id}", "unit-1", 1)
 
 			body := uiCrossOriginBodyFor(row.pattern)
 
@@ -251,7 +254,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 			t.Run("foreign Sec-Fetch-Site refuses before the target runs", func(t *testing.T) {
 				refusals.Add(1)
 				calls = 0
-				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				req := httptest.NewRequest(method, path, strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				req.Header.Set("Sec-Fetch-Site", "cross-site")
 				req.AddCookie(cookie)
@@ -269,7 +272,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 			t.Run("foreign Origin with no Sec-Fetch-Site refuses before the target runs", func(t *testing.T) {
 				refusals.Add(1)
 				calls = 0
-				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				req := httptest.NewRequest(method, path, strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				req.Header.Set("Origin", "http://evil.example")
 				req.AddCookie(cookie)
@@ -291,7 +294,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 			t.Run("same-origin with the right cookie reaches the target exactly once", func(t *testing.T) {
 				reaches.Add(1)
 				calls = 0
-				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				req := httptest.NewRequest(method, path, strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				req.AddCookie(cookie)
 				rec := httptest.NewRecorder()
