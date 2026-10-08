@@ -311,6 +311,11 @@ func TestBeliefsByFacet_GroupsActiveBeliefsUnderAllFiveFacets(t *testing.T) {
 		selfmodel.FacetPreference: {"p1"},
 	}
 	for _, g := range got {
+		// slices.Equal cannot tell nil from empty, and the doc comment says
+		// "present and empty".
+		if g.Beliefs == nil {
+			t.Errorf("facet %s has a nil Beliefs slice, want an empty non-nil one", g.Facet)
+		}
 		if !slices.Equal(beliefIDs(g.Beliefs), wantIDs[g.Facet]) {
 			t.Errorf("facet %s = %v, want %v", g.Facet, beliefIDs(g.Beliefs), wantIDs[g.Facet])
 		}

@@ -60,6 +60,9 @@ func (s *BeliefsService) ByFacet(ctx context.Context) ([]FacetBeliefs, error) {
 	groups := make([]FacetBeliefs, 0, len(selfmodel.AllFacets()))
 	for _, facet := range selfmodel.AllFacets() {
 		bs := grouped[facet]
+		if bs == nil {
+			bs = []ports.Belief{}
+		}
 		slices.SortStableFunc(bs, func(a, b ports.Belief) int {
 			return cmp.Or(
 				cmp.Compare(b.Confidence, a.Confidence),

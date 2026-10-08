@@ -43,6 +43,9 @@ func TestBeliefRetire_ActiveBeliefReadsRetiredWithRowAndSignal(t *testing.T) {
 	if r.Action != ports.ActionBeliefRetired || r.ID == "" || !r.OccurredAt.Equal(w.now) || r.Rationale == "" {
 		t.Errorf("row = action %q id %q at %v rationale %q, want belief.retired, an id, %v and a sentence", r.Action, r.ID, r.OccurredAt, r.Rationale, w.now)
 	}
+	if want := `belief "g1" retired by the user (active -> retired); the row and its content are kept`; r.Rationale != want {
+		t.Errorf("rationale = %q, want %q", r.Rationale, want)
+	}
 	if want := []string{"belief_id", "content", "from", "to", "topic_key"}; !slices.Equal(keysOf(r.Ctx), want) {
 		t.Errorf("context keys = %v, want %v", keysOf(r.Ctx), want)
 	}
