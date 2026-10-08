@@ -32,7 +32,7 @@ are estimates (m4c measured tests at roughly 3.5x impl) and are reported apart.
 | 1 | `feat/ports-store-belief-status` | ~265 | ~345 | ~650 | #289: 318 changed lines when opened (1.2x); tests 1.75x | core `selfmodel` vocabulary + content bound / port + store guards |
 | 2 | `feat/brain-derive-shield` | ~270 | ~351 | ~800 | 557 changed lines (2.06x); tests 1,439 (1.8x) | **cut: 2a / 2b, see below** |
 | 3 | `feat/brain-belief-edit-retire` | ~260 | ~338 | ~650 | built whole: 393 changed lines (1.51x; 369 without the `tasks.md` edits); tests 1,308 (2.0x). Under 400, no cut | `ByFacet` + `Edit` / `Retire` + `write_landed.go` (unused) |
-| 4 | `feat/ui-beliefs` | ~275 | ~358 | ~450 | not built; at 2.06x ~567 | GET view + wiring / the two POSTs + G6 body table |
+| 4 | `feat/ui-beliefs` | ~275 | ~358 | ~450 | built whole: 301 changed lines (1.09x; 339 with the `tasks.md` edits); tests 1,340 (3.0x); generated 413 apart. Under 400, no cut | GET view + wiring / the two POSTs + G6 body table (unused) |
 | 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | ~130, ~290 | ~169, ~377 | ~320, ~450 | | **Moved to [`m4e-activity`](../m4e-activity/tasks.md)** |
 | | **Total (4 forecast PRs)** | **~1,070** | **~1,390** | **~2,550** | | |
 
@@ -337,33 +337,53 @@ Files: `internal/ui/{beliefs.go,beliefs.templ,ui.go,layout.templ}`, `internal/ht
 `test/conformance/{ui_entrances_test,httpapi_ui_wiring_test,ui_cross_origin_test,ui_read_views_write_nothing_test}.go`,
 **`internal/httpapi/server_test.go`**, `docs/06-harness.md` §4.
 
-- [ ] **4.1** SCAFFOLD — `ui.Beliefs` interface type; `wireBeliefs(db)` and `uiDeps(..., beliefs)`
+- [x] **4.1** SCAFFOLD — `ui.Beliefs` interface type; `wireBeliefs(db)` and `uiDeps(..., beliefs)`
   with the typed-nil guard, `serve.go` call site; `beliefs.templ` placeholder; `make templ`.
-- [ ] **4.2** RED conformance (G6) — in `ui_cross_origin_test.go`: `uiCrossOriginBodies` with
+  *Applied as: the scaffold rides with the RED commit, not apart from it. A `wireBeliefs` stub with
+  a call site but no test failed `unused`, and `uiDeps` taking the service without passing it on is
+  what makes its typed-nil and pass-through tests red on an assertion.*
+- [x] **4.2** RED conformance (G6) — in `ui_cross_origin_test.go`: `uiCrossOriginBodies` with
   entries for the **existing** `POST /ui/capture` and `POST /ui/units/{id}/correct` (`text=hello`)
   and the new `POST /ui/beliefs/{id}/edit` (`content=new+text`) and `…/retire` (empty body);
   `uiCrossOriginBodyExempt` with `POST /ui/login` and its reason, whose refusal subtests use a
   **fixed placeholder body**; `build()` gives every mutating entrance a counting stub on one
   shared counter; `TestUICrossOriginBodiesCoverEveryPOSTRow` (missing entry, stale entry,
   empty reason, exemption with no row, pattern in both: U4, U4b). `wantUIMuxWiring` rows.
-- [ ] **4.3** RED gates — add the `Beliefs` field to `ui.Deps` (G12 red: `ByFacet`, `Edit`,
+  *Applied as: the coverage rule is a pure function (`uiCrossOriginBodyViolations`), run over the real
+  tables and, in a second test, over a broken table per violation class. The loop also counts the
+  rows and the refusal and same-origin subtests it drove (a `t.Cleanup` check), because mutants X11
+  and X12 showed a loop that skips rows, or the whole same-origin subtest, passed otherwise.*
+- [x] **4.3** RED gates — add the `Beliefs` field to `ui.Deps` (G12 red: `ByFacet`, `Edit`,
   `Retire` not whitelisted); `TestUIReadViewsWriteNothing` beliefs GET (G7);
   **`internal/httpapi/server_test.go:117` `TestUIGuardedLeavesEachReachAView`: add leaf
   `/ui/beliefs`, marker `<h2>BELIEFS</h2>` and a stub `Beliefs` in its `ui.Deps`.**
-- [ ] **4.4** RED ui — U1 (two-belief test; `facet`/`confidence` posted, unchanged), U2 (404 / 409 /
+  *Applied as: `TestUIReadViewsWriteNothing` did not exist, so this PR creates
+  `ui_read_views_write_nothing_test.go` (the beliefs GET, over decorators of `SelfModelRepo`,
+  `SignalRepo` and `DecisionLog`, three requests, plus a read counter so the view provably went
+  through the decorated repo).*
+- [x] **4.4** RED ui — U1 (two-belief test; `facet`/`confidence` posted, unchanged), U2 (404 / 409 /
   400 / `WriteLandedError` per variant with the notice per §3.4 table and a recording `slog`
   handler), U3 retire -> `Retire`, R1 view (five facets, empty facet), nil dep 503, HTMX fragment
   vs full page, `MaxBytesReader`. `wiring_beliefs_test.go` over a real empty migrated vault;
   `TestUIDeps_NilServicesStayNilInterfaces` gains a `Beliefs` case.
   **Copy note:** on `ErrBeliefStatusConflict` the UI copy must say the belief "changed or was
   retired": a CAS loss can come from derive rewriting the content, not only from a retire.
-- [ ] **4.5** GREEN — routes in `ui.go` and `server.go` `r.Pattern` switch; `beliefs.templ`;
+  *Applied as: the edit form carries the claim hint (`Save keeps this belief as yours...`) on
+  derived and seed beliefs only, a rejected submit (400) re-renders the page with the submitted text
+  in that belief's form, and the retire confirm step is a `<details>` (no script, CSP-safe). An
+  e2e over the compiled binary on a provider-free vault is added (`serve_ui_beliefs_test.go`): it
+  is the only test that reaches `serve.go`'s `uiDeps` call site.*
+- [x] **4.5** GREEN — routes in `ui.go` and `server.go` `r.Pattern` switch; `beliefs.templ`;
   handlers; **`layout.templ` gains the beliefs link only** (design §10 item 1); whitelist
   `ByFacet`, `Edit`, `Retire` in `ui_entrances_test.go:32` (G12).
-- [ ] **4.6** DOCS — harness §4 I22 row names the whitelist additions. `scripts/docs-sync.sh`.
-- [ ] **4.7** PROBES U1 constant id / read another field; U2 swaps and the single generic notice;
+- [x] **4.6** DOCS — harness §4 I22 row names the whitelist additions. `scripts/docs-sync.sh`.
+  *Applied as: I22's row names the whitelist, I27's row names `TestUIReadViewsWriteNothing`. No
+  `internal/core` change, so docs-sync does not apply.*
+- [x] **4.7** PROBES U1 constant id / read another field; U2 swaps and the single generic notice;
   U3 retire -> `Edit`; U4 route with no body entry; U4b drop exemption / empty reason / login
   given a body; G6 unguarded POST; a stub not counted.
+  *Applied as: 149 mutants over the handlers, templates, routes, wiring and the three gates (G6,
+  G7, G12); six survived the first pass and the tests above were added until all were killed.*
 
 ## PR 5 — `feat/ports-store-decisionlog-before` and PR 6 — `feat/ui-activity`
 
@@ -379,5 +399,7 @@ Files: `internal/ui/{beliefs.go,beliefs.templ,ui.go,layout.templ}`, `internal/ht
 - [ ] **C.2** After PR 1 merges: compute actual / estimate; apply the cut rule (Forecast) before
   PR 2 (done: PR 2 was cut, see the Forecast). Apply it again to PRs 3 and 4 (PR 3 done: it
   measured 1.51x, 393 against ~260, under 400, no cut; at 1.51x PR 4 is ~415, so its seam stays
-  pre-defined). After PR 4 merges,
+  pre-defined). PR 4 measured 1.09x: 301 impl+docs changed lines against ~275 (339 with the 38 lines of this
+  file; tests 1,340 against ~450: 3.0x; generated `*_templ.go` 413 apart), under 400, built whole, the seam unused. After
+  PR 4 merges,
   `m4e-activity` may start; `m4e2-admin` starts after `m4e-activity`'s PR 6 merges.

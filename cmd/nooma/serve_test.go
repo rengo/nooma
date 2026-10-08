@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/ui"
 )
 
@@ -71,12 +72,12 @@ func TestServeUsageShowsNoUIPrecedence(t *testing.T) {
 // — deps.Today != nil would be true, so ui.Handler's own nil check
 // (h.deps.Today == nil, "not wired in this build") would never fire, and
 // the first request would panic on a nil-receiver method call instead of
-// answering 503. uiDeps exists to keep every one of its four service
+// answering 503. uiDeps exists to keep every one of its five service
 // parameters out of that trap, at cmd/nooma's one call site — wireToday and
 // wireUnits never actually return nil in production, but this proves the
 // guard holds regardless.
 func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
-	deps := uiDeps(nil, nil, nil, nil, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, nil, ui.Serving{})
 
 	if deps.Today != nil {
 		t.Error("Today: want a nil interface for a nil *brain.TodayService, got non-nil — the typed-nil trap uiDeps exists to avoid")
@@ -89,6 +90,22 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 	}
 	if deps.Capture != nil {
 		t.Error("Capture: want a nil interface for a nil *brain.CaptureService, got non-nil")
+	}
+	if deps.Beliefs != nil {
+		t.Error("Beliefs: want a nil interface for a nil *brain.BeliefsService, got non-nil")
+	}
+}
+
+// TestUIDeps_PassesTheBeliefsServiceThrough is the other half of the typed-nil
+// guard: a real *brain.BeliefsService must reach ui.Deps.Beliefs, or the
+// beliefs routes would answer 503 on a vault that has everything they need.
+func TestUIDeps_PassesTheBeliefsServiceThrough(t *testing.T) {
+	svc := brain.NewBeliefsService(nil, nil, nil, nil, nil)
+
+	deps := uiDeps(nil, nil, nil, nil, svc, ui.Serving{})
+
+	if deps.Beliefs != ui.Beliefs(svc) {
+		t.Errorf("Beliefs = %v, want the service handed to uiDeps", deps.Beliefs)
 	}
 }
 

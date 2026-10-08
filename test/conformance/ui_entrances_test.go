@@ -16,7 +16,7 @@ import (
 )
 
 // TestUIEntrances_DepsExposeOnlyDeclaredMethods is design §3.7 row 3, part
-// (a): ui.Deps' own interface fields — Today, Units, Search, and Capture
+// (a): ui.Deps' own interface fields — Today, Units, Search, Capture and Beliefs
 // once PR 5 adds it — may together expose only the method names this gate
 // whitelists. Capture is whitelisted from this PR even though nothing
 // wires it yet (design §6.1: "harmless while unused") so PR 5 does not
@@ -29,7 +29,7 @@ import (
 func TestUIEntrances_DepsExposeOnlyDeclaredMethods(t *testing.T) {
 	t.Parallel()
 
-	allowedMethods := map[string]bool{"Today": true, "Browse": true, "Detail": true, "ForText": true, "Capture": true}
+	allowedMethods := map[string]bool{"Today": true, "Browse": true, "Detail": true, "ForText": true, "Capture": true, "ByFacet": true, "Edit": true, "Retire": true}
 
 	typ := reflect.TypeOf(ui.Deps{})
 	for i := 0; i < typ.NumField(); i++ {
