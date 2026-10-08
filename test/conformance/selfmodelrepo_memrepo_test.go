@@ -39,3 +39,48 @@ func TestSelfModelRepo_MemRepo_ReinforceByID(t *testing.T) {
 		return memrepo.NewSelfModel()
 	})
 }
+
+// TestSelfModelRepo_MemRepo_RetiredBeliefs runs repocontract.RunRetiredBeliefs
+// against the same fake.
+func TestSelfModelRepo_MemRepo_RetiredBeliefs(t *testing.T) {
+	repocontract.RunRetiredBeliefs(t, func(t *testing.T) ports.SelfModelRepo {
+		t.Helper()
+		return memrepo.NewSelfModel()
+	})
+}
+
+// TestSelfModelRepo_MemRepo_BeliefByID runs repocontract.RunBeliefByID
+// against the same fake.
+func TestSelfModelRepo_MemRepo_BeliefByID(t *testing.T) {
+	repocontract.RunBeliefByID(t, func(t *testing.T) ports.SelfModelRepo {
+		t.Helper()
+		return memrepo.NewSelfModel()
+	})
+}
+
+// TestSelfModelRepo_MemRepo_SetStatus runs repocontract.RunSetStatus
+// against the same fake.
+func TestSelfModelRepo_MemRepo_SetStatus(t *testing.T) {
+	repocontract.RunSetStatus(t, func(t *testing.T) ports.SelfModelRepo {
+		t.Helper()
+		return memrepo.NewSelfModel()
+	})
+}
+
+// TestSelfModelRepo_MemRepo_EditContent runs repocontract.RunEditContent
+// against the same fake.
+func TestSelfModelRepo_MemRepo_EditContent(t *testing.T) {
+	repocontract.RunEditContent(t, func(t *testing.T) ports.SelfModelRepo {
+		t.Helper()
+		return memrepo.NewSelfModel()
+	})
+}
+
+// TestSelfModelRepo_MemRepo_WriteGuards runs repocontract.RunBeliefWriteGuards
+// against the same fake.
+func TestSelfModelRepo_MemRepo_WriteGuards(t *testing.T) {
+	repocontract.RunBeliefWriteGuards(t, func(t *testing.T) ports.SelfModelRepo {
+		t.Helper()
+		return memrepo.NewSelfModel()
+	})
+}

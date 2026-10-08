@@ -243,7 +243,7 @@ Initial extraction:
 |---|---|---|
 | I01 | `status='focus'` does not exist. Focus is a query, never persisted. The previous focus lives only in one `brain.FocusKeeper`'s memory: `TestI01_IncumbentDoesNotSurviveAFreshService` builds a fresh keeper over the same vault and finds nothing held, and `TestBrain_DeclaresNoPackageLevelVar` keeps it from living in a package variable | §3 |
 | I02 | Every LIVE read surface excludes `superseded` and `incomplete` | §1 |
-| I03 | Nothing is deleted: archiving is a state transition. No path emits `DELETE` on `units` | §1 |
+| I03 | Nothing is deleted: archiving is a state transition. No path emits `DELETE` on `units` or `self_beliefs` (a belief is retired, never removed) | §1, §10 |
 | I04 | A timer is never a unit: no weight, no decay, no graph, no beliefs | §8 |
 | I05 | `effective_weight` is computed on read; decay is not written on every read | §2 |
 | I06 | An `incomplete` unit has no embedding until promoted | §1, doc 03 |
@@ -272,7 +272,7 @@ Initial extraction:
 Four of these are better verified with a structural test than a behavioral one:
 
 - **I01** — a test that fails if the literal `"focus"` appears as a status value in the tree.
-- **I03** — a test that fails if a `DELETE FROM units` appears outside the migrations.
+- **I03** — a test that fails if a `DELETE FROM units` or a `DELETE FROM self_beliefs` appears outside the migrations.
 - **I13** — a test verifying the migration declares no FK on `learning_signals.target_id`.
 - **I23** — a `go/ast` test asserting `applyWithPreImage` is the only function that reaches any
   `UnitRepo.Update*` method, and that `recordPreImage` precedes `dispatchEdits` in its statement

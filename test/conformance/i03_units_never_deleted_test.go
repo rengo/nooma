@@ -2,6 +2,7 @@
 package conformance
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -81,6 +82,11 @@ import (
 //     the go:embed directive, and are naturally outside this Go-source
 //     scan — design D1).
 //
+// The tree scan also covers self_beliefs (m4e): a belief is retired, never
+// removed, and the scan is the structural half of that — the reflection
+// check above already forbids a removal verb on SelfModelRepo. The rule is
+// the same identifier-tail rule, parameterised by table name.
+//
 // D10's non-empty-corpus guard applies to both: a zero-method interface or a
 // zero-file scan fails loudly instead of passing vacuously.
 func TestI03_UnitsAreNeverDeleted(t *testing.T) {
@@ -108,23 +114,103 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 		}
 	})
 
-	t.Run("tree scan for DELETE FROM units", func(t *testing.T) {
-		repoRoot := repoRootFromCaller(t)
-		report := func(path string, lineNum int, line string) {
-			t.Errorf(
-				"%s:%d: %q — no code path outside the migrations may emit "+
-					"DELETE FROM units (docs/02-cognitive-core.md §1, CLAUDE.md "+
-					"non-negotiable #6)",
-				path, lineNum, strings.TrimSpace(line),
-			)
-		}
+	for _, table := range i03DeleteScannedTables {
+		t.Run("tree scan for DELETE FROM "+table, func(t *testing.T) {
+			repoRoot := repoRootFromCaller(t)
+			report := func(path string, lineNum int, line string) {
+				t.Errorf(
+					"%s:%d: %q — no code path outside the migrations may emit "+
+						"DELETE FROM %s (docs/02-cognitive-core.md §1, CLAUDE.md "+
+						"non-negotiable #6)",
+					path, lineNum, strings.TrimSpace(line), table,
+				)
+			}
+			match := func(line string) bool { return containsDeleteStatementFrom(line, table) }
 
-		scanned := scanGoTree(t, filepath.Join(repoRoot, "internal"), containsUnitsDeleteStatement, report)
-		scanned += scanGoTree(t, filepath.Join(repoRoot, "cmd"), containsUnitsDeleteStatement, report)
-		if scanned == 0 {
-			t.Fatal("scanned zero .go files under internal/ and cmd/ — D10's guard: nothing to check yet")
+			scanned := scanGoTree(t, filepath.Join(repoRoot, "internal"), match, report)
+			scanned += scanGoTree(t, filepath.Join(repoRoot, "cmd"), match, report)
+			if scanned == 0 {
+				t.Fatal("scanned zero .go files under internal/ and cmd/ — D10's guard: nothing to check yet")
+			}
+		})
+	}
+}
+
+// i03DeleteScannedTables is every table whose removal the tree scan
+// forbids: units (I03 proper) and self_beliefs (m4e: a belief is retired,
+// never removed).
+var i03DeleteScannedTables = []string{"units", "self_beliefs"}
+
+// TestI03_ScansUnitsAndSelfBeliefs keeps the scan from quietly shrinking:
+// dropping a table from i03DeleteScannedTables would leave every other I03
+// test green, because they pass on a tree with no matching statement.
+func TestI03_ScansUnitsAndSelfBeliefs(t *testing.T) {
+	for _, want := range []string{"units", "self_beliefs"} {
+		found := false
+		for _, got := range i03DeleteScannedTables {
+			found = found || got == want
 		}
-	})
+		if !found {
+			t.Errorf("i03DeleteScannedTables = %v, missing %q — the tree scan no longer covers it", i03DeleteScannedTables, want)
+		}
+	}
+}
+
+// TestI03_DeleteMarkerMatchesTheTableNameExactly pins the scan's matcher
+// (the probe rows of m4e gate G2): a DELETE FROM <table> statement matches,
+// case-insensitively and at the end of a line; a longer identifier that
+// merely starts with the table name (self_beliefs_x) and a different table
+// do not.
+func TestI03_DeleteMarkerMatchesTheTableNameExactly(t *testing.T) {
+	cases := []struct {
+		line  string
+		table string
+		want  bool
+	}{
+		{`const q = "DELETE FROM self_beliefs WHERE id = ?"`, "self_beliefs", true},
+		{`const q = "delete from SELF_BELIEFS"`, "self_beliefs", true},
+		{`const q = "DELETE FROM self_beliefs;"`, "self_beliefs", true},
+		{"DELETE FROM self_beliefs", "self_beliefs", true},
+		{`const q = "DELETE FROM self_beliefs_x"`, "self_beliefs", false},
+		{`const q = "DELETE FROM self_beliefs2"`, "self_beliefs", false},
+		{`const q = "DELETE FROM units WHERE id = ?"`, "self_beliefs", false},
+		{`const q = "DELETE FROM self_beliefs"`, "units", false},
+		{`const q = "DELETE FROM units WHERE id = ?"`, "units", true},
+		{`const q = "DELETE FROM units_fts"`, "units", false},
+	}
+	for _, tc := range cases {
+		if got := containsDeleteStatementFrom(tc.line, tc.table); got != tc.want {
+			t.Errorf("containsDeleteStatementFrom(%q, %q) = %v, want %v", tc.line, tc.table, got, tc.want)
+		}
+	}
+}
+
+// TestI03_TreeScanFiresOnAProbeFile proves the scan itself, not only its
+// matcher: over a tree holding one file that emits DELETE FROM self_beliefs
+// and one that only names self_beliefs_x, it reports exactly the first.
+func TestI03_TreeScanFiresOnAProbeFile(t *testing.T) {
+	dir := t.TempDir()
+	probes := map[string]string{
+		"bad.go":    "package probe\n\nconst q = \"DELETE FROM self_beliefs WHERE id = ?\"\n",
+		"silent.go": "package probe\n\nconst q = \"DELETE FROM self_beliefs_x\"\n",
+	}
+	for name, body := range probes {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatalf("write probe %s: %v", name, err)
+		}
+	}
+
+	var reported []string
+	scanned := scanGoTree(t, dir,
+		func(line string) bool { return containsDeleteStatementFrom(line, "self_beliefs") },
+		func(path string, _ int, _ string) { reported = append(reported, filepath.Base(path)) },
+	)
+	if scanned != 2 {
+		t.Fatalf("scanned %d probe files, want 2", scanned)
+	}
+	if len(reported) != 1 || reported[0] != "bad.go" {
+		t.Errorf("scan reported %v, want exactly [bad.go]", reported)
+	}
 }
 
 // deniedMethodPrefixes is I03's strengthened prefix set (design D5): a
@@ -162,12 +248,13 @@ var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.PendingQuestionRepo)(nil)).Elem(),
 }
 
-// containsUnitsDeleteStatement reports whether line contains the exact
-// (case-insensitive) statement "DELETE FROM units", rejecting a match whose
-// next character would extend the identifier — "DELETE FROM units_fts" is a
-// different table's DDL/DML entirely, not a violation of I03.
-func containsUnitsDeleteStatement(line string) bool {
-	const marker = "DELETE FROM UNITS"
+// containsDeleteStatementFrom reports whether line contains the exact
+// (case-insensitive) statement "DELETE FROM <table>", rejecting a match
+// whose next character would extend the identifier — "DELETE FROM units_fts"
+// is a different table's DDL/DML entirely, not a violation of I03, and
+// neither is "DELETE FROM self_beliefs_x".
+func containsDeleteStatementFrom(line, table string) bool {
+	marker := "DELETE FROM " + strings.ToUpper(table)
 
 	upper := strings.ToUpper(line)
 	idx := strings.Index(upper, marker)

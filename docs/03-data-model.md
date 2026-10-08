@@ -93,6 +93,10 @@ CREATE TABLE timers (                            -- ephemeral: NEVER units
   surfaced_at   TEXT
 );
 
+-- A belief is never removed. Retiring one is a status transition
+-- (active -> retired): the row stays, every read of active beliefs excludes
+-- it, and derive may neither revive nor overwrite it. The status vocabulary
+-- is pinned to selfmodel.AllStatuses() by TestBeliefStatusDocMatchesAllStatuses.
 CREATE TABLE self_beliefs (
   id                 TEXT PRIMARY KEY,
   facet              TEXT NOT NULL,              -- identity|value|goal|social|preference
@@ -102,7 +106,7 @@ CREATE TABLE self_beliefs (
   confidence         REAL NOT NULL DEFAULT 0.5,
   origin             TEXT NOT NULL DEFAULT 'user_stated', -- seed|derived|user_stated
   source_unit_id     TEXT REFERENCES units(id) ON DELETE SET NULL,
-  status             TEXT NOT NULL DEFAULT 'active',
+  status             TEXT NOT NULL DEFAULT 'active', -- active|retired
   last_reinforced_at TEXT NOT NULL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL
