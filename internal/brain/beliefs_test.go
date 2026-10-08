@@ -336,8 +336,8 @@ func orderFixture(now time.Time) (inputs []ports.Belief, wantIDs []string) {
 	t1, t2, t3 := now.Add(-3*time.Hour), now.Add(-2*time.Hour), now.Add(-time.Hour)
 	expected := []ports.Belief{
 		mk("top", 0.90, t1),
-		mk("newer", 0.80, t3),
-		mk("older", 0.80, t2),
+		mk("z-newer", 0.80, t3),
+		mk("a-older", 0.80, t2),
 		mk("id-a", 0.50, t1),
 		mk("id-b", 0.50, t1),
 		mk("id-c", 0.50, t1),
@@ -355,7 +355,7 @@ func TestBeliefsByFacet_OrdersConfidenceThenLastReinforcedThenID(t *testing.T) {
 		byID[b.ID] = b
 	}
 	var shuffled []ports.Belief
-	for _, id := range []string{"id-b", "older", "id-c", "top", "id-a", "newer"} {
+	for _, id := range []string{"id-b", "a-older", "id-c", "top", "id-a", "z-newer"} {
 		shuffled = append(shuffled, byID[id])
 	}
 

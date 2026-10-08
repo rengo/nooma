@@ -23,17 +23,31 @@ type WriteLandedError struct {
 	Err    error
 }
 
-// Error implements error.
+// Error implements error. It names only what is missing, so a message
+// built from it never claims the record failed when only the signal did.
 func (e *WriteLandedError) Error() string {
-	return ""
+	what := "a follow-up write"
+	switch {
+	case e.Record && e.Signal:
+		what = "the decision_log row and the learning signal"
+	case e.Record:
+		what = "the decision_log row"
+	case e.Signal:
+		what = "the learning signal"
+	}
+	msg := "brain: the write landed but " + what + " failed"
+	if e.Err != nil {
+		msg += ": " + e.Err.Error()
+	}
+	return msg
 }
 
 // Is reports whether target is ErrWriteLanded.
 func (e *WriteLandedError) Is(target error) bool {
-	return false
+	return target == ErrWriteLanded
 }
 
 // Unwrap returns the underlying cause.
 func (e *WriteLandedError) Unwrap() error {
-	return nil
+	return e.Err
 }
