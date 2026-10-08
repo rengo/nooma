@@ -962,6 +962,16 @@ boot catch-up — the two are one body of work behind two triggers.
    otherwise. A belief that merges is **reinforced**, not duplicated: its confidence rises toward
    1 by the same asymptotic law `strengthen` uses for relation strength, at
    `belief_reinforce_gain` (default 0.10) — `internal/core/consolidation.Reinforce`.
+   A **third rule, the retired shield**, runs ahead of the two defenses: what the user retired
+   does not come back. A proposal is skipped when (1) its key is a retired belief's key, or (2)
+   a retired belief is its nearest retired neighbour at the same 0.85 and no active belief is
+   strictly nearer — a **tie goes to the retired belief**, because the user's word wins.
+   Precedence, first match wins: retired key, retired nearest, the key of a belief the user wrote
+   or edited (reinforce it), active nearest (reinforce it), create
+   (`internal/core/consolidation.RouteProposals`). **Derive may reinforce a user-stated belief,
+   never rewrite its text**: the key of a belief that is not `derived` raises its confidence and
+   writes nothing else, even when another active belief is semantically nearer; the upsert of an
+   active `derived` key still overwrites in place, the only overwrite the store permits (§10).
    **The embedding cost, stated rather than left implicit (owner ruling Q2, option A)**: `derive`
    embeds every **active** belief in memory at the start of the phase and discards the vectors
    after — no schema change, no `belief_embeddings` table, no stale-vector problem when a belief's
