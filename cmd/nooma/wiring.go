@@ -358,7 +358,13 @@ func wireUnits(db *sqlite.Vault) *brain.UnitsService {
 // Wired unconditionally at vault open, wireUnits' precedent, never inside
 // wireScheduler's LLM-gated path.
 func wireBeliefs(db *sqlite.Vault) *brain.BeliefsService {
-	return nil
+	return brain.NewBeliefsService(
+		systemClock{},
+		uuidGen{},
+		sqlite.NewSelfModelRepo(db),
+		sqlite.NewSignalRepo(db),
+		sqlite.NewDecisionLog(db),
+	)
 }
 
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {

@@ -72,7 +72,7 @@ func TestServeUsageShowsNoUIPrecedence(t *testing.T) {
 // — deps.Today != nil would be true, so ui.Handler's own nil check
 // (h.deps.Today == nil, "not wired in this build") would never fire, and
 // the first request would panic on a nil-receiver method call instead of
-// answering 503. uiDeps exists to keep every one of its four service
+// answering 503. uiDeps exists to keep every one of its five service
 // parameters out of that trap, at cmd/nooma's one call site — wireToday and
 // wireUnits never actually return nil in production, but this proves the
 // guard holds regardless.

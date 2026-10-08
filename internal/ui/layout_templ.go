@@ -62,7 +62,7 @@ func Page(title string, body templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</title><link rel=\"stylesheet\" href=\"/ui/static/app.css\"></head><body><nav><a href=\"/ui\">Today</a> <a href=\"/ui/units\">Units</a> <a href=\"/ui/capture\">Capture</a></nav><main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</title><link rel=\"stylesheet\" href=\"/ui/static/app.css\"></head><body><nav><a href=\"/ui\">Today</a> <a href=\"/ui/units\">Units</a> <a href=\"/ui/capture\">Capture</a> <a href=\"/ui/beliefs\">Beliefs</a></nav><main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

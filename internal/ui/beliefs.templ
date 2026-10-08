@@ -1,8 +1,14 @@
 package ui
 
-import "github.com/rengo/nooma/internal/brain"
+import (
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/selfmodel"
+	"github.com/rengo/nooma/internal/ports"
+)
 
-// BeliefsPage is GET /ui/beliefs' full page.
+// BeliefsPage is GET /ui/beliefs' full page, and what a belief POST answers
+// without HX-Request. res is the outcome of the POST that produced it, nil on
+// a plain GET.
 templ BeliefsPage(groups []brain.FacetBeliefs, res *beliefResult) {
 	@Page("nooma — beliefs", beliefsBody(groups, res))
 }
@@ -10,5 +16,63 @@ templ BeliefsPage(groups []brain.FacetBeliefs, res *beliefResult) {
 templ beliefsBody(groups []brain.FacetBeliefs, res *beliefResult) {
 	<section>
 		<h2>BELIEFS</h2>
+		<div id="beliefs-result" aria-live="polite">
+			if res != nil {
+				@beliefOutcomeView(*res)
+			}
+		</div>
 	</section>
+	for _, g := range groups {
+		<section data-facet={ string(g.Facet) }>
+			<h3>{ string(g.Facet) }</h3>
+			if len(g.Beliefs) == 0 {
+				<p>No beliefs yet.</p>
+			} else {
+				<ul>
+					for _, b := range g.Beliefs {
+						@beliefItem(b, res)
+					}
+				</ul>
+			}
+		</section>
+	}
+}
+
+// beliefOutcomeView is the outcome fragment alone: what an HX-Request answer
+// carries and what the result region of the full page wraps. The message is
+// one of this package's own sentences, never the error's text.
+templ beliefOutcomeView(res beliefResult) {
+	<p data-outcome={ res.Outcome }>{ res.Message }</p>
+}
+
+// beliefItem is one belief: its fields, the edit form (content is the only
+// input) and the retire form behind a confirm step. Every value goes through
+// templ's own escaping: a belief's content is model-shaped text.
+templ beliefItem(b ports.Belief, res *beliefResult) {
+	<li data-belief-id={ b.ID }>
+		<p data-field="content">{ b.Content }</p>
+		<p>
+			<span data-field="confidence">{ formatConfidence(b.Confidence) }</span>
+			<span data-field="origin">{ string(b.Origin) }</span>
+			<span data-field="last-reinforced">{ b.LastReinforcedAt.Format(dateLayout) }</span>
+		</p>
+		<details data-action="edit" open?={ rejected(b, res) }>
+			<summary>Edit</summary>
+			<form method="post" action={ templ.URL("/ui/beliefs/" + b.ID + "/edit") } hx-post={ "/ui/beliefs/" + b.ID + "/edit" } hx-target="#beliefs-result" hx-swap="innerHTML">
+				<label for={ "content-" + b.ID }>Content</label>
+				<textarea id={ "content-" + b.ID } name="content" required>{ editText(b, res) }</textarea>
+				if b.Origin != selfmodel.OriginUserStated {
+					<p data-hint="claim">Save keeps this belief as yours, even unchanged: the nightly pass will not rewrite it.</p>
+				}
+				<button type="submit">Save</button>
+			</form>
+		</details>
+		<details data-action="retire">
+			<summary>Retire</summary>
+			<form method="post" action={ templ.URL("/ui/beliefs/" + b.ID + "/retire") } hx-post={ "/ui/beliefs/" + b.ID + "/retire" } hx-target="#beliefs-result" hx-swap="innerHTML">
+				<p>Retiring takes this belief off the list and keeps the nightly pass from deriving it again.</p>
+				<button type="submit">Confirm retire</button>
+			</form>
+		</details>
+	</li>
 }

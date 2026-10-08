@@ -49,7 +49,7 @@ type Capturer interface {
 }
 
 // Deps is what New needs to build the mirror's handler. Today, Units,
-// Search and Capture are nil until wired (cmd/nooma's own transitional
+// Search, Capture and Beliefs are nil until wired (cmd/nooma's own transitional
 // state, and every test fixture that does not need a real view); each nil
 // dependency answers 503 for the routes that need it, rather than
 // panicking on a nil receiver (design m4a §3.1, §3.4's typed-nil gotcha).
@@ -106,6 +106,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveCapture(w, r)
 	case "POST /ui/units/{id}/correct":
 		h.serveCorrect(w, r)
+	case "GET /ui/beliefs":
+		h.serveBeliefs(w, r)
+	case "POST /ui/beliefs/{id}/edit":
+		h.serveBeliefEdit(w, r)
+	case "POST /ui/beliefs/{id}/retire":
+		h.serveBeliefRetire(w, r)
 	default:
 		http.NotFound(w, r)
 	}

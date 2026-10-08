@@ -311,7 +311,7 @@ func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 // receiver instead of answering 503. today and units never actually come
 // back nil in production (both are wired unconditionally, above); recall
 // and capture do, on a vault with no providers configured (wireBrain's own
-// degrade, cmd/nooma/wiring.go) — this function guards all four alike
+// degrade, cmd/nooma/wiring.go) — this function guards all five alike
 // rather than only the ones that need it today.
 func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, serving ui.Serving) ui.Deps {
 	deps := ui.Deps{Serving: serving}
@@ -326,6 +326,9 @@ func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.
 	}
 	if capture != nil {
 		deps.Capture = capture
+	}
+	if beliefs != nil {
+		deps.Beliefs = beliefs
 	}
 	return deps
 }
