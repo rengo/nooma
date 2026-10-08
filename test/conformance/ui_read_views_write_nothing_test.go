@@ -30,7 +30,7 @@ import (
 // The forbidden methods are enumerated from internal/ports: SelfModelRepo's
 // four writes (UpsertByTopicKey, ReinforceByID, SetStatus, EditContent),
 // SignalRepo.Record and DecisionLog.Record; ActiveBeliefs, RetiredBeliefs,
-// BeliefByID and the two Since reads are reads.
+// BeliefByID, the two Since reads and DecisionLog.Before are reads.
 func TestUIReadViewsWriteNothing(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -153,7 +153,7 @@ func (g *rvwDecisionLog) Record(context.Context, ports.Decision) error {
 var (
 	rvwSelfModelReads = []string{"ActiveBeliefs", "BeliefByID", "RetiredBeliefs"}
 	rvwSignalReads    = []string{"Since"}
-	rvwDecisionReads  = []string{"Since"}
+	rvwDecisionReads  = []string{"Before", "Since"}
 )
 
 // rvwRecorder is an rvwT that counts failures instead of stopping the test.
@@ -253,7 +253,7 @@ func TestUIReadViewClassificationCheckFiresOnAnUnguardedMethod(t *testing.T) {
 
 	// And a stale allow-list entry is named too.
 	stale := rvwUnclassified(reflect.TypeOf((*ports.DecisionLog)(nil)).Elem(),
-		&rvwDecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: rec}, rec, []string{"Since", "Gone"})
+		&rvwDecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: rec}, rec, []string{"Before", "Since", "Gone"})
 	if len(stale) != 1 || !strings.HasPrefix(stale[0], "Gone") {
 		t.Errorf("the check named %v, want the stale Gone entry only", stale)
 	}

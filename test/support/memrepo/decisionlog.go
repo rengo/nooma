@@ -3,6 +3,7 @@ package memrepo
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,7 +97,46 @@ func (r *DecisionLog) Since(_ context.Context, t time.Time, limit int) ([]ports.
 	return matched, nil
 }
 
-// Before implements ports.DecisionLog. Scaffold: returns an empty page.
-func (r *DecisionLog) Before(context.Context, *ports.DecisionCursor, string, int) ([]ports.DecisionRow, error) {
-	return nil, nil
+// Before implements ports.DecisionLog over the full-precision in-memory rows:
+// (OccurredAt, Seq) descending, strictly older than the cursor, filtered by
+// action prefix, bounded by limit. Callers use whole-second instants so this
+// agrees with SQLite's one-second storage.
+func (r *DecisionLog) Before(_ context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error) {
+	if limit < 1 {
+		return nil, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var matched []ports.DecisionRow
+	for _, id := range r.order {
+		d := r.byID[id]
+		if !strings.HasPrefix(string(d.Action), actionPrefix) {
+			continue
+		}
+		row := ports.DecisionRow{Decision: d, Seq: r.seq[id]}
+		if before != nil && !olderThan(row, *before) {
+			continue
+		}
+		matched = append(matched, row)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if !matched[i].OccurredAt.Equal(matched[j].OccurredAt) {
+			return matched[i].OccurredAt.After(matched[j].OccurredAt)
+		}
+		return matched[i].Seq > matched[j].Seq
+	})
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+	return matched, nil
+}
+
+// olderThan reports whether row sorts strictly after c in the newest-first
+// order: (OccurredAt, Seq) < (c.OccurredAt, c.Seq).
+func olderThan(row ports.DecisionRow, c ports.DecisionCursor) bool {
+	if !row.OccurredAt.Equal(c.OccurredAt) {
+		return row.OccurredAt.Before(c.OccurredAt)
+	}
+	return row.Seq < c.Seq
 }

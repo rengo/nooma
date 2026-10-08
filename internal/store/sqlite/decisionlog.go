@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ncruces/go-sqlite3"
 
@@ -111,12 +113,70 @@ LIMIT ?`
 // buildDecisionsBeforeQuery assembles Before's SELECT and its arguments. It
 // is a function of its own so the L3 plan test explains the exact SQL
 // production sends, not a hand-copied literal (the unitrepo precedent).
-// Scaffold: a naive query with no keyset and no ordering guarantee.
-func buildDecisionsBeforeQuery(_ *ports.DecisionCursor, _ string, limit int) (string, []any) {
-	return `SELECT id, action, rationale, context, occurred_at, rowid FROM decision_log ORDER BY id LIMIT ?`, []any{limit}
+//
+// decision_log is a rowid table, so rowid is the trailing column of
+// idx_decision_log_occurred and (occurred_at DESC, rowid DESC) is satisfiable
+// from that index without a sort. rowid, not id, breaks ties: occurred_at has
+// one-second resolution and ids are random UUIDs. The prefix uses substr, not
+// LIKE, so "_" in the action vocabulary is never a wildcard.
+func buildDecisionsBeforeQuery(before *ports.DecisionCursor, actionPrefix string, limit int) (string, []any) {
+	q := `SELECT id, action, rationale, context, occurred_at, rowid FROM decision_log`
+	var args []any
+	var where []string
+	if before != nil {
+		where = append(where, `(occurred_at, rowid) < (?, ?)`)
+		args = append(args, before.OccurredAt.UTC().Format(unitTimeLayout), before.Seq)
+	}
+	if actionPrefix != "" {
+		where = append(where, `substr(action, 1, ?) = ?`)
+		args = append(args, utf8.RuneCountInString(actionPrefix), actionPrefix)
+	}
+	if len(where) > 0 {
+		q += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	q += ` ORDER BY occurred_at DESC, rowid DESC LIMIT ?`
+	return q, append(args, limit)
 }
 
-// Before implements ports.DecisionLog. Scaffold: returns an empty page.
-func (r *DecisionLog) Before(context.Context, *ports.DecisionCursor, string, int) ([]ports.DecisionRow, error) {
-	return nil, nil
+// Before implements ports.DecisionLog; see its doc comment for the contract.
+// limit < 1 returns an empty page without touching the database.
+func (r *DecisionLog) Before(ctx context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error) {
+	if limit < 1 {
+		return nil, nil
+	}
+	q, args := buildDecisionsBeforeQuery(before, actionPrefix, limit)
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reading decisions before a cursor: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []ports.DecisionRow
+	for rows.Next() {
+		var (
+			id, action, rationale, context, occurredAt string
+			seq                                        int64
+		)
+		if err := rows.Scan(&id, &action, &rationale, &context, &occurredAt, &seq); err != nil {
+			return nil, fmt.Errorf("scanning a decision row: %w", err)
+		}
+		at, err := time.Parse(unitTimeLayout, occurredAt)
+		if err != nil {
+			return nil, fmt.Errorf("decision %q: occurred_at: %w", id, err)
+		}
+		out = append(out, ports.DecisionRow{
+			Decision: ports.Decision{
+				ID:         id,
+				Action:     ports.DecisionAction(action),
+				Rationale:  rationale,
+				Context:    []byte(context),
+				OccurredAt: at,
+			},
+			Seq: seq,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading decisions before a cursor: %w", err)
+	}
+	return out, nil
 }
