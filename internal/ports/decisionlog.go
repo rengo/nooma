@@ -133,10 +133,13 @@ const (
 	ActionDeriveBeliefReinforced DecisionAction = "consolidate.derive.belief_reinforced"
 	// ActionDeriveBeliefSkipped is m4e's retired shield: a proposal was
 	// not written because it hits a retired belief (by topic key or by
-	// similarity), or because the store refused the write after a
-	// concurrent change (reason changed_since_read). One row per skip,
-	// one shared Context shape: {topic_key, belief_id?, reason,
-	// similarity?, proposed_content}.
+	// similarity), because the store refused the write after a
+	// concurrent change (reason changed_since_read), or because its
+	// vector was unusable while a retired belief exists, so the retired
+	// check could not run (reason unusable_vector_retired_unchecked,
+	// fail closed). One row per skip, one shared Context shape:
+	// {topic_key, belief_id?, reason, similarity?, cause?,
+	// proposed_content}.
 	ActionDeriveBeliefSkipped DecisionAction = "consolidate.derive.belief_skipped"
 	// ActionDeriveRetiredEmbedFailed is m4e's other derive row, with a
 	// different Context shape ({belief_id, topic_key, cause}, m2c §7.5's

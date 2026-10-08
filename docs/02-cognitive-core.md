@@ -967,8 +967,8 @@ boot catch-up — the two are one body of work behind two triggers.
    a retired belief is its nearest retired neighbour at the same 0.85 and no active belief is
    strictly nearer — a **tie goes to the retired belief**, because the user's word wins. The
    skip is a `consolidate.derive.belief_skipped` row naming the reason (`retired_topic_key`,
-   `retired_similar`, or `changed_since_read` when the store refused a write the user changed
-   under derive) with the similarity only when a semantic match decided it — a refusal never
+   `retired_similar`, `changed_since_read` when the store refused a write the user changed
+   under derive, or `unusable_vector_retired_unchecked` for the fail-closed case below) with the similarity only when a semantic match decided it — a refusal never
    aborts the pass. Precedence, first match wins: retired key, retired nearest, the key of a
    belief the user wrote or edited (reinforce it), active nearest (reinforce it), create
    (`internal/core/consolidation.RouteProposals`). **Derive may reinforce a user-stated belief,
