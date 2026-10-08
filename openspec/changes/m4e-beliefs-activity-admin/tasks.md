@@ -355,6 +355,8 @@ Files: `internal/ui/{beliefs.go,beliefs.templ,ui.go,layout.templ}`, `internal/ht
   handler), U3 retire -> `Retire`, R1 view (five facets, empty facet), nil dep 503, HTMX fragment
   vs full page, `MaxBytesReader`. `wiring_beliefs_test.go` over a real empty migrated vault;
   `TestUIDeps_NilServicesStayNilInterfaces` gains a `Beliefs` case.
+  **Copy note:** on `ErrBeliefStatusConflict` the UI copy must say the belief "changed or was
+  retired": a CAS loss can come from derive rewriting the content, not only from a retire.
 - [ ] **4.5** GREEN — routes in `ui.go` and `server.go` `r.Pattern` switch; `beliefs.templ`;
   handlers; **`layout.templ` gains the beliefs link only** (design §10 item 1); whitelist
   `ByFacet`, `Edit`, `Retire` in `ui_entrances_test.go:32` (G12).
