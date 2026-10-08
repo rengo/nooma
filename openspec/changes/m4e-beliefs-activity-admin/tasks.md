@@ -181,6 +181,15 @@ Files: `internal/core/consolidation/shield.go`(+test), `internal/brain/consolida
 `internal/ports/decisionlog.go`, `test/support/repocontract/decisionlog.go`,
 `docs/02-cognitive-core.md` §6 item 5, `docs/06-harness.md` §4.
 
+**Cut at the named seam (measured 2026-10-08).** The whole of PR 2 measured 557 impl+docs changed
+lines (about 2.1x its ~270 forecast, over 400), so it ships as two stacked PRs. **Part 1**,
+`feat/brain-derive-shield`: the pure `shield.go` only, with no doc change and the
+`no-spec-change` label, since nothing calls `RouteProposals` until part 2 (tasks 2.3, 2.7; the
+shield half of 2.1 and 2.10). **Part 2**, `feat/brain-derive-retired-wiring`: the `consolidate.go`
+wiring, the vocabulary, the scripted embedder, the D15/D17 rewrite and all of doc 02 §6 item 5 —
+the retired-shield routing text and the embedding-cost amendment that licenses that rewrite — so
+the doc lands with the code it describes.
+
 - [ ] **2.1** SCAFFOLD — `shield.go`: `RouteKind`, `KeyedBelief`, `Route`, `RetiredKeyHits`
   (returns nil), `RouteProposals` (every proposal -> create). `ports/decisionlog.go`:
   `ActionDeriveBeliefSkipped`, `ActionDeriveRetiredEmbedFailed` after
@@ -189,7 +198,7 @@ Files: `internal/core/consolidation/shield.go`(+test), `internal/brain/consolida
 - [ ] **2.2** SCAFFOLD test helper (correction 12) — `scripted_embedder_test.go`: a test-local
   `ports.EmbeddingProvider` with per-text vectors, per-text errors, NaN / zero / empty /
   wrong-dimension vectors, ctx-cancel support and `EmbedCalls()`.
-- [ ] **2.3** RED core — `shield_test.go`, precedence **1 retired key, 2 retired nearest (tie to
+- [x] **2.3** RED core — `shield_test.go`, precedence **1 retired key, 2 retired nearest (tie to
   retired), 3 user-stated key, 4 active nearest, 5 create** (design §10 item 9). FX-D p0-p6 plus
   **p7** (key == U's, cosine 0.95 to active A: reinforce U). Tests:
   `TestRouteProposals_RetiredKeySkipsEvenWhenFar` (p1), p2, p3, p4, p5, p6 (bitwise-equal
@@ -210,7 +219,7 @@ Files: `internal/core/consolidation/shield.go`(+test), `internal/brain/consolida
   "semantic comparison skipped"; user-stated-key case reinforces; **odd proposal first** with
   active beliefs present (it is the one excluded); no active beliefs and a zero-vector proposal
   first (the next usable proposal sets the dimension) (design §10 item 2).
-- [ ] **2.7** GREEN core — `shield.go` real `RetiredKeyHits` and `RouteProposals` in the 1-5 order.
+- [x] **2.7** GREEN core — `shield.go` real `RetiredKeyHits` and `RouteProposals` in the 1-5 order.
 - [ ] **2.8** GREEN brain — `derive`: read active then retired (error aborts); pending list; zero
   embed calls when pending is empty; embed active (abort on failure), then retired under
   `usableVector(v, dim) cause` (**reference dimension = first active belief's vector, falling
