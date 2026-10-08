@@ -287,6 +287,11 @@ func TestBeliefEdit_UnchangedSubmitClaimsANonUserStatedBelief(t *testing.T) {
 			if sigs[0].Type != ports.SignalBeliefEdit || sigs[0].Ctx["decision_id"] != r.ID {
 				t.Errorf("signal = %q linking %v, want belief_edit linking the claim row %s", sigs[0].Type, sigs[0].Ctx["decision_id"], r.ID)
 			}
+			// Owner ruling 2026-10-08: a claim says the system derived it
+			// right, so it is positive; a real edit stays negative (B6).
+			if sigs[0].Valence != ports.ValencePositive {
+				t.Errorf("claim signal valence = %q, want positive", sigs[0].Valence)
+			}
 		})
 	}
 }

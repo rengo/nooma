@@ -42,7 +42,7 @@ func (s *BeliefsService) Retire(ctx context.Context, id string) error {
 	}
 
 	decisionID, recordErr := s.recordRetired(ctx, current, now)
-	signalErr := s.recordBeliefSignal(ctx, ports.SignalBeliefDelete, current, decisionID, now)
+	signalErr := s.recordBeliefSignal(ctx, ports.SignalBeliefDelete, ports.ValenceNegative, current, decisionID, now)
 	if recordErr == nil && signalErr == nil {
 		return nil
 	}

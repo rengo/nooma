@@ -66,11 +66,14 @@ func (s *BeliefsService) Edit(ctx context.Context, id, content string) error {
 	if err := s.beliefs.EditContent(ctx, id, current.Content, to, now); err != nil {
 		return fmt.Errorf("belief edit: write content of belief %q: %w", id, err)
 	}
-	// A claim emits the same belief_edit signal: design §3.4 has no exception
-	// for it, the user still acted on a belief the system produced, and M5
-	// should learn that act. The row's "claimed" field is what tells the two
-	// apart when the log is read.
-	if err := s.recordBeliefSignal(ctx, ports.SignalBeliefEdit, current, decisionID, now); err != nil {
+	// A claim emits a belief_edit signal too, but POSITIVE (owner ruling
+	// 2026-10-08): the user read the derived text and kept it, which says the
+	// system derived it right. A real edit stays negative.
+	valence := ports.ValenceNegative
+	if claim {
+		valence = ports.ValencePositive
+	}
+	if err := s.recordBeliefSignal(ctx, ports.SignalBeliefEdit, valence, current, decisionID, now); err != nil {
 		return &WriteLandedError{Signal: true, Err: err}
 	}
 	return nil

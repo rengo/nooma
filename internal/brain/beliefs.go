@@ -76,12 +76,14 @@ func (s *BeliefsService) ByFacet(ctx context.Context) ([]FacetBeliefs, error) {
 }
 
 // recordBeliefSignal writes the learning signal of a user's write on b
-// (doc 02 §9): negative, because the belief was wrong in the user's eyes,
-// as for a correction. DecisionAction names the bucket that produced the
+// (doc 02 §9). The caller passes the valence: negative for a retirement or a
+// content edit (the belief was wrong in the user's eyes, as for a
+// correction), positive for a claim (the user kept the derived text, so the
+// system derived it right). DecisionAction names the bucket that produced the
 // belief, and only when that was derive: a seeded or user-stated belief
 // came from no decision_log bucket, and nil beats a guess. decisionID links
 // the log row and is omitted when the row could not be written.
-func (s *BeliefsService) recordBeliefSignal(ctx context.Context, typ ports.SignalType, b ports.Belief, decisionID string, now time.Time) error {
+func (s *BeliefsService) recordBeliefSignal(ctx context.Context, typ ports.SignalType, valence ports.Valence, b ports.Belief, decisionID string, now time.Time) error {
 	contextJSON, err := json.Marshal(struct {
 		BeliefID   string `json:"belief_id"`
 		TopicKey   string `json:"topic_key"`
@@ -95,7 +97,7 @@ func (s *BeliefsService) recordBeliefSignal(ctx context.Context, typ ports.Signa
 	sig := ports.Signal{
 		ID:         s.ids.New(),
 		Type:       typ,
-		Valence:    ports.ValenceNegative,
+		Valence:    valence,
 		TargetKind: &targetKind,
 		TargetID:   &b.ID,
 		Context:    contextJSON,

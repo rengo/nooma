@@ -118,8 +118,8 @@ returns `ErrBeliefNotFound`-shaped not-found and writes no signal and no log row
 changes nothing writes nothing, **except on a belief whose `origin` is not `user_stated`**
 (owner ruling 2026-10-08): saving a derived or seed belief unchanged **claims** it. `origin`
 becomes `user_stated`, the stored text is kept byte for byte, `updated_at` is bumped, a
-`belief.edited` row with `claimed: true` (next equal to previous) and a `belief_edit` signal are
-written. This is how a user protects a derived belief from derive without rewording it.
+`belief.edited` row with `claimed: true` (next equal to previous) and a **positive** `belief_edit` signal (the
+system derived it right; a real edit stays negative) are written. This is how a user protects a derived belief from derive without rewording it.
 
 **Content rules (added 2026-10-08, JD round 1)**: submitted content is **normalised once**:
 every `\r\n` becomes `\n`, then surrounding whitespace is trimmed. The normalised value is what is

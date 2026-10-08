@@ -432,8 +432,10 @@ A test pins each window (§6, B-series; U2 pins the notice per variant). `WriteL
 `ErrWriteLanded` live in `internal/brain/write_landed.go` and are reused by `m4e2-admin`
 (`Record` only: "saved, but not logged").
 
-**Signals** (doc 02 §9): `Type` `belief_edit` / `belief_delete`; `Valence` **negative** (the
-belief was wrong, as for `correction`, `correction.go:336-345`); `TargetKind` `belief`;
+**Signals** (doc 02 §9): `Type` `belief_edit` / `belief_delete`; `Valence` **negative** for a
+real edit and for `belief_delete` (the belief was wrong, as for `correction`,
+`correction.go:336-345`) and **positive for a claim** (owner ruling 2026-10-08: the user kept
+the derived text, so the system derived it right); `TargetKind` `belief`;
 `TargetID` the id; `DecisionAction` = `ActionDeriveBeliefCreated` **when the belief's origin at
 that moment was `derived`** (the bucket that produced it), otherwise nil. Nil is the D6 rule:
 leave a field nil rather than guess. `Magnitude` is nil. `Context` is `{belief_id, topic_key,
@@ -692,7 +694,7 @@ space, and one whose stored content is whitespace only.
 | B3 | 3 | retired → conflict before any write | skip the status check (CAS still refuses, but the log row exists) | `…RetiredBeliefWritesNothing` (log count unchanged) |
 | B4 | 3 | pre-image before `EditContent` | swap | `…LogFailureLeavesBeliefUntouched` |
 | B5 | 3 | signal only after a landed write | signal on failed write | `…WriteFailureEmitsNoSignal` |
-| B6 | 3 | edit signal fields (type, valence negative, target, `DecisionAction` by prior origin, `decision_id`) | each field wrong | `…SignalNamesBeliefAndLogRow`, two cases: prior `derived`, prior `user_stated` (nil action) |
+| B6 | 3 | edit signal fields (type, valence negative for a real edit and positive for a claim, target, `DecisionAction` by prior origin, `decision_id`) | each field wrong; claim negative; real edit positive | `…SignalNamesBeliefAndLogRow` (edit negative), `…UnchangedSubmitClaims…` (claim positive), two cases: prior `derived`, prior `user_stated` (nil action) |
 | B7 | 3 | context keyed by column | positional / missing origin | JSON key assertions |
 | B8 | 3 | empty / over-bound → typed errors, nothing written | accept | table test (FX-N) |
 | B9 | 3 | retire writes first | log first | `TestBeliefRetire_TwiceLogsOnce` |

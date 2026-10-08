@@ -1258,7 +1258,9 @@ use `derived/{facet}/{key}`), `content`, `confidence`, `origin`
 - **Injection into classify**: on every capture, active beliefs enter as context → personalized
   weights and λ. The cycle capture → derive → inject → capture better is THE mechanism by
   which relevance improves over time.
-- Editing or deleting a belief emits a learning signal (`belief_edit` / `belief_delete`).
+- Editing or deleting a belief emits a learning signal (`belief_edit` / `belief_delete`), negative:
+  the belief was wrong in the user's eyes. A claim (saving a derived belief unchanged) emits a
+  **positive** `belief_edit`: the user kept the text, so the system derived it right.
 - **`status` is `active | retired`.** Deleting a belief **retires** it (`active → retired`) and
   never removes a row (I03). A retired belief is excluded from every read of active beliefs:
   today that is derive's dedup and the stagnation check, and it will be classify injection once
