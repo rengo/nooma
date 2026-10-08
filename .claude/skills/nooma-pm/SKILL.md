@@ -97,9 +97,12 @@ retarget check). Then:
 
 1. Confirm the CI of `main` is green on the merge commit; `git pull` main locally.
 2. Run the client's "steps to try" once on the updated `main` (smoke, with the fakes described in
-   `nooma-qa`), on a throwaway vault, with `HOME=<scratch>/home USERPROFILE=<scratch>/home
-   NOOMA_VAULT=` set inline on each `./nooma` call, exactly like `nooma-qa`; never the
-   maintainer's real `~/.nooma` or vault. If a step fails, it is a regression: fix it through the cycle before telling the
+   `nooma-qa`), on a throwaway vault, calling the product **only** through the wrapper
+   `<scratch>/nooma.sh` (it execs the binary with `HOME=<scratch>/home
+   USERPROFILE=<scratch>/home NOOMA_VAULT=` set; never a bare `./nooma`), exactly like
+   `nooma-qa`, including its `ls -d ~/.nooma` check before the first call and at the end; if the
+   real `~/.nooma` appears, stop and report an incident. Never the maintainer's real `~/.nooma`
+   or vault. If a step fails, it is a regression: fix it through the cycle before telling the
    client anything.
 
 ## Hot-Path Escalation

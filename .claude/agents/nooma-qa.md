@@ -32,11 +32,27 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 
 ## Running without a real LLM or network
 
-- Isolate the product, not the toolchain. Bash state does not persist between calls, so set the
-  override inline on every `./nooma` invocation only:
-  `HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT= ./nooma init <scratch>/qa.nooma`.
-  Never export it, and never apply it to `make` or `go` (check-all needs the real module cache
-  and toolchain, and may use the network for them). Never touch the real `~/.nooma`.
+- Isolate the product, not the toolchain. Bash state does not persist between calls, so the
+  isolation lives in a wrapper script, not in your memory of an inline prefix. Before the first
+  product call, write `<scratch>/nooma.sh` and `chmod +x` it:
+
+  ```sh
+  #!/bin/sh
+  export HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT=
+  exec <scratch>/qa-<n>/nooma "$@"
+  ```
+
+  Invoke the product **only** through it (`<scratch>/nooma.sh init <scratch>/qa.nooma`), never as
+  a bare `./nooma`, with no exception for "just `--help`" or `version`. Never export the override
+  in your shell and never apply it to `make` or `go` (check-all needs the real module cache and
+  toolchain, and may use the network for them). The wrapper's `HOME` must be an existing
+  directory under `<scratch>`; create it.
+- Guard the real home. Run `ls -d ~/.nooma` (the real one, in a call without the override)
+  **before the first product call** and **again at the end**, and record both outputs. If
+  `~/.nooma` appears or changes during the run, stop, do not delete or repair it, and report it
+  as an **incident** with the command that was running. Never touch the real `~/.nooma`.
+  (Why: a run once called `./nooma init` without the override and created the maintainer's
+  real `~/.nooma/<user>.nooma`.)
 - The "no network" rule is about the product under test: no real LLM, no Telegram, no outside
   host; fakes on loopback only.
 - Bind only to `127.0.0.1` on a free port. Loopback is allowed; anything else is not.
