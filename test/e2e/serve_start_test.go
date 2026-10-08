@@ -93,11 +93,22 @@ func (e *serveStartError) Error() string {
 	return fmt.Sprintf("serve on port %d: %s\nstderr: %s", e.port, e.reason, e.stderr)
 }
 
-// isBindFailure reports whether serve's stderr says it lost the port. The
-// second phrase is Windows' wording for the same condition.
+// The two renderings of the OS error behind a lost bind. Go prints the
+// syscall's own text after "bind: ", so it differs per platform:
+//   - Unix: EADDRINUSE, "address already in use".
+//   - Windows: WSAEADDRINUSE (10048), "Only one usage of each socket address
+//     (protocol/network address/port) is normally permitted."
+const (
+	bindLostUnix    = "address already in use"
+	bindLostWindows = "Only one usage of each socket address (protocol/network address/port) is normally permitted."
+)
+
+// isBindFailure reports whether serve's stderr says it lost the port, in
+// either platform's wording. It matches on the "bind: " context so the same
+// words elsewhere in stderr do not count.
 func isBindFailure(stderr string) bool {
-	return strings.Contains(stderr, "address already in use") ||
-		strings.Contains(stderr, "Only one usage of each socket address")
+	return strings.Contains(stderr, "bind: "+bindLostUnix) ||
+		strings.Contains(stderr, "bind: "+bindLostWindows)
 }
 
 // launchServe starts `nooma serve` once and returns when it is provably OUR
@@ -195,6 +206,14 @@ func (p *serveProc) settled(client *http.Client, url, vault string) error {
 	case <-time.After(serveOwnershipSettle):
 	}
 	if !holdsVault(vault, p.Process.Pid) {
+		// A child that lost the bind releases the lock as it dies, a moment
+		// before Wait returns and its stderr is complete. Wait for the exit so
+		// the failure carries serve's bind error instead of racing it.
+		select {
+		case <-p.exited:
+			return fmt.Errorf("exited while the port answered (%v)", p.waitErr)
+		case <-time.After(serveOwnershipSettle):
+		}
 		return errors.New("lost the vault lock while the port answered")
 	}
 	resp, err := client.Get(url)

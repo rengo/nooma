@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -75,7 +74,7 @@ func TestLaunchServe_ForeignListenerOnThePort_FailsFastNamingTheBindError(t *tes
 	if !errors.As(err, &se) || !se.bind {
 		t.Fatalf("the failure is not classified as a lost bind:\n%v", err)
 	}
-	if !strings.Contains(err.Error(), "address already in use") {
+	if !isBindFailure(err.Error()) {
 		t.Errorf("the failure does not carry serve's bind error:\n%v", err)
 	}
 	if elapsed > serveReadyBudget/2 {
@@ -136,7 +135,7 @@ func TestLaunchServe_ForeignListenerImpersonatingNooma_IsNotAccepted(t *testing.
 	if !errors.As(err, &se) || !se.bind {
 		t.Fatalf("the failure is not classified as a lost bind:\n%v", err)
 	}
-	if !strings.Contains(err.Error(), "address already in use") {
+	if !isBindFailure(err.Error()) {
 		t.Errorf("the failure does not carry serve's bind error:\n%v", err)
 	}
 }
@@ -172,7 +171,9 @@ func TestIsBindFailure_ClassifiesServeStderr(t *testing.T) {
 		want   bool
 	}{
 		{"linux bind", "listen tcp 127.0.0.1:1: bind: address already in use", true},
-		{"windows bind", "bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.", true},
+		{"windows bind", "nooma: listen tcp 127.0.0.1:52335: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.", true},
+		{"unix phrase outside a bind", "dial tcp 127.0.0.1:1: address already in use", false},
+		{"windows phrase outside a bind", "proxy: Only one usage of each socket address (protocol/network address/port) is normally permitted.", false},
 		{"vault in use", "vault is in use by PID 42", false},
 		{"invalid config", "config: http_port: must be between 1 and 65535", false},
 		{"empty", "", false},
