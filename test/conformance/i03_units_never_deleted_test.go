@@ -114,7 +114,7 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 		}
 	})
 
-	for _, table := range []string{"units", "self_beliefs"} {
+	for _, table := range i03DeleteScannedTables {
 		t.Run("tree scan for DELETE FROM "+table, func(t *testing.T) {
 			repoRoot := repoRootFromCaller(t)
 			report := func(path string, lineNum int, line string) {
@@ -133,6 +133,26 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 				t.Fatal("scanned zero .go files under internal/ and cmd/ — D10's guard: nothing to check yet")
 			}
 		})
+	}
+}
+
+// i03DeleteScannedTables is every table whose removal the tree scan
+// forbids: units (I03 proper) and self_beliefs (m4e: a belief is retired,
+// never removed).
+var i03DeleteScannedTables = []string{"units", "self_beliefs"}
+
+// TestI03_ScansUnitsAndSelfBeliefs keeps the scan from quietly shrinking:
+// dropping a table from i03DeleteScannedTables would leave every other I03
+// test green, because they pass on a tree with no matching statement.
+func TestI03_ScansUnitsAndSelfBeliefs(t *testing.T) {
+	for _, want := range []string{"units", "self_beliefs"} {
+		found := false
+		for _, got := range i03DeleteScannedTables {
+			found = found || got == want
+		}
+		if !found {
+			t.Errorf("i03DeleteScannedTables = %v, missing %q — the tree scan no longer covers it", i03DeleteScannedTables, want)
+		}
 	}
 }
 
@@ -228,18 +248,13 @@ var sweptPortsRepoTypes = []reflect.Type{
 	reflect.TypeOf((*ports.PendingQuestionRepo)(nil)).Elem(),
 }
 
-// containsDeleteStatementFrom reports whether line contains the statement
-// "DELETE FROM <table>" under containsUnitsDeleteStatement's rule.
-func containsDeleteStatementFrom(line, _ string) bool {
-	return containsUnitsDeleteStatement(line)
-}
-
-// containsUnitsDeleteStatement reports whether line contains the exact
-// (case-insensitive) statement "DELETE FROM units", rejecting a match whose
-// next character would extend the identifier — "DELETE FROM units_fts" is a
-// different table's DDL/DML entirely, not a violation of I03.
-func containsUnitsDeleteStatement(line string) bool {
-	const marker = "DELETE FROM UNITS"
+// containsDeleteStatementFrom reports whether line contains the exact
+// (case-insensitive) statement "DELETE FROM <table>", rejecting a match
+// whose next character would extend the identifier — "DELETE FROM units_fts"
+// is a different table's DDL/DML entirely, not a violation of I03, and
+// neither is "DELETE FROM self_beliefs_x".
+func containsDeleteStatementFrom(line, table string) bool {
+	marker := "DELETE FROM " + strings.ToUpper(table)
 
 	upper := strings.ToUpper(line)
 	idx := strings.Index(upper, marker)

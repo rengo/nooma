@@ -81,7 +81,7 @@ var calibrationQuotedPatterns = []*regexp.Regexp{
 // Its match does not by itself rule out "calibration" being the prefix of a
 // longer identifier (e.g. "FROM calibration_history"); isCalibrationIdentBoundary
 // below does that check against the character immediately following the
-// match, mirroring containsUnitsDeleteStatement's own boundary check in
+// match, mirroring containsDeleteStatementFrom's own boundary check in
 // i03_units_never_deleted_test.go.
 var calibrationBarePattern = regexp.MustCompile(`(?i)\b(` + calibrationKeywords + `)\s+calibration`)
 

@@ -1,6 +1,10 @@
 package selfmodel
 
-import "errors"
+import (
+	"errors"
+	"strings"
+	"unicode/utf8"
+)
 
 // MaxBeliefContentRunes bounds the content a form may submit for a belief
 // edit, counted in runes so the same sentence is legal in English and in
@@ -28,12 +32,19 @@ var ErrContentTooLong = errors.New("selfmodel: belief content is too long")
 // never errors, so it is safe to apply to stored text that must not be
 // validated (derived content is unbounded and may look blank).
 func NormalizeText(raw string) string {
-	return raw
+	return strings.TrimSpace(strings.ReplaceAll(raw, "\r\n", "\n"))
 }
 
 // NormalizeContent is NormalizeText followed by rejecting an empty result
 // (ErrEmptyContent) and a result of more than MaxBeliefContentRunes runes
 // (ErrContentTooLong). It runs once, on submitted text.
 func NormalizeContent(raw string) (string, error) {
-	return raw, nil
+	normalized := NormalizeText(raw)
+	if normalized == "" {
+		return "", ErrEmptyContent
+	}
+	if utf8.RuneCountInString(normalized) > MaxBeliefContentRunes {
+		return "", ErrContentTooLong
+	}
+	return normalized, nil
 }

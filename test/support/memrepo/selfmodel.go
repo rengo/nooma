@@ -61,6 +61,11 @@ func (s *SelfModel) UpsertByTopicKey(_ context.Context, b ports.Belief) error {
 	defer s.mu.Unlock()
 
 	if id, ok := s.byTopicKey[b.TopicKey]; ok {
+		// The store guard, mirrored: only an active, derived row is
+		// overwritten.
+		if existing := s.byID[id]; existing.Status != selfmodel.StatusActive || existing.Origin != selfmodel.OriginDerived {
+			return ports.ErrBeliefProtected
+		}
 		b.ID = id
 		s.byID[id] = b
 		return nil
@@ -73,7 +78,8 @@ func (s *SelfModel) UpsertByTopicKey(_ context.Context, b ports.Belief) error {
 // ReinforceByID implements ports.SelfModelRepo. Updates only Confidence
 // and LastReinforcedAt for the belief named by id, leaving every other
 // field unchanged. Returns ports.ErrBeliefNotFound rather than creating a
-// row when id does not exist (spec R2.2).
+// row when id does not exist (spec R2.2), and ports.ErrBeliefStatusConflict
+// for a belief that is not active.
 func (s *SelfModel) ReinforceByID(_ context.Context, id string, confidence float64, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,28 +88,79 @@ func (s *SelfModel) ReinforceByID(_ context.Context, id string, confidence float
 	if !ok {
 		return ports.ErrBeliefNotFound
 	}
+	if existing.Status != selfmodel.StatusActive {
+		return ports.ErrBeliefStatusConflict
+	}
 	existing.Confidence = confidence
 	existing.LastReinforcedAt = at
 	s.byID[id] = existing
 	return nil
 }
 
-// RetiredBeliefs implements ports.SelfModelRepo.
+// RetiredBeliefs implements ports.SelfModelRepo. Returns every belief whose
+// Status is "retired", every facet included.
 func (s *SelfModel) RetiredBeliefs(_ context.Context) ([]ports.Belief, error) {
-	return nil, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []ports.Belief
+	for _, b := range s.byID {
+		if b.Status == selfmodel.StatusRetired {
+			out = append(out, b)
+		}
+	}
+	return out, nil
 }
 
-// BeliefByID implements ports.SelfModelRepo.
-func (s *SelfModel) BeliefByID(_ context.Context, _ string) (ports.Belief, error) {
-	return ports.Belief{}, nil
+// BeliefByID implements ports.SelfModelRepo. Any status.
+func (s *SelfModel) BeliefByID(_ context.Context, id string) (ports.Belief, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.byID[id]
+	if !ok {
+		return ports.Belief{}, ports.ErrBeliefNotFound
+	}
+	return b, nil
 }
 
-// SetStatus implements ports.SelfModelRepo.
-func (s *SelfModel) SetStatus(_ context.Context, _ string, _, _ selfmodel.Status, _ time.Time) error {
+// SetStatus implements ports.SelfModelRepo. from is a precondition: a belief
+// not currently in from is ports.ErrBeliefStatusConflict and nothing is
+// written.
+func (s *SelfModel) SetStatus(_ context.Context, id string, from, to selfmodel.Status, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.byID[id]
+	if !ok {
+		return ports.ErrBeliefNotFound
+	}
+	if existing.Status != from {
+		return ports.ErrBeliefStatusConflict
+	}
+	existing.Status = to
+	existing.UpdatedAt = at
+	s.byID[id] = existing
 	return nil
 }
 
-// EditContent implements ports.SelfModelRepo.
-func (s *SelfModel) EditContent(_ context.Context, _, _, _ string, _ time.Time) error {
+// EditContent implements ports.SelfModelRepo. Only an active belief whose
+// content is still from is written; the write marks it user_stated and
+// moves nothing but content, origin and UpdatedAt.
+func (s *SelfModel) EditContent(_ context.Context, id, from, to string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.byID[id]
+	if !ok {
+		return ports.ErrBeliefNotFound
+	}
+	if existing.Status != selfmodel.StatusActive || existing.Content != from {
+		return ports.ErrBeliefStatusConflict
+	}
+	existing.Content = to
+	existing.Origin = selfmodel.OriginUserStated
+	existing.UpdatedAt = at
+	s.byID[id] = existing
 	return nil
 }
