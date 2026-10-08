@@ -101,23 +101,23 @@ Files: `internal/ports/decisionlog.go`, `internal/store/sqlite/decisionlog.go`,
 `internal/brain/check_test.go:323`, `test/conformance/i27_viewing_is_not_delivering_test.go`,
 `testdata/schema/store_api.golden`.
 
-- [ ] **5.1** SCAFFOLD — `DecisionCursor{OccurredAt, Seq}`, `DecisionRow{Decision; Seq}`, `Before`
+- [x] **5.1** SCAFFOLD — `DecisionCursor{OccurredAt, Seq}`, `DecisionRow{Decision; Seq}`, `Before`
   on the port; sqlite and memrepo return empty; memrepo carries an insertion sequence;
   `recordingLog` (`check_test.go:323`) gains `Before` returning an empty page; i27 header comment
   adds `Before` among the reads.
-- [ ] **5.2** RED L3 probe first — `EXPLAIN QUERY PLAN` uses `idx_decision_log_occurred` with no
+- [x] **5.2** RED L3 probe first — `EXPLAIN QUERY PLAN` uses `idx_decision_log_occurred` with no
   `USE TEMP B-TREE FOR ORDER BY`, unfiltered and cursor forms. If the row-value form fails,
   switch to `occurred_at < ? OR (occurred_at = ? AND rowid < ?)` (same semantics).
-- [ ] **5.3** RED contract (both implementations; FX-A, whole-second builder fails the test on
+- [x] **5.3** RED contract (both implementations; FX-A, whole-second builder fails the test on
   sub-second input; ids chosen so id order differs from write order; tied group straddles the
   page boundary): A1 order, A2 exactly-once walk including a group larger than a page, A3 prefix
   (`capture.checkin.*` absent from `check.`), A5 `limit` 0 empty and 2 over 5, A6 nil vs
   zero-value cursor, A8 `Seq` strictly increasing with write order.
-- [ ] **5.4** GREEN — sqlite `ORDER BY occurred_at DESC, rowid DESC`, keyset
+- [x] **5.4** GREEN — sqlite `ORDER BY occurred_at DESC, rowid DESC`, keyset
   `(occurred_at, rowid) < (?, ?)`, `substr(action, 1, ?) = ?`; memrepo sort by
   `(OccurredAt, Seq)` desc. `make store-api-golden` (G11).
-- [ ] **5.5** DOCS — none (no doc names the read); `scripts/docs-sync.sh` n/a.
-- [ ] **5.6** PROBES A1 ASC / drop rowid / `id DESC`; A2 `<=` and `occurred_at < ?`; A3 ignore /
+- [x] **5.5** DOCS — none (no doc names the read); `scripts/docs-sync.sh` n/a.
+- [x] **5.6** PROBES A1 ASC / drop rowid / `id DESC`; A2 `<=` and `occurred_at < ?`; A3 ignore /
   `LIKE`; A5 `LIMIT -1`; A6 nil as zero cursor; A8 `Seq` 0 or unordered.
 
 ## PR 6 — `feat/ui-activity` (A4, A7, A9-A12, G7, G8, G12)

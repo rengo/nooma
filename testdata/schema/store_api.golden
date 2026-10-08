@@ -3,6 +3,7 @@
 internal/store/sqlite/sqlitetest: func SeedEnergy(t testing.TB, v *sqlite.Vault, id string, at time.Time, energy float64)
 internal/store/sqlite: func (*ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error)
 internal/store/sqlite: func (*ConfigRepo) RecordConsolidationRun(ctx context.Context, at time.Time) error
+internal/store/sqlite: func (*DecisionLog) Before(ctx context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error)
 internal/store/sqlite: func (*DecisionLog) Record(ctx context.Context, d ports.Decision) error
 internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Time, limit int) ([]ports.Decision, error)
 internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error)

@@ -5,6 +5,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,5 +103,55 @@ func TestDecisionLog_ContextExplicitValueRoundTrips(t *testing.T) {
 	if context != string(d.Context) {
 		t.Errorf("context = %q, want %q — Record must not fall back to the column default "+
 			"when the caller supplies a value", context, d.Context)
+	}
+}
+
+// TestDecisionLog_BeforeUsesOccurredIndexWithoutSorting pins design §3.5's
+// claim that Before's order is satisfiable from idx_decision_log_occurred
+// (occurred_at, rowid): no migration, no temp b-tree. The unfiltered and the
+// cursor forms are pinned; the prefix form is a filter on top of the same
+// scan (risk RK-9).
+func TestDecisionLog_BeforeUsesOccurredIndexWithoutSorting(t *testing.T) {
+	cursor := &ports.DecisionCursor{OccurredAt: decisionFixtureTime, Seq: 7}
+	tests := []struct {
+		name   string
+		cursor *ports.DecisionCursor
+		prefix string
+	}{
+		{name: "no cursor", cursor: nil},
+		{name: "cursor", cursor: cursor},
+		{name: "cursor and prefix", cursor: cursor, prefix: "check."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := openTestVault(t)
+			query, args := buildDecisionsBeforeQuery(tt.cursor, tt.prefix, 51)
+
+			rows, err := v.db.QueryContext(context.Background(), `EXPLAIN QUERY PLAN `+query, args...)
+			if err != nil {
+				t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
+			}
+			defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+			var plan string
+			for rows.Next() {
+				var id, parent, notused int
+				var detail string
+				if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+					t.Fatalf("scanning query plan row: %v", err)
+				}
+				plan += detail + "\n"
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatalf("query plan rows: %v", err)
+			}
+			if !strings.Contains(plan, "idx_decision_log_occurred") {
+				t.Errorf("query plan for %q does not mention idx_decision_log_occurred:\n%s", query, plan)
+			}
+			if strings.Contains(plan, "USE TEMP B-TREE FOR ORDER BY") {
+				t.Errorf("query plan for %q uses a temp b-tree for ORDER BY — the index should already "+
+					"provide occurred_at DESC, rowid DESC order:\n%s", query, plan)
+			}
+		})
 	}
 }

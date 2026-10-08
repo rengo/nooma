@@ -3,6 +3,7 @@ package memrepo
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,9 @@ type DecisionLog struct {
 	// instant.
 	order []string
 	byID  map[string]ports.Decision
+	// seq is each row's 1-based insertion sequence, the in-memory twin of
+	// decision_log's rowid: monotone in write order, never reused.
+	seq map[string]int64
 	// failRecord, when non-nil, makes every Record call return it without
 	// touching state — design D5 Layer 3's RED-first audit-failure test
 	// (I23): a correction whose pre-image write fails must leave the target
@@ -35,14 +39,14 @@ var _ ports.DecisionLog = (*DecisionLog)(nil)
 // NewDecisionLog returns an empty, ready-to-use in-memory ports.DecisionLog.
 // Every call returns an independent instance.
 func NewDecisionLog() *DecisionLog {
-	return &DecisionLog{byID: make(map[string]ports.Decision)}
+	return &DecisionLog{byID: make(map[string]ports.Decision), seq: make(map[string]int64)}
 }
 
 // NewFailingDecisionLog returns an in-memory ports.DecisionLog whose Record
 // always fails with err, never persisting anything — design D5 Layer 3's
 // audit-write-failure double.
 func NewFailingDecisionLog(err error) *DecisionLog {
-	return &DecisionLog{byID: make(map[string]ports.Decision), failRecord: err}
+	return &DecisionLog{byID: make(map[string]ports.Decision), seq: make(map[string]int64), failRecord: err}
 }
 
 // Record implements ports.DecisionLog. It returns ports.ErrDecisionExists
@@ -63,6 +67,7 @@ func (r *DecisionLog) Record(_ context.Context, d ports.Decision) error {
 	}
 	r.order = append(r.order, d.ID)
 	r.byID[d.ID] = d
+	r.seq[d.ID] = int64(len(r.order))
 	return nil
 }
 
@@ -90,4 +95,48 @@ func (r *DecisionLog) Since(_ context.Context, t time.Time, limit int) ([]ports.
 		matched = matched[:limit]
 	}
 	return matched, nil
+}
+
+// Before implements ports.DecisionLog over the full-precision in-memory rows:
+// (OccurredAt, Seq) descending, strictly older than the cursor, filtered by
+// action prefix, bounded by limit. Callers use whole-second instants so this
+// agrees with SQLite's one-second storage.
+func (r *DecisionLog) Before(_ context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error) {
+	if limit < 1 {
+		return nil, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var matched []ports.DecisionRow
+	for _, id := range r.order {
+		d := r.byID[id]
+		if !strings.HasPrefix(string(d.Action), actionPrefix) {
+			continue
+		}
+		row := ports.DecisionRow{Decision: d, Seq: r.seq[id]}
+		if before != nil && !olderThan(row, *before) {
+			continue
+		}
+		matched = append(matched, row)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if !matched[i].OccurredAt.Equal(matched[j].OccurredAt) {
+			return matched[i].OccurredAt.After(matched[j].OccurredAt)
+		}
+		return matched[i].Seq > matched[j].Seq
+	})
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+	return matched, nil
+}
+
+// olderThan reports whether row sorts strictly after c in the newest-first
+// order: (OccurredAt, Seq) < (c.OccurredAt, c.Seq).
+func olderThan(row ports.DecisionRow, c ports.DecisionCursor) bool {
+	if !row.OccurredAt.Equal(c.OccurredAt) {
+		return row.OccurredAt.Before(c.OccurredAt)
+	}
+	return row.Seq < c.Seq
 }
