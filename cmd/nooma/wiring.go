@@ -367,6 +367,13 @@ func wireBeliefs(db *sqlite.Vault) *brain.BeliefsService {
 	)
 }
 
+// wireActivity builds a *brain.ActivityService over db's decision_log: the
+// newest-first read behind /ui/activity. It resolves no provider, wireUnits'
+// reason, and is wired unconditionally at vault open.
+func wireActivity(db *sqlite.Vault) *brain.ActivityService {
+	return brain.NewActivityService(sqlite.NewDecisionLog(db))
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {

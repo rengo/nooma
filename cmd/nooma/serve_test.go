@@ -77,7 +77,7 @@ func TestServeUsageShowsNoUIPrecedence(t *testing.T) {
 // wireUnits never actually return nil in production, but this proves the
 // guard holds regardless.
 func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
-	deps := uiDeps(nil, nil, nil, nil, nil, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, nil, nil, ui.Serving{})
 
 	if deps.Today != nil {
 		t.Error("Today: want a nil interface for a nil *brain.TodayService, got non-nil — the typed-nil trap uiDeps exists to avoid")
@@ -102,7 +102,7 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 func TestUIDeps_PassesTheBeliefsServiceThrough(t *testing.T) {
 	svc := brain.NewBeliefsService(nil, nil, nil, nil, nil)
 
-	deps := uiDeps(nil, nil, nil, nil, svc, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, svc, nil, ui.Serving{})
 
 	if deps.Beliefs != ui.Beliefs(svc) {
 		t.Errorf("Beliefs = %v, want the service handed to uiDeps", deps.Beliefs)
