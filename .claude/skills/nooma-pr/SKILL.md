@@ -27,8 +27,10 @@ demands them describes a different repository.
 7. Never invent an issue link or a `type:*` label to satisfy an external convention. Do not create
    labels that do not exist.
 8. A PR touching `internal/core/**` must change `docs/02-cognitive-core.md` in the same PR, or
-   carry the `no-spec-change` label. That label does **not exist yet** — create it before relying
-   on it.
+   carry the `no-spec-change` label. The label **exists** in `rengo/nooma` (verify with
+   `gh label list --repo rengo/nooma`). Its description is "PR touches internal/core/** but
+   changes no cognitive-core behavior (structural/transport-only)", so apply it only when that
+   is true; `scripts/docs-sync.sh` treats it as an explicit, attributable decision to skip doc 02.
 
 ## Decision Gates
 
