@@ -20,6 +20,9 @@ type DecisionLog struct {
 	// instant.
 	order []string
 	byID  map[string]ports.Decision
+	// seq is each row's 1-based insertion sequence, the in-memory twin of
+	// decision_log's rowid: monotone in write order, never reused.
+	seq map[string]int64
 	// failRecord, when non-nil, makes every Record call return it without
 	// touching state — design D5 Layer 3's RED-first audit-failure test
 	// (I23): a correction whose pre-image write fails must leave the target
@@ -35,14 +38,14 @@ var _ ports.DecisionLog = (*DecisionLog)(nil)
 // NewDecisionLog returns an empty, ready-to-use in-memory ports.DecisionLog.
 // Every call returns an independent instance.
 func NewDecisionLog() *DecisionLog {
-	return &DecisionLog{byID: make(map[string]ports.Decision)}
+	return &DecisionLog{byID: make(map[string]ports.Decision), seq: make(map[string]int64)}
 }
 
 // NewFailingDecisionLog returns an in-memory ports.DecisionLog whose Record
 // always fails with err, never persisting anything — design D5 Layer 3's
 // audit-write-failure double.
 func NewFailingDecisionLog(err error) *DecisionLog {
-	return &DecisionLog{byID: make(map[string]ports.Decision), failRecord: err}
+	return &DecisionLog{byID: make(map[string]ports.Decision), seq: make(map[string]int64), failRecord: err}
 }
 
 // Record implements ports.DecisionLog. It returns ports.ErrDecisionExists
@@ -63,6 +66,7 @@ func (r *DecisionLog) Record(_ context.Context, d ports.Decision) error {
 	}
 	r.order = append(r.order, d.ID)
 	r.byID[d.ID] = d
+	r.seq[d.ID] = int64(len(r.order))
 	return nil
 }
 
@@ -90,4 +94,9 @@ func (r *DecisionLog) Since(_ context.Context, t time.Time, limit int) ([]ports.
 		matched = matched[:limit]
 	}
 	return matched, nil
+}
+
+// Before implements ports.DecisionLog. Scaffold: returns an empty page.
+func (r *DecisionLog) Before(context.Context, *ports.DecisionCursor, string, int) ([]ports.DecisionRow, error) {
+	return nil, nil
 }

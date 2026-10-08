@@ -358,6 +358,10 @@ func (l *recordingLog) Since(context.Context, time.Time, int) ([]ports.Decision,
 	return nil, nil
 }
 
+func (l *recordingLog) Before(context.Context, *ports.DecisionCursor, string, int) ([]ports.DecisionRow, error) {
+	return nil, nil
+}
+
 func (l *recordingLog) count(action ports.DecisionAction) int {
 	n := 0
 	for _, a := range l.actions {

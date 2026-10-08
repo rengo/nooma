@@ -107,3 +107,16 @@ LIMIT ?`
 	}
 	return out, nil
 }
+
+// buildDecisionsBeforeQuery assembles Before's SELECT and its arguments. It
+// is a function of its own so the L3 plan test explains the exact SQL
+// production sends, not a hand-copied literal (the unitrepo precedent).
+// Scaffold: a naive query with no keyset and no ordering guarantee.
+func buildDecisionsBeforeQuery(_ *ports.DecisionCursor, _ string, limit int) (string, []any) {
+	return `SELECT id, action, rationale, context, occurred_at, rowid FROM decision_log ORDER BY id LIMIT ?`, []any{limit}
+}
+
+// Before implements ports.DecisionLog. Scaffold: returns an empty page.
+func (r *DecisionLog) Before(context.Context, *ports.DecisionCursor, string, int) ([]ports.DecisionRow, error) {
+	return nil, nil
+}

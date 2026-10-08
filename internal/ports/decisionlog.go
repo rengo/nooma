@@ -286,6 +286,37 @@ type DecisionLog interface {
 	// (docs/02-cognitive-core.md §11: "Pull: everything is recorded and
 	// explorable in the activity UI").
 	Since(ctx context.Context, t time.Time, limit int) ([]Decision, error)
+
+	// Before returns up to limit decisions strictly older than before,
+	// ordered (occurred_at DESC, insertion sequence DESC); a nil before
+	// starts at the newest. actionPrefix "" matches every row; otherwise
+	// only rows whose action begins with it. limit < 1 returns an empty page
+	// without reading.
+	//
+	// The tie-break is the row's insertion sequence, not its id: occurred_at
+	// has one-second resolution and a consolidation pass stamps every effect
+	// with one instant, while ids are random UUIDs, so an id tie-break would
+	// show a pass in arbitrary order. Rows sharing an instant therefore come
+	// back in reverse write order, and a cursor built from a returned row
+	// (its OccurredAt and Seq) neither skips nor repeats a row, including
+	// across a tie group larger than a page. Since is untouched: it stays
+	// forward-only, ordered by id.
+	Before(ctx context.Context, before *DecisionCursor, actionPrefix string, limit int) ([]DecisionRow, error)
+}
+
+// DecisionCursor is the position DecisionLog.Before reads strictly older
+// than: a row's own OccurredAt and Seq.
+type DecisionCursor struct {
+	OccurredAt time.Time
+	Seq        int64
+}
+
+// DecisionRow is a Decision together with its insertion sequence, so a
+// reader can build the next DecisionCursor from a row it already holds.
+// Seq is strictly increasing with write order within one DecisionLog.
+type DecisionRow struct {
+	Decision
+	Seq int64
 }
 
 // ErrDecisionExists is returned by Record when a decision with the given
