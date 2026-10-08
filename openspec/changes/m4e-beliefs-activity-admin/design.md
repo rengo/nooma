@@ -1,8 +1,8 @@
-# Design — m4e: beliefs and activity
+# Design — m4e: beliefs
 
 Technical design for `m4e-beliefs-activity-admin`, the fifth of six slices sharing
-[`m4-mirror-ui/proposal.md`](../m4-mirror-ui/proposal.md). Requirements are `spec.md` (R1-R6, R9,
-R11-R13, owner rulings 2026-10-07). This document decides HOW and closes OQ4 and OQ8. Shape
+[`m4-mirror-ui/proposal.md`](../m4-mirror-ui/proposal.md). Requirements are `spec.md` (R1-R4, R9,
+R11-R13, owner rulings 2026-10-07). This document decides HOW and closes OQ8 (OQ4 moved to `m4e-activity`). Shape
 follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/design.md) and
 [`m4b` design](../archive/2026-09-29-m4b-units-capture/design.md).
 
@@ -12,12 +12,14 @@ follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/d
 > the umbrella rule (proposal.md ~:301, more than seven PRs or more than 2,400 budgeted lines)
 > fires on measurement. **Admin is now [`m4e2-admin`](../m4e2-admin/design.md)**: §3.7, §3.8, the
 > admin rows of §3.9, gate G5 and G4, the admin mutants (C-series), the admin PRs and their
-> findings moved there. The directory name is kept because other artifacts reference it; **the
-> scope is beliefs + activity**. **Depends on nothing from m4e2.** m4e2 depends on this slice for
-> `DecisionLog.Before`, the action-vocabulary file, the change decoder (§3.6), the cross-origin
-> body table (§3.12 G6), `brain.ErrWriteLanded` / `*WriteLandedError` (PR 3), the I22 whitelist
-> test (G12) and the `ui.Deps` / `uiDeps` / `wiring.go` pattern with the layout nav, matching
-> `../m4e2-admin/design.md` lines 18-28.
+> findings moved there. The directory name is kept because other artifacts reference it; the
+> scope was beliefs + activity and **is now beliefs only** (see the next note). **Depends on
+> nothing from m4e2.** m4e2 depends on this slice for `brain.ErrWriteLanded` /
+> `*WriteLandedError` (PR 3), the cross-origin body table (§3.12 G6), the I22 whitelist test (G12)
+> and the `ui.Deps` / `uiDeps` / `wiring.go` pattern with the layout nav (PR 4), and the
+> action-vocabulary file; it depends on [`m4e-activity`](../m4e-activity/design.md) for
+> `DecisionLog.Before`, the change decoder (§3.6 there) and the `config.updated`-shaped fixture
+> (A11), matching `../m4e2-admin/design.md`'s header.
 >
 > **Planning-PR task list (recorded here, not done by this document; the umbrella is not edited
 > now).** Every spot of `m4-mirror-ui/proposal.md` that still puts admin inside m4e, found by
@@ -40,6 +42,20 @@ follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/d
 > 10. risk row R10 (~:505): "m4e #3" becomes PR 5 of this design;
 > 11. Q4 and Q5 rows (~:483-484) marked Ruled, 2026-10-07.
 
+> **Split again on 2026-10-08 (the owner's 7-PR rule, after PR 2 measured 2.06x).** The
+> pre-agreed rule (this document's own §7, "the next remedy"): if growth forces cuts and the PR
+> count passes seven, split beliefs (PRs 1-4) from activity (PRs 5-6) into two changes. PR 1
+> measured 1.2x (318 changed lines against ~265) and PR 2 measured 2.06x (557 against ~270); PR 2
+> was cut into 2a (#291, the pure shield) and 2b (#292, the derive wiring, `size:exception`). At
+> 2.06x, PRs 3, 4 and 6 are ~536, ~567 and ~597 and would each need a cut. **Activity is now
+> [`m4e-activity`](../m4e-activity/design.md)**: §3.5, §3.6, the activity row of §3.9, the
+> activity rows of §3.11 and §3.12 (G7, G8, G11, G12), FX-A, the A-series mutants, the old PRs 5-6,
+> RK-7's decoder half, RK-8, RK-9 and the activity items of §10 **moved there with their text**.
+> Each place leaves a one-line pointer, and **section, finding, gate, mutant, risk and PR numbers
+> are kept** (3.5 and 3.6 exist here only as pointers; PR 5 and PR 6 belong to `m4e-activity`).
+> **This design's scope is beliefs only**: PRs 1, 2 (as 2a and 2b), 3 and 4. The measurements and
+> the PR 2 cut are in [`tasks.md`](tasks.md)'s forecast section.
+
 > **Findings this design made that the spec did not anticipate**, named up front:
 > 1. **Today's create path would revive a retired belief AND overwrite an edited one.**
 >    `UpsertByTopicKey` sets `status = excluded.status` and `origin = excluded.origin` on conflict
@@ -57,9 +73,8 @@ follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/d
 > 4. **One `Now()` per file in `internal/brain`** (`brain_single_clock_read_test.go:23-29`). Edit
 >    and retire cannot share one file with one clock read each. Each operation gets its own file
 >    (§3.4).
-> 5. **The doc 02 sentence R11 names is at `:663-664`, not `:647-648`.** Lines 647-648 are the
->    pre-image's JSON shape. "Recording is not undoing … no surface offers it back until the UI
->    exists" sits at `docs/02-cognitive-core.md:663-664` at `dc22762`.
+> 5. *Moved to [`m4e-activity`](../m4e-activity/design.md) (finding 5 there; the number is kept
+>    so a citation stays valid).*
 > 6. **Migration 0001 has no `self_beliefs.status` vocabulary comment** (`0001:81`), and a
 >    published migration is never modified. The Go↔text vocabulary pin
 >    (`unit_status_ddl_test.go`'s precedent) reads doc 03 instead. Doc 03's DDL comparator strips
@@ -71,12 +86,8 @@ follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/d
 >    target is not `Capture`, and it sends `text=hello` to every row, so a belief edit (which
 >    reads `content`) would fail on a parse error and prove nothing about the guard. It needs a
 >    counting stub per mutating entrance **and a per-row valid body table** (§3.12, G6).
-> 8. **`decision_log` order inside one second is random under the first design's tie-break.**
->    `occurred_at` is RFC3339 text, one-second resolution (`unitTimeLayout = time.RFC3339`,
->    `unitrepo.go:45`; written with `.UTC().Format`, `decisionlog.go:45`, `:51`), and ids are random UUID
->    v4. A nightly pass stamps every effect with one instant (`pass.now`), so `ORDER BY
->    occurred_at DESC, id DESC` would show a pass in arbitrary order. The tie-break is the row's
->    insertion sequence (§3.5).
+> 8. *Moved to [`m4e-activity`](../m4e-activity/design.md) (finding 8 there; the number is kept
+>    so a citation stays valid).*
 > 9. **`MergeProposals` fails the whole call on a non-finite vector on the existing side**
 >    (`internal/core/consolidation/derive.go:91-110`, `:140`), and it returns only the single nearest
 >    neighbour, so it cannot express a tie between an active and a retired neighbour. Both shape
@@ -97,14 +108,10 @@ follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/d
 | Classify receives `nil` beliefs; nothing reads `self_beliefs` for injection | `internal/brain/capture.go:209` |
 | Derive embeds every active belief per pass **even when there are no proposals**, runs `MergeProposals` (nearest at cosine ≥ `BeliefMergeCosine` 0.85), and routes `MergeInto == ""` to create and otherwise to reinforce. An embed failure of any belief or proposal aborts the phase. **Pinned by `TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief` (`consolidate_test.go:1824-1871`) and `embedForMerge`'s comment (`:839-852`)** | `consolidate.go:618-678`, `:853-876`; `internal/core/consolidation/derive.go:21`, `:140-193` |
 | `MergeProposals` returns the single nearest neighbour per proposal (`scored[0]`); a non-finite existing vector returns an error | `derive.go:91-110`, `:140-193` |
-| `decision_log` is a **rowid table**: `id TEXT PRIMARY KEY` with no `WITHOUT ROWID`, indexed only by `idx_decision_log_occurred(occurred_at)`, so every index entry carries the rowid as its trailing column | `0001_core_tables.sql:95-102` (`rg 'WITHOUT ROWID'` over all migrations: no match) |
-| `occurred_at` is stored `time.RFC3339` (seconds), UTC. Nothing in non-test code runs `VACUUM` (`rg -i vacuum`, docs and openspec excluded: no match) | `unitrepo.go:45`; `decisionlog.go:45`, `:51` |
-| `DecisionLog` has `Record` and `Since` (ascending, `occurred_at > t`, tie-break on id) | `internal/ports/decisionlog.go:238-261`; `internal/store/sqlite/decisionlog.go:71-109` |
-| `memrepo.DecisionLog` keeps full-precision `time.Time` and sorts `Since` by `(OccurredAt, ID)`; SQLite truncates to the second | `test/support/memrepo/decisionlog.go:17-20`, `:72-95` |
+| `decision_log`'s layout and `occurred_at` resolution, `DecisionLog`'s `Record` and `Since`, `memrepo.DecisionLog`'s ordering | Moved to [`m4e-activity` design §1](../m4e-activity/design.md) |
 | The vocabulary is forty-eight members, hand-mirrored in `repocontract` (count in a doc comment and in a subtest title) | `decisionlog.go:169-204`; `test/support/repocontract/decisionlog.go:133` |
 | Consolidation writes no run-level `decision_log` row: every `consolidate.*` action is a per-effect row | `internal/ports/decisionlog.go:109-149`; `consolidate.go:1107` writes only `config` |
 | `BrowsePageSize = 50` is a **transport constant**, explicitly not a §13 row | `internal/ports/unitrepo.go:254-257` |
-| Keyset paging precedent: `(created_at, id) < (?, ?)`, `DESC, DESC`, `LIMIT n+1` | `internal/store/sqlite/unitrepo.go:550-571` |
 | UI leaves are listed twice: `newUIMux` registrations and `Handler.ServeHTTP`'s `r.Pattern` switch, pinned by `wantUIMuxWiring` and `TestUIGuardedLeavesEachReachAView` | `internal/httpapi/server.go:150-173`; `internal/ui/ui.go:94-111`; `test/conformance/httpapi_ui_wiring_test.go:158-174` |
 | The I22 reflection gate whitelists exactly `{Today, Browse, Detail, ForText, Capture}` as methods any `ui.Deps` interface field may expose | `test/conformance/ui_entrances_test.go:32` |
 | `uiDeps` takes `(today, units, recall, capture, serving)` and exists to keep typed-nil services out of interfaces; `wireUnits`/`wireToday` are the constructor precedent, `wiring_units_test.go` the test precedent | `cmd/nooma/serve.go:285-300`; `cmd/nooma/wiring.go:310-352`; `cmd/nooma/wiring_units_test.go:14` |
@@ -113,8 +120,8 @@ follows the archived [`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/d
 | `internal/brain` has no logger; `internal/ui` uses `log/slog` | `rg 'log/slog'`: `internal/ui/{ui,units,capture}.go` only |
 
 **New calibratable constants: none** (§3.4 rules the content bound an input bound, not a §13
-row). **New migration: none.** **New ADR: none.** Doc 02 gains text in §5 step 4, §6 item 5, §10
-and §11 (§3.11).
+row). **New migration: none.** **New ADR: none.** Doc 02 gains text in §6 item 5, §10 and §11
+(§3.11); §5 step 4 is `m4e-activity`'s.
 
 ---
 
@@ -130,9 +137,8 @@ belief by key, or a retired belief is at least as near as any active one at the 
 reinforce (nearest active, or the key of a user-stated belief), or create. Retired beliefs are
 embedded each night alongside active ones, but only when a proposal still needs a semantic
 comparison, and a retired belief that fails to embed degrades to key-only matching with a logged
-row, never to a failed pass and never to re-derivability (OQ8). Activity reads a new newest-first
-keyset read, `DecisionLog.Before`, ordered by `(occurred_at, insertion sequence)`, at a 50-row
-transport page with an action-family filter (OQ4). Admin is `m4e2-admin`.
+row, never to a failed pass and never to re-derivability (OQ8). Activity is `m4e-activity`
+(the newest-first `DecisionLog.Before` read and the view). Admin is `m4e2-admin`.
 
 ---
 
@@ -453,74 +459,11 @@ discipline.
 
 ### 3.5 OQ4 — the newest-first read and its page
 
-```go
-type DecisionCursor struct { OccurredAt time.Time; Seq int64 }
-type DecisionRow struct { Decision; Seq int64 } // Seq: the row's insertion sequence (rowid)
-
-// Before returns up to limit decisions strictly older than before, ordered
-// (occurred_at DESC, insertion sequence DESC); nil before starts at the newest.
-// actionPrefix "" matches every row; otherwise only rows whose action begins
-// with it. limit < 1 returns an empty page without reading.
-Before(ctx context.Context, before *DecisionCursor, actionPrefix string, limit int) ([]DecisionRow, error)
-```
-
-**Ordering, decided (finding 8).** `ORDER BY occurred_at DESC, rowid DESC`, cursor
-`(occurred_at, rowid) < (?, ?)`. `decision_log` is a rowid table (§1), `rowid` is monotone in
-insertion order (new rowids are max+1 and nothing deletes from the log, I12), and a pass writes
-its rows sequentially at one instant, so the tie group comes back in **reverse write order**,
-which is the order a reader of "newest first" expects. `Decision` and `Since` are untouched:
-`DecisionRow` embeds `Decision` and adds `Seq`, so the cursor is built from a row the reader
-already holds. `rowid` is also the trailing column of `idx_decision_log_occurred`, so the order
-is satisfiable from that index (probe below).
-
-| Option for the tie-break | Verdict |
-|---|---|
-| **`rowid` (insertion sequence)** — chosen | Deterministic, meaningful (write order), index-trailing, no migration |
-| `id DESC` | Rejected. UUID v4: the order inside a pass would be arbitrary and unrelated to what happened first |
-| Add a `seq`/microsecond column | Rejected. A migration for a property `rowid` already has |
-| Client-side reverse of `Since` | Rejected by umbrella R10 |
-
-*Honest limit:* for a table without an `INTEGER PRIMARY KEY`, SQLite may renumber `rowid`s on
-`VACUUM`. Nothing in the code runs `VACUUM` (§1), a cursor lives only in one reader's URL, and the
-worst case is one skipped or repeated row across a page boundary during a manual `VACUUM`. Recorded
-as risk RK-8.
-
-The SQL follows m4b's keyset shape: `WHERE (occurred_at, rowid) < (?, ?)` (only with a cursor)
-`AND substr(action, 1, ?) = ?` (only with a prefix), `ORDER BY occurred_at DESC, rowid DESC LIMIT
-?`. The prefix uses `substr`, not `LIKE`, so `_` in the vocabulary is never a wildcard. `Since` is
-untouched (R5, umbrella R10). An `EXPLAIN QUERY PLAN` test pins the use of
-`idx_decision_log_occurred` and the absence of `USE TEMP B-TREE FOR ORDER BY` for the unfiltered
-and cursor forms (the m4b precedent), so **no migration** is needed. Written first as a probe: if
-SQLite will not order from the index with `rowid` in a row-value comparison, the fallback is the
-expanded predicate `occurred_at < ? OR (occurred_at = ? AND rowid < ?)`, same semantics.
-
-**Whole-second fixtures.** SQLite stores seconds; `memrepo` keeps nanoseconds. Every FX-A
-fixture time is a whole second, and the fixture builder fails the test on a sub-second input, so
-the two implementations cannot diverge on a boundary. `memrepo` is not changed to truncate
-(other tests rely on its full precision). The brain builds the next cursor from the last *shown*
-row's own `OccurredAt` and `Seq`, so a cursor round-trips within one implementation.
-
-| OQ4 question | Decision | Grounding |
-|---|---|---|
-| Page size | `brain.ActivityPageSize = 50`, a **transport constant, not a §13 row** | `ports.BrowsePageSize = 50`'s ruling (`unitrepo.go:254-256`): it shapes a page and decides nothing doc 02 governs. Same number, same reasoning, same classification. No §13 row is invented |
-| "Older" link | Brain asks for `ActivityPageSize+1` rows. The extra row only signals that more exist. The next cursor is the **last shown** row | m4b's `LIMIT n+1` |
-| Filter by family | `?kind=<family>`, where families = the first dot-segment of `ports.AllDecisionActions()`, derived in brain by `ActivityFamilies(actions)` (today: `capture`, `check`, `relation`, `correction`, `consolidate`; `belief` after PR 3; `config` after `m4e2-admin`). An unknown kind → 400 with no read | Derived from the vocabulary, so a new family needs no edit. The function takes the action list as a parameter so a test can feed it a synthetic family |
-| Filter by date | **None** | The cursor already reaches any date. No requirement asks for a jump |
+**Moved to [`m4e-activity` design §3.5](../m4e-activity/design.md).**
 
 ### 3.6 Activity rendering (R6)
 
-`brain.ActivityService.Page(ctx, kind, before) (ActivityPage, error)` returns rows plus a decoded
-`Change` for any row whose context is a JSON object carrying `previous` and `next` objects. That
-covers `correction.applied`, `belief.edited` and `config.updated` (m4e2's row, shaped
-`{fields:[col], previous:{col:v}, next:{col:v}}` like `belief.edited`; this decoder must already
-accept it, which is the cross-slice dependency in the header). Decoding is **shape-driven, not
-action-driven**: a new change-shaped action needs no edit here. Rendering iterates `fields` when it
-is a string array whose members key both objects, otherwise the sorted union of keys, as
-`column: previous → next`. A value renders by JSON kind: a string as text, a number without a
-trailing `.0` (`21`, not `21.0`; `0.05` stays), a bool as `true`/`false`, `null` as "(none)".
-Malformed JSON or a missing key yields `Change == nil` and the row renders its rationale only;
-the page never fails (R6). The view contains **no `method="post"` and no `hx-post`** anywhere
-(G8). The only form is the GET filter. `applyWithPreImage` and its I23 gate are not touched.
+**Moved to [`m4e-activity` design §3.6](../m4e-activity/design.md).**
 
 ### 3.7 Admin writes, 3.8 admin read
 
@@ -533,22 +476,20 @@ the page never fails (R6). The view contains **no `method="post"` and no `hx-pos
 | `GET /ui/beliefs` | yes | `ByFacet` | 503 nil dep; 500 |
 | `POST /ui/beliefs/{id}/edit` | yes | `Edit(id, content)` | 400 empty/too long; 404 not found; 409 conflict (incl. retired); success on `ErrWriteLanded` with the notice for the missing part (§3.4 table) |
 | `POST /ui/beliefs/{id}/retire` | yes | `Retire(id)` | 404; 409; success on `ErrWriteLanded` with the notice for the missing part |
-| `GET /ui/activity` | yes | `Page(kind, before)` | 400 bad kind / half or malformed cursor (`before_at` + `before_seq`, m4b's `parseBrowseCursor` shape) |
 
-(`/ui/admin` routes: `m4e2-admin`.) Every POST answers with an HTMX fragment on `HX-Request` and
+(`/ui/activity`: `m4e-activity`; `/ui/admin` routes: `m4e2-admin`.) Every POST answers with an HTMX fragment on `HX-Request` and
 the full page otherwise (m4b's split). Bodies are bounded by `MaxBytesReader` at the existing
-64 KiB. `ui.Deps` gains `Beliefs` and `Activity`, each a narrow interface (m4a §3.1). The layout
-nav gains one link per PR (beliefs in PR 4, activity in PR 6).
+64 KiB. `ui.Deps` gains `Beliefs`, a narrow interface (m4a §3.1). The layout nav gains the
+beliefs link in PR 4 (`m4e-activity` adds the activity link in its own PR 6).
 
 **Wiring (`cmd/nooma`).** `wiring.go` gains `wireBeliefs(db) *brain.BeliefsService`
-(`systemClock{}`, `uuidGen{}`, `sqlite.NewSelfModelRepo`, `NewSignalRepo`, `NewDecisionLog`) and
-`wireActivity(db) *brain.ActivityService` (`NewDecisionLog`), both provider-free and wired
-unconditionally at vault open, `wireUnits`'s precedent. `uiDeps` gains `beliefs *brain.BeliefsService`
-and `activity *brain.ActivityService` parameters with the same typed-nil guard, and its one call
-site in `serve.go` passes them. Each constructor has a test over a real empty migrated vault
+(`systemClock{}`, `uuidGen{}`, `sqlite.NewSelfModelRepo`, `NewSignalRepo`, `NewDecisionLog`),
+provider-free and wired unconditionally at vault open, `wireUnits`'s precedent. `uiDeps` gains a
+`beliefs *brain.BeliefsService` parameter with the same typed-nil guard, and its one call site in
+`serve.go` passes it. The constructor has a test over a real empty migrated vault
 (`wiring_units_test.go`'s precedent), and `TestUIDeps_NilServicesStayNilInterfaces`
-(`serve_test.go`) gains a case per new dependency. `wireBeliefs` and the first `uiDeps` change land
-in PR 4; `wireActivity` and the second change in PR 6.
+(`serve_test.go`) gains a case for it. `wireBeliefs` and the first `uiDeps` change land in PR 4;
+the activity wiring and the second signature change are `m4e-activity`'s PR 6.
 
 ### 3.10 Vocabulary edits
 
@@ -569,8 +510,8 @@ Neither is derived from the list. `m4e2-admin` adds `config.updated` (fifty-thre
 | doc 02 §10 (`:1217-1228`) | `status` vocabulary; "deleting a belief **retires** it (`active → retired`), never removes a row; a retired belief is excluded from every read of active beliefs, which today means derive's dedup and stagnation, and will mean classify injection when that exists (`capture.go:209` passes no beliefs yet)"; "an edit changes `content` only and marks `origin = user_stated`". **No sentence claims injection exists today** | 1 |
 | doc 02 §6 item 5 (`:953-972`) | a third dedup rule: the retired shield (key, then the nearest at 0.85, a tie going to retired); "derive may reinforce a user-stated belief, never rewrite its text"; the cost note amended: embedding happens "when a proposal still needs a semantic comparison" (replacing "at the start of the phase"), and covers "every **retired** belief, which grows only by explicit user action"; the retired-embed-failure policy in one sentence (embed error, non-finite, zero and wrong-dimension vectors all drop the retired belief for the pass); and one clause: "a proposal whose vector is unusable is created, or reinforces a user-stated key, without a semantic comparison, and its rationale says so". **The same PR rewrites the test that pins the old sentence** (`consolidate_test.go:1824-1871`, §3.3 step 4) | 2 |
 | doc 02 §11 (`:1237-1240`) | "A user's write through the mirror (a belief edit or retirement) is recorded too, with the value it replaced." §11 today speaks of automatic decisions only. (`m4e2-admin` adds the config clause.) | 3 |
-| doc 02 §5 step 4 (`:663-664`) | "Recording is not undoing. `/ui/activity` shows the previous value beside the new one, read-only; no surface offers it back." | 6 |
-| `docs/06-harness.md` §4 | I03 row names `self_beliefs`; I12 row names the new actions and two signals; the I22 row names the whitelist additions (§3.12 G12) | 1, 2, 3, 4, 6 |
+| doc 02 §5 step 4 (`:663-664`) | Moved to [`m4e-activity` design §3.11](../m4e-activity/design.md) | its PR 6 |
+| `docs/06-harness.md` §4 | I03 row names `self_beliefs`; I12 row names the new actions and two signals; the I22 row names the whitelist additions (§3.12 G12) | 1, 2, 3, 4 (the I23 and `Page` rows: `m4e-activity`) |
 | umbrella `proposal.md:483-484` | Q4 and Q5 → **Ruled 2026-10-07**; slicing, §5.1 rows/totals and dependency rows for the m4e/m4e2 split (planning-PR task) | planning PR |
 
 `docs-sync.sh`: PR 1 (`core/selfmodel`) and PR 2 (`core/consolidation`) each carry their doc 02
@@ -583,13 +524,13 @@ text in the same PR.
 | G1 | A retired belief is unreachable by derive; edited text is never overwritten | Store guards (§3.2) proven by `repocontract` on **both** implementations: upsert over a retired key and over a user-stated key → `ErrBeliefProtected`, row byte-identical; reinforce of a retired id → conflict, confidence unchanged | removing either `WHERE` clause; `changes()==0` mapped to nil | upsert over an active derived row |
 | G2 | Nothing deletes a belief (R4, I03) | `TestI03_UnitsAreNeverDeleted`'s tree scan **strengthened** with a `DELETE FROM self_beliefs` marker (same identifier-tail rule). `SelfModelRepo` is already in the reflection sweep | a probe file emitting `DELETE FROM self_beliefs` | `self_beliefs_x` |
 | G3 | Status vocabulary has one truth | `TestBeliefStatusDocMatchesAllStatuses`: doc 03's `self_beliefs.status` comment ↔ `selfmodel.AllStatuses()`, in order | a member added on one side | the pair |
-| G6 | Every new mutating route is guarded and cross-origin protected (R9), **proven with a valid body** | New rows in `wantUIMuxWiring`; `TestUINonGETLeavesRefuseCrossOrigin`'s `build()` gives **every** mutating entrance (`Capture`, `Beliefs`; `Admin` in m4e2) a counting stub on one shared counter (finding 7). **A body table** `uiCrossOriginBodies map[string]string` (pattern → a form body that passes that handler's parsing, e.g. `"POST /ui/beliefs/{id}/edit": "content=new+text"`, `"POST /ui/beliefs/{id}/retire": ""`), used by all three subtests in place of the fixed `text=hello`, and **also carrying the two existing POST rows** (`POST /ui/capture` and `POST /ui/units/{id}/correct`, both `text=hello`, the body the fixed subtests send today); **`TestUICrossOriginBodiesCoverEveryPOSTRow` fails for a non-GET row with no entry, and for an entry with no row**. **One explicit exemption, with its reason:** `POST /ui/login` is listed in `uiCrossOriginBodyExempt = map[string]string{"POST /ui/login": "unguarded by design: it mints the cookie, so the same-origin-with-cookie subtest cannot apply; the row keeps a fixed placeholder body for the two refusal subtests, and only the same-origin subtest is skipped (wantUIMuxWiring has it as guarded:false, httpapi_ui_wiring_test.go:166; the existing subtest skips it at ui_cross_origin_test.go:112)"}`. The coverage test treats a row as covered by exactly one of the body table or the exemption map, and fails for an exemption with an empty reason, an exemption with no row, and a pattern in both. Without it the new test would fail on the login row it was never meant to cover. The `{id}` replacement already covers `/ui/beliefs/{id}/…`. `TestUIGuardedLeavesEachReachAView` (`internal/httpapi/server_test.go:117`, a hard-coded leaf list over a stub `ui.Deps`) gains the `/ui/beliefs` leaf and a `BELIEFS` marker in PR 4, and the `/ui/activity` leaf and an `ACTIVITY` marker in PR 6 | a POST row unguarded; a POST left out of the wiring table; a POST row with neither a body entry nor an exemption; an exemption with an empty reason (U4b); a body that fails the handler's parse (the stub reads 0 calls); a new entrance not counted | the wiring in §3.9 |
-| G7 | GET views write nothing (R1) | `TestUIReadViewsWriteNothing` (conformance, I27's shape): the two GETs over write-counting decorators of every repo the services hold → zero calls to any write method (`m4e2-admin` adds the admin GET) | a GET that records, signals or seeds | — |
-| G8 | Pre-images are never offered back (R6) | `TestActivityView_HasNoMutatingForm`: rendered page contains no `method="post"` (case-insensitive) and no `hx-post` | a "restore" button | the GET filter form |
+| G6 | Every new mutating route is guarded and cross-origin protected (R9), **proven with a valid body** | New rows in `wantUIMuxWiring`; `TestUINonGETLeavesRefuseCrossOrigin`'s `build()` gives **every** mutating entrance (`Capture`, `Beliefs`; `Admin` in m4e2) a counting stub on one shared counter (finding 7). **A body table** `uiCrossOriginBodies map[string]string` (pattern → a form body that passes that handler's parsing, e.g. `"POST /ui/beliefs/{id}/edit": "content=new+text"`, `"POST /ui/beliefs/{id}/retire": ""`), used by all three subtests in place of the fixed `text=hello`, and **also carrying the two existing POST rows** (`POST /ui/capture` and `POST /ui/units/{id}/correct`, both `text=hello`, the body the fixed subtests send today); **`TestUICrossOriginBodiesCoverEveryPOSTRow` fails for a non-GET row with no entry, and for an entry with no row**. **One explicit exemption, with its reason:** `POST /ui/login` is listed in `uiCrossOriginBodyExempt = map[string]string{"POST /ui/login": "unguarded by design: it mints the cookie, so the same-origin-with-cookie subtest cannot apply; the row keeps a fixed placeholder body for the two refusal subtests, and only the same-origin subtest is skipped (wantUIMuxWiring has it as guarded:false, httpapi_ui_wiring_test.go:166; the existing subtest skips it at ui_cross_origin_test.go:112)"}`. The coverage test treats a row as covered by exactly one of the body table or the exemption map, and fails for an exemption with an empty reason, an exemption with no row, and a pattern in both. Without it the new test would fail on the login row it was never meant to cover. The `{id}` replacement already covers `/ui/beliefs/{id}/…`. `TestUIGuardedLeavesEachReachAView` (`internal/httpapi/server_test.go:117`, a hard-coded leaf list over a stub `ui.Deps`) gains the `/ui/beliefs` leaf and a `BELIEFS` marker in PR 4 (`m4e-activity` adds the `/ui/activity` leaf and an `ACTIVITY` marker in its PR 6; activity has no POST, so it adds no body-table entry) | a POST row unguarded; a POST left out of the wiring table; a POST row with neither a body entry nor an exemption; an exemption with an empty reason (U4b); a body that fails the handler's parse (the stub reads 0 calls); a new entrance not counted | the wiring in §3.9 |
+| G7 | GET views write nothing (R1) | `TestUIReadViewsWriteNothing` (conformance, I27's shape): the beliefs GET over write-counting decorators of every repo the service holds → zero calls to any write method (`m4e-activity` adds the activity GET and `m4e2-admin` the admin GET) | a GET that records, signals or seeds | — |
+| G8 | | Moved to `m4e-activity` (design §3.12 G8; the number is kept) | | |
 | G9 | I23 stays untouched | Naming: `EditContent`, never `UpdateContent` (finding 3). The existing gate is the check | — | — |
 | G10 | One instant per operation | The existing `brain_single_clock_read` gate, satisfied by one file per operation (finding 4) | two `Now()`s in `belief_edit.go` | — |
-| G11 | Store surface widening is reviewed | `testdata/schema/store_api.golden` regenerated in PRs 1 and 5 (`make store-api-golden`) | an unreviewed method | — |
-| G12 | The I22 entrance whitelist names exactly what each slice adds | `ui_entrances_test.go:32`'s `allowedMethods` (a flat name set over every interface field of `ui.Deps`) is edited **per PR, by exact name**: PR 4 adds `ByFacet`, `Edit`, `Retire` (the `Beliefs` interface); PR 6 adds `Page` (the `Activity` interface); `m4e2-admin` adds `View`, `Update` (the `Admin` interface). Decision: keep the flat set (the gate's declared semantics, no scope creep); the tighter per-field map is a possible later hardening, not this change's | a `ui.Deps` interface exposing any method not on the list (the existing test fires; each PR's RED commit shows it red before the whitelist edit) | the five existing names |
+| G11 | Store surface widening is reviewed | `testdata/schema/store_api.golden` regenerated in PR 1 (`make store-api-golden`); `m4e-activity` regenerates it in its PR 5 | an unreviewed method | — |
+| G12 | The I22 entrance whitelist names exactly what each slice adds | `ui_entrances_test.go:32`'s `allowedMethods` (a flat name set over every interface field of `ui.Deps`) is edited **per PR, by exact name**: PR 4 adds `ByFacet`, `Edit`, `Retire` (the `Beliefs` interface); `m4e-activity`'s PR 6 adds `Page` (the `Activity` interface); `m4e2-admin` adds `View`, `Update` (the `Admin` interface). Decision: keep the flat set (the gate's declared semantics, no scope creep); the tighter per-field map is a possible later hardening, not this change's | a `ui.Deps` interface exposing any method not on the list (the existing test fires; each PR's RED commit shows it red before the whitelist edit) | the five existing names |
 
 Each GREEN commit body records its probe (mutation applied, red output, reverted), following
 m4b and m4c.
@@ -611,7 +552,7 @@ nightly derive ─▶ ActiveBeliefs + RetiredBeliefs ─▶ BuildDerivePrompt(ac
 
 POST /ui/beliefs/{id}/edit ─▶ xo ─▶ requireCookie ─▶ Edit: normalise ─▶ read ─▶ no-op? ─▶ log(pre-image) ─▶ EditContent(CAS, origin:=user_stated) ─▶ signal
 POST /ui/beliefs/{id}/retire ─▶ … ─▶ Retire: read ─▶ SetStatus(active→retired) ─▶ log ─▶ signal   (follow-up failure: ErrWriteLanded)
-GET /ui/activity?kind&before_at&before_seq ─▶ Page ─▶ DecisionLog.Before(cursor, prefix, 51) ─▶ 50 rows + older?
+(`GET /ui/activity`: see `m4e-activity` design §4.)
 ```
 
 ## 5. File changes
@@ -631,13 +572,11 @@ GET /ui/activity?kind&before_at&before_seq ─▶ Page ─▶ DecisionLog.Before
 | `internal/ports/decisionlog.go` + repocontract map | +2 actions (PR 2), +2 (PR 3) (§3.10) | 2, 3 |
 | `internal/brain/beliefs.go`, `belief_edit.go`, `belief_retire.go`, `write_landed.go` (+tests) | Create | 3 |
 | `internal/ui/beliefs.go`, `beliefs.templ`, `ui.go`, `layout.templ`; `internal/httpapi/server.go`; `cmd/nooma/serve.go`, `cmd/nooma/wiring.go` (`wireBeliefs`), `cmd/nooma/wiring_beliefs_test.go`, `serve_test.go` | routes, view, deps, wiring, `uiDeps` signature | 4 |
-| `internal/ports/decisionlog.go`, `internal/store/sqlite/decisionlog.go`, memrepo, repocontract | `DecisionCursor`, `DecisionRow`, `Before` | 5 |
-| `internal/brain/check_test.go:323` (`recordingLog`) | **Ripple:** a hand-written `ports.DecisionLog` double with `Record` and `Since` (`:357`) only; it stops compiling when the port gains `Before`. Add a `Before` that returns an empty page (its tests never page). The other `ports.DecisionLog` users (`i27DecisionLog`, the `memrepo` embeds) promote the new read and need no edit; `test/conformance/i27_viewing_is_not_delivering_test.go`'s header comment ("DecisionLog: Record writes; Since reads") gains `Before` among the reads | 5 |
-| `internal/brain/activity.go`; `internal/ui/activity.go`, `activity.templ`, `ui.go`, `layout.templ`; `cmd/nooma/wiring.go` (`wireActivity`), `wiring_activity_test.go`, `serve.go`, `serve_test.go` | page service + view + wiring + `uiDeps` | 6 |
-| `internal/httpapi/server_test.go:117` (`TestUIGuardedLeavesEachReachAView`) | PR 4: `/ui/beliefs` leaf, `BELIEFS` marker, stub `Beliefs`; PR 6: `/ui/activity` leaf, `ACTIVITY` marker, stub `Activity` | 4, 6 |
-| `test/conformance/ui_entrances_test.go` | whitelist additions (G12) | 4, 6 |
-| `test/conformance/httpapi_ui_wiring_test.go`, `ui_cross_origin_test.go`, `ui_read_views_write_nothing_test.go` | G6 (body table), G7 | 4, 6 |
-| docs | §3.11 | 1, 2, 3, 4, 6 |
+| `DecisionLog.Before` and its port/store/memrepo/repocontract changes, the `recordingLog` ripple, `ActivityService`, `/ui/activity` and `wireActivity` | Moved to [`m4e-activity` design §5](../m4e-activity/design.md) | 5, 6 there |
+| `internal/httpapi/server_test.go:117` (`TestUIGuardedLeavesEachReachAView`) | PR 4: `/ui/beliefs` leaf, `BELIEFS` marker, stub `Beliefs` (activity's leaf is `m4e-activity`'s PR 6) | 4 |
+| `test/conformance/ui_entrances_test.go` | whitelist additions (G12) | 4 |
+| `test/conformance/httpapi_ui_wiring_test.go`, `ui_cross_origin_test.go`, `ui_read_views_write_nothing_test.go` | G6 (body table), G7 | 4 |
+| docs | §3.11 | 1, 2, 3, 4 |
 
 ## 6. Testing strategy and mutation targets
 
@@ -689,14 +628,7 @@ is created. The
 fake embedder counts calls: the expected count is asserted for every scenario below, and p1 sits
 before pending proposals so the remap from compact to original index is exercised.
 
-**FX-A, activity.** At L3/contract: five rows, **three sharing one `occurred_at`**, written in a
-known order with **ids chosen so that id order differs from write order**, the tied group
-**straddling a page boundary**, page size 2; whole-second times only (the builder fails the test
-on a sub-second input). A `capture.checkin.*` row beside a `check.*` row for the prefix test. At
-brain level: **a pass-sized tie group** (`2 × ActivityPageSize + 10` rows at one instant, ids in
-descending write order) walked page by page: every row exactly once, in reverse write order; and
-exactly `ActivityPageSize` rows (no "older" link) and `ActivityPageSize+1` (link present, the
-51st row absent from page one).
+**FX-A, activity.** Moved to [`m4e-activity` design §6](../m4e-activity/design.md).
 
 **FX-N, content.** Bound-exact (`MaxBeliefContentRunes` ASCII runes), bound+1, a multibyte string
 of `MaxBeliefContentRunes` runes (> that many bytes), `"  a\r\nb  "`, whitespace only, empty. For
@@ -782,27 +714,15 @@ space, and one whose stored content is whitespace only.
 | U3 | 4 | retire route → `Retire` | → `Edit` | G6 markers and per-route stub counters |
 | U4 | 4 | each POST route has a body-table entry | a route with none | `TestUICrossOriginBodiesCoverEveryPOSTRow` (and a stale entry) |
 | U4b | 4 | `POST /ui/login` is covered by the explicit exemption map, with a non-empty reason; no pattern is in both maps | drop the exemption (the test fails on the login row); an empty reason; login also given a body entry | the same test, three probe rows |
-| A1 | 5 | `ORDER BY occurred_at DESC, rowid DESC` | ASC; drop the rowid tie-break; `id DESC` | FX-A (ids chosen so id order ≠ write order) |
-| A2 | 5 | `(occurred_at,rowid) < (?,?)` | `occurred_at < ?` (skips the tie); `<=` (repeats) | FX-A exactly-once walk, tied group straddling the boundary |
-| A3 | 5 | `substr` prefix | ignore; `LIKE 'check%'` | FX-A `capture.checkin` row absent from `check.` |
-| A4 | 6 | brain asks `size+1`; cursor = last *shown* row | ask `size`; cursor = extra row | FX-A brain cases |
-| A5 | 5 | `limit < 1` → empty page, no read | pass `LIMIT -1` (SQLite: no limit) | contract: limit 0 → empty; limit 2 over 5 rows → the 2 newest |
-| A6 | 5 | `nil` cursor starts at the newest | treat nil as a zero cursor (returns nothing) | contract: nil returns the newest rows; a zero-value non-nil cursor returns none |
-| A7 | 6 | `Before`, not reversed `Since` | `Since` reversed | brain test with > page rows: page one holds the **newest** |
-| A8 | 5 | `Seq` populated from rowid and equal to write order in both implementations | `Seq` 0; memrepo unordered | contract `Seq` strictly increasing with write order |
-| A9 | 6 | unknown `kind` → 400, no read | read all | ui test with a counting reader |
-| A10 | 6 | `Change` decoded by key; malformed → rationale only | show `next` only; 500 on bad JSON | `TestActivityView_CorrectionShowsPreviousAndNext`, `…MalformedContextStillRenders` |
-| A11 | 6 | **`config.updated`-shaped row decodes** (`{fields:["goal_stagnation_days"], previous:{…:21}, next:{…:28}}`; a bool and a float case) | decoder keyed to `correction.applied`'s action; numbers rendered `21.0` | `TestActivityView_ConfigUpdatedShapeRenders`: `goal_stagnation_days: 21 → 28`, `consolidation_enabled: true → false`, `weight_threshold: 0.5 → 0.6`, no trailing `.0` |
-| A12 | 6 | kind families derived from the vocabulary | hard-coded list | `TestActivityFamilies_DerivedFromVocabulary`: a synthetic action list with family `zzz` accepts `?kind=zzz`; the real list yields exactly the first segments; the order is stable |
+| A1-A12 | | **Moved to `m4e-activity` design §6** (numbers kept) | | |
 
-Equivalent mutants named so nobody spends time on them: `SetStatus`'s disambiguating SELECT run
+Equivalent mutant named so nobody spends time on it: `SetStatus`'s disambiguating SELECT run
 **after** a zero-row UPDATE instead of before it (same observable result, one fewer read on the
-happy path); `substr(action,1,?)` vs
-`substr(action,1,length(?))` (same for ASCII vocabulary).
+happy path). (The `substr` one moved with A3 to `m4e-activity`.)
 
 Order per PR, as in m4c: a scaffold commit (signatures with zero-value bodies, compiles), a RED
 commit (tests failing on assertions, never on `undefined`), then GREEN. Umbrella §5.2 row 9 (I03
-beliefs, I12) lands in PR 3. Row 10 (I23 read-only) lands in PR 6.
+beliefs, I12) lands in PR 3. Row 10 (I23 read-only) is `m4e-activity`'s PR 6.
 
 ## 7. The PR chain (stacked-to-main) and the split forecast
 
@@ -821,18 +741,20 @@ a 4.3x outlier is recorded in the umbrella and not modelled here).
 | 2 | `feat/brain-derive-shield` | §3.3, `RouteProposals`/`RetiredKeyHits`, conditional embed, `usableVector` screen and failure policy, actions +2, doc 02 §6 item 5 | ~270 | ~351 | ~486 | ~594 |
 | 3 | `feat/brain-belief-edit-retire` | §3.4, `WriteLandedError`/`ErrWriteLanded`, `ByFacet` order, actions +2, doc 02 §11 | ~260 | ~338 | ~468 | ~572 |
 | 4 | `feat/ui-beliefs` | `/ui/beliefs` and two POSTs, G6 body table + rows + login exemption, G12 (`ByFacet`, `Edit`, `Retire`), `wireBeliefs`, `uiDeps`, nav | ~275 | ~358 | ~495 | ~605 |
-| 5 | `feat/ports-store-decisionlog-before` | `DecisionCursor`, `DecisionRow`, `Before` (port, sqlite, golden): the umbrella's "newest-first read" row | ~130 | ~169 | ~234 | ~286 |
-| 6 | `feat/ui-activity` | `ActivityService` + `/ui/activity` + G8 + G12 (`Page`) + `wireActivity` + doc 02 `:663-664`: the umbrella's "glass box" row | ~290 | ~377 | ~522 | ~638 |
-| | **Total (6 PRs)** | | **~1,490** | **~1,940** | **~2,680** | **~3,280** |
+| 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | **Moved to [`m4e-activity`](../m4e-activity/design.md)** (design §7 there) | ~420 | ~546 | ~756 | ~924 |
+| | **Total (4 PRs; 5 after PR 2's cut)** | | **~1,070** | **~1,390** | **~1,930** | **~2,350** |
 
-**The 400-line soft ceiling.** At 1.3x every PR is under 400 (largest: PR 6 at ~377). At 1.8x
-every PR except PR 5 is over it, and at 2.2x all but PR 5 are well over. So the ceiling holds only
+Arithmetic: 265 + 270 + 260 + 275 = 1,070. x 1.3: 345 + 351 + 338 + 358 = 1,392. x 1.8: 477 + 486
++ 468 + 495 = 1,926. x 2.2: 583 + 594 + 572 + 605 = 2,354. With the moved pointer row (420, 546,
+756, 924) the six-PR totals are the old ones: 1,490, 1,938, 2,682, 3,278.
+
+**The 400-line soft ceiling.** At 1.3x every PR is under 400 (largest: PR 4 at ~358). At 1.8x
+every PR is over it, and at 2.2x all are well over. So the ceiling holds only
 at the lowest multiplier. **Cut rule for `sdd-tasks` (measured, not a mood):** after PR 1 merges,
 compute actual-over-estimate for it; if `estimate x measured multiplier > 400` for any later PR,
 cut that PR at its nearest layer seam (port/store | brain | ui) before `sdd-apply`, and re-run the
-umbrella rule on the new PR count. Named candidates if the cut fires: PR 2 into "pure `shield.go`
-+ its doc 02 text" and "`consolidate.go` wiring"; PR 6 into "`ActivityService`" and "view +
-wiring".
+umbrella rule on the new PR count. Named candidates if the cut fires (PR 2's was exercised: #291 and #292): PR 2 into "pure `shield.go`
++ its doc 02 text" and "`consolidate.go` wiring". PR 6's candidate moved with PR 6 to `m4e-activity`.
 
 PR 2 precedes the UI so that, at every tip, no belief can be retired or edited before the night
 knows how to skip it. At PR 1's tip a `ErrBeliefProtected` from derive would abort the pass, but
@@ -844,7 +766,8 @@ is about *implementation* PRs, and the umbrella's own §5.1 table lists only imp
 branches (its thirty-one PRs exclude every `plan/` branch). PR 0 carries no code and no budgeted
 lines. Counting it would make every slice one PR heavier by construction.
 
-**Forecast, recomputed on 2026-10-08 (round 2), shown at 1.3x, 1.8x and 2.2x:**
+**Forecast, recomputed on 2026-10-08 (round 2), shown at 1.3x, 1.8x and 2.2x** (historical,
+before the activity split: the current figures are the next table and `tasks.md`):
 
 | Scope | PRs | Point | x 1.3 | x 1.8 | x 2.2 | Rule (> 7 PRs or > 2,400 lines) at point (sensitivity: 1.3x / 1.8x / 2.2x) |
 |---|---|---|---|---|---|---|
@@ -860,6 +783,23 @@ and the PR count exceeds seven, the next remedy is splitting beliefs (PRs 1-4) f
 split further now (the cut rule above reacts to the first measurement), but it is why the
 re-measurement point is PR 1, not PR 4. (The "old shape" row counts m4e2's three PRs, so it is 9,
 not the 8 of the first split; with the original two m4e2 PRs it is 8 and ~2,095 points.)
+
+**Forecast after the activity split (2026-10-08, owner ruling), with the measured multiplier.**
+The umbrella rule reads point lines; the other columns are sensitivity. 2.06x is what PR 2
+measured (557 changed lines against ~270).
+
+| Scope | PRs | Point | x 1.3 | x 1.8 | x 2.06 | Rule (> 7 PRs or > 2,400 lines) at point |
+|---|---|---|---|---|---|---|
+| **m4e (beliefs), this change** | **4 forecast; 5 after PR 2's cut** (7 if PRs 3 and 4 are also cut at 2.06x) | **~1,070** | **~1,390** | **~1,930** | **~2,200** | does not fire |
+| `m4e-activity` | 2 (3 if PR 6 is cut) | ~420 | ~546 | ~756 | ~865 | does not fire |
+| `m4e2-admin` | 3 | ~605 | ~790 | ~1,090 | ~1,250 | does not fire |
+| m4e as it stood (beliefs + activity, before the split) | 7 after PR 2's cut; 10 once PRs 3, 4 and 6 are cut at 2.06x | ~1,490 | ~1,940 | ~2,680 | ~3,070 | would fire on the PR-count clause (10 > 7) once the predicted cuts are counted |
+
+Arithmetic: 1,070 x 2.06 = 2,204; 420 x 2.06 = 865; 605 x 2.06 = 1,246; 1,490 x 2.06 = 3,069.
+PR 3 at 2.06x is 260 x 2.06 = ~536 and PR 4 is 275 x 2.06 = ~567, both over 400, so their
+pre-defined seams (`ByFacet` + `Edit` | `Retire` + `write_landed.go`; GET view + wiring | the
+two POSTs + G6 body table) stay available: 5 + 2 = 7 PRs for this change at most, which does not
+pass seven.
 
 **Reconciling the earlier "~1,890" figure.** The previous text said the old design was "7 PRs and
 ~1,890 lines: ~1,460 here plus ~430 admin" and also that the findings had added code, which cannot
@@ -885,12 +825,11 @@ PR 2.
 | RK-4 | One skip row per night per re-proposed retired belief | Requested by R12. Filterable under `consolidate` in activity |
 | RK-5 | A retired belief that fails to embed degrades to key-only matching for that night, so a semantically similar proposal under a new key is created | Decided policy (§3.3), logged as `retired_embed_failed`, ends when the provider recovers; aborting would fail derive nightly with no UI recovery |
 | RK-6 | Typing `Belief.Status`/`Origin` ripples into fixtures that hold typed string variables | Compile errors only, caught by `make check` and `go vet -tags integration,e2e` |
-| RK-7 | The cross-slice contract with `m4e2-admin` (decoder accepts `config.updated`'s shape; vocabulary file; body table) | A11 pins the decoder in m4e; m4e2 adds the integration test that the row it writes decodes; the dependency list is in both headers |
-| RK-8 | `rowid` of `decision_log` is not stable across `VACUUM` | Nothing runs `VACUUM` (verified); a manual one can skip or repeat one row at a page boundary of a held cursor; no migration is justified for that |
-| RK-9 | **INFO.** The family filter `substr(action, 1, ?) = ?` is not index-assisted, so a rare family scans `decision_log` backwards from the cursor until the page fills | Acceptable at current volume (a personal vault, one table); the unfiltered and cursor forms are index-ordered and pinned by `EXPLAIN QUERY PLAN`. Revisit if a filtered page is ever measured slow |
+| RK-7 | The cross-slice contract with `m4e2-admin` (vocabulary file; body table; `ErrWriteLanded`; the decoder half moved to `m4e-activity`, its RK-7) | m4e2 adds the integration test that the row it writes decodes (its C15) through `m4e-activity`'s service; the dependency list is in the headers of all three changes |
+| RK-8, RK-9 | Moved to [`m4e-activity` design §8](../m4e-activity/design.md) (numbers kept) | |
 | RK-10 | The `usableVector` screen turns a **zero or wrong-dimension proposed vector** from a phase abort (verified: `MergeProposals` continues only on `ErrNonFiniteVector`, `derive.go:163`) into a create | Deliberate and logged in the row's rationale (§3.3); D19d pins it. It only ever runs on pending proposals, never on active beliefs, whose corruption keeps aborting. **Proposal-side residue (cf. RK-5):** a proposal with an unusable vector, under a new key, near a retired belief is **created**, because it has no semantic match, just as RK-5's retired side has none. A zero vector degrades while an embed error aborts: an unusable vector is a property of one input the provider returned successfully, deterministic per input, so aborting would fail derive every night with no UI recovery (RK-5's argument); an embed **error** is a provider fault that affects the pass as a whole and clears on retry, and aborting loses nothing. The doc 02 §6 item 5 amendment (PR 2) gains the clause "a proposal whose vector is unusable is created, or reinforces a user-stated key, without a semantic comparison, and its rationale says so" |
 
-No open question blocks `sdd-tasks`. OQ4 and OQ8 are closed above. OQ7 is closed by the split.
+No open question blocks `sdd-tasks`. OQ8 is closed above (OQ4 is closed in `m4e-activity`). OQ7 is closed by the admin split.
 OR-1 and OR-2 are for the owner, not blockers.
 
 ---
@@ -965,6 +904,9 @@ in-place wording changes in the planning PR. Numbers are the round-3 correction 
     edited-key rule under §3.3's original numbering; it is rule 3 once item 9 reorders. The
     `ErrBeliefProtected` effect of the store guard is the second, not the primary, reason.
 
-Tasks-phase notes (not round-3 corrections): mutants A4 and A7 (§6) are tagged PR 5 but their
-production branch is `ActivityService` (`internal/brain/activity.go`), which is PR 6; `tasks.md`
-places them in PR 6.
+Addendum (2026-10-08, activity split): items 1 and 11 each have a PR 6 half, and items 3 and 6
+mention PR 5 or PR 6; those PRs are now `m4e-activity`'s. The activity halves of items 1 and 11
+and the tasks-phase note on mutants A4 and A7 are repeated in
+[`m4e-activity` design §10](../m4e-activity/design.md). Item 3's remedy (split beliefs from
+activity) is the one carried out; the text above is left as the record of what was decided
+then.

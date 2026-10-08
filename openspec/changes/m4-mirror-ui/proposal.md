@@ -108,7 +108,7 @@ user action has an effect, `internal/brain` performs it and logs it. M4 *emits* 
    Belief edit/"delete" (m4e). User-initiated timer cancel from UI and chat (m4f).
 4. **`internal/ports`** — new **methods on existing ports**, never a new port unless a slice's design
    proves one necessary: a live-by-type unit read (m4a), a browse read (m4b), a neighbourhood read
-   (m4d), a newest-first `decision_log` read (m4e) and a config write (m4e2), a pending-timer read (m4f).
+   (m4d), a newest-first `decision_log` read (m4e-activity) and a config write (m4e2), a pending-timer read (m4f).
    Each widens `testdata/schema/store_api.golden`; **no migration**.
 5. **`internal/core`** — the graph neighbourhood bound and its §13 render-budget row (m4d). Nothing
    else: every other number the UI shows is already a §13 row.
@@ -171,7 +171,7 @@ adds an incumbent to the brain's focus service, and the restart cost doc 02 alre
 | I22 | Capture's recall entrance and `/recall` are one mechanism | §5 | **In scope, m4b.** `/ui/units` search calls `brain.RecallService`, not `LexicalSearch` directly — a third entrance would be the exact drift I22 forbids |
 | I10 | Rejecting a relation emits `relation_reject` **before** deleting | §4, §9 | In scope, m4d — the UI's split is the second rejection surface after m3e's |
 | I03 | Nothing deleted; archiving is a transition | §1 | In scope with the I10 exception m3d already scoped to `units`. **m4e's belief "delete" is a status transition** (§4.2) |
-| I23 | A correction's pre-image is recorded before the edit | §5 step 4 | In scope, read-only: m4e's activity view renders `context.previous`. Existing `go/ast` test untouched |
+| I23 | A correction's pre-image is recorded before the edit | §5 step 4 | In scope, read-only: m4e-activity's activity view renders `context.previous`. Existing `go/ast` test untouched |
 | I12 | Every automatic decision with an effect logs | §11 | In scope. UI actions are user-initiated, not automatic; the brain effects they cause (cancel, split, belief change) log as effects. A read-only view writes nothing |
 | I04 | A timer is never a unit | §8 | In scope, m4f: timers are listed from `timers`, never through `/ui/units` |
 | I09 | The `[persist, surface)` band is stored **and** asked | §4 | In scope: m4a shows the pending question read-only; m4f answers it from the UI through m3e's store |
@@ -232,7 +232,7 @@ doc amendment in the PR that implements it.
 | **"Pending digest"** on Today | Doc 01 line 119. Doc 02 §7 defines the digest as a *delivery* | What the UI shows, and the rule: **viewing is not delivering.** The view lists `Undelivered` items and the unasked/open question, and touches neither `surfaced_at` nor `asked_at`; the morning delivery is unchanged | m4a |
 | **The focus without an incumbent** | §3 lines 330-335 describe it as the post-restart state | m4a makes it steady state for one slice (§3.3); the amendment says so in one sentence and m4c removes it | m4a, m4c |
 | **What a belief "delete" is** | §10: "deleting a belief emits `belief_delete`"; non-negotiable #6: nothing is deleted; `self_beliefs.status` has no vocabulary | A status transition and its name, plus a `SelfModelRepo` method with a `from` precondition (`UnitRepo.SetStatus`'s shape); `ActiveBeliefs` keeps excluding it | m4e |
-| **Newest-first activity** | §11: "everything is recorded and explorable in the activity UI"; `Since` reads forward | A `Before(t, limit)` read, or `Since` with a descending flag; and the pre-image rendering (§5 step 4 lines 663-664 rewritten) | m4e |
+| **Newest-first activity** | §11: "everything is recorded and explorable in the activity UI"; `Since` reads forward | A `Before(t, limit)` read, or `Since` with a descending flag; and the pre-image rendering (§5 step 4 lines 663-664 rewritten) | m4e-activity |
 | **The render budget's value** | ADR-0019: exists, is server-side, is calibratable; value undecided | The number, measured on a real vault, as a §13 row | m4d |
 | **A chat message that cancels a timer** | §8: "cancellable from chat"; classify's outcome vocabulary has no cancel | How the intent is recognised and which timer it names — the same *which one* problem m3e solved for relations with a store rather than a model | m4f |
 
@@ -250,17 +250,19 @@ two focuses agree with each other: `effective_weight` is computed on read (**I05
 
 ## 5. The chain
 
-Seven phase changes (six until the 2026-10-08 split of `m4e2-admin`), sharing this
+Eight phase changes (six until the 2026-10-08 split of `m4e2-admin`, seven until the same
+day's split of `m4e-activity`), sharing this
 proposal. `m4a` and `m4b` are fixed by ruling. The rest is argued:
 
 ```
 m4a-ui-foundation ──> m4b-units-capture ──> m4c-focus-hysteresis ──┬──> m4d-graph (ADR-0019 gate)
-                                                                   └──> m4e-beliefs-activity-admin ──┬──> m4e2-admin
+                                                                   └──> m4e-beliefs-activity-admin ──┬──> m4e-activity ──> m4e2-admin
                                                                                                      └──> m4f-timer-chat
 ```
 
 **`m4d` and `m4e` are independent** — `m4d` touches `core`, `RelationRepo` and the island; `m4e`
-touches `SelfModelRepo` and `DecisionLog` (`ConfigRepo` moved to `m4e2-admin`) — and `m4d` has an external gate `m4e` does
+touches `SelfModelRepo` and records to `DecisionLog` (the newest-first read moved to `m4e-activity`,
+`ConfigRepo` to `m4e2-admin`) — and `m4d` has an external gate `m4e` does
 not: **ADR-0019 is `Proposed`.** It cannot start until the ADR is `Accepted` (or superseded), and
 the hand audit ADR-0008 requires of the vendored bundle has been recorded — ADR-0019's own spike
 says its primitive scan "is a precondition for that audit, not a substitute". The recommendation
@@ -290,15 +292,25 @@ vendored (a `size:exception` by construction: one 435 KB file), the island and i
 gates, edge confirm and split. Owns I10 (second surface), I03's scope discipline. Depends on
 m4b (entered from `/ui/units`) and on ADR-0019 being `Accepted`.
 
-**`m4e-beliefs-activity-admin`** — `/ui/beliefs` with edit and the §4.2 "delete"; `/ui/activity`
-newest-first with pre-images. `/ui/admin` left this change on 2026-10-08 (see `m4e2-admin`); the
-directory name is kept because other artifacts reference it. Owns I23 (read-only), I03 (beliefs),
-I12 across the new effects. Depends on m4a only.
+**`m4e-beliefs-activity-admin`** — `/ui/beliefs` with edit and the §4.2 "delete", and the derive
+shield (a retired belief is never re-derived, an edited one never overwritten). `/ui/admin` left
+this change on 2026-10-08 (see `m4e2-admin`), and `/ui/activity` left it the same day (see
+`m4e-activity`); **its scope is beliefs only**, and the directory name is kept because other
+artifacts reference it. Owns I03 (beliefs), I12 across the new effects. Depends on m4a only.
+
+**`m4e-activity`** — the newest-first `DecisionLog.Before` read (keyset by `(occurred_at,
+insertion sequence)`) and `/ui/activity` with a correction's pre-image rendered read-only, by
+shape. Split from `m4e` on 2026-10-08; its old PR numbers (5 and 6) are kept. Owns I23
+(read-only). Depends on `m4e`: the action-vocabulary file as PR 3 leaves it, and the `ui.Deps` /
+`uiDeps` pattern, the layout nav and the I22 whitelist from PR 4 (it starts after m4e's PR 4). It
+does **not** use `ErrWriteLanded` or the cross-origin body table: the view is read-only and has no
+POST.
 
 **`m4e2-admin`** — `/ui/admin` with the writable set Q5 rules (the five hand-set fields), the
 learned `relation_thresholds` shown read-only, job status and `consolidation_enabled`. Depends on
-`m4e` (`DecisionLog.Before`, the action-vocabulary file, the change decoder, the cross-origin body
-table, `ErrWriteLanded`, the I22 whitelist and the `ui.Deps` wiring pattern).
+`m4e-activity` (`DecisionLog.Before`, the shape-driven change decoder and the `config.updated`
+fixture) and on `m4e` (the action-vocabulary file, the cross-origin body table, `ErrWriteLanded`,
+the I22 whitelist and the `ui.Deps` wiring pattern); it starts after `m4e-activity`'s PR 6.
 
 **`m4f-timer-chat`** — a pending-timer read, the timers view with cancel, the chat cancel path
 (§4.2), answering a pending question from the UI, and the doc 05 / `CLAUDE.md` sentences closed.
@@ -309,6 +321,15 @@ off as `m4e2-admin`.** Named now so the split is a measurement, not a mood. **Ex
 2026-10-08:** the combined slice forecast at nine PRs (~2,095 budgeted lines at point), over the
 seven-PR clause, so the split happened: `m4e` is six PRs (~1,490) and `m4e2-admin` three
 (~605), and neither fires the rule at point.
+
+**Exercised a second time the same day, on measurement (the owner's pre-agreed rule: if `m4e`
+passes seven PRs, split beliefs from activity).** `m4e` PR 1 measured 1.2x its forecast and PR 2
+measured 2.06x (557 changed lines against ~270), so PR 2 was cut into 2a (#291, the pure shield)
+and 2b (#292, the derive wiring, `size:exception`). After the cut the slice was seven PRs (1, 2a,
+2b, 3, 4, 5, 6), and at 2.06x PRs 3, 4 and 6 (260, 275 and 290 x 2.06 = ~536, ~567, ~597) would
+each need a cut: ten PRs. **Beliefs split from activity**: `m4e` is PRs 1, 2a, 2b, 3 and 4 (five
+PRs, ~1,070 budgeted lines at point) and `m4e-activity` is PRs 5 and 6 (two PRs, ~420). 1,070 +
+420 = 1,490, the figure before the split. Neither fires the rule at point.
 
 Chain strategy `stacked-to-main`, delivery `auto-chain` — M1's, M2's and M3's own.
 
@@ -341,10 +362,11 @@ predictions low six times in M0 (1.3x–2.2x) and once at 4.3x in M1 Phase B.
 | | `feat/ui-graph-view` | the view and the island JS under its line budget | ~400 |
 | | `feat/brain-edge-curation` | confirm → `relation_confirm`; split → `relation_reject` then `Delete` (**I10**) | ~350 |
 | **m4e** | `feat/ports-store-belief-status` | the `status`/`origin` vocabulary, belief reads and guarded writes | ~265 |
-| | `feat/brain-derive-shield` | the retired-belief shield in nightly derive | ~270 |
+| | `feat/brain-derive-shield` | the retired-belief shield in nightly derive: 2a, the pure shield (#291) | ~270 (2a + 2b; measured 557, 2.06x) |
+| | `feat/brain-derive-retired-wiring` | 2b: the shield wired into derive, with doc 02 §6 item 5 (#292, `size:exception`) | (in the ~270 above) |
 | | `feat/brain-belief-edit-retire` | §4.2's "delete" as a transition; both signals | ~260 |
 | | `feat/ui-beliefs` | beliefs by facet, edit and retire | ~275 |
-| | `feat/ports-store-decisionlog-before` | the newest-first read | ~130 |
+| **m4e-activity** | `feat/ports-store-decisionlog-before` | the newest-first read | ~130 |
 | | `feat/ui-activity` | the glass box, pre-images rendered; doc 02 lines 663-664 corrected | ~290 |
 | **m4e2** | `feat/config-setters-learned-thresholds` | Q5's writable set, one method per field (`m2c`'s discipline), plus the learned-threshold read (1a) | ~140 |
 | | `feat/brain-admin-service` | `AdminService`, the only caller of the setters (1b) | ~190 |
@@ -354,7 +376,19 @@ predictions low six times in M0 (1.3x–2.2x) and once at 4.3x in M1 Phase B.
 | | `feat/ui-timers-questions` | the timers view; answering a pending question | ~350 |
 | | `feat/brain-chat-timer-cancel` | §4.2's chat path; doc 05 and `CLAUDE.md` sentences closed | ~400 |
 
-Thirty-four PRs, ~9,250 budgeted lines (m4e and m4e2 per `m4e-beliefs-activity-admin` and `m4e2-admin` design §7). Read against the measured multipliers, realistically
+Thirty-five PRs, ~9,250 budgeted lines (m4e, m4e-activity and m4e2 per the three designs' §7).
+The arithmetic: the table has 34 rows (m4a 7, m4b 6, m4c 2, m4d 5, m4e 5, m4e-activity 2, m4e2 3,
+m4f 4: 7 + 6 + 2 + 5 + 5 + 2 + 3 + 4 = 34) and m4c's incumbent PR "may cut a 1b", one more:
+**35 PRs** (34 before this split: the PR 2 cut added the one row; the split itself adds none).
+The rows sum to 9,105 lines (m4a 200 + 350 + 150 + 400 + 250 + 350 + 300 = 2,000; m4b 350 + 300 +
+200 + 350 + 250 + 350 = 1,800; m4c 330 + 130 = 460; m4d 350 + 250 + 150 + 400 + 350 = 1,500; m4e
+265 + 270 + 260 + 275 = 1,070; m4e-activity 130 + 290 = 420; m4e2 140 + 190 + 275 = 605; m4f 200 +
+300 + 350 + 400 = 1,250; total 9,105). The earlier figure, ~9,250, carried ~140 more than its
+rows: the pre-split total was 8,900 against rows summing to 8,760. The text never said what the
+140 is; it is consistent with the one possible m4c 1b cut, which would also explain the PR beyond
+the row count. **9,105 + 140 = 9,245, kept as ~9,250.** The split moves 420 lines from `m4e` to
+`m4e-activity` (1,070 + 420 = 1,490) and the PR 2 cut keeps its one ~270 forecast, so the lines
+total does not change. Read against the measured multipliers, realistically
 **11,500–19,000 lines across 40–55 PRs** — M3's own order of magnitude (25 budgeted, 8,500 lines).
 
 **m4a does not fit in four PRs.** Its list — toolchain, gates, boundary, layout, `--no-ui`,
@@ -383,7 +417,7 @@ before the implementation task; `sdd-verify` reads `git log` and reports an inve
 | 7 | **Island gates** | m4d #3 | The no-`fetch`/`eval` scan and the line budget, in the PR with the first JS line — `docs/06-harness.md:206-209` |
 | 8 | **I10, I03** | m4d #5 | `relation_reject` recorded before `Delete`; I03's `units` scope stays deliberate |
 | 9 | **I03** (beliefs), **I12** | m4e PR 3 | The "delete" is a transition with a `from`; `ActiveBeliefs` excludes it; the signal and the log row both exist |
-| 10 | **I23** (read-only) | m4e PR 6 | The activity view renders `context.previous`; the `go/ast` test is untouched and still green |
+| 10 | **I23** (read-only) | m4e-activity PR 6 | The activity view renders `context.previous`; the `go/ast` test is untouched and still green |
 | 11 | **I04**, **I09** | m4f #2-#3 | Timers listed from `timers`; a UI answer resolves the same `pending_questions` row the digest asked |
 
 ---
@@ -514,7 +548,7 @@ Q1–Q3 unblock `m4a`'s spec and design; Q7 is the one design-raised question al
 | R7 | **ADR-0019 stays `Proposed`** and m4d idles | 7 | Q4: m4e proceeds; the audit and the measurement are named as the two unblocking acts |
 | R8 | **The vendored bundle is a 435 KB diff** nobody can review line by line | 8 | `size:exception` by construction; the recorded hand audit and the no-`fetch`/`eval` gate are what is reviewed |
 | R9 | **CSP breaks htmx or the island** late | 9 | Headers ship in m4a #2 before any view; a view that needs an inline script is wrong, not the header |
-| R10 | **`DecisionLog.Since` is forward-only** and the activity view paginates backwards | 10 | A new read (m4e PR 5), not a client-side reverse of a capped forward read |
+| R10 | **`DecisionLog.Since` is forward-only** and the activity view paginates backwards | 10 | A new read (m4e-activity PR 5), not a client-side reverse of a capped forward read |
 | R11 | **Estimates run low** — 1.3x–2.2x six times, 4.3x once | 11 | §5.1 states the multiplier; m4a's split is decided here, with its own overflow rule for the handshake PR |
 | R12 | **The UI slice hides from `docs-sync`.** Most m4a PRs touch no `internal/core/**`, so the sync gate never fires and doc 01/02 amendments could be skipped | 12 | Each §4.2 row names its PR; `sdd-verify` checks the amendment landed, since the gate will not |
 | R13 | **The milestone cannot close inside CI.** §7's browser pass is unautomatable by decision | 13 | Named as an exit gate, recorded in m4f's archive report, as M1 and M3 did |
@@ -530,4 +564,4 @@ screen, and the signature of §3.3's one new read.
 
 `m4b` can be specified as soon as m4a's design is reviewed; it needs the layout and the middleware
 chain, not the Today view. `m4c` waits on m4a's service. `m4d` waits on ADR-0019. `m4e` waits on
-m4a. `m4e2-admin` waits on m4e and Q5 (ruled 2026-10-07). `m4f` waits on m4b and m4e only.
+m4a. `m4e-activity` waits on m4e's PR 4. `m4e2-admin` waits on m4e-activity, m4e and Q5 (ruled 2026-10-07). `m4f` waits on m4b and m4e only.

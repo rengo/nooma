@@ -3,7 +3,9 @@
 Derived from `spec.md` (R7-R11) and `design.md` (§1-§8, APPROVED after Judgment Day round 3;
 **§10 carries the round-3 corrections, applied below**). Split from
 [`m4e-beliefs-activity-admin`](../m4e-beliefs-activity-admin/tasks.md) on 2026-10-08; **starts
-after m4e's PR 6 merges**. Shape follows the archived m4c and m4b tasks.
+after `m4e-activity`'s PR 6 merges** (which itself follows m4e's PR 4; activity split off m4e on
+2026-10-08, so `DecisionLog.Before` and the change decoder are `m4e-activity`'s; `WriteLandedError`,
+the I22 whitelist and the `uiDeps` pattern stay m4e's). Shape follows the archived m4c and m4b tasks.
 
 **Delivery**: `ask-on-risk`, `stacked-to-main` (each branch targets `main`, rebases after the
 previous merge). Strict TDD per PR: scaffold (compiles, lints, no behaviour) -> RED (fails on an
@@ -51,14 +53,14 @@ Chain strategy: stacked-to-main
 400-line budget risk: Medium
 
 The decision is a confirmation: chained PRs and `stacked-to-main` are cached; what remains for the
-user is to accept the post-1a cut rule. Apply cannot start until m4e's PR 6 has merged.
+user is to accept the post-1a cut rule. Apply cannot start until `m4e-activity`'s PR 6 has merged.
 
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Notes |
 |------|------|-----------|-------|
 | 0 | Planning (shared with m4e PR 0) | `plan/m4e-beliefs-activity-admin` | Not counted toward the seven-PR rule |
-| 1a | Persistence surface: five setters, `LearnedThresholds`, G4 | PR 1a, base `main` after m4e PR 6 | Safe alone: no caller outside tests |
+| 1a | Persistence surface: five setters, `LearnedThresholds`, G4 | PR 1a, base `main` after m4e-activity PR 6 | Safe alone: no caller outside tests |
 | 1b | `AdminService` door, G5, doc 02 §11 config clause | PR 1b, base `main` after 1a | The only caller of the setters |
 | 2 | `/ui/admin`, wiring, G6/G7/G12, R10 pin | PR 2, base `main` after 1b | Admin nav link |
 
@@ -76,9 +78,10 @@ repeated here so this slice is self-contained.
   basis (item 3).
 - [x] **0.3** `design.md` §5 PR 2 row and §3.5 G6: name `internal/httpapi/server_test.go:117`
   `TestUIGuardedLeavesEachReachAView` (item 11).
-- [ ] **0.4** Precondition check before 1a: m4e PR 5 and PR 6 merged; `DecisionLog.Before`,
-  `brain.ErrWriteLanded`, `uiCrossOriginBodies`, the I22 whitelist and the shape-driven change
-  decoder exist on `main` (`rg` each).
+- [ ] **0.4** Precondition check before 1a: `m4e-activity`'s PR 5 and PR 6 merged
+  (`DecisionLog.Before` and the shape-driven change decoder) and m4e's PR 3 and PR 4 merged
+  (`brain.ErrWriteLanded`, `uiCrossOriginBodies`, the I22 whitelist, `uiDeps`); all exist on
+  `main` (`rg` each).
 
 ---
 
@@ -141,8 +144,8 @@ Files: `internal/brain/{admin,admin_field,admin_write}.go`(+tests),
   exactly its own column, C7 `…ApplyFailureLogsNothing` and `…LogFailureAfterWriteIsVisible`
   (`ErrWriteLanded`, `Record` set), C9 view with a newer `capture.*` row absent and 11 effects ->
   10, C10 last run nil -> *never*, C12 `"1"` rejected for the bool, C14 JSON keys for all five
-  fields and one row per write, C15 the row `Update` writes decodes through m4e's
-  `ActivityService` (`Change` non-nil), C16 `…RejectedInputWritesNothing`, C17
+  fields and one row per write, C15 the row `Update` writes decodes through
+  m4e-activity's `ActivityService` (`Change` non-nil), C16 `…RejectedInputWritesNothing`, C17
   `TestAdminServiceExportsOnlyViewAndUpdate`.
 - [ ] **1b.3** RED conformance — `config_door_test.go` `TestConfigSettersAreCalledOnlyInsideTheLoggedDoor`
   (G5, AST over non-test `internal/**` and `cmd/**` excluding `internal/store/**`: every call to
