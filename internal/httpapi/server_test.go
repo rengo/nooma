@@ -108,6 +108,13 @@ func (stubBeliefs) ByFacet(context.Context) ([]brain.FacetBeliefs, error) { retu
 func (stubBeliefs) Edit(context.Context, string, string) error            { return nil }
 func (stubBeliefs) Retire(context.Context, string) error                  { return nil }
 
+// stubActivity answers Page with no rows and no error, stubBeliefs' reason.
+type stubActivity struct{}
+
+func (stubActivity) Page(context.Context, string, *ports.DecisionCursor) (brain.ActivityPage, error) {
+	return brain.ActivityPage{}, nil
+}
+
 // stubUnitDetail is the one fixed detail body every guarded-leaf wiring
 // test in this file renders when it needs GET /ui/units/{id} to answer
 // 200 — its own content is irrelevant to these tests (unit_test.go owns
@@ -126,7 +133,7 @@ var stubUnitDetail = brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.T
 func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 	t.Parallel()
 
-	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}})})
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}})})
 
 	// wantMarker names, per leaf, a string only that leaf's own view
 	// renders from these stubs — Today's "SYSTEM" section, units'
@@ -149,9 +156,10 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 		"/ui/units/unit-1": "<h2>UNIT</h2>",
 		"/ui/capture":      "<h2>CAPTURE</h2>",
 		"/ui/beliefs":      "<h2>BELIEFS</h2>",
+		"/ui/activity":     "<h2>ACTIVITY</h2>",
 	}
 
-	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/capture", "/ui/beliefs"} {
+	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/capture", "/ui/beliefs", "/ui/activity"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()
