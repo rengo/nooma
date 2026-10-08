@@ -1226,6 +1226,17 @@ use `derived/{facet}/{key}`), `content`, `confidence`, `origin`
   weights and λ. The cycle capture → derive → inject → capture better is THE mechanism by
   which relevance improves over time.
 - Editing or deleting a belief emits a learning signal (`belief_edit` / `belief_delete`).
+- **`status` is `active | retired`.** Deleting a belief **retires** it (`active → retired`) and
+  never removes a row (I03). A retired belief is excluded from every read of active beliefs:
+  today that is derive's dedup and the stagnation check, and it will be classify injection once
+  that exists (the capture path passes no beliefs to classify yet). The store refuses any
+  derive write that would overwrite a retired belief or reinforce one.
+- **An edit changes `content` only** and marks `origin = user_stated`; facet, confidence and
+  `topic_key` are not editable. The store refuses a derive upsert over a `user_stated` (or
+  `seed`) belief, so the user's text is never overwritten; derive may still reinforce it. The
+  edited text is normalised once (CRLF to LF, surrounding whitespace trimmed) and bounded at
+  `MaxBeliefContentRunes` runes: an input bound on what a form may carry, not a §13
+  calibration row, because it decides nothing this document governs.
 
 **`current_state`** (the delicate facet): append-only rows with `energy` (0–1), `mood` (text),
 `active`, `source` (`user` | `consolidation`). The load watcher opens it as a tentative
