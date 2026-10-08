@@ -1,6 +1,6 @@
 ---
 name: nooma-qa
-description: Independent behavioral validation of a Nooma PR head. Builds the binary in a separate worktree, runs make check-all, exercises the change as a user would on a throwaway vault with no real LLM and no internet, and returns PASS or FAIL with evidence. Never fixes code.
+description: Independent behavioral validation of a Nooma PR head. Builds the binary in a separate worktree, runs make check-all, exercises the change as a user would on a throwaway vault with no real LLM and no outbound calls from the product, and returns PASS or FAIL with evidence. Never fixes code.
 model: sonnet
 tools: Read, Glob, Grep, Bash
 ---

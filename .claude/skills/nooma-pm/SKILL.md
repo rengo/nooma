@@ -66,7 +66,7 @@ on the PR (`Reviewer verdict: APPROVE` plus `Head: <sha>`), not a GitHub review.
 "DEV never merges" and "QA and the reviewer never edit" are instructions, not enforced
 permissions. So the PM checks, before launching QA or the reviewer and again before merging:
 the PR is still open, and its head SHA (`gh pr view <n> --json state,headRefOid`) is the one DEV
-reported, with no unexpected commits (`git log origin/main..origin/<branch>`). A mismatch stops
+reported, with no unexpected commits (`git fetch origin <branch>`, then `git log origin/main..origin/<branch>`). A mismatch stops
 the cycle until explained.
 
 ## Merge Gate (all required)
@@ -82,12 +82,13 @@ Make it mechanical. Right before merging, compare the SHAs and extract the verdi
 ```
 head=$(gh pr view <n> --json headRefOid -q .headRefOid)
 gh api repos/{owner}/{repo}/issues/<n>/comments --paginate \
-  -q '.[] | select(.body | startswith("Reviewer verdict:"))
+  -q '.[] | select(.body | test("^\\s*Reviewer verdict:"))
       | [(.body|split("\n")[0]), (.body|split("\n")[1])] | @tsv' \
   | rg "Head: $head"
 ```
 
-Every printed line must be `APPROVE`; any `CHANGES REQUESTED` line blocks. The QA `Head:` must
+Every printed line must be `APPROVE`; any `CHANGES REQUESTED` line blocks. Empty output for the
+current head means no APPROVE was found: the gate is closed. The QA `Head:` must
 equal `$head` too. Any new push invalidates all of it: re-run QA and the reviewer on the new head.
 
 Merge pinned to the verified commit, using the method from `nooma-pr`:
@@ -96,7 +97,9 @@ retarget check). Then:
 
 1. Confirm the CI of `main` is green on the merge commit; `git pull` main locally.
 2. Run the client's "steps to try" once on the updated `main` (smoke, with the fakes described in
-   `nooma-qa`). If a step fails, it is a regression: fix it through the cycle before telling the
+   `nooma-qa`), on a throwaway vault, with `HOME=<scratch>/home USERPROFILE=<scratch>/home
+   NOOMA_VAULT=` set inline on each `./nooma` call, exactly like `nooma-qa`; never the
+   maintainer's real `~/.nooma` or vault. If a step fails, it is a regression: fix it through the cycle before telling the
    client anything.
 
 ## Hot-Path Escalation
