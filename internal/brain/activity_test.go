@@ -308,3 +308,18 @@ func TestActivityFamilies_DerivedFromVocabulary(t *testing.T) {
 		t.Errorf("ActivityFamilies(nil) = %v, want empty", got)
 	}
 }
+
+// The "." in the prefix matters: kind zz is the family zz.*, not every action
+// that merely starts with "zz" (zzz.b belongs to the family zzz).
+func TestActivityPage_KindPrefixEndsAtTheFamilyBoundary(t *testing.T) {
+	log := memrepo.NewDecisionLog()
+	actRecord(t, log, "d-zz", "zz.a", actBase, "")
+	actRecord(t, log, "d-zzz", "zzz.b", actBase.Add(time.Second), "")
+	svc := &ActivityService{log: log, actions: []ports.DecisionAction{"zz.a", "zzz.b"}}
+
+	got, _ := actWalk(t, svc, "zz")
+
+	if want := []string{"d-zz"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("kind=zz = %v, want %v (zzz.b is another family)", got, want)
+	}
+}
