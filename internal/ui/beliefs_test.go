@@ -36,6 +36,9 @@ type fakeBeliefs struct {
 	listCalls  int
 	editCalls  []beliefEditCall
 	retireCall []string
+	// onEdit, when set, runs after a recorded Edit and may change groups, so the
+	// next ByFacet read shows what the write did.
+	onEdit func(f *fakeBeliefs, id, content string)
 }
 
 func (f *fakeBeliefs) ByFacet(context.Context) ([]brain.FacetBeliefs, error) {
@@ -45,6 +48,9 @@ func (f *fakeBeliefs) ByFacet(context.Context) ([]brain.FacetBeliefs, error) {
 
 func (f *fakeBeliefs) Edit(_ context.Context, id, content string) error {
 	f.editCalls = append(f.editCalls, beliefEditCall{id: id, content: content})
+	if f.onEdit != nil {
+		f.onEdit(f, id, content)
+	}
 	return f.editErr
 }
 
@@ -143,7 +149,7 @@ func facetSection(t *testing.T, body string, facet selfmodel.Facet) string {
 
 func beliefItem(t *testing.T, body, id string) string {
 	t.Helper()
-	return between(t, body, `<li data-belief-id="`+id+`"`, "</li>")
+	return between(t, body, `<li id="belief-`+id+`"`, "</li>")
 }
 
 func outcomeOf(t *testing.T, body string) string {
@@ -605,10 +611,16 @@ func TestBeliefPosts_AnswerAFragmentOnHTMXAndTheFullPageOtherwise(t *testing.T) 
 				t.Errorf("an HX-Request answer carries the full page:\n%s", fragBody)
 			}
 			if !strings.HasPrefix(strings.TrimSpace(fragBody), "<p data-outcome=") {
-				t.Errorf("an HX-Request answer is not the outcome fragment alone:\n%s", fragBody)
+				t.Errorf("an HX-Request answer does not lead with the outcome fragment:\n%s", fragBody)
 			}
-			if frag.listCalls != 0 {
-				t.Errorf("an HX-Request answer read the list %d time(s), want 0", frag.listCalls)
+			// An edit re-reads the belief it changed, once; a retire has nothing to
+			// read, the item is only removed. Neither lists for the full page.
+			wantReads := 1
+			if pattern == beliefRetirePattern {
+				wantReads = 0
+			}
+			if frag.listCalls != wantReads {
+				t.Errorf("an HX-Request answer read the list %d time(s), want %d", frag.listCalls, wantReads)
 			}
 
 			page := &fakeBeliefs{groups: beliefFixture()}
@@ -670,15 +682,21 @@ func TestBeliefWriteLanded_ShowsSuccessWithTheNoticeOfTheMissingPartOnly(t *test
 		landed *brain.WriteLandedError
 		notice string
 	}{
-		{"record only", &brain.WriteLandedError{Record: true, Err: errors.New("record: disk is on fire")}, "Saved, but the activity record of it could not be written."},
-		{"signal only", &brain.WriteLandedError{Signal: true, Err: errors.New("signal: disk is on fire")}, "Saved and recorded, but the learning signal could not be written."},
-		{"both", &brain.WriteLandedError{Record: true, Signal: true, Err: errors.New("both: disk is on fire")}, "Saved, but neither the activity record nor the learning signal could be written."},
-		{"neither part named", &brain.WriteLandedError{Err: errors.New("unnamed: disk is on fire")}, "Saved, but a follow-up write failed."},
+		{"record only", &brain.WriteLandedError{Record: true, Err: errors.New("record: disk is on fire")}, "%s, but the activity record of it could not be written."},
+		{"signal only", &brain.WriteLandedError{Signal: true, Err: errors.New("signal: disk is on fire")}, "%s and recorded, but the learning signal could not be written."},
+		{"both", &brain.WriteLandedError{Record: true, Signal: true, Err: errors.New("both: disk is on fire")}, "%s, but neither the activity record nor the learning signal could be written."},
+		{"neither part named", &brain.WriteLandedError{Err: errors.New("unnamed: disk is on fire")}, "%s, but a follow-up write failed."},
 	}
 
 	for _, pattern := range []string{beliefEditPattern, beliefRetirePattern} {
+		// A retire says "Retired", an edit or claim "Saved": the verb is the action's.
+		verb := "Saved"
+		if pattern == beliefRetirePattern {
+			verb = "Retired"
+		}
 		for _, v := range variants {
 			t.Run(pattern+" "+v.name, func(t *testing.T) {
+				v.notice = fmt.Sprintf(v.notice, verb)
 				rec := &recordingHandler{}
 				prev := slog.Default()
 				slog.SetDefault(slog.New(rec))
@@ -697,7 +715,7 @@ func TestBeliefWriteLanded_ShowsSuccessWithTheNoticeOfTheMissingPartOnly(t *test
 					t.Errorf("outcome = %s, want a saved-with-notice outcome carrying %q", got, v.notice)
 				}
 				for _, other := range variants {
-					if other.name != v.name && strings.Contains(got, other.notice) {
+					if other.name != v.name && strings.Contains(got, fmt.Sprintf(other.notice, verb)) {
 						t.Errorf("outcome also carries the %q notice: %s", other.name, got)
 					}
 				}
@@ -725,6 +743,106 @@ func TestBeliefWriteLanded_ShowsSuccessWithTheNoticeOfTheMissingPartOnly(t *test
 				}
 			})
 		}
+	}
+}
+
+// beliefSwapFixture is a fake whose Edit applies the change the way brain
+// would for a claim: the text becomes the submitted one and the origin becomes
+// user_stated, so the fresh read shows the belief as the user's.
+func claimingFake() *fakeBeliefs {
+	return &fakeBeliefs{groups: beliefFixture(), onEdit: func(f *fakeBeliefs, id, content string) {
+		for gi := range f.groups {
+			for bi := range f.groups[gi].Beliefs {
+				if b := &f.groups[gi].Beliefs[bi]; b.ID == id {
+					b.Content, b.Origin = content, selfmodel.OriginUserStated
+				}
+			}
+		}
+	}}
+}
+
+func TestBeliefRetire_HTMXAnswerRemovesThatItemAndNothingElse(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeBeliefs{groups: beliefFixture()}
+	rec := serveBeliefs(fake, beliefsPost(beliefRetirePattern, "v-1", "", true))
+	body := rec.Body.String()
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := outcomeOf(t, body); !strings.Contains(got, `data-outcome="retired"`) {
+		t.Errorf("outcome = %s, want the retired outcome", got)
+	}
+	removal := between(t, body, `<li id="belief-v-1"`, "</li>")
+	if !strings.Contains(removal, `hx-swap-oob="delete"`) {
+		t.Errorf("the removal of v-1 is not an out-of-band delete: %s", removal)
+	}
+	for _, other := range []string{"v-2", "g-1", "p-1"} {
+		if strings.Contains(body, "belief-"+other) {
+			t.Errorf("the answer touches %s, which was not retired:\n%s", other, body)
+		}
+	}
+	if strings.Contains(body, "data-belief-id=") || strings.Contains(body, "data-field=") {
+		t.Errorf("a retire answer re-renders an item instead of removing it:\n%s", body)
+	}
+}
+
+func TestBeliefEdit_HTMXClaimReplacesTheItemAsUserStatedWithoutTheHint(t *testing.T) {
+	t.Parallel()
+
+	rec := serveBeliefs(claimingFake(), beliefsPost(beliefEditPattern, "v-1", "content=Keep+promises", true))
+	body := rec.Body.String()
+
+	if got := outcomeOf(t, body); !strings.Contains(got, `data-outcome="saved"`) {
+		t.Errorf("outcome = %s, want the saved outcome", got)
+	}
+	item := beliefItem(t, body, "v-1")
+	if !strings.Contains(item, `hx-swap-oob="true"`) {
+		t.Errorf("the item is not swapped out of band: %s", item)
+	}
+	if got := between(t, item, `<span data-field="origin">`, "</span>"); !strings.Contains(got, "user_stated") {
+		t.Errorf("origin = %s, want user_stated after a claim", got)
+	}
+	if strings.Contains(item, `data-hint="claim"`) {
+		t.Errorf("a claimed belief still shows the claim hint: %s", item)
+	}
+	for _, other := range []string{"v-2", "g-1", "p-1"} {
+		if strings.Contains(body, "belief-"+other) {
+			t.Errorf("the answer touches %s, which was not edited:\n%s", other, body)
+		}
+	}
+}
+
+func TestBeliefEdit_HTMXAnswerCarriesTheNewContent(t *testing.T) {
+	t.Parallel()
+
+	rec := serveBeliefs(claimingFake(), beliefsPost(beliefEditPattern, "g-1", "content=Run+a+half+marathon", true))
+	item := beliefItem(t, rec.Body.String(), "g-1")
+
+	if got := between(t, item, `<p data-field="content">`, "</p>"); !strings.Contains(got, "Run a half marathon") {
+		t.Errorf("content = %s, want the new text", got)
+	}
+	if got := between(t, item, "<textarea", "</textarea>"); !strings.Contains(got, "Run a half marathon") {
+		t.Errorf("the edit form = %s, want the new text", got)
+	}
+}
+
+func TestBeliefEdit_HTMXFailuresSwapNoItem(t *testing.T) {
+	t.Parallel()
+
+	for name, err := range map[string]error{
+		"invalid":  selfmodel.ErrEmptyContent,
+		"conflict": ports.ErrBeliefStatusConflict,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeBeliefs{groups: beliefFixture(), editErr: err}
+			body := serveBeliefs(fake, beliefsPost(beliefEditPattern, "v-1", "content=x", true)).Body.String()
+			if strings.Contains(body, "hx-swap-oob") {
+				t.Errorf("a refused edit swaps an item:\n%s", body)
+			}
+		})
 	}
 }
 

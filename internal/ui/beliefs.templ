@@ -30,7 +30,7 @@ templ beliefsBody(groups []brain.FacetBeliefs, res *beliefResult) {
 			} else {
 				<ul>
 					for _, b := range g.Beliefs {
-						@beliefItem(b, res)
+						@beliefItem(b, res, false)
 					}
 				</ul>
 			}
@@ -48,8 +48,11 @@ templ beliefOutcomeView(res beliefResult) {
 // beliefItem is one belief: its fields, the edit form (content is the only
 // input) and the retire form behind a confirm step. Every value goes through
 // templ's own escaping: a belief's content is model-shaped text.
-templ beliefItem(b ports.Belief, res *beliefResult) {
-	<li data-belief-id={ b.ID }>
+//
+// swap marks the item out-of-band: an htmx answer carries the fresh item next
+// to the outcome, and htmx swaps it over the `li` with the same id.
+templ beliefItem(b ports.Belief, res *beliefResult, swap bool) {
+	<li id={ beliefElementID(b.ID) } data-belief-id={ b.ID } if swap { hx-swap-oob="true" }>
 		<p data-field="content">{ b.Content }</p>
 		<p>
 			<span data-field="confidence">{ formatConfidence(b.Confidence) }</span>
@@ -75,4 +78,10 @@ templ beliefItem(b ports.Belief, res *beliefResult) {
 			</form>
 		</details>
 	</li>
+}
+
+// beliefRemoved is the out-of-band instruction that takes a retired belief's
+// item off the list.
+templ beliefRemoved(id string) {
+	<li id={ beliefElementID(id) } hx-swap-oob="delete"></li>
 }

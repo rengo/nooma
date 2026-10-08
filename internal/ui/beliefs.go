@@ -104,7 +104,7 @@ func (h *Handler) respondBelief(w http.ResponseWriter, r *http.Request, err erro
 		// The write landed, so this is success with a notice for the part
 		// that is missing: a retry would only conflict with it.
 		slog.Warn("beliefs: the write landed but a follow-up write failed", "belief", saved.ID, "err", err)
-		res = beliefResult{Outcome: outcomeSavedWithNotice, Message: landedNotice(landed)}
+		res = beliefResult{Outcome: outcomeSavedWithNotice, Message: landedNotice(landed, saved.Outcome == outcomeRetired)}
 	case errors.Is(err, selfmodel.ErrEmptyContent):
 		res, status = invalidResult(saved, "Content cannot be empty."), http.StatusBadRequest
 	case errors.Is(err, selfmodel.ErrContentTooLong):
@@ -127,6 +127,9 @@ func (h *Handler) respondBelief(w http.ResponseWriter, r *http.Request, err erro
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(status)
 		_ = beliefOutcomeView(res).Render(r.Context(), w)
+		if status == http.StatusOK {
+			h.renderBeliefSwap(w, r, saved)
+		}
 		return
 	}
 	groups, listErr := h.deps.Beliefs.ByFacet(r.Context())
@@ -137,6 +140,34 @@ func (h *Handler) respondBelief(w http.ResponseWriter, r *http.Request, err erro
 	writeBeliefsPage(w, r, status, groups, &res)
 }
 
+// renderBeliefSwap appends the out-of-band half of a successful htmx answer, so
+// the list does not go stale: a retired belief's item is removed, and an edited
+// or claimed one is replaced by a fresh read of it. brain has no read by id for
+// the page, so the fresh read is ByFacet and the pick is the id; when that read
+// fails or no longer lists the belief, the outcome stands alone.
+func (h *Handler) renderBeliefSwap(w http.ResponseWriter, r *http.Request, saved beliefResult) {
+	if saved.Outcome == outcomeRetired {
+		_ = beliefRemoved(saved.ID).Render(r.Context(), w)
+		return
+	}
+	groups, err := h.deps.Beliefs.ByFacet(r.Context())
+	if err != nil {
+		slog.Error("beliefs: reading the belief after a write failed", "belief", saved.ID, "err", err)
+		return
+	}
+	for _, g := range groups {
+		for _, b := range g.Beliefs {
+			if b.ID == saved.ID {
+				_ = beliefItem(b, nil, true).Render(r.Context(), w)
+				return
+			}
+		}
+	}
+}
+
+// beliefElementID is the stable id of a belief's list item.
+func beliefElementID(id string) string { return "belief-" + id }
+
 // invalidResult is a rejected edit's result: the message, and the belief and
 // the submitted text so the form can be shown again with them.
 func invalidResult(submitted beliefResult, message string) beliefResult {
@@ -145,16 +176,21 @@ func invalidResult(submitted beliefResult, message string) beliefResult {
 
 // landedNotice names only the part of a landed write that is missing, so it
 // never claims the record failed when only the signal did (design §3.4).
-func landedNotice(e *brain.WriteLandedError) string {
+// The verb is the action's: a retire says "Retired", an edit or claim "Saved".
+func landedNotice(e *brain.WriteLandedError, retired bool) string {
+	verb := "Saved"
+	if retired {
+		verb = "Retired"
+	}
 	switch {
 	case e.Record && e.Signal:
-		return "Saved, but neither the activity record nor the learning signal could be written."
+		return verb + ", but neither the activity record nor the learning signal could be written."
 	case e.Record:
-		return "Saved, but the activity record of it could not be written."
+		return verb + ", but the activity record of it could not be written."
 	case e.Signal:
-		return "Saved and recorded, but the learning signal could not be written."
+		return verb + " and recorded, but the learning signal could not be written."
 	default:
-		return "Saved, but a follow-up write failed."
+		return verb + ", but a follow-up write failed."
 	}
 }
 
