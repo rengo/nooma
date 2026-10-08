@@ -154,7 +154,7 @@ messages through an interface. **Adding a channel = one new adapter, zero core c
 | Command | Description |
 |---|---|
 | `nooma init` | Wizard: creates the vault, base config, LLM preset, credentials, channels |
-| `nooma serve [vault]` | Starts everything: API + UI + channels + scheduler |
+| `nooma serve [vault]` | Starts everything: API + UI + channels + scheduler. Once its socket is bound it writes `nooma: listening on HOST:PORT` (the actual bound address) to stderr, and never before: the vault lock is taken first, so only this line proves the port is serve's own |
 | `nooma status` | Status without starting the server: vault path, schema version, lock holder, size, effective config. Brain state (last consolidation, channel activity) joins it in M2, when there is brain state to report |
 | `nooma doctor` | Checks config, provider connectivity, LLM answer quality, permissions, hardware |
 | `nooma capture <text> [vault]` | Sends text to a running `nooma serve` instance's `POST /capture` over HTTP and prints the result — an HTTP client, never a second direct-vault writer; fails if no server answers |
