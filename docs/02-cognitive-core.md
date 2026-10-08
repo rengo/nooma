@@ -660,8 +660,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        is `"recall"` or `"explicit"`; the three score keys are **omitted** on the explicit path
        rather than written as zeros — an absent key is the truth, a zero score is a claim nobody
        computed.
-   - Recording is not undoing. The previous value is retrievable; no surface offers it back until
-     the UI exists.
+   - Recording is not undoing. `/ui/activity` shows the previous value beside the new one,
+     read-only; no surface offers it back.
 5. **hooks**: dated events arm triggers (§7); `timer` arms an ephemeral timer (§8); a
    `recurring_reminder` (a birthday) arms a recurring trigger — a distinct `type` from `event`,
    not an `event` with a flag; ambiguous references to people leave the unit `incomplete` until
