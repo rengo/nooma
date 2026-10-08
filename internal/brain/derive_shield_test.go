@@ -903,6 +903,61 @@ func TestDerive_UnusableProposalVectorWithoutRetiredStillCreates(t *testing.T) {
 	}
 }
 
+// Precedence inside ONE pass: a proposal that derives a retired belief's key
+// is decided by the key and is never embedded, so it keeps its own reason
+// even when its text would embed to an unusable vector; the other proposal
+// is the one that is unusable and unchecked. Each gets its own skip row, in
+// either proposal order (the second order also exercises the remap from the
+// compact pending list back to the original index).
+func TestDerive_RetiredKeyAndUnusableVectorKeepTheirOwnReasons(t *testing.T) {
+	for _, keyFirst := range []bool{true, false} {
+		name := "retired key first"
+		if !keyFirst {
+			name = "unusable vector first"
+		}
+		t.Run(name, func(t *testing.T) {
+			w := newShieldWorld(t)
+			w.seed(seedBelief{id: "a", key: "derived/value/health", content: "A content", conf: 0.5, vec: []float32{1, 0, 0}})
+			w.seed(seedBelief{id: "r", key: "derived/goal/swim", content: "R content", conf: 0.6, retired: true, vec: []float32{0, 1, 0}})
+			// "KEY content" embeds to a zero vector IF it is ever embedded: the
+			// key must decide it first.
+			if keyFirst {
+				w.propose("goal", "swim", "KEY content", []float32{0, 0, 0})
+				w.propose("goal", "odd", "ODD content", []float32{0, 0, 0})
+			} else {
+				w.propose("goal", "odd", "ODD content", []float32{0, 0, 0})
+				w.propose("goal", "swim", "KEY content", []float32{0, 0, 0})
+			}
+
+			w.mustRun()
+
+			skips := w.rows(ports.ActionDeriveBeliefSkipped)
+			if len(skips) != 2 {
+				t.Fatalf("belief_skipped rows = %+v, want one per proposal", skips)
+			}
+			byKey := w.rowFor(skips, "derived/goal/swim")
+			if byKey.Ctx["reason"] != "retired_topic_key" || byKey.Ctx["belief_id"] != "r" || byKey.Ctx["proposed_content"] != "KEY content" {
+				t.Errorf("retired-key row context = %+v, want reason retired_topic_key naming r", byKey.Ctx)
+			}
+			if _, has := byKey.Ctx["cause"]; has {
+				t.Errorf("retired-key row carries a cause %v: the key decided it, no vector was involved", byKey.Ctx["cause"])
+			}
+			odd := w.rowFor(skips, "derived/goal/odd")
+			if odd.Ctx["reason"] != "unusable_vector_retired_unchecked" || odd.Ctx["cause"] != "zero_vector" || odd.Ctx["proposed_content"] != "ODD content" {
+				t.Errorf("unusable-vector row context = %+v, want reason unusable_vector_retired_unchecked, cause zero_vector", odd.Ctx)
+			}
+			if slices.Contains(w.emb.Embedded(), "KEY content") {
+				t.Errorf("embedded %v: a proposal decided by a retired key must not be embedded", w.emb.Embedded())
+			}
+			if n := len(w.rows(ports.ActionDeriveBeliefCreated)); n != 0 {
+				t.Errorf("belief_created rows = %d, want 0", n)
+			}
+			w.wantUnchanged("r")
+			w.wantUnchanged("a")
+		})
+	}
+}
+
 // Probe for doc 02 §6 item 5: a zero or non-finite ACTIVE vector is not an
 // embed error and is not screened. It fails the merge, so the phase aborts
 // when some proposal is comparable.

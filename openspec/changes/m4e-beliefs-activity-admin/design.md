@@ -387,7 +387,7 @@ derived belief could never be edited.
 
 | Operation | Order | Why this order |
 |---|---|---|
-| `Edit(ctx, id, raw)` | `NormalizeContent(raw)` (→ `ErrEmptyContent`, `ErrContentTooLong`, no I/O) → `BeliefByID` (not found → `ErrBeliefNotFound`; retired → `ErrBeliefStatusConflict`) → normalised equals `NormalizeText(current.Content)` (**non-validating**, see above) → **no-op, writes nothing** → `Record(belief.edited)` **pre-image** → `EditContent(id, current.Content, normalised, now)` → signal `belief_edit` | An edit **overwrites** the user-visible text and a belief has no history table. ADR-0016's reasoning (record first; a failed record means no write) applies, by analogy rather than by its scope. The read first gives R2 its "unknown id writes nothing" without an orphan row. The no-op compares against the stored text normalised too (by `NormalizeText`), so a derived belief whose stored text has a trailing space is not "edited" by resubmitting its visible text, and an over-bound derived belief can still be edited |
+| `Edit(ctx, id, raw)` | `NormalizeContent(raw)` (→ `ErrEmptyContent`, `ErrContentTooLong`, no I/O) → `BeliefByID` (not found → `ErrBeliefNotFound`; retired → `ErrBeliefStatusConflict`) → normalised equals `NormalizeText(current.Content)` (**non-validating**, see above) → **unchanged on a `user_stated` belief: no-op, writes nothing; unchanged on any other origin: a claim** (same writes, `to` = the stored text, row marked `claimed: true`, owner ruling 2026-10-08) → `Record(belief.edited)` **pre-image** → `EditContent(id, current.Content, to, now)` (`to` = `normalised` on an edit, the stored text on a claim) → signal `belief_edit` | An edit **overwrites** the user-visible text and a belief has no history table. ADR-0016's reasoning (record first; a failed record means no write) applies, by analogy rather than by its scope. The read first gives R2 its "unknown id writes nothing" without an orphan row. The no-op compares against the stored text normalised too (by `NormalizeText`), so a derived belief whose stored text has a trailing space is not "edited" by resubmitting its visible text, and an over-bound derived belief can still be edited |
 | `Retire(ctx, id)` | `BeliefByID` (not found / not active → conflict before any write) → `SetStatus(id, active, retired, now)` **first** → `Record(belief.retired)` → signal `belief_delete` | A transition destroys nothing: `from`/`to` *are* the pre-image, and the content stays in the row. See the failure windows below |
 
 **Failure windows, stated for each ordering.**
@@ -432,8 +432,10 @@ A test pins each window (§6, B-series; U2 pins the notice per variant). `WriteL
 `ErrWriteLanded` live in `internal/brain/write_landed.go` and are reused by `m4e2-admin`
 (`Record` only: "saved, but not logged").
 
-**Signals** (doc 02 §9): `Type` `belief_edit` / `belief_delete`; `Valence` **negative** (the
-belief was wrong, as for `correction`, `correction.go:336-345`); `TargetKind` `belief`;
+**Signals** (doc 02 §9): `Type` `belief_edit` / `belief_delete`; `Valence` **negative** for a
+real edit and for `belief_delete` (the belief was wrong, as for `correction`,
+`correction.go:336-345`) and **positive for a claim** (owner ruling 2026-10-08: the user kept
+the derived text, so the system derived it right); `TargetKind` `belief`;
 `TargetID` the id; `DecisionAction` = `ActionDeriveBeliefCreated` **when the belief's origin at
 that moment was `derived`** (the bucket that produced it), otherwise nil. Nil is the D6 rule:
 leave a field nil rather than guess. `Magnitude` is nil. `Context` is `{belief_id, topic_key,
@@ -688,11 +690,11 @@ space, and one whose stored content is whitespace only.
 | D22 | 2 | active-belief embed failure still aborts | degrade | existing behaviour pinned |
 | D23 | 2 | rule order 3 (user-stated key) before 4 (active nearest) | swap the two rules | p7 |
 | B1 | 3 | edit unknown id → nothing | log first | `TestBeliefEdit_UnknownIDWritesNothing` (FX-B seeded) |
-| B2 | 3 | equal normalised content → no-op | write anyway; compare raw | `…SameContentWritesNothing`; `…CRLFResubmissionWritesNothing` (`"a\r\nb"` vs stored `"a\nb"`, origin stays `derived`, `updated_at` unchanged) |
+| B2 | 3 | equal normalised content on a `user_stated` belief → no-op; on any other origin → claim (`to` = stored text, row `claimed: true`, signal) | write anyway; compare raw; claim also for `user_stated`; never claim; claim without the row | `…SameContentOnUserStatedBeliefWritesNothing`; `…UnchangedSubmitClaimsANonUserStatedBelief` (derived, CRLF, whitespace, seed, trailing space); `…ClaimedBeliefSurvivesALaterDerivePass` |
 | B3 | 3 | retired → conflict before any write | skip the status check (CAS still refuses, but the log row exists) | `…RetiredBeliefWritesNothing` (log count unchanged) |
 | B4 | 3 | pre-image before `EditContent` | swap | `…LogFailureLeavesBeliefUntouched` |
 | B5 | 3 | signal only after a landed write | signal on failed write | `…WriteFailureEmitsNoSignal` |
-| B6 | 3 | edit signal fields (type, valence negative, target, `DecisionAction` by prior origin, `decision_id`) | each field wrong | `…SignalNamesBeliefAndLogRow`, two cases: prior `derived`, prior `user_stated` (nil action) |
+| B6 | 3 | edit signal fields (type, valence negative for a real edit and positive for a claim, target, `DecisionAction` by prior origin, `decision_id`) | each field wrong; claim negative; real edit positive | `…SignalNamesBeliefAndLogRow` (edit negative), `…UnchangedSubmitClaims…` (claim positive), two cases: prior `derived`, prior `user_stated` (nil action) |
 | B7 | 3 | context keyed by column | positional / missing origin | JSON key assertions |
 | B8 | 3 | empty / over-bound → typed errors, nothing written | accept | table test (FX-N) |
 | B9 | 3 | retire writes first | log first | `TestBeliefRetire_TwiceLogsOnce` |

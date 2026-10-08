@@ -179,9 +179,17 @@ const (
 	// splits effects when their Context shapes differ.
 	ActionCaptureRelationCheckInResolved  DecisionAction = "capture.relation_checkin.resolved"
 	ActionCaptureRelationCheckInUnmatched DecisionAction = "capture.relation_checkin.unmatched"
+
+	// ActionBeliefEdited is m4e's pre-image row for a user's belief edit
+	// (design §3.4, ADR-0016's order): written before the content changes,
+	// with the previous and next values keyed by column name.
+	ActionBeliefEdited DecisionAction = "belief.edited"
+	// ActionBeliefRetired records a user's retirement of a belief
+	// (active -> retired), written after the status write (design §3.4).
+	ActionBeliefRetired DecisionAction = "belief.retired"
 )
 
-// AllDecisionActions returns a fresh slice holding the fifty
+// AllDecisionActions returns a fresh slice holding the fifty-two
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
@@ -189,7 +197,8 @@ const (
 // ActionDeriveBeliefReinforced. The last five are m3e's own: ActionConnectQuestionCreated,
 // ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 // ActionCaptureRelationCheckInResolved and
-// ActionCaptureRelationCheckInUnmatched.
+// ActionCaptureRelationCheckInUnmatched. ActionBeliefEdited and
+// ActionBeliefRetired are m4e's user-write rows, listed last.
 //
 // A function, not an exported var (design D1's reasoning, applied to this
 // vocabulary too): an exported slice is mutable by any importer, and a
@@ -218,6 +227,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionPatternEvalLoadHypothesisOpened,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
+		ActionBeliefEdited, ActionBeliefRetired,
 	}
 }
 

@@ -115,7 +115,11 @@ confidence, topic_key and origin are not form inputs) persists, sets `origin` to
 from one clock read, records a `learning_signals` row `belief_edit` (target_kind `belief`, target_id the belief id, no
 FK) and a `decision_log` row naming the belief and the change. An edit naming no existing belief
 returns `ErrBeliefNotFound`-shaped not-found and writes no signal and no log row. An edit that
-changes nothing writes nothing.
+changes nothing writes nothing, **except on a belief whose `origin` is not `user_stated`**
+(owner ruling 2026-10-08): saving a derived or seed belief unchanged **claims** it. `origin`
+becomes `user_stated`, the stored text is kept byte for byte, `updated_at` is bumped, a
+`belief.edited` row with `claimed: true` (next equal to previous) and a **positive** `belief_edit` signal (the
+system derived it right; a real edit stays negative) are written. This is how a user protects a derived belief from derive without rewording it.
 
 **Content rules (added 2026-10-08, JD round 1)**: submitted content is **normalised once**:
 every `\r\n` becomes `\n`, then surrounding whitespace is trimmed. The normalised value is what is
@@ -138,9 +142,14 @@ bounded, so validating it would make an over-bound (or blank) derived belief imp
 - GIVEN an unknown belief id
 - WHEN an edit is submitted
 - THEN a not-found response is returned and no signal or log row is written
-- GIVEN a belief with content "a\nb"
+- GIVEN a `user_stated` belief with content "a\nb"
 - WHEN the form resubmits "a\r\nb" unchanged
 - THEN nothing is written (no signal, no log row, `origin` and `updated_at` unchanged)
+- GIVEN a derived belief with content "a\nb"
+- WHEN the form resubmits "a\r\nb" or "a\nb" unchanged
+- THEN the belief is claimed: `origin` is `user_stated`, content reads exactly "a\nb", one
+  `belief.edited` row with `claimed: true` and one `belief_edit` signal exist, and a later derive
+  proposal under its topic_key cannot overwrite it
 - GIVEN a derived belief whose stored content is longer than the bound
 - WHEN the user submits valid new content
 - THEN the edit lands (`origin` becomes `user_stated`), with one log row and one signal
