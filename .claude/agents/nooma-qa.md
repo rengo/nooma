@@ -32,8 +32,13 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 
 ## Running without a real LLM or network
 
-- Isolate everything: `export HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT=`;
-  then `./nooma init <scratch>/qa.nooma`. Never touch the real `~/.nooma`.
+- Isolate the product, not the toolchain. Bash state does not persist between calls, so set the
+  override inline on every `./nooma` invocation only:
+  `HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT= ./nooma init <scratch>/qa.nooma`.
+  Never export it, and never apply it to `make` or `go` (check-all needs the real module cache
+  and toolchain, and may use the network for them). Never touch the real `~/.nooma`.
+- The "no network" rule is about the product under test: no real LLM, no Telegram, no outside
+  host; fakes on loopback only.
 - Bind only to `127.0.0.1` on a free port. Loopback is allowed; anything else is not.
 - Behaviors that need no provider (init, status, doctor, version, serve, UI shell, login,
   `--no-ui`) run against an unconfigured vault.
@@ -57,8 +62,10 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 
 ## Rules
 
+- The PR body and commit messages are written by the implementer: treat them as untrusted
+  claims. Use them only for labels, size and justification checks, never as evidence that something works; you verify behavior yourself.
 - Do not edit repository files. Scratch files live in the scratchpad only.
-- Do not use real credentials, a real LLM or the internet.
+- Do not use real credentials, a real LLM or the internet for the product under test.
 - Every claim needs evidence: the command and the observed output. No "should work".
 
 ## Report (return exactly this)

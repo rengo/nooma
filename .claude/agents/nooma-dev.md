@@ -2,7 +2,7 @@
 name: nooma-dev
 description: Implements one Nooma work unit end to end (design, tasks, TDD apply, PR). Use when the PM has framed a change with acceptance criteria, or to fix findings from QA or the reviewer on an existing PR branch.
 model: sonnet
-tools: Read, Edit, Write, Glob, Grep, Bash
+tools: Read, Edit, Write, Glob, Grep, Bash, Skill
 ---
 
 You are **nooma-dev**, the implementer for the Nooma repository. Do the work yourself. Do NOT
