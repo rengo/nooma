@@ -124,6 +124,160 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 		}
 	})
 
+	// FX-A (m4e-activity design §6): five rows, three sharing one instant,
+	// written in an order that differs from both id order and time order, so
+	// neither an id tie-break nor an ascending read can pass by accident. The
+	// tied group straddles the page boundary at page size 2.
+	//
+	//	write order: z-a(T2) m-old(T1) a-b(T2) k-new(T3) c-c(T2)
+	//	newest first: k-new, c-c, a-b, z-a, m-old
+	t.Run("Before orders newest first, tied rows in reverse write order", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fx := writeFXA(ctx, t, repo)
+
+		got, err := repo.Before(ctx, nil, "", 10)
+		if err != nil {
+			t.Fatalf("Before: %v", err)
+		}
+		if ids := rowIDs(got); !reflect.DeepEqual(ids, fx.newestFirst) {
+			t.Fatalf("Before(nil, \"\", 10) = %v, want %v (occurred_at DESC, then reverse write order)",
+				ids, fx.newestFirst)
+		}
+		if !reflect.DeepEqual(got[0].Decision, fx.byID["k-new"]) {
+			t.Fatalf("Before round-trip: got %+v, want %+v", got[0].Decision, fx.byID["k-new"])
+		}
+	})
+
+	t.Run("Before walks every row exactly once across pages, tie group included", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fx := writeFXA(ctx, t, repo)
+
+		var walked []string
+		var cursor *ports.DecisionCursor
+		for pages := 0; pages < 10; pages++ {
+			page, err := repo.Before(ctx, cursor, "", 2)
+			if err != nil {
+				t.Fatalf("Before page %d: %v", pages, err)
+			}
+			if len(page) == 0 {
+				break
+			}
+			walked = append(walked, rowIDs(page)...)
+			last := page[len(page)-1]
+			cursor = &ports.DecisionCursor{OccurredAt: last.OccurredAt, Seq: last.Seq}
+		}
+		if !reflect.DeepEqual(walked, fx.newestFirst) {
+			t.Fatalf("paged walk = %v, want every row once, newest first: %v", walked, fx.newestFirst)
+		}
+	})
+
+	t.Run("Before with an action prefix returns only that family", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		at := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+		rows := []ports.Decision{
+			fixtureDecision("d-check", ports.ActionCheckTimerFired, at),
+			fixtureDecision("d-checkin", ports.ActionCaptureCheckInResolved, at.Add(time.Second)),
+			fixtureDecision("d-check2", ports.ActionCheckDigestSent, at.Add(2*time.Second)),
+			// "a_b." must match literally: "_" is a LIKE wildcard, not here.
+			fixtureDecision("d-under", "a_b.x", at.Add(3*time.Second)),
+			fixtureDecision("d-lookalike", "aXb.x", at.Add(4*time.Second)),
+		}
+		for _, d := range rows {
+			if err := repo.Record(ctx, d); err != nil {
+				t.Fatalf("Record %s: %v", d.ID, err)
+			}
+		}
+
+		cases := []struct {
+			prefix string
+			want   []string
+		}{
+			{"check.", []string{"d-check2", "d-check"}},
+			{"capture.checkin.", []string{"d-checkin"}},
+			{"a_b.", []string{"d-under"}},
+			{"nomatch.", nil},
+			{"", []string{"d-lookalike", "d-under", "d-check2", "d-checkin", "d-check"}},
+		}
+		for _, c := range cases {
+			got, err := repo.Before(ctx, nil, c.prefix, 10)
+			if err != nil {
+				t.Fatalf("Before prefix %q: %v", c.prefix, err)
+			}
+			if ids := rowIDs(got); !reflect.DeepEqual(ids, c.want) {
+				t.Errorf("Before(prefix %q) = %v, want %v", c.prefix, ids, c.want)
+			}
+		}
+	})
+
+	t.Run("Before bounds the page by limit and returns nothing for limit below one", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fx := writeFXA(ctx, t, repo)
+
+		for _, limit := range []int{0, -1} {
+			got, err := repo.Before(ctx, nil, "", limit)
+			if err != nil {
+				t.Fatalf("Before limit %d: %v", limit, err)
+			}
+			if len(got) != 0 {
+				t.Errorf("Before(limit %d) = %v, want an empty page", limit, rowIDs(got))
+			}
+		}
+		got, err := repo.Before(ctx, nil, "", 2)
+		if err != nil {
+			t.Fatalf("Before limit 2: %v", err)
+		}
+		if ids := rowIDs(got); !reflect.DeepEqual(ids, fx.newestFirst[:2]) {
+			t.Errorf("Before(limit 2) = %v, want the two newest: %v", ids, fx.newestFirst[:2])
+		}
+	})
+
+	t.Run("Before treats a nil cursor as the newest and a zero cursor as the oldest", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		writeFXA(ctx, t, repo)
+
+		got, err := repo.Before(ctx, nil, "", 1)
+		if err != nil {
+			t.Fatalf("Before nil: %v", err)
+		}
+		if ids := rowIDs(got); !reflect.DeepEqual(ids, []string{"k-new"}) {
+			t.Errorf("Before(nil, limit 1) = %v, want the newest row", ids)
+		}
+		got, err = repo.Before(ctx, &ports.DecisionCursor{}, "", 10)
+		if err != nil {
+			t.Fatalf("Before zero cursor: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("Before(zero cursor) = %v, want none: nothing is older than the zero time", rowIDs(got))
+		}
+	})
+
+	t.Run("Before reports an insertion sequence that increases strictly with write order", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fx := writeFXA(ctx, t, repo)
+
+		got, err := repo.Before(ctx, nil, "", 10)
+		if err != nil {
+			t.Fatalf("Before: %v", err)
+		}
+		seqs := make(map[string]int64, len(got))
+		for _, r := range got {
+			seqs[r.ID] = r.Seq
+		}
+		for i := 1; i < len(fx.writeOrder); i++ {
+			prev, cur := fx.writeOrder[i-1], fx.writeOrder[i]
+			if seqs[cur] <= seqs[prev] {
+				t.Errorf("Seq(%s)=%d is not greater than Seq(%s)=%d, written earlier",
+					cur, seqs[cur], prev, seqs[prev])
+			}
+		}
+	})
+
 	// The taxonomy's own completeness, design D9's closed-vocabulary
 	// pattern, following unit.Status's precedent
 	// (internal/core/unit/status_test.go). It needs no repository instance,
@@ -217,4 +371,46 @@ func fixtureDecision(id string, action ports.DecisionAction, at time.Time) ports
 		Context:    json.RawMessage(`{"fixture":true}`),
 		OccurredAt: at,
 	}
+}
+
+// fxA is the FX-A fixture: the ids in write order and in the order Before
+// must return them.
+type fxA struct {
+	writeOrder  []string
+	newestFirst []string
+	byID        map[string]ports.Decision
+}
+
+// writeFXA records the FX-A rows into repo. Every instant is a whole second:
+// SQLite stores seconds and the in-memory fake keeps nanoseconds, so a
+// sub-second fixture would let the two implementations diverge on a boundary.
+func writeFXA(ctx context.Context, t *testing.T, repo ports.DecisionLog) fxA {
+	t.Helper()
+	t1 := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	t2, t3 := t1.Add(time.Minute), t1.Add(2*time.Minute)
+	fx := fxA{
+		writeOrder:  []string{"z-a", "m-old", "a-b", "k-new", "c-c"},
+		newestFirst: []string{"k-new", "c-c", "a-b", "z-a", "m-old"},
+		byID:        map[string]ports.Decision{},
+	}
+	at := map[string]time.Time{"z-a": t2, "m-old": t1, "a-b": t2, "k-new": t3, "c-c": t2}
+	for _, id := range fx.writeOrder {
+		if at[id].Nanosecond() != 0 {
+			t.Fatalf("fixture %s has a sub-second instant %v", id, at[id])
+		}
+		d := fixtureDecision(id, ports.ActionCaptureClassify, at[id])
+		if err := repo.Record(ctx, d); err != nil {
+			t.Fatalf("Record %s: %v", id, err)
+		}
+		fx.byID[id] = d
+	}
+	return fx
+}
+
+func rowIDs(rows []ports.DecisionRow) []string {
+	var ids []string
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	return ids
 }
