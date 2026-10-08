@@ -459,6 +459,51 @@ func TestBeliefEdit_InvalidContentRerendersTheFormWithTheSubmittedText(t *testin
 	}
 }
 
+func TestBeliefEdit_ContentComesFromTheBodyNotTheQuery(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeBeliefs{groups: beliefFixture()}
+	req := beliefsPost(beliefEditPattern, "v-1", "", false)
+	req.URL.RawQuery = "content=smuggled"
+	serveBeliefs(fake, req)
+
+	if len(fake.editCalls) != 1 || fake.editCalls[0].content != "" {
+		t.Errorf("Edit calls = %+v, want one call with the (empty) body content, not the query's", fake.editCalls)
+	}
+}
+
+func TestBeliefEdit_OnlyARejectedSubmitReopensThatBeliefsForm(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		code int
+	}{
+		{"saved", nil, http.StatusOK},
+		{"conflict", ports.ErrBeliefStatusConflict, http.StatusConflict},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			fake := &fakeBeliefs{groups: beliefFixture(), editErr: tc.err}
+			rec := serveBeliefs(fake, beliefsPost(beliefEditPattern, "v-1", "content=typed+text", false))
+
+			if rec.Code != tc.code {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.code)
+			}
+			form := between(t, beliefItem(t, rec.Body.String(), "v-1"), `<details data-action="edit"`, "</details>")
+			if strings.Contains(form, "typed text") || !strings.Contains(form, ">Keep promises</textarea>") {
+				t.Errorf("the form shows the submitted text instead of the stored one:\n%s", form)
+			}
+			if strings.Contains(form, " open") {
+				t.Errorf("the form is left open after a submit that was not rejected for its content:\n%s", form)
+			}
+		})
+	}
+}
+
 func TestBeliefEdit_RejectsAnOversizedBodyBeforeCallingBrain(t *testing.T) {
 	t.Parallel()
 
@@ -667,13 +712,16 @@ func TestBeliefWriteLanded_ShowsSuccessWithTheNoticeOfTheMissingPartOnly(t *test
 				if r.Level != slog.LevelWarn {
 					t.Errorf("log level = %s, want WARN", r.Level)
 				}
-				var cause string
+				attrs := map[string]string{}
 				r.Attrs(func(a slog.Attr) bool {
-					cause += a.Value.String()
+					attrs[a.Key] = a.Value.String()
 					return true
 				})
-				if !strings.Contains(cause, "disk is on fire") {
-					t.Errorf("the warning does not carry the cause: %q", cause)
+				if !strings.Contains(attrs["err"], "disk is on fire") {
+					t.Errorf("the warning's err attribute = %q, want the cause", attrs["err"])
+				}
+				if attrs["belief"] != "v-1" {
+					t.Errorf("the warning's belief attribute = %q, want the belief id v-1", attrs["belief"])
 				}
 			})
 		}

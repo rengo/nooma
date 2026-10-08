@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/rengo/nooma/internal/brain"
@@ -200,7 +201,30 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 	const token = "cross-origin-probe-token"
 	cookie := &http.Cookie{Name: uiCrossOriginCookieName, Value: base64.RawURLEncoding.EncodeToString([]byte(token))}
 
+	// found, refusals and reaches count the rows and the subtests that
+	// actually ran, so the cleanup below can tell "every row was driven" from
+	// "the loop quietly skipped some". t.Cleanup runs after the parallel
+	// children are done, which is what makes the counts final by then.
+	var refusals, reaches atomic.Int64
 	found := 0
+	t.Cleanup(func() {
+		rows := uiNonGETPatterns()
+		if found != len(rows) {
+			t.Errorf("drove %d non-GET row(s), want all %d that wantUIMuxWiring declares", found, len(rows))
+		}
+		exempt := 0
+		for _, pattern := range rows {
+			if _, ok := uiCrossOriginBodyExempt[pattern]; ok {
+				exempt++
+			}
+		}
+		if got, want := refusals.Load(), int64(2*len(rows)); got != want {
+			t.Errorf("ran %d refusal subtest(s), want %d (two per row)", got, want)
+		}
+		if got, want := reaches.Load(), int64(len(rows)-exempt); got != want {
+			t.Errorf("ran %d same-origin subtest(s), want %d (every row but the %d exempt)", got, want, exempt)
+		}
+	})
 	for _, row := range wantUIMuxWiring {
 		row := row
 		if strings.HasPrefix(row.pattern, "GET ") {
@@ -225,6 +249,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 			}
 
 			t.Run("foreign Sec-Fetch-Site refuses before the target runs", func(t *testing.T) {
+				refusals.Add(1)
 				calls = 0
 				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -242,6 +267,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 			})
 
 			t.Run("foreign Origin with no Sec-Fetch-Site refuses before the target runs", func(t *testing.T) {
+				refusals.Add(1)
 				calls = 0
 				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -263,6 +289,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 			}
 
 			t.Run("same-origin with the right cookie reaches the target exactly once", func(t *testing.T) {
+				reaches.Add(1)
 				calls = 0
 				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
