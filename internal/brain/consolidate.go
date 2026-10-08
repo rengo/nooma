@@ -588,6 +588,12 @@ func (r consolidateRunner) deriveSourceIDs(ctx context.Context, pass passContext
 // fresh, feeds consolidation.BuildDerivePrompt (PR 10a) alongside every
 // active belief (dedup defense 1, spec R5.6) into one belief_derivation
 // judge call.
+// Each proposal then goes through consolidation.RouteProposals (m4e): a
+// retired belief's key, or a retired belief at least as near as any active
+// one, skips it with a belief_skipped row; the key of a belief the user
+// wrote reinforces that belief; otherwise it merges or creates as in m2c.
+// The store refusing a write the user changed under derive is a skip too,
+// never an abort.
 // A pass with nothing to derive from (no live source unit, the same
 // "nothing changed since the last sleep" condition SelectConnectSources
 // already applies) never calls the judge at all — connectSources' own
@@ -619,8 +625,15 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 	if err != nil {
 		return fmt.Errorf("consolidate: derive: read active beliefs: %w", err)
 	}
+	retired, err := r.selfModel.RetiredBeliefs(ctx)
+	if err != nil {
+		return fmt.Errorf("consolidate: derive: read retired beliefs: %w", err)
+	}
 	existingBeliefs := beliefsToConsolidation(active)
 
+	// The prompt shows ACTIVE beliefs only: what the judge is told is
+	// unchanged. The retired shield is deterministic code after the judge,
+	// not a request the model may ignore (m4e design §3.3).
 	resp, err := r.judge.Complete(ctx, ports.LLMRequest{
 		Prompt:   consolidation.BuildDerivePrompt(sources, existingBeliefs),
 		Task:     taskBeliefDerivation,
@@ -631,50 +644,166 @@ func (r consolidateRunner) derive(ctx context.Context, pass passContext, report 
 	}
 	proposals := decodeDerivedBeliefs(resp.Text)
 
-	existingVectors, proposedVectors, model, err := r.embedForMerge(ctx, active, proposals)
-	if err != nil {
-		return fmt.Errorf("consolidate: derive: %w", err)
+	keys := make([]string, len(proposals))
+	for i, p := range proposals {
+		facet, _ := selfmodel.ParseFacet(p.Facet) // decode already dropped an unparsable facet
+		keys[i] = consolidation.DeriveTopicKey(facet, p.Key)
+	}
+	activeKeyed, retiredKeyed := keyedBeliefs(active), keyedBeliefs(retired)
+
+	// Rule 1 of the shield needs no vector: a proposal that derives a retired
+	// belief's key is already decided. Only the rest still needs a semantic
+	// comparison, and only then is anything embedded.
+	hits := consolidation.RetiredKeyHits(keys, retiredKeyed)
+	var pending []int
+	for i := range proposals {
+		if _, decided := hits[i]; !decided {
+			pending = append(pending, i)
+		}
 	}
 
-	decisions, err := consolidation.MergeProposals(model, existingVectors, proposedVectors)
-	if err != nil {
-		return fmt.Errorf("consolidate: derive: merge proposals: %w", err)
+	var activeMerges, retiredMerges []consolidation.MergeDecision
+	var unusable map[int]string
+	if len(pending) > 0 {
+		vs, err := r.embedForMerge(ctx, active, retired, proposals, pending)
+		if err != nil {
+			return fmt.Errorf("consolidate: derive: %w", err)
+		}
+		unusable = vs.unusable
+		for _, d := range vs.dropped {
+			if err := r.recordRetiredEmbedFailed(ctx, d, pass.now); err != nil {
+				return err
+			}
+		}
+		activeMerges, retiredMerges, err = mergeAgainstActiveAndRetired(vs)
+		if err != nil {
+			return fmt.Errorf("consolidate: derive: merge proposals: %w", err)
+		}
 	}
 
-	return r.persistMergeDecisions(ctx, decisions, proposals, active, pass.now)
+	routes := consolidation.RouteProposals(activeMerges, retiredMerges, keys, activeKeyed, retiredKeyed)
+	return r.persistRoutes(ctx, routes, proposals, keys, active, unusable, pass.now)
 }
 
-// persistMergeDecisions routes every MergeProposals decision to its own
-// write (spec R5.8): MergeInto == "" (its own zero value) is the CREATE
-// half, routed to r.createDerivedBelief; MergeInto != "" is the MERGE
-// half, routed to r.reinforceDerivedBelief — never the topic-key upsert
-// for a merge, per ports.SelfModelRepo's own MUST NOT (selfmodelrepo.go).
-// active is indexed by id once, up front, so the merge half can look up
-// each target's current confidence without a second SelfModelRepo round
-// trip per decision.
-func (r consolidateRunner) persistMergeDecisions(ctx context.Context, decisions []consolidation.MergeDecision, proposals []derivedBeliefProposal, active []ports.Belief, now time.Time) error {
-	if len(decisions) == 0 {
-		return nil
+// keyedBeliefs reduces beliefs to what the shield decides from.
+func keyedBeliefs(bs []ports.Belief) []consolidation.KeyedBelief {
+	out := make([]consolidation.KeyedBelief, len(bs))
+	for i, b := range bs {
+		out[i] = consolidation.KeyedBelief{ID: b.ID, TopicKey: b.TopicKey, Origin: b.Origin}
 	}
+	return out
+}
 
+// mergeAgainstActiveAndRetired runs MergeProposals twice, once over the
+// active vectors and once over the retired ones, and maps each result from
+// its compact position back to the original proposal index. Two calls, not
+// one over a union: MergeProposals keeps only the nearest neighbour, so a
+// tie between an active and a retired belief must reach RouteProposals as
+// two similarities, not be settled by search order (design §3.3).
+func mergeAgainstActiveAndRetired(vs mergeEmbeddings) (activeMerges, retiredMerges []consolidation.MergeDecision, err error) {
+	if len(vs.proposed) == 0 {
+		return nil, nil, nil
+	}
+	remap := func(ds []consolidation.MergeDecision) []consolidation.MergeDecision {
+		for i := range ds {
+			ds[i].ProposedIndex = vs.proposedIndex[ds[i].ProposedIndex]
+		}
+		return ds
+	}
+	activeMerges, err = consolidation.MergeProposals(vs.model, vs.active, vs.proposed)
+	if err != nil {
+		return nil, nil, err
+	}
+	retiredMerges, err = consolidation.MergeProposals(vs.model, vs.retired, vs.proposed)
+	if err != nil {
+		return nil, nil, err
+	}
+	return remap(activeMerges), remap(retiredMerges), nil
+}
+
+// skipReasonChangedSinceRead is the reason of a skip row written when the
+// store refused a write because the belief changed after derive read it
+// (doc 02 §11: a scan-time conflict is recorded and skipped, never fatal).
+const skipReasonChangedSinceRead = "changed_since_read"
+
+// persistRoutes applies every route in proposal order. A store refusal
+// (ErrBeliefProtected from the upsert, ErrBeliefStatusConflict from the
+// reinforce) means the user changed the belief between derive's read and
+// its write: the proposal is skipped and recorded, and the pass goes on.
+// active is indexed once so a reinforce can read its target's confidence.
+func (r consolidateRunner) persistRoutes(ctx context.Context, routes []consolidation.Route, proposals []derivedBeliefProposal, keys []string, active []ports.Belief, unusable map[int]string, now time.Time) error {
 	byID := make(map[string]ports.Belief, len(active))
 	for _, b := range active {
 		byID[b.ID] = b
 	}
 
-	for _, d := range decisions {
-		proposal := proposals[d.ProposedIndex]
-		if d.MergeInto == "" {
-			if err := r.createDerivedBelief(ctx, proposal, now); err != nil {
+	for _, rt := range routes {
+		proposal, key := proposals[rt.ProposedIndex], keys[rt.ProposedIndex]
+		note := ""
+		if cause, ok := unusable[rt.ProposedIndex]; ok {
+			note = fmt.Sprintf("; semantic comparison skipped: proposal vector unusable (%s)", cause)
+		}
+		switch rt.Kind {
+		case consolidation.RouteSkipRetired:
+			rationale := fmt.Sprintf("derive: skipped proposal %q: it derives the topic key of retired belief %q", key, rt.BeliefID)
+			if rt.Reason == consolidation.RouteReasonRetiredSimilar {
+				rationale = fmt.Sprintf("derive: skipped proposal %q: retired belief %q is at least as similar to it as any active one (%.4f)", key, rt.BeliefID, rt.Similarity)
+			}
+			if err := r.recordSkip(ctx, key, rt.BeliefID, rt.Reason, rt.Similarity, rt.Reason == consolidation.RouteReasonRetiredSimilar, proposal.Content, rationale, now); err != nil {
 				return err
 			}
-			continue
-		}
-		if err := r.reinforceDerivedBelief(ctx, byID, d.MergeInto, now); err != nil {
-			return err
+		case consolidation.RouteReinforce:
+			err := r.reinforceDerivedBelief(ctx, byID, rt.BeliefID, now, note)
+			if errors.Is(err, ports.ErrBeliefStatusConflict) {
+				rationale := fmt.Sprintf("derive: skipped proposal %q: belief %q is no longer active", key, rt.BeliefID)
+				if rerr := r.recordSkip(ctx, key, rt.BeliefID, skipReasonChangedSinceRead, 0, false, proposal.Content, rationale, now); rerr != nil {
+					return rerr
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
+		default:
+			err := r.createDerivedBelief(ctx, proposal, now, note)
+			if errors.Is(err, ports.ErrBeliefProtected) {
+				rationale := fmt.Sprintf("derive: skipped proposal %q: the belief holding that key changed since it was read", key)
+				if rerr := r.recordSkip(ctx, key, "", skipReasonChangedSinceRead, 0, false, proposal.Content, rationale, now); rerr != nil {
+					return rerr
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// recordSkip writes one ActionDeriveBeliefSkipped row. The context is keyed
+// by what is true: topic_key is always the proposal's computed key,
+// belief_id is omitted when the store refused without naming a belief, and
+// similarity is omitted unless a semantic match decided the skip.
+func (r consolidateRunner) recordSkip(ctx context.Context, topicKey, beliefID, reason string, similarity float64, withSimilarity bool, content, rationale string, now time.Time) error {
+	detail := map[string]any{"topic_key": topicKey, "reason": reason, "proposed_content": content}
+	if beliefID != "" {
+		detail["belief_id"] = beliefID
+	}
+	if withSimilarity {
+		detail["similarity"] = similarity
+	}
+	return r.record(ctx, now, ports.ActionDeriveBeliefSkipped, rationale, detail)
+}
+
+// recordRetiredEmbedFailed writes the row for a retired belief whose vector
+// could not be used this pass. It concerns a belief, not a proposal, so it
+// has its own action and its own context shape.
+func (r consolidateRunner) recordRetiredEmbedFailed(ctx context.Context, d droppedRetired, now time.Time) error {
+	rationale := fmt.Sprintf("derive: retired belief %q could not be compared semantically this pass (%s); it is still matched by topic key", d.belief.ID, d.cause)
+	return r.record(ctx, now, ports.ActionDeriveRetiredEmbedFailed, rationale, map[string]any{
+		"belief_id": d.belief.ID, "topic_key": d.belief.TopicKey, "cause": d.cause,
+	})
 }
 
 // createDerivedBelief is R5.8's CREATE half: p's own facet/topic_key/
@@ -682,7 +811,7 @@ func (r consolidateRunner) persistMergeDecisions(ctx context.Context, decisions 
 // consolidation.DeriveTopicKey renders it (doc 02 §10:
 // "derived/{facet}/{key}"), written through UpsertByTopicKey and recorded
 // as ActionDeriveBeliefCreated (design §7.5's own count, row 5).
-func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBeliefProposal, now time.Time) error {
+func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBeliefProposal, now time.Time, note string) error {
 	facet, err := selfmodel.ParseFacet(p.Facet)
 	if err != nil {
 		// decodeDerivedBeliefs already filters an unparsable facet out of
@@ -706,7 +835,7 @@ func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBel
 	if err := r.selfModel.UpsertByTopicKey(ctx, b); err != nil {
 		return fmt.Errorf("consolidate: derive: upsert belief %q: %w", b.TopicKey, err)
 	}
-	rationale := fmt.Sprintf("derive: created belief %q (facet %q)", b.TopicKey, b.Facet)
+	rationale := fmt.Sprintf("derive: created belief %q (facet %q)%s", b.TopicKey, b.Facet, note)
 	return r.record(ctx, now, ports.ActionDeriveBeliefCreated, rationale, b)
 }
 
@@ -715,7 +844,7 @@ func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBel
 // looked up in active for the current Confidence consolidation.Reinforce
 // needs (m2b spec R4.5's own asymptotic law). active not containing id is
 // defensive-only — MergeInto is always chosen from the exact `existing`
-// slice built from active itself (embedForMerge, above), so this is
+// slice built from active itself (mergeEmbeddings.active), so this is
 // unreachable in practice, the same "never assume, still guard" posture
 // judgeAndPersistPair's own j.Type == nil check takes for connect's judge
 // response (PR 9b), restated here because ReinforceByID's own
@@ -723,7 +852,7 @@ func (r consolidateRunner) createDerivedBelief(ctx context.Context, p derivedBel
 // should just skip one decision. A decision with no effect writes nothing
 // (doc 02 §11): a belief already at exactly confidence 1 also returns
 // early here, via Reinforce's own (confidence, false).
-func (r consolidateRunner) reinforceDerivedBelief(ctx context.Context, active map[string]ports.Belief, id string, now time.Time) error {
+func (r consolidateRunner) reinforceDerivedBelief(ctx context.Context, active map[string]ports.Belief, id string, now time.Time, note string) error {
 	belief, ok := active[id]
 	if !ok {
 		return nil
@@ -735,7 +864,7 @@ func (r consolidateRunner) reinforceDerivedBelief(ctx context.Context, active ma
 	if err := r.selfModel.ReinforceByID(ctx, id, newConfidence, now); err != nil {
 		return fmt.Errorf("consolidate: derive: reinforce belief %q: %w", id, err)
 	}
-	rationale := fmt.Sprintf("derive: reinforced belief %q to confidence %.4f", id, newConfidence)
+	rationale := fmt.Sprintf("derive: reinforced belief %q to confidence %.4f%s", id, newConfidence, note)
 	return r.record(ctx, now, ports.ActionDeriveBeliefReinforced, rationale, map[string]any{"belief_id": id, "confidence": newConfidence})
 }
 
@@ -836,43 +965,154 @@ func decodeDerivedBeliefs(raw string) []derivedBeliefProposal {
 	return out
 }
 
-// embedForMerge is spec R5.7's own embedding step: every entry in active
-// is embedded exactly once, unconditionally — "in memory, per pass"
-// regardless of whether proposals is empty — followed by every entry in
-// proposals. Both sides go through the same *RecallService instance's own
-// ports.EmbeddingProvider (r.recall's own unexported embed field,
-// package-private but same-package here — design D9's "one shared
-// RecallService instance", never a second wiring convention for this
-// port), never a new consolidateRunner field: PR 10b widens no
-// NewConsolidateService parameter beyond ce23b23's own selfModel add.
-// model is whichever side's own EmbedResponse.Model answers first — both
-// sides share one EmbeddingProvider within a single phase run, so
-// idx.Model and every query's Model are never different values within one
-// MergeProposals call (design.md §7.1's own note on this exact hazard,
-// restated for derive).
-func (r consolidateRunner) embedForMerge(ctx context.Context, active []ports.Belief, proposals []derivedBeliefProposal) (existing, proposed []consolidation.BeliefVector, model string, err error) {
-	existing = make([]consolidation.BeliefVector, len(active))
-	for i, b := range active {
-		ev, eerr := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: b.Content})
-		if eerr != nil {
-			return nil, nil, "", fmt.Errorf("embed active belief %q: %w", b.ID, eerr)
+// The causes a vector can be unusable, as written in the context of a
+// retired_embed_failed row and in a proposal's rationale.
+const (
+	causeEmbedError        = "embed_error"
+	causeNonFinite         = "non_finite"
+	causeZeroVector        = "zero_vector"
+	causeDimensionMismatch = "dimension_mismatch"
+)
+
+// usableVector is the one place that lists what MergeProposals cannot
+// take: it returns "" when v can be compared against vectors of length dim,
+// and otherwise the cause. A component that is NaN or infinite and a vector
+// of zero magnitude (an empty one included) are what recall.Normalize
+// refuses; a length other than dim is what NewVectorIndex and Search refuse.
+// Each of these fails a whole MergeProposals call, so each is screened out
+// before it. dim == 0 means there is no reference yet and checks nothing.
+func usableVector(v []float32, dim int) string {
+	if _, err := recall.Normalize(v); err != nil {
+		if errors.Is(err, recall.ErrNonFiniteVector) {
+			return causeNonFinite
 		}
-		existing[i] = consolidation.BeliefVector{BeliefID: b.ID, Vector: ev.Vector}
-		model = ev.Model
+		return causeZeroVector
+	}
+	if dim > 0 && len(v) != dim {
+		return causeDimensionMismatch
+	}
+	return ""
+}
+
+// droppedRetired is a retired belief left out of this pass's semantic
+// comparison, and why.
+type droppedRetired struct {
+	belief ports.Belief
+	cause  string
+}
+
+// mergeEmbeddings is what embedForMerge hands MergeProposals: the active
+// vectors, the retired vectors that survived the screen, and the pending
+// proposals that survived it (proposedIndex maps each back to its original
+// position). dropped lists the retired beliefs the screen removed;
+// unusable maps an original proposal index to why its vector was excluded.
+type mergeEmbeddings struct {
+	model         string
+	active        []consolidation.BeliefVector
+	retired       []consolidation.BeliefVector
+	proposed      []consolidation.BeliefVector
+	proposedIndex []int
+	dropped       []droppedRetired
+	unusable      map[int]string
+}
+
+// embedForMerge is spec R5.7's embedding step, as amended by m4e (doc 02
+// §6 item 5). It is called only when at least one proposal still needs a
+// semantic comparison (pending names those, by original index); a night
+// with nothing pending embeds nothing. Then every active belief, every
+// retired belief and every pending proposal is embedded once, in memory,
+// and discarded after the phase.
+//
+// An active belief or a proposal that fails to embed aborts the phase, as
+// before. A retired belief whose embedding fails is dropped for the pass
+// under usableVector's policy and logged by the caller; it is still matched
+// by key. A cancelled context is never that policy: it aborts like any
+// other cancelled read.
+//
+// The reference dimension is the first active belief's vector length (an
+// active vector that is unusable already aborts, so the active set is the
+// trusted one), else the first USABLE pending proposal's. Pending proposals
+// are screened with the same rule and an unusable one is excluded from both
+// merges: it falls to "create" (or "reinforce a user-stated key") without a
+// semantic comparison, and its rationale says so.
+//
+// All embeds go through the same *RecallService instance's own
+// ports.EmbeddingProvider (design D9's "one shared RecallService
+// instance"). model is whichever embedding answers first; every embed in
+// one phase run shares one provider, so idx.Model and every query's Model
+// are never different values within one MergeProposals call (design.md
+// §7.1's note on this exact hazard).
+func (r consolidateRunner) embedForMerge(ctx context.Context, active, retired []ports.Belief, proposals []derivedBeliefProposal, pending []int) (mergeEmbeddings, error) {
+	vs := mergeEmbeddings{unusable: map[int]string{}}
+	setModel := func(m string) {
+		if vs.model == "" {
+			vs.model = m
+		}
 	}
 
-	proposed = make([]consolidation.BeliefVector, len(proposals))
-	for i, p := range proposals {
-		ev, eerr := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: p.Content})
-		if eerr != nil {
-			return nil, nil, "", fmt.Errorf("embed proposed belief %d: %w", i, eerr)
+	vs.active = make([]consolidation.BeliefVector, len(active))
+	for i, b := range active {
+		ev, err := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: b.Content})
+		if err != nil {
+			return mergeEmbeddings{}, fmt.Errorf("embed active belief %q: %w", b.ID, err)
 		}
-		proposed[i] = consolidation.BeliefVector{Vector: ev.Vector}
-		if model == "" {
-			model = ev.Model
-		}
+		vs.active[i] = consolidation.BeliefVector{BeliefID: b.ID, Vector: ev.Vector}
+		setModel(ev.Model)
 	}
-	return existing, proposed, model, nil
+
+	retiredVecs := make([][]float32, len(retired))
+	retiredErr := make([]bool, len(retired))
+	for i, b := range retired {
+		ev, err := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: b.Content})
+		if err != nil {
+			if ctx.Err() != nil {
+				return mergeEmbeddings{}, fmt.Errorf("embed retired belief %q: %w", b.ID, err)
+			}
+			retiredErr[i] = true
+			continue
+		}
+		retiredVecs[i] = ev.Vector
+		setModel(ev.Model)
+	}
+
+	pendingVecs := make([][]float32, len(pending))
+	for i, idx := range pending {
+		ev, err := r.recall.embed.Embed(ctx, ports.EmbedRequest{Text: proposals[idx].Content})
+		if err != nil {
+			return mergeEmbeddings{}, fmt.Errorf("embed proposed belief %d: %w", idx, err)
+		}
+		pendingVecs[i] = ev.Vector
+		setModel(ev.Model)
+	}
+
+	dim := 0
+	if len(vs.active) > 0 {
+		dim = len(vs.active[0].Vector)
+	}
+	for i, idx := range pending {
+		if cause := usableVector(pendingVecs[i], dim); cause != "" {
+			vs.unusable[idx] = cause
+			continue
+		}
+		if dim == 0 {
+			dim = len(pendingVecs[i])
+		}
+		vs.proposed = append(vs.proposed, consolidation.BeliefVector{Vector: pendingVecs[i]})
+		vs.proposedIndex = append(vs.proposedIndex, idx)
+	}
+
+	for i, b := range retired {
+		cause := causeEmbedError
+		if !retiredErr[i] {
+			cause = usableVector(retiredVecs[i], dim)
+		}
+		if cause != "" {
+			vs.dropped = append(vs.dropped, droppedRetired{belief: b, cause: cause})
+			continue
+		}
+		vs.retired = append(vs.retired, consolidation.BeliefVector{BeliefID: b.ID, Vector: retiredVecs[i]})
+	}
+	return vs, nil
 }
 
 // persistArchiveTransitions applies ts through units.SetStatus, in the
