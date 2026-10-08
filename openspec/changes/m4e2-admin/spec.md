@@ -15,7 +15,7 @@ States what MUST be true after this change, in testable form; not how (`design.m
 > merges, which itself follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
 > measured 2.06x): `m4e-activity` now owns what the old m4e PRs 5-6 built.
 >
-> From **`m4e-activity`** ([`../m4e-activity/spec.md`](../m4e-activity/spec.md)):
+> From **`m4e-activity`** ([`../archive/2026-10-08-m4e-activity/spec.md`](../archive/2026-10-08-m4e-activity/spec.md)):
 > - **the newest-first read** `DecisionLog.Before` and its page cursor (admin lists recent
 >   consolidation effects through it);
 > - **the change decoder** in `ActivityService` (R6 of m4e-activity), which must already accept
