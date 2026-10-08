@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/selfmodel"
@@ -25,8 +26,8 @@ func NewSelfModelRepo(v *Vault) *SelfModelRepo {
 
 var _ ports.SelfModelRepo = (*SelfModelRepo)(nil)
 
-// selfBeliefSelectColumns is shared by ActiveBeliefs and ReinforceByID's own
-// verification query — one column list, one place.
+// selfBeliefSelectColumns is shared by BeliefByID and readBeliefs (which
+// ActiveBeliefs and RetiredBeliefs call) — one column list, one place.
 const selfBeliefSelectColumns = `SELECT id, facet, topic_key, content, confidence, origin,
 	source_unit_id, status, last_reinforced_at, created_at, updated_at`
 
@@ -81,10 +82,18 @@ func (r *SelfModelRepo) BeliefByID(ctx context.Context, id string) (ports.Belief
 }
 
 // SetStatus implements ports.SelfModelRepo. from is an optimistic-concurrency
-// precondition, not a validation (UnitRepo.SetStatus's own shape): it is the
-// UPDATE's own WHERE clause, so a writer landing between a caller's read and
-// this call is refused by the statement itself.
+// precondition, not a legality check (UnitRepo.SetStatus's own shape): it is
+// the UPDATE's own WHERE clause, so a writer landing between a caller's read
+// and this call is refused by the statement itself. Both statuses must be
+// members of selfmodel.AllStatuses() (ports.ErrBeliefStatusInvalid, checked
+// before anything is read or written); within that vocabulary every pair is
+// allowed, retired -> active included — derive's paths enforce "the user's
+// word wins", not this primitive.
 func (r *SelfModelRepo) SetStatus(ctx context.Context, id string, from, to selfmodel.Status, at time.Time) error {
+	known := selfmodel.AllStatuses()
+	if !slices.Contains(known, from) || !slices.Contains(known, to) {
+		return fmt.Errorf("belief %q status %q -> %q: %w", id, from, to, ports.ErrBeliefStatusInvalid)
+	}
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE self_beliefs SET status = ?, updated_at = ? WHERE id = ? AND status = ?`,
 		string(to), formatUnitTime(at), id, string(from),
@@ -116,7 +125,9 @@ func (r *SelfModelRepo) EditContent(ctx context.Context, id, from, to string, at
 // ErrBeliefStatusConflict when the row exists but a guard refused it. The
 // disambiguating read runs only after a zero-row UPDATE, so the guard in the
 // statement is the single decision and nothing can slip between a check and
-// a write.
+// a write. The conflict reported can be stale under a concurrent write (the
+// row may have changed between the UPDATE and the read); that is harmless,
+// because nothing was written and the caller may retry.
 func (r *SelfModelRepo) explainZeroRows(ctx context.Context, res sql.Result, id string) error {
 	n, err := res.RowsAffected()
 	if err != nil {

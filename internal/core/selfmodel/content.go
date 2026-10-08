@@ -28,7 +28,8 @@ var ErrEmptyContent = errors.New("selfmodel: belief content is empty")
 var ErrContentTooLong = errors.New("selfmodel: belief content is too long")
 
 // NormalizeText is the total, non-validating half of the content rules:
-// every "\r\n" becomes "\n", then surrounding whitespace is trimmed. It
+// every "\r\n" becomes "\n", then surrounding whitespace is trimmed. Only
+// CRLF is converted; a bare "\r" is left as-is, deliberately. It
 // never errors, so it is safe to apply to stored text that must not be
 // validated (derived content is unbounded and may look blank).
 func NormalizeText(raw string) string {

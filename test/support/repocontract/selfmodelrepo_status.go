@@ -329,12 +329,13 @@ func RunSetStatus(t *testing.T, newRepo func(t *testing.T) ports.SelfModelRepo) 
 		requireBelief(t, repo, "mismatched from", seeded[idGoalDerived])
 	})
 
-	t.Run("honours any from/to pair the caller names", func(t *testing.T) {
+	t.Run("un-retire (retired -> active) is allowed at the store level: the user's-word-wins rule lives on derive's paths, not here", func(t *testing.T) {
 		repo := newRepo(t)
 		seeded := seedFXB(t, repo)
 
-		// The vocabulary has no legality table in the store: from is a
-		// precondition, to is written as given.
+		// Design OR-1 reserves this transition for a future user-initiated
+		// caller. The store must not refuse it; from is a precondition and
+		// to is written as given, provided both are known statuses.
 		if err := repo.SetStatus(context.Background(), idGoalRetired, selfmodel.StatusRetired, selfmodel.StatusActive, retireAt); err != nil {
 			t.Fatalf("SetStatus(retired -> active): %v", err)
 		}
@@ -343,6 +344,51 @@ func RunSetStatus(t *testing.T, newRepo func(t *testing.T) ports.SelfModelRepo) 
 		want.UpdatedAt = retireAt
 		requireBelief(t, repo, "retired -> active", want)
 		requireOthersUnchanged(t, repo, "after retired -> active", seeded, idGoalRetired)
+	})
+
+	t.Run("from == to is accepted like UnitRepo.SetStatus: status stays, updated_at moves", func(t *testing.T) {
+		repo := newRepo(t)
+		seeded := seedFXB(t, repo)
+
+		if err := repo.SetStatus(context.Background(), idGoalDerived, selfmodel.StatusActive, selfmodel.StatusActive, retireAt); err != nil {
+			t.Fatalf("SetStatus(active -> active): %v", err)
+		}
+		want := seeded[idGoalDerived]
+		want.UpdatedAt = retireAt
+		requireBelief(t, repo, "active -> active", want)
+		requireOthersUnchanged(t, repo, "after active -> active", seeded, idGoalDerived)
+	})
+
+	t.Run("a from or to outside AllStatuses is ErrBeliefStatusInvalid and writes nothing", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			from, to selfmodel.Status
+		}{
+			{"unknown to", selfmodel.StatusActive, selfmodel.Status("archived")},
+			{"empty to", selfmodel.StatusActive, selfmodel.Status("")},
+			{"unknown from", selfmodel.Status("archived"), selfmodel.StatusRetired},
+			{"empty from", selfmodel.Status(""), selfmodel.StatusRetired},
+			{"both unknown", selfmodel.Status("x"), selfmodel.Status("y")},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				repo := newRepo(t)
+				seeded := seedFXB(t, repo)
+
+				err := repo.SetStatus(context.Background(), idGoalDerived, tc.from, tc.to, retireAt)
+				if !errors.Is(err, ports.ErrBeliefStatusInvalid) {
+					t.Fatalf("SetStatus(%q -> %q) error = %v, want ports.ErrBeliefStatusInvalid", tc.from, tc.to, err)
+				}
+				requireOthersUnchanged(t, repo, "after an invalid status", seeded)
+			})
+		}
+
+		t.Run("validation runs before the id lookup", func(t *testing.T) {
+			repo := newRepo(t)
+			err := repo.SetStatus(context.Background(), "no-such-belief", selfmodel.StatusActive, selfmodel.Status("archived"), retireAt)
+			if !errors.Is(err, ports.ErrBeliefStatusInvalid) {
+				t.Fatalf("SetStatus(unknown id, invalid to) error = %v, want ports.ErrBeliefStatusInvalid", err)
+			}
+		})
 	})
 
 	t.Run("an unknown id is ErrBeliefNotFound and writes nothing", func(t *testing.T) {

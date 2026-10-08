@@ -2,6 +2,8 @@ package memrepo
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -124,10 +126,16 @@ func (s *SelfModel) BeliefByID(_ context.Context, id string) (ports.Belief, erro
 	return b, nil
 }
 
-// SetStatus implements ports.SelfModelRepo. from is a precondition: a belief
-// not currently in from is ports.ErrBeliefStatusConflict and nothing is
-// written.
+// SetStatus implements ports.SelfModelRepo. A from or to outside
+// selfmodel.AllStatuses() is ports.ErrBeliefStatusInvalid; from is a
+// precondition: a belief not currently in from is
+// ports.ErrBeliefStatusConflict and nothing is written.
 func (s *SelfModel) SetStatus(_ context.Context, id string, from, to selfmodel.Status, at time.Time) error {
+	known := selfmodel.AllStatuses()
+	if !slices.Contains(known, from) || !slices.Contains(known, to) {
+		return fmt.Errorf("belief %q status %q -> %q: %w", id, from, to, ports.ErrBeliefStatusInvalid)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

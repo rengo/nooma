@@ -90,9 +90,13 @@ type SelfModelRepo interface {
 
 	// SetStatus moves the belief from one status to another and bumps
 	// updated_at to at. from is an optimistic-concurrency precondition,
-	// not a validation — UnitRepo.SetStatus's own shape. An unknown id is
-	// ErrBeliefNotFound; a belief not currently in from is
-	// ErrBeliefStatusConflict, with nothing written.
+	// not a legality check — UnitRepo.SetStatus's own shape, so any pair of
+	// known statuses is accepted, including retired -> active (reserved for
+	// a future user-initiated caller; derive never makes that call) and
+	// from == to (a write that bumps updated_at, as UnitRepo does). A from
+	// or to outside selfmodel.AllStatuses() is ErrBeliefStatusInvalid, an
+	// unknown id is ErrBeliefNotFound, and a belief not currently in from
+	// is ErrBeliefStatusConflict; each writes nothing.
 	SetStatus(ctx context.Context, id string, from, to selfmodel.Status, at time.Time) error
 
 	// EditContent replaces the content of an ACTIVE belief whose content
@@ -113,6 +117,12 @@ var ErrBeliefNotFound = errors.New("belief not found")
 // the state the caller expected: SetStatus's from, EditContent's active
 // status or content precondition, or ReinforceByID's active status.
 var ErrBeliefStatusConflict = errors.New("belief is not in the expected state")
+
+// ErrBeliefStatusInvalid is returned by SetStatus when from or to is not a
+// member of selfmodel.AllStatuses(). The check runs before any read or
+// write, so nothing is written. It is a malformed call, not a stale one:
+// a well-formed from that no longer matches is ErrBeliefStatusConflict.
+var ErrBeliefStatusInvalid = errors.New("belief status is not a known status")
 
 // ErrBeliefProtected is returned by UpsertByTopicKey when the row holding
 // the topic_key is not active-and-derived: derive may not overwrite it.

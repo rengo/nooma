@@ -6,8 +6,9 @@ package selfmodel
 // with no conversion table.
 //
 // The vocabulary is closed at two members. Retiring a belief is a
-// transition, never a removal (doc 02 §10, I03); there is no way back in
-// this vocabulary, and no surface offers one.
+// transition, never a removal (doc 02 §10, I03). Derive never undoes a
+// retirement; only an explicit user act could reverse it, and no surface
+// offers one yet.
 type Status string
 
 // The Status vocabulary members, doc 03 self_beliefs.status.
