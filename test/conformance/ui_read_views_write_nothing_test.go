@@ -24,8 +24,9 @@ import (
 // Today's own proof is TestI27_ViewingIsNotDelivering; this one drives each
 // later view through the real handler stack over write-counting decorators
 // of every repo its service holds, and fails the moment any write method is
-// reached. The beliefs GET is the first entry; the activity and admin GETs
-// add theirs in their own changes.
+// reached. The beliefs GET is the first entry and the activity GET the second
+// (TestUIReadViewsWriteNothing_ActivityGet); the admin GET adds its own in
+// its own change.
 //
 // The forbidden methods are enumerated from internal/ports: SelfModelRepo's
 // four writes (UpsertByTopicKey, ReinforceByID, SetStatus, EditContent),
@@ -75,6 +76,47 @@ func TestUIReadViewsWriteNothing(t *testing.T) {
 	}
 	if selfModel.activeReads != 3 {
 		t.Errorf("ActiveBeliefs was read %d time(s) over three requests, want 3 — the view did not go through the decorated repo", selfModel.activeReads)
+	}
+}
+
+// TestUIReadViewsWriteNothing_ActivityGet is G7 for /ui/activity (R5): the
+// page, paged and filtered, runs over a decorated DecisionLog and reaches no
+// write method. The rows are seeded through the undecorated log, so the
+// guard on Record stays armed for the view.
+func TestUIReadViewsWriteNothing_ActivityGet(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+
+	inner := memrepo.NewDecisionLog()
+	for i, d := range []ports.Decision{
+		{ID: "d-1", Action: ports.ActionCaptureUnitCreated, Rationale: "stored the first note", OccurredAt: at},
+		{ID: "d-2", Action: ports.ActionCheckTimerFired, Rationale: "fired the timer", OccurredAt: at.Add(time.Second)},
+	} {
+		if err := inner.Record(ctx, d); err != nil {
+			t.Fatalf("seed decision %d: %v", i, err)
+		}
+	}
+	log := &rvwDecisionLog{DecisionLog: inner, t: t}
+
+	h := httpapi.Handler(httpapi.Deps{Version: "test", UI: ui.New(ui.Deps{Activity: brain.NewActivityService(log)})})
+
+	targets := []string{"/ui/activity", "/ui/activity?kind=check", "/ui/activity?kind=capture&before_at=2026-09-01T09%3A00%3A05Z&before_seq=9"}
+	for i, target := range targets {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200: %s", target, rec.Code, rec.Body.String())
+		}
+		if i == 0 {
+			for _, want := range []string{"stored the first note", "fired the timer"} {
+				if !strings.Contains(rec.Body.String(), want) {
+					t.Fatalf("GET %s does not render %q — the view must actually run for this gate to mean anything:\n%s", target, want, rec.Body.String())
+				}
+			}
+		}
+	}
+	if log.beforeReads != len(targets) {
+		t.Errorf("Before was read %d time(s) over %d requests, want one each — the view did not go through the decorated log", log.beforeReads, len(targets))
 	}
 }
 
@@ -138,7 +180,14 @@ func (g *rvwSignals) Record(context.Context, ports.Signal) error {
 // write.
 type rvwDecisionLog struct {
 	*memrepo.DecisionLog
-	t rvwT
+	t           rvwT
+	beforeReads int
+}
+
+// Before counts the read the activity view must make.
+func (g *rvwDecisionLog) Before(ctx context.Context, before *ports.DecisionCursor, prefix string, limit int) ([]ports.DecisionRow, error) {
+	g.beforeReads++
+	return g.DecisionLog.Before(ctx, before, prefix, limit)
 }
 
 func (g *rvwDecisionLog) Record(context.Context, ports.Decision) error {

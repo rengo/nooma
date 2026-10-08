@@ -107,8 +107,8 @@ did and why.
    (see [M5](#the-learner-m5-planned)).
 8. **Tells the story.** Every decision with an effect writes a row to the `decision_log` with a
    rationale naming the specific unit, relation or belief ([doc 02 §11](02-cognitive-core.md#11-the-glass-box)).
-   The vault is an ordinary SQLite file, so `sqlite3 <vault>` can read that story today; a
-   dedicated activity screen is planned (see the [status table](#status)).
+   `/ui/activity` tells it newest first, and `sqlite3 <vault>` can read it too (see the
+   [status table](#status)).
 
 **You end up with** a vault a little more organized than you left it, and an audit trail instead
 of a black box.

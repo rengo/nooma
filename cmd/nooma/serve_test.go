@@ -77,7 +77,7 @@ func TestServeUsageShowsNoUIPrecedence(t *testing.T) {
 // wireUnits never actually return nil in production, but this proves the
 // guard holds regardless.
 func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
-	deps := uiDeps(nil, nil, nil, nil, nil, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, nil, nil, ui.Serving{})
 
 	if deps.Today != nil {
 		t.Error("Today: want a nil interface for a nil *brain.TodayService, got non-nil — the typed-nil trap uiDeps exists to avoid")
@@ -94,6 +94,22 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 	if deps.Beliefs != nil {
 		t.Error("Beliefs: want a nil interface for a nil *brain.BeliefsService, got non-nil")
 	}
+	if deps.Activity != nil {
+		t.Error("Activity: want a nil interface for a nil *brain.ActivityService, got non-nil")
+	}
+}
+
+// TestUIDeps_PassesTheActivityServiceThrough is the other half of the typed-nil
+// guard for Activity: a real service must reach ui.Deps.Activity, or
+// /ui/activity would answer 503 on a vault that has everything it needs.
+func TestUIDeps_PassesTheActivityServiceThrough(t *testing.T) {
+	svc := brain.NewActivityService(nil)
+
+	deps := uiDeps(nil, nil, nil, nil, nil, svc, ui.Serving{})
+
+	if deps.Activity != ui.Activity(svc) {
+		t.Errorf("Activity = %v, want the service handed to uiDeps", deps.Activity)
+	}
 }
 
 // TestUIDeps_PassesTheBeliefsServiceThrough is the other half of the typed-nil
@@ -102,7 +118,7 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 func TestUIDeps_PassesTheBeliefsServiceThrough(t *testing.T) {
 	svc := brain.NewBeliefsService(nil, nil, nil, nil, nil)
 
-	deps := uiDeps(nil, nil, nil, nil, svc, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, svc, nil, ui.Serving{})
 
 	if deps.Beliefs != ui.Beliefs(svc) {
 		t.Errorf("Beliefs = %v, want the service handed to uiDeps", deps.Beliefs)

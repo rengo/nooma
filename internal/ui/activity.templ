@@ -1,0 +1,50 @@
+package ui
+
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+)
+
+// ActivityPage is GET /ui/activity's full page: the family filter, the rows
+// newest first and, only when older rows exist, a link to them.
+templ ActivityPage(page brain.ActivityPage, kind string, families []string) {
+	@Page("nooma — activity", activityBody(page, kind, families))
+}
+
+// The only form on the page is the GET filter: no row carries a control, so a
+// previous value is shown and never offered back (m4e-activity design G8).
+templ activityBody(page brain.ActivityPage, kind string, families []string) {
+	<section>
+		<h2>ACTIVITY</h2>
+		<form method="get" action="/ui/activity">
+			<label for="kind">Kind</label>
+			<select id="kind" name="kind">
+				<option value="" selected?={ kind == "" }>All</option>
+				for _, f := range families {
+					<option value={ f } selected?={ f == kind }>{ f }</option>
+				}
+			</select>
+			<button type="submit">Filter</button>
+		</form>
+		<ol>
+			for _, row := range page.Rows {
+				<li data-decision-id={ row.ID }>
+					<time datetime={ row.OccurredAt.UTC().Format(time.RFC3339) }>{ row.OccurredAt.UTC().Format(time.RFC3339) }</time>
+					<code>{ string(row.Action) }</code>
+					<span>{ row.Rationale }</span>
+					if len(row.Change) > 0 {
+						<ul data-change>
+							for _, c := range row.Change {
+								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { c.Previous } → { c.Next }</li>
+							}
+						</ul>
+					}
+				</li>
+			}
+		</ol>
+		if page.Next != nil {
+			<a href={ templ.URL(olderURL(kind, page.Next)) } rel="next">Older</a>
+		}
+	</section>
+}

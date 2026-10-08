@@ -212,6 +212,7 @@ GET /ui/activity?kind&before_at&before_seq ─▶ Page ─▶ DecisionLog.Before
 | File | Action | PR |
 |---|---|---|
 | `internal/ports/decisionlog.go`, `internal/store/sqlite/decisionlog.go`, memrepo, repocontract | `DecisionCursor`, `DecisionRow`, `Before` | 5 |
+| `test/conformance/ui_read_views_write_nothing_test.go` | **Ripple:** `rvwDecisionLog` embeds `memrepo.DecisionLog`, so `Before` was promoted silently; the G7 classification (`rvwDecisionReads`) names it among the reads | 5 |
 | `internal/brain/check_test.go:323` (`recordingLog`) | **Ripple:** a hand-written `ports.DecisionLog` double with `Record` and `Since` (`:357`) only; it stops compiling when the port gains `Before`. Add a `Before` that returns an empty page (its tests never page). The other `ports.DecisionLog` users (`i27DecisionLog`, the `memrepo` embeds) promote the new read and need no edit; `test/conformance/i27_viewing_is_not_delivering_test.go`'s header comment ("DecisionLog: Record writes; Since reads") gains `Before` among the reads | 5 |
 | `internal/brain/activity.go`; `internal/ui/activity.go`, `activity.templ`, `ui.go`, `layout.templ`; `cmd/nooma/wiring.go` (`wireActivity`), `wiring_activity_test.go`, `serve.go`, `serve_test.go` | page service + view + wiring + `uiDeps` | 6 |
 | `internal/httpapi/server_test.go:117` (`TestUIGuardedLeavesEachReachAView`) | `/ui/activity` leaf, `ACTIVITY` marker, stub `Activity` | 6 |

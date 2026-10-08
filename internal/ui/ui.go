@@ -48,18 +48,26 @@ type Capturer interface {
 	Capture(ctx context.Context, in brain.CaptureInput) (brain.CaptureResult, error)
 }
 
+// Activity is /ui/activity's own entry point into the decision log (m4e-activity
+// design §3.6): one newest-first page, optionally narrowed to one action
+// family. It reads and writes nothing else. *brain.ActivityService satisfies it.
+type Activity interface {
+	Page(ctx context.Context, kind string, before *ports.DecisionCursor) (brain.ActivityPage, error)
+}
+
 // Deps is what New needs to build the mirror's handler. Today, Units,
-// Search, Capture and Beliefs are nil until wired (cmd/nooma's own transitional
+// Search, Capture, Beliefs and Activity are nil until wired (cmd/nooma's own transitional
 // state, and every test fixture that does not need a real view); each nil
 // dependency answers 503 for the routes that need it, rather than
 // panicking on a nil receiver (design m4a §3.1, §3.4's typed-nil gotcha).
 type Deps struct {
-	Today   TodayReader
-	Units   UnitsReader
-	Search  Searcher
-	Capture Capturer
-	Beliefs Beliefs
-	Serving Serving
+	Today    TodayReader
+	Units    UnitsReader
+	Search   Searcher
+	Capture  Capturer
+	Beliefs  Beliefs
+	Activity Activity
+	Serving  Serving
 }
 
 // Serving carries the two process facts SYSTEM needs that are not the
@@ -112,6 +120,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveBeliefEdit(w, r)
 	case "POST /ui/beliefs/{id}/retire":
 		h.serveBeliefRetire(w, r)
+	case "GET /ui/activity":
+		h.serveActivity(w, r)
 	default:
 		http.NotFound(w, r)
 	}

@@ -846,7 +846,7 @@ func TestBeliefEdit_HTMXFailuresSwapNoItem(t *testing.T) {
 	}
 }
 
-func TestLayout_NavLinksToBeliefsAndNotYetToActivity(t *testing.T) {
+func TestLayout_NavLinksToBeliefsAndActivity(t *testing.T) {
 	t.Parallel()
 
 	pages := map[string]string{}
@@ -866,8 +866,8 @@ func TestLayout_NavLinksToBeliefsAndNotYetToActivity(t *testing.T) {
 		if !strings.Contains(nav, `<a href="/ui/beliefs">Beliefs</a>`) {
 			t.Errorf("%s: nav has no beliefs link:\n%s", name, nav)
 		}
-		if strings.Contains(nav, "/ui/activity") {
-			t.Errorf("%s: nav links /ui/activity, which belongs to the m4e-activity change:\n%s", name, nav)
+		if !strings.Contains(nav, `<a href="/ui/activity">Activity</a>`) {
+			t.Errorf("%s: nav has no activity link:\n%s", name, nav)
 		}
 	}
 }
