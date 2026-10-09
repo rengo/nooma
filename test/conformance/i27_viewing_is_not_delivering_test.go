@@ -159,7 +159,7 @@ func (g *i27Units) ApplyBoosts(context.Context, []weight.Boost, time.Time) error
 	return nil
 }
 
-// i27Triggers wraps memrepo.Triggers, failing on TriggerRepo's five write
+// i27Triggers wraps memrepo.Triggers, failing on TriggerRepo's six write
 // methods.
 type i27Triggers struct {
 	*memrepo.Triggers
@@ -184,6 +184,10 @@ func (g *i27Triggers) Resolve(context.Context, string, ports.TriggerResolution, 
 }
 func (g *i27Triggers) Expire(context.Context, string) error {
 	i27Fail(g.t, "TriggerRepo", "Expire")
+	return nil
+}
+func (g *i27Triggers) Reschedule(context.Context, string, ports.TriggerMove) error {
+	i27Fail(g.t, "TriggerRepo", "Reschedule")
 	return nil
 }
 

@@ -392,6 +392,101 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 	})
 }
 
+// RunTriggerFollow runs the half of the ports.TriggerRepo contract a
+// corrected date uses (I29): ArmedForUnit and Reschedule.
+func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
+	t.Helper()
+	ctx := context.Background()
+
+	// seed creates three triggers on one unit (two armed, one fired) and
+	// one armed trigger on another unit.
+	seed := func(t *testing.T, repo TriggerHarness) {
+		t.Helper()
+		late, early, fired := contractNow.Add(2*time.Hour), contractNow.Add(time.Hour), contractNow
+		for _, trg := range []ports.Trigger{fixtureTrigger("trg-late", &late), fixtureTrigger("trg-early", &early), fixtureTrigger("trg-fired", &fired), fixtureTrigger("trg-other", &early)} {
+			if trg.ID != "trg-other" {
+				unitID := "unit-shared"
+				trg.UnitID = &unitID
+			}
+			createTrigger(t, repo, trg)
+		}
+		if err := repo.Fire(ctx, "trg-fired", fired); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+	}
+	armed := func(t *testing.T, repo TriggerHarness) []ports.DueTrigger {
+		t.Helper()
+		got, err := repo.ArmedForUnit(ctx, "unit-shared")
+		if err != nil {
+			t.Fatalf("ArmedForUnit: %v", err)
+		}
+		return got
+	}
+
+	t.Run("ArmedForUnit returns the unit's armed triggers by fire_at", func(t *testing.T) {
+		repo := newRepo(t)
+		seed(t, repo)
+		got := armed(t, repo)
+		assertDueTriggerIDs(t, got, "trg-early", "trg-late")
+		if got[0].Payload.ActionText != "renew the passport" || got[0].InterruptLevel == nil {
+			t.Errorf("ArmedForUnit row = %+v, want the stored payload and level", got[0])
+		}
+	})
+
+	t.Run("Reschedule moves fire_at and action text and keeps the rest", func(t *testing.T) {
+		repo := newRepo(t)
+		seed(t, repo)
+		to := contractNow.Add(5 * time.Hour)
+		if err := repo.Reschedule(ctx, "trg-early", ports.TriggerMove{FireAt: to, ActionText: "renew it today"}); err != nil {
+			t.Fatalf("Reschedule: %v", err)
+		}
+		got := armed(t, repo)
+		assertDueTriggerIDs(t, got, "trg-late", "trg-early")
+		moved := got[1]
+		if !moved.FireAt.Equal(to) || moved.Payload.ActionText != "renew it today" {
+			t.Errorf("moved = %s %q, want %s %q", moved.FireAt, moved.Payload.ActionText, to, "renew it today")
+		}
+		if moved.Payload.Rationale != "it expires in three months" || moved.Payload.LeadDays != 7 || moved.InterruptLevel == nil || *moved.InterruptLevel != 0.42 {
+			t.Errorf("moved = %+v, want rationale, lead days and level as armed", moved)
+		}
+		if moved.RecurrenceAnchor != nil {
+			t.Errorf("RecurrenceAnchor = %+v, want nil — a nil move anchor writes none", moved.RecurrenceAnchor)
+		}
+	})
+
+	t.Run("Reschedule replaces a recurring anchor and keeps it when nil", func(t *testing.T) {
+		repo := newRepo(t)
+		fireAt := contractNow
+		rule := prospection.RuleYearly
+		trg := fixtureTrigger("trg-rec", &fireAt)
+		trg.RecurrenceRule = &rule
+		trg.RecurrenceAnchor = &prospection.Anchor{Month: time.March, Day: 1}
+		createTrigger(t, repo, trg)
+		next := &prospection.Anchor{Month: time.April, Day: 2}
+		if err := repo.Reschedule(ctx, "trg-rec", ports.TriggerMove{FireAt: fireAt, RecurrenceAnchor: next}); err != nil {
+			t.Fatalf("Reschedule: %v", err)
+		}
+		if err := repo.Reschedule(ctx, "trg-rec", ports.TriggerMove{FireAt: fireAt}); err != nil {
+			t.Fatalf("Reschedule: %v", err)
+		}
+		got := dueTriggers(t, repo, fireAt)
+		if len(got) != 1 || !sameAnchor(got[0].RecurrenceAnchor, next) || got[0].RecurrenceRule == nil {
+			t.Errorf("recurring = %+v, want anchor %+v and its rule kept", got, next)
+		}
+	})
+
+	t.Run("Reschedule refuses a trigger that is not armed, or does not exist", func(t *testing.T) {
+		repo := newRepo(t)
+		seed(t, repo)
+		if err := repo.Reschedule(ctx, "trg-fired", ports.TriggerMove{FireAt: contractNow}); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Errorf("Reschedule(fired) = %v, want ErrTriggerStatusConflict", err)
+		}
+		if err := repo.Reschedule(ctx, "nope", ports.TriggerMove{FireAt: contractNow}); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Errorf("Reschedule(unknown) = %v, want ErrTriggerNotFound", err)
+		}
+	})
+}
+
 // fixtureTrigger is one armed, time_based trigger — the only kind m3b's
 // Arm produces. fireAt is a pointer because triggers.fire_at is nullable
 // and a pattern_based trigger legitimately has none.

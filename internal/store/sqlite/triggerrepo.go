@@ -178,6 +178,51 @@ func (r *TriggerRepo) Resolve(ctx context.Context, id string, to ports.TriggerRe
 		formatUnitTime(at), string(to), id)
 }
 
+// ArmedForUnit implements ports.TriggerRepo.
+func (r *TriggerRepo) ArmedForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor, payload
+		 FROM triggers
+		 WHERE status = ? AND unit_id = ? AND fire_at IS NOT NULL
+		 ORDER BY fire_at, id`,
+		string(ports.TriggerStatusArmed), unitID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("select armed triggers for unit %q: %w", unitID, err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := make([]ports.DueTrigger, 0)
+	for rows.Next() {
+		d, err := scanDueTrigger(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select armed triggers for unit %q: %w", unitID, err)
+	}
+	return out, nil
+}
+
+// Reschedule implements ports.TriggerRepo. json_set rewrites the one
+// payload key that moves and leaves rationale and lead_days as armed;
+// COALESCE keeps the anchor when the move carries none.
+func (r *TriggerRepo) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {
+	anchor, err := marshalAnchor(m.RecurrenceAnchor)
+	if err != nil {
+		return fmt.Errorf("marshal trigger %q recurrence_anchor: %w", id, err)
+	}
+	return r.guardedUpdate(ctx, id,
+		`UPDATE triggers
+		 SET fire_at = ?, payload = json_set(payload, '$.action', ?),
+		     recurrence_anchor = COALESCE(?, recurrence_anchor)
+		 WHERE id = ? AND status = ?`,
+		func(current string) bool { return current == string(ports.TriggerStatusArmed) },
+		formatUnitTime(m.FireAt), m.ActionText, anchor, id, string(ports.TriggerStatusArmed))
+}
+
 // guardedUpdate runs one conditional UPDATE, distinguishing "no such
 // trigger" from "the precondition did not hold" — the two-statement shape
 // transition uses, factored because four methods now need it.

@@ -430,6 +430,15 @@ func TestTriggerRepo_DeliveryContract(t *testing.T) {
 	})
 }
 
+// TestTriggerRepo_FollowContract runs the suite a corrected date uses
+// (I29) over a real migrated vault.
+func TestTriggerRepo_FollowContract(t *testing.T) {
+	repocontract.RunTriggerFollow(t, func(t *testing.T) repocontract.TriggerHarness {
+		v := openTestVault(t)
+		return triggerHarness{TriggerRepo: NewTriggerRepo(v), v: v}
+	})
+}
+
 // TestTriggerRepo_ResolutionColumnHoldsOnlyVocabularyMembers is the
 // constraint the schema does not carry, for the fourth vocabulary.
 //
