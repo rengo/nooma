@@ -22,3 +22,9 @@ Rework after review of 2f5b549:
 - [x] 9. R4: unknown referent answers 404 on the API and the form.
 - [x] 10. `make check` runs `test/conformance` (`make test` is `go test ./...`): confirmed, no
       change.
+
+Second rework, after review of d361113:
+
+- [x] 11. No readable type with an explicit referent asks (`unclassifiable`) instead of taking the
+      content fallback; doc 02, I28 row, UI sentence.
+- [x] 12. I28 timer subtest: the referent fork runs before timer arming.

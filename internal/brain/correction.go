@@ -63,12 +63,22 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		return &Correction{Ambiguous: true, Why: AskReferentAmbiguous}, nil
 	}
 
-	// A text the model read as a question, a remark, a refusal or a timer
-	// carries no change (doc 02 §5 step 4, I28). Only an explicit referent
-	// can reach here with such a kind — the chat path arrives only for
-	// Kind == correction — and without this the content fallback below
-	// would write "when is this?" over the unit's body.
-	if c.Kind != nil && !correction.IsEdit(*c.Kind) {
+	// A text with no readable type, or one the model read as a question, a
+	// remark, a refusal or a timer, carries no change (doc 02 §5 step 4,
+	// I28). Only an explicit referent can reach here with either — the chat
+	// path arrives only for Kind == correction — and without this the
+	// content fallback below would write "when is this?" over the unit's
+	// body.
+	if c.Kind == nil {
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason AskReason `json:"reason"`
+			UnitID string    `json:"unit_id"`
+		}{Reason: AskUnclassifiable, UnitID: target.ID}); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskUnclassifiable}, nil
+	}
+	if !correction.IsEdit(*c.Kind) {
 		if err := r.recordAmbiguousDecision(ctx, now, struct {
 			Reason AskReason `json:"reason"`
 			UnitID string    `json:"unit_id"`

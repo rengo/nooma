@@ -231,4 +231,8 @@ const (
 	// AskNotAnEdit: the unit is known, but the model read the text as a
 	// question, a remark, a refusal or a timer (correction.IsEdit).
 	AskNotAnEdit AskReason = "not_an_edit"
+	// AskUnclassifiable: the unit is known, but the classification came
+	// back with no readable type (classify.Decode degraded it to none), so
+	// nothing says the text is a change at all.
+	AskUnclassifiable AskReason = "unclassifiable"
 )

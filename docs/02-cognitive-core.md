@@ -602,7 +602,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        kinds that are neither memory nor a correction — nothing is written to the unit and the
        system asks, with the same `correction.ambiguous` row any other ask writes. Without that,
        "when is this?" typed into a unit's correction form would take the content fallback below
-       and replace the unit's body with the question.
+       and replace the unit's body with the question. A classification whose `type` is missing
+       or outside the taxonomy (§5.1 degrades it to none) asks the same way: nothing says that
+       text is a change at all.
      - The margin is a **ratio** between the top two scores, not a difference between them. RRF
        compresses: at `k = 60` a candidate ranked first on both legs scores `2/61` and one
        ranked second on both scores `2/62`, so 0.0005 separates a near-tie — while a candidate

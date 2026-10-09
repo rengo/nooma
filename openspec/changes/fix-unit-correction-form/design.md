@@ -70,6 +70,8 @@ ambiguous.":
 
 - not an edit: "Nothing was changed: that read as a question or a request, not a change. Write
   the new value, a date or the new wording."
+- unclassifiable (no readable `type`, PM ruling on review of d361113): "Nothing was changed: that
+  could not be read as a change. Write the new value, a date or the new wording."
 
 - referent ambiguous: "Nothing was changed: that looked like a correction, but it was not clear
   which entry it meant. Open the entry and use its correction form."

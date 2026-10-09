@@ -48,6 +48,14 @@ question or a request. Every other type, and `correction`, keeps applying.
 `asked`, the unit's content and `event_at` are unchanged, and one `correction.ambiguous` row
 carries `{reason: not_an_edit, unit_id, kind: recall}`.
 
+**Scenario: no readable type.** A classification whose `type` is missing or not in the taxonomy
+(decoded to no kind) with the unit as referent answers `asked`, leaves the unit unchanged, and
+writes one `correction.ambiguous` row with reason `unclassifiable`; the page says nothing was
+changed because the text could not be read as a change.
+
+**Scenario: timer.** A `timer` classification with the unit as referent arms no timer, leaves the
+unit unchanged and asks with reason `not_an_edit`.
+
 ## R3 — Free capture is unchanged
 
 A capture with no explicit referent MUST behave exactly as before: the same `event`

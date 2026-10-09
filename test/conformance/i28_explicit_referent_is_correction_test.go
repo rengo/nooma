@@ -272,6 +272,53 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		}
 	})
 
+	// assertOneAsk is R2a's log: exactly one correction.ambiguous row whose
+	// context names the reason and the unit.
+	assertOneAsk := func(t *testing.T, d *memrepo.DecisionLog, reason brain.AskReason) {
+		t.Helper()
+		logged := rows(t, d)
+		if len(logged) != 1 || logged[0].Action != ports.ActionCorrectionAmbiguous {
+			t.Fatalf("decision actions = %v, want exactly [%s]", actions(t, d), ports.ActionCorrectionAmbiguous)
+		}
+		var why struct {
+			Reason string `json:"reason"`
+			UnitID string `json:"unit_id"`
+		}
+		if err := json.Unmarshal(logged[0].Context, &why); err != nil {
+			t.Fatalf("decoding %s: %v", logged[0].Context, err)
+		}
+		if why.Reason != string(reason) || why.UnitID != "dentist" {
+			t.Errorf("ask context = %s, want reason %q, unit dentist", logged[0].Context, reason)
+		}
+	}
+	assertUntouched := func(t *testing.T, f fixture) {
+		t.Helper()
+		got, err := f.units.ByID(context.Background(), "dentist")
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		if got.Content != "Dentista el viernes a las 10" || got.EventAt == nil || !got.EventAt.Equal(original) || got.DueAt != nil {
+			t.Errorf("unit = %q event_at %v due_at %v, want it untouched", got.Content, got.EventAt, got.DueAt)
+		}
+	}
+
+	t.Run("a text with no readable type edits nothing and asks", func(t *testing.T) {
+		// classify.Decode degrades an unknown "type" to no Kind at all (I14).
+		// Content survived, so without this ask PlanEdit's content fallback
+		// would write the question over the unit's body.
+		f := build(t, "i28-typeless", `{"type":"bogus","normalized_content":"When is the dentist?","weight":0.3,"decay_rate":0.1}`)
+		result, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: "when is this?", Channel: "ui", ReferentID: "dentist"})
+		if err != nil {
+			t.Fatalf("Capture: %v", err)
+		}
+		if result.Outcome != brain.OutcomeAsked || result.Correction == nil || result.Correction.Why != brain.AskUnclassifiable {
+			t.Fatalf("result = %+v, want OutcomeAsked because %q", result, brain.AskUnclassifiable)
+		}
+		assertUntouched(t, f)
+		assertNoNewMemory(t, f)
+		assertOneAsk(t, f.decisions, brain.AskUnclassifiable)
+	})
+
 	t.Run("control: the same text without a referent is a new capture", func(t *testing.T) {
 		f := build(t, "i28-event-dated", eventResponse)
 		if _, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: message, Channel: "ui"}); err != nil {
