@@ -93,6 +93,7 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			questions:        questions,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
+				triggers: triggers,
 			},
 		},
 	}

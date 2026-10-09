@@ -593,7 +593,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      blocks.
      - **An identifier also settles *whether* the message is a correction.** A capture that
        arrives naming its referent is a correction of that unit whatever `type` the
-       classification gives the text: it persists no unit, arms nothing, judges no relation and
+       classification gives the text: it persists no unit, arms nothing of its own (only the
+       referent's reminder follows its corrected date, below), judges no relation and
        resolves no check-in. Classification still runs, for the corrected value. Step 1 tells
        the types apart by what the message does, and a caller that names a unit has already
        said what it does — read standalone, "it is today, Friday the 9th, at 10" is an `event`,
@@ -645,8 +646,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      content, is an ask**, the same ask-shaped result an ambiguous referent already produces —
      ambiguity over *what* to write is exactly the ambiguity the product rule below blocks on,
      the same way ambiguity over *which* unit is.
-   - **What a corrected date carries with it** (I29). The body was derived from the date, so it
-     follows it; a corrected unit's text never states the date it no longer has.
+   - **What a corrected date carries with it** (I29). The body and the reminder were derived
+     from the date, so they follow it; a corrected unit never states or reminds of a date it no
+     longer has.
      - **The text.** Step 1 asks `normalized_content` to write a date it resolved as
        `YYYY-MM-DD` and a time as `HH:MM`. When a correction moves `event_at` or `due_at`, the
        body's statement of the previous instant is rewritten to the new one, and the body becomes
@@ -664,6 +666,25 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        instant** ("on the 14th", "el viernes", or a time alone) stays as written — the residual
        of not inferring. An earlier revision accepted a stale body outright; that cost is now
        paid only for wording capture was not asked to produce.
+     - **The reminder.** When the corrected field is an `event` unit's `event_at`, the unit ends
+       with exactly one armed trigger, at what a fresh capture of the new date arms — decided by
+       `internal/core/prospection.Follow`, which calls the very functions `Arm` does, lead time
+       and pull-to-now included. An armed trigger is moved (its `fire_at`, its payload as a fresh
+       arming writes it, its text as above, and a recurring one's anchor, so it stays
+       recurring); with none armed, one is created; any further armed trigger expires. When the
+       new one-shot date is already past, every armed trigger expires and none is created —
+       `expired` is §7's status for a trigger that will not fire, so cancelling deletes nothing
+       and needs no new status. A trigger that already fired is history and is left alone. A
+       `due_at` correction moves no trigger: nothing a unit-keeping capture arms is about
+       `due_at`. Each move, creation and expiry writes its own row — `correction.reminder.moved`,
+       `.armed`, `.cancelled` — before its write, change-shaped (`previous`/`next`) so
+       `/ui/activity` shows it; if that row fails, the trigger is not touched.
+       **A failed reminder step leaves a partial state**, because the unit and its triggers share
+       no transaction: the unit holds the new date, the reminder is unmoved (or, with several,
+       partly moved), the caller gets the error, and the learning signal is not written. The
+       same correction again repairs it — the decision is made from what is armed then, and the
+       reminder's text is rewritten from the trigger's own instant (`fire_at` plus its lead
+       days), which is exact unless that firing had been pulled forward.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values

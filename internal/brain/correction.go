@@ -30,6 +30,9 @@ type correctionRunner struct {
 	signals ports.SignalRepo
 	ids     ports.IDGen
 	recall  *RecallService
+	// triggers is where a corrected event date moves the unit's reminder
+	// (I29).
+	triggers ports.TriggerRepo
 }
 
 // referentSource records how applyWithPreImage's caller resolved target's
@@ -104,7 +107,7 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 	// in.
 	plan = correction.CarryText(plan, *target, now.Location())
 
-	if err := r.applyWithPreImage(ctx, *target, plan, ref, now); err != nil {
+	if err := r.applyWithPreImage(ctx, *target, plan, ref, c.InterruptLevel, now); err != nil {
 		return nil, err
 	}
 
@@ -224,13 +227,25 @@ func (r correctionRunner) recordAmbiguousDecision(ctx context.Context, now time.
 // learning signal — never before, and never when either the pre-image
 // write or an edit failed (D6: "a signal for an edit that failed would
 // teach a future learning pass from an event that did not occur").
-func (r correctionRunner) applyWithPreImage(ctx context.Context, target unit.Unit, plan []correction.Edit, ref referentSource, now time.Time) error {
+//
+// Between the edits and the signal, the unit's reminder follows the new
+// date (followReminder, I29). The repositories share no transaction, so a
+// reminder step that fails leaves a partial state, stated rather than
+// hidden: the unit holds the new date, its reminder is unmoved or (with
+// several) partly moved, the caller gets the error, and no signal is
+// written. Repeating the correction repairs it: the plan is the same,
+// Follow decides from what is armed now, and the reminder's text is
+// rewritten from the trigger's own instant (followTriggerText).
+func (r correctionRunner) applyWithPreImage(ctx context.Context, target unit.Unit, plan []correction.Edit, ref referentSource, interruptLevel *float64, now time.Time) error {
 	decisionID, err := r.recordPreImage(ctx, target, plan, ref, now)
 	if err != nil {
 		return err // ADR-0016: the edit does not happen
 	}
 	if err := r.dispatchEdits(ctx, target.ID, plan, now); err != nil {
 		return err // D6: no signal for a correction that did not land
+	}
+	if err := r.followReminder(ctx, target, plan, interruptLevel, now); err != nil {
+		return err
 	}
 	return r.recordCorrectionSignal(ctx, target.ID, plan, decisionID, now)
 }
