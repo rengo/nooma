@@ -18,13 +18,18 @@ templ Page(title string, body templ.Component) {
 			<link rel="stylesheet" href="/ui/static/app.css"/>
 		</head>
 		<body>
-			<nav>
-				<a href="/ui">Today</a>
-				<a href="/ui/units">Units</a>
-				<a href="/ui/capture">Capture</a>
-				<a href="/ui/beliefs">Beliefs</a>
-				<a href="/ui/activity">Activity</a>
-			</nav>
+			<header>
+				<nav aria-label="Main">
+					<span data-brand>nooma</span>
+					for _, item := range navItems {
+						if item.current(title) {
+							<a href={ templ.URL(item.href) } aria-current="page">{ item.label }</a>
+						} else {
+							<a href={ templ.URL(item.href) }>{ item.label }</a>
+						}
+					}
+				</nav>
+			</header>
 			<main>
 				@body
 			</main>
@@ -34,4 +39,28 @@ templ Page(title string, body templ.Component) {
 			<script src="/ui/static/htmx.min.js"></script>
 		</body>
 	</html>
+}
+
+// navItem is one top-nav entry. A page is the current one when its title
+// names it; the unit detail page belongs to Units.
+type navItem struct {
+	href, label string
+	titles      []string
+}
+
+func (n navItem) current(title string) bool {
+	for _, t := range n.titles {
+		if t == title {
+			return true
+		}
+	}
+	return false
+}
+
+var navItems = []navItem{
+	{href: "/ui", label: "Today", titles: []string{"nooma"}},
+	{href: "/ui/units", label: "Units", titles: []string{"nooma — units", "nooma — unit"}},
+	{href: "/ui/capture", label: "Capture", titles: []string{"nooma — capture"}},
+	{href: "/ui/beliefs", label: "Beliefs", titles: []string{"nooma — beliefs"}},
+	{href: "/ui/activity", label: "Activity", titles: []string{"nooma — activity"}},
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/a-h/templ"
+
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/ui"
 )
@@ -78,4 +80,28 @@ func htmxSwaps(entries []responseHandlingEntry, code string) bool {
 		}
 	}
 	return false
+}
+
+// The nav marks the page being shown, and only that one; the unit detail
+// page belongs to Units.
+func TestLayout_NavMarksTheCurrentPage(t *testing.T) {
+	t.Parallel()
+	for title, want := range map[string]string{
+		"nooma":            "/ui",
+		"nooma — units":    "/ui/units",
+		"nooma — unit":     "/ui/units",
+		"nooma — activity": "/ui/activity",
+	} {
+		var buf strings.Builder
+		if err := ui.Page(title, templ.NopComponent).Render(context.Background(), &buf); err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		page := buf.String()
+		if n := strings.Count(page, `aria-current="page"`); n != 1 {
+			t.Errorf("%q: %d links marked current, want 1", title, n)
+		}
+		if !strings.Contains(page, `<a href="`+want+`" aria-current="page">`) {
+			t.Errorf("%q: %s is not the current link:\n%s", title, want, page)
+		}
+	}
 }

@@ -246,7 +246,7 @@ func TestActivityView_HasNoMutatingForm(t *testing.T) {
 func TestActivityView_NavLinksToActivity(t *testing.T) {
 	t.Parallel()
 	body := serveActivity(ui.Deps{Activity: &fakeActivity{}}, activityGet("")).Body.String()
-	if !strings.Contains(body, `<a href="/ui/activity">Activity</a>`) {
+	if !strings.Contains(body, `<a href="/ui/activity" aria-current="page">Activity</a>`) {
 		t.Errorf("the nav has no Activity link:\n%s", body)
 	}
 }
