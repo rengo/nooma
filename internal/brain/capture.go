@@ -843,39 +843,15 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		}
 
 	case prospection.ArmTrigger, prospection.ArmRecurring:
-		fireAt := plan.FireAt
-		trigger := ports.Trigger{
-			ID: id,
-			// The unit this nudge hangs off. nil only reaches here from a
-			// kind that persists none, and no such kind builds a trigger —
-			// ports.Trigger.UnitID is nil for a pattern_based trigger,
-			// which this never is.
-			UnitID:         unitID,
-			Kind:           ports.TriggerKindTimeBased,
-			InterruptLevel: interruptColumn(plan.Interrupt),
-			Payload: ports.TriggerPayload{
-				// The trigger payload is JSON, not a nullable column, so
-				// a degraded normalized_content lands as the empty string
-				// here rather than as a key meaning "generic nudge" —
-				// triggers have no such concept, and inventing one for
-				// them would give payload.action two readings.
-				ActionText: derefString(c.NormalizedContent),
-				Rationale:  armRationale(plan),
-				LeadDays:   plan.LeadDays,
-			},
-			FireAt:    &fireAt,
-			CreatedAt: now,
-		}
-
+		// The unit this nudge hangs off. nil only reaches here from a kind
+		// that persists none, and no such kind builds a trigger.
+		//
+		// The trigger payload is JSON, not a nullable column, so a degraded
+		// normalized_content lands as the empty string rather than as a key
+		// meaning "generic nudge" — triggers have no such concept.
+		trigger := armedTrigger(id, unitID, derefString(c.NormalizedContent), plan, now)
 		action := ports.ActionCaptureArmedTrigger
 		if plan.What == prospection.ArmRecurring {
-			// The recurrence columns are written only for ArmRecurring.
-			// Plan.Rule and Plan.Anchor carry zero values for the one-shot
-			// case, and writing those would claim a recurrence the user
-			// never asked for.
-			rule, anchor := plan.Rule, plan.Anchor
-			trigger.RecurrenceRule = &rule
-			trigger.RecurrenceAnchor = &anchor
 			action = ports.ActionCaptureArmedRecurring
 		}
 
@@ -898,6 +874,35 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		Outcome: OutcomeArmed,
 		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate},
 	}, nil
+}
+
+// armedTrigger is the one row a dated or recurring Plan becomes. Every
+// caller that arms a trigger builds it here, so each writes exactly what a
+// fresh capture writes. The recurrence columns are written
+// only for ArmRecurring: Plan.Rule and Plan.Anchor carry zero values for a
+// one-shot, and writing those would claim a recurrence nobody asked for.
+func armedTrigger(id string, unitID *string, text string, plan prospection.Plan, now time.Time) ports.Trigger {
+	fireAt := plan.FireAt
+	t := ports.Trigger{
+		ID:             id,
+		UnitID:         unitID,
+		Kind:           ports.TriggerKindTimeBased,
+		InterruptLevel: interruptColumn(plan.Interrupt),
+		Payload:        armedPayload(text, plan),
+		FireAt:         &fireAt,
+		CreatedAt:      now,
+	}
+	if plan.What == prospection.ArmRecurring {
+		rule, anchor := plan.Rule, plan.Anchor
+		t.RecurrenceRule = &rule
+		t.RecurrenceAnchor = &anchor
+	}
+	return t
+}
+
+// armedPayload is the payload an arming of plan writes, saying text.
+func armedPayload(text string, plan prospection.Plan) ports.TriggerPayload {
+	return ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays}
 }
 
 // refuseArm records and reports a capture that asked for a nudge and did
