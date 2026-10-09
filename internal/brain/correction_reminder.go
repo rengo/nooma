@@ -77,7 +77,9 @@ func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t 
 
 	fields := []string{}
 	previous, next := map[string]any{}, map[string]any{}
-	if !t.FireAt.Equal(plan.FireAt) {
+	// Compared at the store's own precision: fire_at is kept to the second,
+	// and a pull to now carries the clock's sub-second part.
+	if !t.FireAt.Truncate(time.Second).Equal(plan.FireAt.Truncate(time.Second)) {
 		fields = append(fields, "fire_at")
 		previous["fire_at"], next["fire_at"] = rfc3339(t.FireAt), rfc3339(plan.FireAt)
 	}

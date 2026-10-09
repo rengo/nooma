@@ -678,7 +678,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        `due_at` correction moves no trigger: nothing a unit-keeping capture arms is about
        `due_at`. Each move, creation and expiry writes its own row — `correction.reminder.moved`,
        `.armed`, `.cancelled` — before its write, change-shaped (`previous`/`next`) so
-       `/ui/activity` shows it; if that row fails, the trigger is not touched.
+       `/ui/activity` shows it; if that row fails, the trigger is not touched. A move that changes
+       nothing visible (`fire_at` to the second, text, anchor) writes neither row nor trigger.
        **A failed reminder step leaves a partial state**, because the unit and its triggers share
        no transaction: the unit holds the new date, the reminder is unmoved (or, with several,
        partly moved), the caller gets the error, and the learning signal is not written. The

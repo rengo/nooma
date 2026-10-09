@@ -18,3 +18,5 @@ glued inside a word or file name are untouched, one case per boundary rule.
 7. #304: `TriggerMove` carries the new arming's payload; NULL `fire_at` case; I27 header.
 8. #305: reminder rows proven before their writes; partial-failure state documented, a retry
 rewrites the text from the trigger's own instant; one trigger builder; anchor shown on a move.
+10. #305/#306 second review: failed-reminder-row subtests assert the edit landed and no signal;
+a same-date move writes nothing; `armedTrigger` pinned by a unit test.

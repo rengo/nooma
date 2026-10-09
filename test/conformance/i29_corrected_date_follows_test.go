@@ -24,6 +24,7 @@ type i29Fixture struct {
 	units     *memrepo.Units
 	triggers  *memrepo.Triggers
 	decisions ports.DecisionLog
+	signals   *memrepo.Signals
 }
 
 const i29Message = "en realidad es hoy viernes 9 a las 11"
@@ -38,7 +39,7 @@ func newI29(t *testing.T, now time.Time, u unit.Unit, response string) i29Fixtur
 func newI29Logging(t *testing.T, now time.Time, u unit.Unit, response string, decisions ports.DecisionLog) i29Fixture {
 	t.Helper()
 	ctx := context.Background()
-	f := i29Fixture{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: decisions}
+	f := i29Fixture{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: decisions, signals: memrepo.NewSignals()}
 	if err := f.units.Create(ctx, u); err != nil {
 		t.Fatalf("seeding the referent: %v", err)
 	}
@@ -58,7 +59,7 @@ func newI29Logging(t *testing.T, now time.Time, u unit.Unit, response string, de
 		t.Fatalf("LoadIndex: %v", err)
 	}
 	llm := fakeprovider.New(t, i28Case(t, "i29", i29Message, response), "i29")
-	f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, lexical, memrepo.NewRelations(), f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), memrepo.NewSignals(), f.triggers, memrepo.NewTimers(), 0.5, nil)
+	f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, lexical, memrepo.NewRelations(), f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
 	return f
 }
 
@@ -376,6 +377,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		f := newI29Logging(t, now, dentist(now), toToday, reminderRowsFail{memrepo.NewDecisionLog()})
 		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
 		f.captureFails(t)
+		f.assertEditLandedUnsignalled(t, time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC))
 		if got := f.armed(t, "dentist"); len(got) != 1 || !got[0].FireAt.Equal(oldFire) || got[0].Payload.ActionText != before {
 			t.Errorf("armed = %+v, want t1 unmoved", got)
 		}
@@ -384,6 +386,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		f := newI29Logging(t, now, dentist(now), toLater, reminderRowsFail{memrepo.NewDecisionLog()})
 		f.captureFails(t)
+		f.assertEditLandedUnsignalled(t, time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC))
 		if n := f.triggers.Count(); n != 0 {
 			t.Errorf("triggers = %d, want none created", n)
 		}
@@ -393,6 +396,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		f := newI29Logging(t, now, dentist(now), toToday, reminderRowsFail{memrepo.NewDecisionLog()})
 		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
 		f.captureFails(t)
+		f.assertEditLandedUnsignalled(t, time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC))
 		if got := f.armed(t, "dentist"); len(got) != 1 {
 			t.Errorf("armed = %+v, want t1 still armed", got)
 		}
@@ -412,6 +416,25 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		got := f.armed(t, "dentist")
 		if len(got) != 1 || !got[0].FireAt.Equal(time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)) || got[0].Payload.ActionText != "Dentista el 2026-10-30 a las 10:00" {
 			t.Errorf("armed = %+v, want t1 at the new lead time saying the new date", got)
+		}
+	})
+
+	t.Run("a correction to the same date moves nothing", func(t *testing.T) {
+		// The reminder already fires at once, stored at second precision;
+		// the clock reads half a second later. Nothing visible changes, so
+		// no row is written and the trigger is not rewritten.
+		now := time.Date(2026, 10, 9, 8, 0, 0, 500_000_000, time.UTC)
+		today := time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC)
+		u := dentist(now)
+		u.EventAt, u.Content = &today, after
+		f := newI29(t, now, u, toToday)
+		f.arm(t, "t1", "dentist", now.Truncate(time.Second), after, nil, nil)
+		f.capture(t, "dentist")
+		if rows := reminderRows(t, f); len(rows) != 0 {
+			t.Errorf("reminder rows = %v, want none", rows)
+		}
+		if got := f.armed(t, "dentist"); len(got) != 1 || got[0].Payload.Rationale != "" {
+			t.Errorf("armed = %+v, want t1 not rewritten", got)
 		}
 	})
 
@@ -453,6 +476,22 @@ func (l reminderRowsFail) Record(ctx context.Context, d ports.Decision) error {
 		return errors.New("disk full")
 	}
 	return l.DecisionLog.Record(ctx, d)
+}
+
+// assertEditLandedUnsignalled is the partial state a failed reminder step
+// leaves: the unit edit landed, and no learning signal was written (D6).
+func (f i29Fixture) assertEditLandedUnsignalled(t *testing.T, want time.Time) {
+	t.Helper()
+	if got := f.unit(t, "dentist").EventAt; got == nil || !got.Equal(want) {
+		t.Errorf("EventAt = %v, want the corrected %s — the edit lands before the reminder step", got, want)
+	}
+	signals, err := f.signals.Since(context.Background(), time.Time{}, 100)
+	if err != nil {
+		t.Fatalf("signals.Since: %v", err)
+	}
+	if len(signals) != 0 {
+		t.Errorf("signals = %d, want none — a correction whose reminder step failed did not land whole", len(signals))
+	}
 }
 
 func (f i29Fixture) captureFails(t *testing.T) {
