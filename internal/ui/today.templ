@@ -43,7 +43,7 @@ templ todayBody(today brain.Today, serving Serving) {
 		<h2>PENDING DIGEST</h2>
 		<ul>
 			for _, line := range today.Digest.Items {
-				<li>{ localizeProse(ctx, line.Text) }</li>
+				<li>{ line.Text }</li>
 			}
 		</ul>
 		<p>{ fmt.Sprintf("Held: %d", today.Digest.Held) }</p>

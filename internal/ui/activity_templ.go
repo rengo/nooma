@@ -261,9 +261,9 @@ func activityBody(page brain.ActivityPage, kind string, families []string) templ
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var14 string
-					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(localizeProse(ctx, c.Previous))
+					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(localizeInstant(ctx, c.Previous))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `activity.templ`, Line: 39, Col: 128}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `activity.templ`, Line: 39, Col: 130}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 					if templ_7745c5c3_Err != nil {
@@ -274,9 +274,9 @@ func activityBody(page brain.ActivityPage, kind string, families []string) templ
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var15 string
-					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(localizeProse(ctx, c.Next))
+					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(localizeInstant(ctx, c.Next))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `activity.templ`, Line: 39, Col: 163}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `activity.templ`, Line: 39, Col: 167}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 					if templ_7745c5c3_Err != nil {

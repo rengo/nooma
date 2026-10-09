@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Every time the mirror displays is rendered in the zone the injected clock's
@@ -48,17 +51,63 @@ func formatTime(ctx context.Context, t time.Time) string {
 // ("2026-10-16") and bare clock times ("12:00Z") do not match and stay as written.
 var instantRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
 
-// localizeProse rewrites every RFC3339 instant in s to formatTime's local form.
-// Brain-written prose (a decision's rationale, a digest line, a refusal) and a
-// change value that is a bare timestamp both pass through here; the stored text
-// is never touched, and a token that does not parse is left as it is.
+// localizeInstant converts a change value only when the WHOLE value is one
+// RFC3339 instant. Any other value (content, action text, belief text) is the
+// user's or a number or a flag, and is shown as written.
+func localizeInstant(ctx context.Context, v string) string {
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return formatTime(ctx, t)
+	}
+	return v
+}
+
+// localizeProse rewrites the RFC3339 instants inside text the brain itself wrote
+// (a decision's rationale, a refusal, a chat reply) to formatTime's local form.
+// Never use it on the user's captured text. A token counts only on its own
+// boundaries: glued to a letter or digit on either side, or sitting after
+// "/", "=", "?", "&" or "#", or inside a word containing "://" (a URL or query),
+// it is left as written, as is a token that does not parse. Stored text is never
+// touched.
 func localizeProse(ctx context.Context, s string) string {
-	return instantRe.ReplaceAllStringFunc(s, func(tok string) string {
-		if t, err := time.Parse(time.RFC3339, tok); err == nil {
-			return formatTime(ctx, t)
+	var b strings.Builder
+	last := 0
+	for _, m := range instantRe.FindAllStringIndex(s, -1) {
+		start, end := m[0], m[1]
+		if !instantBounded(s, start, end) {
+			continue
 		}
-		return tok
-	})
+		t, err := time.Parse(time.RFC3339, s[start:end])
+		if err != nil {
+			continue
+		}
+		b.WriteString(s[last:start])
+		b.WriteString(formatTime(ctx, t))
+		last = end
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// instantBounded reports whether s[start:end] stands alone as an instant.
+func instantBounded(s string, start, end int) bool {
+	if start > 0 {
+		r, _ := utf8.DecodeLastRuneInString(s[:start])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("/=?&#", r) {
+			return false
+		}
+	}
+	if end < len(s) {
+		r, _ := utf8.DecodeRuneInString(s[end:])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return false
+		}
+	}
+	wordStart := strings.LastIndexAny(s[:start], " \t\r\n") + 1
+	wordEnd := len(s)
+	if i := strings.IndexAny(s[end:], " \t\r\n"); i >= 0 {
+		wordEnd = end + i
+	}
+	return !strings.Contains(s[wordStart:wordEnd], "://")
 }
 
 // zoneNote is the one-line statement of which zone the page's times are in, or

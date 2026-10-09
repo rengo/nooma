@@ -36,7 +36,7 @@ templ activityBody(page brain.ActivityPage, kind string, families []string) {
 					if len(row.Change) > 0 {
 						<ul data-change>
 							for _, c := range row.Change {
-								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { localizeProse(ctx, c.Previous) } → { localizeProse(ctx, c.Next) }</li>
+								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { localizeInstant(ctx, c.Previous) } → { localizeInstant(ctx, c.Next) }</li>
 							}
 						</ul>
 					}

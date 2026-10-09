@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -184,14 +185,8 @@ func TestLocalTime_ActivityRationaleInstantsAreLocal(t *testing.T) {
 	}
 }
 
-func TestLocalTime_DigestAndCaptureProseInstantsAreLocal(t *testing.T) {
+func TestLocalTime_CaptureProseInstantsAreLocal(t *testing.T) {
 	t.Parallel()
-	today := brain.Today{Digest: brain.PendingDigest{Items: []brain.DigestLine{{TriggerID: "t", Text: "Dentist at 2026-10-15T14:00:00Z"}}}}
-	page := get(t, ui.Deps{Now: clockIn(t), Today: todayStub{today}}, "GET /ui", "/ui", "")
-	if !strings.Contains(page, "Dentist at 2026-10-15 11:00") || strings.Contains(page, "14:00:00Z") {
-		t.Errorf("digest text not localized:\n%s", page)
-	}
-
 	for name, result := range map[string]brain.CaptureResult{
 		"arm_refused": {Outcome: brain.OutcomeArmRefused, ArmRefused: &brain.ArmRefused{Message: "too soon: 2026-10-15T14:00:00Z"}},
 		"conversed":   {Outcome: brain.OutcomeConversed, Reply: "see you 2026-10-15T14:00:00Z"},
@@ -202,6 +197,59 @@ func TestLocalTime_DigestAndCaptureProseInstantsAreLocal(t *testing.T) {
 		body := rec.Body.String()
 		if !strings.Contains(body, "2026-10-15 11:00") || strings.Contains(body, "14:00:00Z") {
 			t.Errorf("%s: capture prose not localized:\n%s", name, body)
+		}
+	}
+}
+
+// The user's own captured text is shown as written, even when it contains an
+// instant: only fields and the brain's own prose are converted.
+func TestLocalTime_UserTextIsShownAsWritten(t *testing.T) {
+	t.Parallel()
+	const raw = "call at 2026-10-15T14:00:00Z"
+	today := brain.Today{Digest: brain.PendingDigest{Items: []brain.DigestLine{{TriggerID: "t", Text: raw}}}}
+	page := get(t, ui.Deps{Now: clockIn(t), Today: todayStub{today}}, "GET /ui", "/ui", "")
+	if !strings.Contains(page, raw) {
+		t.Errorf("digest line (user text) was rewritten:\n%s", page)
+	}
+
+	row := activityRow("u-1", ports.ActionCorrectionApplied, 1,
+		brain.ChangedField{Name: "content", Previous: raw, Next: "moved to 2026-10-16T09:00:00Z please"},
+		brain.ChangedField{Name: "event_at", Previous: "2026-10-16T13:00:00Z", Next: "2026-10-15T11:00:00-03:00"})
+	page = get(t, ui.Deps{Now: clockIn(t), Activity: &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}},
+		activityGetPattern, "/ui/activity", "")
+	for _, want := range []string{"content: " + raw + " → moved to 2026-10-16T09:00:00Z please", "event_at: 2026-10-16 10:00 → 2026-10-15 11:00"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %q:\n%s", want, page)
+		}
+	}
+}
+
+// Token boundaries: an instant glued to a letter or digit, or inside a URL or
+// query, is not an instant the brain wrote.
+func TestLocalTime_ProseBoundaries(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, want string }{
+		{"at 2026-10-16T13:00:00Z.", "at 2026-10-16 10:00."},
+		{"(2026-10-16T13:00:00Z)", "(2026-10-16 10:00)"},
+		{"12026-10-16T13:00:00Z", "12026-10-16T13:00:00Z"},
+		{"2026-10-16T13:00:00Z0", "2026-10-16T13:00:00Z0"},
+		{"x2026-10-16T13:00:00Z", "x2026-10-16T13:00:00Z"},
+		{"2026-10-16T13:00:00Zx", "2026-10-16T13:00:00Zx"},
+		{"?at=2026-10-16T13:00:00Z", "?at=2026-10-16T13:00:00Z"},
+		{"a=2026-10-16T13:00:00Z", "a=2026-10-16T13:00:00Z"},
+		{"/2026-10-16T13:00:00Z", "/2026-10-16T13:00:00Z"},
+		{"#2026-10-16T13:00:00Z", "#2026-10-16T13:00:00Z"},
+		{"&2026-10-16T13:00:00Z", "&2026-10-16T13:00:00Z"},
+		{"see https://x.example/a b2026 then 2026-10-16T13:00:00Z", "see https://x.example/a b2026 then 2026-10-16 10:00"},
+		{"see https://x.example/p:2026-10-16T13:00:00Z end", "see https://x.example/p:2026-10-16T13:00:00Z end"},
+		{"armed for 2026-10-16T13:00:00Z, firing at 2026-10-09T16:53:30Z", "armed for 2026-10-16 10:00, firing at 2026-10-09 13:53"},
+	} {
+		row := activityRow("p-1", ports.ActionCaptureUnitCreated, 1)
+		row.Rationale = tc.in
+		page := get(t, ui.Deps{Now: clockIn(t), Activity: &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}},
+			activityGetPattern, "/ui/activity", "")
+		if !strings.Contains(page, "<span>"+html.EscapeString(tc.want)+"</span>") {
+			t.Errorf("rationale %q: want %q in:\n%s", tc.in, tc.want, page)
 		}
 	}
 }

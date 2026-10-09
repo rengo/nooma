@@ -908,12 +908,15 @@ disagree the first time either changed. The known limit: a vault hosted for a us
 other than the process's would need this revisited — which is multi-tenancy, deliberately out of
 scope for v1.
 
-The web UI reads the same zone and no other: every time field it displays, and every RFC3339
-instant inside the brain's own prose it displays (a decision's rationale, a digest line, a
-refusal, a chat reply), is converted from UTC to the zone of the injected clock's instant, once
-per request, and the page says which zone it used. Each instant keeps the offset in force at that
-instant, not the clock's. The user's own captured text is shown as written. Presentation only —
-stored values and API responses stay UTC.
+The web UI reads the same zone and no other: every time field it displays, every activity change
+value that is, as a whole, one RFC3339 instant, and every RFC3339 instant inside the brain's own
+sentences (a decision's rationale, a refusal, a chat reply) is converted from UTC to the zone of
+the injected clock's instant, once per request, and the page says which zone it used. In those
+sentences a token glued to a letter or digit, or inside a URL or query, is not converted. Each
+instant keeps the offset in force at that instant, not the clock's. Everything else is shown as
+written, in particular the user's own captured text (a unit's content, a digest line, a change
+value that is text) even when it contains an instant. Presentation only — stored values and API
+responses stay UTC.
 
 **The vocabularies the model is offered are the same ones the decoder accepts.** The prompt does
 not restate the taxonomy in prose; it renders each closed set from the same declaration the
