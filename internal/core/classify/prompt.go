@@ -35,6 +35,10 @@ const (
 // model reads rather than a date it computes.
 const CalendarDays = 14
 
+// calendarRowHour is the time of day each calendar row is built at — a
+// rendering detail, not a behavioural number: only the row's date is shown.
+const calendarRowHour = 12
+
 // Belief is a projection of one row of self_beliefs — design D4.
 //
 // Nothing in M1 reads that table (derive is M2, seeding is M4), so brain
@@ -238,9 +242,11 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 // weekday off this table rather than computing one, which is the arithmetic
 // it got wrong.
 //
-// AddDate rather than Add(24h): it steps the calendar date in the instant's
-// own zone, so a day that a DST change makes 23 or 25 hours long is still
-// one row.
+// Each row is built at noon of its civil date, in the instant's own zone,
+// rather than by stepping now itself: now's time of day can fall in a DST
+// gap on a later date — Chile skips midnight to 01:00 — and a time in a gap
+// normalises onto the neighbouring day, repeating one date and dropping
+// the next. No zone moves its clocks at noon.
 func writeCalendar(b *strings.Builder, now time.Time) {
 	b.WriteString("  A weekday named alone (\"on Friday\", \"el viernes\") means its next " +
 		"occurrence after today;\n")
@@ -248,7 +254,7 @@ func writeCalendar(b *strings.Builder, now time.Time) {
 		"\"today\" (\"hoy\") means today.\n")
 	b.WriteString("  Read the date off this calendar; do not compute it:\n")
 	for i := 0; i < CalendarDays; i++ {
-		day := now.AddDate(0, 0, i)
+		day := time.Date(now.Year(), now.Month(), now.Day()+i, calendarRowHour, 0, 0, 0, now.Location())
 		b.WriteString("    " + pad(day.Weekday().String(), 10) + day.Format(localDateLayout))
 		if i == 0 {
 			b.WriteString(" (today)")

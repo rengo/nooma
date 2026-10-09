@@ -5,6 +5,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	// Embedded so America/Santiago loads on a machine with no zone database,
+	// the same way internal/core/prospection's recurrence tests do.
+	_ "time/tzdata"
 )
 
 // buenosAires and kolkata are fixed in memory rather than loaded with
@@ -621,6 +625,39 @@ func TestBuildPrompt_SeparatesAnEventFromATask(t *testing.T) {
 	} {
 		if !strings.Contains(choosing, want) {
 			t.Errorf("Choosing the type does not state %q:\n%s", want, choosing)
+		}
+	}
+}
+
+// TestBuildPrompt_CalendarSurvivesAMidnightDSTChange: Chile starts DST at
+// midnight, so in America/Santiago 00:30 on Sunday 2026-09-06 does not
+// exist. A calendar that stepped now itself a day at a time carried 00:30
+// into that gap, which normalises onto the wrong day: Saturday printed
+// twice and Sunday dropped. Every row must be the next civil date.
+func TestBuildPrompt_CalendarSurvivesAMidnightDSTChange(t *testing.T) {
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatalf("time.LoadLocation(America/Santiago): %v — time/tzdata is embedded, so this "+
+			"should never fail", err)
+	}
+	now := time.Date(2026, 9, 1, 0, 30, 0, 0, santiago)
+
+	ctx := contextBlock(t, BuildPrompt("dentista el viernes a las 10", nil, now, 0.5))
+
+	var rows []string
+	for _, line := range strings.Split(ctx, "\n") {
+		if calendarRow.MatchString(line) {
+			rows = append(rows, strings.Join(strings.Fields(strings.TrimSuffix(line, " (today)")), " "))
+		}
+	}
+	if len(rows) != CalendarDays {
+		t.Fatalf("the calendar has %d rows, want %d:\n%s", len(rows), CalendarDays, ctx)
+	}
+	for i, got := range rows {
+		// Civil dates counted in UTC, where no day is skipped or repeated.
+		day := time.Date(2026, 9, 1+i, 0, 0, 0, 0, time.UTC)
+		if want := day.Weekday().String() + " " + day.Format("2006-01-02"); got != want {
+			t.Errorf("calendar row %d = %q, want %q", i, got, want)
 		}
 	}
 }
