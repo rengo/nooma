@@ -207,7 +207,9 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    labels (event, due), and its relations with direction and confidence.
 6. **Captures and corrects.** `/ui/capture` is the same pipeline as every other surface. The
    unit page has a correction form whose target is the unit you are looking at, so the UI never
-   has to guess a referent.
+   has to guess a referent. Whatever you type there corrects that unit, never a new one: write
+   the new value ("it is on the 9th at 10") and that one field changes. When the text does not
+   say what to change, nothing changes and the page says so.
 7. **Reviews its beliefs** (`/ui/beliefs`). The active beliefs are listed by facet, each with its
    confidence, origin and last reinforcement. You can edit one: saving it unchanged claims a
    derived belief as yours, and the nightly derive then never overwrites it. You can retire one,

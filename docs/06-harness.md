@@ -268,6 +268,7 @@ Initial extraction:
 | I25 | A capture that is not memory persists no unit and still answers: `chitchat` through the `chat` task, `out_of_scope` with a fixed refusal | §5, ADR-0021 |
 | I26 | A capture is answered in the language its classification named; an absent or unknown language renders in the fallback, never in nothing | §5, ADR-0022 |
 | I27 | Rendering `/ui`'s Today writes nothing to the vault: `surfaced_at` and `asked_at` are set only by the digest pass, never by a GET. Its in-memory incumbent is the one thing it does write, and its relation reads cover the members of the incumbent it holds and of the one it selects (the pending-digest mirror's P'). The other read views hold the same line: `TestUIReadViewsWriteNothing` and `TestUIReadViewsWriteNothing_ActivityGet` drive `GET /ui/beliefs` and `GET /ui/activity` over write-counting decorators of every repo their services hold | §7 |
+| I28 | A capture that names its referent (the unit page's correction form, `POST /capture` with `unit_id`) is a correction of that unit whatever the classification's type: it persists no unit, arms nothing, writes no relation and answers no open check-in (nudge, load hypothesis or relation question); it edits the unit or asks, and it always asks when the text read as `recall`, `chitchat`, `out_of_scope` or `timer`, or came back with no readable type (`TestI28_ExplicitReferentIsAlwaysACorrection`) | §5 step 4 |
 
 Four of these are better verified with a structural test than a behavioral one:
 

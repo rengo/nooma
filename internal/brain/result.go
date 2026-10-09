@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
@@ -26,12 +27,13 @@ type CaptureInput struct {
 	// Channel is where this capture came from (e.g. "chat", "telegram"),
 	// and becomes the persisted unit's Source.
 	Channel string
-	// ReferentID is an optional explicit target-unit id, meaningful only
-	// when the classification resolves to classify.KindCorrection (spec
-	// R1.5, design D7). When non-empty it wins over chat-path referent
-	// resolution outright: recall does not run at all, and an id naming no
-	// existing unit fails the correction rather than falling back to
-	// recall.
+	// ReferentID is an optional explicit target-unit id. When non-empty the
+	// capture IS a correction of that unit, whatever type the
+	// classification gives the text (doc 02 §5 step 4, I28): no unit is
+	// persisted, nothing is armed, no check-in is resolved. It also wins
+	// over chat-path referent resolution outright: recall does not run at
+	// all, and an id naming no existing unit fails the correction rather
+	// than falling back to recall (m1c spec R1.5, design D7).
 	ReferentID string
 }
 
@@ -204,4 +206,33 @@ type Correction struct {
 	// Kind == correction fork reads this to choose OutcomeAsked over
 	// OutcomeCorrected, rather than re-deriving it.
 	Ambiguous bool
+	// Why names which ask this is, set exactly when Ambiguous is true. A
+	// renderer tells the user what to do next from it, and it is the same
+	// string the correction.ambiguous row's context carries as "reason".
+	Why AskReason
 }
+
+// ErrUnknownReferent reports a capture whose explicit referent names no
+// unit. It is the caller's mistake rather than the server's, so an adapter
+// answers it as not-found (fix-unit-correction-form R4); every other
+// capture error stays an internal one.
+var ErrUnknownReferent = errors.New("no unit has that id")
+
+// AskReason is the closed vocabulary of why a correction asked instead of
+// editing (fix-unit-correction-form design §4).
+type AskReason string
+
+const (
+	// AskReferentAmbiguous: the chat-path gate could not pick the unit.
+	AskReferentAmbiguous AskReason = "referent_ambiguous"
+	// AskPlanAmbiguous: the unit is known, but the text named two dates or
+	// nothing to write (correction.PlanEdit).
+	AskPlanAmbiguous AskReason = "plan_ambiguous"
+	// AskNotAnEdit: the unit is known, but the model read the text as a
+	// question, a remark, a refusal or a timer (correction.IsEdit).
+	AskNotAnEdit AskReason = "not_an_edit"
+	// AskUnclassifiable: the unit is known, but the classification came
+	// back with no readable type (classify.Decode degraded it to none), so
+	// nothing says the text is a change at all.
+	AskUnclassifiable AskReason = "unclassifiable"
+)

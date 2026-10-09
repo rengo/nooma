@@ -96,6 +96,10 @@ func captureBody(result *brain.CaptureResult) templ.Component {
 // Reply, ArmRefused.Message and a relation's content are all vault- or
 // model-shaped text (design §9's threat-matrix row on content injection,
 // units.templ's and unit.templ's own precedent).
+//
+// Every ask changes nothing, and says so first; what to do next differs by
+// brain.AskReason (fix-unit-correction-form design §4). The default arm is
+// AskPlanAmbiguous: the unit is known and the text named no single value.
 func captureOutcome(result brain.CaptureResult) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -126,7 +130,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(result.UnitID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 46, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 50, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -144,7 +148,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(string(result.Armed.What))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 48, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 52, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -157,7 +161,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(result.Armed.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 48, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 52, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -175,7 +179,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(result.ArmRefused.Message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 50, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 54, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -193,7 +197,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(result.Reply)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 52, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 56, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -216,7 +220,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(len(result.Recalled)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 56, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 60, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -227,27 +231,58 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		case brain.OutcomeCorrected:
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<p data-outcome=\"corrected\">Corrected ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<p data-outcome=\"corrected\">Corrected <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var10 string
-			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(result.Correction.UnitID)
+			var templ_7745c5c3_Var10 templ.SafeURL
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/ui/units/" + result.Correction.UnitID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 58, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 62, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, ".</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var11 string
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(result.Correction.UnitID)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 62, Col: 129}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</a>.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case brain.OutcomeAsked:
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<p data-outcome=\"asked\">That correction was ambiguous.</p>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
+			switch result.Correction.Why {
+			case brain.AskNotAnEdit:
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<p data-outcome=\"asked\">Nothing was changed: that read as a question or a request, not a change. Write the new value, a date or the new wording.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			case brain.AskUnclassifiable:
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<p data-outcome=\"asked\">Nothing was changed: that could not be read as a change. Write the new value, a date or the new wording.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			case brain.AskReferentAmbiguous:
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<p data-outcome=\"asked\">Nothing was changed: that looked like a correction, but it was not clear which entry it meant. Open the entry and use its correction form.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			default:
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<p data-outcome=\"asked\">Nothing was changed: it was not clear what to change. Write the one new value, a date or the new wording.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
 		}
 		return nil

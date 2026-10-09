@@ -40,6 +40,10 @@ templ captureBody(result *brain.CaptureResult) {
 // Reply, ArmRefused.Message and a relation's content are all vault- or
 // model-shaped text (design §9's threat-matrix row on content injection,
 // units.templ's and unit.templ's own precedent).
+//
+// Every ask changes nothing, and says so first; what to do next differs by
+// brain.AskReason (fix-unit-correction-form design §4). The default arm is
+// AskPlanAmbiguous: the unit is known and the text named no single value.
 templ captureOutcome(result brain.CaptureResult) {
 	switch result.Outcome {
 	case brain.OutcomeStored:
@@ -55,8 +59,17 @@ templ captureOutcome(result brain.CaptureResult) {
 	case brain.OutcomeRecalled:
 		<p data-outcome="recalled">Recalled { strconv.Itoa(len(result.Recalled)) } unit(s).</p>
 	case brain.OutcomeCorrected:
-		<p data-outcome="corrected">Corrected { result.Correction.UnitID }.</p>
+		<p data-outcome="corrected">Corrected <a href={ templ.URL("/ui/units/" + result.Correction.UnitID) }>{ result.Correction.UnitID }</a>.</p>
 	case brain.OutcomeAsked:
-		<p data-outcome="asked">That correction was ambiguous.</p>
+		switch result.Correction.Why {
+			case brain.AskNotAnEdit:
+				<p data-outcome="asked">Nothing was changed: that read as a question or a request, not a change. Write the new value, a date or the new wording.</p>
+			case brain.AskUnclassifiable:
+				<p data-outcome="asked">Nothing was changed: that could not be read as a change. Write the new value, a date or the new wording.</p>
+			case brain.AskReferentAmbiguous:
+				<p data-outcome="asked">Nothing was changed: that looked like a correction, but it was not clear which entry it meant. Open the entry and use its correction form.</p>
+			default:
+				<p data-outcome="asked">Nothing was changed: it was not clear what to change. Write the one new value, a date or the new wording.</p>
+		}
 	}
 }

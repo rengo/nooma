@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -90,6 +91,12 @@ func (h *Handler) serveCorrect(w http.ResponseWriter, r *http.Request) {
 		Channel:    "ui",
 		ReferentID: r.PathValue("id"),
 	})
+	if errors.Is(err, brain.ErrUnknownReferent) {
+		// The page's own unit is gone, or the URL was typed: the user's
+		// situation, not the server's (fix-unit-correction-form R4).
+		http.Error(w, "No unit has that id.", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		slog.Error("correct: failed", "err", err)
 		http.Error(w, "correct: internal error", http.StatusInternalServerError)

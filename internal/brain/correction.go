@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -59,18 +60,44 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		return nil, err
 	}
 	if target == nil {
-		return &Correction{Ambiguous: true}, nil
+		return &Correction{Ambiguous: true, Why: AskReferentAmbiguous}, nil
+	}
+
+	// A text with no readable type, or one the model read as a question, a
+	// remark, a refusal or a timer, carries no change (doc 02 §5 step 4,
+	// I28). Only an explicit referent can reach here with either — the chat
+	// path arrives only for Kind == correction — and without this the
+	// content fallback below would write "when is this?" over the unit's
+	// body.
+	if c.Kind == nil {
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason AskReason `json:"reason"`
+			UnitID string    `json:"unit_id"`
+		}{Reason: AskUnclassifiable, UnitID: target.ID}); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskUnclassifiable}, nil
+	}
+	if !correction.IsEdit(*c.Kind) {
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason AskReason `json:"reason"`
+			UnitID string    `json:"unit_id"`
+			Kind   string    `json:"kind"`
+		}{Reason: AskNotAnEdit, UnitID: target.ID, Kind: string(*c.Kind)}); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskNotAnEdit}, nil
 	}
 
 	plan, ok := correction.PlanEdit(c)
 	if !ok {
 		if err := r.recordAmbiguousDecision(ctx, now, struct {
-			Reason string `json:"reason"`
-			UnitID string `json:"unit_id"`
-		}{Reason: "plan_ambiguous", UnitID: target.ID}); err != nil {
+			Reason AskReason `json:"reason"`
+			UnitID string    `json:"unit_id"`
+		}{Reason: AskPlanAmbiguous, UnitID: target.ID}); err != nil {
 			return nil, err
 		}
-		return &Correction{UnitID: target.ID, Ambiguous: true}, nil
+		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskPlanAmbiguous}, nil
 	}
 
 	if err := r.applyWithPreImage(ctx, *target, plan, ref, now); err != nil {
@@ -103,6 +130,9 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, now time.Time) (*unit.Unit, referentSource, error) {
 	if in.ReferentID != "" {
 		u, err := r.units.ByID(ctx, in.ReferentID)
+		if errors.Is(err, ports.ErrUnitNotFound) {
+			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w: %w", in.ReferentID, ErrUnknownReferent, err)
+		}
 		if err != nil {
 			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w", in.ReferentID, err)
 		}
@@ -129,9 +159,9 @@ func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, 
 			ctxCands[i] = scoredCand{ID: c.ID, Score: c.Score}
 		}
 		if err := r.recordAmbiguousDecision(ctx, now, struct {
-			Reason     string       `json:"reason"`
+			Reason     AskReason    `json:"reason"`
 			Candidates []scoredCand `json:"candidates"`
-		}{Reason: "referent_ambiguous", Candidates: ctxCands}); err != nil {
+		}{Reason: AskReferentAmbiguous, Candidates: ctxCands}); err != nil {
 			return nil, referentSource{}, err
 		}
 		return nil, referentSource{}, nil

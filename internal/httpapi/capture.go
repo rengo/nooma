@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -11,8 +12,9 @@ import (
 
 // captureRequest is POST /capture's request body (design D10 §5.1). Source
 // defaults to "api" when absent — it becomes units.source, the caller's own
-// fact. UnitID is optional and ignored unless the classification resolves to
-// a correction (spec R1.5) — ignored rather than rejected, deliberately.
+// fact. UnitID is optional; when present the capture is a correction of that
+// unit whatever the classification's type (doc 02 §5 step 4, I28), exactly as
+// the unit page's correction form is.
 type captureRequest struct {
 	Text   string `json:"text"`
 	Source string `json:"source"`
@@ -139,6 +141,12 @@ func captureHandler(d Deps) http.HandlerFunc {
 			Channel:    source,
 			ReferentID: req.UnitID,
 		})
+		if errors.Is(err, brain.ErrUnknownReferent) {
+			// A unit_id naming no unit is the caller's mistake: 404, in
+			// words, rather than the 500 below (fix-unit-correction-form R4).
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no unit has that id"})
+			return
+		}
 		if err != nil {
 			// design D10's aspiration is "provider failures -> 502, store
 			// failures -> 500"; brain.CaptureService.Capture returns a plain
