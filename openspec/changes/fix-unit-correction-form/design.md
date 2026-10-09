@@ -45,11 +45,31 @@ comment said the id was "ignored unless the classification resolves to a correct
 step 4 puts the API and the UI on the same footing, and a caller sending a unit id has no reason
 to want a new unit. Without `unit_id` the API is unchanged.
 
+## 3a. A text that is not a change (PM ruling on review note 4)
+
+`correction.IsEdit(k)` (pure, `internal/core/correction`) is false for exactly `recall`,
+`chitchat`, `out_of_scope` and `timer`. It is derived, not listed: those are the kinds whose
+`UnitType` maps to nothing, minus `correction`, so a later kind lands on the side its memory
+mapping puts it, and `TestIsEdit` sweeps `classify.AllKinds` so the table must name it.
+`correctionRunner.at` checks it after the referent resolves and before `PlanEdit`; only the
+explicit path can reach it with such a kind. It writes one `correction.ambiguous` row
+`{reason: not_an_edit, unit_id, kind}`.
+
+## 3b. Unknown referent
+
+`resolveReferent` wraps `ports.ErrUnitNotFound` in `brain.ErrUnknownReferent`. `POST /capture`
+answers 404 `{"error": "no unit has that id"}` and the form answers 404 "No unit has that id."
+Both adapters already import `brain`; neither needs `ports` for this.
+
 ## 4. The "nothing changed" message
 
-`brain.Correction` already distinguishes the two asks: `UnitID` empty means the referent was
-ambiguous (chat path), set means the edit plan was. `captureOutcome` renders each in plain words
-instead of "That correction was ambiguous.":
+`brain.Correction.Why` (`brain.AskReason`: `referent_ambiguous`, `plan_ambiguous`,
+`not_an_edit`, the same strings the `correction.ambiguous` row carries as `reason`) tells the
+asks apart. `captureOutcome` renders each in plain words instead of "That correction was
+ambiguous.":
+
+- not an edit: "Nothing was changed: that read as a question or a request, not a change. Write
+  the new value, a date or the new wording."
 
 - referent ambiguous: "Nothing was changed: that looked like a correction, but it was not clear
   which entry it meant. Open the entry and use its correction form."
