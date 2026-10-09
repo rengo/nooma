@@ -69,13 +69,17 @@ func TestBuildPrompt_RendersTheLocalDate(t *testing.T) {
 
 	prompt := BuildPrompt("remind me tomorrow", nil, instant, 0.5)
 
-	if !strings.Contains(prompt, "2026-08-04") {
+	if !strings.Contains(prompt, "Local date: 2026-08-04") {
 		t.Errorf("prompt does not carry the local date 2026-08-04; it is 01:00 UTC on the 5th "+
 			"but still the 4th in %s, and the model resolves \"tomorrow\" from this.\n\n%s",
 			buenosAires.String(), prompt)
 	}
-	if strings.Contains(prompt, "2026-08-05") {
-		t.Error("prompt carries 2026-08-05 — that is the UTC date, not the user's")
+	// The calendar lists the 5th as tomorrow, so the 5th appearing at all
+	// proves nothing; what must never happen is the 5th standing for today.
+	for _, utcToday := range []string{"Local date: 2026-08-05", "2026-08-05 (today)"} {
+		if strings.Contains(prompt, utcToday) {
+			t.Errorf("prompt carries %q — that is the UTC date, not the user's", utcToday)
+		}
 	}
 }
 
@@ -487,6 +491,94 @@ func TestBuildPrompt_StatesHowTheContentWritesAResolvedInstant(t *testing.T) {
 	for _, want := range []string{"YYYY-MM-DD", "HH:MM", "2026-10-09 14:30"} {
 		if !strings.Contains(head, want) {
 			t.Errorf("normalized_content does not state %q:\n%s", want, head)
+		}
+	}
+}
+
+// contextBlock returns the prompt's "Context" section alone, so an assertion
+// about the injected now cannot be satisfied by a format example elsewhere —
+// both examples render now too, and "2026-10-09" appears in each.
+func contextBlock(t *testing.T, prompt string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(prompt, "Context\n")
+	if !found {
+		t.Fatalf("the prompt has no Context section:\n%s", prompt)
+	}
+	block, _, found := strings.Cut(rest, "\n\n")
+	if !found {
+		t.Fatalf("the Context section never ends:\n%s", prompt)
+	}
+	return block
+}
+
+// TestBuildPrompt_NamesTodaysWeekdayAndTime is the first half of the
+// "dentista el viernes a las 10" defect: the context gave 2026-10-09 and no
+// weekday, so the model had to work out that it was a Friday, and a small
+// model answered Tuesday 2026-10-13. Both come from the instant's own zone:
+// 14:46 UTC is 11:46 in Buenos Aires.
+func TestBuildPrompt_NamesTodaysWeekdayAndTime(t *testing.T) {
+	now := time.Date(2026, 10, 9, 14, 46, 0, 0, time.UTC).In(buenosAires)
+
+	ctx := contextBlock(t, BuildPrompt("dentista el viernes a las 10", nil, now, 0.5))
+
+	for _, want := range []string{"Local date: 2026-10-09 (Friday)", "Local time: 11:46"} {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("the context does not state %q:\n%s", want, ctx)
+		}
+	}
+}
+
+// TestBuildPrompt_RendersAFourteenDayCalendarFromToday: a weekday is read
+// off a table, never computed by the model. Fourteen rows starting today,
+// today marked, so "next Friday" said on a Friday is still on the table.
+// The instant is 01:00 UTC on Saturday the 10th, which is still Friday the
+// 9th in Buenos Aires: the table starts on the user's day, not UTC's.
+func TestBuildPrompt_RendersAFourteenDayCalendarFromToday(t *testing.T) {
+	now := time.Date(2026, 10, 10, 1, 0, 0, 0, time.UTC).In(buenosAires)
+
+	ctx := contextBlock(t, BuildPrompt("dentista el viernes a las 10", nil, now, 0.5))
+
+	var rows []string
+	for _, line := range strings.Split(ctx, "\n") {
+		if regexp.MustCompile(`^\s+[A-Z][a-z]+day +\d{4}-\d{2}-\d{2}`).MatchString(line) {
+			rows = append(rows, strings.Join(strings.Fields(line), " "))
+		}
+	}
+	if len(rows) != CalendarDays {
+		t.Fatalf("the calendar has %d rows, want %d:\n%s", len(rows), CalendarDays, ctx)
+	}
+	for i, want := range map[int]string{
+		0:  "Friday 2026-10-09 (today)",
+		1:  "Saturday 2026-10-10",
+		7:  "Friday 2026-10-16",
+		13: "Thursday 2026-10-22",
+	} {
+		if rows[i] != want {
+			t.Errorf("calendar row %d = %q, want %q", i, rows[i], want)
+		}
+	}
+	if strings.Count(ctx, "(today)") != 1 {
+		t.Errorf("exactly one row is marked today, got %d:\n%s", strings.Count(ctx, "(today)"), ctx)
+	}
+}
+
+// TestBuildPrompt_StatesHowABareWeekdayResolves pins the client's rule
+// (doc 02 §5 step 1): a weekday named alone is its next occurrence after
+// today, and named on that same weekday it is next week's — "el viernes"
+// said on a Friday is seven days later. "Today" is today.
+func TestBuildPrompt_StatesHowABareWeekdayResolves(t *testing.T) {
+	now := time.Date(2026, 10, 9, 14, 46, 0, 0, time.UTC)
+
+	ctx := strings.Join(strings.Fields(contextBlock(t, BuildPrompt("x", nil, now, 0.5))), " ")
+
+	for _, want := range []string{
+		"its next occurrence after today",
+		"named on that same weekday, it means next week's, 7 days later",
+		`"today" ("hoy") means today`,
+		"Read the date off this calendar",
+	} {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("the context does not state %q:\n%s", want, ctx)
 		}
 	}
 }
