@@ -139,31 +139,7 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 			return datedTrigger(*c.EventAt, now, interrupt)
 		}
 
-		// The weekday is always stated, derived from the capture's own
-		// dated occurrence — "every Sunday" arrives as an event_at that is
-		// a Sunday. Set for every rule rather than only for weekly: it
-		// costs nothing, and an anchor whose weekday depends on which rule
-		// was decoded is an anchor that means different things in
-		// different rows.
-		weekday := c.EventAt.Weekday()
-		anchor := Anchor{Month: c.EventAt.Month(), Day: c.EventAt.Day(), Weekday: &weekday}
-		rule := recurrenceRule(*c.RecurrenceRule)
-		// The next occurrence, re-derived from the anchor rather than the
-		// date the user stated: a birthday captured after this year's has
-		// passed arms for next year's, and About must name the instant the
-		// nudge is actually about.
-		next := NextOccurrence(rule, anchor, now)
-		fireAt, immediate := clampToNow(LeadTime(next), now)
-		return Plan{
-			What:      ArmRecurring,
-			FireAt:    fireAt,
-			About:     next,
-			Immediate: immediate,
-			LeadDays:  EventLeadDays,
-			Rule:      rule,
-			Anchor:    anchor,
-			Interrupt: interrupt,
-		}, true
+		return recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), now, interrupt), true
 
 	case classify.KindEvent:
 		if c.EventAt == nil {
@@ -173,6 +149,36 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 	}
 
 	return nothing(RefusalKindNotArming)
+}
+
+// recurringTrigger arms the recurring trigger a dated occurrence and a
+// rule own. Follow calls it too, so a corrected date re-anchors by the
+// very rule capture used.
+func recurringTrigger(eventAt time.Time, rule Rule, now time.Time, interrupt Interrupt) Plan {
+	// The weekday is always stated, derived from the capture's own
+	// dated occurrence — "every Sunday" arrives as an event_at that is
+	// a Sunday. Set for every rule rather than only for weekly: it
+	// costs nothing, and an anchor whose weekday depends on which rule
+	// was decoded is an anchor that means different things in
+	// different rows.
+	weekday := eventAt.Weekday()
+	anchor := Anchor{Month: eventAt.Month(), Day: eventAt.Day(), Weekday: &weekday}
+	// The next occurrence, re-derived from the anchor rather than the
+	// date the user stated: a birthday captured after this year's has
+	// passed arms for next year's, and About must name the instant the
+	// nudge is actually about.
+	next := NextOccurrence(rule, anchor, now)
+	fireAt, immediate := clampToNow(LeadTime(next), now)
+	return Plan{
+		What:      ArmRecurring,
+		FireAt:    fireAt,
+		About:     next,
+		Immediate: immediate,
+		LeadDays:  EventLeadDays,
+		Rule:      rule,
+		Anchor:    anchor,
+		Interrupt: interrupt,
+	}
 }
 
 // datedTrigger arms the one-shot trigger a dated event owns, or nothing
