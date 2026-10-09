@@ -219,8 +219,8 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Capture: %v", err)
 		}
-		if result.Outcome != brain.OutcomeAsked || result.Correction == nil || result.Correction.UnitID != "dentist" {
-			t.Fatalf("result = %+v, want OutcomeAsked naming unit %q", result, "dentist")
+		if result.Outcome != brain.OutcomeAsked || result.Correction == nil || result.Correction.UnitID != "dentist" || result.Correction.Why != brain.AskPlanAmbiguous {
+			t.Fatalf("result = %+v, want OutcomeAsked naming unit %q because %q", result, "dentist", brain.AskPlanAmbiguous)
 		}
 		got, err := f.units.ByID(context.Background(), "dentist")
 		if err != nil {
@@ -232,6 +232,43 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		assertNoNewMemory(t, f)
 		if acts := actions(t, f.decisions); len(acts) != 1 || acts[0] != ports.ActionCorrectionAmbiguous {
 			t.Errorf("decision actions = %v, want exactly [%s]", acts, ports.ActionCorrectionAmbiguous)
+		}
+	})
+
+	t.Run("a text the model reads as a question edits nothing and asks", func(t *testing.T) {
+		// "when is this?" typed into the form reads as recall. Its
+		// normalized_content would otherwise take PlanEdit's content
+		// fallback and overwrite the unit's body with the question.
+		f := build(t, "i28-recall-question", `{"type":"recall","normalized_content":"When is the dentist?","weight":0.3,"decay_rate":0.1,"language":"en"}`)
+		result, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: "when is this?", Channel: "ui", ReferentID: "dentist"})
+		if err != nil {
+			t.Fatalf("Capture: %v", err)
+		}
+		if result.Outcome != brain.OutcomeAsked || result.Correction == nil || result.Correction.Why != brain.AskNotAnEdit {
+			t.Fatalf("result = %+v, want OutcomeAsked because %q", result, brain.AskNotAnEdit)
+		}
+		got, err := f.units.ByID(context.Background(), "dentist")
+		if err != nil {
+			t.Fatalf("ByID: %v", err)
+		}
+		if got.Content != "Dentista el viernes a las 10" || got.EventAt == nil || !got.EventAt.Equal(original) {
+			t.Errorf("unit = %q at %v, want it untouched", got.Content, got.EventAt)
+		}
+		assertNoNewMemory(t, f)
+		logged := rows(t, f.decisions)
+		if len(logged) != 1 || logged[0].Action != ports.ActionCorrectionAmbiguous {
+			t.Fatalf("decision actions = %v, want exactly [%s]", actions(t, f.decisions), ports.ActionCorrectionAmbiguous)
+		}
+		var why struct {
+			Reason string `json:"reason"`
+			UnitID string `json:"unit_id"`
+			Kind   string `json:"kind"`
+		}
+		if err := json.Unmarshal(logged[0].Context, &why); err != nil {
+			t.Fatalf("decoding %s: %v", logged[0].Context, err)
+		}
+		if why.Reason != "not_an_edit" || why.UnitID != "dentist" || why.Kind != "recall" {
+			t.Errorf("ask context = %s, want reason not_an_edit, unit dentist, kind recall", logged[0].Context)
 		}
 	})
 

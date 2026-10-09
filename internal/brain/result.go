@@ -205,4 +205,23 @@ type Correction struct {
 	// Kind == correction fork reads this to choose OutcomeAsked over
 	// OutcomeCorrected, rather than re-deriving it.
 	Ambiguous bool
+	// Why names which ask this is, set exactly when Ambiguous is true. A
+	// renderer tells the user what to do next from it, and it is the same
+	// string the correction.ambiguous row's context carries as "reason".
+	Why AskReason
 }
+
+// AskReason is the closed vocabulary of why a correction asked instead of
+// editing (fix-unit-correction-form design §4).
+type AskReason string
+
+const (
+	// AskReferentAmbiguous: the chat-path gate could not pick the unit.
+	AskReferentAmbiguous AskReason = "referent_ambiguous"
+	// AskPlanAmbiguous: the unit is known, but the text named two dates or
+	// nothing to write (correction.PlanEdit).
+	AskPlanAmbiguous AskReason = "plan_ambiguous"
+	// AskNotAnEdit: the unit is known, but the model read the text as a
+	// question, a remark, a refusal or a timer (correction.IsEdit).
+	AskNotAnEdit AskReason = "not_an_edit"
+)

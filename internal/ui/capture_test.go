@@ -162,8 +162,9 @@ func TestCaptureView_AskSaysNothingChanged(t *testing.T) {
 		corr brain.Correction
 		want string
 	}{
-		{"plan ambiguous", brain.Correction{UnitID: "unit-4", Ambiguous: true}, "Write the one new value"},
-		{"referent ambiguous", brain.Correction{Ambiguous: true}, "use its correction form"},
+		{"plan ambiguous", brain.Correction{UnitID: "unit-4", Ambiguous: true, Why: brain.AskPlanAmbiguous}, "Write the one new value"},
+		{"referent ambiguous", brain.Correction{Ambiguous: true, Why: brain.AskReferentAmbiguous}, "use its correction form"},
+		{"not an edit", brain.Correction{UnitID: "unit-4", Ambiguous: true, Why: brain.AskNotAnEdit}, "read as a question or a request, not a change"},
 	}
 	for _, tc := range cases {
 		fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeAsked, Correction: &tc.corr}}

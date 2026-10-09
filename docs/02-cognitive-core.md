@@ -597,6 +597,12 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        said what it does — read standalone, "it is today, Friday the 9th, at 10" is an `event`,
        and a unit page's correction form that let the model decide turned it into a second
        unit with its own trigger while the unit being looked at stayed as it was (I28).
+       The exception is a text that carries no change at all: when the model reads it as a
+       question (`recall`), a remark (`chitchat`), a refusal (`out_of_scope`) or a `timer` — the
+       kinds that are neither memory nor a correction — nothing is written to the unit and the
+       system asks, with the same `correction.ambiguous` row any other ask writes. Without that,
+       "when is this?" typed into a unit's correction form would take the content fallback below
+       and replace the unit's body with the question.
      - The margin is a **ratio** between the top two scores, not a difference between them. RRF
        compresses: at `k = 60` a candidate ranked first on both legs scores `2/61` and one
        ranked second on both scores `2/62`, so 0.0005 separates a near-tie — while a candidate
