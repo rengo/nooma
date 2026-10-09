@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -27,12 +28,35 @@ var ErrUnknownActivityKind = errors.New("activity: unknown kind")
 type ActivityService struct {
 	log     ports.DecisionLog
 	actions []ports.DecisionAction
+	units   ActivityUnits
+}
+
+// ActivityUnits is the one unit read the activity page makes: the live units
+// its rows name, so a row can say what it is about. *sqlite.UnitRepo and
+// memrepo's Units satisfy it.
+type ActivityUnits interface {
+	LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
 }
 
 // NewActivityService wires an ActivityService over log, filtering by the
 // families of the full action vocabulary.
 func NewActivityService(log ports.DecisionLog) *ActivityService {
 	return &ActivityService{log: log, actions: ports.AllDecisionActions()}
+}
+
+// WithUnits lets each row carry the live unit it concerns as its Subject. The
+// page reads the units it names once, whatever its length. Without it rows
+// carry no subject.
+func (s *ActivityService) WithUnits(units ActivityUnits) *ActivityService {
+	s.units = units
+	return s
+}
+
+// ActivitySubject is the live unit a row concerns: enough to name it and link
+// to it.
+type ActivitySubject struct {
+	UnitID  string
+	Content string
 }
 
 // ChangedField is one column of a change-shaped row, with its previous and
@@ -48,6 +72,9 @@ type ChangedField struct {
 type ActivityRow struct {
 	ports.DecisionRow
 	Change []ChangedField
+	// Subject is the live unit the row's context names, nil when it names
+	// none or that unit is no longer live.
+	Subject *ActivitySubject
 }
 
 // ActivityPage is one page of rows and the cursor of the page after it, nil
@@ -87,11 +114,62 @@ func (s *ActivityService) Page(ctx context.Context, kind string, before *ports.D
 	for i, r := range rows {
 		page.Rows[i] = ActivityRow{DecisionRow: r, Change: decodeChange(r.Context)}
 	}
+	if err := s.attachSubjects(ctx, page.Rows); err != nil {
+		return ActivityPage{}, err
+	}
 	if more {
 		last := rows[len(rows)-1]
 		page.Next = &ports.DecisionCursor{OccurredAt: last.OccurredAt, Seq: last.Seq}
 	}
 	return page, nil
+}
+
+// attachSubjects resolves every row's subject unit with one read.
+func (s *ActivityService) attachSubjects(ctx context.Context, rows []ActivityRow) error {
+	if s.units == nil {
+		return nil
+	}
+	ids := make([]string, len(rows))
+	var wanted []string
+	for i, r := range rows {
+		ids[i] = subjectUnitID(r.Context)
+		if ids[i] != "" && !slices.Contains(wanted, ids[i]) {
+			wanted = append(wanted, ids[i])
+		}
+	}
+	if len(wanted) == 0 {
+		return nil
+	}
+	live, err := s.units.LiveByIDs(ctx, wanted)
+	if err != nil {
+		return fmt.Errorf("read activity subjects: %w", err)
+	}
+	content := make(map[string]string, len(live))
+	for _, u := range live {
+		content[u.ID] = u.Content
+	}
+	for i := range rows {
+		if c, ok := content[ids[i]]; ok {
+			rows[i].Subject = &ActivitySubject{UnitID: ids[i], Content: c}
+		}
+	}
+	return nil
+}
+
+// subjectUnitID reads the unit a row's context names: "unit_id", or for a
+// relation row its "from_unit_id". Anything else names none.
+func subjectUnitID(raw json.RawMessage) string {
+	var ref struct {
+		UnitID     string `json:"unit_id"`
+		FromUnitID string `json:"from_unit_id"`
+	}
+	if err := json.Unmarshal(raw, &ref); err != nil {
+		return ""
+	}
+	if ref.UnitID != "" {
+		return ref.UnitID
+	}
+	return ref.FromUnitID
 }
 
 // ActivityFamilies returns the distinct first dot-segments of actions, sorted.

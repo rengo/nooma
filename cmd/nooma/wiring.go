@@ -371,7 +371,7 @@ func wireBeliefs(db *sqlite.Vault) *brain.BeliefsService {
 // newest-first read behind /ui/activity. It resolves no provider, wireUnits'
 // reason, and is wired unconditionally at vault open.
 func wireActivity(db *sqlite.Vault) *brain.ActivityService {
-	return brain.NewActivityService(sqlite.NewDecisionLog(db))
+	return brain.NewActivityService(sqlite.NewDecisionLog(db)).WithUnits(sqlite.NewUnitRepo(db))
 }
 
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
