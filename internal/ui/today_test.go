@@ -195,3 +195,42 @@ func TestTodayView_EscapesVaultContent(t *testing.T) {
 		t.Errorf("vault content is not escaped as expected:\n%s", page)
 	}
 }
+
+// An empty focus list and an empty digest each say what would fill them.
+func TestTodayView_EmptyStates(t *testing.T) {
+	t.Parallel()
+	today := brain.Today{Focuses: []brain.Focus{{Kind: focus.KindTask}, {Kind: focus.KindLoad}}}
+	var buf strings.Builder
+	if err := ui.Today(today, ui.Serving{}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Today.Render: %v", err)
+	}
+	page := buf.String()
+	for _, want := range []string{"Nothing needs your attention right now.", "Nothing is weighing on you.", "The next morning digest has nothing to carry yet."} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks the empty state %q:\n%s", want, page)
+		}
+	}
+	full := renderToday(t, fixedToday())
+	for _, unwanted := range []string{"Nothing needs your attention", "nothing to carry yet"} {
+		if strings.Contains(full, unwanted) {
+			t.Errorf("a populated page shows the empty state %q", unwanted)
+		}
+	}
+}
+
+// Each focus member links to its unit.
+func TestTodayView_FocusMembersLinkToTheirUnit(t *testing.T) {
+	t.Parallel()
+	if page := renderToday(t, fixedToday()); !strings.Contains(page, `<a href="/ui/units/task-1">Call the dentist</a>`) {
+		t.Errorf("focus member does not link to its unit:\n%s", page)
+	}
+}
+
+func renderToday(t *testing.T, today brain.Today) string {
+	t.Helper()
+	var buf strings.Builder
+	if err := ui.Today(today, ui.Serving{}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Today.Render: %v", err)
+	}
+	return buf.String()
+}

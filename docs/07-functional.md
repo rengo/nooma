@@ -210,7 +210,8 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    unit page has a correction form whose target is the unit you are looking at, so the UI never
    has to guess a referent. Whatever you type there corrects that unit, never a new one: write
    the new value ("it is on the 9th at 10") and that field changes, with the date the text
-   states and the unit's reminder following it. When the text does not
+   states and the unit's reminder following it. You stay on that unit: the page comes back with
+   its fields as they are now and a line naming what changed. When the text does not
    say what to change, nothing changes and the page says so.
 7. **Reviews its beliefs** (`/ui/beliefs`). The active beliefs are listed by facet, each with its
    confidence, origin and last reinforcement. You can edit one: saving it unchanged claims a
@@ -229,6 +230,9 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    `2026-10-15 11:00`, with a one-line note naming the zone. Nothing stored changes: the vault and
    the API stay UTC. Text you wrote yourself (a unit's content, a digest line) is shown as written,
    even if it contains an instant. A vault viewed from a browser in another zone still reads in the server's.
+
+An empty Today, Units or Beliefs page says in one line what will appear there and how, as
+Activity does, rather than rendering nothing.
 
 **You end up with** a product you can use without a terminal, for what exists today. The graph
 and admin screens are not built (see below).

@@ -3,34 +3,57 @@ package ui
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/correction"
 )
 
 // UnitPage is GET /ui/units/{id}'s full page: one live unit, its stored
-// weight and its live relations (spec R3). No fragment mode — unlike
-// /ui/units, this view is neither paginated nor searched, so it has no
-// HX-Request-only rows to answer with, and always renders the full page
-// (design §3.1).
-templ UnitPage(detail brain.UnitDetail) {
-	@Page("nooma — unit", unitBody(detail))
+// weight and its live relations (spec R3). It is also what a correction
+// submitted from this page answers with: res is that correction's outcome,
+// nil on a plain GET, so the user stays on the unit they were correcting and
+// sees its fields as they are now. The correction form is a plain POST, not
+// htmx: its answer is always a full page, an error included.
+templ UnitPage(detail brain.UnitDetail, res *brain.CaptureResult) {
+	@Page("nooma — unit", unitBody(detail, res))
 }
 
-templ unitBody(detail brain.UnitDetail) {
-	<section>
+templ unitBody(detail brain.UnitDetail, res *brain.CaptureResult) {
+	<section data-view="unit">
 		<h2>UNIT</h2>
 		<p data-unit-id={ detail.Unit.ID }>{ detail.Unit.Content }</p>
 		<p><span>{ string(detail.Unit.Type) }</span></p>
-		<ul>
-			<li>{ "Stored weight: " + formatWeight(detail.Unit.Weight) }</li>
-			<li>{ "Created: " + formatTime(ctx, detail.Unit.CreatedAt) }</li>
-			<li>{ "Event: " + formatOptionalDate(ctx, detail.Unit.EventAt) }</li>
-			<li>{ "Due: " + formatOptionalDate(ctx, detail.Unit.DueAt) }</li>
-		</ul>
+		<dl>
+			<dt>Stored weight</dt>
+			<dd>{ formatWeight(detail.Unit.Weight) }</dd>
+			<dt>Created</dt>
+			<dd>{ formatTime(ctx, detail.Unit.CreatedAt) }</dd>
+			<dt>Event</dt>
+			<dd>{ formatOptionalDate(ctx, detail.Unit.EventAt) }</dd>
+			<dt>Due</dt>
+			<dd>{ formatOptionalDate(ctx, detail.Unit.DueAt) }</dd>
+		</dl>
 	</section>
-	<section>
+	<section data-view="correct">
+		<h2>CORRECT</h2>
+		<div id="correct-result" aria-live="polite">
+			if res != nil {
+				@correctOutcome(*res)
+			}
+		</div>
+		<form method="post" action={ templ.URL("/ui/units/" + detail.Unit.ID + "/correct") }>
+			<label for="text">What is wrong?</label>
+			<textarea id="text" name="text" rows="2" placeholder="It is on the 9th at 10" required></textarea>
+			<button type="submit">Submit correction</button>
+		</form>
+	</section>
+	<section data-view="relations">
 		<h2>RELATIONS</h2>
+		if len(detail.Relations) == 0 {
+			<p data-empty>Not connected to anything yet. Related entries are linked as you capture and overnight.</p>
+		}
 		<ul>
 			for _, rel := range detail.Relations {
 				<li data-relation-id={ rel.RelationID }>
@@ -39,21 +62,24 @@ templ unitBody(detail brain.UnitDetail) {
 					} else {
 						<span aria-label="incoming">←</span>
 					}
-					{ rel.Type }
-					<span>{ formatConfidence(rel.Confidence) }</span>
+					<span data-relation-type>{ rel.Type }</span>
 					<a href={ templ.URL("/ui/units/" + rel.Other.ID) }>{ rel.Other.Content }</a>
+					<span data-confidence title="confidence">{ formatConfidence(rel.Confidence) }</span>
 				</li>
 			}
 		</ul>
 	</section>
-	<section>
-		<h2>CORRECT</h2>
-		<form method="post" action={ templ.URL("/ui/units/" + detail.Unit.ID + "/correct") }>
-			<label for="text">Correction</label>
-			<textarea id="text" name="text" required></textarea>
-			<button type="submit">Submit correction</button>
-		</form>
-	</section>
+}
+
+// correctOutcome is a correction's outcome as the unit page shows it: what
+// changed, by its field's plain name, or the same ask captureOutcome gives
+// when nothing changed.
+templ correctOutcome(res brain.CaptureResult) {
+	if res.Outcome == brain.OutcomeCorrected && res.Correction != nil {
+		<p data-outcome="corrected">Corrected. Changed: { fieldLabels(res.Correction.Fields) }.</p>
+	} else {
+		@captureOutcome(res)
+	}
 }
 
 // formatOptionalDate renders literal "none" for a nil EventAt/DueAt — I18's
@@ -81,4 +107,13 @@ func formatWeight(w float64) string {
 // renders, not a third one invented here.
 func formatConfidence(c float64) string {
 	return strconv.FormatFloat(c, 'f', 2, 64)
+}
+
+// fieldLabels joins the plain names of the fields a correction changed.
+func fieldLabels(fields []correction.Field) string {
+	labels := make([]string, len(fields))
+	for i, f := range fields {
+		labels[i] = fieldLabel(string(f))
+	}
+	return strings.Join(labels, ", ")
 }

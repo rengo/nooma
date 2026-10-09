@@ -151,7 +151,7 @@ func (h *Handler) serveUnit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = UnitPage(detail).Render(r.Context(), w)
+	_ = UnitPage(detail, nil).Render(r.Context(), w)
 }
 
 // moreURL builds the "more" link's hx-get target from next and the same

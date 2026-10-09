@@ -16,6 +16,9 @@ templ BeliefsPage(groups []brain.FacetBeliefs, res *beliefResult) {
 templ beliefsBody(groups []brain.FacetBeliefs, res *beliefResult) {
 	<section>
 		<h2>BELIEFS</h2>
+		if noBeliefs(groups) {
+			<p data-empty>No beliefs yet. Nooma derives them overnight from what you capture; you can edit or retire each one here.</p>
+		}
 		<div id="beliefs-result" aria-live="polite">
 			if res != nil {
 				@beliefOutcomeView(*res)
@@ -26,7 +29,7 @@ templ beliefsBody(groups []brain.FacetBeliefs, res *beliefResult) {
 		<section data-facet={ string(g.Facet) }>
 			<h3>{ string(g.Facet) }</h3>
 			if len(g.Beliefs) == 0 {
-				<p>No beliefs yet.</p>
+				<p data-empty>No beliefs yet.</p>
 			} else {
 				<ul>
 					for _, b := range g.Beliefs {
@@ -84,4 +87,14 @@ templ beliefItem(b ports.Belief, res *beliefResult, swap bool) {
 // item off the list.
 templ beliefRemoved(id string) {
 	<li id={ beliefElementID(id) } hx-swap-oob="delete"></li>
+}
+
+// noBeliefs reports a page with no active belief under any facet.
+func noBeliefs(groups []brain.FacetBeliefs) bool {
+	for _, g := range groups {
+		if len(g.Beliefs) > 0 {
+			return false
+		}
+	}
+	return true
 }

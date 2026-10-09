@@ -399,3 +399,19 @@ func TestUnitsView_RowsLinkToDetail(t *testing.T) {
 		}
 	}
 }
+
+// An empty list says how units get there instead of rendering nothing.
+func TestUnitsView_EmptyState(t *testing.T) {
+	t.Parallel()
+	h := ui.New(ui.Deps{Units: stubUnitsReader{}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, unitsRequest(""))
+	if body := rec.Body.String(); !strings.Contains(body, "No units here yet.") {
+		t.Errorf("empty list has no empty state:\n%s", body)
+	}
+	rec = httptest.NewRecorder()
+	(ui.New(ui.Deps{Units: stubUnitsReader{page: fixedBrowsePage()}})).ServeHTTP(rec, unitsRequest(""))
+	if strings.Contains(rec.Body.String(), "No units here yet.") {
+		t.Error("a populated list shows the empty state")
+	}
+}

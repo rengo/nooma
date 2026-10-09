@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ui"
 )
@@ -61,20 +62,20 @@ func TestUnitView_I18ThreeDatesNeverSwap(t *testing.T) {
 
 	// templ's generated output is one unbroken line — today_test.go's own
 	// TestTodayView_I18DatesLabelled precedent slices by label position
-	// instead of by "\n", and this test does the same: each <li> is sliced
-	// from its own label up to the next one.
-	iCreated, iEvent, iDue := strings.Index(page, "Created:"), strings.Index(page, "Event:"), strings.Index(page, "Due:")
+	// instead of by "\n", and this test does the same: each <dt>/<dd> pair is
+	// sliced from its own label up to the next one, the last up to </dl>.
+	iCreated, iEvent, iDue := strings.Index(page, "<dt>Created</dt>"), strings.Index(page, "<dt>Event</dt>"), strings.Index(page, "<dt>Due</dt>")
 	if iCreated < 0 || iEvent < 0 || iDue < 0 {
 		t.Fatalf("page is missing one of the three date labels:\n%s", page)
 	}
 	createdLine := page[iCreated:iEvent]
 	eventLine := page[iEvent:iDue]
-	dueLine := page[iDue:]
+	dueLine := page[iDue : iDue+strings.Index(page[iDue:], "</dl>")]
 
-	if !strings.Contains(createdLine, "2026-09-01") || strings.Contains(createdLine, "Due:") || strings.Contains(createdLine, "Event:") {
+	if !strings.Contains(createdLine, "2026-09-01") || strings.Contains(createdLine, "<dt>Due</dt>") || strings.Contains(createdLine, "<dt>Event</dt>") {
 		t.Errorf("Created: line wrong or carries another date's label:\n%s", createdLine)
 	}
-	if !strings.Contains(dueLine, "2026-09-22") || strings.Contains(dueLine, "Created:") || strings.Contains(dueLine, "Event:") {
+	if !strings.Contains(dueLine, "2026-09-22") || strings.Contains(dueLine, "<dt>Created</dt>") || strings.Contains(dueLine, "<dt>Event</dt>") {
 		t.Errorf("Due: line wrong or carries another date's label:\n%s", dueLine)
 	}
 	if !strings.Contains(eventLine, "none") {
@@ -129,7 +130,7 @@ func TestUnitView_StoredWeightLabelled(t *testing.T) {
 	h.ServeHTTP(rec, unitRequest("unit-1"))
 
 	page := rec.Body.String()
-	if !strings.Contains(page, "Stored weight: 0.50") {
+	if !strings.Contains(page, "<dt>Stored weight</dt><dd>0.50</dd>") {
 		t.Errorf("page does not label the weight as \"Stored weight\":\n%s", page)
 	}
 	if strings.Contains(page, "Effective weight") {
@@ -449,5 +450,105 @@ func TestUnitView_EscapesVaultContent(t *testing.T) {
 	}
 	if strings.Count(body, escaped) != 2 {
 		t.Errorf("expected both the unit's own content and its relation's content escaped exactly once each (2 total), got %d:\n%s", strings.Count(body, escaped), body)
+	}
+}
+
+// A correction sent from a unit page answers with that unit page — its
+// fields read again after the edit, and the outcome naming what changed — so
+// the user stays on the unit instead of landing on /ui/capture. With or
+// without an HX-Request header the answer is the same full page.
+func TestCorrectView_StaysOnTheUnitPage(t *testing.T) {
+	t.Parallel()
+	event := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC)
+	for name, hx := range map[string]bool{"plain post": false, "htmx": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var readID string
+			detail := brain.UnitDetail{Unit: unit.Unit{ID: "unit-9", Type: unit.TypeEvent, Content: "Dentist", CreatedAt: event, EventAt: &event}}
+			fake := &fakeCapturer{result: brain.CaptureResult{
+				Outcome:    brain.OutcomeCorrected,
+				Correction: &brain.Correction{UnitID: "unit-9", Fields: []correction.Field{correction.FieldEventAt}},
+			}}
+			h := ui.New(ui.Deps{Capture: fake, Units: stubUnitsReader{detail: detail, detailFound: true, calledID: &readID}})
+			req := correctRequest("unit-9", "text=it+is+on+the+15th")
+			if hx {
+				req.Header.Set("HX-Request", "true")
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST correct = %d, want 200: %s", rec.Code, rec.Body.String())
+			}
+			body := rec.Body.String()
+			for _, want := range []string{`data-unit-id="unit-9"`, "<main>", `data-outcome="corrected"`, "Changed: Event."} {
+				if !strings.Contains(body, want) {
+					t.Errorf("answer lacks %q:\n%s", want, body)
+				}
+			}
+			if strings.Contains(body, "<h2>CAPTURE</h2>") {
+				t.Errorf("answer is the capture page, not the unit page:\n%s", body)
+			}
+			if readID != "unit-9" {
+				t.Errorf("Detail read %q after the correction, want the path's unit", readID)
+			}
+		})
+	}
+}
+
+// When nothing changed, the unit page carries the same ask the capture page
+// would, so the user knows what to write instead.
+func TestCorrectView_AskStaysOnTheUnitPage(t *testing.T) {
+	t.Parallel()
+	detail := brain.UnitDetail{Unit: unit.Unit{ID: "unit-9", Type: unit.TypeTask, Content: "Pay rent", CreatedAt: time.Now()}}
+	fake := &fakeCapturer{result: brain.CaptureResult{
+		Outcome:    brain.OutcomeAsked,
+		Correction: &brain.Correction{UnitID: "unit-9", Ambiguous: true, Why: brain.AskNotAnEdit},
+	}}
+	h := ui.New(ui.Deps{Capture: fake, Units: stubUnitsReader{detail: detail, detailFound: true}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-9", "text=when+is+it"))
+
+	body := rec.Body.String()
+	for _, want := range []string{`data-unit-id="unit-9"`, `data-outcome="asked"`, "Nothing was changed"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("answer lacks %q:\n%s", want, body)
+		}
+	}
+}
+
+// The correction form is a plain POST: the answer is a full page, so an
+// error answer (404, 500) replaces the page with its message instead of
+// htmx swapping an empty selection over the unit.
+func TestUnitView_CorrectionFormIsAPlainPost(t *testing.T) {
+	t.Parallel()
+	detail := brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "Pay rent", CreatedAt: time.Now()}}
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}}).ServeHTTP(rec, unitRequest("unit-1"))
+	form := between(t, rec.Body.String(), `action="/ui/units/unit-1/correct"`, "</form>")
+	if strings.Contains(form, "hx-") {
+		t.Errorf("correction form carries htmx attributes:\n%s", form)
+	}
+}
+
+// When the corrected unit cannot be read back (no longer live, or the read
+// fails), the answer falls back to the capture outcome rather than a unit
+// page with empty fields.
+func TestCorrectView_UnreadableUnitFallsBackToTheOutcome(t *testing.T) {
+	t.Parallel()
+	for name, reader := range map[string]stubUnitsReader{
+		"not found":   {detailFound: false},
+		"read failed": {detailErr: errors.New("boom"), detailFound: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-9"}}}
+			rec := httptest.NewRecorder()
+			ui.New(ui.Deps{Capture: fake, Units: reader}).ServeHTTP(rec, correctRequest("unit-9", "text=x"))
+			body := rec.Body.String()
+			if strings.Contains(body, "<h2>UNIT</h2>") || !strings.Contains(body, `data-outcome="corrected"`) {
+				t.Errorf("answer is not the capture outcome:\n%s", body)
+			}
+		})
 	}
 }
