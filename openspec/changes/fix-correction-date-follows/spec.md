@@ -4,9 +4,10 @@ States what MUST be true after this change. `design.md` says how.
 
 ## R1 — The text follows a corrected date
 
-When a correction writes `event_at` or `due_at`, every place the unit's content writes the
-previous instant in capture's stated form (`YYYY-MM-DD` for the date, `HH:MM` for the time) MUST
-be rewritten to the new instant in the same form, and the content edit MUST be part of the same
+When a correction writes `event_at` or `due_at`, the content's statement of the previous instant
+— a `YYYY-MM-DD` date token, and the `HH:MM` time token that follows it in the same phrase — MUST
+be rewritten to the new instant in the same form. A bare time, a range and URL or query text MUST
+NOT be touched, and the content edit MUST be part of the same
 `correction.applied` row (`fields`, `previous`, `next`). A content that does not write the
 previous instant in that form MUST stay as it was.
 

@@ -645,18 +645,21 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      content, is an ask**, the same ask-shaped result an ambiguous referent already produces —
      ambiguity over *what* to write is exactly the ambiguity the product rule below blocks on,
      the same way ambiguity over *which* unit is.
-   - **What a corrected date carries with it** (I29). The body and the reminder were derived
-     from the date, so they follow it; a corrected unit never reads one date and holds another.
+   - **What a corrected date carries with it** (I29). The body was derived from the date, so it
+     follows it; a corrected unit's text never states the date it no longer has.
      - **The text.** Step 1 asks `normalized_content` to write a date it resolved as
-       `YYYY-MM-DD` and a time as `HH:MM`. When a correction moves `event_at` or `due_at`, every
-       place the body writes the previous instant that way is rewritten to the new one, and the
-       body becomes a second field of the same `correction.applied` row. This is not the content
-       fallback above: it rewrites a value the system itself resolved, in the form it asked for,
-       and needs no model. Which frame the body was written in is not stored, so the user's zone
-       is tried before UTC. **A body naming the date any other way** ("on the 14th", "el
-       viernes") is not recognised and stays as written — the residual of not inferring. An
-       earlier revision accepted a stale body outright; that cost is now paid only for wording
-       capture was not asked to produce.
+       `YYYY-MM-DD` and a time as `HH:MM`. When a correction moves `event_at` or `due_at`, the
+       body's statement of the previous instant is rewritten to the new one, and the body becomes
+       a second field of the same `correction.applied` row. **Only the stated instant is
+       rewritten**: a date token, and the time token that follows it in the same phrase ("T", a
+       space, " at ", " a las "). A time with no date before it ("gym daily at 10:00") is never
+       touched, nor a range ("10:00-11:00"), nor anything inside a URL or query value. This is
+       not the content fallback above: it rewrites a value the system itself resolved, in the
+       form it asked for, and needs no model. Which frame the body was written in is not stored,
+       so the user's zone is tried before UTC. **A body with no date token for the previous
+       instant** ("on the 14th", "el viernes", or a time alone) stays as written — the residual
+       of not inferring. An earlier revision accepted a stale body outright; that cost is now
+       paid only for wording capture was not asked to produce.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values

@@ -21,8 +21,10 @@ Options weighed:
 | Ask a model to re-word the body on correction | Rejected. A second provider call, an outage mode, and the inference doc 02 refuses when it writes `content` from a model reading |
 | **Rewrite, in the body, the previous instant in the form capture writes it** | Chosen. Pure, deterministic, no provider. Covers the client's shape: the body writes what the system itself resolved |
 
-`correction.FollowDate(text, previous, next, zone)` replaces whole tokens of `previous` rendered
-as `YYYY-MM-DD` and, when the time changed, `HH:MM`, with `next` rendered the same way. The
+`correction.FollowDate(text, previous, next, zone)` replaces each standalone `YYYY-MM-DD` token
+of `previous` (not digit-, path- or query-adjacent, not in a word with a scheme) and the `HH:MM`
+time anchored to it by "T", a space, " at " or " a las ", with `next` rendered the same way. A
+time with no date before it, or followed by a range dash, is never rewritten. The
 frame the model wrote the body in is not stored (the column holds UTC), so it tries the user's
 zone first and UTC second, and rewrites in the first frame where the old instant appears.
 `correction.CarryText(plan, unit, zone)` appends the content edit to a date plan. `PlanEdit` is

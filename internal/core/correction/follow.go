@@ -17,42 +17,104 @@ const (
 )
 
 // FollowDate rewrites, in text, the instant previous as capture writes it
-// into a body, to next written the same way. The date is rewritten
-// whenever it appears; the time only when it changed. It reports whether
-// text changed.
+// into a body, to next written the same way. It reports whether text
+// changed.
+//
+// Only the stated instant is rewritten: a date token, and the time token
+// that follows it within the same phrase (connected by "T", a space, " at "
+// or " a las "). A time with no date before it is never touched — "gym
+// daily at 10:00" names a habit, not this unit's instant — and neither is
+// a range ("10:00-11:00") or anything inside a URL or a query value. A body
+// with no date token for previous is returned unchanged: the residual of
+// not inferring (doc 02 §5 step 4).
 //
 // The frame the body was written in is not stored — the column holds UTC
-// — so the user's zone is tried first and UTC second, and the rewrite
-// happens in the first frame where previous appears. A body naming the
-// instant in any other form is returned unchanged.
+// — so the user's zone is tried first and UTC second. A frame where the
+// date and its moved time both appear wins over one where only the date
+// does: 10:00Z is 07:00 in UTC-3 on the same date.
 func FollowDate(text string, previous, next time.Time, zone *time.Location) (string, bool) {
-	frames := []*time.Location{zone, time.UTC}
-	// A frame where every moved part appears wins over one where only some
-	// does: 10:00Z is 07:00 in UTC-3 on the same date, and taking that frame
-	// on the date alone would leave "10:00" behind.
 	for _, whole := range []bool{true, false} {
-		for _, frame := range frames {
+		for _, frame := range []*time.Location{zone, time.UTC} {
 			p, n := previous.In(frame), next.In(frame)
-			pd, nd := p.Format(textDateLayout), n.Format(textDateLayout)
-			pt, nt := p.Format(textTimeLayout), n.Format(textTimeLayout)
-			timeMoved := pt != nt
-			hasDate, hasTime := hasToken(text, pd), timeMoved && hasToken(text, pt)
-			found := hasDate || hasTime
-			if whole {
-				found = hasDate && (hasTime || !timeMoved)
-			}
-			if !found {
+			out, dates, times := rewriteInstant(text,
+				p.Format(textDateLayout), n.Format(textDateLayout),
+				p.Format(textTimeLayout), n.Format(textTimeLayout))
+			timeMoved := p.Format(textTimeLayout) != n.Format(textTimeLayout)
+			if dates == 0 || whole && timeMoved && times == 0 {
 				continue
-			}
-			out := replaceToken(text, pd, nd)
-			if timeMoved {
-				out = replaceToken(out, pt, nt)
 			}
 			return out, out != text
 		}
 	}
 	return text, false
 }
+
+// connectors join a date token to the time token of the same instant,
+// longest first so " a las " is not read as " ".
+var connectors = []string{" a las ", " a la ", " at ", "T", " "}
+
+// rewriteInstant replaces every standalone date token pd with nd and, when
+// a time token pt follows it through a connector, that time with nt. It
+// counts the date tokens and the anchored time tokens it found.
+func rewriteInstant(text, pd, nd, pt, nt string) (string, int, int) {
+	var b strings.Builder
+	dates, times := 0, 0
+	rest, offset := text, 0
+	for {
+		i := strings.Index(rest, pd)
+		if i < 0 {
+			b.WriteString(rest)
+			return b.String(), dates, times
+		}
+		end := i + len(pd)
+		if !standalone(text, offset+i, offset+end) {
+			b.WriteString(rest[:end])
+			rest, offset = rest[end:], offset+end
+			continue
+		}
+		dates++
+		b.WriteString(rest[:i])
+		b.WriteString(nd)
+		for _, c := range connectors {
+			t := end + len(c)
+			if strings.HasPrefix(rest[end:], c) && strings.HasPrefix(rest[t:], pt) &&
+				timeEnds(rest, t+len(pt)) {
+				times++
+				b.WriteString(c)
+				b.WriteString(nt)
+				end = t + len(pt)
+				break
+			}
+		}
+		rest, offset = rest[end:], offset+end
+	}
+}
+
+// standalone reports whether text[i:j] is a token of its own: no digit on
+// either side, not part of a path or query (/ ? = & #), and not inside a
+// word carrying a URL scheme.
+func standalone(text string, i, j int) bool {
+	if i > 0 && (isDigit(text[i-1]) || isURLMark(text[i-1])) {
+		return false
+	}
+	if j < len(text) && (isDigit(text[j]) || isURLMark(text[j])) {
+		return false
+	}
+	start := strings.LastIndexAny(text[:i], " \t\n") + 1
+	stop := strings.IndexAny(text[j:], " \t\n")
+	if stop < 0 {
+		stop = len(text) - j
+	}
+	return !strings.Contains(text[start:j+stop], "://")
+}
+
+// timeEnds reports whether a time token ending at j is not continued by a
+// digit, a range dash, or a URL mark.
+func timeEnds(s string, j int) bool {
+	return j == len(s) || !isDigit(s[j]) && s[j] != '-' && !isURLMark(s[j])
+}
+
+func isURLMark(c byte) bool { return strings.IndexByte("/?=&#", c) >= 0 }
 
 // CarryText returns plan with, appended, the content edit its date edit
 // carries: the unit's body rewritten by FollowDate from the edited
@@ -75,33 +137,6 @@ func CarryText(plan []Edit, u unit.Unit, zone *time.Location) []Edit {
 		}
 	}
 	return plan
-}
-
-// hasToken reports whether tok appears in s with no digit on either side.
-func hasToken(s, tok string) bool {
-	return replaceToken(s, tok, "\x00") != s
-}
-
-// replaceToken replaces every occurrence of tok in s that has no digit on
-// either side, so 10:00 inside 110:00 is left alone.
-func replaceToken(s, tok, with string) string {
-	var b strings.Builder
-	for {
-		i := strings.Index(s, tok)
-		if i < 0 {
-			b.WriteString(s)
-			return b.String()
-		}
-		end := i + len(tok)
-		bounded := (i == 0 || !isDigit(s[i-1])) && (end == len(s) || !isDigit(s[end]))
-		b.WriteString(s[:i])
-		if bounded {
-			b.WriteString(with)
-		} else {
-			b.WriteString(tok)
-		}
-		s = s[end:]
-	}
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }

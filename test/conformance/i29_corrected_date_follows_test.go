@@ -153,6 +153,20 @@ func TestI29_CorrectedDateCarriesTheText(t *testing.T) {
 		assertCarried(t, f)
 	})
 
+	t.Run("the body is read in the clock's own zone first", func(t *testing.T) {
+		// A clock that is not UTC: the body says 07:00 because the user is
+		// at UTC-3, and only reading it in that zone finds the time to move.
+		art := time.FixedZone("ART", -3*60*60)
+		local := now.In(art)
+		v := event
+		v.Content = "Dentista el 2026-10-16 a las 07:00"
+		f := newI29(t, local, v, `{"type":"event","normalized_content":"Dentista hoy a las 11:00","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-09T11:00:00-03:00","language":"es"}`)
+		f.capture(t, "dentist")
+		if got := f.unit(t, "dentist").Content; got != "Dentista el 2026-10-09 a las 11:00" {
+			t.Errorf("content = %q, want the date and the local time moved", got)
+		}
+	})
+
 	t.Run("a due_at correction carries the text too", func(t *testing.T) {
 		due := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 		task := unit.Unit{ID: "bill", Type: unit.TypeTask, Status: unit.StatusPool, Content: "Pagar la luz antes del 2026-10-20",
