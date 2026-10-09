@@ -43,7 +43,9 @@ PR already exists for it, resume that PR instead of starting a second one.
    owns `design.md`, `tasks.md` and apply. Decisions that need an ADR go to the client first
    (rule 3b).
 2. **Build.** Launch `nooma-dev` with the change name, the artifacts and the acceptance
-   criteria. It works in its own branch/worktree and opens the PR.
+   criteria. It works in its own branch **and its own
+   `git worktree`** (`../nooma-<branch-slug>`), never switching the branch of the maintainer's
+   main checkout `/home/pablo/dev/nooma`, which stays on `main` and clean; it opens the PR.
 3. **Validate.** Launch `nooma-qa` on the PR head.
 4. **Review.** Launch `nooma-reviewer` on the PR; it posts its verdict on the PR.
 5. **Rework.** Send blocking findings (QA failures, reviewer findings) back to `nooma-dev` on

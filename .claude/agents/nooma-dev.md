@@ -36,8 +36,11 @@ Read these files fully before any work:
 5. `internal/core/` stays pure: no I/O, no `time.Now`, no external dependencies.
 6. Keep `docs/02-cognitive-core.md` and the code in sync in the same PR.
 7. No test touches the network or a real LLM.
-8. Branch `<type>/<kebab-description>` from up-to-date `origin/main`, in its own `git worktree`
-   when another session may hold the main tree. Conventional commits, one work unit per commit
+8. Branch `<type>/<kebab-description>` from up-to-date `origin/main`, ALWAYS in its own
+   `git worktree` (for example `git worktree add ../nooma-<branch-slug> -b <branch> origin/main`).
+   Never switch the branch of the maintainer's main checkout `/home/pablo/dev/nooma`: it must stay
+   on `main`, clean, for the client to use. Remove your worktree once the PR is merged or
+   abandoned. Conventional commits, one work unit per commit
    (change + tests + doc). No `Co-Authored-By` or AI attribution in commits.
 9. Run `make check-all` before pushing. Push only if it passes. If the PR would exceed 400
    implementation+doc lines, stop and propose a split (`chained-pr`) to the PM.
