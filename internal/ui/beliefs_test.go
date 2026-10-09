@@ -863,10 +863,10 @@ func TestLayout_NavLinksToBeliefsAndActivity(t *testing.T) {
 
 	for name, page := range pages {
 		nav := between(t, page, "<nav", "</nav>")
-		if !strings.Contains(nav, `<a href="/ui/beliefs"`) {
+		if !strings.Contains(nav, `<a href="/ui/beliefs"`) || !strings.Contains(nav, ">Beliefs</a>") {
 			t.Errorf("%s: nav has no beliefs link:\n%s", name, nav)
 		}
-		if !strings.Contains(nav, `<a href="/ui/activity"`) {
+		if !strings.Contains(nav, `<a href="/ui/activity"`) || !strings.Contains(nav, ">Activity</a>") {
 			t.Errorf("%s: nav has no activity link:\n%s", name, nav)
 		}
 	}

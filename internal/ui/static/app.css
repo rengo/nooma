@@ -109,7 +109,9 @@
 		--color-fg: light-dark(#1b1d20, #e7e8ea);
 		--color-muted: light-dark(#5a606b, #a0a6b0);
 		--color-border: light-dark(#e1e1dc, #2d3138);
-		--color-border-strong: light-dark(#c9cac4, #40454e);
+		/* Control borders: at least 3:1 against --color-surface and
+		 * --color-bg in both themes (WCAG 1.4.11). */
+		--color-border-strong: light-dark(#868b93, #70767f);
 		--color-accent: light-dark(#2f55c8, #8aa6ff);
 		--color-accent-hover: light-dark(#2445a8, #a8bdff);
 		--color-accent-soft: light-dark(#eaeffc, #1e2741);
@@ -426,10 +428,13 @@
 		background: var(--color-danger-soft);
 	}
 
+	/* An empty result region takes no space but stays in the accessibility
+	 * tree: hiding it (display: none) could keep its polite announcement
+	 * from being read once the outcome arrives. Out of flow, it adds no gap. */
 	#capture-result:empty,
 	#correct-result:empty,
 	#beliefs-result:empty {
-		display: none;
+		position: absolute;
 	}
 
 	/* --- Forms ------------------------------------------------------------- */
