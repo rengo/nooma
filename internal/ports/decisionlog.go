@@ -102,6 +102,14 @@ const (
 	// the referent gate or the edit plan asked instead of picking (design
 	// D2/D3, m1b D7's precedent for a discard that still explains itself).
 	ActionCorrectionAmbiguous DecisionAction = "correction.ambiguous"
+	// The three reminder rows a corrected event date writes (I29), each
+	// before its trigger write and change-shaped (previous/next) so
+	// /ui/activity shows it: an armed trigger moved to the new date, one
+	// created because none was armed, and one expired because the new
+	// date is past or another trigger carries it.
+	ActionCorrectionReminderMoved     DecisionAction = "correction.reminder.moved"
+	ActionCorrectionReminderArmed     DecisionAction = "correction.reminder.armed"
+	ActionCorrectionReminderCancelled DecisionAction = "correction.reminder.cancelled"
 
 	// ActionExpireIncompleteTransitioned covers expire_incomplete's one
 	// effect kind — both ReasonIncompleteExpired and ReasonIncompletePromoted
@@ -220,6 +228,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,
+		ActionCorrectionReminderMoved, ActionCorrectionReminderArmed, ActionCorrectionReminderCancelled,
 		ActionExpireIncompleteTransitioned, ActionArchiveArchived, ActionArchiveConflictSkipped,
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
 		ActionDeriveBeliefReinforced, ActionDeriveBeliefSkipped, ActionDeriveRetiredEmbedFailed,

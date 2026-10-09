@@ -67,7 +67,8 @@ is on the 15th.
    caller holds a unit id (the UI and the API do), that id wins. In chat there is none, so
    Nooma finds the referent by recall and **asks** when it cannot tell which unit you mean
    rather than guessing. The edit changes the one field you corrected, with its pre-image
-   recorded; a moved date also rewrites the date the text states. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
+   recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
+   unit's reminder as a fresh capture of the new date would. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 
 **You end up with** units that carry what you said in your own words (ADR-0024), related to one
 another, findable by meaning or by keyword, and editable.
@@ -209,7 +210,7 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    unit page has a correction form whose target is the unit you are looking at, so the UI never
    has to guess a referent. Whatever you type there corrects that unit, never a new one: write
    the new value ("it is on the 9th at 10") and that field changes, with the date the text
-   states following it. When the text does not
+   states and the unit's reminder following it. When the text does not
    say what to change, nothing changes and the page says so.
 7. **Reviews its beliefs** (`/ui/beliefs`). The active beliefs are listed by facet, each with its
    confidence, origin and last reinforcement. You can edit one: saving it unchanged claims a

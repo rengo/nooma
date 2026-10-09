@@ -6,12 +6,17 @@ half, 5 docs), #304 `feat/trigger-reschedule` (task 3), #306 `refactor/arming-bu
 reminder half).
 
 - [x] 1. RED/GREEN, L1: `correction.FollowDate`, `correction.CarryText`; prompt states the form (R1, R2).
-- [ ] 2. RED/GREEN, L1: `prospection.Follow` over `datedTrigger`/`recurringTrigger` (R3).
-- [ ] 3. Port: `TriggerRepo.ArmedForUnit`, `Reschedule`; contract suite, memrepo, sqlite (L2/L3).
-- [ ] 4. RED: `TestI29_CorrectedDateCarriesTheText`, `TestI29_CorrectedDateMovesTheReminder` (R1, R3, R4) and the I29 row; I28
+- [x] 2. RED/GREEN, L1: `prospection.Follow` over `datedTrigger`/`recurringTrigger` (R3).
+- [x] 3. Port: `TriggerRepo.ArmedForUnit`, `Reschedule`; contract suite, memrepo, sqlite (L2/L3).
+- [x] 4. RED: `TestI29_CorrectedDateCarriesTheText`, `TestI29_CorrectedDateMovesTheReminder` (R1, R3, R4) and the I29 row; I28
       wording. GREEN: `correctionRunner` carries text and follows the reminder.
-- [ ] 5. Doc 02 §5 step 4, doc 07; `make check-all`; PR.
+- [x] 5. Doc 02 §5 step 4, doc 07; `make check-all`; PR.
 
 Rework after review: 6. `FollowDate` rewrites only the stated instant, with the reviewers'
 adversarial cases and a non-UTC clock fixture; 9. trailing `?`/`#`/`&` are punctuation, dates
 glued inside a word or file name are untouched, one case per boundary rule.
+7. #304: `TriggerMove` carries the new arming's payload; NULL `fire_at` case; I27 header.
+8. #305: reminder rows proven before their writes; partial-failure state documented, a retry
+rewrites the text from the trigger's own instant; one trigger builder; anchor shown on a move.
+10. #305/#306 second review: failed-reminder-row subtests assert the edit landed and no signal;
+a same-date move writes nothing; `armedTrigger` pinned by a unit test.

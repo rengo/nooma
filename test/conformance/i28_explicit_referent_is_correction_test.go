@@ -101,12 +101,18 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 	}
 	// assertAppliedDates is the spec R1 scenario's own row: one
 	// correction.applied whose previous/next carry the two dates, not merely
-	// a row with the right name.
+	// a row with the right name. Only the referent's own reminder rows (I29)
+	// may follow it.
 	assertAppliedDates := func(t *testing.T, d *memrepo.DecisionLog) {
 		t.Helper()
 		got := rows(t, d)
-		if len(got) != 1 || got[0].Action != ports.ActionCorrectionApplied {
-			t.Fatalf("decision actions = %v, want exactly [%s]", actions(t, d), ports.ActionCorrectionApplied)
+		if len(got) == 0 || got[0].Action != ports.ActionCorrectionApplied {
+			t.Fatalf("decision actions = %v, want %s first", actions(t, d), ports.ActionCorrectionApplied)
+		}
+		for _, r := range got[1:] {
+			if r.Action != ports.ActionCorrectionReminderArmed {
+				t.Errorf("decision actions = %v, want only the referent's reminder after %s", actions(t, d), ports.ActionCorrectionApplied)
+			}
 		}
 		var pre struct {
 			UnitID   string               `json:"unit_id"`
@@ -163,7 +169,22 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		if got.EventAt == nil || !got.EventAt.Equal(corrected) {
 			t.Errorf("EventAt = %v, want %v", got.EventAt, corrected)
 		}
-		assertNoNewMemory(t, f)
+		// No new unit and no relation. The one trigger is the referent's own
+		// reminder for its corrected date, firing at once since the lead
+		// horizon is behind (I29) — not a trigger for a second capture.
+		if got := f.units.Count(); got != 1 {
+			t.Errorf("units = %d, want 1 — a capture naming its referent must never persist a unit", got)
+		}
+		if rels, err := f.relations.ByUnit(context.Background(), "dentist"); err != nil || len(rels) != 0 {
+			t.Errorf("relations on the referent = %v (%v), want none", rels, err)
+		}
+		armed, err := f.triggers.ArmedForUnit(context.Background(), "dentist")
+		if err != nil {
+			t.Fatalf("ArmedForUnit: %v", err)
+		}
+		if f.triggers.Count() != 1 || len(armed) != 1 || !armed[0].FireAt.Equal(now) {
+			t.Errorf("triggers = %d, armed on the referent = %+v, want exactly the referent's reminder firing at %s", f.triggers.Count(), armed, now)
+		}
 		assertAppliedDates(t, f.decisions)
 	})
 

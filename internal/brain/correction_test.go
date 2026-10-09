@@ -63,7 +63,7 @@ func TestApplyWithPreImage_AuditFailureBlocksTheEdit(t *testing.T) {
 	newEventAt := time.Date(2026, 8, 15, 9, 0, 0, 0, time.UTC)
 	plan := []correction.Edit{correction.NewEventAtEdit(newEventAt)}
 
-	err := r.applyWithPreImage(ctx, target, plan, referentSource{Source: "explicit"}, now)
+	err := r.applyWithPreImage(ctx, target, plan, referentSource{Source: "explicit"}, nil, now)
 	if err == nil {
 		t.Fatal("applyWithPreImage error = nil, want the audit-write failure to propagate")
 	}
@@ -120,7 +120,7 @@ func TestApplyWithPreImage_PreImageShape(t *testing.T) {
 			newEventAt := time.Date(2026, 8, 15, 9, 0, 0, 0, time.UTC)
 			plan := []correction.Edit{correction.NewEventAtEdit(newEventAt)}
 
-			if err := r.applyWithPreImage(ctx, target, plan, tc.ref, now); err != nil {
+			if err := r.applyWithPreImage(ctx, target, plan, tc.ref, nil, now); err != nil {
 				t.Fatalf("applyWithPreImage: %v", err)
 			}
 
@@ -217,7 +217,7 @@ func TestApplyWithPreImage_RecordsCorrectionSignalAfterSuccess(t *testing.T) {
 	newEventAt := time.Date(2026, 8, 15, 9, 0, 0, 0, time.UTC)
 	plan := []correction.Edit{correction.NewEventAtEdit(newEventAt)}
 
-	if err := r.applyWithPreImage(ctx, target, plan, referentSource{Source: "explicit"}, now); err != nil {
+	if err := r.applyWithPreImage(ctx, target, plan, referentSource{Source: "explicit"}, nil, now); err != nil {
 		t.Fatalf("applyWithPreImage: %v", err)
 	}
 
@@ -302,7 +302,7 @@ func TestApplyWithPreImage_FailedEditRecordsNoSignal(t *testing.T) {
 	// any dispatchEdits failure without needing a second failing fake.
 	plan := []correction.Edit{{}}
 
-	err := r.applyWithPreImage(ctx, target, plan, referentSource{Source: "explicit"}, now)
+	err := r.applyWithPreImage(ctx, target, plan, referentSource{Source: "explicit"}, nil, now)
 	if err == nil {
 		t.Fatal("applyWithPreImage error = nil, want the dispatchEdits failure to propagate")
 	}
