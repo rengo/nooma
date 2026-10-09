@@ -342,7 +342,7 @@ func (r *Triggers) Reschedule(_ context.Context, id string, m ports.TriggerMove)
 	}
 	fireAt := m.FireAt
 	stored.trigger.FireAt = &fireAt
-	stored.trigger.Payload.ActionText = m.ActionText
+	stored.trigger.Payload = m.Payload
 	if m.RecurrenceAnchor != nil {
 		stored.trigger.RecurrenceAnchor = copyAnchor(m.RecurrenceAnchor)
 	}

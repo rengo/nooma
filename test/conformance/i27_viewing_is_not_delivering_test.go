@@ -29,15 +29,15 @@ import (
 // ByUnit through the focus keeper, for the members of the incumbent it holds
 // and of the one it selects (the pending-digest mirror's P'), and ByID is a
 // read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
-// Expire write; Due, Undelivered, Delivered read),
+// Expire, Reschedule write; Due, Undelivered, Delivered, ArmedForUnit read),
 // pendingquestionrepo.go (PendingQuestionRepo: Create, MarkAsked,
 // Confirm, Reject, Expire write; Unasked, Open read), staterepo.go
 // (StateRepo: OpenHypothesis writes; LastHypothesisAt, LatestEnergy
 // read), configrepo.go (ConfigRepo: RecordConsolidationRun writes; Load
 // reads), decisionlog.go (DecisionLog: Record writes; Since and Before read) —
-// eighteen distinct method names in total, recounted from the guards
+// nineteen distinct method names in total, recounted from the guards
 // below (m4c added RelationRepo's Upsert and Delete to design §3.6's
-// sixteen).
+// sixteen; fix-correction-date-follows added TriggerRepo's Reschedule).
 func TestI27_ViewingIsNotDelivering(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -119,8 +119,8 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 func strPtrI27(s string) *string { return &s }
 
 // i27Fail fails t naming the port and method a write reached — every
-// override below is one line calling this, so the eighteen names stay a
-// list to read rather than eighteen bespoke messages to keep in sync.
+// override below is one line calling this, so the nineteen names stay a
+// list to read rather than nineteen bespoke messages to keep in sync.
 func i27Fail(t *testing.T, port, method string) {
 	t.Helper()
 	t.Fatalf("TodayService called %s.%s — a view must not write (I27, docs/06-harness.md §4)", port, method)

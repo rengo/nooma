@@ -403,7 +403,9 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 	seed := func(t *testing.T, repo TriggerHarness) {
 		t.Helper()
 		late, early, fired := contractNow.Add(2*time.Hour), contractNow.Add(time.Hour), contractNow
-		for _, trg := range []ports.Trigger{fixtureTrigger("trg-late", &late), fixtureTrigger("trg-early", &early), fixtureTrigger("trg-fired", &fired), fixtureTrigger("trg-other", &early)} {
+		// trg-unclocked has no fire_at (a NULL the column allows): ArmedForUnit
+		// returns DueTrigger, whose FireAt is not a pointer, so it is skipped.
+		for _, trg := range []ports.Trigger{fixtureTrigger("trg-late", &late), fixtureTrigger("trg-early", &early), fixtureTrigger("trg-fired", &fired), fixtureTrigger("trg-other", &early), fixtureTrigger("trg-unclocked", nil)} {
 			if trg.ID != "trg-other" {
 				unitID := "unit-shared"
 				trg.UnitID = &unitID
@@ -433,21 +435,22 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		}
 	})
 
-	t.Run("Reschedule moves fire_at and action text and keeps the rest", func(t *testing.T) {
+	t.Run("Reschedule moves fire_at and payload and keeps the level", func(t *testing.T) {
 		repo := newRepo(t)
 		seed(t, repo)
 		to := contractNow.Add(5 * time.Hour)
-		if err := repo.Reschedule(ctx, "trg-early", ports.TriggerMove{FireAt: to, ActionText: "renew it today"}); err != nil {
+		payload := ports.TriggerPayload{ActionText: "renew it today", Rationale: "armed for today", LeadDays: 3}
+		if err := repo.Reschedule(ctx, "trg-early", ports.TriggerMove{FireAt: to, Payload: payload}); err != nil {
 			t.Fatalf("Reschedule: %v", err)
 		}
 		got := armed(t, repo)
 		assertDueTriggerIDs(t, got, "trg-late", "trg-early")
 		moved := got[1]
-		if !moved.FireAt.Equal(to) || moved.Payload.ActionText != "renew it today" {
-			t.Errorf("moved = %s %q, want %s %q", moved.FireAt, moved.Payload.ActionText, to, "renew it today")
+		if !moved.FireAt.Equal(to) || moved.Payload != payload {
+			t.Errorf("moved = %s %+v, want %s %+v", moved.FireAt, moved.Payload, to, payload)
 		}
-		if moved.Payload.Rationale != "it expires in three months" || moved.Payload.LeadDays != 7 || moved.InterruptLevel == nil || *moved.InterruptLevel != 0.42 {
-			t.Errorf("moved = %+v, want rationale, lead days and level as armed", moved)
+		if moved.InterruptLevel == nil || *moved.InterruptLevel != 0.42 {
+			t.Errorf("moved = %+v, want the level as armed", moved)
 		}
 		if moved.RecurrenceAnchor != nil {
 			t.Errorf("RecurrenceAnchor = %+v, want nil — a nil move anchor writes none", moved.RecurrenceAnchor)

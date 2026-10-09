@@ -180,11 +180,12 @@ type DueTrigger struct {
 
 // TriggerMove is what Reschedule rewrites on an armed trigger when the date
 // it watches is corrected (doc 02 §5 step 4, I29): when it fires, what it
-// will say, and — for a recurring trigger, nil otherwise — its anchor.
-// Everything else on the row, its interrupt level included, stays as armed.
+// will say, why and how far ahead (the payload a fresh arming would write),
+// and — for a recurring trigger, nil otherwise — its anchor. Everything
+// else on the row, its interrupt level included, stays as armed.
 type TriggerMove struct {
 	FireAt           time.Time
-	ActionText       string
+	Payload          TriggerPayload
 	RecurrenceAnchor *prospection.Anchor
 }
 
@@ -291,8 +292,8 @@ type TriggerRepo interface {
 	ArmedForUnit(ctx context.Context, unitID string) ([]DueTrigger, error)
 
 	// Reschedule applies m to id under an armed precondition: fire_at,
-	// payload's action text and, when m.RecurrenceAnchor is non-nil,
-	// recurrence_anchor. It returns the same two errors as Fire.
+	// payload and, when m.RecurrenceAnchor is non-nil, recurrence_anchor.
+	// It returns the same two errors as Fire.
 	Reschedule(ctx context.Context, id string, m TriggerMove) error
 }
 

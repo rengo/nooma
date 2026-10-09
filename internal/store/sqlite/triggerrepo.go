@@ -206,21 +206,25 @@ func (r *TriggerRepo) ArmedForUnit(ctx context.Context, unitID string) ([]ports.
 	return out, nil
 }
 
-// Reschedule implements ports.TriggerRepo. json_set rewrites the one
-// payload key that moves and leaves rationale and lead_days as armed;
-// COALESCE keeps the anchor when the move carries none.
+// Reschedule implements ports.TriggerRepo. COALESCE keeps the anchor when
+// the move carries none.
 func (r *TriggerRepo) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {
+	payload, err := json.Marshal(payloadJSON{
+		Action: m.Payload.ActionText, Rationale: m.Payload.Rationale, LeadDays: m.Payload.LeadDays,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal trigger %q payload: %w", id, err)
+	}
 	anchor, err := marshalAnchor(m.RecurrenceAnchor)
 	if err != nil {
 		return fmt.Errorf("marshal trigger %q recurrence_anchor: %w", id, err)
 	}
 	return r.guardedUpdate(ctx, id,
 		`UPDATE triggers
-		 SET fire_at = ?, payload = json_set(payload, '$.action', ?),
-		     recurrence_anchor = COALESCE(?, recurrence_anchor)
+		 SET fire_at = ?, payload = ?, recurrence_anchor = COALESCE(?, recurrence_anchor)
 		 WHERE id = ? AND status = ?`,
 		func(current string) bool { return current == string(ports.TriggerStatusArmed) },
-		formatUnitTime(m.FireAt), m.ActionText, anchor, id, string(ports.TriggerStatusArmed))
+		formatUnitTime(m.FireAt), string(payload), anchor, id, string(ports.TriggerStatusArmed))
 }
 
 // guardedUpdate runs one conditional UPDATE, distinguishing "no such
