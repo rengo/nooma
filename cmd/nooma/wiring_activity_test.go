@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
 )
@@ -54,5 +55,29 @@ func TestWireActivity_BuildsAWorkingService(t *testing.T) {
 	}
 	if len(page.Rows) != 1 || page.Rows[0].ID != "d-1" {
 		t.Fatalf("Page = %+v, want the recorded row d-1: wireActivity is not over the real decision_log", page.Rows)
+	}
+
+	// A row naming a live unit carries it as its subject: wireActivity hands
+	// the service the real unit repo, not only the log.
+	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	if err := sqlite.NewUnitRepo(db).Create(ctx, unit.Unit{
+		ID: "u-live", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "Dentist appointment", Source: "chat",
+		Weight: 0.7, WeightDecayRate: 0.01, LastTouchedAt: at, CreatedAt: at, UpdatedAt: at,
+	}); err != nil {
+		t.Fatalf("Create unit: %v", err)
+	}
+	named := ports.Decision{ID: "d-2", Action: ports.ActionCaptureArmedTrigger, Rationale: "armed", Context: []byte(`{"unit_id":"u-live"}`), OccurredAt: at}
+	if err := sqlite.NewDecisionLog(db).Record(ctx, named); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	page, err = svc.Page(ctx, "capture", nil)
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	if len(page.Rows) != 2 || page.Rows[0].ID != "d-2" {
+		t.Fatalf("Page = %+v, want d-2 then d-1", page.Rows)
+	}
+	if s := page.Rows[0].Subject; s == nil || s.UnitID != "u-live" || s.Content != "Dentist appointment" {
+		t.Errorf("d-2 subject = %+v, want the live unit u-live: wireActivity does not resolve units", s)
 	}
 }
