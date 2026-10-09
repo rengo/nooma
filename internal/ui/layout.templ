@@ -28,6 +28,9 @@ templ Page(title string, body templ.Component) {
 			<main>
 				@body
 			</main>
+			if note := zoneNote(ctx); note != "" {
+				<footer><small>{ note }</small></footer>
+			}
 			<script src="/ui/static/htmx.min.js"></script>
 		</body>
 	</html>

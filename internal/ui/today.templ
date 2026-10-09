@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -28,10 +29,10 @@ templ todayBody(today brain.Today, serving Serving) {
 					<li>
 						{ m.ID } — { m.Content } (score: { formatScore(m.Score) })
 						if m.DueAt != nil {
-							<span>Due: { m.DueAt.Format(dateLayout) }</span>
+							<span>Due: { formatTime(ctx, *m.DueAt) }</span>
 						}
 						if m.EventAt != nil {
-							<span>Event: { m.EventAt.Format(dateLayout) }</span>
+							<span>Event: { formatTime(ctx, *m.EventAt) }</span>
 						}
 					</li>
 				}
@@ -53,8 +54,8 @@ templ todayBody(today brain.Today, serving Serving) {
 	<section>
 		<h2>SYSTEM</h2>
 		<ul>
-			<li>{ "Last consolidation: " + formatConsolidation(today.Status.LastConsolidationAt) }</li>
-			<li>{ "Energy: " + formatEnergy(today.Status.Energy) }</li>
+			<li>{ "Last consolidation: " + formatConsolidation(ctx, today.Status.LastConsolidationAt) }</li>
+			<li>{ "Energy: " + formatEnergy(ctx, today.Status.Energy) }</li>
 			<li>{ fmt.Sprintf("Undelivered: %d", today.Status.Undelivered) }</li>
 			<li>{ fmt.Sprintf("Open questions: %d", today.Status.OpenQuestions) }</li>
 			<li>{ "Bind: " + serving.Bind }</li>
@@ -78,18 +79,18 @@ func formatScore(s float64) string {
 	return strconv.FormatFloat(s, 'f', 2, 64)
 }
 
-func formatConsolidation(t *time.Time) string {
+func formatConsolidation(ctx context.Context, t *time.Time) string {
 	if t == nil {
 		return "never"
 	}
-	return t.Format(dateLayout)
+	return formatTime(ctx, *t)
 }
 
-func formatEnergy(e *prospection.EnergyReading) string {
+func formatEnergy(ctx context.Context, e *prospection.EnergyReading) string {
 	if e == nil {
 		return "no reading"
 	}
-	return fmt.Sprintf("%.2f (%s, %s)", e.Level, e.Source, e.RecordedAt.Format(dateLayout))
+	return fmt.Sprintf("%.2f (%s, %s)", e.Level, e.Source, formatTime(ctx, e.RecordedAt))
 }
 
 func formatCookieAuth(on bool) string {

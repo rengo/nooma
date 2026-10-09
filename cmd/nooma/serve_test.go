@@ -174,3 +174,11 @@ func TestListenAndAnnounce_SaysNothingWhenTheBindFails(t *testing.T) {
 		t.Errorf("stdout = %q after a failed bind, want no serving banner", out.String())
 	}
 }
+
+// TestUIDeps_CarriesTheClockTheMirrorReadsItsZoneFrom: without a clock the UI
+// falls back to UTC, which is the defect this wiring exists to prevent.
+func TestUIDeps_CarriesTheClockTheMirrorReadsItsZoneFrom(t *testing.T) {
+	if deps := uiDeps(nil, nil, nil, nil, nil, nil, ui.Serving{}); deps.Now == nil {
+		t.Error("Now: want the system clock wired, got nil — every time would render in UTC")
+	}
+}

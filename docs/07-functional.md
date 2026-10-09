@@ -219,6 +219,13 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
 8. **Shows what it did** (`/ui/activity`). The `decision_log` newest first, 50 rows a page, with
    an "older" link and a `?kind=` filter by family. A row that records an edit shows what it was
    before and what it became. The page is read-only: nothing on it writes or undoes.
+9. **Shows every time in your zone.** Each date and time the UI displays, each activity before/after
+   value that is a timestamp, and each instant inside Nooma's own sentences (an activity
+   rationale, a refusal, a chat reply) is in the zone the server process runs in (the one that travels
+   with the clock, [doc 02 §5](02-cognitive-core.md#5-capture)), as
+   `2026-10-15 11:00`, with a one-line note naming the zone. Nothing stored changes: the vault and
+   the API stay UTC. Text you wrote yourself (a unit's content, a digest line) is shown as written,
+   even if it contains an instant. A vault viewed from a browser in another zone still reads in the server's.
 
 **You end up with** a product you can use without a terminal, for what exists today. The graph
 and admin screens are not built (see below).

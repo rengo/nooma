@@ -315,7 +315,7 @@ func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 // degrade, cmd/nooma/wiring.go) — this function guards all five alike
 // rather than only the ones that need it today.
 func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, activity *brain.ActivityService, serving ui.Serving) ui.Deps {
-	deps := ui.Deps{Serving: serving}
+	deps := ui.Deps{Serving: serving, Now: systemClock{}.Now}
 	if today != nil {
 		deps.Today = today
 	}

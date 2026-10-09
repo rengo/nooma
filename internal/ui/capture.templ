@@ -51,9 +51,9 @@ templ captureOutcome(result brain.CaptureResult) {
 	case brain.OutcomeArmed:
 		<p data-outcome="armed">Armed { string(result.Armed.What) } ({ result.Armed.ID }).</p>
 	case brain.OutcomeArmRefused:
-		<p data-outcome="arm_refused">{ result.ArmRefused.Message }</p>
+		<p data-outcome="arm_refused">{ localizeProse(ctx, result.ArmRefused.Message) }</p>
 	case brain.OutcomeConversed:
-		<p data-outcome="conversed">{ result.Reply }</p>
+		<p data-outcome="conversed">{ localizeProse(ctx, result.Reply) }</p>
 	case brain.OutcomeOutOfScope:
 		<p data-outcome="out_of_scope">That is out of scope.</p>
 	case brain.OutcomeRecalled:

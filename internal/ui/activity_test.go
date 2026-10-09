@@ -101,7 +101,7 @@ func TestActivityView_CorrectionShowsPreviousBesideNext(t *testing.T) {
 	body := serveActivity(ui.Deps{Activity: fake}, activityGet("")).Body.String()
 
 	for _, want := range []string{
-		"event_at: 2026-09-01T10:00:00Z → 2026-09-02T10:00:00Z",
+		"event_at: 2026-09-01 10:00 → 2026-09-02 10:00",
 		"goal_stagnation_days: 21 → 28",
 		"consolidation_enabled: true → false",
 		"weight_threshold: 0.5 → 0.6",
