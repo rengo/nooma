@@ -152,8 +152,8 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 }
 
 // recurringTrigger arms the recurring trigger a dated occurrence and a
-// rule own. Follow calls it too, so a corrected date re-anchors by the
-// very rule capture used.
+// rule own. A function rather than a branch of Arm so that any other
+// decision arming a recurrence re-anchors by the very rule capture uses.
 func recurringTrigger(eventAt time.Time, rule Rule, now time.Time, interrupt Interrupt) Plan {
 	// The weekday is always stated, derived from the capture's own
 	// dated occurrence — "every Sunday" arrives as an event_at that is
