@@ -74,14 +74,25 @@ func TestBuildPrompt_RendersTheLocalDate(t *testing.T) {
 			"but still the 4th in %s, and the model resolves \"tomorrow\" from this.\n\n%s",
 			buenosAires.String(), prompt)
 	}
-	// The calendar lists the 5th as tomorrow, so the 5th appearing at all
-	// proves nothing; what must never happen is the 5th standing for today.
-	for _, utcToday := range []string{"Local date: 2026-08-05", "2026-08-05 (today)"} {
-		if strings.Contains(prompt, utcToday) {
-			t.Errorf("prompt carries %q — that is the UTC date, not the user's", utcToday)
+	// The calendar lists the 5th as tomorrow, and that row is the only place
+	// the 5th may appear. Anywhere else — the local date, today's row, either
+	// format example — it is the UTC date standing where the user's belongs.
+	var outside []string
+	for _, line := range strings.Split(prompt, "\n") {
+		if calendarRow.MatchString(line) && !strings.Contains(line, "(today)") {
+			continue
 		}
+		outside = append(outside, line)
+	}
+	if rest := strings.Join(outside, "\n"); strings.Contains(rest, "2026-08-05") {
+		t.Errorf("prompt carries 2026-08-05 outside the calendar's later rows — that is the "+
+			"UTC date, not the user's:\n%s", rest)
 	}
 }
+
+// calendarRow matches one row of the context's calendar: a weekday name,
+// then a date.
+var calendarRow = regexp.MustCompile(`^\s+[A-Z][a-z]+day +\d{4}-\d{2}-\d{2}`)
 
 // TestBuildPrompt_CarriesTheMessage: the text under classification reaches
 // the prompt intact. Stated separately because everything else here is
@@ -540,7 +551,7 @@ func TestBuildPrompt_RendersAFourteenDayCalendarFromToday(t *testing.T) {
 
 	var rows []string
 	for _, line := range strings.Split(ctx, "\n") {
-		if regexp.MustCompile(`^\s+[A-Z][a-z]+day +\d{4}-\d{2}-\d{2}`).MatchString(line) {
+		if calendarRow.MatchString(line) {
 			rows = append(rows, strings.Join(strings.Fields(line), " "))
 		}
 	}
