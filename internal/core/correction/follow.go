@@ -85,12 +85,11 @@ func rewriteInstant(text, pd, nd, pt, nt string) (string, int, int) {
 	}
 }
 
-// standalone reports whether text[i:j] is a date token of its own rather
-// than part of something else:
-//
+// standalone reports whether text[i:j] is a date token of its own:
 //   - not glued inside a word or file name: no letter, digit, "-" or "_"
-//     before it, and no digit, "-", "_" or "." followed by a letter or
-//     digit after it ("minutes-2026-10-16.pdf", "2026-10-16-17");
+//     before it; after it no digit, "-", "_", letter (but "T" plus a
+//     digit, a timestamp) or "." followed by a letter or digit
+//     ("minutes-2026-10-16.pdf", "2026-10-16notes", "2026-10-16-17");
 //   - not part of a path or query: no URL mark on either side;
 //   - not inside a word carrying a URL scheme.
 func standalone(text string, i, j int) bool {
@@ -100,7 +99,10 @@ func standalone(text string, i, j int) bool {
 	}
 	if j < len(text) {
 		c := text[j]
+		after, _ := utf8.DecodeRuneInString(text[j:])
+		timestamp := c == 'T' && j+1 < len(text) && isDigit(text[j+1])
 		if isDigit(c) || c == '-' || c == '_' || isURLMark(text, j) ||
+			unicode.IsLetter(after) && !timestamp ||
 			c == '.' && j+1 < len(text) && isAlnum(text[j+1]) {
 			return false
 		}
