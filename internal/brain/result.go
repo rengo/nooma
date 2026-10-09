@@ -26,12 +26,13 @@ type CaptureInput struct {
 	// Channel is where this capture came from (e.g. "chat", "telegram"),
 	// and becomes the persisted unit's Source.
 	Channel string
-	// ReferentID is an optional explicit target-unit id, meaningful only
-	// when the classification resolves to classify.KindCorrection (spec
-	// R1.5, design D7). When non-empty it wins over chat-path referent
-	// resolution outright: recall does not run at all, and an id naming no
-	// existing unit fails the correction rather than falling back to
-	// recall.
+	// ReferentID is an optional explicit target-unit id. When non-empty the
+	// capture IS a correction of that unit, whatever type the
+	// classification gives the text (doc 02 §5 step 4, I28): no unit is
+	// persisted, nothing is armed, no check-in is resolved. It also wins
+	// over chat-path referent resolution outright: recall does not run at
+	// all, and an id naming no existing unit fails the correction rather
+	// than falling back to recall (m1c spec R1.5, design D7).
 	ReferentID string
 }
 

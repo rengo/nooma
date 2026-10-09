@@ -11,8 +11,9 @@ import (
 
 // captureRequest is POST /capture's request body (design D10 §5.1). Source
 // defaults to "api" when absent — it becomes units.source, the caller's own
-// fact. UnitID is optional and ignored unless the classification resolves to
-// a correction (spec R1.5) — ignored rather than rejected, deliberately.
+// fact. UnitID is optional; when present the capture is a correction of that
+// unit whatever the classification's type (doc 02 §5 step 4, I28), exactly as
+// the unit page's correction form is.
 type captureRequest struct {
 	Text   string `json:"text"`
 	Source string `json:"source"`

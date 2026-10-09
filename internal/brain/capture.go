@@ -239,6 +239,20 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	lang := c.Language.Or()
 	defer func() { result.Language = lang }()
 
+	// **A capture that names its referent is a correction of that unit,
+	// whatever type the model gives the text standalone** (doc 02 §5 step 4,
+	// I28). The caller already said what the message does: a unit page's
+	// correction form or POST /capture's unit_id. Read standalone, a text
+	// that states the corrected value ("it is today, Friday the 9th, at 10")
+	// is an event, and before this fork it persisted a second unit, judged
+	// a relation back to the one being corrected and armed a trigger for
+	// it, while the unit the user was looking at stayed as it was. The fork
+	// sits before check-in resolution and arming so none of those side
+	// effects is reachable; classification still ran, for the value.
+	if in.ReferentID != "" {
+		return r.correct(ctx, in, c, now)
+	}
+
 	// A check-in answer resolves what it answers, and then the message
 	// carries on being whatever else it is. Deliberately not a fork: an
 	// answer carries an outcome, not a Kind, and "yes, done — and remind
@@ -306,14 +320,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// before classify.ToUnit is ever reached, and r.units.Create is never
 	// called for this Kind.
 	if c.Kind != nil && *c.Kind == classify.KindCorrection {
-		corr, err := r.correction.at(ctx, in, c, now)
-		if err != nil {
-			return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
-		}
-		if corr.Ambiguous {
-			return CaptureResult{Outcome: OutcomeAsked, Correction: corr}, nil
-		}
-		return CaptureResult{Outcome: OutcomeCorrected, Correction: corr}, nil
+		return r.correct(ctx, in, c, now)
 	}
 
 	// The recall fork (spec R2.3, design D9; Conflicts §C11): a
@@ -1340,4 +1347,19 @@ func (r captureRunner) recordRelationDuplicateDecision(ctx context.Context, u un
 		return fmt.Errorf("capture: record relation-duplicate decision for unit %q: %w", u.ID, err)
 	}
 	return nil
+}
+
+// correct runs the correction path and maps its result onto the two
+// outcomes a correction can end in. Both forks that reach it — an explicit
+// referent, and a correction-typed classification — share it, so a
+// correction answers the same way whichever one recognised it.
+func (r captureRunner) correct(ctx context.Context, in CaptureInput, c classify.Classification, now time.Time) (CaptureResult, error) {
+	corr, err := r.correction.at(ctx, in, c, now)
+	if err != nil {
+		return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
+	}
+	if corr.Ambiguous {
+		return CaptureResult{Outcome: OutcomeAsked, Correction: corr}, nil
+	}
+	return CaptureResult{Outcome: OutcomeCorrected, Correction: corr}, nil
 }
