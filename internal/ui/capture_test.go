@@ -149,6 +149,33 @@ func TestCaptureView_RendersEveryOutcome(t *testing.T) {
 	}
 }
 
+// TestCaptureView_AskSaysNothingChanged is fix-unit-correction-form R2: an
+// ask tells the user in plain words that nothing was changed and what to do
+// instead, and the two asks say different things — an edit plan that was
+// ambiguous names what to write, a referent that was ambiguous points at
+// the unit page's own form.
+func TestCaptureView_AskSaysNothingChanged(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		corr brain.Correction
+		want string
+	}{
+		{"plan ambiguous", brain.Correction{UnitID: "unit-4", Ambiguous: true}, "Write the one new value"},
+		{"referent ambiguous", brain.Correction{Ambiguous: true}, "use its correction form"},
+	}
+	for _, tc := range cases {
+		fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeAsked, Correction: &tc.corr}}
+		rec := httptest.NewRecorder()
+		ui.New(ui.Deps{Capture: fake}).ServeHTTP(rec, captureRequest("text=hello"))
+		body := rec.Body.String()
+		if !strings.Contains(body, "Nothing was changed") || !strings.Contains(body, tc.want) {
+			t.Errorf("%s: body does not say %q and %q:\n%s", tc.name, "Nothing was changed", tc.want, body)
+		}
+	}
+}
+
 // TestCaptureView_EmptyTextIs400 is parseCaptureForm's own bad-body case:
 // an empty (or absent) text field is a 400, and Capture is never reached —
 // the same "no call on a bad body" posture TestCaptureView_BodyIsBounded
