@@ -99,6 +99,10 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		}
 		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskPlanAmbiguous}, nil
 	}
+	// A moved date carries the body that states it (doc 02 §5 step 4, I29).
+	// now's zone is the user's: the frame the body was most likely written
+	// in.
+	plan = correction.CarryText(plan, *target, now.Location())
 
 	if err := r.applyWithPreImage(ctx, *target, plan, ref, now); err != nil {
 		return nil, err
@@ -212,9 +216,9 @@ func (r correctionRunner) recordAmbiguousDecision(ctx context.Context, now time.
 // halves of this door: no Update* call exists outside dispatchEdits, and
 // recordPreImage's own call appears strictly before dispatchEdits's.
 //
-// One pre-image row covers the whole plan: under C6's ruling plan always
-// holds at most one Edit, so the row names one field, but the shape does
-// not change if a later milestone widens plan (design D5).
+// One pre-image row covers the whole plan: the one field PlanEdit chose
+// and, when a moved date carries the body, the content edit CarryText
+// derived from it (I29).
 //
 // Once every edit has landed, applyWithPreImage writes the R1.10/design D6
 // learning signal — never before, and never when either the pre-image

@@ -471,3 +471,22 @@ func TestBuildPrompt_KeepsTheMessagesLanguageInTheContent(t *testing.T) {
 		t.Errorf("the rule is stated without its reason — the stored text is what a raw query is compared against (I22, ADR-0020):\n%s", got)
 	}
 }
+
+// TestBuildPrompt_StatesHowTheContentWritesAResolvedInstant pins the form
+// correction.FollowDate rewrites when a correction moves a date (doc 02 §5
+// step 4). Without a stated form the model writes "a las 10" in one capture
+// and "10:00" in the next, and a later correction cannot find the time it
+// is moving. correction's own test pins the example to its layouts.
+func TestBuildPrompt_StatesHowTheContentWritesAResolvedInstant(t *testing.T) {
+	now := time.Date(2026, 10, 9, 14, 30, 0, 0, time.UTC)
+	flat := strings.Join(strings.Fields(BuildPrompt("dentista el viernes a las 10", nil, now, 0.5)), " ")
+	head, _, found := strings.Cut(flat, "weight 0-1")
+	if !found {
+		t.Fatalf("cannot locate the normalized_content block:\n%s", flat)
+	}
+	for _, want := range []string{"YYYY-MM-DD", "HH:MM", "2026-10-09 14:30"} {
+		if !strings.Contains(head, want) {
+			t.Errorf("normalized_content does not state %q:\n%s", want, head)
+		}
+	}
+}

@@ -187,7 +187,7 @@ func TestCapture_CorrectionChatPathReferentResolution(t *testing.T) {
 			t.Errorf("EventAt = %v, want %v", got.EventAt, wantEventAt)
 		}
 		if got.Content != "Dentist appointment on the 14th" {
-			t.Errorf("Content = %q, want unchanged — dates win over content (R1.8)", got.Content)
+			t.Errorf("Content = %q, want unchanged — dates win over content, and 'the 14th' is not the form a moved date rewrites (I29)", got.Content)
 		}
 
 		// I03's correction half (12g.6): an UPDATE, not a write — the unit

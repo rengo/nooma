@@ -481,6 +481,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    - **`normalized_content` is written in the message's own language, never translated**
      ([ADR-0024](adr/0024-the-vault-keeps-your-words.md)). Normalization cleans a message into a
      self-contained statement; it does not move it between languages.
+     A date or time it resolved is written as `YYYY-MM-DD` and `HH:MM`, the one form a later
+     correction of that date can find and rewrite (step 4).
      - **A vault holds what its owner wrote.** Without this rule the model rewrites into the
        language of the prompt, which is English — "recordame comprar cafe" was stored as
        "Record to buy coffee.", translated *and* mistranslated, since "recordame" is "remind
@@ -632,9 +634,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      corrected date belongs in `event_at`/`due_at` resolved against the local date, and that a
      correction still answers every required field like any other type — that last clause is not
      decoration: without it the model traded the required fields away for the date.
-   - **Which field it writes.** A correction writes **exactly one** field of the referent unit,
-     never more: `event_at` if the classification resolved it and not `due_at`; `due_at` if it
-     resolved that and not `event_at`; `content` only when **neither** date resolved, as the
+   - **Which field it corrects.** A correction corrects **exactly one** field of the referent
+     unit, never more: `event_at` if the classification resolved it and not `due_at`; `due_at` if
+     it resolved that and not `event_at`; `content` only when **neither** date resolved, as the
      no-date fallback. Dates win over content whenever either is present — writing `event_at`
      or `due_at` from the classification's own fields of the same name requires no inference,
      while writing `content` from `normalized_content` requires inferring that the model's
@@ -643,15 +645,18 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      content, is an ask**, the same ask-shaped result an ambiguous referent already produces —
      ambiguity over *what* to write is exactly the ambiguity the product rule below blocks on,
      the same way ambiguity over *which* unit is.
-     - **Accepted cost, stated rather than hidden.** A correction that moves a date leaves the
-       referent's body stale: the content still reads whatever it read before, while `event_at`
-       or `due_at` now carries the corrected value. This is deliberate — an earlier revision of
-       this rule wrote every field the classification resolved, which meant a correction like
-       "no, it's the 15th, not the 14th" also overwrote the unit's content with the correction
-       utterance itself, destroying the thing the unit was there to remember. Inconsistent but
-       useful beats consistent but empty. ADR-0016's pre-image keeps the previous value of the
-       one field a correction actually changes, so the staleness is visible in the audit trail
-       even before a later correction fixes the body itself.
+   - **What a corrected date carries with it** (I29). The body and the reminder were derived
+     from the date, so they follow it; a corrected unit never reads one date and holds another.
+     - **The text.** Step 1 asks `normalized_content` to write a date it resolved as
+       `YYYY-MM-DD` and a time as `HH:MM`. When a correction moves `event_at` or `due_at`, every
+       place the body writes the previous instant that way is rewritten to the new one, and the
+       body becomes a second field of the same `correction.applied` row. This is not the content
+       fallback above: it rewrites a value the system itself resolved, in the form it asked for,
+       and needs no model. Which frame the body was written in is not stored, so the user's zone
+       is tried before UTC. **A body naming the date any other way** ("on the 14th", "el
+       viernes") is not recognised and stays as written — the residual of not inferring. An
+       earlier revision accepted a stale body outright; that cost is now paid only for wording
+       capture was not asked to produce.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
