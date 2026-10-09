@@ -55,6 +55,7 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		triggers  *memrepo.Triggers
 		relations *memrepo.Relations
 		decisions *memrepo.DecisionLog
+		signals   *memrepo.Signals
 	}
 	build := func(t *testing.T, id, response string) fixture {
 		t.Helper()
@@ -62,6 +63,7 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		f := fixture{
 			units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(),
 			relations: memrepo.NewRelations(), decisions: memrepo.NewDecisionLog(),
+			signals: memrepo.NewSignals(),
 		}
 		if err := f.units.Create(ctx, unit.Unit{
 			ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool,
@@ -76,20 +78,53 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 			t.Fatalf("LoadIndex: %v", err)
 		}
 		llm := fakeprovider.New(t, i28Case(t, id, message, response), id)
-		f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(), f.relations, f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), memrepo.NewSignals(), f.triggers, memrepo.NewTimers(), 0.5, nil)
+		f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(), f.relations, f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
 		return f
 	}
-	actions := func(t *testing.T, d *memrepo.DecisionLog) []ports.DecisionAction {
+	rows := func(t *testing.T, d *memrepo.DecisionLog) []ports.Decision {
 		t.Helper()
-		rows, err := d.Since(context.Background(), time.Time{}, 100)
+		got, err := d.Since(context.Background(), time.Time{}, 100)
 		if err != nil {
 			t.Fatalf("decisions.Since: %v", err)
 		}
-		out := make([]ports.DecisionAction, len(rows))
-		for i, r := range rows {
+		return got
+	}
+	actions := func(t *testing.T, d *memrepo.DecisionLog) []ports.DecisionAction {
+		t.Helper()
+		got := rows(t, d)
+		out := make([]ports.DecisionAction, len(got))
+		for i, r := range got {
 			out[i] = r.Action
 		}
 		return out
+	}
+	// assertAppliedDates is the spec R1 scenario's own row: one
+	// correction.applied whose previous/next carry the two dates, not merely
+	// a row with the right name.
+	assertAppliedDates := func(t *testing.T, d *memrepo.DecisionLog) {
+		t.Helper()
+		got := rows(t, d)
+		if len(got) != 1 || got[0].Action != ports.ActionCorrectionApplied {
+			t.Fatalf("decision actions = %v, want exactly [%s]", actions(t, d), ports.ActionCorrectionApplied)
+		}
+		var pre struct {
+			UnitID   string               `json:"unit_id"`
+			Fields   []string             `json:"fields"`
+			Previous map[string]time.Time `json:"previous"`
+			Next     map[string]time.Time `json:"next"`
+			Referent struct {
+				Source string `json:"source"`
+			} `json:"referent"`
+		}
+		if err := json.Unmarshal(got[0].Context, &pre); err != nil {
+			t.Fatalf("decoding the pre-image %s: %v", got[0].Context, err)
+		}
+		if pre.UnitID != "dentist" || len(pre.Fields) != 1 || pre.Fields[0] != "event_at" || pre.Referent.Source != "explicit" {
+			t.Errorf("pre-image = %s, want unit dentist, fields [event_at], referent explicit", got[0].Context)
+		}
+		if !pre.Previous["event_at"].Equal(original) || !pre.Next["event_at"].Equal(corrected) {
+			t.Errorf("pre-image previous/next = %v -> %v, want %v -> %v", pre.Previous["event_at"], pre.Next["event_at"], original, corrected)
+		}
 	}
 	// assertNoNewMemory is R1's MUST NOT: no unit, no trigger, no relation.
 	assertNoNewMemory := func(t *testing.T, f fixture) {
@@ -128,9 +163,54 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 			t.Errorf("EventAt = %v, want %v", got.EventAt, corrected)
 		}
 		assertNoNewMemory(t, f)
-		if acts := actions(t, f.decisions); len(acts) != 1 || acts[0] != ports.ActionCorrectionApplied {
-			t.Errorf("decision actions = %v, want exactly [%s]", acts, ports.ActionCorrectionApplied)
+		assertAppliedDates(t, f.decisions)
+	})
+
+	t.Run("an answer-shaped text answers no open check-in", func(t *testing.T) {
+		// The same correction, worded so the model also reads it as an
+		// answer to every kind of check-in this pipeline resolves: a nudge,
+		// the load hypothesis and a relation question. With a referent none
+		// of them may be touched — the user was correcting a unit, not
+		// answering a question nobody showed them on this page.
+		const answering = `{"type":"event","normalized_content":"Dentista hoy viernes 9 a las 10","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-09T10:00:00Z","language":"es","nudge_outcome":"engaged","task_checkin_outcome":"done","state_outcome":"confirmed","relation_outcome":"rejected"}`
+		f := build(t, "i28-event-answering", answering)
+		ctx := context.Background()
+		unitID := "dentist"
+		fireAt := now.Add(-time.Hour)
+		if err := f.triggers.Create(ctx, ports.Trigger{ID: "open-checkin", UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &fireAt}); err != nil {
+			t.Fatalf("seeding the check-in: %v", err)
 		}
+		if err := f.triggers.Fire(ctx, "open-checkin", fireAt); err != nil {
+			t.Fatalf("firing the check-in: %v", err)
+		}
+		if err := f.triggers.Surface(ctx, "open-checkin", fireAt); err != nil {
+			t.Fatalf("delivering the check-in: %v", err)
+		}
+
+		result, err := f.svc.Capture(ctx, brain.CaptureInput{Text: message, Channel: "ui", ReferentID: "dentist"})
+		if err != nil {
+			t.Fatalf("Capture: %v", err)
+		}
+		if result.Outcome != brain.OutcomeCorrected {
+			t.Fatalf("Outcome = %q, want %q", result.Outcome, brain.OutcomeCorrected)
+		}
+		open, err := f.triggers.Delivered(ctx)
+		if err != nil {
+			t.Fatalf("Delivered: %v", err)
+		}
+		if len(open) != 1 || open[0].ID != "open-checkin" {
+			t.Errorf("open check-ins = %v, want open-checkin still open", open)
+		}
+		signals, err := f.signals.Since(ctx, time.Time{}, 100)
+		if err != nil {
+			t.Fatalf("signals.Since: %v", err)
+		}
+		for _, sig := range signals {
+			if sig.Type != ports.SignalCorrection {
+				t.Errorf("signal %q written — only the correction's own signal may be", sig.Type)
+			}
+		}
+		assertAppliedDates(t, f.decisions)
 	})
 
 	t.Run("a text resolving no single edit asks and changes nothing", func(t *testing.T) {
