@@ -164,8 +164,9 @@ Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.t
 - [x] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
-  *Both PRs merged: #299 at `8d7cbc7`, #300 at `6c30bb4`. Preconditions 0.1 and this task are
-  satisfied by those merges.*
+  *Both PRs merged: #299 at `8d7cbc7`, #300 at `6c30bb4`. Their bodies record `make check-all`
+  green, `go vet` clean and `docs-sync` OK (#300 also names the worktree it ran in); the merge
+  itself proves none of that.*
 - [x] **C.2** After PR 5 merges: compute actual / estimate; apply the cut rule (Forecast) before
   PR 6. After PR 6 merges, `m4e2-admin` may start.
   *PR 5 measured 104 impl+docs against ~130 (0.80x), so PR 6 was not pre-cut. PR 6 measured 391

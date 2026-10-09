@@ -37,10 +37,10 @@ The split plan that created this change is #294 (`plan/m4e-activity-split`), arc
 ## Cost, stated plainly
 
 - **Multipliers (impl+docs actual over forecast).** PR 5 0.80x. PR 6 1.35x as the PR body states
-  it; the merged range (`git diff --numstat 6c30bb4^1 6c30bb4`) measures 386 impl+docs lines
-  (added plus deleted, tests, generated `*_templ.go` and openspec bookkeeping excluded), the same
-  order. Neither needed a cut; neither carries `size:exception`.
-- **Tests** ran over forecast on PR 6: 739 against ~450 (1.64x), 749 by the merged range.
+  it; the merged range (`git diff --numstat 6c30bb4^1 6c30bb4`) measures 381 impl+docs lines
+  (added plus deleted; excluded per design §7: tests, which include `test/support/**`, generated
+  `*_templ.go` and openspec bookkeeping), the same order. Neither needed a cut; neither carries `size:exception`.
+- **Tests** ran over forecast on PR 6: 739 against ~450 (1.64x), 754 by the merged range.
   Generated `*_templ.go` 333 apart.
 - Judgment Day round counts are not recorded in anything checked here; not claimed.
 
