@@ -27,19 +27,32 @@ templ activityBody(page brain.ActivityPage, kind string, families []string) {
 			</select>
 			<button type="submit">Filter</button>
 		</form>
-		<ol>
+		if len(page.Rows) == 0 {
+			if kind == "" {
+				<p data-empty>Nothing recorded yet. Every capture, reminder and overnight change will be listed here, with the reason for it.</p>
+			} else {
+				<p data-empty>Nothing of this kind has been recorded yet.</p>
+			}
+		}
+		<ol data-timeline>
 			for _, row := range page.Rows {
 				<li data-decision-id={ row.ID }>
+					<p data-headline>
+						<strong>{ activityTitle(row.Action) }</strong>
+						if row.Subject != nil {
+							<a href={ templ.URL("/ui/units/" + row.Subject.UnitID) }>{ row.Subject.Content }</a>
+						}
+					</p>
 					<time datetime={ row.OccurredAt.UTC().Format(time.RFC3339) }>{ formatTime(ctx, row.OccurredAt) }</time>
-					<code>{ string(row.Action) }</code>
-					<span>{ localizeProse(ctx, row.Rationale) }</span>
 					if len(row.Change) > 0 {
 						<ul data-change>
 							for _, c := range row.Change {
-								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { localizeInstant(ctx, c.Previous) } → { localizeInstant(ctx, c.Next) }</li>
+								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }><span>{ fieldLabel(c.Name) }</span> <del>{ localizeInstant(ctx, c.Previous) }</del> → <ins>{ localizeInstant(ctx, c.Next) }</ins></li>
 							}
 						</ul>
 					}
+					<p data-rationale>{ localizeProse(ctx, row.Rationale) }</p>
+					<code>{ string(row.Action) }</code>
 				</li>
 			}
 		</ol>

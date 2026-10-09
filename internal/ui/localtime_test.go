@@ -118,9 +118,9 @@ func TestLocalTime_ActivityRowsAndTimestampChangesUseOneFormatAndZone(t *testing
 
 	for _, want := range []string{
 		">2026-10-09 13:10<",
-		"event_at: 2026-10-16 10:00 → 2026-10-15 11:00",
-		"note: 2026-10-16 → not a time",
-		"weight: 0.5 → 0.6",
+		"<span>Event</span> <del>2026-10-16 10:00</del> → <ins>2026-10-15 11:00</ins>",
+		"<span>note</span> <del>2026-10-16</del> → <ins>not a time</ins>",
+		"<span>weight</span> <del>0.5</del> → <ins>0.6</ins>",
 		`datetime="2026-10-09T16:10:57Z"`,
 		zoneNote,
 	} {
@@ -217,7 +217,7 @@ func TestLocalTime_UserTextIsShownAsWritten(t *testing.T) {
 		brain.ChangedField{Name: "event_at", Previous: "2026-10-16T13:00:00Z", Next: "2026-10-15T11:00:00-03:00"})
 	page = get(t, ui.Deps{Now: clockIn(t), Activity: &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}},
 		activityGetPattern, "/ui/activity", "")
-	for _, want := range []string{"content: " + raw + " → moved to 2026-10-16T09:00:00Z please", "event_at: 2026-10-16 10:00 → 2026-10-15 11:00"} {
+	for _, want := range []string{"<span>Text</span> <del>" + raw + "</del> → <ins>moved to 2026-10-16T09:00:00Z please</ins>", "<span>Event</span> <del>2026-10-16 10:00</del> → <ins>2026-10-15 11:00</ins>"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -248,7 +248,7 @@ func TestLocalTime_ProseBoundaries(t *testing.T) {
 		row.Rationale = tc.in
 		page := get(t, ui.Deps{Now: clockIn(t), Activity: &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}},
 			activityGetPattern, "/ui/activity", "")
-		if !strings.Contains(page, "<span>"+html.EscapeString(tc.want)+"</span>") {
+		if !strings.Contains(page, "<p data-rationale>"+html.EscapeString(tc.want)+"</p>") {
 			t.Errorf("rationale %q: want %q in:\n%s", tc.in, tc.want, page)
 		}
 	}
@@ -267,7 +267,7 @@ func TestLocalTime_DSTOffsetsArePerInstantNotTheClocks(t *testing.T) {
 		brain.ChangedField{Name: "event_at", Previous: "2026-10-24T12:00:00Z", Next: "2026-10-26T12:00:00Z"})
 	page := get(t, ui.Deps{Now: clock, Activity: &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}},
 		activityGetPattern, "/ui/activity", "")
-	if !strings.Contains(page, "event_at: 2026-10-24 14:00 → 2026-10-26 13:00") {
+	if !strings.Contains(page, "<span>Event</span> <del>2026-10-24 14:00</del> → <ins>2026-10-26 13:00</ins>") {
 		t.Errorf("offsets not per instant (want 14:00 CEST then 13:00 CET):\n%s", page)
 	}
 }
