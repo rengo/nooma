@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
@@ -210,6 +211,12 @@ type Correction struct {
 	// string the correction.ambiguous row's context carries as "reason".
 	Why AskReason
 }
+
+// ErrUnknownReferent reports a capture whose explicit referent names no
+// unit. It is the caller's mistake rather than the server's, so an adapter
+// answers it as not-found (fix-unit-correction-form R4); every other
+// capture error stays an internal one.
+var ErrUnknownReferent = errors.New("no unit has that id")
 
 // AskReason is the closed vocabulary of why a correction asked instead of
 // editing (fix-unit-correction-form design §4).

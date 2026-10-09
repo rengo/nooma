@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,5 +228,26 @@ func TestAllCaptureOutcomesHaveAStatusMapping(t *testing.T) {
 
 	if checked != len(brain.AllCaptureOutcomes()) {
 		t.Fatalf("checked %d outcomes, want %d — brain.AllCaptureOutcomes() and this test's coverage have drifted apart", checked, len(brain.AllCaptureOutcomes()))
+	}
+}
+
+// TestCaptureHandler_UnknownUnitIDIs404 is fix-unit-correction-form R4: a
+// correction naming a unit that does not exist is the caller's mistake, not
+// the server's, so it answers 404 with a plain message rather than 500
+// "capture failed". It runs through the real CaptureService, so it also
+// proves brain reports the case as brain.ErrUnknownReferent.
+func TestCaptureHandler_UnknownUnitIDIs404(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
+	svc := newTestCaptureService(t, now, "classify-pick-up-dry-cleaning")
+	h := Handler(Deps{Version: "test", Capture: svc})
+
+	rec := postCapture(t, h, `{"text":"pick up the dry cleaning","unit_id":"no-such-unit"}`)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("POST /capture with an unknown unit_id = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "no unit has that id") {
+		t.Errorf("body = %s, want the plain message", rec.Body.String())
 	}
 }

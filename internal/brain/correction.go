@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -119,6 +120,9 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, now time.Time) (*unit.Unit, referentSource, error) {
 	if in.ReferentID != "" {
 		u, err := r.units.ByID(ctx, in.ReferentID)
+		if errors.Is(err, ports.ErrUnitNotFound) {
+			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w: %w", in.ReferentID, ErrUnknownReferent, err)
+		}
 		if err != nil {
 			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w", in.ReferentID, err)
 		}

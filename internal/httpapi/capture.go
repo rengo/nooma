@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -140,6 +141,12 @@ func captureHandler(d Deps) http.HandlerFunc {
 			Channel:    source,
 			ReferentID: req.UnitID,
 		})
+		if errors.Is(err, brain.ErrUnknownReferent) {
+			// A unit_id naming no unit is the caller's mistake: 404, in
+			// words, rather than the 500 below (fix-unit-correction-form R4).
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no unit has that id"})
+			return
+		}
 		if err != nil {
 			// design D10's aspiration is "provider failures -> 502, store
 			// failures -> 500"; brain.CaptureService.Capture returns a plain

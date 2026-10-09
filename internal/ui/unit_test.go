@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -354,6 +355,24 @@ func TestCorrectView_NilCapturerIs503(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("POST /ui/units/unit-1/correct with no Capturer = %d, want 503", rec.Code)
+	}
+}
+
+// TestCorrectView_UnknownUnitIs404 is fix-unit-correction-form R4: a
+// correction of a unit that does not exist answers 404 with a plain
+// sentence, not the 500 every other Capture error gets.
+func TestCorrectView_UnknownUnitIs404(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{err: fmt.Errorf("capture: correction: %w", brain.ErrUnknownReferent)}
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Capture: fake}).ServeHTTP(rec, correctRequest("no-such-unit", "text=on+the+9th"))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /ui/units/no-such-unit/correct = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "No unit has that id.") {
+		t.Errorf("body = %q, want the plain sentence", rec.Body.String())
 	}
 }
 

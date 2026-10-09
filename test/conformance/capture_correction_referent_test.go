@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -108,6 +109,9 @@ func TestCapture_CorrectionExplicitReferentWinsWithoutRecall(t *testing.T) {
 		})
 		if err == nil {
 			t.Fatal("Capture error = nil, want an error — an unknown explicit referent must never fall back to recall (R1.5)")
+		}
+		if !errors.Is(err, brain.ErrUnknownReferent) {
+			t.Errorf("Capture error = %v, want it to wrap brain.ErrUnknownReferent so a caller can answer 404 (fix-unit-correction-form R4)", err)
 		}
 
 		got, err := units.ByID(ctx, "unrelated-unit")
