@@ -56,6 +56,7 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		relations *memrepo.Relations
 		decisions *memrepo.DecisionLog
 		signals   *memrepo.Signals
+		timers    *memrepo.Timers
 	}
 	build := func(t *testing.T, id, response string) fixture {
 		t.Helper()
@@ -63,7 +64,7 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		f := fixture{
 			units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(),
 			relations: memrepo.NewRelations(), decisions: memrepo.NewDecisionLog(),
-			signals: memrepo.NewSignals(),
+			signals: memrepo.NewSignals(), timers: memrepo.NewTimers(),
 		}
 		if err := f.units.Create(ctx, unit.Unit{
 			ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool,
@@ -78,7 +79,7 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 			t.Fatalf("LoadIndex: %v", err)
 		}
 		llm := fakeprovider.New(t, i28Case(t, id, message, response), id)
-		f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(), f.relations, f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
+		f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(), f.relations, f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, f.timers, 0.5, nil)
 		return f
 	}
 	rows := func(t *testing.T, d *memrepo.DecisionLog) []ports.Decision {
@@ -317,6 +318,26 @@ func TestI28_ExplicitReferentIsAlwaysACorrection(t *testing.T) {
 		assertUntouched(t, f)
 		assertNoNewMemory(t, f)
 		assertOneAsk(t, f.decisions, brain.AskUnclassifiable)
+	})
+
+	t.Run("a timer-typed text arms nothing and asks", func(t *testing.T) {
+		// A timer is armed by the arming fork before any unit is built; the
+		// referent fork must run first, or "remind me in ten minutes" typed
+		// into a unit's form would set a timer instead of asking.
+		f := build(t, "i28-timer", `{"type":"timer","normalized_content":"Llamar al dentista","weight":0.3,"decay_rate":0.1,"due_at":"2026-10-09T08:10:00Z","language":"es"}`)
+		result, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: "avisame en diez minutos", Channel: "ui", ReferentID: "dentist"})
+		if err != nil {
+			t.Fatalf("Capture: %v", err)
+		}
+		if result.Outcome != brain.OutcomeAsked || result.Correction == nil || result.Correction.Why != brain.AskNotAnEdit {
+			t.Fatalf("result = %+v, want OutcomeAsked because %q", result, brain.AskNotAnEdit)
+		}
+		if got := f.timers.Count(); got != 0 {
+			t.Errorf("timers = %d, want 0 — a capture naming its referent must never arm", got)
+		}
+		assertUntouched(t, f)
+		assertNoNewMemory(t, f)
+		assertOneAsk(t, f.decisions, brain.AskNotAnEdit)
 	})
 
 	t.Run("control: the same text without a referent is a new capture", func(t *testing.T) {
