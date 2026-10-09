@@ -234,3 +234,24 @@ func renderToday(t *testing.T, today brain.Today) string {
 	}
 	return buf.String()
 }
+
+// The digest's empty line reads the whole digest: a pending question alone is
+// something to carry, and held items are named rather than contradicted.
+func TestTodayView_DigestEmptyStateReadsTheWholeDigest(t *testing.T) {
+	t.Parallel()
+	const empty = "The next morning digest has nothing to carry yet."
+
+	question := brain.Today{Digest: brain.PendingDigest{Question: &ports.RelationQuestion{FromContent: "Book flights", ToContent: "Renew passport"}}}
+	if page := renderToday(t, question); strings.Contains(page, empty) || strings.Contains(page, "held for later") {
+		t.Errorf("a digest carrying a question says it is empty:\n%s", page)
+	}
+
+	held := renderToday(t, brain.Today{Digest: brain.PendingDigest{Held: 2}})
+	if !strings.Contains(held, "Nothing for the next digest yet; 2 held for later.") || strings.Contains(held, empty) {
+		t.Errorf("a digest with only held items does not say so:\n%s", held)
+	}
+
+	if page := renderToday(t, brain.Today{}); !strings.Contains(page, empty) || strings.Contains(page, "held for later") {
+		t.Errorf("an empty digest lacks its line:\n%s", page)
+	}
+}

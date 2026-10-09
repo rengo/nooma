@@ -232,7 +232,9 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    even if it contains an instant. A vault viewed from a browser in another zone still reads in the server's.
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
-Activity does, rather than rendering nothing.
+Activity does, rather than rendering nothing; so does a unit page's relations section when the
+unit is connected to nothing. A digest with nothing to carry but items held back says how many
+it holds. Beliefs says it once when every facet is empty, and under each empty facet otherwise.
 
 **You end up with** a product you can use without a terminal, for what exists today. The graph
 and admin screens are not built (see below).

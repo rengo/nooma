@@ -29,7 +29,10 @@ templ beliefsBody(groups []brain.FacetBeliefs, res *beliefResult) {
 		<section data-facet={ string(g.Facet) }>
 			<h3>{ string(g.Facet) }</h3>
 			if len(g.Beliefs) == 0 {
-				<p data-empty>No beliefs yet.</p>
+				// When every facet is empty the page says so once, above.
+				if !noBeliefs(groups) {
+					<p data-empty>No beliefs yet.</p>
+				}
 			} else {
 				<ul>
 					for _, b := range g.Beliefs {

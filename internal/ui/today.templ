@@ -48,7 +48,11 @@ templ todayBody(today brain.Today, serving Serving) {
 		<section data-view="digest">
 			<h2>PENDING DIGEST</h2>
 			if len(today.Digest.Items) == 0 && today.Digest.Question == nil {
-				<p data-empty>The next morning digest has nothing to carry yet.</p>
+				if today.Digest.Held > 0 {
+					<p data-empty>{ fmt.Sprintf("Nothing for the next digest yet; %d held for later.", today.Digest.Held) }</p>
+				} else {
+					<p data-empty>The next morning digest has nothing to carry yet.</p>
+				}
 			}
 			<ul>
 				for _, line := range today.Digest.Items {

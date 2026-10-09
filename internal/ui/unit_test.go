@@ -552,3 +552,24 @@ func TestCorrectView_UnreadableUnitFallsBackToTheOutcome(t *testing.T) {
 		})
 	}
 }
+
+// The relations section says the unit is not connected only when it has no
+// relation.
+func TestUnitView_RelationsEmptyStateOnlyWhenEmpty(t *testing.T) {
+	t.Parallel()
+	const line = "Not connected to anything yet."
+	render := func(detail brain.UnitDetail) string {
+		rec := httptest.NewRecorder()
+		ui.New(ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}}).ServeHTTP(rec, unitRequest("unit-1"))
+		return rec.Body.String()
+	}
+	bare := brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "Pay rent", CreatedAt: time.Now()}}
+	if body := render(bare); !strings.Contains(body, line) {
+		t.Errorf("a unit with no relations has no empty state:\n%s", body)
+	}
+	linked := bare
+	linked.Relations = []brain.RelatedUnit{{RelationID: "r-1", Type: "relates_to", Confidence: 0.8, Outgoing: true, Other: unit.Unit{ID: "unit-2", Content: "Bank"}}}
+	if body := render(linked); strings.Contains(body, line) {
+		t.Errorf("a unit with a relation shows the empty state:\n%s", body)
+	}
+}

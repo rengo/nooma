@@ -415,3 +415,35 @@ func TestUnitsView_EmptyState(t *testing.T) {
 		t.Error("a populated list shows the empty state")
 	}
 }
+
+// A row shows its unit's event date, or its due date when it has no event;
+// with both, the event wins (the row has room for one date). A unit with
+// neither shows no date line.
+func TestUnitsView_RowsShowOneDate(t *testing.T) {
+	t.Parallel()
+	event := time.Date(2026, 10, 16, 13, 0, 0, 0, time.UTC)
+	due := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	page := ports.BrowsePage{Units: []unit.Unit{
+		{ID: "u-event", Type: unit.TypeEvent, Content: "Dentist", EventAt: &event},
+		{ID: "u-due", Type: unit.TypeTask, Content: "Flights", DueAt: &due},
+		{ID: "u-both", Type: unit.TypeTask, Content: "Both", EventAt: &event, DueAt: &due},
+		{ID: "u-none", Type: unit.TypeKnowledge, Content: "Recipe"},
+	}}
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Units: stubUnitsReader{page: page}}).ServeHTTP(rec, unitsRequest(""))
+	body := rec.Body.String()
+	row := func(id string) string { return between(t, body, `data-unit-id="`+id+`"`, "</li>") }
+
+	if r := row("u-event"); !strings.Contains(r, "<small>Event: 2026-10-16 13:00</small>") {
+		t.Errorf("event row lacks its event date:\n%s", r)
+	}
+	if r := row("u-due"); !strings.Contains(r, "<small>Due: 2026-10-20 15:00</small>") {
+		t.Errorf("due row lacks its due date:\n%s", r)
+	}
+	if r := row("u-both"); !strings.Contains(r, "<small>Event: 2026-10-16 13:00</small>") || strings.Contains(r, "Due:") {
+		t.Errorf("a row with both dates must show the event only:\n%s", r)
+	}
+	if r := row("u-none"); strings.Contains(r, "<small>") {
+		t.Errorf("a row with no date shows a date line:\n%s", r)
+	}
+}

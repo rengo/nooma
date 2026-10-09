@@ -894,3 +894,25 @@ func TestBeliefsView_EmptyState(t *testing.T) {
 		t.Error("a page with a belief shows the empty state")
 	}
 }
+
+// When no facet holds a belief the page says so once: the five facet sections
+// stay, without repeating the empty line under each. When some facet holds
+// one, the empty facets keep theirs (TestBeliefsView_RendersAllFiveFacets...).
+func TestBeliefsView_AllEmptySaysItOnce(t *testing.T) {
+	t.Parallel()
+	var groups []brain.FacetBeliefs
+	for _, f := range selfmodel.AllFacets() {
+		groups = append(groups, brain.FacetBeliefs{Facet: f})
+	}
+	var buf strings.Builder
+	if err := ui.BeliefsPage(groups, nil).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	page := buf.String()
+	if n := strings.Count(page, "No beliefs yet."); n != 1 {
+		t.Errorf("an all-empty page says it is empty %d times, want once:\n%s", n, page)
+	}
+	if n := strings.Count(page, "<section data-facet="); n != len(groups) {
+		t.Errorf("an all-empty page renders %d facet sections, want %d", n, len(groups))
+	}
+}
