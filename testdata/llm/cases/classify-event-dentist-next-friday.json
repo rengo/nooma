@@ -1,0 +1,8 @@
+{
+  "id": "classify-event-dentist-next-friday",
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "task": "classify",
+  "message": "dentista el viernes a las 10",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"dentista el 2026-10-16 a las 10:00\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-16T10:00:00-03:00\"}"
+}

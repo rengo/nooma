@@ -456,6 +456,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      answer. Symmetrically, an imperative that moves an existing thing ("move the renewal to
      the 20th") is a `correction`, not a new `task`. The prompt states all three, because a
      bare vocabulary list lets a model match the topic word instead of the act.
+   - `event` and `task` are separated by **how the message is dated**: something that happens
+     at a set day or time (an appointment, a meeting, the dentist) is an `event` with its instant
+     in `event_at`; something to get done, by a deadline if one is named, is a `task` with that
+     deadline in `due_at`. The distinction carries the reminder: §7 arms an `event` and never a
+     `task`, so "dentista el viernes a las 10" captured as a `task` was stored with no reminder.
+     The prompt states both, because defining the two date fields without saying which type
+     each belongs to left the model choosing on the word "dentista" alone.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
      "on Friday"), open check-ins.

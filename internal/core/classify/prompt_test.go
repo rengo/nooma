@@ -582,3 +582,34 @@ func TestBuildPrompt_StatesHowABareWeekdayResolves(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPrompt_SeparatesAnEventFromATask: the same capture came back as a
+// task with a due_at, and a task arms nothing (prospection.Arm), so the
+// client's dentist appointment got no reminder. Doc 02 §5 step 1: what
+// happens at a set day or time is an event with event_at; what has to get
+// done by a deadline is a task with due_at.
+//
+// Like the asking/telling clause, this proves the guidance is in the
+// prompt, not that a model obeys it; only `nooma doctor` against a real
+// provider, read by a human, measures that.
+func TestBuildPrompt_SeparatesAnEventFromATask(t *testing.T) {
+	p := BuildPrompt("dentista el viernes a las 10", nil, time.Date(2026, 10, 9, 14, 46, 0, 0, time.UTC), 0.5)
+	_, choosing, found := strings.Cut(p, "Choosing the type\n")
+	if !found {
+		t.Fatalf("the prompt has no Choosing the type section:\n%s", p)
+	}
+	choosing = strings.Join(strings.Fields(choosing), " ")
+
+	for _, want := range []string{
+		"event something that HAPPENS at a set day or time",
+		"an appointment, a meeting, the dentist",
+		"Its day and time go in event_at",
+		"task something the user has to GET DONE, by a deadline if one is named",
+		"The deadline goes in due_at",
+		"An appointment filed as a task gets no reminder",
+	} {
+		if !strings.Contains(choosing, want) {
+			t.Errorf("Choosing the type does not state %q:\n%s", want, choosing)
+		}
+	}
+}

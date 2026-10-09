@@ -208,7 +208,17 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 	b.WriteString("               value, a different detail. An imperative that moves or changes\n")
 	b.WriteString("               an existing thing corrects it; it does not create a new one.\n")
 	b.WriteString("  A recall stores nothing and is answered. Classifying a question as knowledge\n")
-	b.WriteString("  files the question away instead of answering it.\n\n")
+	b.WriteString("  files the question away instead of answering it.\n")
+	// **When, not what.** "dentista el viernes a las 10" came back as a
+	// task with a due_at, and a task arms nothing (prospection.Arm), so the
+	// appointment got no reminder. The prompt defined event_at and due_at
+	// but never said which type each belongs to.
+	b.WriteString("  Two more are decided by how the message is dated.\n")
+	b.WriteString("  event        something that HAPPENS at a set day or time — an appointment, a\n")
+	b.WriteString("               meeting, the dentist. Its day and time go in event_at.\n")
+	b.WriteString("  task         something the user has to GET DONE, by a deadline if one is named.\n")
+	b.WriteString("               The deadline goes in due_at.\n")
+	b.WriteString("  An appointment filed as a task gets no reminder.\n\n")
 
 	b.WriteString("Corrections\n")
 	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")
