@@ -18,22 +18,15 @@ const (
 	textTimeLayout = "15:04"
 )
 
-// FollowDate rewrites, in text, the instant previous as capture writes it
-// into a body, to next written the same way. It reports whether text
-// changed.
+// FollowDate rewrites, in text, the body's statement of previous — a date
+// token and the time anchored to it (see rewriteInstant, standalone) — to
+// next written the same way, and reports whether text changed. A bare time
+// ("gym daily at 10:00") is a habit, not this instant, and is never
+// touched; a body with no date token for previous is returned unchanged.
 //
-// Only the stated instant is rewritten: a date token, and the time token
-// that follows it within the same phrase (connected by "T", a space, " at "
-// or " a las "). A time with no date before it is never touched — "gym
-// daily at 10:00" names a habit, not this unit's instant — and neither is
-// a range ("10:00-11:00") or anything inside a URL or a query value. A body
-// with no date token for previous is returned unchanged: the residual of
-// not inferring (doc 02 §5 step 4).
-//
-// The frame the body was written in is not stored — the column holds UTC
-// — so the user's zone is tried first and UTC second. A frame where the
-// date and its moved time both appear wins over one where only the date
-// does: 10:00Z is 07:00 in UTC-3 on the same date.
+// The body's frame is not stored, so the user's zone is tried before UTC,
+// and a frame where the date and its moved time both appear wins over one
+// where only the date does: 10:00Z is 07:00 in UTC-3 on the same date.
 func FollowDate(text string, previous, next time.Time, zone *time.Location) (string, bool) {
 	for _, whole := range []bool{true, false} {
 		for _, frame := range []*time.Location{zone, time.UTC} {
@@ -112,12 +105,17 @@ func standalone(text string, i, j int) bool {
 			return false
 		}
 	}
-	start := strings.LastIndexAny(text[:i], " \t\n") + 1
-	stop := strings.IndexAny(text[j:], " \t\n")
+	return !strings.Contains(wordAround(text, i, j), "://")
+}
+
+// wordAround returns the whitespace-delimited word holding s[i:j].
+func wordAround(s string, i, j int) string {
+	start := strings.LastIndexAny(s[:i], " \t\n") + 1
+	stop := strings.IndexAny(s[j:], " \t\n")
 	if stop < 0 {
-		stop = len(text) - j
+		return s[start:]
 	}
-	return !strings.Contains(text[start:j+stop], "://")
+	return s[start : j+stop]
 }
 
 // timeEnds reports whether a time token ending at j is not continued by a
@@ -138,12 +136,7 @@ func isURLMark(s string, k int) bool {
 		if k+1 == len(s) || strings.IndexByte(" \t\n", s[k+1]) >= 0 {
 			return false
 		}
-		start := strings.LastIndexAny(s[:k], " \t\n") + 1
-		stop := strings.IndexAny(s[k:], " \t\n")
-		if stop < 0 {
-			stop = len(s) - k
-		}
-		return strings.ContainsAny(s[start:k+stop], "/=")
+		return strings.ContainsAny(wordAround(s, k, k+1), "/=")
 	}
 	return false
 }

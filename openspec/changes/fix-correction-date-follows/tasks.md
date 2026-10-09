@@ -12,9 +12,6 @@ reminder half).
       wording. GREEN: `correctionRunner` carries text and follows the reminder.
 - [ ] 5. Doc 02 §5 step 4, doc 07; `make check-all`; PR.
 
-Rework after review of #303/#305:
-
-- [x] 6. `FollowDate` rewrites only the stated instant (date token, anchored time); adversarial
-      cases; zone-order case; a non-UTC clock fixture.
-- [x] 9. #303 second review: trailing `?`/`#`/`&` are punctuation; dates glued inside a word or
-      file name are not rewritten; a discriminating case per boundary rule and connector.
+Rework after review: 6. `FollowDate` rewrites only the stated instant, with the reviewers'
+adversarial cases and a non-UTC clock fixture; 9. trailing `?`/`#`/`&` are punctuation, dates
+glued inside a word or file name are untouched, one case per boundary rule.

@@ -50,15 +50,9 @@ it and it will not fire (I15's meaning). No migration, no new status.
 A new trigger takes the correction classification's interrupt level (a fresh capture's); a moved
 one keeps its stored level. A move that changes nothing writes nothing.
 
-## 4. Order and audit
+## 4. Order, audit, docs
 
-`correction.applied` (now possibly two fields) → unit edits → per reminder: its row, then its
-write → the learning signal. Every row precedes its write, ADR-0016's posture. The reminder rows
-are change-shaped, so `/ui/activity` renders them with no template change.
-
-## 5. Docs and invariants
-
-Doc 02 §5 step 4 replaces the "accepted cost" paragraph with R1/R3. I28's "arms nothing" becomes
-"arms nothing of its own" — the referent's reminder follows by the new I29. That is the doc-02
-exit for I28's test, which asserted the old rule. No ADR governs the one-field rule (ADR-0016
-leaves "which columns" open), so no ADR is superseded or added.
+`correction.applied` → unit edits → per reminder: its change-shaped row, then its write → the
+learning signal (ADR-0016's posture). Doc 02 §5 step 4 replaces the "accepted cost" paragraph;
+I28's "arms nothing" becomes "arms nothing of its own" (the doc-02 exit for its test). No ADR
+governs the one-field rule (ADR-0016 leaves "which columns" open), so none is added.
