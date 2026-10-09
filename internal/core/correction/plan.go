@@ -20,10 +20,9 @@ import "github.com/rengo/nooma/internal/core/classify"
 // same thing on both sides of the pipeline — while writing content from
 // NormalizedContent requires inferring that the model's normalization of
 // the correction *utterance* is the referent's new *body*, which this
-// package licenses only when there is nothing else to write. The accepted
-// cost, owner-accepted and unmitigated: a correction that moves a date
-// leaves the referent's body stale, naming whatever it named before, until
-// a later correction touches the text itself.
+// package licenses only when there is nothing else to write. A moved date
+// still carries the body's own statement of it, but that edit is derived
+// afterwards by CarryText, not decided here (doc 02 §5 step 4, I29).
 //
 // The returned slice holds at most one element (see plan_test.go's own
 // invariant test) and stays a slice rather than a single Edit on purpose:

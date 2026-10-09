@@ -140,7 +140,7 @@ func TestCapture_CorrectionPlanWritesExactlyOneField(t *testing.T) {
 			t.Fatalf("Outcome = %q, want %q", result.Outcome, brain.OutcomeCorrected)
 		}
 		if counting.updateCalls != 1 {
-			t.Errorf("Update* calls = %d, want exactly 1 — C6's ruling: a correction writes exactly one field", counting.updateCalls)
+			t.Errorf("Update* calls = %d, want exactly 1 — a correction corrects one field, and this body states no date for it to carry", counting.updateCalls)
 		}
 	})
 }

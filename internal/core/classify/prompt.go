@@ -88,7 +88,15 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 		"in**. Do not\n")
 	b.WriteString("                       translate it — this is what the person will read " +
 		"back later,\n")
-	b.WriteString("                       and what their own words are searched against\n")
+	b.WriteString("                       and what their own words are searched against.\n")
+	// **One form for a resolved instant.** A later correction that moves
+	// the date rewrites it in the body (correction.FollowDate), and it can
+	// only find a form it knows: "a las 10" in one capture and "10:00" in
+	// the next leaves the body naming a time the unit no longer has.
+	b.WriteString("                       Where it names a date or time you resolved, write the " +
+		"date as\n")
+	b.WriteString("                       YYYY-MM-DD and the time as HH:MM, 24-hour (e.g. " +
+		now.Format("2006-01-02 15:04") + ")\n")
 	// **The scale, not just the question.** These two were asked for as
 	// bare 0-1 floats — "how much this matters", "per-day forgetting
 	// rate" — and a real model answered 0.5 and 0.3 for "buy coffee",
