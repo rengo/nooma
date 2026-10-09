@@ -6,8 +6,8 @@ States what MUST be true after this change. `design.md` says how.
 
 When a correction writes `event_at` or `due_at`, the content's statement of the previous instant
 — a `YYYY-MM-DD` date token, and the `HH:MM` time token that follows it in the same phrase — MUST
-be rewritten to the new instant in the same form. A bare time, a range and URL or query text MUST
-NOT be touched, and the content edit MUST be part of the same
+be rewritten to the new instant in the same form. A bare time, a range, URL or query text and a date glued
+inside a word or file name MUST NOT be touched (a trailing `?`, `#` or `&` is punctuation), and the content edit MUST be part of the same
 `correction.applied` row (`fields`, `previous`, `next`). A content that does not write the
 previous instant in that form MUST stay as it was.
 

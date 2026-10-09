@@ -653,7 +653,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        a second field of the same `correction.applied` row. **Only the stated instant is
        rewritten**: a date token, and the time token that follows it in the same phrase ("T", a
        space, " at ", " a las "). A time with no date before it ("gym daily at 10:00") is never
-       touched, nor a range ("10:00-11:00"), nor anything inside a URL or query value. This is
+       touched, nor a range ("10:00-11:00"), nor anything inside a URL or query value, nor a
+       date glued inside a word or file name ("minutes-2026-10-16.pdf", "2026-10-16-17": a
+       letter, digit, `-` or `_` before it, or a digit, `-`, `_` or `.` plus a letter or digit
+       after it). A trailing `?`, `#` or `&` is punctuation, not a URL: it marks a URL only
+       when something follows it inside a word that also holds `/` or `=`. This is
        not the content fallback above: it rewrites a value the system itself resolved, in the
        form it asked for, and needs no model. Which frame the body was written in is not stored,
        so the user's zone is tried before UTC. **A body with no date token for the previous

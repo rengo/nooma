@@ -1,8 +1,9 @@
 # Tasks — fix-correction-date-follows
 
-A three-link chain stacked to `main`: #303 `fix/correction-date-follows-text` (tasks 1, 4
-text half, 5 docs), #304 `feat/trigger-reschedule` (task 3), #305 `fix/correction-date-follows`
-(tasks 2, 4 reminder half).
+A four-link chain stacked to `main`: #303 `fix/correction-date-follows-text` (tasks 1, 4 text
+half, 5 docs), #304 `feat/trigger-reschedule` (task 3), #306 `refactor/arming-builders` (the
+`recurringTrigger`/`armedTrigger` extractions), #305 `fix/correction-date-follows` (tasks 2, 4
+reminder half).
 
 - [x] 1. RED/GREEN, L1: `correction.FollowDate`, `correction.CarryText`; prompt states the form (R1, R2).
 - [ ] 2. RED/GREEN, L1: `prospection.Follow` over `datedTrigger`/`recurringTrigger` (R3).
@@ -15,3 +16,5 @@ Rework after review of #303/#305:
 
 - [x] 6. `FollowDate` rewrites only the stated instant (date token, anchored time); adversarial
       cases; zone-order case; a non-UTC clock fixture.
+- [x] 9. #303 second review: trailing `?`/`#`/`&` are punctuation; dates glued inside a word or
+      file name are not rewritten; a discriminating case per boundary rule and connector.

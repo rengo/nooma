@@ -3,6 +3,8 @@ package correction
 import (
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/rengo/nooma/internal/core/unit"
 )
@@ -90,15 +92,25 @@ func rewriteInstant(text, pd, nd, pt, nt string) (string, int, int) {
 	}
 }
 
-// standalone reports whether text[i:j] is a token of its own: no digit on
-// either side, not part of a path or query (/ ? = & #), and not inside a
-// word carrying a URL scheme.
+// standalone reports whether text[i:j] is a date token of its own rather
+// than part of something else:
+//
+//   - not glued inside a word or file name: no letter, digit, "-" or "_"
+//     before it, and no digit, "-", "_" or "." followed by a letter or
+//     digit after it ("minutes-2026-10-16.pdf", "2026-10-16-17");
+//   - not part of a path or query: no URL mark on either side;
+//   - not inside a word carrying a URL scheme.
 func standalone(text string, i, j int) bool {
-	if i > 0 && (isDigit(text[i-1]) || isURLMark(text[i-1])) {
+	if before, _ := utf8.DecodeLastRuneInString(text[:i]); i > 0 &&
+		(unicode.IsLetter(before) || unicode.IsDigit(before) || before == '-' || before == '_' || isURLMark(text, i-1)) {
 		return false
 	}
-	if j < len(text) && (isDigit(text[j]) || isURLMark(text[j])) {
-		return false
+	if j < len(text) {
+		c := text[j]
+		if isDigit(c) || c == '-' || c == '_' || isURLMark(text, j) ||
+			c == '.' && j+1 < len(text) && isAlnum(text[j+1]) {
+			return false
+		}
 	}
 	start := strings.LastIndexAny(text[:i], " \t\n") + 1
 	stop := strings.IndexAny(text[j:], " \t\n")
@@ -111,10 +123,32 @@ func standalone(text string, i, j int) bool {
 // timeEnds reports whether a time token ending at j is not continued by a
 // digit, a range dash, or a URL mark.
 func timeEnds(s string, j int) bool {
-	return j == len(s) || !isDigit(s[j]) && s[j] != '-' && !isURLMark(s[j])
+	return j == len(s) || !isDigit(s[j]) && s[j] != '-' && !isURLMark(s, j)
 }
 
-func isURLMark(c byte) bool { return strings.IndexByte("/?=&#", c) >= 0 }
+// isURLMark reports whether s[k] belongs to a path or query. "/" and "="
+// always do. "?", "#" and "&" are also sentence punctuation, so they count
+// only when something follows them and the word around them is URL-shaped
+// (holds a "/" or "="): "on 2026-10-16?" and "10:00#urgent" are prose.
+func isURLMark(s string, k int) bool {
+	switch s[k] {
+	case '/', '=':
+		return true
+	case '?', '#', '&':
+		if k+1 == len(s) || strings.IndexByte(" \t\n", s[k+1]) >= 0 {
+			return false
+		}
+		start := strings.LastIndexAny(s[:k], " \t\n") + 1
+		stop := strings.IndexAny(s[k:], " \t\n")
+		if stop < 0 {
+			stop = len(s) - k
+		}
+		return strings.ContainsAny(s[start:k+stop], "/=")
+	}
+	return false
+}
+
+func isAlnum(c byte) bool { return isDigit(c) || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
 
 // CarryText returns plan with, appended, the content edit its date edit
 // carries: the unit's body rewritten by FollowDate from the edited

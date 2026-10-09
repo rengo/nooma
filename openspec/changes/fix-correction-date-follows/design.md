@@ -22,7 +22,8 @@ Options weighed:
 | **Rewrite, in the body, the previous instant in the form capture writes it** | Chosen. Pure, deterministic, no provider. Covers the client's shape: the body writes what the system itself resolved |
 
 `correction.FollowDate(text, previous, next, zone)` replaces each standalone `YYYY-MM-DD` token
-of `previous` (not digit-, path- or query-adjacent, not in a word with a scheme) and the `HH:MM`
+of `previous` (not glued inside a word or file name, not path- or query-adjacent — a trailing
+`?`/`#`/`&` is punctuation — and not in a word with a scheme) and the `HH:MM`
 time anchored to it by "T", a space, " at " or " a las ", with `next` rendered the same way. A
 time with no date before it, or followed by a range dash, is never rewritten. The
 frame the model wrote the body in is not stored (the column holds UTC), so it tries the user's
