@@ -177,6 +177,20 @@ func TestCaptureView_AskSaysNothingChanged(t *testing.T) {
 	}
 }
 
+// TestCaptureView_CorrectedLinksToTheUnit is fix-unit-correction-form
+// design §4: after a correction the result links back to the unit it
+// changed, so the user can see the new value where they made it.
+func TestCaptureView_CorrectedLinksToTheUnit(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-3", Fields: []correction.Field{correction.FieldEventAt}}}}
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Capture: fake}).ServeHTTP(rec, captureRequest("text=hello"))
+	if want := `<a href="/ui/units/unit-3">unit-3</a>`; !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("body does not carry %q:\n%s", want, rec.Body.String())
+	}
+}
+
 // TestCaptureView_EmptyTextIs400 is parseCaptureForm's own bad-body case:
 // an empty (or absent) text field is a 400, and Capture is never reached —
 // the same "no call on a bad body" posture TestCaptureView_BodyIsBounded

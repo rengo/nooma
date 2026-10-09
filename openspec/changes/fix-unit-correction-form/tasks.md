@@ -18,7 +18,7 @@ Rework after review of 2f5b549:
       check-in; fork-after-`resolveRelationCheckIn` mutation goes red. Pre-image dates asserted.
 - [x] 7. R2a: `correction.IsEdit`, `brain.AskReason`, the not-an-edit ask, doc 02 sentence, UI
       sentence.
-- [ ] 8. UI test: the corrected outcome links to the unit page.
+- [x] 8. UI test: the corrected outcome links to the unit page.
 - [ ] 9. R4: unknown referent answers 404 on the API and the form.
 - [x] 10. `make check` runs `test/conformance` (`make test` is `go test ./...`): confirmed, no
       change.
