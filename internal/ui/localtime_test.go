@@ -164,3 +164,62 @@ func TestLocalTime_NoteDescribesAnUnnamedZoneByItsOffset(t *testing.T) {
 		t.Errorf("note wrong for an unnamed zone:\n%s", page)
 	}
 }
+
+// Brain-written prose embeds UTC instants (armRationale, internal/brain/capture.go);
+// under a footer saying times are local they must read local too. Stored text is
+// untouched: only the rendering changes.
+func TestLocalTime_ActivityRationaleInstantsAreLocal(t *testing.T) {
+	t.Parallel()
+	row := activityRow("a-1", ports.ActionCaptureUnitCreated, 1)
+	row.Rationale = "armed a trigger for 2026-10-16T13:00:00Z, firing at 2026-10-09T16:53:30Z (lead 2h); kept 2026-10-16 and 12:00Z as written"
+	fake := &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}
+	page := get(t, ui.Deps{Now: clockIn(t), Activity: fake}, activityGetPattern, "/ui/activity", "")
+
+	want := "armed a trigger for 2026-10-16 10:00, firing at 2026-10-09 13:53 (lead 2h); kept 2026-10-16 and 12:00Z as written"
+	if !strings.Contains(page, want) {
+		t.Errorf("rationale not localized, want %q in:\n%s", want, page)
+	}
+	if strings.Contains(page, "T13:00:00Z") || strings.Contains(page, "T16:53:30Z") {
+		t.Errorf("a UTC instant survived in the rationale:\n%s", page)
+	}
+}
+
+func TestLocalTime_DigestAndCaptureProseInstantsAreLocal(t *testing.T) {
+	t.Parallel()
+	today := brain.Today{Digest: brain.PendingDigest{Items: []brain.DigestLine{{TriggerID: "t", Text: "Dentist at 2026-10-15T14:00:00Z"}}}}
+	page := get(t, ui.Deps{Now: clockIn(t), Today: todayStub{today}}, "GET /ui", "/ui", "")
+	if !strings.Contains(page, "Dentist at 2026-10-15 11:00") || strings.Contains(page, "14:00:00Z") {
+		t.Errorf("digest text not localized:\n%s", page)
+	}
+
+	for name, result := range map[string]brain.CaptureResult{
+		"arm_refused": {Outcome: brain.OutcomeArmRefused, ArmRefused: &brain.ArmRefused{Message: "too soon: 2026-10-15T14:00:00Z"}},
+		"conversed":   {Outcome: brain.OutcomeConversed, Reply: "see you 2026-10-15T14:00:00Z"},
+	} {
+		req := captureRequest("text=hi")
+		rec := httptest.NewRecorder()
+		ui.New(ui.Deps{Now: clockIn(t), Capture: &fakeCapturer{result: result}}).ServeHTTP(rec, req)
+		body := rec.Body.String()
+		if !strings.Contains(body, "2026-10-15 11:00") || strings.Contains(body, "14:00:00Z") {
+			t.Errorf("%s: capture prose not localized:\n%s", name, body)
+		}
+	}
+}
+
+// Each instant converts with the offset in force at that instant, not the
+// clock's: Madrid leaves summer time on 2026-10-25, the clock sits before it.
+func TestLocalTime_DSTOffsetsArePerInstantNotTheClocks(t *testing.T) {
+	t.Parallel()
+	madrid, err := time.LoadLocation("Europe/Madrid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := fixedClock{now: time.Date(2026, 10, 9, 13, 0, 0, 0, madrid)}.Now // CEST, +02:00
+	row := activityRow("d-1", ports.ActionCorrectionApplied, 1,
+		brain.ChangedField{Name: "event_at", Previous: "2026-10-24T12:00:00Z", Next: "2026-10-26T12:00:00Z"})
+	page := get(t, ui.Deps{Now: clock, Activity: &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row}}}},
+		activityGetPattern, "/ui/activity", "")
+	if !strings.Contains(page, "event_at: 2026-10-24 14:00 → 2026-10-26 13:00") {
+		t.Errorf("offsets not per instant (want 14:00 CEST then 13:00 CET):\n%s", page)
+	}
+}

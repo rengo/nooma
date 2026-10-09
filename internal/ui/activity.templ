@@ -32,11 +32,11 @@ templ activityBody(page brain.ActivityPage, kind string, families []string) {
 				<li data-decision-id={ row.ID }>
 					<time datetime={ row.OccurredAt.UTC().Format(time.RFC3339) }>{ formatTime(ctx, row.OccurredAt) }</time>
 					<code>{ string(row.Action) }</code>
-					<span>{ row.Rationale }</span>
+					<span>{ localizeProse(ctx, row.Rationale) }</span>
 					if len(row.Change) > 0 {
 						<ul data-change>
 							for _, c := range row.Change {
-								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { formatChangeValue(ctx, c.Previous) } → { formatChangeValue(ctx, c.Next) }</li>
+								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { localizeProse(ctx, c.Previous) } → { localizeProse(ctx, c.Next) }</li>
 							}
 						</ul>
 					}

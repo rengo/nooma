@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 )
 
@@ -43,14 +44,21 @@ func formatTime(ctx context.Context, t time.Time) string {
 	return t.In(loc).Format(dateLayout)
 }
 
-// formatChangeValue renders a decision-log change value: an RFC3339 string is a
-// timestamp and reads like every other time on the page, so previous and next
-// are comparable; anything else is shown as it is.
-func formatChangeValue(ctx context.Context, v string) string {
-	if t, err := time.Parse(time.RFC3339, v); err == nil {
-		return formatTime(ctx, t)
-	}
-	return v
+// instantRe finds RFC3339 instants inside text. Dates without a time of day
+// ("2026-10-16") and bare clock times ("12:00Z") do not match and stay as written.
+var instantRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
+
+// localizeProse rewrites every RFC3339 instant in s to formatTime's local form.
+// Brain-written prose (a decision's rationale, a digest line, a refusal) and a
+// change value that is a bare timestamp both pass through here; the stored text
+// is never touched, and a token that does not parse is left as it is.
+func localizeProse(ctx context.Context, s string) string {
+	return instantRe.ReplaceAllStringFunc(s, func(tok string) string {
+		if t, err := time.Parse(time.RFC3339, tok); err == nil {
+			return formatTime(ctx, t)
+		}
+		return tok
+	})
 }
 
 // zoneNote is the one-line statement of which zone the page's times are in, or
