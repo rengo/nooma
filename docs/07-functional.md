@@ -212,9 +212,12 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    confidence, origin and last reinforcement. You can edit one: saving it unchanged claims a
    derived belief as yours, and the nightly derive then never overwrites it. You can retire one,
    after a confirm step, and the nightly derive never brings it back.
+8. **Shows what it did** (`/ui/activity`). The `decision_log` newest first, 50 rows a page, with
+   an "older" link and a `?kind=` filter by family. A row that records an edit shows what it was
+   before and what it became. The page is read-only: nothing on it writes or undoes.
 
-**You end up with** a product you can use without a terminal, for what exists today. The graph,
-activity and admin screens are not built (see below).
+**You end up with** a product you can use without a terminal, for what exists today. The graph
+and admin screens are not built (see below).
 
 ---
 
@@ -235,7 +238,7 @@ As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in 
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |
 | Graph view with edge curation | Blocked: `m4d` waits on ADR-0019 (still `Proposed`) | ADR-0019; 05 §M4 |
 | Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
-| Activity view (the `decision_log` told as a story) | In progress: `m4e-activity`, planned, nothing built | 05 §M4; doc 02 §11 |
+| Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | In progress: `m4e2`, planned, nothing built | 05 §M4 |
 | Timer list and cancel from chat and UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Planned: M5 | doc 02 §9; 05 §M5 |

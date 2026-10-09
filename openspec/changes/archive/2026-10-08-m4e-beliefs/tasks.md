@@ -3,7 +3,7 @@
 Derived from `spec.md` (R1-R4, R9, R11-R13) and `design.md` (§1-§8, APPROVED after Judgment Day
 round 3; **§10 carries the round-3 corrections, applied below**). Fifth of six slices under
 `openspec/changes/m4-mirror-ui/proposal.md`. Scope is beliefs only (PRs 1-4; activity, the old PRs 5-6, is
-[`m4e-activity`](../../m4e-activity/tasks.md)); admin is [`m4e2-admin`](../../m4e2-admin/tasks.md),
+[`m4e-activity`](../../archive/2026-10-08-m4e-activity/tasks.md)); admin is [`m4e2-admin`](../../m4e2-admin/tasks.md),
 which starts after `m4e-activity`'s PR 6 merges. Shape follows
 the archived m4c and m4b tasks.
 
@@ -20,7 +20,7 @@ red output, reverted). A probe that never applied is a finding.
 
 > **Split on 2026-10-08 (the owner's pre-agreed 7-PR rule, after PR 2 measured 2.06x).** This
 > section was written for six PRs (beliefs PRs 1-4 and activity PRs 5-6). Activity is now
-> [`m4e-activity`](../../m4e-activity/tasks.md), with its old PRs 5 and 6 moved there unchanged
+> [`m4e-activity`](../../archive/2026-10-08-m4e-activity/tasks.md), with its old PRs 5 and 6 moved there unchanged
 > (numbers kept). This change is **beliefs only**. The forecast below is the old one for PRs 1-4,
 > with the measurements and the PR 2 cut recorded.
 
@@ -33,7 +33,7 @@ are estimates (m4c measured tests at roughly 3.5x impl) and are reported apart.
 | 2 | `feat/brain-derive-shield` | ~270 | ~351 | ~800 | 557 changed lines (2.06x); tests 1,439 (1.8x) | **cut: 2a / 2b, see below** |
 | 3 | `feat/brain-belief-edit-retire` | ~260 | ~338 | ~650 | built whole: 393 changed lines (1.51x; 369 without the `tasks.md` edits); tests 1,308 (2.0x). Under 400, no cut | `ByFacet` + `Edit` / `Retire` + `write_landed.go` (unused) |
 | 4 | `feat/ui-beliefs` | ~275 | ~358 | ~450 | built whole: 301 changed lines (1.09x; 339 with the `tasks.md` edits); tests 1,340 (3.0x); generated 413 apart. Under 400, no cut | GET view + wiring / the two POSTs + G6 body table (unused) |
-| 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | ~130, ~290 | ~169, ~377 | ~320, ~450 | | **Moved to [`m4e-activity`](../../m4e-activity/tasks.md)** |
+| 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | ~130, ~290 | ~169, ~377 | ~320, ~450 | | **Moved to [`m4e-activity`](../../archive/2026-10-08-m4e-activity/tasks.md)** |
 | | **Total (4 forecast PRs)** | **~1,070** | **~1,390** | **~2,550** | | |
 
 Arithmetic: impl+docs 265 + 270 + 260 + 275 = 1,070; x 1.3: 345 + 351 + 338 + 358 = 1,392; tests
@@ -387,7 +387,7 @@ Files: `internal/ui/{beliefs.go,beliefs.templ,ui.go,layout.templ}`, `internal/ht
 
 ## PR 5 — `feat/ports-store-decisionlog-before` and PR 6 — `feat/ui-activity`
 
-**Moved to [`m4e-activity`](../../m4e-activity/tasks.md)** (tasks 5.1-5.6 and 6.1-6.6, numbers kept).
+**Moved to [`m4e-activity`](../../archive/2026-10-08-m4e-activity/tasks.md)** (tasks 5.1-5.6 and 6.1-6.6, numbers kept).
 
 ---
 

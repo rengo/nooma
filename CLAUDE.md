@@ -16,10 +16,11 @@ against a real migrated vault, on Linux and Windows.
 
 **M4 is the mirror: the complete UI**, in progress. Shipped: `m4a` (Today, cookie login,
 `--no-ui`), `m4b` (units browse, search, detail, capture and correction), `m4c` (a focus held
-by hysteresis and fed by relation adjacency, shared by Today and the digest) and `m4e` (beliefs:
+by hysteresis and fed by relation adjacency, shared by Today and the digest), `m4e` (beliefs:
 list by facet, edit, claim on save, retire, and a nightly derive that never brings back what the
-user retired or overwrites what they edited). Pending: `m4d` graph (blocked on ADR-0019 being
-`Accepted`), `m4e-activity`, `m4e2` admin, and `m4f`.
+user retired or overwrites what they edited) and `m4e-activity` (`/ui/activity`: the
+`decision_log` newest first, an edit's pre-image shown, read-only). Pending: `m4d` graph (blocked
+on ADR-0019 being `Accepted`), `m4e2` admin, and `m4f`.
 
 **One** M3 list item is still deliberately open rather than left to be noticed — a timer's list
 and cancel from chat, named in [`docs/05-build-plan.md`](docs/05-build-plan.md) and owned by

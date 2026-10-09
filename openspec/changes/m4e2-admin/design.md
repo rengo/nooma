@@ -19,7 +19,7 @@ document decides HOW. Shape follows the archived
 > follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
 > measured 2.06x): `m4e-activity` now owns what the old m4e PRs 5-6 built.
 >
-> From [`m4e-activity`](../m4e-activity/design.md):
+> From [`m4e-activity`](../archive/2026-10-08-m4e-activity/design.md):
 > - `DecisionLog.Before`, `DecisionCursor`, `DecisionRow` (m4e-activity PR 5), used for the
 >   recent consolidation effects;
 > - the **change decoder** in `ActivityService` (m4e-activity §3.6), which must already accept

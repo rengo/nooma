@@ -3,9 +3,9 @@
 Technical design for `m4e-activity`, split off `m4e-beliefs-activity-admin` on 2026-10-08.
 Requirements are [`spec.md`](spec.md) (R5, R6, the activity part of R9 and R11). This document
 decides HOW and closes OQ4. Shape follows the archived
-[`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/design.md) and
-[`m4b` design](../archive/2026-09-29-m4b-units-capture/design.md). Companion:
-[`../archive/2026-10-08-m4e-beliefs/design.md`](../archive/2026-10-08-m4e-beliefs/design.md).
+[`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md) and
+[`m4b` design](../2026-09-29-m4b-units-capture/design.md). Companion:
+[`../2026-10-08-m4e-beliefs/design.md`](../2026-10-08-m4e-beliefs/design.md).
 
 > **Split from m4e-beliefs-activity-admin on 2026-10-08 by the owner's 7-PR rule after PR 2 measured 2.06x.**
 > The sections below are the old m4e §3.5, §3.6, the activity row of §3.9, the activity rows of

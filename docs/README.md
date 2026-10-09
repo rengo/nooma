@@ -34,8 +34,8 @@ the digest asks about a relation Nooma is unsure of and the answer settles it. A
 against a real migrated vault, on Linux and Windows.
 
 **M4, the mirror (the complete UI), is in progress.** `m4a` (Today), `m4b` (units, capture and
-correction), `m4c` (focus held by hysteresis) and `m4e` (beliefs) have shipped and are archived.
-`m4d` (graph) is blocked on ADR-0019, still `Proposed`. `m4e-activity`, `m4e2` (admin) and `m4f`
+correction), `m4c` (focus held by hysteresis), `m4e` (beliefs) and `m4e-activity` (activity) have shipped and
+are archived. `m4d` (graph) is blocked on ADR-0019, still `Proposed`. `m4e2` (admin) and `m4f`
 (timer list and cancel) are not built yet. M5 is the learner.
 
 [`07-functional.md`](07-functional.md) carries the per-capability status table, and

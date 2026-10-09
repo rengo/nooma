@@ -43,7 +43,9 @@ PR already exists for it, resume that PR instead of starting a second one.
    owns `design.md`, `tasks.md` and apply. Decisions that need an ADR go to the client first
    (rule 3b).
 2. **Build.** Launch `nooma-dev` with the change name, the artifacts and the acceptance
-   criteria. It works in its own branch/worktree and opens the PR.
+   criteria. It works in its own branch **and its own
+   `git worktree`** (`../nooma-<branch-slug>`), never switching the branch of the maintainer's
+   main checkout (the repository root the session started in), which stays on `main` and clean; it opens the PR.
 3. **Validate.** Launch `nooma-qa` on the PR head.
 4. **Review.** Launch `nooma-reviewer` on the PR; it posts its verdict on the PR.
 5. **Rework.** Send blocking findings (QA failures, reviewer findings) back to `nooma-dev` on
@@ -95,11 +97,19 @@ Merge pinned to the verified commit, using the method from `nooma-pr`:
 `gh pr merge <n> --merge --match-head-commit "$head"` (chains in dependency order with the
 retarget check). Then:
 
-1. Confirm the CI of `main` is green on the merge commit; `git pull` main locally.
+1. Confirm the CI of `main` is green on the merge commit; `git pull` main locally. Tell
+   `nooma-dev` the PR merged or was abandoned (or remove its `../nooma-<branch-slug>` worktree yourself with
+   `git worktree remove`), so no worktree outlives its branch.
 2. Run the client's "steps to try" once on the updated `main` (smoke, with the fakes described in
-   `nooma-qa`), on a throwaway vault, with `HOME=<scratch>/home USERPROFILE=<scratch>/home
-   NOOMA_VAULT=` set inline on each `./nooma` call, exactly like `nooma-qa`; never the
-   maintainer's real `~/.nooma` or vault. If a step fails, it is a regression: fix it through the cycle before telling the
+   `nooma-qa`), on a throwaway vault, calling the product **only** through the wrapper
+   `<scratch>/nooma.sh` (it execs the binary with `HOME=<scratch>/home
+   USERPROFILE=<scratch>/home NOOMA_VAULT=` set; never a bare `./nooma`), exactly like
+   `nooma-qa`, with the wrapper's `NOOMA_BIN` line naming a binary built from the updated `main`
+   into scratch (`go build -o <scratch>/nooma-main ./cmd/nooma` from an up-to-date main worktree;
+   never `make binary` in the maintainer's checkout, which would overwrite the binary their real
+   `nooma serve` runs), not a QA worktree's. Run `nooma-qa`'s `~/.nooma` path-set diff (before the
+   first call and at the end); any added or removed path is an incident: stop and report it.
+   Never the maintainer's real `~/.nooma` or vault. If a step fails, it is a regression: fix it through the cycle before telling the
    client anything.
 
 ## Hot-Path Escalation

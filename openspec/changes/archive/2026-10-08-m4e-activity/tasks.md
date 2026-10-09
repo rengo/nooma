@@ -4,8 +4,8 @@ Derived from `spec.md` (R5, R6, the activity part of R9 and R11) and `design.md`
 design is the activity half of the m4e design that was APPROVED after Judgment Day round 3, and
 **§10 carries the round-3 corrections that touch it**). A slice sharing
 `openspec/changes/m4-mirror-ui/proposal.md`. Beliefs are
-[`m4e-beliefs-activity-admin`](../archive/2026-10-08-m4e-beliefs/tasks.md); admin is
-[`m4e2-admin`](../m4e2-admin/tasks.md), which starts after this slice's PR 6 merges. Shape follows
+[`m4e-beliefs-activity-admin`](../2026-10-08-m4e-beliefs/tasks.md); admin is
+[`m4e2-admin`](../../m4e2-admin/tasks.md), which starts after this slice's PR 6 merges. Shape follows
 the archived m4c and m4b tasks.
 
 > **Split from m4e-beliefs-activity-admin on 2026-10-08 by the owner's 7-PR rule after PR 2 measured 2.06x.**
@@ -164,6 +164,9 @@ Files: `internal/brain/activity.go`(+test), `internal/ui/{activity.go,activity.t
 - [x] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
+  *Both PRs merged: #299 at `8d7cbc7`, #300 at `6c30bb4`. Their bodies record `make check-all`
+  green, `go vet` clean and `docs-sync` OK (#300 also names the worktree it ran in); the merge
+  itself proves none of that.*
 - [x] **C.2** After PR 5 merges: compute actual / estimate; apply the cut rule (Forecast) before
   PR 6. After PR 6 merges, `m4e2-admin` may start.
   *PR 5 measured 104 impl+docs against ~130 (0.80x), so PR 6 was not pre-cut. PR 6 measured 391

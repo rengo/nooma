@@ -17,7 +17,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 > nothing from m4e2.** m4e2 depends on this slice for `brain.ErrWriteLanded` /
 > `*WriteLandedError` (PR 3), the cross-origin body table (§3.12 G6), the I22 whitelist test (G12)
 > and the `ui.Deps` / `uiDeps` / `wiring.go` pattern with the layout nav (PR 4), and the
-> action-vocabulary file; it depends on [`m4e-activity`](../../m4e-activity/design.md) for
+> action-vocabulary file; it depends on [`m4e-activity`](../../archive/2026-10-08-m4e-activity/design.md) for
 > `DecisionLog.Before`, the change decoder (§3.6 there) and the `config.updated`-shaped fixture
 > (A11), matching `../m4e2-admin/design.md`'s header.
 >
@@ -48,7 +48,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 > measured 1.2x (318 changed lines against ~265) and PR 2 measured 2.06x (557 against ~270); PR 2
 > was cut into 2a (#291, the pure shield) and 2b (#292, the derive wiring, `size:exception`). At
 > 2.06x, PRs 3, 4 and 6 are ~536, ~567 and ~597 and would each need a cut. **Activity is now
-> [`m4e-activity`](../../m4e-activity/design.md)**: §3.5, §3.6, the activity row of §3.9, the
+> [`m4e-activity`](../../archive/2026-10-08-m4e-activity/design.md)**: §3.5, §3.6, the activity row of §3.9, the
 > activity rows of §3.11 and §3.12 (G7, G8, G11, G12), FX-A, the A-series mutants, the old PRs 5-6,
 > RK-7's decoder half, RK-8, RK-9 and the activity items of §10 **moved there with their text**.
 > Each place leaves a one-line pointer, and **section, finding, gate, mutant, risk and PR numbers
@@ -73,7 +73,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 > 4. **One `Now()` per file in `internal/brain`** (`brain_single_clock_read_test.go:23-29`). Edit
 >    and retire cannot share one file with one clock read each. Each operation gets its own file
 >    (§3.4).
-> 5. *Moved to [`m4e-activity`](../../m4e-activity/design.md) (finding 5 there; the number is kept
+> 5. *Moved to [`m4e-activity`](../../archive/2026-10-08-m4e-activity/design.md) (finding 5 there; the number is kept
 >    so a citation stays valid).*
 > 6. **Migration 0001 has no `self_beliefs.status` vocabulary comment** (`0001:81`), and a
 >    published migration is never modified. The Go↔text vocabulary pin
@@ -86,7 +86,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 >    target is not `Capture`, and it sends `text=hello` to every row, so a belief edit (which
 >    reads `content`) would fail on a parse error and prove nothing about the guard. It needs a
 >    counting stub per mutating entrance **and a per-row valid body table** (§3.12, G6).
-> 8. *Moved to [`m4e-activity`](../../m4e-activity/design.md) (finding 8 there; the number is kept
+> 8. *Moved to [`m4e-activity`](../../archive/2026-10-08-m4e-activity/design.md) (finding 8 there; the number is kept
 >    so a citation stays valid).*
 > 9. **`MergeProposals` fails the whole call on a non-finite vector on the existing side**
 >    (`internal/core/consolidation/derive.go:91-110`, `:140`), and it returns only the single nearest
@@ -108,7 +108,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 | Classify receives `nil` beliefs; nothing reads `self_beliefs` for injection | `internal/brain/capture.go:209` |
 | Derive embeds every active belief per pass **even when there are no proposals**, runs `MergeProposals` (nearest at cosine ≥ `BeliefMergeCosine` 0.85), and routes `MergeInto == ""` to create and otherwise to reinforce. An embed failure of any belief or proposal aborts the phase. **Pinned by `TestConsolidateRunner_Derive_EmbedsExactlyOncePerActiveBelief` (`consolidate_test.go:1824-1871`) and `embedForMerge`'s comment (`:839-852`)** | `consolidate.go:618-678`, `:853-876`; `internal/core/consolidation/derive.go:21`, `:140-193` |
 | `MergeProposals` returns the single nearest neighbour per proposal (`scored[0]`); a non-finite existing vector returns an error | `derive.go:91-110`, `:140-193` |
-| `decision_log`'s layout and `occurred_at` resolution, `DecisionLog`'s `Record` and `Since`, `memrepo.DecisionLog`'s ordering | Moved to [`m4e-activity` design §1](../../m4e-activity/design.md) |
+| `decision_log`'s layout and `occurred_at` resolution, `DecisionLog`'s `Record` and `Since`, `memrepo.DecisionLog`'s ordering | Moved to [`m4e-activity` design §1](../../archive/2026-10-08-m4e-activity/design.md) |
 | The vocabulary is forty-eight members, hand-mirrored in `repocontract` (count in a doc comment and in a subtest title) | `decisionlog.go:169-204`; `test/support/repocontract/decisionlog.go:133` |
 | Consolidation writes no run-level `decision_log` row: every `consolidate.*` action is a per-effect row | `internal/ports/decisionlog.go:109-149`; `consolidate.go:1107` writes only `config` |
 | `BrowsePageSize = 50` is a **transport constant**, explicitly not a §13 row | `internal/ports/unitrepo.go:254-257` |
@@ -461,11 +461,11 @@ discipline.
 
 ### 3.5 OQ4 — the newest-first read and its page
 
-**Moved to [`m4e-activity` design §3.5](../../m4e-activity/design.md).**
+**Moved to [`m4e-activity` design §3.5](../../archive/2026-10-08-m4e-activity/design.md).**
 
 ### 3.6 Activity rendering (R6)
 
-**Moved to [`m4e-activity` design §3.6](../../m4e-activity/design.md).**
+**Moved to [`m4e-activity` design §3.6](../../archive/2026-10-08-m4e-activity/design.md).**
 
 ### 3.7 Admin writes, 3.8 admin read
 
@@ -512,7 +512,7 @@ Neither is derived from the list. `m4e2-admin` adds `config.updated` (fifty-thre
 | doc 02 §10 (`:1217-1228`) | `status` vocabulary; "deleting a belief **retires** it (`active → retired`), never removes a row; a retired belief is excluded from every read of active beliefs, which today means derive's dedup and stagnation, and will mean classify injection when that exists (`capture.go:209` passes no beliefs yet)"; "an edit changes `content` only and marks `origin = user_stated`". **No sentence claims injection exists today** | 1 |
 | doc 02 §6 item 5 (`:953-972`) | a third dedup rule: the retired shield (key, then the nearest at 0.85, a tie going to retired); "derive may reinforce a user-stated belief, never rewrite its text"; the cost note amended: embedding happens "when a proposal still needs a semantic comparison" (replacing "at the start of the phase"), and covers "every **retired** belief, which grows only by explicit user action"; the retired-embed-failure policy in one sentence (embed error, non-finite, zero and wrong-dimension vectors all drop the retired belief for the pass); and one clause: "a proposal whose vector is unusable is created, or reinforces a user-stated key, without a semantic comparison, and its rationale says so". **The same PR rewrites the test that pins the old sentence** (`consolidate_test.go:1824-1871`, §3.3 step 4) | 2 |
 | doc 02 §11 (`:1237-1240`) | "A user's write through the mirror (a belief edit or retirement) is recorded too, with the value it replaced." §11 today speaks of automatic decisions only. (`m4e2-admin` adds the config clause.) | 3 |
-| doc 02 §5 step 4 (`:663-664`) | Moved to [`m4e-activity` design §3.11](../../m4e-activity/design.md) | its PR 6 |
+| doc 02 §5 step 4 (`:663-664`) | Moved to [`m4e-activity` design §3.11](../../archive/2026-10-08-m4e-activity/design.md) | its PR 6 |
 | `docs/06-harness.md` §4 | I03 row names `self_beliefs`; I12 row names the new actions and two signals; the I22 row names the whitelist additions (§3.12 G12) | 1, 2, 3, 4 (the I23 and `Page` rows: `m4e-activity`) |
 | umbrella `proposal.md:483-484` | Q4 and Q5 → **Ruled 2026-10-07**; slicing, §5.1 rows/totals and dependency rows for the m4e/m4e2 split (planning-PR task) | planning PR |
 
@@ -574,7 +574,7 @@ POST /ui/beliefs/{id}/retire ─▶ … ─▶ Retire: read ─▶ SetStatus(act
 | `internal/ports/decisionlog.go` + repocontract map | +2 actions (PR 2), +2 (PR 3) (§3.10) | 2, 3 |
 | `internal/brain/beliefs.go`, `belief_edit.go`, `belief_retire.go`, `write_landed.go` (+tests) | Create | 3 |
 | `internal/ui/beliefs.go`, `beliefs.templ`, `ui.go`, `layout.templ`; `internal/httpapi/server.go`; `cmd/nooma/serve.go`, `cmd/nooma/wiring.go` (`wireBeliefs`), `cmd/nooma/wiring_beliefs_test.go`, `serve_test.go` | routes, view, deps, wiring, `uiDeps` signature | 4 |
-| `DecisionLog.Before` and its port/store/memrepo/repocontract changes, the `recordingLog` ripple, `ActivityService`, `/ui/activity` and `wireActivity` | Moved to [`m4e-activity` design §5](../../m4e-activity/design.md) | 5, 6 there |
+| `DecisionLog.Before` and its port/store/memrepo/repocontract changes, the `recordingLog` ripple, `ActivityService`, `/ui/activity` and `wireActivity` | Moved to [`m4e-activity` design §5](../../archive/2026-10-08-m4e-activity/design.md) | 5, 6 there |
 | `internal/httpapi/server_test.go:117` (`TestUIGuardedLeavesEachReachAView`) | PR 4: `/ui/beliefs` leaf, `BELIEFS` marker, stub `Beliefs` (activity's leaf is `m4e-activity`'s PR 6) | 4 |
 | `test/conformance/ui_entrances_test.go` | whitelist additions (G12) | 4 |
 | `test/conformance/httpapi_ui_wiring_test.go`, `ui_cross_origin_test.go`, `ui_read_views_write_nothing_test.go` | G6 (body table), G7 | 4 |
@@ -630,7 +630,7 @@ is created. The
 fake embedder counts calls: the expected count is asserted for every scenario below, and p1 sits
 before pending proposals so the remap from compact to original index is exercised.
 
-**FX-A, activity.** Moved to [`m4e-activity` design §6](../../m4e-activity/design.md).
+**FX-A, activity.** Moved to [`m4e-activity` design §6](../../archive/2026-10-08-m4e-activity/design.md).
 
 **FX-N, content.** Bound-exact (`MaxBeliefContentRunes` ASCII runes), bound+1, a multibyte string
 of `MaxBeliefContentRunes` runes (> that many bytes), `"  a\r\nb  "`, whitespace only, empty. For
@@ -743,7 +743,7 @@ a 4.3x outlier is recorded in the umbrella and not modelled here).
 | 2 | `feat/brain-derive-shield` | §3.3, `RouteProposals`/`RetiredKeyHits`, conditional embed, `usableVector` screen and failure policy, actions +2, doc 02 §6 item 5 | ~270 | ~351 | ~486 | ~594 |
 | 3 | `feat/brain-belief-edit-retire` | §3.4, `WriteLandedError`/`ErrWriteLanded`, `ByFacet` order, actions +2, doc 02 §11 | ~260 | ~338 | ~468 | ~572 |
 | 4 | `feat/ui-beliefs` | `/ui/beliefs` and two POSTs, G6 body table + rows + login exemption, G12 (`ByFacet`, `Edit`, `Retire`), `wireBeliefs`, `uiDeps`, nav | ~275 | ~358 | ~495 | ~605 |
-| 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | **Moved to [`m4e-activity`](../../m4e-activity/design.md)** (design §7 there) | ~420 | ~546 | ~756 | ~924 |
+| 5, 6 | `feat/ports-store-decisionlog-before`, `feat/ui-activity` | **Moved to [`m4e-activity`](../../archive/2026-10-08-m4e-activity/design.md)** (design §7 there) | ~420 | ~546 | ~756 | ~924 |
 | | **Total (4 PRs; 5 after PR 2's cut)** | | **~1,070** | **~1,390** | **~1,930** | **~2,350** |
 
 Arithmetic: 265 + 270 + 260 + 275 = 1,070. x 1.3: 345 + 351 + 338 + 358 = 1,392. x 1.8: 477 + 486
@@ -828,7 +828,7 @@ PR 2.
 | RK-5 | A retired belief that fails to embed degrades to key-only matching for that night, so a semantically similar proposal under a new key is created | Decided policy (§3.3), logged as `retired_embed_failed`, ends when the provider recovers; aborting would fail derive nightly with no UI recovery |
 | RK-6 | Typing `Belief.Status`/`Origin` ripples into fixtures that hold typed string variables | Compile errors only, caught by `make check` and `go vet -tags integration,e2e` |
 | RK-7 | The cross-slice contract with `m4e2-admin` (vocabulary file; body table; `ErrWriteLanded`; the decoder half moved to `m4e-activity`, its RK-7) | m4e2 adds the integration test that the row it writes decodes (its C15) through `m4e-activity`'s service; the dependency list is in the headers of all three changes |
-| RK-8, RK-9 | Moved to [`m4e-activity` design §8](../../m4e-activity/design.md) (numbers kept) | |
+| RK-8, RK-9 | Moved to [`m4e-activity` design §8](../../archive/2026-10-08-m4e-activity/design.md) (numbers kept) | |
 | RK-10 | The `usableVector` screen turns a **zero or wrong-dimension proposed vector** from a phase abort (verified: `MergeProposals` continues only on `ErrNonFiniteVector`, `derive.go:163`) into a create | Deliberate and logged in the row's rationale (§3.3); D19d pins it. It only ever runs on pending proposals, never on active beliefs, whose corruption keeps aborting. **Proposal-side residue (cf. RK-5):** a proposal with an unusable vector, under a new key, near a retired belief is **created**, because it has no semantic match, just as RK-5's retired side has none. A zero vector degrades while an embed error aborts: an unusable vector is a property of one input the provider returned successfully, deterministic per input, so aborting would fail derive every night with no UI recovery (RK-5's argument); an embed **error** is a provider fault that affects the pass as a whole and clears on retry, and aborting loses nothing. The doc 02 §6 item 5 amendment (PR 2) gains the clause "a proposal whose vector is unusable is created, or reinforces a user-stated key, without a semantic comparison, and its rationale says so" |
 
 No open question blocks `sdd-tasks`. OQ8 is closed above (OQ4 is closed in `m4e-activity`). OQ7 is closed by the admin split.
@@ -909,6 +909,6 @@ in-place wording changes in the planning PR. Numbers are the round-3 correction 
 Addendum (2026-10-08, activity split): items 1 and 11 each have a PR 6 half, and items 3 and 6
 mention PR 5 or PR 6; those PRs are now `m4e-activity`'s. The activity halves of items 1 and 11
 and the tasks-phase note on mutants A4 and A7 are repeated in
-[`m4e-activity` design §10](../../m4e-activity/design.md). Item 3's remedy (split beliefs from
+[`m4e-activity` design §10](../../archive/2026-10-08-m4e-activity/design.md). Item 3's remedy (split beliefs from
 activity) is the one carried out; the text above is left as the record of what was decided
 then.

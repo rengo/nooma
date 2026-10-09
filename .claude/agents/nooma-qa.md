@@ -32,11 +32,36 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 
 ## Running without a real LLM or network
 
-- Isolate the product, not the toolchain. Bash state does not persist between calls, so set the
-  override inline on every `./nooma` invocation only:
-  `HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT= ./nooma init <scratch>/qa.nooma`.
-  Never export it, and never apply it to `make` or `go` (check-all needs the real module cache
-  and toolchain, and may use the network for them). Never touch the real `~/.nooma`.
+- Isolate the product, not the toolchain. Bash state does not persist between calls, so the
+  isolation lives in a wrapper script, not in your memory of an inline prefix. Before the first
+  product call, write `<scratch>/nooma.sh` and `chmod +x` it:
+
+  ```sh
+  #!/bin/sh
+  NOOMA_BIN=<absolute path of the binary under test>
+  export HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT=
+  exec "$NOOMA_BIN" "$@"
+  ```
+
+  The first line holds a literal absolute path written into the file; the script needs nothing
+  from the environment. For QA it is `<scratch>/qa-<n>/nooma`, the binary built from the PR head
+  in step 4. `init` reads stdin: run it as `<scratch>/nooma.sh init <scratch>/qa.nooma </dev/null`.
+
+  Invoke the product **only** through it (`<scratch>/nooma.sh init <scratch>/qa.nooma`), never as
+  a bare `./nooma`, with no exception for "just `version`". Never export the override
+  in your shell and never apply it to `make` or `go` (check-all needs the real module cache and
+  toolchain, and may use the network for them). The wrapper's `HOME` must be an existing
+  directory under `<scratch>`; create it.
+- The wrapper is the protection; this guard is only a tripwire. Before the first product call
+  and again at the end, in a call without the override, list the real home's paths, ignoring the
+  live SQLite side files (the maintainer's own `nooma serve` may be running):
+  `find ~/.nooma -not -name '*-wal' -not -name '*-shm' -not -name '*.lock' 2>/dev/null | sort > <scratch>/home-before.txt`
+  (`home-after.txt` at the end), then `diff` them. An absent directory gives an empty file both
+  times. Any added or removed path is an incident: stop, report the diff lines, touch nothing.
+  Content changes inside an existing vault are **not** detected (the live server writes there);
+  only the wrapper prevents them. Never touch the real `~/.nooma` beyond this read-only listing.
+  (Why: a run once called `./nooma init` without the override and created the maintainer's
+  real `~/.nooma/<user>.nooma`.)
 - The "no network" rule is about the product under test: no real LLM, no Telegram, no outside
   host; fakes on loopback only.
 - Bind only to `127.0.0.1` on a free port. Loopback is allowed; anything else is not.
