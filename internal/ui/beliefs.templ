@@ -57,7 +57,7 @@ templ beliefItem(b ports.Belief, res *beliefResult, swap bool) {
 		<p>
 			<span data-field="confidence">{ formatConfidence(b.Confidence) }</span>
 			<span data-field="origin">{ string(b.Origin) }</span>
-			<span data-field="last-reinforced">{ b.LastReinforcedAt.Format(dateLayout) }</span>
+			<span data-field="last-reinforced">{ formatTime(ctx, b.LastReinforcedAt) }</span>
 		</p>
 		<details data-action="edit" open?={ rejected(b, res) }>
 			<summary>Edit</summary>

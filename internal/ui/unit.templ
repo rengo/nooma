@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strconv"
 	"time"
 
@@ -23,9 +24,9 @@ templ unitBody(detail brain.UnitDetail) {
 		<p><span>{ string(detail.Unit.Type) }</span></p>
 		<ul>
 			<li>{ "Stored weight: " + formatWeight(detail.Unit.Weight) }</li>
-			<li>{ "Created: " + detail.Unit.CreatedAt.Format(dateLayout) }</li>
-			<li>{ "Event: " + formatOptionalDate(detail.Unit.EventAt) }</li>
-			<li>{ "Due: " + formatOptionalDate(detail.Unit.DueAt) }</li>
+			<li>{ "Created: " + formatTime(ctx, detail.Unit.CreatedAt) }</li>
+			<li>{ "Event: " + formatOptionalDate(ctx, detail.Unit.EventAt) }</li>
+			<li>{ "Due: " + formatOptionalDate(ctx, detail.Unit.DueAt) }</li>
 		</ul>
 	</section>
 	<section>
@@ -59,11 +60,11 @@ templ unitBody(detail brain.UnitDetail) {
 // own explicit-absence rule (spec R3): never an empty string and never the
 // zero time, either of which a reader could mistake for a real value, and
 // never a stand-in for the other date field.
-func formatOptionalDate(t *time.Time) string {
+func formatOptionalDate(ctx context.Context, t *time.Time) string {
 	if t == nil {
 		return "none"
 	}
-	return t.Format(dateLayout)
+	return formatTime(ctx, *t)
 }
 
 // formatWeight renders the unit's own stored Weight — never an effective

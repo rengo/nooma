@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/unit"
@@ -68,6 +69,10 @@ type Deps struct {
 	Beliefs  Beliefs
 	Activity Activity
 	Serving  Serving
+	// Now reads the injected clock (ports.Clock.Now); the UI takes its zone from
+	// the instant it returns and nothing else. A func, not ports.Clock, so Deps
+	// stays free of interfaces that are not a brain entrance (I22's gate).
+	Now func() time.Time
 }
 
 // Serving carries the two process facts SYSTEM needs that are not the
@@ -101,6 +106,7 @@ func New(deps Deps) *Handler {
 // own drift guard against a leaf newUIMux wires but this switch forgot
 // (design N2, TestUIGuardedLeavesEachReachAView).
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = h.zoned(r)
 	switch r.Pattern {
 	case "GET /ui", "GET /ui/{$}":
 		h.serveToday(w, r)

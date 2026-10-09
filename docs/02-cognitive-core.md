@@ -908,6 +908,10 @@ disagree the first time either changed. The known limit: a vault hosted for a us
 other than the process's would need this revisited — which is multi-tenancy, deliberately out of
 scope for v1.
 
+The web UI reads the same zone and no other: every time it displays is converted from the stored
+UTC to the zone of the injected clock's instant, once per request, and the page says which zone
+it used. Presentation only — stored values and API responses stay UTC.
+
 **The vocabularies the model is offered are the same ones the decoder accepts.** The prompt does
 not restate the taxonomy in prose; it renders each closed set from the same declaration the
 decoder matches against. A value added to a vocabulary therefore reaches the model with no second

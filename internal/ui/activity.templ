@@ -30,13 +30,13 @@ templ activityBody(page brain.ActivityPage, kind string, families []string) {
 		<ol>
 			for _, row := range page.Rows {
 				<li data-decision-id={ row.ID }>
-					<time datetime={ row.OccurredAt.UTC().Format(time.RFC3339) }>{ row.OccurredAt.UTC().Format(time.RFC3339) }</time>
+					<time datetime={ row.OccurredAt.UTC().Format(time.RFC3339) }>{ formatTime(ctx, row.OccurredAt) }</time>
 					<code>{ string(row.Action) }</code>
 					<span>{ row.Rationale }</span>
 					if len(row.Change) > 0 {
 						<ul data-change>
 							for _, c := range row.Change {
-								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { c.Previous } → { c.Next }</li>
+								<li data-field={ c.Name } data-previous={ c.Previous } data-next={ c.Next }>{ c.Name }: { formatChangeValue(ctx, c.Previous) } → { formatChangeValue(ctx, c.Next) }</li>
 							}
 						</ul>
 					}
