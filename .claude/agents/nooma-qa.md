@@ -38,25 +38,28 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 
   ```sh
   #!/bin/sh
+  NOOMA_BIN=<absolute path of the binary under test>
   export HOME=<scratch>/home USERPROFILE=<scratch>/home NOOMA_VAULT=
   exec "$NOOMA_BIN" "$@"
   ```
 
-  `NOOMA_BIN` is the absolute path of the binary under test, set where the wrapper is written
-  (substitute it into the file, so the file needs no environment). For QA it is
-  `<scratch>/qa-<n>/nooma`, the binary built from the PR head in step 4.
+  The first line holds a literal absolute path written into the file; the script needs nothing
+  from the environment. For QA it is `<scratch>/qa-<n>/nooma`, the binary built from the PR head
+  in step 4. `init` reads stdin: run it as `<scratch>/nooma.sh init <scratch>/qa.nooma </dev/null`.
 
   Invoke the product **only** through it (`<scratch>/nooma.sh init <scratch>/qa.nooma`), never as
   a bare `./nooma`, with no exception for "just `version`". Never export the override
   in your shell and never apply it to `make` or `go` (check-all needs the real module cache and
   toolchain, and may use the network for them). The wrapper's `HOME` must be an existing
   directory under `<scratch>`; create it.
-- Guard the real home with a content snapshot, not an existence check (an `ls -d` cannot see a
-  write once `~/.nooma` exists). In a call without the override, run
-  `find ~/.nooma -printf '%p %s %T@\n' 2>&1 | sort | sha256sum` **before the first product call**
-  and **again at the end**, and record both hashes. An absent directory hashes the same both times
-  (the `find` error text is hashed). Any difference is an incident: stop, do not delete or repair
-  anything, and report it with the command that was running. Never touch the real `~/.nooma`.
+- The wrapper is the protection; this guard is only a tripwire. Before the first product call
+  and again at the end, in a call without the override, list the real home's paths, ignoring the
+  live SQLite side files (the maintainer's own `nooma serve` may be running):
+  `find ~/.nooma -not -name '*-wal' -not -name '*-shm' -not -name '*.lock' 2>/dev/null | sort > <scratch>/home-before.txt`
+  (`home-after.txt` at the end), then `diff` them. An absent directory gives an empty file both
+  times. Any added or removed path is an incident: stop, report the diff lines, touch nothing.
+  Content changes inside an existing vault are **not** detected (the live server writes there);
+  only the wrapper prevents them. Never touch the real `~/.nooma` beyond this read-only listing.
   (Why: a run once called `./nooma init` without the override and created the maintainer's
   real `~/.nooma/<user>.nooma`.)
 - The "no network" rule is about the product under test: no real LLM, no Telegram, no outside
