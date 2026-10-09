@@ -11,6 +11,10 @@ import (
 // the shape it is asked to answer in.
 const localDateLayout = "2006-01-02"
 
+// localTimeLayout is how the injected local time is rendered: the HH:MM,
+// 24-hour form normalized_content is asked to write a time in.
+const localTimeLayout = "15:04"
+
 // offsetLayout renders the instant's UTC offset, and exampleLayout renders
 // the whole instant in the exact shape Decode's assignTime accepts.
 //
@@ -24,6 +28,16 @@ const (
 	offsetLayout  = "Z07:00"
 	exampleLayout = time.RFC3339
 )
+
+// CalendarDays is how many days, today included, the classify context lists
+// as a calendar — doc 02 §5 step 1 and §13. Fourteen so that "next Friday"
+// said on a Friday, the furthest a bare weekday reaches, is still a row the
+// model reads rather than a date it computes.
+const CalendarDays = 14
+
+// calendarRowHour is the time of day each calendar row is built at — a
+// rendering detail, not a behavioural number: only the row's date is shown.
+const calendarRowHour = 12
 
 // Belief is a projection of one row of self_beliefs — design D4.
 //
@@ -54,7 +68,11 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 	b.WriteString("Answer with one JSON object and nothing else — no prose, no code fence.\n\n")
 
 	b.WriteString("Context\n")
-	b.WriteString("  Local date: " + now.Format(localDateLayout) + "\n")
+	// **The weekday and the time, not the date alone.** Given only
+	// "2026-10-09", a small model had to work out that it was a Friday, and
+	// resolved "dentista el viernes a las 10" to Tuesday 2026-10-13.
+	b.WriteString("  Local date: " + now.Format(localDateLayout) + " (" + now.Weekday().String() + ")\n")
+	b.WriteString("  Local time: " + now.Format(localTimeLayout) + "\n")
 	// **The offset, not the zone's name.** Every caller supplies an instant
 	// whose Location is time.Local, and time.Local.String() is the literal
 	// string "Local" on every machine — a sentinel Location rather than a
@@ -65,6 +83,7 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 	b.WriteString("  UTC offset: " + now.Format(offsetLayout) + "\n")
 	b.WriteString("  Resolve every relative reference (\"tomorrow\", \"on Friday\") against " +
 		"that date and offset, and answer with absolute dates.\n")
+	writeCalendar(&b, now)
 	writeBeliefs(&b, beliefs)
 	b.WriteString("\n")
 
@@ -193,7 +212,17 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 	b.WriteString("               value, a different detail. An imperative that moves or changes\n")
 	b.WriteString("               an existing thing corrects it; it does not create a new one.\n")
 	b.WriteString("  A recall stores nothing and is answered. Classifying a question as knowledge\n")
-	b.WriteString("  files the question away instead of answering it.\n\n")
+	b.WriteString("  files the question away instead of answering it.\n")
+	// **When, not what.** "dentista el viernes a las 10" came back as a
+	// task with a due_at, and a task arms nothing (prospection.Arm), so the
+	// appointment got no reminder. The prompt defined event_at and due_at
+	// but never said which type each belongs to.
+	b.WriteString("  Two more are decided by how the message is dated.\n")
+	b.WriteString("  event        something that HAPPENS at a set day or time — an appointment, a\n")
+	b.WriteString("               meeting, the dentist. Its day and time go in event_at.\n")
+	b.WriteString("  task         something the user has to GET DONE, by a deadline if one is named.\n")
+	b.WriteString("               The deadline goes in due_at.\n")
+	b.WriteString("  An appointment filed as a task gets no reminder.\n\n")
 
 	b.WriteString("Corrections\n")
 	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")
@@ -206,6 +235,32 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 	b.WriteString(text + "\n")
 
 	return b.String()
+}
+
+// writeCalendar renders the next CalendarDays days, today first and marked,
+// and the rule a bare weekday resolves by — doc 02 §5 step 1. A model reads a
+// weekday off this table rather than computing one, which is the arithmetic
+// it got wrong.
+//
+// Each row is built at noon of its civil date, in the instant's own zone,
+// rather than by stepping now itself: now's time of day can fall in a DST
+// gap on a later date — Chile skips midnight to 01:00 — and a time in a gap
+// normalises onto the neighbouring day, repeating one date and dropping
+// the next. No zone moves its clocks at noon.
+func writeCalendar(b *strings.Builder, now time.Time) {
+	b.WriteString("  A weekday named alone (\"on Friday\", \"el viernes\") means its next " +
+		"occurrence after today;\n")
+	b.WriteString("  named on that same weekday, it means next week's, 7 days later. " +
+		"\"today\" (\"hoy\") means today.\n")
+	b.WriteString("  Read the date off this calendar; do not compute it:\n")
+	for i := 0; i < CalendarDays; i++ {
+		day := time.Date(now.Year(), now.Month(), now.Day()+i, calendarRowHour, 0, 0, 0, now.Location())
+		b.WriteString("    " + pad(day.Weekday().String(), 10) + day.Format(localDateLayout))
+		if i == 0 {
+			b.WriteString(" (today)")
+		}
+		b.WriteString("\n")
+	}
 }
 
 // writeBeliefs renders the self-model projection, or nothing at all when

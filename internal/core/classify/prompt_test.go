@@ -5,6 +5,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	// Embedded so America/Santiago loads on a machine with no zone database,
+	// the same way internal/core/prospection's recurrence tests do.
+	_ "time/tzdata"
 )
 
 // buenosAires and kolkata are fixed in memory rather than loaded with
@@ -69,15 +73,30 @@ func TestBuildPrompt_RendersTheLocalDate(t *testing.T) {
 
 	prompt := BuildPrompt("remind me tomorrow", nil, instant, 0.5)
 
-	if !strings.Contains(prompt, "2026-08-04") {
+	if !strings.Contains(prompt, "Local date: 2026-08-04") {
 		t.Errorf("prompt does not carry the local date 2026-08-04; it is 01:00 UTC on the 5th "+
 			"but still the 4th in %s, and the model resolves \"tomorrow\" from this.\n\n%s",
 			buenosAires.String(), prompt)
 	}
-	if strings.Contains(prompt, "2026-08-05") {
-		t.Error("prompt carries 2026-08-05 — that is the UTC date, not the user's")
+	// The calendar lists the 5th as tomorrow, and that row is the only place
+	// the 5th may appear. Anywhere else — the local date, today's row, either
+	// format example — it is the UTC date standing where the user's belongs.
+	var outside []string
+	for _, line := range strings.Split(prompt, "\n") {
+		if calendarRow.MatchString(line) && !strings.Contains(line, "(today)") {
+			continue
+		}
+		outside = append(outside, line)
+	}
+	if rest := strings.Join(outside, "\n"); strings.Contains(rest, "2026-08-05") {
+		t.Errorf("prompt carries 2026-08-05 outside the calendar's later rows — that is the "+
+			"UTC date, not the user's:\n%s", rest)
 	}
 }
+
+// calendarRow matches one row of the context's calendar: a weekday name,
+// then a date.
+var calendarRow = regexp.MustCompile(`^\s+[A-Z][a-z]+day +\d{4}-\d{2}-\d{2}`)
 
 // TestBuildPrompt_CarriesTheMessage: the text under classification reaches
 // the prompt intact. Stated separately because everything else here is
@@ -487,6 +506,158 @@ func TestBuildPrompt_StatesHowTheContentWritesAResolvedInstant(t *testing.T) {
 	for _, want := range []string{"YYYY-MM-DD", "HH:MM", "2026-10-09 14:30"} {
 		if !strings.Contains(head, want) {
 			t.Errorf("normalized_content does not state %q:\n%s", want, head)
+		}
+	}
+}
+
+// contextBlock returns the prompt's "Context" section alone, so an assertion
+// about the injected now cannot be satisfied by a format example elsewhere —
+// both examples render now too, and "2026-10-09" appears in each.
+func contextBlock(t *testing.T, prompt string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(prompt, "Context\n")
+	if !found {
+		t.Fatalf("the prompt has no Context section:\n%s", prompt)
+	}
+	block, _, found := strings.Cut(rest, "\n\n")
+	if !found {
+		t.Fatalf("the Context section never ends:\n%s", prompt)
+	}
+	return block
+}
+
+// TestBuildPrompt_NamesTodaysWeekdayAndTime is the first half of the
+// "dentista el viernes a las 10" defect: the context gave 2026-10-09 and no
+// weekday, so the model had to work out that it was a Friday, and a small
+// model answered Tuesday 2026-10-13. Both come from the instant's own zone:
+// 14:46 UTC is 11:46 in Buenos Aires.
+func TestBuildPrompt_NamesTodaysWeekdayAndTime(t *testing.T) {
+	now := time.Date(2026, 10, 9, 14, 46, 0, 0, time.UTC).In(buenosAires)
+
+	ctx := contextBlock(t, BuildPrompt("dentista el viernes a las 10", nil, now, 0.5))
+
+	for _, want := range []string{"Local date: 2026-10-09 (Friday)", "Local time: 11:46"} {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("the context does not state %q:\n%s", want, ctx)
+		}
+	}
+}
+
+// TestBuildPrompt_RendersAFourteenDayCalendarFromToday: a weekday is read
+// off a table, never computed by the model. Fourteen rows starting today,
+// today marked, so "next Friday" said on a Friday is still on the table.
+// The instant is 01:00 UTC on Saturday the 10th, which is still Friday the
+// 9th in Buenos Aires: the table starts on the user's day, not UTC's.
+func TestBuildPrompt_RendersAFourteenDayCalendarFromToday(t *testing.T) {
+	now := time.Date(2026, 10, 10, 1, 0, 0, 0, time.UTC).In(buenosAires)
+
+	ctx := contextBlock(t, BuildPrompt("dentista el viernes a las 10", nil, now, 0.5))
+
+	var rows []string
+	for _, line := range strings.Split(ctx, "\n") {
+		if calendarRow.MatchString(line) {
+			rows = append(rows, strings.Join(strings.Fields(line), " "))
+		}
+	}
+	if len(rows) != CalendarDays {
+		t.Fatalf("the calendar has %d rows, want %d:\n%s", len(rows), CalendarDays, ctx)
+	}
+	for i, want := range map[int]string{
+		0:  "Friday 2026-10-09 (today)",
+		1:  "Saturday 2026-10-10",
+		7:  "Friday 2026-10-16",
+		13: "Thursday 2026-10-22",
+	} {
+		if rows[i] != want {
+			t.Errorf("calendar row %d = %q, want %q", i, rows[i], want)
+		}
+	}
+	if strings.Count(ctx, "(today)") != 1 {
+		t.Errorf("exactly one row is marked today, got %d:\n%s", strings.Count(ctx, "(today)"), ctx)
+	}
+}
+
+// TestBuildPrompt_StatesHowABareWeekdayResolves pins the client's rule
+// (doc 02 §5 step 1): a weekday named alone is its next occurrence after
+// today, and named on that same weekday it is next week's — "el viernes"
+// said on a Friday is seven days later. "Today" is today.
+func TestBuildPrompt_StatesHowABareWeekdayResolves(t *testing.T) {
+	now := time.Date(2026, 10, 9, 14, 46, 0, 0, time.UTC)
+
+	ctx := strings.Join(strings.Fields(contextBlock(t, BuildPrompt("x", nil, now, 0.5))), " ")
+
+	for _, want := range []string{
+		"its next occurrence after today",
+		"named on that same weekday, it means next week's, 7 days later",
+		`"today" ("hoy") means today`,
+		"Read the date off this calendar",
+	} {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("the context does not state %q:\n%s", want, ctx)
+		}
+	}
+}
+
+// TestBuildPrompt_SeparatesAnEventFromATask: the same capture came back as a
+// task with a due_at, and a task arms nothing (prospection.Arm), so the
+// client's dentist appointment got no reminder. Doc 02 §5 step 1: what
+// happens at a set day or time is an event with event_at; what has to get
+// done by a deadline is a task with due_at.
+//
+// Like the asking/telling clause, this proves the guidance is in the
+// prompt, not that a model obeys it; only `nooma doctor` against a real
+// provider, read by a human, measures that.
+func TestBuildPrompt_SeparatesAnEventFromATask(t *testing.T) {
+	p := BuildPrompt("dentista el viernes a las 10", nil, time.Date(2026, 10, 9, 14, 46, 0, 0, time.UTC), 0.5)
+	_, choosing, found := strings.Cut(p, "Choosing the type\n")
+	if !found {
+		t.Fatalf("the prompt has no Choosing the type section:\n%s", p)
+	}
+	choosing = strings.Join(strings.Fields(choosing), " ")
+
+	for _, want := range []string{
+		"event something that HAPPENS at a set day or time",
+		"an appointment, a meeting, the dentist",
+		"Its day and time go in event_at",
+		"task something the user has to GET DONE, by a deadline if one is named",
+		"The deadline goes in due_at",
+		"An appointment filed as a task gets no reminder",
+	} {
+		if !strings.Contains(choosing, want) {
+			t.Errorf("Choosing the type does not state %q:\n%s", want, choosing)
+		}
+	}
+}
+
+// TestBuildPrompt_CalendarSurvivesAMidnightDSTChange: Chile starts DST at
+// midnight, so in America/Santiago 00:30 on Sunday 2026-09-06 does not
+// exist. A calendar that stepped now itself a day at a time carried 00:30
+// into that gap, which normalises onto the wrong day: Saturday printed
+// twice and Sunday dropped. Every row must be the next civil date.
+func TestBuildPrompt_CalendarSurvivesAMidnightDSTChange(t *testing.T) {
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatalf("time.LoadLocation(America/Santiago): %v — time/tzdata is embedded, so this "+
+			"should never fail", err)
+	}
+	now := time.Date(2026, 9, 1, 0, 30, 0, 0, santiago)
+
+	ctx := contextBlock(t, BuildPrompt("dentista el viernes a las 10", nil, now, 0.5))
+
+	var rows []string
+	for _, line := range strings.Split(ctx, "\n") {
+		if calendarRow.MatchString(line) {
+			rows = append(rows, strings.Join(strings.Fields(strings.TrimSuffix(line, " (today)")), " "))
+		}
+	}
+	if len(rows) != CalendarDays {
+		t.Fatalf("the calendar has %d rows, want %d:\n%s", len(rows), CalendarDays, ctx)
+	}
+	for i, got := range rows {
+		// Civil dates counted in UTC, where no day is skipped or repeated.
+		day := time.Date(2026, 9, 1+i, 0, 0, 0, 0, time.UTC)
+		if want := day.Weekday().String() + " " + day.Format("2006-01-02"); got != want {
+			t.Errorf("calendar row %d = %q, want %q", i, got, want)
 		}
 	}
 }

@@ -456,8 +456,22 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      answer. Symmetrically, an imperative that moves an existing thing ("move the renewal to
      the 20th") is a `correction`, not a new `task`. The prompt states all three, because a
      bare vocabulary list lets a model match the topic word instead of the act.
-   - Injected context: active self-beliefs, local date + UTC offset (to resolve "tomorrow",
+   - `event` and `task` are separated by **how the message is dated**: something that happens
+     at a set day or time (an appointment, a meeting, the dentist) is an `event` with its instant
+     in `event_at`; something to get done, by a deadline if one is named, is a `task` with that
+     deadline in `due_at`. The distinction carries the reminder: §7 arms an `event` and never a
+     `task`, so "dentista el viernes a las 10" captured as a `task` was stored with no reminder.
+     The prompt states both, because defining the two date fields without saying which type
+     each belongs to left the model choosing on the word "dentista" alone.
+   - Injected context: active self-beliefs, local date with its weekday, local time and UTC
+     offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
      "on Friday"), open check-ins.
+   - **A bare weekday is its next occurrence after today**; named on that same weekday it is
+     next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
+     "today" ("hoy") is today. The prompt states this rule and gives the model the calendar to
+     read the date off rather than the arithmetic to compute it: given only `2026-10-09`, a small
+     model resolved "dentista el viernes a las 10" to Tuesday the 13th. The model still resolves
+     the date — nothing in code checks that the weekday it names matches the date it answers.
    - One message can resolve a check-in **and** be a capture at the same time ("yes, I
      practiced yesterday" → `nudge_outcome: engaged` + a `knowledge` unit). These are
      orthogonal fields, not types: `nudge_outcome (engaged|declined)`,
@@ -874,10 +888,11 @@ archiving pass can never reach it. Both look like ordinary data and neither viol
 constraint.
 
 **The user's timezone reaches the model inside the instant, never from the environment.** §5
-step 1 injects the local date and the UTC offset so the model can resolve "tomorrow" and "on
-Friday", and the brain is forbidden from reading either from the machine it runs on. Both travel
-inside the single timestamp the pipeline reads once per capture: its calendar date is the local
-date, its offset is the user's offset.
+step 1 injects the local date, its weekday, the local time, the UTC offset and the calendar from
+today so the model can resolve "tomorrow" and "on Friday", and the brain is forbidden from reading
+any of them from the machine it runs on. All travel inside the single timestamp the pipeline reads
+once per capture: its calendar date is the local date, its offset is the user's offset, and the
+calendar steps that date forward in the same zone.
 
 **It is the offset that is injected, not the zone's name**, and the distinction is not
 cosmetic. Go's `time.Local` is a sentinel `Location` whose `String()` is the literal `"Local"` on
@@ -1413,6 +1428,7 @@ module):
 
 | Knob | Default |
 |---|---|
+| `calendar_days` (`internal/core/classify.CalendarDays`) | 14 — how many days, today included, the classify context lists (§5 step 1); the furthest a bare weekday reaches is seven days out, so a week of margin |
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |
 | `catch_up_staleness_hours` (`internal/core/consolidation.CatchUpStalenessHours`) | 24 — ADR-0009's boot catch-up gate; coincides with `incomplete_expiry_hours` above by coincidence, not by relation (a startup staleness window versus a phase's expiry window), no test ties them |
