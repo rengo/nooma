@@ -178,9 +178,20 @@ type DueTrigger struct {
 	RecurrenceAnchor *prospection.Anchor
 }
 
+// TriggerMove is what Reschedule rewrites on an armed trigger when the date
+// it watches is corrected (doc 02 §5 step 4, I29): when it fires, what it
+// will say, why and how far ahead (the payload a fresh arming would write),
+// and — for a recurring trigger, nil otherwise — its anchor. Everything
+// else on the row, its interrupt level included, stays as armed.
+type TriggerMove struct {
+	FireAt           time.Time
+	Payload          TriggerPayload
+	RecurrenceAnchor *prospection.Anchor
+}
+
 // TriggerRepo is the repository port over triggers.
 //
-// Eight methods, and three absences that are deliberate:
+// Ten methods, and three absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     — I03's strengthened prefix set, asserted over this interface's own
@@ -275,6 +286,15 @@ type TriggerRepo interface {
 	//
 	// It returns the same two errors as Fire, for the same reasons.
 	Expire(ctx context.Context, id string) error
+
+	// ArmedForUnit returns every armed trigger hanging off unitID, ordered
+	// by (fire_at, id) — the reminders a corrected date moves (I29).
+	ArmedForUnit(ctx context.Context, unitID string) ([]DueTrigger, error)
+
+	// Reschedule applies m to id under an armed precondition: fire_at,
+	// payload and, when m.RecurrenceAnchor is non-nil, recurrence_anchor.
+	// It returns the same two errors as Fire.
+	Reschedule(ctx context.Context, id string, m TriggerMove) error
 }
 
 // Sentinel errors ports.TriggerRepo implementations return.

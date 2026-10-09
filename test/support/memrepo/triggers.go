@@ -299,3 +299,53 @@ func (r *Triggers) All() []ports.Trigger {
 	sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
 	return all
 }
+
+// ArmedForUnit implements ports.TriggerRepo. Armed rows with a non-nil
+// FireAt hanging off unitID, ordered by (fire_at, id).
+func (r *Triggers) ArmedForUnit(_ context.Context, unitID string) ([]ports.DueTrigger, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]ports.DueTrigger, 0)
+	for _, stored := range r.triggers {
+		t := stored.trigger
+		if stored.status != ports.TriggerStatusArmed || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID {
+			continue
+		}
+		out = append(out, ports.DueTrigger{
+			ID: t.ID, UnitID: copyString(t.UnitID), FireAt: *t.FireAt, Payload: t.Payload,
+			InterruptLevel: copyFloat64(t.InterruptLevel), RecurrenceRule: copyRule(t.RecurrenceRule),
+			RecurrenceAnchor: copyAnchor(t.RecurrenceAnchor),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].FireAt.Equal(out[j].FireAt) {
+			return out[i].FireAt.Before(out[j].FireAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+// Reschedule implements ports.TriggerRepo, under the same armed
+// precondition transition enforces.
+func (r *Triggers) Reschedule(_ context.Context, id string, m ports.TriggerMove) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, ok := r.triggers[id]
+	if !ok {
+		return ports.ErrTriggerNotFound
+	}
+	if stored.status != ports.TriggerStatusArmed {
+		return ports.ErrTriggerStatusConflict
+	}
+	fireAt := m.FireAt
+	stored.trigger.FireAt = &fireAt
+	stored.trigger.Payload = m.Payload
+	if m.RecurrenceAnchor != nil {
+		stored.trigger.RecurrenceAnchor = copyAnchor(m.RecurrenceAnchor)
+	}
+	r.triggers[id] = stored
+	return nil
+}

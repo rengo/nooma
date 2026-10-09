@@ -149,6 +149,12 @@ func (r *conflictingTriggers) Due(context.Context, time.Time) ([]ports.DueTrigge
 }
 
 func (r *conflictingTriggers) Fire(context.Context, string, time.Time) error { return nil }
+func (r *conflictingTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
+func (r *conflictingTriggers) Reschedule(context.Context, string, ports.TriggerMove) error {
+	return nil
+}
 
 func (r *conflictingTriggers) Expire(_ context.Context, id string) error {
 	if id == r.conflictOnID {
@@ -300,6 +306,12 @@ func (r *failingTriggers) Due(context.Context, time.Time) ([]ports.DueTrigger, e
 }
 func (r *failingTriggers) Fire(context.Context, string, time.Time) error { return nil }
 func (r *failingTriggers) Expire(context.Context, string) error          { return r.err }
+func (r *failingTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+	return nil, r.err
+}
+func (r *failingTriggers) Reschedule(context.Context, string, ports.TriggerMove) error {
+	return r.err
+}
 
 type emptyTriggers struct{}
 
@@ -309,6 +321,10 @@ func (emptyTriggers) Due(context.Context, time.Time) ([]ports.DueTrigger, error)
 }
 func (emptyTriggers) Fire(context.Context, string, time.Time) error { return nil }
 func (emptyTriggers) Expire(context.Context, string) error          { return nil }
+func (emptyTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
+func (emptyTriggers) Reschedule(context.Context, string, ports.TriggerMove) error { return nil }
 
 type emptyTimers struct{}
 
