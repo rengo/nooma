@@ -1,6 +1,7 @@
 # nooma store API golden — regenerate with `make store-api-golden`.
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
 internal/store/sqlite/sqlitetest: func SeedEnergy(t testing.TB, v *sqlite.Vault, id string, at time.Time, energy float64)
+internal/store/sqlite/sqlitetest: func SeedReminderLeads(t testing.TB, v *sqlite.Vault, leads string)
 internal/store/sqlite: func (*ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error)
 internal/store/sqlite: func (*ConfigRepo) RecordConsolidationRun(ctx context.Context, at time.Time) error
 internal/store/sqlite: func (*DecisionLog) Before(ctx context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error)

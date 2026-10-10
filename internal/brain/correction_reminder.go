@@ -49,7 +49,7 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 		live[i] = prospection.Live{ID: t.ID, FireAt: t.FireAt, Rule: t.RecurrenceRule}
 		byID[t.ID] = t
 	}
-	f := prospection.Follow(eventAt, live, prospection.DefaultReminderPrefs(), interruptLevel, now)
+	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config), interruptLevel, now)
 
 	for i, plan := range f.Plans {
 		var err error

@@ -1,6 +1,7 @@
 // Package sqlitetest is test support for the SQLite store: fixtures that need a
 // row no port can write, kept next to the schema so the column list stays inside
-// internal/store (the sqlite-containment depguard rule exempts this path).
+// internal/store (the sqlite-containment depguard rule exempts this path):
+// an energy reading, and the reminder preferences nothing writes yet.
 //
 // It is imported by tests only. No production code may import it (the
 // sqlitetest-tests-only depguard rule in .golangci.yml fails the lint if one
@@ -23,26 +24,41 @@ import (
 )
 
 // SeedEnergy appends one user-sourced current_state row carrying energy,
-// recorded at the given instant, to the vault v. It opens its own short-lived
-// handle on v's file with the operational pragmas the vault applies that
-// matter to a second writer (busy_timeout, foreign_keys); WAL is a property of
-// the file and is already in force once the vault is open.
+// recorded at the given instant, to the vault v.
 func SeedEnergy(t testing.TB, v *sqlite.Vault, id string, at time.Time, energy float64) {
+	t.Helper()
+	exec(t, v, "SeedEnergy",
+		`INSERT INTO current_state (id, energy, mood, active, recorded_at, source) VALUES (?, ?, '', 0, ?, ?)`,
+		id, energy, at.UTC().Format(time.RFC3339), ports.StateSourceUser)
+}
+
+// SeedReminderLeads stores the user's event reminder leads (ADR-0029) in v's
+// config row, creating it when absent. No port writes them yet: the writer
+// is the settings work unit's.
+func SeedReminderLeads(t testing.TB, v *sqlite.Vault, leads string) {
+	t.Helper()
+	exec(t, v, "SeedReminderLeads",
+		`INSERT INTO config (id, event_reminder_leads, updated_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET event_reminder_leads = excluded.event_reminder_leads`,
+		leads, time.Unix(0, 0).UTC().Format(time.RFC3339))
+}
+
+// exec runs one statement on its own short-lived handle on v's file, with the
+// operational pragmas the vault applies that matter to a second writer
+// (busy_timeout, foreign_keys); WAL is a property of the file and is already
+// in force once the vault is open.
+func exec(t testing.TB, v *sqlite.Vault, who, query string, args ...any) {
 	t.Helper()
 	q := url.Values{}
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "foreign_keys(on)")
 	q.Set("_txlock", "immediate")
-	dsn := "file:" + v.Path() + "?" + q.Encode()
-
-	raw, err := sql.Open("sqlite3", dsn)
+	raw, err := sql.Open("sqlite3", "file:"+v.Path()+"?"+q.Encode())
 	if err != nil {
-		t.Fatalf("sqlitetest.SeedEnergy: open: %v", err)
+		t.Fatalf("sqlitetest.%s: open: %v", who, err)
 	}
 	defer func() { _ = raw.Close() }()
-	if _, err := raw.ExecContext(context.Background(),
-		`INSERT INTO current_state (id, energy, mood, active, recorded_at, source) VALUES (?, ?, '', 0, ?, ?)`,
-		id, energy, at.UTC().Format(time.RFC3339), ports.StateSourceUser); err != nil {
-		t.Fatalf("sqlitetest.SeedEnergy: insert: %v", err)
+	if _, err := raw.ExecContext(context.Background(), query, args...); err != nil {
+		t.Fatalf("sqlitetest.%s: %v", who, err)
 	}
 }
