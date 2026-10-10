@@ -148,8 +148,14 @@ func isAlnum(c byte) bool { return isDigit(c) || c >= 'a' && c <= 'z' || c >= 'A
 // CarryText returns plan with, appended, the content edit its date edit
 // carries: the unit's body rewritten by FollowDate from the edited
 // column's previous value. plan is returned unchanged when it writes no
-// date, when that column was empty, or when the body does not name it.
+// date, when that column was empty, when the body does not name it, or when
+// it already writes content (the new text states the new date itself).
 func CarryText(plan []Edit, u unit.Unit, zone *time.Location) []Edit {
+	for _, e := range plan {
+		if _, ok := e.Content(); ok {
+			return plan // the plan carries its own text; the old body is stale
+		}
+	}
 	for _, e := range plan {
 		var previous *time.Time
 		var next time.Time
@@ -166,6 +172,17 @@ func CarryText(plan []Edit, u unit.Unit, zone *time.Location) []Edit {
 		}
 	}
 	return plan
+}
+
+// StatesInstant reports whether content states at in capture's own form
+// and in the user's zone: its date token and the time anchored to it, as
+// FollowDate reads them. It is how a correction's new text proves it
+// speaks for a new instant (PlanEdit).
+func StatesInstant(content string, at time.Time, zone *time.Location) bool {
+	a := at.In(zone)
+	d, tm := a.Format(textDateLayout), a.Format(textTimeLayout)
+	_, dates, times := rewriteInstant(content, d, d, tm, tm)
+	return dates > 0 && times > 0
 }
 
 // KeepsInstant reports whether content, written over u's body, still

@@ -3,6 +3,8 @@ package correction
 import (
 	"testing"
 	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
 )
 
 // TestAllFields_EveryEditReportsExactlyOneAccessorTrue is design D3's own
@@ -92,5 +94,37 @@ func TestNewDueAtEdit_ValueRoundTrips(t *testing.T) {
 	got, ok := NewDueAtEdit(want).DueAt()
 	if !ok || !got.Equal(want) {
 		t.Errorf("DueAt() = (%v, %v), want (%v, true)", got, ok, want)
+	}
+}
+
+func TestChanges(t *testing.T) {
+	at := time.Date(2026, 12, 20, 9, 0, 0, 0, time.UTC)
+	due := time.Date(2026, 12, 21, 9, 0, 0, 0, time.UTC)
+	u := unit.Unit{Content: "body", EventAt: &at, DueAt: &due}
+	otherZone := at.In(time.FixedZone("ART", -3*60*60)) // the same instant
+	later := at.Add(time.Hour)
+
+	tests := []struct {
+		name string
+		plan []Edit
+		u    unit.Unit
+		want int
+	}{
+		{"same content", []Edit{NewContentEdit("body")}, u, 0},
+		{"new content", []Edit{NewContentEdit("other")}, u, 1},
+		{"same event_at in another frame", []Edit{NewEventAtEdit(otherZone)}, u, 0},
+		{"new event_at", []Edit{NewEventAtEdit(later)}, u, 1},
+		{"same due_at", []Edit{NewDueAtEdit(due)}, u, 0},
+		{"new due_at", []Edit{NewDueAtEdit(later)}, u, 1},
+		{"a date the unit lacks", []Edit{NewEventAtEdit(at)}, unit.Unit{Content: "body"}, 1},
+		{"a due_at the unit lacks", []Edit{NewDueAtEdit(due)}, unit.Unit{Content: "body"}, 1},
+		{"only the edits that change", []Edit{NewEventAtEdit(at), NewContentEdit("other")}, u, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Changes(tt.plan, tt.u); len(got) != tt.want {
+				t.Errorf("Changes() = %+v, want %d edit(s)", got, tt.want)
+			}
+		})
 	}
 }

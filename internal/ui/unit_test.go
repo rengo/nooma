@@ -496,6 +496,29 @@ func TestCorrectView_StaysOnTheUnitPage(t *testing.T) {
 	}
 }
 
+// A correction that finds the unit already holding what it says is not a
+// change, and the page does not report one.
+func TestCorrectView_AnUnchangedCorrectionSaysNothingChanged(t *testing.T) {
+	t.Parallel()
+	event := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC)
+	detail := brain.UnitDetail{Unit: unit.Unit{ID: "unit-9", Type: unit.TypeEvent, Content: "Dentist", CreatedAt: event, EventAt: &event}}
+	fake := &fakeCapturer{result: brain.CaptureResult{
+		Outcome:    brain.OutcomeCorrected,
+		Correction: &brain.Correction{UnitID: "unit-9", Unchanged: true},
+	}}
+	h := ui.New(ui.Deps{Capture: fake, Units: stubUnitsReader{detail: detail, detailFound: true}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, correctRequest("unit-9", "text=it+is+on+the+15th"))
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Nothing was changed: the entry already says that.") {
+		t.Errorf("answer does not say nothing changed:\n%s", body)
+	}
+	if strings.Contains(body, "Corrected") || strings.Contains(body, "Changed:") {
+		t.Errorf("answer claims a change:\n%s", body)
+	}
+}
+
 // When nothing changed, the unit page carries the same ask the capture page
 // would, so the user knows what to write instead.
 func TestCorrectView_AskStaysOnTheUnitPage(t *testing.T) {

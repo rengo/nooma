@@ -298,7 +298,7 @@ func unitBody(detail brain.UnitDetail, res *brain.CaptureResult) templ.Component
 
 // correctOutcome is a correction's outcome as the unit page shows it: what
 // changed, by its field's plain name, or the same ask captureOutcome gives
-// when nothing changed.
+// when nothing changed (an unchanged correction included).
 func correctOutcome(res brain.CaptureResult) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -320,7 +320,7 @@ func correctOutcome(res brain.CaptureResult) templ.Component {
 			templ_7745c5c3_Var16 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		if res.Outcome == brain.OutcomeCorrected && res.Correction != nil {
+		if res.Outcome == brain.OutcomeCorrected && res.Correction != nil && !res.Correction.Unchanged {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<p data-outcome=\"corrected\">Corrected. Changed: ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

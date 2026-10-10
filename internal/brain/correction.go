@@ -115,11 +115,33 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		}
 		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskContentLosesDate}, nil
 	}
+	// New text beside a new date is the model's rewrite of the unit it was
+	// shown (PlanEdit). It was shown that unit only on the explicit path,
+	// and only holds if the unit has not changed since; on the chat path
+	// the referent is found after the model answered, so its text is the
+	// utterance's, not the unit's — the date alone is the edit, and the
+	// body follows it (CarryText).
+	if len(plan) == 2 && (explicit == nil || explicit.Content != target.Content) {
+		plan = plan[:1]
+	}
+
 	// A moved date carries the body that states it (doc 02 §5 step 4, I29).
 	// now's zone is the user's: the frame the body was most likely written
 	// in.
 	plan = correction.CarryText(plan, *target, now.Location())
+	wanted := plan
 
+	// A correction the unit already satisfies changes nothing: no pre-image
+	// row, no edit, no learning signal. The reminder step still runs, since
+	// repeating a correction is how a reminder a failed step left behind is
+	// repaired (I29), and it decides from what is armed now.
+	plan = correction.Changes(plan, *target)
+	if len(plan) == 0 {
+		if err := r.followReminder(ctx, *target, wanted, c.InterruptLevel, now); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Unchanged: true}, nil
+	}
 	if err := r.applyWithPreImage(ctx, *target, plan, ref, c.InterruptLevel, now); err != nil {
 		return nil, err
 	}

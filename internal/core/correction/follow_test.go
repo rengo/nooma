@@ -269,3 +269,41 @@ func TestKeepsInstant(t *testing.T) {
 		t.Error("a UTC body restated in UTC was refused")
 	}
 }
+
+// TestCarryText_LeavesAPlanThatAlreadyWritesContent: when the plan carries
+// the new text itself, deriving the body from the old one would overwrite
+// it with a stale rewrite.
+func TestCarryText_LeavesAPlanThatAlreadyWritesContent(t *testing.T) {
+	old := time.Date(2026, 12, 20, 9, 0, 0, 0, time.UTC)
+	moved := time.Date(2026, 12, 20, 8, 0, 0, 0, time.UTC)
+	u := unit.Unit{Content: "Vuelo a Madrid el 2026-12-20 a las 09:00.", EventAt: &old}
+	plan := []Edit{NewEventAtEdit(moved), NewContentEdit("Vuelo a Roma el 2026-12-20 a las 08:00.")}
+	got := CarryText(plan, u, time.UTC)
+	if len(got) != 2 || got[1] != plan[1] {
+		t.Errorf("CarryText() = %+v, want the plan unchanged", got)
+	}
+}
+
+func TestStatesInstant(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	at := time.Date(2026, 12, 20, 8, 0, 0, 0, art)
+	tests := []struct {
+		name, content string
+		want          bool
+	}{
+		{"date and anchored time", "Vuelo el 2026-12-20 a las 08:00.", true},
+		{"timestamp form", "Vuelo 2026-12-20T08:00", true},
+		{"date only", "Vuelo el 2026-12-20.", false},
+		{"time only", "Vuelo a las 08:00.", false},
+		{"another time", "Vuelo el 2026-12-20 a las 09:00.", false},
+		{"date glued in a file name", "minutes-2026-12-20.pdf a las 08:00", false},
+		{"the same instant in UTC is not the user's frame", "Vuelo el 2026-12-20 a las 11:00.", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StatesInstant(tt.content, at, art); got != tt.want {
+				t.Errorf("StatesInstant(%q) = %v, want %v", tt.content, got, tt.want)
+			}
+		})
+	}
+}

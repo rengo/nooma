@@ -26,12 +26,13 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	var eventAt time.Time
 	moved := false
 	body := target.Content
+	bodyChanged := false
 	for _, e := range plan {
 		if v, ok := e.EventAt(); ok {
 			eventAt, moved = v, true
 		}
 		if v, ok := e.Content(); ok {
-			body = v
+			body, bodyChanged = v, v != target.Content
 		}
 	}
 	if !moved {
@@ -52,7 +53,7 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 
 	switch {
 	case f.Carry != "":
-		if err := r.moveReminder(ctx, target, byID[f.Carry], f.Plan, eventAt, now); err != nil {
+		if err := r.moveReminder(ctx, target, byID[f.Carry], f.Plan, eventAt, body, bodyChanged, now); err != nil {
 			return err
 		}
 	case f.Plan.What != prospection.ArmNothing:
@@ -71,8 +72,11 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 // moveReminder reschedules t to plan, with the payload a fresh arming of
 // plan writes and its text following the date as the unit's body did. A
 // move that changes nothing visible writes nothing.
-func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt, now time.Time) error {
+func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
 	text := followTriggerText(t, target.EventAt, eventAt, now.Location())
+	if bodyChanged && t.Payload.ActionText == target.Content {
+		text = body // the reminder said what the unit said, and the unit now says this
+	}
 	move := ports.TriggerMove{FireAt: plan.FireAt, Payload: armedPayload(text, plan)}
 
 	fields := []string{}

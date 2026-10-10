@@ -1,6 +1,10 @@
 package correction
 
-import "time"
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // Field names the one column a correction can write — doc 02 §5 step 4,
 // design D3.
@@ -67,4 +71,26 @@ func (e Edit) EventAt() (time.Time, bool) {
 // only when e.Field() == FieldDueAt.
 func (e Edit) DueAt() (time.Time, bool) {
 	return e.dueAt, e.field == FieldDueAt
+}
+
+// Changes returns the edits of plan that would alter u: a content edit
+// whose text is u's own, or a date edit whose instant is u's own, writes
+// nothing and is not a change. A repeated correction finds its work done;
+// it must not be recorded, signalled or reported as one.
+func Changes(plan []Edit, u unit.Unit) []Edit {
+	var out []Edit
+	for _, e := range plan {
+		same := false
+		if v, ok := e.Content(); ok {
+			same = v == u.Content
+		} else if v, ok := e.EventAt(); ok {
+			same = u.EventAt != nil && u.EventAt.Equal(v)
+		} else if v, ok := e.DueAt(); ok {
+			same = u.DueAt != nil && u.DueAt.Equal(v)
+		}
+		if !same {
+			out = append(out, e)
+		}
+	}
+	return out
 }
