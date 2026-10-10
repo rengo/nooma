@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/store/vaultlock"
@@ -407,5 +408,43 @@ func TestCaptureSaysAProviderFailurePlainly(t *testing.T) {
 	err := runCapture([]string{"anything", vault}, &out, &errOut)
 	if err == nil || err.Error() != msg {
 		t.Errorf("error = %v, want exactly %q", err, msg)
+	}
+}
+
+// The CLI must outwait the server: if its own timeout fired first, a provider
+// timeout the server reports (504) could never reach the terminal.
+func TestCaptureTimeoutOutlastsEveryProviderDeadline(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{Providers: map[string]config.Provider{
+		"fast": {Type: "ollama", Timeout: "10s"},
+		"slow": {Type: "ollama", Timeout: "5m"},
+	}}
+	if got := captureTimeoutFor(cfg); got <= 3*5*time.Minute {
+		t.Errorf("captureTimeoutFor = %v, want more than three sequential calls at the slowest provider deadline (5m)", got)
+	}
+	if got := captureTimeoutFor(&config.Config{}); got <= config.DefaultProviderTimeout {
+		t.Errorf("captureTimeoutFor(no providers) = %v, want more than the default provider deadline", got)
+	}
+}
+
+// A server that is up but does not reply in time is not "not running": the
+// old text sent the user to server.bind, which was fine.
+func TestCaptureThatTimesOutDoesNotBlameTheBind(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	defer srv.Close()
+	defer close(release)
+	prev := captureTimeoutMargin
+	captureTimeoutMargin = 40 * time.Millisecond
+	t.Cleanup(func() { captureTimeoutMargin = prev })
+
+	host, port := splitHostPort(t, srv.URL)
+	vault := writeVault(t, fmt.Sprintf("server:\n  bind: %s\n  http_port: %s\nproviders:\n  p:\n    type: ollama\n    timeout: 40ms\n", host, port))
+
+	var out, errOut bytes.Buffer
+	err := runCapture([]string{"anything", vault}, &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "did not reply") || strings.Contains(err.Error(), "server.bind") {
+		t.Errorf("error = %v, want the server did not reply in time, without blaming server.bind", err)
 	}
 }
