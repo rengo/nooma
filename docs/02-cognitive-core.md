@@ -844,6 +844,15 @@ The floor: a response from which **no** field can be read at all is not a classi
 every field null. It is a failed classification, and it is reported as one. A payload with no
 fields has nothing to degrade.
 
+**A failed classification fails the capture in plain words, and nothing is written** (I31). That
+covers a response with no readable field, one with no type, and a classify call that never
+answered (key missing, provider unreachable, key rejected, rate limited, timed out). The
+failure is raised before the unit is built, so no unit, relation or timer exists for it; the
+caller is told which class it was, never a bare internal error, and what it is told carries
+neither a credential, a vendor's response body nor the captured text. This is the opposite of a
+later step's outage (§5 step 3, the relation judge), which degrades because the unit is already
+stored.
+
 **A response may carry a preamble around its object, and the preamble is discarded, not
 treated as a malformed field.** A model asked to answer with one JSON object and nothing else can
 still wrap that object in a markdown code fence, or add a line of its own prose before it — a live

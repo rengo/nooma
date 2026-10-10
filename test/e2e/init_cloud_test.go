@@ -66,16 +66,11 @@ func patchNoomaYML(t *testing.T, vault string, replacements map[string]string) {
 	}
 }
 
-// TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary is spec
-// R6.3's L4 half (R8.1's own level assignment — not a duplicate of
-// test/conformance's L2 half, which proves the distinction exists in the
-// pipeline; this proves it survives being wired together for real) and
-// R6.2's own verification: a freshly `init`ed Cloud vault's tasks: block
-// includes an embedding entry, readable without running a capture at all,
-// AND a capture against it actually stores a vector.
-func TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary(t *testing.T) {
-	llm := mockOpenAI(t)
-
+// serveCloudVault inits a Cloud-path vault, points its openai entries at llm,
+// optionally gives it the key its api_key_env names (in .env, where a user puts
+// it), and starts serve. It returns the vault, the port and the running proc.
+func serveCloudVault(t *testing.T, llm *httptest.Server, withKey bool) (string, int, *serveProc) {
+	t.Helper()
 	home, work := t.TempDir(), t.TempDir()
 	target := filepath.Join(work, "cloud.nooma")
 
@@ -101,7 +96,30 @@ func TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary(t *testing.T
 		"type: openai\n":  fmt.Sprintf("type: openai\n    endpoint: %s\n", llm.URL),
 	})
 
-	startServe(t, home, target, &port)
+	if withKey {
+		env, err := os.OpenFile(filepath.Join(target, ".env"), os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = env.WriteString("OPENAI_API_KEY=sk-e2e-test-key\n")
+		_ = env.Close()
+	}
+
+	proc := startServe(t, home, target, &port)
+
+	return target, port, proc
+}
+
+// TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary is spec
+// R6.3's L4 half (R8.1's own level assignment — not a duplicate of
+// test/conformance's L2 half, which proves the distinction exists in the
+// pipeline; this proves it survives being wired together for real) and
+// R6.2's own verification: a freshly `init`ed Cloud vault's tasks: block
+// includes an embedding entry, readable without running a capture at all,
+// AND a capture against it actually stores a vector.
+func TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary(t *testing.T) {
+	llm := mockOpenAI(t)
+	_, port, _ := serveCloudVault(t, llm, true)
 
 	captureBody, err := json.Marshal(map[string]string{"text": "Pick up the dry cleaning on Friday"})
 	if err != nil {
@@ -188,5 +206,36 @@ func TestInitCloudPathNeverWritesTheScriptedKeyValue(t *testing.T) {
 
 	if !strings.Contains(stdout, "OPENAI_API_KEY") {
 		t.Errorf("the wizard's own output does not instruct the user to set the key themselves:\n%s", stdout)
+	}
+}
+
+// TestCloudVaultWithoutItsKeySaysSoPlainly is the plain-errors contract
+// through the real binary: with the key absent from .env and the environment,
+// a capture is a 503 that names the variable and where Nooma looks, never a
+// bare 500, and serve logs one line for it that holds neither the key nor the
+// text.
+func TestCloudVaultWithoutItsKeySaysSoPlainly(t *testing.T) {
+	llm := mockOpenAI(t)
+	_, port, proc := serveCloudVault(t, llm, false)
+
+	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/capture", port), "application/json", strings.NewReader(`{"text":"Pick up the dry cleaning on Friday"}`))
+	if err != nil {
+		t.Fatalf("POST /capture: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body struct{ Error, Code string }
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding the error body: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable || body.Code != "provider_key_missing" ||
+		!strings.Contains(body.Error, "OPENAI_API_KEY") || !strings.Contains(body.Error, ".env") {
+		t.Errorf("POST /capture = %d %+v, want 503 provider_key_missing naming OPENAI_API_KEY and .env", resp.StatusCode, body)
+	}
+	logs := proc.stderr.String()
+	if !strings.Contains(logs, "class=provider_key_missing") || !strings.Contains(logs, "provider=openai") || !strings.Contains(logs, "path=/capture") {
+		t.Errorf("serve logged no line for the failure:\n%s", logs)
+	}
+	if strings.Contains(logs, "dry cleaning") {
+		t.Errorf("serve logged the captured text:\n%s", logs)
 	}
 }
