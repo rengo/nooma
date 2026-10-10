@@ -273,13 +273,18 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+			case brain.AskContentLosesDate:
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<p data-outcome=\"asked\">Nothing was changed: that would have replaced the whole entry, or left its text and its date disagreeing. Write the full new date and time, or the whole new wording.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			case brain.AskReferentAmbiguous:
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<p data-outcome=\"asked\">Nothing was changed: that looked like a correction, but it was not clear which entry it meant. Open the entry and use its correction form.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<p data-outcome=\"asked\">Nothing was changed: that looked like a correction, but it was not clear which entry it meant. Open the entry and use its correction form.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			default:
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<p data-outcome=\"asked\">Nothing was changed: it was not clear what to change. Write the one new value, a date or the new wording.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<p data-outcome=\"asked\">Nothing was changed: it was not clear what to change. Write the one new value, a date or the new wording.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

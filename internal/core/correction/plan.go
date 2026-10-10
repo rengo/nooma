@@ -1,6 +1,11 @@
 package correction
 
-import "github.com/rengo/nooma/internal/core/classify"
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // PlanEdit decides which field a correction changes — doc 02 §5 step 4,
 // design D3, the C6 ruling that overruled spec R1.8's prior revision:
@@ -37,7 +42,32 @@ import "github.com/rengo/nooma/internal/core/classify"
 // arguments side by side, I18's exact failure mode with nothing guarding
 // it. The cost is that core/correction imports core/classify, the same
 // accepted smell m1b D7 named for the same reversal criterion.
-func PlanEdit(c classify.Classification) ([]Edit, bool) {
+//
+// target is the unit being corrected, and zone the user's frame. A date
+// equal to target's own value is an echo (I30): the correction prompt
+// shows the model the unit's current instants, so a text-only correction
+// can come back with them repeated. An echo yields to content that is a
+// real change and still states the instant the unit keeps (KeepsInstant):
+// letting it win would discard the text the correction spoke about and
+// record a change that never happened. Otherwise the echo stands — a
+// same-date correction, which changes nothing in the unit and is how
+// repeating a correction repairs a reminder a failed step left behind
+// (I29).
+func PlanEdit(c classify.Classification, target unit.Unit, zone *time.Location) ([]Edit, bool) {
+	eventEcho, dueEcho := echoes(c.EventAt, target.EventAt), echoes(c.DueAt, target.DueAt)
+	newDate := c.EventAt != nil && !eventEcho || c.DueAt != nil && !dueEcho
+	if (eventEcho || dueEcho) && !newDate && c.NormalizedContent != nil &&
+		*c.NormalizedContent != target.Content && KeepsInstant(*c.NormalizedContent, target, zone) {
+		return []Edit{NewContentEdit(*c.NormalizedContent)}, true
+	}
+	if newDate {
+		if eventEcho {
+			c.EventAt = nil
+		}
+		if dueEcho {
+			c.DueAt = nil
+		}
+	}
 	hasEvent := c.EventAt != nil
 	hasDue := c.DueAt != nil
 
@@ -53,4 +83,10 @@ func PlanEdit(c classify.Classification) ([]Edit, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// echoes reports whether a classified date repeats the unit's current one:
+// the same instant, whatever frame either is written in.
+func echoes(classified, current *time.Time) bool {
+	return classified != nil && current != nil && classified.Equal(*current)
 }

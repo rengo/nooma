@@ -61,7 +61,7 @@ func testdataLLMCasesDir(t *testing.T) string {
 // uses, restated here because internal/httpapi may not import test/conformance
 // (docs/06-harness.md §1's dependency rule runs adapter -> brain -> core,
 // never adapter -> test).
-func newTestCaptureService(t *testing.T, now time.Time, llmCase string) *brain.CaptureService {
+func newTestCaptureService(t *testing.T, now time.Time, llmCases ...string) *brain.CaptureService {
 	t.Helper()
 	ctx := context.Background()
 
@@ -70,7 +70,7 @@ func newTestCaptureService(t *testing.T, now time.Time, llmCase string) *brain.C
 	embeddings := memrepo.NewEmbeddings()
 	lexical := memrepo.NewLexical()
 	relations := memrepo.NewRelations()
-	llm := fakeprovider.New(t, testdataLLMCasesDir(t), llmCase)
+	llm := fakeprovider.New(t, testdataLLMCasesDir(t), llmCases...)
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
 	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
@@ -240,7 +240,8 @@ func TestCaptureHandler_UnknownUnitIDIs404(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
-	svc := newTestCaptureService(t, now, "classify-pick-up-dry-cleaning")
+	// No case scripted: the named unit is read before any LLM call (I30).
+	svc := newTestCaptureService(t, now)
 	h := Handler(Deps{Version: "test", Capture: svc})
 
 	rec := postCapture(t, h, `{"text":"pick up the dry cleaning","unit_id":"no-such-unit"}`)

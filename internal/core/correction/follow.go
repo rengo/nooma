@@ -168,4 +168,34 @@ func CarryText(plan []Edit, u unit.Unit, zone *time.Location) []Edit {
 	return plan
 }
 
+// KeepsInstant reports whether content, written over u's body, still
+// states every instant the body states for u's own event_at or due_at: the
+// date token and, where the body anchors a time to it, that same time. It
+// is I30's guard on the content fallback — new content that drops the
+// date reads as the correction utterance standing in for the whole unit
+// ("Es a las 08:00." over "Tengo un vuelo el 2026-10-11 a las 09:00."),
+// and new content naming another time leaves the body and the column
+// disagreeing. A body that never stated the instant in capture's own form
+// constrains nothing: there is nothing to lose. Frames are tried as in
+// FollowDate.
+func KeepsInstant(content string, u unit.Unit, zone *time.Location) bool {
+	for _, at := range []*time.Time{u.EventAt, u.DueAt} {
+		if at == nil {
+			continue
+		}
+		for _, frame := range []*time.Location{zone, time.UTC} {
+			d, tm := at.In(frame).Format(textDateLayout), at.In(frame).Format(textTimeLayout)
+			_, dates, times := rewriteInstant(u.Content, d, d, tm, tm)
+			if dates == 0 {
+				continue
+			}
+			_, keptDates, keptTimes := rewriteInstant(content, d, d, tm, tm)
+			if keptDates == 0 || times > 0 && keptTimes == 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }

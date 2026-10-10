@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/test/support/goldenset"
 )
 
@@ -64,7 +66,7 @@ func TestPlanEditOverCorrectionCorpus(t *testing.T) {
 				t.Fatalf("classify.Decode: %v", err)
 			}
 
-			edits, ok := correction.PlanEdit(c)
+			edits, ok := correction.PlanEdit(c, unit.Unit{}, time.UTC)
 
 			hasEvent := c.EventAt != nil
 			hasDue := c.DueAt != nil

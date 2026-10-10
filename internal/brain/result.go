@@ -235,4 +235,9 @@ const (
 	// back with no readable type (classify.Decode degraded it to none), so
 	// nothing says the text is a change at all.
 	AskUnclassifiable AskReason = "unclassifiable"
+	// AskContentLosesDate: the unit is known, but the only thing to write
+	// was new content that no longer states the date and time the unit
+	// still holds — writing it would replace the unit with the utterance,
+	// or leave the body and the date disagreeing (I30).
+	AskContentLosesDate AskReason = "content_loses_date"
 )
