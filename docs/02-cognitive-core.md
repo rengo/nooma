@@ -595,7 +595,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    - Robustness: a provider outage on this call degrades the capture rather than refusing
      it — the unit stays stored, no relations are evaluated for it, and the outage is recorded
      in the trail. The product rule below ("asking is the EXCEPTION") governs this the same way
-     it governs every other capture-time provider outage; this step is not a special case.
+     it governs every capture-time provider outage after step 1; step 1's own call is the one
+     exception, since a failed classification leaves no unit to keep (§5.1, I31).
 4. **corrections**: a `correction` edits the referenced unit in place and emits a learning
    signal with the correction.
    - **Which unit it edits.** A caller holding an identifier passes it, and that identifier
