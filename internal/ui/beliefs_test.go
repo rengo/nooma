@@ -871,3 +871,48 @@ func TestLayout_NavLinksToBeliefsAndActivity(t *testing.T) {
 		}
 	}
 }
+
+// A page with no belief under any facet says where beliefs come from; one
+// belief anywhere removes that line.
+func TestBeliefsView_EmptyState(t *testing.T) {
+	t.Parallel()
+	const line = "Nooma derives them overnight"
+	var buf strings.Builder
+	empty := []brain.FacetBeliefs{{Facet: selfmodel.AllFacets()[0]}}
+	if err := ui.BeliefsPage(empty, nil).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(buf.String(), line) {
+		t.Errorf("empty page has no empty state:\n%s", buf.String())
+	}
+	buf.Reset()
+	one := []brain.FacetBeliefs{{Facet: selfmodel.AllFacets()[0], Beliefs: []ports.Belief{{ID: "b1", Content: "likes mornings"}}}}
+	if err := ui.BeliefsPage(one, nil).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(buf.String(), line) {
+		t.Error("a page with a belief shows the empty state")
+	}
+}
+
+// When no facet holds a belief the page says so once: the five facet sections
+// stay, without repeating the empty line under each. When some facet holds
+// one, the empty facets keep theirs (TestBeliefsView_RendersAllFiveFacets...).
+func TestBeliefsView_AllEmptySaysItOnce(t *testing.T) {
+	t.Parallel()
+	var groups []brain.FacetBeliefs
+	for _, f := range selfmodel.AllFacets() {
+		groups = append(groups, brain.FacetBeliefs{Facet: f})
+	}
+	var buf strings.Builder
+	if err := ui.BeliefsPage(groups, nil).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	page := buf.String()
+	if n := strings.Count(page, "No beliefs yet."); n != 1 {
+		t.Errorf("an all-empty page says it is empty %d times, want once:\n%s", n, page)
+	}
+	if n := strings.Count(page, "<section data-facet="); n != len(groups) {
+		t.Errorf("an all-empty page renders %d facet sections, want %d", n, len(groups))
+	}
+}

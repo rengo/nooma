@@ -67,7 +67,7 @@ func captureBody(result *brain.CaptureResult) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section><h2>CAPTURE</h2><form method=\"post\" action=\"/ui/capture\" hx-post=\"/ui/capture\" hx-target=\"#capture-result\" hx-swap=\"innerHTML\"><label for=\"text\">Text</label> <textarea id=\"text\" name=\"text\" required></textarea> <button type=\"submit\">Capture</button></form><div id=\"capture-result\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section><h2>CAPTURE</h2><form method=\"post\" action=\"/ui/capture\" hx-post=\"/ui/capture\" hx-target=\"#capture-result\" hx-swap=\"innerHTML\"><label for=\"text\">Text</label><p id=\"text-hint\" data-hint>A task, an event, a note, a reminder or a question: write it as you would say it.</p><textarea id=\"text\" name=\"text\" rows=\"4\" aria-describedby=\"text-hint\" required></textarea> <button type=\"submit\">Capture</button></form><div id=\"capture-result\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -130,7 +130,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(result.UnitID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 50, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 51, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -148,7 +148,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(string(result.Armed.What))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 52, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 53, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -161,7 +161,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(result.Armed.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 52, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 53, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -179,7 +179,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(localizeProse(ctx, result.ArmRefused.Message))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 54, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 55, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -197,7 +197,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(localizeProse(ctx, result.Reply))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 56, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 57, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -220,7 +220,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(len(result.Recalled)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 60, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 61, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -238,7 +238,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var10 templ.SafeURL
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/ui/units/" + result.Correction.UnitID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 62, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 63, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -251,7 +251,7 @@ func captureOutcome(result brain.CaptureResult) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(result.Correction.UnitID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 62, Col: 129}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `capture.templ`, Line: 63, Col: 129}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {

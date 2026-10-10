@@ -15,7 +15,7 @@ templ UnitsPage(units []unit.Unit, next *ports.BrowseCursor, types []string) {
 templ unitsBody(units []unit.Unit, next *ports.BrowseCursor, types []string) {
 	<section>
 		<h2>UNITS</h2>
-		<form hx-get="/ui/units" hx-target="#units-rows" hx-swap="innerHTML">
+		<form role="search" hx-get="/ui/units" hx-target="#units-rows" hx-swap="innerHTML">
 			<label for="q">Search</label>
 			<input type="search" id="q" name="q" placeholder="search live units"/>
 			<button type="submit">Search</button>
@@ -31,11 +31,19 @@ templ unitsBody(units []unit.Unit, next *ports.BrowseCursor, types []string) {
 // travels as data-unit-id, this view's structural marker, not its own
 // escaped text.
 templ unitsRows(units []unit.Unit, next *ports.BrowseCursor, types []string) {
+	if len(units) == 0 {
+		<p data-empty>No units here yet. Capture a thought, a task or an event and it is listed here; a search that finds nothing ends here too.</p>
+	}
 	<ul>
 		for _, u := range units {
 			<li data-unit-id={ u.ID }>
 				<a href={ templ.URL("/ui/units/" + u.ID) }>{ u.Content }</a>
 				<span>{ string(u.Type) }</span>
+				if u.EventAt != nil {
+					<small>Event: { formatTime(ctx, *u.EventAt) }</small>
+				} else if u.DueAt != nil {
+					<small>Due: { formatTime(ctx, *u.DueAt) }</small>
+				}
 			</li>
 		}
 	</ul>

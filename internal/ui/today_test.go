@@ -195,3 +195,63 @@ func TestTodayView_EscapesVaultContent(t *testing.T) {
 		t.Errorf("vault content is not escaped as expected:\n%s", page)
 	}
 }
+
+// An empty focus list and an empty digest each say what would fill them.
+func TestTodayView_EmptyStates(t *testing.T) {
+	t.Parallel()
+	today := brain.Today{Focuses: []brain.Focus{{Kind: focus.KindTask}, {Kind: focus.KindLoad}}}
+	var buf strings.Builder
+	if err := ui.Today(today, ui.Serving{}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Today.Render: %v", err)
+	}
+	page := buf.String()
+	for _, want := range []string{"Nothing needs your attention right now.", "Nothing is weighing on you.", "The next morning digest has nothing to carry yet."} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks the empty state %q:\n%s", want, page)
+		}
+	}
+	full := renderToday(t, fixedToday())
+	for _, unwanted := range []string{"Nothing needs your attention", "nothing to carry yet"} {
+		if strings.Contains(full, unwanted) {
+			t.Errorf("a populated page shows the empty state %q", unwanted)
+		}
+	}
+}
+
+// Each focus member links to its unit.
+func TestTodayView_FocusMembersLinkToTheirUnit(t *testing.T) {
+	t.Parallel()
+	if page := renderToday(t, fixedToday()); !strings.Contains(page, `<a href="/ui/units/task-1">Call the dentist</a>`) {
+		t.Errorf("focus member does not link to its unit:\n%s", page)
+	}
+}
+
+func renderToday(t *testing.T, today brain.Today) string {
+	t.Helper()
+	var buf strings.Builder
+	if err := ui.Today(today, ui.Serving{}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("Today.Render: %v", err)
+	}
+	return buf.String()
+}
+
+// The digest's empty line reads the whole digest: a pending question alone is
+// something to carry, and held items are named rather than contradicted.
+func TestTodayView_DigestEmptyStateReadsTheWholeDigest(t *testing.T) {
+	t.Parallel()
+	const empty = "The next morning digest has nothing to carry yet."
+
+	question := brain.Today{Digest: brain.PendingDigest{Question: &ports.RelationQuestion{FromContent: "Book flights", ToContent: "Renew passport"}}}
+	if page := renderToday(t, question); strings.Contains(page, empty) || strings.Contains(page, "held for later") {
+		t.Errorf("a digest carrying a question says it is empty:\n%s", page)
+	}
+
+	held := renderToday(t, brain.Today{Digest: brain.PendingDigest{Held: 2}})
+	if !strings.Contains(held, "Nothing for the next digest yet; 2 held for later.") || strings.Contains(held, empty) {
+		t.Errorf("a digest with only held items does not say so:\n%s", held)
+	}
+
+	if page := renderToday(t, brain.Today{}); !strings.Contains(page, empty) || strings.Contains(page, "held for later") {
+		t.Errorf("an empty digest lacks its line:\n%s", page)
+	}
+}

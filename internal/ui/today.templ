@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
@@ -21,47 +22,68 @@ templ Today(today brain.Today, serving Serving) {
 }
 
 templ todayBody(today brain.Today, serving Serving) {
-	for _, f := range today.Focuses {
-		<section>
-			<h2>{ "FOCUS: " + string(f.Kind) }</h2>
-			<ol>
-				for _, m := range f.Members {
-					<li>
-						{ m.ID } — { m.Content } (score: { formatScore(m.Score) })
-						if m.DueAt != nil {
-							<span>Due: { formatTime(ctx, *m.DueAt) }</span>
-						}
-						if m.EventAt != nil {
-							<span>Event: { formatTime(ctx, *m.EventAt) }</span>
-						}
-					</li>
+	<div data-grid>
+		for _, f := range today.Focuses {
+			<section data-focus={ string(f.Kind) }>
+				<h2>{ "FOCUS: " + string(f.Kind) }</h2>
+				if len(f.Members) == 0 {
+					<p data-empty>{ focusEmpty(f.Kind) }</p>
 				}
-			</ol>
-		</section>
-	}
-	<section>
-		<h2>PENDING DIGEST</h2>
-		<ul>
-			for _, line := range today.Digest.Items {
-				<li>{ line.Text }</li>
-			}
-		</ul>
-		<p>{ fmt.Sprintf("Held: %d", today.Digest.Held) }</p>
-		if today.Digest.Question != nil {
-			<p>{ "Question: " + today.Digest.Question.FromContent + " — " + today.Digest.Question.ToContent }</p>
+				<ol>
+					for _, m := range f.Members {
+						<li>
+							<a href={ templ.URL("/ui/units/" + m.ID) }>{ m.Content }</a>
+							if m.DueAt != nil {
+								<span>Due: { formatTime(ctx, *m.DueAt) }</span>
+							}
+							if m.EventAt != nil {
+								<span>Event: { formatTime(ctx, *m.EventAt) }</span>
+							}
+							<span data-score title="focus score">score { formatScore(m.Score) }</span>
+						</li>
+					}
+				</ol>
+			</section>
 		}
-	</section>
-	<section>
-		<h2>SYSTEM</h2>
-		<ul>
-			<li>{ "Last consolidation: " + formatConsolidation(ctx, today.Status.LastConsolidationAt) }</li>
-			<li>{ "Energy: " + formatEnergy(ctx, today.Status.Energy) }</li>
-			<li>{ fmt.Sprintf("Undelivered: %d", today.Status.Undelivered) }</li>
-			<li>{ fmt.Sprintf("Open questions: %d", today.Status.OpenQuestions) }</li>
-			<li>{ "Bind: " + serving.Bind }</li>
-			<li>{ "Cookie auth: " + formatCookieAuth(serving.CookieAuth) }</li>
-		</ul>
-	</section>
+		<section data-view="digest">
+			<h2>PENDING DIGEST</h2>
+			if len(today.Digest.Items) == 0 && today.Digest.Question == nil {
+				if today.Digest.Held > 0 {
+					<p data-empty>{ fmt.Sprintf("Nothing for the next digest yet; %d held for later.", today.Digest.Held) }</p>
+				} else {
+					<p data-empty>The next morning digest has nothing to carry yet.</p>
+				}
+			}
+			<ul>
+				for _, line := range today.Digest.Items {
+					<li>{ line.Text }</li>
+				}
+			</ul>
+			if today.Digest.Question != nil {
+				<p data-question>{ "Question: " + today.Digest.Question.FromContent + " — " + today.Digest.Question.ToContent }</p>
+			}
+			<p data-held>{ fmt.Sprintf("Held: %d", today.Digest.Held) }</p>
+		</section>
+		<section data-view="system">
+			<h2>SYSTEM</h2>
+			<ul>
+				<li>{ "Last consolidation: " + formatConsolidation(ctx, today.Status.LastConsolidationAt) }</li>
+				<li>{ "Energy: " + formatEnergy(ctx, today.Status.Energy) }</li>
+				<li>{ fmt.Sprintf("Undelivered: %d", today.Status.Undelivered) }</li>
+				<li>{ fmt.Sprintf("Open questions: %d", today.Status.OpenQuestions) }</li>
+				<li>{ "Bind: " + serving.Bind }</li>
+				<li>{ "Cookie auth: " + formatCookieAuth(serving.CookieAuth) }</li>
+			</ul>
+		</section>
+	</div>
+}
+
+// focusEmpty is a focus list's empty state: what would put something there.
+func focusEmpty(k focus.Kind) string {
+	if k == focus.KindLoad {
+		return "Nothing is weighing on you. Worries and open loops you capture show up here."
+	}
+	return "Nothing needs your attention right now. Capture a task or an event and it shows up here."
 }
 
 // dateLayout is today.templ's one date format — I18's distinct labels

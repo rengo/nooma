@@ -103,6 +103,25 @@ func (h *Handler) serveCorrect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.renderCorrectResponse(w, r, result)
+}
+
+// renderCorrectResponse keeps the user on the unit they corrected: the unit
+// page, read again after the edit, carrying the outcome. The answer is the
+// full page with or without htmx. Only when the unit cannot be read back
+// does it fall back to the capture answer.
+func (h *Handler) renderCorrectResponse(w http.ResponseWriter, r *http.Request, result brain.CaptureResult) {
+	if h.deps.Units != nil {
+		detail, found, err := h.deps.Units.Detail(r.Context(), r.PathValue("id"))
+		if err != nil {
+			slog.Error("correct: reading the unit back failed", "err", err)
+		}
+		if err == nil && found {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = UnitPage(detail, &result).Render(r.Context(), w)
+			return
+		}
+	}
 	renderCaptureResponse(w, r, result)
 }
 

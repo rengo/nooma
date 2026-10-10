@@ -71,7 +71,7 @@ func TestLocalTime_UnitPageShowsEveryDateInTheClocksZone(t *testing.T) {
 	page := get(t, ui.Deps{Now: clockIn(t), Units: stubUnitsReader{detail: detail, detailFound: true}},
 		"GET /ui/units/{id}", "/ui/units/u1", "u1")
 
-	for _, want := range []string{"Created: 2026-10-09 13:27", "Event: 2026-10-15 11:00", "Due: 2026-10-15 23:30", zoneNote} {
+	for _, want := range []string{"<dt>Created</dt><dd>2026-10-09 13:27</dd>", "<dt>Event</dt><dd>2026-10-15 11:00</dd>", "<dt>Due</dt><dd>2026-10-15 23:30</dd>", zoneNote} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -149,7 +149,7 @@ func TestLocalTime_NoClockFallsBackToUTCWithoutANote(t *testing.T) {
 	event := time.Date(2026, 10, 15, 14, 0, 0, 0, time.UTC)
 	detail := brain.UnitDetail{Unit: unit.Unit{ID: "u1", Type: unit.TypeEvent, EventAt: &event}}
 	page := get(t, ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}}, "GET /ui/units/{id}", "/ui/units/u1", "u1")
-	if !strings.Contains(page, "Event: 2026-10-15 14:00") || strings.Contains(page, "Times in") {
+	if !strings.Contains(page, "<dt>Event</dt><dd>2026-10-15 14:00</dd>") || strings.Contains(page, "Times in") {
 		t.Errorf("fallback wrong:\n%s", page)
 	}
 }

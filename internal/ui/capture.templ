@@ -18,7 +18,8 @@ templ captureBody(result *brain.CaptureResult) {
 		<h2>CAPTURE</h2>
 		<form method="post" action="/ui/capture" hx-post="/ui/capture" hx-target="#capture-result" hx-swap="innerHTML">
 			<label for="text">Text</label>
-			<textarea id="text" name="text" required></textarea>
+			<p id="text-hint" data-hint>A task, an event, a note, a reminder or a question: write it as you would say it.</p>
+			<textarea id="text" name="text" rows="4" aria-describedby="text-hint" required></textarea>
 			<button type="submit">Capture</button>
 		</form>
 		<div id="capture-result">
