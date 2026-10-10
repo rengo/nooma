@@ -46,7 +46,7 @@ func TestCapture_AnAppointmentOnABareWeekdayIsAnArmedEvent(t *testing.T) {
 	if result.Armed == nil {
 		t.Fatalf("Armed = nil — the appointment got no reminder: %+v", result)
 	}
-	if got := triggers.Count(); got != 1 {
-		t.Errorf("triggers.Count() = %d, want 1 armed reminder", got)
+	if got := triggers.Count(); got != 2 {
+		t.Errorf("triggers.Count() = %d, want 2 armed reminders, the day before and 2 hours before", got)
 	}
 }

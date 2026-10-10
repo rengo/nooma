@@ -32,8 +32,8 @@ func TestCapture_ArmedTriggerRowNamesItsUnit(t *testing.T) {
 		t.Fatalf("Capture: %v", err)
 	}
 	rows, err := log.Before(ctx, nil, string(ports.ActionCaptureArmedTrigger), 10)
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("armed rows = %d (%v), want 1", len(rows), err)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("armed rows = %d (%v), want 2, one per reminder", len(rows), err)
 	}
 	var got struct {
 		UnitID string `json:"unit_id"`

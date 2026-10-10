@@ -69,7 +69,7 @@ func TestArm(t *testing.T) {
 			EventAt: armPtr(at(time.December, 25)),
 		}
 
-		plan, ok := Arm(c, now)
+		plan, ok := armFirst(c, now)
 		if !ok || plan.What != ArmTimer {
 			t.Fatalf("Arm = (%+v, %v), want an ArmTimer plan", plan, ok)
 		}
@@ -87,26 +87,26 @@ func TestArm(t *testing.T) {
 		event := at(time.June, 20)
 		c := classify.Classification{Kind: kind(classify.KindEvent), EventAt: armPtr(event)}
 
-		plan, ok := Arm(c, now)
+		plan, ok := armFirst(c, now)
 		if !ok || plan.What != ArmTrigger {
 			t.Fatalf("Arm = (%+v, %v), want an ArmTrigger plan", plan, ok)
 		}
-		if want := LeadTime(event); !plan.FireAt.Equal(want) {
-			t.Errorf("FireAt = %v, want %v", plan.FireAt, want)
+		if want := event.Add(-DefaultEventLeadFarHours * time.Hour); !plan.FireAt.Equal(want) {
+			t.Errorf("FireAt = %v, want the earliest lead %v", plan.FireAt, want)
 		}
-		if plan.LeadDays != EventLeadDays {
-			t.Errorf("LeadDays = %d, want %d", plan.LeadDays, EventLeadDays)
+		if plan.LeadMinutes != DefaultEventLeadFarHours*60 || plan.LeadDays != 0 {
+			t.Errorf("LeadMinutes, LeadDays = %d, %d, want %d, 0", plan.LeadMinutes, plan.LeadDays, DefaultEventLeadFarHours*60)
 		}
 	})
 
 	t.Run("an event closer than the horizon arms at now, not in the past", func(t *testing.T) {
-		// Two days out: the horizon is five days behind us. Arming there
-		// would be expired by the staleness gate on the very next pass, and
-		// the system is not late for an event it only just learned about.
-		event := at(time.June, 3)
+		// An hour out: every lead is behind us. Arming there would be
+		// expired by the staleness gate on the very next pass, and the
+		// system is not late for an event it only just learned about.
+		event := now.Add(time.Hour)
 		c := classify.Classification{Kind: kind(classify.KindEvent), EventAt: armPtr(event)}
 
-		plan, ok := Arm(c, now)
+		plan, ok := armFirst(c, now)
 		if !ok || plan.What != ArmTrigger {
 			t.Fatalf("Arm = (%+v, %v), want an ArmTrigger plan", plan, ok)
 		}
@@ -128,7 +128,7 @@ func TestArm(t *testing.T) {
 			RecurrenceRule: armPtr(classify.RecurrenceRuleYearly),
 		}
 
-		plan, ok := Arm(c, now)
+		plan, ok := armFirst(c, now)
 		if !ok || plan.What != ArmRecurring {
 			t.Fatalf("Arm = (%+v, %v), want an ArmRecurring plan", plan, ok)
 		}
@@ -143,6 +143,10 @@ func TestArm(t *testing.T) {
 		}
 		if want := LeadTime(NextOccurrence(RuleYearly, plan.Anchor, now)); !plan.FireAt.Equal(want) {
 			t.Errorf("FireAt = %v, want %v", plan.FireAt, want)
+		}
+		if plan.LeadDays != EventLeadDays || plan.LeadMinutes != 0 {
+			t.Errorf("LeadDays, LeadMinutes = %d, %d, want %d, 0 — a recurrence keeps its seven days (ADR-0029 point 7)",
+				plan.LeadDays, plan.LeadMinutes, EventLeadDays)
 		}
 	})
 
@@ -182,7 +186,7 @@ func TestArm(t *testing.T) {
 				RecurrenceRule: armPtr(from),
 			}
 
-			plan, ok := Arm(c, now)
+			plan, ok := armFirst(c, now)
 			if !ok || plan.What != ArmRecurring {
 				t.Fatalf("%q: Arm = (%+v, %v), want an ArmRecurring plan", from, plan, ok)
 			}
@@ -248,7 +252,7 @@ func TestArm(t *testing.T) {
 			RecurrenceRule: nil,
 		}
 
-		plan, ok := Arm(c, now)
+		plan, ok := armFirst(c, now)
 		if !ok || plan.What != ArmTrigger {
 			t.Fatalf("Arm = (%+v, %v), want an ArmTrigger plan — the capture is honoured and "+
 				"the recurrence is not invented", plan, ok)
@@ -306,7 +310,7 @@ func TestArm(t *testing.T) {
 		seen := map[Refusal]int{}
 		for name, tc := range cases {
 			t.Run(name, func(t *testing.T) {
-				plan, ok := Arm(tc.c, now)
+				plan, ok := armFirst(tc.c, now)
 				if ok {
 					t.Errorf("Arm = (%+v, true), want false", plan)
 				}
@@ -331,7 +335,7 @@ func TestArm(t *testing.T) {
 	})
 
 	t.Run("an armed plan carries no refusal", func(t *testing.T) {
-		plan, ok := Arm(classify.Classification{
+		plan, ok := armFirst(classify.Classification{
 			Kind: kind(classify.KindEvent), EventAt: armPtr(at(time.June, 20)),
 		}, now)
 		if !ok {
@@ -355,14 +359,14 @@ func TestArm(t *testing.T) {
 			Kind: kind(classify.KindEvent), EventAt: armPtr(event),
 			InterruptLevel: armPtr(0.0),
 		}
-		plan, _ := Arm(claimed, now)
+		plan, _ := armFirst(claimed, now)
 		if plan.Interrupt.Degraded() {
 			t.Errorf("a claimed 0.0 produced a degraded Interrupt — the plan must carry the " +
 				"model's own claim, not a zero value")
 		}
 
 		absent := classify.Classification{Kind: kind(classify.KindEvent), EventAt: armPtr(event)}
-		plan, _ = Arm(absent, now)
+		plan, _ = armFirst(absent, now)
 		if !plan.Interrupt.Degraded() {
 			t.Errorf("an absent reading produced a non-degraded Interrupt")
 		}
@@ -375,7 +379,7 @@ func TestArm(t *testing.T) {
 			Kind: kind(classify.KindEvent), EventAt: armPtr(event),
 			InterruptLevel: armPtr(0.95),
 		}
-		plan, _ = Arm(urgent, now)
+		plan, _ = armFirst(urgent, now)
 		if plan.Interrupt.Route() != RoutePush {
 			t.Errorf("Route = %q, want %q for a claimed 0.95", plan.Interrupt.Route(), RoutePush)
 		}
@@ -405,7 +409,7 @@ func TestArm_ReadsOneTimestampPerKind(t *testing.T) {
 	kind := func(k classify.Kind) *classify.Kind { return &k }
 
 	t.Run("a timer reads due_at only", func(t *testing.T) {
-		plan, ok := Arm(classify.Classification{
+		plan, ok := armFirst(classify.Classification{
 			Kind: kind(classify.KindTimer), DueAt: &due, EventAt: &event,
 		}, now)
 		if !ok {
@@ -423,7 +427,7 @@ func TestArm_ReadsOneTimestampPerKind(t *testing.T) {
 	})
 
 	t.Run("an event reads event_at only", func(t *testing.T) {
-		plan, ok := Arm(classify.Classification{
+		plan, ok := armFirst(classify.Classification{
 			Kind: kind(classify.KindEvent), EventAt: &event, DueAt: &due,
 		}, now)
 		if !ok {
@@ -433,7 +437,7 @@ func TestArm_ReadsOneTimestampPerKind(t *testing.T) {
 			t.Errorf("FireAt = %v, derived from the DUE instant — an event that reads due_at "+
 				"arms against a timestamp that means something else", plan.FireAt)
 		}
-		if want := LeadTime(event); !plan.FireAt.Equal(want) {
+		if want := event.Add(-DefaultEventLeadFarHours * time.Hour); !plan.FireAt.Equal(want) {
 			t.Errorf("FireAt = %v, want %v", plan.FireAt, want)
 		}
 	})
@@ -445,7 +449,7 @@ func TestArm_ReadsOneTimestampPerKind(t *testing.T) {
 		// cannot quietly reach for one.
 		for _, k := range classify.AllKinds() {
 			c := classify.Classification{Kind: kind(k), EventAt: &event, DueAt: &due}
-			plan, ok := Arm(c, now)
+			plan, ok := armFirst(c, now)
 			if !ok {
 				continue
 			}
@@ -489,7 +493,7 @@ func TestPlanAndArmamentVocabulary(t *testing.T) {
 			{Kind: kind(k), EventAt: &now, DueAt: &now},
 			{Kind: kind(k), EventAt: armPtr(now.AddDate(0, 2, 0)), DueAt: armPtr(now.Add(time.Hour))},
 		} {
-			plan, _ := Arm(c, now)
+			plan, _ := armFirst(c, now)
 			if !named[plan.What] {
 				t.Errorf("Kind %q produced What = %q, which is not one of the four named "+
 					"Armament values — every path out of Arm is a decision, including a refusal",
@@ -499,7 +503,7 @@ func TestPlanAndArmamentVocabulary(t *testing.T) {
 	}
 
 	// And with no Kind at all, which is its own path.
-	if plan, _ := Arm(classify.Classification{}, now); plan.What != ArmNothing {
+	if plan, _ := armFirst(classify.Classification{}, now); plan.What != ArmNothing {
 		t.Errorf("a classification with no Kind produced What = %q, want %q", plan.What, ArmNothing)
 	}
 }
@@ -524,7 +528,7 @@ func TestArm_RecurringIgnoresHowOldItsAnchorIs(t *testing.T) {
 	kind := func(k classify.Kind) *classify.Kind { return &k }
 
 	born := time.Date(1985, time.September, 4, 6, 15, 0, 0, loc)
-	plan, ok := Arm(classify.Classification{
+	plan, ok := armFirst(classify.Classification{
 		Kind:           kind(classify.KindRecurringReminder),
 		EventAt:        &born,
 		RecurrenceRule: armPtr(classify.RecurrenceRuleYearly),
@@ -546,7 +550,7 @@ func TestArm_RecurringIgnoresHowOldItsAnchorIs(t *testing.T) {
 	// The contrast, in the same test so the boundary is visible: without a
 	// rule, the same classification IS a one-shot occurrence, and a one-shot
 	// occurrence decades past arms nothing.
-	oneShot, ok := Arm(classify.Classification{
+	oneShot, ok := armFirst(classify.Classification{
 		Kind:    kind(classify.KindRecurringReminder),
 		EventAt: &born,
 	}, now)
@@ -579,7 +583,7 @@ func TestArm_AnchorIsTheDateAsStated(t *testing.T) {
 			stated.In(nowLoc).Day())
 	}
 
-	plan, ok := Arm(classify.Classification{
+	plan, ok := armFirst(classify.Classification{
 		Kind:           kind(classify.KindRecurringReminder),
 		EventAt:        &stated,
 		RecurrenceRule: armPtr(classify.RecurrenceRuleYearly),
@@ -619,7 +623,7 @@ func TestArm_WeeklyAnchorsOnTheEventsOwnWeekday(t *testing.T) {
 			RecurrenceRule: armPtr(classify.RecurrenceRuleWeekly),
 		}
 
-		plan, ok := Arm(c, now)
+		plan, ok := armFirst(c, now)
 		if !ok || plan.What != ArmRecurring {
 			t.Fatalf("%s: Arm = (%+v, %v), want an ArmRecurring plan", event.Weekday(), plan, ok)
 		}
@@ -635,4 +639,11 @@ func TestArm_WeeklyAnchorsOnTheEventsOwnWeekday(t *testing.T) {
 			t.Errorf("event on a %s anchored on %s", event.Weekday(), *plan.Anchor.Weekday)
 		}
 	}
+}
+
+// armFirst is Arm with the default preferences, reduced to its first plan:
+// every case in this file arms at most one row, or asserts on the earliest.
+func armFirst(c classify.Classification, now time.Time) (Plan, bool) {
+	plans, ok := Arm(c, DefaultReminderPrefs(), now)
+	return plans[0], ok
 }

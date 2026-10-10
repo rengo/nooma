@@ -13,6 +13,7 @@ import (
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
@@ -111,8 +112,10 @@ func TestCaptureArmRefusal_WritesARowExactlyWhenTheCaptureIsOtherwiseTraceless(t
 						}
 					}
 
-					if c.armed > 1 {
-						t.Errorf("%d capture.armed.* rows, want at most 1 — one Plan is one row", c.armed)
+					// A dated event arms one reminder per lead (ADR-0029), each
+					// its own Plan and its own row.
+					if limit := len(prospection.DefaultReminderPrefs().TimedLeads); c.armed > limit {
+						t.Errorf("%d capture.armed.* rows, want at most %d — one Plan is one row", c.armed, limit)
 					}
 					if len(c.refused) > 1 {
 						t.Errorf("%d capture.arm.refused rows, want at most 1", len(c.refused))
