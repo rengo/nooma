@@ -56,7 +56,7 @@ func (c *Client) Embed(ctx context.Context, req ports.EmbedRequest) (ports.Embed
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return ports.EmbedResponse{}, fmt.Errorf("openai: embed request failed: %w", err)
+		return ports.EmbedResponse{}, ports.TransportFailure("openai", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -65,7 +65,7 @@ func (c *Client) Embed(ctx context.Context, req ports.EmbedRequest) (ports.Embed
 		return ports.EmbedResponse{}, fmt.Errorf("openai: reading embed response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return ports.EmbedResponse{}, fmt.Errorf("openai: embed request failed with status %d: %s", resp.StatusCode, respBody)
+		return ports.EmbedResponse{}, ports.StatusFailure("openai", resp.StatusCode)
 	}
 
 	var parsed embedResponse

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ var doctorChecks = []doctorCheck{
 	{"database integrity", checkIntegrity},
 	{"schema version", checkSchema},
 	{"bind", checkBindExposure},
+	{"provider keys", checkProviderKeys},
 	{"llm quality", checkLLMQuality},
 	{"task coverage", checkTaskCoverage},
 	{"vault coverage", checkVaultCoverage},
@@ -168,6 +170,46 @@ func checkBindExposure(_ string, cfg *config.Config) error {
 		}
 	}
 	return fmt.Errorf("the effective bind could not be determined")
+}
+
+// checkProviderKeys flags a provider some task is bound to whose api_key_env
+// holds nothing. It reads presence only: a value is never printed, and whether
+// the vendor accepts it is the quality gate's business.
+func checkProviderKeys(_ string, cfg *config.Config) error {
+	problems := providerKeyProblems(cfg, os.LookupEnv)
+	if len(problems) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(problems, "\n"))
+}
+
+// providerKeyProblems reports, one line per provider, each key a bound task
+// needs and the environment lacks. Providers no task uses are skipped: a key
+// nothing will read is not a problem.
+func providerKeyProblems(cfg *config.Config, lookup func(string) (string, bool)) []string {
+	used := make(map[string]bool)
+	for _, binding := range cfg.Tasks {
+		used[binding.Provider] = true
+	}
+	var names []string
+	for name := range used {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var problems []string
+	for _, name := range names {
+		p, present := cfg.Providers[name]
+		if !present || p.APIKeyEnv == "" {
+			continue
+		}
+		if value, _ := lookup(p.APIKeyEnv); value == "" {
+			problems = append(problems, fmt.Sprintf(
+				"provider %s (%s): %s is not set — put it in the vault's .env or the environment",
+				name, p.Type, p.APIKeyEnv))
+		}
+	}
+	return problems
 }
 
 // jsonTasks is the fixed, ordered set of tasks the quality gate checks —

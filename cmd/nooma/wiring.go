@@ -49,6 +49,27 @@ func (uuidGen) New() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// keyMissingLLM stands in for a provider whose api_key_env holds nothing. It
+// builds, so serve still starts on a vault whose key is not set yet, and every
+// call fails with a ports.ProviderError naming the variable — which is what
+// the surfaces turn into a plain sentence. Sending the request with an empty
+// key would only earn a 401 that blames the key the user never supplied.
+type keyMissingLLM struct{ err *ports.ProviderError }
+
+func (g keyMissingLLM) Complete(context.Context, ports.LLMRequest) (ports.LLMResponse, error) {
+	return ports.LLMResponse{}, g.err
+}
+
+// keyMissingLLMEmbed is keyMissingLLM for a type whose real client also
+// embeds. The two guards exist so a guard satisfies exactly the ports its
+// real client does: resolveTaskProviders refuses an anthropic embedding
+// binding by asserting the port.
+type keyMissingLLMEmbed struct{ keyMissingLLM }
+
+func (g keyMissingLLMEmbed) Embed(context.Context, ports.EmbedRequest) (ports.EmbedResponse, error) {
+	return ports.EmbedResponse{}, g.err
+}
+
 // buildProvider constructs the client cfg.Providers[name] describes. lookup
 // resolves an api_key_env name to its value, the same injected-environment
 // shape every other config-adjacent call in this command already takes.
@@ -64,9 +85,15 @@ func buildProvider(p config.Provider, lookup func(string) (string, bool)) (any, 
 	switch p.Type {
 	case "anthropic":
 		apiKey, _ := lookup(p.APIKeyEnv)
+		if apiKey == "" {
+			return keyMissingLLM{ports.KeyMissing("anthropic", p.APIKeyEnv)}, nil
+		}
 		return anthropic.NewClient(p.Endpoint, apiKey, p.Model, http.DefaultClient), nil
 	case "openai":
 		apiKey, _ := lookup(p.APIKeyEnv)
+		if apiKey == "" {
+			return keyMissingLLMEmbed{keyMissingLLM{ports.KeyMissing("openai", p.APIKeyEnv)}}, nil
+		}
 		return openai.NewClient(p.Endpoint, apiKey, p.Model, http.DefaultClient), nil
 	case "ollama":
 		return ollama.NewClient(p.Endpoint, p.Model, http.DefaultClient), nil

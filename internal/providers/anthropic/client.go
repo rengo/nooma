@@ -91,7 +91,7 @@ func (c *Client) Complete(ctx context.Context, req ports.LLMRequest) (ports.LLMR
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return ports.LLMResponse{}, fmt.Errorf("anthropic: request failed: %w", err)
+		return ports.LLMResponse{}, ports.TransportFailure("anthropic", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -100,7 +100,7 @@ func (c *Client) Complete(ctx context.Context, req ports.LLMRequest) (ports.LLMR
 		return ports.LLMResponse{}, fmt.Errorf("anthropic: reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return ports.LLMResponse{}, fmt.Errorf("anthropic: request failed with status %d: %s", resp.StatusCode, respBody)
+		return ports.LLMResponse{}, ports.StatusFailure("anthropic", resp.StatusCode)
 	}
 
 	var parsed messagesResponse
