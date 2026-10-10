@@ -140,30 +140,59 @@ func TestSet_Found_AgreesWithItsNumber(t *testing.T) {
 // that arrives at once.
 func TestSet_Lead_ReadsImmediateRatherThanDerivingIt(t *testing.T) {
 	es := For(classify.LanguageES)
+	zone := time.FixedZone("ART", -3*60*60)
+	about := time.Date(2026, 10, 16, 10, 0, 0, 0, zone)
 
-	if got, want := es.Lead(true, 41*time.Hour), es.LeadImmediate; got != want {
+	if got, want := es.Lead(true, about.Add(-41*time.Hour), about), es.LeadImmediate; got != want {
 		t.Errorf("Lead(immediate=true, 41h) = %q, want %q — the plan's own fact wins over the arithmetic", got, want)
 	}
 
+	// The day is the calendar's, in the event's own zone, not a 24-48 hour
+	// gap: a date-only event at midnight reminded at 09:00 the day before is
+	// 15 hours ahead and is "the day before".
 	tests := []struct {
-		gap  time.Duration
+		fire time.Time
 		want string
 	}{
-		{-time.Hour, es.LeadImmediate},
-		{0, es.LeadImmediate},
-		{2 * time.Hour, es.LeadHours},
-		{23 * time.Hour, es.LeadHours},
-		{24 * time.Hour, es.LeadDayBefore},
-		{47 * time.Hour, es.LeadDayBefore},
+		{about.Add(time.Hour), es.LeadImmediate},
+		{about, es.LeadImmediate},
+		{about.Add(-2 * time.Hour), es.LeadHours},
+		{time.Date(2026, 10, 16, 0, 30, 0, 0, zone), es.LeadHours},
+		{about.Add(-24 * time.Hour), es.LeadDayBefore},
+		{time.Date(2026, 10, 15, 0, 0, 0, 0, zone), es.LeadDayBefore},
+		{time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC), es.LeadDayBefore}, // 06:00 the 15th in ART
+		{about.Add(-72 * time.Hour), "3 días antes"},
 	}
 	for _, tt := range tests {
-		if got := es.Lead(false, tt.gap); got != tt.want {
-			t.Errorf("Lead(false, %v) = %q, want %q", tt.gap, got, tt.want)
+		if got := es.Lead(false, tt.fire, about); got != tt.want {
+			t.Errorf("Lead(false, %v, %v) = %q, want %q", tt.fire, about, got, tt.want)
 		}
 	}
+	date := time.Date(2026, 10, 16, 0, 0, 0, 0, zone)
+	if got := es.Lead(false, time.Date(2026, 10, 15, 9, 0, 0, 0, zone), date); got != es.LeadDayBefore {
+		t.Errorf("Lead(09:00 the day before a date) = %q, want %q", got, es.LeadDayBefore)
+	}
+}
 
-	if got, want := es.Lead(false, 72*time.Hour), "3 días antes"; got != want {
-		t.Errorf("Lead(false, 72h) = %q, want %q", got, want)
+// TestSet_Leads_NamesEveryReminder covers ADR-0029's reply: every reminder
+// of an event is named, joined in the message's language, and two that
+// read alike are said once.
+func TestSet_Leads_NamesEveryReminder(t *testing.T) {
+	en, es := For(classify.LanguageEN), For(classify.LanguageES)
+	about := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	dayBefore, hoursBefore := about.Add(-24*time.Hour), about.Add(-2*time.Hour)
+
+	if got, want := en.Leads(false, about, dayBefore, hoursBefore), "the day before and a few hours before"; got != want {
+		t.Errorf("en.Leads = %q, want %q", got, want)
+	}
+	if got, want := es.Leads(false, about, dayBefore, hoursBefore), "el día anterior y unas horas antes"; got != want {
+		t.Errorf("es.Leads = %q, want %q", got, want)
+	}
+	if got, want := en.Leads(false, about, about.Add(-3*time.Hour), hoursBefore), en.LeadHours; got != want {
+		t.Errorf("en.Leads of two alike = %q, want %q said once", got, want)
+	}
+	if got, want := en.Leads(true, about, hoursBefore), en.LeadImmediate; got != want {
+		t.Errorf("en.Leads(immediate) = %q, want %q", got, want)
 	}
 }
 

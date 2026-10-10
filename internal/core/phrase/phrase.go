@@ -17,6 +17,7 @@ package phrase
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -81,6 +82,8 @@ type Set struct {
 	LeadHours     string
 	LeadDayBefore string
 	LeadDays      string
+	// And joins the last two of several lead phrases.
+	And string
 
 	// FoundOne takes one %d and FoundMany takes one %d. Two fields rather
 	// than one plural rule because plural agreement is not a shared
@@ -132,6 +135,7 @@ var sets = map[classify.Language]Set{
 		LeadHours:     "a few hours before",
 		LeadDayBefore: "the day before",
 		LeadDays:      "%d days before",
+		And:           "and",
 
 		FoundOne:  "Found %d thing:",
 		FoundMany: "Found %d things:",
@@ -167,6 +171,7 @@ var sets = map[classify.Language]Set{
 		LeadHours:     "unas horas antes",
 		LeadDayBefore: "el día anterior",
 		LeadDays:      "%d días antes",
+		And:           "y",
 
 		FoundOne:  "Encontré %d cosa:",
 		FoundMany: "Encontré %d cosas:",
@@ -217,23 +222,45 @@ func (s Set) Found(n int) string {
 	return fmt.Sprintf(s.FoundMany, n)
 }
 
-// Lead names when a nudge arrives, relative to what it is about.
+// Lead names when a nudge firing at fire arrives, relative to about.
 //
-// It takes the gap and whether the plan called itself immediate, rather
-// than deriving the second from the first: subtracting the two instants
-// gives a true duration and a false promise — 41 hours reads as "the day
-// before" for a reminder that arrives at once.
-func (s Set) Lead(immediate bool, gap time.Duration) string {
-	switch {
-	case immediate, gap <= 0:
+// It takes whether the plan called itself immediate rather than deriving
+// it: subtracting the two instants gives a true duration and a false
+// promise — 41 hours reads as "the day before" for a reminder that arrives
+// at once. The day is counted on the calendar, in about's own zone: 09:00
+// the day before a date-only event is 15 hours ahead and is "the day
+// before" (ADR-0029).
+func (s Set) Lead(immediate bool, fire, about time.Time) string {
+	if immediate || !about.After(fire) {
 		return s.LeadImmediate
-	case gap < 24*time.Hour:
+	}
+	y, m, d := fire.In(about.Location()).Date()
+	ay, am, ad := about.Date()
+	days := int(time.Date(ay, am, ad, 0, 0, 0, 0, time.UTC).Sub(time.Date(y, m, d, 0, 0, 0, 0, time.UTC)).Hours() / 24)
+	switch days {
+	case 0:
 		return s.LeadHours
-	case gap < 48*time.Hour:
+	case 1:
 		return s.LeadDayBefore
 	default:
-		return fmt.Sprintf(s.LeadDays, int(gap.Hours()/24))
+		return fmt.Sprintf(s.LeadDays, days)
 	}
+}
+
+// Leads names every reminder of one event, earliest first, joined in the
+// language; two that read alike are said once. immediate is the earliest
+// firing's own fact.
+func (s Set) Leads(immediate bool, about time.Time, fires ...time.Time) string {
+	var said []string
+	for i, fire := range fires {
+		if p := s.Lead(immediate && i == 0, fire, about); !slices.Contains(said, p) {
+			said = append(said, p)
+		}
+	}
+	if len(said) < 2 {
+		return strings.Join(said, "")
+	}
+	return strings.Join(said[:len(said)-1], ", ") + " " + s.And + " " + said[len(said)-1]
 }
 
 // List renders a recall's header and its bullets as one message.
