@@ -412,7 +412,8 @@ func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup
 		archiveThreshold = consolidation.ResolveWeightThreshold(stored.WeightThreshold)
 	}
 
-	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, chatter, embed, index, signals, triggers, timers, archiveThreshold, sqlite.NewPendingQuestionRepo(db))
+	capture := brain.NewCaptureService(systemClock{}, uuidGen{}, units, embeds, lex, rels, log, llm, judge, chatter, embed, index, signals, triggers, timers, archiveThreshold, sqlite.NewPendingQuestionRepo(db)).
+		WithReminderPrefs(sqlite.NewConfigRepo(db))
 	recall := brain.NewRecallService(index, lex, units, embed)
 	return capture, recall, nil
 }

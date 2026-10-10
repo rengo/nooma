@@ -8,9 +8,10 @@ import (
 
 // TestParseMigrationsRealEmbeddedSet is D10's non-empty-corpus guard applied
 // to the real embedded migration set: it asserts parseMigrations finds
-// exactly versions 1..5 (0001_core_tables.sql, 0002_learning_and_search.sql,
+// exactly versions 1..6 (0001_core_tables.sql, 0002_learning_and_search.sql,
 // 0003_current_state_source.sql, 0004_pending_questions.sql,
-// 0005_units_browse_index.sql — R3.8, m4b design §3.2's browse index) with
+// 0005_units_browse_index.sql — R3.8, m4b design §3.2's browse index —
+// and 0006_reminder_preferences.sql, ADR-0029) with
 // non-empty SQL, before any other test in this file trusts synthetic inputs
 // to mean anything.
 func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
@@ -18,8 +19,8 @@ func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMigrations(migrationFS) = _, %v, want nil error", err)
 	}
-	if len(migrations) != 5 {
-		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 5 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql, 0004_pending_questions.sql, 0005_units_browse_index.sql)", len(migrations))
+	if len(migrations) != 6 {
+		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 6 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql, 0004_pending_questions.sql, 0005_units_browse_index.sql, 0006_reminder_preferences.sql)", len(migrations))
 	}
 	for _, m := range migrations {
 		if strings.TrimSpace(m.SQL) == "" {
@@ -40,6 +41,9 @@ func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	}
 	if migrations[4].Version != 5 {
 		t.Errorf("migrations[4].Version = %d, want 5", migrations[4].Version)
+	}
+	if migrations[5].Version != 6 {
+		t.Errorf("migrations[5].Version = %d, want 6", migrations[5].Version)
 	}
 }
 

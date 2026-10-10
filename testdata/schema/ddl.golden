@@ -13,7 +13,7 @@ CREATE TABLE config (
   mental_load_threshold     INTEGER NOT NULL DEFAULT 7,
   consolidation_last_run_at TEXT,                -- NULL = never ran
   updated_at                TEXT NOT NULL
-);
+, event_reminder_leads TEXT, date_only_reminder_at TEXT);
 
 CREATE TABLE current_state (
   id          TEXT PRIMARY KEY,

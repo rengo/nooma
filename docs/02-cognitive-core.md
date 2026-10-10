@@ -1227,7 +1227,16 @@ have N nudges; a pattern watcher does not hang off any unit):
   instant — by default 24 hours and 2 hours, as absolute durations. A **date-only** event — an
   `event_at` at exactly local midnight in the user's zone (the clock's), which is how a bare
   date is stored (§5.1) — once, the day before at the user's reminder time, by default 09:00
-  local. Each lead is stored in its trigger's `payload.lead_minutes`. An event at genuine
+  local. Each lead is stored in its trigger's `payload.lead_minutes`.
+  **The leads and the reminder time are the user's preferences**, not calibration: two
+  `config` columns, `event_reminder_leads` (a JSON array of minutes) and
+  `date_only_reminder_at` (`HH:MM`), read at arm time by capture and by a correction alike,
+  each resolved by `internal/core/prospection.ResolveReminderPrefs`. `NULL` means never chosen,
+  so a later change of default reaches everyone who never chose; a stored value that fails
+  validation falls back to its own default. Valid: 1 to `max_event_reminder_leads` leads, each
+  a whole number of minutes from 1 to `max_event_lead_days` days, no two equal; a time from
+  `00:00` to `23:59`. A change of preference re-arms every armed one-shot reminder of an event
+  still ahead, through the decision a correction uses; it ships with the first writer. An event at genuine
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is
@@ -1492,7 +1501,7 @@ caps.
 ## 13. Calibration — numbers vs mechanisms
 
 Initial defaults (global config; those marked ⚙ are recalibratable per user by the learning
-module):
+module; those that say *user-overridable* are the user's own preferences, stored in `config`):
 
 | Knob | Default |
 |---|---|
@@ -1532,9 +1541,11 @@ module):
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
 | `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a recurring reminder's next occurrence its trigger fires; a dated event uses the three rows below (ADR-0029). A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
-| Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours`) | 24 — hours before a timed event its first reminder fires (ADR-0029) |
-| Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours`) | 2 — hours before a timed event its second reminder fires |
-| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour`) | 9 — local hour, the day before, a date-only event is reminded |
+| Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours` + `ResolveReminderPrefs`) | 24 — hours before a timed event its first reminder fires (ADR-0029). User-overridable: `config.event_reminder_leads` |
+| Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours` + `ResolveReminderPrefs`) | 2 — hours before a timed event its second reminder fires. User-overridable, same column |
+| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded. User-overridable: `config.date_only_reminder_at` |
+| `max_event_reminder_leads` (`internal/core/prospection.MaxEventReminderLeads`) | 5 — the most reminders a user may set per timed event; a bound on input, not a default |
+| `max_event_lead_days` (`internal/core/prospection.MaxEventLeadDays`) | 30 — the furthest ahead of a timed event a user may set a reminder |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
