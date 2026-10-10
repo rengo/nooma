@@ -854,6 +854,11 @@ neither a credential, a vendor's response body nor the captured text. This is th
 later step's outage (§5 step 3, the relation judge), which degrades because the unit is already
 stored.
 
+**A provider call has a deadline** (I32, `provider_timeout` in §13). A provider that accepts the
+request and never answers ends the capture as a timeout at that deadline; it never holds the
+capture, or the caller's terminal, open. A caller that hangs up first is logged as `canceled`,
+not as a provider that is down.
+
 **A response may carry a preamble around its object, and the preamble is discarded, not
 treated as a malformed field.** A model asked to answer with one JSON object and nothing else can
 still wrap that object in a markdown code fence, or add a line of its own prose before it — a live
@@ -1528,6 +1533,7 @@ module):
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
 | `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a dated event its trigger fires. A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
+| `provider_timeout` (`internal/config.DefaultProviderTimeout`; per provider `timeout:` overrides) | 60 s — how long one provider call may take before it fails as a timeout (I32). A local model on modest hardware may need more |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
 | Consolidation hour (`internal/scheduler.ConsolidationHour`) — **not checked by the calibration gate, and splitting this row did not fix that.** The gate's regex matches `internal/core/…` only and never reaches `internal/scheduler`, so naming the constant here buys nothing. The row said splitting it was M3's job; M3 split it and found the diagnosis was wrong. Making it genuinely checkable means moving the hour into `internal/core`, recorded as a work unit outside M3 (owner ruling 5) | 3 — 03:00 daily |

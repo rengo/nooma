@@ -210,6 +210,7 @@ providers:
     type: ollama
     endpoint: http://localhost:11434
     model: llama3.1:70b
+    timeout: 120s                     # optional: per-call deadline, default 60s (doc 02 §13)
   whisper_local:
     type: whisper_cpp
     binary_path: /usr/local/bin/whisper
