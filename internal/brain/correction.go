@@ -57,8 +57,8 @@ type referentSource struct {
 // ask instead of deciding: no unit is touched, one correction.ambiguous row
 // is written, and the returned *Correction carries Ambiguous == true for
 // the caller to map onto OutcomeAsked.
-func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Classification, now time.Time) (*Correction, error) {
-	target, ref, err := r.resolveReferent(ctx, in, now)
+func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Classification, explicit *unit.Unit, now time.Time) (*Correction, error) {
+	target, ref, err := r.resolveReferent(ctx, in, explicit, now)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +102,19 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		}
 		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskPlanAmbiguous}, nil
 	}
+	// A correction is a patch (doc 02 §5 step 4, I30): content alone may
+	// replace the body only while it still states the instant the unit
+	// keeps. Otherwise it is the utterance standing in for the unit, or a
+	// body that would disagree with its own date — ask.
+	if v, isContent := plan[0].Content(); isContent && !correction.KeepsInstant(v, *target, now.Location()) {
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason AskReason `json:"reason"`
+			UnitID string    `json:"unit_id"`
+		}{Reason: AskContentLosesDate, UnitID: target.ID}); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskContentLosesDate}, nil
+	}
 	// A moved date carries the body that states it (doc 02 §5 step 4, I29).
 	// now's zone is the user's: the frame the body was most likely written
 	// in.
@@ -118,12 +131,12 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 	return &Correction{UnitID: target.ID, Fields: fields}, nil
 }
 
-// resolveReferent is R1.5/R1.6's own fork: in.ReferentID wins wherever it
-// is non-empty, and recall does not run at all when it does (design D7's
-// "an instrumented index that fails the test if queried proves it" —
-// r.recall.ScoredFor is simply never called on this branch). An unknown
-// explicit id is an error, never a silent fallback to recall (R1.5's own
-// MUST — a fallback would defeat the caller's explicit intent).
+// resolveReferent is R1.5/R1.6's own fork: an explicit referent wins
+// wherever the caller named one — captureRunner already read it with
+// explicitReferent, before classifying against it (I30) — and recall does
+// not run at all when it does (design D7's "an instrumented index that
+// fails the test if queried proves it" — r.recall.ScoredFor is simply never
+// called on this branch).
 //
 // Otherwise it runs r.recall.ScoredFor(ctx, in.Text) — the raw text, D9's
 // forced argument — and gates the result through correction.Referent at
@@ -134,16 +147,9 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 // scorer, so the ratio Referent computes is the ratio over the survivors,
 // never recomputed by this method itself. A nil target with a nil error
 // means the gate asked; the caller records that outcome.
-func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, now time.Time) (*unit.Unit, referentSource, error) {
-	if in.ReferentID != "" {
-		u, err := r.units.ByID(ctx, in.ReferentID)
-		if errors.Is(err, ports.ErrUnitNotFound) {
-			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w: %w", in.ReferentID, ErrUnknownReferent, err)
-		}
-		if err != nil {
-			return nil, referentSource{}, fmt.Errorf("correction: resolve explicit referent %q: %w", in.ReferentID, err)
-		}
-		return &u, referentSource{Source: "explicit"}, nil
+func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, explicit *unit.Unit, now time.Time) (*unit.Unit, referentSource, error) {
+	if explicit != nil {
+		return explicit, referentSource{Source: "explicit"}, nil
 	}
 
 	scored, _, err := r.recall.ScoredFor(ctx, in.Text)
@@ -183,6 +189,20 @@ func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, 
 		ref.RunnerUpScore = &runnerUp
 	}
 	return &target, ref, nil
+}
+
+// explicitReferent reads the unit a caller named. An unknown id is an
+// error, never a silent fallback to recall (R1.5's own MUST — a fallback
+// would defeat the caller's explicit intent).
+func (r correctionRunner) explicitReferent(ctx context.Context, id string) (unit.Unit, error) {
+	u, err := r.units.ByID(ctx, id)
+	if errors.Is(err, ports.ErrUnitNotFound) {
+		return unit.Unit{}, fmt.Errorf("correction: resolve explicit referent %q: %w: %w", id, ErrUnknownReferent, err)
+	}
+	if err != nil {
+		return unit.Unit{}, fmt.Errorf("correction: resolve explicit referent %q: %w", id, err)
+	}
+	return u, nil
 }
 
 // recordAmbiguousDecision writes design D2/D3's ask row

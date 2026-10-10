@@ -66,7 +66,10 @@ is on the 15th.
 7. **Corrects in place.** "Actually the dentist is on the 15th" is a `correction`. Where the
    caller holds a unit id (the UI and the API do), that id wins. In chat there is none, so
    Nooma finds the referent by recall and **asks** when it cannot tell which unit you mean
-   rather than guessing. The edit changes the one field you corrected, with its pre-image
+   rather than guessing. A correction is a patch: from a unit page, "it's at 8am" is read
+   against that unit, so the time moves and the rest of the text stays; a change that would
+   replace the text with the correction itself, or leave text and date disagreeing, asks instead
+   (I30). The edit changes the one field you corrected, with its pre-image
    recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
    unit's reminder as a fresh capture of the new date would. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 

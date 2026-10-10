@@ -209,6 +209,21 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
 	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold)
 
+	// **A correction that names its unit is classified against it** (doc 02
+	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the
+	// model could only answer with content, and that content replaced a
+	// flight's whole body. The unit is read before the LLM call, so an
+	// unknown id fails without spending one.
+	var explicit *unit.Unit
+	if in.ReferentID != "" {
+		u, err := r.correction.explicitReferent(ctx, in.ReferentID)
+		if err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
+		}
+		explicit = &u
+		prompt = classify.BuildCorrectionPrompt(in.Text, u, nil, now, r.archiveThreshold)
+	}
+
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: prompt, Task: taskCaptureProcessing, JSONOnly: true})
 	if err != nil {
 		return CaptureResult{}, fmt.Errorf("capture: classify completion: %w", err)
@@ -250,8 +265,8 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// it, while the unit the user was looking at stayed as it was. The fork
 	// sits before check-in resolution and arming so none of those side
 	// effects is reachable; classification still ran, for the value.
-	if in.ReferentID != "" {
-		return r.correct(ctx, in, c, now)
+	if explicit != nil {
+		return r.correct(ctx, in, c, explicit, now)
 	}
 
 	// A check-in answer resolves what it answers, and then the message
@@ -321,7 +336,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// before classify.ToUnit is ever reached, and r.units.Create is never
 	// called for this Kind.
 	if c.Kind != nil && *c.Kind == classify.KindCorrection {
-		return r.correct(ctx, in, c, now)
+		return r.correct(ctx, in, c, nil, now)
 	}
 
 	// The recall fork (spec R2.3, design D9; Conflicts §C11): a
@@ -1363,8 +1378,11 @@ func (r captureRunner) recordRelationDuplicateDecision(ctx context.Context, u un
 // outcomes a correction can end in. Both forks that reach it — an explicit
 // referent, and a correction-typed classification — share it, so a
 // correction answers the same way whichever one recognised it.
-func (r captureRunner) correct(ctx context.Context, in CaptureInput, c classify.Classification, now time.Time) (CaptureResult, error) {
-	corr, err := r.correction.at(ctx, in, c, now)
+//
+// explicit is the unit the caller named, already read; nil on the chat
+// path, where recall resolves it.
+func (r captureRunner) correct(ctx context.Context, in CaptureInput, c classify.Classification, explicit *unit.Unit, now time.Time) (CaptureResult, error) {
+	corr, err := r.correction.at(ctx, in, c, explicit, now)
 	if err != nil {
 		return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
 	}

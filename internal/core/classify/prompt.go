@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
 )
 
 // localDateLayout is how the injected local date is rendered. It is the same
@@ -62,6 +64,20 @@ type Belief struct {
 // process zone. A test Clock fixing a Location is what makes these assertions
 // stable.
 func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold float64) string {
+	return buildPrompt(text, nil, beliefs, now, archiveThreshold)
+}
+
+// BuildCorrectionPrompt is BuildPrompt for a message that corrects target,
+// a unit its caller already named (doc 02 §5 step 4, I30): the same
+// instructions plus the unit as it stands, and the rule that a correction
+// is a patch. Without the unit, "Es a las 8am" names no date, so the model
+// could only answer with content, and its normalization of the utterance
+// replaced the unit's whole body while the date stayed where it was.
+func BuildCorrectionPrompt(text string, target unit.Unit, beliefs []Belief, now time.Time, archiveThreshold float64) string {
+	return buildPrompt(text, &target, beliefs, now, archiveThreshold)
+}
+
+func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time, archiveThreshold float64) string {
 	var b strings.Builder
 
 	b.WriteString("You classify a single message into Nooma's memory model.\n")
@@ -231,10 +247,38 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 	b.WriteString("  effect, and a correction that omits them changes nothing.\n")
 	b.WriteString("  A correction still answers every required field above, like any other type.\n\n")
 
+	if target != nil {
+		writeTarget(&b, *target, now)
+	}
+
 	b.WriteString("Message\n")
 	b.WriteString(text + "\n")
 
 	return b.String()
+}
+
+// writeTarget renders the unit a correction patches, its instants in the
+// user's own frame (the one the message speaks in), and the patch rule.
+func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
+	instant := func(t *time.Time) string {
+		if t == nil {
+			return "none"
+		}
+		return t.In(now.Location()).Format(exampleLayout)
+	}
+	b.WriteString("Correcting this unit\n")
+	b.WriteString("  The message below corrects this unit, whatever it reads like on its own.\n")
+	b.WriteString("  Current text: " + u.Content + "\n")
+	b.WriteString("  Current event_at: " + instant(u.EventAt) + "\n")
+	b.WriteString("  Current due_at: " + instant(u.DueAt) + "\n")
+	b.WriteString("  A correction is a PATCH: change only what the message speaks about and keep\n")
+	b.WriteString("  everything else.\n")
+	b.WriteString("  normalized_content is the unit's WHOLE corrected text — the current text with\n")
+	b.WriteString("  only that change applied, never the message on its own.\n")
+	b.WriteString("  If the message changes the day or the time of event_at or due_at, answer that\n")
+	b.WriteString("  field with the complete new instant:\n")
+	b.WriteString("  keep the current date when only the time changes,\n")
+	b.WriteString("  and keep the current time when only the date changes.\n\n")
 }
 
 // writeCalendar renders the next CalendarDays days, today first and marked,

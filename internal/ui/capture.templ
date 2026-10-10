@@ -67,6 +67,8 @@ templ captureOutcome(result brain.CaptureResult) {
 				<p data-outcome="asked">Nothing was changed: that read as a question or a request, not a change. Write the new value, a date or the new wording.</p>
 			case brain.AskUnclassifiable:
 				<p data-outcome="asked">Nothing was changed: that could not be read as a change. Write the new value, a date or the new wording.</p>
+			case brain.AskContentLosesDate:
+				<p data-outcome="asked">Nothing was changed: that would have replaced the whole entry, or left its text and its date disagreeing. Write the full new date and time, or the whole new wording.</p>
 			case brain.AskReferentAmbiguous:
 				<p data-outcome="asked">Nothing was changed: that looked like a correction, but it was not clear which entry it meant. Open the entry and use its correction form.</p>
 			default:

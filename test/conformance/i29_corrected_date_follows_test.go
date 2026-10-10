@@ -25,6 +25,8 @@ type i29Fixture struct {
 	triggers  *memrepo.Triggers
 	decisions ports.DecisionLog
 	signals   *memrepo.Signals
+	llm       *fakeprovider.Fake
+	message   string
 }
 
 const i29Message = "en realidad es hoy viernes 9 a las 11"
@@ -38,34 +40,41 @@ func newI29(t *testing.T, now time.Time, u unit.Unit, response string) i29Fixtur
 
 func newI29Logging(t *testing.T, now time.Time, u unit.Unit, response string, decisions ports.DecisionLog) i29Fixture {
 	t.Helper()
+	return newCorrectionFixture(t, now, u, i29Message, response, decisions)
+}
+
+// newCorrectionFixture seeds u, makes it the one strong recall match for
+// message, and replays response for the one classify call.
+func newCorrectionFixture(t *testing.T, now time.Time, u unit.Unit, message, response string, decisions ports.DecisionLog) i29Fixture {
+	t.Helper()
 	ctx := context.Background()
-	f := i29Fixture{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: decisions, signals: memrepo.NewSignals()}
+	f := i29Fixture{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: decisions, signals: memrepo.NewSignals(), message: message}
 	if err := f.units.Create(ctx, u); err != nil {
 		t.Fatalf("seeding the referent: %v", err)
 	}
 	embeddings := memrepo.NewEmbeddings()
 	lexical := memrepo.NewLexical()
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
-	match, err := embed.Embed(ctx, ports.EmbedRequest{Text: i29Message})
+	match, err := embed.Embed(ctx, ports.EmbedRequest{Text: message})
 	if err != nil {
 		t.Fatalf("deriving the match vector: %v", err)
 	}
 	if err := embeddings.Put(ctx, ports.Embedding{UnitID: u.ID, Model: embedFakeModel, Vector: match.Vector, At: now}); err != nil {
 		t.Fatalf("seeding the embedding: %v", err)
 	}
-	lexical.SeedLexical(t, u.ID, i29Message)
+	lexical.SeedLexical(t, u.ID, message)
 	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
 	if err != nil {
 		t.Fatalf("LoadIndex: %v", err)
 	}
-	llm := fakeprovider.New(t, i28Case(t, "i29", i29Message, response), "i29")
-	f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, lexical, memrepo.NewRelations(), f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
+	f.llm = fakeprovider.New(t, i28Case(t, "i29", message, response), "i29")
+	f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, lexical, memrepo.NewRelations(), f.decisions, f.llm, f.llm, f.llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
 	return f
 }
 
 func (f i29Fixture) capture(t *testing.T, referent string) {
 	t.Helper()
-	result, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: i29Message, Channel: "ui", ReferentID: referent})
+	result, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: f.message, Channel: "ui", ReferentID: referent})
 	if err != nil {
 		t.Fatalf("Capture: %v", err)
 	}

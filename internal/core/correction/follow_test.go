@@ -224,3 +224,48 @@ func TestFollowDate_RewritesTheFormThePromptAsksFor(t *testing.T) {
 		t.Errorf("the prompt does not show %q, the form FollowDate rewrites", example)
 	}
 }
+
+// TestKeepsInstant is I30's content guard: new content may replace a body
+// only while it still states the date, and the time anchored to it, that
+// the body states for the unit's own event_at or due_at.
+func TestKeepsInstant(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	at := time.Date(2026, 10, 11, 9, 0, 0, 0, art)
+	flight := unit.Unit{Content: "Tengo un vuelo el 2026-10-11 a las 09:00.", EventAt: &at}
+	dateOnly := unit.Unit{Content: "Pagar la luz antes del 2026-10-11", DueAt: &at}
+	undated := unit.Unit{Content: "El codigo del wifi es 1234"}
+	unstated := unit.Unit{Content: "Vuelo el domingo a las 9", EventAt: &at}
+
+	for _, tc := range []struct {
+		name    string
+		u       unit.Unit
+		content string
+		want    bool
+	}{
+		{"the utterance alone drops the date", flight, "Es a las 08:00.", false},
+		{"another time on the same date contradicts the unit", flight, "Tengo un vuelo el 2026-10-11 a las 08:00.", false},
+		{"the date without its time drops the time", flight, "Tengo un vuelo el 2026-10-11.", false},
+		{"the same instant restated is kept", flight, "Tengo un vuelo a Roma el 2026-10-11 a las 09:00.", true},
+		{"a date-only body needs only its date", dateOnly, "Pagar el gas antes del 2026-10-11", true},
+		{"a date-only body dropping its date", dateOnly, "Pagar el gas", false},
+		{"a body with no date is free to change", undated, "El codigo del wifi es 5678", true},
+		{"a body that never stated the date is free to change", unstated, "Vuelo a Roma el domingo a las 9", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := KeepsInstant(tc.content, tc.u, art); got != tc.want {
+				t.Errorf("KeepsInstant(%q) = %v, want %v", tc.content, got, tc.want)
+			}
+		})
+	}
+
+	// The body was written in UTC: 01:00Z on the 12th is 22:00 on the 11th
+	// in ART, so only the UTC frame finds its date.
+	late := time.Date(2026, 10, 11, 22, 0, 0, 0, art)
+	utc := unit.Unit{Content: "Vuelo el 2026-10-12 a las 01:00", EventAt: &late}
+	if KeepsInstant("Es a las 08:00", utc, art) {
+		t.Error("a body stating its instant in UTC was not recognised")
+	}
+	if !KeepsInstant("Vuelo a Roma el 2026-10-12 a las 01:00", utc, art) {
+		t.Error("a UTC body restated in UTC was refused")
+	}
+}

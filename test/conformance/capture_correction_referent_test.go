@@ -93,7 +93,10 @@ func TestCapture_CorrectionExplicitReferentWinsWithoutRecall(t *testing.T) {
 		embeddings := memrepo.NewEmbeddings()
 		lexical := memrepo.NewLexical()
 		relations := memrepo.NewRelations()
-		llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-correction-dentist-date")
+		// No case is scripted: the named unit is read before classifying
+		// against it (I30), so an unknown id fails without an LLM call, and
+		// any call fails the test as unscripted.
+		llm := fakeprovider.New(t, testdataLLMCasesDir(t))
 		embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
 		idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
