@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -187,13 +188,11 @@ func checkProviderKeys(_ string, cfg *config.Config) error {
 // needs and the environment lacks. Providers no task uses are skipped: a key
 // nothing will read is not a problem.
 func providerKeyProblems(cfg *config.Config, lookup func(string) (string, bool)) []string {
-	used := make(map[string]bool)
-	for _, binding := range cfg.Tasks {
-		used[binding.Provider] = true
-	}
 	var names []string
-	for name := range used {
-		names = append(names, name)
+	for _, binding := range cfg.Tasks {
+		if !slices.Contains(names, binding.Provider) {
+			names = append(names, binding.Provider)
+		}
 	}
 	sort.Strings(names)
 

@@ -13,18 +13,12 @@ import (
 type FailureKind string
 
 const (
-	// FailureKeyMissing: the api_key_env the provider names holds nothing.
-	FailureKeyMissing FailureKind = "key_missing"
-	// FailureUnreachable: no answer at all (refused, no route, DNS).
-	FailureUnreachable FailureKind = "unreachable"
-	// FailureKeyRejected: the vendor answered 401 or 403.
-	FailureKeyRejected FailureKind = "key_rejected"
-	// FailureRateLimited: the vendor answered 429.
-	FailureRateLimited FailureKind = "rate_limited"
-	// FailureTimeout: the call outlived its deadline.
-	FailureTimeout FailureKind = "timeout"
-	// FailureOther: any other non-success answer.
-	FailureOther FailureKind = "failed"
+	FailureKeyMissing  FailureKind = "key_missing"  // the api_key_env holds nothing
+	FailureUnreachable FailureKind = "unreachable"  // no answer at all (refused, no route, DNS)
+	FailureKeyRejected FailureKind = "key_rejected" // the vendor answered 401 or 403
+	FailureRateLimited FailureKind = "rate_limited" // the vendor answered 429
+	FailureTimeout     FailureKind = "timeout"      // the call outlived its deadline
+	FailureOther       FailureKind = "failed"       // any other non-success answer
 )
 
 // ProviderError is what every provider adapter returns when a call fails.
