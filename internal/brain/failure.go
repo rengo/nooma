@@ -30,6 +30,7 @@ const (
 	statusBadGateway         = 502
 	statusServiceUnavailable = 503
 	statusGatewayTimeout     = 504
+	statusClientClosed       = 499 // nginx's name for a caller that hung up
 )
 
 // providerName is how a person says an adapter's type; an unknown type is
@@ -76,6 +77,9 @@ func Describe(err error) (Failure, bool) {
 	case ports.FailureRateLimited:
 		f.Code, f.Status = "provider_rate_limited", statusServiceUnavailable
 		f.Message = fmt.Sprintf("%s is rate limiting requests. Try again in a moment.", name)
+	case ports.FailureCanceled:
+		f.Code, f.Status = "canceled", statusClientClosed
+		f.Message = "The request was canceled."
 	case ports.FailureTimeout:
 		f.Code, f.Status = "provider_timeout", statusGatewayTimeout
 		f.Message = fmt.Sprintf("%s took too long to answer. Try again in a moment.", name)

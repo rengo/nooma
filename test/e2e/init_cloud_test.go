@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // mockOpenAI stands in for OpenAI's real API over a loopback httptest.Server
@@ -67,9 +68,9 @@ func patchNoomaYML(t *testing.T, vault string, replacements map[string]string) {
 }
 
 // serveCloudVault inits a Cloud-path vault, points its openai entries at llm,
-// optionally gives it the key its api_key_env names (in .env, where a user puts
+// adds providerExtra (indented yaml) to each openai entry, optionally gives it the key its api_key_env names (in .env, where a user puts
 // it), and starts serve. It returns the vault, the port and the running proc.
-func serveCloudVault(t *testing.T, llm *httptest.Server, withKey bool) (string, int, *serveProc) {
+func serveCloudVault(t *testing.T, llm *httptest.Server, withKey bool, providerExtra string) (string, int, *serveProc) {
 	t.Helper()
 	home, work := t.TempDir(), t.TempDir()
 	target := filepath.Join(work, "cloud.nooma")
@@ -93,7 +94,7 @@ func serveCloudVault(t *testing.T, llm *httptest.Server, withKey bool) (string, 
 	port := freePort(t)
 	patchNoomaYML(t, target, map[string]string{
 		"http_port: 7777": fmt.Sprintf("http_port: %d", port),
-		"type: openai\n":  fmt.Sprintf("type: openai\n    endpoint: %s\n", llm.URL),
+		"type: openai\n":  fmt.Sprintf("type: openai\n    endpoint: %s\n%s", llm.URL, providerExtra),
 	})
 
 	if withKey {
@@ -119,7 +120,7 @@ func serveCloudVault(t *testing.T, llm *httptest.Server, withKey bool) (string, 
 // AND a capture against it actually stores a vector.
 func TestInitCloudPathWizardVaultEmbedsACaptureThroughTheRealBinary(t *testing.T) {
 	llm := mockOpenAI(t)
-	_, port, _ := serveCloudVault(t, llm, true)
+	_, port, _ := serveCloudVault(t, llm, true, "")
 
 	captureBody, err := json.Marshal(map[string]string{"text": "Pick up the dry cleaning on Friday"})
 	if err != nil {
@@ -216,7 +217,7 @@ func TestInitCloudPathNeverWritesTheScriptedKeyValue(t *testing.T) {
 // text.
 func TestCloudVaultWithoutItsKeySaysSoPlainly(t *testing.T) {
 	llm := mockOpenAI(t)
-	_, port, proc := serveCloudVault(t, llm, false)
+	_, port, proc := serveCloudVault(t, llm, false, "")
 
 	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/capture", port), "application/json", strings.NewReader(`{"text":"Pick up the dry cleaning on Friday"}`))
 	if err != nil {
@@ -237,5 +238,37 @@ func TestCloudVaultWithoutItsKeySaysSoPlainly(t *testing.T) {
 	}
 	if strings.Contains(logs, "dry cleaning") {
 		t.Errorf("serve logged the captured text:\n%s", logs)
+	}
+}
+
+// TestHungProviderEndsInAPlainTimeoutThroughTheRealBinary: a provider that
+// accepts the request and never answers used to hang POST /capture for as long
+// as the caller waited. With the provider's deadline it is a 504 naming the
+// class, one log line, and the same sentence on the CLI.
+func TestHungProviderEndsInAPlainTimeoutThroughTheRealBinary(t *testing.T) {
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	t.Cleanup(hung.Close)
+	t.Cleanup(func() { close(release) })
+	vault, port, proc := serveCloudVault(t, hung, true, "    timeout: 300ms\n")
+
+	start := time.Now()
+	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/capture", port), "application/json", strings.NewReader(`{"text":"Pick up the dry cleaning on Friday"}`))
+	if err != nil {
+		t.Fatalf("POST /capture: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body struct{ Error, Code string }
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if resp.StatusCode != http.StatusGatewayTimeout || body.Code != "provider_timeout" || time.Since(start) > 5*time.Second {
+		t.Errorf("POST /capture = %d %+v after %v, want 504 provider_timeout within seconds", resp.StatusCode, body, time.Since(start))
+	}
+	if logs := proc.stderr.String(); strings.Count(logs, "class=provider_timeout") != 1 || strings.Contains(logs, "dry cleaning") {
+		t.Errorf("want exactly one provider_timeout log line and no captured text:\n%s", logs)
+	}
+
+	stdout, stderr, err := nooma(t, t.TempDir(), t.TempDir(), "capture", "Pick up the dry cleaning on Friday", vault)
+	if err == nil || !strings.Contains(stderr+stdout, "took too long to answer") {
+		t.Errorf("nooma capture: err=%v stdout=%q stderr=%q, want the server's timeout sentence", err, stdout, stderr)
 	}
 }

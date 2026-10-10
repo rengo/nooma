@@ -1,6 +1,7 @@
 package brain_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -32,6 +33,8 @@ func TestDescribe(t *testing.T) {
 			[]string{"Ollama", "too long"}},
 		{"other status", ports.StatusFailure("openai", 500), "provider_failed", 502,
 			[]string{"OpenAI", "500"}},
+		{"canceled", ports.TransportFailure("openai", context.Canceled), "canceled", 499,
+			[]string{"canceled"}},
 		{"model output", fmt.Errorf("capture: decode: %w: %w", brain.ErrModelOutput, errors.New("no fields")), "model_output_unusable", 502,
 			[]string{"could not be understood", "nothing was saved"}},
 	}

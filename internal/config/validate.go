@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // check is one named validation. Making checks values rather than a sequence of
@@ -140,6 +141,11 @@ func checkProviders(c *Config, _ string, _ func(string) (string, bool)) error {
 	var problems []error
 	for _, name := range sortedKeys(c.Providers) {
 		typ := c.Providers[name].Type
+		if raw := c.Providers[name].Timeout; raw != "" {
+			if d, err := time.ParseDuration(raw); err != nil || d <= 0 {
+				problems = append(problems, fmt.Errorf("providers.%s.timeout is %q, which is not a positive duration such as 30s or 2m", name, raw))
+			}
+		}
 		switch {
 		case typ == "":
 			problems = append(problems, fmt.Errorf("providers.%s has no type; one of %s is required", name, strings.Join(DocumentedProviderTypes, ", ")))

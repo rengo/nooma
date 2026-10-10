@@ -84,6 +84,9 @@ func TestCaptureHandler_FailuresAreStatusCodeAndMessageNotABare500(t *testing.T)
 		{"timeout", func(t *testing.T) *brain.CaptureService {
 			return newFailingCaptureService(t, ports.TransportFailure("anthropic", context.DeadlineExceeded))
 		}, http.StatusGatewayTimeout, "provider_timeout", "too long", "provider=anthropic"},
+		{"a caller that hung up", func(t *testing.T) *brain.CaptureService {
+			return newFailingCaptureService(t, ports.TransportFailure("openai", context.Canceled))
+		}, 499, "canceled", "canceled", "provider=openai"},
 		{"undecodable answer", func(t *testing.T) *brain.CaptureService {
 			return newTestCaptureService(t, time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC), "classify-empty-response")
 		}, http.StatusBadGateway, "model_output_unusable", "nothing was saved", "class=model_output_unusable"},
