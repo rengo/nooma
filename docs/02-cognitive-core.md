@@ -798,7 +798,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    the unit it also stored.
    **What it reports is the instant the armament is ABOUT, never the instant the nudge fires.**
    Those differ for most dated things: the firing sits `event_lead_days` before the event, and is
-   pulled forward to the capture instant when that horizon is already behind. A reply naming the
+   pulled forward to the capture instant when that horizon is already behind. A reply names every
+   firing of what it armed ("the day before and a few hours before"), the day counted on the
+   calendar in the event's own zone. A reply naming the
    firing answers a question nobody asked — "Reminder set for Wed 26 Aug, 15:26" is what a
    correct reading of "el viernes a las 9am" looks like, and it was read as a misparse twice by
    the person who wrote the message. A recurrence reports its NEXT occurrence rather than the

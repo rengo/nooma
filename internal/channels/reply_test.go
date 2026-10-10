@@ -74,6 +74,20 @@ func TestRenderReply_ImmediateIsNotADayBefore(t *testing.T) {
 	}
 }
 
+// TestRenderReply_NamesEveryReminder: a timed event is reminded the day
+// before and two hours before (ADR-0029), and the reply promises both.
+//
+// Mutation: render only FireAt's lead and this fails.
+func TestRenderReply_NamesEveryReminder(t *testing.T) {
+	about := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	armed := brain.Armed{What: prospection.ArmTrigger, FireAt: about.Add(-24 * time.Hour), About: about,
+		Later: []time.Time{about.Add(-2 * time.Hour)}}
+	got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed})
+	if !strings.Contains(got, "the day before and a few hours before") {
+		t.Errorf("reply %q does not name both reminders", got)
+	}
+}
+
 // A correction that found the unit already saying it is not "Corrected."
 func TestRenderReply_AnUnchangedCorrectionSaysNothingChanged(t *testing.T) {
 	changed := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "u"}})
