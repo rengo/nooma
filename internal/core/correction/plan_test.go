@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/unit"
 )
 
 func strPtr(s string) *string        { return &s }
@@ -68,12 +69,62 @@ func TestPlanEdit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := PlanEdit(tt.c)
+			got, ok := PlanEdit(tt.c, unit.Unit{}, time.UTC)
 			if ok != tt.ok {
 				t.Fatalf("PlanEdit() ok = %v, want %v", ok, tt.ok)
 			}
 			if len(got) != len(tt.want) {
 				t.Fatalf("PlanEdit() = %d edits, want %d", len(got), len(tt.want))
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("edit[%d] = %+v, want %+v", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestPlanEdit_AnEchoedDateIsNoEdit is I30's echo rule: the correction
+// prompt shows the model the unit's current instants, so a date field
+// equal to the unit's own value can be the model repeating it. It yields
+// to a content change that keeps the unit's instant; otherwise it stands
+// as a same-date correction, the edit I29's repair path repeats.
+func TestPlanEdit_AnEchoedDateIsNoEdit(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	event := time.Date(2026, 10, 11, 9, 0, 0, 0, art)
+	due := time.Date(2026, 10, 20, 9, 0, 0, 0, art)
+	moved := time.Date(2026, 10, 11, 8, 0, 0, 0, art)
+	sameInUTC := event.UTC() // the same instant written in another frame
+	content := "Tengo un vuelo a Roma el 2026-10-11 a las 09:00."
+	u := unit.Unit{Content: "Tengo un vuelo el 2026-10-11 a las 09:00.", EventAt: &event, DueAt: &due}
+	eventOnly := unit.Unit{Content: u.Content, EventAt: &event}
+
+	tests := []struct {
+		name   string
+		c      classify.Classification
+		want   []Edit
+		ok     bool
+		target *unit.Unit // u when nil
+	}{
+		{"echoed event_at beside a text change -> content", classify.Classification{EventAt: &sameInUTC, NormalizedContent: strPtr(content)}, []Edit{NewContentEdit(content)}, true, &eventOnly},
+		{"both echoed beside a text change -> content", classify.Classification{EventAt: timePtr(event), DueAt: timePtr(due), NormalizedContent: strPtr(content)}, []Edit{NewContentEdit(content)}, true, nil},
+		{"echo beside content losing the instant stands", classify.Classification{EventAt: timePtr(event), NormalizedContent: strPtr("Es a Roma.")}, []Edit{NewEventAtEdit(event)}, true, &eventOnly},
+		{"echo beside the unchanged body stands", classify.Classification{EventAt: timePtr(event), NormalizedContent: strPtr(u.Content)}, []Edit{NewEventAtEdit(event)}, true, &eventOnly},
+		{"echo alone stands", classify.Classification{EventAt: timePtr(event)}, []Edit{NewEventAtEdit(event)}, true, &eventOnly},
+		{"echoed due_at beside a moved event_at -> event_at", classify.Classification{EventAt: timePtr(moved), DueAt: timePtr(due), NormalizedContent: strPtr(content)}, []Edit{NewEventAtEdit(moved)}, true, nil},
+		{"a moved event_at still wins over content", classify.Classification{EventAt: timePtr(moved), NormalizedContent: strPtr(content)}, []Edit{NewEventAtEdit(moved)}, true, &eventOnly},
+		{"a date the unit lacks is never an echo", classify.Classification{DueAt: timePtr(due), NormalizedContent: strPtr(content)}, []Edit{NewDueAtEdit(due)}, true, &eventOnly},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := u
+			if tt.target != nil {
+				target = *tt.target
+			}
+			got, ok := PlanEdit(tt.c, target, art)
+			if ok != tt.ok || len(got) != len(tt.want) {
+				t.Fatalf("PlanEdit() = %+v, %v; want %+v, %v", got, ok, tt.want, tt.ok)
 			}
 			for i := range got {
 				if got[i] != tt.want[i] {
@@ -95,7 +146,7 @@ func TestPlanEdit_DateCorrectionLeavesContentByteForByteUntouched(t *testing.T) 
 		NormalizedContent: strPtr("It's Ana, not Anna"),
 	}
 
-	got, ok := PlanEdit(c)
+	got, ok := PlanEdit(c, unit.Unit{}, time.UTC)
 	if !ok {
 		t.Fatalf("PlanEdit() ok = false, want true")
 	}
@@ -128,7 +179,7 @@ func TestPlanEdit_ReturnedSliceHoldsAtMostOneElement(t *testing.T) {
 		{},
 	}
 	for _, c := range cases {
-		if edits, _ := PlanEdit(c); len(edits) > 1 {
+		if edits, _ := PlanEdit(c, unit.Unit{}, time.UTC); len(edits) > 1 {
 			t.Errorf("PlanEdit(%+v) returned %d edits, D3's own invariant allows at most 1", c, len(edits))
 		}
 	}

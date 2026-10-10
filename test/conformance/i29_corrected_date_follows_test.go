@@ -27,6 +27,22 @@ type i29Fixture struct {
 	signals   *memrepo.Signals
 	llm       *fakeprovider.Fake
 	message   string
+	// hook runs its during func inside the classify call, standing for
+	// whatever else writes the vault while the model is thinking.
+	hook *llmHook
+}
+
+// llmHook wraps the scripted provider so a test can act mid-call.
+type llmHook struct {
+	inner  ports.LLMProvider
+	during func()
+}
+
+func (h *llmHook) Complete(ctx context.Context, req ports.LLMRequest) (ports.LLMResponse, error) {
+	if h.during != nil {
+		h.during()
+	}
+	return h.inner.Complete(ctx, req)
 }
 
 const i29Message = "en realidad es hoy viernes 9 a las 11"
@@ -68,7 +84,8 @@ func newCorrectionFixture(t *testing.T, now time.Time, u unit.Unit, message, res
 		t.Fatalf("LoadIndex: %v", err)
 	}
 	f.llm = fakeprovider.New(t, i28Case(t, "i29", message, response), "i29")
-	f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, lexical, memrepo.NewRelations(), f.decisions, f.llm, f.llm, f.llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
+	f.hook = &llmHook{inner: f.llm}
+	f.svc = brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, f.units, embeddings, lexical, memrepo.NewRelations(), f.decisions, f.hook, f.hook, f.hook, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, nil)
 	return f
 }
 

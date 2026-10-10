@@ -120,6 +120,69 @@ func TestI30_ACorrectionIsAPatch(t *testing.T) {
 		assertAsked(t, newCorrectionFixture(t, now, i30Flight(now), i30Message, response, memrepo.NewDecisionLog()), "flight")
 	})
 
+	// The prompt shows the model the current event_at, so a text-only
+	// correction can come back with that instant echoed beside the new
+	// text. An echo moves nothing: it is no date edit, and the text is
+	// what the correction speaks about.
+	t.Run("an echoed event_at is no edit, and the text it came with is written", func(t *testing.T) {
+		const rome = "Tengo un vuelo a Roma el 2026-10-11 a las 09:00."
+		f := newCorrectionFixture(t, now, i30Flight(now), "es a Roma",
+			`{"type":"correction","normalized_content":"`+rome+`","weight":0.7,"decay_rate":0.03,"event_at":"2026-10-11T09:00:00-03:00","language":"es"}`,
+			memrepo.NewDecisionLog())
+		f.capture(t, "flight")
+		got := f.unit(t, "flight")
+		if got.Content != rome {
+			t.Errorf("content = %q, want %q", got.Content, rome)
+		}
+		if got.EventAt == nil || !got.EventAt.Equal(*i30Flight(now).EventAt) {
+			t.Errorf("event_at = %v, want it unchanged", got.EventAt)
+		}
+		applied := f.rows(t, ports.ActionCorrectionApplied)
+		if len(applied) != 1 {
+			t.Fatalf("correction.applied rows = %d, want 1", len(applied))
+		}
+		if c := decodeI29(t, applied[0]); len(c.Fields) != 1 || c.Fields[0] != "content" {
+			t.Errorf("fields = %v, want [content] — an echoed date is not an edit", c.Fields)
+		}
+	})
+
+	// An echo beside content that would lose the instant does not hand
+	// the body to that content: it stands as a same-date correction, the
+	// shape I29's repair path repeats, and the body stays as it was.
+	t.Run("an echoed event_at beside content that drops the date leaves the body", func(t *testing.T) {
+		f := newCorrectionFixture(t, now, i30Flight(now), "es a Roma",
+			`{"type":"correction","normalized_content":"Es a Roma.","weight":0.7,"decay_rate":0.03,"event_at":"2026-10-11T09:00:00-03:00","language":"es"}`,
+			memrepo.NewDecisionLog())
+		f.capture(t, "flight")
+		got := f.unit(t, "flight")
+		if got.Content != i30Body || got.EventAt == nil || !got.EventAt.Equal(*i30Flight(now).EventAt) {
+			t.Errorf("unit = %q at %v, want it as it was", got.Content, got.EventAt)
+		}
+	})
+
+	// The unit is read before the model call, to show it to the model, and
+	// the call can be long. What gets recorded and rewritten is the unit as
+	// it is when the correction lands, not as it was shown.
+	t.Run("the edit lands on the unit as it is after the call", func(t *testing.T) {
+		const edited = "Tengo un vuelo el 2026-10-11 a las 09:00. Asiento 12A."
+		f := newCorrectionFixture(t, now, i30Flight(now), i30Message,
+			`{"type":"correction","normalized_content":"`+i30Fixed+`","weight":0.7,"decay_rate":0.03,"event_at":"2026-10-11T08:00:00-03:00","language":"es"}`,
+			memrepo.NewDecisionLog())
+		f.hook.during = func() {
+			if err := f.units.UpdateContent(context.Background(), "flight", edited, now); err != nil {
+				t.Fatalf("UpdateContent: %v", err)
+			}
+		}
+		f.capture(t, "flight")
+		if got := f.unit(t, "flight").Content; got != "Tengo un vuelo el 2026-10-11 a las 08:00. Asiento 12A." {
+			t.Errorf("content = %q, want the edit made during the call kept and the time moved", got)
+		}
+		c := decodeI29(t, f.rows(t, ports.ActionCorrectionApplied)[0])
+		if c.Previous["content"] != edited {
+			t.Errorf("pre-image content = %v, want %q — the body actually overwritten", c.Previous["content"], edited)
+		}
+	})
+
 	t.Run("control: content that keeps the instant is written", func(t *testing.T) {
 		const rome = "Tengo un vuelo a Roma el 2026-10-11 a las 09:00."
 		f := newCorrectionFixture(t, now, i30Flight(now), "es a Roma",

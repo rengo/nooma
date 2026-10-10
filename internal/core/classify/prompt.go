@@ -268,7 +268,9 @@ func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
 	}
 	b.WriteString("Correcting this unit\n")
 	b.WriteString("  The message below corrects this unit, whatever it reads like on its own.\n")
-	b.WriteString("  Current text: " + u.Content + "\n")
+	// Quoted, so a body's own line breaks — or a line of it reading
+	// "Message" — cannot pass for a section of this prompt.
+	b.WriteString("  Current text (quoted): " + strconv.Quote(u.Content) + "\n")
 	b.WriteString("  Current event_at: " + instant(u.EventAt) + "\n")
 	b.WriteString("  Current due_at: " + instant(u.DueAt) + "\n")
 	b.WriteString("  A correction is a PATCH: change only what the message speaks about and keep\n")

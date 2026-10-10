@@ -92,7 +92,7 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskNotAnEdit}, nil
 	}
 
-	plan, ok := correction.PlanEdit(c)
+	plan, ok := correction.PlanEdit(c, *target, now.Location())
 	if !ok {
 		if err := r.recordAmbiguousDecision(ctx, now, struct {
 			Reason AskReason `json:"reason"`
@@ -147,9 +147,17 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 // scorer, so the ratio Referent computes is the ratio over the survivors,
 // never recomputed by this method itself. A nil target with a nil error
 // means the gate asked; the caller records that outcome.
+//
+// explicit was read before the classify call, to show it to the model; it
+// is read again here because that call can be long, and the pre-image,
+// the echo test and the carried text must see the unit the edit lands on.
 func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, explicit *unit.Unit, now time.Time) (*unit.Unit, referentSource, error) {
 	if explicit != nil {
-		return explicit, referentSource{Source: "explicit"}, nil
+		u, err := r.explicitReferent(ctx, explicit.ID)
+		if err != nil {
+			return nil, referentSource{}, err
+		}
+		return &u, referentSource{Source: "explicit"}, nil
 	}
 
 	scored, _, err := r.recall.ScoredFor(ctx, in.Text)

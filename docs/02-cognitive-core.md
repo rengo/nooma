@@ -611,8 +611,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        referent's reminder follows its corrected date, below), judges no relation and
        resolves no check-in. Classification still runs, for the corrected value, and it runs
        **against the unit**: the unit is read first (an unknown id fails before any model call)
-       and the prompt carries its current text, `event_at` and `due_at` in the user's frame
-       (I30, below). Step 1 tells
+       and the prompt carries its current text, quoted on one line, and its `event_at` and
+       `due_at` in the user's frame (I30, below). It is read again once the model answers, so
+       the pre-image and the rewritten text are those of the unit the edit lands on. Step 1 tells
        the types apart by what the message does, and a caller that names a unit has already
        said what it does — read standalone, "it is today, Friday the 9th, at 10" is an `event`,
        and a unit page's correction form that let the model decide turned it into a second
@@ -664,6 +665,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      content, is an ask**, the same ask-shaped result an ambiguous referent already produces —
      ambiguity over *what* to write is exactly the ambiguity the product rule below blocks on,
      the same way ambiguity over *which* unit is.
+     **A date equal to the unit's current value is an echo, not a new date** (I30): the
+     correction prompt shows the model the unit's instants, so a text-only correction can come
+     back with them repeated. An echo yields to content that differs from the body and still
+     states the instant the unit keeps — that content is the edit — and otherwise stands as a
+     same-date correction, which changes nothing in the unit and is how repeating a correction
+     repairs a reminder (below). A new date beside an echo of the other column is that new date
+     alone, not two dated fields.
    - **A correction is a patch, not a replacement** (I30). It changes only what it speaks about
      and keeps the rest of the unit; a correction that names only a new time never drops the
      unit's subject. Two halves, because the model and the code each own one:
