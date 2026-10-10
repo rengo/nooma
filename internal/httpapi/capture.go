@@ -117,17 +117,17 @@ func captureHandler(d Deps) http.HandlerFunc {
 		// it stays as the structural answer to "what if a future refactor
 		// leaves a dependency unwired again."
 		if d.Capture == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "capture is not wired in this build"})
+			writeError(w, http.StatusServiceUnavailable, "not_wired", "capture is not wired in this build")
 			return
 		}
 
 		var req captureRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the request body is not valid JSON"})
+			writeError(w, http.StatusBadRequest, "invalid_request", "the request body is not valid JSON")
 			return
 		}
 		if req.Text == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "text is required"})
+			writeError(w, http.StatusBadRequest, "invalid_request", "text is required")
 			return
 		}
 
@@ -144,19 +144,11 @@ func captureHandler(d Deps) http.HandlerFunc {
 		if errors.Is(err, brain.ErrUnknownReferent) {
 			// A unit_id naming no unit is the caller's mistake: 404, in
 			// words, rather than the 500 below (fix-unit-correction-form R4).
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no unit has that id"})
+			writeError(w, http.StatusNotFound, "unit_not_found", "no unit has that id")
 			return
 		}
 		if err != nil {
-			// design D10's aspiration is "provider failures -> 502, store
-			// failures -> 500"; brain.CaptureService.Capture returns a plain
-			// error with no exported way for this package to tell the two
-			// apart without importing internal/core/classify (which the
-			// design's own dependency-rule check does not list for this
-			// package — see tasks.md Conflicts §C13). Every Capture error
-			// is therefore 500 here — the conservative default, never a
-			// silent 200.
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "capture failed"})
+			writeCaptureFailure(w, r, err, "capture failed")
 			return
 		}
 

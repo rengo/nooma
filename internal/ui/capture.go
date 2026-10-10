@@ -44,6 +44,21 @@ func parseCaptureForm(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return text, true
 }
 
+// captureFailed answers an error from Capturer.Capture. A provider or model
+// failure is said in words with its own status and leaves one log line
+// (class, provider, path — never the typed text); anything else stays the
+// detail-free internal error, logged with the error because a 500 cannot be
+// diagnosed without it.
+func captureFailed(w http.ResponseWriter, r *http.Request, err error, internal string) {
+	if f, ok := brain.Describe(err); ok {
+		brain.LogFailure(r.URL.Path, f)
+		http.Error(w, f.Message, f.Status)
+		return
+	}
+	slog.Error("request failed", "class", "internal", "path", r.URL.Path, "err", err)
+	http.Error(w, internal, http.StatusInternalServerError)
+}
+
 // serveCapture answers POST /ui/capture: builds a brain.CaptureInput from
 // the submitted text and calls Capturer.Capture exactly as POST /capture
 // already does (spec R4) — a submitted unit_id is never read, so it can
@@ -62,8 +77,7 @@ func (h *Handler) serveCapture(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.deps.Capture.Capture(r.Context(), brain.CaptureInput{Text: text, Channel: "ui"})
 	if err != nil {
-		slog.Error("capture: failed", "err", err)
-		http.Error(w, "capture: internal error", http.StatusInternalServerError)
+		captureFailed(w, r, err, "capture: internal error")
 		return
 	}
 
@@ -98,8 +112,7 @@ func (h *Handler) serveCorrect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		slog.Error("correct: failed", "err", err)
-		http.Error(w, "correct: internal error", http.StatusInternalServerError)
+		captureFailed(w, r, err, "correct: internal error")
 		return
 	}
 

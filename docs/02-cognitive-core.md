@@ -595,7 +595,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    - Robustness: a provider outage on this call degrades the capture rather than refusing
      it — the unit stays stored, no relations are evaluated for it, and the outage is recorded
      in the trail. The product rule below ("asking is the EXCEPTION") governs this the same way
-     it governs every other capture-time provider outage; this step is not a special case.
+     it governs every capture-time provider outage after step 1; step 1's own call is the one
+     exception, since a failed classification leaves no unit to keep (§5.1, I31).
 4. **corrections**: a `correction` edits the referenced unit in place and emits a learning
    signal with the correction.
    - **Which unit it edits.** A caller holding an identifier passes it, and that identifier
@@ -843,6 +844,15 @@ than a recorded absence.
 The floor: a response from which **no** field can be read at all is not a classification with
 every field null. It is a failed classification, and it is reported as one. A payload with no
 fields has nothing to degrade.
+
+**A failed classification fails the capture in plain words, and nothing is written** (I31). That
+covers a response with no readable field, one with no type, and a classify call that never
+answered (key missing, provider unreachable, key rejected, rate limited, timed out). The
+failure is raised before the unit is built, so no unit, relation or timer exists for it; the
+caller is told which class it was, never a bare internal error, and what it is told carries
+neither a credential, a vendor's response body nor the captured text. This is the opposite of a
+later step's outage (§5 step 3, the relation judge), which degrades because the unit is already
+stored.
 
 **A response may carry a preamble around its object, and the preamble is discarded, not
 treated as a malformed field.** A model asked to answer with one JSON object and nothing else can
