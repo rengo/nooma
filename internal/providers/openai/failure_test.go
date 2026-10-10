@@ -91,3 +91,21 @@ func TestUnreachableAndTimeoutAreTold(t *testing.T) {
 		}
 	}
 }
+
+// A caller that gives up is not an unreachable provider.
+func TestCancelledCallIsCanceledNotUnreachable(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-release }))
+	defer slow.Close()
+	defer close(release)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel2)
+
+	_, err := NewClient(slow.URL, "sk-test-key", "m", http.DefaultClient).Complete(ctx2, ports.LLMRequest{Prompt: "hi"})
+	var pe *ports.ProviderError
+	if !errors.As(err, &pe) || pe.Kind != ports.FailureCanceled {
+		t.Errorf("got %v, want canceled", err)
+	}
+}
