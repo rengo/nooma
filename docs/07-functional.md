@@ -258,6 +258,7 @@ As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in 
 | Nightly consolidation at 03:00, boot catch-up, `nooma consolidate`, `decision_log` | Shipped in M2 (`learn` is an empty slot) | [05 §M2](05-build-plan.md#m2--sleep-and-weight), doc 02 §6, §11 |
 | Telegram channel, triggers, push, morning digest, check-ins, ephemeral timers | Shipped in M3 | [05 §M3](05-build-plan.md#m3--the-mouth-telegram--prospection), doc 02 §7, §8 |
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
+| Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; editing them from the UI or chat is pending | doc 02 §7; ADR-0029 (`Proposed`) |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |

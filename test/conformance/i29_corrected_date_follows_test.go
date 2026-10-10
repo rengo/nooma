@@ -347,6 +347,22 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		}
 	})
 
+	t.Run("the set follows the user's stored preferences", func(t *testing.T) {
+		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), toLater)
+		cfg := memrepo.NewConfig()
+		leads := `[180]`
+		cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+		f.svc = f.svc.WithReminderPrefs(cfg)
+		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
+		f.arm(t, "t2", "dentist", oldFire.Add(time.Hour), before, nil, nil)
+		f.capture(t, "dentist")
+		want := time.Date(2026, 10, 30, 7, 0, 0, 0, time.UTC)
+		if got := f.armed(t, "dentist"); len(got) != 1 || got[0].ID != "t1" || !got[0].FireAt.Equal(want) {
+			t.Errorf("armed = %+v, want t1 alone, three hours before", got)
+		}
+	})
+
 	t.Run("a correction never creates an at-once reminder", func(t *testing.T) {
 		// Both leads of 10:00 are behind at 08:30 and nothing is armed:
 		// the at-once reminder is a capture's, sent once (ADR-0029).

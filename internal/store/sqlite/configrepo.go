@@ -43,7 +43,8 @@ var _ ports.ConfigRepo = (*ConfigRepo)(nil)
 func (r *ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error) {
 	const q = `
 SELECT weight_threshold, hysteresis_margin, consolidation_enabled,
-       goal_stagnation_days, mental_load_threshold, consolidation_last_run_at
+       goal_stagnation_days, mental_load_threshold, consolidation_last_run_at,
+       event_reminder_leads, date_only_reminder_at
 FROM config WHERE id = 1`
 
 	var (
@@ -51,10 +52,12 @@ FROM config WHERE id = 1`
 		consolidationEnabled                    sql.NullBool
 		goalStagnationDays, mentalLoadThreshold sql.NullInt64
 		consolidationLastRunAt                  sql.NullString
+		reminderLeads, dateOnlyAt               sql.NullString
 	)
 	err := r.db.QueryRowContext(ctx, q).Scan(
 		&weightThreshold, &hysteresisMargin, &consolidationEnabled,
 		&goalStagnationDays, &mentalLoadThreshold, &consolidationLastRunAt,
+		&reminderLeads, &dateOnlyAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ports.VaultConfig{}, nil
@@ -83,6 +86,12 @@ FROM config WHERE id = 1`
 	if mentalLoadThreshold.Valid {
 		v := int(mentalLoadThreshold.Int64)
 		cfg.MentalLoadThreshold = &v
+	}
+	if reminderLeads.Valid {
+		cfg.EventReminderLeads = &reminderLeads.String
+	}
+	if dateOnlyAt.Valid {
+		cfg.DateOnlyReminderAt = &dateOnlyAt.String
 	}
 	if consolidationLastRunAt.Valid {
 		t, err := time.Parse(unitTimeLayout, consolidationLastRunAt.String)

@@ -230,9 +230,15 @@ CREATE TABLE config (
   goal_stagnation_days      INTEGER NOT NULL DEFAULT 21,
   mental_load_threshold     INTEGER NOT NULL DEFAULT 7,
   consolidation_last_run_at TEXT,                -- NULL = never ran
-  updated_at                TEXT NOT NULL
+  updated_at                TEXT NOT NULL,
+  event_reminder_leads      TEXT,                -- JSON array of minutes, e.g. [1440,120]; NULL = default
+  date_only_reminder_at     TEXT                 -- HH:MM local; NULL = default
 );
 ```
+
+(The two reminder columns are migration 0006's, appended by `ALTER TABLE`, hence after
+`updated_at`. They are the user's preferences, not calibration: `NULL` means "never chosen" and
+resolves to the default in `prospection.ResolveReminderPrefs`, ADR-0029.)
 
 (The schedule is neither here nor in `nooma.yml`: it is two constants in `internal/scheduler`,
 retired from configuration by [ADR-0025](adr/0025-the-schedule-is-not-a-setting.md). What this

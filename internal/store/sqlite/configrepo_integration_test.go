@@ -111,6 +111,39 @@ VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
 	}
 }
 
+// TestConfigRepo_LoadReadsReminderPreferences: migration 0006's two
+// columns come back as stored — absent as nil, a corrupt value verbatim —
+// for prospection.ResolveReminderPrefs to judge (ADR-0029 point 5).
+func TestConfigRepo_LoadReadsReminderPreferences(t *testing.T) {
+	v := openTestVault(t)
+	repo := NewConfigRepo(v)
+	ctx := context.Background()
+	at := configFixtureTime.Format(unitTimeLayout)
+
+	if _, err := v.db.ExecContext(ctx, `INSERT INTO config (id, updated_at) VALUES (1, ?)`, at); err != nil {
+		t.Fatalf("seeding config row: %v", err)
+	}
+	got, err := repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.EventReminderLeads != nil || got.DateOnlyReminderAt != nil {
+		t.Errorf("never chosen = %v, %v, want both nil — NULL is the default, not a stored copy of it",
+			got.EventReminderLeads, got.DateOnlyReminderAt)
+	}
+
+	if _, err := v.db.ExecContext(ctx, `UPDATE config SET event_reminder_leads = '[180,30]', date_only_reminder_at = '25:99' WHERE id = 1`); err != nil {
+		t.Fatalf("setting preferences: %v", err)
+	}
+	got, err = repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.EventReminderLeads == nil || *got.EventReminderLeads != "[180,30]" || got.DateOnlyReminderAt == nil || *got.DateOnlyReminderAt != "25:99" {
+		t.Errorf("stored = %v, %v, want both as stored, the corrupt time included", got.EventReminderLeads, got.DateOnlyReminderAt)
+	}
+}
+
 // TestConfigRepo_LoadMalformedConsolidationLastRunAtErrors is task 6.1's own
 // sqlite-specific case: a consolidation_last_run_at TEXT value that does not
 // parse as unitTimeLayout must error, never decode to nil — design §3.4's
