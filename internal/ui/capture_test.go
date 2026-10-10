@@ -193,6 +193,20 @@ func TestCaptureView_CorrectedLinksToTheUnit(t *testing.T) {
 	}
 }
 
+// An unchanged correction on the capture page says so, and links nothing it
+// did not touch.
+func TestCaptureView_UnchangedCorrectionSaysNothingChanged(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-3", Unchanged: true}}}
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Capture: fake}).ServeHTTP(rec, captureRequest("text=hello"))
+	body := rec.Body.String()
+	if !strings.Contains(body, "Nothing was changed: the entry already says that.") || strings.Contains(body, "Corrected") {
+		t.Errorf("body does not say nothing changed:\n%s", body)
+	}
+}
+
 // TestCaptureView_EmptyTextIs400 is parseCaptureForm's own bad-body case:
 // an empty (or absent) text field is a 400, and Capture is never reached —
 // the same "no call on a bad body" posture TestCaptureView_BodyIsBounded

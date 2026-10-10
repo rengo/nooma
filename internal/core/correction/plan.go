@@ -20,7 +20,10 @@ import (
 // instead of guessing, the same ask-shaped result an ambiguous referent
 // (Referent) already produces.
 //
-// Dates win over content whenever either date is present: writing event_at
+// Dates win over content whenever either date is present, with one
+// exception: new text that states the new instant travels with the date
+// (withText), so a correction that changes the wording and the time at once
+// keeps both. Beyond that exception, writing event_at
 // from Classification.EventAt requires no inference — the field means the
 // same thing on both sides of the pipeline — while writing content from
 // NormalizedContent requires inferring that the model's normalization of
@@ -29,8 +32,9 @@ import (
 // still carries the body's own statement of it, but that edit is derived
 // afterwards by CarryText, not decided here (doc 02 §5 step 4, I29).
 //
-// The returned slice holds at most one element (see plan_test.go's own
-// invariant test) and stays a slice rather than a single Edit on purpose:
+// The returned slice holds one edit, or a date edit and the text that
+// states it (see plan_test.go's own invariant test), and stays a slice
+// rather than a single Edit on purpose:
 // the shape was introduced before the C6 ruling precisely so the ruling
 // would cost one function body and this table — not the port, not the
 // pre-image shape, not dispatchEdits. Collapsing it to a single Edit now
@@ -75,14 +79,29 @@ func PlanEdit(c classify.Classification, target unit.Unit, zone *time.Location) 
 	case hasEvent && hasDue:
 		return nil, false
 	case hasEvent:
-		return []Edit{NewEventAtEdit(*c.EventAt)}, true
+		return withText(NewEventAtEdit(*c.EventAt), *c.EventAt, target.EventAt, c.NormalizedContent, target, zone), true
 	case hasDue:
-		return []Edit{NewDueAtEdit(*c.DueAt)}, true
+		return withText(NewDueAtEdit(*c.DueAt), *c.DueAt, target.DueAt, c.NormalizedContent, target, zone), true
 	case c.NormalizedContent != nil:
 		return []Edit{NewContentEdit(*c.NormalizedContent)}, true
 	default:
 		return nil, false
 	}
+}
+
+// withText is a date edit and, when the correction changed the wording as
+// well, the text that goes with it. The model's text is taken only when it
+// is a real change that states the new instant — date and anchored time, in
+// the user's zone — and no longer states the previous one: then it speaks
+// for the whole unit, and the old body has nothing left to contribute.
+// Otherwise the date stands alone and CarryText moves the old body's own
+// statement of it.
+func withText(date Edit, next time.Time, previous *time.Time, text *string, target unit.Unit, zone *time.Location) []Edit {
+	if text != nil && *text != target.Content && StatesInstant(*text, next, zone) &&
+		(previous == nil || !StatesInstant(*text, *previous, zone)) {
+		return []Edit{date, NewContentEdit(*text)}
+	}
+	return []Edit{date}
 }
 
 // echoes reports whether a classified date repeats the unit's current one:

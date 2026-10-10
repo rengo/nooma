@@ -100,6 +100,9 @@ func RenderReply(result brain.CaptureResult) string {
 		return say.List(contents)
 
 	case brain.OutcomeCorrected:
+		if result.Correction != nil && result.Correction.Unchanged {
+			return say.Unchanged
+		}
 		return say.Corrected
 
 	case brain.OutcomeAsked:

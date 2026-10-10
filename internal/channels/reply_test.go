@@ -73,3 +73,15 @@ func TestRenderReply_ImmediateIsNotADayBefore(t *testing.T) {
 		t.Errorf("reply %q says the reminder is immediate for a firing that is not", got)
 	}
 }
+
+// A correction that found the unit already saying it is not "Corrected."
+func TestRenderReply_AnUnchangedCorrectionSaysNothingChanged(t *testing.T) {
+	changed := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "u"}})
+	same := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "u", Unchanged: true}})
+	if changed != "Corrected." {
+		t.Errorf("changed = %q, want %q", changed, "Corrected.")
+	}
+	if same == changed || !strings.Contains(same, "Nothing") {
+		t.Errorf("unchanged = %q, want a reply saying nothing changed", same)
+	}
+}

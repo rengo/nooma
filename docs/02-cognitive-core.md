@@ -654,7 +654,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      correction still answers every required field like any other type — that last clause is not
      decoration: without it the model traded the required fields away for the date.
    - **Which field it corrects.** A correction corrects **exactly one** field of the referent
-     unit, never more: `event_at` if the classification resolved it and not `due_at`; `due_at` if
+     unit, never more (but for the date-and-text case below): `event_at` if the classification resolved it and not `due_at`; `due_at` if
      it resolved that and not `event_at`; `content` only when **neither** date resolved, as the
      no-date fallback. Dates win over content whenever either is present — writing `event_at`
      or `due_at` from the classification's own fields of the same name requires no inference,
@@ -671,7 +671,18 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      states the instant the unit keeps — that content is the edit — and otherwise stands as a
      same-date correction, which changes nothing in the unit and is how repeating a correction
      repairs a reminder (below). A new date beside an echo of the other column is that new date
-     alone, not two dated fields.
+     alone, not two dated fields. **A correction that changes nothing is not recorded as one**:
+     an edit whose value the unit already holds (read again as the edit lands) writes no
+     `correction.applied` row and no learning signal, and the answer says nothing changed; only
+     the reminder step still runs, so the repair above works.
+     **New text beside a new date is both edits** (I30). When the correction changes what the
+     unit says and when it happens at once, and the model — shown the unit — returns text that
+     differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`
+     anchored to it, in the user's zone) and no longer states the previous one, the plan is the
+     date and that text, in one `correction.applied` row; the body is not rewritten from the old
+     one. Text that does not state the new instant yields to the date, which carries the old
+     body as below. On the chat path, and when the unit changed while the model answered, the
+     text was never written against this unit and is not taken.
    - **A correction is a patch, not a replacement** (I30). It changes only what it speaks about
      and keeps the rest of the unit; a correction that names only a new time never drops the
      unit's subject. Two halves, because the model and the code each own one:

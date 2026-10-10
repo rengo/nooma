@@ -60,7 +60,11 @@ templ captureOutcome(result brain.CaptureResult) {
 	case brain.OutcomeRecalled:
 		<p data-outcome="recalled">Recalled { strconv.Itoa(len(result.Recalled)) } unit(s).</p>
 	case brain.OutcomeCorrected:
-		<p data-outcome="corrected">Corrected <a href={ templ.URL("/ui/units/" + result.Correction.UnitID) }>{ result.Correction.UnitID }</a>.</p>
+		if result.Correction.Unchanged {
+			<p data-outcome="unchanged">Nothing was changed: the entry already says that.</p>
+		} else {
+			<p data-outcome="corrected">Corrected <a href={ templ.URL("/ui/units/" + result.Correction.UnitID) }>{ result.Correction.UnitID }</a>.</p>
+		}
 	case brain.OutcomeAsked:
 		switch result.Correction.Why {
 			case brain.AskNotAnEdit:

@@ -73,9 +73,9 @@ templ unitBody(detail brain.UnitDetail, res *brain.CaptureResult) {
 
 // correctOutcome is a correction's outcome as the unit page shows it: what
 // changed, by its field's plain name, or the same ask captureOutcome gives
-// when nothing changed.
+// when nothing changed (an unchanged correction included).
 templ correctOutcome(res brain.CaptureResult) {
-	if res.Outcome == brain.OutcomeCorrected && res.Correction != nil {
+	if res.Outcome == brain.OutcomeCorrected && res.Correction != nil && !res.Correction.Unchanged {
 		<p data-outcome="corrected">Corrected. Changed: { fieldLabels(res.Correction.Fields) }.</p>
 	} else {
 		@captureOutcome(res)

@@ -202,6 +202,10 @@ type Correction struct {
 	UnitID string
 	// Fields names the columns PlanEdit wrote, in order. Empty for Asked.
 	Fields []correction.Field
+	// Unchanged is true for a correction that found the unit already
+	// holding everything it said: nothing was written or recorded as a
+	// change, Fields is empty, and the answer says so.
+	Unchanged bool
 	// Ambiguous is true for the ask-shaped outcome — captureRunner's own
 	// Kind == correction fork reads this to choose OutcomeAsked over
 	// OutcomeCorrected, rather than re-deriving it.
