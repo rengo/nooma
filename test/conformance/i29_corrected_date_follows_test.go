@@ -237,6 +237,17 @@ func (f i29Fixture) arm(t *testing.T, id, unitID string, fireAt time.Time, text 
 	}
 }
 
+// armLead seeds an event reminder of the dentist unit as ADR-0029 arms one,
+// with its lead in minutes.
+func (f i29Fixture) armLead(t *testing.T, id string, fireAt time.Time, text string, leadMinutes int) {
+	t.Helper()
+	unitID := "dentist"
+	if err := f.triggers.Create(context.Background(), ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: text, LeadMinutes: leadMinutes}, FireAt: &fireAt}); err != nil {
+		t.Fatalf("seeding trigger %s: %v", id, err)
+	}
+}
+
 func (f i29Fixture) armed(t *testing.T, unitID string) []ports.DueTrigger {
 	t.Helper()
 	got, err := f.triggers.ArmedForUnit(context.Background(), unitID)
@@ -262,6 +273,8 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		return unit.Unit{ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool, Content: before,
 			EventAt: &original, Source: "cli", CreatedAt: now, UpdatedAt: now}
 	}
+	dayBefore := time.Date(2026, 10, 29, 10, 0, 0, 0, time.UTC)
+	hoursBefore := time.Date(2026, 10, 30, 8, 0, 0, 0, time.UTC)
 	reminderRows := func(t *testing.T, f i29Fixture) []ports.Decision {
 		return f.rows(t, ports.ActionCorrectionReminderMoved, ports.ActionCorrectionReminderArmed, ports.ActionCorrectionReminderCancelled)
 	}
@@ -311,22 +324,40 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		}
 	})
 
-	t.Run("with no reminder armed, one is armed as a fresh capture would", func(t *testing.T) {
+	t.Run("with no reminder armed, the set is armed as a fresh capture would", func(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		f := newI29(t, now, dentist(now), toLater)
 		f.capture(t, "dentist")
 
 		got := f.armed(t, "dentist")
-		wantFire := time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)
-		if len(got) != 1 || !got[0].FireAt.Equal(wantFire) || got[0].InterruptLevel == nil || *got[0].InterruptLevel != 0.9 {
-			t.Fatalf("armed = %+v, want one firing at %s with level 0.9", got, wantFire)
+		if len(got) != 2 || !got[0].FireAt.Equal(dayBefore) || !got[1].FireAt.Equal(hoursBefore) {
+			t.Fatalf("armed = %+v, want two firing at %s and %s", got, dayBefore, hoursBefore)
+		}
+		for _, g := range got {
+			if g.InterruptLevel == nil || *g.InterruptLevel != 0.9 {
+				t.Errorf("trigger %s level = %v, want 0.9", g.ID, g.InterruptLevel)
+			}
 		}
 		rows := reminderRows(t, f)
-		if len(rows) != 1 || rows[0].Action != ports.ActionCorrectionReminderArmed {
-			t.Fatalf("reminder rows = %v, want one %s", rows, ports.ActionCorrectionReminderArmed)
+		if len(rows) != 2 || rows[0].Action != ports.ActionCorrectionReminderArmed || rows[1].Action != ports.ActionCorrectionReminderArmed {
+			t.Fatalf("reminder rows = %v, want two %s", rows, ports.ActionCorrectionReminderArmed)
 		}
-		if c := decodeI29(t, rows[0]); c.TriggerID != got[0].ID || c.Previous["fire_at"] != nil || c.Next["fire_at"] != "2026-10-23T10:00:00Z" {
+		if c := decodeI29(t, rows[0]); c.TriggerID != got[0].ID || c.Previous["fire_at"] != nil || c.Next["fire_at"] != "2026-10-29T10:00:00Z" {
 			t.Errorf("armed row = %s", rows[0].Context)
+		}
+	})
+
+	t.Run("a correction never creates an at-once reminder", func(t *testing.T) {
+		// Both leads of 10:00 are behind at 08:30 and nothing is armed:
+		// the at-once reminder is a capture's, sent once (ADR-0029).
+		now := time.Date(2026, 10, 9, 8, 30, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), toToday)
+		f.capture(t, "dentist")
+		if n := f.triggers.Count(); n != 0 {
+			t.Errorf("triggers = %d, want none", n)
+		}
+		if rows := reminderRows(t, f); len(rows) != 0 {
+			t.Errorf("reminder rows = %v, want none", rows)
 		}
 	})
 
@@ -344,19 +375,22 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		}
 	})
 
-	t.Run("two armed reminders end as one", func(t *testing.T) {
+	t.Run("armed reminders are carried onto the set in order, the surplus expires", func(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		f := newI29(t, now, dentist(now), toLater)
 		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
 		f.arm(t, "t2", "dentist", oldFire.Add(time.Hour), before, nil, nil)
+		f.arm(t, "t3", "dentist", oldFire.Add(2*time.Hour), before, nil, nil)
 		f.capture(t, "dentist")
 
-		if got := f.armed(t, "dentist"); len(got) != 1 || got[0].ID != "t1" {
-			t.Fatalf("armed = %+v, want t1 alone", got)
+		got := f.armed(t, "dentist")
+		if len(got) != 2 || got[0].ID != "t1" || !got[0].FireAt.Equal(dayBefore) || got[1].ID != "t2" || !got[1].FireAt.Equal(hoursBefore) {
+			t.Fatalf("armed = %+v, want t1 the day before and t2 two hours before", got)
 		}
 		rows := reminderRows(t, f)
-		if len(rows) != 2 || rows[0].Action != ports.ActionCorrectionReminderMoved || rows[1].Action != ports.ActionCorrectionReminderCancelled {
-			t.Errorf("reminder rows = %v, want moved then cancelled", rows)
+		if len(rows) != 3 || rows[0].Action != ports.ActionCorrectionReminderMoved || rows[1].Action != ports.ActionCorrectionReminderMoved ||
+			rows[2].Action != ports.ActionCorrectionReminderCancelled {
+			t.Errorf("reminder rows = %v, want moved, moved, cancelled", rows)
 		}
 	})
 
@@ -440,8 +474,32 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
 		f.capture(t, "dentist")
 		got := f.armed(t, "dentist")
-		if len(got) != 1 || !got[0].FireAt.Equal(time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)) || got[0].Payload.ActionText != "Dentista el 2026-10-30 a las 10:00" {
-			t.Errorf("armed = %+v, want t1 at the new lead time saying the new date", got)
+		if len(got) != 2 || got[0].ID != "t1" || !got[0].FireAt.Equal(dayBefore) || got[0].Payload.ActionText != "Dentista el 2026-10-30 a las 10:00" {
+			t.Errorf("armed = %+v, want t1 at the new lead time saying the new date, and a second reminder", got)
+		}
+	})
+
+	t.Run("a retry completes a set the failed step left half-armed", func(t *testing.T) {
+		// The first reminder moved and the second was never created. The
+		// text of a reminder that watches the old date is rewritten from
+		// its own instant, fire_at plus lead_minutes.
+		now := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+		corrected := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+		u := dentist(now)
+		u.EventAt, u.Content = &corrected, "Dentista el 2026-10-30 a las 10:00"
+		f := newI29(t, now, u, toLater)
+		f.armLead(t, "t1", time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC), before, 1440)
+		f.capture(t, "dentist")
+		got := f.armed(t, "dentist")
+		if len(got) != 2 || got[0].ID != "t1" || !got[0].FireAt.Equal(dayBefore) || got[0].Payload.ActionText != u.Content ||
+			!got[1].FireAt.Equal(hoursBefore) || got[1].Payload.ActionText != u.Content {
+			t.Errorf("armed = %+v, want t1 moved and the 2-hour reminder created, both saying %q", got, u.Content)
+		}
+		f2 := newI29(t, now, u, toLater)
+		f2.armLead(t, "t1", dayBefore, u.Content, 1440)
+		f2.capture(t, "dentist")
+		if rows := reminderRows(t, f2); len(rows) != 1 || rows[0].Action != ports.ActionCorrectionReminderArmed {
+			t.Errorf("reminder rows = %v, want only the missing reminder armed", rows)
 		}
 	})
 
@@ -470,7 +528,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
 		f.capture(t, "dentist")
 		got := f.armed(t, "dentist")
-		if len(got) != 1 || !strings.Contains(got[0].Payload.Rationale, "2026-10-30T10:00:00Z") || got[0].Payload.LeadDays != prospection.EventLeadDays {
+		if len(got) != 2 || !strings.Contains(got[0].Payload.Rationale, "2026-10-30T10:00:00Z") || got[0].Payload.LeadDays != 0 || got[0].Payload.LeadMinutes != 1440 {
 			t.Errorf("payload = %+v, want the rationale of an arming for 2026-10-30", got[0].Payload)
 		}
 	})

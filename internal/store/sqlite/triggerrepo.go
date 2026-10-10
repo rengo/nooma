@@ -65,12 +65,14 @@ type anchorJSON struct {
 // payloadJSON is ports.TriggerPayload's storage encoding, declared here for
 // anchorJSON's reason and pinned to migration 0001:48's own column comment,
 // "JSON (action, rationale, lead_days…)". lead_days is the key doc 02 §7
-// names when it says a recurring trigger's re-arm propagates it — the one
-// key in this object that anything reads back.
+// names when it says a recurring trigger's re-arm propagates it;
+// lead_minutes is a one-shot event reminder's (ADR-0029). Both are read
+// back, and each is omitted where it does not apply.
 type payloadJSON struct {
-	Action    string `json:"action"`
-	Rationale string `json:"rationale"`
-	LeadDays  int    `json:"lead_days"`
+	Action      string `json:"action"`
+	Rationale   string `json:"rationale"`
+	LeadDays    int    `json:"lead_days,omitempty"`
+	LeadMinutes int    `json:"lead_minutes,omitempty"`
 }
 
 // Create implements ports.TriggerRepo. The armed literal is written here
@@ -80,9 +82,10 @@ type payloadJSON struct {
 // change that quietly.
 func (r *TriggerRepo) Create(ctx context.Context, t ports.Trigger) error {
 	payload, err := json.Marshal(payloadJSON{
-		Action:    t.Payload.ActionText,
-		Rationale: t.Payload.Rationale,
-		LeadDays:  t.Payload.LeadDays,
+		Action:      t.Payload.ActionText,
+		Rationale:   t.Payload.Rationale,
+		LeadDays:    t.Payload.LeadDays,
+		LeadMinutes: t.Payload.LeadMinutes,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal trigger %q payload: %w", t.ID, err)
@@ -210,7 +213,8 @@ func (r *TriggerRepo) ArmedForUnit(ctx context.Context, unitID string) ([]ports.
 // the move carries none.
 func (r *TriggerRepo) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {
 	payload, err := json.Marshal(payloadJSON{
-		Action: m.Payload.ActionText, Rationale: m.Payload.Rationale, LeadDays: m.Payload.LeadDays,
+		Action: m.Payload.ActionText, Rationale: m.Payload.Rationale,
+		LeadDays: m.Payload.LeadDays, LeadMinutes: m.Payload.LeadMinutes,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal trigger %q payload: %w", id, err)
@@ -364,9 +368,10 @@ func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
 			return ports.DueTrigger{}, fmt.Errorf("trigger %q: payload: %w", d.ID, err)
 		}
 		d.Payload = ports.TriggerPayload{
-			ActionText: stored.Action,
-			Rationale:  stored.Rationale,
-			LeadDays:   stored.LeadDays,
+			ActionText:  stored.Action,
+			Rationale:   stored.Rationale,
+			LeadDays:    stored.LeadDays,
+			LeadMinutes: stored.LeadMinutes,
 		}
 	}
 

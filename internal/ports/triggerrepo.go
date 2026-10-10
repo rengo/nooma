@@ -103,9 +103,13 @@ type TriggerPayload struct {
 	ActionText string
 	// Rationale is why it was armed — doc 02 §11's glass box.
 	Rationale string
-	// LeadDays is how far ahead of the event the trigger fires. A
-	// recurring trigger's re-arm propagates it (doc 02 §7).
+	// LeadDays is how far ahead of its occurrence a recurring trigger
+	// fires; its re-arm propagates it (doc 02 §7). 0 for a one-shot.
 	LeadDays int
+	// LeadMinutes is how far ahead of its event a one-shot event reminder
+	// fires, as armed before any pull to now (ADR-0029); 0 for one armed
+	// at once. fire_at plus it is the event the reminder watches.
+	LeadMinutes int
 }
 
 // Trigger is TriggerRepo's write shape: every triggers column this slice

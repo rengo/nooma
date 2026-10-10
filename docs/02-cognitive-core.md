@@ -724,11 +724,16 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        of not inferring. An earlier revision accepted a stale body outright; that cost is now
        paid only for wording capture was not asked to produce.
      - **The reminder.** When the corrected field is an `event` unit's `event_at`, the unit ends
-       with exactly one armed trigger, at what a fresh capture of the new date arms — decided by
-       `internal/core/prospection.Follow`, which calls the very functions `Arm` does, lead time
-       and pull-to-now included. An armed trigger is moved (its `fire_at`, its payload as a fresh
-       arming writes it, its text as above, and a recurring one's anchor, so it stays
-       recurring); with none armed, one is created; any further armed trigger expires. When the
+       with exactly the armed triggers a fresh capture of the new date arms (§7 "Lead time") —
+       decided by `internal/core/prospection.Follow`, which calls the very functions `Arm` does,
+       leads and pull-to-now included ([ADR-0029](adr/0029-event-reminders-follow-the-users-leads.md)).
+       Armed triggers are carried onto the new reminders in firing order and moved (their
+       `fire_at`, their payload as a fresh arming writes it, their text as above, and a recurring
+       one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
+       created; any further armed trigger expires. **A correction never creates an at-once
+       reminder**: when every lead of the new instant is behind and nothing is armed, nothing is
+       armed — the at-once reminder is a capture's, sent once; an armed one is still pulled to
+       now, and one already due keeps its instant. When the
        new one-shot date is already past, every armed trigger expires and none is created —
        `expired` is §7's status for a trigger that will not fire, so cancelling deletes nothing
        and needs no new status. A trigger that already fired is history and is left alone. A
@@ -738,11 +743,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        `/ui/activity` shows it; if that row fails, the trigger is not touched. A move that changes
        nothing visible (`fire_at` to the second, text, anchor) writes neither row nor trigger.
        **A failed reminder step leaves a partial state**, because the unit and its triggers share
-       no transaction: the unit holds the new date, the reminder is unmoved (or, with several,
-       partly moved), the caller gets the error, and the learning signal is not written. The
-       same correction again repairs it — the decision is made from what is armed then, and the
-       reminder's text is rewritten from the trigger's own instant (`fire_at` plus its lead
-       days), which is exact unless that firing had been pulled forward.
+       no transaction: the unit holds the new date, the reminders are unmoved or partly moved,
+       the caller gets the error, and the learning signal is not written. The same correction
+       again repairs it — the decision is made from what is armed then, and a reminder's text is
+       rewritten from the trigger's own instant (`fire_at` plus its `lead_minutes`, or a
+       recurring one's lead days), which is exact unless that firing had been pulled forward.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
@@ -775,17 +780,18 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    the disambiguation answer arrives.
    What each kind arms is decided by `internal/core/prospection.Arm`, a pure function of the
    classification and one instant: a `timer` with a `due_at` still ahead arms a timer at exactly
-   that instant; a dated `event` arms a trigger at `event_lead_days` before it; a
+   that instant; a dated `event` arms one trigger per reminder lead still ahead (§7 "Lead
+   time"); a
    `recurring_reminder` carrying both a date and a rule arms a recurring trigger anchored on the
    event's own month and day; the same kind with the rule degraded arms the one-shot dated
    occurrence instead, because the capture is honoured and the recurrence is not invented; and
    anything undated, already past, or of another kind arms nothing.
    The effect follows the decision in the same capture: `Arm`'s plan is written as one row, in
    one table, and never both — a `timer` becomes one `timers` row whose `fire_at` is the
-   classification's own `due_at`; a dated `event` and a `recurring_reminder` each become one
-   `triggers` row, `kind = time_based`, carrying `payload.lead_days` and the resolved
-   `interrupt_level` (§7's `NULL` ↔ degraded contract), the recurring one adding
-   `recurrence_rule` and `recurrence_anchor`.
+   classification's own `due_at`; a dated `event` becomes one `triggers` row per reminder,
+   carrying `payload.lead_minutes`, and a `recurring_reminder` one row carrying
+   `payload.lead_days`, `recurrence_rule` and `recurrence_anchor` — all `kind = time_based`
+   with the resolved `interrupt_level` (§7's `NULL` ↔ degraded contract).
    **What arms is not what decides whether a unit is kept — the kind is.** A `timer` persists no
    unit, and §8's "a timer is NEVER a unit" is what routes it before the unit is ever built. A
    dated `event` and a `recurring_reminder` are memory that also carries a nudge: their unit is
@@ -797,8 +803,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    The capture reports what it armed, because that is the answer the user asked for, and names
    the unit it also stored.
    **What it reports is the instant the armament is ABOUT, never the instant the nudge fires.**
-   Those differ for most dated things: the firing sits `event_lead_days` before the event, and is
-   pulled forward to the capture instant when that horizon is already behind. A reply names every
+   Those differ for most dated things: a firing sits a lead before the event, and is pulled
+   forward to the capture instant when every lead is already behind. A reply names every
    firing of what it armed ("the day before and a few hours before"), the day counted on the
    calendar in the event's own zone. A reply naming the
    firing answers a question nobody asked — "Reminder set for Wed 26 Aug, 15:26" is what a
@@ -810,7 +816,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    Whether the firing was pulled forward is carried as its own fact rather than inferred from
    the two instants. Subtracting them gives a true duration and a false promise — 41 hours reads
    as "the day before" for a reminder that arrives at once.
-   Each arming writes exactly one `decision_log` row: `capture.armed.timer`,
+   Each armed row writes exactly one `decision_log` row: `capture.armed.timer`,
    `capture.armed.trigger` or `capture.armed.recurring_trigger`. Three actions rather than one,
    because their contexts carry different facts — a timer has no lead days, no recurrence and no
    interrupt level — and the row records both the level that was stored and whether the reading
@@ -1216,13 +1222,20 @@ have N nudges; a pattern watcher does not hang off any unit):
   first would clamp there. An anchor whose month or day is out of range is clamped into range
   rather than normalised, because normalising moves the occurrence into a month, or a year, the
   user never named.
-- **Lead time**: default 7 days before the event, stored in `payload.lead_days` (the re-arm
-  propagates it). Policy per event class; migrating it to a self-model preference is a
-  deferred decision.
-  The horizon is **clamped to `now`, never offset into the past**. An event captured two days
-  before it happens has its horizon five days behind, and arming there would hand §7's own
-  staleness gate a trigger born expired. The lead time says how much warning is wanted; the
-  system is not late for an event it only just learned about.
+- **Lead time** ([ADR-0029](adr/0029-event-reminders-follow-the-users-leads.md)): a dated
+  `event` is reminded once per lead. A **timed** event, at each of the user's leads before its
+  instant — by default 24 hours and 2 hours, as absolute durations. A **date-only** event — an
+  `event_at` at exactly local midnight in the user's zone (the clock's), which is how a bare
+  date is stored (§5.1) — once, the day before at the user's reminder time, by default 09:00
+  local. Each lead is stored in its trigger's `payload.lead_minutes`. An event at genuine
+  midnight is read as date-only: the classification does not say whether a time was stated.
+  **A lead already behind is skipped**, never offset into the past: arming there would hand
+  §7's own staleness gate a trigger born expired. When every lead is behind and the event is
+  not, a capture arms **one reminder at once**: the system is not late for an event it only
+  just learned about. A correction follows §5 step 4 and never creates that at-once reminder.
+  A **recurring reminder** keeps one trigger `event_lead_days` before its next occurrence,
+  stored in `payload.lead_days` (the re-arm propagates it). Triggers armed before ADR-0029 keep
+  the instant they were armed for; a correction of their date re-arms them as the new set.
   A recurring reminder's `event_at` is an **anchor**, not a spent instant: its year is discarded
   and only the month and day survive, so a birth date decades past still arms. The at-or-before-now
   refusal above governs a one-shot occurrence — the same date is a spent instant without a
@@ -1410,8 +1423,8 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
 
 - **A rationale states what happened, never what was configured.** The distance between a
   firing and the thing it is about is measured from the two instants, not read off
-  `event_lead_days`: a trigger armed for an event two days out fires at the capture instant, and
-  a rationale saying "7 days ahead of the event" records a gap that never existed. A table whose
+  the configured lead: a trigger armed for an event an hour out fires at the capture instant, and
+  a rationale saying "2 hours ahead of the event" records a gap that never existed. A table whose
   purpose is evidence must not restate settings back as observations — that is the one way this
   table can be worse than empty, because an empty one misleads nobody.
 - **The trail is written in English, whatever language the reply was written in**
@@ -1518,7 +1531,10 @@ module):
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
-| `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a dated event its trigger fires. A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
+| `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a recurring reminder's next occurrence its trigger fires; a dated event uses the three rows below (ADR-0029). A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
+| Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours`) | 24 — hours before a timed event its first reminder fires (ADR-0029) |
+| Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours`) | 2 — hours before a timed event its second reminder fires |
+| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour`) | 9 — local hour, the day before, a date-only event is reminded |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
