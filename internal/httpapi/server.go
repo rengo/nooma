@@ -193,12 +193,10 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": message, "code": code})
 }
 
-// writeCaptureFailure answers an error from brain.CaptureService. A provider
-// or model failure keeps its own status, code and sentence; anything else is
-// an internal error, answered without detail. Either way serve logs exactly
-// one line: class, provider and path, never the captured text. An
-// unclassified error is the one place the error itself is logged, because
-// without it a 500 cannot be diagnosed at all.
+// writeCaptureFailure answers an error from brain.CaptureService: a provider
+// or model failure keeps its status, code and sentence, anything else is a
+// detail-free internal error. Either way serve logs one line; only an
+// unclassified error logs the error itself, or a 500 could not be diagnosed.
 func writeCaptureFailure(w http.ResponseWriter, r *http.Request, err error, fallback string) {
 	if f, ok := brain.Describe(err); ok {
 		brain.LogFailure(r.URL.Path, f)

@@ -86,9 +86,8 @@ func Describe(err error) (Failure, bool) {
 	return f, true
 }
 
-// LogFailure writes the one line serve owes for a failed request: the class,
-// the provider and the path. It takes no error and no text on purpose — the
-// line is safe to keep because it cannot hold a secret or the user's words.
+// LogFailure writes the one line serve owes a failed request. It takes no
+// error and no text, so the line cannot hold a secret or the user's words.
 func LogFailure(path string, f Failure) {
 	slog.Error("request failed", "class", f.Code, "provider", f.Provider, "path", path)
 }
