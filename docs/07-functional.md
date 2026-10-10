@@ -217,8 +217,11 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    derived belief as yours, and the nightly derive then never overwrites it. You can retire one,
    after a confirm step, and the nightly derive never brings it back.
 8. **Shows what it did** (`/ui/activity`). The `decision_log` newest first, 50 rows a page, with
-   an "older" link and a `?kind=` filter by family. A row that records an edit shows what it was
-   before and what it became. The page is read-only: nothing on it writes or undoes.
+   an "older" link and a `?kind=` filter by family. Each row leads with what happened in plain
+   words ("Reminder set", "Corrected", "New belief") and, when it concerns a unit that is still
+   live, links to it; Nooma's own reason and the action code follow, secondary. A row that
+   records an edit shows what it was before and what it became. An empty page says what will
+   appear there. The page is read-only: nothing on it writes or undoes.
 9. **Shows every time in your zone.** Each date and time the UI displays, each activity before/after
    value that is a timestamp, and each instant inside Nooma's own sentences (an activity
    rationale, a refusal, a chat reply) is in the zone the server process runs in (the one that travels

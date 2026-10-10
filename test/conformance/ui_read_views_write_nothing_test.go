@@ -13,6 +13,8 @@ import (
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/selfmodel"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/httpapi"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/ui"
@@ -80,16 +82,17 @@ func TestUIReadViewsWriteNothing(t *testing.T) {
 }
 
 // TestUIReadViewsWriteNothing_ActivityGet is G7 for /ui/activity (R5): the
-// page, paged and filtered, runs over a decorated DecisionLog and reaches no
-// write method. The rows are seeded through the undecorated log, so the
-// guard on Record stays armed for the view.
+// page, paged and filtered, runs over a decorated DecisionLog and, as in
+// production, a decorated UnitRepo for the rows' subjects, and reaches no
+// write method of either. Rows and units are seeded through the undecorated
+// stores, so the guards stay armed for the view.
 func TestUIReadViewsWriteNothing_ActivityGet(t *testing.T) {
 	ctx := context.Background()
 	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 
 	inner := memrepo.NewDecisionLog()
 	for i, d := range []ports.Decision{
-		{ID: "d-1", Action: ports.ActionCaptureUnitCreated, Rationale: "stored the first note", OccurredAt: at},
+		{ID: "d-1", Action: ports.ActionCaptureUnitCreated, Rationale: "stored the first note", Context: []byte(`{"unit_id":"u-1"}`), OccurredAt: at},
 		{ID: "d-2", Action: ports.ActionCheckTimerFired, Rationale: "fired the timer", OccurredAt: at.Add(time.Second)},
 	} {
 		if err := inner.Record(ctx, d); err != nil {
@@ -97,8 +100,13 @@ func TestUIReadViewsWriteNothing_ActivityGet(t *testing.T) {
 		}
 	}
 	log := &rvwDecisionLog{DecisionLog: inner, t: t}
+	innerUnits := memrepo.NewUnits()
+	if err := innerUnits.Create(ctx, unit.Unit{ID: "u-1", Type: unit.TypeTask, Status: unit.StatusPool, Content: "the first note", CreatedAt: at}); err != nil {
+		t.Fatalf("seed unit: %v", err)
+	}
+	units := &rvwUnits{Units: innerUnits, t: t}
 
-	h := httpapi.Handler(httpapi.Deps{Version: "test", UI: ui.New(ui.Deps{Activity: brain.NewActivityService(log)})})
+	h := httpapi.Handler(httpapi.Deps{Version: "test", UI: ui.New(ui.Deps{Activity: brain.NewActivityService(log).WithUnits(units)})})
 
 	targets := []string{"/ui/activity", "/ui/activity?kind=check", "/ui/activity?kind=capture&before_at=2026-09-01T09%3A00%3A05Z&before_seq=9"}
 	for i, target := range targets {
@@ -117,6 +125,9 @@ func TestUIReadViewsWriteNothing_ActivityGet(t *testing.T) {
 	}
 	if log.beforeReads != len(targets) {
 		t.Errorf("Before was read %d time(s) over %d requests, want one each — the view did not go through the decorated log", log.beforeReads, len(targets))
+	}
+	if units.liveReads == 0 {
+		t.Error("LiveByIDs was never read — the view did not resolve subjects through the decorated unit repo")
 	}
 }
 
@@ -195,6 +206,49 @@ func (g *rvwDecisionLog) Record(context.Context, ports.Decision) error {
 	return nil
 }
 
+// rvwUnits wraps memrepo.Units, failing on UnitRepo's write methods and
+// counting the read the activity view makes for its rows' subjects.
+type rvwUnits struct {
+	*memrepo.Units
+	t         rvwT
+	liveReads int
+}
+
+func (g *rvwUnits) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error) {
+	g.liveReads++
+	return g.Units.LiveByIDs(ctx, ids)
+}
+
+func (g *rvwUnits) Create(context.Context, unit.Unit) error {
+	rvwFail(g.t, "UnitRepo", "Create")
+	return nil
+}
+
+func (g *rvwUnits) UpdateContent(context.Context, string, string, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "UpdateContent")
+	return nil
+}
+
+func (g *rvwUnits) UpdateEventAt(context.Context, string, time.Time, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "UpdateEventAt")
+	return nil
+}
+
+func (g *rvwUnits) UpdateDueAt(context.Context, string, time.Time, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "UpdateDueAt")
+	return nil
+}
+
+func (g *rvwUnits) SetStatus(context.Context, string, unit.Status, unit.Status, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "SetStatus")
+	return nil
+}
+
+func (g *rvwUnits) ApplyBoosts(context.Context, []weight.Boost, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "ApplyBoosts")
+	return nil
+}
+
 // The reads each port is allowed to promote from its memrepo, by name. Every
 // other method of the three ports must be overridden by its decorator to fail:
 // the decorators embed memrepo types, so a write method added to a port later
@@ -203,6 +257,10 @@ var (
 	rvwSelfModelReads = []string{"ActiveBeliefs", "BeliefByID", "RetiredBeliefs"}
 	rvwSignalReads    = []string{"Since"}
 	rvwDecisionReads  = []string{"Before", "Since"}
+	rvwUnitReads      = []string{
+		"ByID", "LiveByIDs", "CountLiveByType", "IncompleteOlderThan", "LiveDecayStates",
+		"LiveFocusCandidates", "LiveFocusCandidatesByType", "LiveBrowsePage",
+	}
 )
 
 // rvwRecorder is an rvwT that counts failures instead of stopping the test.
@@ -255,8 +313,8 @@ func rvwUnclassified(port reflect.Type, decorator any, rec *rvwRecorder, reads [
 }
 
 // TestUIReadViewDecoratorsClassifyEveryPortMethod makes the decorators'
-// completeness a gate: a method added to SelfModelRepo, SignalRepo or
-// DecisionLog fails here until it is either allow-listed as a read or
+// completeness a gate: a method added to SelfModelRepo, SignalRepo,
+// DecisionLog or UnitRepo fails here until it is either allow-listed as a read or
 // overridden to fail.
 func TestUIReadViewDecoratorsClassifyEveryPortMethod(t *testing.T) {
 	rec := &rvwRecorder{}
@@ -268,6 +326,7 @@ func TestUIReadViewDecoratorsClassifyEveryPortMethod(t *testing.T) {
 		{reflect.TypeOf((*ports.SelfModelRepo)(nil)).Elem(), &rvwSelfModel{SelfModel: memrepo.NewSelfModel(), t: rec}, rvwSelfModelReads},
 		{reflect.TypeOf((*ports.SignalRepo)(nil)).Elem(), &rvwSignals{Signals: memrepo.NewSignals(), t: rec}, rvwSignalReads},
 		{reflect.TypeOf((*ports.DecisionLog)(nil)).Elem(), &rvwDecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: rec}, rvwDecisionReads},
+		{reflect.TypeOf((*ports.UnitRepo)(nil)).Elem(), &rvwUnits{Units: memrepo.NewUnits(), t: rec}, rvwUnitReads},
 	}
 	for _, c := range cases {
 		if bad := rvwUnclassified(c.port, c.decorator, rec, c.reads); len(bad) > 0 {

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -321,5 +322,84 @@ func TestActivityPage_KindPrefixEndsAtTheFamilyBoundary(t *testing.T) {
 
 	if want := []string{"d-zz"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("kind=zz = %v, want %v (zzz.b is another family)", got, want)
+	}
+}
+
+// actCountingUnits counts LiveByIDs calls, so a test can prove one page costs
+// one unit read however many rows name a unit.
+type actCountingUnits struct {
+	*memrepo.Units
+	reads int
+}
+
+func (c *actCountingUnits) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error) {
+	c.reads++
+	return c.Units.LiveByIDs(ctx, ids)
+}
+
+// A row whose context names a unit ("unit_id", or "from_unit_id" for a
+// relation row) carries that unit as its subject while the unit is live, so
+// the page can say what the row is about and link to it. A unit no longer
+// live, or a row naming none, has no subject: the row still renders.
+func TestActivityPage_RowsCarryTheirLiveUnitAsSubject(t *testing.T) {
+	ctx := context.Background()
+	units := &actCountingUnits{Units: memrepo.NewUnits()}
+	for _, u := range []unit.Unit{
+		{ID: "u-live", Type: unit.TypeEvent, Content: "Dentist on Friday at 10", Status: unit.StatusPool, CreatedAt: actBase},
+		{ID: "u-from", Type: unit.TypeTask, Content: "Buy dry cleaning bags", Status: unit.StatusPool, CreatedAt: actBase},
+		{ID: "u-gone", Type: unit.TypeTask, Content: "Old errand", Status: unit.StatusArchived, CreatedAt: actBase},
+	} {
+		if err := units.Create(ctx, u); err != nil {
+			t.Fatalf("Create %s: %v", u.ID, err)
+		}
+	}
+	log := memrepo.NewDecisionLog()
+	actRecord(t, log, "d-unit", ports.ActionCaptureUnitCreated, actBase.Add(4*time.Second), `{"unit_id":"u-live"}`)
+	actRecord(t, log, "d-rel", ports.ActionRelationPersisted, actBase.Add(3*time.Second), `{"from_unit_id":"u-from","to_unit_id":"u-live"}`)
+	actRecord(t, log, "d-gone", ports.ActionArchiveArchived, actBase.Add(2*time.Second), `{"unit_id":"u-gone"}`)
+	actRecord(t, log, "d-none", ports.ActionCheckDigestSent, actBase.Add(1*time.Second), `{}`)
+
+	page, err := NewActivityService(log).WithUnits(units).Page(ctx, "", nil)
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	got := map[string]*ActivitySubject{}
+	for _, r := range page.Rows {
+		got[r.ID] = r.Subject
+	}
+	want := map[string]*ActivitySubject{
+		"d-unit": {UnitID: "u-live", Content: "Dentist on Friday at 10"},
+		"d-rel":  {UnitID: "u-from", Content: "Buy dry cleaning bags"},
+		"d-gone": nil,
+		"d-none": nil,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("subjects = %+v, want %+v", got, want)
+	}
+	if units.reads != 1 {
+		t.Errorf("LiveByIDs called %d times for one page, want 1", units.reads)
+	}
+}
+
+// Without a unit reader the page is what it always was: no subject, no read.
+func TestActivityPage_NoUnitReaderMeansNoSubject(t *testing.T) {
+	row := actSingle(t, ports.ActionCaptureUnitCreated, `{"unit_id":"u1"}`)
+	if row.Subject != nil {
+		t.Errorf("Subject = %+v, want nil without a unit reader", row.Subject)
+	}
+}
+
+type actFailingUnits struct{}
+
+func (actFailingUnits) LiveByIDs(context.Context, []string) ([]unit.Unit, error) {
+	return nil, errors.New("disk gone")
+}
+
+// A failed subject read fails the page rather than silently dropping links.
+func TestActivityPage_SubjectReadFailureFailsThePage(t *testing.T) {
+	log := memrepo.NewDecisionLog()
+	actRecord(t, log, "d-1", ports.ActionCaptureUnitCreated, actBase, `{"unit_id":"u1"}`)
+	if _, err := NewActivityService(log).WithUnits(actFailingUnits{}).Page(context.Background(), "", nil); err == nil {
+		t.Error("Page succeeded although the unit read failed")
 	}
 }

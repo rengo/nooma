@@ -101,10 +101,10 @@ func TestActivityView_CorrectionShowsPreviousBesideNext(t *testing.T) {
 	body := serveActivity(ui.Deps{Activity: fake}, activityGet("")).Body.String()
 
 	for _, want := range []string{
-		"event_at: 2026-09-01 10:00 → 2026-09-02 10:00",
-		"goal_stagnation_days: 21 → 28",
-		"consolidation_enabled: true → false",
-		"weight_threshold: 0.5 → 0.6",
+		"<span>Event</span> <del>2026-09-01 10:00</del> → <ins>2026-09-02 10:00</ins>",
+		"<span>goal_stagnation_days</span> <del>21</del> → <ins>28</ins>",
+		"<span>consolidation_enabled</span> <del>true</del> → <ins>false</ins>",
+		"<span>weight_threshold</span> <del>0.5</del> → <ins>0.6</ins>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page does not show %q:\n%s", want, body)
@@ -266,5 +266,44 @@ func TestActivityView_BrainFailureAnswers500WithoutTheDetail(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "/secret/path") {
 		t.Errorf("the 500 reflects the internal error: %s", rec.Body.String())
+	}
+}
+
+// A row leads with what happened in plain words and, when it concerns a live
+// unit, links to it; the action code stays on the row, after the reason.
+func TestActivityView_RowsReadInPlainLanguageAndLinkTheirUnit(t *testing.T) {
+	t.Parallel()
+	row := activityRow("r-1", ports.ActionCaptureArmedTrigger, 1)
+	row.Subject = &brain.ActivitySubject{UnitID: "unit-5", Content: "Dentist on Friday"}
+	fake := &fakeActivity{page: brain.ActivityPage{Rows: []brain.ActivityRow{row, activityRow("r-2", ports.ActionCheckDigestSent, 2)}}}
+
+	body := serveActivity(ui.Deps{Activity: fake}, activityGet("")).Body.String()
+
+	first := between(t, body, `data-decision-id="r-1"`, "</li>")
+	for _, want := range []string{"<strong>Reminder set</strong>", `<a href="/ui/units/unit-5">Dentist on Friday</a>`, "<code>capture.armed.trigger</code>"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("row lacks %q:\n%s", want, first)
+		}
+	}
+	if strings.Index(first, "<code>") < strings.Index(first, "data-rationale") {
+		t.Errorf("the action code leads the reason instead of following it:\n%s", first)
+	}
+	second := between(t, body, `data-decision-id="r-2"`, "</li>")
+	if !strings.Contains(second, "<strong>Morning digest sent</strong>") || strings.Contains(second, "/ui/units/") {
+		t.Errorf("a row with no subject links a unit or lost its title:\n%s", second)
+	}
+}
+
+// An empty page says what will appear there, and a filtered one says the
+// filter matched nothing.
+func TestActivityView_EmptyStates(t *testing.T) {
+	t.Parallel()
+	all := serveActivity(ui.Deps{Activity: &fakeActivity{}}, activityGet("")).Body.String()
+	if !strings.Contains(all, "Nothing recorded yet.") {
+		t.Errorf("empty page has no empty state:\n%s", all)
+	}
+	filtered := serveActivity(ui.Deps{Activity: &fakeActivity{}}, activityGet("kind=check")).Body.String()
+	if !strings.Contains(filtered, "Nothing of this kind has been recorded yet.") {
+		t.Errorf("empty filtered page has no filtered empty state:\n%s", filtered)
 	}
 }

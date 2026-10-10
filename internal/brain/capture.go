@@ -839,7 +839,7 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		}); err != nil {
 			return CaptureResult{}, fmt.Errorf("capture: arm timer: %w", err)
 		}
-		if err := r.recordArmedDecision(ctx, ports.ActionCaptureArmedTimer, id, plan, now); err != nil {
+		if err := r.recordArmedDecision(ctx, ports.ActionCaptureArmedTimer, id, nil, plan, now); err != nil {
 			return CaptureResult{}, err
 		}
 
@@ -859,7 +859,7 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		if err := r.triggers.Create(ctx, trigger); err != nil {
 			return CaptureResult{}, fmt.Errorf("capture: arm trigger: %w", err)
 		}
-		if err := r.recordArmedDecision(ctx, action, id, plan, now); err != nil {
+		if err := r.recordArmedDecision(ctx, action, id, unitID, plan, now); err != nil {
 			return CaptureResult{}, err
 		}
 
@@ -968,11 +968,14 @@ func refusalMessage(why prospection.Refusal) string {
 // action would produce rows whose keys mean "absent" for one armament and
 // "missing" for another with nothing to tell them apart. m3d's re-arm needs
 // its own action too, which would read oddly beside a merged capture.armed.
-func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.DecisionAction, id string, plan prospection.Plan, now time.Time) error {
+func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.DecisionAction, id string, unitID *string, plan prospection.Plan, now time.Time) error {
 	rationale := armRationale(plan)
 
 	type armedContext struct {
-		ArmedID        string   `json:"armed_id"`
+		ArmedID string `json:"armed_id"`
+		// UnitID is the unit a trigger hangs off, so the activity page can
+		// name and link it. A timer hangs off none.
+		UnitID         *string  `json:"unit_id,omitempty"`
 		What           string   `json:"what"`
 		FireAt         string   `json:"fire_at"`
 		LeadDays       *int     `json:"lead_days,omitempty"`
@@ -987,6 +990,7 @@ func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.Dec
 
 	ctxValue := armedContext{
 		ArmedID:           id,
+		UnitID:            unitID,
 		What:              string(plan.What),
 		FireAt:            plan.FireAt.UTC().Format(time.RFC3339),
 		InterruptLevel:    interruptColumn(plan.Interrupt),
