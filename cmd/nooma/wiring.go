@@ -82,21 +82,24 @@ func (g keyMissingLLMEmbed) Embed(context.Context, ports.EmbedRequest) (ports.Em
 // task actually needs at its own call site, rather than this function
 // promising one it cannot always keep.
 func buildProvider(p config.Provider, lookup func(string) (string, bool)) (any, error) {
+	// http.DefaultClient has no timeout: a provider that accepts the request
+	// and never answers would hold the capture behind it forever.
+	httpClient := &http.Client{Timeout: p.CallTimeout()}
 	switch p.Type {
 	case "anthropic":
 		apiKey, _ := lookup(p.APIKeyEnv)
 		if apiKey == "" {
 			return keyMissingLLM{ports.KeyMissing("anthropic", p.APIKeyEnv)}, nil
 		}
-		return anthropic.NewClient(p.Endpoint, apiKey, p.Model, http.DefaultClient), nil
+		return anthropic.NewClient(p.Endpoint, apiKey, p.Model, httpClient), nil
 	case "openai":
 		apiKey, _ := lookup(p.APIKeyEnv)
 		if apiKey == "" {
 			return keyMissingLLMEmbed{keyMissingLLM{ports.KeyMissing("openai", p.APIKeyEnv)}}, nil
 		}
-		return openai.NewClient(p.Endpoint, apiKey, p.Model, http.DefaultClient), nil
+		return openai.NewClient(p.Endpoint, apiKey, p.Model, httpClient), nil
 	case "ollama":
-		return ollama.NewClient(p.Endpoint, p.Model, http.DefaultClient), nil
+		return ollama.NewClient(p.Endpoint, p.Model, httpClient), nil
 	default:
 		return nil, fmt.Errorf("provider type %q has no client this binary wires (whisper_cpp is audio-only)", p.Type)
 	}

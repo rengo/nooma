@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/ports"
@@ -104,5 +107,32 @@ func TestProviderKeyProblemsNamesEveryMissingVariableAndNoValue(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	if err := checkProviderKeys("", cfg); err == nil {
 		t.Error("the doctor check passed with a task's key missing")
+	}
+}
+
+// A provider that accepts the request and never answers ends in a timeout at
+// the provider's own deadline, instead of a capture that hangs behind it.
+// Every built client gets the deadline, so the table covers all three types.
+func TestBuiltProvidersTimeOutOnAHungServer(t *testing.T) {
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	defer hung.Close()
+	defer close(release)
+	env := func(string) (string, bool) { return "sk-x", true }
+
+	for _, typ := range []string{"openai", "anthropic", "ollama"} {
+		client, err := buildProvider(config.Provider{Type: typ, APIKeyEnv: "K", Endpoint: hung.URL, Model: "m", Timeout: "150ms"}, env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		start := time.Now()
+		_, err = client.(ports.LLMProvider).Complete(context.Background(), ports.LLMRequest{Prompt: "p"})
+		var pe *ports.ProviderError
+		if !errors.As(err, &pe) || pe.Kind != ports.FailureTimeout {
+			t.Errorf("%s: error = %v, want a timeout", typ, err)
+		}
+		if took := time.Since(start); took > 3*time.Second {
+			t.Errorf("%s: took %v to give up on a 150ms deadline", typ, took)
+		}
 	}
 }
