@@ -6,9 +6,11 @@ import (
 	"github.com/rengo/nooma/internal/core/classify"
 )
 
-// EventLeadDays is doc 02 §7's notification horizon: how far before a dated
-// event its trigger fires. Untyped and not a time.Duration, for the reason
-// QuietHoursStartHour's own comment gives.
+// EventLeadDays is doc 02 §7's notification horizon for a recurring
+// reminder: how far before its next occurrence it fires. A dated event is
+// reminded at the user's own leads instead (reminders.go, ADR-0029).
+// Untyped and not a time.Duration, for the reason QuietHoursStartHour's own
+// comment gives.
 const EventLeadDays = 7
 
 // LeadTime returns the instant EventLeadDays before eventAt, in eventAt's
@@ -63,11 +65,12 @@ const (
 	RefusalAlreadyPast Refusal = "already_past"
 )
 
-// Plan is Arm's decision: what to arm and with what.
+// Plan is one row of Arm's decision: what to arm and with what. A dated
+// event arms several, one Plan each (ADR-0029).
 //
-// Rule and Anchor are meaningful only for ArmRecurring, and LeadDays only
-// for the two trigger kinds — a timer fires at the instant the user named,
-// with no horizon in front of it.
+// Rule, Anchor and LeadDays are meaningful only for ArmRecurring, and
+// LeadMinutes only for a one-shot ArmTrigger — a timer fires at the instant
+// the user named, with no horizon in front of it.
 type Plan struct {
 	What Armament
 	Why  Refusal // RefusalNone unless What == ArmNothing
@@ -92,23 +95,27 @@ type Plan struct {
 	// defect this whole change exists to end.
 	Immediate bool
 	LeadDays  int
-	Rule      Rule
-	Anchor    Anchor
-	Interrupt Interrupt
+	// LeadMinutes is how far before About a one-shot event reminder was
+	// armed to fire; 0 for one armed at once.
+	LeadMinutes int
+	Rule        Rule
+	Anchor      Anchor
+	Interrupt   Interrupt
 }
 
 // Arm decides what one classification arms at one instant (spec R6.1,
-// design §3.7). It is the same shape classify.Kind's own mapping already
-// has: a decision about a value, taking the instant as an argument.
-func Arm(c classify.Classification, now time.Time) (Plan, bool) {
+// design §3.7), one Plan per row to write: several for a dated event, one
+// otherwise. When it arms nothing it returns one ArmNothing Plan saying
+// why, and false. prefs are the user's event reminder preferences.
+func Arm(c classify.Classification, prefs ReminderPrefs, now time.Time) ([]Plan, bool) {
 	// Resolved once, for every branch including the ones that arm nothing.
 	// A zero Interrupt would report itself degraded and therefore look
 	// correct, which is exactly why it is not good enough: only a real
 	// resolution keeps a claimed 0.0 apart from an absent reading, and doc
 	// 02 §7 makes that distinction decide whether brain persists NULL.
 	interrupt := ResolveInterrupt(c.InterruptLevel)
-	nothing := func(why Refusal) (Plan, bool) {
-		return Plan{What: ArmNothing, Why: why, Interrupt: interrupt}, false
+	nothing := func(why Refusal) ([]Plan, bool) {
+		return []Plan{{What: ArmNothing, Why: why, Interrupt: interrupt}}, false
 	}
 
 	if c.Kind == nil {
@@ -126,7 +133,7 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 		if !c.DueAt.After(now) {
 			return nothing(RefusalAlreadyPast)
 		}
-		return Plan{What: ArmTimer, FireAt: *c.DueAt, About: *c.DueAt, Interrupt: interrupt}, true
+		return []Plan{{What: ArmTimer, FireAt: *c.DueAt, About: *c.DueAt, Interrupt: interrupt}}, true
 
 	case classify.KindRecurringReminder:
 		if c.EventAt == nil {
@@ -136,16 +143,16 @@ func Arm(c classify.Classification, now time.Time) (Plan, bool) {
 			// The rule degraded, or the model never claimed one. The capture
 			// is honoured as its dated occurrence; the recurrence is not
 			// invented (doc 02 §5.1's own posture toward a degraded field).
-			return datedTrigger(*c.EventAt, now, interrupt)
+			return eventReminders(*c.EventAt, prefs, now, interrupt)
 		}
 
-		return recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), now, interrupt), true
+		return []Plan{recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), now, interrupt)}, true
 
 	case classify.KindEvent:
 		if c.EventAt == nil {
 			return nothing(RefusalNoDate)
 		}
-		return datedTrigger(*c.EventAt, now, interrupt)
+		return eventReminders(*c.EventAt, prefs, now, interrupt)
 	}
 
 	return nothing(RefusalKindNotArming)
@@ -179,25 +186,6 @@ func recurringTrigger(eventAt time.Time, rule Rule, now time.Time, interrupt Int
 		Anchor:    anchor,
 		Interrupt: interrupt,
 	}
-}
-
-// datedTrigger arms the one-shot trigger a dated event owns, or nothing
-// when that event is already over — doc 02 §5.1 refuses to arm on a date it
-// cannot trust, and a nudge for something already finished is the same
-// refusal pointing the other way.
-func datedTrigger(eventAt, now time.Time, interrupt Interrupt) (Plan, bool) {
-	if !eventAt.After(now) {
-		return Plan{What: ArmNothing, Why: RefusalAlreadyPast, Interrupt: interrupt}, false
-	}
-	fireAt, immediate := clampToNow(LeadTime(eventAt), now)
-	return Plan{
-		What:      ArmTrigger,
-		FireAt:    fireAt,
-		About:     eventAt,
-		Immediate: immediate,
-		LeadDays:  EventLeadDays,
-		Interrupt: interrupt,
-	}, true
 }
 
 // clampToNow is the layer LeadTime deliberately does not have (Finding F5).

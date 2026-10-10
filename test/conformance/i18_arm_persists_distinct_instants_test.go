@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -67,25 +68,30 @@ func TestI18_ArmingPersistsTheRightInstant(t *testing.T) {
 		}
 
 		rows := triggers.All()
-		if len(rows) != 1 {
-			t.Fatalf("triggers.All() returned %d rows, want 1", len(rows))
+		leads := prospection.DefaultReminderPrefs().TimedLeads
+		if len(rows) != len(leads) {
+			t.Fatalf("triggers.All() returned %d rows, want one per lead (%d)", len(rows), len(leads))
 		}
-		if rows[0].FireAt == nil {
-			t.Fatal("triggers.fire_at is NULL — an armed time_based trigger has one by definition")
+		for _, r := range rows {
+			if r.FireAt == nil {
+				t.Fatal("triggers.fire_at is NULL — an armed time_based trigger has one by definition")
+			}
 		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].FireAt.Before(*rows[j].FireAt) })
 
 		// Derived from event_at, not equal to it: doc 02 §7's lead time
-		// puts the nudge EventLeadDays ahead of the occurrence. Expressed
-		// as an offset from the constant rather than as a literal date, so
-		// a recalibration needs no fixture edit.
-		want := prospection.LeadTime(eventAt)
-		assertInstant(t, "triggers.fire_at", *rows[0].FireAt, want, map[string]time.Time{
-			"event_at":            eventAt,
-			"due_at":              dueAt,
-			"the capture instant": now,
-		})
-		if rows[0].Payload.LeadDays != prospection.EventLeadDays {
-			t.Errorf("payload.lead_days = %d, want %d", rows[0].Payload.LeadDays, prospection.EventLeadDays)
+		// puts each nudge one lead ahead of the occurrence. Expressed as an
+		// offset from the defaults rather than as a literal date, so a
+		// recalibration needs no fixture edit.
+		for i, lead := range leads {
+			assertInstant(t, "triggers.fire_at", *rows[i].FireAt, eventAt.Add(-lead), map[string]time.Time{
+				"event_at":            eventAt,
+				"due_at":              dueAt,
+				"the capture instant": now,
+			})
+			if want := int(lead / time.Minute); rows[i].Payload.LeadMinutes != want {
+				t.Errorf("payload.lead_minutes = %d, want %d", rows[i].Payload.LeadMinutes, want)
+			}
 		}
 	})
 }

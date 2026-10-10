@@ -61,9 +61,10 @@ func TestI30_ACorrectionOfTextAndTimeKeepsBoth(t *testing.T) {
 				t.Errorf("event_at = %v, want %v", got.EventAt, want)
 			}
 			armed := f.armed(t, "flight")
-			wantFire := time.Date(2026, 12, 13, 8, 0, 0, 0, i30Zone)
-			if len(armed) != 1 || armed[0].ID != "t1" || !armed[0].FireAt.Equal(wantFire) || armed[0].Payload.ActionText != i30tdRome {
-				t.Errorf("armed = %+v, want t1 at %s saying %q", armed, wantFire, i30tdRome)
+			wantFire := time.Date(2026, 12, 19, 8, 0, 0, 0, i30Zone)
+			if len(armed) != 2 || armed[0].ID != "t1" || !armed[0].FireAt.Equal(wantFire) ||
+				armed[0].Payload.ActionText != i30tdRome || armed[1].Payload.ActionText != i30tdRome {
+				t.Errorf("armed = %+v, want t1 at %s and a second reminder, both saying %q", armed, wantFire, i30tdRome)
 			}
 			applied := f.rows(t, ports.ActionCorrectionApplied)
 			if len(applied) != 1 {
