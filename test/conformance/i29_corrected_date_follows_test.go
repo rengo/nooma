@@ -409,6 +409,72 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		}
 	})
 
+	// ADR-0029 D4: fire_at + lead_minutes is the reminder's event. A correction
+	// that lands the set on the same fire_at instants still changes which
+	// event those instants lead to.
+	t.Run("a lead that changes under an unchanged fire_at is moved, recorded first (ADR-0029 D4)", func(t *testing.T) {
+		now := time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC)
+		noon := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+		nine := time.Date(2026, 10, 30, 21, 0, 0, 0, time.UTC)
+		event := time.Date(2026, 10, 31, 5, 0, 0, 0, time.UTC)
+		const body = "Vuelo pasado manana"
+		const toFive = `{"type":"event","normalized_content":"Vuelo pasado manana","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-31T05:00:00Z","language":"es"}`
+		ten := time.Date(2026, 10, 31, 10, 0, 0, 0, time.UTC)
+		flight := unit.Unit{ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool, Content: body,
+			EventAt: &ten, Source: "cli", CreatedAt: now, UpdatedAt: now}
+		setup := func(t *testing.T, decisions ports.DecisionLog) i29Fixture {
+			f := newI29Logging(t, now, flight, toFive, decisions)
+			cfg := memrepo.NewConfig()
+			cfg.SeedConfig(t, ports.VaultConfig{QuietHoursEnd: strPtrI27("12:00"), EveningReminderAt: strPtrI27("21:00")})
+			f.svc = f.svc.WithReminderPrefs(cfg)
+			f.armLead(t, "t1", noon, body, 1320)
+			f.armLead(t, "t2", nine, body, 780)
+			return f
+		}
+
+		f := setup(t, memrepo.NewDecisionLog())
+		f.capture(t, "dentist")
+		got := f.armed(t, "dentist")
+		if len(got) != 2 || !got[0].FireAt.Equal(noon) || !got[1].FireAt.Equal(nine) {
+			t.Fatalf("armed = %+v, want the same two instants, 12:00 and 21:00", got)
+		}
+		for _, g := range got {
+			if at := g.FireAt.Add(time.Duration(g.Payload.LeadMinutes) * time.Minute); !at.Equal(event) {
+				t.Errorf("trigger %s names %s (lead %d), want the corrected event %s", g.ID, at, g.Payload.LeadMinutes, event)
+			}
+		}
+		rows := f.rows(t, ports.ActionCorrectionReminderMoved)
+		if len(rows) != 2 {
+			t.Fatalf("moved rows = %v, want one per reminder", rows)
+		}
+		c := decodeI29(t, rows[0])
+		if !slices.Equal(c.Fields, []string{"lead_minutes"}) || c.Previous["lead_minutes"] != float64(1320) || c.Next["lead_minutes"] != float64(1020) {
+			t.Errorf("moved row = %s, want lead_minutes 1320 -> 1020 alone", rows[0].Context)
+		}
+
+		t.Run("a failed reminder row leaves the stale lead unwritten", func(t *testing.T) {
+			f := setup(t, reminderRowsFail{memrepo.NewDecisionLog()})
+			f.captureFails(t)
+			if got := f.armed(t, "dentist"); len(got) != 2 || got[0].Payload.LeadMinutes != 1320 || got[1].Payload.LeadMinutes != 780 {
+				t.Errorf("armed = %+v, want the leads untouched when the row could not be written", got)
+			}
+		})
+	})
+
+	// A move that changes nothing visible writes nothing: the reminders of a
+	// corrected date that a retry finds already carried stay, rowless.
+	t.Run("a set already carrying the corrected date is left alone", func(t *testing.T) {
+		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), flight)
+		const text = "Vuelo el 2026-10-30 a las 05:00"
+		f.armLead(t, "t1", time.Date(2026, 10, 29, 7, 0, 0, 0, time.UTC), text, 1320)
+		f.armLead(t, "t2", time.Date(2026, 10, 29, 22, 0, 0, 0, time.UTC), text, 420)
+		f.capture(t, "dentist")
+		if rows := reminderRows(t, f); len(rows) != 0 {
+			t.Errorf("reminder rows = %v, want none for a set that already matches", rows)
+		}
+	})
+
 	t.Run("a reminder left with no allowed instant is cancelled for quiet hours, not as past", func(t *testing.T) {
 		now := time.Date(2026, 10, 30, 2, 0, 0, 0, time.UTC)
 		f := newI29(t, now, dentist(now), flight)

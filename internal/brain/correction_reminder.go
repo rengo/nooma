@@ -73,7 +73,10 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 
 // moveReminder reschedules t to plan, with the payload a fresh arming of
 // plan writes and its text following the date as the unit's body did. A
-// move that changes nothing visible writes nothing.
+// move that changes nothing the reminder says or is read by writes nothing:
+// not its instant, its text, its lead or its anchor. lead_days is not
+// compared: only a legacy reminder carries one, nothing but the text
+// follower reads it, and a new arming of the same date never does.
 func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
 	text := followTriggerText(t, target.EventAt, eventAt, now.Location())
 	if bodyChanged && t.Payload.ActionText == target.Content {
@@ -92,6 +95,13 @@ func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t 
 	if text != t.Payload.ActionText {
 		fields = append(fields, "action_text")
 		previous["action_text"], next["action_text"] = t.Payload.ActionText, text
+	}
+	// The leads are what name the event: the due scan reads fire_at plus
+	// lead_minutes as its instant (ADR-0029 D4), so a lead that changed under
+	// an unchanged fire_at is a move, not a no-op.
+	if want := move.Payload; want.LeadMinutes != t.Payload.LeadMinutes {
+		fields = append(fields, "lead_minutes")
+		previous["lead_minutes"], next["lead_minutes"] = t.Payload.LeadMinutes, want.LeadMinutes
 	}
 	if plan.What == prospection.ArmRecurring {
 		a := plan.Anchor

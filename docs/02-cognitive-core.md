@@ -744,7 +744,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        `due_at`. Each move, creation and expiry writes its own row — `correction.reminder.moved`,
        `.armed`, `.cancelled` — before its write, change-shaped (`previous`/`next`) so
        `/ui/activity` shows it; if that row fails, the trigger is not touched. A move that changes
-       nothing visible (`fire_at` to the second, text, anchor) writes neither row nor trigger.
+       nothing visible (`fire_at` to the second, text, `lead_minutes`, anchor) writes neither row
+       nor trigger. `lead_minutes` counts: the due scan reads the event as `fire_at` plus it
+       ([ADR-0029](adr/0029-event-reminders-follow-the-users-leads.md) D4), so a correction that
+       lands on the same `fire_at` instants but another event still moves the reminder, with its
+       row, to refresh the lead.
        **A failed reminder step leaves a partial state**, because the unit and its triggers share
        no transaction: the unit holds the new date, the reminders are unmoved or partly moved,
        the caller gets the error, and the learning signal is not written. The same correction
