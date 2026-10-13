@@ -1,6 +1,6 @@
 # ADR-0030 — Event reminders are pushed during the day, held through the night, and never late
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-13
 - **Supersedes**: —
 - **Superseded by**: —

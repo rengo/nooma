@@ -3,10 +3,10 @@
 Three links stacked on `event-reminder-leads` (design §3).
 
 PR 1 — `docs/event-reminder-delivery-plan`
-- [x] 1. ADR-0029 → Accepted; ADR-0030 (Proposed) and its index row; this design and tasks.
+- [x] 1. ADR-0029 → Accepted; ADR-0030 (Accepted by the client, 2026-10-13) and its index row; this design and tasks.
 
 PR 2 — `feat/event-reminder-delivery`
-- [ ] 2. RED: I32 row in doc 06 §4 and `TestI32_EventRemindersArePushedAndNeverLate`; I29 widened.
+- [ ] 2. RED: I34 row in doc 06 §4 and `TestI34_EventRemindersArePushedAndNeverLate`; I29 widened.
 - [ ] 3. RED/GREEN, L1: `deliverAt`, collapse, `RefusalQuietHours` in `eventReminders` (D2-D3).
 - [ ] 4. GREEN: capture records a `quiet_hours` drop (D5).
 - [ ] 5. RED/GREEN, L1: `RouteTrigger`, `EventReminderVerdict`; the scan uses both (D6-D7).

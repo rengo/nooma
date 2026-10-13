@@ -74,13 +74,13 @@ ports.ConfigRepo)` reads `Load` once per scan, like `WithReminderPrefs`; unset, 
 
 | PR | Branch | Content | Forecast impl+docs |
 |---|---|---|---|
-| 1 | `docs/event-reminder-delivery-plan` | ADR-0029 → Accepted, ADR-0030 (Proposed), this design, tasks | ~170 |
-| 2 | `feat/event-reminder-delivery` | D1-D7 at the defaults; doc 02 §7/§13, doc 06 I32, doc 07 | ~300 |
+| 1 | `docs/event-reminder-delivery-plan` | ADR-0029 → Accepted, ADR-0030 (Accepted), this design, tasks | ~170 |
+| 2 | `feat/event-reminder-delivery` | D1-D7 at the defaults; doc 02 §7/§13, doc 06 I34, doc 07 | ~300 |
 | 3 | `feat/quiet-hours-preferences` | D8-D9; migration 0007, schema golden, doc 02 §7/§13, doc 03 | ~250 |
 
 ## 4. Tests (written first, watched red)
 
-- L2 `TestI32_EventRemindersArePushedAndNeverLate` (new invariant, doc 06 §4): ADR-0030's worked
+- L2 `TestI34_EventRemindersArePushedAndNeverLate` (new invariant, doc 06 §4): ADR-0030's worked
   examples table, row by row, through capture; a low-interrupt and a degraded event reminder are
   pushed when due; a reminder whose event has started is expired, not sent.
 - L2 I29 widened: a correction onto a 05:00 instant re-arms at 07:00 and 22:00 the day before.

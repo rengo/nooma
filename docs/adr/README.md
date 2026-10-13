@@ -81,7 +81,7 @@ order, with no correspondence to anything.
 | [0027](0027-pending-question-store.md) | Where a question the brain asked lives while it waits for an answer: a dedicated `pending_questions` store, not `triggers` and not `decision_log` | Accepted | M3e |
 | [0028](0028-ui-cookie-handshake.md) | The UI cookie carries the token itself; cross-origin UI requests are refused structurally | Accepted | M4a |
 | [0029](0029-event-reminders-follow-the-users-leads.md) | Event reminders: the day before and two hours before, as the user's own preference | Accepted | M4 |
-| [0030](0030-event-reminders-are-pushed-and-respect-the-night.md) | Event reminders are pushed during the day, held through the night, and never late | Proposed | M4 |
+| [0030](0030-event-reminders-are-pushed-and-respect-the-night.md) | Event reminders are pushed during the day, held through the night, and never late | Accepted | M4 |
 
 ## Template
 
