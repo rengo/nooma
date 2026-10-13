@@ -47,7 +47,9 @@ is on the 15th.
 2. **Classifies it with one provider call.** The message becomes one or more units, each with a
    type (`task`, `event`, `mental_load`, `knowledge`, …), normalized text, dates resolved against
    your local day ("Friday", "the 14th"), and an initial weight. The dentist visit gets an
-   `event_at`; the contract gets a `due_at`. The full taxonomy is in
+   `event_at`; the contract gets a `due_at`. The dentist visit is reminded 24 hours and 2 hours
+   before; a date with no time, the day before at 09:00; a reminder whose time has already
+   passed is skipped ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe), ADR-0029). The full taxonomy is in
    [doc 02 §5 step 1](02-cognitive-core.md#5-capture); the units and their statuses in
    [doc 02 §1](02-cognitive-core.md#1-the-unit--the-atom).
 3. **Degrades instead of refusing.** If a field comes back malformed, or a provider is down at a
@@ -73,7 +75,7 @@ is on the 15th.
    replace the text with the correction itself, or leave text and date disagreeing, asks instead
    (I30). The edit changes the one field you corrected, with its pre-image
    recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
-   unit's reminder as a fresh capture of the new date would. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
+   unit's reminders as a fresh capture of the new date would. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 
 **When the capture itself cannot proceed**, Nooma says why in plain words and saves nothing
 ([doc 02 §5.1](02-cognitive-core.md#51-what-degrades-to-null-means-field-by-field), I31). The CLI

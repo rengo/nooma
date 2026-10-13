@@ -289,7 +289,8 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// and I04 stays structural rather than remembered. Arm takes the
 	// instant Capture already read — there is no second clock read here,
 	// and captureRunner holds no clock to make one with.
-	plan, armable := prospection.Arm(c, now)
+	plans, armable := prospection.Arm(c, prospection.DefaultReminderPrefs(), now)
+	plan := plans[0] // the refusal, when nothing is armed
 
 	// **A kind that persists NO unit arms and returns here.** That is the
 	// timer, and only the timer: I04 stays structural because ToUnit is
@@ -303,7 +304,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// units, and a NULL unit_id that no foreign key rejects.
 	if armable {
 		if _, persistsUnit := c.Kind.UnitType(); !persistsUnit {
-			result, err := r.arm(ctx, c, plan, now, nil)
+			result, err := r.armAll(ctx, c, plans, now, nil)
 			if err != nil {
 				return CaptureResult{}, err
 			}
@@ -448,7 +449,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// asked for, and carries the unit id so the caller can name what was
 	// also stored.
 	if armable {
-		armed, err := r.arm(ctx, c, plan, now, &u.ID)
+		armed, err := r.armAll(ctx, c, plans, now, &u.ID)
 		if err != nil {
 			return CaptureResult{}, err
 		}
@@ -821,6 +822,23 @@ func (r captureRunner) recordAmbiguousPersonRefDecision(ctx context.Context, u u
 	return nil
 }
 
+// armAll persists every row Arm decided, in firing order, and reports the
+// earliest firing with the later ones beside it (ADR-0029: a dated event
+// arms one reminder per lead).
+func (r captureRunner) armAll(ctx context.Context, c classify.Classification, plans []prospection.Plan, now time.Time, unitID *string) (CaptureResult, error) {
+	result, err := r.arm(ctx, c, plans[0], now, unitID)
+	if err != nil {
+		return CaptureResult{}, err
+	}
+	for _, plan := range plans[1:] {
+		if _, err := r.arm(ctx, c, plan, now, unitID); err != nil {
+			return CaptureResult{}, err
+		}
+		result.Armed.Later = append(result.Armed.Later, plan.FireAt)
+	}
+	return result, nil
+}
+
 // arm persists what one Plan decided and reports it back to the caller.
 //
 // One row, in one table, per Plan — never both, which is why the switch
@@ -918,7 +936,7 @@ func armedTrigger(id string, unitID *string, text string, plan prospection.Plan,
 
 // armedPayload is the payload an arming of plan writes, saying text.
 func armedPayload(text string, plan prospection.Plan) ports.TriggerPayload {
-	return ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays}
+	return ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays, LeadMinutes: plan.LeadMinutes}
 }
 
 // refuseArm records and reports a capture that asked for a nudge and did
@@ -994,6 +1012,7 @@ func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.Dec
 		What           string   `json:"what"`
 		FireAt         string   `json:"fire_at"`
 		LeadDays       *int     `json:"lead_days,omitempty"`
+		LeadMinutes    int      `json:"lead_minutes,omitempty"`
 		RecurrenceRule *string  `json:"recurrence_rule,omitempty"`
 		InterruptLevel *float64 `json:"interrupt_level,omitempty"`
 		// InterruptDegraded travels beside the level rather than being
@@ -1010,14 +1029,11 @@ func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.Dec
 		FireAt:            plan.FireAt.UTC().Format(time.RFC3339),
 		InterruptLevel:    interruptColumn(plan.Interrupt),
 		InterruptDegraded: plan.Interrupt.Degraded(),
-	}
-	if plan.What != prospection.ArmTimer {
-		leadDays := plan.LeadDays
-		ctxValue.LeadDays = &leadDays
+		LeadMinutes:       plan.LeadMinutes,
 	}
 	if plan.What == prospection.ArmRecurring {
-		rule := string(plan.Rule)
-		ctxValue.RecurrenceRule = &rule
+		leadDays, rule := plan.LeadDays, string(plan.Rule)
+		ctxValue.LeadDays, ctxValue.RecurrenceRule = &leadDays, &rule
 	}
 
 	contextJSON, err := json.Marshal(ctxValue)

@@ -41,7 +41,7 @@ func TestPlan_CarriesWhatItArmedFor(t *testing.T) {
 
 	t.Run("a timer arms for its due instant", func(t *testing.T) {
 		due := now.Add(40 * time.Minute)
-		plan, ok := Arm(classify.Classification{
+		plan, ok := armFirst(classify.Classification{
 			Kind: kind(classify.KindTimer), DueAt: ptr(due),
 		}, now)
 
@@ -54,11 +54,11 @@ func TestPlan_CarriesWhatItArmedFor(t *testing.T) {
 	})
 
 	t.Run("a dated event arms for the event, not the nudge", func(t *testing.T) {
-		// Two days out, so LeadTime's seven-day horizon is already past
-		// and clampToNow moves the firing to now — the exact shape that
-		// made the reply look like a misparse.
-		event := time.Date(2026, 8, 28, 9, 0, 0, 0, loc)
-		plan, ok := Arm(classify.Classification{
+		// One hour out, so every lead is already behind and the firing is
+		// pulled to now — the exact shape that made the reply look like a
+		// misparse.
+		event := now.Add(time.Hour)
+		plan, ok := armFirst(classify.Classification{
 			Kind: kind(classify.KindEvent), EventAt: ptr(event),
 		}, now)
 
@@ -73,14 +73,14 @@ func TestPlan_CarriesWhatItArmedFor(t *testing.T) {
 				"they differ — which is the whole reason About exists")
 		}
 		if !plan.FireAt.Equal(now) {
-			t.Errorf("FireAt = %v, want the capture instant: a seven-day horizon two days out "+
-				"is already behind, and the system is not late for what it just learned", plan.FireAt)
+			t.Errorf("FireAt = %v, want the capture instant: every lead an hour out is already "+
+				"behind, and the system is not late for what it just learned", plan.FireAt)
 		}
 	})
 
 	t.Run("a recurring reminder arms for its next occurrence", func(t *testing.T) {
 		event := time.Date(2026, 9, 4, 9, 0, 0, 0, loc)
-		plan, ok := Arm(classify.Classification{
+		plan, ok := armFirst(classify.Classification{
 			Kind:           kind(classify.KindRecurringReminder),
 			EventAt:        ptr(event),
 			RecurrenceRule: ptr2(classify.RecurrenceRuleYearly),

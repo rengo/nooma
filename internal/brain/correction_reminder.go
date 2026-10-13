@@ -49,20 +49,22 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 		live[i] = prospection.Live{ID: t.ID, FireAt: t.FireAt, Rule: t.RecurrenceRule}
 		byID[t.ID] = t
 	}
-	f := prospection.Follow(eventAt, live, interruptLevel, now)
+	f := prospection.Follow(eventAt, live, prospection.DefaultReminderPrefs(), interruptLevel, now)
 
-	switch {
-	case f.Carry != "":
-		if err := r.moveReminder(ctx, target, byID[f.Carry], f.Plan, eventAt, body, bodyChanged, now); err != nil {
-			return err
+	for i, plan := range f.Plans {
+		var err error
+		switch {
+		case f.Carry[i] != "":
+			err = r.moveReminder(ctx, target, byID[f.Carry[i]], plan, eventAt, body, bodyChanged, now)
+		case plan.What != prospection.ArmNothing:
+			err = r.armReminder(ctx, target.ID, body, plan, now)
 		}
-	case f.Plan.What != prospection.ArmNothing:
-		if err := r.armReminder(ctx, target.ID, body, f.Plan, now); err != nil {
+		if err != nil {
 			return err
 		}
 	}
 	for _, id := range f.Expire {
-		if err := r.cancelReminder(ctx, target.ID, byID[id], f.Plan, now); err != nil {
+		if err := r.cancelReminder(ctx, target.ID, byID[id], f.Plans[0], now); err != nil {
 			return err
 		}
 	}
@@ -118,8 +120,9 @@ func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t 
 // followTriggerText rewrites t's text from the instant it was about to
 // eventAt. That instant is the unit's previous event_at; when the unit
 // already holds eventAt — a retry after the reminder step failed — it is
-// the trigger's own, fire_at plus its lead days, exact unless the firing
-// had been pulled forward to its capture.
+// the trigger's own, fire_at plus its lead (days for a recurring trigger,
+// minutes for an event reminder), exact unless the firing had been pulled
+// forward to its capture.
 func followTriggerText(t ports.DueTrigger, previous *time.Time, eventAt time.Time, zone *time.Location) string {
 	candidates := []time.Time{}
 	if previous != nil {
@@ -127,6 +130,9 @@ func followTriggerText(t ports.DueTrigger, previous *time.Time, eventAt time.Tim
 	}
 	if t.Payload.LeadDays > 0 {
 		candidates = append(candidates, t.FireAt.AddDate(0, 0, t.Payload.LeadDays))
+	}
+	if t.Payload.LeadMinutes > 0 {
+		candidates = append(candidates, t.FireAt.Add(time.Duration(t.Payload.LeadMinutes)*time.Minute))
 	}
 	for _, was := range candidates {
 		if text, changed := correction.FollowDate(t.Payload.ActionText, was, eventAt, zone); changed {
