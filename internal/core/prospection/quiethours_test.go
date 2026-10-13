@@ -218,9 +218,36 @@ func TestQuietHours_DigestDue(t *testing.T) {
 				tc.end, tc.notYet, tc.dueFrom, q.DigestDue(nil, tc.notYet), q.DigestDue(nil, tc.dueFrom))
 		}
 		sentYesterday := tc.dueFrom.AddDate(0, 0, -1)
-		sentBeforeDue := tc.dueFrom.Add(-time.Minute)
-		if !q.DigestDue(&sentYesterday, tc.dueFrom) || !q.DigestDue(&sentBeforeDue, tc.dueFrom) || q.DigestDue(&tc.dueFrom, tc.dueFrom.Add(time.Hour)) {
+		if !q.DigestDue(&sentYesterday, tc.dueFrom) || q.DigestDue(&tc.dueFrom, tc.dueFrom.Add(time.Hour)) {
 			t.Errorf("quiet end %v: the last-sent instant is not judged against the shifted due time", tc.end)
 		}
+	}
+}
+
+// TestQuietHours_DigestDue_AtMostOnePerLocalDate: a digest already sent today
+// is today's digest, whatever the due time was when it went out. Moving the
+// quiet end later after the morning digest (sent at 08:00 under a 07:00 end,
+// then the end moved to 10:00) must not make a second one due at 10:00.
+func TestQuietHours_DigestDue_AtMostOnePerLocalDate(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	sent := time.Date(2026, 10, 16, 8, 0, 0, 0, zone)
+	later := QuietHours{End: TimeOfDay{Hour: 10}}
+	for _, now := range []time.Time{
+		time.Date(2026, 10, 16, 10, 0, 0, 0, zone),
+		time.Date(2026, 10, 16, 23, 59, 0, 0, zone),
+	} {
+		if later.DigestDue(&sent, now) {
+			t.Errorf("a digest sent at %v is due again at %v after the quiet end moved to 10:00", sent, now)
+		}
+	}
+	// The next local date owes its own digest, at the new quiet end.
+	if !later.DigestDue(&sent, time.Date(2026, 10, 17, 10, 0, 0, 0, zone)) {
+		t.Error("the next day's digest is not due at the moved quiet end")
+	}
+	// The local date is the user's, not UTC's: 22:00 at UTC-3 is already
+	// the next day in UTC, and still today here.
+	lateSent := time.Date(2026, 10, 16, 22, 0, 0, 0, zone)
+	if later.DigestDue(&lateSent, time.Date(2026, 10, 16, 23, 0, 0, 0, zone)) {
+		t.Error("a digest sent at 22:00 local made another due the same local evening")
 	}
 }
