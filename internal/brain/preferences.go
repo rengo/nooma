@@ -95,10 +95,8 @@ func (s *PreferencesService) Preferences(ctx context.Context) (Preferences, erro
 // Save validates p with the parsers the arm-time read resolves with, then
 // writes the fields whose value differs from the one in force — or whose
 // stored value is invalid — records one config.updated row, and re-arms
-// the reminders of every event still ahead (ADR-0029 point 6). A re-arm
-// that stops part way leaves the values saved and returns
-// ErrRemindersNotFollowed. An invalid
-// field refuses the whole save with a *PreferencesError and writes nothing.
+// (rearm), returning ErrRemindersNotFollowed if that stops part way. An
+// invalid field refuses the whole save with a *PreferencesError.
 // The write comes before its row (m4e2-admin design §3.1): a failed write
 // logs nothing, and a failed row after a landed write is a
 // *WriteLandedError.
@@ -144,17 +142,10 @@ func (s *PreferencesService) Save(ctx context.Context, p Preferences) (SaveResul
 			landed = &WriteLandedError{Record: true, Err: err}
 		}
 	}
-	// A save that changes nothing re-arms only to finish an earlier change's
-	// re-arm: planning the same values again is not a no-op, since Follow
-	// sees only live triggers and would re-send a lead whose reminder
-	// already went out.
+	// A save that changes nothing re-arms only to finish a pending re-arm.
 	if len(changed) == 0 {
-		pending, err := s.rearmPending(ctx)
-		if err != nil {
-			return result, fmt.Errorf("%w: %w", ErrRemindersNotFollowed, err)
-		}
-		if !pending {
-			return result, nil
+		if pending, err := s.rearmPending(ctx); err != nil || !pending {
+			return result, err
 		}
 	}
 	if err := s.rearm(ctx, next, now); err != nil {

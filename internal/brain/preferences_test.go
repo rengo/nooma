@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -445,5 +446,61 @@ func TestPreferencesSave_AReArmThatStoppedAfterOneWriteIsFinishedOnce(t *testing
 	}
 	if triggers.writes != 3 {
 		t.Errorf("trigger writes in all = %d, want 3: the move, the failed cancel, the cancel; the third save writes none", triggers.writes)
+	}
+}
+
+// When the change's config.updated row and its re-arm both fail, the error
+// says both, so the page does not promise that saving again finishes it:
+// nothing marks the re-arm pending (ErrRemindersNotFollowed's documented
+// gap), and the next save that changes nothing re-arms nothing.
+func TestPreferencesSave_ADoubleFailureSaysBoth(t *testing.T) {
+	cfg := memrepo.NewConfig()
+	p := defaultPrefs()
+	p.QuietEnd = "08:00"
+	_, err := NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, cfg, memrepo.NewFailingDecisionLog(errors.New("log down")),
+		memrepo.NewUnits(), &failingTriggers{err: errors.New("disk")}).Save(context.Background(), p)
+	if !errors.Is(err, ErrRemindersNotFollowed) || !errors.Is(err, ErrWriteLanded) {
+		t.Fatalf("Save error = %v, want both ErrRemindersNotFollowed and ErrWriteLanded", err)
+	}
+	triggers := &countingArmedReads{Triggers: memrepo.NewTriggers()}
+	if _, err := NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, cfg, memrepo.NewDecisionLog(), memrepo.NewUnits(), triggers).Save(context.Background(), p); err != nil || triggers.reads != 0 {
+		t.Errorf("the next unchanged save = %v with %d re-arm reads, want no re-arm: nothing marked it pending", err, triggers.reads)
+	}
+}
+
+type countingArmedReads struct {
+	*memrepo.Triggers
+	reads int
+}
+
+func (c *countingArmedReads) ArmedUnitIDs(ctx context.Context) ([]string, error) {
+	c.reads++
+	return c.Triggers.ArmedUnitIDs(ctx)
+}
+
+// Pending is judged by write order alone: a change written after the last
+// completed re-arm is pending even when the clock stepped back and stamped
+// it earlier than that completion.
+func TestPreferencesSave_PendingFollowsWriteOrderNotTheClock(t *testing.T) {
+	ctx := context.Background()
+	log := memrepo.NewDecisionLog()
+	for i, row := range []struct {
+		action ports.DecisionAction
+		at     time.Time
+	}{
+		{ports.ActionConfigUpdated, prefsNow},
+		{ports.ActionConfigRemindersFollowed, prefsNow},
+		{ports.ActionConfigUpdated, prefsNow.Add(-time.Hour)}, // its re-arm never completed
+	} {
+		if err := log.Record(ctx, ports.Decision{ID: fmt.Sprintf("row-%d", i), Action: row.action, Context: []byte(`{}`), OccurredAt: row.at}); err != nil {
+			t.Fatalf("seeding the log: %v", err)
+		}
+	}
+	triggers := &countingArmedReads{Triggers: memrepo.NewTriggers()}
+	if _, err := NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, memrepo.NewConfig(), log, memrepo.NewUnits(), triggers).Save(ctx, defaultPrefs()); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if triggers.reads != 1 {
+		t.Errorf("re-arm reads = %d, want the pending re-arm run once", triggers.reads)
 	}
 }

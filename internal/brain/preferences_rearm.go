@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
@@ -11,9 +12,10 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// ErrRemindersNotFollowed reports a save whose values are in force but
-// whose re-arm of the reminders already set stopped part way. Saving again
-// finishes it: Follow over a set already consistent writes nothing.
+// ErrRemindersNotFollowed: the values are saved, the re-arm stopped part
+// way, and the next save finishes it — unless the change's config.updated
+// row also failed (the error then matches ErrWriteLanded too), when nothing
+// marks it pending and the next change of a preference re-arms instead.
 var ErrRemindersNotFollowed = errors.New("preferences: saved, but the reminders already set were not all moved")
 
 // preferencesCause is a preference change's (ADR-0029 point 6).
@@ -28,14 +30,9 @@ func preferencesCause() reminderCause {
 	}
 }
 
-// rearm makes every event still ahead follow prefs (ADR-0029 point 6):
-// each unit an armed trigger hangs off is read, and an event whose instant
-// is after now and none of whose armed triggers recurs is re-armed through
-// prospection.Follow, the decision a corrected date uses. A recurring
-// reminder keeps its own timing (ADR-0029 point 7), and anything else arms
-// nothing from these preferences. A trigger created here takes the level
-// of the unit's earliest armed one (doc 02 §7): the reading that unit's
-// reminders were armed with, whether by its capture or by a correction.
+// rearm makes every event still ahead whose armed triggers do not recur
+// follow prefs through prospection.Follow (ADR-0029 points 6-7). A created
+// trigger takes the level of the unit's earliest armed one (doc 02 §7).
 func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.ReminderPrefs, now time.Time) error {
 	ids, err := s.triggers.ArmedUnitIDs(ctx)
 	if err != nil {
@@ -76,21 +73,27 @@ func recurs(armed []ports.DueTrigger) bool {
 }
 
 // rearmPending reports whether the last change's re-arm did not complete:
-// the newest config.updated row is newer than the newest
-// config.reminders.followed row, by insertion sequence.
+// the last config.updated row written comes after the last
+// config.reminders.followed row written. Both are picked and compared by
+// insertion sequence alone, so a clock that stepped back cannot hide one.
 func (s *PreferencesService) rearmPending(ctx context.Context) (bool, error) {
-	updated, err := s.log.Before(ctx, nil, string(ports.ActionConfigUpdated), 1)
-	if err != nil {
-		return false, fmt.Errorf("read the last change: %w", err)
+	updated, err := s.lastWritten(ctx, ports.ActionConfigUpdated)
+	if err != nil || updated == 0 {
+		return false, err
 	}
-	if len(updated) == 0 {
-		return false, nil
+	followed, err := s.lastWritten(ctx, ports.ActionConfigRemindersFollowed)
+	return followed < updated, err
+}
+
+// lastWritten is the highest insertion sequence among action's rows (one
+// per save), 0 for none. Before orders by occurred_at, so all are read.
+func (s *PreferencesService) lastWritten(ctx context.Context, action ports.DecisionAction) (int64, error) {
+	rows, err := s.log.Before(ctx, nil, string(action), math.MaxInt32)
+	var last int64
+	for _, r := range rows {
+		last = max(last, r.Seq)
 	}
-	followed, err := s.log.Before(ctx, nil, string(ports.ActionConfigRemindersFollowed), 1)
-	if err != nil {
-		return false, fmt.Errorf("read the last completed re-arm: %w", err)
-	}
-	return len(followed) == 0 || followed[0].Seq < updated[0].Seq, nil
+	return last, err
 }
 
 // recordFollowed marks the re-arm of the preferences in force complete.

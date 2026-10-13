@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -139,6 +140,51 @@ func TestI35_ASaveThatChangesNothingTouchesNoReminder(t *testing.T) {
 				t.Errorf("a save that changed nothing wrote %d decision rows", after-before)
 			}
 		})
+	}
+}
+
+// i35ReadFails fails ArmedForUnit for one unit, so a re-arm stops part way
+// after the units before it.
+type i35ReadFails struct {
+	*memrepo.Triggers
+	unit string
+}
+
+func (f *i35ReadFails) ArmedForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error) {
+	if unitID == f.unit {
+		return nil, errors.New("disk")
+	}
+	return f.Triggers.ArmedForUnit(ctx, unitID)
+}
+
+// TestI35_APendingReArmIsFinishedByTheNextSave is I35's pending clause: a
+// change whose re-arm stopped before the "zoo" trip (a date-only event,
+// reminded the day before at 09:00) is finished by the next save even
+// though that one changes nothing, and the save after it writes nothing.
+func TestI35_APendingReArmIsFinishedByTheNextSave(t *testing.T) {
+	ctx := context.Background()
+	evening := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
+	zoo := time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)
+	v := newI35(t, evening)
+	v.unit(t, "zoo", unit.TypeEvent, zoo, evening)
+	v.arm(t, "zoo-day-before", "zoo", time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC), 900, nil)
+	p := i35Defaults()
+	p.DateOnlyAt = "08:00"
+
+	broken := brain.NewPreferencesService(fixedClock{now: evening}, v.ids, v.cfg, v.log, v.units, &i35ReadFails{Triggers: v.triggers, unit: "zoo"})
+	if _, err := broken.Save(ctx, p); !errors.Is(err, brain.ErrRemindersNotFollowed) {
+		t.Fatalf("Save at 20:00 = %v, want the re-arm to stop at zoo", err)
+	}
+	later := v.at(evening.Add(2 * time.Hour))
+	if res, err := later.Save(ctx, p); err != nil || len(res.Changed) != 0 {
+		t.Fatalf("Save at 22:00 = %+v, %v; want nothing changed and no error", res, err)
+	}
+	if got := v.armedAt(t, "zoo"); !sameInstants(got, []time.Time{time.Date(2026, 10, 16, 8, 0, 0, 0, time.UTC)}) {
+		t.Errorf("zoo reminders = %v, want the pending re-arm to move it to 08:00", got)
+	}
+	before := len(v.rowsOrFail(t))
+	if _, err := later.Save(ctx, p); err != nil || len(v.rowsOrFail(t)) != before {
+		t.Errorf("a third save = %v and wrote %d rows, want nothing: the re-arm completed", err, len(v.rowsOrFail(t))-before)
 	}
 }
 

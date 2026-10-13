@@ -15,6 +15,10 @@ PR 3 — `feat/reminder-prefs-rearm` (#331)
 - [x] 6. RED/GREEN L3 + contract: `TriggerRepo.ArmedUnitIDs`.
 - [x] 7. GREEN: re-arm on save through `Follow` with `config.reminder.*` rows (D5, D6); doc 02 §7.
 - [x] 7a. RED/GREEN: re-arm only on a change or a pending re-arm (`config.reminders.followed`); the created reminder's level; a re-arm failing after one write.
+- [x] 7b. RED/GREEN: pending by insertion order; the double failure said; I35's pending clause.
+
+PR 3b — `feat/reminder-prefs-delivered`
+- [x] 7c. RED/GREEN: a reminder already sent is never sent again by a save — each reminder records its event instant and user lead, and `FollowSent` treats a lead served for the same instant as covered (`TriggerRepo.FiredForUnit`).
 
 PR 4 — `feat/ui-preferences` (#332)
 - [ ] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).
