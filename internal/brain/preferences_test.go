@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -552,5 +553,47 @@ func TestSentReminders_PlacesWhatWentOut(t *testing.T) {
 	}
 	if !got[3].About.IsZero() {
 		t.Errorf("legacy row with no lead, sent after the event = %+v, want it placed nowhere", got[3])
+	}
+}
+
+// A live reminder of a lead the new preferences drop expires as covered
+// when what is left already went out, and its row says so, not "passed".
+func TestPreferencesSave_ACoveredReminderSaysWhy(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	event := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	units, triggers, log := memrepo.NewUnits(), memrepo.NewTriggers(), memrepo.NewDecisionLog()
+	if err := units.Create(ctx, unit.Unit{ID: "flight", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "flight",
+		EventAt: &event, Source: "cli", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("seeding unit: %v", err)
+	}
+	unitID := "flight"
+	for _, tr := range []struct {
+		id   string
+		at   time.Time
+		lead int
+	}{{"flight-2h", time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC), 120}, {"flight-6h", time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC), 360}} {
+		at := tr.at
+		if err := triggers.Create(ctx, ports.Trigger{ID: tr.id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &at,
+			Payload: ports.TriggerPayload{ActionText: "flight", LeadMinutes: int(event.Sub(at) / time.Minute), About: event, UserLeadsMinutes: []int{tr.lead}}}); err != nil {
+			t.Fatalf("seeding trigger: %v", err)
+		}
+	}
+	if err := triggers.Fire(ctx, "flight-2h", time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	p := defaultPrefs()
+	p.LeadMinutes = []int{120}
+	if _, err := NewPreferencesService(fixedClock{now: now}, &seqIDs{}, memrepo.NewConfig(), log, units, triggers).Save(ctx, p); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	var cancelled []ports.Decision
+	for _, d := range prefsRows(t, log) {
+		if d.Action == ports.ActionConfigReminderCancelled {
+			cancelled = append(cancelled, d)
+		}
+	}
+	if len(cancelled) != 1 || !strings.Contains(cancelled[0].Rationale, "already sent covers its leads") {
+		t.Errorf("cancelled rows = %+v, want one saying a reminder already sent covers the leads", cancelled)
 	}
 }

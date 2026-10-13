@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/correction"
@@ -116,7 +117,8 @@ func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.
 // moveReminder reschedules t to plan, with the payload a fresh arming of
 // plan writes and its text following the date as the unit's body did. A
 // move that changes nothing the reminder says or is read by writes nothing:
-// not its instant, its text, its lead or its anchor. lead_days is not
+// not its instant, its text, its lead, what it is about, the leads it
+// serves or its anchor. lead_days is not
 // compared: only a legacy reminder carries one, nothing but the text
 // follower reads it, and a new arming of the same date never does.
 func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
@@ -144,6 +146,17 @@ func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports
 	if want := move.Payload; want.LeadMinutes != t.Payload.LeadMinutes {
 		fields = append(fields, "lead_minutes")
 		previous["lead_minutes"], next["lead_minutes"] = t.Payload.LeadMinutes, want.LeadMinutes
+	}
+	// What it is about and which leads it serves are what a later re-arm
+	// reads back as sent (doc 02 §7): a lead merged into it, or a row from
+	// before they were recorded, is a move even at an unchanged fire_at.
+	if want := move.Payload; !want.About.Equal(t.Payload.About) {
+		fields = append(fields, "event_at")
+		previous["event_at"], next["event_at"] = instantText(t.Payload.About), instantText(want.About)
+	}
+	if want := move.Payload; !slices.Equal(want.UserLeadsMinutes, t.Payload.UserLeadsMinutes) {
+		fields = append(fields, "user_leads_minutes")
+		previous["user_leads_minutes"], next["user_leads_minutes"] = t.Payload.UserLeadsMinutes, want.UserLeadsMinutes
 	}
 	if plan.What == prospection.ArmRecurring {
 		a := plan.Anchor
@@ -271,3 +284,11 @@ func (r reminderSet) recordReminder(ctx context.Context, action ports.DecisionAc
 }
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
+// instantText is rfc3339, or nil for an instant never recorded.
+func instantText(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return rfc3339(t)
+}

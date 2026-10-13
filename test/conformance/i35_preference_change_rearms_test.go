@@ -4,6 +4,7 @@ package conformance
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -408,6 +409,60 @@ func TestI35_OneReminderServingTwoLeadsCoversBoth(t *testing.T) {
 	t.Run("a row from before leads were recorded, pulled to now", func(t *testing.T) {
 		run(t, pulled.Add(5*time.Minute), pulled, func(v i35Vault) { v.arm(t, "flight-sent", "flight", pulled, 0, nil) },
 			func(p *brain.Preferences) { p.DateOnlyAt = "08:00" })
+	})
+}
+
+// TestI35_ALeadMergedByAReArmIsRecorded goes through real re-arms, not a
+// seeded payload: leads 6 h and 3 h before a 05:00 flight; at 20:00 a save
+// adds 2 h, which lands on the 3 h reminder at 22:00 (the evening before).
+// That reminder must now record both leads, so after it goes out a later
+// evening time sends neither again. A row from before leads were recorded,
+// carried at an unchanged time, gains its event instant the same way.
+func TestI35_ALeadMergedByAReArmIsRecorded(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	ten, eleven := time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC), time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
+	evening := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
+	v := newI35(t, evening)
+	leads := "[360,180]"
+	v.cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+	v.unit(t, "flight", unit.TypeEvent, flight, evening)
+	v.serve(t, "flight-3h", "flight", ten, flight, 420, 180)
+	v.serve(t, "flight-6h", "flight", eleven, flight, 360, 360)
+
+	p := i35Defaults()
+	p.LeadMinutes = []int{360, 180, 120}
+	if _, err := v.svc.Save(ctx, p); err != nil {
+		t.Fatalf("Save adding 2 h: %v", err)
+	}
+	armed, _ := v.triggers.ArmedForUnit(ctx, "flight")
+	if len(armed) != 2 || armed[0].ID != "flight-3h" || !slices.Equal(armed[0].Payload.UserLeadsMinutes, []int{180, 120}) {
+		t.Fatalf("after adding 2 h = %+v, want flight-3h at 22:00 serving 3 h and 2 h", armed)
+	}
+	if err := v.triggers.Fire(ctx, "flight-3h", ten); err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	p.EveningAt = "23:30"
+	if _, err := v.at(time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)).Save(ctx, p); err != nil {
+		t.Fatalf("Save at 22:30: %v", err)
+	}
+	if got := v.armedAt(t, "flight"); !sameInstants(got, []time.Time{eleven}) {
+		t.Errorf("flight reminders = %v, want only 23:00: 3 h and 2 h both went out at 22:00", got)
+	}
+
+	t.Run("a row from before leads were recorded gains them", func(t *testing.T) {
+		v := newI35(t, evening)
+		v.unit(t, "flight", unit.TypeEvent, flight, evening)
+		v.arm(t, "flight-6h", "flight", eleven, 360, nil)
+		p := i35Defaults()
+		p.LeadMinutes = []int{360}
+		if _, err := v.svc.Save(ctx, p); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		armed, _ := v.triggers.ArmedForUnit(ctx, "flight")
+		if len(armed) != 1 || !armed[0].FireAt.Equal(eleven) || !armed[0].Payload.About.Equal(flight) || !slices.Equal(armed[0].Payload.UserLeadsMinutes, []int{360}) {
+			t.Errorf("carried legacy row = %+v, want it at 23:00, about 05:00, serving 6 h", armed)
+		}
 	})
 }
 

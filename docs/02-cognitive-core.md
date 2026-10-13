@@ -1271,7 +1271,12 @@ have N nudges; a pattern watcher does not hang off any unit):
   placed by `fire_at + lead_minutes` and covers by time only; one with no lead (pulled to now, or
   armed at once) that went out before the event's current instant is taken as about that
   instant and covers by time only. For those old rows alone, a send about the date before a
-  correction may therefore cover the new date: that risk is accepted so they never re-send. The
+  correction may therefore cover the new date: that risk is accepted so they never re-send. One
+  old row with a lead that already went out can be sent once more after a later change of the
+  evening time or the quiet end, which moves its slot past the send: an accepted residual risk
+  for reminders armed before these keys only. A reminder carried by a re-arm or a correction is
+  rewritten whenever the instant it is about or the leads it serves change, a lead merged into
+  it at an unchanged time included, and an old row gains both keys the first time it is carried. The
   re-arm plans only uncovered leads (`prospection.FollowSent`), and a live reminder of a lead no
   longer planned expires as covered. An event with nothing armed is not re-armed, so a lead
   added after all of its reminders went out is not armed (the change re-arms *armed* reminders). **A save that changes nothing creates, moves or re-sends no
