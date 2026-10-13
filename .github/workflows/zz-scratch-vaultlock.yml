@@ -41,7 +41,7 @@ jobs:
           s=open(p).read()
           i=s.index('\t_, _ = io.Copy(io.Discard, os.Stdin)')
           j=s.index('os.Exit(0)\n', i)+len('os.Exit(0)\n')
-          s=s[:i]+'\tdefer func() { _ = lock.Release() }()\n\tselect {}\n'+s[j:]
+          s=s[:i]+'\tdefer func() { _ = lock.Release() }()\n\t_ = io.Discard\n\tselect {}\n'+s[j:]
           open(p,'w').write(s)
           PY
           grep -n "select {}" test/integration/vaultlock_test.go
