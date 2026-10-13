@@ -67,3 +67,12 @@ func TestProviderErrorTextCarriesNoResponseBody(t *testing.T) {
 		t.Errorf("message = %q", msg)
 	}
 }
+
+// A caller that went away is not a provider that is down: a canceled context
+// is its own class, so serve does not log "unreachable" for a closed tab.
+func TestTransportFailureSeparatesCancellationFromUnreachable(t *testing.T) {
+	got := ports.TransportFailure("openai", fmt.Errorf("Post: %w", context.Canceled))
+	if got.Kind != ports.FailureCanceled {
+		t.Errorf("kind = %q, want canceled", got.Kind)
+	}
+}

@@ -89,7 +89,8 @@ in the vault's `.env` and the environment, and asks for a restart of `serve`, wh
 | `provider_unreachable` | 502 | No answer from the provider |
 | `provider_key_rejected` | 502 | The provider answered 401 or 403 |
 | `provider_rate_limited` | 503 | The provider answered 429 |
-| `provider_timeout` | 504 | The provider outlived its deadline |
+| `provider_timeout` | 504 | The provider outlived its deadline: 60 s per call unless its `timeout:` in `nooma.yml` says otherwise |
+| `canceled` | 499 | The caller hung up mid-capture; logged, not a provider fault |
 | `provider_failed` | 502 | Any other non-success answer from the provider |
 | `model_output_unusable` | 502 | The answer had no usable field or no type; nothing was saved |
 | `invalid_request` | 400 | The body is not JSON, or `text`, `query` or `ids` is missing |

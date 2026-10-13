@@ -18,6 +18,7 @@ const (
 	FailureKeyRejected FailureKind = "key_rejected" // the vendor answered 401 or 403
 	FailureRateLimited FailureKind = "rate_limited" // the vendor answered 429
 	FailureTimeout     FailureKind = "timeout"      // the call outlived its deadline
+	FailureCanceled    FailureKind = "canceled"     // the caller went away; not the provider's fault
 	FailureOther       FailureKind = "failed"       // any other non-success answer
 )
 
@@ -75,7 +76,9 @@ func StatusFailure(provider string, status int) *ProviderError {
 func TransportFailure(provider string, err error) *ProviderError {
 	kind := FailureUnreachable
 	var netErr net.Error
-	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+	if errors.Is(err, context.Canceled) {
+		kind = FailureCanceled
+	} else if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
 		kind = FailureTimeout
 	}
 	return &ProviderError{Provider: provider, Kind: kind, Err: err}

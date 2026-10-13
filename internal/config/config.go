@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // The schema below mirrors docs/01-architecture.md §"Configuration — nooma.yml"
 // field for field. That is not a coincidence to be maintained by hand: the L2
 // gate of spec R9.1 decodes the document's own example into these types and
@@ -55,6 +57,9 @@ type Provider struct {
 	Endpoint   string `yaml:"endpoint"`
 	BinaryPath string `yaml:"binary_path"`
 	ModelPath  string `yaml:"model_path"`
+	// Timeout bounds each call to this provider ("30s", "2m"); empty means
+	// DefaultProviderTimeout.
+	Timeout string `yaml:"timeout"`
 }
 
 // TaskBinding points one brain task at one provider by name.
@@ -95,3 +100,17 @@ type Telegram struct {
 // slices. This slice deliberately stops at the schema and the decoder: the keys
 // of spec R3.4 are pointers here so that absence survives decoding, and nothing
 // yet decides what an absent key should become.
+
+// DefaultProviderTimeout is how long one provider call may take when the
+// provider sets no timeout (doc 02 §13). A call that outlives it fails as a
+// timeout instead of hanging the capture behind it.
+const DefaultProviderTimeout = 60 * time.Second
+
+// CallTimeout is the deadline for one call to p. Validate guarantees a set
+// Timeout parses and is positive, so the fallback is for an unvalidated config.
+func (p Provider) CallTimeout() time.Duration {
+	if d, err := time.ParseDuration(p.Timeout); err == nil && d > 0 {
+		return d
+	}
+	return DefaultProviderTimeout
+}

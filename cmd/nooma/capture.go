@@ -20,12 +20,28 @@ import (
 	"github.com/rengo/nooma/internal/store/vaultlock"
 )
 
-// captureTimeout bounds how long `nooma capture` waits for POST /capture to
-// answer. A real capture can involve an LLM classify call and an embedding
-// call, both already bounded server-side (doctor.go's own
-// qualityGateTimeout); this is the CLI's own ceiling so an unresponsive
-// server does not hang the terminal forever.
-const captureTimeout = 30 * time.Second
+// providerCallsPerCapture is the most provider calls one capture makes in
+// sequence (classify, embed, judge). Each may use its provider's whole
+// deadline, so the CLI waits for all of them plus captureTimeoutMargin: a
+// shorter wait would give up before the server's own 504 could arrive.
+const providerCallsPerCapture = 3
+
+// captureTimeoutMargin is the slack on top of the providers' deadlines. A var
+// so a test can shrink it.
+var captureTimeoutMargin = 15 * time.Second
+
+// captureTimeoutFor bounds how long `nooma capture` waits for POST /capture,
+// from the slowest provider deadline this vault configures.
+func captureTimeoutFor(cfg *config.Config) time.Duration {
+	longest := config.DefaultProviderTimeout
+	if len(cfg.Providers) > 0 {
+		longest = 0
+	}
+	for _, p := range cfg.Providers {
+		longest = max(longest, p.CallTimeout())
+	}
+	return providerCallsPerCapture*longest + captureTimeoutMargin
+}
 
 // runCapture is design D11: `nooma capture` is an HTTP client of a running
 // `nooma serve`, never a second direct-vault writer. It resolves the vault
@@ -68,8 +84,16 @@ func runCapture(args []string, out, errOut io.Writer) error {
 	}
 
 	addr := dialAddress(cfg)
-	resp, err := postCapture(addr, header, text)
+	timeout := captureTimeoutFor(cfg)
+	resp, err := postCapture(addr, header, text, timeout)
 	if err != nil {
+		// Waiting out the whole timeout is not "no server": the server was
+		// there and did not answer, and blaming server.bind sends the user
+		// looking for the wrong thing.
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return fmt.Errorf("the server at http://%s did not reply within %s — a provider call may be hung; see the nooma serve log", addr, timeout)
+		}
 		// A transport-level failure (connection refused, no route, timeout)
 		// is exactly the case design D11's three-way diagnosis exists for:
 		// "connection refused" alone does not tell a user whether they
@@ -146,7 +170,7 @@ func captureAuthHeader(cfg *config.Config) (string, error) {
 // design D11's connectivity probe: no separate check runs before it,
 // because by the time it runs the auth decision has already been made
 // (captureAuthHeader, above) — sending is the last step, never the first.
-func postCapture(addr, authHeader, text string) (*http.Response, error) {
+func postCapture(addr, authHeader, text string, timeout time.Duration) (*http.Response, error) {
 	payload, err := json.Marshal(map[string]string{"text": text})
 	if err != nil {
 		return nil, err
@@ -159,7 +183,7 @@ func postCapture(addr, authHeader, text string) (*http.Response, error) {
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}
-	client := &http.Client{Timeout: captureTimeout}
+	client := &http.Client{Timeout: timeout}
 	return client.Do(req)
 }
 
