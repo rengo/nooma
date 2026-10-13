@@ -297,9 +297,12 @@ func wireChannel(cfg *config.Config, lookup func(string) (string, bool), log io.
 // and loads no index, because a due scan calls no model and searches
 // nothing — the shortest wiring function in this file, and short for a
 // reason worth stating rather than for one worth wondering about.
-func wireCheck(db *sqlite.Vault) *brain.CheckService {
+//
+// clock is a parameter for the test that pins its quiet-hours wiring;
+// `nooma check` hands it systemClock{}.
+func wireCheck(clock ports.Clock, db *sqlite.Vault) *brain.CheckService {
 	return brain.NewCheckService(
-		systemClock{},
+		clock,
 		sqlite.NewTriggerRepo(db),
 		sqlite.NewTimerRepo(db),
 		uuidGen{},

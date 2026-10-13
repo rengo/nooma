@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/sqlite/sqlitetest"
@@ -88,6 +89,29 @@ tasks:
 // 07:30 fires at 08:30 under the default night, so its staying armed is
 // only reachable through the stored 09:00.
 func TestWireProactive_DefersToTheStoredQuietEnd(t *testing.T) {
+	deferToStoredQuietEnd(t, func(clock ports.Clock, db *sqlite.Vault, cfg *config.Config) *brain.CheckService {
+		check, err := wireProactive(clock, db, cfg, func(string) (string, bool) { return "", false }, nil, nil)
+		if err != nil {
+			t.Fatalf("wireProactive: %v", err)
+		}
+		return check
+	})
+}
+
+// TestWireCheck_DefersToTheStoredQuietEnd: `nooma check` reads the same
+// quiet end serve's pass does, so a manual scan never fires what serve
+// would still hold.
+func TestWireCheck_DefersToTheStoredQuietEnd(t *testing.T) {
+	deferToStoredQuietEnd(t, func(clock ports.Clock, db *sqlite.Vault, _ *config.Config) *brain.CheckService {
+		return wireCheck(clock, db)
+	})
+}
+
+// deferToStoredQuietEnd arms a trigger due at 07:30 under a stored quiet
+// end of 09:00 and asserts the check wire builds holds it at 08:30 and
+// fires it at 09:00.
+func deferToStoredQuietEnd(t *testing.T, wire func(ports.Clock, *sqlite.Vault, *config.Config) *brain.CheckService) {
+	t.Helper()
 	ctx := context.Background()
 	db, cfg := gateVault(t)
 	sqlitetest.SeedQuietHoursEnd(t, db, "09:00")
@@ -99,16 +123,11 @@ func TestWireProactive_DefersToTheStoredQuietEnd(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("arming: %v", err)
 	}
-	lookup := func(string) (string, bool) { return "", false }
 	for _, tc := range []struct {
 		now   time.Time
 		fired int
 	}{{day(8, 30), 0}, {day(9, 0), 1}} {
-		check, err := wireProactive(gateClock{now: tc.now}, db, cfg, lookup, nil, nil)
-		if err != nil {
-			t.Fatalf("wireProactive: %v", err)
-		}
-		report, err := check.Check(ctx, brain.CheckRequest{DryRun: true})
+		report, err := wire(gateClock{now: tc.now}, db, cfg).Check(ctx, brain.CheckRequest{DryRun: true})
 		if err != nil {
 			t.Fatalf("Check: %v", err)
 		}

@@ -85,7 +85,7 @@ func runCheck(args []string, out, errOut io.Writer) error {
 	}
 	defer func() { _ = db.Close() }()
 
-	report, err := wireCheck(db).Check(ctx, brain.CheckRequest{DryRun: dryRun})
+	report, err := wireCheck(systemClock{}, db).Check(ctx, brain.CheckRequest{DryRun: dryRun})
 	if err != nil {
 		return err
 	}
