@@ -2,6 +2,7 @@ package channels
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/phrase"
@@ -57,7 +58,9 @@ func RenderReply(result brain.CaptureResult) string {
 			// two instants: subtracting them gives a true duration and a
 			// false promise — 41 hours reads as "the day before" for a
 			// reminder that arrives at once.
-			lead := say.Lead(result.Armed.Immediate, result.Armed.About.Sub(result.Armed.FireAt))
+			// Every reminder is named: a timed event has two (ADR-0029).
+			fires := append([]time.Time{result.Armed.FireAt}, result.Armed.Later...)
+			lead := say.Leads(result.Armed.Immediate, result.Armed.About, fires...)
 			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), lead)
 		}
 

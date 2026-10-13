@@ -170,6 +170,9 @@ type Armed struct {
 	// instants above, which would read a gap of hours and describe a
 	// reminder arriving "the day before" when it arrives at once.
 	Immediate bool
+	// Later are the fire instants of an event's further reminders, in
+	// order, after the earliest one FireAt names (ADR-0029).
+	Later []time.Time
 }
 
 // ArmRefused is what CaptureResult carries when a capture classified as
