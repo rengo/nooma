@@ -130,8 +130,8 @@ func TestStatusReportsTheLockHolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status on a held vault: %v\nstderr: %s", err, stderr)
 	}
-	if !strings.Contains(stdout, strconv.Itoa(holder)) {
-		t.Errorf("status does not name the holding PID %d:\n%s", holder, stdout)
+	if !lockLineNamesPID(stdout, holder) {
+		t.Errorf("status does not name the holding PID %d on its lock line:\n%s", holder, stdout)
 	}
 
 	// And the same command on a free vault must not invent a holder.
@@ -140,9 +140,33 @@ func TestStatusReportsTheLockHolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status on a free vault: %v", err)
 	}
-	if strings.Contains(stdout, strconv.Itoa(holder)) {
-		t.Errorf("status reported a holder for a vault nobody holds:\n%s", stdout)
+	if line := lockLine(stdout); !strings.HasSuffix(line, "free") || lockLineNamesPID(stdout, holder) {
+		t.Errorf("status reported a holder for a vault nobody holds (lock line %q):\n%s", line, stdout)
 	}
+}
+
+// lockLine returns the `lock:` line of status output, or "" when there is none.
+// The assertions look only at this line: the rest of the output carries the
+// temp path, the size and the port, and a PID's digits can appear in any of them.
+func lockLine(stdout string) string {
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.HasPrefix(line, "lock:") {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
+// lockLineNamesPID reports whether the lock line carries pid as a whole token,
+// not as a substring of a longer number.
+func lockLineNamesPID(stdout string, pid int) bool {
+	want := strconv.Itoa(pid)
+	for _, tok := range strings.Fields(lockLine(stdout)) {
+		if tok == want {
+			return true
+		}
+	}
+	return false
 }
 
 // holdVaultLock takes the vault's write lock in THIS process and returns the PID
