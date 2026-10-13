@@ -4,6 +4,7 @@ package conformance
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -150,3 +151,43 @@ func TestI34_EventRemindersArePushedAndNeverLate(t *testing.T) {
 }
 
 func ptrTime(t time.Time) *time.Time { return &t }
+
+// TestI34_EventRemindersFollowTheStoredNight is ADR-0030 point 5 at arm
+// time: quiet end and the evening time are the user's preferences, read
+// from the vault's config row, and a stored value that fails validation
+// falls back to its own default.
+func TestI34_EventRemindersFollowTheStoredNight(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(day, hour int) time.Time { return time.Date(2026, 10, day, hour, 0, 0, 0, zone) }
+	str := func(s string) *string { return &s }
+	flight := `{"type":"event","normalized_content":"vuelo","weight":0.7,"decay_rate":0.05,"event_at":"2026-10-16T08:00:00-03:00"}`
+
+	cases := []struct {
+		name              string
+		quietEnd, evening *string
+		want              []time.Time
+	}{
+		{"quiet until 09:00, evening at 21:00: the 24h reminder at 09:00, the 2h one at 21:00 the evening before",
+			str("09:00"), str("21:00"), []time.Time{at(15, 9), at(15, 21)}},
+		{"a quiet end past noon and an evening before quiet end are invalid: the defaults",
+			str("13:00"), str("06:00"), []time.Time{at(15, 8), at(16, 7)}},
+		{"an evening before the stored quiet end is invalid on its own",
+			str("09:00"), str("08:30"), []time.Time{at(15, 9), at(15, 22)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := memrepo.NewConfig()
+			cfg.SeedConfig(t, ports.VaultConfig{QuietHoursEnd: tc.quietEnd, EveningReminderAt: tc.evening})
+			triggers, _, _ := i33CaptureWith(t, at(13, 10), flight, cfg)
+			rows := triggers.All()
+			sort.Slice(rows, func(i, j int) bool { return rows[i].FireAt.Before(*rows[j].FireAt) })
+			got := make([]time.Time, len(rows))
+			for i, r := range rows {
+				got[i] = *r.FireAt
+			}
+			if !slices.EqualFunc(got, tc.want, time.Time.Equal) {
+				t.Errorf("fires at %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

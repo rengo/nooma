@@ -118,7 +118,7 @@ func reminderPrefs(ctx context.Context, cfg ports.ConfigRepo) prospection.Remind
 	if err != nil {
 		return prospection.DefaultReminderPrefs()
 	}
-	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt)
+	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt, stored.QuietHoursEnd, stored.EveningReminderAt)
 }
 
 // Capture is the package's only ports.Clock.Now() read (spec R4.1, design
