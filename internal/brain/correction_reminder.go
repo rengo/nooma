@@ -167,12 +167,15 @@ func (r correctionRunner) armReminder(ctx context.Context, unitID, body string, 
 	return nil
 }
 
-// cancelReminder expires t: its date is past, or another trigger carries
-// the unit's reminder. Expired is I15's status for a trigger that will not
+// cancelReminder expires t: its date is past, no instant before it is
+// outside quiet hours, or another trigger carries the unit's reminder. Expired is I15's status for a trigger that will not
 // fire; nothing is deleted.
 func (r correctionRunner) cancelReminder(ctx context.Context, unitID string, t ports.DueTrigger, plan prospection.Plan, now time.Time) error {
 	why := "another reminder of the unit carries the corrected date"
-	if plan.What == prospection.ArmNothing {
+	switch {
+	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalQuietHours:
+		why = "every moment left before the corrected date is in quiet hours, when nothing is sent"
+	case plan.What == prospection.ArmNothing:
 		why = "the corrected date has already passed"
 	}
 	if err := r.recordReminder(ctx, ports.ActionCorrectionReminderCancelled,

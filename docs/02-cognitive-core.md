@@ -734,7 +734,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        created; any further armed trigger expires. **A correction never creates an at-once
        reminder**: when every lead of the new instant is behind and nothing is armed, nothing is
        armed — the at-once reminder is a capture's, sent once; an armed one is still pulled to
-       now, and one already due keeps its instant. When the
+       now, and one already due keeps its instant. A reminder whose lead was ahead but that the
+       night rule pulls to now (§7 "Lead time", ADR-0030) is not that at-once reminder: a
+       correction arms it with the rest of the set, exactly as a capture does. When the
        new one-shot date is already past, every armed trigger expires and none is created —
        `expired` is §7's status for a trigger that will not fire, so cancelling deletes nothing
        and needs no new status. A trigger that already fired is history and is left alone. A
@@ -1269,8 +1271,10 @@ have N nudges; a pattern watcher does not hang off any unit):
   event and the reminder is not armed — a capture records why, `capture.arm.refused` with
   reason `quiet_hours`, and the unit stays stored. Two reminders the adjustment lands on one
   instant are armed once. `payload.lead_minutes` is the adjusted instant's distance to the
-  event, so `fire_at + lead_minutes` still names it. A 05:00 flight is reminded at 07:00 and
-  at 22:00 the day before; an 08:00 flight's 2-hour reminder goes out at 07:00.
+  event, so `fire_at + lead_minutes` still names it; a reminder armed at once — the at-once one,
+  or a lead pulled to now — carries no lead. A 05:00 flight is reminded at 07:00 and at 22:00
+  the day before; an 08:00 flight's 2-hour reminder goes out at 07:00. A correction that leaves
+  a reminder no allowed instant expires it with the reason `quiet_hours`, not as a past date.
   A **recurring reminder** keeps one trigger `event_lead_days` before its next occurrence,
   stored in `payload.lead_days` (the re-arm propagates it). Triggers armed before ADR-0029 keep
   the instant they were armed for; a correction of their date re-arms them as the new set.
@@ -1291,9 +1295,12 @@ box can audit it):
   a one-shot trigger — every trigger without a recurrence rule — goes out when due whatever its
   `interrupt_level`, a degraded one included (`internal/core/prospection.RouteTrigger`); waiting
   for tomorrow's digest would deliver it after the thing it is about. Quiet hours still defer
-  it, as below. **It is never late**: one whose event has started (`fire_at + lead_minutes`, so
-  only a reminder that carries a lead) is expired with a `check.trigger.expired` row instead of
-  sent (`EventReminderVerdict`). The interrupt split below, and its "a degraded reading never
+  it, as below. **It is never late**: one whose event has started (`fire_at + lead_minutes`) is
+  expired with a `check.trigger.expired` row instead of sent (`EventReminderVerdict`).
+  **Exception**: a reminder armed at once carries no lead, so its event is not known at delivery
+  and this check does not apply to it; it falls under `TriggerVerdict`'s staleness alone. It is
+  due the minute it is armed, so only a vault that is off between arming and the event can send
+  it after the event. The interrupt split below, and its "a degraded reading never
   pushes" guarantee, govern every recurring reminder.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),

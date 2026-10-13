@@ -90,13 +90,7 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 	if !eventAt.After(now) {
 		return []Plan{{What: ArmNothing, Why: RefusalAlreadyPast, Interrupt: interrupt}}, false
 	}
-	var nominal []time.Time
-	for _, fireAt := range reminderInstants(eventAt, prefs, now.Location()) {
-		// clampToNow's own boundary: an instant equal to now is not behind.
-		if !fireAt.Before(now) {
-			nominal = append(nominal, fireAt)
-		}
-	}
+	nominal := leadsAhead(eventAt, prefs, now)
 	atOnce := len(nominal) == 0
 	if atOnce {
 		nominal = []time.Time{now} // ADR-0029 point 3's at-once reminder
@@ -141,4 +135,22 @@ func reminderInstants(eventAt time.Time, prefs ReminderPrefs, zone *time.Locatio
 		out[i] = eventAt.Add(-lead)
 	}
 	return out
+}
+
+// leadsAhead is the nominal instants of eventAt's reminders not behind now
+// — clampToNow's own boundary: an instant equal to now is not behind.
+func leadsAhead(eventAt time.Time, prefs ReminderPrefs, now time.Time) []time.Time {
+	var ahead []time.Time
+	for _, fireAt := range reminderInstants(eventAt, prefs, now.Location()) {
+		if !fireAt.Before(now) {
+			ahead = append(ahead, fireAt)
+		}
+	}
+	return ahead
+}
+
+// everyLeadBehind reports ADR-0029 point 3's case: no lead of eventAt is
+// left, so a capture arms its one reminder at once.
+func everyLeadBehind(eventAt time.Time, prefs ReminderPrefs, now time.Time) bool {
+	return len(leadsAhead(eventAt, prefs, now)) == 0
 }
