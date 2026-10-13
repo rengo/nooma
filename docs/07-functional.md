@@ -49,7 +49,11 @@ is on the 15th.
    your local day ("Friday", "the 14th"), and an initial weight. The dentist visit gets an
    `event_at`; the contract gets a `due_at`. The dentist visit is reminded 24 hours and 2 hours
    before; a date with no time, the day before at 09:00; a reminder whose time has already
-   passed is skipped ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe), ADR-0029). The full taxonomy is in
+   passed is skipped ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe), ADR-0029).
+   Nothing is set for the night: a reminder that would fall before 07:00 is moved to 07:00, or
+   to 22:00 the evening before when the event itself is that early, so a 05:00 flight is
+   reminded at 07:00 and 22:00 the day before. When no time before the event is left outside
+   the night, none is set, and the trail says why (ADR-0030). The full taxonomy is in
    [doc 02 §5 step 1](02-cognitive-core.md#5-capture); the units and their statuses in
    [doc 02 §1](02-cognitive-core.md#1-the-unit--the-atom).
 3. **Degrades instead of refusing.** If a field comes back malformed, or a provider is down at a
@@ -284,6 +288,7 @@ As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in 
 | Telegram channel, triggers, push, morning digest, check-ins, ephemeral timers | Shipped in M3 | [05 §M3](05-build-plan.md#m3--the-mouth-telegram--prospection), doc 02 §7, §8 |
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
 | Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; editing them from the UI or chat is pending | doc 02 §7; ADR-0029 |
+| Event reminders pushed by day, moved out of the night, never sent after the event | Shipped at the default quiet end (07:00) and evening time (22:00); making them preferences is pending | doc 02 §7; ADR-0030 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |

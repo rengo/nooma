@@ -19,11 +19,15 @@ import (
 // reminder three hours before is only reachable through the stored row.
 // The provider is a loopback httptest.Server, not the network.
 func TestWireBrain_ArmsAtTheStoredReminderPreferences(t *testing.T) {
+	// The production clock reads the host's zone, so the event is stated on
+	// that wall clock: 15:00 local keeps the three-hour lead at 12:00 local,
+	// outside quiet hours (ADR-0030) whatever zone the host is in.
+	eventAt := time.Date(2099, 1, 10, 15, 0, 0, 0, time.Local)
 	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/generate":
-			_, _ = fmt.Fprint(w, `{"model":"m","response":"{\"type\":\"event\",\"normalized_content\":\"Flight\",\"weight\":0.7,\"decay_rate\":0.05,\"event_at\":\"2099-01-10T10:00:00Z\"}","done":true}`)
+			_, _ = fmt.Fprintf(w, `{"model":"m","response":"{\"type\":\"event\",\"normalized_content\":\"Flight\",\"weight\":0.7,\"decay_rate\":0.05,\"event_at\":\"%s\"}","done":true}`, eventAt.Format(time.RFC3339))
 		case "/api/embed":
 			_, _ = fmt.Fprint(w, `{"model":"m","embeddings":[[0.1,0.2,0.3]]}`)
 		default:
@@ -72,7 +76,7 @@ tasks:
 	if err != nil {
 		t.Fatalf("ArmedForUnit: %v", err)
 	}
-	want := time.Date(2099, 1, 10, 7, 0, 0, 0, time.UTC)
+	want := eventAt.Add(-3 * time.Hour)
 	if len(armed) != 1 || !armed[0].FireAt.Equal(want) {
 		t.Errorf("armed = %+v, want one reminder at %s — the stored three-hour lead, not the defaults", armed, want)
 	}

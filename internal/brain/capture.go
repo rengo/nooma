@@ -484,6 +484,19 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return armed, nil
 	}
 
+	// The one refusal a kept unit records (ADR-0030 point 4): an event
+	// still ahead that gets no reminder because every instant left before
+	// it is in quiet hours. Unlike an undated or past event, nothing on the
+	// unit says why it was not reminded.
+	if plan.Why == prospection.RefusalQuietHours {
+		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureArmRefused, refusalMessage(plan.Why), now, struct {
+			Why    string `json:"why"`
+			UnitID string `json:"unit_id"`
+		}{Why: string(plan.Why), UnitID: u.ID}); err != nil {
+			return CaptureResult{}, err
+		}
+	}
+
 	return CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, Embedded: embedded, Candidates: candidates}, nil
 }
 
@@ -1012,6 +1025,8 @@ func refusalMessage(why prospection.Refusal) string {
 		return "nothing was scheduled: no time was given, and guessing one is worse than not setting a reminder at all"
 	case prospection.RefusalAlreadyPast:
 		return "nothing was scheduled: the time given has already passed"
+	case prospection.RefusalQuietHours:
+		return "no reminder was scheduled: every moment left before the event is in quiet hours, when nothing is sent"
 	default:
 		return fmt.Sprintf("nothing was scheduled: %s", why)
 	}

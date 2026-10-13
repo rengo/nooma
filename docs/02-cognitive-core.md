@@ -1257,6 +1257,20 @@ have N nudges; a pattern watcher does not hang off any unit):
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is
   not, a capture arms **one reminder at once**: the system is not late for an event it only
   just learned about. A correction follows §5 step 4 and never creates that at-once reminder.
+  **The night is respected at arm time** ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)):
+  every instant above, the at-once one included, is adjusted before it is stored, by
+  `internal/core/prospection.eventReminders`, so the reply, the trail and a correction (§5
+  step 4, which plans through the same function) all name the instant the reminder really
+  fires at. One whose instant falls in quiet hours `[00:00, quiet end)` local — quiet end
+  07:00 — is armed **at that night's quiet end** when that is still before the event, and
+  otherwise **the evening before at 22:00** (`default_evening_reminder_hour`): earlier, never
+  later. One whose adjusted instant is behind the arming instant is armed at once when that
+  instant is outside quiet hours; when it is not, no allowed instant is left before the
+  event and the reminder is not armed — a capture records why, `capture.arm.refused` with
+  reason `quiet_hours`, and the unit stays stored. Two reminders the adjustment lands on one
+  instant are armed once. `payload.lead_minutes` is the adjusted instant's distance to the
+  event, so `fire_at + lead_minutes` still names it. A 05:00 flight is reminded at 07:00 and
+  at 22:00 the day before; an 08:00 flight's 2-hour reminder goes out at 07:00.
   A **recurring reminder** keeps one trigger `event_lead_days` before its next occurrence,
   stored in `payload.lead_days` (the re-arm propagates it). Triggers armed before ADR-0029 keep
   the instant they were armed for; a correction of their date re-arms them as the new set.
@@ -1559,6 +1573,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours` + `ResolveReminderPrefs`) | 24 — hours before a timed event its first reminder fires (ADR-0029). User-overridable: `config.event_reminder_leads` |
 | Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours` + `ResolveReminderPrefs`) | 2 — hours before a timed event its second reminder fires. User-overridable, same column |
 | Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded. User-overridable: `config.date_only_reminder_at` |
+| `default_evening_reminder_hour` (`internal/core/prospection.DefaultEveningReminderHour`) | 22 — local hour, the evening before, an event reminder is armed at when its instant falls in quiet hours and the event is at or before quiet end (ADR-0030). Not yet user-overridable |
 | `max_event_reminder_leads` (`internal/core/prospection.MaxEventReminderLeads`) | 5 — the most reminders a user may set per timed event; a bound on input, not a default |
 | `max_event_lead_days` (`internal/core/prospection.MaxEventLeadDays`) | 30 — the furthest ahead of a timed event a user may set a reminder |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |

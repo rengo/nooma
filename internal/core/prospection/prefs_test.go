@@ -64,7 +64,7 @@ func TestResolveReminderPrefs(t *testing.T) {
 		t.Errorf("nothing stored = %+v, want the defaults", got)
 	}
 	got := ResolveReminderPrefs(str(`[180]`), str("20:30"))
-	if !reflect.DeepEqual(got, ReminderPrefs{TimedLeads: []time.Duration{3 * time.Hour}, DateOnlyAt: TimeOfDay{20, 30}}) {
+	if !reflect.DeepEqual(got, ReminderPrefs{TimedLeads: []time.Duration{3 * time.Hour}, DateOnlyAt: TimeOfDay{20, 30}, QuietEnd: def.QuietEnd, EveningAt: def.EveningAt}) {
 		t.Errorf("both stored = %+v", got)
 	}
 	got = ResolveReminderPrefs(str(`[0]`), str("20:30"))

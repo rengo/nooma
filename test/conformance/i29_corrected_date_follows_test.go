@@ -363,6 +363,18 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		}
 	})
 
+	t.Run("the set is re-armed around quiet hours, as a capture arms it (ADR-0030)", func(t *testing.T) {
+		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), `{"type":"event","normalized_content":"Vuelo el 2026-10-30 a las 05:00","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-30T05:00:00Z","language":"es"}`)
+		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
+		f.capture(t, "dentist")
+		quietEnd := time.Date(2026, 10, 29, 7, 0, 0, 0, time.UTC)
+		evening := time.Date(2026, 10, 29, 22, 0, 0, 0, time.UTC)
+		if got := f.armed(t, "dentist"); len(got) != 2 || got[0].ID != "t1" || !got[0].FireAt.Equal(quietEnd) || !got[1].FireAt.Equal(evening) {
+			t.Fatalf("armed = %+v, want t1 at %s and a new one at %s", got, quietEnd, evening)
+		}
+	})
+
 	t.Run("a correction never creates an at-once reminder", func(t *testing.T) {
 		// Both leads of 10:00 are behind at 08:30 and nothing is armed:
 		// the at-once reminder is a capture's, sent once (ADR-0029).
