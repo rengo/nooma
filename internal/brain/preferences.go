@@ -225,15 +225,28 @@ const (
 	LeadDays    LeadUnit = "days"
 )
 
-// Minutes is how many minutes one u is.
+// ParseLeadUnit reads one of the three lead units, and nothing else.
+func ParseLeadUnit(s string) (LeadUnit, bool) {
+	switch u := LeadUnit(s); u {
+	case LeadMinutes, LeadHours, LeadDays:
+		return u, true
+	}
+	return "", false
+}
+
+// Minutes is how many minutes one u is, or 0 for a unit outside the set:
+// a lead of 0 minutes is one core always refuses, so an unknown unit can
+// never become a silent wrong value.
 func (u LeadUnit) Minutes() int {
 	switch u {
 	case LeadDays:
 		return 24 * 60
 	case LeadHours:
 		return 60
+	case LeadMinutes:
+		return 1
 	}
-	return 1
+	return 0
 }
 
 // SplitLead names a lead in the largest unit that divides it, except that a

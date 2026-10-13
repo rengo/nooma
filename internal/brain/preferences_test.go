@@ -227,3 +227,28 @@ func TestLeadText(t *testing.T) {
 		}
 	}
 }
+
+// LeadUnit is a closed set: an unknown unit does not parse, and its
+// minutes are 0, a lead core always refuses, so it can never be saved as a
+// silent wrong value.
+func TestLeadUnit_IsAClosedSet(t *testing.T) {
+	for _, s := range []string{"minutes", "hours", "days"} {
+		if u, ok := ParseLeadUnit(s); !ok || string(u) != s || u.Minutes() == 0 {
+			t.Errorf("ParseLeadUnit(%q) = %v, %v; want the unit", s, u, ok)
+		}
+	}
+	for _, s := range []string{"weeks", "", "Hours"} {
+		if _, ok := ParseLeadUnit(s); ok {
+			t.Errorf("ParseLeadUnit(%q) accepted an unknown unit", s)
+		}
+		if m := LeadUnit(s).Minutes(); m != 0 {
+			t.Errorf("LeadUnit(%q).Minutes() = %d, want 0", s, m)
+		}
+	}
+	_, err := prefsService(memrepo.NewConfig(), memrepo.NewDecisionLog()).Save(context.Background(),
+		Preferences{LeadMinutes: []int{2 * LeadUnit("weeks").Minutes()}, DateOnlyAt: "09:00", QuietEnd: "07:00", EveningAt: "22:00"})
+	var perr *PreferencesError
+	if !errors.As(err, &perr) || perr.Fields[FieldLeads] == nil {
+		t.Errorf("two weeks saved as %v, want the leads refused", err)
+	}
+}
