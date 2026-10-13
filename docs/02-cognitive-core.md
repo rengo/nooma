@@ -1330,6 +1330,9 @@ box can audit it):
     relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality. A
     user's later quiet end delays the digest to it: it is due at the later of `digest_hour` and
     the user's quiet end, so it is never born deferred ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)).
+    **At most one digest per local date**: once today's has gone out, it is today's, whatever the
+    due time was when it went out — so moving the quiet end past the hour this morning's digest
+    was sent delays tomorrow's, and never sends a second one today.
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery.
     **Low** is `energy < low_energy_max`, strict — this gate suppresses delivery, so the burden of

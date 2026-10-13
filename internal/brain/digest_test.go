@@ -101,6 +101,36 @@ func TestDigest_IsSentOnceADay(t *testing.T) {
 	}
 }
 
+// TestDigest_MovingQuietEndLaterAfterTheDigestSendsNoSecond: the morning
+// digest went out at 08:00 under a 07:00 quiet end; the user then moves the
+// quiet end to 10:00. The 10:30 scan reads the new night and must not send
+// that day's digest again.
+func TestDigest_MovingQuietEndLaterAfterTheDigestSendsNoSecond(t *testing.T) {
+	triggers := &undeliveredTriggers{pending: []ports.DueTrigger{digestTrigger("trg-1", "u-1", "renew the passport")}}
+	units := &digestUnits{byID: map[string]focus.Candidate{"u-1": {ID: "u-1", Weight: 1}}}
+	ch := &sendingChannel{}
+	r := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), ch)
+
+	ctx := context.Background()
+	morning := time.Date(2026, 8, 5, 8, 0, 0, 0, time.UTC)
+	r.night = prospection.QuietHours{End: prospection.TimeOfDay{Hour: 7}}
+	if _, err := r.assembleDigest(ctx, morning, true); err != nil {
+		t.Fatalf("morning digest: %v", err)
+	}
+	if ch.count() != 1 {
+		t.Fatalf("the morning pass sent %d digest(s), want 1", ch.count())
+	}
+
+	triggers.pending = append(triggers.pending, digestTrigger("trg-2", "u-1", "call the bank"))
+	r.night = prospection.QuietHours{End: prospection.TimeOfDay{Hour: 10}}
+	if _, err := r.assembleDigest(ctx, time.Date(2026, 8, 5, 10, 30, 0, 0, time.UTC), true); err != nil {
+		t.Fatalf("after the quiet end moved: %v", err)
+	}
+	if ch.count() != 1 {
+		t.Fatalf("moving the quiet end later sent a second digest the same day (%d in total)", ch.count())
+	}
+}
+
 // TestDigest_IsNotDueBeforeTheDigestHour.
 func TestDigest_IsNotDueBeforeTheDigestHour(t *testing.T) {
 	triggers := &undeliveredTriggers{pending: []ports.DueTrigger{digestTrigger("trg-1", "u-1", "x")}}

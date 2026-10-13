@@ -24,7 +24,7 @@ const DigestHour = 7
 // §3.5.
 //
 // Due iff now's local hour is at or past DigestHour AND no digest has been
-// delivered since today's DigestHour instant. Written that way so downtime
+// delivered on today's local date. Written that way so downtime
 // is a normal case rather than a backlog: a vault that was off for three
 // days owes exactly one digest, because the question asked is "has today's
 // digest gone out", never "how many are outstanding".
@@ -40,16 +40,20 @@ func DigestDue(lastDigestAt *time.Time, now time.Time) bool {
 // DigestHour and q's end, so a user's later quiet end only ever delays the
 // digest, and an earlier one never brings it before DigestHour (ADR-0030
 // point 5).
+//
+// At most one digest per local date: a digest already sent today is
+// today's, whatever the due time was when it went out. Judging the last
+// send against today's due time instead would send a second digest the day
+// the user moves the quiet end past the hour the first one went out.
 func (q QuietHours) DigestDue(lastDigestAt *time.Time, now time.Time) bool {
 	hour := TimeOfDay{Hour: DigestHour}
 	if hour.before(q.End) {
 		hour = q.End
 	}
-	dueAt := hour.on(now, 0, now.Location())
-	if now.Before(dueAt) {
+	if now.Before(hour.on(now, 0, now.Location())) {
 		return false
 	}
-	return lastDigestAt == nil || lastDigestAt.Before(dueAt)
+	return lastDigestAt == nil || lastDigestAt.Before(TimeOfDay{}.on(now, 0, now.Location()))
 }
 
 // LowEnergyMax is the level below which energy reads as low (design §3.5).
