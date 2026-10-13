@@ -228,6 +228,73 @@ func TestLeadText(t *testing.T) {
 	}
 }
 
+// Every field is judged in one save, so a refusal names all the wrong ones:
+// a malformed evening is reported even when the quiet end it would be judged
+// against is wrong too.
+func TestPreferencesSave_SeveralInvalidFieldsAreAllNamed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		p    Preferences
+		want []PreferenceField
+	}{
+		{"all four", Preferences{LeadMinutes: []int{0}, DateOnlyAt: "9", QuietEnd: "13:00", EveningAt: "late"},
+			[]PreferenceField{FieldLeads, FieldDateOnlyAt, FieldQuietEnd, FieldEveningAt}},
+		{"a bad quiet end and a malformed evening", Preferences{LeadMinutes: []int{120}, DateOnlyAt: "09:00", QuietEnd: "00:00", EveningAt: "22:61"},
+			[]PreferenceField{FieldQuietEnd, FieldEveningAt}},
+		{"a bad quiet end and a well-formed evening", Preferences{LeadMinutes: []int{120}, DateOnlyAt: "09:00", QuietEnd: "00:00", EveningAt: "05:00"},
+			[]PreferenceField{FieldQuietEnd}},
+		{"leads and the date-only time", Preferences{LeadMinutes: []int{60, 60}, DateOnlyAt: "24:00", QuietEnd: "07:00", EveningAt: "22:00"},
+			[]PreferenceField{FieldLeads, FieldDateOnlyAt}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := prefsService(memrepo.NewConfig(), memrepo.NewDecisionLog()).Save(context.Background(), tc.p)
+			var perr *PreferencesError
+			if !errors.As(err, &perr) {
+				t.Fatalf("Save error = %v, want a *PreferencesError", err)
+			}
+			got := make([]PreferenceField, 0, len(perr.Fields))
+			for f := range perr.Fields {
+				got = append(got, f)
+			}
+			slices.Sort(got)
+			want := slices.Clone(tc.want)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Errorf("fields = %v, want exactly %v", got, want)
+			}
+		})
+	}
+}
+
+// A stored evening is judged against the stored quiet end, as the arm-time
+// read judges it: 06:30 under a stored 06:00 end is valid and is not
+// rewritten by a save that submits it unchanged.
+func TestPreferencesSave_AStoredEveningIsJudgedAgainstTheStoredQuietEnd(t *testing.T) {
+	cfg, log := memrepo.NewConfig(), memrepo.NewDecisionLog()
+	end, evening := "06:00", "06:30"
+	cfg.SeedConfig(t, ports.VaultConfig{QuietHoursEnd: &end, EveningReminderAt: &evening})
+	p := defaultPrefs()
+	p.QuietEnd, p.EveningAt = "06:00", "06:30"
+	res, err := prefsService(cfg, log).Save(context.Background(), p)
+	if err != nil || len(res.Changed) != 0 || len(prefsRows(t, log)) != 0 {
+		t.Errorf("Save = %+v, %v with %d rows; want nothing changed", res, err, len(prefsRows(t, log)))
+	}
+}
+
+// Saved is what is in force after the save, the submitted values in their
+// stored form: leads largest first.
+func TestPreferencesSave_ResultHoldsTheValuesNowInForce(t *testing.T) {
+	p := Preferences{LeadMinutes: []int{30, 300}, DateOnlyAt: "08:15", QuietEnd: "06:00", EveningAt: "21:00"}
+	res, err := prefsService(memrepo.NewConfig(), memrepo.NewDecisionLog()).Save(context.Background(), p)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if want := (Preferences{LeadMinutes: []int{300, 30}, DateOnlyAt: "08:15", QuietEnd: "06:00", EveningAt: "21:00"}); !slices.Equal(res.Saved.LeadMinutes, want.LeadMinutes) ||
+		res.Saved.DateOnlyAt != want.DateOnlyAt || res.Saved.QuietEnd != want.QuietEnd || res.Saved.EveningAt != want.EveningAt {
+		t.Errorf("Saved = %+v, want %+v", res.Saved, want)
+	}
+}
+
 // LeadUnit is a closed set: an unknown unit does not parse, and its
 // minutes are 0, a lead core always refuses, so it can never be saved as a
 // silent wrong value.

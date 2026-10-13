@@ -477,3 +477,26 @@ func TestConfigRepo_SetReminderPrefsLazyCreateUsesMigrationDefaults(t *testing.T
 		t.Errorf("updated_at = %q, want the write's instant", updatedAt)
 	}
 }
+
+// TestConfigRepo_SetReminderPrefsRefreshesUpdatedAtOnAnExistingRow: the
+// update branch stamps updated_at with the write's instant too.
+func TestConfigRepo_SetReminderPrefsRefreshesUpdatedAtOnAnExistingRow(t *testing.T) {
+	v := openTestVault(t)
+	repo := NewConfigRepo(v)
+	ctx := context.Background()
+	if err := repo.RecordConsolidationRun(ctx, configFixtureTime); err != nil {
+		t.Fatalf("RecordConsolidationRun: %v", err)
+	}
+	later := configFixtureTime.Add(time.Hour)
+	end := "08:00"
+	if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{QuietHoursEnd: &end}, later); err != nil {
+		t.Fatalf("SetReminderPrefs: %v", err)
+	}
+	var updatedAt string
+	if err := v.db.QueryRowContext(ctx, `SELECT updated_at FROM config WHERE id = 1`).Scan(&updatedAt); err != nil {
+		t.Fatalf("reading updated_at: %v", err)
+	}
+	if updatedAt != later.Format(unitTimeLayout) {
+		t.Errorf("updated_at = %q, want the update's instant %q", updatedAt, later.Format(unitTimeLayout))
+	}
+}
