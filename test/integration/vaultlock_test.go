@@ -5,6 +5,7 @@ package integration
 
 import (
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,8 +45,19 @@ func holdForever(dir string) {
 	}
 	// Announce on stdout that the lock is held, then block until killed.
 	_, _ = os.Stdout.WriteString("held\n")
-	defer func() { _ = lock.Release() }()
-	select {}
+
+	// Block on a read of stdin, which the parent never writes to nor closes
+	// before killing us. NOT `select {}`: with no goroutine of its own left,
+	// that is a deadlock the Go runtime detects and kills on Windows, and the
+	// kernel then releases the lock (see
+	// TestHolderKeepsTheLockAfterReportingHeld). A goroutine in a blocking
+	// syscall is not one the detector counts as asleep.
+	//
+	// If the parent dies first, stdin reaches EOF and the child releases and
+	// exits rather than being orphaned holding a temporary vault.
+	_, _ = io.Copy(io.Discard, os.Stdin)
+	_ = lock.Release()
+	os.Exit(0)
 }
 
 // startHolder launches a child holding the vault's lock and returns it once the
@@ -61,12 +73,19 @@ func startHolder(t *testing.T, dir string) *exec.Cmd {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The child blocks reading this pipe; holding the write end open is what
+	// keeps it alive and holding the lock until Cleanup kills it.
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
+		_ = stdin.Close()
 	})
 
 	ready := make(chan struct{})
@@ -93,6 +112,40 @@ func vaultDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// TestHolderKeepsTheLockAfterReportingHeld guards the harness every test above
+// and below leans on: a child that has printed "held" must still hold the lock
+// afterwards, not merely have held it once.
+//
+// An earlier holder printed "held" and then parked in `select {}`. With no
+// goroutine of its own left, Go's deadlock detector killed it right after —
+// "fatal error: all goroutines are asleep - deadlock!" — and the kernel
+// released the lock with it. Measured on windows-latest, every time. The
+// detector stays quiet in a binary that links runtime/cgo, and the Linux test
+// binaries here do (with or without -race), so Linux never saw it; a Linux
+// build with CGO_ENABLED=0 reproduces it. TestSecondWriterFails passed when the
+// parent's Acquire beat the child's exit and failed when it did not (CI run
+// 38401269281). The product was never exposed: every writer in cmd/nooma holds
+// the lock in a function that returns, with live network or signal waiters.
+//
+// The wait is the point: the dead holder released the lock within
+// milliseconds, so a second longer is far past that window.
+func TestHolderKeepsTheLockAfterReportingHeld(t *testing.T) {
+	dir := vaultDir(t)
+	startHolder(t, dir)
+
+	time.Sleep(time.Second)
+
+	lock, err := vaultlock.Acquire(dir)
+	if err == nil {
+		_ = lock.Release()
+		t.Fatal("the holder reported the lock held, then lost it: a test built on it races its exit")
+	}
+	var inUse *vaultlock.InUseError
+	if !errors.As(err, &inUse) {
+		t.Fatalf("Acquire on a held vault failed for a reason other than the holder: %v", err)
+	}
 }
 
 // TestSecondWriterFails is spec R8.2. A second `nooma serve` over a held vault
