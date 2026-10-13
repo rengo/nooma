@@ -19,7 +19,7 @@ type unitsListResponse struct {
 // through unitByIDHandler's own single `len(units) == 0` branch below, which
 // is the strongest form of "the same shape": there is only one code path
 // that can produce it.
-var notFoundBody = map[string]string{"error": "unit not found"}
+var notFoundBody = map[string]string{"error": "unit not found", "code": "unit_not_found"}
 
 // unitByIDHandler wires GET /units/{id} to RecallService.LiveByIDs — never
 // ports.UnitRepo.ByID, which internal/ports/unitrepo.go's own doc comment
@@ -31,14 +31,14 @@ func unitByIDHandler(d Deps) http.HandlerFunc {
 		// The same nil-dependency treatment recallHandler and captureHandler
 		// both apply to their own dependency — see recall.go's doc comment.
 		if d.Recall == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "recall is not wired in this build"})
+			writeError(w, http.StatusServiceUnavailable, "not_wired", "recall is not wired in this build")
 			return
 		}
 
 		id := r.PathValue("id")
 		units, err := d.Recall.LiveByIDs(r.Context(), []string{id})
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unit lookup failed"})
+			writeError(w, http.StatusInternalServerError, "internal", "unit lookup failed")
 			return
 		}
 		if len(units) == 0 {
@@ -57,7 +57,7 @@ func unitByIDHandler(d Deps) http.HandlerFunc {
 func unitsListHandler(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if d.Recall == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "recall is not wired in this build"})
+			writeError(w, http.StatusServiceUnavailable, "not_wired", "recall is not wired in this build")
 			return
 		}
 
@@ -69,13 +69,13 @@ func unitsListHandler(d Deps) http.HandlerFunc {
 			}
 		}
 		if len(ids) == 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ids is required"})
+			writeError(w, http.StatusBadRequest, "invalid_request", "ids is required")
 			return
 		}
 
 		units, err := d.Recall.LiveByIDs(r.Context(), ids)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unit lookup failed"})
+			writeError(w, http.StatusInternalServerError, "internal", "unit lookup failed")
 			return
 		}
 		rendered := make([]unitResponse, len(units))

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/rengo/nooma/internal/brain"
@@ -183,4 +184,25 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// writeError is the one shape every JSON error takes: a sentence for a
+// person and a stable code for a client. The codes are documented in
+// docs/07-functional.md and are API: rename one and a client breaks.
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	writeJSON(w, status, map[string]string{"error": message, "code": code})
+}
+
+// writeCaptureFailure answers an error from brain.CaptureService: a provider
+// or model failure keeps its status, code and sentence, anything else is a
+// detail-free internal error. Either way serve logs one line; only an
+// unclassified error logs the error itself, or a 500 could not be diagnosed.
+func writeCaptureFailure(w http.ResponseWriter, r *http.Request, err error, fallback string) {
+	if f, ok := brain.Describe(err); ok {
+		brain.LogFailure(r.URL.Path, f)
+		writeError(w, f.Status, f.Code, f.Message)
+		return
+	}
+	slog.Error("request failed", "class", "internal", "path", r.URL.Path, "err", err)
+	writeError(w, http.StatusInternalServerError, "internal", fallback)
 }

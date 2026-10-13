@@ -387,3 +387,25 @@ func TestCaptureNeverAcquiresTheVaultLock(t *testing.T) {
 		return true
 	})
 }
+
+// A provider or model failure comes back from serve as a code and a sentence;
+// the CLI says the sentence as it is, not wrapped in "the server rejected the
+// capture ... (status 503)", which blames the request for the server's trouble.
+func TestCaptureSaysAProviderFailurePlainly(t *testing.T) {
+	t.Parallel()
+
+	const msg = "The OpenAI API key is missing: OPENAI_API_KEY is not set."
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"` + msg + `","code":"provider_key_missing"}`))
+	}))
+	t.Cleanup(srv.Close)
+	host, port := splitHostPort(t, srv.URL)
+	vault := writeVault(t, fmt.Sprintf("server:\n  bind: %s\n  http_port: %s\n", host, port))
+
+	var out, errOut bytes.Buffer
+	err := runCapture([]string{"anything", vault}, &out, &errOut)
+	if err == nil || err.Error() != msg {
+		t.Errorf("error = %v, want exactly %q", err, msg)
+	}
+}

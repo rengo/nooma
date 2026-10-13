@@ -30,7 +30,7 @@ import (
 func TestDoctorChecksGainsOneNewEntry(t *testing.T) {
 	want := []string{
 		"configuration", "permissions", "database integrity", "schema version", "bind",
-		"llm quality", "task coverage", "vault coverage",
+		"provider keys", "llm quality", "task coverage", "vault coverage",
 	}
 	if len(doctorChecks) != len(want) {
 		t.Fatalf("doctorChecks has %d entries, want %d: %v", len(doctorChecks), len(want), doctorChecks)

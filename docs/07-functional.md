@@ -50,8 +50,10 @@ is on the 15th.
    `event_at`; the contract gets a `due_at`. The full taxonomy is in
    [doc 02 §5 step 1](02-cognitive-core.md#5-capture); the units and their statuses in
    [doc 02 §1](02-cognitive-core.md#1-the-unit--the-atom).
-3. **Degrades instead of refusing.** If a provider is down, or a field comes back malformed, the
-   unit is still stored and the missing field is left empty. Nooma is cautious to *capture*
+3. **Degrades instead of refusing.** If a field comes back malformed, or a provider is down at a
+   later step (embedding, the relation judge), the unit is still stored and the missing field is
+   left empty. The two failures that leave nothing to store, the classify call itself failing and
+   an answer with no usable field, are the next paragraph's. Nooma is cautious to *capture*
    ([doc 02 §5.1](02-cognitive-core.md#51-what-degrades-to-null-means-field-by-field)).
 4. **Asks only when it has to.** A vague reference to a person can leave a unit `incomplete`
    until the ambiguity resolves. After a day the nightly pass promotes it with what it has
@@ -72,6 +74,28 @@ is on the 15th.
    (I30). The edit changes the one field you corrected, with its pre-image
    recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
    unit's reminder as a fresh capture of the new date would. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
+
+**When the capture itself cannot proceed**, Nooma says why in plain words and saves nothing
+([doc 02 §5.1](02-cognitive-core.md#51-what-degrades-to-null-means-field-by-field), I31). The CLI
+and `/ui/capture` show the sentence; `POST /capture` answers it with a stable `code` next to the
+`error` text, and `nooma serve` writes one log line (class, provider, request path), never the key
+or what you typed. A missing key names the variable (for example `OPENAI_API_KEY`), says Nooma looks
+in the vault's `.env` and the environment, and asks for a restart of `serve`, which reads both once.
+`nooma doctor` flags the same missing key under `provider keys`.
+
+| `code` | HTTP | Meaning |
+|---|---|---|
+| `provider_key_missing` | 503 | The provider's `api_key_env` holds nothing |
+| `provider_unreachable` | 502 | No answer from the provider |
+| `provider_key_rejected` | 502 | The provider answered 401 or 403 |
+| `provider_rate_limited` | 503 | The provider answered 429 |
+| `provider_timeout` | 504 | The provider outlived its deadline |
+| `provider_failed` | 502 | Any other non-success answer from the provider |
+| `model_output_unusable` | 502 | The answer had no usable field or no type; nothing was saved |
+| `invalid_request` | 400 | The body is not JSON, or `text`, `query` or `ids` is missing |
+| `unit_not_found` | 404 | No unit has that id |
+| `not_wired` | 503 | This build has no capture or recall pipeline (no provider bound) |
+| `internal` | 500 | Anything else; the cause is in the `serve` log |
 
 **You end up with** units that carry what you said in your own words (ADR-0024), related to one
 another, findable by meaning or by keyword, and editable.

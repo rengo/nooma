@@ -106,9 +106,10 @@ func TestClient_EmbedFailsWhenDataIsEmpty(t *testing.T) {
 }
 
 // TestClient_EmbedSurfacesVendorErrorStatus is design D17's third copied
-// behaviour: a non-200 status is an error carrying the body — OpenAI's quota
-// and model-not-found messages are the useful part, and they arrive in the
-// body.
+// behaviour: a non-200 status is an error. It no longer carries the vendor's
+// body (plain-errors work unit): a body can echo the input, which is the
+// user's captured text, and this error is logged and shown. The status and
+// its class are what survive.
 func TestClient_EmbedSurfacesVendorErrorStatus(t *testing.T) {
 	t.Parallel()
 
@@ -126,7 +127,10 @@ func TestClient_EmbedSurfacesVendorErrorStatus(t *testing.T) {
 	if err == nil {
 		t.Fatal("Embed returned a nil error for a 400 vendor response")
 	}
-	if !strings.Contains(err.Error(), body) {
-		t.Errorf("error = %q, want it to carry the vendor's response body %q", err.Error(), body)
+	if strings.Contains(err.Error(), "not found") {
+		t.Errorf("error = %q, want the vendor's response body kept out of it", err.Error())
+	}
+	if !strings.Contains(err.Error(), "400") {
+		t.Errorf("error = %q, want the status named", err.Error())
 	}
 }

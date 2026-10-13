@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
@@ -83,8 +85,15 @@ func runCapture(args []string, out, errOut io.Writer) error {
 	if resp.StatusCode >= http.StatusBadRequest {
 		var errBody struct {
 			Error string `json:"error"`
+			Code  string `json:"code"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		// A provider or model failure is already a sentence for a person
+		// (brain.Describe); wrapping it in "the server rejected the capture"
+		// would blame the request for the server's trouble.
+		if strings.HasPrefix(errBody.Code, "provider_") || strings.HasPrefix(errBody.Code, "model_") {
+			return errors.New(errBody.Error)
+		}
 		if errBody.Error != "" {
 			return fmt.Errorf("the server rejected the capture: %s (status %d)", errBody.Error, resp.StatusCode)
 		}

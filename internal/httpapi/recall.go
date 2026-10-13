@@ -42,17 +42,17 @@ func recallHandler(d Deps) http.HandlerFunc {
 		// nil check, 503, a detail-free body, no fallthrough that could
 		// panic on a nil receiver.
 		if d.Recall == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "recall is not wired in this build"})
+			writeError(w, http.StatusServiceUnavailable, "not_wired", "recall is not wired in this build")
 			return
 		}
 
 		var req recallRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the request body is not valid JSON"})
+			writeError(w, http.StatusBadRequest, "invalid_request", "the request body is not valid JSON")
 			return
 		}
 		if req.Query == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "query is required"})
+			writeError(w, http.StatusBadRequest, "invalid_request", "query is required")
 			return
 		}
 
@@ -64,7 +64,7 @@ func recallHandler(d Deps) http.HandlerFunc {
 			// provider failure (already degraded to the lexical leg alone,
 			// design D9) from a lexical-leg failure — every error here is
 			// therefore 500, never a silent 200.
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recall failed"})
+			writeError(w, http.StatusInternalServerError, "internal", "recall failed")
 			return
 		}
 

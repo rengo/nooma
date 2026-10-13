@@ -240,7 +240,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 				return CaptureResult{}, logErr
 			}
 		}
-		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w", err)
+		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w: %w", ErrModelOutput, err)
 	}
 
 	// **Every outcome below is answered in the same language, so it is
@@ -391,7 +391,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureUnclassifiable, "classification carried no type — nothing was stored", now, ctxValue); err != nil {
 			return CaptureResult{}, err
 		}
-		return CaptureResult{}, fmt.Errorf("capture: build unit: %w", classify.ErrNoUnitType)
+		return CaptureResult{}, fmt.Errorf("capture: build unit: %w: %w", ErrModelOutput, classify.ErrNoUnitType)
 	}
 
 	// The base priors, design D3: there are exactly two numbers, not
@@ -399,7 +399,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	priors := classify.Priors{Weight: classify.PriorWeight, DecayRate: classify.PriorDecayRate}
 	u, err := classify.ToUnit(c, r.ids.New(), in.Channel, now, priors)
 	if err != nil {
-		return CaptureResult{}, fmt.Errorf("capture: build unit: %w", err)
+		return CaptureResult{}, fmt.Errorf("capture: build unit: %w: %w", ErrModelOutput, err)
 	}
 
 	if err := r.units.Create(ctx, u); err != nil {
