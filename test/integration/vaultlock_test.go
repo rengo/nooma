@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -107,7 +107,7 @@ func TestSecondWriterFails(t *testing.T) {
 		t.Fatal("a second writer acquired a lock the first one holds")
 	}
 
-	if !strings.Contains(err.Error(), strconv.Itoa(child.Process.Pid)) {
+	if !regexp.MustCompile(`by process ` + strconv.Itoa(child.Process.Pid) + `\b`).MatchString(err.Error()) {
 		t.Errorf("the error does not name the holding PID %d, which is the user's next action:\n%v",
 			child.Process.Pid, err)
 	}

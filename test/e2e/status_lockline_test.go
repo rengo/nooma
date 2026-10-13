@@ -29,6 +29,14 @@ func TestLockLineIgnoresPIDDigitsElsewhere(t *testing.T) {
 	if lockLineNamesPID(tooLong, pid) {
 		t.Error("a longer number containing the PID was read as the holder")
 	}
+	refusal := "vault /tmp/TestX" + strconv.Itoa(pid) + "/v.nooma is already in use by process 42"
+	if refusalNamesPID(refusal, pid) {
+		t.Error("a PID inside the vault path was read as the refusal's holder")
+	}
+	if !refusalNamesPID("vault /v is already in use by process "+strconv.Itoa(pid), pid) ||
+		refusalNamesPID("vault /v is already in use by process "+strconv.Itoa(pid)+"1", pid) {
+		t.Error("refusalNamesPID does not match the holder as a whole token")
+	}
 	if lockLine(free) != "lock:      free" {
 		t.Errorf("lock line = %q", lockLine(free))
 	}

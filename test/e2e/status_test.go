@@ -5,6 +5,7 @@ package e2e
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -167,6 +168,13 @@ func lockLineNamesPID(stdout string, pid int) bool {
 		}
 	}
 	return false
+}
+
+// refusalNamesPID reports whether a lock-refusal message ("... in use by process
+// N") names pid as the holder. The message also carries the vault path, so a bare
+// substring match would pass on a PID that only appears in the path.
+func refusalNamesPID(out string, pid int) bool {
+	return regexp.MustCompile(`by process ` + strconv.Itoa(pid) + `\b`).MatchString(out)
 }
 
 // holdVaultLock takes the vault's write lock in THIS process and returns the PID

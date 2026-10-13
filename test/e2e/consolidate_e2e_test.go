@@ -174,7 +174,7 @@ func TestConsolidate_Lock(t *testing.T) {
 		if err == nil {
 			t.Fatal("consolidate succeeded against a vault a lock holder already holds")
 		}
-		if !strings.Contains(stderr, fmt.Sprint(holder)) {
+		if !refusalNamesPID(stderr, holder) {
 			t.Errorf("the refusal does not name the holding PID %d:\n%s", holder, stderr)
 		}
 	})
