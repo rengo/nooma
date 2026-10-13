@@ -1267,7 +1267,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   finishes a re-arm that stopped part way, which a `config.updated` row written after the last
   `config.reminders.followed` row marks as pending (both compared by insertion order); the next
   save runs it. When that `config.updated` row could not be written either, nothing marks the
-  re-arm pending and the reminders it did not reach move with the next change. An event at genuine
+  re-arm pending and the reminders it did not reach move with the next change. When the re-arm
+  completes but its `config.reminders.followed` row cannot be written, the change still reads as
+  pending and the next save runs the re-arm again. Until the re-arm records which leads already
+  went out, a change, and the finish of a pending re-arm, plan from armed reminders only, so a
+  lead whose reminder already went out is armed again, at once when its slot is behind. An event at genuine
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is

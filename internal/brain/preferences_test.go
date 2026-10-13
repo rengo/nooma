@@ -452,20 +452,43 @@ func TestPreferencesSave_AReArmThatStoppedAfterOneWriteIsFinishedOnce(t *testing
 // When the change's config.updated row and its re-arm both fail, the error
 // says both, so the page does not promise that saving again finishes it:
 // nothing marks the re-arm pending (ErrRemindersNotFollowed's documented
-// gap), and the next save that changes nothing re-arms nothing.
+// gap), and the next save that changes nothing re-arms nothing. The vault's
+// own log holds an earlier change whose re-arm completed.
 func TestPreferencesSave_ADoubleFailureSaysBoth(t *testing.T) {
-	cfg := memrepo.NewConfig()
-	p := defaultPrefs()
+	ctx := context.Background()
+	cfg, ids := memrepo.NewConfig(), &seqIDs{}
+	log := &switchingLog{DecisionLog: memrepo.NewDecisionLog()}
+	first := defaultPrefs()
+	first.EveningAt = "21:00"
+	if _, err := NewPreferencesService(fixedClock{now: prefsNow}, ids, cfg, log, memrepo.NewUnits(), memrepo.NewTriggers()).Save(ctx, first); err != nil {
+		t.Fatalf("the earlier change: %v", err)
+	}
+
+	p := first
 	p.QuietEnd = "08:00"
-	_, err := NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, cfg, memrepo.NewFailingDecisionLog(errors.New("log down")),
-		memrepo.NewUnits(), &failingTriggers{err: errors.New("disk")}).Save(context.Background(), p)
+	log.failing = true
+	_, err := NewPreferencesService(fixedClock{now: prefsNow}, ids, cfg, log, memrepo.NewUnits(), &failingTriggers{err: errors.New("disk")}).Save(ctx, p)
 	if !errors.Is(err, ErrRemindersNotFollowed) || !errors.Is(err, ErrWriteLanded) {
 		t.Fatalf("Save error = %v, want both ErrRemindersNotFollowed and ErrWriteLanded", err)
 	}
+	log.failing = false
 	triggers := &countingArmedReads{Triggers: memrepo.NewTriggers()}
-	if _, err := NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, cfg, memrepo.NewDecisionLog(), memrepo.NewUnits(), triggers).Save(context.Background(), p); err != nil || triggers.reads != 0 {
+	if _, err := NewPreferencesService(fixedClock{now: prefsNow}, ids, cfg, log, memrepo.NewUnits(), triggers).Save(ctx, p); err != nil || triggers.reads != 0 {
 		t.Errorf("the next unchanged save = %v with %d re-arm reads, want no re-arm: nothing marked it pending", err, triggers.reads)
 	}
+}
+
+// switchingLog fails every Record while failing is set.
+type switchingLog struct {
+	*memrepo.DecisionLog
+	failing bool
+}
+
+func (l *switchingLog) Record(ctx context.Context, d ports.Decision) error {
+	if l.failing {
+		return errors.New("log down")
+	}
+	return l.DecisionLog.Record(ctx, d)
 }
 
 type countingArmedReads struct {
