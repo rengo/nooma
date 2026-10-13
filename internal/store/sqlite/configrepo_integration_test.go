@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/repocontract"
 )
 
 // configFixtureTime is a fixed, whole-second UTC instant — this suite does
@@ -400,4 +403,77 @@ func extractConfigTableBody(t *testing.T) (body string, ok bool) {
 		}
 	}
 	return "", false
+}
+
+// configHarness adapts the real repo to repocontract.ConfigHarness, for the
+// one suite whose columns are all nullable: RunSetReminderPrefs. SeedConfig
+// creates the row with the migration's defaults, then sets each non-nil
+// field it is given.
+type configHarness struct {
+	*ConfigRepo
+	db *sql.DB
+}
+
+func (h configHarness) SeedConfig(t *testing.T, cfg ports.VaultConfig) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := h.db.ExecContext(ctx, `INSERT OR REPLACE INTO config (id, updated_at) VALUES (1, ?)`, configFixtureTime.Format(unitTimeLayout)); err != nil {
+		t.Fatalf("seeding config row: %v", err)
+	}
+	set := map[string]any{}
+	if cfg.GoalStagnationDays != nil {
+		set["goal_stagnation_days"] = *cfg.GoalStagnationDays
+	}
+	for col, v := range map[string]*string{
+		"event_reminder_leads": cfg.EventReminderLeads, "date_only_reminder_at": cfg.DateOnlyReminderAt,
+		"quiet_hours_end": cfg.QuietHoursEnd, "evening_reminder_at": cfg.EveningReminderAt,
+	} {
+		if v != nil {
+			set[col] = *v
+		}
+	}
+	for col, v := range set {
+		if _, err := h.db.ExecContext(ctx, `UPDATE config SET `+col+` = ? WHERE id = 1`, v); err != nil {
+			t.Fatalf("seeding config.%s: %v", col, err)
+		}
+	}
+}
+
+func (h configHarness) RowExists(t *testing.T) bool { return configRowExists(t, h.db) }
+
+// TestConfigRepo_SetReminderPrefs runs the reminder-preferences write
+// contract against the real store (ui-preferences design D2).
+func TestConfigRepo_SetReminderPrefs(t *testing.T) {
+	repocontract.RunSetReminderPrefs(t, func(t *testing.T) repocontract.ConfigHarness {
+		t.Helper()
+		v := openTestVault(t)
+		return configHarness{ConfigRepo: NewConfigRepo(v), db: v.db}
+	})
+}
+
+// TestConfigRepo_SetReminderPrefsLazyCreateUsesMigrationDefaults: a row the
+// preference write creates takes the migration's own defaults for every
+// other column and stamps updated_at, like RecordConsolidationRun's.
+func TestConfigRepo_SetReminderPrefsLazyCreateUsesMigrationDefaults(t *testing.T) {
+	v := openTestVault(t)
+	repo := NewConfigRepo(v)
+	ctx := context.Background()
+	end := "08:00"
+	if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{QuietHoursEnd: &end}, configFixtureTime); err != nil {
+		t.Fatalf("SetReminderPrefs: %v", err)
+	}
+	got, err := repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.WeightThreshold == nil || *got.WeightThreshold != migrationColumnDefaultFloat(t, "weight_threshold") {
+		t.Errorf("WeightThreshold = %v, want the migration default", got.WeightThreshold)
+	}
+	var updatedAt string
+	if err := v.db.QueryRowContext(ctx, `SELECT updated_at FROM config WHERE id = 1`).Scan(&updatedAt); err != nil {
+		t.Fatalf("reading updated_at: %v", err)
+	}
+	if updatedAt != configFixtureTime.Format(unitTimeLayout) {
+		t.Errorf("updated_at = %q, want the write's instant", updatedAt)
+	}
 }

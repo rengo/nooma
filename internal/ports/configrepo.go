@@ -49,4 +49,23 @@ type ConfigRepo interface {
 	// DEFAULTs. A vault that never runs a pass still has no config row at
 	// all.
 	RecordConsolidationRun(ctx context.Context, at time.Time) error
+
+	// SetReminderPrefs writes the user's reminder and quiet-hours
+	// preferences (ADR-0029, ADR-0030) in one statement: each non-nil field
+	// of u replaces its column, each nil one leaves it as it is, and
+	// updated_at becomes at. An absent row is created the way
+	// RecordConsolidationRun creates it. One write for the four because the
+	// evening time is valid only against the quiet end it lands with.
+	// Values are stored as given: validating them is the caller's
+	// (brain.PreferencesService), with the same parsers Resolve uses.
+	SetReminderPrefs(ctx context.Context, u ReminderPrefsUpdate, at time.Time) error
+}
+
+// ReminderPrefsUpdate is the preference columns SetReminderPrefs writes,
+// in their stored form; nil leaves a column unchanged.
+type ReminderPrefsUpdate struct {
+	EventReminderLeads *string // a JSON array of minutes
+	DateOnlyReminderAt *string // HH:MM
+	QuietHoursEnd      *string // HH:MM
+	EveningReminderAt  *string // HH:MM
 }

@@ -24,6 +24,10 @@ func (errConfigRepo) RecordConsolidationRun(_ context.Context, _ time.Time) erro
 	return nil
 }
 
+func (errConfigRepo) SetReminderPrefs(context.Context, ports.ReminderPrefsUpdate, time.Time) error {
+	return nil
+}
+
 // fakeTimer is this package's own timer seam test double (design §5.2):
 // the real timer.go implementation calls time.After directly, and this
 // fake lets a test control exactly when the cron loop's own wait fires,

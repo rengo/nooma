@@ -193,3 +193,63 @@ func RunRecordConsolidationRun(t *testing.T, newRepo func(t *testing.T) ConfigHa
 		}
 	})
 }
+
+// RunSetReminderPrefs runs the ports.ConfigRepo.SetReminderPrefs contract
+// (ui-preferences design D2). The four preference columns are nullable on
+// every adapter, so unlike the two suites above this one runs against the
+// real store too: a nil field of the update leaves its column as it is, a
+// non-nil one writes it, and no other column moves.
+func RunSetReminderPrefs(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
+	t.Helper()
+	ctx := context.Background()
+	at := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	str := func(s string) *string { return &s }
+
+	t.Run("an absent row is created holding only the fields written", func(t *testing.T) {
+		repo := newRepo(t)
+		if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{QuietHoursEnd: str("08:30")}, at); err != nil {
+			t.Fatalf("SetReminderPrefs: %v", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got.QuietHoursEnd == nil || *got.QuietHoursEnd != "08:30" {
+			t.Errorf("QuietHoursEnd = %v, want 08:30", got.QuietHoursEnd)
+		}
+		if got.EventReminderLeads != nil || got.DateOnlyReminderAt != nil || got.EveningReminderAt != nil || got.ConsolidationLastRunAt != nil {
+			t.Errorf("Load() = %+v, want only QuietHoursEnd written", got)
+		}
+	})
+
+	t.Run("an existing row changes only the fields written, all four at once", func(t *testing.T) {
+		repo := newRepo(t)
+		goalDays := 30
+		repo.SeedConfig(t, ports.VaultConfig{GoalStagnationDays: &goalDays, DateOnlyReminderAt: str("10:00"), EveningReminderAt: str("21:00")})
+		if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{
+			EventReminderLeads: str("[1440,60]"), QuietHoursEnd: str("06:00"), EveningReminderAt: str("23:00"),
+		}, at); err != nil {
+			t.Fatalf("SetReminderPrefs: %v", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		for name, c := range map[string]struct {
+			got  *string
+			want string
+		}{
+			"EventReminderLeads": {got.EventReminderLeads, "[1440,60]"},
+			"DateOnlyReminderAt": {got.DateOnlyReminderAt, "10:00"},
+			"QuietHoursEnd":      {got.QuietHoursEnd, "06:00"},
+			"EveningReminderAt":  {got.EveningReminderAt, "23:00"},
+		} {
+			if c.got == nil || *c.got != c.want {
+				t.Errorf("%s = %v, want %s", name, c.got, c.want)
+			}
+		}
+		if got.GoalStagnationDays == nil || *got.GoalStagnationDays != goalDays {
+			t.Errorf("GoalStagnationDays = %v, want the seeded %d untouched", got.GoalStagnationDays, goalDays)
+		}
+	})
+}

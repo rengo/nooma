@@ -28,3 +28,12 @@ func TestConfigRepo_MemRepo_RecordConsolidationRun(t *testing.T) {
 		return memrepo.NewConfig()
 	})
 }
+
+// TestConfigRepo_MemRepo_SetReminderPrefs runs the reminder-preferences
+// write contract (ui-preferences design D2) against the fake.
+func TestConfigRepo_MemRepo_SetReminderPrefs(t *testing.T) {
+	repocontract.RunSetReminderPrefs(t, func(t *testing.T) repocontract.ConfigHarness {
+		t.Helper()
+		return memrepo.NewConfig()
+	})
+}
