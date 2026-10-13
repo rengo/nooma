@@ -288,7 +288,7 @@ func TestActivityFamilies_DerivedFromVocabulary(t *testing.T) {
 	}
 
 	real := ActivityFamilies(ports.AllDecisionActions())
-	if want := []string{"belief", "capture", "check", "consolidate", "correction", "relation"}; !reflect.DeepEqual(real, want) {
+	if want := []string{"belief", "capture", "check", "config", "consolidate", "correction", "relation"}; !reflect.DeepEqual(real, want) {
 		t.Errorf("ActivityFamilies(real) = %v, want %v", real, want)
 	}
 	if again := ActivityFamilies(ports.AllDecisionActions()); !reflect.DeepEqual(real, again) {

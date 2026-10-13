@@ -195,9 +195,14 @@ const (
 	// ActionBeliefRetired records a user's retirement of a belief
 	// (active -> retired), written after the status write (design §3.4).
 	ActionBeliefRetired DecisionAction = "belief.retired"
+	// ActionConfigUpdated records a user's change of a vault setting,
+	// written after the config write with the fields it changed and their
+	// values in force before and after (ui-preferences design D4; the shape
+	// m4e2-admin plans for its own settings).
+	ActionConfigUpdated DecisionAction = "config.updated"
 )
 
-// AllDecisionActions returns a fresh slice holding the fifty-two
+// AllDecisionActions returns a fresh slice holding the fifty-three
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
@@ -206,7 +211,8 @@ const (
 // ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 // ActionCaptureRelationCheckInResolved and
 // ActionCaptureRelationCheckInUnmatched. ActionBeliefEdited and
-// ActionBeliefRetired are m4e's user-write rows, listed last.
+// ActionBeliefRetired are m4e's user-write rows, followed by
+// ui-preferences' ActionConfigUpdated.
 //
 // A function, not an exported var (design D1's reasoning, applied to this
 // vocabulary too): an exported slice is mutable by any importer, and a
@@ -237,6 +243,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionBeliefEdited, ActionBeliefRetired,
+		ActionConfigUpdated,
 	}
 }
 

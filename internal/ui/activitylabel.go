@@ -68,6 +68,7 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionCaptureRelationCheckInUnmatched: "Reply matched no link question",
 	ports.ActionBeliefEdited:                    "Belief edited",
 	ports.ActionBeliefRetired:                   "Belief retired",
+	ports.ActionConfigUpdated:                   "Preferences changed",
 }
 
 // activityTitle is a row's headline. A vault can hold actions the vocabulary
