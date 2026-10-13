@@ -63,6 +63,9 @@ const (
 	// RefusalAlreadyPast — the instant exists and is behind now. The same
 	// refusal pointing the other way: a nudge for something already over.
 	RefusalAlreadyPast Refusal = "already_past"
+	// RefusalQuietHours — the event is ahead, but every instant left before
+	// it falls in quiet hours, when nothing is sent (ADR-0030 point 4).
+	RefusalQuietHours Refusal = "quiet_hours"
 )
 
 // Plan is one row of Arm's decision: what to arm and with what. A dated

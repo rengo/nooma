@@ -161,9 +161,14 @@ func TestI09_TheDigestNamesBothEndpointsOfTheQueuedQuestion(t *testing.T) {
 	triggers := memrepo.NewTriggers()
 	sourceID := "u-source"
 	fireAt := time.Date(2026, 8, 5, prospection.DigestHour, 0, 0, 0, time.UTC).Add(-time.Hour)
+	// Recurring, because a one-shot event reminder is pushed rather than
+	// digested (ADR-0030) and this fixture needs an item in the digest.
+	yearly := prospection.RuleYearly
 	if err := triggers.Create(ctx, ports.Trigger{
 		ID: "trg-1", Kind: ports.TriggerKindTimeBased, FireAt: &fireAt, UnitID: &sourceID,
-		Payload: ports.TriggerPayload{ActionText: "renew the passport"}, CreatedAt: fireAt.Add(-time.Hour),
+		Payload:        ports.TriggerPayload{ActionText: "renew the passport", LeadDays: prospection.EventLeadDays},
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.August, Day: 12},
+		CreatedAt: fireAt.Add(-time.Hour),
 	}); err != nil {
 		t.Fatalf("seed trigger: %v", err)
 	}

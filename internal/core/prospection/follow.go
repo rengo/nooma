@@ -34,9 +34,11 @@ type Following struct {
 //
 // **A correction never creates an at-once reminder.** When every lead of
 // the new instant is behind and nothing is live, it arms nothing: the
-// at-once reminder is a capture's, sent once. A live one is still carried
-// to now, and one already due keeps its instant, so the same correction
-// again moves nothing.
+// at-once reminder is a capture's, sent once (ADR-0029 point 4). A live
+// one is still carried to now, and one already due keeps its instant, so
+// the same correction again moves nothing. A lead that ADR-0030 pulled to
+// now is not that reminder — its lead was ahead — and is armed with the
+// rest of the set.
 func Follow(eventAt time.Time, live []Live, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
 	interrupt := ResolveInterrupt(interruptLevel)
 	for i, l := range live {
@@ -45,7 +47,7 @@ func Follow(eventAt time.Time, live []Live, prefs ReminderPrefs, interruptLevel 
 		}
 	}
 	plans, arms := eventReminders(eventAt, prefs, now, interrupt)
-	if !arms || (plans[0].Immediate && len(live) == 0) {
+	if !arms || (len(live) == 0 && everyLeadBehind(eventAt, prefs, now)) {
 		return settle([]Plan{{What: ArmNothing, Why: plans[0].Why, Interrupt: interrupt}}, live, []int{-1})
 	}
 	carried := make([]int, len(plans))

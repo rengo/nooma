@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -360,6 +361,66 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		want := time.Date(2026, 10, 30, 7, 0, 0, 0, time.UTC)
 		if got := f.armed(t, "dentist"); len(got) != 1 || got[0].ID != "t1" || !got[0].FireAt.Equal(want) {
 			t.Errorf("armed = %+v, want t1 alone, three hours before", got)
+		}
+	})
+
+	t.Run("the set is re-armed around quiet hours, as a capture arms it (ADR-0030)", func(t *testing.T) {
+		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), `{"type":"event","normalized_content":"Vuelo el 2026-10-30 a las 05:00","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-30T05:00:00Z","language":"es"}`)
+		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
+		f.capture(t, "dentist")
+		quietEnd := time.Date(2026, 10, 29, 7, 0, 0, 0, time.UTC)
+		evening := time.Date(2026, 10, 29, 22, 0, 0, 0, time.UTC)
+		if got := f.armed(t, "dentist"); len(got) != 2 || got[0].ID != "t1" || !got[0].FireAt.Equal(quietEnd) || !got[1].FireAt.Equal(evening) {
+			t.Fatalf("armed = %+v, want t1 at %s and a new one at %s", got, quietEnd, evening)
+		}
+	})
+
+	flight := `{"type":"event","normalized_content":"Vuelo el 2026-10-30 a las 05:00","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-30T05:00:00Z","language":"es"}`
+	t.Run("a lead pulled to now is armed like the rest of the set, as a capture arms it (ADR-0030)", func(t *testing.T) {
+		evening := func(hour, minute int) time.Time { return time.Date(2026, 10, 29, hour, minute, 0, 0, time.UTC) }
+		for _, tc := range []struct {
+			name  string
+			leads *string
+			now   time.Time
+			want  []time.Time
+		}{
+			{"leads 6h and 2h at 22:30", strPtrI27(`[360,120]`), evening(22, 30), []time.Time{evening(22, 30), evening(23, 0)}},
+			{"the default leads at 23:00", nil, evening(23, 0), []time.Time{evening(23, 0)}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				f := newI29(t, tc.now, dentist(tc.now), flight)
+				cfg := memrepo.NewConfig()
+				cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: tc.leads})
+				f.svc = f.svc.WithReminderPrefs(cfg)
+				f.capture(t, "dentist")
+				got := f.armed(t, "dentist")
+				fires := make([]time.Time, len(got))
+				for i, g := range got {
+					fires[i] = g.FireAt
+				}
+				if !slices.EqualFunc(fires, tc.want, time.Time.Equal) {
+					t.Fatalf("armed at %v, want %v — the set a fresh capture of 05:00 arms", fires, tc.want)
+				}
+				if rows := reminderRows(t, f); len(rows) != len(tc.want) {
+					t.Errorf("reminder rows = %d, want one %s per reminder", len(rows), ports.ActionCorrectionReminderArmed)
+				}
+			})
+		}
+	})
+
+	t.Run("a reminder left with no allowed instant is cancelled for quiet hours, not as past", func(t *testing.T) {
+		now := time.Date(2026, 10, 30, 2, 0, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), flight)
+		f.arm(t, "t1", "dentist", now.Add(time.Hour), before, nil, nil)
+		f.capture(t, "dentist")
+		if got := f.armed(t, "dentist"); len(got) != 0 {
+			t.Fatalf("armed = %+v, want none: every moment before 05:00 is quiet", got)
+		}
+		rows := reminderRows(t, f)
+		if len(rows) != 1 || rows[0].Action != ports.ActionCorrectionReminderCancelled ||
+			!strings.Contains(rows[0].Rationale, "quiet hours") || strings.Contains(rows[0].Rationale, "passed") {
+			t.Errorf("rows = %+v, want one cancellation saying quiet hours", rows)
 		}
 	})
 

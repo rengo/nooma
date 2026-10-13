@@ -92,3 +92,40 @@ func TestFollow(t *testing.T) {
 		}
 	})
 }
+
+// TestFollow_KeepsALeadPulledToNow is I29 under ADR-0030: a lead that
+// deliverAt pulled to now is a real reminder of the moved event, not
+// ADR-0029's at-once reminder, so a correction with nothing live arms the
+// whole set a fresh capture arms — never nothing in front of it.
+func TestFollow_KeepsALeadPulledToNow(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(day, hour, minute int) time.Time { return time.Date(2026, 10, day, hour, minute, 0, 0, zone) }
+	event := classify.KindEvent
+	eventAt := at(16, 5, 0)
+	custom := DefaultReminderPrefs()
+	custom.TimedLeads = []time.Duration{6 * time.Hour, 2 * time.Hour}
+	for _, tc := range []struct {
+		name  string
+		prefs ReminderPrefs
+		now   time.Time
+		want  []time.Time
+	}{
+		{"leads 6h and 2h at 22:30: the 6h one pulled to now, the 2h one at 23:00", custom, at(15, 22, 30), []time.Time{at(15, 22, 30), at(15, 23, 0)}},
+		{"the default leads at 23:00: the 2h one pulled to now", DefaultReminderPrefs(), at(15, 23, 0), []time.Time{at(15, 23, 0)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh, _ := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, tc.prefs, tc.now)
+			got := Follow(eventAt, nil, tc.prefs, nil, tc.now)
+			if !reflect.DeepEqual(got.Plans, fresh) {
+				t.Fatalf("Follow plans = %+v, want the capture's %+v", got.Plans, fresh)
+			}
+			fires := make([]time.Time, len(got.Plans))
+			for i, p := range got.Plans {
+				fires[i] = p.FireAt
+			}
+			if !slices.EqualFunc(fires, tc.want, time.Time.Equal) {
+				t.Errorf("fires at %v, want %v", fires, tc.want)
+			}
+		})
+	}
+}

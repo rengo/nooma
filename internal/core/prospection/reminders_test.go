@@ -16,7 +16,10 @@ func TestDefaultReminderPrefs(t *testing.T) {
 	if p.DateOnlyAt != (TimeOfDay{Hour: 9}) {
 		t.Errorf("DateOnlyAt = %+v, want 09:00", p.DateOnlyAt)
 	}
-	if DefaultEventLeadFarHours != 24 || DefaultEventLeadNearHours != 2 || DefaultDateOnlyReminderHour != 9 {
+	if p.QuietEnd != (TimeOfDay{Hour: QuietHoursEndHour}) || p.EveningAt != (TimeOfDay{Hour: DefaultEveningReminderHour}) {
+		t.Errorf("QuietEnd, EveningAt = %+v, %+v, want 07:00 and 22:00 (ADR-0030)", p.QuietEnd, p.EveningAt)
+	}
+	if DefaultEventLeadFarHours != 24 || DefaultEventLeadNearHours != 2 || DefaultDateOnlyReminderHour != 9 || DefaultEveningReminderHour != 22 {
 		t.Error("the default constants drifted from doc 02 §13's rows")
 	}
 }
@@ -121,4 +124,67 @@ func TestArm_EventReminders(t *testing.T) {
 			t.Errorf("Arm = %+v, %v, want one already_past refusal", plans, ok)
 		}
 	})
+}
+
+// TestDeliverAt is ADR-0030 points 2-4, step by step: outside quiet hours
+// unchanged; inside, quiet end when it is before the event, else the
+// evening before; an instant left behind now is pulled to now outside
+// quiet hours and dropped inside them.
+func TestDeliverAt(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(day, hour, minute int) time.Time { return time.Date(2026, 10, day, hour, minute, 0, 0, zone) }
+	p := DefaultReminderPrefs()
+	cases := []struct {
+		name                string
+		nominal, event, now time.Time
+		want                time.Time
+		ok                  bool
+	}{
+		{"daytime is unchanged", at(16, 8, 0), at(16, 10, 0), at(13, 10, 0), at(16, 8, 0), true},
+		{"quiet end itself is outside quiet hours", at(16, 7, 0), at(16, 9, 0), at(13, 10, 0), at(16, 7, 0), true},
+		{"the last quiet minute moves to quiet end", at(16, 6, 59), at(16, 8, 0), at(13, 10, 0), at(16, 7, 0), true},
+		{"midnight is quiet: quiet end before the event", at(16, 0, 0), at(16, 7, 1), at(13, 10, 0), at(16, 7, 0), true},
+		{"the event at quiet end: the evening before", at(16, 5, 0), at(16, 7, 0), at(13, 10, 0), at(15, 22, 0), true},
+		{"the event before quiet end: the evening before", at(16, 3, 0), at(16, 5, 0), at(13, 10, 0), at(15, 22, 0), true},
+		{"the evening behind now, now allowed: at once", at(16, 3, 0), at(16, 5, 0), at(15, 22, 30), at(15, 22, 30), true},
+		{"the evening behind now, now quiet: dropped", at(16, 3, 0), at(16, 5, 0), at(16, 0, 0), time.Time{}, false},
+		{"now itself in quiet hours moves to quiet end", at(16, 6, 0), at(16, 7, 30), at(16, 6, 0), at(16, 7, 0), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := deliverAt(tc.nominal, tc.event, tc.now, p)
+			if ok != tc.ok || (ok && !got.Equal(tc.want)) {
+				t.Errorf("deliverAt(%v) = %v, %v; want %v, %v", tc.nominal, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+	t.Run("built on the zone's wall clock, not UTC's", func(t *testing.T) {
+		// 08:00 UTC is 05:00 ART: quiet in the user's zone, daytime in UTC.
+		nominal := time.Date(2026, 10, 16, 8, 0, 0, 0, time.UTC)
+		got, ok := deliverAt(nominal, at(16, 9, 0), at(13, 10, 0), p)
+		if !ok || !got.Equal(at(16, 7, 0)) {
+			t.Errorf("deliverAt = %v, %v; want 07:00 ART", got, ok)
+		}
+	})
+}
+
+// TestArm_EventRemindersAroundQuietHours: two leads the adjustment lands on
+// one instant are armed once, and an event with no allowed instant arms
+// nothing, saying quiet_hours.
+func TestArm_EventRemindersAroundQuietHours(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(day, hour int) time.Time { return time.Date(2026, 10, day, hour, 0, 0, 0, zone) }
+	event := classify.KindEvent
+	eventAt := at(16, 5)
+	p := DefaultReminderPrefs()
+	p.TimedLeads = []time.Duration{3 * time.Hour, 2 * time.Hour}
+
+	plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, p, at(13, 10))
+	if !ok || len(plans) != 1 || !plans[0].FireAt.Equal(at(15, 22)) || plans[0].LeadMinutes != 7*60 {
+		t.Errorf("plans = %+v, want one at 22:00 the evening before, lead 420", plans)
+	}
+	plans, ok = Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, p, at(16, 2))
+	if ok || len(plans) != 1 || plans[0].What != ArmNothing || plans[0].Why != RefusalQuietHours {
+		t.Errorf("plans = %+v, want nothing armed, why quiet_hours", plans)
+	}
 }
