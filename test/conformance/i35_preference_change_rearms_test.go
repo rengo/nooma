@@ -466,6 +466,49 @@ func TestI35_ALeadMergedByAReArmIsRecorded(t *testing.T) {
 	})
 }
 
+// TestI35_AnOldReminderIsSentAtMostOnceMore pins doc 02 §7's accepted
+// residual risk for rows armed before the event instant and leads were
+// recorded: such a row that went out may be sent once more after a change
+// that moves its slot, and never again after that. A legacy 3 h reminder of
+// a 05:00 flight, pulled to now (lead_minutes 0), went out at 22:10; at
+// 22:30 a change to the evening time arms the 3 h lead once more, and it
+// goes out; a further change sends it no third time.
+func TestI35_AnOldReminderIsSentAtMostOnceMore(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	eleven := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
+	first, again := time.Date(2026, 10, 14, 22, 10, 0, 0, time.UTC), time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	v := newI35(t, again)
+	leads := "[360,180]"
+	v.cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+	v.unit(t, "flight", unit.TypeEvent, flight, first)
+	v.arm(t, "flight-old", "flight", first, 0, nil)
+	v.arm(t, "flight-6h", "flight", eleven, 360, nil)
+	if err := v.triggers.Fire(ctx, "flight-old", first); err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	p := i35Defaults()
+	p.LeadMinutes, p.EveningAt = []int{360, 180}, "22:20"
+	if _, err := v.svc.Save(ctx, p); err != nil {
+		t.Fatalf("Save at 22:30: %v", err)
+	}
+	// The once-more send: whichever row the re-arm put at 22:30 goes out.
+	armed, _ := v.triggers.ArmedForUnit(ctx, "flight")
+	if len(armed) != 2 || !armed[0].FireAt.Equal(again) || !armed[1].FireAt.Equal(eleven) {
+		t.Fatalf("after the change = %+v, want the 3 h lead once more at 22:30 and 23:00", armed)
+	}
+	if err := v.triggers.Fire(ctx, armed[0].ID, again); err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	p.EveningAt = "22:40"
+	if _, err := v.at(again.Add(5*time.Minute)).Save(ctx, p); err != nil {
+		t.Fatalf("Save at 22:35: %v", err)
+	}
+	if got := v.armedAt(t, "flight"); !sameInstants(got, []time.Time{eleven}) {
+		t.Errorf("flight reminders = %v, want only 23:00: the old 3 h reminder is sent at most once more", got)
+	}
+}
+
 // TestI35_ACreatedReminderTakesTheEarliestArmedLevel: a reminder a change
 // creates for an event takes the interrupt level of the event's earliest
 // armed reminder (doc 02 §7), not the default and not another reminder's.

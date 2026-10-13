@@ -538,15 +538,17 @@ func TestSentReminders_PlacesWhatWentOut(t *testing.T) {
 	fire := time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)
 	got := sentReminders([]ports.FiredTrigger{
 		{FireAt: fire, FiredAt: fire, Payload: ports.TriggerPayload{About: event.Add(time.Hour), UserLeadsMinutes: []int{180, 120}}},
-		{FireAt: fire, FiredAt: fire, Payload: ports.TriggerPayload{LeadMinutes: 420}},
+		{FireAt: fire, FiredAt: fire, Payload: ports.TriggerPayload{LeadMinutes: 1440}},
 		{FireAt: fire, FiredAt: fire},
 		{FireAt: event.Add(time.Hour), FiredAt: event.Add(time.Hour)},
 	}, event)
 	if !got[0].About.Equal(event.Add(time.Hour)) || !slices.Equal(got[0].Leads, []time.Duration{3 * time.Hour, 2 * time.Hour}) {
 		t.Errorf("recorded row = %+v, want its own instant and both leads", got[0])
 	}
-	if !got[1].About.Equal(fire.Add(420 * time.Minute)) {
-		t.Errorf("legacy row with a lead = %+v, want it placed at fire_at + lead_minutes", got[1])
+	// Placed at fire_at + lead_minutes, the date it was about (here before a
+	// correction), never the event now in force.
+	if !got[1].About.Equal(fire.Add(1440*time.Minute)) || got[1].About.Equal(event) {
+		t.Errorf("legacy row with a lead = %+v, want it placed at fire_at + lead_minutes, not at the current event", got[1])
 	}
 	if !got[2].About.Equal(event) || len(got[2].Leads) != 0 {
 		t.Errorf("legacy row with no lead, sent before the event = %+v, want it about the event, by time only", got[2])
