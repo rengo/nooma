@@ -33,6 +33,8 @@ type correctionRunner struct {
 	// triggers is where a corrected event date moves the unit's reminder
 	// (I29).
 	triggers ports.TriggerRepo
+	// config holds the reminder preferences the followed set is armed at.
+	config ports.ConfigRepo
 }
 
 // referentSource records how applyWithPreImage's caller resolved target's

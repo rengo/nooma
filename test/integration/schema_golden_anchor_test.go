@@ -123,6 +123,8 @@ func TestSchemaGoldenAnchorsExpectedObjects(t *testing.T) {
 		"index idx_pending_questions_open",
 		// 0005_units_browse_index.sql
 		"index idx_units_live_browse",
+		// 0006_reminder_preferences.sql adds columns to config, an object
+		// already required above.
 	}
 
 	requiredSet := make(map[string]bool, len(required))

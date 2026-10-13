@@ -99,6 +99,28 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 	}
 }
 
+// WithReminderPrefs lets capture and correction arm an event's reminders
+// at the user's stored preferences (ADR-0029), read from cfg at arm time.
+// Without it they arm at the defaults.
+func (s *CaptureService) WithReminderPrefs(cfg ports.ConfigRepo) *CaptureService {
+	s.run.config, s.run.correction.config = cfg, cfg
+	return s
+}
+
+// reminderPrefs reads the user's reminder preferences, once per operation.
+// A failed read arms at the defaults rather than failing a capture whose
+// memory is already kept — wireBrain's posture toward the weight threshold.
+func reminderPrefs(ctx context.Context, cfg ports.ConfigRepo) prospection.ReminderPrefs {
+	if cfg == nil {
+		return prospection.DefaultReminderPrefs()
+	}
+	stored, err := cfg.Load(ctx)
+	if err != nil {
+		return prospection.DefaultReminderPrefs()
+	}
+	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt)
+}
+
 // Capture is the package's only ports.Clock.Now() read (spec R4.1, design
 // D4). Every timestamp this pipeline produces — classify's local-date
 // injection, I18's three unit timestamps, decision_log.occurred_at — comes
@@ -172,6 +194,9 @@ type captureRunner struct {
 	// with no question store has nothing open, which is the honest reading
 	// rather than a crash.
 	questions ports.PendingQuestionRepo
+	// config holds the user's event reminder preferences (ADR-0029); nil
+	// arms at the defaults.
+	config ports.ConfigRepo
 }
 
 // at runs one capture given the instant CaptureService.Capture already
@@ -289,7 +314,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// and I04 stays structural rather than remembered. Arm takes the
 	// instant Capture already read — there is no second clock read here,
 	// and captureRunner holds no clock to make one with.
-	plans, armable := prospection.Arm(c, prospection.DefaultReminderPrefs(), now)
+	plans, armable := prospection.Arm(c, reminderPrefs(ctx, r.config), now)
 	plan := plans[0] // the refusal, when nothing is armed
 
 	// **A kind that persists NO unit arms and returns here.** That is the
