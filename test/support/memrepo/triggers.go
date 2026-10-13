@@ -327,6 +327,26 @@ func (r *Triggers) ArmedForUnit(_ context.Context, unitID string) ([]ports.DueTr
 	return out, nil
 }
 
+// ArmedUnitIDs implements ports.TriggerRepo: the distinct unit ids of armed
+// rows with a non-nil FireAt, in id order.
+func (r *Triggers) ArmedUnitIDs(_ context.Context) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	seen := map[string]bool{}
+	out := make([]string, 0)
+	for _, stored := range r.triggers {
+		t := stored.trigger
+		if stored.status != ports.TriggerStatusArmed || t.FireAt == nil || t.UnitID == nil || seen[*t.UnitID] {
+			continue
+		}
+		seen[*t.UnitID] = true
+		out = append(out, *t.UnitID)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 // Reschedule implements ports.TriggerRepo, under the same armed
 // precondition transition enforces.
 func (r *Triggers) Reschedule(_ context.Context, id string, m ports.TriggerMove) error {

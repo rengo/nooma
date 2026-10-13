@@ -152,6 +152,7 @@ func (r *conflictingTriggers) Fire(context.Context, string, time.Time) error { r
 func (r *conflictingTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
 	return nil, nil
 }
+func (r *conflictingTriggers) ArmedUnitIDs(context.Context) ([]string, error) { return nil, nil }
 func (r *conflictingTriggers) Reschedule(context.Context, string, ports.TriggerMove) error {
 	return nil
 }
@@ -309,6 +310,7 @@ func (r *failingTriggers) Expire(context.Context, string) error          { retur
 func (r *failingTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
 	return nil, r.err
 }
+func (r *failingTriggers) ArmedUnitIDs(context.Context) ([]string, error) { return nil, r.err }
 func (r *failingTriggers) Reschedule(context.Context, string, ports.TriggerMove) error {
 	return r.err
 }
@@ -324,6 +326,7 @@ func (emptyTriggers) Expire(context.Context, string) error          { return nil
 func (emptyTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
 	return nil, nil
 }
+func (emptyTriggers) ArmedUnitIDs(context.Context) ([]string, error)              { return nil, nil }
 func (emptyTriggers) Reschedule(context.Context, string, ports.TriggerMove) error { return nil }
 
 type emptyTimers struct{}

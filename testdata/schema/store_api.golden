@@ -44,6 +44,7 @@ internal/store/sqlite: func (*TimerRepo) Create(ctx context.Context, t ports.Tim
 internal/store/sqlite: func (*TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, error)
 internal/store/sqlite: func (*TimerRepo) Fire(ctx context.Context, id string, at time.Time, rendered *string) error
 internal/store/sqlite: func (*TriggerRepo) ArmedForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error)
+internal/store/sqlite: func (*TriggerRepo) ArmedUnitIDs(ctx context.Context) ([]string, error)
 internal/store/sqlite: func (*TriggerRepo) Create(ctx context.Context, t ports.Trigger) error
 internal/store/sqlite: func (*TriggerRepo) Delivered(ctx context.Context) ([]ports.DueTrigger, error)
 internal/store/sqlite: func (*TriggerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTrigger, error)

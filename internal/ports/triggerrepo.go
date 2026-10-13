@@ -295,6 +295,12 @@ type TriggerRepo interface {
 	// by (fire_at, id) — the reminders a corrected date moves (I29).
 	ArmedForUnit(ctx context.Context, unitID string) ([]DueTrigger, error)
 
+	// ArmedUnitIDs returns, once each and in id order, every unit an armed
+	// trigger with a fire_at hangs off — the units a change of the reminder
+	// preferences re-arms (ADR-0029 point 6), each then read through
+	// ArmedForUnit.
+	ArmedUnitIDs(ctx context.Context) ([]string, error)
+
 	// Reschedule applies m to id under an armed precondition: fire_at,
 	// payload and, when m.RecurrenceAnchor is non-nil, recurrence_anchor.
 	// It returns the same two errors as Fire.

@@ -209,6 +209,33 @@ func (r *TriggerRepo) ArmedForUnit(ctx context.Context, unitID string) ([]ports.
 	return out, nil
 }
 
+// ArmedUnitIDs implements ports.TriggerRepo.
+func (r *TriggerRepo) ArmedUnitIDs(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT unit_id FROM triggers
+		 WHERE status = ? AND unit_id IS NOT NULL AND fire_at IS NOT NULL
+		 ORDER BY unit_id`,
+		string(ports.TriggerStatusArmed),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("select units with armed triggers: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan unit with armed triggers: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select units with armed triggers: %w", err)
+	}
+	return out, nil
+}
+
 // Reschedule implements ports.TriggerRepo. COALESCE keeps the anchor when
 // the move carries none.
 func (r *TriggerRepo) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {

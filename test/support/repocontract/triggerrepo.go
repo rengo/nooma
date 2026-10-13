@@ -425,6 +425,38 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		return got
 	}
 
+	t.Run("ArmedUnitIDs names each unit with an armed clocked trigger once, in id order", func(t *testing.T) {
+		repo := newRepo(t)
+		seed(t, repo)
+		ids := func() []string {
+			t.Helper()
+			got, err := repo.ArmedUnitIDs(ctx)
+			if err != nil {
+				t.Fatalf("ArmedUnitIDs: %v", err)
+			}
+			return got
+		}
+		// unit-shared holds two armed triggers, a fired one and an unclocked
+		// one: it is named once.
+		if got, want := ids(), []string{"unit-shared", "unit-trg-other"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("ArmedUnitIDs = %v, want %v", got, want)
+		}
+		unitID := "unit-a"
+		at := contractNow.Add(3 * time.Hour)
+		trg := fixtureTrigger("trg-a", &at)
+		trg.UnitID = &unitID
+		createTrigger(t, repo, trg)
+		if got, want := ids(), []string{"unit-a", "unit-shared", "unit-trg-other"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("ArmedUnitIDs = %v, want %v", got, want)
+		}
+		if err := repo.Fire(ctx, "trg-a", at); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+		if got, want := ids(), []string{"unit-shared", "unit-trg-other"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("ArmedUnitIDs after unit-a's only trigger fired = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("ArmedForUnit returns the unit's armed triggers by fire_at", func(t *testing.T) {
 		repo := newRepo(t)
 		seed(t, repo)
