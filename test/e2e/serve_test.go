@@ -516,7 +516,7 @@ func TestServeHoldsTheWriteLock(t *testing.T) {
 	if err := second.Run(); err == nil {
 		t.Fatal("a second serve started against a held vault")
 	}
-	if !strings.Contains(errOut.String(), fmt.Sprint(cmd.Process.Pid)) {
+	if !refusalNamesPID(errOut.String(), cmd.Process.Pid) {
 		t.Errorf("the refusal does not name the holding PID %d:\n%s", cmd.Process.Pid, errOut.String())
 	}
 }

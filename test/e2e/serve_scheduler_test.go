@@ -46,7 +46,7 @@ func TestServe_ConcurrentConsolidate_StillRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("consolidate succeeded against a vault a running serve process already holds")
 	}
-	if !strings.Contains(stderr, fmt.Sprint(cmd.Process.Pid)) {
+	if !refusalNamesPID(stderr, cmd.Process.Pid) {
 		t.Errorf("the refusal does not name the holding PID %d:\n%s", cmd.Process.Pid, stderr)
 	}
 }
