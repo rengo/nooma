@@ -1,0 +1,54 @@
+name: scratch vaultlock repro
+on: pull_request
+jobs:
+  before:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod }
+      - name: toolchain
+        run: go env CGO_ENABLED CC; where.exe gcc; exit 0
+      - name: old harness child run directly
+        shell: bash
+        run: |
+          git checkout f3cbb2a -- test/integration/vaultlock_test.go
+          go test -tags integration -c -o old.test.exe ./test/integration/
+          mkdir v
+          set +e
+          NOOMA_LOCK_CHILD=1 NOOMA_LOCK_VAULT="$PWD/v" timeout 10 ./old.test.exe; echo "child exit=$?"
+          exit 0
+      - name: old harness, TestSecondWriterFails x500
+        shell: bash
+        run: |
+          set +e
+          ./old.test.exe -test.run '^TestSecondWriterFails$' -test.count=500 > old.out 2>&1
+          echo "old harness failures out of 500: $(grep -c -- '--- FAIL' old.out)"
+          exit 0
+  after:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod }
+      - name: new regression test against the old holder (expect red)
+        shell: bash
+        run: |
+          set +e
+          python - <<'PY'
+          p='test/integration/vaultlock_test.go'
+          s=open(p).read()
+          i=s.index('\t_, _ = io.Copy(io.Discard, os.Stdin)')
+          j=s.index('os.Exit(0)\n', i)+len('os.Exit(0)\n')
+          s=s[:i]+'\tdefer func() { _ = lock.Release() }()\n\tselect {}\n'+s[j:]
+          open(p,'w').write(s)
+          PY
+          grep -n "select {}" test/integration/vaultlock_test.go
+          go test -tags integration -run 'TestHolderKeepsTheLock' -count=1 ./test/integration/ 2>&1 | tail -4
+          git checkout -- test/integration/vaultlock_test.go
+          exit 0
+      - name: fixed harness, x500 second writer, x30 holder
+        run: |
+          go test -tags integration -run '^TestSecondWriterFails$' -count=500 ./test/integration/
+          go test -tags integration -run 'Holder|SIGKILL|ReadHolderTakesNoLock' -count=30 ./test/integration/
