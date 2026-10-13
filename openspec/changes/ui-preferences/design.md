@@ -43,39 +43,56 @@ order the user typed them in changes nothing.
 `Save(ctx, Preferences) (SaveResult, error)`. `Save` validates every field with the core parsers
 before any write. The evening time is judged against the *submitted* quiet end. Each invalid
 field is reported in `*PreferencesError`, which wraps `prospection.ErrInvalidReminderPref`, and
-nothing is written. The order then follows m4e2 §3.1: write, then record `config.updated` with
+nothing is written. Every field is judged in the same save, so a refusal names all the wrong
+ones at once, a malformed evening included when the quiet end is wrong too. The order then follows m4e2 §3.1: write, then record `config.updated` with
 `{fields, previous, next}`, where previous and next are the values in force. Leads are recorded
 as readable text ("24 hours, 2 hours"), so `/ui/activity` shows them without a template. If the
 log write fails after the config write landed, the error is `*WriteLandedError{Record: true}`.
+`LeadUnit` is a closed set: `ParseLeadUnit` refuses any other unit, and `Minutes()` of a unit
+outside it is 0, a lead core always refuses, so an unknown unit can never be saved as minutes.
 
 **D5. Re-arm (ADR-0029 point 6).** After a valid save, `Save` walks
 `TriggerRepo.ArmedUnitIDs` (new read: distinct `unit_id` of armed clocked triggers). For each
 unit it reads `UnitRepo.ByID`, which includes archived units, because their triggers still fire.
 It keeps the unit if it is an `event` with `event_at` after now and none of its armed triggers is
 recurring (birthdays are point 7). For each kept unit it runs `prospection.Follow` with the new
-preferences and the level of the unit's earliest trigger, then applies the result through the
-same helper the correction uses. The helper is now parameterised by action family, so the rows
+preferences and the interrupt level of the unit's earliest armed trigger (the one a reminder
+created for the unit inherits; doc 02 §7 states it), then applies the result through the same
+helper the correction uses. The helper is now parameterised by action family, so the rows
 are `config.reminder.moved|armed|cancelled`, recorded before each trigger write (ADR-0016).
 
-Re-arm runs on **every valid save**, including one that changes nothing. `Follow` over a set
-that is already consistent writes nothing, so saving again is how a partial failure gets
-repaired, which is the correction's own retry rule. If re-arm fails, the error is returned and
-the saved values stand.
+Re-arm runs when a save **changes a value in force**, or when the re-arm of an earlier change is
+still pending. A save that changes nothing, with nothing pending, never creates, moves or
+re-sends a reminder. Running `Follow` again over the same preferences is *not* a no-op: it only
+sees live triggers, so a lead whose evening-pulled reminder already went out is planned again
+at once (leads 6 h and 2 h, an event at 05:00, the 22:00 reminder sent, a save at 22:30 would
+pull the 23:00 one to 22:30 and arm a new 23:00).
+
+Pending is read from the decision log. A re-arm that completes records
+`config.reminders.followed`. A re-arm is pending when the newest `config.updated` row is newer
+(by insertion sequence) than the newest `config.reminders.followed` row. If a re-arm stops part
+way, `Save` returns `ErrRemindersNotFollowed`, the saved values stand, and the next save (the page
+says "Save again to finish") completes the re-arm even if it changes nothing. The re-arm is
+deterministic over what is armed, so finishing it does not repeat what the first attempt
+already did. Known gap: if the `config.updated` row itself could not be written *and* the re-arm
+failed, nothing marks the re-arm pending. That needs two writes to fail in one save.
 
 Two consequences come straight from point 4, and the page copy does not hide them. When every
 new lead of an event is already behind, its armed reminder is pulled to now. When a new lead is
 still ahead, a reminder is armed for it even if a reminder for an older lead already went out.
 
-**D6. Four actions, `config.updated` plus `config.reminder.{moved,armed,cancelled}`.** They are
+**D6. Five actions: `config.updated`, `config.reminder.{moved,armed,cancelled}` and
+`config.reminders.followed`.** They are
 appended to the vocabulary, and `ActivityFamilies` yields one `config` family. m4e2 reuses
 `config.updated` for its admin fields.
 
 **D7. UI: `GET /ui/preferences` and `POST /ui/preferences`.** These are guarded and
 cross-origin-protected like `/ui/beliefs`, and a nav entry is added. The page has one form. The
 leads editor is one row per lead (a whole number and a unit: minutes, hours or days) with a
-**Remove** button per row and an **Add a lead** button, up to 5. Remove and Add are submit
-buttons (`name="op"`) that re-render the form with the edits kept and **save nothing**, so the
-editor works without custom JavaScript. The times are `<input type="time">`. An invalid save
+**Remove** button per row and an **Add a lead** button, up to 5. Remove and Add are htmx
+buttons (`type="button"`, `name="op"`) that post the form and get back the leads fieldset with the
+edits kept. They **save nothing**. An empty row counts as no lead, and one spare empty row is always
+shown while there is room, so adding a lead works without JavaScript too. The times are `<input type="time">`. An invalid save
 re-renders with each field's message and keeps what was typed. A valid save re-renders with the
 saved values and "Preferences saved." On `HX-Request` the response is a fragment, otherwise the
 full page. The save button uses the pending pattern from #328. One line of copy says that a
@@ -83,16 +100,17 @@ change also moves the reminders already set for upcoming events.
 
 **D8. Messages restate the rule, with core's constants interpolated.** Example: "Each lead is
 from 1 minute to 30 days, at most 5, no two the same." The UI never re-implements the rule.
-Core decides, and the UI names the field. A non-numeric amount is the UI's own parse error,
-reported the same way.
+Core decides, and the UI names the field. An amount that is not a whole number, or an unknown
+unit, is refused by the UI. The UI still submits the times to `Save`, with no leads (which core
+always refuses, so nothing is written), so the same submit reports every wrong field.
 
 ## 3. Chain (stacked to main)
 
 | PR | Branch | Content |
 |---|---|---|
-| 1 | `fix/digest-once-per-date` | D1 + doc 02 (#329) |
-| 2 | `feat/reminder-prefs-save` | this design; D2-D4, D6 (`config.updated`); doc 02 §11 |
-| 3 | `feat/reminder-prefs-rearm` | D5, D6 (`config.reminder.*`), I35; doc 02 §7, doc 06 §4 |
+| 1 | `fix/digest-once-per-date` | D1 + doc 02; this design and tasks (#329) |
+| 2 | `feat/reminder-prefs-save` | D2-D4, D6 (`config.updated`); doc 02 §11 (#330) |
+| 3 | `feat/reminder-prefs-rearm` | D5, D6 (`config.reminder.*`, `config.reminders.followed`), I35; doc 02 §7, doc 06 §4 (#331) |
 | 4 | `feat/ui-preferences` | D7-D8; wiring and UI gates; doc 07 |
 
 ## 4. Tests

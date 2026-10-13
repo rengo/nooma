@@ -4,9 +4,9 @@ Four links stacked to main (design §3).
 
 PR 1 — `fix/digest-once-per-date` (#329)
 - [x] 1. RED/GREEN L1 core + brain: at most one digest per local date (D1); doc 02 §7.
+- [x] 2. This design and tasks.
 
-PR 2 — `feat/reminder-prefs-save`
-- [ ] 2. This design and tasks.
+PR 2 — `feat/reminder-prefs-save` (#330)
 - [ ] 3. RED/GREEN L3 + contract: `ConfigRepo.SetReminderPrefs` (D2); memrepo, doubles, store API golden.
 - [ ] 4. RED/GREEN L1 brain: `PreferencesService.Preferences/Save`, validation, effective no-op, `config.updated` (D3, D4, D6); doc 02 §11.
 
