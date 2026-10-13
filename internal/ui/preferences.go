@@ -13,8 +13,7 @@ import (
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
-// Preferences is /ui/preferences' entry point (design D7): the values in
-// force, and a save. *brain.PreferencesService satisfies it.
+// Preferences is /ui/preferences' entry point; *brain.PreferencesService.
 type Preferences interface {
 	Preferences(ctx context.Context) (brain.Preferences, error)
 	Save(ctx context.Context, p brain.Preferences) (brain.SaveResult, error)
@@ -26,8 +25,7 @@ type leadRow struct {
 	Unit   brain.LeadUnit
 }
 
-// prefsForm is the form as shown: rows, times, each field's refusal keyed
-// by brain's field name (also the inputs' names), and the POST's outcome.
+// prefsForm is the form as shown; Errors are keyed by brain's field names.
 type prefsForm struct {
 	Rows                          []leadRow
 	DateOnlyAt, QuietEnd, Evening string
@@ -84,8 +82,7 @@ func formFromRequest(r *http.Request) prefsForm {
 	return f
 }
 
-// leadMinutes turns the filled rows into minutes; an empty row is no lead.
-// A row that is not a whole number in a unit brain parses refuses the leads.
+// leadMinutes: filled rows in minutes; any unreadable row refuses them all.
 func (f prefsForm) leadMinutes() ([]int, bool) {
 	limit := prospection.MaxEventLeadDays * brain.LeadDays.Minutes()
 	var out []int
@@ -98,11 +95,11 @@ func (f prefsForm) leadMinutes() ([]int, bool) {
 		if err != nil || !ok {
 			return nil, false
 		}
-		m := n * unit.Minutes()
+		// Bounded before the product, which could wrap into a valid lead.
 		if n > limit || n < -limit {
-			m = limit + 1 // still out of range, never an overflowed product
+			n, unit = limit+1, brain.LeadMinutes
 		}
-		out = append(out, m)
+		out = append(out, n*unit.Minutes())
 	}
 	return out, true
 }
@@ -122,8 +119,7 @@ func (h *Handler) servePreferences(w http.ResponseWriter, r *http.Request) {
 	writePreferencesPage(w, r, http.StatusOK, formFromPrefs(p))
 }
 
-// servePreferencesSave answers POST /ui/preferences: op "add" and
-// "remove-<i>" edit the rows without saving; anything else saves the form.
+// servePreferencesSave saves the form, or edits rows for op add/remove-<i>.
 func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Preferences == nil {
 		http.Error(w, "preferences: not wired in this build", http.StatusServiceUnavailable)
@@ -140,13 +136,13 @@ func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Leads the UI cannot read go to the brain as no leads, which it always
-	// refuses, so the times are still judged in this same submit (design D8).
+	// Unreadable leads go to Save as none, which core refuses, so the times
+	// are still judged in this submit (design D8).
 	minutes, leadsOK := f.leadMinutes()
 	res, err := h.deps.Preferences.Save(r.Context(), brain.Preferences{LeadMinutes: minutes, DateOnlyAt: f.DateOnlyAt, QuietEnd: f.QuietEnd, EveningAt: f.Evening})
 	var refused *brain.PreferencesError
 	var landed *brain.WriteLandedError
-	notFollowed := errors.Is(err, brain.ErrRemindersNotFollowed)
+	notFollowed, hasLanded := errors.Is(err, brain.ErrRemindersNotFollowed), errors.As(err, &landed)
 	switch {
 	case errors.As(err, &refused):
 		fields := []brain.PreferenceField{}
@@ -159,10 +155,11 @@ func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
 		refusePreferences(w, r, f, fields...)
 		return
 	case !leadsOK:
+		// A tripwire, not a guard: Save already ran; core refuses no leads.
 		slog.Error("preferences: a save with no leads was not refused", "err", err)
 		http.Error(w, "preferences: internal error", http.StatusInternalServerError)
 		return
-	case err != nil && !notFollowed && !errors.As(err, &landed):
+	case err != nil && !notFollowed && !hasLanded:
 		slog.Error("preferences: save failed", "err", err)
 		http.Error(w, "preferences: internal error", http.StatusInternalServerError)
 		return
@@ -170,6 +167,9 @@ func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
 	f = formFromPrefs(res.Saved)
 	f.Outcome = &beliefResult{Outcome: outcomeSaved, Message: "Preferences saved."}
 	switch {
+	case notFollowed && hasLanded: // nothing marks the re-arm pending
+		slog.Warn("preferences: saved, but neither the activity row nor every reminder move was written", "err", err)
+		f.Outcome = &beliefResult{Outcome: outcomeSavedWithNotice, Message: "Saved, but the activity record could not be written and some reminders already set were not moved; they move with the next change of a preference."}
 	case notFollowed:
 		slog.Warn("preferences: saved, but the reminders already set were not all moved", "err", err)
 		f.Outcome = &beliefResult{Outcome: outcomeSavedWithNotice, Message: "Saved, but some reminders already set could not be moved. Save again to finish."}

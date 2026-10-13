@@ -321,3 +321,43 @@ func TestPreferencesSave_RemovingTheLastRowLeavesAnEmptyOne(t *testing.T) {
 		t.Errorf("%d rows after removing the only one, want one empty row:\n%s", n, body)
 	}
 }
+
+// A bad row next to a readable one still sends no leads at all: dropping
+// only the bad row would save the readable one while the page says
+// nothing was saved.
+func TestPreferencesSave_ABadRowBesideAGoodOneSendsNoLeads(t *testing.T) {
+	t.Parallel()
+	for _, bad := range []string{"lead_amount=abc&lead_unit=hours", "lead_amount=2&lead_unit=weeks"} {
+		fake := &fakePreferences{err: &brain.PreferencesError{Fields: map[brain.PreferenceField]error{brain.FieldLeads: prospection.ErrInvalidReminderPref}}}
+		rec := preferencesPost(t, fake, "lead_amount=2&lead_unit=hours&"+bad+"&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00")
+		if len(fake.saved) != 1 || len(fake.saved[0].LeadMinutes) != 0 {
+			t.Errorf("%s: Save got %+v, want no leads", bad, fake.saved)
+		}
+		assertContains(t, rec.Body.String(), `data-error="event_reminder_leads"`)
+	}
+}
+
+// An amount whose product with its unit would wrap around is still out of
+// range: 576460752303423490 days is 2880 minutes modulo 2^64, a valid
+// two-day lead, and must not become one.
+func TestPreferencesSave_AnAmountThatWouldWrapStaysOutOfRange(t *testing.T) {
+	t.Parallel()
+	fake := &fakePreferences{}
+	preferencesPost(t, fake, "lead_amount=576460752303423490&lead_unit=days&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00")
+	if len(fake.saved) != 1 || len(fake.saved[0].LeadMinutes) != 1 || fake.saved[0].LeadMinutes[0] <= prospection.MaxEventLeadDays*24*60 {
+		t.Errorf("Save got %+v, want one lead past the bound, never the wrapped 2880", fake.saved)
+	}
+}
+
+// When the change's activity row and the re-arm both failed, nothing marks
+// the re-arm pending, so the page must not say that saving again finishes
+// it.
+func TestPreferencesSave_ADoubleFailureDoesNotPromiseARetry(t *testing.T) {
+	t.Parallel()
+	err := errors.Join(&brain.WriteLandedError{Record: true, Err: errors.New("log")}, brain.ErrRemindersNotFollowed)
+	body := preferencesPost(t, &fakePreferences{result: brain.SaveResult{Saved: defaultPreferences()}, err: err}, validForm).Body.String()
+	assertContains(t, body, `data-outcome="saved-with-notice"`, "move with the next change")
+	if strings.Contains(body, "Save again") {
+		t.Errorf("the notice promises a retry that will not happen:\n%s", body)
+	}
+}

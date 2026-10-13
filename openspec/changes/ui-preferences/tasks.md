@@ -22,5 +22,7 @@ PR 3b — `feat/reminder-prefs-delivered`
 - [x] 7d. RED/GREEN: a carried reminder is rewritten when its event instant or lead list changes (a merged lead, an old row gaining the keys); the residual risk for old rows stated (at most once more per lead it covered, with or without a lead, pinned by I35); the covered reason pinned.
 
 PR 4 — `feat/ui-preferences` (#332)
-- [ ] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).
-- [ ] 9. Wiring, nav, UI gates; doc 07; `make check-all`.
+- [x] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).
+- [x] 9. Wiring, nav, UI gates; doc 07; `make check-all`.
+- [x] 9a. RED/GREEN: each field's own message, an unknown unit refused, a bad amount still checks the times, the body cap, the empty-row fallback, the serve call site (L4).
+- [x] 9b. RED/GREEN: a bad row beside a good one sends no leads; amounts bounded before the product; a double failure promises no retry.
