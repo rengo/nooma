@@ -27,11 +27,13 @@ func preferencesCause() reminderCause {
 		carried: "another reminder of the unit carries the new leads",
 		quiet:   "every moment left before the event is in quiet hours, when nothing is sent",
 		passed:  "the event has already passed",
+		covered: "a reminder of the event already sent covers its leads",
 	}
 }
 
 // rearm makes every event still ahead whose armed triggers do not recur
-// follow prefs through prospection.Follow (ADR-0029 points 6-7). A created
+// follow prefs through prospection.FollowSent (ADR-0029 points 6-7), the
+// event's last sent reminder covering the leads due before it. A created
 // trigger takes the level of the unit's earliest armed one (doc 02 §7).
 func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.ReminderPrefs, now time.Time) error {
 	ids, err := s.triggers.ArmedUnitIDs(ctx)
@@ -54,8 +56,12 @@ func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.Remind
 		if len(armed) == 0 || recurs(armed) {
 			continue
 		}
+		fired, err := s.triggers.FiredForUnit(ctx, id)
+		if err != nil {
+			return fmt.Errorf("read the reminders sent for unit %q: %w", id, err)
+		}
 		live, byID := liveSet(armed)
-		f := prospection.Follow(*u.EventAt, live, prefs, armed[0].InterruptLevel, now)
+		f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired), prefs, armed[0].InterruptLevel, now)
 		if err := w.apply(ctx, u, f, byID, *u.EventAt, u.Content, false, now); err != nil {
 			return err
 		}
@@ -104,4 +110,19 @@ func (s *PreferencesService) recordFollowed(ctx context.Context, now time.Time) 
 		return fmt.Errorf("preferences: record %s: %w", ports.ActionConfigRemindersFollowed, err)
 	}
 	return nil
+}
+
+// sentReminders is what went out, as FollowSent reads it. A row armed before
+// the event instant was recorded still names it when it carries a lead
+// (fire_at plus lead_minutes); one armed at once cannot be placed.
+func sentReminders(fired []ports.FiredTrigger) []prospection.Sent {
+	out := make([]prospection.Sent, len(fired))
+	for i, f := range fired {
+		about := f.Payload.About
+		if about.IsZero() && f.Payload.LeadMinutes > 0 {
+			about = f.FireAt.Add(time.Duration(f.Payload.LeadMinutes) * time.Minute)
+		}
+		out[i] = prospection.Sent{About: about, Lead: time.Duration(f.Payload.UserLeadMinutes) * time.Minute, At: f.FiredAt}
+	}
+	return out
 }

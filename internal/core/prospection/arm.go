@@ -66,6 +66,10 @@ const (
 	// RefusalQuietHours — the event is ahead, but every instant left before
 	// it falls in quiet hours, when nothing is sent (ADR-0030 point 4).
 	RefusalQuietHours Refusal = "quiet_hours"
+	// RefusalCovered: every lead left is due at or before the last
+	// reminder of the event that went out, which already covered it
+	// (FollowSent; only a re-arm under new preferences gives it).
+	RefusalCovered Refusal = "covered"
 )
 
 // Plan is one row of Arm's decision: what to arm and with what. A dated
@@ -101,9 +105,13 @@ type Plan struct {
 	// LeadMinutes is how far before About a one-shot event reminder was
 	// armed to fire; 0 for one armed at once.
 	LeadMinutes int
-	Rule        Rule
-	Anchor      Anchor
-	Interrupt   Interrupt
+	// Lead is the user's lead this one-shot event reminder serves, before
+	// any quiet-hours move (a re-arm reads it back from the sent ones); 0
+	// for the at-once reminder.
+	Lead      time.Duration
+	Rule      Rule
+	Anchor    Anchor
+	Interrupt Interrupt
 }
 
 // Arm decides what one classification arms at one instant (spec R6.1,
@@ -146,7 +154,7 @@ func Arm(c classify.Classification, prefs ReminderPrefs, now time.Time) ([]Plan,
 			// The rule degraded, or the model never claimed one. The capture
 			// is honoured as its dated occurrence; the recurrence is not
 			// invented (doc 02 §5.1's own posture toward a degraded field).
-			return eventReminders(*c.EventAt, prefs, now, interrupt)
+			return eventReminders(*c.EventAt, prefs, now, interrupt, nil)
 		}
 
 		return []Plan{recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), now, interrupt)}, true
@@ -155,7 +163,7 @@ func Arm(c classify.Classification, prefs ReminderPrefs, now time.Time) ([]Plan,
 		if c.EventAt == nil {
 			return nothing(RefusalNoDate)
 		}
-		return eventReminders(*c.EventAt, prefs, now, interrupt)
+		return eventReminders(*c.EventAt, prefs, now, interrupt, nil)
 	}
 
 	return nothing(RefusalKindNotArming)

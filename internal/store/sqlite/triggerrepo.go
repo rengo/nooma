@@ -69,10 +69,36 @@ type anchorJSON struct {
 // lead_minutes is a one-shot event reminder's (ADR-0029). Both are read
 // back, and each is omitted where it does not apply.
 type payloadJSON struct {
-	Action      string `json:"action"`
-	Rationale   string `json:"rationale"`
-	LeadDays    int    `json:"lead_days,omitempty"`
-	LeadMinutes int    `json:"lead_minutes,omitempty"`
+	Action          string `json:"action"`
+	Rationale       string `json:"rationale"`
+	LeadDays        int    `json:"lead_days,omitempty"`
+	LeadMinutes     int    `json:"lead_minutes,omitempty"`
+	About           string `json:"event_at,omitempty"`
+	UserLeadMinutes int    `json:"user_lead_minutes,omitempty"`
+}
+
+func encodePayload(p ports.TriggerPayload) ([]byte, error) {
+	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadMinutes: p.UserLeadMinutes}
+	if !p.About.IsZero() {
+		s.About = formatUnitTime(p.About)
+	}
+	return json.Marshal(s)
+}
+
+func decodePayload(raw string) (ports.TriggerPayload, error) {
+	var s payloadJSON
+	if err := json.Unmarshal([]byte(raw), &s); err != nil {
+		return ports.TriggerPayload{}, err
+	}
+	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadMinutes: s.UserLeadMinutes}
+	if s.About != "" {
+		about, err := time.Parse(unitTimeLayout, s.About)
+		if err != nil {
+			return ports.TriggerPayload{}, err
+		}
+		p.About = about
+	}
+	return p, nil
 }
 
 // Create implements ports.TriggerRepo. The armed literal is written here
@@ -81,12 +107,7 @@ type payloadJSON struct {
 // armed, and a default changed in a later migration must not be able to
 // change that quietly.
 func (r *TriggerRepo) Create(ctx context.Context, t ports.Trigger) error {
-	payload, err := json.Marshal(payloadJSON{
-		Action:      t.Payload.ActionText,
-		Rationale:   t.Payload.Rationale,
-		LeadDays:    t.Payload.LeadDays,
-		LeadMinutes: t.Payload.LeadMinutes,
-	})
+	payload, err := encodePayload(t.Payload)
 	if err != nil {
 		return fmt.Errorf("marshal trigger %q payload: %w", t.ID, err)
 	}
@@ -236,13 +257,40 @@ func (r *TriggerRepo) ArmedUnitIDs(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
+// FiredForUnit implements ports.TriggerRepo.
+func (r *TriggerRepo) FiredForUnit(ctx context.Context, unitID string) ([]ports.FiredTrigger, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT fire_at, fired_at, payload FROM triggers
+		 WHERE unit_id = ? AND recurrence_rule IS NULL AND fired_at IS NOT NULL AND fire_at IS NOT NULL`, unitID)
+	if err != nil {
+		return nil, fmt.Errorf("select fired triggers of unit %q: %w", unitID, err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := make([]ports.FiredTrigger, 0)
+	for rows.Next() {
+		var fireAt, firedAt, payload string
+		if err := rows.Scan(&fireAt, &firedAt, &payload); err != nil {
+			return nil, fmt.Errorf("scan fired trigger of unit %q: %w", unitID, err)
+		}
+		var f ports.FiredTrigger
+		if f.FireAt, err = time.Parse(unitTimeLayout, fireAt); err == nil {
+			if f.FiredAt, err = time.Parse(unitTimeLayout, firedAt); err == nil {
+				f.Payload, err = decodePayload(payload)
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("fired trigger of unit %q: %w", unitID, err)
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
 // Reschedule implements ports.TriggerRepo. COALESCE keeps the anchor when
 // the move carries none.
 func (r *TriggerRepo) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {
-	payload, err := json.Marshal(payloadJSON{
-		Action: m.Payload.ActionText, Rationale: m.Payload.Rationale,
-		LeadDays: m.Payload.LeadDays, LeadMinutes: m.Payload.LeadMinutes,
-	})
+	payload, err := encodePayload(m.Payload)
 	if err != nil {
 		return fmt.Errorf("marshal trigger %q payload: %w", id, err)
 	}
@@ -390,16 +438,11 @@ func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
 		d.RecurrenceRule = &rule
 	}
 	if payload.Valid && payload.String != "" {
-		var stored payloadJSON
-		if err := json.Unmarshal([]byte(payload.String), &stored); err != nil {
+		p, err := decodePayload(payload.String)
+		if err != nil {
 			return ports.DueTrigger{}, fmt.Errorf("trigger %q: payload: %w", d.ID, err)
 		}
-		d.Payload = ports.TriggerPayload{
-			ActionText:  stored.Action,
-			Rationale:   stored.Rationale,
-			LeadDays:    stored.LeadDays,
-			LeadMinutes: stored.LeadMinutes,
-		}
+		d.Payload = p
 	}
 
 	if recurrenceAnch.Valid {

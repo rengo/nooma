@@ -28,6 +28,7 @@ type storedTrigger struct {
 	// surfacedAt, respondedAt and resolution are the delivery half of the
 	// row. ports.Trigger carries none of them: Create only ever writes an
 	// armed row, and every one of these is written by a later transition.
+	firedAt     *time.Time
 	surfacedAt  *time.Time
 	respondedAt *time.Time
 	resolution  ports.TriggerResolution
@@ -99,8 +100,16 @@ func (r *Triggers) Due(_ context.Context, at time.Time) ([]ports.DueTrigger, err
 }
 
 // Fire implements ports.TriggerRepo.
-func (r *Triggers) Fire(_ context.Context, id string, _ time.Time) error {
-	return r.transition(id, ports.TriggerStatusFired)
+func (r *Triggers) Fire(_ context.Context, id string, at time.Time) error {
+	if err := r.transition(id, ports.TriggerStatusFired); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stored := r.triggers[id]
+	stored.firedAt = &at
+	r.triggers[id] = stored
+	return nil
 }
 
 // Expire implements ports.TriggerRepo.
@@ -113,10 +122,7 @@ func (r *Triggers) Expire(_ context.Context, id string) error {
 // UPDATE's WHERE clause for the same reason: two scans racing over one due
 // trigger must produce exactly one winner.
 //
-// The at parameter Fire receives is dropped here on purpose: fired_at and
-// surfaced_at are columns this fake has no reader for, and storing a value
-// nothing can observe would be a promise the fake cannot keep. The real
-// repository's write of fired_at is asserted at L3, against raw SQL.
+// Fire stores its at after the transition: FiredForUnit reads it.
 func (r *Triggers) transition(id string, to ports.TriggerStatus) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -344,6 +350,23 @@ func (r *Triggers) ArmedUnitIDs(_ context.Context) ([]string, error) {
 		out = append(out, *t.UnitID)
 	}
 	sort.Strings(out)
+	return out, nil
+}
+
+// FiredForUnit implements ports.TriggerRepo: unitID's one-shot triggers
+// that fired, with the instant Fire was given.
+func (r *Triggers) FiredForUnit(_ context.Context, unitID string) ([]ports.FiredTrigger, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]ports.FiredTrigger, 0)
+	for _, stored := range r.triggers {
+		t := stored.trigger
+		if stored.firedAt == nil || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil {
+			continue
+		}
+		out = append(out, ports.FiredTrigger{FireAt: *t.FireAt, FiredAt: *stored.firedAt, Payload: t.Payload})
+	}
 	return out, nil
 }
 

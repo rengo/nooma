@@ -1261,17 +1261,22 @@ have N nudges; a pattern watcher does not hang off any unit):
   or expiry recorded before its trigger write as `config.reminder.moved|armed|cancelled`; an
   event already past and a recurring reminder keep theirs. A reminder this creates takes the
   interrupt level of the event's earliest armed reminder. A re-arm that reaches every event
-  records `config.reminders.followed`. **A save that changes nothing creates, moves or re-sends
-  no reminder**: planning the same values again is not a no-op, since the plan sees only armed
-  reminders and would send again a lead whose reminder already went out. The one exception
-  finishes a re-arm that stopped part way, which a `config.updated` row written after the last
-  `config.reminders.followed` row marks as pending (both compared by insertion order); the next
-  save runs it. When that `config.updated` row could not be written either, nothing marks the
-  re-arm pending and the reminders it did not reach move with the next change. When the re-arm
-  completes but its `config.reminders.followed` row cannot be written, the change still reads as
-  pending and the next save runs the re-arm again. Until the re-arm records which leads already
-  went out, a change, and the finish of a pending re-arm, plan from armed reminders only, so a
-  lead whose reminder already went out is armed again, at once when its slot is behind. An event at genuine
+  records `config.reminders.followed`. **A reminder already sent is never sent again because of
+  a preference save**. Each one-shot reminder records the event instant it is about and the
+  user's lead it serves (`payload.event_at`, `payload.user_lead_minutes`). A lead is covered when
+  a reminder of the unit that already went out was about the same event instant and served
+  that same lead, or went out, about that instant, at or after the lead's quiet-moved time. A
+  send about another instant, such as the date before a correction, covers nothing. A row armed
+  before these were recorded is placed by `fire_at + lead_minutes` and covers by time only. The
+  re-arm plans only uncovered leads (`prospection.FollowSent`), and a live reminder of a lead no
+  longer planned expires as covered. An event with nothing armed is not re-armed, so a lead
+  added after all of its reminders went out is not armed (the change re-arms *armed* reminders). **A save that changes nothing creates, moves or re-sends no
+  reminder**, except to finish a re-arm that stopped part way, which a `config.updated` row
+  written after the last `config.reminders.followed` row marks as pending (both compared by
+  insertion order). When that `config.updated` row could not be written either, nothing marks
+  the re-arm pending and the reminders it did not reach move with the next change. When the
+  re-arm completes but its `config.reminders.followed` row cannot be written, the change still
+  reads as pending and the next save runs the re-arm again. An event at genuine
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is

@@ -1,6 +1,6 @@
 # Tasks — ui-preferences
 
-Four links stacked to main (design §3).
+Five links stacked to main (design §3); 3b split from 3 on size.
 
 PR 1 — `fix/digest-once-per-date` (#329)
 - [x] 1. RED/GREEN L1 core + brain: at most one digest per local date (D1); doc 02 §7.

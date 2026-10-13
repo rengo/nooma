@@ -67,6 +67,7 @@ type reminderCause struct {
 	moved, armed, cancelled ports.DecisionAction
 	movedWith, armedFor     string
 	carried, quiet, passed  string
+	covered                 string
 }
 
 // correctionCause is a corrected event date's (I29).
@@ -225,6 +226,8 @@ func (r reminderSet) cancelReminder(ctx context.Context, unitID string, t ports.
 	switch {
 	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalQuietHours:
 		why = r.cause.quiet
+	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalCovered:
+		why = r.cause.covered
 	case plan.What == prospection.ArmNothing:
 		why = r.cause.passed
 	}

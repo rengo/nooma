@@ -188,6 +188,179 @@ func TestI35_APendingReArmIsFinishedByTheNextSave(t *testing.T) {
 	}
 }
 
+// TestI35_AReminderAlreadySentIsNeverSentAgain: a reminder that went out is
+// never sent again because of a preference save — not by a change that
+// does not touch the event, and not by the save that finishes a re-arm that
+// stopped part way. Leads 6 h and 2 h, a flight at 05:00: its 2 h reminder
+// goes out the evening before at 22:00 and its 6 h one waits at 23:00. A
+// date-only event, the "zoo" trip, is reminded the day before at 09:00.
+func TestI35_AReminderAlreadySentIsNeverSentAgain(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	zoo := time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)
+	evening := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
+	sent := time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)
+	late := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	six := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
+
+	setup := func(t *testing.T) (i35Vault, brain.Preferences) {
+		v := newI35(t, evening)
+		leads := "[360,120]"
+		v.cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+		v.unit(t, "flight", unit.TypeEvent, flight, evening)
+		v.arm(t, "flight-2h", "flight", sent, 420, nil)
+		v.arm(t, "flight-6h", "flight", six, 360, nil)
+		v.unit(t, "zoo", unit.TypeEvent, zoo, evening)
+		v.arm(t, "zoo-day-before", "zoo", time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC), 900, nil)
+		p := i35Defaults()
+		p.LeadMinutes = []int{360, 120}
+		return v, p
+	}
+	fire := func(t *testing.T, v i35Vault) {
+		if err := v.triggers.Fire(ctx, "flight-2h", sent); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+	}
+	assertFlight := func(t *testing.T, v i35Vault) {
+		t.Helper()
+		if got := v.armedAt(t, "flight"); !sameInstants(got, []time.Time{six}) {
+			t.Errorf("flight reminders = %v, want only the 6 h one at 23:00: the 2 h one already went out", got)
+		}
+	}
+
+	t.Run("a change that does not touch the event", func(t *testing.T) {
+		v, p := setup(t)
+		fire(t, v)
+		p.DateOnlyAt = "08:00"
+		if _, err := v.at(late).Save(ctx, p); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		assertFlight(t, v)
+	})
+
+	t.Run("the save that finishes a re-arm that stopped part way", func(t *testing.T) {
+		v, p := setup(t)
+		broken := brain.NewPreferencesService(fixedClock{now: evening}, v.ids, v.cfg, v.log, v.units, &i35ReadFails{Triggers: v.triggers, unit: "zoo"})
+		p.DateOnlyAt = "08:00"
+		if _, err := broken.Save(ctx, p); !errors.Is(err, brain.ErrRemindersNotFollowed) {
+			t.Fatalf("Save at 20:00 = %v, want the re-arm to stop at zoo", err)
+		}
+		if got := v.armedAt(t, "zoo"); !sameInstants(got, []time.Time{time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)}) {
+			t.Fatalf("zoo reminders = %v, want them not reached yet", got)
+		}
+		fire(t, v)
+
+		// The pending clause: a save that changes nothing finishes the
+		// re-arm, zoo moving to the new 08:00, and sends nothing again.
+		res, err := v.at(late).Save(ctx, p)
+		if err != nil || len(res.Changed) != 0 {
+			t.Fatalf("Save at 22:30 = %+v, %v; want nothing changed and no error", res, err)
+		}
+		if got := v.armedAt(t, "zoo"); !sameInstants(got, []time.Time{time.Date(2026, 10, 16, 8, 0, 0, 0, time.UTC)}) {
+			t.Errorf("zoo reminders = %v, want the pending re-arm to move it to 08:00", got)
+		}
+		assertFlight(t, v)
+	})
+}
+
+// serve seeds a one-shot reminder as capture now arms one: the event
+// instant it is about and the user's lead it serves (0 for one at once).
+func (v i35Vault) serve(t *testing.T, id, unitID string, fireAt, about time.Time, leadMinutes, userLead int) {
+	t.Helper()
+	if err := v.triggers.Create(context.Background(), ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: unitID, LeadMinutes: leadMinutes, About: about, UserLeadMinutes: userLead}, FireAt: &fireAt}); err != nil {
+		t.Fatalf("seeding trigger %s: %v", id, err)
+	}
+}
+
+// TestI35_WhatWentOutIsTiedToItsLeadAndItsDate: coverage is what was
+// delivered, not a time under the new preferences. A real change that moves
+// a sent lead's slot later does not send it again (B1); a send about the
+// date before a correction covers nothing for the new date (B2); a new lead
+// due after an earlier one went out is armed; an event with nothing armed
+// is not re-armed at all.
+func TestI35_WhatWentOutIsTiedToItsLeadAndItsDate(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	late := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	sixPM, sent := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC), time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)
+	for name, edit := range map[string]func(p *brain.Preferences){
+		"the evening time later than the send": func(p *brain.Preferences) { p.EveningAt = "23:30" },
+		"a quiet end before the event":         func(p *brain.Preferences) { p.QuietEnd = "04:00" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			v := newI35(t, late)
+			v.unit(t, "flight", unit.TypeEvent, flight, late)
+			v.serve(t, "flight-2h", "flight", sent, flight, 420, 120)
+			v.serve(t, "flight-6h", "flight", sixPM, flight, 360, 360)
+			if err := v.triggers.Fire(ctx, "flight-2h", sent); err != nil {
+				t.Fatalf("Fire: %v", err)
+			}
+			p := i35Defaults()
+			p.LeadMinutes = []int{360, 120}
+			edit(&p)
+			if _, err := v.svc.Save(ctx, p); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			if got := v.armedAt(t, "flight"); !sameInstants(got, []time.Time{sixPM}) {
+				t.Errorf("flight reminders = %v, want only 23:00: the 2 h reminder already went out", got)
+			}
+		})
+	}
+
+	t.Run("a send about the date before a correction", func(t *testing.T) {
+		// Dinner was at 22:40 and its 30 min reminder went out at 22:10. At
+		// 22:20 a correction moved it to 05:00 and armed the 30 min lead at
+		// once, as Follow does; 20 seconds later a save changes the
+		// date-only time. The reminder for the new date stays.
+		at := time.Date(2026, 10, 14, 22, 20, 20, 0, time.UTC)
+		v := newI35(t, at)
+		old, moved := time.Date(2026, 10, 14, 22, 40, 0, 0, time.UTC), time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+		v.unit(t, "dinner", unit.TypeEvent, moved, at)
+		v.serve(t, "dinner-old", "dinner", old.Add(-30*time.Minute), old, 30, 30)
+		if err := v.triggers.Fire(ctx, "dinner-old", old.Add(-30*time.Minute)); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+		corrected := time.Date(2026, 10, 14, 22, 20, 0, 0, time.UTC)
+		v.serve(t, "dinner-new", "dinner", corrected, moved, 0, 30)
+		p := i35Defaults()
+		p.LeadMinutes, p.DateOnlyAt = []int{30}, "08:00"
+		if _, err := v.svc.Save(ctx, p); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		if got := v.armedAt(t, "dinner"); !sameInstants(got, []time.Time{corrected}) {
+			t.Errorf("dinner reminders = %v, want the corrected date's reminder kept", got)
+		}
+	})
+
+	t.Run("a new lead after an earlier one went out, and an event with nothing armed", func(t *testing.T) {
+		noon := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC)
+		v := newI35(t, noon)
+		event := time.Date(2026, 10, 15, 18, 0, 0, 0, time.UTC)
+		v.unit(t, "talk", unit.TypeEvent, event, noon)
+		v.serve(t, "talk-6h", "talk", event.Add(-6*time.Hour), event, 360, 360)
+		v.serve(t, "talk-2h", "talk", event.Add(-2*time.Hour), event, 120, 120)
+		v.unit(t, "done", unit.TypeEvent, event, noon)
+		v.serve(t, "done-6h", "done", event.Add(-6*time.Hour), event, 360, 360)
+		for _, id := range []string{"talk-6h", "done-6h"} {
+			if err := v.triggers.Fire(ctx, id, event.Add(-6*time.Hour)); err != nil {
+				t.Fatalf("Fire: %v", err)
+			}
+		}
+		p := i35Defaults()
+		p.LeadMinutes = []int{360, 120, 60}
+		if _, err := v.svc.Save(ctx, p); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		if got := v.armedAt(t, "talk"); !sameInstants(got, []time.Time{event.Add(-2 * time.Hour), event.Add(-time.Hour)}) {
+			t.Errorf("talk reminders = %v, want 2 h and the new 1 h, the sent 6 h not again", got)
+		}
+		if got := v.armedAt(t, "done"); len(got) != 0 {
+			t.Errorf("an event with nothing armed got %v, want it skipped (doc 02 §7)", got)
+		}
+	})
+}
+
 // TestI35_ACreatedReminderTakesTheEarliestArmedLevel: a reminder a change
 // creates for an event takes the interrupt level of the event's earliest
 // armed reminder (doc 02 §7), not the default and not another reminder's.
