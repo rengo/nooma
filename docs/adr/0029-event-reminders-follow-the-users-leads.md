@@ -1,6 +1,6 @@
 # ADR-0029 — Event reminders: the day before and two hours before, as the user's own preference
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-10
 - **Supersedes**: —
 - **Superseded by**: —
