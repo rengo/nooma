@@ -150,9 +150,11 @@ func TestPreferencesSave_WritesOnlyWhatChangedAndRecordsThePreviousValue(t *test
 		t.Errorf("stored = %+v, want the unchanged fields left NULL", stored)
 	}
 
+	// The change's row, then the re-arm's completion (nothing was armed).
 	rows := prefsRows(t, log)
-	if len(rows) != 1 || rows[0].Action != ports.ActionConfigUpdated || !rows[0].OccurredAt.Equal(prefsNow) {
-		t.Fatalf("log = %+v, want one config.updated row at the save's instant", rows)
+	if len(rows) != 2 || rows[0].Action != ports.ActionConfigUpdated || !rows[0].OccurredAt.Equal(prefsNow) ||
+		rows[1].Action != ports.ActionConfigRemindersFollowed {
+		t.Fatalf("log = %+v, want one config.updated row at the save's instant, then config.reminders.followed", rows)
 	}
 	var change struct {
 		Fields   []string          `json:"fields"`
@@ -356,5 +358,92 @@ func TestPreferencesSave_AFailedReArmKeepsTheValuesAndASecondSaveFinishesIt(t *t
 	armed, _ := triggers.ArmedForUnit(ctx, "flight")
 	if len(armed) != 1 || !armed[0].FireAt.Equal(event.Add(-3*time.Hour)) {
 		t.Errorf("armed after the second save = %+v, want one reminder 3 hours before", armed)
+	}
+}
+
+// failingAfter lets the first n trigger writes land and fails every write
+// after them, so a re-arm can stop part way.
+type failingAfter struct {
+	*memrepo.Triggers
+	n, writes int
+}
+
+func (f *failingAfter) write() error {
+	f.writes++
+	if f.writes > f.n {
+		return errors.New("disk")
+	}
+	return nil
+}
+
+func (f *failingAfter) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {
+	if err := f.write(); err != nil {
+		return err
+	}
+	return f.Triggers.Reschedule(ctx, id, m)
+}
+
+func (f *failingAfter) Expire(ctx context.Context, id string) error {
+	if err := f.write(); err != nil {
+		return err
+	}
+	return f.Triggers.Expire(ctx, id)
+}
+
+func (f *failingAfter) Create(ctx context.Context, t ports.Trigger) error {
+	if err := f.write(); err != nil {
+		return err
+	}
+	return f.Triggers.Create(ctx, t)
+}
+
+// A re-arm that moved one reminder and then failed is finished by the next
+// save, which changes nothing: the moved one stays where it went, the one
+// left is cancelled, nothing is duplicated, and a third save does nothing.
+func TestPreferencesSave_AReArmThatStoppedAfterOneWriteIsFinishedOnce(t *testing.T) {
+	ctx := context.Background()
+	cfg, log, units := memrepo.NewConfig(), memrepo.NewDecisionLog(), memrepo.NewUnits()
+	event := prefsNow.Add(78 * time.Hour) // 15:00, clear of quiet hours at every lead
+	if err := units.Create(ctx, unit.Unit{ID: "flight", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "flight",
+		EventAt: &event, Source: "cli", CreatedAt: prefsNow, UpdatedAt: prefsNow}); err != nil {
+		t.Fatalf("seeding unit: %v", err)
+	}
+	triggers := &failingAfter{Triggers: memrepo.NewTriggers(), n: 1}
+	unitID := "flight"
+	for id, lead := range map[string]int{"flight-24h": 1440, "flight-2h": 120} {
+		fireAt := event.Add(-time.Duration(lead) * time.Minute)
+		if err := triggers.Triggers.Create(ctx, ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+			Payload: ports.TriggerPayload{ActionText: "flight", LeadMinutes: lead}, FireAt: &fireAt}); err != nil {
+			t.Fatalf("seeding trigger: %v", err)
+		}
+	}
+	ids := &seqIDs{}
+	svc := NewPreferencesService(fixedClock{now: prefsNow}, ids, cfg, log, units, triggers)
+	p := defaultPrefs()
+	p.LeadMinutes = []int{180}
+
+	if _, err := svc.Save(ctx, p); !errors.Is(err, ErrRemindersNotFollowed) {
+		t.Fatalf("first Save error = %v, want ErrRemindersNotFollowed", err)
+	}
+	if triggers.writes != 2 {
+		t.Fatalf("trigger writes = %d, want the move to land and the cancel to fail", triggers.writes)
+	}
+
+	triggers.n = 100
+	for i, want := range []int{1, 0} {
+		res, err := svc.Save(ctx, p)
+		if err != nil || len(res.Changed) != 0 {
+			t.Fatalf("save %d = %+v, %v; want nothing changed and no error", i+2, res, err)
+		}
+		armed, _ := triggers.ArmedForUnit(ctx, "flight")
+		if len(armed) != 1 || armed[0].ID != "flight-24h" || !armed[0].FireAt.Equal(event.Add(-3*time.Hour)) {
+			t.Fatalf("after save %d armed = %+v, want flight-24h alone, 3 hours before", i+2, armed)
+		}
+		if got := triggers.writes - 2; i == 0 && got != want {
+			t.Errorf("the finishing save made %d trigger writes, want only the cancel", got)
+		}
+	}
+	if triggers.writes != 3 {
+		t.Errorf("trigger writes in all = %d, want 3: the move, the failed cancel, the cancel; the third save writes none", triggers.writes)
 	}
 }

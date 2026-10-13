@@ -1259,9 +1259,13 @@ have N nudges; a pattern watcher does not hang off any unit):
   `00:00` to `23:59`. A change of preference re-arms every armed one-shot reminder of an event
   still ahead, through the decision a correction uses (`prospection.Follow`), each move, creation
   or expiry recorded before its trigger write as `config.reminder.moved|armed|cancelled`; an
-  event already past and a recurring reminder keep theirs. Every valid save re-arms, an
-  unchanged one included: over a set already following the values it writes nothing, so saving
-  again finishes a re-arm that stopped part way. An event at genuine
+  event already past and a recurring reminder keep theirs. A reminder this creates takes the
+  interrupt level of the event's earliest armed reminder. A re-arm that reaches every event
+  records `config.reminders.followed`. **A save that changes nothing creates, moves or re-sends
+  no reminder**: planning the same values again is not a no-op, since the plan sees only armed
+  reminders and would send again a lead whose reminder already went out. The one exception
+  finishes a re-arm that stopped part way, which a `config.updated` row newer than the last
+  `config.reminders.followed` row marks as pending; the next save runs it. An event at genuine
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is

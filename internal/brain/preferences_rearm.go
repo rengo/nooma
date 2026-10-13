@@ -34,7 +34,8 @@ func preferencesCause() reminderCause {
 // prospection.Follow, the decision a corrected date uses. A recurring
 // reminder keeps its own timing (ADR-0029 point 7), and anything else arms
 // nothing from these preferences. A trigger created here takes the level
-// of the unit's earliest armed one, which carries the capture's reading.
+// of the unit's earliest armed one (doc 02 §7): the reading that unit's
+// reminders were armed with, whether by its capture or by a correction.
 func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.ReminderPrefs, now time.Time) error {
 	ids, err := s.triggers.ArmedUnitIDs(ctx)
 	if err != nil {
@@ -72,4 +73,32 @@ func recurs(armed []ports.DueTrigger) bool {
 		}
 	}
 	return false
+}
+
+// rearmPending reports whether the last change's re-arm did not complete:
+// the newest config.updated row is newer than the newest
+// config.reminders.followed row, by insertion sequence.
+func (s *PreferencesService) rearmPending(ctx context.Context) (bool, error) {
+	updated, err := s.log.Before(ctx, nil, string(ports.ActionConfigUpdated), 1)
+	if err != nil {
+		return false, fmt.Errorf("read the last change: %w", err)
+	}
+	if len(updated) == 0 {
+		return false, nil
+	}
+	followed, err := s.log.Before(ctx, nil, string(ports.ActionConfigRemindersFollowed), 1)
+	if err != nil {
+		return false, fmt.Errorf("read the last completed re-arm: %w", err)
+	}
+	return len(followed) == 0 || followed[0].Seq < updated[0].Seq, nil
+}
+
+// recordFollowed marks the re-arm of the preferences in force complete.
+func (s *PreferencesService) recordFollowed(ctx context.Context, now time.Time) error {
+	if err := s.log.Record(ctx, ports.Decision{ID: s.ids.New(), Action: ports.ActionConfigRemindersFollowed,
+		Rationale: "every reminder already set for an event ahead now follows the user's reminder preferences",
+		Context:   []byte(`{}`), OccurredAt: now}); err != nil {
+		return fmt.Errorf("preferences: record %s: %w", ports.ActionConfigRemindersFollowed, err)
+	}
+	return nil
 }

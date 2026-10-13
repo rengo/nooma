@@ -14,6 +14,7 @@ PR 3 — `feat/reminder-prefs-rearm` (#331)
 - [x] 5. RED: I35 row in doc 06 §4 and `TestI35_APreferenceChangeReArmsEventsAhead`.
 - [x] 6. RED/GREEN L3 + contract: `TriggerRepo.ArmedUnitIDs`.
 - [x] 7. GREEN: re-arm on save through `Follow` with `config.reminder.*` rows (D5, D6); doc 02 §7.
+- [x] 7a. RED/GREEN: re-arm only on a change or a pending re-arm (`config.reminders.followed`); the created reminder's level; a re-arm failing after one write.
 
 PR 4 — `feat/ui-preferences` (#332)
 - [ ] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).

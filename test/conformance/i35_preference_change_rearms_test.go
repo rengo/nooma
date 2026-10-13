@@ -19,14 +19,21 @@ type i35Vault struct {
 	units    *memrepo.Units
 	triggers *memrepo.Triggers
 	log      *memrepo.DecisionLog
+	cfg      *memrepo.Config
+	ids      *counterIDs
 	svc      *brain.PreferencesService
 }
 
 func newI35(t *testing.T, now time.Time) i35Vault {
 	t.Helper()
-	v := i35Vault{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), log: memrepo.NewDecisionLog()}
-	v.svc = brain.NewPreferencesService(fixedClock{now: now}, &counterIDs{}, memrepo.NewConfig(), v.log, v.units, v.triggers)
+	v := i35Vault{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), log: memrepo.NewDecisionLog(), cfg: memrepo.NewConfig(), ids: &counterIDs{}}
+	v.svc = v.at(now)
 	return v
+}
+
+// at is the same vault's service read at another instant.
+func (v i35Vault) at(now time.Time) *brain.PreferencesService {
+	return brain.NewPreferencesService(fixedClock{now: now}, v.ids, v.cfg, v.log, v.units, v.triggers)
 }
 
 func (v i35Vault) unit(t *testing.T, id string, typ unit.Type, eventAt time.Time, now time.Time) {
@@ -39,8 +46,13 @@ func (v i35Vault) unit(t *testing.T, id string, typ unit.Type, eventAt time.Time
 
 func (v i35Vault) arm(t *testing.T, id, unitID string, fireAt time.Time, leadMinutes int, rule *prospection.Rule) {
 	t.Helper()
+	v.armAt(t, id, unitID, fireAt, leadMinutes, rule, nil)
+}
+
+func (v i35Vault) armAt(t *testing.T, id, unitID string, fireAt time.Time, leadMinutes int, rule *prospection.Rule, level *float64) {
+	t.Helper()
 	if err := v.triggers.Create(context.Background(), ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
-		Payload: ports.TriggerPayload{ActionText: unitID, LeadMinutes: leadMinutes}, FireAt: &fireAt, RecurrenceRule: rule}); err != nil {
+		Payload: ports.TriggerPayload{ActionText: unitID, LeadMinutes: leadMinutes}, FireAt: &fireAt, RecurrenceRule: rule, InterruptLevel: level}); err != nil {
 		t.Fatalf("seeding trigger %s: %v", id, err)
 	}
 }
@@ -87,6 +99,74 @@ func sameInstants(a, b []time.Time) bool {
 		}
 	}
 	return true
+}
+
+// TestI35_ASaveThatChangesNothingTouchesNoReminder: re-planning a set under
+// the same preferences is not a no-op — Follow sees only live triggers, so a
+// lead whose evening-pulled reminder already went out would be planned again
+// at once. Leads 6 h and 2 h, an event at 05:00 on day 3: the 2 h reminder
+// went out at 22:00, the 6 h one waits at 23:00. A save at 22:30 that
+// changes nothing must leave the 23:00 one alone and arm nothing.
+func TestI35_ASaveThatChangesNothingTouchesNoReminder(t *testing.T) {
+	night := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	event := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	p := i35Defaults()
+	p.LeadMinutes = []int{360, 120}
+
+	for _, history := range []string{"never changed", "a change whose re-arm completed"} {
+		t.Run(history, func(t *testing.T) {
+			v := newI35(t, night)
+			if history != "never changed" {
+				if _, err := v.at(night.Add(-36*time.Hour)).Save(context.Background(), p); err != nil {
+					t.Fatalf("the earlier change: %v", err)
+				}
+			} else {
+				leads := "[360,120]"
+				v.cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+			}
+			v.unit(t, "flight", unit.TypeEvent, event, night)
+			v.arm(t, "flight-6h", "flight", time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC), 360, nil)
+			before := len(v.rowsOrFail(t))
+
+			res, err := v.svc.Save(context.Background(), p)
+			if err != nil || len(res.Changed) != 0 {
+				t.Fatalf("Save = %+v, %v; want nothing changed", res, err)
+			}
+			if got, want := v.armedAt(t, "flight"), []time.Time{time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)}; !sameInstants(got, want) {
+				t.Errorf("flight reminders = %v, want only the 23:00 one, untouched", got)
+			}
+			if after := len(v.rowsOrFail(t)); after != before {
+				t.Errorf("a save that changed nothing wrote %d decision rows", after-before)
+			}
+		})
+	}
+}
+
+// TestI35_ACreatedReminderTakesTheEarliestArmedLevel: a reminder a change
+// creates for an event takes the interrupt level of the event's earliest
+// armed reminder (doc 02 §7), not the default and not another reminder's.
+func TestI35_ACreatedReminderTakesTheEarliestArmedLevel(t *testing.T) {
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	event := time.Date(2026, 10, 16, 15, 0, 0, 0, time.UTC)
+	v := newI35(t, now)
+	v.unit(t, "flight", unit.TypeEvent, event, now)
+	early, late := 0.9, 0.3
+	v.armAt(t, "flight-24h", "flight", event.Add(-24*time.Hour), 1440, nil, &early)
+	v.armAt(t, "flight-2h", "flight", event.Add(-2*time.Hour), 120, nil, &late)
+
+	p := i35Defaults()
+	p.LeadMinutes = []int{1440, 120, 30}
+	if _, err := v.svc.Save(context.Background(), p); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	armed, err := v.triggers.ArmedForUnit(context.Background(), "flight")
+	if err != nil || len(armed) != 3 {
+		t.Fatalf("armed = %+v, %v; want three reminders", armed, err)
+	}
+	created := armed[2]
+	if !created.FireAt.Equal(event.Add(-30*time.Minute)) || created.InterruptLevel == nil || *created.InterruptLevel != early {
+		t.Errorf("created reminder = %+v (level %v), want 30 minutes before at the earliest reminder's level %v", created, created.InterruptLevel, early)
+	}
 }
 
 // TestI35_APreferenceChangeReArmsEventsAhead is ADR-0029 point 6: a change
@@ -168,7 +248,7 @@ func TestI35_AQuietEndChangeMovesTheReminderItShifted(t *testing.T) {
 	v := newI35(t, now)
 	v.unit(t, "train", unit.TypeEvent, event, now)
 	v.arm(t, "train-24h", "train", event.Add(-24*time.Hour), 1440, nil)
-	v.arm(t, "train-2h", "train", time.Date(2026, 10, 15, 7, 0, 0, 0, time.UTC), 60, nil)
+	v.arm(t, "train-2h", "train", time.Date(2026, 10, 15, 7, 0, 0, 0, time.UTC), 120, nil)
 
 	p := i35Defaults()
 	p.QuietEnd = "07:30"

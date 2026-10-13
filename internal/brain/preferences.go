@@ -144,11 +144,24 @@ func (s *PreferencesService) Save(ctx context.Context, p Preferences) (SaveResul
 			landed = &WriteLandedError{Record: true, Err: err}
 		}
 	}
-	// Every valid save re-arms, an unchanged one included: over a set that
-	// already follows these values it writes nothing, so saving again is
-	// how a re-arm that stopped part way is finished.
+	// A save that changes nothing re-arms only to finish an earlier change's
+	// re-arm: planning the same values again is not a no-op, since Follow
+	// sees only live triggers and would re-send a lead whose reminder
+	// already went out.
+	if len(changed) == 0 {
+		pending, err := s.rearmPending(ctx)
+		if err != nil {
+			return result, fmt.Errorf("%w: %w", ErrRemindersNotFollowed, err)
+		}
+		if !pending {
+			return result, nil
+		}
+	}
 	if err := s.rearm(ctx, next, now); err != nil {
 		return result, errors.Join(landed, fmt.Errorf("%w: %w", ErrRemindersNotFollowed, err))
+	}
+	if err := s.recordFollowed(ctx, now); err != nil {
+		return result, errors.Join(landed, &WriteLandedError{Record: true, Err: err})
 	}
 	return result, landed
 }
