@@ -19,7 +19,7 @@ PR 3 — `feat/reminder-prefs-rearm` (#331)
 
 PR 3b — `feat/reminder-prefs-delivered`
 - [x] 7c. RED/GREEN: a reminder already sent is never sent again by a save — each reminder records its event instant and every user lead (collapsed leads included; legacy rows with no lead cover by time), and `FollowSent` treats a lead served for the same instant as covered (`TriggerRepo.FiredForUnit`).
-- [x] 7d. RED/GREEN: a carried reminder is rewritten when its event instant or lead list changes (a merged lead, an old row gaining the keys); the residual risk for old rows stated (at most once more, with or without a lead, pinned by I35); the covered reason pinned.
+- [x] 7d. RED/GREEN: a carried reminder is rewritten when its event instant or lead list changes (a merged lead, an old row gaining the keys); the residual risk for old rows stated (at most once more per lead it covered, with or without a lead, pinned by I35); the covered reason pinned.
 
 PR 4 — `feat/ui-preferences` (#332)
 - [ ] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).

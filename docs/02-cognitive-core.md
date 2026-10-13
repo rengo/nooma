@@ -1272,9 +1272,10 @@ have N nudges; a pattern watcher does not hang off any unit):
   armed at once) that went out before the event's current instant is taken as about that
   instant and covers by time only. For those old rows alone, a send about the date before a
   correction may therefore cover the new date. And any reminder armed before these keys, with a
-  lead or without, that already went out may be sent **at most once** more after a preference
-  change that moves its lead's slot past the send: the reminder that re-arms it records its
-  lead, so no later save sends it again. Both are accepted residual risks for reminders armed
+  lead or without, that already went out may be sent **at most once more per lead it covered**,
+  after preference changes that move that lead's slot past the send: the reminder that re-arms a
+  lead records it, so no later save sends that lead again. One old reminder that served several
+  leads can thus be followed by one more send for each of them. Both are accepted residual risks for reminders armed
   before these keys only. A reminder carried by a re-arm or a correction is
   rewritten whenever the instant it is about or the leads it serves change, a lead merged into
   it at an unchanged time included, and an old row gains both keys the first time it is carried. The

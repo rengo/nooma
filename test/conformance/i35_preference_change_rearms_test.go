@@ -509,6 +509,55 @@ func TestI35_AnOldReminderIsSentAtMostOnceMore(t *testing.T) {
 	}
 }
 
+// TestI35_AnOldReminderIsSentAtMostOnceMorePerLead: one old row can have
+// served several leads (5 h and 3 h merged on the evening slot, recorded as
+// one lead_minutes), and each of them may go out once more, in its own
+// save, but never twice. A 05:00 flight, leads 6 h, 5 h and 3 h; the old
+// 22:00 reminder went out. At 22:05 the 3 h lead is dropped and the evening
+// moved to 22:30: 5 h goes out once more. At 22:35 3 h comes back with the
+// evening at 22:40: 3 h goes out once more. A further change sends nothing.
+func TestI35_AnOldReminderIsSentAtMostOnceMorePerLead(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	at := func(h, m int) time.Time { return time.Date(2026, 10, 14, h, m, 0, 0, time.UTC) }
+	v := newI35(t, at(22, 5))
+	leads := "[360,300,180]"
+	v.cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+	v.unit(t, "flight", unit.TypeEvent, flight, at(10, 0))
+	v.arm(t, "flight-old", "flight", at(22, 0), 420, nil)
+	v.arm(t, "flight-6h", "flight", at(23, 0), 360, nil)
+	if err := v.triggers.Fire(ctx, "flight-old", at(22, 0)); err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	// step saves at now, checks what is armed, and sends the one due at sent.
+	step := func(t *testing.T, now time.Time, leadMinutes []int, evening string, want []time.Time, sent time.Time) {
+		t.Helper()
+		p := i35Defaults()
+		p.LeadMinutes, p.EveningAt = leadMinutes, evening
+		if _, err := v.at(now).Save(ctx, p); err != nil {
+			t.Fatalf("Save at %s: %v", now.Format("15:04"), err)
+		}
+		armed, _ := v.triggers.ArmedForUnit(ctx, "flight")
+		got := make([]time.Time, len(armed))
+		for i, a := range armed {
+			got[i] = a.FireAt
+		}
+		if !sameInstants(got, want) {
+			t.Fatalf("after the save at %s, reminders = %v, want %v", now.Format("15:04"), got, want)
+		}
+		for _, a := range armed {
+			if a.FireAt.Equal(sent) {
+				if err := v.triggers.Fire(ctx, a.ID, sent); err != nil {
+					t.Fatalf("Fire: %v", err)
+				}
+			}
+		}
+	}
+	step(t, at(22, 5), []int{360, 300}, "22:30", []time.Time{at(22, 30), at(23, 0)}, at(22, 30))       // 5 h once more
+	step(t, at(22, 35), []int{360, 300, 180}, "22:40", []time.Time{at(22, 40), at(23, 0)}, at(22, 40)) // 3 h once more
+	step(t, at(22, 45), []int{360, 300, 180}, "22:50", []time.Time{at(23, 0)}, time.Time{})            // nothing more
+}
+
 // TestI35_ACreatedReminderTakesTheEarliestArmedLevel: a reminder a change
 // creates for an event takes the interrupt level of the event's earliest
 // armed reminder (doc 02 §7), not the default and not another reminder's.
