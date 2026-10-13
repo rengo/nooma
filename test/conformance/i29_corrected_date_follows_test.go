@@ -249,6 +249,17 @@ func (f i29Fixture) armLead(t *testing.T, id string, fireAt time.Time, text stri
 	}
 }
 
+// armServing seeds an event reminder of the dentist unit as capture arms
+// one now: the event instant it is about and the user leads it serves.
+func (f i29Fixture) armServing(t *testing.T, id string, fireAt time.Time, text string, leadMinutes int, about time.Time, userLeads ...int) {
+	t.Helper()
+	unitID := "dentist"
+	if err := f.triggers.Create(context.Background(), ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: text, LeadMinutes: leadMinutes, About: about, UserLeadsMinutes: userLeads}, FireAt: &fireAt}); err != nil {
+		t.Fatalf("seeding trigger %s: %v", id, err)
+	}
+}
+
 func (f i29Fixture) armed(t *testing.T, unitID string) []ports.DueTrigger {
 	t.Helper()
 	got, err := f.triggers.ArmedForUnit(context.Background(), unitID)
@@ -427,8 +438,8 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 			cfg := memrepo.NewConfig()
 			cfg.SeedConfig(t, ports.VaultConfig{QuietHoursEnd: strPtrI27("12:00"), EveningReminderAt: strPtrI27("21:00")})
 			f.svc = f.svc.WithReminderPrefs(cfg)
-			f.armLead(t, "t1", noon, body, 1320)
-			f.armLead(t, "t2", nine, body, 780)
+			f.armServing(t, "t1", noon, body, 1320, ten, 1440)
+			f.armServing(t, "t2", nine, body, 780, ten, 120)
 			return f
 		}
 
@@ -447,9 +458,12 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		if len(rows) != 2 {
 			t.Fatalf("moved rows = %v, want one per reminder", rows)
 		}
+		// The instant it is about moves with the lead: both are what a later
+		// re-arm reads back as sent (doc 02 §7).
 		c := decodeI29(t, rows[0])
-		if !slices.Equal(c.Fields, []string{"lead_minutes"}) || c.Previous["lead_minutes"] != float64(1320) || c.Next["lead_minutes"] != float64(1020) {
-			t.Errorf("moved row = %s, want lead_minutes 1320 -> 1020 alone", rows[0].Context)
+		if !slices.Equal(c.Fields, []string{"lead_minutes", "event_at"}) || c.Previous["lead_minutes"] != float64(1320) || c.Next["lead_minutes"] != float64(1020) ||
+			c.Previous["event_at"] != "2026-10-31T10:00:00Z" || c.Next["event_at"] != "2026-10-31T05:00:00Z" {
+			t.Errorf("moved row = %s, want lead_minutes 1320 -> 1020 and event_at 10:00 -> 05:00 alone", rows[0].Context)
 		}
 
 		t.Run("a failed reminder row leaves the stale lead unwritten", func(t *testing.T) {
@@ -467,8 +481,9 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		f := newI29(t, now, dentist(now), flight)
 		const text = "Vuelo el 2026-10-30 a las 05:00"
-		f.armLead(t, "t1", time.Date(2026, 10, 29, 7, 0, 0, 0, time.UTC), text, 1320)
-		f.armLead(t, "t2", time.Date(2026, 10, 29, 22, 0, 0, 0, time.UTC), text, 420)
+		at := time.Date(2026, 10, 30, 5, 0, 0, 0, time.UTC)
+		f.armServing(t, "t1", time.Date(2026, 10, 29, 7, 0, 0, 0, time.UTC), text, 1320, at, 1440)
+		f.armServing(t, "t2", time.Date(2026, 10, 29, 22, 0, 0, 0, time.UTC), text, 420, at, 120)
 		f.capture(t, "dentist")
 		if rows := reminderRows(t, f); len(rows) != 0 {
 			t.Errorf("reminder rows = %v, want none for a set that already matches", rows)
@@ -639,7 +654,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 			t.Errorf("armed = %+v, want t1 moved and the 2-hour reminder created, both saying %q", got, u.Content)
 		}
 		f2 := newI29(t, now, u, toLater)
-		f2.armLead(t, "t1", dayBefore, u.Content, 1440)
+		f2.armServing(t, "t1", dayBefore, u.Content, 1440, corrected, 1440)
 		f2.capture(t, "dentist")
 		if rows := reminderRows(t, f2); len(rows) != 1 || rows[0].Action != ports.ActionCorrectionReminderArmed {
 			t.Errorf("reminder rows = %v, want only the missing reminder armed", rows)
@@ -655,7 +670,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		u := dentist(now)
 		u.EventAt, u.Content = &today, after
 		f := newI29(t, now, u, toToday)
-		f.arm(t, "t1", "dentist", now.Truncate(time.Second), after, nil, nil)
+		f.armServing(t, "t1", now.Truncate(time.Second), after, 0, today)
 		f.capture(t, "dentist")
 		if rows := reminderRows(t, f); len(rows) != 0 {
 			t.Errorf("reminder rows = %v, want none", rows)

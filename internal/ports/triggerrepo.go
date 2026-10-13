@@ -110,6 +110,20 @@ type TriggerPayload struct {
 	// fires, as armed before any pull to now (ADR-0029); 0 for one armed
 	// at once. fire_at plus it is the event the reminder watches.
 	LeadMinutes int
+	// About is the event instant a one-shot event reminder is about, and
+	// UserLeadsMinutes every user lead it serves before any quiet-hours
+	// move (several when they landed on one instant, none for one armed at
+	// once). A re-arm reads both back from the ones that fired, so what went
+	// out is never sent again (doc 02 §7). Empty on rows armed before.
+	About            time.Time
+	UserLeadsMinutes []int
+}
+
+// FiredTrigger is a one-shot trigger that fired: when it was to fire, when
+// it did, and what it carried.
+type FiredTrigger struct {
+	FireAt, FiredAt time.Time
+	Payload         TriggerPayload
 }
 
 // Trigger is TriggerRepo's write shape: every triggers column this slice
@@ -294,6 +308,17 @@ type TriggerRepo interface {
 	// ArmedForUnit returns every armed trigger hanging off unitID, ordered
 	// by (fire_at, id) — the reminders a corrected date moves (I29).
 	ArmedForUnit(ctx context.Context, unitID string) ([]DueTrigger, error)
+
+	// ArmedUnitIDs returns, once each and in id order, every unit an armed
+	// trigger with a fire_at hangs off — the units a change of the reminder
+	// preferences re-arms (ADR-0029 point 6), each then read through
+	// ArmedForUnit.
+	ArmedUnitIDs(ctx context.Context) ([]string, error)
+
+	// FiredForUnit returns unitID's one-shot triggers that fired, in no
+	// particular order: what a re-arm under new preferences must not send
+	// again.
+	FiredForUnit(ctx context.Context, unitID string) ([]FiredTrigger, error)
 
 	// Reschedule applies m to id under an armed precondition: fire_at,
 	// payload and, when m.RecurrenceAnchor is non-nil, recurrence_anchor.

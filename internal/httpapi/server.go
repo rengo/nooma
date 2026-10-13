@@ -173,6 +173,8 @@ func newUIMux(d Deps) *http.ServeMux {
 	mux.Handle("POST /ui/beliefs/{id}/edit", guardedUI)
 	mux.Handle("POST /ui/beliefs/{id}/retire", guardedUI)
 	mux.Handle("GET /ui/activity", guardedUI)
+	mux.Handle("GET /ui/preferences", guardedUI)
+	mux.Handle("POST /ui/preferences", guardedUI)
 
 	return mux
 }

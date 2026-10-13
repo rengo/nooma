@@ -63,6 +63,30 @@ func (c *Config) RecordConsolidationRun(_ context.Context, at time.Time) error {
 	return nil
 }
 
+// SetReminderPrefs implements ports.ConfigRepo: each non-nil field of u
+// replaces its own, lazily creating the row as RecordConsolidationRun does.
+func (c *Config) SetReminderPrefs(_ context.Context, u ports.ReminderPrefsUpdate, _ time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.row == nil {
+		c.row = &ports.VaultConfig{}
+	}
+	for _, f := range []struct {
+		to **string
+		v  *string
+	}{
+		{&c.row.EventReminderLeads, u.EventReminderLeads}, {&c.row.DateOnlyReminderAt, u.DateOnlyReminderAt},
+		{&c.row.QuietHoursEnd, u.QuietHoursEnd}, {&c.row.EveningReminderAt, u.EveningReminderAt},
+	} {
+		if f.v != nil {
+			v := *f.v
+			*f.to = &v
+		}
+	}
+	return nil
+}
+
 // SeedConfig implements repocontract.ConfigHarness. Replaces the row
 // wholesale — a fixture hook bypassing ports.ConfigRepo entirely, since
 // RecordConsolidationRun cannot set any field but ConsolidationLastRunAt.

@@ -52,6 +52,21 @@ func (c countingBeliefs) Retire(context.Context, string) error {
 	return nil
 }
 
+// countingPreferences is this file's own ui.Preferences stub on the same
+// counter: Save, the one write, counts; the read counts nothing.
+type countingPreferences struct {
+	calls *int
+}
+
+func (countingPreferences) Preferences(context.Context) (brain.Preferences, error) {
+	return brain.Preferences{}, nil
+}
+
+func (c countingPreferences) Save(context.Context, brain.Preferences) (brain.SaveResult, error) {
+	*c.calls++
+	return brain.SaveResult{}, nil
+}
+
 // uiCrossOriginBodies maps every non-GET route pattern to a form body that
 // passes THAT handler's parsing (m4e design 3.12 G6, spec R9). A fixed body
 // shared by every route would make a new route's same-origin case fail on a
@@ -63,6 +78,7 @@ var uiCrossOriginBodies = map[string]string{
 	"POST /ui/units/{id}/correct":  "text=hello",
 	"POST /ui/beliefs/{id}/edit":   "content=new+text",
 	"POST /ui/beliefs/{id}/retire": "",
+	"POST /ui/preferences":         "lead_amount=2&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00",
 }
 
 // uiCrossOriginBodyExempt lists the rows that have no valid-body entry, each
@@ -247,7 +263,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 				return httpapi.Handler(httpapi.Deps{
 					Version: "test",
 					Token:   token,
-					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}}),
+					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}}),
 				})
 			}
 

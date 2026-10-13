@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -30,12 +31,21 @@ func TestArmedTrigger(t *testing.T) {
 		if got.InterruptLevel == nil || *got.InterruptLevel != level {
 			t.Errorf("InterruptLevel = %v, want %v", got.InterruptLevel, level)
 		}
-		want := ports.TriggerPayload{ActionText: "Dentista", Rationale: armRationale(oneShot), LeadDays: prospection.EventLeadDays}
-		if got.Payload != want || !strings.Contains(got.Payload.Rationale, "2026-10-30T10:00:00Z") {
+		// A one-shot reminder records the event instant it is about.
+		want := ports.TriggerPayload{ActionText: "Dentista", Rationale: armRationale(oneShot), LeadDays: prospection.EventLeadDays, About: about}
+		if !reflect.DeepEqual(got.Payload, want) || !strings.Contains(got.Payload.Rationale, "2026-10-30T10:00:00Z") {
 			t.Errorf("Payload = %+v, want %+v", got.Payload, want)
 		}
 		if got.RecurrenceRule != nil || got.RecurrenceAnchor != nil {
 			t.Errorf("recurrence = %v %v, want none for a one-shot", got.RecurrenceRule, got.RecurrenceAnchor)
+		}
+	})
+
+	t.Run("a one-shot plan records every user lead it serves", func(t *testing.T) {
+		withLead := oneShot
+		withLead.Leads = []time.Duration{3 * time.Hour, 2 * time.Hour}
+		if got := armedTrigger("t1", &unitID, "Dentista", withLead, now).Payload; !reflect.DeepEqual(got.UserLeadsMinutes, []int{180, 120}) || !got.About.Equal(about) {
+			t.Errorf("Payload = %+v, want user leads [180 120] and the event instant", got)
 		}
 	})
 

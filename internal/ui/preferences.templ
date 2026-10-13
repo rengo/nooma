@@ -1,0 +1,77 @@
+package ui
+
+import (
+	"strconv"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/prospection"
+)
+
+// PreferencesPage is GET /ui/preferences' full page, and what its POST
+// answers outside an htmx row edit.
+templ PreferencesPage(f prefsForm) {
+	@Page("nooma — preferences", preferencesBody(f))
+}
+
+templ preferencesBody(f prefsForm) {
+	<section data-view="preferences">
+		<h2>PREFERENCES</h2>
+		<p data-hint>When Nooma reminds you, and when it stays quiet. A change applies to new reminders and also moves the reminders already set for upcoming events.</p>
+		<div id="preferences-result" aria-live="polite">
+			if f.Outcome != nil {
+				@beliefOutcomeView(*f.Outcome)
+			}
+		</div>
+		<form method="post" action="/ui/preferences" hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop">
+			<h3>Reminders</h3>
+			@leadsEditor(f)
+			<label for={ string(brain.FieldDateOnlyAt) }>For an event with no time of day, remind me the day before at</label>
+			<input type="time" id={ string(brain.FieldDateOnlyAt) } name={ string(brain.FieldDateOnlyAt) } value={ f.DateOnlyAt } required aria-invalid?={ f.Errors[brain.FieldDateOnlyAt] != "" }/>
+			@fieldError(f, brain.FieldDateOnlyAt)
+			<h3>Quiet hours</h3>
+			<p data-hint>Quiet hours start at midnight. Nothing is sent during them, and the morning digest waits until they end.</p>
+			<label for={ string(brain.FieldQuietEnd) }>Quiet hours end at</label>
+			<input type="time" id={ string(brain.FieldQuietEnd) } name={ string(brain.FieldQuietEnd) } value={ f.QuietEnd } required aria-invalid?={ f.Errors[brain.FieldQuietEnd] != "" }/>
+			@fieldError(f, brain.FieldQuietEnd)
+			<label for={ string(brain.FieldEveningAt) }>When a reminder would fall in quiet hours and the event comes before they end, send it the evening before at</label>
+			<input type="time" id={ string(brain.FieldEveningAt) } name={ string(brain.FieldEveningAt) } value={ f.Evening } required aria-invalid?={ f.Errors[brain.FieldEveningAt] != "" }/>
+			@fieldError(f, brain.FieldEveningAt)
+			<button type="submit">
+				@submitLabel("Save preferences", "Saving…")
+			</button>
+		</form>
+	</section>
+}
+
+// leadsEditor is the leads fieldset: one row per lead (a whole number and a
+// unit), each with Remove, and Add while there is room. Remove and Add are
+// htmx requests that answer this fieldset alone and save nothing (design
+// D7); an empty row is no lead, so the spare row adds one without them.
+templ leadsEditor(f prefsForm) {
+	<fieldset id="prefs-leads">
+		<legend>Before an event with a time, remind me</legend>
+		for i, row := range f.Rows {
+			<div data-lead-row>
+				<input type="number" name="lead_amount" value={ row.Amount } min="1" step="1" inputmode="numeric" aria-label={ "Lead " + strconv.Itoa(i+1) + " amount" } aria-invalid?={ f.Errors[brain.FieldLeads] != "" }/>
+				<select name="lead_unit" aria-label={ "Lead " + strconv.Itoa(i+1) + " unit" }>
+					for _, u := range leadUnits {
+						<option value={ string(u) } selected?={ row.Unit == u }>{ string(u) }</option>
+					}
+				</select>
+				<button type="button" name="op" value={ "remove-" + strconv.Itoa(i) } hx-post="/ui/preferences" hx-include="closest form" hx-target="#prefs-leads" hx-swap="outerHTML" data-variant="secondary" aria-label={ "Remove lead " + strconv.Itoa(i+1) }>Remove</button>
+			</div>
+		}
+		<p data-hint>before it. Leave a row empty to remove it.</p>
+		if len(f.Rows) < prospection.MaxEventReminderLeads {
+			<button type="button" name="op" value="add" hx-post="/ui/preferences" hx-include="closest form" hx-target="#prefs-leads" hx-swap="outerHTML" data-variant="secondary">Add a lead</button>
+		}
+		@fieldError(f, brain.FieldLeads)
+	</fieldset>
+}
+
+// fieldError is a refused field's message, beside it.
+templ fieldError(f prefsForm, field brain.PreferenceField) {
+	if msg := f.Errors[field]; msg != "" {
+		<p data-error={ string(field) }>{ msg }</p>
+	}
+}

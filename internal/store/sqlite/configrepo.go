@@ -134,3 +134,23 @@ ON CONFLICT(id) DO UPDATE SET
 	}
 	return nil
 }
+
+// SetReminderPrefs implements ports.ConfigRepo. COALESCE keeps a column the
+// update leaves nil; a fresh row takes the migration's defaults elsewhere,
+// RecordConsolidationRun's own lazy creation.
+func (r *ConfigRepo) SetReminderPrefs(ctx context.Context, u ports.ReminderPrefsUpdate, at time.Time) error {
+	const q = `
+INSERT INTO config (id, event_reminder_leads, date_only_reminder_at, quiet_hours_end, evening_reminder_at, updated_at)
+VALUES (1, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+  event_reminder_leads = COALESCE(excluded.event_reminder_leads, event_reminder_leads),
+  date_only_reminder_at = COALESCE(excluded.date_only_reminder_at, date_only_reminder_at),
+  quiet_hours_end = COALESCE(excluded.quiet_hours_end, quiet_hours_end),
+  evening_reminder_at = COALESCE(excluded.evening_reminder_at, evening_reminder_at),
+  updated_at = excluded.updated_at`
+
+	if _, err := r.db.ExecContext(ctx, q, u.EventReminderLeads, u.DateOnlyReminderAt, u.QuietHoursEnd, u.EveningReminderAt, formatUnitTime(at)); err != nil {
+		return fmt.Errorf("writing reminder preferences at %s: %w", at, err)
+	}
+	return nil
+}

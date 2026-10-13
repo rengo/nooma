@@ -59,14 +59,8 @@ func (d TimeOfDay) on(t time.Time, days int, zone *time.Location) time.Time {
 // result is before eventAt: the quiet-end branch checks it, and the other
 // two are at or before nominal, itself before the event.
 func deliverAt(nominal, eventAt, now time.Time, prefs ReminderPrefs) (time.Time, bool) {
-	zone, night := now.Location(), QuietHours{End: prefs.QuietEnd}
-	at := nominal
-	if local := nominal.In(zone); night.Contains(local) {
-		at = night.DeliverableFrom(local)
-		if !at.Before(eventAt) {
-			at = prefs.EveningAt.on(local, -1, zone)
-		}
-	}
+	night := QuietHours{End: prefs.QuietEnd}
+	at := dueAt(nominal, eventAt, now.Location(), prefs)
 	if !at.Before(now) {
 		return at, true
 	}
@@ -76,12 +70,50 @@ func deliverAt(nominal, eventAt, now time.Time, prefs ReminderPrefs) (time.Time,
 	return now, true
 }
 
+// Sent is a one-shot reminder of a unit that already went out: the event
+// instant it was about, every user lead it served (none for one armed at
+// once, or when its row predates recording them) and when it went out. A
+// zero About is a send nobody can place, which covers nothing.
+type Sent struct {
+	About time.Time
+	Leads []time.Duration
+	At    time.Time
+}
+
+// coveredBy reports whether a reminder already sent about eventAt covers
+// the lead whose nominal instant is n and whose quiet-moved instant is
+// due: one served that very lead, or one went out at or after due. A send
+// about any other instant covers nothing.
+func coveredBy(sent []Sent, eventAt, n, due time.Time) bool {
+	for _, s := range sent {
+		if s.About.Equal(eventAt) && (slices.Contains(s.Leads, eventAt.Sub(n)) || !due.After(s.At)) {
+			return true
+		}
+	}
+	return false
+}
+
+// dueAt is nominal moved out of quiet hours: to quiet end when that is
+// before the event, else to the evening before at EveningAt.
+func dueAt(nominal, eventAt time.Time, zone *time.Location, prefs ReminderPrefs) time.Time {
+	night := QuietHours{End: prefs.QuietEnd}
+	if local := nominal.In(zone); night.Contains(local) {
+		if at := night.DeliverableFrom(local); at.Before(eventAt) {
+			return at
+		}
+		return prefs.EveningAt.on(local, -1, zone)
+	}
+	return nominal
+}
+
 // eventReminders arms the one-shot reminders a dated event owns: one per
 // lead still ahead of now, in firing order, or one at once when every lead
 // is behind and the event is not. An event at or before now arms nothing —
 // doc 02 §5.1 refuses to arm on a date it cannot trust, and a nudge for
 // something already over is the same refusal pointing the other way.
-func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, interrupt Interrupt) ([]Plan, bool) {
+// sent is what already went out for the unit (FollowSent), nil for a
+// capture or a correction.
+func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	if !eventAt.After(now) {
 		return []Plan{{What: ArmNothing, Why: RefusalAlreadyPast, Interrupt: interrupt}}, false
 	}
@@ -91,9 +123,21 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 		nominal = []time.Time{now} // ADR-0029 point 3's at-once reminder
 	}
 	var plans []Plan
+	covered := false
 	for _, n := range nominal {
+		if coveredBy(sent, eventAt, n, dueAt(n, eventAt, now.Location(), prefs)) {
+			covered = true
+			continue
+		}
 		fireAt, ok := deliverAt(n, eventAt, now, prefs)
-		if !ok || slices.ContainsFunc(plans, func(p Plan) bool { return p.FireAt.Equal(fireAt) }) {
+		if !ok {
+			continue
+		}
+		// Two leads landing on one instant are one reminder serving both.
+		if i := slices.IndexFunc(plans, func(p Plan) bool { return p.FireAt.Equal(fireAt) }); i >= 0 {
+			if !atOnce {
+				plans[i].Leads = append(plans[i].Leads, eventAt.Sub(n))
+			}
 			continue
 		}
 		// Immediate is "sent at once rather than at a lead": the at-once
@@ -101,10 +145,16 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 		// now is still that lead.
 		immediate := fireAt.Equal(now) && (atOnce || !n.Equal(now))
 		plan := Plan{What: ArmTrigger, FireAt: fireAt, About: eventAt, Immediate: immediate, Interrupt: interrupt}
+		if !atOnce {
+			plan.Leads = []time.Duration{eventAt.Sub(n)}
+		}
 		if !plan.Immediate {
 			plan.LeadMinutes = int(eventAt.Sub(fireAt) / time.Minute)
 		}
 		plans = append(plans, plan)
+	}
+	if len(plans) == 0 && covered {
+		return []Plan{{What: ArmNothing, Why: RefusalCovered, Interrupt: interrupt}}, false
 	}
 	if len(plans) == 0 {
 		return []Plan{{What: ArmNothing, Why: RefusalQuietHours, Interrupt: interrupt}}, false

@@ -409,6 +409,15 @@ func wireActivity(db *sqlite.Vault) *brain.ActivityService {
 	return brain.NewActivityService(sqlite.NewDecisionLog(db)).WithUnits(sqlite.NewUnitRepo(db))
 }
 
+// wirePreferences builds a *brain.PreferencesService over db: the reminder
+// and quiet-hours preferences behind /ui/preferences, and the re-arm a save
+// runs over the triggers (ADR-0029 point 6). It resolves no provider,
+// wireUnits' reason, and is wired unconditionally at vault open.
+func wirePreferences(db *sqlite.Vault) *brain.PreferencesService {
+	return brain.NewPreferencesService(systemClock{}, uuidGen{}, sqlite.NewConfigRepo(db), sqlite.NewDecisionLog(db),
+		sqlite.NewUnitRepo(db), sqlite.NewTriggerRepo(db))
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {

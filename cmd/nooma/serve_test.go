@@ -77,7 +77,7 @@ func TestServeUsageShowsNoUIPrecedence(t *testing.T) {
 // wireUnits never actually return nil in production, but this proves the
 // guard holds regardless.
 func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
-	deps := uiDeps(nil, nil, nil, nil, nil, nil, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, nil, nil, nil, ui.Serving{})
 
 	if deps.Today != nil {
 		t.Error("Today: want a nil interface for a nil *brain.TodayService, got non-nil — the typed-nil trap uiDeps exists to avoid")
@@ -97,6 +97,21 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 	if deps.Activity != nil {
 		t.Error("Activity: want a nil interface for a nil *brain.ActivityService, got non-nil")
 	}
+	if deps.Preferences != nil {
+		t.Error("Preferences: want a nil interface for a nil *brain.PreferencesService, got non-nil")
+	}
+}
+
+// TestUIDeps_PassesThePreferencesServiceThrough: a real service must reach
+// ui.Deps.Preferences, or /ui/preferences would answer 503.
+func TestUIDeps_PassesThePreferencesServiceThrough(t *testing.T) {
+	svc := brain.NewPreferencesService(nil, nil, nil, nil, nil, nil)
+
+	deps := uiDeps(nil, nil, nil, nil, nil, nil, svc, ui.Serving{})
+
+	if deps.Preferences != ui.Preferences(svc) {
+		t.Errorf("Preferences = %v, want the service handed to uiDeps", deps.Preferences)
+	}
 }
 
 // TestUIDeps_PassesTheActivityServiceThrough is the other half of the typed-nil
@@ -105,7 +120,7 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 func TestUIDeps_PassesTheActivityServiceThrough(t *testing.T) {
 	svc := brain.NewActivityService(nil)
 
-	deps := uiDeps(nil, nil, nil, nil, nil, svc, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, nil, svc, nil, ui.Serving{})
 
 	if deps.Activity != ui.Activity(svc) {
 		t.Errorf("Activity = %v, want the service handed to uiDeps", deps.Activity)
@@ -118,7 +133,7 @@ func TestUIDeps_PassesTheActivityServiceThrough(t *testing.T) {
 func TestUIDeps_PassesTheBeliefsServiceThrough(t *testing.T) {
 	svc := brain.NewBeliefsService(nil, nil, nil, nil, nil)
 
-	deps := uiDeps(nil, nil, nil, nil, svc, nil, ui.Serving{})
+	deps := uiDeps(nil, nil, nil, nil, svc, nil, nil, ui.Serving{})
 
 	if deps.Beliefs != ui.Beliefs(svc) {
 		t.Errorf("Beliefs = %v, want the service handed to uiDeps", deps.Beliefs)
@@ -178,7 +193,7 @@ func TestListenAndAnnounce_SaysNothingWhenTheBindFails(t *testing.T) {
 // TestUIDeps_CarriesTheClockTheMirrorReadsItsZoneFrom: without a clock the UI
 // falls back to UTC, which is the defect this wiring exists to prevent.
 func TestUIDeps_CarriesTheClockTheMirrorReadsItsZoneFrom(t *testing.T) {
-	if deps := uiDeps(nil, nil, nil, nil, nil, nil, ui.Serving{}); deps.Now == nil {
+	if deps := uiDeps(nil, nil, nil, nil, nil, nil, nil, ui.Serving{}); deps.Now == nil {
 		t.Error("Now: want the system clock wired, got nil — every time would render in UTC")
 	}
 }

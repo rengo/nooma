@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/correction"
@@ -43,14 +44,56 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	if err != nil {
 		return fmt.Errorf("correction: read reminders of unit %q: %w", target.ID, err)
 	}
+	live, byID := liveSet(armed)
+	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config), interruptLevel, now)
+	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: correctionCause()}
+	return w.apply(ctx, target, f, byID, eventAt, body, bodyChanged, now)
+}
+
+// liveSet is a unit's armed triggers as Follow reads them, and by id.
+func liveSet(armed []ports.DueTrigger) ([]prospection.Live, map[string]ports.DueTrigger) {
 	live := make([]prospection.Live, len(armed))
 	byID := make(map[string]ports.DueTrigger, len(armed))
 	for i, t := range armed {
 		live[i] = prospection.Live{ID: t.ID, FireAt: t.FireAt, Rule: t.RecurrenceRule}
 		byID[t.ID] = t
 	}
-	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config), interruptLevel, now)
+	return live, byID
+}
 
+// reminderCause is why a unit's armed set is followed: the three rows it
+// writes and the words its rationales use.
+type reminderCause struct {
+	op                      string
+	moved, armed, cancelled ports.DecisionAction
+	movedWith, armedFor     string
+	carried, quiet, passed  string
+	covered                 string
+}
+
+// correctionCause is a corrected event date's (I29).
+func correctionCause() reminderCause {
+	return reminderCause{
+		op:    "correction",
+		moved: ports.ActionCorrectionReminderMoved, armed: ports.ActionCorrectionReminderArmed, cancelled: ports.ActionCorrectionReminderCancelled,
+		movedWith: "with its corrected date", armedFor: "for unit %q's corrected date",
+		carried: "another reminder of the unit carries the corrected date",
+		quiet:   "every moment left before the corrected date is in quiet hours, when nothing is sent",
+		passed:  "the corrected date has already passed",
+		covered: "a reminder of the event already sent covers its leads",
+	}
+}
+
+// reminderSet writes what Follow decided for one unit, each move, creation
+// or expiry recorded before its trigger write (ADR-0016's order).
+type reminderSet struct {
+	triggers ports.TriggerRepo
+	log      ports.DecisionLog
+	ids      ports.IDGen
+	cause    reminderCause
+}
+
+func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.Following, byID map[string]ports.DueTrigger, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
 	for i, plan := range f.Plans {
 		var err error
 		switch {
@@ -74,10 +117,11 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 // moveReminder reschedules t to plan, with the payload a fresh arming of
 // plan writes and its text following the date as the unit's body did. A
 // move that changes nothing the reminder says or is read by writes nothing:
-// not its instant, its text, its lead or its anchor. lead_days is not
+// not its instant, its text, its lead, what it is about, the leads it
+// serves or its anchor. lead_days is not
 // compared: only a legacy reminder carries one, nothing but the text
 // follower reads it, and a new arming of the same date never does.
-func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
+func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
 	text := followTriggerText(t, target.EventAt, eventAt, now.Location())
 	if bodyChanged && t.Payload.ActionText == target.Content {
 		text = body // the reminder said what the unit said, and the unit now says this
@@ -103,6 +147,17 @@ func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t 
 		fields = append(fields, "lead_minutes")
 		previous["lead_minutes"], next["lead_minutes"] = t.Payload.LeadMinutes, want.LeadMinutes
 	}
+	// What it is about and which leads it serves are what a later re-arm
+	// reads back as sent (doc 02 §7): a lead merged into it, or a row from
+	// before they were recorded, is a move even at an unchanged fire_at.
+	if want := move.Payload; !want.About.Equal(t.Payload.About) {
+		fields = append(fields, "event_at")
+		previous["event_at"], next["event_at"] = instantText(t.Payload.About), instantText(want.About)
+	}
+	if want := move.Payload; !slices.Equal(want.UserLeadsMinutes, t.Payload.UserLeadsMinutes) {
+		fields = append(fields, "user_leads_minutes")
+		previous["user_leads_minutes"], next["user_leads_minutes"] = t.Payload.UserLeadsMinutes, want.UserLeadsMinutes
+	}
 	if plan.What == prospection.ArmRecurring {
 		a := plan.Anchor
 		move.RecurrenceAnchor = &a
@@ -115,14 +170,14 @@ func (r correctionRunner) moveReminder(ctx context.Context, target unit.Unit, t 
 		return nil
 	}
 
-	if err := r.recordReminder(ctx, ports.ActionCorrectionReminderMoved,
-		fmt.Sprintf("moved the reminder of unit %q with its corrected date: %s", target.ID, armRationale(plan)),
+	if err := r.recordReminder(ctx, r.cause.moved,
+		fmt.Sprintf("moved the reminder of unit %q %s: %s", target.ID, r.cause.movedWith, armRationale(plan)),
 		reminderChange{UnitID: target.ID, TriggerID: t.ID, Fields: fields, Previous: previous, Next: next,
 			About: rfc3339(plan.About), Immediate: plan.Immediate}, now); err != nil {
 		return err
 	}
 	if err := r.triggers.Reschedule(ctx, t.ID, move); err != nil {
-		return fmt.Errorf("correction: move reminder %q: %w", t.ID, err)
+		return fmt.Errorf("%s: move reminder %q: %w", r.cause.op, t.ID, err)
 	}
 	return nil
 }
@@ -162,17 +217,17 @@ func anchorText(a *prospection.Anchor) string {
 
 // armReminder creates the trigger a fresh capture of the corrected date
 // arms, when the unit had none armed.
-func (r correctionRunner) armReminder(ctx context.Context, unitID, body string, plan prospection.Plan, now time.Time) error {
+func (r reminderSet) armReminder(ctx context.Context, unitID, body string, plan prospection.Plan, now time.Time) error {
 	trigger := armedTrigger(r.ids.New(), &unitID, body, plan, now)
-	if err := r.recordReminder(ctx, ports.ActionCorrectionReminderArmed,
-		fmt.Sprintf("armed a reminder for unit %q's corrected date: %s", unitID, armRationale(plan)),
+	if err := r.recordReminder(ctx, r.cause.armed,
+		fmt.Sprintf("armed a reminder "+r.cause.armedFor+": %s", unitID, armRationale(plan)),
 		reminderChange{UnitID: unitID, TriggerID: trigger.ID, Fields: []string{"fire_at"},
 			Previous: map[string]any{"fire_at": nil}, Next: map[string]any{"fire_at": rfc3339(plan.FireAt)},
 			About: rfc3339(plan.About), Immediate: plan.Immediate}, now); err != nil {
 		return err
 	}
 	if err := r.triggers.Create(ctx, trigger); err != nil {
-		return fmt.Errorf("correction: arm reminder for unit %q: %w", unitID, err)
+		return fmt.Errorf("%s: arm reminder for unit %q: %w", r.cause.op, unitID, err)
 	}
 	return nil
 }
@@ -180,15 +235,17 @@ func (r correctionRunner) armReminder(ctx context.Context, unitID, body string, 
 // cancelReminder expires t: its date is past, no instant before it is
 // outside quiet hours, or another trigger carries the unit's reminder. Expired is I15's status for a trigger that will not
 // fire; nothing is deleted.
-func (r correctionRunner) cancelReminder(ctx context.Context, unitID string, t ports.DueTrigger, plan prospection.Plan, now time.Time) error {
-	why := "another reminder of the unit carries the corrected date"
+func (r reminderSet) cancelReminder(ctx context.Context, unitID string, t ports.DueTrigger, plan prospection.Plan, now time.Time) error {
+	why := r.cause.carried
 	switch {
 	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalQuietHours:
-		why = "every moment left before the corrected date is in quiet hours, when nothing is sent"
+		why = r.cause.quiet
+	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalCovered:
+		why = r.cause.covered
 	case plan.What == prospection.ArmNothing:
-		why = "the corrected date has already passed"
+		why = r.cause.passed
 	}
-	if err := r.recordReminder(ctx, ports.ActionCorrectionReminderCancelled,
+	if err := r.recordReminder(ctx, r.cause.cancelled,
 		fmt.Sprintf("cancelled reminder %q of unit %q: %s", t.ID, unitID, why),
 		reminderChange{UnitID: unitID, TriggerID: t.ID, Fields: []string{"status"},
 			Previous: map[string]any{"status": string(ports.TriggerStatusArmed)},
@@ -197,7 +254,7 @@ func (r correctionRunner) cancelReminder(ctx context.Context, unitID string, t p
 		return err
 	}
 	if err := r.triggers.Expire(ctx, t.ID); err != nil {
-		return fmt.Errorf("correction: cancel reminder %q: %w", t.ID, err)
+		return fmt.Errorf("%s: cancel reminder %q: %w", r.cause.op, t.ID, err)
 	}
 	return nil
 }
@@ -215,15 +272,23 @@ type reminderChange struct {
 	FireAt    string         `json:"fire_at,omitempty"`
 }
 
-func (r correctionRunner) recordReminder(ctx context.Context, action ports.DecisionAction, rationale string, change reminderChange, now time.Time) error {
+func (r reminderSet) recordReminder(ctx context.Context, action ports.DecisionAction, rationale string, change reminderChange, now time.Time) error {
 	contextJSON, err := json.Marshal(change)
 	if err != nil {
-		return fmt.Errorf("correction: encode %s context: %w", action, err)
+		return fmt.Errorf("%s: encode %s context: %w", r.cause.op, action, err)
 	}
 	if err := r.log.Record(ctx, ports.Decision{ID: r.ids.New(), Action: action, Rationale: rationale, Context: contextJSON, OccurredAt: now}); err != nil {
-		return fmt.Errorf("correction: record %s for trigger %q: %w", action, change.TriggerID, err)
+		return fmt.Errorf("%s: record %s for trigger %q: %w", r.cause.op, action, change.TriggerID, err)
 	}
 	return nil
 }
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
+// instantText is rfc3339, or nil for an instant never recorded.
+func instantText(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return rfc3339(t)
+}

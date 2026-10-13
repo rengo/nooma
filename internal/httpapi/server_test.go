@@ -115,6 +115,17 @@ func (stubActivity) Page(context.Context, string, *ports.DecisionCursor) (brain.
 	return brain.ActivityPage{}, nil
 }
 
+// stubPreferences answers the defaults, stubBeliefs' reason.
+type stubPreferences struct{}
+
+func (stubPreferences) Preferences(context.Context) (brain.Preferences, error) {
+	return brain.Preferences{LeadMinutes: []int{120}, DateOnlyAt: "09:00", QuietEnd: "07:00", EveningAt: "22:00"}, nil
+}
+
+func (stubPreferences) Save(context.Context, brain.Preferences) (brain.SaveResult, error) {
+	return brain.SaveResult{}, nil
+}
+
 // stubUnitDetail is the one fixed detail body every guarded-leaf wiring
 // test in this file renders when it needs GET /ui/units/{id} to answer
 // 200 — its own content is irrelevant to these tests (unit_test.go owns
@@ -133,7 +144,7 @@ var stubUnitDetail = brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.T
 func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 	t.Parallel()
 
-	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}})})
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}, Preferences: stubPreferences{}})})
 
 	// wantMarker names, per leaf, a string only that leaf's own view
 	// renders from these stubs — Today's "SYSTEM" section, units'
@@ -157,9 +168,10 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 		"/ui/capture":      "<h2>CAPTURE</h2>",
 		"/ui/beliefs":      "<h2>BELIEFS</h2>",
 		"/ui/activity":     "<h2>ACTIVITY</h2>",
+		"/ui/preferences":  "<h2>PREFERENCES</h2>",
 	}
 
-	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/capture", "/ui/beliefs", "/ui/activity"} {
+	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/capture", "/ui/beliefs", "/ui/activity", "/ui/preferences"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()

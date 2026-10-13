@@ -974,7 +974,14 @@ func armedTrigger(id string, unitID *string, text string, plan prospection.Plan,
 
 // armedPayload is the payload an arming of plan writes, saying text.
 func armedPayload(text string, plan prospection.Plan) ports.TriggerPayload {
-	return ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays, LeadMinutes: plan.LeadMinutes}
+	p := ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays, LeadMinutes: plan.LeadMinutes}
+	if plan.What == prospection.ArmTrigger {
+		p.About = plan.About
+		for _, l := range plan.Leads {
+			p.UserLeadsMinutes = append(p.UserLeadsMinutes, int(l/time.Minute))
+		}
+	}
+	return p
 }
 
 // refuseArm records and reports a capture that asked for a nudge and did

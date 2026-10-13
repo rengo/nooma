@@ -1257,7 +1257,37 @@ have N nudges; a pattern watcher does not hang off any unit):
   validation falls back to its own default. Valid: 1 to `max_event_reminder_leads` leads, each
   a whole number of minutes from 1 to `max_event_lead_days` days, no two equal; a time from
   `00:00` to `23:59`. A change of preference re-arms every armed one-shot reminder of an event
-  still ahead, through the decision a correction uses; it ships with the first writer. An event at genuine
+  still ahead, through the decision a correction uses (`prospection.Follow`), each move, creation
+  or expiry recorded before its trigger write as `config.reminder.moved|armed|cancelled`; an
+  event already past and a recurring reminder keep theirs. A reminder this creates takes the
+  interrupt level of the event's earliest armed reminder. A re-arm that reaches every event
+  records `config.reminders.followed`. **A reminder already sent is never sent again because of
+  a preference save**. Each one-shot reminder records the event instant it is about and every
+  user lead it serves (`payload.event_at`, `payload.user_leads_minutes`): several when leads land
+  on one instant and go out as one reminder. A lead is covered when a reminder of the unit that
+  already went out was about the same event instant and served that same lead, or went out,
+  about that instant, at or after the lead's quiet-moved time. A send about another instant, such
+  as the date before a correction, covers nothing. A row armed before these were recorded is
+  placed by `fire_at + lead_minutes` and covers by time only; one with no lead (pulled to now, or
+  armed at once) that went out before the event's current instant is taken as about that
+  instant and covers by time only. For those old rows alone, a send about the date before a
+  correction may therefore cover the new date. And any reminder armed before these keys, with a
+  lead or without, that already went out may be sent **at most once more per lead it covered**,
+  after preference changes that move that lead's slot past the send: the reminder that re-arms a
+  lead records it, so no later save sends that lead again. One old reminder that served several
+  leads can thus be followed by one more send for each of them. Both are accepted residual risks for reminders armed
+  before these keys only. A reminder carried by a re-arm or a correction is
+  rewritten whenever the instant it is about or the leads it serves change, a lead merged into
+  it at an unchanged time included, and an old row gains both keys the first time it is carried. The
+  re-arm plans only uncovered leads (`prospection.FollowSent`), and a live reminder of a lead no
+  longer planned expires as covered. An event with nothing armed is not re-armed, so a lead
+  added after all of its reminders went out is not armed (the change re-arms *armed* reminders). **A save that changes nothing creates, moves or re-sends no
+  reminder**, except to finish a re-arm that stopped part way, which a `config.updated` row
+  written after the last `config.reminders.followed` row marks as pending (both compared by
+  insertion order). When that `config.updated` row could not be written either, nothing marks
+  the re-arm pending and the reminders it did not reach move with the next change. When the
+  re-arm completes but its `config.reminders.followed` row cannot be written, the change still
+  reads as pending and the next save runs the re-arm again. An event at genuine
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is
@@ -1514,7 +1544,11 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   pre-image already follows ([ADR-0016](adr/0016-correction-pre-image.md)), because a belief has
   no history table; a retirement records after its status write, because nothing is overwritten
   (the row keeps its content). A claim writes the same `belief.edited` row with `claimed: true`
-  and the new content equal to the previous. When the write lands and its row or its learning signal cannot be
+  and the new content equal to the previous. A change of the user's reminder preferences writes
+  `config.updated` with the fields it changed and their values in force before and after, after
+  its config write: a number or a time replaced is not text lost, and a refused or failed write
+  must not leave a row asserting a change. Submitting the values already in force writes
+  nothing. When the write lands and its row or its learning signal cannot be
   written, the act stands and is not reported as a failure: the mirror says which part is
   missing.
 - **Pull**: everything is recorded and explorable in the activity UI.

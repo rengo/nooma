@@ -195,9 +195,25 @@ const (
 	// ActionBeliefRetired records a user's retirement of a belief
 	// (active -> retired), written after the status write (design §3.4).
 	ActionBeliefRetired DecisionAction = "belief.retired"
+	// ActionConfigUpdated records a user's change of a vault setting,
+	// written after the config write with the fields it changed and their
+	// values in force before and after (ui-preferences design D4; the shape
+	// m4e2-admin plans for its own settings).
+	ActionConfigUpdated DecisionAction = "config.updated"
+	// ActionConfigReminderMoved, ...Armed and ...Cancelled record what a
+	// change of the reminder preferences did to an event's armed set
+	// (ADR-0029 point 6): the correction.reminder.* rows' shape, for the
+	// preferences' cause.
+	ActionConfigReminderMoved     DecisionAction = "config.reminder.moved"
+	ActionConfigReminderArmed     DecisionAction = "config.reminder.armed"
+	ActionConfigReminderCancelled DecisionAction = "config.reminder.cancelled"
+	// ActionConfigRemindersFollowed records that a change's re-arm reached
+	// every event ahead; a config.updated row newer than the newest of these
+	// is a re-arm still pending, which the next save finishes.
+	ActionConfigRemindersFollowed DecisionAction = "config.reminders.followed"
 )
 
-// AllDecisionActions returns a fresh slice holding the fifty-two
+// AllDecisionActions returns a fresh slice holding the fifty-seven
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
@@ -206,7 +222,9 @@ const (
 // ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 // ActionCaptureRelationCheckInResolved and
 // ActionCaptureRelationCheckInUnmatched. ActionBeliefEdited and
-// ActionBeliefRetired are m4e's user-write rows, listed last.
+// ActionBeliefRetired are m4e's user-write rows, followed by
+// ui-preferences' ActionConfigUpdated, its three config.reminder.* and
+// ActionConfigRemindersFollowed.
 //
 // A function, not an exported var (design D1's reasoning, applied to this
 // vocabulary too): an exported slice is mutable by any importer, and a
@@ -237,6 +255,8 @@ func AllDecisionActions() []DecisionAction {
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionBeliefEdited, ActionBeliefRetired,
+		ActionConfigUpdated, ActionConfigReminderMoved, ActionConfigReminderArmed, ActionConfigReminderCancelled,
+		ActionConfigRemindersFollowed,
 	}
 }
 

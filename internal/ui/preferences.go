@@ -1,0 +1,223 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/prospection"
+)
+
+// Preferences is /ui/preferences' entry point; *brain.PreferencesService.
+type Preferences interface {
+	Preferences(ctx context.Context) (brain.Preferences, error)
+	Save(ctx context.Context, p brain.Preferences) (brain.SaveResult, error)
+}
+
+// leadRow is one row of the leads editor, as typed.
+type leadRow struct {
+	Amount string
+	Unit   brain.LeadUnit
+}
+
+// prefsForm is the form as shown; Errors are keyed by brain's field names.
+type prefsForm struct {
+	Rows                          []leadRow
+	DateOnlyAt, QuietEnd, Evening string
+	Errors                        map[brain.PreferenceField]string
+	Outcome                       *beliefResult
+}
+
+// leadUnits is every unit the editor offers, smallest first.
+var leadUnits = []brain.LeadUnit{brain.LeadMinutes, brain.LeadHours, brain.LeadDays}
+
+// prefsMessage restates each rule with core's bounds (design D8).
+func prefsMessage(field brain.PreferenceField) string {
+	switch field {
+	case brain.FieldLeads:
+		return fmt.Sprintf("Give 1 to %d leads, each a whole number from 1 minute to %d days, no two the same.",
+			prospection.MaxEventReminderLeads, prospection.MaxEventLeadDays)
+	case brain.FieldDateOnlyAt:
+		return "Use a time from 00:00 to 23:59."
+	case brain.FieldQuietEnd:
+		return fmt.Sprintf("Quiet hours must end between 00:01 and %02d:00.", prospection.MaxQuietEndHour)
+	}
+	return "The evening time must be at or after the end of quiet hours, and no later than 23:59."
+}
+
+// formFromPrefs is the form showing p, plus an empty row while there is room.
+func formFromPrefs(p brain.Preferences) prefsForm {
+	f := prefsForm{DateOnlyAt: p.DateOnlyAt, QuietEnd: p.QuietEnd, Evening: p.EveningAt}
+	for _, m := range p.LeadMinutes {
+		n, u := brain.SplitLead(m)
+		f.Rows = append(f.Rows, leadRow{Amount: strconv.Itoa(n), Unit: u})
+	}
+	return f.withSpareRow()
+}
+
+func (f prefsForm) withSpareRow() prefsForm {
+	if len(f.Rows) < prospection.MaxEventReminderLeads {
+		f.Rows = append(f.Rows, leadRow{Unit: brain.LeadHours})
+	}
+	return f
+}
+
+// formFromRequest reads the posted form as typed.
+func formFromRequest(r *http.Request) prefsForm {
+	f := prefsForm{DateOnlyAt: r.PostFormValue(string(brain.FieldDateOnlyAt)), QuietEnd: r.PostFormValue(string(brain.FieldQuietEnd)),
+		Evening: r.PostFormValue(string(brain.FieldEveningAt))}
+	units := r.PostForm["lead_unit"]
+	for i, amount := range r.PostForm["lead_amount"] {
+		row := leadRow{Amount: strings.TrimSpace(amount), Unit: brain.LeadHours}
+		if i < len(units) {
+			row.Unit = brain.LeadUnit(units[i])
+		}
+		f.Rows = append(f.Rows, row)
+	}
+	return f
+}
+
+// leadMinutes: filled rows in minutes; any unreadable row refuses them all.
+func (f prefsForm) leadMinutes() ([]int, bool) {
+	limit := prospection.MaxEventLeadDays * brain.LeadDays.Minutes()
+	var out []int
+	for _, row := range f.Rows {
+		if row.Amount == "" {
+			continue
+		}
+		n, err := strconv.Atoi(row.Amount)
+		unit, ok := brain.ParseLeadUnit(string(row.Unit))
+		if err != nil || !ok {
+			return nil, false
+		}
+		// Bounded before the product, which could wrap into a valid lead.
+		if n > limit || n < -limit {
+			n, unit = limit+1, brain.LeadMinutes
+		}
+		out = append(out, n*unit.Minutes())
+	}
+	return out, true
+}
+
+// servePreferences answers GET /ui/preferences: the values in force.
+func (h *Handler) servePreferences(w http.ResponseWriter, r *http.Request) {
+	if h.deps.Preferences == nil {
+		http.Error(w, "preferences: not wired in this build", http.StatusServiceUnavailable)
+		return
+	}
+	p, err := h.deps.Preferences.Preferences(r.Context())
+	if err != nil {
+		slog.Error("preferences: reading failed", "err", err)
+		http.Error(w, "preferences: internal error", http.StatusInternalServerError)
+		return
+	}
+	writePreferencesPage(w, r, http.StatusOK, formFromPrefs(p))
+}
+
+// servePreferencesSave saves the form, or edits rows for op add/remove-<i>.
+func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
+	if h.deps.Preferences == nil {
+		http.Error(w, "preferences: not wired in this build", http.StatusServiceUnavailable)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, captureFormMaxBytes)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	f := formFromRequest(r)
+	if op := r.PostFormValue("op"); op == "add" || strings.HasPrefix(op, "remove-") {
+		h.editRows(w, r, f, op)
+		return
+	}
+
+	// Unreadable leads go to Save as none, which core refuses, so the times
+	// are still judged in this submit (design D8).
+	minutes, leadsOK := f.leadMinutes()
+	res, err := h.deps.Preferences.Save(r.Context(), brain.Preferences{LeadMinutes: minutes, DateOnlyAt: f.DateOnlyAt, QuietEnd: f.QuietEnd, EveningAt: f.Evening})
+	var refused *brain.PreferencesError
+	var landed *brain.WriteLandedError
+	notFollowed, hasLanded := errors.Is(err, brain.ErrRemindersNotFollowed), errors.As(err, &landed)
+	switch {
+	case errors.As(err, &refused):
+		fields := []brain.PreferenceField{}
+		if !leadsOK {
+			fields = append(fields, brain.FieldLeads)
+		}
+		for field := range refused.Fields {
+			fields = append(fields, field)
+		}
+		refusePreferences(w, r, f, fields...)
+		return
+	case !leadsOK:
+		// A tripwire, not a guard: Save already ran; core refuses no leads.
+		slog.Error("preferences: a save with no leads was not refused", "err", err)
+		http.Error(w, "preferences: internal error", http.StatusInternalServerError)
+		return
+	case err != nil && !notFollowed && !hasLanded:
+		slog.Error("preferences: save failed", "err", err)
+		http.Error(w, "preferences: internal error", http.StatusInternalServerError)
+		return
+	}
+	f = formFromPrefs(res.Saved)
+	f.Outcome = &beliefResult{Outcome: outcomeSaved, Message: "Preferences saved."}
+	switch {
+	case notFollowed && hasLanded: // nothing marks the re-arm pending
+		slog.Warn("preferences: saved, but neither the activity row nor every reminder move was written", "err", err)
+		f.Outcome = &beliefResult{Outcome: outcomeSavedWithNotice, Message: "Saved, but the activity record could not be written and some reminders already set were not moved; they move with the next change of a preference."}
+	case notFollowed:
+		slog.Warn("preferences: saved, but the reminders already set were not all moved", "err", err)
+		f.Outcome = &beliefResult{Outcome: outcomeSavedWithNotice, Message: "Saved, but some reminders already set could not be moved. Save again to finish."}
+	case landed != nil:
+		slog.Warn("preferences: the write landed but a follow-up write failed", "err", err)
+		f.Outcome = &beliefResult{Outcome: outcomeSavedWithNotice, Message: landedNotice(landed, false)}
+	case len(res.Changed) == 0:
+		f.Outcome.Message = "Nothing changed."
+	}
+	writePreferencesPage(w, r, http.StatusOK, f)
+}
+
+// refusePreferences answers a refused save: each field's rule, input kept.
+func refusePreferences(w http.ResponseWriter, r *http.Request, f prefsForm, fields ...brain.PreferenceField) {
+	f.Errors = map[brain.PreferenceField]string{}
+	for _, field := range fields {
+		f.Errors[field] = prefsMessage(field)
+	}
+	f.Outcome = &beliefResult{Outcome: outcomeInvalid, Message: "Nothing was saved. Check the fields marked below."}
+	writePreferencesPage(w, r, http.StatusBadRequest, f)
+}
+
+// editRows adds or removes a row and answers the editor; it saves nothing.
+func (h *Handler) editRows(w http.ResponseWriter, r *http.Request, f prefsForm, op string) {
+	if op == "add" {
+		if len(f.Rows) < prospection.MaxEventReminderLeads {
+			f.Rows = append(f.Rows, leadRow{Unit: brain.LeadHours})
+		}
+	} else if i, err := strconv.Atoi(strings.TrimPrefix(op, "remove-")); err == nil && i >= 0 && i < len(f.Rows) {
+		f.Rows = append(f.Rows[:i:i], f.Rows[i+1:]...)
+	}
+	if len(f.Rows) == 0 {
+		f = f.withSpareRow()
+	}
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = leadsEditor(f).Render(r.Context(), w)
+		return
+	}
+	writePreferencesPage(w, r, http.StatusOK, f)
+}
+
+// writePreferencesPage writes the page; a boosted POST's URL is replaced.
+func writePreferencesPage(w http.ResponseWriter, r *http.Request, status int, f prefsForm) {
+	if r.Method == http.MethodPost && r.Header.Get("HX-Boosted") == "true" {
+		w.Header().Set("HX-Replace-Url", "/ui/preferences")
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_ = PreferencesPage(f).Render(r.Context(), w)
+}

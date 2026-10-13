@@ -40,13 +40,20 @@ type Following struct {
 // now is not that reminder — its lead was ahead — and is armed with the
 // rest of the set.
 func Follow(eventAt time.Time, live []Live, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
+	return FollowSent(eventAt, live, nil, prefs, interruptLevel, now)
+}
+
+// FollowSent is Follow for a re-arm under new preferences (ADR-0029 point
+// 6): a lead a reminder already sent about this same event instant covers
+// (coveredBy) is not planned again. A nil sent is Follow.
+func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
 	interrupt := ResolveInterrupt(interruptLevel)
 	for i, l := range live {
 		if l.Rule != nil {
 			return settle([]Plan{recurringTrigger(eventAt, *l.Rule, now, interrupt)}, live, []int{i})
 		}
 	}
-	plans, arms := eventReminders(eventAt, prefs, now, interrupt)
+	plans, arms := eventReminders(eventAt, prefs, now, interrupt, sent)
 	if !arms || (len(live) == 0 && everyLeadBehind(eventAt, prefs, now)) {
 		return settle([]Plan{{What: ArmNothing, Why: plans[0].Why, Interrupt: interrupt}}, live, []int{-1})
 	}

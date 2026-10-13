@@ -70,7 +70,7 @@ CREATE TABLE triggers (
   status            TEXT NOT NULL DEFAULT 'armed', -- armed|fired|dismissed|expired
   condition         TEXT,                        -- JSON (event/pattern)
   interrupt_level   REAL,                        -- 0–1, persisted (auditable)
-  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days…)
+  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days, lead_minutes, event_at, user_leads_minutes)
   fire_at           TEXT,
   fired_at          TEXT,
   surfaced_at       TEXT,                        -- NULL = pending delivery

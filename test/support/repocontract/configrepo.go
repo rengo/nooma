@@ -193,3 +193,96 @@ func RunRecordConsolidationRun(t *testing.T, newRepo func(t *testing.T) ConfigHa
 		}
 	})
 }
+
+// RunSetReminderPrefs runs the ports.ConfigRepo.SetReminderPrefs contract
+// (ui-preferences design D2). The four preference columns are nullable on
+// every adapter, so unlike the two suites above this one runs against the
+// real store too: a nil field of the update leaves its column as it is, a
+// non-nil one writes it, and no other column moves.
+func RunSetReminderPrefs(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
+	t.Helper()
+	ctx := context.Background()
+	at := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	str := func(s string) *string { return &s }
+
+	t.Run("an absent row is created holding only the fields written", func(t *testing.T) {
+		repo := newRepo(t)
+		if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{QuietHoursEnd: str("08:30")}, at); err != nil {
+			t.Fatalf("SetReminderPrefs: %v", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got.QuietHoursEnd == nil || *got.QuietHoursEnd != "08:30" {
+			t.Errorf("QuietHoursEnd = %v, want 08:30", got.QuietHoursEnd)
+		}
+		if got.EventReminderLeads != nil || got.DateOnlyReminderAt != nil || got.EveningReminderAt != nil || got.ConsolidationLastRunAt != nil {
+			t.Errorf("Load() = %+v, want only QuietHoursEnd written", got)
+		}
+	})
+
+	t.Run("an existing row changes only the fields written, all four at once", func(t *testing.T) {
+		repo := newRepo(t)
+		goalDays := 30
+		repo.SeedConfig(t, ports.VaultConfig{GoalStagnationDays: &goalDays, DateOnlyReminderAt: str("10:00"), EveningReminderAt: str("21:00")})
+		if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{
+			EventReminderLeads: str("[1440,60]"), DateOnlyReminderAt: str("08:00"), QuietHoursEnd: str("06:00"), EveningReminderAt: str("23:00"),
+		}, at); err != nil {
+			t.Fatalf("SetReminderPrefs: %v", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		for name, c := range map[string]struct {
+			got  *string
+			want string
+		}{
+			"EventReminderLeads": {got.EventReminderLeads, "[1440,60]"},
+			"DateOnlyReminderAt": {got.DateOnlyReminderAt, "08:00"},
+			"QuietHoursEnd":      {got.QuietHoursEnd, "06:00"},
+			"EveningReminderAt":  {got.EveningReminderAt, "23:00"},
+		} {
+			if c.got == nil || *c.got != c.want {
+				t.Errorf("%s = %v, want %s", name, c.got, c.want)
+			}
+		}
+		if got.GoalStagnationDays == nil || *got.GoalStagnationDays != goalDays {
+			t.Errorf("GoalStagnationDays = %v, want the seeded %d untouched", got.GoalStagnationDays, goalDays)
+		}
+	})
+
+	// One subtest per column: all four seeded, an update that names every
+	// column but one, and the one left out keeps its value. Each COALESCE is
+	// what the subtest for its column guards.
+	seeded := ports.VaultConfig{EventReminderLeads: str("[300]"), DateOnlyReminderAt: str("10:00"), QuietHoursEnd: str("05:00"), EveningReminderAt: str("21:00")}
+	for _, col := range []struct {
+		name  string
+		leave func(u *ports.ReminderPrefsUpdate)
+		read  func(c ports.VaultConfig) *string
+		want  string
+	}{
+		{"event_reminder_leads", func(u *ports.ReminderPrefsUpdate) { u.EventReminderLeads = nil }, func(c ports.VaultConfig) *string { return c.EventReminderLeads }, "[300]"},
+		{"date_only_reminder_at", func(u *ports.ReminderPrefsUpdate) { u.DateOnlyReminderAt = nil }, func(c ports.VaultConfig) *string { return c.DateOnlyReminderAt }, "10:00"},
+		{"quiet_hours_end", func(u *ports.ReminderPrefsUpdate) { u.QuietHoursEnd = nil }, func(c ports.VaultConfig) *string { return c.QuietHoursEnd }, "05:00"},
+		{"evening_reminder_at", func(u *ports.ReminderPrefsUpdate) { u.EveningReminderAt = nil }, func(c ports.VaultConfig) *string { return c.EveningReminderAt }, "21:00"},
+	} {
+		t.Run("a stored "+col.name+" left out of an update keeps its value", func(t *testing.T) {
+			repo := newRepo(t)
+			repo.SeedConfig(t, seeded)
+			u := ports.ReminderPrefsUpdate{EventReminderLeads: str("[60]"), DateOnlyReminderAt: str("08:00"), QuietHoursEnd: str("06:00"), EveningReminderAt: str("23:00")}
+			col.leave(&u)
+			if err := repo.SetReminderPrefs(ctx, u, at); err != nil {
+				t.Fatalf("SetReminderPrefs: %v", err)
+			}
+			got, err := repo.Load(ctx)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if v := col.read(got); v == nil || *v != col.want {
+				t.Errorf("%s = %v, want the stored %s kept", col.name, v, col.want)
+			}
+		})
+	}
+}

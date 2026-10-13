@@ -56,7 +56,7 @@ outside it is 0, a lead core always refuses, so an unknown unit can never be sav
 unit it reads `UnitRepo.ByID`, which includes archived units, because their triggers still fire.
 It keeps the unit if it is an `event` with `event_at` after now and none of its armed triggers is
 recurring (birthdays are point 7). For each kept unit it runs `prospection.FollowSent` with the new
-preferences, the event's last sent one-shot reminder (`TriggerRepo.LastFiredAt`), and the interrupt level of the unit's earliest armed trigger (the one a reminder
+preferences, the unit's one-shot reminders that already fired (`TriggerRepo.FiredForUnit`), and the interrupt level of the unit's earliest armed trigger (the one a reminder
 created for the unit inherits; doc 02 §7 states it), then applies the result through the same
 helper the correction uses. The helper is now parameterised by action family, so the rows
 are `config.reminder.moved|armed|cancelled`, recorded before each trigger write (ADR-0016).
@@ -67,10 +67,21 @@ evening-pulled reminder already went out: leads 6 h and 2 h, an event at 05:00, 
 reminder sent; a save at 22:30 would pull the 23:00 one to 22:30 and arm a new 23:00. That
 happened for any save that re-planned the event: an unchanged one, one that changed an
 unrelated field such as the date-only time, and the save that finishes a pending re-arm.
-`FollowSent` closes all of them at once. The event's last sent reminder covers every lead due,
-after the quiet-hours move, at or before the moment it went out. Only later leads are planned,
-and a live reminder of a lead no longer planned expires as covered (`RefusalCovered`).
-Corrections keep `Follow`, because a reminder sent for the old date says nothing about the new one.
+`FollowSent` closes all of them at once by tying coverage to what was delivered, not to times
+under the new preferences. A time-only rule failed in two ways (review of #331, round 3). A real
+change that moves a sent lead's slot later (the evening time to 23:30, or a quiet end of 04:00)
+sent it again. A send about the date before a correction suppressed the reminder for the new
+date. Each one-shot reminder now records, in its JSON payload (no migration), the event instant it
+is about (`event_at`) and every user lead it serves (`user_leads_minutes`), several when leads
+land on one instant (review of #333). A lead is covered when a fired reminder about the **same
+instant** served the **same lead**, or went out, about that instant, at or after the lead's
+quiet-moved time. A send about another instant covers nothing. A row armed before these keys
+existed is placed by `fire_at + lead_minutes` and covers by time only. One with no lead (pulled
+to now, or at once) that fired before the event's current instant is taken as about it and
+covers by time only. For those rows alone this accepts a B2-shaped risk (PM decision), so they
+never re-send. Only uncovered leads are planned. When every lead left is covered, the plan is
+`RefusalCovered`, and the live reminders no plan carries expire with that reason. Corrections
+keep `Follow`.
 
 Re-arm runs when a save **changes a value in force**, or when the re-arm of an earlier change is
 still pending. A save that changes nothing, with nothing pending, never creates, moves or
@@ -82,7 +93,7 @@ after the last `config.reminders.followed` row written; both are picked and comp
 insertion sequence. If a re-arm stops part way, `Save` returns `ErrRemindersNotFollowed`, the
 saved values stand, and the next save completes the re-arm even if it changes nothing. Finishing
 it re-plans the units already done, and `FollowSent` keeps that from sending anything again: a
-reminder that went out between the two saves covers its lead. Known gap: if the `config.updated`
+reminder that went out between the two saves covers its lead for its instant. Known gap: if the `config.updated`
 row could not be written *and* the re-arm failed, nothing marks the re-arm pending. The error
 then matches `ErrWriteLanded` as well, the page does not tell the user to save again, and the
 reminders not reached move with the next change of a preference.
@@ -90,11 +101,14 @@ reminders not reached move with the next change of a preference.
 Consequences of point 4 under this rule:
 - When every new lead of an event is already behind and a reminder is still armed, that reminder
   is pulled to now. It has not been sent, so this is not a re-send.
-- A new lead is armed only if it is due after the event's last sent reminder. A lead due at or
-  before that send is covered by it, so it is never sent at once as a late duplicate.
+- A new lead is armed unless a reminder already sent about the same instant covers it, either by
+  serving it or by going out at or after its slot, so it is never sent at once as a late
+  duplicate.
+- An event with nothing armed is skipped, so a lead added after all of its reminders went out is
+  not armed. The change re-arms *armed* reminders (ADR-0029 point 6).
 
 **D6. Five actions: `config.updated`, `config.reminder.{moved,armed,cancelled}` and
-`config.reminders.followed`.** `TriggerRepo` gains `ArmedUnitIDs` and `LastFiredAt`. They are
+`config.reminders.followed`.** `TriggerRepo` gains `ArmedUnitIDs` and `FiredForUnit`. They are
 appended to the vocabulary, and `ActivityFamilies` yields one `config` family. m4e2 reuses
 `config.updated` for its admin fields.
 
@@ -122,7 +136,8 @@ always refuses, so nothing is written), so the same submit reports every wrong f
 |---|---|---|
 | 1 | `fix/digest-once-per-date` | D1 + doc 02; this design and tasks (#329) |
 | 2 | `feat/reminder-prefs-save` | D2-D4, D6 (`config.updated`); doc 02 §11 (#330) |
-| 3 | `feat/reminder-prefs-rearm` | D5, D6 (`config.reminder.*`, `config.reminders.followed`), I35; doc 02 §7, doc 06 §4 (#331) |
+| 3 | `feat/reminder-prefs-rearm` | D5 without coverage, D6 (`config.reminder.*`, `config.reminders.followed`), I35; doc 02 §7, doc 06 §4 (#331) |
+| 3b | `feat/reminder-prefs-delivered` | D5's coverage by what was delivered (`FollowSent`, payload `event_at`/`user_leads_minutes`, `FiredForUnit`); doc 02 §7, doc 03 |
 | 4 | `feat/ui-preferences` | D7-D8; wiring and UI gates; doc 07 |
 
 ## 4. Tests
