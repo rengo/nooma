@@ -1257,7 +1257,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   validation falls back to its own default. Valid: 1 to `max_event_reminder_leads` leads, each
   a whole number of minutes from 1 to `max_event_lead_days` days, no two equal; a time from
   `00:00` to `23:59`. A change of preference re-arms every armed one-shot reminder of an event
-  still ahead, through the decision a correction uses; it ships with the first writer. An event at genuine
+  still ahead, through the decision a correction uses (`prospection.Follow`), each move, creation
+  or expiry recorded before its trigger write as `config.reminder.moved|armed|cancelled`; an
+  event already past and a recurring reminder keep theirs. Every valid save re-arms, an
+  unchanged one included: over a set already following the values it writes nothing, so saving
+  again finishes a re-arm that stopped part way. An event at genuine
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is

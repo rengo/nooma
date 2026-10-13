@@ -69,6 +69,9 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionBeliefEdited:                    "Belief edited",
 	ports.ActionBeliefRetired:                   "Belief retired",
 	ports.ActionConfigUpdated:                   "Preferences changed",
+	ports.ActionConfigReminderMoved:             "Reminder moved to new preferences",
+	ports.ActionConfigReminderArmed:             "Reminder set by new preferences",
+	ports.ActionConfigReminderCancelled:         "Reminder cancelled by new preferences",
 }
 
 // activityTitle is a row's headline. A vault can hold actions the vocabulary

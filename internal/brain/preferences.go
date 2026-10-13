@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -18,15 +19,18 @@ import (
 // correction read them at arm time, so a saved value reaches every reminder
 // armed after it (ui-preferences design D4).
 type PreferencesService struct {
-	clock ports.Clock
-	ids   ports.IDGen
-	cfg   ports.ConfigRepo
-	log   ports.DecisionLog
+	clock    ports.Clock
+	ids      ports.IDGen
+	cfg      ports.ConfigRepo
+	log      ports.DecisionLog
+	units    ports.UnitRepo
+	triggers ports.TriggerRepo
 }
 
-// NewPreferencesService wires a PreferencesService.
-func NewPreferencesService(clock ports.Clock, ids ports.IDGen, cfg ports.ConfigRepo, log ports.DecisionLog) *PreferencesService {
-	return &PreferencesService{clock: clock, ids: ids, cfg: cfg, log: log}
+// NewPreferencesService wires a PreferencesService. units and triggers are
+// what a save re-arms (ADR-0029 point 6).
+func NewPreferencesService(clock ports.Clock, ids ports.IDGen, cfg ports.ConfigRepo, log ports.DecisionLog, units ports.UnitRepo, triggers ports.TriggerRepo) *PreferencesService {
+	return &PreferencesService{clock: clock, ids: ids, cfg: cfg, log: log, units: units, triggers: triggers}
 }
 
 // Preferences is the four preferences in the shape a form edits them:
@@ -90,7 +94,10 @@ func (s *PreferencesService) Preferences(ctx context.Context) (Preferences, erro
 
 // Save validates p with the parsers the arm-time read resolves with, then
 // writes the fields whose value differs from the one in force — or whose
-// stored value is invalid — and records one config.updated row. An invalid
+// stored value is invalid — records one config.updated row, and re-arms
+// the reminders of every event still ahead (ADR-0029 point 6). A re-arm
+// that stops part way leaves the values saved and returns
+// ErrRemindersNotFollowed. An invalid
 // field refuses the whole save with a *PreferencesError and writes nothing.
 // The write comes before its row (m4e2-admin design §3.1): a failed write
 // logs nothing, and a failed row after a landed write is a
@@ -127,18 +134,23 @@ func (s *PreferencesService) Save(ctx context.Context, p Preferences) (SaveResul
 		}
 	}
 	result := SaveResult{Changed: changed, Saved: saved}
-	if len(changed) == 0 {
-		return result, nil
-	}
-
 	now := s.clock.Now()
-	if err := s.cfg.SetReminderPrefs(ctx, update, now); err != nil {
-		return SaveResult{}, fmt.Errorf("preferences: write: %w", err)
+	var landed error
+	if len(changed) > 0 {
+		if err := s.cfg.SetReminderPrefs(ctx, update, now); err != nil {
+			return SaveResult{}, fmt.Errorf("preferences: write: %w", err)
+		}
+		if err := s.recordChange(ctx, changed, inForce, saved, now); err != nil {
+			landed = &WriteLandedError{Record: true, Err: err}
+		}
 	}
-	if err := s.recordChange(ctx, changed, inForce, saved, now); err != nil {
-		return result, &WriteLandedError{Record: true, Err: err}
+	// Every valid save re-arms, an unchanged one included: over a set that
+	// already follows these values it writes nothing, so saving again is
+	// how a re-arm that stopped part way is finished.
+	if err := s.rearm(ctx, next, now); err != nil {
+		return result, errors.Join(landed, fmt.Errorf("%w: %w", ErrRemindersNotFollowed, err))
 	}
-	return result, nil
+	return result, landed
 }
 
 // validatePrefs parses every field, judging the evening time against the

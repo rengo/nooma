@@ -200,9 +200,16 @@ const (
 	// values in force before and after (ui-preferences design D4; the shape
 	// m4e2-admin plans for its own settings).
 	ActionConfigUpdated DecisionAction = "config.updated"
+	// ActionConfigReminderMoved, ...Armed and ...Cancelled record what a
+	// change of the reminder preferences did to an event's armed set
+	// (ADR-0029 point 6): the correction.reminder.* rows' shape, for the
+	// preferences' cause.
+	ActionConfigReminderMoved     DecisionAction = "config.reminder.moved"
+	ActionConfigReminderArmed     DecisionAction = "config.reminder.armed"
+	ActionConfigReminderCancelled DecisionAction = "config.reminder.cancelled"
 )
 
-// AllDecisionActions returns a fresh slice holding the fifty-three
+// AllDecisionActions returns a fresh slice holding the fifty-six
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
@@ -212,7 +219,7 @@ const (
 // ActionCaptureRelationCheckInResolved and
 // ActionCaptureRelationCheckInUnmatched. ActionBeliefEdited and
 // ActionBeliefRetired are m4e's user-write rows, followed by
-// ui-preferences' ActionConfigUpdated.
+// ui-preferences' ActionConfigUpdated and its three config.reminder.*.
 //
 // A function, not an exported var (design D1's reasoning, applied to this
 // vocabulary too): an exported slice is mutable by any importer, and a
@@ -243,7 +250,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionBeliefEdited, ActionBeliefRetired,
-		ActionConfigUpdated,
+		ActionConfigUpdated, ActionConfigReminderMoved, ActionConfigReminderArmed, ActionConfigReminderCancelled,
 	}
 }
 

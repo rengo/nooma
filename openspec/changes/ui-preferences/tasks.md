@@ -11,9 +11,9 @@ PR 2 — `feat/reminder-prefs-save` (#330)
 - [x] 4. RED/GREEN L1 brain: `PreferencesService.Preferences/Save`, validation, effective no-op, `config.updated` (D3, D4, D6); doc 02 §11.
 
 PR 3 — `feat/reminder-prefs-rearm` (#331)
-- [ ] 5. RED: I35 row in doc 06 §4 and `TestI35_APreferenceChangeReArmsEventsAhead`.
-- [ ] 6. RED/GREEN L3 + contract: `TriggerRepo.ArmedUnitIDs`.
-- [ ] 7. GREEN: re-arm on save through `Follow` with `config.reminder.*` rows (D5, D6); doc 02 §7.
+- [x] 5. RED: I35 row in doc 06 §4 and `TestI35_APreferenceChangeReArmsEventsAhead`.
+- [x] 6. RED/GREEN L3 + contract: `TriggerRepo.ArmedUnitIDs`.
+- [x] 7. GREEN: re-arm on save through `Follow` with `config.reminder.*` rows (D5, D6); doc 02 §7.
 
 PR 4 — `feat/ui-preferences` (#332)
 - [ ] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).

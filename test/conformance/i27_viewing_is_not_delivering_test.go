@@ -29,7 +29,8 @@ import (
 // ByUnit through the focus keeper, for the members of the incumbent it holds
 // and of the one it selects (the pending-digest mirror's P'), and ByID is a
 // read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
-// Expire, Reschedule write; Due, Undelivered, Delivered, ArmedForUnit read),
+// Expire, Reschedule write; Due, Undelivered, Delivered, ArmedForUnit,
+// ArmedUnitIDs read),
 // pendingquestionrepo.go (PendingQuestionRepo: Create, MarkAsked,
 // Confirm, Reject, Expire write; Unasked, Open read), staterepo.go
 // (StateRepo: OpenHypothesis writes; LastHypothesisAt, LatestEnergy

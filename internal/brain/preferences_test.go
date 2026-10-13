@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -24,7 +25,7 @@ func (failingPrefsWrite) SetReminderPrefs(context.Context, ports.ReminderPrefsUp
 }
 
 func prefsService(cfg ports.ConfigRepo, log ports.DecisionLog) *PreferencesService {
-	return NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, cfg, log)
+	return NewPreferencesService(fixedClock{now: prefsNow}, &seqIDs{}, cfg, log, memrepo.NewUnits(), memrepo.NewTriggers())
 }
 
 func defaultPrefs() Preferences {
@@ -317,5 +318,43 @@ func TestLeadUnit_IsAClosedSet(t *testing.T) {
 	var perr *PreferencesError
 	if !errors.As(err, &perr) || perr.Fields[FieldLeads] == nil {
 		t.Errorf("two weeks saved as %v, want the leads refused", err)
+	}
+}
+
+// A re-arm that stops part way leaves the values saved and says so; saving
+// the same values again finishes it.
+func TestPreferencesSave_AFailedReArmKeepsTheValuesAndASecondSaveFinishesIt(t *testing.T) {
+	ctx := context.Background()
+	cfg, log, units := memrepo.NewConfig(), memrepo.NewDecisionLog(), memrepo.NewUnits()
+	event := prefsNow.Add(78 * time.Hour) // 15:00, clear of quiet hours at every lead
+	if err := units.Create(ctx, unit.Unit{ID: "flight", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "flight",
+		EventAt: &event, Source: "cli", CreatedAt: prefsNow, UpdatedAt: prefsNow}); err != nil {
+		t.Fatalf("seeding unit: %v", err)
+	}
+	triggers := memrepo.NewTriggers()
+	unitID, fireAt := "flight", event.Add(-2*time.Hour)
+	if err := triggers.Create(ctx, ports.Trigger{ID: "flight-2h", UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: "flight", LeadMinutes: 120}, FireAt: &fireAt}); err != nil {
+		t.Fatalf("seeding trigger: %v", err)
+	}
+	p := defaultPrefs()
+	p.LeadMinutes = []int{180}
+
+	ids := &seqIDs{}
+	broken := NewPreferencesService(fixedClock{now: prefsNow}, ids, cfg, log, units, &failingTriggers{err: errors.New("disk")})
+	if _, err := broken.Save(ctx, p); !errors.Is(err, ErrRemindersNotFollowed) || errors.Is(err, ErrWriteLanded) {
+		t.Fatalf("Save error = %v, want ErrRemindersNotFollowed alone", err)
+	}
+	if stored, _ := cfg.Load(ctx); stored.EventReminderLeads == nil || *stored.EventReminderLeads != "[180]" {
+		t.Fatalf("stored leads = %v, want [180] saved despite the re-arm failure", stored.EventReminderLeads)
+	}
+
+	res, err := NewPreferencesService(fixedClock{now: prefsNow}, ids, cfg, log, units, triggers).Save(ctx, p)
+	if err != nil || len(res.Changed) != 0 {
+		t.Fatalf("second Save = %+v, %v; want nothing changed and no error", res, err)
+	}
+	armed, _ := triggers.ArmedForUnit(ctx, "flight")
+	if len(armed) != 1 || !armed[0].FireAt.Equal(event.Add(-3*time.Hour)) {
+		t.Errorf("armed after the second save = %+v, want one reminder 3 hours before", armed)
 	}
 }
