@@ -68,7 +68,9 @@ type Deps struct {
 	Capture  Capturer
 	Beliefs  Beliefs
 	Activity Activity
-	Serving  Serving
+	// Preferences is the reminder and quiet-hours preferences page's.
+	Preferences Preferences
+	Serving     Serving
 	// Now reads the injected clock (ports.Clock.Now); the UI takes its zone from
 	// the instant it returns and nothing else. A func, not ports.Clock, so Deps
 	// stays free of interfaces that are not a brain entrance (I22's gate).
@@ -128,6 +130,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveBeliefRetire(w, r)
 	case "GET /ui/activity":
 		h.serveActivity(w, r)
+	case "GET /ui/preferences":
+		h.servePreferences(w, r)
+	case "POST /ui/preferences":
+		h.servePreferencesSave(w, r)
 	default:
 		http.NotFound(w, r)
 	}

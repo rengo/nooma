@@ -51,8 +51,8 @@ is on the 15th.
    before; a date with no time, the day before at 09:00; a reminder whose time has already
    passed is skipped ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe), ADR-0029).
    Nothing is set for the night: a reminder that would fall before 07:00 is moved to 07:00, or
-   to 22:00 the evening before when the event itself is that early (both hours are your
-   preferences), so a 05:00 flight is
+   to 22:00 the evening before when the event itself is that early (the leads, the 09:00 and
+   both hours are your preferences, changed on `/ui/preferences`), so a 05:00 flight is
    reminded at 07:00 and 22:00 the day before. When no time before the event is left outside
    the night, none is set, and the trail says why (ADR-0030). The full taxonomy is in
    [doc 02 §5 step 1](02-cognitive-core.md#5-capture); the units and their statuses in
@@ -266,6 +266,14 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
    `2026-10-15 11:00`, with a one-line note naming the zone. Nothing stored changes: the vault and
    the API stay UTC. Text you wrote yourself (a unit's content, a digest line) is shown as written,
    even if it contains an instant. A vault viewed from a browser in another zone still reads in the server's.
+10. **Lets you change when it reminds you** (`/ui/preferences`). The page shows the leads before
+    a timed event (one row each, up to five, in minutes, hours or days, with Remove and Add), the
+    time for an event with no time of day, the end of quiet hours and the evening time, defaults
+    included. Saving checks every field with the rules capture uses and, when one is wrong, names
+    it and saves nothing. A save applies to every reminder set from then on, also moves the
+    reminders already set for upcoming events, and shows up in Activity with the values it
+    replaced. A later end of quiet hours also delays the morning digest, which never goes out
+    twice in one day.
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
 Activity does, rather than rendering nothing; so does a unit page's relations section when the
@@ -289,8 +297,8 @@ As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in 
 | Nightly consolidation at 03:00, boot catch-up, `nooma consolidate`, `decision_log` | Shipped in M2 (`learn` is an empty slot) | [05 §M2](05-build-plan.md#m2--sleep-and-weight), doc 02 §6, §11 |
 | Telegram channel, triggers, push, morning digest, check-ins, ephemeral timers | Shipped in M3 | [05 §M3](05-build-plan.md#m3--the-mouth-telegram--prospection), doc 02 §7, §8 |
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
-| Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; editing them from the UI or chat is pending | doc 02 §7; ADR-0029 |
-| Event reminders pushed by day, moved out of the night, never sent after the event | Shipped; quiet end (07:00) and evening time (22:00) are vault preferences, editing them from the UI or chat is pending | doc 02 §7; ADR-0030 |
+| Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; edited on `/ui/preferences`, which moves the reminders already set; editing them by chat is pending | doc 02 §7; ADR-0029 |
+| Event reminders pushed by day, moved out of the night, never sent after the event | Shipped; quiet end (07:00) and evening time (22:00) are vault preferences edited on `/ui/preferences`; editing them by chat is pending | doc 02 §7; ADR-0030 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |

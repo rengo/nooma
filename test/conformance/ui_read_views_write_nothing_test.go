@@ -81,6 +81,24 @@ func TestUIReadViewsWriteNothing(t *testing.T) {
 	}
 }
 
+// TestUIReadViewsWriteNothing_PreferencesGet is G7 for /ui/preferences: the
+// GET reads config and nothing else, and writes neither config, the log,
+// a unit nor a trigger — I27's decorators fail on every one of those writes.
+func TestUIReadViewsWriteNothing_PreferencesGet(t *testing.T) {
+	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	svc := brain.NewPreferencesService(fixedClock{now: now}, &counterIDs{},
+		&i27Config{Config: memrepo.NewConfig(), t: t}, &i27DecisionLog{DecisionLog: memrepo.NewDecisionLog(), t: t},
+		&i27Units{Units: memrepo.NewUnits(), t: t}, &i27Triggers{Triggers: memrepo.NewTriggers(), t: t})
+	h := httpapi.Handler(httpapi.Deps{Version: "test", UI: ui.New(ui.Deps{Preferences: svc})})
+	for i := 0; i < 3; i++ {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ui/preferences", nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `name="quiet_hours_end" value="07:00"`) {
+			t.Fatalf("GET /ui/preferences request %d = %d, want 200 rendering the defaults:\n%s", i+1, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 // TestUIReadViewsWriteNothing_ActivityGet is G7 for /ui/activity (R5): the
 // page, paged and filtered, runs over a decorated DecisionLog and, as in
 // production, a decorated UnitRepo for the rows' subjects, and reaches no

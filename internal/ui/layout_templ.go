@@ -192,6 +192,7 @@ var navItems = []navItem{
 	{href: "/ui/capture", label: "Capture", titles: []string{"nooma — capture"}},
 	{href: "/ui/beliefs", label: "Beliefs", titles: []string{"nooma — beliefs"}},
 	{href: "/ui/activity", label: "Activity", titles: []string{"nooma — activity"}},
+	{href: "/ui/preferences", label: "Preferences", titles: []string{"nooma — preferences"}},
 }
 
 var _ = templruntime.GeneratedTemplate

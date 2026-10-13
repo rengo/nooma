@@ -175,6 +175,8 @@ var wantUIMuxWiring = []struct {
 	{pattern: "POST /ui/beliefs/{id}/edit", guarded: true},
 	{pattern: "POST /ui/beliefs/{id}/retire", guarded: true},
 	{pattern: "GET /ui/activity", guarded: true},
+	{pattern: "GET /ui/preferences", guarded: true},
+	{pattern: "POST /ui/preferences", guarded: true},
 }
 
 // wantGuardFuncName, wantGuardTokenExpr and wantGuardTargetExpr are the
