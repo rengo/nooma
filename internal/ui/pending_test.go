@@ -3,6 +3,7 @@ package ui_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -80,12 +81,59 @@ func TestLayout_BoostedSwapDoesNotRerunScripts(t *testing.T) {
 	}
 }
 
-func TestStylesheet_PendingStateSwapsLabelsAndNeverMovesInline(t *testing.T) {
+// cssRuleBody returns the declarations of the rule whose selector list
+// contains exactly selector, so a renamed selector or a deleted declaration
+// is found missing rather than matched by a stray substring.
+func cssRuleBody(t *testing.T, css, selector string) string {
+	t.Helper()
+	rule := regexp.MustCompile(`([^{}]*)\{([^{}]*)\}`)
+	for _, m := range rule.FindAllStringSubmatch(css, -1) {
+		for _, sel := range strings.Split(m[1], ",") {
+			if strings.TrimSpace(sel) == selector {
+				return strings.Join(strings.Fields(m[2]), "")
+			}
+		}
+	}
+	t.Fatalf("app.css has no rule for %q", selector)
+	return ""
+}
+
+func TestStylesheet_PendingStateSwapsIdleLabelForPendingOne(t *testing.T) {
 	t.Parallel()
 	css := readStylesheet(t)
-	for _, want := range []string{".htmx-request", "[data-pending]", "[data-idle]", "button:disabled"} {
-		if !strings.Contains(css, want) {
-			t.Errorf("app.css has no %q rule", want)
+	for selector, want := range map[string]string{
+		"[data-pending]":                       "display:none",
+		".htmx-request [data-idle]":            "display:none",
+		".htmx-request [data-pending]":         "display:inline-flex",
+		".htmx-request [data-pending]::before": "animation:spinvar(--spinner-duration)linearinfinite",
+		"button:disabled":                      "cursor:progress",
+	} {
+		if body := cssRuleBody(t, css, selector); !strings.Contains(body, want) {
+			t.Errorf("rule %q lacks %q: %s", selector, want, body)
 		}
+	}
+}
+
+// The browser must not stay on the boosted POST's URL: reloading it is a 405.
+func TestCorrectView_BoostedAnswerReplacesTheURL(t *testing.T) {
+	t.Parallel()
+	detail := brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "Pay rent", CreatedAt: time.Now()}}
+	fake := &fakeCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-1"}}}
+	req := correctRequest("unit-1", "text=x")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Boosted", "true")
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Capture: fake, Units: stubUnitsReader{detail: detail, detailFound: true}}).ServeHTTP(rec, req)
+	if got := rec.Header().Get("HX-Replace-Url"); got != "/ui/units/unit-1" {
+		t.Errorf("HX-Replace-Url = %q, want /ui/units/unit-1", got)
+	}
+
+	req = correctRequest("unit-9", "text=x")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Boosted", "true")
+	rec = httptest.NewRecorder()
+	ui.New(ui.Deps{Capture: fake, Units: stubUnitsReader{detailFound: false}}).ServeHTTP(rec, req)
+	if got := rec.Header().Get("HX-Replace-Url"); got != "/ui/capture" {
+		t.Errorf("fallback HX-Replace-Url = %q, want /ui/capture", got)
 	}
 }

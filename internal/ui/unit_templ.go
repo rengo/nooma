@@ -22,8 +22,8 @@ import (
 // weight and its live relations (spec R3). It is also what a correction
 // submitted from this page answers with: res is that correction's outcome,
 // nil on a plain GET, so the user stays on the unit they were correcting and
-// sees its fields as they are now. The correction form is a plain POST, not
-// htmx: its answer is always a full page, an error included.
+// sees its fields as they are now. The correction form is boosted: its answer is
+// always a full page, an error included, swapped over the current one.
 func UnitPage(detail brain.UnitDetail, res *brain.CaptureResult) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
