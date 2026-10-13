@@ -80,6 +80,7 @@ order, with no correspondence to anything.
 | [0026](0026-the-judge-answers-about-what-it-was-shown.md) | The judge answers about what it was shown: a target that was never a candidate stores nothing | Accepted | M3e |
 | [0027](0027-pending-question-store.md) | Where a question the brain asked lives while it waits for an answer: a dedicated `pending_questions` store, not `triggers` and not `decision_log` | Accepted | M3e |
 | [0028](0028-ui-cookie-handshake.md) | The UI cookie carries the token itself; cross-origin UI requests are refused structurally | Accepted | M4a |
+| [0029](0029-event-reminders-follow-the-users-leads.md) | Event reminders: the day before and two hours before, as the user's own preference | Proposed | M4 |
 
 ## Template
 
