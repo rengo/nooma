@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -14,10 +13,8 @@ import (
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
-// Preferences is /ui/preferences' entry point into the user's reminder and
-// quiet-hours preferences (ui-preferences design D7): the values in force,
-// and a save that validates, writes, records and re-arms. It reads and
-// writes nothing else. *brain.PreferencesService satisfies it.
+// Preferences is /ui/preferences' entry point (design D7): the values in
+// force, and a save. *brain.PreferencesService satisfies it.
 type Preferences interface {
 	Preferences(ctx context.Context) (brain.Preferences, error)
 	Save(ctx context.Context, p brain.Preferences) (brain.SaveResult, error)
@@ -29,9 +26,8 @@ type leadRow struct {
 	Unit   brain.LeadUnit
 }
 
-// prefsForm is the preferences form as shown: the rows and times it holds,
-// each field's refusal keyed by the brain's field name (also the inputs'
-// names), and the outcome of the POST that produced it.
+// prefsForm is the form as shown: rows, times, each field's refusal keyed
+// by brain's field name (also the inputs' names), and the POST's outcome.
 type prefsForm struct {
 	Rows                          []leadRow
 	DateOnlyAt, QuietEnd, Evening string
@@ -42,8 +38,7 @@ type prefsForm struct {
 // leadUnits is every unit the editor offers, smallest first.
 var leadUnits = []brain.LeadUnit{brain.LeadMinutes, brain.LeadHours, brain.LeadDays}
 
-// prefsMessage restates each rule with core's own bounds (design D8): the
-// UI names the field, the brain decides.
+// prefsMessage restates each rule with core's bounds (design D8).
 func prefsMessage(field brain.PreferenceField) string {
 	switch field {
 	case brain.FieldLeads:
@@ -90,7 +85,7 @@ func formFromRequest(r *http.Request) prefsForm {
 }
 
 // leadMinutes turns the filled rows into minutes; an empty row is no lead.
-// A row that is not a whole number in a known unit refuses the leads.
+// A row that is not a whole number in a unit brain parses refuses the leads.
 func (f prefsForm) leadMinutes() ([]int, bool) {
 	limit := prospection.MaxEventLeadDays * brain.LeadDays.Minutes()
 	var out []int
@@ -99,10 +94,11 @@ func (f prefsForm) leadMinutes() ([]int, bool) {
 			continue
 		}
 		n, err := strconv.Atoi(row.Amount)
-		if err != nil || !slices.Contains(leadUnits, row.Unit) {
+		unit, ok := brain.ParseLeadUnit(string(row.Unit))
+		if err != nil || !ok {
 			return nil, false
 		}
-		m := n * row.Unit.Minutes()
+		m := n * unit.Minutes()
 		if n > limit || n < -limit {
 			m = limit + 1 // still out of range, never an overflowed product
 		}
@@ -144,22 +140,27 @@ func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	minutes, ok := f.leadMinutes()
-	if !ok {
-		refusePreferences(w, r, f, brain.FieldLeads)
-		return
-	}
+	// Leads the UI cannot read go to the brain as no leads, which it always
+	// refuses, so the times are still judged in this same submit (design D8).
+	minutes, leadsOK := f.leadMinutes()
 	res, err := h.deps.Preferences.Save(r.Context(), brain.Preferences{LeadMinutes: minutes, DateOnlyAt: f.DateOnlyAt, QuietEnd: f.QuietEnd, EveningAt: f.Evening})
 	var refused *brain.PreferencesError
 	var landed *brain.WriteLandedError
 	notFollowed := errors.Is(err, brain.ErrRemindersNotFollowed)
 	switch {
 	case errors.As(err, &refused):
-		var fields []brain.PreferenceField
+		fields := []brain.PreferenceField{}
+		if !leadsOK {
+			fields = append(fields, brain.FieldLeads)
+		}
 		for field := range refused.Fields {
 			fields = append(fields, field)
 		}
 		refusePreferences(w, r, f, fields...)
+		return
+	case !leadsOK:
+		slog.Error("preferences: a save with no leads was not refused", "err", err)
+		http.Error(w, "preferences: internal error", http.StatusInternalServerError)
 		return
 	case err != nil && !notFollowed && !errors.As(err, &landed):
 		slog.Error("preferences: save failed", "err", err)
@@ -181,8 +182,7 @@ func (h *Handler) servePreferencesSave(w http.ResponseWriter, r *http.Request) {
 	writePreferencesPage(w, r, http.StatusOK, f)
 }
 
-// refusePreferences answers a refused save: each named field's rule beside
-// it, what was typed kept, and nothing saved.
+// refusePreferences answers a refused save: each field's rule, input kept.
 func refusePreferences(w http.ResponseWriter, r *http.Request, f prefsForm, fields ...brain.PreferenceField) {
 	f.Errors = map[brain.PreferenceField]string{}
 	for _, field := range fields {
@@ -192,8 +192,7 @@ func refusePreferences(w http.ResponseWriter, r *http.Request, f prefsForm, fiel
 	writePreferencesPage(w, r, http.StatusBadRequest, f)
 }
 
-// editRows adds an empty row or removes one, and answers the leads editor
-// alone to htmx, the whole page otherwise. Nothing is saved.
+// editRows adds or removes a row and answers the editor; it saves nothing.
 func (h *Handler) editRows(w http.ResponseWriter, r *http.Request, f prefsForm, op string) {
 	if op == "add" {
 		if len(f.Rows) < prospection.MaxEventReminderLeads {
@@ -213,8 +212,7 @@ func (h *Handler) editRows(w http.ResponseWriter, r *http.Request, f prefsForm, 
 	writePreferencesPage(w, r, http.StatusOK, f)
 }
 
-// writePreferencesPage writes the full page with status. A boosted POST
-// would leave its URL in the address bar, and a reload of it is a 405.
+// writePreferencesPage writes the page; a boosted POST's URL is replaced.
 func writePreferencesPage(w http.ResponseWriter, r *http.Request, status int, f prefsForm) {
 	if r.Method == http.MethodPost && r.Header.Get("HX-Boosted") == "true" {
 		w.Header().Set("HX-Replace-Url", "/ui/preferences")

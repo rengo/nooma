@@ -148,10 +148,10 @@ func TestPreferencesSave_RefusedFieldsAreNamedAndTheInputKept(t *testing.T) {
 	}
 }
 
-func TestPreferencesSave_AnAmountThatIsNotAWholeNumberIsRefusedBeforeTheBrain(t *testing.T) {
+func TestPreferencesSave_AnAmountThatIsNotAWholeNumberIsRefused(t *testing.T) {
 	t.Parallel()
 	for _, amount := range []string{"abc", "1.5", "-2"} {
-		fake := &fakePreferences{}
+		fake := &fakePreferences{err: &brain.PreferencesError{Fields: map[brain.PreferenceField]error{brain.FieldLeads: prospection.ErrInvalidReminderPref}}}
 		rec := preferencesPost(t, fake, "lead_amount="+amount+"&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00")
 		if amount == "-2" {
 			// A whole number, so it reaches the brain, which refuses it.
@@ -160,8 +160,8 @@ func TestPreferencesSave_AnAmountThatIsNotAWholeNumberIsRefusedBeforeTheBrain(t 
 			}
 			continue
 		}
-		if rec.Code != http.StatusBadRequest || len(fake.saved) != 0 {
-			t.Errorf("amount %q: status %d with %d saves, want 400 and none", amount, rec.Code, len(fake.saved))
+		if rec.Code != http.StatusBadRequest || len(fake.saved) != 1 || len(fake.saved[0].LeadMinutes) != 0 {
+			t.Errorf("amount %q: status %d, Save got %+v; want 400 and the brain given no leads", amount, rec.Code, fake.saved)
 		}
 		assertContains(t, rec.Body.String(), `data-error="event_reminder_leads"`)
 	}
@@ -246,5 +246,78 @@ func TestPreferencesSave_ExtraRowsAreNotDropped(t *testing.T) {
 	preferencesPost(t, fake, body)
 	if len(fake.saved) != 1 || len(fake.saved[0].LeadMinutes) != 6 {
 		t.Errorf("Save got %+v, want all six leads for the brain to judge", fake.saved)
+	}
+}
+
+// Each field shows its own rule beside it: all four refused at once, each
+// data-error carries that field's message.
+func TestPreferencesSave_EachRefusedFieldShowsItsOwnRule(t *testing.T) {
+	t.Parallel()
+	fake := &fakePreferences{err: &brain.PreferencesError{Fields: map[brain.PreferenceField]error{
+		brain.FieldLeads: prospection.ErrInvalidReminderPref, brain.FieldDateOnlyAt: prospection.ErrInvalidReminderPref,
+		brain.FieldQuietEnd: prospection.ErrInvalidReminderPref, brain.FieldEveningAt: prospection.ErrInvalidReminderPref,
+	}}}
+	body := preferencesPost(t, fake, validForm).Body.String()
+	for field, rule := range map[string]string{
+		"event_reminder_leads":  "no two the same",
+		"date_only_reminder_at": "Use a time from 00:00 to 23:59.",
+		"quiet_hours_end":       "Quiet hours must end between 00:01 and 12:00.",
+		"evening_reminder_at":   "at or after the end of quiet hours",
+	} {
+		msg := between(t, body, `<p data-error="`+field+`">`, "</p>")
+		if !strings.Contains(msg, rule) {
+			t.Errorf("%s error = %q, want its rule %q", field, msg, rule)
+		}
+	}
+}
+
+// An unknown unit is refused by the UI: the leads are marked, and the
+// brain is given no leads (which it always refuses), never a lead in a
+// unit it does not have.
+func TestPreferencesSave_AnUnknownUnitIsRefused(t *testing.T) {
+	t.Parallel()
+	fake := &fakePreferences{err: &brain.PreferencesError{Fields: map[brain.PreferenceField]error{brain.FieldLeads: prospection.ErrInvalidReminderPref}}}
+	rec := preferencesPost(t, fake, "lead_amount=2&lead_unit=weeks&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+	if len(fake.saved) != 1 || len(fake.saved[0].LeadMinutes) != 0 {
+		t.Errorf("Save got %+v, want no leads", fake.saved)
+	}
+	assertContains(t, rec.Body.String(), `data-error="event_reminder_leads"`)
+}
+
+// A bad amount does not hide the other fields: the times go to the brain
+// in the same submit, and every refusal is shown at once.
+func TestPreferencesSave_ABadAmountStillChecksTheTimes(t *testing.T) {
+	t.Parallel()
+	fake := &fakePreferences{err: &brain.PreferencesError{Fields: map[brain.PreferenceField]error{
+		brain.FieldLeads: prospection.ErrInvalidReminderPref, brain.FieldEveningAt: prospection.ErrInvalidReminderPref,
+	}}}
+	rec := preferencesPost(t, fake, "lead_amount=abc&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=06:00")
+	if len(fake.saved) != 1 || fake.saved[0].EveningAt != "06:00" || len(fake.saved[0].LeadMinutes) != 0 {
+		t.Fatalf("Save got %+v, want the times and no leads", fake.saved)
+	}
+	assertContains(t, rec.Body.String(), `data-error="event_reminder_leads"`, `data-error="evening_reminder_at"`)
+}
+
+// The body is capped: a form past the bound is refused before it is read.
+func TestPreferencesSave_AnOversizedFormIsRefused(t *testing.T) {
+	t.Parallel()
+	fake := &fakePreferences{}
+	rec := preferencesPost(t, fake, validForm+"&pad="+strings.Repeat("x", 70<<10))
+	if rec.Code != http.StatusBadRequest || len(fake.saved) != 0 {
+		t.Errorf("status %d with %d saves, want 400 and none", rec.Code, len(fake.saved))
+	}
+}
+
+// Removing the last row leaves one empty row to type into, not an editor
+// with no row at all.
+func TestPreferencesSave_RemovingTheLastRowLeavesAnEmptyOne(t *testing.T) {
+	t.Parallel()
+	body := preferencesPost(t, &fakePreferences{}, "op=remove-0&lead_amount=2&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00",
+		"HX-Request", "true").Body.String()
+	if n := strings.Count(body, `name="lead_amount"`); n != 1 || strings.Contains(body, `value="2"`) {
+		t.Errorf("%d rows after removing the only one, want one empty row:\n%s", n, body)
 	}
 }
