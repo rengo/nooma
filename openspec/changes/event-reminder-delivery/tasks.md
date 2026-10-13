@@ -9,8 +9,8 @@ PR 2 — `feat/event-reminder-delivery`
 - [x] 2. RED: I34 row in doc 06 §4 and `TestI34_EventRemindersArePushedAndNeverLate`; I29 widened.
 - [x] 3. RED/GREEN, L1: `deliverAt`, collapse, `RefusalQuietHours` in `eventReminders` (D2-D3).
 - [x] 4. GREEN: capture records a `quiet_hours` drop (D5).
-- [ ] 5. RED/GREEN, L1: `RouteTrigger`, `EventReminderVerdict`; the scan uses both (D6-D7).
-- [ ] 6. Doc 02 §7 and §13, doc 07; `make check-all`; PR.
+- [x] 5. RED/GREEN, L1: `RouteTrigger`, `EventReminderVerdict`; the scan uses both (D6-D7).
+- [x] 6. Doc 02 §7 and §13, doc 07; `make check-all`; PR.
 
 PR 3 — `feat/quiet-hours-preferences`
 - [ ] 7. RED/GREEN, L1: quiet end and evening parsers, `ResolveReminderPrefs` (D8).

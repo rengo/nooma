@@ -57,24 +57,30 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 	morning := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
 	quietHour := time.Date(2026, 8, 5, prospection.QuietHoursStartHour+1, 0, 0, 0, time.UTC)
 
-	// Act 1 — two triggers are armed: one loud, one quiet.
+	// Act 1 — two triggers are armed: one loud, one quiet. The quiet one
+	// is a recurring reminder, because a one-shot event reminder is pushed
+	// whatever its level (ADR-0030) and only a recurring one is digested.
 	seedUnit(t, db, "unit-loud")
 	seedUnit(t, db, "unit-quiet")
 	loud, quiet := 0.9, 0.2
+	yearly := prospection.RuleYearly
 	for _, seed := range []struct {
 		id, unit string
 		level    *float64
 		text     string
+		rule     *prospection.Rule
+		anchor   *prospection.Anchor
 	}{
-		{"trg-loud", "unit-loud", &loud, "call the clinic back"},
-		{"trg-quiet", "unit-quiet", &quiet, "water the plants"},
+		{"trg-loud", "unit-loud", &loud, "call the clinic back", nil, nil},
+		{"trg-quiet", "unit-quiet", &quiet, "water the plants", &yearly, &prospection.Anchor{Month: time.August, Day: 12}},
 	} {
 		fireAt := morning.Add(-time.Minute)
 		unitID := seed.unit
 		if err := triggers.Create(ctx, ports.Trigger{
 			ID: seed.id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
 			InterruptLevel: seed.level, FireAt: &fireAt,
-			Payload:   ports.TriggerPayload{ActionText: seed.text},
+			Payload:        ports.TriggerPayload{ActionText: seed.text},
+			RecurrenceRule: seed.rule, RecurrenceAnchor: seed.anchor,
 			CreatedAt: morning.Add(-24 * time.Hour),
 		}); err != nil {
 			t.Fatalf("arming %s: %v", seed.id, err)

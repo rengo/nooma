@@ -1287,6 +1287,15 @@ have N nudges; a pattern watcher does not hang off any unit):
 **Delivery — digest vs push** (`interrupt_level` 0–1, persisted on the trigger so the glass
 box can audit it):
 
+- **An event reminder is always pushed** ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)):
+  a one-shot trigger — every trigger without a recurrence rule — goes out when due whatever its
+  `interrupt_level`, a degraded one included (`internal/core/prospection.RouteTrigger`); waiting
+  for tomorrow's digest would deliver it after the thing it is about. Quiet hours still defer
+  it, as below. **It is never late**: one whose event has started (`fire_at + lead_minutes`, so
+  only a reminder that carries a lead) is expired with a `check.trigger.expired` row instead of
+  sent (`EventReminderVerdict`). The interrupt split below, and its "a degraded reading never
+  pushes" guarantee, govern every recurring reminder.
+
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, 07:00)` local time: deferred and
   resurfacing on waking — **except a timer**. A timer's instant was set by an explicit user

@@ -11,6 +11,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // TestI34_EventRemindersAreArmedAroundQuietHours is doc 02 §7's delivery
@@ -92,3 +93,60 @@ func TestI34_EventRemindersAreArmedAroundQuietHours(t *testing.T) {
 		})
 	}
 }
+
+// TestI34_EventRemindersArePushedAndNeverLate is the delivery half
+// (ADR-0030 points 1 and 4): a due event reminder is pushed whatever its
+// interrupt level, a degraded one included; a recurring reminder keeps its
+// interrupt routing; and a reminder whose event has already started is
+// expired with a check.trigger.expired row rather than sent.
+func TestI34_EventRemindersArePushedAndNeverLate(t *testing.T) {
+	now := time.Date(2026, 10, 16, 8, 30, 0, 0, time.UTC)
+	low := 0.1
+	yearly := prospection.RuleYearly
+	unitID := "u1"
+
+	cases := []struct {
+		name          string
+		trigger       ports.Trigger
+		wantDelivered int
+		wantExpired   int
+	}{
+		{"a low-interrupt event reminder is pushed", ports.Trigger{InterruptLevel: &low,
+			Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 120}, FireAt: ptrTime(now.Add(-time.Minute))}, 1, 0},
+		{"a degraded event reminder is pushed", ports.Trigger{
+			Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 120}, FireAt: ptrTime(now.Add(-time.Minute))}, 1, 0},
+		{"a pre-ADR-0029 one-shot reminder is pushed", ports.Trigger{InterruptLevel: &low,
+			Payload: ports.TriggerPayload{ActionText: "dentist", LeadDays: 7}, FireAt: ptrTime(now.Add(-time.Minute))}, 1, 0},
+		{"a low-interrupt recurring reminder still waits for the digest", ports.Trigger{InterruptLevel: &low,
+			Payload: ports.TriggerPayload{ActionText: "birthday", LeadDays: 7}, FireAt: ptrTime(now.Add(-time.Minute)),
+			RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 23}}, 0, 0},
+		{"a reminder whose event started 30 minutes ago is expired, not sent", ports.Trigger{InterruptLevel: &low,
+			Payload: ports.TriggerPayload{ActionText: "flight", LeadMinutes: 60}, FireAt: ptrTime(now.Add(-90 * time.Minute))}, 0, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			triggers := memrepo.NewTriggers()
+			log := memrepo.NewDecisionLog()
+			ch := &countingChannel{}
+			tr := tc.trigger
+			tr.ID, tr.UnitID, tr.Kind, tr.CreatedAt = "trg", &unitID, ports.TriggerKindTimeBased, now.Add(-48*time.Hour)
+			if err := triggers.Create(ctx, tr); err != nil {
+				t.Fatal(err)
+			}
+			report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), &counterIDs{}, log, ch,
+				nil, nil, nil, "12449194", nil, nil).Check(ctx, brain.CheckRequest{})
+			if err != nil {
+				t.Fatalf("Check: %v", err)
+			}
+			if report.TriggersDelivered != tc.wantDelivered || ch.sent != tc.wantDelivered {
+				t.Errorf("delivered = %d (sent %d), want %d", report.TriggersDelivered, ch.sent, tc.wantDelivered)
+			}
+			if report.TriggersExpired != tc.wantExpired {
+				t.Errorf("expired = %d, want %d", report.TriggersExpired, tc.wantExpired)
+			}
+		})
+	}
+}
+
+func ptrTime(t time.Time) *time.Time { return &t }

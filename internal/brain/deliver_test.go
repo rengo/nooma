@@ -110,11 +110,13 @@ func TestDeliver_APushRoutedTriggerIsSentAndMarked(t *testing.T) {
 }
 
 // TestDeliver_ADigestRoutedTriggerFiresAndWaits: it is not sent, and it is
-// not marked — the digest finds it in Undelivered.
+// not marked — the digest finds it in Undelivered. Recurring, because a
+// one-shot event reminder is pushed whatever its level (ADR-0030).
 func TestDeliver_ADigestRoutedTriggerFiresAndWaits(t *testing.T) {
-	triggers := &deliveringTriggers{due: []ports.DueTrigger{
-		pushTrigger("trg-1", deliverFireAt, 0.2), // below PushThreshold
-	}}
+	low := pushTrigger("trg-1", deliverFireAt, 0.2) // below PushThreshold
+	yearly := prospection.RuleYearly
+	low.RecurrenceRule = &yearly
+	triggers := &deliveringTriggers{due: []ports.DueTrigger{low}}
 	ch := &sendingChannel{}
 
 	report, err := checkRunner{triggers: triggers, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}, channel: ch, conversation: testConversation}.

@@ -10,8 +10,8 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// fireAndDeliver moves one due trigger armed -> fired and, when its
-// resolved interrupt routes to push, sends it and records that it reached
+// fireAndDeliver moves one due trigger armed -> fired and, when it routes
+// to push (triggerRoute), sends it and records that it reached
 // the user. It reports how many it fired and how many it delivered.
 //
 // **The two counts differ on purpose.** Firing is a decision this pass
@@ -30,7 +30,7 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 		// A dry run reaches the same verdict and reports the same intent.
 		// It does not send: a preview that messaged the user would be a
 		// preview of nothing (m3b's Q1 ruling, applied to a new effect).
-		if prospection.ResolveInterrupt(t.InterruptLevel).Route() == prospection.RoutePush {
+		if triggerRoute(t) == prospection.RoutePush {
 			return 1, 1, nil
 		}
 		return 1, 0, nil
@@ -47,15 +47,15 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 		return 0, 0, fmt.Errorf("check: fire trigger %q: %w", t.ID, err)
 	}
 
-	interrupt := prospection.ResolveInterrupt(t.InterruptLevel)
+	route := triggerRoute(t)
 	if err := r.record(ctx, now, ports.ActionCheckTriggerFired,
-		fmt.Sprintf("trigger %q came due and fired, routed to %s", t.ID, interrupt.Route()),
+		fmt.Sprintf("trigger %q came due and fired, routed to %s", t.ID, route),
 		checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictDeliver)},
 	); err != nil {
 		return 0, 0, err
 	}
 
-	if interrupt.Route() != prospection.RoutePush {
+	if route != prospection.RoutePush {
 		// The digest's, and it is already in Undelivered. Nothing more to
 		// do here, and no second row: waiting is not an effect.
 		return 1, 0, nil
@@ -69,6 +69,12 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 		return 1, 0, nil
 	}
 	return 1, 1, nil
+}
+
+// triggerRoute is where a due trigger goes: an event reminder (one-shot) is
+// pushed, a recurring one follows its interrupt level (ADR-0030 point 1).
+func triggerRoute(t ports.DueTrigger) prospection.Route {
+	return prospection.RouteTrigger(t.RecurrenceRule != nil, prospection.ResolveInterrupt(t.InterruptLevel))
 }
 
 // deliver sends one trigger and records that it reached the user. It

@@ -110,7 +110,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	report.TriggersDue = len(due)
 
 	for _, t := range due {
-		status, writes := triggerTransition(prospection.TriggerVerdict(t.FireAt, now))
+		status, writes := triggerTransition(triggerVerdict(t, now))
 		if !writes {
 			continue
 		}
@@ -393,6 +393,19 @@ func (r checkRunner) skipOnConflict(ctx context.Context, now time.Time, err, sen
 		return false, recordErr
 	}
 	return true, nil
+}
+
+// triggerVerdict is the gate for one due trigger. An event reminder whose
+// event is known — a one-shot trigger with a lead, fire_at + lead_minutes
+// being its event (ADR-0029 D4) — is never sent once that event has
+// started (ADR-0030 point 4); every other trigger is TriggerVerdict's. An
+// at-once reminder carries no lead and is due the minute it is armed.
+func triggerVerdict(t ports.DueTrigger, now time.Time) prospection.Verdict {
+	if t.RecurrenceRule == nil && t.Payload.LeadMinutes > 0 {
+		eventAt := t.FireAt.Add(time.Duration(t.Payload.LeadMinutes) * time.Minute)
+		return prospection.EventReminderVerdict(t.FireAt, eventAt, now)
+	}
+	return prospection.TriggerVerdict(t.FireAt, now)
 }
 
 // triggerTransition maps one verdict to the triggers.status a scan writes

@@ -160,9 +160,10 @@ of a black box.
 1. **Only speaks to a chat you allowed.** The Telegram channel will not start without
    `allowed_chat_ids`; messages from any other chat are refused. It uses long polling, so it
    opens no inbound port ([ADR-0014](adr/0014-telegram-transport.md)).
-2. **Splits what is urgent from what can wait.** A trigger above the push threshold goes out
-   immediately, except during quiet hours, when it waits for you to wake. Everything else
-   accumulates for the digest ([doc 02 §7, delivery](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
+2. **Splits what is urgent from what can wait.** A reminder of an event always goes out on its
+   own when due, whatever its urgency, and never after the event has started. Another trigger
+   above the push threshold goes out immediately too. Either waits for you to wake during
+   quiet hours. Everything else accumulates for the digest ([doc 02 §7, delivery](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
    Hours and thresholds are in [§13](02-cognitive-core.md#13-calibration--numbers-vs-mechanisms).
 3. **Sends one digest a day.** It carries the top items by priority. A vault that was off for
    three days owes one digest, not three. If your last energy reading is low, it holds back
