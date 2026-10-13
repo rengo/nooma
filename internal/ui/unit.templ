@@ -43,10 +43,12 @@ templ unitBody(detail brain.UnitDetail, res *brain.CaptureResult) {
 				@correctOutcome(*res)
 			}
 		</div>
-		<form method="post" action={ templ.URL("/ui/units/" + detail.Unit.ID + "/correct") }>
+		<form method="post" action={ templ.URL("/ui/units/" + detail.Unit.ID + "/correct") } hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop">
 			<label for="text">What is wrong?</label>
 			<textarea id="text" name="text" rows="2" placeholder="It is on the 9th at 10" required></textarea>
-			<button type="submit">Submit correction</button>
+			<button type="submit">
+				@submitLabel("Submit correction", "Saving…")
+			</button>
 		</form>
 	</section>
 	<section data-view="relations">

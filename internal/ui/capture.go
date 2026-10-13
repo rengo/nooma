@@ -143,7 +143,9 @@ func (h *Handler) renderCorrectResponse(w http.ResponseWriter, r *http.Request, 
 // (units.go, design §3.5).
 func renderCaptureResponse(w http.ResponseWriter, r *http.Request, result brain.CaptureResult) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if r.Header.Get("HX-Request") == "true" {
+	// A boosted submit (the correction form) swaps the whole answer into the
+	// page, so it needs the page, not the fragment.
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
 		_ = captureOutcome(result).Render(r.Context(), w)
 		return
 	}

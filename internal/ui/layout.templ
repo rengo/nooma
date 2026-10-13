@@ -13,7 +13,7 @@ templ Page(title string, body templ.Component) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<meta name="htmx-config" content={ `{"allowEval":false,"includeIndicatorStyles":false,"responseHandling":[{"code":"...","swap":true}]}` }/>
+			<meta name="htmx-config" content={ `{"allowEval":false,"includeIndicatorStyles":false,"allowScriptTags":false,"responseHandling":[{"code":"...","swap":true}]}` }/>
 			<title>{ title }</title>
 			<link rel="stylesheet" href="/ui/static/app.css"/>
 		</head>

@@ -540,17 +540,23 @@ func TestCorrectView_AskStaysOnTheUnitPage(t *testing.T) {
 	}
 }
 
-// The correction form is a plain POST: the answer is a full page, so an
-// error answer (404, 500) replaces the page with its message instead of
-// htmx swapping an empty selection over the unit.
-func TestUnitView_CorrectionFormIsAPlainPost(t *testing.T) {
+// The correction form's answer is a full page, so it is boosted (the page
+// replaces the page) and never targets a fragment: an error answer (404,
+// 500) replaces the page with its message instead of htmx swapping an empty
+// selection over the unit.
+func TestUnitView_CorrectionFormIsABoostedFullPagePost(t *testing.T) {
 	t.Parallel()
 	detail := brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.TypeTask, Content: "Pay rent", CreatedAt: time.Now()}}
 	rec := httptest.NewRecorder()
 	ui.New(ui.Deps{Units: stubUnitsReader{detail: detail, detailFound: true}}).ServeHTTP(rec, unitRequest("unit-1"))
 	form := between(t, rec.Body.String(), `action="/ui/units/unit-1/correct"`, "</form>")
-	if strings.Contains(form, "hx-") {
-		t.Errorf("correction form carries htmx attributes:\n%s", form)
+	if !strings.Contains(form, `hx-boost="true"`) {
+		t.Errorf("correction form is not boosted:\n%s", form)
+	}
+	for _, bad := range []string{"hx-post", "hx-target", "hx-select"} {
+		if strings.Contains(form, bad) {
+			t.Errorf("correction form carries %s, which would swap a fragment:\n%s", bad, form)
+		}
 	}
 }
 
