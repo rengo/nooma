@@ -33,11 +33,22 @@ const DigestHour = 7
 // user's local one — the zone travels inside the instant, as everywhere
 // else in this package.
 func DigestDue(lastDigestAt *time.Time, now time.Time) bool {
-	if now.Hour() < DigestHour {
+	return DefaultQuietHours().DigestDue(lastDigestAt, now)
+}
+
+// DigestDue is the package DigestDue in q's night: due at the later of
+// DigestHour and q's end, so a user's later quiet end only ever delays the
+// digest, and an earlier one never brings it before DigestHour (ADR-0030
+// point 5).
+func (q QuietHours) DigestDue(lastDigestAt *time.Time, now time.Time) bool {
+	hour := TimeOfDay{Hour: DigestHour}
+	if hour.before(q.End) {
+		hour = q.End
+	}
+	dueAt := hour.on(now, 0, now.Location())
+	if now.Before(dueAt) {
 		return false
 	}
-	y, m, d := now.Date()
-	dueAt := time.Date(y, m, d, DigestHour, 0, 0, 0, now.Location())
 	return lastDigestAt == nil || lastDigestAt.Before(dueAt)
 }
 

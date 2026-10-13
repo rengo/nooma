@@ -144,6 +144,38 @@ func TestConfigRepo_LoadReadsReminderPreferences(t *testing.T) {
 	}
 }
 
+// TestConfigRepo_LoadReadsQuietHoursPreferences: migration 0007's two
+// columns come back as stored — absent as nil, a corrupt value verbatim —
+// for prospection.ResolveReminderPrefs to judge (ADR-0030 point 5).
+func TestConfigRepo_LoadReadsQuietHoursPreferences(t *testing.T) {
+	v := openTestVault(t)
+	repo := NewConfigRepo(v)
+	ctx := context.Background()
+	at := configFixtureTime.Format(unitTimeLayout)
+
+	if _, err := v.db.ExecContext(ctx, `INSERT INTO config (id, updated_at) VALUES (1, ?)`, at); err != nil {
+		t.Fatalf("seeding config row: %v", err)
+	}
+	got, err := repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.QuietHoursEnd != nil || got.EveningReminderAt != nil {
+		t.Errorf("never chosen = %v, %v, want both nil", got.QuietHoursEnd, got.EveningReminderAt)
+	}
+
+	if _, err := v.db.ExecContext(ctx, `UPDATE config SET quiet_hours_end = '08:30', evening_reminder_at = '99:99' WHERE id = 1`); err != nil {
+		t.Fatalf("setting preferences: %v", err)
+	}
+	got, err = repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.QuietHoursEnd == nil || *got.QuietHoursEnd != "08:30" || got.EveningReminderAt == nil || *got.EveningReminderAt != "99:99" {
+		t.Errorf("stored = %v, %v, want both as stored, the corrupt time included", got.QuietHoursEnd, got.EveningReminderAt)
+	}
+}
+
 // TestConfigRepo_LoadMalformedConsolidationLastRunAtErrors is task 6.1's own
 // sqlite-specific case: a consolidation_last_run_at TEXT value that does not
 // parse as unitTimeLayout must error, never decode to nil — design §3.4's

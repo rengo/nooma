@@ -44,7 +44,8 @@ func (r *ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error) {
 	const q = `
 SELECT weight_threshold, hysteresis_margin, consolidation_enabled,
        goal_stagnation_days, mental_load_threshold, consolidation_last_run_at,
-       event_reminder_leads, date_only_reminder_at
+       event_reminder_leads, date_only_reminder_at,
+       quiet_hours_end, evening_reminder_at
 FROM config WHERE id = 1`
 
 	var (
@@ -53,11 +54,12 @@ FROM config WHERE id = 1`
 		goalStagnationDays, mentalLoadThreshold sql.NullInt64
 		consolidationLastRunAt                  sql.NullString
 		reminderLeads, dateOnlyAt               sql.NullString
+		quietEnd, eveningAt                     sql.NullString
 	)
 	err := r.db.QueryRowContext(ctx, q).Scan(
 		&weightThreshold, &hysteresisMargin, &consolidationEnabled,
 		&goalStagnationDays, &mentalLoadThreshold, &consolidationLastRunAt,
-		&reminderLeads, &dateOnlyAt,
+		&reminderLeads, &dateOnlyAt, &quietEnd, &eveningAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ports.VaultConfig{}, nil
@@ -92,6 +94,12 @@ FROM config WHERE id = 1`
 	}
 	if dateOnlyAt.Valid {
 		cfg.DateOnlyReminderAt = &dateOnlyAt.String
+	}
+	if quietEnd.Valid {
+		cfg.QuietHoursEnd = &quietEnd.String
+	}
+	if eveningAt.Valid {
+		cfg.EveningReminderAt = &eveningAt.String
 	}
 	if consolidationLastRunAt.Valid {
 		t, err := time.Parse(unitTimeLayout, consolidationLastRunAt.String)

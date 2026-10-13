@@ -26,9 +26,10 @@ const digestHistoryDays = prospection.MaxDigestDeferrals + 2
 // assembleDigest sends one digest if one is due, and reports how many
 // items it carried.
 //
-// Everything it decides is prospection's: DigestDue says whether a digest
-// is owed, LowEnergy reads the care gate, and Carry splits what goes out
-// from what waits. This supplies their inputs and persists their outcome.
+// Everything it decides is prospection's: DigestDue, in the scan's night,
+// says whether a digest is owed, LowEnergy reads the care gate, and Carry
+// splits what goes out from what waits. This supplies their inputs and
+// persists their outcome.
 func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit bool) (int, error) {
 	if r.channel == nil {
 		// No channel, no digest. The push path already declines to mark
@@ -46,7 +47,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, fmt.Errorf("check: reading digest history: %w", err)
 	}
 
-	if !prospection.DigestDue(lastDigestAt(history), now) {
+	if !r.night.DigestDue(lastDigestAt(history), now) {
 		return 0, nil
 	}
 

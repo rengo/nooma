@@ -297,9 +297,12 @@ func wireChannel(cfg *config.Config, lookup func(string) (string, bool), log io.
 // and loads no index, because a due scan calls no model and searches
 // nothing — the shortest wiring function in this file, and short for a
 // reason worth stating rather than for one worth wondering about.
-func wireCheck(db *sqlite.Vault) *brain.CheckService {
+//
+// clock is a parameter for the test that pins its quiet-hours wiring;
+// `nooma check` hands it systemClock{}.
+func wireCheck(clock ports.Clock, db *sqlite.Vault) *brain.CheckService {
 	return brain.NewCheckService(
-		systemClock{},
+		clock,
 		sqlite.NewTriggerRepo(db),
 		sqlite.NewTimerRepo(db),
 		uuidGen{},
@@ -330,7 +333,9 @@ func wireCheck(db *sqlite.Vault) *brain.CheckService {
 		// a focus, and a second keeper beside serve's would be one nothing
 		// reads.
 		nil,
-	)
+	// The user's night, as serve's pass reads it: a manual scan that
+	// fired what serve would still hold would disagree with it.
+	).WithQuietHours(sqlite.NewConfigRepo(db))
 }
 
 // wireFocus builds the one *brain.FocusKeeper a serve process shares between
@@ -516,7 +521,7 @@ func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, look
 		// The keeper serve built once and hands to Today too: the digest
 		// reads and writes the same previous focus.
 		keeper,
-	), nil
+	).WithQuietHours(sqlite.NewConfigRepo(db)), nil
 }
 
 func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel, keeper *brain.FocusKeeper) (*scheduler.Scheduler, error) {

@@ -109,7 +109,7 @@ func TestCheckEffectCompleteness(t *testing.T) {
 			}
 
 			// A timer never defers — TimerVerdict passes
-			// deferInQuietHours = false, which is the one push exception
+			// no night (deferIn = nil), which is the one push exception
 			// to quiet hours (doc 02 §7). At the Defer instant a timer is
 			// judged on staleness alone, so its expected count is that
 			// verdict's, not zero. Encoding it as "0 because defer" would

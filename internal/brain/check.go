@@ -102,6 +102,9 @@ func (s *CheckService) Check(ctx context.Context, req CheckRequest) (CheckReport
 // run a preview of this scan rather than a story about it.
 func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckReport, error) {
 	var report CheckReport
+	// r is this scan's copy: the user's night, read once, is what every
+	// verdict and the digest below are judged in.
+	r.night = r.quietHours(ctx)
 
 	due, err := r.triggers.Due(ctx, now)
 	if err != nil {
@@ -110,7 +113,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	report.TriggersDue = len(due)
 
 	for _, t := range due {
-		status, writes := triggerTransition(triggerVerdict(t, now))
+		status, writes := triggerTransition(triggerVerdict(t, now, r.night))
 		if !writes {
 			continue
 		}
@@ -271,6 +274,12 @@ type checkRunner struct {
 	// fires and expires.
 	units ports.UnitRepo
 	state ports.StateRepo
+	// config is where the user's quiet end is read, once per scan, into
+	// night. Nil means the default night. A runner whose night was never
+	// read (a test calling assembleDigest directly) holds the zero night,
+	// whose digest is due at DigestHour exactly as the default's is.
+	config ports.ConfigRepo
+	night  prospection.QuietHours
 	// llm words a timer at delivery. Nil is legal: a vault with no
 	// provider bound delivers the user's own words, which is what the
 	// rephrasing falls back to anyway.
@@ -400,12 +409,27 @@ func (r checkRunner) skipOnConflict(ctx context.Context, now time.Time, err, sen
 // being its event (ADR-0029 D4) — is never sent once that event has
 // started (ADR-0030 point 4); every other trigger is TriggerVerdict's. An
 // at-once reminder carries no lead and is due the minute it is armed.
-func triggerVerdict(t ports.DueTrigger, now time.Time) prospection.Verdict {
+func triggerVerdict(t ports.DueTrigger, now time.Time, night prospection.QuietHours) prospection.Verdict {
 	if t.RecurrenceRule == nil && t.Payload.LeadMinutes > 0 {
 		eventAt := t.FireAt.Add(time.Duration(t.Payload.LeadMinutes) * time.Minute)
-		return prospection.EventReminderVerdict(t.FireAt, eventAt, now)
+		return night.EventReminderVerdict(t.FireAt, eventAt, now)
 	}
-	return prospection.TriggerVerdict(t.FireAt, now)
+	return night.TriggerVerdict(t.FireAt, now)
+}
+
+// WithQuietHours lets the scan defer to the user's stored quiet end
+// (ADR-0030 point 5), read from cfg once per scan. Without it, the
+// default night.
+func (s *CheckService) WithQuietHours(cfg ports.ConfigRepo) *CheckService {
+	s.run.config = cfg
+	return s
+}
+
+// quietHours is the user's night, read once per scan. A failed read
+// defers to the default night rather than failing the scan: the
+// preference is a comfort, the scan's other work is not.
+func (r checkRunner) quietHours(ctx context.Context) prospection.QuietHours {
+	return prospection.QuietHours{End: reminderPrefs(ctx, r.config).QuietEnd}
 }
 
 // triggerTransition maps one verdict to the triggers.status a scan writes
@@ -443,7 +467,7 @@ func triggerTransition(v prospection.Verdict) (ports.TriggerStatus, bool) {
 // because a timer's firing IS its delivery and there is no rendering step
 // for it to wait on.
 //
-// Defer is unreachable: TimerVerdict passes deferInQuietHours = false,
+// Defer is unreachable: TimerVerdict passes no night (deferIn = nil),
 // which is how a timer stays the one push exception to quiet hours. It
 // still gets a defined answer here rather than falling into a panic that
 // waits for the day it becomes reachable.

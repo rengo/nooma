@@ -63,7 +63,7 @@ func TestTriggerTransition_MapsEveryVerdict(t *testing.T) {
 // timer half.
 //
 // VerdictDefer is unreachable for a timer — TimerVerdict passes
-// deferInQuietHours = false, which is how a timer stays the one push
+// no night (deferIn = nil), which is how a timer stays the one push
 // exception to quiet hours — and it is still given a defined answer here
 // rather than left to fall through. An unreachable case that panics is a
 // crash waiting for the day it becomes reachable.

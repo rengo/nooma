@@ -20,6 +20,8 @@ type VaultConfig struct {
 	ConsolidationLastRunAt *time.Time // → passContext.since, and m2d's boot catch-up
 	EventReminderLeads     *string    // → prospection.ResolveReminderPrefs (ADR-0029)
 	DateOnlyReminderAt     *string    // → prospection.ResolveReminderPrefs
+	QuietHoursEnd          *string    // → prospection.ResolveReminderPrefs (ADR-0030)
+	EveningReminderAt      *string    // → prospection.ResolveReminderPrefs
 }
 
 // ConfigRepo is the repository port over the config singleton row —

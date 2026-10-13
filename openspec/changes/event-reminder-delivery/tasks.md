@@ -13,7 +13,7 @@ PR 2 — `feat/event-reminder-delivery`
 - [x] 6. Doc 02 §7 and §13, doc 07; `make check-all`; PR.
 
 PR 3 — `feat/quiet-hours-preferences`
-- [ ] 7. RED/GREEN, L1: quiet end and evening parsers, `ResolveReminderPrefs` (D8).
-- [ ] 8. RED/GREEN, L3: migration 0007, `ConfigRepo.Load`, schema golden.
-- [ ] 9. RED/GREEN: `QuietHours` in the verdicts and `DigestDue`; the scan reads it (D9).
-- [ ] 10. Doc 02 §7/§13, doc 03 `config`; `make check-all`; PR.
+- [x] 7. RED/GREEN, L1: quiet end and evening parsers, `ResolveReminderPrefs` (D8).
+- [x] 8. RED/GREEN, L3: migration 0007, `ConfigRepo.Load`, schema golden.
+- [x] 9. RED/GREEN: `QuietHours` in the verdicts and `DigestDue`; the scan reads it (D9).
+- [x] 10. Doc 02 §7/§13, doc 03 `config`; `make check-all`; PR.

@@ -142,3 +142,85 @@ func TestDeliverableFrom(t *testing.T) {
 		})
 	}
 }
+
+// TestQuietHours is ADR-0030 point 5's night: [QuietHoursStartHour, End)
+// on the instant's own wall clock, deferred to End.
+func TestQuietHours(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(hour, minute int) time.Time { return time.Date(2026, 10, 16, hour, minute, 0, 0, zone) }
+	q := QuietHours{End: TimeOfDay{Hour: 9, Minute: 30}}
+	for _, tc := range []struct {
+		now   time.Time
+		quiet bool
+		from  time.Time
+	}{
+		{at(0, 0), true, at(9, 30)},
+		{at(9, 29), true, at(9, 30)},
+		{at(9, 30), false, at(9, 30)},
+		{at(23, 59), false, at(23, 59)},
+	} {
+		if got := q.Contains(tc.now); got != tc.quiet {
+			t.Errorf("Contains(%v) = %v, want %v", tc.now, got, tc.quiet)
+		}
+		if got := q.DeliverableFrom(tc.now); !got.Equal(tc.from) {
+			t.Errorf("DeliverableFrom(%v) = %v, want %v", tc.now, got, tc.from)
+		}
+	}
+	// The default night is the package's own InQuietHours, minute by minute.
+	def := DefaultQuietHours()
+	for m := 0; m < 24*60; m++ {
+		now := at(0, 0).Add(time.Duration(m) * time.Minute)
+		if def.Contains(now) != InQuietHours(now) || !def.DeliverableFrom(now).Equal(DeliverableFrom(now)) {
+			t.Fatalf("the default night disagrees with InQuietHours/DeliverableFrom at %v", now)
+		}
+	}
+}
+
+// TestQuietHours_TriggerVerdict: a trigger is deferred to the user's quiet
+// end, and its staleness is measured from it.
+func TestQuietHours_TriggerVerdict(t *testing.T) {
+	at := func(hour, minute int) time.Time { return time.Date(2026, 10, 16, hour, minute, 0, 0, time.UTC) }
+	q := QuietHours{End: TimeOfDay{Hour: 9}}
+	fireAt := at(6, 0)
+	for _, tc := range []struct {
+		now  time.Time
+		want Verdict
+	}{
+		{at(8, 59), VerdictDefer},
+		{at(9, 0), VerdictDeliver},
+		{at(9, 0).Add(TriggerStalenessHours * time.Hour), VerdictDeliver},
+		{at(9, 1).Add(TriggerStalenessHours * time.Hour), VerdictStale},
+	} {
+		if got := q.TriggerVerdict(fireAt, tc.now); got != tc.want {
+			t.Errorf("TriggerVerdict at %v = %s, want %s", tc.now, got, tc.want)
+		}
+	}
+	if got := q.EventReminderVerdict(fireAt, at(10, 0), at(8, 0)); got != VerdictDefer {
+		t.Errorf("EventReminderVerdict before the stored quiet end = %s, want defer", got)
+	}
+}
+
+// TestQuietHours_DigestDue: the digest is due at the later of DigestHour
+// and the user's quiet end, never inside the night.
+func TestQuietHours_DigestDue(t *testing.T) {
+	at := func(hour, minute int) time.Time { return time.Date(2026, 10, 16, hour, minute, 0, 0, time.UTC) }
+	for _, tc := range []struct {
+		end     TimeOfDay
+		notYet  time.Time
+		dueFrom time.Time
+	}{
+		{TimeOfDay{Hour: 9, Minute: 15}, at(9, 14), at(9, 15)},
+		{TimeOfDay{Hour: 5}, at(DigestHour, 0).Add(-time.Minute), at(DigestHour, 0)},
+	} {
+		q := QuietHours{End: tc.end}
+		if q.DigestDue(nil, tc.notYet) || !q.DigestDue(nil, tc.dueFrom) {
+			t.Errorf("quiet end %v: DigestDue at %v, %v = %v, %v; want false, true",
+				tc.end, tc.notYet, tc.dueFrom, q.DigestDue(nil, tc.notYet), q.DigestDue(nil, tc.dueFrom))
+		}
+		sentYesterday := tc.dueFrom.AddDate(0, 0, -1)
+		sentBeforeDue := tc.dueFrom.Add(-time.Minute)
+		if !q.DigestDue(&sentYesterday, tc.dueFrom) || !q.DigestDue(&sentBeforeDue, tc.dueFrom) || q.DigestDue(&tc.dueFrom, tc.dueFrom.Add(time.Hour)) {
+			t.Errorf("quiet end %v: the last-sent instant is not judged against the shifted due time", tc.end)
+		}
+	}
+}

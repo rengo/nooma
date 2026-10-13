@@ -59,15 +59,10 @@ func (d TimeOfDay) on(t time.Time, days int, zone *time.Location) time.Time {
 // result is before eventAt: the quiet-end branch checks it, and the other
 // two are at or before nominal, itself before the event.
 func deliverAt(nominal, eventAt, now time.Time, prefs ReminderPrefs) (time.Time, bool) {
-	zone := now.Location()
-	quiet := func(t time.Time) bool {
-		local := t.In(zone)
-		return t.Before(prefs.QuietEnd.on(local, 0, zone)) && !t.Before(TimeOfDay{Hour: QuietHoursStartHour}.on(local, 0, zone))
-	}
+	zone, night := now.Location(), QuietHours{End: prefs.QuietEnd}
 	at := nominal
-	if quiet(nominal) {
-		local := nominal.In(zone)
-		at = prefs.QuietEnd.on(local, 0, zone)
+	if local := nominal.In(zone); night.Contains(local) {
+		at = night.DeliverableFrom(local)
 		if !at.Before(eventAt) {
 			at = prefs.EveningAt.on(local, -1, zone)
 		}
@@ -75,7 +70,7 @@ func deliverAt(nominal, eventAt, now time.Time, prefs ReminderPrefs) (time.Time,
 	if !at.Before(now) {
 		return at, true
 	}
-	if quiet(now) {
+	if night.Contains(now) {
 		return time.Time{}, false
 	}
 	return now, true

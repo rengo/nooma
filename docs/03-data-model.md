@@ -232,13 +232,16 @@ CREATE TABLE config (
   consolidation_last_run_at TEXT,                -- NULL = never ran
   updated_at                TEXT NOT NULL,
   event_reminder_leads      TEXT,                -- JSON array of minutes, e.g. [1440,120]; NULL = default
-  date_only_reminder_at     TEXT                 -- HH:MM local; NULL = default
+  date_only_reminder_at     TEXT,                -- HH:MM local; NULL = default
+  quiet_hours_end           TEXT,                -- HH:MM local, 00:01 to 12:00; NULL = default (07:00)
+  evening_reminder_at       TEXT                 -- HH:MM local, quiet end to 23:59; NULL = default (22:00)
 );
 ```
 
-(The two reminder columns are migration 0006's, appended by `ALTER TABLE`, hence after
-`updated_at`. They are the user's preferences, not calibration: `NULL` means "never chosen" and
-resolves to the default in `prospection.ResolveReminderPrefs`, ADR-0029.)
+(The two reminder columns are migration 0006's and the two quiet-hours columns migration
+0007's, appended by `ALTER TABLE`, hence after `updated_at`. They are the user's preferences,
+not calibration: `NULL` means "never chosen" and resolves to the default in
+`prospection.ResolveReminderPrefs`, ADR-0029 and ADR-0030.)
 
 (The schedule is neither here nor in `nooma.yml`: it is two constants in `internal/scheduler`,
 retired from configuration by [ADR-0025](adr/0025-the-schedule-is-not-a-setting.md). What this

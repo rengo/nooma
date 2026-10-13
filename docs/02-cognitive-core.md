@@ -1263,10 +1263,14 @@ have N nudges; a pattern watcher does not hang off any unit):
   every instant above, the at-once one included, is adjusted before it is stored, by
   `internal/core/prospection.eventReminders`, so the reply, the trail and a correction (§5
   step 4, which plans through the same function) all name the instant the reminder really
-  fires at. One whose instant falls in quiet hours `[00:00, quiet end)` local — quiet end
-  07:00 — is armed **at that night's quiet end** when that is still before the event, and
-  otherwise **the evening before at 22:00** (`default_evening_reminder_hour`): earlier, never
-  later. One whose adjusted instant is behind the arming instant is armed at once when that
+  fires at. One whose instant falls in quiet hours `[00:00, quiet end)` local is armed **at
+  that night's quiet end** when that is still before the event, and otherwise **the evening
+  before at the evening time**: earlier, never later. Both are the user's preferences, like the
+  leads: `config.quiet_hours_end` (default 07:00, `quiet_hours_end_hour`; valid `00:01` to
+  `max_quiet_end_hour`:00) and `config.evening_reminder_at` (default 22:00,
+  `default_evening_reminder_hour`; valid from the resolved quiet end to `23:59`, so the evening
+  is never itself quiet), resolved by the same `ResolveReminderPrefs` and read at arm time by
+  capture and correction; the due scan reads the same quiet end (below). One whose adjusted instant is behind the arming instant is armed at once when that
   instant is outside quiet hours; when it is not, no allowed instant is left before the
   event and the reminder is not armed — a capture records why, `capture.arm.refused` with
   reason `quiet_hours`, and the unit stays stored. Two reminders the adjustment lands on one
@@ -1304,8 +1308,9 @@ box can audit it):
   pushes" guarantee, govern every recurring reminder.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
-  skipping cadence and gates. Quiet hours `[00:00, 07:00)` local time: deferred and
-  resurfacing on waking — **except a timer**. A timer's instant was set by an explicit user
+  skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
+  user's `config.quiet_hours_end` (default 07:00, read once per due scan into
+  `prospection.QuietHours`): deferred and resurfacing on waking — **except a timer**. A timer's instant was set by an explicit user
   instruction at capture ("remind me in 15 min"); an inferred trigger's instant was not, and an
   inferred trigger always defers through quiet hours regardless of its own `interrupt_level`. An
   explicit instruction outranks the quiet-hours policy window; an inference does not. Mutually
@@ -1318,7 +1323,9 @@ box can audit it):
     quiet-hours-deferred pushes have resurfaced and the digest has not, making the user's first
     morning contact the lane this design says should be rarer. The hour quiet hours end is the only
     one that is neither, and `digest_hour` is a separate knob from `quiet_hours_end_hour` with the
-    relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality.
+    relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality. A
+    user's later quiet end delays the digest to it: it is due at the later of `digest_hour` and
+    the user's quiet end, so it is never born deferred ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)).
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery.
     **Low** is `energy < low_energy_max`, strict — this gate suppresses delivery, so the burden of
@@ -1584,12 +1591,13 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
-| `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split |
+| `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split. The default of an event reminder's quiet end, user-overridable: `config.quiet_hours_end` (ADR-0030) |
 | `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a recurring reminder's next occurrence its trigger fires; a dated event uses the three rows below (ADR-0029). A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
 | Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours` + `ResolveReminderPrefs`) | 24 — hours before a timed event its first reminder fires (ADR-0029). User-overridable: `config.event_reminder_leads` |
 | Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours` + `ResolveReminderPrefs`) | 2 — hours before a timed event its second reminder fires. User-overridable, same column |
 | Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded. User-overridable: `config.date_only_reminder_at` |
-| `default_evening_reminder_hour` (`internal/core/prospection.DefaultEveningReminderHour`) | 22 — local hour, the evening before, an event reminder is armed at when its instant falls in quiet hours and the event is at or before quiet end (ADR-0030). Not yet user-overridable |
+| `default_evening_reminder_hour` (`internal/core/prospection.DefaultEveningReminderHour` + `ResolveReminderPrefs`) | 22 — local hour, the evening before, an event reminder is armed at when its instant falls in quiet hours and the event is at or before quiet end (ADR-0030). User-overridable: `config.evening_reminder_at` |
+| `max_quiet_end_hour` (`internal/core/prospection.MaxQuietEndHour`) | 12 — the latest quiet end a user may set; a bound on input, not a default |
 | `max_event_reminder_leads` (`internal/core/prospection.MaxEventReminderLeads`) | 5 — the most reminders a user may set per timed event; a bound on input, not a default |
 | `max_event_lead_days` (`internal/core/prospection.MaxEventLeadDays`) | 30 — the furthest ahead of a timed event a user may set a reminder |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
