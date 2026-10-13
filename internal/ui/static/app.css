@@ -99,6 +99,9 @@
 		--row-title-min: 16rem;
 		--input-min-height: 2.5rem;
 		--transition: 120ms ease-out;
+		--spinner-size: 0.875rem;
+		--spinner-duration: 700ms;
+		--spinner-turn: 1turn;
 
 		/* Colour roles. light-dark() keeps theming one declaration per role
 		 * instead of a second stylesheet (ADR-0018). Text roles hold at least
@@ -246,6 +249,47 @@
 	button:hover {
 		background: var(--color-accent-hover);
 		border-color: var(--color-accent-hover);
+	}
+
+	/* A submit that is waiting on the model: htmx disables the button and
+	 * puts .htmx-request on the form until the answer arrives. The pending
+	 * label (with a spinner) replaces the idle one; both are in the markup,
+	 * so no script is needed. */
+	button:disabled {
+		cursor: progress;
+		background: var(--color-accent);
+		border-color: var(--color-accent);
+	}
+
+	[data-pending] {
+		display: none;
+	}
+
+	.htmx-request [data-idle] {
+		display: none;
+	}
+
+	.htmx-request [data-pending] {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.htmx-request [data-pending]::before {
+		content: "";
+		box-sizing: border-box;
+		width: var(--spinner-size);
+		height: var(--spinner-size);
+		border: var(--focus-width) solid currentColor;
+		border-inline-end-color: transparent;
+		border-radius: var(--radius-pill);
+		animation: spin var(--spinner-duration) linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(var(--spinner-turn));
+		}
 	}
 
 	summary {
@@ -870,6 +914,10 @@
 	@media (prefers-reduced-motion: reduce) {
 		* {
 			transition: none !important;
+		}
+
+		[data-pending]::before {
+			animation: none;
 		}
 	}
 }

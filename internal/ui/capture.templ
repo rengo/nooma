@@ -16,11 +16,13 @@ templ CapturePage(result *brain.CaptureResult) {
 templ captureBody(result *brain.CaptureResult) {
 	<section>
 		<h2>CAPTURE</h2>
-		<form method="post" action="/ui/capture" hx-post="/ui/capture" hx-target="#capture-result" hx-swap="innerHTML">
+		<form method="post" action="/ui/capture" hx-post="/ui/capture" hx-target="#capture-result" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop">
 			<label for="text">Text</label>
 			<p id="text-hint" data-hint>A task, an event, a note, a reminder or a question: write it as you would say it.</p>
 			<textarea id="text" name="text" rows="4" aria-describedby="text-hint" required></textarea>
-			<button type="submit">Capture</button>
+			<button type="submit">
+				@submitLabel("Capture", "Capturing…")
+			</button>
 		</form>
 		<div id="capture-result">
 			if result != nil {
@@ -79,4 +81,14 @@ templ captureOutcome(result brain.CaptureResult) {
 				<p data-outcome="asked">Nothing was changed: it was not clear what to change. Write the one new value, a date or the new wording.</p>
 		}
 	}
+}
+
+// submitLabel is the content of a submit button whose form waits on the
+// model. Both labels are rendered; while htmx has a request in flight it
+// puts .htmx-request on the form and app.css shows the pending one (with a
+// spinner) in place of the idle one. The pending label is aria-hidden: the
+// button is disabled meanwhile and keeps its accessible name.
+templ submitLabel(idle, pending string) {
+	<span data-idle>{ idle }</span>
+	<span data-pending aria-hidden="true">{ pending }</span>
 }

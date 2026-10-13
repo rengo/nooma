@@ -131,6 +131,9 @@ func (h *Handler) renderCorrectResponse(w http.ResponseWriter, r *http.Request, 
 		}
 		if err == nil && found {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			// The boosted POST would stay in the address bar, and a reload
+			// of it is a 405: the unit page is where the user now is.
+			w.Header().Set("HX-Replace-Url", "/ui/units/"+detail.Unit.ID)
 			_ = UnitPage(detail, &result).Render(r.Context(), w)
 			return
 		}
@@ -143,9 +146,14 @@ func (h *Handler) renderCorrectResponse(w http.ResponseWriter, r *http.Request, 
 // (units.go, design §3.5).
 func renderCaptureResponse(w http.ResponseWriter, r *http.Request, result brain.CaptureResult) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if r.Header.Get("HX-Request") == "true" {
+	// A boosted submit (the correction form) swaps the whole answer into the
+	// page, so it needs the page, not the fragment.
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
 		_ = captureOutcome(result).Render(r.Context(), w)
 		return
+	}
+	if r.Header.Get("HX-Boosted") == "true" {
+		w.Header().Set("HX-Replace-Url", "/ui/capture")
 	}
 	_ = CapturePage(&result).Render(r.Context(), w)
 }
