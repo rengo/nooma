@@ -976,7 +976,10 @@ func armedTrigger(id string, unitID *string, text string, plan prospection.Plan,
 func armedPayload(text string, plan prospection.Plan) ports.TriggerPayload {
 	p := ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays, LeadMinutes: plan.LeadMinutes}
 	if plan.What == prospection.ArmTrigger {
-		p.About, p.UserLeadMinutes = plan.About, int(plan.Lead/time.Minute)
+		p.About = plan.About
+		for _, l := range plan.Leads {
+			p.UserLeadsMinutes = append(p.UserLeadsMinutes, int(l/time.Minute))
+		}
 	}
 	return p
 }

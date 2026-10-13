@@ -105,10 +105,11 @@ type Plan struct {
 	// LeadMinutes is how far before About a one-shot event reminder was
 	// armed to fire; 0 for one armed at once.
 	LeadMinutes int
-	// Lead is the user's lead this one-shot event reminder serves, before
-	// any quiet-hours move (a re-arm reads it back from the sent ones); 0
-	// for the at-once reminder.
-	Lead      time.Duration
+	// Leads are the user's leads this one-shot event reminder serves,
+	// before any quiet-hours move: several when they landed on one instant
+	// (a re-arm reads them back from the sent ones); none for the at-once
+	// reminder.
+	Leads     []time.Duration
 	Rule      Rule
 	Anchor    Anchor
 	Interrupt Interrupt

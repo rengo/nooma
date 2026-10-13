@@ -264,11 +264,11 @@ func TestI35_AReminderAlreadySentIsNeverSentAgain(t *testing.T) {
 }
 
 // serve seeds a one-shot reminder as capture now arms one: the event
-// instant it is about and the user's lead it serves (0 for one at once).
-func (v i35Vault) serve(t *testing.T, id, unitID string, fireAt, about time.Time, leadMinutes, userLead int) {
+// instant it is about and every user lead it serves (none for one at once).
+func (v i35Vault) serve(t *testing.T, id, unitID string, fireAt, about time.Time, leadMinutes int, userLeads ...int) {
 	t.Helper()
 	if err := v.triggers.Create(context.Background(), ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
-		Payload: ports.TriggerPayload{ActionText: unitID, LeadMinutes: leadMinutes, About: about, UserLeadMinutes: userLead}, FireAt: &fireAt}); err != nil {
+		Payload: ports.TriggerPayload{ActionText: unitID, LeadMinutes: leadMinutes, About: about, UserLeadsMinutes: userLeads}, FireAt: &fireAt}); err != nil {
 		t.Fatalf("seeding trigger %s: %v", id, err)
 	}
 }
@@ -358,6 +358,56 @@ func TestI35_WhatWentOutIsTiedToItsLeadAndItsDate(t *testing.T) {
 		if got := v.armedAt(t, "done"); len(got) != 0 {
 			t.Errorf("an event with nothing armed got %v, want it skipped (doc 02 §7)", got)
 		}
+	})
+}
+
+// TestI35_OneReminderServingTwoLeadsCoversBoth: leads 6 h, 3 h and 2 h
+// before a 05:00 flight. 3 h and 2 h land on one instant, so one reminder
+// serves both, and a change after it went out sends neither again — when
+// it went out the evening before at 22:00, or at once because the flight
+// was captured at 22:40. A row from before leads were recorded, pulled to
+// now (lead_minutes 0), is not sent again either.
+func TestI35_OneReminderServingTwoLeadsCoversBoth(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	six := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
+	run := func(t *testing.T, now, sentAt time.Time, seed func(v i35Vault), edit func(p *brain.Preferences)) {
+		t.Helper()
+		v := newI35(t, now)
+		v.unit(t, "flight", unit.TypeEvent, flight, now)
+		seed(v)
+		v.serve(t, "flight-6h", "flight", six, flight, 360, 360)
+		if err := v.triggers.Fire(ctx, "flight-sent", sentAt); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+		p := i35Defaults()
+		p.LeadMinutes = []int{360, 180, 120}
+		edit(&p)
+		if _, err := v.svc.Save(ctx, p); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		if got := v.armedAt(t, "flight"); !sameInstants(got, []time.Time{six}) {
+			t.Errorf("flight reminders = %v, want only 23:00: what went out is not sent again", got)
+		}
+	}
+	evening := time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)
+	half := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	pulled := time.Date(2026, 10, 14, 22, 40, 0, 0, time.UTC)
+	t.Run("evening collapse, evening time later", func(t *testing.T) {
+		run(t, half, evening, func(v i35Vault) { v.serve(t, "flight-sent", "flight", evening, flight, 420, 180, 120) },
+			func(p *brain.Preferences) { p.EveningAt = "23:30" })
+	})
+	t.Run("evening collapse, quiet end before the event", func(t *testing.T) {
+		run(t, half, evening, func(v i35Vault) { v.serve(t, "flight-sent", "flight", evening, flight, 420, 180, 120) },
+			func(p *brain.Preferences) { p.QuietEnd = "04:00" })
+	})
+	t.Run("pulled to now at capture", func(t *testing.T) {
+		run(t, pulled.Add(5*time.Minute), pulled, func(v i35Vault) { v.serve(t, "flight-sent", "flight", pulled, flight, 0, 180, 120) },
+			func(p *brain.Preferences) { p.EveningAt = "23:30" })
+	})
+	t.Run("a row from before leads were recorded, pulled to now", func(t *testing.T) {
+		run(t, pulled.Add(5*time.Minute), pulled, func(v i35Vault) { v.arm(t, "flight-sent", "flight", pulled, 0, nil) },
+			func(p *brain.Preferences) { p.DateOnlyAt = "08:00" })
 	})
 }
 

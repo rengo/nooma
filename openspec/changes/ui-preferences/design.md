@@ -72,11 +72,14 @@ under the new preferences. A time-only rule failed in two ways (review of #331, 
 change that moves a sent lead's slot later (the evening time to 23:30, or a quiet end of 04:00)
 sent it again. A send about the date before a correction suppressed the reminder for the new
 date. Each one-shot reminder now records, in its JSON payload (no migration), the event instant it
-is about (`event_at`) and the user's lead it serves (`user_lead_minutes`). A lead is covered when
-a fired reminder about the **same instant** served the **same lead**, or went out, about that
-instant, at or after the lead's quiet-moved time. A send about another instant covers nothing. A
-row armed before these keys existed is placed by `fire_at + lead_minutes` and covers by time
-only. Only uncovered leads are planned. When every lead left is covered, the plan is
+is about (`event_at`) and every user lead it serves (`user_leads_minutes`), several when leads
+land on one instant (review of #333). A lead is covered when a fired reminder about the **same
+instant** served the **same lead**, or went out, about that instant, at or after the lead's
+quiet-moved time. A send about another instant covers nothing. A row armed before these keys
+existed is placed by `fire_at + lead_minutes` and covers by time only. One with no lead (pulled
+to now, or at once) that fired before the event's current instant is taken as about it and
+covers by time only. For those rows alone this accepts a B2-shaped risk (PM decision), so they
+never re-send. Only uncovered leads are planned. When every lead left is covered, the plan is
 `RefusalCovered`, and the live reminders no plan carries expire with that reason. Corrections
 keep `Follow`.
 
@@ -134,7 +137,7 @@ always refuses, so nothing is written), so the same submit reports every wrong f
 | 1 | `fix/digest-once-per-date` | D1 + doc 02; this design and tasks (#329) |
 | 2 | `feat/reminder-prefs-save` | D2-D4, D6 (`config.updated`); doc 02 §11 (#330) |
 | 3 | `feat/reminder-prefs-rearm` | D5 without coverage, D6 (`config.reminder.*`, `config.reminders.followed`), I35; doc 02 §7, doc 06 §4 (#331) |
-| 3b | `feat/reminder-prefs-delivered` | D5's coverage by what was delivered (`FollowSent`, payload `event_at`/`user_lead_minutes`, `FiredForUnit`); doc 02 §7, doc 03 |
+| 3b | `feat/reminder-prefs-delivered` | D5's coverage by what was delivered (`FollowSent`, payload `event_at`/`user_leads_minutes`, `FiredForUnit`); doc 02 §7, doc 03 |
 | 4 | `feat/ui-preferences` | D7-D8; wiring and UI gates; doc 07 |
 
 ## 4. Tests

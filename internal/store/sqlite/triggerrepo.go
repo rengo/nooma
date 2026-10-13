@@ -69,16 +69,16 @@ type anchorJSON struct {
 // lead_minutes is a one-shot event reminder's (ADR-0029). Both are read
 // back, and each is omitted where it does not apply.
 type payloadJSON struct {
-	Action          string `json:"action"`
-	Rationale       string `json:"rationale"`
-	LeadDays        int    `json:"lead_days,omitempty"`
-	LeadMinutes     int    `json:"lead_minutes,omitempty"`
-	About           string `json:"event_at,omitempty"`
-	UserLeadMinutes int    `json:"user_lead_minutes,omitempty"`
+	Action           string `json:"action"`
+	Rationale        string `json:"rationale"`
+	LeadDays         int    `json:"lead_days,omitempty"`
+	LeadMinutes      int    `json:"lead_minutes,omitempty"`
+	About            string `json:"event_at,omitempty"`
+	UserLeadsMinutes []int  `json:"user_leads_minutes,omitempty"`
 }
 
 func encodePayload(p ports.TriggerPayload) ([]byte, error) {
-	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadMinutes: p.UserLeadMinutes}
+	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes}
 	if !p.About.IsZero() {
 		s.About = formatUnitTime(p.About)
 	}
@@ -90,7 +90,7 @@ func decodePayload(raw string) (ports.TriggerPayload, error) {
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		return ports.TriggerPayload{}, err
 	}
-	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadMinutes: s.UserLeadMinutes}
+	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes}
 	if s.About != "" {
 		about, err := time.Parse(unitTimeLayout, s.About)
 		if err != nil {

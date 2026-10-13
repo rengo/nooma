@@ -465,9 +465,9 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		unitID := "unit-shared"
 		trg := fixtureTrigger("trg-about", &at)
 		trg.UnitID = &unitID
-		trg.Payload.About, trg.Payload.UserLeadMinutes = event, 120
+		trg.Payload.About, trg.Payload.UserLeadsMinutes = event, []int{180, 120}
 		createTrigger(t, repo, trg)
-		if got := armed(t, repo); len(got) != 3 || !got[1].Payload.About.Equal(event) || got[1].Payload.UserLeadMinutes != 120 {
+		if got := armed(t, repo); len(got) != 3 || !got[1].Payload.About.Equal(event) || !reflect.DeepEqual(got[1].Payload.UserLeadsMinutes, []int{180, 120}) {
 			t.Fatalf("ArmedForUnit = %+v, want trg-about carrying its event instant and user lead", got)
 		}
 		later := contractNow.Add(30 * time.Minute)
@@ -482,7 +482,7 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		for _, f := range got {
 			byFired[f.FiredAt.UTC()] = f
 		}
-		if f, ok := byFired[later.UTC()]; !ok || !f.FireAt.Equal(at) || !f.Payload.About.Equal(event) || f.Payload.UserLeadMinutes != 120 {
+		if f, ok := byFired[later.UTC()]; !ok || !f.FireAt.Equal(at) || !f.Payload.About.Equal(event) || !reflect.DeepEqual(f.Payload.UserLeadsMinutes, []int{180, 120}) {
 			t.Errorf("FiredForUnit lost trg-about's instants or payload: %+v", got)
 		}
 		if f, ok := byFired[contractNow.UTC()]; !ok || !f.Payload.About.IsZero() {
@@ -509,10 +509,10 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		seed(t, repo)
 		event := contractNow.Add(24 * time.Hour)
 		if err := repo.Reschedule(ctx, "trg-early", ports.TriggerMove{FireAt: contractNow.Add(2 * time.Hour),
-			Payload: ports.TriggerPayload{ActionText: "x", About: event, UserLeadMinutes: 60}}); err != nil {
+			Payload: ports.TriggerPayload{ActionText: "x", About: event, UserLeadsMinutes: []int{60}}}); err != nil {
 			t.Fatalf("Reschedule: %v", err)
 		}
-		if got := armed(t, repo); !got[0].Payload.About.Equal(event) || got[0].Payload.UserLeadMinutes != 60 {
+		if got := armed(t, repo); !got[0].Payload.About.Equal(event) || !reflect.DeepEqual(got[0].Payload.UserLeadsMinutes, []int{60}) {
 			t.Errorf("after Reschedule = %+v, want the event instant and user lead written", got[0])
 		}
 	})
@@ -538,7 +538,7 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		got := armed(t, repo)
 		assertDueTriggerIDs(t, got, "trg-late", "trg-early")
 		moved := got[1]
-		if !moved.FireAt.Equal(to) || moved.Payload != payload {
+		if !moved.FireAt.Equal(to) || !reflect.DeepEqual(moved.Payload, payload) {
 			t.Errorf("moved = %s %+v, want %s %+v", moved.FireAt, moved.Payload, to, payload)
 		}
 		if moved.InterruptLevel == nil || *moved.InterruptLevel != 0.42 {

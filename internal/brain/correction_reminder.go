@@ -79,6 +79,7 @@ func correctionCause() reminderCause {
 		carried: "another reminder of the unit carries the corrected date",
 		quiet:   "every moment left before the corrected date is in quiet hours, when nothing is sent",
 		passed:  "the corrected date has already passed",
+		covered: "a reminder of the event already sent covers its leads",
 	}
 }
 

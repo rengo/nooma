@@ -111,12 +111,12 @@ type TriggerPayload struct {
 	// at once. fire_at plus it is the event the reminder watches.
 	LeadMinutes int
 	// About is the event instant a one-shot event reminder is about, and
-	// UserLeadMinutes the user's lead it serves before any quiet-hours move
-	// (0 for one armed at once). A re-arm reads both back from the ones
-	// that fired, so what went out is never sent again (doc 02 §7). Zero
-	// on rows armed before they were recorded.
-	About           time.Time
-	UserLeadMinutes int
+	// UserLeadsMinutes every user lead it serves before any quiet-hours
+	// move (several when they landed on one instant, none for one armed at
+	// once). A re-arm reads both back from the ones that fired, so what went
+	// out is never sent again (doc 02 §7). Empty on rows armed before.
+	About            time.Time
+	UserLeadsMinutes []int
 }
 
 // FiredTrigger is a one-shot trigger that fired: when it was to fire, when

@@ -138,7 +138,7 @@ func TestFollow_KeepsALeadPulledToNow(t *testing.T) {
 func TestFollowSent(t *testing.T) {
 	event := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
 	now := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
-	twoHours := Sent{About: event, Lead: 2 * time.Hour, At: time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)}
+	twoHours := Sent{About: event, Leads: []time.Duration{2 * time.Hour}, At: time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)}
 	six := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
 	live := []Live{{ID: "six", FireAt: six}}
 	prefs := DefaultReminderPrefs()
@@ -177,11 +177,11 @@ func TestFollowSent(t *testing.T) {
 	// event, its 6 h reminder sent at noon, a 1 h lead added at 13:00.
 	day := time.Date(2026, 10, 15, 18, 0, 0, 0, time.UTC)
 	dayNow := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC)
-	sixFired := Sent{About: day, Lead: 6 * time.Hour, At: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
+	sixFired := Sent{About: day, Leads: []time.Duration{6 * time.Hour}, At: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
 	withHour := prefs
 	withHour.TimedLeads = []time.Duration{6 * time.Hour, time.Hour}
 	f := FollowSent(day, nil, []Sent{sixFired}, withHour, nil, dayNow)
-	if len(f.Plans) != 1 || !f.Plans[0].FireAt.Equal(day.Add(-time.Hour)) || f.Plans[0].Lead != time.Hour {
+	if len(f.Plans) != 1 || !f.Plans[0].FireAt.Equal(day.Add(-time.Hour)) || !slices.Equal(f.Plans[0].Leads, []time.Duration{time.Hour}) {
 		t.Errorf("a new 1 h lead after the 6 h one went out = %+v, want it armed at 17:00", f)
 	}
 
@@ -203,5 +203,50 @@ func TestFollowSent(t *testing.T) {
 	// No send: FollowSent is Follow.
 	if f, g := FollowSent(event, live, nil, DefaultReminderPrefs(), nil, now), Follow(event, live, DefaultReminderPrefs(), nil, now); len(f.Plans) != len(g.Plans) {
 		t.Errorf("FollowSent with no send = %+v, want Follow's %+v", f, g)
+	}
+}
+
+// TestFollowSent_LeadsOneReminderServed: when two leads land on one
+// instant they are one reminder, and it records both, so neither is sent
+// again later. Leads 6 h, 3 h and 2 h before a 05:00 event: 3 h and 2 h
+// both fall in quiet hours before an event that is before quiet end, so
+// both go out the evening before at 22:00, as one.
+func TestFollowSent_LeadsOneReminderServed(t *testing.T) {
+	event := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	capture := time.Date(2026, 10, 13, 10, 0, 0, 0, time.UTC)
+	prefs := DefaultReminderPrefs()
+	prefs.TimedLeads = []time.Duration{6 * time.Hour, 3 * time.Hour, 2 * time.Hour}
+
+	plans, _ := eventReminders(event, prefs, capture, ResolveInterrupt(nil), nil)
+	if len(plans) != 2 || !slices.Equal(plans[0].Leads, []time.Duration{3 * time.Hour, 2 * time.Hour}) {
+		t.Fatalf("capture plans = %+v, want 22:00 serving 3 h and 2 h, then 23:00", plans)
+	}
+	sent := []Sent{{About: event, Leads: plans[0].Leads, At: plans[0].FireAt}}
+	six := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
+	live := []Live{{ID: "six", FireAt: six}}
+	now := time.Date(2026, 10, 14, 22, 30, 0, 0, time.UTC)
+	for name, edit := range map[string]func(p *ReminderPrefs){
+		"evening at 23:30":   func(p *ReminderPrefs) { p.EveningAt = TimeOfDay{Hour: 23, Minute: 30} },
+		"quiet end at 04:00": func(p *ReminderPrefs) { p.QuietEnd = TimeOfDay{Hour: 4} },
+	} {
+		p := prefs
+		edit(&p)
+		if f := FollowSent(event, live, sent, p, nil, now); len(f.Plans) != 1 || !f.Plans[0].FireAt.Equal(six) {
+			t.Errorf("%s: %+v, want only the 23:00 reminder: 3 h and 2 h both went out at 22:00", name, f)
+		}
+	}
+
+	// Pulled to now at capture: captured at 22:40, both the 3 h and the 2 h
+	// lead are behind their evening slot and go out at once, as one.
+	late := time.Date(2026, 10, 14, 22, 40, 0, 0, time.UTC)
+	plans, _ = eventReminders(event, prefs, late, ResolveInterrupt(nil), nil)
+	if len(plans) != 2 || !plans[0].Immediate || !slices.Equal(plans[0].Leads, []time.Duration{3 * time.Hour, 2 * time.Hour}) {
+		t.Fatalf("late capture plans = %+v, want one at once serving 3 h and 2 h", plans)
+	}
+	sent = []Sent{{About: event, Leads: plans[0].Leads, At: late}}
+	p := prefs
+	p.EveningAt = TimeOfDay{Hour: 23, Minute: 30}
+	if f := FollowSent(event, live, sent, p, nil, late.Add(5*time.Minute)); len(f.Plans) != 1 || !f.Plans[0].FireAt.Equal(six) {
+		t.Errorf("after the at-once send: %+v, want only the 23:00 reminder", f)
 	}
 }

@@ -61,7 +61,7 @@ func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.Remind
 			return fmt.Errorf("read the reminders sent for unit %q: %w", id, err)
 		}
 		live, byID := liveSet(armed)
-		f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired), prefs, armed[0].InterruptLevel, now)
+		f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired, *u.EventAt), prefs, armed[0].InterruptLevel, now)
 		if err := w.apply(ctx, u, f, byID, *u.EventAt, u.Content, false, now); err != nil {
 			return err
 		}
@@ -112,17 +112,28 @@ func (s *PreferencesService) recordFollowed(ctx context.Context, now time.Time) 
 	return nil
 }
 
-// sentReminders is what went out, as FollowSent reads it. A row armed before
-// the event instant was recorded still names it when it carries a lead
-// (fire_at plus lead_minutes); one armed at once cannot be placed.
-func sentReminders(fired []ports.FiredTrigger) []prospection.Sent {
+// sentReminders is what went out for an event now at eventAt, as
+// FollowSent reads it. A row armed before the event instant was recorded is
+// placed by fire_at plus lead_minutes; one pulled to now or armed at once
+// (lead_minutes 0) that fired before eventAt is taken as about eventAt and
+// covers by time only (doc 02 §7: a correction's old date may be read as
+// the new one for such rows, and nothing re-sends).
+func sentReminders(fired []ports.FiredTrigger, eventAt time.Time) []prospection.Sent {
 	out := make([]prospection.Sent, len(fired))
 	for i, f := range fired {
 		about := f.Payload.About
-		if about.IsZero() && f.Payload.LeadMinutes > 0 {
+		switch {
+		case !about.IsZero():
+		case f.Payload.LeadMinutes > 0:
 			about = f.FireAt.Add(time.Duration(f.Payload.LeadMinutes) * time.Minute)
+		case f.FiredAt.Before(eventAt):
+			about = eventAt
 		}
-		out[i] = prospection.Sent{About: about, Lead: time.Duration(f.Payload.UserLeadMinutes) * time.Minute, At: f.FiredAt}
+		s := prospection.Sent{About: about, At: f.FiredAt}
+		for _, m := range f.Payload.UserLeadsMinutes {
+			s.Leads = append(s.Leads, time.Duration(m)*time.Minute)
+		}
+		out[i] = s
 	}
 	return out
 }

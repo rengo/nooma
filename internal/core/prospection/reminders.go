@@ -71,12 +71,12 @@ func deliverAt(nominal, eventAt, now time.Time, prefs ReminderPrefs) (time.Time,
 }
 
 // Sent is a one-shot reminder of a unit that already went out: the event
-// instant it was about, the user's lead it served (0 for one armed at
-// once, or when its row predates recording it) and when it went out. A
+// instant it was about, every user lead it served (none for one armed at
+// once, or when its row predates recording them) and when it went out. A
 // zero About is a send nobody can place, which covers nothing.
 type Sent struct {
 	About time.Time
-	Lead  time.Duration
+	Leads []time.Duration
 	At    time.Time
 }
 
@@ -86,7 +86,7 @@ type Sent struct {
 // about any other instant covers nothing.
 func coveredBy(sent []Sent, eventAt, n, due time.Time) bool {
 	for _, s := range sent {
-		if s.About.Equal(eventAt) && ((s.Lead != 0 && s.Lead == eventAt.Sub(n)) || !due.After(s.At)) {
+		if s.About.Equal(eventAt) && (slices.Contains(s.Leads, eventAt.Sub(n)) || !due.After(s.At)) {
 			return true
 		}
 	}
@@ -130,7 +130,14 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 			continue
 		}
 		fireAt, ok := deliverAt(n, eventAt, now, prefs)
-		if !ok || slices.ContainsFunc(plans, func(p Plan) bool { return p.FireAt.Equal(fireAt) }) {
+		if !ok {
+			continue
+		}
+		// Two leads landing on one instant are one reminder serving both.
+		if i := slices.IndexFunc(plans, func(p Plan) bool { return p.FireAt.Equal(fireAt) }); i >= 0 {
+			if !atOnce {
+				plans[i].Leads = append(plans[i].Leads, eventAt.Sub(n))
+			}
 			continue
 		}
 		// Immediate is "sent at once rather than at a lead": the at-once
@@ -139,7 +146,7 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 		immediate := fireAt.Equal(now) && (atOnce || !n.Equal(now))
 		plan := Plan{What: ArmTrigger, FireAt: fireAt, About: eventAt, Immediate: immediate, Interrupt: interrupt}
 		if !atOnce {
-			plan.Lead = eventAt.Sub(n)
+			plan.Leads = []time.Duration{eventAt.Sub(n)}
 		}
 		if !plan.Immediate {
 			plan.LeadMinutes = int(eventAt.Sub(fireAt) / time.Minute)

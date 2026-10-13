@@ -18,7 +18,7 @@ PR 3 — `feat/reminder-prefs-rearm` (#331)
 - [x] 7b. RED/GREEN: pending by insertion order; the double failure said; I35's pending clause.
 
 PR 3b — `feat/reminder-prefs-delivered`
-- [x] 7c. RED/GREEN: a reminder already sent is never sent again by a save — each reminder records its event instant and user lead, and `FollowSent` treats a lead served for the same instant as covered (`TriggerRepo.FiredForUnit`).
+- [x] 7c. RED/GREEN: a reminder already sent is never sent again by a save — each reminder records its event instant and every user lead (collapsed leads included; legacy rows with no lead cover by time), and `FollowSent` treats a lead served for the same instant as covered (`TriggerRepo.FiredForUnit`).
 
 PR 4 — `feat/ui-preferences` (#332)
 - [ ] 8. RED/GREEN L1 ui: page, leads editor, errors, saved notice, pending button (D7, D8).
