@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/sqlite/sqlitetest"
 )
@@ -79,5 +80,40 @@ tasks:
 	want := eventAt.Add(-3 * time.Hour)
 	if len(armed) != 1 || !armed[0].FireAt.Equal(want) {
 		t.Errorf("armed = %+v, want one reminder at %s — the stored three-hour lead, not the defaults", armed, want)
+	}
+}
+
+// TestWireProactive_DefersToTheStoredQuietEnd: serve's due scan reads the
+// user's quiet end from the vault (ADR-0030 point 5). A trigger due at
+// 07:30 fires at 08:30 under the default night, so its staying armed is
+// only reachable through the stored 09:00.
+func TestWireProactive_DefersToTheStoredQuietEnd(t *testing.T) {
+	ctx := context.Background()
+	db, cfg := gateVault(t)
+	sqlitetest.SeedQuietHoursEnd(t, db, "09:00")
+	day := func(hour, minute int) time.Time { return time.Date(2099, 1, 10, hour, minute, 0, 0, time.UTC) }
+	fireAt := day(7, 30)
+	if err := sqlite.NewTriggerRepo(db).Create(ctx, ports.Trigger{
+		ID: "trg", Kind: ports.TriggerKindTimeBased, FireAt: &fireAt,
+		Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 270}, CreatedAt: day(0, 0),
+	}); err != nil {
+		t.Fatalf("arming: %v", err)
+	}
+	lookup := func(string) (string, bool) { return "", false }
+	for _, tc := range []struct {
+		now   time.Time
+		fired int
+	}{{day(8, 30), 0}, {day(9, 0), 1}} {
+		check, err := wireProactive(gateClock{now: tc.now}, db, cfg, lookup, nil, nil)
+		if err != nil {
+			t.Fatalf("wireProactive: %v", err)
+		}
+		report, err := check.Check(ctx, brain.CheckRequest{DryRun: true})
+		if err != nil {
+			t.Fatalf("Check: %v", err)
+		}
+		if report.TriggersFired != tc.fired {
+			t.Errorf("at %s: fired %d, want %d — the scan must wait for the stored quiet end", tc.now.Format("15:04"), report.TriggersFired, tc.fired)
+		}
 	}
 }

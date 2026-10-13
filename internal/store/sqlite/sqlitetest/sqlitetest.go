@@ -1,7 +1,8 @@
 // Package sqlitetest is test support for the SQLite store: fixtures that need a
 // row no port can write, kept next to the schema so the column list stays inside
 // internal/store (the sqlite-containment depguard rule exempts this path):
-// an energy reading, and the reminder preferences nothing writes yet.
+// an energy reading, and the reminder and quiet-hours preferences nothing
+// writes yet.
 //
 // It is imported by tests only. No production code may import it (the
 // sqlitetest-tests-only depguard rule in .golangci.yml fails the lint if one
@@ -41,6 +42,17 @@ func SeedReminderLeads(t testing.TB, v *sqlite.Vault, leads string) {
 		`INSERT INTO config (id, event_reminder_leads, updated_at) VALUES (1, ?, ?)
 ON CONFLICT(id) DO UPDATE SET event_reminder_leads = excluded.event_reminder_leads`,
 		leads, time.Unix(0, 0).UTC().Format(time.RFC3339))
+}
+
+// SeedQuietHoursEnd stores the user's quiet end (ADR-0030) in v's config
+// row, creating it when absent. No port writes it yet: the writer is the
+// settings work unit's.
+func SeedQuietHoursEnd(t testing.TB, v *sqlite.Vault, end string) {
+	t.Helper()
+	exec(t, v, "SeedQuietHoursEnd",
+		`INSERT INTO config (id, quiet_hours_end, updated_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET quiet_hours_end = excluded.quiet_hours_end`,
+		end, time.Unix(0, 0).UTC().Format(time.RFC3339))
 }
 
 // exec runs one statement on its own short-lived handle on v's file, with the

@@ -65,10 +65,14 @@ event and keeps `TriggerVerdict`: it is due the minute it is armed.
 valid `00:01`-`12:00`, evening valid from the resolved quiet end to `23:59`, else its default.
 
 **D9. The scan reads quiet end** (B5, link 3). A `QuietHours{End TimeOfDay}` value with
-`Contains`/`DeliverableFrom`; `InQuietHours(now)` stays the default window's (I16 pins its
-one-parameter shape). `TriggerVerdict`/`EventReminderVerdict` take a `QuietHours`;
-`DigestDue` is due at the later of `DigestHour` and quiet end. `CheckService.WithQuietHours(
-ports.ConfigRepo)` reads `Load` once per scan, like `WithReminderPrefs`; unset, the defaults.
+`Contains`/`DeliverableFrom` and the methods `TriggerVerdict`, `EventReminderVerdict` and
+`DigestDue`; the package functions of the same names keep their one-night signatures as
+`DefaultQuietHours()`'s, so I16 (which pins `InQuietHours`' one-parameter shape) and every
+existing caller are untouched. `DigestDue` is due at the later of `DigestHour` and quiet end.
+`CheckService.WithQuietHours(ports.ConfigRepo)` reads `Load` once per scan into the runner's
+`night`, like `WithReminderPrefs`; unset, the defaults. `deliverAt` uses the same `QuietHours`
+so the arm-time window and the scan's cannot drift apart. Both `nooma check` and serve's pass
+are wired with it, so a manual scan never fires what serve would still hold.
 
 ## 3. Chain (stacked)
 

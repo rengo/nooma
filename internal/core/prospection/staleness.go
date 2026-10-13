@@ -65,10 +65,10 @@ func AllVerdicts() []Verdict {
 // (design §3.3), evaluated in this fixed order:
 //
 //  1. now.Before(fireAt) → Pending. Not yet due.
-//  2. deferInQuietHours && InQuietHours(now) → Defer. Quiet hours are
+//  2. deferIn != nil && deferIn.Contains(now) → Defer. Quiet hours are
 //     evaluated before staleness, so an item is never declared stale
 //     during a window in which it was refused delivery. Trigger-only —
-//     TimerVerdict passes deferInQuietHours = false and never reaches
+//     TimerVerdict passes no night (deferIn = nil) and never reaches
 //     this branch, which is how the timer stays the one push exception
 //     to quiet hours (design §3.2).
 //  3. now.Sub(from) > stalenessHours → Stale. Strict, matching
@@ -76,19 +76,20 @@ func AllVerdicts() []Verdict {
 //     ADR-0009's wording: exactly stalenessHours overdue still delivers.
 //  4. → Deliver.
 //
-// deferInQuietHours is the one parameter design §3.3's own four-argument
+// deferIn is the one parameter design §3.3's own four-argument
 // sketch does not name explicitly, alongside its "trigger only" prose for
 // step 2 — a shared helper cannot honor that exception from (fireAt,
 // from, stalenessHours, now) alone, since a timer whose fireAt equals its
 // own from is indistinguishable from a trigger armed outside quiet hours
 // on those four values. Behavior matches design's own worked table and
 // scenarios exactly; only this private, unexported parameter is added to
-// make the "trigger only" sentence executable.
-func verdict(fireAt, from time.Time, stalenessHours int, now time.Time, deferInQuietHours bool) Verdict {
+// make the "trigger only" sentence executable. It carries the night itself
+// rather than a flag since ADR-0030 made the night the user's.
+func verdict(fireAt, from time.Time, stalenessHours int, now time.Time, deferIn *QuietHours) Verdict {
 	if now.Before(fireAt) {
 		return VerdictPending
 	}
-	if deferInQuietHours && InQuietHours(now) {
+	if deferIn != nil && deferIn.Contains(now) {
 		return VerdictDefer
 	}
 	overdue := now.Sub(from)
@@ -106,7 +107,13 @@ func verdict(fireAt, from time.Time, stalenessHours int, now time.Time, deferInQ
 // directly would expire every trigger armed inside quiet hours before the
 // user woke, every night (design §3.3, Finding F1).
 func TriggerVerdict(fireAt, now time.Time) Verdict {
-	return verdict(fireAt, DeliverableFrom(fireAt), TriggerStalenessHours, now, true)
+	return DefaultQuietHours().TriggerVerdict(fireAt, now)
+}
+
+// TriggerVerdict is the package TriggerVerdict in q's night: deferred until
+// q's end, and overdue measured from it (ADR-0030 point 5).
+func (q QuietHours) TriggerVerdict(fireAt, now time.Time) Verdict {
+	return verdict(fireAt, q.DeliverableFrom(fireAt), TriggerStalenessHours, now, &q)
 }
 
 // TimerVerdict mirrors TriggerVerdict with the timer's own threshold and
@@ -115,7 +122,7 @@ func TriggerVerdict(fireAt, now time.Time) Verdict {
 // quiet hours and never accrues policy delay — overdue is measured from
 // fireAt directly, with no DeliverableFrom shift.
 func TimerVerdict(fireAt, now time.Time) Verdict {
-	return verdict(fireAt, fireAt, TimerStalenessHours, now, false)
+	return verdict(fireAt, fireAt, TimerStalenessHours, now, nil)
 }
 
 // DelayCaveat reports whether a delivered item's overdue duration is
@@ -142,8 +149,13 @@ func DelayCaveat(overdue time.Duration) bool {
 // reminder is VerdictStale — expired, never sent late — whatever its
 // overdue amount; before that it is TriggerVerdict's.
 func EventReminderVerdict(fireAt, eventAt, now time.Time) Verdict {
+	return DefaultQuietHours().EventReminderVerdict(fireAt, eventAt, now)
+}
+
+// EventReminderVerdict is the package EventReminderVerdict in q's night.
+func (q QuietHours) EventReminderVerdict(fireAt, eventAt, now time.Time) Verdict {
 	if !now.Before(eventAt) {
 		return VerdictStale
 	}
-	return TriggerVerdict(fireAt, now)
+	return q.TriggerVerdict(fireAt, now)
 }

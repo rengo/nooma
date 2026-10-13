@@ -1270,7 +1270,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   `max_quiet_end_hour`:00) and `config.evening_reminder_at` (default 22:00,
   `default_evening_reminder_hour`; valid from the resolved quiet end to `23:59`, so the evening
   is never itself quiet), resolved by the same `ResolveReminderPrefs` and read at arm time by
-  capture and correction. One whose adjusted instant is behind the arming instant is armed at once when that
+  capture and correction; the due scan reads the same quiet end (below). One whose adjusted instant is behind the arming instant is armed at once when that
   instant is outside quiet hours; when it is not, no allowed instant is left before the
   event and the reminder is not armed — a capture records why, `capture.arm.refused` with
   reason `quiet_hours`, and the unit stays stored. Two reminders the adjustment lands on one
@@ -1308,8 +1308,9 @@ box can audit it):
   pushes" guarantee, govern every recurring reminder.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
-  skipping cadence and gates. Quiet hours `[00:00, 07:00)` local time: deferred and
-  resurfacing on waking — **except a timer**. A timer's instant was set by an explicit user
+  skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
+  user's `config.quiet_hours_end` (default 07:00, read once per due scan into
+  `prospection.QuietHours`): deferred and resurfacing on waking — **except a timer**. A timer's instant was set by an explicit user
   instruction at capture ("remind me in 15 min"); an inferred trigger's instant was not, and an
   inferred trigger always defers through quiet hours regardless of its own `interrupt_level`. An
   explicit instruction outranks the quiet-hours policy window; an inference does not. Mutually
@@ -1322,7 +1323,9 @@ box can audit it):
     quiet-hours-deferred pushes have resurfaced and the digest has not, making the user's first
     morning contact the lane this design says should be rarer. The hour quiet hours end is the only
     one that is neither, and `digest_hour` is a separate knob from `quiet_hours_end_hour` with the
-    relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality.
+    relation `digest_hour >= quiet_hours_end_hour` asserted, not their present equality. A
+    user's later quiet end delays the digest to it: it is due at the later of `digest_hour` and
+    the user's quiet end, so it is never born deferred ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)).
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery.
     **Low** is `energy < low_energy_max`, strict — this gate suppresses delivery, so the burden of

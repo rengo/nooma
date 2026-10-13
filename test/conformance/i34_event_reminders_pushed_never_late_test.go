@@ -191,3 +191,58 @@ func TestI34_EventRemindersFollowTheStoredNight(t *testing.T) {
 		})
 	}
 }
+
+// TestI34_TheScanWaitsForTheStoredQuietEnd is ADR-0030 point 5 at delivery:
+// the due scan reads the user's quiet end, so a trigger due before it is
+// deferred to it rather than sent at the default 07:00, and the daily
+// digest is not due before it either.
+func TestI34_TheScanWaitsForTheStoredQuietEnd(t *testing.T) {
+	ctx := context.Background()
+	day := func(hour, minute int) time.Time { return time.Date(2026, 10, 16, hour, minute, 0, 0, time.UTC) }
+	str := func(s string) *string { return &s }
+	cfg := memrepo.NewConfig()
+	cfg.SeedConfig(t, ports.VaultConfig{QuietHoursEnd: str("09:00")})
+
+	triggers := memrepo.NewTriggers()
+	unitID := "u1"
+	low := 0.1
+	yearly := prospection.RuleYearly
+	for _, tr := range []ports.Trigger{
+		{ID: "event", UnitID: &unitID, Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 270}, FireAt: ptrTime(day(7, 30))},
+		{ID: "birthday", InterruptLevel: &low, Payload: ports.TriggerPayload{ActionText: "birthday", LeadDays: prospection.EventLeadDays},
+			FireAt: ptrTime(day(-2, 30)), RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 23}},
+	} {
+		tr.Kind, tr.CreatedAt = ports.TriggerKindTimeBased, day(0, 0).Add(-48*time.Hour)
+		if err := triggers.Create(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Yesterday's digest went out at 10:00, so the birthday reminder that
+	// fires at 22:30 waits for today's: the digest owed this morning has
+	// an item, and sending it before the stored quiet end is observable.
+	log := memrepo.NewDecisionLog()
+	if err := log.Record(ctx, ports.Decision{ID: "d0", Action: ports.ActionCheckDigestSent, Rationale: "yesterday's digest", OccurredAt: day(-14, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	ch := &countingChannel{}
+	ids := &counterIDs{}
+	check := func(now time.Time) brain.CheckReport {
+		t.Helper()
+		report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), ids, log, ch,
+			memrepo.NewUnits(), memrepo.NewState(), nil, "12449194", nil, nil).WithQuietHours(cfg).Check(ctx, brain.CheckRequest{})
+		if err != nil {
+			t.Fatalf("Check at %v: %v", now, err)
+		}
+		return report
+	}
+
+	if r := check(day(-1, 0)); r.TriggersFired != 1 || r.DigestCarried != 0 || ch.sent != 0 {
+		t.Fatalf("at 23:00 the evening before: %+v (sent %d), want the birthday fired and held for the digest", r, ch.sent)
+	}
+	if r := check(day(8, 30)); r.TriggersDelivered != 0 || r.DigestCarried != 0 || r.TriggersExpired != 0 || ch.sent != 0 {
+		t.Errorf("at 08:30, before the stored quiet end: %+v (sent %d), want nothing sent and nothing expired", r, ch.sent)
+	}
+	if r := check(day(9, 0)); r.TriggersDelivered != 1 || r.DigestCarried == 0 {
+		t.Errorf("at 09:00, the stored quiet end: %+v, want the event reminder pushed and the digest sent", r)
+	}
+}

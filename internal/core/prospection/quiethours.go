@@ -23,8 +23,7 @@ const QuietHoursEndHour = 7
 // instant ports.Clock.Now() produced (docs/02-cognitive-core.md:600-610;
 // the same mechanism classify/prompt.go documents for capture).
 func InQuietHours(now time.Time) bool {
-	hour := now.Hour()
-	return hour >= QuietHoursStartHour && hour < QuietHoursEndHour
+	return DefaultQuietHours().Contains(now)
 }
 
 // DeliverableFrom returns the first instant at or after t at which a
@@ -37,9 +36,33 @@ func InQuietHours(now time.Time) bool {
 // out-of-range-field construction keeps the wall clock's own
 // normalization in one place.
 func DeliverableFrom(t time.Time) time.Time {
-	if !InQuietHours(t) {
+	return DefaultQuietHours().DeliverableFrom(t)
+}
+
+// QuietHours is one user's night: [QuietHoursStartHour, End) on the local
+// wall clock, End being their quiet end (ADR-0030 point 5). The package
+// functions InQuietHours, DeliverableFrom, TriggerVerdict,
+// EventReminderVerdict and DigestDue are DefaultQuietHours'; the due scan
+// uses the user's own.
+type QuietHours struct{ End TimeOfDay }
+
+// DefaultQuietHours is the night nobody chose: it ends at QuietHoursEndHour.
+func DefaultQuietHours() QuietHours {
+	return QuietHours{End: TimeOfDay{Hour: QuietHoursEndHour}}
+}
+
+// Contains reports whether t's wall clock, in t's own location, is in the
+// night — InQuietHours' rule with the user's end.
+func (q QuietHours) Contains(t time.Time) bool {
+	minute := t.Hour()*60 + t.Minute()
+	return minute >= QuietHoursStartHour*60 && minute < q.End.Hour*60+q.End.Minute
+}
+
+// DeliverableFrom is t outside the night, and that day's quiet end inside
+// it — DeliverableFrom's rule with the user's end.
+func (q QuietHours) DeliverableFrom(t time.Time) time.Time {
+	if !q.Contains(t) {
 		return t
 	}
-	y, m, d := t.Date()
-	return time.Date(y, m, d, QuietHoursEndHour, 0, 0, 0, t.Location())
+	return q.End.on(t, 0, t.Location())
 }
