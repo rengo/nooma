@@ -17,11 +17,6 @@ days. The first digest read "Here are 7 things for today", listed three flights 
 departed, said "09:00" for a flight the user had corrected to 08:00, listed one flight twice, and
 asked its relation question in English to a user whose every reply comes back in Spanish.
 
-Four decisions were missing: when a reminder is checked against the world (a trigger is judged
-once, at `armed → fired`, and the digest sends whatever was never delivered), what it says (the
-sentence frozen at arming), what happens to a backlog (it is sent at once), and which language
-Nooma speaks first (ADR-0022's named gap: the fallback, English).
-
 ## Options evaluated
 
 | Question | Option | Verdict |

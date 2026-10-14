@@ -1,8 +1,7 @@
 # Design — digest-stale-reminders
 
-A fix change. The client report (2026-10-14) and the PM's read-only evidence are the requirement;
-[ADR-0032](../../../docs/adr/0032-a-reminder-says-what-is-true-now.md) (Accepted by the client,
-2026-10-14) records the product decisions, cited here as P1-P5. Lines are at `7d2b98a`.
+The decisions are [ADR-0032](../../../docs/adr/0032-a-reminder-says-what-is-true-now.md)
+(Accepted by the client on 2026-10-14), cited as P1-P5. Lines are at `7d2b98a`.
 
 ## 1. Evidence (read-only, `~/.nooma/pablo.nooma/nooma.db`, 2026-10-14)
 
@@ -35,13 +34,10 @@ and three on 10-11/10-12, which are **past**. `480914d7`'s unit text is now "Es 
 - **Follow-up, its own change:** the 2026-10-10T19:35:53Z correction stored "Es a las 08:00." as
   the unit's text and left its time at 09:00.
 
-**Defect 3 — English.**
-
-- Replies follow the message's language: `capture.go:280` keeps it and `channels/reply.go:35`
-  uses it.
-- The language is stored only in the `capture.classify` row (`capture.go:764-773`).
-- The digest and push sentences are English literals (`digest.go:349, :368, :378, :394-399`;
-  `deliver.go:170, :173`). ADR-0022 and doc 02 §5 (`:539-543`) name the gap.
+**Defect 3 — English.** The language is kept only in the `capture.classify` row
+(`capture.go:764-773`), and replies use it per message (`capture.go:280`, `channels/reply.go:35`).
+The digest and push sentences are English literals (`digest.go:349, :368, :378, :394-399`;
+`deliver.go:170, :173`). ADR-0022 and doc 02 §5 (`:539-543`) name the gap.
 
 **Defect 4 — two reminders for one unit.** `dad3c936` was moved by a correction, then fired
 undelivered. The next correction saw no armed row (`correction_reminder.go:43`) and armed
@@ -63,55 +59,60 @@ undelivered. The next correction saw no armed row (`correction_reminder.go:43`) 
 4. Otherwise `q.TriggerVerdict(FireAt, now)`, whose `Stale` is `overdue`. Quiet hours still answer
    `Defer` first (`staleness.go:92-94`).
 
-How `About` is resolved:
+`About` resolves, in order:
 
-- one-shot, from the payload `event_at` (`FromEvent`);
-- otherwise `fire_at + lead_minutes` when `lead_minutes > 0`;
-- recurring: `NextOccurrence(rule, anchor, fire_at)` (`recurrence.go:88`, pure), because
-  `armedPayload` writes no `event_at` for `ArmRecurring` (`capture.go:978`);
-- otherwise unknown.
-
-The recurring case assumes a period longer than the lead, which is true today: L1 table.
+1. the payload's `event_at` (`FromEvent`);
+2. `fire_at + lead_minutes`, when `lead_minutes > 0`;
+3. for a recurring row, `NextOccurrence(rule, anchor, fire_at.In(<clock zone>))`. The function
+   reads its zone from its argument (`recurrence.go:88-89`), `fire_at` is stored in UTC, and
+   `ArmRecurring` writes no `event_at` (`capture.go:978`). This assumes a period longer than the
+   lead;
+4. otherwise unknown.
 `Current` is the unit's `event_at` (a task unit's `due_at`, §5) via `UnitRepo.ByID`. A nil port
 or `ErrUnitNotFound` means unknown. Any other read error aborts the pass.
 `EventReminderVerdict` is D1 with `Current` nil, so I34 is unchanged.
 
-**D2. Where it runs.** At fire time (`check.go:412-418`), in the reminder step (D6) and in the
-digest, through one brain helper. Today runs it read-only (I27) and counts after it
-(`today.go:149`).
+**D2. Where it runs.** At fire time (`check.go:412-418`), in D6 and in the digest, through one
+helper. Today runs it read-only (I27) and counts after it (`today.go:149`).
 
 **D3. Delivery attempts** (P2). A pass *can deliver* when its channel is non-nil and its
 conversation is non-empty.
 
 - **When it can:**
-  - every undelivered one-shot row is judged in the reminder step;
+  - the due loop does not expire an overdue one-shot armed row; it passes the row to D6
+    (`check.go:128-146`, link 3);
+  - every undelivered one-shot row is judged in D6;
   - `Deliver` is pushed (link 5), skipping rows this pass already fired or attempted;
-  - only recurring rows reach the digest.
-- **Send and record failures:**
+  - in links 3-4 the digest skips any one-shot row that D6 holds or judges stale (no send, no
+    lapse); from link 5 on it carries only recurring rows;
   - a `Surface` conflict is skipped, not fatal (`deliver.go:121-126`);
-  - if `Send` succeeds and `Surface` then fails, the id joins a set held across passes, so the
-    retry skips it until restart;
-  - a failing transport writes one `check.delivery.failed` per reminder per outage: an
-    in-process set, cleared on success. That is not about 70 rows (one every 5 min for 6 h).
-- **Concurrency:** no two passes with a channel run at once. Both commands take the vault lock
-  (`cmd/nooma/check.go:67`, `serve.go:84`), and the proactive job is single-flight
-  (`scheduler.go:72-108`).
-- **When it cannot** (nil channel, `nooma check`, or no conversation):
-  - a one-shot row is judged only for `passed`, which expires or lapses it with no re-plan;
-  - every other one-shot row stays as it is and writes nothing;
-  - no conversation adds one loud `check.delivery.failed` per due reminder per process
+  - an id whose `Send` succeeded and whose `Surface` failed joins a set held across passes, and
+    the retry skips it until restart;
+  - an outage writes one `check.delivery.failed` per reminder, from an in-process set cleared on
+    success.
+- **When it cannot:**
+  - link 3: overdue rows expire as today. From link 4: only `passed` is judged, nothing is
+    re-planned, and every other one-shot row is left untouched (at most one per lead);
+  - no conversation writes one loud `check.delivery.failed` per due reminder per process
     (non-negotiable 7);
-  - Today lists the armed one-shot reminders due by `now + 24 h`, read-only, so a UI-only vault
-    still sees them (PM).
-- **Bound:** at most one armed row per lead per event still ahead, never re-created.
-- **I15 changes** (doc 02, ADR-0032 amending ADR-0009), and its row text names it. With no
-  destination, an overdue one-shot trigger is left untouched; one with no unit is kept until a
-  channel exists. Its test (`i15_…_test.go:168`) gets a channel case and a nil-channel case.
+  - Today lists armed one-shot rows due by `now + 24 h`, read-only (PM; I27). I15's row and
+    test (`i15_…_test.go:168`) gain the nil-channel case, which amends ADR-0009.
+- **Concurrency:** none. Both commands take the vault lock (`cmd/nooma/check.go:67`,
+  `serve.go:84`), and the job is single-flight (`scheduler.go:72-108`).
 
 **D4. Lapse.** `TriggerRepo.Lapse(id)` moves a `fired` row with `surfaced_at` NULL to `expired`,
 keeping `fired_at`. Doc 03, I15's comment and `due_scan_status_vocabulary_test.go` name the
-combination. Each lapse writes `check.trigger.lapsed {id, fire_at, verdict, reason}`, the
-reason being `passed`, `superseded`, `overdue` or `covered`.
+combination. Each case maps to an action and a counter:
+
+- an **armed** row (`passed`, or `overdue` after D6) is `Expire`d, recorded as
+  `check.trigger.expired`, counted in `TriggersExpired`;
+- a **fired, undelivered** row (`passed`, `superseded`, `overdue` or `covered`) is `Lapse`d,
+  recorded as `check.trigger.lapsed {id, fire_at, verdict, reason}`, counted in
+  `TriggersLapsed`;
+- D6's writes are `check.reminder.armed`, `moved`, `cancelled` and `refused`, counted in
+  `RemindersArmed`, `Moved`, `Cancelled` and `Refused`.
+- Every new action goes into `AllDecisionActions`, doc 02 §11 and `ui/activitylabel.go`, and
+  every new counter into I12 and `cmd/nooma/check.go:122`.
 
 **D5. Render from the unit** (P4). The message is the unit's current `content`, verbatim, plus
 `About` in the clock's zone via `Set.Time`. A date-only event (ADR-0029's midnight test) uses
@@ -119,12 +120,11 @@ the new `Set.Date`.
 
 - A date correction rewrites the text's date (`correction/follow.go:170`). A text that still
   disagrees is a defect in the unit (§2).
-- `payload.action` and `followTriggerText` (`correction_reminder.go:191-208`) remain, but only as
-  the fallback when the unit cannot be read.
+- `payload.action` and `followTriggerText` (`correction_reminder.go:191-208`) remain only as the
+  fallback when the unit cannot be read.
 - New `phrase.Set` fields in `en`/`es`: `Reminder`, `DigestLine`, `DigestHeaderOne/Many`,
   `OneMore`, `RelationQuestion`, `Late`, `SomethingYouAsked`, `Date`.
-- The `fired` rows sent for one unit in one pass become one message, each surfaced. Armed
-  siblings are untouched.
+- The `fired` rows sent for one unit in one pass become one message, and each is surfaced.
 
 **D6. The reminder step: re-plan before lapse** (P3), when the pass can deliver. After the due
 loop and **before** the digest:
@@ -132,9 +132,14 @@ loop and **before** the digest:
 1. Stale one-shot rows are collected, both armed (`overdue`) and undelivered (`overdue`,
    `superseded`). `passed` rows are retired at once.
 2. Each unit with collected rows, whose current instant is ahead, gets
-   `CatchUp(eventAt, live, sent, prefs, interrupt, now)` (pure). `live` is the unit's armed
-   one-shot rows. `sent` is the unit's `status = 'fired'` rows: delivered, or undelivered and not
-   lapsed, so a row still in flight covers its lead.
+   `CatchUp(eventAt, live, sent, prefs, interrupt, now)` (pure).
+   - `live` is the unit's armed one-shot rows **minus every row collected as stale in step 1**.
+     So `FollowSent` never carries a stale row onto a plan and then loses it in step 4. Example:
+     stale L24 with healthy L2 keeps L2. The at-once carry of a past-due row
+     (`follow.go:62-66`) only ever sees a row that is not stale.
+   - `sent` is the unit's `status = 'fired'` rows **minus every row collected in step 1**. A
+     lapsing catch-up is excluded too, so a lone stale fired row on an event ahead yields a
+     catch-up.
 3. The plan is written first: `FollowSent`'s leads, carrying `live`, through `reminderSet.apply`
    with `checkCause` (`check.reminder.armed/moved/cancelled`).
 4. Only then are the collected rows lapsed or expired.
@@ -150,13 +155,14 @@ catch-up is armed or in flight. It produces **one** at-once plan through ADR-003
 `check.reminder.refused` (`quiet_hours`, written by its own writer, not `apply`), and the rows
 lapse.
 
-- **Exactly one delivered.** `armCatchUp` creates id `catch-up:<unit>:<About UTC
-  RFC3339>:<n>`, where `n` is 1 + the catch-ups already made for that instant, then records
-  `armed`. `ErrTriggerExists` (`ports/triggerrepo.go:337`) means another pass took `n`, so
-  nothing is recorded. A catch-up that lapses undelivered may be followed by attempt `n+1`
-  while the event is ahead. Once one is delivered, it is in `sent`, and none follows.
-- `catch_up` (`TriggerPayload.CatchUp`, `payloadJSON`) is cleared by `moveReminder` when the
-  instant changes.
+- **Exactly one delivered.** `armCatchUp` creates id `catch-up:<unit>:<About UTC RFC3339>:<n>`,
+  then records `armed`. `n` is 1 + the catch-ups that `TriggerRepo.OneShotForUnit` (link 4;
+  every one-shot row, expired included) returns for that instant. `ErrTriggerExists`
+  (`ports/triggerrepo.go:337`) means another pass took `n`, and nothing is recorded. An
+  undelivered lapse allows `n+1` while the event is ahead; once one is delivered it is in
+  `sent`. `moveReminder` clears `catch_up` (`TriggerPayload.CatchUp`) when the instant changes.
+- **Accepted exceptions:** a catch-up less than 5 minutes (one tick) before its event may end
+  `passed`, and D8's `Newer` may misfire, which is judged low risk.
 
 In link 3, before the catch-up exists, a unit owed only a catch-up is **held**: its rows are
 neither sent nor lapsed until link 4 or `passed`.
@@ -170,24 +176,14 @@ action='capture.classify' GROUP BY 1) UPDATE units SET language =
 NULLIF(json_extract(d.context,'$.language'),'') FROM f JOIN decision_log d ON d.rowid = f.r
 WHERE f.u = units.id` (SQLite 3.53).
 
-- Capture writes it, empty as NULL. Corrections never change it.
-- `UnitRepo.LatestLanguage()` returns the newest unit's non-null language, archived included.
-- A push uses its unit's language, else the latest, else the fallback. The digest uses the
-  latest, else the fallback.
+Capture writes it (empty as NULL), and corrections never change it. `UnitRepo.LatestLanguage()`
+returns the newest unit's non-null language, archived units included. A push uses its unit's
+language, else the latest, else the fallback; the digest uses the latest, else the fallback.
 
-**D8. Legacy rows** (the client's seven, `About` unknown). An undelivered one is `superseded`
-(`Newer`) when its unit has an armed one-shot row. Every such pair is a legacy fired row next to
-a lead armed later by a correction or re-arm.
+**D8. Legacy rows** (`About` unknown). An undelivered one is `superseded` (`Newer`) when its unit
+has an armed one-shot row, armed later by a correction or a re-arm.
 
-**Common.** `CheckReport` gains `TriggersLapsed`, `RemindersArmed`, `RemindersMoved`,
-`RemindersCancelled` and `RemindersRefused` (I12, `cmd/nooma/check.go:122`). The five actions go
-into `AllDecisionActions`, doc 02 §11 and `ui/activitylabel.go`.
-
-## 4-5. Client's vault; #337
-
-After link 4 the first check drops all seven. The departed flights send nothing. The dentist gets
-its 2-hour lead, and the 10-15 flight its 24-hour lead. The 10-16 flight gets its leads, out of
-the night.
+## 4-5. Interactions with #337
 
 #337 takes ADR-0031, migration 0008 and I36. This change takes ADR-0032, the next migration and
 I37; whichever merges second renumbers. #337's task reminders must write `event_at`, because D1
@@ -197,34 +193,14 @@ reads `due_at` as `Current`, and its quiet-hours exemption sits inside D1's `Tri
 
 | PR | Branch | Content | Impl+docs |
 |---|---|---|---|
-| 2 | `fix/never-remind-of-the-past` | D1 `passed` only, recurring by `NextOccurrence` (no `overdue` change: armed rows keep today's verdict, the digest ignores `overdue`), D4; doc 02 §7/§11, doc 03, I37 | ~320 |
-| 3 | `fix/late-reminders-replan` | D1 rest, D8, D6 without the catch-up (held), `sent` = `status = 'fired'` | ~390 |
-| 4 | `fix/no-destination-and-catch-up` | D3 cannot-deliver branch, Today's list, catch-up attempts, I15 amended | ~380 |
+| 2 | `fix/never-remind-of-the-past` | D1 `passed` only, recurring by `NextOccurrence` (no `overdue` change: armed rows keep today's verdict, the digest ignores `overdue`), D4, `FiredForUnit` on `status = 'fired'`; doc 02 §7/§11, doc 03, I37 | ~320 |
+| 3 | `fix/late-reminders-replan` | D1 rest, D8, "can deliver", the due loop deferring to D6, D6 without the catch-up (held), the digest skipping held rows | ~390 |
+| 4 | `fix/no-destination-and-catch-up` | D3 cannot-deliver branch, Today's list, `OneShotForUnit`, catch-up attempts, I15 amended | ~400 |
 | 5 | `fix/push-retries-undelivered` | D3 can-deliver branch: push, skips, bounds, recurring-only digest | ~200 |
 | 6 | `fix/reminder-renders-the-unit` | D5 | ~260 |
 | 7 | `feat/proactive-language` | D7 | ~220 |
 
-## 7. Tests (written first, watched red)
+## 7. Tests
 
-- **L1:**
-  - `ReminderVerdict`: every reason; `FromEvent` versus minute leads; second precision;
-    `Waiting`; recurring `About` by `NextOccurrence` (the period is longer than the lead);
-  - `CatchUp`: every branch, including attempt `n+1` and one already delivered.
-- **L2 `TestI37_*`:**
-  - link 2: the client's seven rows, so the past is never sent;
-  - link 3: D8; the re-plan, then an **abort mid-pass** (a failing `Lapse`) followed by a clean pass
-    creates nothing twice; a waiting birthday is carried; dry run equals the real scan;
-  - link 4: one catch-up across passes; an undelivered one gets exactly one successor; a nil
-    channel touches no row ahead and Today lists them;
-  - link 5: one failure row per outage;
-  - link 7: Spanish.
-- **Kept or widened:** I15 amended, I34 unchanged, I35 widened (a row in flight covers; a lapsed
-  one does not), I27 held.
-- **L3:** `Lapse`, `status = 'fired'` coverage, the grouped backfill, `LatestLanguage`.
-- **Mutation probes, per PR:**
-  - drop each reason;
-  - `overdue` on waiting rows;
-  - lapse before re-plan;
-  - drop the attempt number;
-  - count a lapsed row as sent;
-  - render `payload.action`.
+The acceptance gate is the named RED list per link in `tasks.md`, one test per scenario the
+judges raised in rounds 1-3.
