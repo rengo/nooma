@@ -18,7 +18,7 @@ This continues `design.md` (D1-D9). The rules are ADR-0031. P1-P5 are the PM's d
 | `resolveCheckIn` engages `open[0]` whatever it is | `checkin.go:48` |
 | `armedPayload` writes `event_at` only for one-shot plans, so a corrected recurring row loses any payload instant | `capture.go:976-986` |
 | `DueTrigger` has no `created_at`, and `Reschedule` keeps the original | `ports/triggerrepo.go` |
-| `pending_questions.relation_id` is `NOT NULL`, the resolutions are confirmed, rejected and expired, and both reads inner-join `relations` | migration 0004; `ports/pendingquestionrepo.go:34-49, 80` |
+| `pending_questions.relation_id` is `NOT NULL`, the resolutions are confirmed, rejected and expired, and both reads inner-join `relations` | migration 0004; `ports/pendingquestionrepo.go:34-49`; the join in `internal/store/sqlite/pendingquestionrepo.go` |
 
 ## 2. Decisions
 
@@ -89,7 +89,8 @@ tombstone with its instant. `remind_me` keeps its history.
   never aborts its pass: the capture correction fork, `Follow`, the preference re-arm, ADR-0032's
   re-plan and `CatchUp`, and D33.
 - **Sending:** today the gate reads the unit only for a row that names no event
-  (`reminder_gate.go:23` on main; `reminderGate.judge`, #343). Link 6 adds an **unconditional**
+  (`reminder_gate.go:23` on main; `reminderGate.judge` once #343 lands, which link 6 rebases onto).
+  Link 6 adds an **unconditional**
   unit read for the stop check. `prospection.Reminder` gains `Stopped`, and `ReminderVerdict`
   answers `Stale`, `LapseStopped`, before any other rule. A unit that cannot be read (any error
   but `ErrUnitNotFound`) **holds** the row: `Defer`, fail closed. Push, digest carry and Today all
@@ -174,7 +175,20 @@ cannot, because it knows no zone, so there is no backfill migration (round 3, it
 | Asked, no time ("No" daily, D43) | `occurs_at` | 0 | ✓ | — |
 | Unasked | `max(LeadTime(occ), previous occurrence)` | 7 | — | — |
 
-In `ReminderVerdict` (#340), `occurs_at` comes before `NextOccurrence(fire_at)`. A row with `occurs_at` is
+**How the gate judges a recurring row.** In `ReminderVerdict` (#340), `about` is `occurs_at` when
+present, and `NextOccurrence(fire_at)` (D32) otherwise.
+
+- **Unasked row:** day-granular, as #340 has it. It is passed from the next local midnight after
+  `occurs_at`, and keeps `Waiting` and its digest routing.
+- **Asked row:** never judged `passed`, because it fires *at* `occurs_at` and would be passed the
+  moment it is due. It is judged by lateness only, and its successor (D33) carries the next
+  occurrence.
+  - With `night_exempt` (a named time): no quiet-hours `Defer`, and stale `TriggerStalenessHours`
+    after `fire_at`. So "todos los días a las 06:30" rings at 06:30, and is dropped after 12:30 if
+    the vault was off.
+  - Without it (the "No" daily): `TriggerVerdict` as it is, deferred through the night and overdue
+    from quiet end.
+
 **Asked recurring rows are pushed:** `RouteTrigger(recurring, asked, i)` returns `RoutePush` for
 an asked row (`delivery.go:97` today routes every recurring row by interrupt level), and
 `reminderGate.judge` sets `Waiting` only for unasked recurring rows (#343 sets it for every fired
@@ -223,7 +237,7 @@ daily never fires twice on its first day (round 3, item 8). As a result:
   `asked`, and recomputes `occurs_at`: "a las 22" moves 21:00 to 22:00.
 - **Preference re-arm:** it keeps skipping recurring rows (`preferences_rearm.go:68-74`); an asked
   recurring row has no lead to re-arm.
-- **Rendering:** #339's renderer prints `About`, which is now `occurs_at`, so a recurring task
+- **Rendering:** ADR-0032's renderer (link 6 of `digest-stale-reminders`) prints `About`, which is now `occurs_at`, so a recurring task
   shows that day's occurrence and never its first date.
 - **Archive:** archiving a unit does not touch its reminders. Only the user stops them (client).
 
