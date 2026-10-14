@@ -28,6 +28,14 @@ func (errConfigRepo) SetReminderPrefs(context.Context, ports.ReminderPrefsUpdate
 	return nil
 }
 
+func (errConfigRepo) SetWeightThreshold(context.Context, float64, time.Time) error  { return nil }
+func (errConfigRepo) SetHysteresisMargin(context.Context, float64, time.Time) error { return nil }
+func (errConfigRepo) SetGoalStagnationDays(context.Context, int, time.Time) error   { return nil }
+func (errConfigRepo) SetMentalLoadThreshold(context.Context, int, time.Time) error  { return nil }
+func (errConfigRepo) SetConsolidationEnabled(context.Context, bool, time.Time) error {
+	return nil
+}
+
 // fakeTimer is this package's own timer seam test double (design §5.2):
 // the real timer.go implementation calls time.After directly, and this
 // fake lets a test control exactly when the cron loop's own wait fires,

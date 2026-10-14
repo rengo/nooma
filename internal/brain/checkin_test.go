@@ -384,6 +384,12 @@ func (r *confirmingRelations) ThresholdsFor(context.Context, string) (*relation.
 	return r.thresholds, nil
 }
 
+// LearnedThresholds is not part of the confirm path; a stray call fails
+// loudly instead of nil-panicking through the embedded interface.
+func (r *confirmingRelations) LearnedThresholds(context.Context) ([]ports.LearnedThreshold, error) {
+	return nil, errors.New("confirmingRelations: LearnedThresholds is not part of the confirm path")
+}
+
 func (r *confirmingRelations) Upsert(_ context.Context, rel ports.Relation) error {
 	if r.upsertErr != nil {
 		return r.upsertErr

@@ -14,7 +14,7 @@ import (
 type VaultConfig struct {
 	WeightThreshold        *float64   // → consolidation.ResolveWeightThreshold
 	HysteresisMargin       *float64   // → focus.ResolveMargin, read by brain.FocusKeeper
-	ConsolidationEnabled   *bool      // → no reader in m2c; m2d's cron gate
+	ConsolidationEnabled   *bool      // → internal/scheduler (catchup.go:36, scheduler.go:247)
 	GoalStagnationDays     *int       // → consolidation.ResolveGoalStagnationDays
 	MentalLoadThreshold    *int       // → consolidation.ResolveMentalLoadThreshold
 	ConsolidationLastRunAt *time.Time // → passContext.since, and m2d's boot catch-up
@@ -59,6 +59,20 @@ type ConfigRepo interface {
 	// Values are stored as given: validating them is the caller's
 	// (brain.PreferencesService), with the same parsers Resolve uses.
 	SetReminderPrefs(ctx context.Context, u ReminderPrefsUpdate, at time.Time) error
+
+	// The five setters below are the admin settings' only write path
+	// (m4e2-admin design Q5): one per column, no generic writer, no setter
+	// for relation thresholds or consolidation_last_run_at. Each one writes
+	// its own column and updated_at = at and nothing else, creating an
+	// absent row the way RecordConsolidationRun does (the migration's own
+	// defaults for every other column). Values are stored as given:
+	// validating them is the caller's (brain.AdminService), with the same
+	// Resolve functions the readers use.
+	SetWeightThreshold(ctx context.Context, v float64, at time.Time) error
+	SetHysteresisMargin(ctx context.Context, v float64, at time.Time) error
+	SetGoalStagnationDays(ctx context.Context, v int, at time.Time) error
+	SetMentalLoadThreshold(ctx context.Context, v int, at time.Time) error
+	SetConsolidationEnabled(ctx context.Context, v bool, at time.Time) error
 }
 
 // ReminderPrefsUpdate is the preference columns SetReminderPrefs writes,

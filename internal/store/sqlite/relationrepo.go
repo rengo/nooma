@@ -122,6 +122,34 @@ WHERE relation_type = ?`
 	return &t, nil
 }
 
+// LearnedThresholds implements ports.RelationRepo: every relation_thresholds
+// row, ORDER BY relation_type (UNIQUE, so the order is total).
+func (r *RelationRepo) LearnedThresholds(ctx context.Context) ([]ports.LearnedThreshold, error) {
+	const q = `
+SELECT relation_type, min_confidence_to_persist, min_confidence_to_surface
+FROM relation_thresholds
+ORDER BY relation_type`
+
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("reading learned thresholds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []ports.LearnedThreshold
+	for rows.Next() {
+		var lt ports.LearnedThreshold
+		if err := rows.Scan(&lt.RelationType, &lt.Persist, &lt.Surface); err != nil {
+			return nil, fmt.Errorf("scanning a learned threshold: %w", err)
+		}
+		out = append(out, lt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading learned thresholds: %w", err)
+	}
+	return out, nil
+}
+
 // Evidence implements ports.RelationRepo — the join design §4.2 fixed:
 // every relation, joined to both endpoints' own last_touched_at, in one
 // query — never relations, then units, then a zip in brain (design §4.1's

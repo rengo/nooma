@@ -3,6 +3,7 @@ package repocontract
 import (
 	"context"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 
@@ -38,6 +39,10 @@ type ConfigHarness interface {
 	// row and an all-NULL row both decode to every field nil). RowExists
 	// is what tells them apart.
 	RowExists(t *testing.T) bool
+
+	// UpdatedAt reports the singleton row's updated_at, so a setter's
+	// "updated_at becomes at" claim can be checked on both adapters.
+	UpdatedAt(t *testing.T) time.Time
 }
 
 // RunConfigRepoLoad runs the ports.ConfigRepo.Load contract against a
@@ -282,6 +287,84 @@ func RunSetReminderPrefs(t *testing.T, newRepo func(t *testing.T) ConfigHarness)
 			}
 			if v := col.read(got); v == nil || *v != col.want {
 				t.Errorf("%s = %v, want the stored %s kept", col.name, v, col.want)
+			}
+		})
+	}
+}
+
+// RunConfigSetters runs the contract of the five admin setters
+// (m4e2-admin design §6, C1). FX-C: every column is seeded to a distinct
+// non-default value before a setter runs, so a setter that writes another
+// column, or resets the row, moves something the test sees.
+func RunConfigSetters(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
+	t.Helper()
+	ctx := context.Background()
+	at := time.Date(2026, 10, 14, 9, 30, 0, 0, time.UTC)
+	str := func(s string) *string { return &s }
+	f64 := func(v float64) *float64 { return &v }
+	num := func(v int) *int { return &v }
+	flag := func(v bool) *bool { return &v }
+	lastRun := time.Date(2026, 8, 9, 3, 0, 0, 0, time.UTC)
+
+	seeded := func() ports.VaultConfig {
+		return ports.VaultConfig{
+			WeightThreshold: f64(0.7), HysteresisMargin: f64(0.11), ConsolidationEnabled: flag(false),
+			GoalStagnationDays: num(30), MentalLoadThreshold: num(9), ConsolidationLastRunAt: &lastRun,
+			EventReminderLeads: str("[300]"), DateOnlyReminderAt: str("10:00"),
+			QuietHoursEnd: str("05:00"), EveningReminderAt: str("21:00"),
+		}
+	}
+
+	for _, c := range []struct {
+		name  string
+		set   func(r ConfigHarness) error
+		moves func(c *ports.VaultConfig)
+	}{
+		{"SetWeightThreshold", func(r ConfigHarness) error { return r.SetWeightThreshold(ctx, 0.9, at) },
+			func(c *ports.VaultConfig) { c.WeightThreshold = f64(0.9) }},
+		{"SetHysteresisMargin", func(r ConfigHarness) error { return r.SetHysteresisMargin(ctx, 0.25, at) },
+			func(c *ports.VaultConfig) { c.HysteresisMargin = f64(0.25) }},
+		{"SetGoalStagnationDays", func(r ConfigHarness) error { return r.SetGoalStagnationDays(ctx, 45, at) },
+			func(c *ports.VaultConfig) { c.GoalStagnationDays = num(45) }},
+		{"SetMentalLoadThreshold", func(r ConfigHarness) error { return r.SetMentalLoadThreshold(ctx, 12, at) },
+			func(c *ports.VaultConfig) { c.MentalLoadThreshold = num(12) }},
+		{"SetConsolidationEnabled", func(r ConfigHarness) error { return r.SetConsolidationEnabled(ctx, true, at) },
+			func(c *ports.VaultConfig) { c.ConsolidationEnabled = flag(true) }},
+	} {
+		t.Run(c.name+" moves only its own column and stamps updated_at", func(t *testing.T) {
+			repo := newRepo(t)
+			repo.SeedConfig(t, seeded())
+			before, err := repo.Load(ctx)
+			if err != nil {
+				t.Fatalf("Load (before): %v", err)
+			}
+			if err := c.set(repo); err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			got, err := repo.Load(ctx)
+			if err != nil {
+				t.Fatalf("Load (after): %v", err)
+			}
+			want := before
+			c.moves(&want)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("Load() after %s = %+v, want only its own column changed: %+v", c.name, got, want)
+			}
+			if u := repo.UpdatedAt(t); !u.Equal(at) {
+				t.Errorf("updated_at = %v, want the write's instant %v", u, at)
+			}
+		})
+
+		t.Run(c.name+" creates an absent row", func(t *testing.T) {
+			repo := newRepo(t)
+			if err := c.set(repo); err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			if !repo.RowExists(t) {
+				t.Errorf("%s on an absent row left no row", c.name)
+			}
+			if u := repo.UpdatedAt(t); !u.Equal(at) {
+				t.Errorf("updated_at = %v, want %v", u, at)
 			}
 		})
 	}

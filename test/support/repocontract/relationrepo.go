@@ -2,6 +2,7 @@ package repocontract
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -408,4 +409,40 @@ func fixtureRelation(id, from, to, relType string, strength, confidence float64)
 		CreatedBy:  "system",
 		CreatedAt:  time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC),
 	}
+}
+
+// RunLearnedThresholds runs the ports.RelationRepo.LearnedThresholds
+// contract (m4e2-admin design §3.2, C8): every relation_thresholds row,
+// ordered by relation_type however the rows were inserted.
+func RunLearnedThresholds(t *testing.T, newRepo func(t *testing.T) RelationHarness) {
+	t.Helper()
+	ctx := context.Background()
+
+	t.Run("an empty table returns no rows and no error", func(t *testing.T) {
+		got, err := newRepo(t).LearnedThresholds(ctx)
+		if err != nil {
+			t.Fatalf("LearnedThresholds: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("LearnedThresholds() = %+v, want none", got)
+		}
+	})
+
+	t.Run("rows come back ordered by relation_type, whatever the insert order", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.SeedThreshold(t, "same_topic", 0.4, 0.6)
+		repo.SeedThreshold(t, "duplicate", 0.2, 0.8)
+
+		got, err := repo.LearnedThresholds(ctx)
+		if err != nil {
+			t.Fatalf("LearnedThresholds: %v", err)
+		}
+		want := []ports.LearnedThreshold{
+			{RelationType: "duplicate", Thresholds: relation.Thresholds{Persist: 0.2, Surface: 0.8}},
+			{RelationType: "same_topic", Thresholds: relation.Thresholds{Persist: 0.4, Surface: 0.6}},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("LearnedThresholds() = %+v, want %+v", got, want)
+		}
+	})
 }

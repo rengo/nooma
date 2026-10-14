@@ -203,3 +203,12 @@ func fixtureStoreRelation(id, from, to, relType string, strength, confidence flo
 		CreatedBy: "system", CreatedAt: relationFixtureTime,
 	}
 }
+
+// TestRelationRepo_LearnedThresholds runs the LearnedThresholds contract
+// against a real vault (C8: the order is the SQL's, not insertion order).
+func TestRelationRepo_LearnedThresholds(t *testing.T) {
+	repocontract.RunLearnedThresholds(t, func(t *testing.T) repocontract.RelationHarness {
+		v := openTestVault(t)
+		return relationHarness{RelationRepo: NewRelationRepo(v), v: v}
+	})
+}

@@ -137,6 +137,20 @@ func (r *Relations) ThresholdsFor(_ context.Context, relType string) (*relation.
 	return &t, nil
 }
 
+// LearnedThresholds implements ports.RelationRepo, ordered by relation_type
+// like the store's ORDER BY.
+func (r *Relations) LearnedThresholds(context.Context) ([]ports.LearnedThreshold, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []ports.LearnedThreshold
+	for relType, t := range r.thresholds {
+		out = append(out, ports.LearnedThreshold{RelationType: relType, Thresholds: t})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RelationType < out[j].RelationType })
+	return out, nil
+}
+
 // Evidence implements ports.RelationRepo. Joins every stored relation to
 // both endpoints' last_touched_at, read from r.lastTouchedAt (set via
 // SetLastTouchedAt) — an endpoint never seeded reports the zero time.Time,

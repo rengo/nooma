@@ -154,3 +154,34 @@ ON CONFLICT(id) DO UPDATE SET
 	}
 	return nil
 }
+
+// setColumn is the one statement behind the five admin setters: a lazy
+// UPSERT that names only id, the column and updated_at, so an absent row
+// takes the migration's own defaults for every other column (never a Go
+// literal duplicating them) and an existing row changes nothing else. col is
+// always one of the five literals below, never caller input.
+func (r *ConfigRepo) setColumn(ctx context.Context, col string, v any, at time.Time) error {
+	q := `INSERT INTO config (id, ` + col + `, updated_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET ` + col + ` = excluded.` + col + `, updated_at = excluded.updated_at`
+	if _, err := r.db.ExecContext(ctx, q, v, formatUnitTime(at)); err != nil {
+		return fmt.Errorf("writing config.%s at %s: %w", col, at, err)
+	}
+	return nil
+}
+
+// The five admin setters — see ports.ConfigRepo.
+func (r *ConfigRepo) SetWeightThreshold(ctx context.Context, v float64, at time.Time) error {
+	return r.setColumn(ctx, "weight_threshold", v, at)
+}
+func (r *ConfigRepo) SetHysteresisMargin(ctx context.Context, v float64, at time.Time) error {
+	return r.setColumn(ctx, "hysteresis_margin", v, at)
+}
+func (r *ConfigRepo) SetGoalStagnationDays(ctx context.Context, v int, at time.Time) error {
+	return r.setColumn(ctx, "goal_stagnation_days", v, at)
+}
+func (r *ConfigRepo) SetMentalLoadThreshold(ctx context.Context, v int, at time.Time) error {
+	return r.setColumn(ctx, "mental_load_threshold", v, at)
+}
+func (r *ConfigRepo) SetConsolidationEnabled(ctx context.Context, v bool, at time.Time) error {
+	return r.setColumn(ctx, "consolidation_enabled", v, at)
+}

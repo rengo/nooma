@@ -37,3 +37,12 @@ func TestConfigRepo_MemRepo_SetReminderPrefs(t *testing.T) {
 		return memrepo.NewConfig()
 	})
 }
+
+// TestConfigRepo_MemRepo_Setters runs the five admin setters' contract
+// (m4e2-admin design §6, C1) against the fake.
+func TestConfigRepo_MemRepo_Setters(t *testing.T) {
+	repocontract.RunConfigSetters(t, func(t *testing.T) repocontract.ConfigHarness {
+		t.Helper()
+		return memrepo.NewConfig()
+	})
+}
