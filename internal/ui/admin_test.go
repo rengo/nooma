@@ -224,6 +224,34 @@ func TestAdminPost_ARefusedValueIs400AndTheFormComesBackWithTheMessageAndTheText
 	assertContains(t, body, `name="value" value="0.05"`)
 }
 
+func TestAdminPost_ARefusedConsolidationValueKeepsTheValueInForceSelected(t *testing.T) {
+	t.Parallel()
+	for _, inForce := range []bool{true, false} {
+		view := defaultAdminView()
+		view.Settings.ConsolidationEnabled = inForce
+		refused := &brain.ConfigRangeError{Field: brain.ConfigConsolidationEnabled, Raw: "maybe", Message: "choose enabled or disabled"}
+		rec := adminPost(t, &fakeAdmin{view: view, err: refused}, "field=consolidation_enabled&value=maybe")
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("in force %v: status = %d, want 400", inForce, rec.Code)
+		}
+		body := rec.Body.String()
+		assertContains(t, body, `data-error="consolidation_enabled"`, "choose enabled or disabled")
+		selectedTrue, selectedFalse := `<option value="true" selected>`, `<option value="false" selected>`
+		if inForce {
+			assertContains(t, body, selectedTrue)
+			if strings.Contains(body, selectedFalse) {
+				t.Errorf("in force true: the disabled option is selected too: %q", body)
+			}
+		} else {
+			assertContains(t, body, selectedFalse)
+			if strings.Contains(body, selectedTrue) {
+				t.Errorf("in force false: the enabled option is selected too: %q", body)
+			}
+		}
+	}
+}
+
 func TestAdminPost_AFailureIs500WithoutItsCause(t *testing.T) {
 	t.Parallel()
 	rec := adminPost(t, &fakeAdmin{view: defaultAdminView(), err: errors.New("disk is on fire")}, "field=weight_threshold&value=0.6")
