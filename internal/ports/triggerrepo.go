@@ -301,9 +301,18 @@ type TriggerRepo interface {
 	// Expire moves id from armed to expired (I15: a trigger past its
 	// window expires, it does not fire late). triggers carries no
 	// expired_at column, so no timestamp is written and none is invented.
+	// An expired row with a fired_at is the other way to be expired: a fired
+	// reminder that lapsed (Lapse below), whose firing did happen.
 	//
 	// It returns the same two errors as Fire, for the same reasons.
 	Expire(ctx context.Context, id string) error
+
+	// Lapse moves id from fired to expired when it never reached the user
+	// (surfaced_at NULL), keeping fired_at: a reminder that fired and was
+	// judged no longer true to send (ADR-0032). It returns
+	// ErrTriggerStatusConflict if id is not fired or was already surfaced,
+	// and ErrTriggerNotFound if it does not exist.
+	Lapse(ctx context.Context, id string) error
 
 	// ArmedForUnit returns every armed trigger hanging off unitID, ordered
 	// by (fire_at, id) — the reminders a corrected date moves (I29).
@@ -315,9 +324,10 @@ type TriggerRepo interface {
 	// ArmedForUnit.
 	ArmedUnitIDs(ctx context.Context) ([]string, error)
 
-	// FiredForUnit returns unitID's one-shot triggers that fired, in no
-	// particular order: what a re-arm under new preferences must not send
-	// again.
+	// FiredForUnit returns unitID's one-shot triggers whose status is still
+	// fired, in no particular order: what a re-arm under new preferences
+	// must not send again. A lapsed row (expired, fired_at kept) was never
+	// sent and covers nothing.
 	FiredForUnit(ctx context.Context, unitID string) ([]FiredTrigger, error)
 
 	// Reschedule applies m to id under an armed precondition: fire_at,

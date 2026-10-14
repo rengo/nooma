@@ -29,18 +29,18 @@ import (
 // ByUnit through the focus keeper, for the members of the incumbent it holds
 // and of the one it selects (the pending-digest mirror's P'), and ByID is a
 // read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
-// Expire, Reschedule write; Due, Undelivered, Delivered, ArmedForUnit,
+// Expire, Lapse, Reschedule write; Due, Undelivered, Delivered, ArmedForUnit,
 // ArmedUnitIDs read),
 // pendingquestionrepo.go (PendingQuestionRepo: Create, MarkAsked,
 // Confirm, Reject, Expire write; Unasked, Open read), staterepo.go
 // (StateRepo: OpenHypothesis writes; LastHypothesisAt, LatestEnergy
 // read), configrepo.go (ConfigRepo: RecordConsolidationRun and SetReminderPrefs
 // write; Load reads), decisionlog.go (DecisionLog: Record writes; Since and Before read) —
-// twenty-five distinct method names in total, recounted from the guards
+// twenty-six distinct method names in total, recounted from the guards
 // below (m4c added RelationRepo's Upsert and Delete to design §3.6's
 // sixteen; fix-correction-date-follows added TriggerRepo's Reschedule;
 // ui-preferences added ConfigRepo's SetReminderPrefs; m4e2-admin added
-// ConfigRepo's five setters).
+// ConfigRepo's five setters; the never-remind-of-the-past link added TriggerRepo's Lapse).
 func TestI27_ViewingIsNotDelivering(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -187,6 +187,10 @@ func (g *i27Triggers) Resolve(context.Context, string, ports.TriggerResolution, 
 }
 func (g *i27Triggers) Expire(context.Context, string) error {
 	i27Fail(g.t, "TriggerRepo", "Expire")
+	return nil
+}
+func (g *i27Triggers) Lapse(context.Context, string) error {
+	i27Fail(g.t, "TriggerRepo", "Lapse")
 	return nil
 }
 func (g *i27Triggers) Reschedule(context.Context, string, ports.TriggerMove) error {

@@ -1191,7 +1191,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   `proactive_check` ticks, `internal/core/prospection.DelayCaveatMinutes`).
 - Delivery lifecycle: `fired_at` (fired) → `surfaced_at` (delivered to the user) →
   `responded_at` + `resolution` (`engaged` | `declined` | `self_healed` — fresh activity
-  resolved it before the user answered).
+  resolved it before the user answered). One whose event passed first lapses (ADR-0032).
 - **The due scan** reads the clock once and judges every trigger and timer that has come due
   against that one instant, so a pass's verdicts are consistent with each other. It decides
   nothing itself: staleness, quiet hours and the deliverable-from shift above are all evaluated
@@ -1334,12 +1334,32 @@ box can audit it):
   `interrupt_level`, a degraded one included (`internal/core/prospection.RouteTrigger`); waiting
   for tomorrow's digest would deliver it after the thing it is about. Quiet hours still defer
   it, as below. **It is never late**: one whose event has started (`fire_at + lead_minutes`) is
-  expired with a `check.trigger.expired` row instead of sent (`EventReminderVerdict`).
-  **Exception**: a reminder armed at once carries no lead, so its event is not known at delivery
-  and this check does not apply to it; it falls under `TriggerVerdict`'s staleness alone. It is
-  due the minute it is armed, so only a vault that is off between arming and the event can send
-  it after the event. The interrupt split below, and its "a degraded reading never
+  expired with a `check.trigger.expired` row instead of sent (`ReminderVerdict`).
+  A reminder armed at once carries no lead but names its event in `payload.event_at`, and a
+  legacy one is judged on its unit's event: both fall under the gate below (ADR-0032).
+  The interrupt split below, and its "a degraded reading never
   pushes" guarantee, govern every recurring reminder.
+
+- **A reminder never speaks of the past** ([ADR-0032](adr/0032-a-reminder-says-what-is-true-now.md),
+  `internal/core/prospection.ReminderVerdict`). One gate judges a reminder against its event when
+  its trigger comes due, when the digest assembles and when Today previews it. The event is, in
+  order: the payload's `event_at`; `fire_at + lead_minutes` when the lead is positive; for a
+  recurring reminder, the occurrence after `fire_at` read in the clock's zone (`fire_at` is stored
+  in UTC); and, for a one-shot reminder with none of those, the event its unit holds now. One that
+  names no event is never past: `lead_minutes` 0 is not an event at `fire_at`. A timed event is
+  past once its instant is at or before now; a day-granular one, a recurring occurrence (noon) or a
+  date-only event (local midnight, as `reminderInstants` reads it), only from the next local
+  midnight in the clock's zone, so a birthday is still reminded at 15:00 on the day. A past
+  event means:
+  - an armed trigger is expired (`check.trigger.expired`, reason `passed`);
+  - a fired trigger that never reached the user **lapses**: `fired` to `expired`, `fired_at` kept,
+    `surfaced_at` NULL (`TriggerRepo.Lapse`), recorded as `check.trigger.lapsed`, counted in the
+    check report, and no longer covering a lead a re-arm would skip (`FiredForUnit` reads `fired`
+    rows only).
+  Lateness does not judge a fired reminder waiting for the digest (ADR-0009's window is a push's),
+  and an armed trigger keeps today's verdict on it. Only the digest lapses, so a past fired row
+  stays `fired` until a digest is due while Today and the digest ignore it. Today applies the same
+  gate and writes nothing (I27).
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
@@ -1519,6 +1539,8 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
 `decision_log`: ONE table for all modules (`action`, `rationale`, `context` JSON,
 `occurred_at`). Every automatic decision with an effect is recorded with its reasoning.
 
+- **A reminder retired because its event passed says so**: `check.trigger.expired` (armed) or
+  `check.trigger.lapsed` (fired, never delivered), each with `reason: passed`.
 - **A rationale states what happened, never what was configured.** The distance between a
   firing and the thing it is about is measured from the two instants, not read off
   the configured lead: a trigger armed for an event an hour out fires at the capture instant, and

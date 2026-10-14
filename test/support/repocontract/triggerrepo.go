@@ -504,6 +504,29 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		}
 	})
 
+	t.Run("FiredForUnit_LapsedRowDoesNotCover", func(t *testing.T) {
+		repo := newRepo(t)
+		seed(t, repo) // trg-fired fired at contractNow; trg-late, trg-early armed, all on unit-shared
+		at := contractNow.Add(time.Hour)
+		unitID := "unit-shared"
+		lapsing := fixtureTrigger("trg-lapsing", &at)
+		lapsing.UnitID = &unitID
+		createTrigger(t, repo, lapsing)
+		if err := repo.Fire(ctx, "trg-lapsing", at); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+		if got, err := repo.FiredForUnit(ctx, "unit-shared"); err != nil || len(got) != 2 {
+			t.Fatalf("FiredForUnit before the lapse = %+v, %v; want trg-fired and trg-lapsing", got, err)
+		}
+		if err := repo.Lapse(ctx, "trg-lapsing"); err != nil {
+			t.Fatalf("Lapse: %v", err)
+		}
+		got, err := repo.FiredForUnit(ctx, "unit-shared")
+		if err != nil || len(got) != 1 || !got[0].FiredAt.Equal(contractNow) {
+			t.Errorf("FiredForUnit after the lapse = %+v, %v; want only trg-fired: a lapsed row was never sent and covers nothing", got, err)
+		}
+	})
+
 	t.Run("Reschedule writes the event instant and user lead", func(t *testing.T) {
 		repo := newRepo(t)
 		seed(t, repo)
@@ -706,6 +729,46 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		if err := repo.Surface(ctx, "trg-1", contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
 			t.Fatalf("second Surface: got %v, want ErrTriggerStatusConflict", err)
 		}
+	})
+
+	t.Run("Lapse retires a fired, unsurfaced trigger: it leaves Undelivered and can no longer be surfaced", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-1")
+
+		if err := repo.Lapse(ctx, "trg-1"); err != nil {
+			t.Fatalf("Lapse: %v", err)
+		}
+		assertDueTriggerIDs(t, undelivered(t, repo))
+		assertDueTriggerIDs(t, delivered(t, repo))
+		if err := repo.Surface(ctx, "trg-1", contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("Surface after Lapse: got %v, want ErrTriggerStatusConflict: a lapsed reminder was never delivered", err)
+		}
+		if err := repo.Lapse(ctx, "trg-1"); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("second Lapse: got %v, want ErrTriggerStatusConflict", err)
+		}
+	})
+
+	t.Run("Lapse refuses an armed and a surfaced trigger, and an unknown id", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		at := contractNow
+		createTrigger(t, repo, fixtureTrigger("trg-armed", &at))
+		fire(t, repo, "trg-sent")
+		if err := repo.Surface(ctx, "trg-sent", contractNow); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+
+		for _, id := range []string{"trg-armed", "trg-sent"} {
+			if err := repo.Lapse(ctx, id); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+				t.Errorf("Lapse(%s): got %v, want ErrTriggerStatusConflict", id, err)
+			}
+		}
+		if err := repo.Lapse(ctx, "trg-missing"); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Errorf("Lapse of an unknown id: got %v, want ErrTriggerNotFound", err)
+		}
+		assertDueTriggerIDs(t, dueTriggers(t, repo, contractNow.Add(time.Hour)), "trg-armed")
+		assertDueTriggerIDs(t, delivered(t, repo), "trg-sent")
 	})
 
 	t.Run("Resolve records the answer and closes the check-in", func(t *testing.T) {

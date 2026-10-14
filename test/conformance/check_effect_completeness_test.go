@@ -155,3 +155,41 @@ func assertRowCount(t *testing.T, decisions ports.DecisionLog, since time.Time, 
 		t.Fatalf("decision_log has %d rows, want %d: %+v", len(rows), want, rows)
 	}
 }
+
+// TestCheckEffectCompleteness_LapseAndExpireInOnePass is I12 for the effect
+// the verdict sweep above cannot reach: a fired reminder lapsing in the digest.
+// One pass expires an armed overdue reminder and lapses a fired past one, and
+// each writes exactly its row; the report's arithmetic equals the rows written,
+// and a dry run reports the same effects and writes none.
+func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
+	seed := func(v *i37Vault) {
+		v.event("u-gone", i37At(12, 9))
+		v.event("u-ahead", i37At(20, 9))
+		v.fired("gone", "u-gone", "flight already gone", *i37At(9, 16), nil)
+		v.row("overdue", "u-ahead", "dentist", *i37At(13, 20), nil) // armed, 14 hours late
+	}
+
+	real := newI37Vault(t)
+	seed(real)
+	report := real.check(false)
+	rows, err := real.log.Since(context.Background(), time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects := report.TriggersExpired + report.TriggersLapsed; effects != 2 || len(rows) != effects {
+		t.Errorf("report = %+v, decision_log rows = %d; want one row per expiry and lapse", report, len(rows))
+	}
+	if report.TriggersExpired != 1 || report.TriggersLapsed != 1 {
+		t.Errorf("report = %+v, want one expired and one lapsed", report)
+	}
+
+	dry := newI37Vault(t)
+	seed(dry)
+	preview := dry.check(true)
+	if preview != report {
+		t.Errorf("dry run reported %+v, the real pass %+v", preview, report)
+	}
+	if rows, _ := dry.log.Since(context.Background(), time.Time{}, -1); len(rows) != 0 {
+		t.Errorf("dry run wrote %d rows", len(rows))
+	}
+}

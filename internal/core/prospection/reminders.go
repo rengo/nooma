@@ -171,7 +171,7 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 // across a DST change too.
 func reminderInstants(eventAt time.Time, prefs ReminderPrefs, zone *time.Location) []time.Time {
 	local := eventAt.In(zone)
-	if local.Hour() == 0 && local.Minute() == 0 && local.Second() == 0 && local.Nanosecond() == 0 {
+	if isDateOnly(local) {
 		y, m, d := local.Date()
 		return []time.Time{time.Date(y, m, d-1, prefs.DateOnlyAt.Hour, prefs.DateOnlyAt.Minute, 0, 0, zone)}
 	}
@@ -180,6 +180,13 @@ func reminderInstants(eventAt time.Time, prefs ReminderPrefs, zone *time.Locatio
 		out[i] = eventAt.Add(-lead)
 	}
 	return out
+}
+
+// isDateOnly reports whether local (in the user's zone) is midnight sharp, how
+// classify stores a bare date; a timed 00:00 event reads as one. Shared by
+// reminderInstants and the delivery gate.
+func isDateOnly(local time.Time) bool {
+	return local.Hour() == 0 && local.Minute() == 0 && local.Second() == 0 && local.Nanosecond() == 0
 }
 
 // leadsAhead is the nominal instants of eventAt's reminders not behind now

@@ -146,6 +146,13 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	if err != nil {
 		return Today{}, fmt.Errorf("today: undelivered triggers: %w", err)
 	}
+	// Counted after the gate the digest applies, never before: a reminder whose
+	// event is no longer ahead is neither listed nor counted. Today only
+	// judges it; lapsing it is the digest pass's write (I27).
+	pending, _, err = splitPast(ctx, r.units, prospection.DefaultQuietHours(), pending, now)
+	if err != nil {
+		return Today{}, fmt.Errorf("today: %w", err)
+	}
 	out.Status.Undelivered = len(pending)
 
 	history, err := r.log.Since(ctx, now.AddDate(0, 0, -digestHistoryDays), -1)

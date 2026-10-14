@@ -363,7 +363,7 @@ func TestToday_RepeatedRequestsLeaveDeliveryBookkeepingUnchanged(t *testing.T) {
 	// Baseline: zero Today requests before the digest assembles.
 	baseTriggers, baseUnits, baseQuestions, baseLog, baseState, _ := newDigestParityFixture(t)
 	baseCh := &sendingChannel{}
-	baseCarried, err := questionRunner(t, baseTriggers, baseUnits, baseState, baseLog, baseCh, baseQuestions).
+	baseCarried, _, err := questionRunner(t, baseTriggers, baseUnits, baseState, baseLog, baseCh, baseQuestions).
 		assembleDigest(ctx, digestNow, true)
 	if err != nil {
 		t.Fatalf("baseline assembleDigest: %v", err)
@@ -379,7 +379,7 @@ func TestToday_RepeatedRequestsLeaveDeliveryBookkeepingUnchanged(t *testing.T) {
 		}
 	}
 	ch := &sendingChannel{}
-	carried, err := questionRunner(t, triggers, units, state, log, ch, questions).
+	carried, _, err := questionRunner(t, triggers, units, state, log, ch, questions).
 		assembleDigest(ctx, digestNow, true)
 	if err != nil {
 		t.Fatalf("assembleDigest after five Today requests: %v", err)

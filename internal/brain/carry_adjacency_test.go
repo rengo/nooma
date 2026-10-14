@@ -105,7 +105,7 @@ func (f *fxH) contest(t *testing.T, k focus.Kind) (incumbent, challenger string)
 func (f *fxH) digestOrder(t *testing.T) (order []string, carried int) {
 	t.Helper()
 	ch := &sendingChannel{}
-	carried, err := f.digestRunner(ch).assembleDigest(context.Background(), todayNow, true)
+	carried, _, err := f.digestRunner(ch).assembleDigest(context.Background(), todayNow, true)
 	if err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestDigest_AdjacencyNeverChangesHowManyItemsCarry(t *testing.T) {
 	// committing run so it cannot be influenced by it.
 	dryRun := func(f *fxH) int {
 		t.Helper()
-		n, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), todayNow, false)
+		n, _, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), todayNow, false)
 		if err != nil {
 			t.Fatalf("assembleDigest dry run: %v", err)
 		}

@@ -77,7 +77,7 @@ func TestDigest_IsSentOnceADay(t *testing.T) {
 	r := digestRunner(t, triggers, units, memrepo.NewState(), log, ch)
 
 	ctx := context.Background()
-	if _, err := r.assembleDigest(ctx, digestNow, true); err != nil {
+	if _, _, err := r.assembleDigest(ctx, digestNow, true); err != nil {
 		t.Fatalf("first digest: %v", err)
 	}
 	if ch.count() != 1 {
@@ -85,7 +85,7 @@ func TestDigest_IsSentOnceADay(t *testing.T) {
 	}
 
 	// A second pass the same day.
-	if _, err := r.assembleDigest(ctx, digestNow.Add(time.Hour), true); err != nil {
+	if _, _, err := r.assembleDigest(ctx, digestNow.Add(time.Hour), true); err != nil {
 		t.Fatalf("second digest: %v", err)
 	}
 	if ch.count() != 1 {
@@ -93,7 +93,7 @@ func TestDigest_IsSentOnceADay(t *testing.T) {
 	}
 
 	// The next day.
-	if _, err := r.assembleDigest(ctx, digestNow.AddDate(0, 0, 1), true); err != nil {
+	if _, _, err := r.assembleDigest(ctx, digestNow.AddDate(0, 0, 1), true); err != nil {
 		t.Fatalf("next day: %v", err)
 	}
 	if ch.count() != 2 {
@@ -114,7 +114,7 @@ func TestDigest_MovingQuietEndLaterAfterTheDigestSendsNoSecond(t *testing.T) {
 	ctx := context.Background()
 	morning := time.Date(2026, 8, 5, 8, 0, 0, 0, time.UTC)
 	r.night = prospection.QuietHours{End: prospection.TimeOfDay{Hour: 7}}
-	if _, err := r.assembleDigest(ctx, morning, true); err != nil {
+	if _, _, err := r.assembleDigest(ctx, morning, true); err != nil {
 		t.Fatalf("morning digest: %v", err)
 	}
 	if ch.count() != 1 {
@@ -123,7 +123,7 @@ func TestDigest_MovingQuietEndLaterAfterTheDigestSendsNoSecond(t *testing.T) {
 
 	triggers.pending = append(triggers.pending, digestTrigger("trg-2", "u-1", "call the bank"))
 	r.night = prospection.QuietHours{End: prospection.TimeOfDay{Hour: 10}}
-	if _, err := r.assembleDigest(ctx, time.Date(2026, 8, 5, 10, 30, 0, 0, time.UTC), true); err != nil {
+	if _, _, err := r.assembleDigest(ctx, time.Date(2026, 8, 5, 10, 30, 0, 0, time.UTC), true); err != nil {
 		t.Fatalf("after the quiet end moved: %v", err)
 	}
 	if ch.count() != 1 {
@@ -138,7 +138,7 @@ func TestDigest_IsNotDueBeforeTheDigestHour(t *testing.T) {
 	r := digestRunner(t, triggers, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), ch)
 
 	early := time.Date(2026, 8, 5, prospection.DigestHour-1, 0, 0, 0, time.UTC)
-	if _, err := r.assembleDigest(context.Background(), early, true); err != nil {
+	if _, _, err := r.assembleDigest(context.Background(), early, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if ch.count() != 0 {
@@ -155,7 +155,7 @@ func TestDigest_EmptyIsNotSent(t *testing.T) {
 	ch := &sendingChannel{}
 	r := digestRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), ch)
 
-	if _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if ch.count() != 0 {
@@ -181,7 +181,7 @@ func TestDigest_LowEnergyHoldsItemsBackAndCountsTheDeferral(t *testing.T) {
 	log := memrepo.NewDecisionLog()
 	ch := &sendingChannel{}
 
-	carried, err := digestRunner(t, triggers, &digestUnits{byID: byID}, state, log, ch).
+	carried, _, err := digestRunner(t, triggers, &digestUnits{byID: byID}, state, log, ch).
 		assembleDigest(context.Background(), digestNow, true)
 	if err != nil {
 		t.Fatalf("assembleDigest: %v", err)
@@ -218,7 +218,7 @@ func TestDigest_ANullUnitIDNeverReachesTheFocusQuery(t *testing.T) {
 	}}
 	units := &digestUnits{byID: map[string]focus.Candidate{"u-1": {ID: "u-1", Weight: 1}}}
 
-	if _, err := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), &sendingChannel{}).
+	if _, _, err := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), &sendingChannel{}).
 		assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestDigest_NoEnergyReadingIsNotLowEnergy(t *testing.T) {
 		byID[unit] = focus.Candidate{ID: unit, Weight: 1}
 	}
 
-	carried, err := digestRunner(t, &undeliveredTriggers{pending: pending}, &digestUnits{byID: byID},
+	carried, _, err := digestRunner(t, &undeliveredTriggers{pending: pending}, &digestUnits{byID: byID},
 		memrepo.NewState(), memrepo.NewDecisionLog(), &sendingChannel{}).
 		assembleDigest(context.Background(), digestNow, true)
 	if err != nil {
@@ -341,7 +341,7 @@ func TestDigest_WithNoQueuedQuestionIsUnchanged(t *testing.T) {
 	ch := &sendingChannel{}
 	log := memrepo.NewDecisionLog()
 
-	if _, err := questionRunner(t, triggers, units, memrepo.NewState(), log, ch, queuedQuestions(t)).
+	if _, _, err := questionRunner(t, triggers, units, memrepo.NewState(), log, ch, queuedQuestions(t)).
 		assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestDigest_AsksExactlyOneQuestionOldestFirst(t *testing.T) {
 	log := memrepo.NewDecisionLog()
 
 	ctx := context.Background()
-	if _, err := questionRunner(t, triggers, units, memrepo.NewState(), log, ch, questions).
+	if _, _, err := questionRunner(t, triggers, units, memrepo.NewState(), log, ch, questions).
 		assembleDigest(ctx, digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestDigest_AQuestionAloneIsStillSent(t *testing.T) {
 	ch := &sendingChannel{}
 	log := memrepo.NewDecisionLog()
 
-	carried, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, ch, questions).
+	carried, _, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, ch, questions).
 		assembleDigest(context.Background(), digestNow, true)
 	if err != nil {
 		t.Fatalf("assembleDigest: %v", err)
@@ -466,7 +466,7 @@ func TestDigest_LowEnergyAsksNothingAndLeavesTheQueueUntouched(t *testing.T) {
 	ch := &sendingChannel{}
 
 	ctx := context.Background()
-	if _, err := questionRunner(t, triggers, units, state, memrepo.NewDecisionLog(), ch, questions).
+	if _, _, err := questionRunner(t, triggers, units, state, memrepo.NewDecisionLog(), ch, questions).
 		assembleDigest(ctx, digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -495,7 +495,7 @@ func TestDigest_WithoutAQuestionRepoStillSends(t *testing.T) {
 	ch := &sendingChannel{}
 
 	// digestRunner leaves questions nil, which is the case under test.
-	if _, err := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), ch).
+	if _, _, err := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), ch).
 		assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest with a nil question repo: %v", err)
 	}
@@ -513,7 +513,7 @@ func TestDigest_DryRunAsksNothing(t *testing.T) {
 	ch := &sendingChannel{}
 
 	ctx := context.Background()
-	if _, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), ch, questions).
+	if _, _, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), ch, questions).
 		assembleDigest(ctx, digestNow, false); err != nil {
 		t.Fatalf("assembleDigest(dry run): %v", err)
 	}
@@ -782,7 +782,7 @@ func TestDigest_ExpiresBeforeItSends(t *testing.T) {
 	}
 
 	ch := &sendingChannel{}
-	if _, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, ch, questions).
+	if _, _, err := questionRunner(t, &undeliveredTriggers{}, &digestUnits{}, memrepo.NewState(), log, ch, questions).
 		assembleDigest(ctx, digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}

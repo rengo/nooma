@@ -139,6 +139,24 @@ func (r *Triggers) transition(id string, to ports.TriggerStatus) error {
 	return nil
 }
 
+// Lapse implements ports.TriggerRepo: fired and unsurfaced to expired,
+// keeping the instant Fire was given.
+func (r *Triggers) Lapse(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, ok := r.triggers[id]
+	if !ok {
+		return ports.ErrTriggerNotFound
+	}
+	if stored.status != ports.TriggerStatusFired || stored.surfacedAt != nil {
+		return ports.ErrTriggerStatusConflict
+	}
+	stored.status = ports.TriggerStatusExpired
+	r.triggers[id] = stored
+	return nil
+}
+
 // Surface implements ports.TriggerRepo.
 func (r *Triggers) Surface(_ context.Context, id string, at time.Time) error {
 	r.mu.Lock()
@@ -354,7 +372,7 @@ func (r *Triggers) ArmedUnitIDs(_ context.Context) ([]string, error) {
 }
 
 // FiredForUnit implements ports.TriggerRepo: unitID's one-shot triggers
-// that fired, with the instant Fire was given.
+// still fired, with the instant Fire was given. A lapsed row is not one.
 func (r *Triggers) FiredForUnit(_ context.Context, unitID string) ([]ports.FiredTrigger, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -362,7 +380,7 @@ func (r *Triggers) FiredForUnit(_ context.Context, unitID string) ([]ports.Fired
 	out := make([]ports.FiredTrigger, 0)
 	for _, stored := range r.triggers {
 		t := stored.trigger
-		if stored.firedAt == nil || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil {
+		if stored.status != ports.TriggerStatusFired || stored.firedAt == nil || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil {
 			continue
 		}
 		out = append(out, ports.FiredTrigger{FireAt: *t.FireAt, FiredAt: *stored.firedAt, Payload: t.Payload})

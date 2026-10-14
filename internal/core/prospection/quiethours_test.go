@@ -195,9 +195,6 @@ func TestQuietHours_TriggerVerdict(t *testing.T) {
 			t.Errorf("TriggerVerdict at %v = %s, want %s", tc.now, got, tc.want)
 		}
 	}
-	if got := q.EventReminderVerdict(fireAt, at(10, 0), at(8, 0)); got != VerdictDefer {
-		t.Errorf("EventReminderVerdict before the stored quiet end = %s, want defer", got)
-	}
 }
 
 // TestQuietHours_DigestDue: the digest is due at the later of DigestHour

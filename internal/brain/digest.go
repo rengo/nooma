@@ -24,13 +24,14 @@ import (
 const digestHistoryDays = prospection.MaxDigestDeferrals + 2
 
 // assembleDigest sends one digest if one is due, and reports how many
-// items it carried.
+// items it carried and how many past reminders it lapsed (or, on a dry
+// run, would).
 //
 // Everything it decides is prospection's: DigestDue, in the scan's night,
 // says whether a digest is owed, LowEnergy reads the care gate, and Carry
 // splits what goes out from what waits. This supplies their inputs and
 // persists their outcome.
-func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit bool) (int, error) {
+func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit bool) (int, int, error) {
 	if r.channel == nil {
 		// No channel, no digest. The push path already declines to mark
 		// anything delivered without one; the digest must too, and the
@@ -39,21 +40,21 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		// nobody received and removing them from tomorrow's digest
 		// forever. `nooma check` on a Telegram-less vault is exactly this
 		// case, and it is what caught it.
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	history, err := r.log.Since(ctx, now.AddDate(0, 0, -digestHistoryDays), -1)
 	if err != nil {
-		return 0, fmt.Errorf("check: reading digest history: %w", err)
+		return 0, 0, fmt.Errorf("check: reading digest history: %w", err)
 	}
 
 	if !r.night.DigestDue(lastDigestAt(history), now) {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	energy, err := r.state.LatestEnergy(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("check: reading energy: %w", err)
+		return 0, 0, fmt.Errorf("check: reading energy: %w", err)
 	}
 	// Read once, used twice: Carry's own truncation, and the gate on
 	// asking. Recomputing it at the second site would be the same rule in
@@ -65,12 +66,23 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// the digest going out now must not count against the question it may
 	// be carrying.
 	if _, err := r.expireStaleQuestions(ctx, history, now, commit); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	pending, err := r.triggers.Undelivered(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("check: undelivered triggers: %w", err)
+		return 0, 0, fmt.Errorf("check: undelivered triggers: %w", err)
+	}
+
+	// A reminder whose event is past is lapsed before anything reads the list
+	// (ADR-0032); lateness is a push's window and does not judge it here.
+	pending, past, err := splitPast(ctx, r.units, r.night, pending, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	lapsed, err := r.lapsePast(ctx, past, now, commit)
+	if err != nil {
+		return 0, 0, err
 	}
 
 	// The digest's SECOND item source, and it does not enter Carry's
@@ -87,7 +99,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	if !low {
 		question, err = r.nextQuestion(ctx)
 		if err != nil {
-			return 0, err
+			return 0, lapsed, err
 		}
 	}
 
@@ -102,12 +114,12 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		// linked X with Y, are they related?" is not empty. It has content
 		// and it wants something, and without this a vault with an
 		// uncertain relation and no triggers would stay silent forever.
-		return 0, nil
+		return 0, lapsed, nil
 	}
 
 	items, err := digestItems(ctx, r.units, pending, history)
 	if err != nil {
-		return 0, err
+		return 0, lapsed, err
 	}
 
 	// This first split is the VERDICT, not what is sent: its length decides the
@@ -118,10 +130,10 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
 	if len(carry) == 0 && question == nil {
-		return 0, nil
+		return 0, lapsed, nil
 	}
 	if !commit {
-		return len(carry), nil
+		return len(carry), lapsed, nil
 	}
 
 	if r.conversation == "" {
@@ -129,7 +141,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		// items stay undelivered and tomorrow's digest carries them,
 		// which is exactly what a failed send would have left behind —
 		// without asking the transport to parse an empty chat id first.
-		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; this vault has no conversation to "+
 				"push to, so its %d item(s) stay undelivered and tomorrow's digest carries them", len(carry)),
 			checkDetail{})
@@ -140,7 +152,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// the keeper, and none can leave a check.focus.unavailable row.
 	round, haveRound, err := r.digestFocus(ctx, now)
 	if err != nil {
-		return 0, err
+		return 0, lapsed, err
 	}
 
 	if haveRound {
@@ -150,7 +162,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, question)); err != nil {
-		return 0, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})
 	}
@@ -168,7 +180,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 
 	for _, item := range carry {
 		if err := r.triggers.Surface(ctx, item.ID, now); err != nil {
-			return 0, fmt.Errorf("check: digest was sent but trigger %q was not marked delivered: %w", item.ID, err)
+			return 0, lapsed, fmt.Errorf("check: digest was sent but trigger %q was not marked delivered: %w", item.ID, err)
 		}
 	}
 	if question != nil {
@@ -176,18 +188,18 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		// (asked_at IS NULL is its precondition), so a question marked
 		// before a failed send would be a question nobody was ever asked.
 		if err := r.questions.MarkAsked(ctx, question.ID, now); err != nil {
-			return 0, fmt.Errorf("check: digest was sent but question %q was not marked asked: %w", question.ID, err)
+			return 0, lapsed, fmt.Errorf("check: digest was sent but question %q was not marked asked: %w", question.ID, err)
 		}
 		if err := r.recordQuestion(ctx, now, ports.ActionCheckDigestQuestionAsked,
 			fmt.Sprintf("the daily digest asked about the relation between %q and %q", question.FromContent, question.ToContent),
 			questionDetail{QuestionID: question.ID, RelationID: question.RelationID}); err != nil {
-			return 0, err
+			return 0, lapsed, err
 		}
 	}
 	if err := r.record(ctx, now, ports.ActionCheckDigestSent,
 		fmt.Sprintf("the daily digest carried %d item(s) and held %d", len(carry), len(held)),
 		checkDetail{}); err != nil {
-		return 0, err
+		return 0, lapsed, err
 	}
 
 	// One row per held item, and this is not only for the glass box: the
@@ -198,11 +210,11 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		if err := r.record(ctx, now, ports.ActionCheckDigestHeld,
 			fmt.Sprintf("trigger %q was held back by the low-energy gate; it has now been held %d time(s)", item.ID, item.Deferrals+1),
 			checkDetail{ID: item.ID}); err != nil {
-			return 0, err
+			return 0, lapsed, err
 		}
 	}
 
-	return len(carry), nil
+	return len(carry), lapsed, nil
 }
 
 // digestFocus computes the focus the digest is about to be sent against. A

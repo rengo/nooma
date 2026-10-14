@@ -485,3 +485,43 @@ func TestTriggerRepo_ResolutionColumnHoldsOnlyVocabularyMembers(t *testing.T) {
 		t.Error("responded_at is NULL on a resolved trigger — an answer without an instant is unrepresentable by design")
 	}
 }
+
+// TestFiredForUnit_LapsedRowDoesNotCover is ADR-0032's L3 half: a lapsed row
+// keeps the fired_at it earned (the glass box says when it fired) and carries
+// the expired status, and FiredForUnit, which a re-arm reads as "what already
+// went out", must not count it. The fired_at IS NOT NULL predicate alone
+// would; the status is what says it never reached the user.
+func TestFiredForUnit_LapsedRowDoesNotCover(t *testing.T) {
+	ctx := context.Background()
+	v := openTestVault(t)
+	repo := NewTriggerRepo(v)
+	h := triggerHarness{TriggerRepo: repo, v: v}
+	h.EnsureUnit(t, "u1")
+
+	unitID := "u1"
+	for _, id := range []string{"sent", "lapsed"} {
+		at := triggerFixtureTime
+		if err := repo.Create(ctx, ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &at, CreatedAt: at}); err != nil {
+			t.Fatalf("Create %s: %v", id, err)
+		}
+		if err := repo.Fire(ctx, id, at); err != nil {
+			t.Fatalf("Fire %s: %v", id, err)
+		}
+	}
+	if err := repo.Lapse(ctx, "lapsed"); err != nil {
+		t.Fatalf("Lapse: %v", err)
+	}
+
+	got, err := repo.FiredForUnit(ctx, "u1")
+	if err != nil || len(got) != 1 {
+		t.Fatalf("FiredForUnit = %+v, %v; want only the row that is still fired", got, err)
+	}
+	var status string
+	var firedAt, surfacedAt sql.NullString
+	if err := v.db.QueryRowContext(ctx, `SELECT status, fired_at, surfaced_at FROM triggers WHERE id = 'lapsed'`).Scan(&status, &firedAt, &surfacedAt); err != nil {
+		t.Fatalf("reading the lapsed row: %v", err)
+	}
+	if status != string(ports.TriggerStatusExpired) || !firedAt.Valid || surfacedAt.Valid {
+		t.Errorf("lapsed row = status %q, fired_at %v, surfaced_at %v; want expired, fired_at kept, never surfaced", status, firedAt, surfacedAt)
+	}
+}

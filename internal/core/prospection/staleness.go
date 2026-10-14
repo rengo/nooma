@@ -143,19 +143,3 @@ func TimerVerdict(fireAt, now time.Time) Verdict {
 func DelayCaveat(overdue time.Duration) bool {
 	return overdue >= DelayCaveatMinutes*time.Minute
 }
-
-// EventReminderVerdict is TriggerVerdict for an event reminder whose event
-// instant is known (ADR-0030 point 4): once the event has started the
-// reminder is VerdictStale — expired, never sent late — whatever its
-// overdue amount; before that it is TriggerVerdict's.
-func EventReminderVerdict(fireAt, eventAt, now time.Time) Verdict {
-	return DefaultQuietHours().EventReminderVerdict(fireAt, eventAt, now)
-}
-
-// EventReminderVerdict is the package EventReminderVerdict in q's night.
-func (q QuietHours) EventReminderVerdict(fireAt, eventAt, now time.Time) Verdict {
-	if !now.Before(eventAt) {
-		return VerdictStale
-	}
-	return q.TriggerVerdict(fireAt, now)
-}

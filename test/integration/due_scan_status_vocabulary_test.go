@@ -33,6 +33,12 @@ import (
 // actually holds after a scan, which is the only place the claim is
 // checkable.
 //
+// "expired" has two shapes the vocabulary does not tell apart: an armed row
+// that expired (fired_at NULL, I15) and a fired reminder that lapsed
+// (ADR-0032: fired_at kept, surfaced_at NULL, written by TriggerRepo.Lapse).
+// Both are members of the vocabulary; the lapsed shape is asserted at L3 by
+// internal/store/sqlite's TestFiredForUnit_LapsedRowDoesNotCover.
+//
 // The fixtures cross every prospection.Verdict with both tables, so what
 // is asserted is the vocabulary of the whole write path and not of one
 // branch.

@@ -41,8 +41,8 @@ func DeliverableFrom(t time.Time) time.Time {
 
 // QuietHours is one user's night: [QuietHoursStartHour, End) on the local
 // wall clock, End being their quiet end (ADR-0030 point 5). The package
-// functions InQuietHours, DeliverableFrom, TriggerVerdict,
-// EventReminderVerdict and DigestDue are DefaultQuietHours'; the due scan
+// functions InQuietHours, DeliverableFrom, TriggerVerdict
+// and DigestDue are DefaultQuietHours'; the due scan
 // uses the user's own.
 type QuietHours struct{ End TimeOfDay }
 
