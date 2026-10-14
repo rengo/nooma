@@ -1,78 +1,79 @@
-# Tasks — remind-me-reminders
+# Tasks — remind-me-reminders, links 1-4 (links 5-9: `tasks-repeating.md`)
 
-Nine links stacked to main (design §5), after this plan merges and ADR-0031 is accepted. Strict
-TDD: each RED fails for the right reason first. A link measured over 400 is cut before it opens.
+Stacked to main (design §4). Strict TDD. **Apply gate:** every named RED test below is written
+and watched failing for the stated reason before its link's GREEN code. Zone in examples:
+America/Argentina/Buenos_Aires (-03:00) unless stated. A link measured over 400 is cut before it
+opens.
 
 ## Review Workload Forecast
 
-| Link | Impl + docs (est.) | Tests (est.) | Risk |
+| Link | Impl+docs | Tests | Risk |
 |---|---|---|---|
-| 1 `feat/remind-me-decision` | ~240 | ~380 | Medium: the planner every event reminder uses |
-| 2 `feat/remind-me-one-shot` | ~350 | ~330 | Medium: migration, payload, scan, reply |
-| 3 `feat/remind-me-follows` | ~170 | ~200 | Medium: I29, I35, #339's re-plan |
-| 4 `feat/remind-me-preference-ui` | ~110 | ~120 | Low |
-| 5 `feat/remind-me-recurring` | ~330 | ~330 | High: re-arm on fire is new for every recurring trigger |
-| 6a `feat/question-store-widens` | ~180 | ~180 | Medium: table rebuild of published data |
-| 6b `feat/remind-me-ask-back` | ~300 | ~260 | High: binding an answer without the model |
-| 7a `feat/remind-me-stop` | ~280 | ~260 | High: dismissing on a chat phrase |
-| 7b `feat/remind-me-done` | ~260 | ~240 | Medium: the keep-or-delete question and the mark |
-| Total | ~2,220 | ~2,300 | Chained PRs: yes. Decision before apply: ADR-0031 |
+| 1 | ~260 | ~420 | Medium: the planner every event uses |
+| 2 | ~350 | ~350 | Medium: migration, payload, gate, reply |
+| 3 | ~190 | ~230 | Medium: I29, I35 amendments |
+| 4 | ~110 | ~120 | Low |
 
-PR 0a — `plan/remind-me-reminders`, and 0b — `plan/remind-me-reminders-design`
-- [x] 0.1 0a: ADR-0031 (Proposed), its index row, proposal, spec. 0b: design and tasks.
-- [x] 0.2 The client's 2026-10-14 answers, NQ1 included, folded in; aligned with #339 as merged.
+PR 0a/0b/0c: the plan chain (ADR-0031 + proposal + spec; design + tasks; design-repeating + tasks-repeating).
+- [x] 0.1 Written; client answers and review round 1 folded in.
 
-PR 1 — `feat/remind-me-decision`
-- [ ] 1.1 RED/GREEN L1: `AsksToBeReminded`, `RemindCues`, the language sweep, negation, accents (D1).
-- [ ] 1.2 RED/GREEN L1: `RemindMeLead`, `ParseRemindMeLead`, `ResolveReminderPrefs` (D6).
-- [ ] 1.3 RED/GREEN L1: `leadSet`, `reminders`, `Arm(c, asked, …)`. Cover each R2 case (named time, day only, event union, past lead at once, any kind, timer unchanged), with every existing `Arm`/`Follow` test green (D2, D3).
-- [ ] 1.4 RED/GREEN L1: a named-time asked lead is not moved by the night (D4 core).
-- [ ] 1.5 Doc 02 §5 step 1, §7, §13; `make check-all`.
+## PR 1 — `feat/remind-me-decision` (D1-D4 core, D6)
 
-PR 2 — `feat/remind-me-one-shot` (first usable link)
-- [ ] 2.1 RED: the I36 row in doc 06 §4, and the I36 capture tests (design §3).
-- [ ] 2.2 RED/GREEN L3: migration M1 (`units.remind_me`, `config.remind_me_lead_minutes`), the port fields, `TriggerPayload.Asked`, memrepo, contracts, goldens; doc 03 (D5).
-- [ ] 2.3 RED/GREEN L1 brain: capture arms, records `asked`, refuses with a reason (D7).
-- [ ] 2.4 RED/GREEN L1 phrase + channels: `Firings`, `LeadBefore`, `ThatDayAt`, `NotReminded`, both languages (D8).
-- [ ] 2.5 RED/GREEN: the scan exemption for a named time (D4 scan, inside `ReminderVerdict` if #339 is in).
-- [ ] 2.6 Corpus case and L4; doc 02 §5 step 5, §11; doc 07; `make check-all`.
+- [ ] 1.1 RED L1 `core/classify`, the cue reader (D1). Each test asserts `AsksToBeReminded`:
+  - `TestAsks_ObservedMessage`: "recordame comprar café mañana a las 10" → true.
+  - `TestAsks_ConditionalClauseIsNotNegation`: "si no, avisame" and "si no puedo, avisame" → true.
+  - `TestAsks_NoTeOlvidesDeRecordarme` → true. `TestAsks_NoMeRecuerdesMasIsAStopNotARequest` → false.
+  - `TestAsks_Variants`: "recordámelo", "haceme acordar", "acordate de avisarme", "poneme un recordatorio", "que no se me olvide" → true.
+  - `TestAsks_RecallQuestion`: "recordame qué hablamos con Juan" → false.
+  - `TestAsks_DentistReminderToConfirm`: "my dentist sent a reminder to confirm" → false.
+  - `TestAsks_ApostropheForms`: "don’t remind me", "don't remind me", "dont remind me" → all false, the same.
+  - `TestAsks_AccentFoldTable`: "RECUÉRDAME" and "recuerdame" → true; every fold-table entry is covered.
+  - `TestQuotedSpeechCountsAsAskedKnownLimit`: "Ana me dijo 'avisame cuando llegues'" → true (P4, pinned).
+  - `TestRemindCuesCoverEveryLanguage`: a sweep over `AllLanguages()`.
+- [ ] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
+- [ ] 1.3 RED L1 `prospection` (D3, D4, D6):
+  - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.
+  - `TestArmAsked_DayOnly`: day-only 10-15 → 10-15 09:00. `TestArmAsked_DayOnlyFollowsDateOnlyAt`: 08:30 pref → 08:30.
+  - `TestArmAsked_NamedMidnightIsNotDayOnly`: 10-16T00:00 timed → 10-15 23:45.
+  - `TestArmAsked_DSTDayWithoutMidnightStaysDayOnly` (America/Santiago, its spring-forward date): a bare date → that day at `DateOnlyAt`, not 01:00 minus a lead.
+  - `TestArmAsked_EventGetsThreeLeads`: event 10-17 10:00 → 10-16 10:00, 10-17 08:00, 10-17 09:45.
+  - `TestArmAsked_PastLeadAtOnce`: 20:10 said at 20:00 → at once.
+  - `TestArmAsked_PastLeadInQuietHoursRingsAtOnce`: "a las 6:30" at 06:20, quiet end 08:00 → at once (item 12).
+  - `TestArmAsked_NamedTimeInsideQuietHoursNotMoved`: 06:30 → 06:15.
+  - `TestArmAsked_TooLateTodayRefused`: "hoy" day-only at 23:56 → `too_late`; at 23:50 → at once.
+  - `TestArmAsked_AnyKindWithADate`: a `mental_load` with a `due_at` → armed. `TestArmAsked_TimerUnchanged`.
+  - `TestArmUnasked_EveryExistingArmAndFollowTestUnchanged`: the existing suite stays green.
+  - `TestParseRemindMeLead_Bounds`: 0 → error, 1 → ok, 43200 → ok, 43201 → error, NULL → 15.
+  - `TestAtOnceMarginMatchesProactiveInterval`.
+- [ ] 1.4 GREEN; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
 
-PR 3 — `feat/remind-me-follows`
-- [ ] 3.1 RED: `TestI36_AnAskedReminderFollowsItsInstant`, `TestI36_ALeadChangeMovesAskedReminders`.
-- [ ] 3.2 RED/GREEN L1 brain: correction of an asked unit's instant moves it, arms it after a capture refusal, and expires it. A unit that did not ask moves nothing (D9).
-- [ ] 3.3 RED/GREEN: the re-arm includes asked units, and a lead-only save re-arms. `CatchUp` uses `leadSet` (if #339 is in).
-- [ ] 3.4 Doc 02 §5 step 4, §7; `make check-all`.
+## PR 2 — `feat/remind-me-one-shot` (D5, D7, D8, D4 scan; first usable)
 
-PR 4 — `feat/remind-me-preference-ui`
-- [ ] 4.1 RED/GREEN L1 brain: `Save` validates and records the lead.
-- [ ] 4.2 RED/GREEN L1 ui: the row, its error, the saved value; UI gates.
-- [ ] 4.3 Doc 07; `make check-all`.
+- [ ] 2.1 RED L2, the I36 row:
+  - `TestI36_AnAskedReminderIsArmedBeforeItsTime`: the observed message → a `task` unit with `remind_me=1`, one trigger at 09:45, payload `{lead_minutes:15, event_at:10:00, asked, night_exempt}`.
+  - `TestI36_TheWordsDecideNotTheModel`: the same classification without the cue → no trigger.
+  - `TestI36_ADayAloneRemindsThatDayAtNine`: payload `{lead_minutes:0, event_at:midnight, day_only}`.
+  - `TestI36_AskedDayOnlyIsNotPassedAtNine` (the gate): a 09:00 delivery → `Deliver`, not `passed`.
+  - `TestI36_ANamedTimeRingsThroughTheNight`: an asked 03:00 row at 02:46 → `Deliver`, not `Defer`.
+  - `TestI36_TheReplyNamesTheAskedReminder`: exact "Anotado para el jue 15 oct 10:00. Te aviso 15 minutos antes." and the English counterpart.
+  - `TestI36_TheReplyStatesTheArmedHour`: `DateOnlyAt` 08:30 → "…ese día a las 08:30."
+  - `TestI36_AskedButNotArmedSaysWhy`: past, quiet, too late → the refusal row and the reason sentence.
+- [ ] 2.2 RED L3: migration M1; `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens.
+- [ ] 2.3 GREEN: the store, capture, phrase, channels and gate branch; the corpus case `classify-task-remind-me-coffee.json`; L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
 
-PR 5 — `feat/remind-me-recurring`
-- [ ] 5.1 RED: `TestI36_AnAskedRecurrenceIsARecurringTask`, `TestI36_ARecurringTriggerReArmsWhenItFires`.
-- [ ] 5.2 RED/GREEN L1 core: anchor time, `NextOccurrence` with a time, `recurringTrigger` asked, the verdict's `occurs_at` (D10).
-- [ ] 5.3 RED/GREEN L1 brain: an asked recurrence makes a `task`; push routing; re-arm on fire for every recurring trigger, idempotent (D11).
-- [ ] 5.4 RED/GREEN L1 phrase: the cadence words. Corpus case for the pills.
-- [ ] 5.5 Doc 02 §7 "Recurrence" (re-arm made true); doc 07; `make check-all`.
+## PR 3 — `feat/remind-me-follows` (D9)
 
-PR 6a — `feat/question-store-widens`
-- [ ] 6.1 RED/GREEN L3: migration M2 rebuilds `pending_questions` and keeps the rows and indexes. The new kinds, `CreateAbout`, `OpenOfKind`. The relation reads are unchanged (m3e tests green); goldens; doc 03 (D12).
+- [ ] 3.1 RED:
+  - `TestI36_AnAskedReminderFollowsItsInstant`: an asked task due 10:00, armed 09:45; "a las 11" → moved to 10:45, one `correction.reminder.moved`.
+  - `TestI29_FirstArmingOfAnAskedUnitMayBeAtOnce`: refused as past at capture; corrected to 2 minutes ahead → armed at once.
+  - `TestI29_SecondCorrectionNeverCreatesAtOnce`: a unit that had a trigger, every lead behind → nothing.
+  - `TestI36_UnaskedTaskDueAtEditMovesNothing`.
+  - `TestI35_ALeadChangeMovesAskedReminders`: 15 → 30 min → 09:30, `config.reminder.moved`.
+  - `TestI35_LeadOnlySaveReArms`; `TestI35_NoOpSaveTouchesNoAskedReminder`.
+  - `TestCatchUpUsesTheAskedLeadSet` (if #339 link 4 is in).
+- [ ] 3.2 GREEN; I29 and I35 rows amended; doc 02 §5 step 4, §7; `make check-all`.
 
-PR 6b — `feat/remind-me-ask-back`
-- [ ] 6.2 RED: the I38 row, and the ask-back tests.
-- [ ] 6.3 RED/GREEN L1 classify: `IsNoAnswer`, `IsOnlyWhen` and their lexicons, swept.
-- [ ] 6.4 RED/GREEN L1 brain: ask (D13); bind within the window. A time answer goes through the explicit correction path, "No" becomes daily at `DateOnlyAt`, and anything else is a capture (D14).
-- [ ] 6.5 Doc 02, doc 07; `make check-all`.
+## PR 4 — `feat/remind-me-preference-ui`
 
-PR 7a — `feat/remind-me-stop`
-- [ ] 7.1 RED: the I38 stop tests (design §3).
-- [ ] 7.2 RED/GREEN L1 classify: `StopsReminding`, swept, negation-aware; a stop wins over a done (D15).
-- [ ] 7.3 RED/GREEN L1 brain: the binding order, `which_reminder` and its answer, `reminder.stopped` before dismissing, the reply (D16, D16b stop row).
-- [ ] 7.4 Doc 02 §5, §11; doc 07; `make check-all`.
-
-PR 7b — `feat/remind-me-done`
-- [ ] 7.5 RED: the I38 done tests (design §3).
-- [ ] 7.6 RED/GREEN L3: migration M3 `units.done_means_today`; port, memrepo, goldens; doc 03.
-- [ ] 7.7 RED/GREEN L1 classify: `SaysDone`, `SaysKeep`, `SaysDelete`, swept (D15).
-- [ ] 7.8 RED/GREEN L1 brain: D16b, one test per row. The question is asked once until it is answered, `reminder.kept` is written before the mark, and the daily made by a "No" follows the same rows.
-- [ ] 7.9 Doc 02 §5, §11; doc 07; `make check-all`.
+- [ ] 4.1 RED: `TestSave_RemindMeLeadValidatedAndRecorded` (`config.updated` reads "15 minutes" → "30 minutes"); `TestPreferencesPage_RemindMeLeadRowErrorAndSaved`.
+- [ ] 4.2 GREEN; doc 07; `make check-all`.
