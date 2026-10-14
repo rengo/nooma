@@ -38,7 +38,7 @@ type reminderTally struct{ armed, moved, cancelled, refused int }
 // finds the plan armed and carries it, creating nothing twice. A unit owed only
 // an at-once catch-up, every lead behind and nothing sent, is held: its rows are
 // neither sent nor retired until the catch-up exists.
-func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []staleRow, settled map[string]settledRow, now time.Time, commit bool) error {
+func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []staleRow, settled map[string]settledRow, q *pushQueue, now time.Time, commit bool) error {
 	undelivered, err := r.triggers.Undelivered(ctx)
 	if err != nil {
 		return fmt.Errorf("check: undelivered triggers: %w", err)
@@ -104,15 +104,9 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 	// event is ahead (ADR-0032 point 2). Not one this pass fired or already
 	// tried, and not one sent that the vault could not record.
 	for _, t := range retry {
-		if !commit {
-			report.TriggersDelivered++
-			continue
-		}
-		sent, err := r.deliver(ctx, t, now)
-		if err != nil {
-			return err
-		}
-		if sent {
+		if commit {
+			q.add(t)
+		} else {
 			report.TriggersDelivered++
 		}
 	}

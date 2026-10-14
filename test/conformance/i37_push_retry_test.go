@@ -19,7 +19,7 @@ import (
 func pushes(ch *i37Channel, text string) int {
 	n := 0
 	for _, a := range ch.attempts {
-		if strings.HasPrefix(a, text) {
+		if strings.Contains(a, text) {
 			n++
 		}
 	}
@@ -146,7 +146,7 @@ func TestI37_OutageWritesOneRowPerReminder(t *testing.T) {
 		t.Fatalf("three passes of an outage wrote %v, want one row per reminder", got)
 	}
 
-	v.ch.failIf = func(text string) bool { return strings.HasPrefix(text, "alpha") }
+	v.ch.failIf = func(text string) bool { return strings.Contains(text, "alpha") }
 	v.checkAt(i37Now.Add(15*time.Minute), false)
 	v.checkAt(i37Now.Add(20*time.Minute), false)
 	if got := v.failedRows(); got["alpha"] != 2 || got["bravo"] != 1 || v.undelivered()["bravo"] {
@@ -198,7 +198,7 @@ func TestI37_DigestCarriesRecurringOnly(t *testing.T) {
 	v.fired("b", "bd", "Leo's birthday", i37Day(13, 16, 0), func(tr *ports.Trigger) {
 		tr.RecurrenceRule, tr.RecurrenceAnchor = &yearly, &prospection.Anchor{Month: time.October, Day: 21}
 	})
-	v.ch.failIf = func(text string) bool { return strings.HasPrefix(text, "alpha") }
+	v.ch.failIf = func(text string) bool { return strings.Contains(text, "alpha") }
 
 	report := v.check(false)
 

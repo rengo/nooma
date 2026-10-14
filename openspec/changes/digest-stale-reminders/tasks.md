@@ -82,10 +82,10 @@ PR 5 — `fix/push-retries-undelivered`
 - [x] 9. GREEN: the retry and its bounds. Doc 02 §7. Run `make check-all`, then open the PR.
 
 PR 6 — `fix/reminder-renders-the-unit`
-- [ ] 10. RED tests: `TestPhraseSetsComplete`; `TestRenderUsesCurrentContentAndInstant`;
+- [x] 10. RED tests: `TestPhraseSetsComplete`; `TestRenderUsesCurrentContentAndInstant`;
       `TestDateOnlyEventRendersWithoutATime`; `TestOneMessagePerUnitArmedSiblingUntouched`;
       `TestMissingUnitFallsBackToAction`.
-- [ ] 11. GREEN: render from the unit. Doc 02 §7, doc 07. Run `make check-all`, then open the PR.
+- [x] 11. GREEN: render from the unit. Doc 02 §7, doc 07. Run `make check-all`, then open the PR.
 
 PR 7 — `feat/proactive-language`
 - [ ] 12. RED tests: `TestBackfillTakesTheEarliestClassifyByRowid`; `TestBackfillEmptyLanguageIsNull`;

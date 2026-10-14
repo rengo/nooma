@@ -172,7 +172,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		carry, held = prospection.Carry(items, carryAdjacency(round.adjacent, pending), low, now)
 	}
 
-	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, pending, question)); err != nil {
+	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, r.saidNow(ctx, pending, now), question)); err != nil {
 		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})
@@ -355,6 +355,21 @@ func heldCounts(history []ports.Decision) map[string]int {
 	return counts
 }
 
+// saidNow is pending as the digest says it: each text is its unit's now, with
+// when, or the one it was armed with when the unit cannot be read (ADR-0032).
+func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, now time.Time) []ports.DueTrigger {
+	out := slices.Clone(pending)
+	for i, t := range out {
+		if text, when, ok := r.unitWords(ctx, t, now); ok {
+			if when != "" {
+				text = sentences().Line(text, when)
+			}
+			out[i].Payload.ActionText = text
+		}
+	}
+	return out
+}
+
 // renderDigest is what the digest says: a header naming the count, then
 // one line per item.
 //
@@ -367,15 +382,23 @@ func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, qu
 		text[t.ID] = t.Payload.ActionText
 	}
 
+	// Two reminders of one unit are one line (ADR-0032 point 4).
+	var lines []string
+	for _, item := range carry {
+		line := text[item.ID]
+		if line == "" {
+			line = "something you asked me to remind you about"
+		}
+		if !slices.Contains(lines, line) {
+			lines = append(lines, line)
+		}
+	}
+
 	var b strings.Builder
-	if len(carry) > 0 {
-		b.WriteString("Here " + plural(len(carry)) + ":")
-		for _, item := range carry {
-			line := text[item.ID]
-			if line == "" {
-				line = "something you asked me to remind you about"
-			}
-			b.WriteString("\n• " + line)
+	if len(lines) > 0 {
+		b.WriteString("Here " + plural(len(lines)) + ":")
+		for _, line := range lines {
+			b.WriteString("\n\u2022 " + line)
 		}
 	}
 

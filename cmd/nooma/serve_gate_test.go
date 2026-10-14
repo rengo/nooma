@@ -568,6 +568,10 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 		w          float64
 	}{{"trg-hi", "k-hi", 3}, {"trg-1", "k-p", 1}, {"trg-2", "k-q", 1}, {"trg-lo", "k-lo", 0.2}} {
 		seed(p.unit, unit.TypeKnowledge, p.w)
+		// A digest line says its unit's words (ADR-0032 point 4).
+		if err := units.UpdateContent(ctx, p.unit, "act on "+p.trig, seededAt); err != nil {
+			t.Fatalf("say %s: %v", p.unit, err)
+		}
 		uid, fireAt, yearly := p.unit, digestAt.Add(-time.Hour), prospection.RuleYearly
 		if err := triggers.Create(ctx, ports.Trigger{
 			ID: p.trig, UnitID: &uid, Kind: ports.TriggerKindTimeBased,
@@ -609,6 +613,7 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 	}
 	var order []string
 	for _, line := range strings.Split(sent[0].Text, "\n\u2022 ")[1:] {
+		line, _, _ = strings.Cut(line, " \u2014 ")
 		order = append(order, strings.TrimPrefix(line, "act on "))
 	}
 	return order

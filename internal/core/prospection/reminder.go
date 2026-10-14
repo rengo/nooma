@@ -113,14 +113,34 @@ func (r Reminder) NamesEvent() bool {
 // day-granular one.
 func (r Reminder) passed(about, now time.Time) bool {
 	local := about.In(now.Location())
-	// An asked row is a day only when its payload says so: an asked named
-	// midnight passes at midnight. A row nobody asked about keeps the
-	// midnight heuristic (ADR-0031 D5).
-	if r.Rule != nil || r.DayOnly || (!r.Asked && isDateOnly(local)) {
+	if r.dayGranular(local) {
 		y, m, d := local.Date()
 		return !now.Before(time.Date(y, m, d+1, 0, 0, 0, 0, now.Location()))
 	}
 	return !now.Before(about)
+}
+
+// dayGranular is whether local, the reminder's event in the user's zone, is a
+// whole day rather than a moment. An asked row is a day only when its payload
+// says so: an asked named midnight passes at midnight. A row nobody asked about
+// keeps the midnight heuristic (ADR-0031 D5).
+func (r Reminder) dayGranular(local time.Time) bool {
+	return r.Rule != nil || r.DayOnly || (!r.Asked && isDateOnly(local))
+}
+
+// Occasion is the instant a message about the reminder names, in zone, whether
+// it is a whole day (no clock time is said), and whether any is known (ADR-0032
+// point 4): the unit's event now, or for a recurring one its next occurrence.
+func (r Reminder) Occasion(zone *time.Location) (about time.Time, dayOnly, known bool) {
+	if r.Rule == nil && r.Current != nil {
+		about, known = *r.Current, true
+	} else {
+		about, known = r.about(zone)
+	}
+	if !known {
+		return time.Time{}, false, false
+	}
+	return about, r.dayGranular(about.In(zone)), true
 }
 
 // about is the event instant the reminder is about, and whether it is known.

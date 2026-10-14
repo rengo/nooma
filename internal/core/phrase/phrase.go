@@ -76,6 +76,11 @@ type Set struct {
 	// question nobody asked (doc 02 §5 step 5).
 	NotedFor string
 
+	// Reminder frames a pushed reminder (ADR-0032 point 4): one %s, the
+	// sentence. AtWhen joins a unit's words to its instant: two %s, in that order.
+	Reminder string
+	AtWhen   string
+
 	// The four lead-time phrases NotedFor's second %s is filled with.
 	// LeadDays takes one %d.
 	LeadImmediate string
@@ -131,6 +136,9 @@ var sets = map[classify.Language]Set{
 		RecurringSet: "Recurring reminder set for %s.",
 		NotedFor:     "Noted for %s. I will remind you %s.",
 
+		Reminder: "Reminder: %s",
+		AtWhen:   "%s \u2014 %s",
+
 		LeadImmediate: "right away",
 		LeadHours:     "a few hours before",
 		LeadDayBefore: "the day before",
@@ -166,6 +174,9 @@ var sets = map[classify.Language]Set{
 		TimerSet:     "Temporizador puesto para el %s.",
 		RecurringSet: "Recordatorio recurrente puesto para el %s.",
 		NotedFor:     "Anotado para el %s. Te aviso %s.",
+
+		Reminder: "Recordatorio: %s",
+		AtWhen:   "%s \u2014 %s",
 
 		LeadImmediate: "ahora mismo",
 		LeadHours:     "unas horas antes",
@@ -203,15 +214,28 @@ func For(l classify.Language) Set {
 // the user's offset in, and re-rendering it in the server's zone would
 // tell someone in Buenos Aires about a reminder at a time nobody set.
 func (s Set) Time(t time.Time) string {
+	return s.Date(t) + fmt.Sprintf(", %02d:%02d", t.Hour(), t.Minute())
+}
+
+// Date renders an instant as Time does, without the clock: a whole day has no hour.
+func (s Set) Date(t time.Time) string {
 	day := strconv.Itoa(t.Day())
 	month := s.Months[int(t.Month())-1]
-	clock := fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute())
-
 	head := day + " " + month
 	if !s.DayBeforeMonth {
 		head = month + " " + day
 	}
-	return s.Weekdays[int(t.Weekday())] + " " + head + ", " + clock
+	return s.Weekdays[int(t.Weekday())] + " " + head
+}
+
+func (s Set) Line(text, when string) string { return fmt.Sprintf(s.AtWhen, text, when) }
+
+// Remind frames text as a reminder, saying when if when is not empty.
+func (s Set) Remind(text, when string) string {
+	if when != "" {
+		text = s.Line(text, when)
+	}
+	return fmt.Sprintf(s.Reminder, text)
 }
 
 // Found renders the header over a recall's results, in agreement with n.

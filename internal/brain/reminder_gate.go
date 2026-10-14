@@ -57,6 +57,14 @@ func (r checkRunner) reportUnreadable(ctx context.Context, now time.Time, commit
 // event_at only; #337's task units will add their due_at here.
 func currentEvent(u unit.Unit) *time.Time { return u.EventAt }
 
+// newReminder is the gate's view of a stored trigger, before its unit is read.
+func newReminder(t ports.DueTrigger, fired bool) prospection.Reminder {
+	return prospection.Reminder{
+		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,
+		Rule: t.RecurrenceRule, Anchor: t.RecurrenceAnchor, Waiting: fired && (t.RecurrenceRule != nil || t.FireAt.IsZero()),
+	}
+}
+
 // judge returns the verdict for t. fired says it already fired and never
 // reached the user. A recurring one then waits for the digest, which lateness
 // does not judge (ADR-0009's window is a push's), nor one with no clock; a
@@ -68,10 +76,7 @@ func currentEvent(u unit.Unit) *time.Time { return u.EventAt }
 // is superseded when its unit has armed a one-shot of its own since (D8). A
 // nil port or a missing unit means unknown.
 func (g reminderGate) judge(ctx context.Context, t ports.DueTrigger, fired bool, now time.Time) (prospection.Verdict, prospection.LapseReason, error) {
-	reminder := prospection.Reminder{
-		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,
-		Rule: t.RecurrenceRule, Anchor: t.RecurrenceAnchor, Waiting: fired && (t.RecurrenceRule != nil || t.FireAt.IsZero()),
-	}
+	reminder := newReminder(t, fired)
 	if t.UnitID != nil && g.units != nil && (!reminder.EventAt.IsZero() || !reminder.NamesEvent()) {
 		u, err := g.units.ByID(ctx, *t.UnitID)
 		switch {

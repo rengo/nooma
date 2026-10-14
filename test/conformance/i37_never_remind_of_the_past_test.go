@@ -88,6 +88,14 @@ func (v *i37Vault) row(id, unitID, text string, fireAt time.Time, mutate func(*p
 	if mutate != nil {
 		mutate(&tr)
 	}
+	// A reminder says its unit's words (ADR-0032 point 4). A unit seeded by
+	// event() carries its id as its text; the row's text becomes the unit's, so a
+	// test that wants the two to differ says so with say().
+	if u, err := v.units.ByID(context.Background(), unitID); err == nil && u.Content == unitID {
+		if err := v.units.UpdateContent(context.Background(), unitID, text, i37Now); err != nil {
+			v.t.Fatalf("seed content of %s: %v", unitID, err)
+		}
+	}
 	if err := v.triggers.Create(context.Background(), tr); err != nil {
 		v.t.Fatalf("seed trigger %s: %v", id, err)
 	}

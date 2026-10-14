@@ -168,6 +168,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	g, canDeliver := r.gate(), r.canDeliver()
 	var stale []staleRow
 	settled := map[string]settledRow{}
+	var q pushQueue
 	for _, t := range due {
 		verdict, reason, err := g.judge(ctx, t, false, now)
 		if err != nil {
@@ -198,7 +199,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 			continue
 		}
 		if status == ports.TriggerStatusFired {
-			fired, delivered, err := r.fireAndDeliver(ctx, t, now, commit)
+			fired, delivered, err := r.fireAndDeliver(ctx, t, now, commit, &q)
 			if err != nil {
 				return CheckReport{}, err
 			}
@@ -309,9 +310,18 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	}
 
 	if canDeliver {
-		if err := r.replan(ctx, &report, stale, settled, now, commit); err != nil {
+		if err := r.replan(ctx, &report, stale, settled, &q, now, commit); err != nil {
 			return CheckReport{}, err
 		}
+	}
+
+	// Everything this pass pushes goes out together, so a unit's reminders that
+	// came due in the same pass (a retry beside the lead that just fired) are one
+	// message (ADR-0032 point 4).
+	delivered, err := r.flush(ctx, &q, now)
+	report.TriggersDelivered += delivered
+	if err != nil {
+		return CheckReport{}, err
 	}
 
 	if r.channel != nil && r.units != nil && r.state != nil {
