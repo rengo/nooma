@@ -30,7 +30,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestAsks_AccentFoldTable`: "RECUÉRDAME" and "recuerdame" → true; every fold-table entry is covered.
   - `TestQuotedSpeechCountsAsAskedKnownLimit`: "Ana me dijo 'avisame cuando llegues'" → true (P4, pinned).
   - `TestRemindCuesCoverEveryLanguage`: a sweep over `AllLanguages()`.
-- [ ] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
+- [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [ ] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.
   - `TestArmAsked_DayOnly`: day-only 10-15 → 10-15 09:00. `TestArmAsked_DayOnlyFollowsDateOnlyAt`: 08:30 pref → 08:30.
