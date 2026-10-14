@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -35,10 +36,11 @@ func (f *fxH) seedTrigger(id, unitID string) error {
 	}); err != nil {
 		return err
 	}
-	uid, fireAt := unitID, digestNow.Add(-time.Hour)
+	uid, fireAt, yearly := unitID, digestNow.Add(-time.Hour), prospection.RuleYearly
 	if err := f.triggers.Create(ctx, ports.Trigger{
 		ID: id, UnitID: &uid, Kind: ports.TriggerKindTimeBased,
 		Payload: ports.TriggerPayload{ActionText: "act on " + id}, FireAt: &fireAt, CreatedAt: digestNow,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 	}); err != nil {
 		return err
 	}

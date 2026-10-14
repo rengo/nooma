@@ -91,6 +91,9 @@ type reminderSet struct {
 	log      ports.DecisionLog
 	ids      ports.IDGen
 	cause    reminderCause
+	// tally, when set, counts each change; dry then writes none of them.
+	tally *reminderTally
+	dry   bool
 }
 
 func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.Following, byID map[string]ports.DueTrigger, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
@@ -169,6 +172,12 @@ func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports
 	if len(fields) == 0 {
 		return nil
 	}
+	if r.tally != nil {
+		r.tally.moved++
+	}
+	if r.dry {
+		return nil
+	}
 
 	if err := r.recordReminder(ctx, r.cause.moved,
 		fmt.Sprintf("moved the reminder of unit %q %s: %s", target.ID, r.cause.movedWith, armRationale(plan)),
@@ -218,6 +227,12 @@ func anchorText(a *prospection.Anchor) string {
 // armReminder creates the trigger a fresh capture of the corrected date
 // arms, when the unit had none armed.
 func (r reminderSet) armReminder(ctx context.Context, unitID, body string, plan prospection.Plan, now time.Time) error {
+	if r.tally != nil {
+		r.tally.armed++
+	}
+	if r.dry {
+		return nil
+	}
 	trigger := armedTrigger(r.ids.New(), &unitID, body, plan, now)
 	if err := r.recordReminder(ctx, r.cause.armed,
 		fmt.Sprintf("armed a reminder "+r.cause.armedFor+": %s", unitID, armRationale(plan)),
@@ -236,6 +251,12 @@ func (r reminderSet) armReminder(ctx context.Context, unitID, body string, plan 
 // outside quiet hours, or another trigger carries the unit's reminder. Expired is I15's status for a trigger that will not
 // fire; nothing is deleted.
 func (r reminderSet) cancelReminder(ctx context.Context, unitID string, t ports.DueTrigger, plan prospection.Plan, now time.Time) error {
+	if r.tally != nil {
+		r.tally.cancelled++
+	}
+	if r.dry {
+		return nil
+	}
 	why := r.cause.carried
 	switch {
 	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalQuietHours:

@@ -4,80 +4,154 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// judgeReminder is where a stored trigger becomes prospection.ReminderVerdict's
-// input, for the due scan, the digest and Today alike (ADR-0032 point 1). A
-// reminder that names its own event reads no unit, so a damaged unit row cannot
-// stall a pass; a legacy row is judged on its unit's event. A nil port or a
-// missing unit means unknown; any other read error aborts the pass.
-func judgeReminder(ctx context.Context, units ports.UnitRepo, night prospection.QuietHours, t ports.DueTrigger, waiting bool, now time.Time) (prospection.Verdict, prospection.LapseReason, error) {
+// reminderGate is where a stored trigger becomes prospection.ReminderVerdict's
+// input, for the due scan, the re-plan step, the digest and Today alike
+// (ADR-0032 point 1).
+type reminderGate struct {
+	units    ports.UnitRepo
+	triggers ports.TriggerRepo
+	night    prospection.QuietHours
+	// unreadable collects the units a pass could not read, judged without
+	// them; the pass reports each once. Nil (Today) collects nothing.
+	unreadable map[string]error
+}
+
+func (r checkRunner) gate() reminderGate {
+	return reminderGate{units: r.units, triggers: r.triggers, night: r.night, unreadable: r.unreadable}
+}
+
+// reportUnreadable records one row per unit this pass judged without its unit
+// (a write, so not in a dry run), so a damaged unit row is visible instead of
+// silently skipped.
+func (r checkRunner) reportUnreadable(ctx context.Context, now time.Time, commit bool) error {
+	ids := make([]string, 0, len(r.unreadable))
+	for id := range r.unreadable {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	if !commit {
+		return nil
+	}
+	for _, id := range ids {
+		if err := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+			fmt.Sprintf("unit %q could not be read (%v), so its reminders were judged without it", id, r.unreadable[id]), checkDetail{UnitID: id}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// currentEvent is the instant a unit holds for its event now. It is the unit's
+// event_at only; #337's task units will add their due_at here.
+func currentEvent(u unit.Unit) *time.Time { return u.EventAt }
+
+// judge returns the verdict for t. fired says it already fired and never
+// reached the user. A recurring one then waits for the digest, which lateness
+// does not judge (ADR-0009's window is a push's), nor one with no clock; a
+// one-shot row is judged late.
+// The unit is read for a reminder that names its event in the payload (to see
+// whether it moved) and for a legacy one that names none. A damaged unit row is
+// tolerated for the former, which is judged without it and reported, so it
+// cannot stall a pass; for a legacy row it aborts the pass. A legacy fired row
+// is superseded when its unit has armed a one-shot of its own since (D8). A
+// nil port or a missing unit means unknown.
+func (g reminderGate) judge(ctx context.Context, t ports.DueTrigger, fired bool, now time.Time) (prospection.Verdict, prospection.LapseReason, error) {
 	reminder := prospection.Reminder{
 		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,
-		Rule: t.RecurrenceRule, Anchor: t.RecurrenceAnchor, Waiting: waiting,
+		Rule: t.RecurrenceRule, Anchor: t.RecurrenceAnchor, Waiting: fired && (t.RecurrenceRule != nil || t.FireAt.IsZero()),
 	}
-	if !reminder.NamesEvent() && t.UnitID != nil && units != nil {
-		u, err := units.ByID(ctx, *t.UnitID)
+	if t.UnitID != nil && g.units != nil && (!reminder.EventAt.IsZero() || !reminder.NamesEvent()) {
+		u, err := g.units.ByID(ctx, *t.UnitID)
 		switch {
 		case err == nil:
-			reminder.Current = u.EventAt
-		case !errors.Is(err, ports.ErrUnitNotFound):
+			reminder.Current = currentEvent(u)
+		case errors.Is(err, ports.ErrUnitNotFound):
+		case reminder.NamesEvent():
+			if g.unreadable != nil {
+				g.unreadable[*t.UnitID] = err
+			}
+		default:
 			return "", "", fmt.Errorf("reminder: read unit %q of trigger %q: %w", *t.UnitID, t.ID, err)
 		}
 	}
-	verdict, reason := night.ReminderVerdict(reminder, now)
+	if fired && !reminder.NamesEvent() && t.UnitID != nil && g.triggers != nil {
+		armed, err := g.triggers.ArmedForUnit(ctx, *t.UnitID)
+		if err != nil {
+			return "", "", fmt.Errorf("reminder: read reminders of unit %q: %w", *t.UnitID, err)
+		}
+		reminder.Newer = slices.ContainsFunc(armed, func(a ports.DueTrigger) bool { return a.RecurrenceRule == nil })
+	}
+	verdict, reason := g.night.ReminderVerdict(reminder, now)
 	return verdict, reason, nil
 }
 
 // splitPast sets apart the fired, undelivered reminders whose event is past
-// from those still worth carrying. They are judged as waiting for the digest:
-// lateness is a push's concern (ADR-0032 point 1). It writes nothing, so Today
-// and a dry run share it with the real pass.
-func splitPast(ctx context.Context, units ports.UnitRepo, night prospection.QuietHours, pending []ports.DueTrigger, now time.Time) (kept, past []ports.DueTrigger, err error) {
+// from those still worth carrying. A one-shot row that is late or superseded is
+// the re-plan step's, held or re-planned, and is in neither list: the digest
+// neither sends nor lapses it. It writes nothing, so Today and a dry run share
+// it with the real pass.
+func splitPast(ctx context.Context, g reminderGate, pending []ports.DueTrigger, now time.Time) (kept, past []ports.DueTrigger, err error) {
 	kept = make([]ports.DueTrigger, 0, len(pending))
 	for _, t := range pending {
-		verdict, _, err := judgeReminder(ctx, units, night, t, true, now)
-		if err != nil {
+		verdict, reason, err := g.judge(ctx, t, true, now)
+		switch {
+		case err != nil:
 			return nil, nil, err
-		}
-		if verdict == prospection.VerdictStale {
+		case verdict != prospection.VerdictStale:
+			kept = append(kept, t)
+		case reason == prospection.LapsePassed:
 			past = append(past, t)
-			continue
 		}
-		kept = append(kept, t)
 	}
 	return kept, past, nil
 }
 
-// lapsePast retires each of past and says why in the trail. A row another pass
-// already surfaced or lapsed is skipped. It returns how many it lapsed, or
-// would have when commit is false.
-func (r checkRunner) lapsePast(ctx context.Context, past []ports.DueTrigger, now time.Time, commit bool) (int, error) {
-	lapsed := 0
-	for _, t := range past {
-		if commit {
-			if err := r.triggers.Lapse(ctx, t.ID); err != nil {
-				skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
-				if skipErr != nil {
-					return 0, skipErr
-				}
-				if skipped {
-					continue
-				}
-				return 0, fmt.Errorf("check: lapse trigger %q: %w", t.ID, err)
-			}
-			if err := r.record(ctx, now, ports.ActionCheckTriggerLapsed,
-				fmt.Sprintf("trigger %q fired and never reached the user, and the event it is about is no longer ahead, so it was retired rather than sent", t.ID),
-				checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale), Reason: string(prospection.LapsePassed)},
-			); err != nil {
-				return 0, err
-			}
-		}
-		lapsed++
+// staleRow is a reminder that will not be sent: armed (to expire) or fired and
+// never delivered (to lapse), and why.
+type staleRow struct {
+	ports.DueTrigger
+	armed  bool
+	reason prospection.LapseReason
+}
+
+// retire expires an armed row or lapses a fired one, and says why in the
+// trail. A row another pass already moved is skipped (false). commit false
+// reports the retirement without writing it.
+func (r checkRunner) retire(ctx context.Context, s staleRow, now time.Time, commit bool) (bool, error) {
+	if !commit {
+		return true, nil
 	}
-	return lapsed, nil
+	action, verb := ports.ActionCheckTriggerLapsed, "fired and never reached the user, and was lapsed"
+	retire := r.triggers.Lapse
+	if s.armed {
+		action, verb, retire = ports.ActionCheckTriggerExpired, "came due and was expired", r.triggers.Expire
+	}
+	if err := retire(ctx, s.ID); err != nil {
+		skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", s.ID, s.FireAt)
+		if skipErr != nil || skipped {
+			return false, skipErr
+		}
+		return false, fmt.Errorf("check: retire trigger %q: %w", s.ID, err)
+	}
+	return true, r.record(ctx, now, action,
+		fmt.Sprintf("trigger %q %s rather than sent: %s", s.ID, verb, lapseWhy(s.reason)),
+		checkDetail{ID: s.ID, FireAt: s.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale), Reason: string(s.reason)})
+}
+
+func lapseWhy(reason prospection.LapseReason) string {
+	switch reason {
+	case prospection.LapseOverdue:
+		return "it is overdue past its staleness window"
+	case prospection.LapseSuperseded:
+		return "its unit no longer has the event it is about"
+	}
+	return "its event is no longer ahead"
 }
