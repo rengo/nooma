@@ -91,8 +91,14 @@ PR 7 — `feat/proactive-language`
 - [ ] 12. RED tests: `TestBackfillTakesTheEarliestClassifyByRowid`; `TestBackfillEmptyLanguageIsNull`;
       `TestLatestLanguageIncludesArchived`; `TestI37_SpanishUnitPushAndDigestInSpanish`;
       `TestPushFallsBackToLatestThenEnglish`.
+      Also the sentences link 6 deferred (D5): `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
+      `RelationQuestion`, `Late`, `SomethingYouAsked`; the digest, the lateness caveat and the
+      check-in wording still use English literals.
 - [ ] 13. GREEN: the migration, the golden, `LatestLanguage`, capture writing the language. Doc 02
       §5, doc 03. Run `make check-all`, then open the PR.
+
+Follow-up (own change): Today's lines (`today.go`) still show the payload text; render them from the
+unit like the push and the digest.
 
 ## Review Workload Forecast
 

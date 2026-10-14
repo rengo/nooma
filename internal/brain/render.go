@@ -54,8 +54,10 @@ func (q *pushQueue) groups() [][]ports.DueTrigger {
 
 // flush pushes the queue, one message per unit, and counts the reminders delivered.
 func (r checkRunner) flush(ctx context.Context, q *pushQueue, now time.Time) (int, error) {
+	groups := q.groups()
+	q.rows = nil // sent or failed once: an abort after this never sends them again
 	delivered := 0
-	for _, g := range q.groups() {
+	for _, g := range groups {
 		n, err := r.deliver(ctx, g, now)
 		delivered += n
 		if err != nil {
@@ -95,7 +97,7 @@ func (r checkRunner) unitWords(ctx context.Context, t ports.DueTrigger, now time
 			when = set.Time(at)
 		}
 	}
-	return u.Content, when, true
+	return clip(u.Content), when, true
 }
 
 // pushText is the one message for a unit's reminders due together. It admits
@@ -112,4 +114,18 @@ func (r checkRunner) pushText(ctx context.Context, group []ports.DueTrigger, now
 		}
 	}
 	return withDelayCaveat(strings.Join(lines, "\n"), latest, now)
+}
+
+// reminderTextRunes bounds how much of a unit's own text one reminder says.
+// units.content is unbounded (a capture may be 64 KiB) and Telegram refuses a
+// message over 4096 UTF-16 units, which would fail every pass; like
+// questionSnippetRunes, a rendering bound nothing branches on.
+const reminderTextRunes = 500
+
+// clip cuts s to reminderTextRunes runes with an ellipsis, never inside a rune.
+func clip(s string) string {
+	if runes := []rune(s); len(runes) > reminderTextRunes {
+		return string(runes[:reminderTextRunes]) + "\u2026"
+	}
+	return s
 }

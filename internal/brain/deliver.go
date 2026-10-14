@@ -127,8 +127,11 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 
 	r.outage.clear()
 
+	// Every row went out in this one message, so each is marked even when an
+	// earlier one could not be: a row left unmarked is resent by a restart.
 	delivered := 0
-	for i, t := range group {
+	var failed error
+	for _, t := range group {
 		if err := r.triggers.Surface(ctx, t.ID, now); err != nil {
 			// Another pass moved the row on first: its business, not a failure.
 			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
@@ -141,12 +144,12 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 			// The message went out and the row could not record it. Loud:
 			// this is the one state the ordering cannot make safe. The retry
 			// would send it again every pass, so the process remembers it and
-			// never does; a restart, which forgets, sends it once more. The
-			// rows behind it went out in the same message.
-			for _, sent := range group[i:] {
-				r.unmarked.first(sent.ID)
+			// never does; a restart, which forgets, sends it once more.
+			r.unmarked.first(t.ID)
+			if failed == nil {
+				failed = fmt.Errorf("check: trigger %q was sent but not marked delivered: %w", t.ID, err)
 			}
-			return delivered, fmt.Errorf("check: trigger %q was sent but not marked delivered: %w", t.ID, err)
+			continue
 		}
 		delivered++
 		if err := r.record(ctx, now, ports.ActionCheckTriggerDelivered,
@@ -155,7 +158,7 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 			return delivered, err
 		}
 	}
-	return delivered, nil
+	return delivered, failed
 }
 
 // conversationFor is where a trigger's delivery goes.
@@ -200,7 +203,7 @@ func frozenText(t ports.DueTrigger) string {
 	if t.Payload.ActionText == "" {
 		return "You asked me to remind you about something."
 	}
-	return t.Payload.ActionText
+	return clip(t.Payload.ActionText)
 }
 
 func withDelayCaveat(text string, fireAt, now time.Time) string {

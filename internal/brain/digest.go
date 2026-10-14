@@ -365,6 +365,8 @@ func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, no
 				text = sentences().Line(text, when)
 			}
 			out[i].Payload.ActionText = text
+		} else {
+			out[i].Payload.ActionText = clip(t.Payload.ActionText)
 		}
 	}
 	return out
@@ -377,23 +379,29 @@ func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, no
 // would defeat the low-energy gate it came from — the point of holding
 // something back is that the person does not have to think about it today.
 func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) string {
-	text := make(map[string]string, len(pending))
+	byID := make(map[string]ports.DueTrigger, len(pending))
 	for _, t := range pending {
-		text[t.ID] = t.Payload.ActionText
+		byID[t.ID] = t
 	}
 
-	// Two reminders of one unit are one line (ADR-0032 point 4).
+	// One line per unit, however many of its reminders are carried (ADR-0032
+	// point 4); a reminder of no unit stands alone.
 	var lines []string
+	seen := map[string]bool{}
 	for _, item := range carry {
-		line := text[item.ID]
+		t := byID[item.ID]
+		if t.UnitID != nil {
+			if seen[*t.UnitID] {
+				continue
+			}
+			seen[*t.UnitID] = true
+		}
+		line := t.Payload.ActionText
 		if line == "" {
 			line = "something you asked me to remind you about"
 		}
-		if !slices.Contains(lines, line) {
-			lines = append(lines, line)
-		}
+		lines = append(lines, line)
 	}
-
 	var b strings.Builder
 	if len(lines) > 0 {
 		b.WriteString("Here " + plural(len(lines)) + ":")

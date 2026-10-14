@@ -228,6 +228,7 @@ func (s Set) Date(t time.Time) string {
 	return s.Weekdays[int(t.Weekday())] + " " + head
 }
 
+// Line joins a unit's words to its instant, for a digest line.
 func (s Set) Line(text, when string) string { return fmt.Sprintf(s.AtWhen, text, when) }
 
 // Remind frames text as a reminder, saying when if when is not empty.

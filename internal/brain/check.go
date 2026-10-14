@@ -152,8 +152,7 @@ func (s *CheckService) Check(ctx context.Context, req CheckRequest) (CheckReport
 // commit gates the writes and nothing else. Every read, every verdict and
 // every count below is identical in both modes, which is what makes a dry
 // run a preview of this scan rather than a story about it.
-func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckReport, error) {
-	var report CheckReport
+func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (report CheckReport, err error) {
 	// r is this scan's copy: the user's night, read once, is what every
 	// verdict and the digest below are judged in.
 	r.night = r.quietHours(ctx)
@@ -169,6 +168,15 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	var stale []staleRow
 	settled := map[string]settledRow{}
 	var q pushQueue
+	// A pass that aborts later still sends what it already fired: a push left
+	// waiting behind someone else's error goes stale.
+	defer func() {
+		if err != nil {
+			if _, flushErr := r.flush(ctx, &q, now); flushErr != nil {
+				err = errors.Join(err, flushErr)
+			}
+		}
+	}()
 	for _, t := range due {
 		verdict, reason, err := g.judge(ctx, t, false, now)
 		if err != nil {
