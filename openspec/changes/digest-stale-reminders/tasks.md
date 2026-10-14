@@ -99,6 +99,8 @@ PR 7 — `feat/proactive-language`
 
 Follow-up (own change): Today's lines (`today.go`) still show the payload text; render them from the
 unit like the push and the digest.
+Follow-up (own change): the 500-rune cap is per line, so a digest of dozens of items can still exceed
+Telegram's 4096-character limit; bound the whole message.
 
 ## Review Workload Forecast
 
