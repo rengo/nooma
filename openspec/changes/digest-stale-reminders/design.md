@@ -193,14 +193,12 @@ reads `due_at` as `Current`, and its quiet-hours exemption sits inside D1's `Tri
 
 | PR | Branch | Content | Impl+docs |
 |---|---|---|---|
-| 2 | `fix/never-remind-of-the-past` | D1 `passed` only, recurring by `NextOccurrence` (no `overdue` change: armed rows keep today's verdict, the digest ignores `overdue`), D4, `FiredForUnit` on `status = 'fired'`; doc 02 §7/§11, doc 03, I37 | ~320 |
+| 2 | `fix/never-remind-of-the-past` | D1 `passed` only, recurring by `NextOccurrence` (no `overdue` change: armed rows keep today's verdict, the digest ignores `overdue`), D4, `FiredForUnit` on `status = 'fired'`; doc 02 §7/§11, doc 03, I37 | ~330 |
 | 3 | `fix/late-reminders-replan` | D1 rest, D8, "can deliver", the due loop deferring to D6, D6 without the catch-up (held), the digest skipping held rows | ~390 |
 | 4 | `fix/no-destination-and-catch-up` | D3 cannot-deliver branch, Today's list, `OneShotForUnit`, catch-up attempts, I15 amended | ~400 |
 | 5 | `fix/push-retries-undelivered` | D3 can-deliver branch: push, skips, bounds, recurring-only digest | ~200 |
 | 6 | `fix/reminder-renders-the-unit` | D5 | ~260 |
 | 7 | `feat/proactive-language` | D7 | ~220 |
 
-## 7. Tests
-
-The acceptance gate is the named RED list per link in `tasks.md`, one test per scenario the
-judges raised in rounds 1-3.
+**Tests.** The acceptance gate is the named RED list per link in `tasks.md`, one test per
+scenario the judges raised in rounds 1-3.

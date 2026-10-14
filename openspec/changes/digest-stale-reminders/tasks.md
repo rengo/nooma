@@ -16,13 +16,14 @@ PR 2 — `fix/never-remind-of-the-past` (D1 `passed`, D4, `FiredForUnit`)
   - `TestI37_PastBirthdayIsNeverSent`: a recurring row whose occurrence passed → lapsed.
   - `TestReminderVerdict_RecurringOccurrenceInClockZone`: anchor plus fire_at in UTC-3 → the
     local occurrence, not the UTC one.
-  - `TestReminderVerdict_ZeroLeadIsNotPassed`: `lead_minutes` 0 and no `event_at` → About unknown.
+  - `TestReminderVerdict_ZeroLeadIsNotPassed`: `lead_minutes` 0, no `event_at` → About unknown.
   - `TestTodayCountsAfterTheGate`: a past row → not counted, and no write.
+  - `TestDryRunCountsALapseAndWritesNothing`: a past fired row → `TriggersLapsed` 1, no row.
   - `TestFiredForUnit_LapsedRowDoesNotCover` (L3): a lapsed row → absent; a fired row → present.
   - Repo contract: `Lapse` only `fired`/unsurfaced, else a conflict.
 - [ ] 3. GREEN: `ReminderVerdict` (`passed`, `About`), `Lapse`, the gate (fire time, digest, Today),
-      `FiredForUnit`, `check.trigger.lapsed` (action, label, counter, dry run). Doc 02 §7/§11, doc 03,
-      doc 07, I37 row. Run `make check-all`, then open the PR.
+      `FiredForUnit`, `check.trigger.lapsed` (action, label, counter, dry run). Doc 02 §7/§11,
+      doc 03, doc 07, I37 row. `make check-all`, open the PR.
 
 PR 3 — `fix/late-reminders-replan` (D1 rest, D8, D6 without the catch-up)
 - [ ] 4. RED tests:
@@ -67,9 +68,9 @@ PR 4 — `fix/no-destination-and-catch-up`
   - `TestMoveReminderClearsCatchUpOnANewInstant`.
   - Repo contract: `OneShotForUnit` returns expired rows; `Create` of a taken attempt id →
     `ErrTriggerExists`.
-- [ ] 7. GREEN: the cannot-deliver branch, Today's list, `OneShotForUnit` (sqlite, memrepo),
-      `CatchUp` at once, `armCatchUp`, `TriggerPayload.CatchUp`, the refused writer and
-      `check.reminder.refused`. Doc 02 §5/§7, doc 07. Run `make check-all`, then open the PR.
+- [ ] 7. GREEN: cannot-deliver, Today's list, `OneShotForUnit` (sqlite, memrepo), `CatchUp`,
+      `armCatchUp`, `TriggerPayload.CatchUp`, the refused writer, `check.reminder.refused` (doc 02
+      §11, `ui/activitylabel.go`). Doc 02 §5/§7, doc 07. `make check-all`, open the PR.
 
 PR 5 — `fix/push-retries-undelivered`
 - [ ] 8. RED tests: `TestI37_FailedPushRetriedOncePerPass` (not twice in the pass that fired

@@ -67,19 +67,19 @@ asked its relation question in English to a user whose every reply comes back in
 
 ### What it enables
 
-- A vault can run for weeks without a channel and the first message it sends is still true.
-- A correction reaches every reminder not yet delivered, not only armed ones.
+- After weeks without a channel the first message is still true, and a correction reaches every
+  reminder not yet delivered.
 
 ### What it costs
 
-- A migration (`units.language`), backfilled from the `capture.classify` rows that already
-  recorded each unit's language.
+- A migration (`units.language`), backfilled from the `capture.classify` rows.
 - A due scan now reads the units of the reminders it delivers, one read per reminder.
 - On a vault with no channel, reminders for events still ahead stay armed until one exists (at
   most one row per lead per event), and Today lists them so a UI-only vault still sees them.
 - A transport outage writes one failure row per reminder, not one per check.
-- The frame is fixed text; a reminder reads as "Reminder: <your sentence> — <when>", not as a
-  sentence written for the occasion.
+- The frame is fixed text: "Reminder: <your sentence> — <when>".
+- Under point 1, a catch-up for an event less than one check interval (5 min) ahead may not be
+  sent; the trail says `passed`.
 - A person who writes in two languages gets the digest frame in whichever they captured in last.
 
 ### Reversal criteria
