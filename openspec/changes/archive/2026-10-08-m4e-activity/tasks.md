@@ -5,7 +5,7 @@ design is the activity half of the m4e design that was APPROVED after Judgment D
 **§10 carries the round-3 corrections that touch it**). A slice sharing
 `openspec/changes/m4-mirror-ui/proposal.md`. Beliefs are
 [`m4e-beliefs-activity-admin`](../2026-10-08-m4e-beliefs/tasks.md); admin is
-[`m4e2-admin`](../../m4e2-admin/tasks.md), which starts after this slice's PR 6 merges. Shape follows
+[`m4e2-admin`](../2026-10-14-m4e2-admin/tasks.md), which starts after this slice's PR 6 merges. Shape follows
 the archived m4c and m4b tasks.
 
 > **Split from m4e-beliefs-activity-admin on 2026-10-08 by the owner's 7-PR rule after PR 2 measured 2.06x.**

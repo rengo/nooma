@@ -3,8 +3,8 @@
 Technical design for `m4e2-admin`, the slice split off `m4e-beliefs-activity-admin` on
 2026-10-08. Requirements are [`spec.md`](spec.md) (R7-R11, owner rulings 2026-10-07). This
 document decides HOW. Shape follows the archived
-[`m4c` design](../archive/2026-10-07-m4c-focus-hysteresis/design.md) and
-[`m4b` design](../archive/2026-09-29-m4b-units-capture/design.md).
+[`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md) and
+[`m4b` design](../2026-09-29-m4b-units-capture/design.md).
 
 > **Split from `m4e-beliefs-activity-admin` on 2026-10-08 by the umbrella rule** (proposal.md
 > ~:301, more than seven PRs or more than 2,400 budgeted lines). m4e's design had admin as a
@@ -13,19 +13,19 @@ document decides HOW. Shape follows the archived
 > decision). The sections below are the old m4e §3.7, §3.8, the admin rows of §3.9, gates G4 and
 > G5, the admin mutants (C-series) and the old PRs 6-7, with the amendments of the 2026-10-08
 > judgment round marked.
-> Companion: [`../archive/2026-10-08-m4e-beliefs/design.md`](../archive/2026-10-08-m4e-beliefs/design.md).
+> Companion: [`../archive/2026-10-08-m4e-beliefs/design.md`](../2026-10-08-m4e-beliefs/design.md).
 >
 > **Depends on `m4e-activity` and on m4e (starts after `m4e-activity`'s PR 6 merges, which itself
 > follows m4e's PR 4).** Re-pointed on 2026-10-08, when activity split off m4e (the owner's 7-PR rule, after m4e PR 2
 > measured 2.06x): `m4e-activity` now owns what the old m4e PRs 5-6 built.
 >
-> From [`m4e-activity`](../archive/2026-10-08-m4e-activity/design.md):
+> From [`m4e-activity`](../2026-10-08-m4e-activity/design.md):
 > - `DecisionLog.Before`, `DecisionCursor`, `DecisionRow` (m4e-activity PR 5), used for the
 >   recent consolidation effects;
 > - the **change decoder** in `ActivityService` (m4e-activity §3.6), which must already accept
 >   `{fields, previous, next}` (m4e-activity's A11 test carries a `config.updated`-shaped row).
 >
-> From [m4e](../archive/2026-10-08-m4e-beliefs/design.md):
+> From [m4e](../2026-10-08-m4e-beliefs/design.md):
 > - the action-vocabulary file and its `repocontract` map as m4e leaves them (fifty-two members,
 >   after m4e PR 3; m4e-activity adds none); this slice adds the fifty-third, `config.updated`;
 > - `brain.ErrWriteLanded` and `*brain.WriteLandedError{Record, Signal}` (m4e PR 3, `internal/brain/write_landed.go`);
@@ -38,7 +38,7 @@ document decides HOW. Shape follows the archived
 > and dependency rows gain `m4e2-admin` (after m4e); the umbrella is not edited now. The complete
 > list of umbrella spots that still put admin inside m4e (acceptance line ~:75, §5.2 rows 9-10,
 > the Q5 header "blocking m4e #5", the independence paragraph listing `ConfigRepo` under m4e, and
-> more) is in the header of [`../archive/2026-10-08-m4e-beliefs/design.md`](../archive/2026-10-08-m4e-beliefs/design.md).
+> more) is in the header of [`../archive/2026-10-08-m4e-beliefs/design.md`](../2026-10-08-m4e-beliefs/design.md).
 
 > **Findings this design made that the spec did not anticipate:**
 > 1. **R8 needs a read on a fourth port.** Relation type is open text

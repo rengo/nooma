@@ -10,7 +10,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 > covered beliefs, activity and admin in seven PRs (~1,890 lines, thin margins). Splitting the
 > activity PR into "newest-first read" and "activity view" makes eight implementation PRs, so
 > the umbrella rule (proposal.md ~:301, more than seven PRs or more than 2,400 budgeted lines)
-> fires on measurement. **Admin is now [`m4e2-admin`](../../m4e2-admin/design.md)**: §3.7, §3.8, the
+> fires on measurement. **Admin is now [`m4e2-admin`](../2026-10-14-m4e2-admin/design.md)**: §3.7, §3.8, the
 > admin rows of §3.9, gate G5 and G4, the admin mutants (C-series), the admin PRs and their
 > findings moved there. The directory name is kept because other artifacts reference it; the
 > scope was beliefs + activity and **is now beliefs only** (see the next note). **Depends on
@@ -19,7 +19,7 @@ follows the archived [`m4c` design](../2026-10-07-m4c-focus-hysteresis/design.md
 > and the `ui.Deps` / `uiDeps` / `wiring.go` pattern with the layout nav (PR 4), and the
 > action-vocabulary file; it depends on [`m4e-activity`](../../archive/2026-10-08-m4e-activity/design.md) for
 > `DecisionLog.Before`, the change decoder (§3.6 there) and the `config.updated`-shaped fixture
-> (A11), matching `../m4e2-admin/design.md`'s header.
+> (A11), matching `../2026-10-14-m4e2-admin/design.md`'s header.
 >
 > **Planning-PR task list (recorded here, not done by this document; the umbrella is not edited
 > now).** Every spot of `m4-mirror-ui/proposal.md` that still puts admin inside m4e, found by
@@ -469,7 +469,7 @@ discipline.
 
 ### 3.7 Admin writes, 3.8 admin read
 
-**Moved to [`m4e2-admin` design](../../m4e2-admin/design.md) §3.1 and §3.2.**
+**Moved to [`m4e2-admin` design](../2026-10-14-m4e2-admin/design.md) §3.1 and §3.2.**
 
 ### 3.9 UI routes
 
@@ -899,7 +899,7 @@ in-place wording changes in the planning PR. Numbers are the round-3 correction 
     the action-vocabulary file, the change decoder (§3.6) and the cross-origin body table
     (§3.12 G6)" gains `brain.ErrWriteLanded` / `*WriteLandedError` (PR 3), the I22 whitelist test
     (G12) and the `ui.Deps` / `uiDeps` / `wiring.go` pattern with the layout nav, matching
-    `../m4e2-admin/design.md` lines 18-28.
+    `../2026-10-14-m4e2-admin/design.md` lines 18-28.
 14. **`:1930` ripple justification (§5).** The `consolidate_test.go` seed rows are justified as:
     every seed gets `Origin: "derived"` **to avoid rule 4 treating an empty-origin seed as
     non-derived** (it would reinforce instead of overwriting in place). "Rule 4" is the

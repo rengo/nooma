@@ -3,7 +3,7 @@
 Derived from `spec.md` (R1-R4, R9, R11-R13) and `design.md` (§1-§8, APPROVED after Judgment Day
 round 3; **§10 carries the round-3 corrections, applied below**). Fifth of six slices under
 `openspec/changes/m4-mirror-ui/proposal.md`. Scope is beliefs only (PRs 1-4; activity, the old PRs 5-6, is
-[`m4e-activity`](../../archive/2026-10-08-m4e-activity/tasks.md)); admin is [`m4e2-admin`](../../m4e2-admin/tasks.md),
+[`m4e-activity`](../../archive/2026-10-08-m4e-activity/tasks.md)); admin is [`m4e2-admin`](../2026-10-14-m4e2-admin/tasks.md),
 which starts after `m4e-activity`'s PR 6 merges. Shape follows
 the archived m4c and m4b tasks.
 
