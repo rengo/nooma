@@ -34,6 +34,7 @@ func TestCatchUp(t *testing.T) {
 		{"the event has passed", event, nil, nil, day(11, 0), false, time.Time{}, "", false},
 		{"a date-only event on its own day", day(0, 0), nil, nil, day(10, 0), true, day(10, 0), "", true},
 		{"a date-only event in quiet hours on its own day: at quiet end", day(0, 0), nil, nil, day(6, 0), true, day(7, 0), "", false},
+		{"a date-only event is still owed one in the last half hour of its day", day(0, 0), nil, nil, day(23, 30), true, day(23, 30), "", true},
 		{"a date-only event once its day ended", day(0, 0), nil, nil, day(0, 0).AddDate(0, 0, 1), false, time.Time{}, "", false},
 		{"in quiet hours: at quiet end, before the event", day(7, 30), nil, nil, day(6, 0), true, day(7, 0), "", false},
 		{"in quiet hours with quiet end at the event: refused", day(7, 0), nil, nil, day(6, 0), true, time.Time{}, RefusalQuietHours, false},
