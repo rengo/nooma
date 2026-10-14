@@ -324,12 +324,14 @@ func TestRenderSaysTheLocalDayNotUTC(t *testing.T) {
 
 // TestSeveralUnreadableRowsSayEachTextOnce: a unit that cannot be read makes the
 // message the texts the reminders were armed with, one line for each distinct
-// one, in the order they came due.
+// one, in the order they came due. The second call is armed with the first
+// call's text again and is said once.
 func TestSeveralUnreadableRowsSayEachTextOnce(t *testing.T) {
 	v := newI37Vault(t)
 	event := i37Day(14, 20, 0)
 	v.fired("a", "gone", "dentist, first call", i37Day(14, 17, 0), modern(event, 180))
-	v.row("b", "gone", "dentist, second call", i37Day(14, 18, 59), modern(event, 61))
+	v.row("b", "gone", "dentist, first call", i37Day(14, 18, 58), modern(event, 62))
+	v.row("c", "gone", "dentist, second call", i37Day(14, 18, 59), modern(event, 61))
 
 	v.checkAt(i37Day(14, 19, 0), false)
 
@@ -387,5 +389,42 @@ func TestALongTextCannotWedgeAnyPath(t *testing.T) {
 	}
 	if len(digest.ch.texts) == 1 && !strings.HasSuffix(digest.ch.texts[0], "… — Wed 21 Oct") {
 		t.Errorf("digest line = %.20q...%q, want the ellipsis then the date", digest.ch.texts[0], digest.ch.texts[0][len(digest.ch.texts[0])-20:])
+	}
+}
+
+// TestTheClipNeverSplitsAMultiByteCharacter: the cut is on runes. A 3-byte
+// character is used because 500 is not a multiple of 3, so a byte cut lands inside
+// one; with a 2-byte character it would land between two and pass.
+func TestTheClipNeverSplitsAMultiByteCharacter(t *testing.T) {
+	v := newI37Vault(t)
+	event := i37Day(15, 11, 0)
+	v.event("u", &event)
+	v.row("r", "u", "dentist", i37Now.Add(-time.Minute), modern(event, 1500))
+	v.say("u", strings.Repeat("\u20ac", 600))
+
+	v.check(false)
+
+	want := "Reminder: " + strings.Repeat("\u20ac", 500) + "\u2026 \u2014 Thu 15 Oct, 11:00"
+	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
+		got := ""
+		if len(v.ch.texts) == 1 {
+			got = v.ch.texts[0]
+		}
+		t.Errorf("sent %d message(s) of %d bytes, valid %v; want exactly %d bytes: 500 whole runes then an ellipsis", len(v.ch.texts), len(got), utf8.ValidString(got), len(want))
+	}
+}
+
+// TestI37_AnAbortedPassReportsTheFlushFailureToo: the pass aborts and the push it
+// still sends cannot be recorded; both failures reach the caller, so the one that
+// caused the abort does not hide that a message went out unrecorded.
+func TestI37_AnAbortedPassReportsTheFlushFailureToo(t *testing.T) {
+	v := newI37Vault(t)
+	v.dueNow("r", "u", "dentist")
+	v.repo = failingUndelivered{newSurfaceFails(v.triggers, errors.New("disk full"), 1, "r")}
+
+	_, err := v.tryCheckAt(i37Now, false)
+
+	if err == nil || !strings.Contains(err.Error(), "the store is unavailable") || !strings.Contains(err.Error(), "disk full") {
+		t.Errorf("error = %v, want both the abort's cause and the unrecorded send", err)
 	}
 }

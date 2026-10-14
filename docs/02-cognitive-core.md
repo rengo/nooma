@@ -543,9 +543,16 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        said English".
      - **It follows the message, not a setting.** The person who writes in Spanish today and
        English tomorrow is answered in each, with nothing to configure and nothing to keep in
-       sync. What this does not cover is anything Nooma says on its own initiative — the
-       digest arises from a clock, not from a message, and has no classification to read.
-       Until a language is carried on the unit itself, those speak the fallback.
+       sync. What Nooma says on its own initiative has no message to follow, so it follows the
+       unit ([ADR-0032](adr/0032-a-reminder-says-what-is-true-now.md) point 5): capture stores
+       the classification's language on the unit (`units.language`, empty as NULL, never changed
+       by a correction; the migration backfills it from each unit's earliest `capture.classify`
+       row). A pushed reminder speaks its unit's language; the digest (header, lines' frame,
+       lateness note, relation question) speaks the language of the most recently created unit
+       that has one, archived or not. A unit that knows none speaks the newest unit's, and
+       none known at all, the fallback. **A timer's wording is the exception for now**: a timer
+       is not a unit, and its generic nudge and lateness note stay English until a follow-up
+       makes them follow the newest unit's language.
 
    - **Two of the thirteen are not memory, and they route before anything is built**
      ([ADR-0021](adr/0021-conversation-boundary.md)) — `chitchat` and `out_of_scope`. Neither
@@ -1438,7 +1445,9 @@ box can audit it):
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
   delivered. The text a reminder was armed with is only the fallback when the unit cannot be read.
-  The sentences (`phrase`: `Reminder`, `AtWhen`) are the fallback language's until ADR-0032 point 5.
+  The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
+  `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
+  newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the

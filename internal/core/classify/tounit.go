@@ -85,9 +85,21 @@ func ToUnit(c Classification, id, source string, now time.Time, p Priors) (unit.
 		// Phase B writes no perception confidence — proposal §8 Q2. nil
 		// rather than 0.0, which would read as "measured, and zero".
 		Confidence: nil,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		// The language the capture was written in; empty when the
+		// classification named none (ADR-0032 point 5). Never Fallback: that
+		// would record English as a fact about a message nobody classified.
+		Language:  languageText(c.Language),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}, nil
+}
+
+// languageText is l as the text a unit stores, empty when none was named.
+func languageText(l *Language) string {
+	if l == nil {
+		return ""
+	}
+	return string(*l)
 }
 
 // orPrior returns the model's value when it supplied one, and the prior when

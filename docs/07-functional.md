@@ -311,7 +311,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | A reminder is never sent once its event is past, by the push, the digest or Today (the rest of ADR-0032 is pending) | Shipped | doc 02 §7; ADR-0032 |
 | An event whose every reminder lapsed gets one catch-up at once (or at quiet end); a vault with no channel keeps its reminders (an overdue one-shot, a unit-less one included, stays listed on Today) | Shipped | doc 02 §7; ADR-0032 |
 | A reminder that could not be pushed is pushed again on a later pass while its event is ahead, once per pass, never twice for one outage report; the digest carries only recurring reminders | Shipped | doc 02 §7; ADR-0032 |
-| A reminder, pushed or in the digest, says its unit's current text and instant ("Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"), one message per unit; a bare date has no clock time | Shipped; in the fallback language until the language arrives with the unit | doc 02 §7; ADR-0032 |
+| A reminder, pushed or in the digest, says its unit's current text and instant ("Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
+| What Nooma says first speaks the user's language: a pushed reminder, in its unit's; the digest (header, lines, question, lateness note), in the newest capture's; English when none is known | Shipped; a timer's wording is not covered | doc 02 §5, §7; ADR-0032 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |

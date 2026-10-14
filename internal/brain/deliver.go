@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -195,20 +196,20 @@ func ProactiveConversation(allowedChatIDs []int64) ports.ConversationID {
 }
 
 // renderPush is what a pushed trigger says when its unit cannot be read.
-func renderPush(t ports.DueTrigger, now time.Time) string {
-	return withDelayCaveat(frozenText(t), t.FireAt, now)
+func renderPush(t ports.DueTrigger, now time.Time, set phrase.Set) string {
+	return withDelayCaveat(frozenText(t, set), t.FireAt, now, set)
 }
 
-func frozenText(t ports.DueTrigger) string {
+func frozenText(t ports.DueTrigger, set phrase.Set) string {
 	if t.Payload.ActionText == "" {
-		return "You asked me to remind you about something."
+		return set.SomethingYouAsked
 	}
 	return clip(t.Payload.ActionText)
 }
 
-func withDelayCaveat(text string, fireAt, now time.Time) string {
+func withDelayCaveat(text string, fireAt, now time.Time, set phrase.Set) string {
 	if prospection.DelayCaveat(now.Sub(fireAt)) {
-		return text + " (This is later than intended.)"
+		return set.Delayed(text)
 	}
 	return text
 }

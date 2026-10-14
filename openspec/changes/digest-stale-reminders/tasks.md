@@ -88,19 +88,28 @@ PR 6 — `fix/reminder-renders-the-unit`
 - [x] 11. GREEN: render from the unit. Doc 02 §7, doc 07. Run `make check-all`, then open the PR.
 
 PR 7 — `feat/proactive-language`
-- [ ] 12. RED tests: `TestBackfillTakesTheEarliestClassifyByRowid`; `TestBackfillEmptyLanguageIsNull`;
+- [x] 12. RED tests: `TestBackfillTakesTheEarliestClassifyByRowid`; `TestBackfillEmptyLanguageIsNull`;
       `TestLatestLanguageIncludesArchived`; `TestI37_SpanishUnitPushAndDigestInSpanish`;
       `TestPushFallsBackToLatestThenEnglish`.
       Also the sentences link 6 deferred (D5): `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
       `RelationQuestion`, `Late`, `SomethingYouAsked`; the digest, the lateness caveat and the
       check-in wording still use English literals.
-- [ ] 13. GREEN: the migration, the golden, `LatestLanguage`, capture writing the language. Doc 02
+      Also written: `TestI37_SpanishUnit...` is joined by `TestFallbackSentencesSpeakTheLatestLanguage`,
+      `TestProactiveSentences`, `TestRenderDigest_SpeaksTheSetItIsGiven`, `TestToUnit_CarriesTheClassifiedLanguage`
+      and `TestI26_TheCapturedUnitKeepsItsLanguage`. A timer's wording (`rephrase.go`) is not covered: a
+      timer is not a unit and the design leaves it out.
+- [x] 13. GREEN: the migration, the golden, `LatestLanguage`, capture writing the language. Doc 02
       §5, doc 03. Run `make check-all`, then open the PR.
 
 Follow-up (own change): Today's lines (`today.go`) still show the payload text; render them from the
 unit like the push and the digest.
 Follow-up (own change): the 500-rune cap is per line, so a digest of dozens of items can still exceed
-Telegram's 4096-character limit; bound the whole message.
+Telegram's 4096-character limit; bound the whole message. Cutting lines means deciding what happens to the
+reminders not shown (they must stay undelivered), which is a product call.
+PM decisions for those follow-ups: (1) timer wording follows the newest unit's language; (2) a digest over
+4096 characters drops the overflow lines, which stay undelivered for tomorrow, and appends "and N more" /
+"y N más"; (3) Today lines render from the unit.
+Done in link 7: the 3-byte clip test, a repeated unreadable text, and the joined flush error on an aborted pass.
 
 ## Review Workload Forecast
 

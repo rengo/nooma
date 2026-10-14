@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
@@ -270,7 +272,7 @@ func TestRenderDigest_DoesNotMentionWhatItHeld(t *testing.T) {
 		digestTrigger("trg-carried", "u-1", "the carried one"),
 		digestTrigger("trg-held", "u-2", "the held one"),
 	}
-	got := renderDigest([]prospection.DigestItem{{ID: "trg-carried"}}, pending, nil)
+	got := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-carried"}}, pending, nil)
 
 	if !strings.Contains(got, "the carried one") {
 		t.Errorf("the digest does not name what it carried:\n%s", got)
@@ -541,7 +543,7 @@ func TestRenderDigest_NamesBothEndpointsAfterTheItems(t *testing.T) {
 	pending := []ports.DueTrigger{digestTrigger("trg-1", "u-1", "renew the passport")}
 	q := question("q-1", digestQuestionNow, "plan the offsite", "the travel budget")
 
-	got := renderDigest([]prospection.DigestItem{{ID: "trg-1"}}, pending, &q)
+	got := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-1"}}, pending, &q)
 
 	want := "Here is 1 thing for today:\n• renew the passport\n\n" +
 		"One more — I linked \"plan the offsite\" with \"the travel budget\". Are they related?"
@@ -559,7 +561,7 @@ func TestRenderDigest_NamesBothEndpointsAfterTheItems(t *testing.T) {
 func TestRenderDigest_WithoutItemsDropsTheHeaderRatherThanLie(t *testing.T) {
 	q := question("q-1", digestQuestionNow, "plan the offsite", "the travel budget")
 
-	got := renderDigest(nil, nil, &q)
+	got := renderDigest(sentences(), nil, nil, &q)
 
 	if strings.Contains(got, "for today") {
 		t.Errorf("renderDigest() with no carried items still writes the item header:\n%q", got)
@@ -577,7 +579,7 @@ func TestRenderDigest_TruncatesEndpointsToTheSnippetBound(t *testing.T) {
 	long := strings.Repeat("á", questionSnippetRunes+20)
 	q := question("q-1", digestQuestionNow, long, "short")
 
-	got := renderDigest(nil, nil, &q)
+	got := renderDigest(sentences(), nil, nil, &q)
 
 	quoted := strings.Repeat("á", questionSnippetRunes) + "…"
 	if !strings.Contains(got, quoted) {
@@ -875,5 +877,30 @@ func TestI37_LowEnergyHeldRowIsNotOverdue(t *testing.T) {
 	carried, lapsed, err := digestRunner(t, triggers, &digestUnits{}, state, log, ch).assembleDigest(context.Background(), digestNow, true)
 	if err != nil || carried != 1 || lapsed != 0 || !slices.Equal(triggers.surfaced, []string{"rec"}) {
 		t.Errorf("carried %d, lapsed %d, surfaced %v, err %v; want the held birthday carried", carried, lapsed, triggers.surfaced, err)
+	}
+}
+
+// TestRenderDigest_SpeaksTheSetItIsGiven: the header, the bullets, the "one more"
+// join, the question and the line standing in for a reminder with no words all
+// come from the sentence set, so a Spanish digest has no English left in it
+// (ADR-0032 point 5).
+func TestRenderDigest_SpeaksTheSetItIsGiven(t *testing.T) {
+	es := phrase.For(classify.LanguageES)
+	q := question("q-1", digestQuestionNow, "planear la salida", "el presupuesto")
+	pending := []ports.DueTrigger{
+		digestTrigger("a", "u-a", "renovar el pasaporte"),
+		digestTrigger("b", "u-b", ""),
+	}
+	carry := []prospection.DigestItem{{ID: "a"}, {ID: "b"}}
+
+	got := renderDigest(es, carry, pending, &q)
+
+	want := "Hoy hay 2 cosas:\n• renovar el pasaporte\n• Me pediste que te recordara algo.\n\n" +
+		"Una más — Relacioné \"planear la salida\" con \"el presupuesto\". ¿Tienen relación?"
+	if got != want {
+		t.Errorf("renderDigest() =\n%q\nwant\n%q", got, want)
+	}
+	if got, want := renderDigest(sentences(), carry[1:], pending, nil), "Here is 1 thing for today:\n\u2022 You asked me to remind you about something."; got != want {
+		t.Errorf("English renderDigest() = %q, want %q", got, want)
 	}
 }

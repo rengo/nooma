@@ -8,11 +8,12 @@ import (
 
 // TestParseMigrationsRealEmbeddedSet is D10's non-empty-corpus guard applied
 // to the real embedded migration set: it asserts parseMigrations finds
-// exactly versions 1..7 (0001_core_tables.sql, 0002_learning_and_search.sql,
+// exactly versions 1..8 (0001_core_tables.sql, 0002_learning_and_search.sql,
 // 0003_current_state_source.sql, 0004_pending_questions.sql,
 // 0005_units_browse_index.sql — R3.8, m4b design §3.2's browse index —
 // 0006_reminder_preferences.sql, ADR-0029, and
-// 0007_quiet_hours_preferences.sql, ADR-0030) with
+// 0007_quiet_hours_preferences.sql, ADR-0030, and
+// 0008_unit_language.sql, ADR-0032) with
 // non-empty SQL, before any other test in this file trusts synthetic inputs
 // to mean anything.
 func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
@@ -20,8 +21,8 @@ func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMigrations(migrationFS) = _, %v, want nil error", err)
 	}
-	if len(migrations) != 7 {
-		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 7 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql, 0004_pending_questions.sql, 0005_units_browse_index.sql, 0006_reminder_preferences.sql, 0007_quiet_hours_preferences.sql)", len(migrations))
+	if len(migrations) != 8 {
+		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 8 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql, 0004_pending_questions.sql, 0005_units_browse_index.sql, 0006_reminder_preferences.sql, 0007_quiet_hours_preferences.sql, 0008_unit_language.sql)", len(migrations))
 	}
 	for _, m := range migrations {
 		if strings.TrimSpace(m.SQL) == "" {
@@ -48,6 +49,9 @@ func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	}
 	if migrations[6].Version != 7 {
 		t.Errorf("migrations[6].Version = %d, want 7", migrations[6].Version)
+	}
+	if migrations[7].Version != 8 {
+		t.Errorf("migrations[7].Version = %d, want 8", migrations[7].Version)
 	}
 }
 

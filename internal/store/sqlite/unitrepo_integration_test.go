@@ -336,3 +336,11 @@ func TestUnitRepo_LiveFocusCandidatesFiltersPositively(t *testing.T) {
 		t.Fatalf("LiveFocusCandidates: got %+v, want exactly focus-raw-pool", got)
 	}
 }
+
+// TestUnitRepo_Language runs repocontract.RunLanguage against a real migrated
+// vault (ADR-0032 point 5).
+func TestUnitRepo_Language(t *testing.T) {
+	repocontract.RunLanguage(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
