@@ -31,7 +31,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestQuotedSpeechCountsAsAskedKnownLimit`: "Ana me dijo 'avisame cuando llegues'" → true (P4, pinned).
   - `TestRemindCuesCoverEveryLanguage`: a sweep over `AllLanguages()`.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
-- [ ] 1.3 RED L1 `prospection` (D3, D4, D6):
+- [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.
   - `TestArmAsked_DayOnly`: day-only 10-15 → 10-15 09:00. `TestArmAsked_DayOnlyFollowsDateOnlyAt`: 08:30 pref → 08:30.
   - `TestArmAsked_NamedMidnightIsNotDayOnly`: 10-16T00:00 timed → 10-15 23:45.
@@ -47,7 +47,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `test/conformance/TestAtOnceMarginMatchesProactiveInterval` (L2, so core imports no scheduler).
   - `TestVerdict_NightExemptOverdueFromFireAt`: an exempt 03:00 row at 09:05, with a 6 h window → stale `overdue`; an unexempt one → deferred, then delivered (round 2, item 3).
   - `TestVerdict_AskedNamedMidnightPassesAtMidnight`: an asked row about 10-16 00:00 with no `day_only` → `passed` at 00:00, not at the next midnight (item 4). `TestVerdict_UnaskedMidnightKeepsDayGranular`.
-- [ ] 1.4 GREEN, including the call-site edits for the new signatures: `Arm` at `brain/capture.go:317`, and `ResolveReminderPrefs` at `brain/capture.go:121` and `brain/preferences.go:207`, plus their test callers; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
+- [x] 1.4 GREEN, including the call-site edits for the new signatures: `Arm` at `brain/capture.go:317`, and `ResolveReminderPrefs` at `brain/capture.go:121` and `brain/preferences.go:207`, plus their test callers; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
 
 ## PR 2 — `feat/remind-me-one-shot` (D5, D7, D8, D4 scan; first usable)
 

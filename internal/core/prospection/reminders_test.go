@@ -33,7 +33,7 @@ func TestArm_EventReminders(t *testing.T) {
 	event := classify.KindEvent
 	arm := func(eventAt, now time.Time, prefs ReminderPrefs) []Plan {
 		t.Helper()
-		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, prefs, now)
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, false, prefs, now)
 		if !ok {
 			t.Fatalf("Arm(%v at %v) armed nothing: %+v", eventAt, now, plans)
 		}
@@ -119,7 +119,7 @@ func TestArm_EventReminders(t *testing.T) {
 	})
 	t.Run("an event already past arms nothing", func(t *testing.T) {
 		e := at(10, 7, 0)
-		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &e}, defaults, at(10, 8, 0))
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &e}, false, defaults, at(10, 8, 0))
 		if ok || len(plans) != 1 || plans[0].What != ArmNothing || plans[0].Why != RefusalAlreadyPast {
 			t.Errorf("Arm = %+v, %v, want one already_past refusal", plans, ok)
 		}
@@ -179,11 +179,11 @@ func TestArm_EventRemindersAroundQuietHours(t *testing.T) {
 	p := DefaultReminderPrefs()
 	p.TimedLeads = []time.Duration{3 * time.Hour, 2 * time.Hour}
 
-	plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, p, at(13, 10))
+	plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, false, p, at(13, 10))
 	if !ok || len(plans) != 1 || !plans[0].FireAt.Equal(at(15, 22)) || plans[0].LeadMinutes != 7*60 {
 		t.Errorf("plans = %+v, want one at 22:00 the evening before, lead 420", plans)
 	}
-	plans, ok = Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, p, at(16, 2))
+	plans, ok = Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, false, p, at(16, 2))
 	if ok || len(plans) != 1 || plans[0].What != ArmNothing || plans[0].Why != RefusalQuietHours {
 		t.Errorf("plans = %+v, want nothing armed, why quiet_hours", plans)
 	}

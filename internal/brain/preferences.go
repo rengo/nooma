@@ -204,7 +204,7 @@ func storedValid(f PreferenceField, v string, stored ports.VaultConfig) bool {
 }
 
 func resolvePrefs(c ports.VaultConfig) prospection.ReminderPrefs {
-	return prospection.ResolveReminderPrefs(c.EventReminderLeads, c.DateOnlyReminderAt, c.QuietHoursEnd, c.EveningReminderAt)
+	return prospection.ResolveReminderPrefs(c.EventReminderLeads, c.DateOnlyReminderAt, c.QuietHoursEnd, c.EveningReminderAt, nil)
 }
 
 // formPrefs renders resolved preferences in form shape, leads largest first.

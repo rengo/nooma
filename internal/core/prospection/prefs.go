@@ -68,7 +68,7 @@ func ParseTimeOfDay(s string) (TimeOfDay, error) {
 // time), each falling back to its own default when absent or invalid — the
 // posture of every other Resolve* over that row: Load never sanitizes,
 // this does.
-func ResolveReminderPrefs(leads, dateOnlyAt, quietEnd, eveningAt *string) ReminderPrefs {
+func ResolveReminderPrefs(leads, dateOnlyAt, quietEnd, eveningAt *string, remindMeLead *int) ReminderPrefs {
 	p := DefaultReminderPrefs()
 	if leads != nil {
 		if v, err := ParseEventReminderLeads(*leads); err == nil {
@@ -92,7 +92,21 @@ func ResolveReminderPrefs(leads, dateOnlyAt, quietEnd, eveningAt *string) Remind
 			p.EveningAt = v
 		}
 	}
+	if remindMeLead != nil {
+		if v, err := ParseRemindMeLead(*remindMeLead); err == nil {
+			p.RemindMeLead = v
+		}
+	}
 	return p
+}
+
+// ParseRemindMeLead reads config.remind_me_lead_minutes: whole minutes from 1
+// to MaxEventLeadDays days (ADR-0031 point 2).
+func ParseRemindMeLead(minutes int) (time.Duration, error) {
+	if minutes < 1 || minutes > MaxEventLeadDays*24*60 {
+		return 0, fmt.Errorf("%w: remind-me lead %d is not a whole number of minutes from 1 to %d days", ErrInvalidReminderPref, minutes, MaxEventLeadDays)
+	}
+	return time.Duration(minutes) * time.Minute, nil
 }
 
 // MaxQuietEndHour is the latest quiet end a user may set, on the hour

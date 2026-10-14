@@ -39,6 +39,10 @@ type Reminder struct {
 	// not known (a trigger carries no creation instant), so a legacy row can be
 	// held beside a reminder that was in fact armed before it: accepted.
 	Newer bool
+	// Asked, DayOnly and NightExempt are the payload's keys of the same name
+	// (ADR-0031 D5): the reminder was asked for; its event is a bare date;
+	// quiet hours do not hold it.
+	Asked, DayOnly, NightExempt bool
 }
 
 // ReminderVerdict decides whether a reminder may be sent, in q's night
@@ -77,7 +81,13 @@ func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseRe
 	if r.Waiting {
 		return VerdictDeliver, ""
 	}
-	v := q.TriggerVerdict(r.FireAt, now)
+	trigger := q.TriggerVerdict
+	if r.NightExempt {
+		// A named time, or an at-once arming, rings through the night, and is
+		// late from its own instant, as a timer is (ADR-0031 point 6).
+		trigger = func(fireAt, now time.Time) Verdict { return verdict(fireAt, fireAt, TriggerStalenessHours, now, nil) }
+	}
+	v := trigger(r.FireAt, now)
 	if v == VerdictStale {
 		return v, LapseOverdue
 	}
@@ -103,7 +113,10 @@ func (r Reminder) NamesEvent() bool {
 // day-granular one.
 func (r Reminder) passed(about, now time.Time) bool {
 	local := about.In(now.Location())
-	if r.Rule != nil || isDateOnly(local) {
+	// An asked row is a day only when its payload says so: an asked named
+	// midnight passes at midnight. A row nobody asked about keeps the
+	// midnight heuristic (ADR-0031 D5).
+	if r.Rule != nil || r.DayOnly || (!r.Asked && isDateOnly(local)) {
 		y, m, d := local.Date()
 		return !now.Before(time.Date(y, m, d+1, 0, 0, 0, 0, now.Location()))
 	}
