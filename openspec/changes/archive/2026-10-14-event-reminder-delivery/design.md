@@ -1,6 +1,6 @@
 # Design — event-reminder-delivery
 
-How [ADR-0030](../../../docs/adr/0030-event-reminders-are-pushed-and-respect-the-night.md) is
+How [ADR-0030](../../../../docs/adr/0030-event-reminders-are-pushed-and-respect-the-night.md) is
 built. The ADR is the product decision (client, relayed by the PM on 2026-10-13); this file
 decides HOW. As for `event-reminder-leads`, the ADR's numbered decision is the requirement list,
 cited here as B1-B6. Stacked on `event-reminder-leads` (#314 → #316 → #317 → #318).
