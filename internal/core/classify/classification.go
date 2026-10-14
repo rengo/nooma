@@ -41,6 +41,13 @@ type Classification struct {
 	EventAt           *time.Time
 	DueAt             *time.Time
 
+	// EventAtDayOnly and DueAtDayOnly record the shape of the wire value:
+	// true when the model wrote a bare YYYY-MM-DD. This is a fact about the
+	// value, never a model claim and never inferred from a midnight
+	// (ADR-0031 D2).
+	EventAtDayOnly bool
+	DueAtDayOnly   bool
+
 	// The six orthogonal resolution fields — doc 02 §5 at 02:120-123. Each
 	// rides alongside any Kind and degrades independently of the others.
 	NudgeOutcome       *NudgeOutcome

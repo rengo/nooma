@@ -712,3 +712,27 @@ func TestDecode_BareDateOnADSTGapDayLandsOnThatDay(t *testing.T) {
 		t.Errorf("an ordinary day moved: %v, want midnight 2026-09-07", c.DueAt)
 	}
 }
+
+func TestDecode_BareDateIsDayOnly(t *testing.T) {
+	c, err := Decode(`{"type":"task","normalized_content":"pay gas","weight":1,"decay_rate":0.1,"due_at":"2026-10-15","event_at":"2026-10-16T10:00:00-03:00"}`, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.DueAtDayOnly {
+		t.Error("a bare YYYY-MM-DD due_at must set DueAtDayOnly")
+	}
+	if c.EventAtDayOnly {
+		t.Error("a timestamped event_at must not set EventAtDayOnly")
+	}
+	c, _ = Decode(`{"type":"event","normalized_content":"x","weight":1,"decay_rate":0.1,"event_at":"2026-10-15"}`, testNow)
+	if !c.EventAtDayOnly || c.DueAtDayOnly {
+		t.Errorf("EventAtDayOnly, DueAtDayOnly = %v, %v, want true, false", c.EventAtDayOnly, c.DueAtDayOnly)
+	}
+}
+
+func TestDecode_MidnightTimestampIsNotDayOnly(t *testing.T) {
+	c, _ := Decode(`{"type":"task","normalized_content":"x","weight":1,"decay_rate":0.1,"due_at":"2026-10-16T00:00:00-03:00"}`, testNow)
+	if c.DueAt == nil || c.DueAtDayOnly {
+		t.Errorf("a midnight timestamp is a named time: DueAt %v, DueAtDayOnly %v", c.DueAt, c.DueAtDayOnly)
+	}
+}

@@ -463,6 +463,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `task`, so "dentista el viernes a las 10" captured as a `task` was stored with no reminder.
      The prompt states both, because defining the two date fields without saying which type
      each belongs to left the model choosing on the word "dentista" alone.
+   - **Decoding records whether `event_at` and `due_at` were written as a bare date**
+     (`YYYY-MM-DD`): `Classification.EventAtDayOnly` and `DueAtDayOnly`. This is the shape of the
+     wire value, never inferred from a midnight, so a timestamp at midnight is a named time and a
+     bare date on a day whose midnight a DST change skips is still a bare date
+     ([ADR-0031](adr/0031-reminders-the-user-asks-for.md)).
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
      "on Friday"), open check-ins.
