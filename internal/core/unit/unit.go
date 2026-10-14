@@ -28,6 +28,9 @@ type Unit struct {
 	EventAt         *time.Time // nil is not the zero time — I18
 	DueAt           *time.Time
 	Confidence      *float64 // always nil in Phase A — proposal §8 Q2
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// Language is the language the capture was written in, "" when none is known
+	// (stored as NULL). Written once at capture; a correction never changes it.
+	Language  string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

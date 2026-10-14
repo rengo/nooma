@@ -1213,3 +1213,52 @@ func sortStrings(ss []string) { sort.Strings(ss) }
 func sortStringsDesc(ss []string) {
 	sort.Sort(sort.Reverse(sort.StringSlice(ss)))
 }
+
+// RunLanguage pins the language a unit carries (ADR-0032 point 5): it is stored
+// at Create and read back, and LatestLanguage answers the newest unit that has
+// one, at any status.
+func RunLanguage(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+	ctx := context.Background()
+	at := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	made := func(repo ports.UnitRepo, id string, status unit.Status, language string, age time.Duration) {
+		t.Helper()
+		u := fixtureUnit(id, status)
+		u.Language, u.CreatedAt = language, at.Add(age)
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create %s: %v", id, err)
+		}
+	}
+
+	t.Run("a unit's language round-trips and an absent one stays empty", func(t *testing.T) {
+		repo := newRepo(t)
+		made(repo, "es", unit.StatusPool, "es", 0)
+		made(repo, "none", unit.StatusPool, "", time.Hour)
+		for id, want := range map[string]string{"es": "es", "none": ""} {
+			if got, err := repo.ByID(ctx, id); err != nil || got.Language != want {
+				t.Errorf("ByID(%s).Language = %q, %v; want %q", id, got.Language, err, want)
+			}
+		}
+	})
+
+	t.Run("no unit has a language", func(t *testing.T) {
+		repo := newRepo(t)
+		if got, err := repo.LatestLanguage(ctx); err != nil || got != "" {
+			t.Errorf("empty vault: LatestLanguage = %q, %v; want empty", got, err)
+		}
+		made(repo, "none", unit.StatusPool, "", 0)
+		if got, err := repo.LatestLanguage(ctx); err != nil || got != "" {
+			t.Errorf("only a unit with no language: LatestLanguage = %q, %v; want empty", got, err)
+		}
+	})
+
+	t.Run("the newest unit that has one wins, archived included", func(t *testing.T) {
+		repo := newRepo(t)
+		made(repo, "old-en", unit.StatusPool, "en", 0)
+		made(repo, "archived-es", unit.StatusArchived, "es", time.Hour)
+		made(repo, "newest-none", unit.StatusPool, "", 2*time.Hour)
+		if got, err := repo.LatestLanguage(ctx); err != nil || got != "es" {
+			t.Errorf("LatestLanguage = %q, %v; want es: the newest unit that has a language, archived or not", got, err)
+		}
+	})
+}

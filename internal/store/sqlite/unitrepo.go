@@ -49,11 +49,11 @@ func (r *UnitRepo) Create(ctx context.Context, u unit.Unit) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO units
 			(id, type, content, status, weight, weight_decay_rate, last_touched_at,
-			 structured_data, source, event_at, due_at, confidence, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 structured_data, source, event_at, due_at, confidence, language, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, string(u.Type), u.Content, string(u.Status), u.Weight, u.WeightDecayRate,
 		formatUnitTime(u.LastTouchedAt), rawMessageToNull(u.StructuredData), u.Source,
-		timePtrToNull(u.EventAt), timePtrToNull(u.DueAt), floatPtrToNull(u.Confidence),
+		timePtrToNull(u.EventAt), timePtrToNull(u.DueAt), floatPtrToNull(u.Confidence), languageToNull(u.Language),
 		formatUnitTime(u.CreatedAt), formatUnitTime(u.UpdatedAt),
 	)
 	if err != nil {
@@ -76,6 +76,20 @@ func (r *UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error) {
 		return unit.Unit{}, fmt.Errorf("select unit %q: %w", id, err)
 	}
 	return u, nil
+}
+
+// LatestLanguage implements ports.UnitRepo.
+func (r *UnitRepo) LatestLanguage(ctx context.Context) (string, error) {
+	var language string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT language FROM units WHERE language IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1`).Scan(&language)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("select latest language: %w", err)
+	}
+	return language, nil
 }
 
 // LiveByIDs implements ports.UnitRepo. The SQL filters positively on
@@ -319,7 +333,7 @@ func (r *UnitRepo) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, e
 // unitSelectColumns is shared by ByID and LiveByIDs — one column list, one
 // place, so the two read paths and scanUnit cannot drift apart.
 const unitSelectColumns = `SELECT id, type, content, status, weight, weight_decay_rate, last_touched_at,
-	structured_data, source, event_at, due_at, confidence, created_at, updated_at`
+	structured_data, source, event_at, due_at, confidence, language, created_at, updated_at`
 
 // unitRow is satisfied by both *sql.Row (ByID) and *sql.Rows (LiveByIDs).
 type unitRow interface {
@@ -336,11 +350,12 @@ func scanUnit(row unitRow) (unit.Unit, error) {
 		structuredData                      sql.NullString
 		eventAt, dueAt                      sql.NullString
 		confidence                          sql.NullFloat64
+		language                            sql.NullString
 	)
 
 	err := row.Scan(
 		&u.ID, &typ, &u.Content, &status, &u.Weight, &u.WeightDecayRate, &lastTouchedAt,
-		&structuredData, &u.Source, &eventAt, &dueAt, &confidence, &createdAt, &updatedAt,
+		&structuredData, &u.Source, &eventAt, &dueAt, &confidence, &language, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return unit.Unit{}, err
@@ -363,6 +378,7 @@ func scanUnit(row unitRow) (unit.Unit, error) {
 	if u.UpdatedAt, err = time.Parse(unitTimeLayout, updatedAt); err != nil {
 		return unit.Unit{}, fmt.Errorf("unit %q: updated_at: %w", u.ID, err)
 	}
+	u.Language = language.String
 	if structuredData.Valid {
 		u.StructuredData = json.RawMessage(structuredData.String)
 	}
@@ -408,6 +424,14 @@ func timePtrToNull(t *time.Time) any {
 		return nil
 	}
 	return formatUnitTime(*t)
+}
+
+// languageToNull stores "no language known" as NULL, never as an empty string.
+func languageToNull(l string) any {
+	if l == "" {
+		return nil
+	}
+	return l
 }
 
 // floatPtrToNull converts a possibly-nil *float64 into the SQL NULL/REAL
