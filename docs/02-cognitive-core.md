@@ -1187,7 +1187,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   deliverable instant, `trigger_staleness_hours` (6,
   `internal/core/prospection.TriggerStalenessHours`) and `timer_staleness_hours` (3,
   `internal/core/prospection.TimerStalenessHours`) govern expiry, quiet hours are evaluated
-  before staleness, and overdue by more, a trigger goes `expired` (on a pass that can speak, ADR-0032) and a timer goes
+  before staleness, and overdue by more, a trigger goes `expired` (a one-shot one only on a pass that can speak, ADR-0032) and a timer goes
   `cancelled` — never fired (ADR-0009). A delivered-but-late item mentions the delay
   explicitly once overdue reaches `delay_caveat_minutes` (15 minutes — three shipped
   `proactive_check` ticks, `internal/core/prospection.DelayCaveatMinutes`).
@@ -1381,8 +1381,9 @@ box can audit it):
   before it is recorded (`check.reminder.armed`) so two passes racing for an attempt resolve to
   one. One that fired and was never delivered lapses like any late row and the event, still ahead,
   is owed attempt n+1; one delivered, or still being delivered, covers the event. When quiet
-  end is at or after the event nothing is sent and `check.reminder.refused` (`quiet_hours`) says
-  so. A catch-up moved onto another instant by a correction is an ordinary reminder. A pass that cannot deliver (no channel, or a channel with no
+  end is at or after the event, or a lead still ahead falls in the night with no instant left,
+  nothing is sent and `check.reminder.refused` (`quiet_hours`) says so for any unit left with
+  no live reminder. A date-only event is owed its catch-up until its day ends. A catch-up moved onto another instant by a correction is an ordinary reminder. A pass that cannot deliver (no channel, or a channel with no
   conversation) retires only rows whose event passed and leaves every other one-shot row as it
   found it: nothing is fired into a state it cannot leave, and an overdue armed trigger is kept,
   amending ADR-0009 (I15) — its expiry belongs to a pass that can re-plan. A channel with no

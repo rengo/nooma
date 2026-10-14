@@ -32,6 +32,8 @@ func TestCatchUp(t *testing.T) {
 		{"one sent about the instant covers it", event, nil, []Sent{about(event)}, day(10, 0), false, time.Time{}, "", false},
 		{"one sent about another instant covers nothing", event, nil, []Sent{about(day(9, 0))}, day(10, 0), true, day(10, 0), "", true},
 		{"the event has passed", event, nil, nil, day(11, 0), false, time.Time{}, "", false},
+		{"a date-only event on its own day", day(0, 0), nil, nil, day(10, 0), true, day(10, 0), "", true},
+		{"a date-only event once its day ended", day(0, 0), nil, nil, day(0, 0).AddDate(0, 0, 1), false, time.Time{}, "", false},
 		{"in quiet hours: at quiet end, before the event", day(7, 30), nil, nil, day(6, 0), true, day(7, 0), "", false},
 		{"in quiet hours with quiet end at the event: refused", day(7, 0), nil, nil, day(6, 0), true, time.Time{}, RefusalQuietHours, false},
 		{"in quiet hours with quiet end after the event: refused", day(6, 30), nil, nil, day(6, 0), true, time.Time{}, RefusalQuietHours, false},

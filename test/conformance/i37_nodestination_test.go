@@ -152,3 +152,25 @@ func TestI37_TodayListsArmedRemindersWithoutAChannel(t *testing.T) {
 		t.Errorf("Upcoming = %+v, want the armed one-shot reminders due within a day (the overdue one a silent vault kept included), not the one whose event passed, the later one nor the birthday", today.Upcoming)
 	}
 }
+
+// TestI37_TodayToleratesAnUnreadableUnit: a page that aborts for one damaged
+// unit row hides everything else the user could see. Today skips what it cannot
+// judge, as a due scan does, and shows the rest.
+func TestI37_TodayToleratesAnUnreadableUnit(t *testing.T) {
+	v := newI37Vault(t)
+	v.units = i37BrokenUnits{memrepo.NewUnits()}
+	v.silent = true
+	event := i37Day(14, 20, 0)
+	v.fired("legacy-fired", "u1", "visa", i37Now.Add(-time.Hour), nil)
+	v.row("legacy-armed", "u1", "visa", i37Now.Add(-time.Minute), nil)
+	v.fired("ok", "u2", "dentist", i37Now.Add(-time.Hour), modern(event, 120))
+	v.row("ok-armed", "u2", "dentist", i37Day(14, 18, 0), modern(event, 120))
+
+	today, err := newI37Today(v).Today(context.Background())
+	if err != nil {
+		t.Fatalf("Today aborted for one unreadable unit: %v", err)
+	}
+	if today.Status.Undelivered != 1 || len(today.Upcoming) != 1 || today.Upcoming[0].TriggerID != "ok-armed" {
+		t.Errorf("Today = undelivered %d, upcoming %+v; want the readable reminders only", today.Status.Undelivered, today.Upcoming)
+	}
+}

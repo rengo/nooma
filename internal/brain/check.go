@@ -90,8 +90,9 @@ type CheckReport struct {
 	// TriggersLapsed counts fired reminders never delivered that this pass
 	// retired: past, late or superseded (ADR-0032).
 	TriggersLapsed int
-	// RemindersArmed, RemindersMoved and RemindersCancelled count what the
-	// re-plan step did to a unit's armed set (ADR-0032 point 3).
+	// RemindersArmed, Moved, Cancelled and Refused count what the re-plan step
+	// did for a unit: its armed set changed, a catch-up armed (Armed), or no
+	// reminder sent because only the night was left (Refused) (ADR-0032 point 3).
 	RemindersArmed, RemindersMoved, RemindersCancelled, RemindersRefused int
 	TimersFired                                                          int
 	TimersCancelled                                                      int
@@ -315,9 +316,9 @@ type checkRunner struct {
 	ids      ports.IDGen
 	log      ports.DecisionLog
 	// channel is where a delivery goes. Nil is legal and means this vault
-	// has no channel configured — the pass still fires and expires, it
-	// simply has nowhere to speak, which is what `nooma check` on a
-	// Telegram-less vault is.
+	// has no channel configured: the pass leaves its one-shot reminders as it
+	// found them (a recurring one still fires and expires), which is what
+	// `nooma check` on a Telegram-less vault is.
 	channel ports.Channel
 	// conversation is WHO a delivery goes to, and empty is legal for the
 	// same reason a nil channel is: a vault that cannot name exactly one

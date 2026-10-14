@@ -195,32 +195,72 @@ func TestI37_QuietEndAfterEventIsRefused(t *testing.T) {
 // attempt. The id decides it: the loser's create fails and it writes no row,
 // leaving the winner's reminder the only one.
 func TestI37_ACatchUpAnotherPassTookIsNotRecorded(t *testing.T) {
-	v := newI37Vault(t)
-	event := owedACatchUp(v, 24*60)
-	taken := "catch-up:u:" + event.UTC().Format(time.RFC3339) + ":1"
-	v.row(taken, "u", "dentist", i37Day(14, 10, 30), func(tr *ports.Trigger) {
-		modern(event, 0)(tr)
-		tr.Payload.UserLeadsMinutes, tr.Payload.CatchUp = nil, true
-	})
-	v.repo = &hidesCatchUps{TriggerRepo: v.triggers}
+	for _, sent := range []bool{false, true} {
+		v := newI37Vault(t)
+		event := owedACatchUp(v, 24*60)
+		taken := "catch-up:u:" + event.UTC().Format(time.RFC3339) + ":1"
+		fireAt := i37Day(14, 10, 30)
+		if sent {
+			fireAt = i37Day(14, 9, 59)
+		}
+		v.row(taken, "u", "dentist", fireAt, func(tr *ports.Trigger) {
+			modern(event, 0)(tr)
+			tr.Payload.UserLeadsMinutes, tr.Payload.CatchUp = nil, true
+		})
+		if sent { // the other pass fired it and delivered it, after this one looked
+			if err := v.triggers.Fire(context.Background(), taken, fireAt); err != nil {
+				t.Fatal(err)
+			}
+			if err := v.triggers.Surface(context.Background(), taken, fireAt); err != nil {
+				t.Fatal(err)
+			}
+		}
+		v.repo = &hidesCatchUps{TriggerRepo: v.triggers}
 
-	report := v.check(false)
+		report := v.check(false)
 
-	if report.RemindersArmed != 0 || len(v.rows(ports.ActionCheckReminderArmed)) != 0 || len(v.catchUps("u")) != 1 {
-		t.Errorf("report %+v, armed rows %+v; want the lost race to leave no trace", report, v.rows(ports.ActionCheckReminderArmed))
+		if report.RemindersArmed != 0 || len(v.rows(ports.ActionCheckReminderArmed)) != 0 || len(v.catchUps("u")) != 1 {
+			t.Errorf("sent=%v: report %+v, armed rows %+v; want the lost race to leave no trace", sent, report, v.rows(ports.ActionCheckReminderArmed))
+		}
 	}
 }
 
 // hidesCatchUps reads as a pass would that looked before another created its
-// attempt: the catch-up it took is in neither the armed nor the attempted set.
-type hidesCatchUps struct{ ports.TriggerRepo }
+// attempt: the first reads of the catch-up it took miss it, later ones do not.
+type hidesCatchUps struct {
+	ports.TriggerRepo
+	oneShot, armed, fired bool // each already answered once
+}
 
-func (hidesCatchUps) OneShotForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+func (h *hidesCatchUps) FiredForUnit(ctx context.Context, unitID string) ([]ports.FiredTrigger, error) {
+	all, err := h.TriggerRepo.FiredForUnit(ctx, unitID)
+	if h.fired {
+		return all, err
+	}
+	h.fired = true
+	var out []ports.FiredTrigger
+	for _, f := range all {
+		if !f.Payload.CatchUp {
+			out = append(out, f)
+		}
+	}
+	return out, err
+}
+
+func (h *hidesCatchUps) OneShotForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error) {
+	if h.oneShot {
+		return h.TriggerRepo.OneShotForUnit(ctx, unitID)
+	}
+	h.oneShot = true
 	return nil, nil
 }
 
-func (h hidesCatchUps) ArmedForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error) {
+func (h *hidesCatchUps) ArmedForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error) {
 	all, err := h.TriggerRepo.ArmedForUnit(ctx, unitID)
+	if h.armed {
+		return all, err
+	}
+	h.armed = true
 	var out []ports.DueTrigger
 	for _, t := range all {
 		if !t.Payload.CatchUp {
@@ -228,4 +268,89 @@ func (h hidesCatchUps) ArmedForUnit(ctx context.Context, unitID string) ([]ports
 		}
 	}
 	return out, err
+}
+
+// TestI37_ANightEventWhoseLateReminderLapsesIsRefusedAndSaysSo: the event is at
+// 06:00 and it is 02:00. A lead (the 2-hour one, 04:00) is still ahead, but it
+// falls in the night and the evening before has passed, so nothing can be sent.
+// Not being owed a catch-up (a lead is ahead) must not make that silent: the
+// late row (superseded by the move, so judged even in the night) lapses with a
+// refusal in the trail.
+func TestI37_ANightEventWhoseLateReminderLapsesIsRefusedAndSaysSo(t *testing.T) {
+	v := newI37Vault(t)
+	event := i37Day(15, 6, 0)
+	v.event("u", &event)
+	v.fired("late", "u", "dentist", i37Day(14, 6, 0), modern(i37Day(14, 9, 0), 180)) // about the date before the move
+
+	report := v.checkAt(i37Day(15, 2, 0), false)
+
+	if len(v.catchUps("u")) != 0 || report.RemindersRefused != 1 || report.TriggersLapsed != 1 || len(v.rows(ports.ActionCheckReminderRefused)) != 1 {
+		t.Errorf("report %+v, catch-ups %+v; want the late row lapsed with one refusal", report, v.catchUps("u"))
+	}
+}
+
+// TestI37_ALiveReminderBlocksTheQuietHoursRefusal: the same night, but the unit
+// still has a healthy reminder armed. The plan then speaks through the changes
+// it makes to that reminder (a cancellation says why), and no refusal is
+// written beside it: a refusal is for a unit left with nothing.
+func TestI37_ALiveReminderBlocksTheQuietHoursRefusal(t *testing.T) {
+	v := newI37Vault(t)
+	event := i37Day(15, 6, 0)
+	v.event("u", &event)
+	v.fired("late", "u", "dentist", i37Day(14, 6, 0), modern(i37Day(14, 9, 0), 180)) // about the date before the move
+	v.row("live", "u", "dentist", i37Day(15, 4, 0), modern(event, 120))
+
+	report := v.checkAt(i37Day(15, 2, 0), false)
+
+	if report.RemindersRefused != 0 || len(v.rows(ports.ActionCheckReminderRefused)) != 0 || report.RemindersCancelled != 1 {
+		t.Errorf("report %+v; want the live row cancelled and no refusal", report)
+	}
+}
+
+// TestI37_ACatchUpIdTakenByAMovedRowAdvancesTheAttempt: a catch-up that a
+// correction moved off its instant, and a later correction moved back, keeps
+// its id but has lost its mark. The attempt number comes from the ids, not the
+// mark, so the next attempt is 2 and is created, and a dry run says the same.
+func TestI37_ACatchUpIdTakenByAMovedRowAdvancesTheAttempt(t *testing.T) {
+	event := i37Day(14, 11, 0)
+	seed := func() *i37Vault {
+		v := newI37Vault(t)
+		v.event("u", &event)
+		for _, n := range []string{"1", "2"} { // two attempts, both moved away and back
+			v.fired("catch-up:u:"+event.UTC().Format(time.RFC3339)+":"+n, "u", "dentist", i37Day(13, 23, 0), func(tr *ports.Trigger) {
+				modern(event, 0)(tr)
+				tr.Payload.UserLeadsMinutes = nil // the mark is gone, the id stays
+			})
+		}
+		return v
+	}
+	dry, v := seed(), seed()
+
+	preview := dry.check(true)
+	report := v.check(false)
+
+	var ids []string
+	for _, c := range v.catchUps("u") {
+		ids = append(ids, c.ID)
+	}
+	if preview != report || report.RemindersArmed != 1 || len(ids) != 1 || ids[0] != "catch-up:u:"+event.UTC().Format(time.RFC3339)+":3" {
+		t.Errorf("dry run %+v, real %+v, catch-ups %v; want attempt 3 created, and the preview to say so", preview, report, ids)
+	}
+}
+
+// TestI37_ADateOnlyEventOnItsDayGetsACatchUp: a date-only event is stored as
+// midnight but is the whole day, and the gate carries its reminder until the
+// day ends. The 13th's reminder never reached the user; at 10:00 on the 14th the
+// event is owed one catch-up, not a silent lapse.
+func TestI37_ADateOnlyEventOnItsDayGetsACatchUp(t *testing.T) {
+	v := newI37Vault(t)
+	day := i37Day(14, 0, 0)
+	v.event("u", &day)
+	v.fired("late", "u", "passport", i37Day(13, 9, 0), modern(day, 15*60))
+
+	report := v.check(false)
+
+	if got := v.catchUps("u"); len(got) != 1 || report.RemindersArmed != 1 || report.TriggersLapsed != 1 {
+		t.Errorf("catch-ups %+v, report %+v; want one catch-up and the late row lapsed", got, report)
+	}
 }

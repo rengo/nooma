@@ -124,6 +124,7 @@ func renderCheckReport(out io.Writer, report brain.CheckReport, dryRun bool) err
 		{report.RemindersArmed, "armed %d replacement reminder(s)", "would arm %d replacement reminder(s)"},
 		{report.RemindersMoved, "moved %d reminder(s)", "would move %d reminder(s)"},
 		{report.RemindersCancelled, "cancelled %d reminder(s)", "would cancel %d reminder(s)"},
+		{report.RemindersRefused, "refused %d reminder(s) with no time left", "would refuse %d reminder(s) with no time left"},
 		{report.TimersFired, "fired %d timer(s)", "would fire %d timer(s)"},
 		{report.TimersCancelled, "cancelled %d timer(s)", "would cancel %d timer(s)"},
 	} {
