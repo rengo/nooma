@@ -230,6 +230,12 @@ func assignTime(set func(*Classification, *time.Time)) func(json.RawMessage, *Cl
 			return ""
 		}
 		if t, err := time.ParseInLocation(dateOnlyLayout, s, now.Location()); err == nil {
+			// A day whose midnight does not exist (Chile springs forward at
+			// 24:00) parses onto the previous civil day. A bare date is the
+			// first instant of its own day, so step forward to it.
+			for i := 0; i < 4 && t.Format(dateOnlyLayout) != s; i++ {
+				t = t.Add(30 * time.Minute)
+			}
 			set(c, &t)
 			return ""
 		}
