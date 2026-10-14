@@ -25,7 +25,7 @@ import (
 // that mutate a row; ByID, LiveByIDs, CountLiveByType, IncompleteOlderThan,
 // LiveDecayStates, LiveFocusCandidates and LiveFocusCandidatesByType are
 // reads), relationrepo.go (RelationRepo: Upsert and Delete write; ByUnit,
-// ThresholdsFor, Evidence, ExistingPairs and ByID read — Today reads
+// ThresholdsFor, LearnedThresholds, Evidence, ExistingPairs and ByID read — Today reads
 // ByUnit through the focus keeper, for the members of the incumbent it holds
 // and of the one it selects (the pending-digest mirror's P'), and ByID is a
 // read), triggerrepo.go (TriggerRepo: Create, Fire, Surface, Resolve,
@@ -36,10 +36,11 @@ import (
 // (StateRepo: OpenHypothesis writes; LastHypothesisAt, LatestEnergy
 // read), configrepo.go (ConfigRepo: RecordConsolidationRun and SetReminderPrefs
 // write; Load reads), decisionlog.go (DecisionLog: Record writes; Since and Before read) —
-// twenty distinct method names in total, recounted from the guards
+// twenty-five distinct method names in total, recounted from the guards
 // below (m4c added RelationRepo's Upsert and Delete to design §3.6's
 // sixteen; fix-correction-date-follows added TriggerRepo's Reschedule;
-// ui-preferences added ConfigRepo's SetReminderPrefs).
+// ui-preferences added ConfigRepo's SetReminderPrefs; m4e2-admin added
+// ConfigRepo's five setters).
 func TestI27_ViewingIsNotDelivering(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -232,8 +233,9 @@ func (g *i27State) OpenHypothesis(context.Context, ports.StateHypothesis) error 
 	return nil
 }
 
-// i27Config wraps memrepo.Config, failing on ConfigRepo's two write
-// methods.
+// i27Config wraps memrepo.Config, failing on ConfigRepo's seven write
+// methods. memrepo.Config's own setters would be promoted and succeed, so
+// every one is overridden.
 type i27Config struct {
 	*memrepo.Config
 	t *testing.T
@@ -246,6 +248,27 @@ func (g *i27Config) RecordConsolidationRun(context.Context, time.Time) error {
 
 func (g *i27Config) SetReminderPrefs(context.Context, ports.ReminderPrefsUpdate, time.Time) error {
 	i27Fail(g.t, "ConfigRepo", "SetReminderPrefs")
+	return nil
+}
+
+func (g *i27Config) SetWeightThreshold(context.Context, float64, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "SetWeightThreshold")
+	return nil
+}
+func (g *i27Config) SetHysteresisMargin(context.Context, float64, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "SetHysteresisMargin")
+	return nil
+}
+func (g *i27Config) SetGoalStagnationDays(context.Context, int, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "SetGoalStagnationDays")
+	return nil
+}
+func (g *i27Config) SetMentalLoadThreshold(context.Context, int, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "SetMentalLoadThreshold")
+	return nil
+}
+func (g *i27Config) SetConsolidationEnabled(context.Context, bool, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "SetConsolidationEnabled")
 	return nil
 }
 

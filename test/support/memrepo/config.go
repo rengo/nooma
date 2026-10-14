@@ -87,6 +87,15 @@ func (c *Config) SetReminderPrefs(_ context.Context, u ports.ReminderPrefsUpdate
 	return nil
 }
 
+// The five admin setters — see ports.ConfigRepo.
+func (c *Config) SetWeightThreshold(context.Context, float64, time.Time) error  { return nil }
+func (c *Config) SetHysteresisMargin(context.Context, float64, time.Time) error { return nil }
+func (c *Config) SetGoalStagnationDays(context.Context, int, time.Time) error   { return nil }
+func (c *Config) SetMentalLoadThreshold(context.Context, int, time.Time) error  { return nil }
+func (c *Config) SetConsolidationEnabled(context.Context, bool, time.Time) error {
+	return nil
+}
+
 // SeedConfig implements repocontract.ConfigHarness. Replaces the row
 // wholesale — a fixture hook bypassing ports.ConfigRepo entirely, since
 // RecordConsolidationRun cannot set any field but ConsolidationLastRunAt.

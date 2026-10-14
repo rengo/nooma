@@ -31,6 +31,13 @@ type Relation struct {
 	CreatedAt  time.Time
 }
 
+// LearnedThreshold is one relation_thresholds row: a relation type and the
+// persist/surface pair the learning pass stored for it.
+type LearnedThreshold struct {
+	RelationType string
+	relation.Thresholds
+}
+
 // RelationRepo is the repository port over relations — design D8, spec R5.3.
 //
 // Five methods, and each has a real caller (design D8's own rule for adding
@@ -80,6 +87,11 @@ type RelationRepo interface {
 	// expects for "this type has never been looked up before". The caller,
 	// never core/relation, performs this lookup (R5.1's purity MUST).
 	ThresholdsFor(ctx context.Context, relType string) (*relation.Thresholds, error)
+
+	// LearnedThresholds returns every relation_thresholds row ordered by
+	// relation_type, for the admin page to show read-only (m4e2-admin design
+	// §3.2). An empty table returns an empty slice and a nil error.
+	LearnedThresholds(ctx context.Context) ([]LearnedThreshold, error)
 
 	// Evidence returns every relation joined to both endpoints'
 	// last_touched_at, in one read — strengthen's own input (design §4.2,

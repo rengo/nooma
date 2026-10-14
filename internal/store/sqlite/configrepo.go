@@ -154,3 +154,20 @@ ON CONFLICT(id) DO UPDATE SET
 	}
 	return nil
 }
+
+// The five admin setters — see ports.ConfigRepo. Scaffold: GREEN follows.
+func (r *ConfigRepo) SetWeightThreshold(ctx context.Context, v float64, at time.Time) error {
+	return nil
+}
+func (r *ConfigRepo) SetHysteresisMargin(ctx context.Context, v float64, at time.Time) error {
+	return nil
+}
+func (r *ConfigRepo) SetGoalStagnationDays(ctx context.Context, v int, at time.Time) error {
+	return nil
+}
+func (r *ConfigRepo) SetMentalLoadThreshold(ctx context.Context, v int, at time.Time) error {
+	return nil
+}
+func (r *ConfigRepo) SetConsolidationEnabled(ctx context.Context, v bool, at time.Time) error {
+	return nil
+}

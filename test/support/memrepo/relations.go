@@ -137,6 +137,11 @@ func (r *Relations) ThresholdsFor(_ context.Context, relType string) (*relation.
 	return &t, nil
 }
 
+// LearnedThresholds implements ports.RelationRepo.
+func (r *Relations) LearnedThresholds(context.Context) ([]ports.LearnedThreshold, error) {
+	return nil, nil
+}
+
 // Evidence implements ports.RelationRepo. Joins every stored relation to
 // both endpoints' last_touched_at, read from r.lastTouchedAt (set via
 // SetLastTouchedAt) — an endpoint never seeded reports the zero time.Time,

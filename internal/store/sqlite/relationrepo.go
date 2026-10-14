@@ -122,6 +122,11 @@ WHERE relation_type = ?`
 	return &t, nil
 }
 
+// LearnedThresholds implements ports.RelationRepo.
+func (r *RelationRepo) LearnedThresholds(ctx context.Context) ([]ports.LearnedThreshold, error) {
+	return nil, nil
+}
+
 // Evidence implements ports.RelationRepo — the join design §4.2 fixed:
 // every relation, joined to both endpoints' own last_touched_at, in one
 // query — never relations, then units, then a zip in brain (design §4.1's
