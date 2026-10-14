@@ -133,7 +133,7 @@ type Plan struct {
 // why, and false. prefs are the user's event reminder preferences.
 //
 // asked is whether the user's own words asked to be reminded
-// (classify.AsksToBeReminded). An asked unit of any kind that persists one arms
+// (decided by the caller, not by Arm). An asked unit of any kind that persists one arms
 // its instant (its own field, else the other) through leadSet, as ADR-0031
 // decides; a timer keeps its own branch below.
 func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Time) ([]Plan, bool) {

@@ -1320,7 +1320,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   the day before; an 08:00 flight's 2-hour reminder goes out at 07:00. A correction that leaves
   a reminder no allowed instant expires it with the reason `quiet_hours`, not as a past date.
   **An asked reminder** ([ADR-0031](adr/0031-reminders-the-user-asks-for.md)): a unit of any
-  kind that persists one and whose message asked (§5 step 1) is armed through
+  kind that persists one and that the caller says was asked for is armed through
   `prospection.Arm`'s `asked` argument, at its instant (an event's `event_at`, otherwise
   `due_at`, then the other field). A **named time** is reminded `remind_me_lead` before it,
   default `default_remind_me_lead_minutes` (15). The planner reads it from the resolved
