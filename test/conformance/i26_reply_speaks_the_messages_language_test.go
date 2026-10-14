@@ -214,3 +214,33 @@ func TestI26_TheTrailRecordsWhatLanguageWasRead(t *testing.T) {
 		})
 	}
 }
+
+// TestI26_TheCapturedUnitKeepsItsLanguage: a capture stores the language it was
+// written in on the unit, the one place a reminder or a digest can read it from
+// weeks later (ADR-0032 point 5), and a classification naming none stores none.
+func TestI26_TheCapturedUnitKeepsItsLanguage(t *testing.T) {
+	for llmCase, want := range map[string]string{"classify-spanish-task": "es", "classify-pick-up-dry-cleaning": ""} {
+		t.Run(llmCase, func(t *testing.T) {
+			ctx := context.Background()
+			now := time.Date(2026, 8, 27, 9, 30, 0, 0, time.UTC)
+			units := memrepo.NewUnits()
+			embeddings := memrepo.NewEmbeddings()
+			llm := fakeprovider.New(t, testdataLLMCasesDir(t), llmCase)
+			idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units,
+				embeddings, memrepo.NewLexical(), memrepo.NewRelations(), memrepo.NewDecisionLog(),
+				llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
+				memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
+
+			if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "acordate de comprar café", Channel: "chat"}); err != nil {
+				t.Fatalf("Capture: %v", err)
+			}
+			if got, err := units.LatestLanguage(ctx); err != nil || got != want {
+				t.Errorf("the stored unit's language = %q, %v; want %q", got, err, want)
+			}
+		})
+	}
+}

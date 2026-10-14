@@ -289,3 +289,21 @@ func TestToUnit_ReturnsZeroUnitOnError(t *testing.T) {
 		t.Errorf("timestamps or weight were filled on the error path: %+v", u)
 	}
 }
+
+// TestToUnit_CarriesTheClassifiedLanguage: the language the capture was written
+// in is stored on the unit (ADR-0032 point 5), and a classification that named
+// none leaves it empty rather than inventing the fallback.
+func TestToUnit_CarriesTheClassifiedLanguage(t *testing.T) {
+	spanish := LanguageES
+	c := wholeClassification()
+	c.Language = &spanish
+
+	u, err := ToUnit(c, "unit-1", "chat", ingestedAt, defaultPriors())
+	if err != nil || u.Language != "es" {
+		t.Errorf("ToUnit(es).Language = %q, %v; want es", u.Language, err)
+	}
+	u, err = ToUnit(wholeClassification(), "unit-2", "chat", ingestedAt, defaultPriors())
+	if err != nil || u.Language != "" {
+		t.Errorf("ToUnit(no language).Language = %q, %v; want empty", u.Language, err)
+	}
+}
