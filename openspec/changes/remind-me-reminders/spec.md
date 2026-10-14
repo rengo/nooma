@@ -89,8 +89,10 @@ own instant:
 
 A day-only one keeps ADR-0030's night rules.
 
-Scenarios: "todos los días a las 06:30", quiet end 08:00 → 06:30; "a las 6:30" said at 06:20 →
-at once; "hoy" said at 23:55 → at once, before midnight.
+A day-only or "hoy" request reminds at once unless **less than** one check interval (5 minutes)
+remains in the local day, when it is refused `too_late`. Scenarios: "todos los días a las 06:30",
+quiet end 08:00 → 06:30; "a las 6:30" at 06:20 → at once; "hoy" at 23:50 or 23:55 → at once; at
+23:56 → refused.
 
 ### R5 — The reply
 

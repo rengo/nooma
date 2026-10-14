@@ -83,12 +83,12 @@ literally.
      time, Nooma asks "¿Querés que te lo siga recordando o borramos el recordatorio?":
      - **"Seguí"** keeps it and marks it, so a later bare "listo" on it means done for today,
        with no question, and it keeps recurring.
-     - **"Borralo"** stops it.
+     - **"Borralo"**, or a bare **"No"**, stops it.
      - Any other answer leaves it unmarked, to be asked again next time.
    - A reminder made daily by "No" follows the same rule.
    - Which reminder is meant: the one the message names; else the one Nooma just sent; else,
      for an explicit stop, the only one there is. Otherwise Nooma asks which, with a numbered
-     list.
+     list of at most 5.
    - Every answer is read from phrase lists, never by the model. Every stop is recorded with
      what it changed.
 6. **Delivery.**
@@ -113,7 +113,8 @@ literally.
   - the "keep going" mark on the unit.
 - On acceptance, ADR-0027's header gains `Superseded by: ADR-0031 (shape)`.
 - Doc 02: §5 step 4's "a `due_at` correction moves no trigger" now applies only to a unit that
-  did not ask, and §7's re-arm on firing becomes true. Doc 06 gains I36 and I38.
+  did not ask, and §7's re-arm on firing becomes true. Doc 06 gains I36 and I38 and amends I29,
+  I34 and I35.
 
 ### Reversal criteria
 
