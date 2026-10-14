@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+	_ "time/tzdata" // the DST-gap case needs real rules, and core tests read no file
 )
 
 // testZone is a fixed non-UTC location built in memory. It is deliberately
@@ -676,5 +677,38 @@ func TestDecode_ExplicitNullNormalizedContent(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no degradation recorded for normalized_content; got %v", c.Degradations)
+	}
+}
+
+// TestDecode_BareDateOnADSTGapDayLandsOnThatDay: Chile springs forward at 24:00
+// on 2026-09-06, so that day has no midnight. Go resolves the missing 00:00 to
+// the previous civil day (2026-09-05 23:00 -04:00), which silently moved every
+// bare date of that day a day early. A bare date is the first instant of its
+// own day.
+func TestDecode_BareDateOnADSTGapDayLandsOnThatDay(t *testing.T) {
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, santiago)
+	for field, payload := range map[string]string{
+		"due_at":   `{"type":"task","normalized_content":"x","weight":1,"decay_rate":0.1,"due_at":"2026-09-06"}`,
+		"event_at": `{"type":"event","normalized_content":"x","weight":1,"decay_rate":0.1,"event_at":"2026-09-06"}`,
+	} {
+		c, err := Decode(payload, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := c.DueAt
+		if field == "event_at" {
+			got = c.EventAt
+		}
+		if got == nil || got.Format("2006-01-02") != "2026-09-06" || got.Hour() != 1 {
+			t.Errorf("%s = %v, want 2026-09-06 01:00, the first instant of that day", field, got)
+		}
+	}
+	c, _ := Decode(`{"type":"task","normalized_content":"x","weight":1,"decay_rate":0.1,"due_at":"2026-09-07"}`, now)
+	if c.DueAt == nil || c.DueAt.Hour() != 0 || c.DueAt.Format("2006-01-02") != "2026-09-07" {
+		t.Errorf("an ordinary day moved: %v, want midnight 2026-09-07", c.DueAt)
 	}
 }

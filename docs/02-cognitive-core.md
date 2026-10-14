@@ -922,7 +922,8 @@ belonging to *some* vocabulary is not the test; belonging to *this field's* voca
 **A date is degraded in two distinguishable ways**, and they are recorded separately: a value
 that is not text at all, and text that is not a date Nooma reads. Only two date formats are
 accepted — a full timestamp carrying its own offset, and a bare calendar date. A bare date has no
-offset of its own, so it becomes midnight **in the user's timezone**, which is supplied with the
+offset of its own, so it becomes midnight **in the user's timezone** (on a day whose midnight a DST
+change skips, such as Chile's, the first instant of that day), which is supplied with the
 request (§5 step 1's injected context) and never read from the machine Nooma happens to run on.
 The same vault syncing between two machines in two zones must classify a date identically.
 
