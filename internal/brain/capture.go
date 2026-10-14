@@ -118,7 +118,7 @@ func reminderPrefs(ctx context.Context, cfg ports.ConfigRepo) prospection.Remind
 	if err != nil {
 		return prospection.DefaultReminderPrefs()
 	}
-	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt, stored.QuietHoursEnd, stored.EveningReminderAt)
+	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt, stored.QuietHoursEnd, stored.EveningReminderAt, nil)
 }
 
 // Capture is the package's only ports.Clock.Now() read (spec R4.1, design
@@ -164,7 +164,7 @@ type captureRunner struct {
 	// rather than per capture.
 	correction correctionRunner
 	// triggers and timers are what arming writes through. There is no
-	// clock field beside them on purpose: Arm(c, now) reuses the instant
+	// clock field beside them on purpose: Arm(c, asked, prefs, now) reuses the instant
 	// Capture already read, so the single-clock-read rule holds by
 	// construction rather than by a reviewer noticing.
 	triggers ports.TriggerRepo
@@ -314,7 +314,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// and I04 stays structural rather than remembered. Arm takes the
 	// instant Capture already read — there is no second clock read here,
 	// and captureRunner holds no clock to make one with.
-	plans, armable := prospection.Arm(c, reminderPrefs(ctx, r.config), now)
+	// asked is false until capture reads the user's words (ADR-0031 link 2): the
+	// planner and the gate already honour it, no capture yet sets it.
+	plans, armable := prospection.Arm(c, false, reminderPrefs(ctx, r.config), now)
 	plan := plans[0] // the refusal, when nothing is armed
 
 	// **A kind that persists NO unit arms and returns here.** That is the

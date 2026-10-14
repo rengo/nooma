@@ -70,6 +70,10 @@ const (
 	// reminder of the event that went out, which already covered it
 	// (FollowSent; only a re-arm under new preferences gives it).
 	RefusalCovered Refusal = "covered"
+	// RefusalTooLate: an asked reminder would go out at once, but less than
+	// AtOnceMarginMinutes remain before its instant or its local day ends
+	// (ADR-0031 point 2).
+	RefusalTooLate Refusal = "too_late"
 )
 
 // Plan is one row of Arm's decision: what to arm and with what. A dated
@@ -113,13 +117,26 @@ type Plan struct {
 	Rule      Rule
 	Anchor    Anchor
 	Interrupt Interrupt
+	// Asked marks a reminder armed because the user's message asked for it.
+	Asked bool
+	// DayOnly marks an asked reminder whose instant is a bare date: About is
+	// that day's local midnight and the reminder fires at DateOnlyAt.
+	DayOnly bool
+	// NightExempt marks a reminder that quiet hours neither move nor hold: an
+	// asked one at a named time, or armed at once (ADR-0031 point 6).
+	NightExempt bool
 }
 
 // Arm decides what one classification arms at one instant (spec R6.1,
 // design §3.7), one Plan per row to write: several for a dated event, one
 // otherwise. When it arms nothing it returns one ArmNothing Plan saying
 // why, and false. prefs are the user's event reminder preferences.
-func Arm(c classify.Classification, prefs ReminderPrefs, now time.Time) ([]Plan, bool) {
+//
+// asked is whether the user's own words asked to be reminded
+// (classify.AsksToBeReminded). An asked unit of any kind that persists one arms
+// its instant (its own field, else the other) through leadSet, as ADR-0031
+// decides; a timer and an asked recurrence keep their own branches below.
+func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Time) ([]Plan, bool) {
 	// Resolved once, for every branch including the ones that arm nothing.
 	// A zero Interrupt would report itself degraded and therefore look
 	// correct, which is exactly why it is not good enough: only a real
@@ -132,6 +149,15 @@ func Arm(c classify.Classification, prefs ReminderPrefs, now time.Time) ([]Plan,
 
 	if c.Kind == nil {
 		return nothing(RefusalNoKind)
+	}
+
+	if _, persists := c.Kind.UnitType(); asked && persists && (*c.Kind != classify.KindRecurringReminder || c.RecurrenceRule == nil) {
+		at, dayOnly, ok := askedInstant(c)
+		if !ok {
+			return nothing(RefusalNoDate)
+		}
+		leads := leadSet(*c.Kind, true, at, dayOnly, prefs, now.Location())
+		return reminders(at, dayOnly, leads, prefs, now, interrupt, nil)
 	}
 
 	switch *c.Kind {
@@ -168,6 +194,23 @@ func Arm(c classify.Classification, prefs ReminderPrefs, now time.Time) ([]Plan,
 	}
 
 	return nothing(RefusalKindNotArming)
+}
+
+// askedInstant is the instant an asked unit is reminded about: an event's
+// event_at, any other kind's due_at, else the other field (spec terms), with
+// whether the model wrote it as a bare date.
+func askedInstant(c classify.Classification) (at time.Time, dayOnly, ok bool) {
+	own, other, ownDay, otherDay := c.DueAt, c.EventAt, c.DueAtDayOnly, c.EventAtDayOnly
+	if *c.Kind == classify.KindEvent || *c.Kind == classify.KindRecurringReminder {
+		own, other, ownDay, otherDay = other, own, otherDay, ownDay
+	}
+	switch {
+	case own != nil:
+		return *own, ownDay, true
+	case other != nil:
+		return *other, otherDay, true
+	}
+	return time.Time{}, false, false
 }
 
 // recurringTrigger arms the recurring trigger a dated occurrence and a

@@ -17,6 +17,13 @@ const TriggerStalenessHours = 6
 // temporal (doc 02 §8) and decays faster than a memory-backed nudge.
 const TimerStalenessHours = 3
 
+// AtOnceMarginMinutes is the least time that must remain before an asked
+// reminder's instant (or the end of its day) for an at-once arming to be
+// worth sending: one proactive check interval (ADR-0031 point 2). Untyped for
+// the reason TriggerStalenessHours gives. test/conformance pins it equal to
+// scheduler.ProactiveCheckInterval, which core may not import.
+const AtOnceMarginMinutes = 5
+
 // DelayCaveatMinutes is the overdue amount at which a delivered-but-late
 // item must say so (spec R1.3, ADR-0009, design §3.3): below it, the
 // lateness is the scheduler's own granularity and is not a fact about the
