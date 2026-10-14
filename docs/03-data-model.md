@@ -67,7 +67,7 @@ CREATE TABLE triggers (
   id                TEXT PRIMARY KEY,
   unit_id           TEXT REFERENCES units(id) ON DELETE CASCADE,  -- NULL for pattern_based
   kind              TEXT NOT NULL,               -- time_based|event_based|pattern_based
-  status            TEXT NOT NULL DEFAULT 'armed', -- armed|fired|dismissed|expired
+  status            TEXT NOT NULL DEFAULT 'armed', -- armed|fired|dismissed|expired (expired + fired_at = a fired reminder that lapsed, never delivered)
   condition         TEXT,                        -- JSON (event/pattern)
   interrupt_level   REAL,                        -- 0–1, persisted (auditable)
   payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days, lead_minutes, event_at, user_leads_minutes)

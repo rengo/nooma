@@ -193,6 +193,16 @@ func (r *TriggerRepo) Surface(ctx context.Context, id string, at time.Time) erro
 		formatUnitTime(at), id, string(ports.TriggerStatusFired))
 }
 
+// Lapse implements ports.TriggerRepo. One UPDATE under a fired-and-unsurfaced
+// precondition, Surface's own, so a pass lapsing a row and a pass delivering
+// it cannot both win. fired_at is left as it is: the row did fire.
+func (r *TriggerRepo) Lapse(ctx context.Context, id string) error {
+	return r.guardedUpdate(ctx, id,
+		`UPDATE triggers SET status = ? WHERE id = ? AND status = ? AND surfaced_at IS NULL`,
+		func(current string) bool { return current == string(ports.TriggerStatusFired) },
+		string(ports.TriggerStatusExpired), id, string(ports.TriggerStatusFired))
+}
+
 // Resolve implements ports.TriggerRepo.
 func (r *TriggerRepo) Resolve(ctx context.Context, id string, to ports.TriggerResolution, at time.Time) error {
 	return r.guardedUpdate(ctx, id,
@@ -261,7 +271,8 @@ func (r *TriggerRepo) ArmedUnitIDs(ctx context.Context) ([]string, error) {
 func (r *TriggerRepo) FiredForUnit(ctx context.Context, unitID string) ([]ports.FiredTrigger, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT fire_at, fired_at, payload FROM triggers
-		 WHERE unit_id = ? AND recurrence_rule IS NULL AND fired_at IS NOT NULL AND fire_at IS NOT NULL`, unitID)
+		 WHERE unit_id = ? AND status = ? AND recurrence_rule IS NULL AND fired_at IS NOT NULL AND fire_at IS NOT NULL`,
+		unitID, string(ports.TriggerStatusFired))
 	if err != nil {
 		return nil, fmt.Errorf("select fired triggers of unit %q: %w", unitID, err)
 	}

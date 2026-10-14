@@ -68,6 +68,7 @@ const (
 	ActionCaptureArmedRecurring     DecisionAction = "capture.armed.recurring_trigger"
 	ActionCaptureArmRefused         DecisionAction = "capture.arm.refused"
 	ActionCheckTriggerExpired       DecisionAction = "check.trigger.expired"
+	ActionCheckTriggerLapsed        DecisionAction = "check.trigger.lapsed"
 	ActionCheckTimerFired           DecisionAction = "check.timer.fired"
 	ActionCheckTimerCancelled       DecisionAction = "check.timer.cancelled"
 	ActionCheckConflictSkipped      DecisionAction = "check.conflict_skipped"
@@ -213,7 +214,7 @@ const (
 	ActionConfigRemindersFollowed DecisionAction = "config.reminders.followed"
 )
 
-// AllDecisionActions returns a fresh slice holding the fifty-seven
+// AllDecisionActions returns a fresh slice holding the fifty-eight
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
@@ -238,7 +239,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCapturePersonRefAmbiguous,
 		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
 		ActionCaptureArmRefused,
-		ActionCheckTriggerExpired, ActionCheckTimerFired, ActionCheckTimerCancelled,
+		ActionCheckTriggerExpired, ActionCheckTriggerLapsed, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,
 		ActionCheckTriggerDelivered, ActionCheckDeliveryFailed,
 		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,

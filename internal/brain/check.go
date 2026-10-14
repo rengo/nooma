@@ -63,6 +63,9 @@ type CheckReport struct {
 	// when none was due.
 	DigestCarried   int
 	TriggersExpired int
+	// TriggersLapsed counts fired reminders never delivered that this pass
+	// retired because their event is no longer ahead (ADR-0032).
+	TriggersLapsed  int
 	TimersFired     int
 	TimersCancelled int
 }
@@ -113,7 +116,11 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	report.TriggersDue = len(due)
 
 	for _, t := range due {
-		status, writes := triggerTransition(triggerVerdict(t, now, r.night))
+		verdict, reason, err := judgeReminder(ctx, r.units, r.night, t, false, now)
+		if err != nil {
+			return CheckReport{}, err
+		}
+		status, writes := triggerTransition(verdict)
 		if !writes {
 			continue
 		}
@@ -143,10 +150,13 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 			}
 			return CheckReport{}, fmt.Errorf("check: expire trigger %q: %w", t.ID, err)
 		}
-		if err := r.record(ctx, now, ports.ActionCheckTriggerExpired,
-			fmt.Sprintf("trigger %q was overdue past its staleness window and expired rather than firing late", t.ID),
-			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale)},
-		); err != nil {
+		rationale := fmt.Sprintf("trigger %q was overdue past its staleness window and expired rather than firing late", t.ID)
+		detail := checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale)}
+		if reason == prospection.LapsePassed {
+			rationale = fmt.Sprintf("trigger %q came due after the event it is about was no longer ahead, and expired rather than firing", t.ID)
+			detail.Reason = string(reason)
+		}
+		if err := r.record(ctx, now, ports.ActionCheckTriggerExpired, rationale, detail); err != nil {
 			return CheckReport{}, err
 		}
 		report.TriggersExpired++
@@ -239,11 +249,12 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	}
 
 	if r.channel != nil && r.units != nil && r.state != nil {
-		carried, err := r.assembleDigest(ctx, now, commit)
+		carried, lapsed, err := r.assembleDigest(ctx, now, commit)
 		if err != nil {
 			return CheckReport{}, err
 		}
 		report.DigestCarried = carried
+		report.TriggersLapsed = lapsed
 	}
 
 	return report, nil
@@ -309,6 +320,10 @@ type checkDetail struct {
 	// effect. It is empty on a conflict row, where no verdict was acted
 	// on — the write was refused before the verdict could become one.
 	Verdict string `json:"verdict,omitempty"`
+	// Reason is why a stale verdict ended a reminder, on the rows that say
+	// its event was no longer ahead (ADR-0032). It is empty on an overdue
+	// expiry, which is ADR-0009's and says nothing more.
+	Reason string `json:"reason,omitempty"`
 	// Table names which of the two a conflict row is about, and is empty
 	// on the effect rows, where the action already says. Putting the
 	// table into Verdict instead would have made one field mean two
@@ -402,19 +417,6 @@ func (r checkRunner) skipOnConflict(ctx context.Context, now time.Time, err, sen
 		return false, recordErr
 	}
 	return true, nil
-}
-
-// triggerVerdict is the gate for one due trigger. An event reminder whose
-// event is known — a one-shot trigger with a lead, fire_at + lead_minutes
-// being its event (ADR-0029 D4) — is never sent once that event has
-// started (ADR-0030 point 4); every other trigger is TriggerVerdict's. An
-// at-once reminder carries no lead and is due the minute it is armed.
-func triggerVerdict(t ports.DueTrigger, now time.Time, night prospection.QuietHours) prospection.Verdict {
-	if t.RecurrenceRule == nil && t.Payload.LeadMinutes > 0 {
-		eventAt := t.FireAt.Add(time.Duration(t.Payload.LeadMinutes) * time.Minute)
-		return night.EventReminderVerdict(t.FireAt, eventAt, now)
-	}
-	return night.TriggerVerdict(t.FireAt, now)
 }
 
 // WithQuietHours lets the scan defer to the user's stored quiet end

@@ -162,7 +162,8 @@ of a black box.
    `allowed_chat_ids`; messages from any other chat are refused. It uses long polling, so it
    opens no inbound port ([ADR-0014](adr/0014-telegram-transport.md)).
 2. **Splits what is urgent from what can wait.** A reminder of an event always goes out on its
-   own when due, whatever its urgency, and never after the event has started. Another trigger
+   own when due, whatever its urgency, and never after the event has started; the digest drops
+   one whose event has passed rather than listing it. Another trigger
    above the push threshold goes out immediately too. Either waits for you to wake during
    quiet hours. Everything else accumulates for the digest ([doc 02 §7, delivery](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
    Hours and thresholds are in [§13](02-cognitive-core.md#13-calibration--numbers-vs-mechanisms).
@@ -307,6 +308,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
 | Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; edited on `/ui/preferences`, which moves the reminders already set; editing them by chat is pending | doc 02 §7; ADR-0029 |
 | Event reminders pushed by day, moved out of the night, never sent after the event | Shipped; quiet end (07:00) and evening time (22:00) are vault preferences edited on `/ui/preferences`; editing them by chat is pending | doc 02 §7; ADR-0030 |
+| A reminder is never sent once its event is past, by the push, the digest or Today (the rest of ADR-0032 — re-planning a backlog, rendering from the unit, the user's language — is pending) | Shipped | doc 02 §7; ADR-0032 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |

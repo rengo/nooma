@@ -8,7 +8,7 @@ PR 1 — `plan/digest-stale-reminders`
 - [x] 1. ADR-0032 (Accepted, 2026-10-14), the index row, design, tasks; review rounds 1-3.
 
 PR 2 — `fix/never-remind-of-the-past` (D1 `passed`, D4, `FiredForUnit`)
-- [ ] 2. RED tests:
+- [x] 2. RED tests:
   - `TestI37_ClientsSevenRowsSendNothingPast`: the client's seven rows → the three past flights
     lapse `passed`, the four ahead are carried.
   - `TestI37_ArmedOverdueKeepsTodaysVerdict`: an armed row overdue in link 2 → expired as today.
@@ -21,7 +21,7 @@ PR 2 — `fix/never-remind-of-the-past` (D1 `passed`, D4, `FiredForUnit`)
   - `TestDryRunCountsALapseAndWritesNothing`: a past fired row → `TriggersLapsed` 1, no row.
   - `TestFiredForUnit_LapsedRowDoesNotCover` (L3): a lapsed row → absent; a fired row → present.
   - Repo contract: `Lapse` only `fired`/unsurfaced, else a conflict.
-- [ ] 3. GREEN: `ReminderVerdict` (`passed`, `About`), `Lapse`, the gate (fire time, digest, Today),
+- [x] 3. GREEN: `ReminderVerdict` (`passed`, `About`), `Lapse`, the gate (fire time, digest, Today),
       `FiredForUnit`, `check.trigger.lapsed` (action, label, counter, dry run). Doc 02 §7/§11,
       doc 03, doc 07, I37 row. `make check-all`, open the PR.
 

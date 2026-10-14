@@ -159,6 +159,7 @@ func (r *conflictingTriggers) FiredForUnit(context.Context, string) ([]ports.Fir
 func (r *conflictingTriggers) Reschedule(context.Context, string, ports.TriggerMove) error {
 	return nil
 }
+func (r *conflictingTriggers) Lapse(context.Context, string) error { return nil }
 
 func (r *conflictingTriggers) Expire(_ context.Context, id string) error {
 	if id == r.conflictOnID {
@@ -320,6 +321,7 @@ func (r *failingTriggers) FiredForUnit(context.Context, string) ([]ports.FiredTr
 func (r *failingTriggers) Reschedule(context.Context, string, ports.TriggerMove) error {
 	return r.err
 }
+func (r *failingTriggers) Lapse(context.Context, string) error { return r.err }
 
 type emptyTriggers struct{}
 
@@ -337,6 +339,7 @@ func (emptyTriggers) FiredForUnit(context.Context, string) ([]ports.FiredTrigger
 	return nil, nil
 }
 func (emptyTriggers) Reschedule(context.Context, string, ports.TriggerMove) error { return nil }
+func (emptyTriggers) Lapse(context.Context, string) error                         { return nil }
 
 type emptyTimers struct{}
 

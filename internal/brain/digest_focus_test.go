@@ -88,7 +88,7 @@ func (f *fxH) focusRows(t *testing.T) int {
 func TestDigest_FailedSendPublishesNothing(t *testing.T) {
 	f := digestFixture(t)
 	ch := &sendingChannel{err: errKeeperBoom}
-	if _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if got := f.slotSevenAfter(t); got != "B" {
@@ -111,7 +111,7 @@ func TestDigest_PublishesBeforeSurface(t *testing.T) {
 	f := digestFixture(t)
 	r := f.digestRunner(&sendingChannel{})
 	r.triggers = surfaceFailingTriggers{TriggerRepo: f.triggers}
-	if _, err := r.assembleDigest(context.Background(), digestNow, true); !errors.Is(err, errKeeperBoom) {
+	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); !errors.Is(err, errKeeperBoom) {
 		t.Fatalf("assembleDigest error = %v, want the Surface failure", err)
 	}
 	if got := f.slotSevenAfter(t); got != "A" {
@@ -121,7 +121,7 @@ func TestDigest_PublishesBeforeSurface(t *testing.T) {
 
 func TestDigest_DryRunPublishesNothing(t *testing.T) {
 	f := digestFixture(t)
-	if _, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, false); err != nil {
+	if _, _, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, false); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if got := f.slotSevenAfter(t); got != "B" {
@@ -133,7 +133,7 @@ func TestDigest_EmptyDigestPublishesNothing(t *testing.T) {
 	f := newFxH(t)
 	f.taskContest(t, 1.0, 0.99)
 	ch := &sendingChannel{}
-	if _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if ch.count() != 0 {
@@ -148,7 +148,7 @@ func TestDigest_NoConversationPublishesNothing(t *testing.T) {
 	f := digestFixture(t)
 	r := f.digestRunner(&sendingChannel{})
 	r.conversation = ""
-	if _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if got := countAction(t, f.log, digestNow, ports.ActionCheckDeliveryFailed); got != 1 {
@@ -166,7 +166,7 @@ func TestDigest_QuestionOnlyDigestPublishesWhenSent(t *testing.T) {
 	f.taskContest(t, 1.0, 0.99)
 	f.questions.PendingQuestions = queuedQuestions(t, question("q-1", digestQuestionNow, "plan the offsite", "the travel budget"))
 	ch := &sendingChannel{}
-	carried, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true)
+	carried, _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true)
 	if err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestDigest_EmptyDigestDoesNotCompute(t *testing.T) {
 	f := newFxH(t)
 	f.taskContest(t, 1.0, 0.99)
 	f.cfgPort.fail = true
-	if _, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := f.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if got := f.focusRows(t); got != 0 {
@@ -201,7 +201,7 @@ func TestDigest_NoConversationDoesNotCompute(t *testing.T) {
 	f.cfgPort.fail = true
 	r := f.digestRunner(&sendingChannel{})
 	r.conversation = ""
-	if _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if got := f.focusRows(t); got != 0 {
@@ -219,7 +219,7 @@ func TestDigest_FocusErrorStillSendsDigest(t *testing.T) {
 	f := digestFixture(t)
 	f.cfgPort.fail = true
 	ch := &sendingChannel{}
-	carried, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true)
+	carried, _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true)
 	if err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestDigest_FocusErrorRepeatsPerRetryScan(t *testing.T) {
 	f.cfgPort.fail = true
 	r := f.digestRunner(&sendingChannel{err: errKeeperBoom})
 	for i := 0; i < 2; i++ {
-		if _, err := r.assembleDigest(context.Background(), digestNow.Add(time.Duration(i)*5*time.Minute), true); err != nil {
+		if _, _, err := r.assembleDigest(context.Background(), digestNow.Add(time.Duration(i)*5*time.Minute), true); err != nil {
 			t.Fatalf("scan %d: %v", i+1, err)
 		}
 	}
@@ -270,7 +270,7 @@ func TestDigest_FocusErrorRepeatsPerRetryScan(t *testing.T) {
 func TestDigest_DryRunFocusErrorWritesNothing(t *testing.T) {
 	dry := digestFixture(t)
 	dry.cfgPort.fail = true
-	dryCount, err := dry.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, false)
+	dryCount, _, err := dry.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, false)
 	if err != nil {
 		t.Fatalf("dry assembleDigest: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestDigest_DryRunFocusErrorWritesNothing(t *testing.T) {
 
 	wet := digestFixture(t)
 	wet.cfgPort.fail = true
-	wetCount, err := wet.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, true)
+	wetCount, _, err := wet.digestRunner(&sendingChannel{}).assembleDigest(context.Background(), digestNow, true)
 	if err != nil {
 		t.Fatalf("wet assembleDigest: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestDigest_FocusErrorPublishesNothing(t *testing.T) {
 
 	f.cfgPort.fail = true
 	ch := &sendingChannel{}
-	if _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if ch.count() != 1 {
@@ -323,7 +323,7 @@ func TestDigest_FocusErrorPublishesNothing(t *testing.T) {
 func TestDigest_TodaySeesDigestIncumbent(t *testing.T) {
 	f := digestFixture(t)
 	ch := &sendingChannel{}
-	if _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
+	if _, _, err := f.digestRunner(ch).assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 	if ch.count() != 1 {
@@ -342,7 +342,7 @@ func TestDigest_TodaySeesDigestIncumbent(t *testing.T) {
 func TestDigest_SecondDigestSeesFirst(t *testing.T) {
 	f := digestFixture(t)
 	ctx := context.Background()
-	if _, err := f.digestRunner(&sendingChannel{}).assembleDigest(ctx, digestNow, true); err != nil {
+	if _, _, err := f.digestRunner(&sendingChannel{}).assembleDigest(ctx, digestNow, true); err != nil {
 		t.Fatalf("first digest: %v", err)
 	}
 
@@ -350,7 +350,7 @@ func TestDigest_SecondDigestSeesFirst(t *testing.T) {
 	f.pendingTrigger(t, "trg-2", "k-2")
 	ch := &sendingChannel{}
 	next := digestNow.AddDate(0, 0, 1)
-	if _, err := f.digestRunner(ch).assembleDigest(ctx, next, true); err != nil {
+	if _, _, err := f.digestRunner(ch).assembleDigest(ctx, next, true); err != nil {
 		t.Fatalf("second digest: %v", err)
 	}
 	if ch.count() != 1 {
@@ -445,7 +445,7 @@ func TestFocusKeeper_ConcurrentTodayAndDigestAreRaceFree(t *testing.T) {
 				t.Errorf("seed trigger: %v", err)
 				return
 			}
-			if _, err := r.assembleDigest(ctx, digestNow.AddDate(0, 0, i+1), true); err != nil {
+			if _, _, err := r.assembleDigest(ctx, digestNow.AddDate(0, 0, i+1), true); err != nil {
 				t.Errorf("digest %d: %v", i, err)
 				return
 			}
@@ -487,7 +487,7 @@ func TestDigest_FocusErrorRowWriteFailureIsReturned(t *testing.T) {
 	ch := &sendingChannel{}
 	r := f.digestRunner(ch)
 	r.log = failingFocusRow{f.log}
-	if _, err := r.assembleDigest(context.Background(), digestNow, true); !errors.Is(err, errKeeperBoom) {
+	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); !errors.Is(err, errKeeperBoom) {
 		t.Fatalf("assembleDigest err = %v, want the audit-write error", err)
 	}
 	if ch.count() != 0 {

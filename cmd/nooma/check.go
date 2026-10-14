@@ -120,6 +120,7 @@ func renderCheckReport(out io.Writer, report brain.CheckReport, dryRun bool) err
 		dry   string
 	}{
 		{report.TriggersExpired, "expired %d trigger(s)", "would expire %d trigger(s)"},
+		{report.TriggersLapsed, "lapsed %d trigger(s) whose event is past", "would lapse %d trigger(s) whose event is past"},
 		{report.TimersFired, "fired %d timer(s)", "would fire %d timer(s)"},
 		{report.TimersCancelled, "cancelled %d timer(s)", "would cancel %d timer(s)"},
 	} {
