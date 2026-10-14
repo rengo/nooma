@@ -34,19 +34,14 @@ PM decisions, binding:
 - **P3:** a bare "no" to "¿seguís o borramos?" deletes.
 - **P4:** quoted or reported speech is a known limit, pinned by a test.
 - **P5:** a stop is durable state on the unit, never inferred from the request flag.
+- **P6:** only a new explicit ask brings a stopped reminder back, as a new unit.
+- **P7:** a stop binds without asking only on one unambiguous candidate; a tie asks, with a
+  list capped at 5.
 
 ## Out of scope
 
-- Asking for a reminder about a unit already stored.
-- Listing reminders from chat.
-- Cancelling timers from chat (`m4f`).
-- The lead by chat.
-- Quoted speech (P4).
-- Units captured before this change.
-
-## Open product questions
-
-None.
+A reminder for a unit already stored; listing reminders, or cancelling timers, from chat (`m4f`);
+the lead by chat; quoted speech (P4); units captured before this change.
 
 ## Review Workload Forecast
 
@@ -57,11 +52,9 @@ None.
 | Chained PRs | Yes: stacked to main, each link under 400 |
 | Decision needed before apply | None. ADR-0031 is accepted |
 
-The plan itself is a chain of three PRs, each under 400 lines:
-
-1. ADR-0031, this proposal and `spec.md`;
-2. `design.md` and `tasks.md`, for the one-shot links 1-4;
-3. `design-repeating.md` and `tasks-repeating.md`, for links 5-9.
+The plan is a chain of four PRs, each under 400 lines: (1) ADR-0031, this proposal, `spec.md`;
+(2) `design.md` and `tasks.md`, one-shot links 1-4; (3) `design-repeating.md`, links 5-9; (4)
+`tasks-repeating.md`.
 
 **Link 2 delivers the first usable thing**: "recordame X a las H", "…mañana", and "recordame" on
 an event.

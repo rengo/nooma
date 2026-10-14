@@ -16,7 +16,8 @@ decisions: `proposal.md`.
 - **Remind-me lead**: the user's preference for how long before a named time a one-shot asked
   reminder fires.
 - **Repeating reminder**: an asked recurring reminder (R7), or the daily one a "No" makes (R8).
-- **Stopped**: the unit carries a durable stop (R9). No path arms a stopped unit again.
+- **Stopped**: the unit carries a durable stop (R9). No path arms or sends anything of it again;
+  only a new explicit ask creates a new reminder (P6).
 
 | ID | Requirement | Invariant |
 |----|-------------|-----------|
@@ -36,25 +37,14 @@ decisions: `proposal.md`.
 
 **MUST**: "asked" is a pure function of the raw text, never of `normalized_content` or a model
 field. It is true when a remind phrase from a closed per-language list appears as whole words,
-case-, accent- and apostrophe-insensitive, and none of these hold:
-
-- a negation governs it in its own clause;
-- a stop phrase (R9) is present;
-- an interrogative word follows it ("recordame qué…", a recall).
-
-Clauses end at punctuation and at the conjunctions "y", "pero", "si", "and", "but", "if".
+case-, accent- and apostrophe-insensitive (`don’t` = `don't` = `dont`), unless a negation governs
+it in its own clause, a stop phrase (R9) is present, or an interrogative follows it (a recall).
+Clauses end at punctuation and at "y", "pero", "si", "and", "but", "if".
 
 | Message | Asked? |
 |---|---|
-| "recordame comprar café mañana a las 10", "Remind me to call Ana at 5pm" | yes |
-| "si no, avisame", "si no puedo, avisame", "no te olvides de recordarme X" | yes |
-| "recordámelo", "haceme acordar", "acordate de avisarme", "poneme un recordatorio", "que no se me olvide" | yes |
-| "comprar café mañana a las 10", even when the model writes "Recordarme…" | no |
-| "no me recuerdes más" | no; it is a stop |
-| "recordame qué hablamos con Juan" | no; it is a recall |
-| "my dentist sent a reminder to confirm" | no |
-
-`don’t`, `don't` and `dont` behave alike.
+| "recordame comprar café mañana a las 10", "Remind me to call Ana at 5pm", "si no, avisame", "si no puedo, avisame", "no te olvides de recordarme X", "recordámelo", "haceme acordar", "acordate de avisarme", "poneme un recordatorio", "que no se me olvide" | yes |
+| "comprar café mañana a las 10" (even when the model writes "Recordarme…"); "no me recuerdes más" (a stop); "recordame qué hablamos con Juan" (a recall); "my dentist sent a reminder to confirm" | no |
 
 **Known limit (PM)**: quoted or reported speech ("Ana me dijo 'avisame…'") counts as asked. A
 test pins this.
@@ -91,7 +81,8 @@ nothing written. A change is recorded in `config.updated`.
 one is never sent after its instant. An asked day-only reminder stays deliverable through its
 whole day.
 
-**MUST**: neither of these is moved or held by quiet hours:
+**MUST**: neither of these is moved or held by quiet hours, and lateness is measured from its
+own instant:
 
 - a reminder at a **named time**, recurring included;
 - an asked reminder armed **at once**.
@@ -128,13 +119,8 @@ whatever the kind. It arms a recurring trigger at the named time on each occurre
 date-only time when none was named). It has no lead and is pushed.
 
 **MUST**: every recurring trigger, asked or not, has a successor armed for the next occurrence
-after the later of its own occurrence and now:
-
-- when it fires;
-- when it expires;
-- when a crash interrupted either.
-
-Each occurrence is computed in the user's zone. One occurrence is never reminded twice, a
+after the later of its own occurrence and now, when it fires, when it expires, and after a crash
+interrupted either. Each occurrence is computed in the user's zone. One occurrence is never reminded twice, a
 successor never fires before its predecessor's occurrence, and a stopped unit gets none.
 
 ### R8 — Ask back
@@ -156,43 +142,62 @@ the unit stored with no reminder.
 
 ### R9 — Stopping, chat first
 
-**MUST**: an **explicit stop** ("no me lo recuerdes más", "listo, no me lo recuerdes más") on an
-asked reminder:
+**MUST**: an **explicit stop** ("no me lo recuerdes más", "listo, no me lo recuerdes más"):
 
-- records the stop durably on the unit, first;
-- dismisses its armed triggers;
-- keeps every later path from arming it again (correction, re-plan, re-arm, preferences).
+- records a durable stop on the unit first;
+- dismisses the unit's armed triggers and lapses its fired, undelivered ones;
+- leaves nothing of that unit sendable afterwards, by any path (the delivery gate, the digest,
+  corrections, the re-plan, the re-arm, preferences).
 
-**MUST**: a **bare done**, a message that is only "listo" / "ya lo hice" / "done", has these
-effects:
+Only a **new explicit ask** (P6) brings the reminder back, as a new unit. A correction of a
+stopped unit is refused with the reason `stopped`, and the reply says so.
+
+**MUST**: a **bare done** (the whole message is "listo" / "ya lo hice" / "done"; "listo, nos vemos
+mañana" is not one) acts on the asked reminder it binds:
 
 | Reminder | Effect |
 |---|---|
-| Repeating, not marked | Nooma asks once "¿Querés que te lo siga recordando o borramos el recordatorio?" |
-| Repeating, marked | Done for today; no question, and it keeps recurring |
-| One-shot | Resolves it |
+| Repeating, not marked | asks once "¿Querés que te lo siga recordando o borramos el recordatorio?" |
+| Repeating, marked | done for today; it keeps recurring |
+| One-shot | resolves it; an event's remaining leads are dismissed |
 
-The answer: "seguí" marks and keeps it; "borralo", or a bare "no" (PM), stops it; any other next
-message leaves it unmarked, and the next bare done asks again.
+The answer to the question:
 
-"listo, nos vemos mañana" is not a bare done.
+- "seguí" marks it;
+- "borralo" or a bare "no" (PM) stops it;
+- anything else leaves it unmarked, and the next bare done asks again.
 
-**MUST**: which reminder is meant is decided without the model:
+**MUST**: the binding uses no model, and binds without asking only on **one unambiguous
+candidate** (P7). The rules apply in order:
 
-1. The message's content words match exactly one active asked reminder.
-2. Otherwise, exactly one asked reminder was delivered within the window **and** it is the last
-   delivery of any reminder.
-3. Otherwise, for a stop, exactly one asked reminder is active.
+1. The message's content words match exactly one candidate.
+2. The single newest delivery of any trigger, with no tie on `surfaced_at`, is a candidate and
+   lies inside the window.
+3. For a stop only: exactly one candidate exists.
 
-Otherwise Nooma asks "¿Cuál?" with a numbered list, remembering whether the user meant stop or
-done. A bare done that rule 1 or 2 does not bind stops nothing.
+The candidates are:
 
-**MUST**: one fixed order of precedence decides which open question, or which phrase, a message
-answers: the most recently asked open question first, then the phrases, then the model. Check-in
-resolution never takes a message the phrases consumed.
+- **for a stop:** asked units with an armed or recently delivered trigger, plus the unit of a
+  unique last delivery (a birthday included);
+- **for a done:** asked triggers delivered inside the window.
 
-The reply confirms it: "Listo, no te lo recuerdo más: tomar pastillas." / "Bien, te lo sigo
-recordando." / "Hecho por hoy.".
+Otherwise Nooma asks "¿Cuál?" with at most the 5 most recent candidates, keeping the intent. A
+done that no rule binds does nothing.
+
+**MUST**: one fixed precedence:
+
+- the explicit referent, when a surface gives one;
+- then the newest open question;
+- then the phrases;
+- then the model.
+
+Check-in resolution never takes a message the phrases consumed. A message consumed by any
+answer, phrase or check-in expires every older open reminder question. Every reminder question
+has a window, and a newer delivery expires an open `keep_or_stop` or `which_reminder`, so a late
+"no" never deletes.
+
+Replies: "Listo, no te lo recuerdo más: tomar pastillas." / "Bien, te lo sigo recordando." /
+"Hecho por hoy.".
 
 ### R10 — Reminders nobody asked for
 
