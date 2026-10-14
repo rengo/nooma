@@ -109,7 +109,22 @@ retarget check). Then:
    never `make binary` in the maintainer's checkout, which would overwrite the binary their real
    `nooma serve` runs), not a QA worktree's. Run `nooma-qa`'s `~/.nooma` path-set diff (before the
    first call and at the end); any added or removed path is an incident: stop and report it.
-   Never the maintainer's real `~/.nooma` or vault. If a step fails, it is a regression: fix it through the cycle before telling the
+   Never the maintainer's real `~/.nooma` or vault.
+   Background processes: begin each run with a fresh list (`: > <scratch>/pids`). Start each
+   process in one Bash call, with the backgrounded command being the process itself:
+   `cd <dir>; cmd > <scratch>/x.log 2>&1 & echo $! >> <scratch>/pids` (or
+   `(cd <dir> && exec cmd) > <scratch>/x.log 2>&1 & echo $! >> <scratch>/pids`). Never put a
+   `cd <dir> && cmd &` list, `sh -c`, `go run`, `make` or `timeout` in front of a backgrounded
+   server: `$!` is then a wrapper's PID, the real server outlives the kill, and `ps -p` falsely
+   reports it gone. Shell state does not survive between calls and `run_in_background` yields no
+   `$!`, so a bare `pid=$!` is lost; never pipe (`cmd | tee log &` records tee's PID). WHEN: before
+   reporting to the client, on success and on every failure path, stop exactly the PIDs in that file
+   (`xargs -r kill < <scratch>/pids`); if one survives, `kill -9` that PID from the file, never by
+   name. Then verify: `ps -p <pid>` shows nothing and `ss -ltn | rg :<port>` is empty. Never kill by
+   name or pattern (`pkill`, `killall`, `pgrep -x nooma`, `kill $(pgrep ...)`): the maintainer's
+   real `nooma serve` has the same name as yours. A port already in use belongs to someone else,
+   usually that real server: pick another free port, never free it. Never `git stash` in the shared
+   repository. If a step fails, it is a regression: fix it through the cycle before telling the
    client anything.
 
 ## Hot-Path Escalation

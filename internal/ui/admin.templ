@@ -1,6 +1,10 @@
 package ui
 
-import "time"
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+)
 
 // AdminPage is GET /ui/admin's full page.
 templ AdminPage(p adminPage) {
@@ -66,7 +70,7 @@ templ adminSettingForm(s adminSetting) {
 	<form method="post" action="/ui/admin" hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop" data-setting={ string(s.Field) }>
 		<input type="hidden" name="field" value={ string(s.Field) }/>
 		<label for={ "admin-" + string(s.Field) }>{ s.Label }</label>
-		if s.Field == "consolidation_enabled" {
+		if s.Field == brain.ConfigConsolidationEnabled {
 			<select id={ "admin-" + string(s.Field) } name="value">
 				<option value="true" selected?={ s.Value == "true" }>enabled</option>
 				<option value="false" selected?={ s.Value == "false" }>disabled</option>

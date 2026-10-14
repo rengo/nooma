@@ -1,6 +1,6 @@
 # Design — event-reminder-leads
 
-How [ADR-0029](../../../docs/adr/0029-event-reminders-follow-the-users-leads.md) is built. The
+How [ADR-0029](../../../../docs/adr/0029-event-reminders-follow-the-users-leads.md) is built. The
 ADR is the product decision (client, relayed by the PM on 2026-10-10); this file decides HOW.
 There is no `proposal.md`/`spec.md`: the ADR's numbered decision is the requirement list, cited
 here as A1-A7.
@@ -14,7 +14,7 @@ here as A1-A7.
 | A date-only `event_at` decodes to midnight in the clock's zone | `internal/core/classify/decode.go` `assignTime` |
 | The text repair of a failed reminder step reads `fire_at + lead_days` | `correction_reminder.go` `followTriggerText` |
 | Vault settings live on the `config` singleton, read by `ConfigRepo.Load`, defaulted by core `Resolve*` | `internal/store/sqlite/configrepo.go`; migration 0002 |
-| `m4e2-admin` (planned, unbuilt) writes settings through typed setters and logs `config.updated` | `openspec/changes/m4e2-admin/design.md` §3.1 |
+| `m4e2-admin` (planned, unbuilt) writes settings through typed setters and logs `config.updated` | `openspec/changes/archive/2026-10-14-m4e2-admin/design.md` §3.1 |
 | No path expires a unit's triggers on archive | `rg triggers internal/brain` |
 
 ## 2. Decisions

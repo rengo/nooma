@@ -83,7 +83,23 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 - Time-dependent flows: when a flow cannot be reached in wall-clock time, say so and rely on
   the existing e2e tests (`go test -tags e2e -run <Name> ./test/e2e/...`), reporting them as
   such. State plainly what could not be exercised by hand.
-- Stop every process you start (fake LLM, `serve`) before returning.
+- Background processes: begin each run with a fresh list (`: > <scratch>/pids`). Start each process
+  in one Bash call, with the backgrounded command being the process itself:
+  `cd <dir>; cmd > <scratch>/x.log 2>&1 & echo $! >> <scratch>/pids` (or
+  `(cd <dir> && exec cmd) > <scratch>/x.log 2>&1 & echo $! >> <scratch>/pids`). Never put a
+  `cd <dir> && cmd &` list, `sh -c`, `go run`, `make` or `timeout` in front of a backgrounded
+  server: `$!` is then a wrapper's PID, the real server outlives the kill, and `ps -p` falsely
+  reports it gone. Shell state does not survive between calls and `run_in_background` yields no
+  `$!`, so a bare `pid=$!` is lost; never pipe (`cmd | tee log &` records tee's PID). WHEN: before
+  returning, on success and on every failure path, stop exactly the PIDs in that file
+  (`xargs -r kill < <scratch>/pids`); if one survives, `kill -9` that PID from the file, never by
+  name. Then verify: `ps -p <pid>` shows nothing and `ss -ltn | rg :<port>` is empty. Never kill by
+  name or pattern (`pkill`, `killall`, `pgrep -x nooma`, `kill $(pgrep ...)`): the maintainer's real
+  `nooma serve` has the same name as yours. A port already in use belongs to someone else, usually
+  that real server: pick another free port, never free it. (Why: a run found 7777 taken, cleaned up
+  with `kill $(pgrep -x nooma)` and killed the maintainer's server.)
+- Never `git stash` in the shared repository: a stash is global to every worktree, and another
+  agent can pop it.
 
 ## Rules
 

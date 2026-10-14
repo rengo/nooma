@@ -9,7 +9,7 @@ testable form; not how (`sdd-design`'s job).
 > "activity view" (the umbrella's own estimate: ~200 + ~300) makes eight implementation PRs, so
 > the umbrella rule (proposal.md ~:301, "more than seven PRs or more than 2,400 budgeted lines")
 > fires on measurement. **Admin is now its own slice, `m4e2-admin`**
-> ([`../m4e2-admin/spec.md`](../../m4e2-admin/spec.md)), after m4e. R7, R8 and R10, the Q5/OQ5/OQ6
+> ([`../2026-10-14-m4e2-admin/spec.md`](../2026-10-14-m4e2-admin/spec.md)), after m4e. R7, R8 and R10, the Q5/OQ5/OQ6
 > rulings, and the admin part of R9 and R11 moved there with their text, scenarios and rulings
 > intact. The directory name `m4e-beliefs-activity-admin` is kept because other artifacts
 > reference it; **its scope was beliefs + activity and is now beliefs only (see the next

@@ -126,11 +126,16 @@ func (h *Handler) serveAdminSave(w http.ResponseWriter, r *http.Request) {
 	_ = AdminPage(page).Render(r.Context(), w)
 }
 
-// refuse shows a refused setting with the text as typed and brain's message.
+// refuse shows a refused setting with brain's message and, for a typed
+// number, the text as typed. A choice has no text to give back: its select
+// keeps the value in force, or no option would be selected.
 func (p *adminPage) refuse(e *brain.ConfigRangeError) {
 	for i := range p.Settings {
 		if p.Settings[i].Field == e.Field {
-			p.Settings[i].Value, p.Settings[i].Error = e.Raw, e.Message
+			if e.Field != brain.ConfigConsolidationEnabled {
+				p.Settings[i].Value = e.Raw
+			}
+			p.Settings[i].Error = e.Message
 		}
 	}
 }

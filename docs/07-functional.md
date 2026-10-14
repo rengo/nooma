@@ -295,7 +295,7 @@ screen is not built (see below).
 
 ## Status
 
-As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in the build plan.
+As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in the build plan.
 
 | Capability | Status | Where it is specified |
 |---|---|---|

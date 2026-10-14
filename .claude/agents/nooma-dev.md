@@ -48,6 +48,22 @@ Read these files fully before any work:
     `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. On rework, fix on the same
     branch, rerun `make check-all`, push, and update the PR. After a rebase, rerun `make check-all`.
 11. Never merge. Never push to `main`.
+12. Background processes: begin each run with a fresh list (`: > <scratch>/pids`). Start each
+    process in one Bash call, with the backgrounded command being the process itself:
+    `cd <dir>; cmd > <scratch>/x.log 2>&1 & echo $! >> <scratch>/pids` (or
+    `(cd <dir> && exec cmd) > <scratch>/x.log 2>&1 & echo $! >> <scratch>/pids`). Never put a
+    `cd <dir> && cmd &` list, `sh -c`, `go run`, `make` or `timeout` in front of a backgrounded
+    server: `$!` is then a wrapper's PID, the real server outlives the kill, and `ps -p` falsely
+    reports it gone. Shell state does not survive between calls and `run_in_background` yields no
+    `$!`, so a bare `pid=$!` is lost; never pipe (`cmd | tee log &` records tee's PID). WHEN: before
+    returning, on success and on every failure path, stop exactly the PIDs in that file
+    (`xargs -r kill < <scratch>/pids`); if one survives, `kill -9` that PID from the file, never by
+    name. Then verify: `ps -p <pid>` shows nothing and `ss -ltn | rg :<port>` is empty. Never kill
+    by name or pattern (`pkill`, `killall`, `pgrep -x nooma`, `kill $(pgrep ...)`): the maintainer's
+    real `nooma serve` has the same name as yours. A port already in use belongs to someone else,
+    usually that real server: pick another free port, never free it.
+13. Never `git stash` in the shared repository: stashes are shared by every worktree, and a
+    foreign one can be popped by mistake.
 
 ## Rework
 
