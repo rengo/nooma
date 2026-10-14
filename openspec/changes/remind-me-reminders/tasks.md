@@ -40,7 +40,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestArmAsked_PastLeadAtOnce`: 20:10 said at 20:00 → at once.
   - `TestArmAsked_PastLeadInQuietHoursRingsAtOnce`: "a las 6:30" at 06:20, quiet end 08:00 → at once (item 12).
   - `TestArmAsked_NamedTimeInsideQuietHoursNotMoved`: 06:30 → 06:15.
-  - `TestArmAsked_TooLateTodayRefused`: "hoy" day-only at 23:56 → `too_late`; at 23:50 → at once.
+  - `TestArmAsked_TooLateTodayRefused`: "hoy" day-only at 23:50 → at once; at 23:55 → at once (exactly 5 min left); at 23:56 → `too_late`.
   - `TestArmAsked_AnyKindWithADate`: a `mental_load` with a `due_at` → armed. `TestArmAsked_TimerUnchanged`.
   - `TestArmUnasked_EveryExistingArmAndFollowTestUnchanged`: the existing suite stays green.
   - `TestParseRemindMeLead_Bounds`: 0 → error, 1 → ok, 43200 → ok, 43201 → error, NULL → 15.
@@ -64,13 +64,14 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestReplanKeepsTheAskedLeadOfAnEvent`: an asked event with a stale 24 h row → `replanUnit` keeps the +15 row, with `asked` and `night_exempt`.
   - `TestReplanOfAskedDayOnlyKeepsDateOnlyAt`: the re-plan of an asked day-only unit → at `DateOnlyAt`, `day_only` kept.
   - `TestCurrentEventReadsDueAtForRemindMe`: an asked task → `currentEvent` is `due_at`; an unasked task → nil.
-  - `TestCorrectedAskedTaskOldRowIsNotSentAtItsOldTime` (link 3 expectation, red until link 3): 10:00 → 11:00 → nothing at 09:45; one row at 10:45.
+  - `TestAskedRecurrenceBeforeLink7IsOneShot`: "recordame tomar pastillas todos los días a las 9pm" in links 2-6 → a unit of the type the model's kind maps to (the `task` mapping is link 7's), `remind_me=1`, one one-shot trigger at 20:45 today, never the 7-day recurring row (named time minus the lead), reply "Anotado para el … 21:00. Te aviso 15 minutos antes."; no recurring row (P1). Link 7 replaces this test with its I36 recurring tests.
 - [ ] 2.2 RED L3: migration M1; `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens.
-- [ ] 2.3 GREEN: the store, capture, phrase, channels and gate branch; the corpus case `classify-task-remind-me-coffee.json`; L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
+- [ ] 2.3 GREEN: the store, capture, phrase, channels and gate branch; the I36 row in doc 06 §4; the corpus case `classify-task-remind-me-coffee.json`; L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
 
 ## PR 3 — `feat/remind-me-follows` (D9)
 
 - [ ] 3.1 RED:
+  - `TestCorrectedAskedTaskOldRowIsNotSentAtItsOldTime`: an asked task 10:00 → 11:00 → nothing at 09:45; one row at 10:45 (the #343 `currentEvent` seam).
   - `TestI36_AnAskedReminderFollowsItsInstant`: an asked task due 10:00, armed 09:45; "a las 11" → moved to 10:45, one `correction.reminder.moved`.
   - `TestI29_FirstArmingOfAnAskedUnitMayBeAtOnce`: refused as past at capture; corrected to 2 minutes ahead → armed at once.
   - `TestI29_SecondCorrectionNeverCreatesAtOnce`: a unit that had a trigger, every lead behind → nothing.

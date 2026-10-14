@@ -67,9 +67,10 @@ instants, each tagged `asked`:
 
 `reminders(at, leads, …)` replaces `eventReminders`, with merging and `FollowSent` coverage
 unchanged. An asked lead that is behind while `at` is ahead becomes **at once** (PM default).
-**Too late:** an at-once asked arming whose instant, or whose day for a day-only one, ends within
-`AtOnceMarginMinutes` (5, §13, asserted equal to `scheduler.ProactiveCheckInterval`) is refused
-`too_late`, and the reply says so (spec R4, the 23:55 case).
+**Too late:** an at-once asked arming is refused `too_late` only when **less than**
+`AtOnceMarginMinutes` (5, §13, equal to `scheduler.ProactiveCheckInterval`) remain before its
+instant, or before the end of its local day for a day-only or "hoy" request (`end − now < 5 min`,
+strict): 23:55 → at once, 23:56 → refused. The reply says so (spec R4).
 
 **D4. The night.** An asked lead at a named time, and any asked at-once arming, skip both
 `dueAt`'s move and `deliverAt`'s quiet drop. So "a las 6:30" said at 06:20 rings at once, and
