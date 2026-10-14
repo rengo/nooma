@@ -83,7 +83,13 @@ client (if any). Read `CLAUDE.md`, `docs/07-functional.md` (flows) and the docs 
 - Time-dependent flows: when a flow cannot be reached in wall-clock time, say so and rely on
   the existing e2e tests (`go test -tags e2e -run <Name> ./test/e2e/...`), reporting them as
   such. State plainly what could not be exercised by hand.
-- Stop every process you start (fake LLM, `serve`) before returning.
+- Record the PID of every process you start (`cmd & pid=$!`) and stop only those PIDs before
+  returning. Never kill by name or pattern (`pkill`, `killall`, `pgrep -x nooma`, `kill $(pgrep ...)`):
+  the maintainer's real `nooma serve` has the same name as yours. A port already in use belongs to
+  someone else, usually that real server: pick another free port, never free it. (Why: a run
+  found 7777 taken, cleaned up with `kill $(pgrep -x nooma)` and killed the maintainer's server.)
+- Never `git stash` in the shared repository: a stash is global to every worktree, and another
+  agent can pop it.
 
 ## Rules
 
