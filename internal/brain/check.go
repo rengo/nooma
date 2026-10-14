@@ -319,6 +319,9 @@ type checkDetail struct {
 	// its event was no longer ahead (ADR-0032). It is empty on an overdue
 	// expiry, which is ADR-0009's and says nothing more.
 	Reason string `json:"reason,omitempty"`
+	// UnitID names the unit a row is about, on the rows that are not about a
+	// trigger.
+	UnitID string `json:"unit_id,omitempty"`
 	// Table names which of the two a conflict row is about, and is empty
 	// on the effect rows, where the action already says. Putting the
 	// table into Verdict instead would have made one field mean two

@@ -487,7 +487,8 @@ func (i37BrokenUnits) ByID(context.Context, string) (unit.Unit, error) {
 
 // TestI37_ACorruptUnitDoesNotStallAModernRow: a damaged unit row cannot abort
 // the pass, and with it every due timer and the digest: a reminder that names
-// its event is judged without the unit, and a stale one for that unit is held.
+// its event is judged without the unit, and the unit is reported once with its
+// id, however many rows it has.
 func TestI37_ACorruptUnitDoesNotStallAModernRow(t *testing.T) {
 	v := newI37Vault(t)
 	v.units = i37BrokenUnits{memrepo.NewUnits()}
@@ -512,4 +513,24 @@ func TestI37_ACorruptUnitDoesNotStallAModernRow(t *testing.T) {
 	if got := v.rows(ports.ActionCheckDeliveryFailed); len(got) != 2 {
 		t.Errorf("check.delivery_failed rows = %+v, want one per unit judged without its row", got)
 	}
+	all, _ := v.log.Since(context.Background(), time.Time{}, -1)
+	units := map[string]bool{}
+	for _, d := range all {
+		var c struct {
+			UnitID string `json:"unit_id"`
+		}
+		if d.Action == ports.ActionCheckDeliveryFailed && json.Unmarshal(d.Context, &c) == nil {
+			units[c.UnitID] = true
+		}
+	}
+	if !units["u1"] || !units["u2"] {
+		t.Errorf("delivery_failed contexts name units %v, want u1 and u2", units)
+	}
+}
+
+// newI37Today is Today over the vault's own stores.
+func newI37Today(v *i37Vault) *brain.TodayService {
+	cfg := memrepo.NewConfig()
+	return brain.NewTodayService(fixedClock{now: i37Now}, v.units, cfg, memrepo.NewState(), v.triggers, memrepo.NewPendingQuestions(), v.log,
+		brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()))
 }

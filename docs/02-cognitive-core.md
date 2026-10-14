@@ -1362,7 +1362,9 @@ box can audit it):
   names no event and its unit has since armed a one-shot reminder (a legacy row). A late or
   superseded row whose event is still ahead is **held**: not sent, not lapsed, and not carried by
   the digest or counted by Today, until the re-plan step (ADR-0032 point 3) arms its replacement
-  and retires it; only a past row is retired now, and an armed trigger overdue past ADR-0009's
+  and retires it. Superseded is judged before passed, so a moved row is held, not retired, while
+  its unit's new event is ahead; once that is past too the row has nothing to wait for and is
+  retired as `passed`. Only a past row is retired now, and an armed trigger overdue past ADR-0009's
   window expires as before. Only the digest lapses, so a past fired row stays `fired` until a
   digest is due while Today and the digest ignore it. Today applies the same gate and writes
   nothing (I27). A unit a pass cannot read is judged without it, for a reminder that names its own

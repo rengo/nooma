@@ -37,12 +37,12 @@ func (r checkRunner) reportUnreadable(ctx context.Context, now time.Time, commit
 		ids = append(ids, id)
 	}
 	slices.Sort(ids)
+	if !commit {
+		return nil
+	}
 	for _, id := range ids {
-		if !commit {
-			continue
-		}
 		if err := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
-			fmt.Sprintf("unit %q could not be read (%v), so its reminders were judged without it", id, r.unreadable[id]), checkDetail{}); err != nil {
+			fmt.Sprintf("unit %q could not be read (%v), so its reminders were judged without it", id, r.unreadable[id]), checkDetail{UnitID: id}); err != nil {
 			return err
 		}
 	}
@@ -58,11 +58,11 @@ func currentEvent(u unit.Unit) *time.Time { return u.EventAt }
 // does not judge (ADR-0009's window is a push's), nor one with no clock; a
 // one-shot row is judged late.
 // The unit is read for a reminder that names its event in the payload (to see
-// whether it moved) and for a legacy one that names none; one that tolerates an
-// unreadable unit is the former, a damaged unit row cannot stall a pass on it.
-// A legacy fired row is superseded when its unit has armed a one-shot of its
-// own since (D8). A nil port or a missing unit means unknown; any other read
-// error on a legacy row aborts the pass.
+// whether it moved) and for a legacy one that names none. A damaged unit row is
+// tolerated for the former, which is judged without it and reported, so it
+// cannot stall a pass; for a legacy row it aborts the pass. A legacy fired row
+// is superseded when its unit has armed a one-shot of its own since (D8). A
+// nil port or a missing unit means unknown.
 func (g reminderGate) judge(ctx context.Context, t ports.DueTrigger, fired bool, now time.Time) (prospection.Verdict, prospection.LapseReason, error) {
 	reminder := prospection.Reminder{
 		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,

@@ -75,7 +75,8 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	// A reminder whose event is past is lapsed before anything reads the list
-	// (ADR-0032); lateness is a push's window and does not judge it here.
+	// (ADR-0032). A late or superseded one-shot row is skipped, held for the
+	// re-plan step; a recurring one is not judged late (a push's window).
 	pending, past, err := splitPast(ctx, r.gate(), pending, now)
 	if err != nil {
 		return 0, 0, err

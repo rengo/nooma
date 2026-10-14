@@ -35,14 +35,17 @@ type Reminder struct {
 	// push's window) does not judge it.
 	Waiting bool
 	// Newer: the unit has armed a one-shot reminder of its own since (D8).
-	// Only a reminder that names no event can be superseded by it.
+	// Only a reminder that names no event can be superseded by it. "Since" is
+	// not known (a trigger carries no creation instant), so a legacy row can be
+	// held beside a reminder that was in fact armed before it: accepted.
 	Newer bool
 }
 
 // ReminderVerdict decides whether a reminder may be sent, in q's night
 // (ADR-0032 point 1), in this order:
 //
-//  1. It is superseded: Stale, LapseSuperseded. Its payload's event is not the
+//  1. It is superseded: Stale, LapseSuperseded, or LapsePassed when the unit's
+//     new event is past too. Its payload's event is not the
 //     unit's current one (compared to the second), or it names no event and
 //     the unit has armed a newer reminder. A lead, a rule or no event cannot
 //     be contradicted otherwise.
@@ -61,6 +64,11 @@ type Reminder struct {
 // recurring occurrence or a date-only event): past from the next local midnight.
 func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseReason) {
 	if r.superseded() {
+		// Held for a re-plan while the unit's new event is ahead; when it is
+		// past too there is nothing to re-plan and the row has passed.
+		if r.Current != nil && r.passed(*r.Current, now) {
+			return VerdictStale, LapsePassed
+		}
 		return VerdictStale, LapseSuperseded
 	}
 	if about, known := r.about(now.Location()); known && r.passed(about, now) {
@@ -84,7 +92,9 @@ func (r Reminder) superseded() bool {
 }
 
 // NamesEvent reports whether the reminder carries its own event (a payload
-// instant, a positive lead or a rule); only one that does not needs its unit read.
+// instant, a positive lead or a rule). One that does not needs its unit's event
+// to be judged at all; one whose event is the payload's reads the unit too, to
+// see whether it moved.
 func (r Reminder) NamesEvent() bool {
 	return !r.EventAt.IsZero() || r.LeadMinutes > 0 || r.Rule != nil
 }

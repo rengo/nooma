@@ -226,3 +226,26 @@ func TestReminderVerdict_SupersededOnlyFromEventAt(t *testing.T) {
 		}
 	}
 }
+
+// TestReminderVerdict_SupersededWhoseCurrentEventIsPastIsPassed: a moved
+// reminder is held while its unit's new event is ahead, so the unit can be
+// re-planned. When that event is past too there is nothing to re-plan and
+// nothing to hold for: the row has passed, and is retired as such.
+func TestReminderVerdict_SupersededWhoseCurrentEventIsPastIsPassed(t *testing.T) {
+	now := time.Date(2026, 10, 14, 10, 0, 0, 0, time.UTC)
+	q := DefaultQuietHours()
+	old := now.Add(-48 * time.Hour)
+	for _, tc := range []struct {
+		name string
+		r    Reminder
+		want LapseReason
+	}{
+		{"moved ahead: held", Reminder{FireAt: now.Add(-time.Hour), EventAt: old, Current: ptrTime(now.Add(24 * time.Hour))}, LapseSuperseded},
+		{"moved to another past instant: passed", Reminder{FireAt: now.Add(-time.Hour), EventAt: old, Current: ptrTime(now.Add(-time.Hour))}, LapsePassed},
+		{"a legacy row whose unit's event is past: passed", Reminder{FireAt: now.Add(-time.Hour), Newer: true, Current: ptrTime(now.Add(-time.Hour))}, LapsePassed},
+	} {
+		if v, reason := q.ReminderVerdict(tc.r, now); v != VerdictStale || reason != tc.want {
+			t.Errorf("%s = %q/%q, want stale/%q", tc.name, v, reason, tc.want)
+		}
+	}
+}
