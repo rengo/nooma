@@ -8,6 +8,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,6 +192,9 @@ func TestAdmin_UnsetFieldWriteLogs(t *testing.T) {
 	if ctx.Previous["goal_stagnation_days"] != float64(consolidation.DefaultGoalStagnationDays) || ctx.Next["goal_stagnation_days"] != float64(28) {
 		t.Errorf("context = %+v, want previous the default %d and next 28", ctx, consolidation.DefaultGoalStagnationDays)
 	}
+	if want := "the previous value was the default"; !strings.Contains(rows[0].Rationale, want) {
+		t.Errorf("rationale %q does not say %q", rows[0].Rationale, want)
+	}
 }
 
 // C5b: a corrupt stored value is not in force; submitting the fallback repairs it.
@@ -205,8 +209,32 @@ func TestAdmin_CorruptStoredValueIsRepaired(t *testing.T) {
 	if m := w.load(t).HysteresisMargin; m == nil || *m != 0 {
 		t.Errorf("HysteresisMargin = %v, want 0", m)
 	}
-	if rows := w.rows(t); len(rows) != 1 {
-		t.Errorf("%d log rows, want 1", len(rows))
+	rows := w.rows(t)
+	if len(rows) != 1 {
+		t.Fatalf("%d log rows, want 1", len(rows))
+	}
+	// previous is the value the runtime had in force (ResolveMargin's 0), not
+	// the corrupt -5 that was stored, and the rationale says why.
+	if c := decodeAdminRow(t, rows[0]); c.Previous["hysteresis_margin"] != float64(0) || c.Next["hysteresis_margin"] != float64(0) {
+		t.Errorf("context = %+v, want previous 0 (in force) and next 0", c)
+	}
+	if want := "the stored value -5 was invalid, so 0 was in force"; !strings.Contains(rows[0].Rationale, want) {
+		t.Errorf("rationale %q does not say %q", rows[0].Rationale, want)
+	}
+}
+
+// -0 parses as a negative zero; it must be stored and logged as 0.
+func TestAdmin_NegativeZeroIsStoredAndLoggedAsZero(t *testing.T) {
+	w := newAdminWorld(t, true)
+	if _, err := w.svc.Update(context.Background(), ConfigHysteresisMargin, "-0"); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if m := w.load(t).HysteresisMargin; m == nil || math.Signbit(*m) {
+		t.Errorf("HysteresisMargin = %v, want a positive zero", m)
+	}
+	rows := w.rows(t)
+	if len(rows) != 1 || strings.Contains(string(rows[0].Context), "-0") || strings.Contains(rows[0].Rationale, "-0") {
+		t.Errorf("rows = %+v, want one row that never prints -0", rows)
 	}
 }
 

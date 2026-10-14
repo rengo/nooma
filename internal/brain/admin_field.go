@@ -78,6 +78,9 @@ func parseFloatField(f ConfigField, raw string) (float64, error) {
 	if err != nil {
 		return 0, f.refuse(raw)
 	}
+	if v == 0 {
+		v = 0 // -0 is 0: store and log one zero, not "-0"
+	}
 	return v, nil
 }
 

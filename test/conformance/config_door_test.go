@@ -68,7 +68,7 @@ func TestConfigSettersAreCalledOnlyInsideTheLoggedDoor(t *testing.T) {
 	}
 }
 
-// configDoorViolations returns one message per call to a config setter in src
+// configDoorViolations returns one message per reference to a config setter in src
 // (a file at repo-relative path name) that is not inside a function literal
 // passed to write in internal/brain/admin*.go.
 func configDoorViolations(t *testing.T, name, src string) []string {
@@ -88,18 +88,14 @@ func configDoorViolations(t *testing.T, name, src string) []string {
 			return true
 		}
 		stack = append(stack, n)
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
+		sel, ok := n.(*ast.SelectorExpr)
 		if !ok || !slices.Contains(configSetterNames, sel.Sel.Name) {
 			return true
 		}
 		if !inDoorFile || !insideWriteClosure(stack) {
-			out = append(out, fmt.Sprintf("%s: %s is called outside the logged door "+
+			out = append(out, fmt.Sprintf("%s: %s is referenced outside the logged door "+
 				"(a function literal passed to write in internal/brain/admin*.go): "+
-				"a config write must record its config.updated row", fset.Position(call.Pos()), sel.Sel.Name))
+				"a config write must record its config.updated row", fset.Position(sel.Pos()), sel.Sel.Name))
 		}
 		return true
 	})
@@ -146,6 +142,10 @@ func (s *S) applyHysteresisMargin(ctx C, v float64) error {
 			"package brain\nfunc (s *S) f() { run(func() { s.cfg.SetMentalLoadThreshold(ctx, 1, at) }) }", 1},
 		{"a write closure outside the door files fires", "internal/brain/preferences.go",
 			"package brain\nfunc (s *S) f() { s.write(a, func(at T) error { return s.cfg.SetConsolidationEnabled(ctx, true, at) }) }", 1},
+		{"a method value taken outside the door fires", "internal/brain/preferences.go",
+			"package brain\nfunc (s *S) f() { g := s.cfg.SetWeightThreshold; g(ctx, 1, at) }", 1},
+		{"a method value inside the door file but outside write fires", "internal/brain/admin_write.go",
+			"package brain\nfunc (s *S) f() { g := s.cfg.SetWeightThreshold; _ = g }", 1},
 		{"a method that is not a setter is silent", "internal/brain/preferences.go",
 			"package brain\nfunc (s *S) f() { s.cfg.SetReminderPrefs(ctx, u, at) }", 0},
 	} {
