@@ -14,8 +14,8 @@ opens.
 | 3 | ~190 | ~230 | Medium: I29, I35 amendments |
 | 4 | ~110 | ~120 | Low |
 
-PR 0a/0b/0c: the plan chain (ADR-0031 + proposal + spec; design + tasks; design-repeating + tasks-repeating).
-- [x] 0.1 Written; client answers and review round 1 folded in.
+Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating; tasks-repeating.
+- [x] 0.1 Written; client answers and review rounds 1-2 folded in.
 
 ## PR 1 — `feat/remind-me-decision` (D1-D4 core, D6)
 
@@ -45,6 +45,8 @@ PR 0a/0b/0c: the plan chain (ADR-0031 + proposal + spec; design + tasks; design-
   - `TestArmUnasked_EveryExistingArmAndFollowTestUnchanged`: the existing suite stays green.
   - `TestParseRemindMeLead_Bounds`: 0 → error, 1 → ok, 43200 → ok, 43201 → error, NULL → 15.
   - `TestAtOnceMarginMatchesProactiveInterval`.
+  - `TestVerdict_NightExemptOverdueFromFireAt`: an exempt 03:00 row at 09:05, with a 6 h window → stale `overdue`; an unexempt one → deferred, then delivered (round 2, item 3).
+  - `TestVerdict_AskedNamedMidnightPassesAtMidnight`: an asked row about 10-16 00:00 with no `day_only` → `passed` at 00:00, not at the next midnight (item 4). `TestVerdict_UnaskedMidnightKeepsDayGranular`.
 - [ ] 1.4 GREEN; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
 
 ## PR 2 — `feat/remind-me-one-shot` (D5, D7, D8, D4 scan; first usable)
@@ -70,6 +72,8 @@ PR 0a/0b/0c: the plan chain (ADR-0031 + proposal + spec; design + tasks; design-
   - `TestI36_UnaskedTaskDueAtEditMovesNothing`.
   - `TestI35_ALeadChangeMovesAskedReminders`: 15 → 30 min → 09:30, `config.reminder.moved`.
   - `TestI35_LeadOnlySaveReArms`; `TestI35_NoOpSaveTouchesNoAskedReminder`.
+  - `TestI35_LeadOnlySaveLeavesAskedDayOnlyAtDateOnlyAt`: an asked day-only reminder at 09:00; the lead goes 15 → 30 → still 09:00, not 23:30 the day before (item 8).
+  - `TestI35_DateOnlyAtSaveMovesAskedDayOnly`: 09:00 → 08:30 → moved to 08:30, `config.reminder.moved`.
   - `TestCatchUpUsesTheAskedLeadSet` (if #339 link 4 is in).
 - [ ] 3.2 GREEN; I29 and I35 rows amended; doc 02 §5 step 4, §7; `make check-all`.
 

@@ -12,13 +12,14 @@
 | Observed: a `task` with a `due_at`, no trigger, and the reply "Anotado." | client vault, 2026-10-14 |
 | `Arm` arms `timer`, `event` and `recurring_reminder`, and nothing else | `core/prospection/arm.go` |
 | `eventReminders` plans the leads (`reminderInstants`), moves each out of the night (`dueAt`), and **drops** a past lead when now is quiet (`deliverAt`, `reminders.go:61-71`) | `prospection/reminders.go` |
-| Day only is inferred from local midnight (`reminders.go:174`). A bare date on a DST day without midnight lands at 01:00 | `reminders.go`, `classify/prompt.go:293` |
+| Day only is inferred from local midnight (`isDateOnly`, `reminders.go:189`). A bare date on a DST day without midnight lands at 01:00 (Chile, `classify/prompt.go:290-296`) | `reminders.go` |
 | The decoder knows whether the model wrote `YYYY-MM-DD` or a timestamp (`dateOnlyLayout`) | `classify/decode.go:11` |
 | A correction follows `event_at` of an `event` only, and never creates an at-once reminder (I29) | `brain/correction_reminder.go:23-41`, `follow.go:56-57` |
 | The preference re-arm keeps `event` units with `event_at` ahead | `brain/preferences_rearm.go:49` |
 | Check-in resolution engages `Delivered()[0]` from the model's outcome, before any phrase logic could run | `brain/checkin.go:19-55`, `capture.go:302` |
 | The migration runner already rejects a gap or a duplicate version | `internal/store/sqlite/migrate_test.go:55` |
-| `ReminderVerdict` reads the payload's `event_at` first, treats day-granular events (`isDateOnly`, or a rule) as passed from the next local midnight, and defers through quiet hours | `core/prospection/reminder.go:53-110` |
+| `ReminderVerdict` reads the payload's `event_at` first, treats day-granular events (`isDateOnly`, or a rule) as passed from the next local midnight, and defers through quiet hours, measuring overdue from quiet end (`staleness.go:116`) | `core/prospection/reminder.go:53-110` |
+| `DueTrigger` carries no `created_at` | `ports/triggerrepo.go` |
 
 ## 2. Decisions
 
@@ -96,7 +97,10 @@ runner test on rebase (ground truth). Payload keys, per row shape:
 - `about` is `event_at`, else `occurs_at` (link 7), else as it does today.
 - A row with `day_only` is passed from the next local midnight, whatever the hour of its midnight
   (the DST case). So an asked day-only row firing at 09:00 is not passed.
-- `night_exempt` skips `Defer`.
+- `night_exempt` skips `Defer`, and its overdue is measured from `fire_at`, not from quiet end, so
+  an exempt 03:00 reminder is not sent at 09:00 (`verdict(fireAt, fireAt, …, nil)`, as for timers).
+- An asked row (`asked` set) is judged day-granular **only** by its `day_only` key, so an asked
+  named midnight passes at midnight. Rows without `asked` keep the `isDateOnly` heuristic.
 
 **D6. Prefs.** `RemindMeLead` and `DefaultRemindMeLeadMinutes = 15`. `ParseRemindMeLead` accepts
 1 minute to `max_event_lead_days`, and `ResolveReminderPrefs` gains the argument.
@@ -128,7 +132,10 @@ Completeness is swept over both languages.
   read if that has not landed). A capture refusal followed by a correction, and the ask-back time
   answer, both rely on this.
 - **Re-arm:** the preference re-arm adds `RemindMe` units with their instant ahead. Lead-only
-  saves re-arm. **I35 is amended** (asked units re-arm).
+  saves re-arm. **I35 is amended** (asked units re-arm). It reads `asked` and `day_only` from the
+  unit's **armed rows' payload**, never from the unit's midnight, so a lead-only save leaves an
+  asked day-only reminder at `DateOnlyAt`, and a `DateOnlyAt` save moves it to the new time.
+  A unit with no armed row is not re-armed (ADR-0029 point 6).
 - **Stop:** from link 6, every one of these paths skips a stopped unit.
 
 ## 3. Invariants and doc amendments
@@ -152,10 +159,23 @@ Completeness is swept over both languages.
 | 3 | `feat/remind-me-follows` | D9 | ~190 | corrections and lead changes move it |
 | 4 | `feat/remind-me-preference-ui` | the lead on `/ui/preferences` | ~110 | lead editable |
 | 5 | `feat/question-store-widens` | `design-repeating.md` D10-D13 | ~220 | — |
-| 6 | `feat/remind-me-stop` | D20-D24 | ~360 | "no me lo recuerdes más" |
+| 6 | `feat/remind-me-stop` | D20-D24 | ~390 | "no me lo recuerdes más" |
 | 7 | `feat/recurring-rearm` | D30-D35 | ~380 | "todos los días a las 9pm"; birthdays re-arm |
 | 8 | `feat/remind-me-ask-back` | D40-D43 | ~300 | "recordame X" asks; "No" makes it daily |
 | 9 | `feat/remind-me-done` | D50-D52 | ~260 | bare "listo" |
 
 Dependencies: 1 → 2 → 3 → 4. Link 5 stands alone. Link 6 needs 2 and 5. Link 7 needs 6. Link 8
 needs 3, 5, 6 and 7. Link 9 needs 6 and 7.
+
+**Seam with ADR-0032's unlanded links 3-7** (link 3 is in progress):
+
+- `CatchUp` and `OneShotForUnit`: if they are absent when link 3 lands, D9 uses a
+  `CountForUnit` read, and `CatchUp` takes `leadSet` when it lands.
+- The renderer's `About`: until it lands, the frozen `payload.action` is sent. Link 7's
+  `occurs_at` is read by whichever renderer exists.
+- `units.language`: independent.
+- **Every ADR-0032 link that arms or sends honours `reminder_stopped_at` from link 6 on**, by
+  structure. The guard sits inside the SQL of `Create`/`Reschedule`, and the stop verdict inside
+  `judgeReminder`, so no caller can bypass either. `TestEveryCreateCallerSkipsErrUnitStopped`, an
+  AST sweep of `brain`, fails a caller that aborts its pass on `ErrUnitStopped` instead of
+  skipping and recording it.
