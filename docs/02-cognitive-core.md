@@ -1544,11 +1544,16 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   pre-image already follows ([ADR-0016](adr/0016-correction-pre-image.md)), because a belief has
   no history table; a retirement records after its status write, because nothing is overwritten
   (the row keeps its content). A claim writes the same `belief.edited` row with `claimed: true`
-  and the new content equal to the previous. A change of the user's reminder preferences writes
+  and the new content equal to the previous. A change of the user's reminder preferences, or of
+  one of the five admin settings (`weight_threshold`, `hysteresis_margin`,
+  `goal_stagnation_days`, `mental_load_threshold`, `consolidation_enabled`), writes
   `config.updated` with the fields it changed and their values in force before and after, after
   its config write: a number or a time replaced is not text lost, and a refused or failed write
-  must not leave a row asserting a change. Submitting the values already in force writes
-  nothing. When the write lands and its row or its learning signal cannot be
+  must not leave a row asserting a change. The value in force is the default when the column was
+  never set. Submitting the values already in force writes nothing, and on a vault with no config
+  row submitting a default creates neither the row nor a log entry; a stored value outside what
+  the runtime accepts is not in force, so submitting the value the runtime fell back to repairs
+  it and is logged. When the write lands and its row or its learning signal cannot be
   written, the act stands and is not reported as a failure: the mirror says which part is
   missing.
 - **Pull**: everything is recorded and explorable in the activity UI.

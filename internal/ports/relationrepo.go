@@ -40,13 +40,15 @@ type LearnedThreshold struct {
 
 // RelationRepo is the repository port over relations — design D8, spec R5.3.
 //
-// Five methods, and each has a real caller (design D8's own rule for adding
-// a port method): Upsert is the judge's persist step (PR 11c), ByUnit is
-// Phase C's read-only units route showing a unit's related units,
-// ThresholdsFor is what feeds relation.Resolve — the two are meant to be
-// called together, never ThresholdsFor alone with nothing to resolve —
-// Evidence is strengthen's co-use join (design §4.2), and ExistingPairs is
-// connect's exclusion lookup (design §4.2).
+// Every method has a real caller (design D8's own rule for adding a port
+// method): Upsert is the judge's persist step (PR 11c), ByUnit is Phase C's
+// read-only units route showing a unit's related units, ThresholdsFor is
+// what feeds relation.Resolve — the two are meant to be called together,
+// never ThresholdsFor alone with nothing to resolve — Evidence is
+// strengthen's co-use join (design §4.2), ExistingPairs is connect's
+// exclusion lookup (design §4.2), ByID and Delete serve the confirm path
+// (m3e), and LearnedThresholds is brain.AdminService.View's read of the
+// learned pairs (m4e2-admin).
 //
 // No Delete*-prefixed method — keeps
 // test/conformance/i03_units_never_deleted_test.go's strengthened prefix set
@@ -90,7 +92,7 @@ type RelationRepo interface {
 
 	// LearnedThresholds returns every relation_thresholds row ordered by
 	// relation_type, for the admin page to show read-only (m4e2-admin design
-	// §3.2). An empty table returns an empty slice and a nil error.
+	// §3.2). An empty table returns a nil slice and a nil error, as both stores do.
 	LearnedThresholds(ctx context.Context) ([]LearnedThreshold, error)
 
 	// Evidence returns every relation joined to both endpoints'

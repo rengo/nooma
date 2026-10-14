@@ -21,7 +21,8 @@ type Config struct {
 	// design §3.4's "no migration seeds it" rule at the fake's own
 	// zero-value level.
 	row *ports.VaultConfig
-	// updatedAt is the instant of the last write that stamps one.
+	// updatedAt is the instant of the last write; every write stamps it, as
+	// the real store's UPSERTs do.
 	updatedAt time.Time
 }
 
@@ -55,38 +56,26 @@ func (c *Config) Load(_ context.Context) (ports.VaultConfig, error) {
 // PR 6's sqlite implementation proves that half). When the row already
 // exists, only ConsolidationLastRunAt changes.
 func (c *Config) RecordConsolidationRun(_ context.Context, at time.Time) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.row == nil {
-		c.row = &ports.VaultConfig{}
-	}
-	c.row.ConsolidationLastRunAt = &at
-	return nil
+	return c.set(at, func(r *ports.VaultConfig) { r.ConsolidationLastRunAt = &at })
 }
 
 // SetReminderPrefs implements ports.ConfigRepo: each non-nil field of u
 // replaces its own, lazily creating the row as RecordConsolidationRun does.
-func (c *Config) SetReminderPrefs(_ context.Context, u ports.ReminderPrefsUpdate, _ time.Time) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.row == nil {
-		c.row = &ports.VaultConfig{}
-	}
-	for _, f := range []struct {
-		to **string
-		v  *string
-	}{
-		{&c.row.EventReminderLeads, u.EventReminderLeads}, {&c.row.DateOnlyReminderAt, u.DateOnlyReminderAt},
-		{&c.row.QuietHoursEnd, u.QuietHoursEnd}, {&c.row.EveningReminderAt, u.EveningReminderAt},
-	} {
-		if f.v != nil {
-			v := *f.v
-			*f.to = &v
+func (c *Config) SetReminderPrefs(_ context.Context, u ports.ReminderPrefsUpdate, at time.Time) error {
+	return c.set(at, func(r *ports.VaultConfig) {
+		for _, f := range []struct {
+			to **string
+			v  *string
+		}{
+			{&r.EventReminderLeads, u.EventReminderLeads}, {&r.DateOnlyReminderAt, u.DateOnlyReminderAt},
+			{&r.QuietHoursEnd, u.QuietHoursEnd}, {&r.EveningReminderAt, u.EveningReminderAt},
+		} {
+			if f.v != nil {
+				v := *f.v
+				*f.to = &v
+			}
 		}
-	}
-	return nil
+	})
 }
 
 // set lazily creates the row (every other field nil, as in

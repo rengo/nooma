@@ -196,6 +196,9 @@ func RunRecordConsolidationRun(t *testing.T, newRepo func(t *testing.T) ConfigHa
 			t.Errorf("Load().GoalStagnationDays = %v, want the seeded %d untouched by two "+
 				"RecordConsolidationRun calls", got.GoalStagnationDays, goalDays)
 		}
+		if u := repo.UpdatedAt(t); !u.Equal(second) {
+			t.Errorf("updated_at = %v, want the second write's instant %v", u, second)
+		}
 	})
 }
 
@@ -255,6 +258,9 @@ func RunSetReminderPrefs(t *testing.T, newRepo func(t *testing.T) ConfigHarness)
 		}
 		if got.GoalStagnationDays == nil || *got.GoalStagnationDays != goalDays {
 			t.Errorf("GoalStagnationDays = %v, want the seeded %d untouched", got.GoalStagnationDays, goalDays)
+		}
+		if u := repo.UpdatedAt(t); !u.Equal(at) {
+			t.Errorf("updated_at = %v, want the write's instant %v", u, at)
 		}
 	})
 

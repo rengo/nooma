@@ -136,14 +136,17 @@ Files: `internal/ports/{configrepo,relationrepo,decisionlog}.go`,
 Files: `internal/brain/{admin,admin_field,admin_write}.go`(+tests),
 `test/conformance/config_door_test.go`, `docs/02-cognitive-core.md` §11.
 
-- [ ] **1b.1** SCAFFOLD — `ConfigField` closed type, `ParseConfigField` (unknown ->
+- [x] **1b.1** SCAFFOLD — `ConfigField` closed type, `ParseConfigField` (unknown ->
   `ErrUnknownConfigField`), `*ConfigRangeError`, `AdminRecentEffectRows = 10`, `AdminService`
   exporting only `View` and `Update` (zero values), `NewAdminService(clock, cfg, rels, log)`,
   `admin_write.go` `write(ctx, field, previous, next any, apply func(at time.Time) error) error`
   holding the file's single `s.clock.Now()`; five unexported `apply...` appliers (never `Set...`).
+  *Applied differently:* `NewAdminService` also takes the `ports.IDGen` a `Decision` needs
+  (`clock, ids, cfg, rels, log`); `write` takes a `note` for the default / invalid-stored suffix of
+  the rationale. No separate scaffold commit: RED was run against stubbed `View`/`Update`.
   Per the m4c scaffold precedent, reference unexported symbols from the stubs so `unused` stays
   quiet.
-- [ ] **1b.2** RED brain (FX-C; second fixture with no config row): C3 `TestAdmin_Ranges` (margin
+- [x] **1b.2** RED brain (FX-C; second fixture with no config row): C3 `TestAdmin_Ranges` (margin
   `0` ok, weight `2.0` ok and `nextafter(2,3)` rejected, `NaN`/`±Inf` rejected, days `1` ok / `0`
   rejected), C4 `…SameValueLogsNothing` and `…DefaultOnAbsentRowWritesNothing`, C5
   `…UnsetFieldWriteLogs`, C5b `…CorruptStoredValueIsRepaired` (margin `-5`), C6 each field moves
@@ -153,19 +156,19 @@ Files: `internal/brain/{admin,admin_field,admin_write}.go`(+tests),
   fields and one row per write, C15 the row `Update` writes decodes through
   m4e-activity's `ActivityService` (`Change` non-nil), C16 `…RejectedInputWritesNothing`, C17
   `TestAdminServiceExportsOnlyViewAndUpdate`.
-- [ ] **1b.3** RED conformance — `config_door_test.go` `TestConfigSettersAreCalledOnlyInsideTheLoggedDoor`
+- [x] **1b.3** RED conformance — `config_door_test.go` `TestConfigSettersAreCalledOnlyInsideTheLoggedDoor`
   (G5, AST over non-test `internal/**` and `cmd/**` excluding `internal/store/**`: every call to
   one of the five setter selectors sits in a `FuncLit` passed to `write` in
   `internal/brain/admin*.go`) with self-proof rows: a direct `s.cfg.SetHysteresisMargin(...)`
   fires, the five closures are silent.
-- [ ] **1b.4** GREEN — parse per field (exact `true`/`false`, `Atoi`, `ParseFloat`); accept iff
+- [x] **1b.4** GREEN — parse per field (exact `true`/`false`, `Atoi`, `ParseFloat`); accept iff
   `Resolve(&v) == v`; unchanged iff `effective == v && (stored == nil || *stored == v)`; `write`:
   `apply(now)` then `Record(config.updated)` with the same `now`; log row
   `{fields:[col], previous:{col:v}, next:{col:v}}`, `previous` the value in force; `View`:
   `Load`, `LearnedThresholds`, `relation.Resolve(nil)`, `Before(nil, "consolidate.", 10)`.
-- [ ] **1b.5** DOCS — doc 02 §11 (`:1237-1240`) adds "a config change" to m4e's belief sentence.
+- [x] **1b.5** DOCS — doc 02 §11 (`:1237-1240`) adds "a config change" to m4e's belief sentence.
   Verify `scripts/docs-sync.sh`.
-- [ ] **1b.6** PROBES C3 `> 0` margin / `< 2` weight; C4 compare stored pointer only; C5 skip as
+- [x] **1b.6** PROBES C3 `> 0` margin / `< 2` weight; C4 compare stored pointer only; C5 skip as
   unchanged / `previous: null`; C5b treat as no-op; C6 crossed wiring; C7 record-first; C9
   prefix `""` / wrong limit; C10 zero time; C12 `ParseBool`; C14 positional / no `fields` /
   extra row on no-op; C15 a shape the decoder rejects; C16 log first; C17 add a `Set...` method;
@@ -215,4 +218,6 @@ Files: `internal/ui/{admin.go,admin.templ,ui.go,layout.templ}`, `internal/httpap
 - [ ] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
-- [ ] **C.2** After 1a merges compute actual / estimate and apply the cut rule before 1b.
+- [x] **C.2** After 1a merges compute actual / estimate and apply the cut rule before 1b. *Recorded:*
+  1a measured 117 impl+docs lines (28 of them these tick lines) against ~140 estimated, a
+  multiplier of 0.84; 1b's ~190 x 0.84 is ~160, so no cut was needed.

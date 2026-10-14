@@ -95,7 +95,8 @@ unchanged write logs nothing.
 - **"Unchanged" is judged against the effective value.** A submission equal to the value in force
   is a no-op: on a vault with no config row, submitting a field's default writes nothing, creates
   no row and logs nothing. A stored value that is corrupt (non-nil but outside the accepted set)
-  is not "in force": submitting the default repairs it and logs.
+  is not "in force": submitting the runtime's fallback value for it (the default, except for
+  `hysteresis_margin`, whose fallback is 0, `focus.ResolveMargin`) repairs it and logs.
 - **Write order.** The config write happens first and its log row second (the previous value was
   already read by `Load`, so nothing is lost by writing first), and a rejected or failed write
   logs nothing. If the log row fails after the write landed, the user is told the value was saved
