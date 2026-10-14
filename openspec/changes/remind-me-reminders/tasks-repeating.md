@@ -31,7 +31,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
 - [ ] 6.2 RED, the I38 row:
   - `TestI38_StopStopsTheNamedReminder`: two asked reminders; "no me recuerdes más lo del gas" → only the gas one is dismissed.
   - `TestI38_StopIsDurableAgainstCorrection`: stop, then a date correction → nothing armed (item 3).
-  - `TestI38_StopIsDurableAgainstRePlanAndPreferences`: #339's re-plan and a lead change → nothing armed.
+  - `TestI38_StopIsDurableAgainstRePlanAndPreferences`: #344's re-plan (`replanUnit`) and a lead change → nothing armed.
   - `TestI38_StopWinsTheRaceWithReArm`: a guarded insert after the tombstone → `ErrUnitStopped`.
   - `TestI38_LastDeliveryBindsOnlyIfNothingLaterWasSent`: the asked reminder delivered, then an unasked push → `which_reminder` asked (item 10).
   - `TestI38_AmbiguousStopAsksWhichAndKeepsTheIntent`: answer "2" → the second is stopped.
@@ -63,7 +63,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestPrecedence_NewReminderQuestionExpiresTheOlder` (each reminder-kind pair);
   - `TestPrecedence_TieOrderByKind`.
 - [ ] 6.4 RED L3 contract: `TriggerRepo.Dismiss` armed → dismissed, any other status → conflict; `LastDeliveries` returns every tied row; guarded `Create`. The I03 sweep stays green. The link-6 tests seed open questions through `PendingQuestionRepo.Ask`.
-- [ ] 6.5 GREEN: M3, the guards on every arming path, the reply; doc 02 §5, §11; doc 03; doc 07; `make check-all`.
+- [ ] 6.5 GREEN: M3, the guards on every arming path, the reply; the I38 row in doc 06 §4; the `stopped` lapse reason in doc 02 §7/§11 and doc 03; doc 02 §5; doc 07; `make check-all`.
 
 ## PR 7 — `feat/recurring-rearm` (D30-D35)
 
@@ -78,6 +78,8 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestSuccessor_RefusesNilAnchor` → `ErrNoAnchor`; the pass goes on (item 11).
   - `TestSuccessor_ClampedDailyNoSecondFireOnDayOne`: a daily captured at 10:00 for 12:00 (clamped, fired 10:00) → the successor is not before 00:00 the next local day (round 3, item 8).
   - `TestRouteTrigger_AskedRecurringIsPushed`: degraded interrupt → push (round 3, item 9). `TestGate_AskedRecurringIsNotWaiting`: a fired asked recurring row → not `Waiting`, judged as a push.
+  - `TestGate_AskedRecurringJudgedByOccursAt`: an asked night-exempt daily, `occurs_at` 06:30, quiet end 08:00 → at 06:30, `about` is `occurs_at` (not `NextOccurrence(fire_at)`) and `Deliver`, never `passed` nor `Defer`; at 12:31 → `Stale` `overdue` (6 h from `fire_at`); an asked "No" daily at 09:00 with quiet end 10:00 → `Defer` until 10:00.
+  - `TestGate_UnaskedRecurringJudgedByOccursAtDayGranular`: an unasked birthday row with `occurs_at` 10-20 12:00 → not passed at 23:59 on 10-20; `passed` from 10-21 00:00 local; `Waiting` when fired.
   - `TestAnchorTimeRoundTrip`, `TestNextOccurrenceUsesAnchorTime`.
 - [ ] 7.2 RED, I36 recurring:
   - `TestI36_AnAskedRecurrenceIsARecurringTask`: "todos los días a las 9pm" → a `task`; the row has `occurs_at` 21:00 and `night_exempt`.
@@ -93,7 +95,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestI36_BirthdayCorrectionKeepsOccursAt`: a corrected unasked recurring row → `occurs_at` is the new occurrence (item 12).
   - `TestI36_CorrectedLegacyClampedRowIsNotLate`: a clamped legacy daily, corrected → `occurs_at` written, the successor is not 7 days late (item 11).
   - `TestRecurringRootsLatestStatus` (L3, by id prefix); `TestCheckReportCountsReArms` (I12); `TestDryRunCreatesNoSuccessorAndNoRepair`.
-- [ ] 7.3 GREEN: `LegacyOccurrence`, `RecurringRoots`, `RouteTrigger`'s asked branch; doc 02 §7 "Recurrence" (the re-arm becomes true; P2 stated as a change); doc 07; corpus case `classify-task-remind-me-daily-pills.json`; `make check-all`.
+- [ ] 7.3 GREEN: `LegacyOccurrence`, `RecurringRoots`, `RouteTrigger`'s asked branch, the gate rule (design-repeating D30); doc 03 (anchor `hour`/`minute`, the `occurs_at` key); doc 02 §11 (`check.trigger.rearmed`); doc 02 §7 "Recurrence" (the re-arm becomes true; P2 stated as a change); doc 07; corpus case `classify-task-remind-me-daily-pills.json`; `make check-all`.
 
 ## PR 8 — `feat/remind-me-ask-back` (D40-D43; needs links 3, 5, 6, 7)
 
