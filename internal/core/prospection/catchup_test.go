@@ -33,6 +33,7 @@ func TestCatchUp(t *testing.T) {
 		{"one sent about another instant covers nothing", event, nil, []Sent{about(day(9, 0))}, day(10, 0), true, day(10, 0), "", true},
 		{"the event has passed", event, nil, nil, day(11, 0), false, time.Time{}, "", false},
 		{"a date-only event on its own day", day(0, 0), nil, nil, day(10, 0), true, day(10, 0), "", true},
+		{"a date-only event in quiet hours on its own day: at quiet end", day(0, 0), nil, nil, day(6, 0), true, day(7, 0), "", false},
 		{"a date-only event once its day ended", day(0, 0), nil, nil, day(0, 0).AddDate(0, 0, 1), false, time.Time{}, "", false},
 		{"in quiet hours: at quiet end, before the event", day(7, 30), nil, nil, day(6, 0), true, day(7, 0), "", false},
 		{"in quiet hours with quiet end at the event: refused", day(7, 0), nil, nil, day(6, 0), true, time.Time{}, RefusalQuietHours, false},
@@ -56,7 +57,7 @@ func TestCatchUp(t *testing.T) {
 			if plan.What != ArmTrigger || !plan.FireAt.Equal(tc.wantFire) || !plan.About.Equal(tc.event) || plan.Immediate != tc.immediate {
 				t.Errorf("plan = %+v, want a trigger at %v about %v (immediate %v)", plan, tc.wantFire, tc.event, tc.immediate)
 			}
-			if tc.immediate && plan.LeadMinutes != 0 || !tc.immediate && plan.LeadMinutes != int(tc.event.Sub(tc.wantFire)/time.Minute) {
+			if tc.immediate && plan.LeadMinutes != 0 || !tc.immediate && plan.LeadMinutes != max(0, int(tc.event.Sub(tc.wantFire)/time.Minute)) {
 				t.Errorf("LeadMinutes = %d for a catch-up at %v of an event at %v", plan.LeadMinutes, tc.wantFire, tc.event)
 			}
 		})

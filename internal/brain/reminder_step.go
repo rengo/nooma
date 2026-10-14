@@ -210,49 +210,26 @@ func (r checkRunner) armCatchUp(ctx context.Context, u unit.Unit, plan prospecti
 			attempt = n + 1
 		}
 	}
-	for range 2 {
-		trigger := armedTrigger(prefix+strconv.Itoa(attempt), &u.ID, u.Content, plan, now)
-		trigger.Payload.CatchUp = true
-		err := r.triggers.Create(ctx, trigger)
-		switch {
-		case err == nil:
-			tally.armed++
-			w := reminderSet{log: r.log, ids: r.ids, cause: checkCause()}
-			return w.recordReminder(ctx, ports.ActionCheckReminderArmed,
-				fmt.Sprintf("armed a catch-up (attempt %d) for unit %q: %s", attempt, u.ID, armRationale(plan)),
-				reminderChange{UnitID: u.ID, TriggerID: trigger.ID, Fields: []string{"fire_at"},
-					Previous: map[string]any{"fire_at": nil}, Next: map[string]any{"fire_at": rfc3339(plan.FireAt)},
-					About: rfc3339(plan.About), Immediate: plan.Immediate}, now)
-		case errors.Is(err, ports.ErrTriggerExists):
-			// Another pass took this number and has recorded it, or the id is a
-			// stale row's (a catch-up moved off its instant and back): only the
-			// first is a reason to stop.
-			if taken, err := r.catchUpInPlay(ctx, u.ID, trigger.ID); err != nil || taken {
-				return err
-			}
-			attempt++
-		default:
-			return fmt.Errorf("check: arm a catch-up for unit %q: %w", u.ID, err)
-		}
+	trigger := armedTrigger(prefix+strconv.Itoa(attempt), &u.ID, u.Content, plan, now)
+	trigger.Payload.CatchUp = true
+	err = r.triggers.Create(ctx, trigger)
+	switch {
+	case err == nil:
+		tally.armed++
+		w := reminderSet{log: r.log, ids: r.ids, cause: checkCause()}
+		return w.recordReminder(ctx, ports.ActionCheckReminderArmed,
+			fmt.Sprintf("armed a catch-up (attempt %d) for unit %q: %s", attempt, u.ID, armRationale(plan)),
+			reminderChange{UnitID: u.ID, TriggerID: trigger.ID, Fields: []string{"fire_at"},
+				Previous: map[string]any{"fire_at": nil}, Next: map[string]any{"fire_at": rfc3339(plan.FireAt)},
+				About: rfc3339(plan.About), Immediate: plan.Immediate}, now)
+	case errors.Is(err, ports.ErrTriggerExists):
+		// Another pass took this attempt between the scan above and this create,
+		// and records it. The scan already counts every id used before then, so
+		// there is no number to try next.
+		return nil
+	default:
+		return fmt.Errorf("check: arm a catch-up for unit %q: %w", u.ID, err)
 	}
-	return nil
-}
-
-// catchUpInPlay is whether the catch-up id is a reminder of its unit that is
-// armed or has been sent: a live one another pass just made.
-func (r checkRunner) catchUpInPlay(ctx context.Context, unitID, id string) (bool, error) {
-	armed, err := r.triggers.ArmedForUnit(ctx, unitID)
-	if err != nil {
-		return false, fmt.Errorf("check: read the reminders of unit %q: %w", unitID, err)
-	}
-	if slices.ContainsFunc(armed, func(t ports.DueTrigger) bool { return t.ID == id && t.Payload.CatchUp }) {
-		return true, nil
-	}
-	fired, err := r.triggers.FiredForUnit(ctx, unitID)
-	if err != nil {
-		return false, fmt.Errorf("check: read the reminders sent for unit %q: %w", unitID, err)
-	}
-	return slices.ContainsFunc(fired, func(f ports.FiredTrigger) bool { return f.ID == id && f.Payload.CatchUp }), nil
 }
 
 // refuse says that no reminder could be sent for a unit that is left with none:
