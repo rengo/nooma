@@ -39,27 +39,6 @@ func (v *i37Vault) reasons(action ports.DecisionAction) []string {
 	return out
 }
 
-// TestI37_SupersededRowIsHeldNotRetired: a correction moved the event ahead,
-// so the reminder about the old date is never sent. It is not lapsed either:
-// the unit still needs the reminders of its new date, and only the re-plan step
-// arms them before it retires the old row. Until then the row is held untouched
-// and the pass writes nothing.
-func TestI37_SupersededRowIsHeldNotRetired(t *testing.T) {
-	v := newI37Vault(t)
-	corrected := i37Day(16, 11, 0)
-	v.event("u", &corrected)
-	v.fired("old", "u", "dentist", i37Day(14, 8, 0), modern(i37Day(15, 11, 0), 27*60))
-
-	report := v.check(false)
-
-	if all, _ := v.log.Since(context.Background(), time.Time{}, -1); len(all) != 0 {
-		t.Errorf("the pass wrote %+v, want nothing", all)
-	}
-	if !v.undelivered()["old"] || report.DigestCarried != 0 || report.TriggersLapsed != 0 || len(v.ch.texts) != 0 {
-		t.Errorf("report = %+v (sent %d, undelivered %v); want the superseded row held", report, len(v.ch.texts), v.undelivered())
-	}
-}
-
 // TestI37_BirthdayWaitingForTheDigestIsCarried: a recurring reminder is waiting
 // for the digest, not late. Fired eighteen hours before it, it is carried.
 func TestI37_BirthdayWaitingForTheDigestIsCarried(t *testing.T) {
@@ -77,43 +56,36 @@ func TestI37_BirthdayWaitingForTheDigestIsCarried(t *testing.T) {
 	}
 }
 
-// TestI37_LegacyRowSupersededByNewerArming (D8): a row that names no event
-// cannot be compared with its unit, but a unit that has since armed a reminder
-// of its own has moved on from the legacy one. Though it is not late it is not
-// sent, and it is held, not lapsed, for the re-plan step; the newer reminder is
-// untouched.
-func TestI37_LegacyRowSupersededByNewerArming(t *testing.T) {
+// TestI37_CannotDeliverExpiresAsToday: with no channel nothing is re-planned
+// (ADR-0032 point 3): an overdue armed reminder expires exactly as before.
+func TestI37_CannotDeliverExpiresAsToday(t *testing.T) {
 	v := newI37Vault(t)
+	v.silent = true
 	event := i37Day(14, 20, 0)
 	v.event("u", &event)
-	v.fired("legacy", "u", "dentist", i37Day(14, 9, 0), nil)
-	v.row("l2", "u", "dentist", i37Day(14, 18, 0), modern(event, 120))
+	v.row("a24", "u", "dentist", i37Day(13, 20, 0), modern(event, 24*60))
 
 	report := v.check(false)
 
-	if report.TriggersLapsed != 0 || report.DigestCarried != 0 || len(v.ch.texts) != 0 || !v.undelivered()["legacy"] {
-		t.Errorf("report = %+v (sent %d, undelivered %v); want the legacy row held", report, len(v.ch.texts), v.undelivered())
-	}
-	if got := v.armed("u"); len(got) != 1 || got[0].ID != "l2" {
-		t.Errorf("armed = %+v; want l2 untouched", got)
+	if got := v.armed("u"); len(got) != 0 || report.TriggersExpired != 1 || report.RemindersArmed != 0 {
+		t.Errorf("armed = %+v, report %+v; want it expired and nothing planned", got, report)
 	}
 }
 
-// TestI37_CannotDeliverExpiresAsToday: an overdue armed reminder expires as it
-// always has, on a pass with no channel as on one with.
-func TestI37_CannotDeliverExpiresAsToday(t *testing.T) {
-	for _, silent := range []bool{true, false} {
-		v := newI37Vault(t)
-		v.silent = silent
-		event := i37Day(14, 20, 0)
-		v.event("u", &event)
-		v.row("a24", "u", "dentist", i37Day(13, 20, 0), modern(event, 24*60))
+// TestI37_SupersededHeldWhenItCannotBeReplanned: with no channel a superseded
+// armed reminder is not sent and not expired: nothing could replace it, so it
+// is left for the first pass that can.
+func TestI37_SupersededHeldWhenItCannotBeReplanned(t *testing.T) {
+	v := newI37Vault(t)
+	v.silent = true
+	corrected := i37Day(20, 9, 0)
+	v.event("u", &corrected)
+	v.row("old", "u", "dentist", i37Now.Add(-time.Minute), modern(i37Day(15, 11, 0), 0))
 
-		report := v.check(false)
+	report := v.check(false)
 
-		if got := v.armed("u"); len(got) != 0 || report.TriggersExpired != 1 {
-			t.Errorf("silent=%v: armed = %+v, report %+v; want it expired", silent, got, report)
-		}
+	if got := v.armed("u"); len(got) != 1 || report.TriggersExpired != 0 || report.TriggersFired != 0 {
+		t.Errorf("armed = %+v, report %+v; want the row held armed", got, report)
 	}
 }
 

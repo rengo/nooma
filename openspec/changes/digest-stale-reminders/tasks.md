@@ -29,7 +29,7 @@ PR 3a `fix/late-reminders-held` and PR 3b `fix/late-reminders-replan` (D1 rest, 
 Split (the client's vault would otherwise lose its reminders): 3a judges and HOLDS, retiring only `passed` rows;
 3b writes the plan first and then retires the late and superseded rows. 3a owns the digest-skip, verdict, D8,
 `BirthdayWaiting`, `LowEnergyHeld`, `CannotDeliverExpiresAsToday` and I35 tests below; 3b owns the rest.
-- [ ] 4. RED tests:
+- [x] 4. RED tests (3a: verdicts, digest skip, birthday, low energy, cannot-deliver, I35; 3b: the rest):
   - `TestI37_StaleL24HealthyL2KeepsOneAtTheTwoHourLead` (C1): stale 24 h + healthy 2 h →
     exactly one armed row, at the 2 h lead.
   - `TestI37_SupersededRowReplansTheNewInstant`: a fired row about the old date, the unit
@@ -52,7 +52,7 @@ Split (the client's vault would otherwise lose its reminders): 3a judges and HOL
   - `TestReminderVerdict_SupersededAtSecondPrecision`: nanosecond-different instants → not
     superseded.
   - `TestReminderVerdict_SupersededOnlyFromEventAt`: About from `lead_minutes` → never superseded.
-- [ ] 5. GREEN: the reasons, "can deliver", the due loop's deferral, the D6 step (`live`/`sent`
+- [x] 5. GREEN (the catch-up is link 4; a unit owed only one is held): the reasons, "can deliver", the due loop's deferral, the D6 step (`live`/`sent`
       exclusions, plan before retire), `checkCause` with its actions and counters, the digest skip.
       Doc 02 §7/§11. Run `make check-all`, then open the PR.
 

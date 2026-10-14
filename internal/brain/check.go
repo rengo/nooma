@@ -65,9 +65,12 @@ type CheckReport struct {
 	TriggersExpired int
 	// TriggersLapsed counts fired reminders never delivered that this pass
 	// retired because their event is no longer ahead (ADR-0032).
-	TriggersLapsed  int
-	TimersFired     int
-	TimersCancelled int
+	TriggersLapsed int
+	// RemindersArmed, RemindersMoved and RemindersCancelled count what the
+	// re-plan step did to a unit's armed set (ADR-0032 point 3).
+	RemindersArmed, RemindersMoved, RemindersCancelled int
+	TimersFired                                        int
+	TimersCancelled                                    int
 }
 
 // CheckRequest selects how one Check call behaves. Its zero value is an
@@ -116,15 +119,21 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	}
 	report.TriggersDue = len(due)
 
-	g := r.gate()
+	g, canDeliver := r.gate(), r.canDeliver()
+	var stale []staleRow
+	settled := map[string]settledRow{}
 	for _, t := range due {
 		verdict, reason, err := g.judge(ctx, t, false, now)
 		if err != nil {
 			return CheckReport{}, err
 		}
+		if verdict == prospection.VerdictStale && reason != prospection.LapsePassed && t.RecurrenceRule == nil && canDeliver {
+			// A pass that can speak re-plans before it retires (ADR-0032 point 3).
+			stale = append(stale, staleRow{t, true, reason})
+			continue
+		}
 		if reason == prospection.LapseSuperseded {
-			// Held, untouched: its event moved, and until the re-plan step
-			// exists, retiring it would lose the unit's reminder.
+			// A pass that cannot speak holds it: nothing is re-planned.
 			continue
 		}
 		status, writes := triggerTransition(verdict)
@@ -138,6 +147,9 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 			}
 			report.TriggersFired += fired
 			report.TriggersDelivered += delivered
+			if fired > 0 {
+				settled[t.ID] = settledRow{row: t, fired: true}
+			}
 			continue
 		}
 		if status != ports.TriggerStatusExpired {
@@ -149,6 +161,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		}
 		if done {
 			report.TriggersExpired++
+			settled[t.ID] = settledRow{row: t}
 		}
 	}
 
@@ -238,13 +251,19 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		}
 	}
 
+	if canDeliver {
+		if err := r.replan(ctx, &report, stale, settled, now, commit); err != nil {
+			return CheckReport{}, err
+		}
+	}
+
 	if r.channel != nil && r.units != nil && r.state != nil {
 		carried, lapsed, err := r.assembleDigest(ctx, now, commit)
 		if err != nil {
 			return CheckReport{}, err
 		}
 		report.DigestCarried = carried
-		report.TriggersLapsed = lapsed
+		report.TriggersLapsed += lapsed
 	}
 
 	if err := r.reportUnreadable(ctx, now, commit); err != nil {

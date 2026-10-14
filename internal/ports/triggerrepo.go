@@ -122,6 +122,7 @@ type TriggerPayload struct {
 // FiredTrigger is a one-shot trigger that fired: when it was to fire, when
 // it did, and what it carried.
 type FiredTrigger struct {
+	ID              string
 	FireAt, FiredAt time.Time
 	Payload         TriggerPayload
 }

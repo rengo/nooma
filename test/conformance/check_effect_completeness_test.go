@@ -162,6 +162,7 @@ func assertRowCount(t *testing.T, decisions ports.DecisionLog, since time.Time, 
 // each writes exactly its row; the report's arithmetic equals the rows written,
 // and a dry run reports the same effects and writes none.
 func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
+	// The expired row's unit has a later event, so its leads are re-planned too.
 	seed := func(v *i37Vault) {
 		v.event("u-gone", i37At(12, 9))
 		v.event("u-ahead", i37At(20, 9))
@@ -176,8 +177,9 @@ func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if effects := report.TriggersExpired + report.TriggersLapsed; effects != 2 || len(rows) != effects {
-		t.Errorf("report = %+v, decision_log rows = %d; want one row per expiry and lapse", report, len(rows))
+	effects := report.TriggersExpired + report.TriggersLapsed + report.RemindersArmed + report.RemindersMoved + report.RemindersCancelled
+	if effects != 4 || len(rows) != effects {
+		t.Errorf("report = %+v, decision_log rows = %d; want one row per expiry, lapse and re-planned reminder", report, len(rows))
 	}
 	if report.TriggersExpired != 1 || report.TriggersLapsed != 1 {
 		t.Errorf("report = %+v, want one expired and one lapsed", report)

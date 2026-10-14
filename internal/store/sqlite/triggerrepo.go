@@ -270,7 +270,7 @@ func (r *TriggerRepo) ArmedUnitIDs(ctx context.Context) ([]string, error) {
 // FiredForUnit implements ports.TriggerRepo.
 func (r *TriggerRepo) FiredForUnit(ctx context.Context, unitID string) ([]ports.FiredTrigger, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT fire_at, fired_at, payload FROM triggers
+		`SELECT id, fire_at, fired_at, payload FROM triggers
 		 WHERE unit_id = ? AND status = ? AND recurrence_rule IS NULL AND fired_at IS NOT NULL AND fire_at IS NOT NULL`,
 		unitID, string(ports.TriggerStatusFired))
 	if err != nil {
@@ -281,10 +281,10 @@ func (r *TriggerRepo) FiredForUnit(ctx context.Context, unitID string) ([]ports.
 	out := make([]ports.FiredTrigger, 0)
 	for rows.Next() {
 		var fireAt, firedAt, payload string
-		if err := rows.Scan(&fireAt, &firedAt, &payload); err != nil {
+		var f ports.FiredTrigger
+		if err := rows.Scan(&f.ID, &fireAt, &firedAt, &payload); err != nil {
 			return nil, fmt.Errorf("scan fired trigger of unit %q: %w", unitID, err)
 		}
-		var f ports.FiredTrigger
 		if f.FireAt, err = time.Parse(unitTimeLayout, fireAt); err == nil {
 			if f.FiredAt, err = time.Parse(unitTimeLayout, firedAt); err == nil {
 				f.Payload, err = decodePayload(payload)

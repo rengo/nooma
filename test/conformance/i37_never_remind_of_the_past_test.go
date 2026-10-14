@@ -154,10 +154,9 @@ func i37At(day, hour int) *time.Time {
 // TestI37_ClientsSevenRowsSendNothingPast replays the client's vault of
 // 2026-10-14 (ADR-0032): seven undelivered reminders, all armed by a binary
 // that fired them days earlier with no channel, three of them about flights
-// that had already departed. Nothing is sent: the three past flights lapse
-// (passed, each with a row), and the four whose event is still ahead are held
-// untouched, not sent and not lapsed, for the re-plan step that gives them the
-// reminders their leads still have ahead.
+// that had already departed. None is sent: the three past flights lapse
+// (passed), and the four whose event is still ahead lapse as late and get the
+// reminders their leads still have ahead, each with a row saying why.
 func TestI37_ClientsSevenRowsSendNothingPast(t *testing.T) {
 	v := newI37Vault(t)
 	for _, u := range []struct {
@@ -181,20 +180,23 @@ func TestI37_ClientsSevenRowsSendNothingPast(t *testing.T) {
 
 	report := v.check(false)
 
-	if report.TriggersLapsed != 3 || report.DigestCarried != 0 || len(v.ch.texts) != 0 {
-		t.Errorf("report = %+v (sent %q); want three lapsed and nothing sent", report, v.ch.texts)
+	if report.TriggersLapsed != 7 || report.RemindersArmed != 5 || report.DigestCarried != 0 || len(v.ch.texts) != 0 {
+		t.Errorf("report = %+v (sent %q); want seven lapsed, five re-planned, nothing sent", report, v.ch.texts)
 	}
-	lapsed := v.rows(ports.ActionCheckTriggerLapsed)
-	if len(lapsed) != 3 {
-		t.Fatalf("check.trigger.lapsed rows = %+v, want one per past flight", lapsed)
-	}
-	for _, row := range lapsed {
-		if row.Reason != string(prospection.LapsePassed) || !strings.HasPrefix(row.ID, "p") {
-			t.Errorf("lapsed row %+v, want a past flight with reason passed", row)
+	passed := 0
+	for _, row := range v.rows(ports.ActionCheckTriggerLapsed) {
+		if row.Reason == string(prospection.LapsePassed) {
+			if !strings.HasPrefix(row.ID, "p") {
+				t.Errorf("row %+v lapsed as passed, but its event is ahead", row)
+			}
+			passed++
 		}
 	}
-	if left := v.undelivered(); len(left) != 4 || left["p1"] || left["p2"] || left["p3"] {
-		t.Errorf("undelivered after the pass = %v, want the four flights ahead untouched", left)
+	if passed != 3 {
+		t.Errorf("%d rows lapsed as passed, want the three flights that departed", passed)
+	}
+	if left := v.undelivered(); len(left) != 0 {
+		t.Errorf("still undelivered after the pass: %v", left)
 	}
 }
 
@@ -410,17 +412,16 @@ func TestI37_BirthdayIsCarriedAfterNoonOnItsDay(t *testing.T) {
 // TestI37_ModernFiredRowWithAPastAboutLapses: a row armed since ADR-0029 names
 // its event in the payload, at-once rows (lead 0) included, and that event is
 // what the unit is compared with. Where the unit still has it, it was
-// yesterday and the reminder lapses as passed. Where the unit says it is ahead,
-// the event moved: the row is superseded, not sent and not lapsed, held for
-// the re-plan step.
+// yesterday and the reminder is past; where the unit says it is ahead, the
+// event moved and the reminder is superseded. Either way it is not sent.
 func TestI37_ModernFiredRowWithAPastAboutLapses(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		unitAt     *time.Time
-		wantLapsed int
+		name   string
+		unitAt *time.Time
+		want   prospection.LapseReason
 	}{
-		{"the unit still has the event", i37At(13, 15), 1},
-		{"the unit moved the event ahead", i37At(20, 9), 0},
+		{"the unit still has the event", i37At(13, 15), prospection.LapsePassed},
+		{"the unit moved the event ahead", i37At(20, 9), prospection.LapseSuperseded},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := newI37Vault(t)
@@ -428,33 +429,26 @@ func TestI37_ModernFiredRowWithAPastAboutLapses(t *testing.T) {
 			v.fired("r", "u1", "flight", i37Day(12, 9, 0), func(tr *ports.Trigger) {
 				tr.Payload.About, tr.Payload.LeadMinutes, tr.Payload.LeadDays = i37Day(13, 15, 0), 0, 0
 			})
-			report := v.check(false)
-			if report.TriggersLapsed != tc.wantLapsed || report.DigestCarried != 0 || len(v.ch.texts) != 0 {
-				t.Errorf("report = %+v (sent %q); want lapsed %d, nothing carried", report, v.ch.texts, tc.wantLapsed)
+			if report := v.check(false); report.TriggersLapsed != 1 || report.DigestCarried != 0 {
+				t.Errorf("report = %+v; want the reminder lapsed on its payload's event", report)
 			}
-			if got := v.undelivered()["r"]; got != (tc.wantLapsed == 0) {
-				t.Errorf("row undelivered = %v, want it held exactly when it did not lapse", got)
-			}
-			if tc.wantLapsed == 1 {
-				if got := v.reasons(ports.ActionCheckTriggerLapsed); len(got) != 1 || got[0] != string(prospection.LapsePassed) {
-					t.Errorf("lapsed reasons = %v, want passed", got)
-				}
+			if got := v.reasons(ports.ActionCheckTriggerLapsed); len(got) != 1 || got[0] != string(tc.want) {
+				t.Errorf("lapsed reasons = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
 // TestI37_ModernArmedRowWithAPastAboutExpires: the same at fire time, for an
-// armed at-once row whose payload event was yesterday: expired as passed when
-// the unit agrees, held (still armed, not pushed) when the unit moved the event.
+// armed at-once row whose payload event was yesterday.
 func TestI37_ModernArmedRowWithAPastAboutExpires(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		unitAt      *time.Time
-		wantExpired int
+		name   string
+		unitAt *time.Time
+		want   prospection.LapseReason
 	}{
-		{"the unit still has the event", i37At(13, 15), 1},
-		{"the unit moved the event ahead", i37At(20, 9), 0},
+		{"the unit still has the event", i37At(13, 15), prospection.LapsePassed},
+		{"the unit moved the event ahead", i37At(20, 9), prospection.LapseSuperseded},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := newI37Vault(t)
@@ -463,16 +457,11 @@ func TestI37_ModernArmedRowWithAPastAboutExpires(t *testing.T) {
 				tr.Payload.About, tr.Payload.LeadMinutes, tr.Payload.LeadDays = i37Day(13, 15, 0), 0, 0
 			})
 			report := v.check(false)
-			if report.TriggersExpired != tc.wantExpired || report.TriggersDelivered != 0 || len(v.ch.texts) != 0 {
-				t.Errorf("report = %+v (sent %d); want expired %d, never pushed", report, len(v.ch.texts), tc.wantExpired)
+			if report.TriggersExpired != 1 || report.TriggersDelivered != 0 || len(v.ch.texts) != 0 {
+				t.Errorf("report = %+v (sent %d); want it expired, not pushed", report, len(v.ch.texts))
 			}
-			if got := len(v.armed("u1")); got != 1-tc.wantExpired {
-				t.Errorf("armed rows = %d, want the superseded one held armed", got)
-			}
-			if tc.wantExpired == 1 {
-				if got := v.reasons(ports.ActionCheckTriggerExpired); len(got) != 1 || got[0] != string(prospection.LapsePassed) {
-					t.Errorf("expired reasons = %v, want passed", got)
-				}
+			if got := v.reasons(ports.ActionCheckTriggerExpired); len(got) != 1 || got[0] != string(tc.want) {
+				t.Errorf("expired reasons = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -534,3 +523,5 @@ func newI37Today(v *i37Vault) *brain.TodayService {
 	return brain.NewTodayService(fixedClock{now: i37Now}, v.units, cfg, memrepo.NewState(), v.triggers, memrepo.NewPendingQuestions(), v.log,
 		brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()))
 }
+
+func newI37State() ports.StateRepo { return memrepo.NewState() }
