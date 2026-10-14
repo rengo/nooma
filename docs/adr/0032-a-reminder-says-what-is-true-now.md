@@ -4,7 +4,10 @@
 - **Date**: 2026-10-14
 - **Supersedes**: —
 - **Superseded by**: —
-- **Extends**: [ADR-0022](0022-reply-language.md) (its "anything Nooma says first" gap),
+- **Amends** (none of them edited): [ADR-0009](0009-scheduler-downtime.md) (judged at
+  every delivery attempt, by a pass that can deliver), [ADR-0022](0022-reply-language.md) (its
+  "anything Nooma says first" gap), [ADR-0029](0029-event-reminders-follow-the-users-leads.md)
+  points 3-4 (an at-once reminder only at capture), and
   [ADR-0030](0030-event-reminders-are-pushed-and-respect-the-night.md) point 4 (never late)
 
 ## Context
@@ -14,17 +17,10 @@ days. The first digest read "Here are 7 things for today", listed three flights 
 departed, said "09:00" for a flight the user had corrected to 08:00, listed one flight twice, and
 asked its relation question in English to a user whose every reply comes back in Spanish.
 
-Four decisions were missing, not one:
-
-1. **When a reminder is checked against the world.** A trigger is judged once, when it moves
-   `armed → fired`. A fired trigger nobody could deliver (no channel, `nooma check` run by hand,
-   a failed send) waits in `Undelivered`, and the digest carries everything there without asking
-   whether its event has passed.
-2. **What a reminder says.** The text is `payload.action`, the user's sentence frozen when the
-   trigger was armed. A correction of the unit's text does not reach a trigger already fired.
-3. **What happens to a backlog.** Nothing decides it: whatever piled up is sent at once.
-4. **Which language Nooma speaks first.** ADR-0022 named the gap: the digest and a pushed
-   reminder have no message to read a language from, so they speak the fallback, English.
+Four decisions were missing: when a reminder is checked against the world (a trigger is judged
+once, at `armed → fired`, and the digest sends whatever was never delivered), what it says (the
+sentence frozen at arming), what happens to a backlog (it is sent at once), and which language
+Nooma speaks first (ADR-0022's named gap: the fallback, English).
 
 ## Options evaluated
 
@@ -45,19 +41,23 @@ Four decisions were missing, not one:
 1. **Every delivery attempt is judged, not only the first.** A reminder is sent only while its
    event is still ahead, the unit still has that event (a correction to another instant
    supersedes it), and it is no later than ADR-0009's window. Otherwise it **lapses**: it is
-   never sent, and the trail says why. This applies to the pushed path and to the digest alike.
-2. **A one-shot reminder that could not be pushed is pushed again on the next pass**, while (1)
+   never sent, and the trail says why. ADR-0009's window is for a push. A recurring reminder
+   waiting for its digest is judged only on its occurrence having passed.
+2. **A one-shot reminder that could not be pushed is pushed again on a later pass**, while (1)
    holds. It does not fall back to the digest: ADR-0030 already says a reminder that waits for
    tomorrow's digest arrives after the thing it is about.
 3. **A backlog is re-planned, not replayed.** When a reminder lapses and its event is still
    ahead with no other reminder armed for it, the event gets the reminders the user's leads still
    have ahead, by the same rule a corrected date uses. **When every lead has passed and nothing
    about that event reached the user, it gets exactly one reminder at once** (client, 2026-10-14):
-   one per event instant, never one per lapsed lead, never twice. It obeys quiet hours like any
-   other push: inside them it waits for quiet end, and when quiet end is at or after the event
-   nothing is sent and the trail says so. A reminder counts as sent only once it reached the user.
-   A pass that has nowhere to speak leaves event reminders as they are, so a backlog is judged
-   by the first pass that can deliver it.
+   one per event and instant, never one per lapsed lead, never twice. A reminder superseded by a
+   correction re-plans the same way for the unit's new instant. This is the one path besides
+   capture that arms an at-once reminder. It obeys quiet hours like any other push: inside them
+   it waits for quiet end, and **when quiet end is at or after the event, nothing is sent**, so an
+   event inside the night whose leads all lapsed gets no reminder, and the trail says so. A
+   reminder counts as sent only once it reached the user. A pass with no channel at all only
+   retires reminders whose event passed and leaves the rest, so a backlog is judged by the
+   first pass that can deliver it.
 4. **A reminder says the unit as it is now**: its current text and its current instant, framed as
    a reminder ("Recordatorio: … — jue 15 oct, 11:00"). One unit is one line, however many of its
    triggers are due together.
@@ -78,6 +78,8 @@ Four decisions were missing, not one:
 - A migration (`units.language`), backfilled from the `capture.classify` rows that already
   recorded each unit's language.
 - A due scan now reads the units of the reminders it delivers, one read per reminder.
+- On a vault with no channel, reminders for events still ahead stay armed until one exists: at
+  most one row per lead per captured event, never re-created.
 - The frame is fixed text; a reminder reads as "Reminder: <your sentence> — <when>", not as a
   sentence written for the occasion.
 - A person who writes in two languages gets the digest frame in whichever they captured in last.

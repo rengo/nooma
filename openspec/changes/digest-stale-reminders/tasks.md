@@ -1,60 +1,68 @@
 # Tasks — digest-stale-reminders
 
-Five links stacked to main (design §6).
+Six links stacked to main (design §6); each leaves main consistent.
 
 PR 1 — `plan/digest-stale-reminders`
-- [x] 1. ADR-0032 and its index row; this design and tasks.
-- [x] 1a. Client decisions of 2026-10-14: ADR-0032 Accepted; one at-once reminder for an event
-      never reminded (D6); the correction-text defect recorded as a follow-up.
+- [x] 1. ADR-0032 (Accepted by the client, 2026-10-14), its index row, this design and tasks;
+      review round 1 folded in.
 
-PR 2 — `fix/undelivered-reminder-gate`
-- [ ] 2. RED: I37 row in doc 06 §4 and `TestI37_AnUndeliveredReminderIsJudgedAgain` with the
-      client's seven rows.
-- [ ] 3. RED/GREEN, L1: `Reminder`, `ReminderVerdict`, `LapseReason`; `EventReminderVerdict`
-      delegates to it (D1).
-- [ ] 4. RED/GREEN, L3: `TriggerRepo.Lapse` in sqlite, memrepo and the repo contract (D4).
-- [ ] 5. GREEN: the scan judges at fire time through the gate. It retries undelivered one-shot
-      rows by push and lapses the stale ones with `check.trigger.lapsed`. The digest carries
-      recurring rows only, gated. Today mirrors the digest (D2-D3).
-- [ ] 5a. RED/GREEN: a pass with no destination leaves one-shot rows untouched (D3a).
-- [ ] 6. Doc 02 §7 (drop the at-once exception, add the lapse) and §11. Doc 03 `triggers`, doc 07.
-      Run `make check-all`, then open the PR.
+PR 2 — `fix/never-remind-of-the-past`
+- [ ] 2. RED: I37 row in doc 06 §4 and `TestI37_ThePastIsNeverSent`, using the client's seven rows.
+- [ ] 3. RED/GREEN, L1: `Reminder`, `ReminderVerdict` with the `passed` reason, and `About`
+      resolution (D1). `EventReminderVerdict` delegates to it.
+- [ ] 4. RED/GREEN, L3: `TriggerRepo.Lapse` in sqlite, memrepo and the repo contract. Name
+      `expired` + `fired_at` in the status-vocabulary test (D4).
+- [ ] 5. RED/GREEN: `FiredForUnit` returns delivered rows only, and I35 is widened.
+- [ ] 6. GREEN: the gate at fire time, in the digest (which lapses `passed` rows, recurring
+      included) and in Today (read-only, counts after the gate). Units are read per row (D1-D2).
+- [ ] 7. `check.trigger.lapsed` (actions, label), `TriggersLapsed` (report, I12, CLI), dry run.
+      Doc 02 §7/§11, doc 03 `triggers`, doc 07. Run `make check-all`, then open the PR.
 
-PR 3 — `fix/lapsed-reminder-replans`
-- [ ] 7. RED: `TestI37_AnEventNeverRemindedGetsOneReminder` (design §7). I35 widened, so that
-      an undelivered row covers no lead.
-- [ ] 8. RED/GREEN, L1: `prospection.CatchUp`, covering leads ahead, one at once, nothing, and
-      quiet end versus the event (D6).
-- [ ] 8a. RED/GREEN, L3: `Create` of an existing id returns `ErrTriggerExists` in sqlite,
-      memrepo and the repo contract.
-- [ ] 8b. GREEN: `FiredForUnit` reads delivered rows only. Add the per-unit re-plan set,
-      `checkCause`, the deterministic catch-up id and `catch_up` payload, and the `covered` lapse.
-- [ ] 9. Doc 02 §7 and §11. Run `make check-all`, then open the PR.
+PR 3 — `fix/late-reminders-replan`
+- [ ] 8. RED: `TestI37_ALateReminderIsReplannedOnce` (design §7, link 3), and a recurring row
+      waiting 18 h is carried. Amend I15 (channel and nil-channel cases, doc 06 row).
+- [ ] 9. RED/GREEN, L1: the `superseded` (second precision) and `overdue` reasons, `Waiting`,
+      and `prospection.CatchUp` (D6).
+- [ ] 10. GREEN: D3a, nil channel only. Add the per-unit re-plan set and its three conditions,
+      `checkCause`, `armCatchUp` (create, then record; `ErrTriggerExists` means claimed),
+      `TriggerPayload.CatchUp` in `payloadJSON`, the flag kept by `moveReminder`, and the
+      `covered` lapse.
+- [ ] 11. Add `check.reminder.armed`/`refused` (actions, labels) and `RemindersArmed`/`Refused`
+      (report, I12, CLI).
+- [ ] 12. Doc 02 §5 (ADR-0029 point 4 amended) and §7 (ADR-0009 amended, nil channel), §11. Run
+      `make check-all`, then open the PR.
 
-PR 4 — `fix/reminder-renders-the-unit`
-- [ ] 10. RED/GREEN, L1: the new `phrase.Set` fields in `en` and `es` (completeness test).
-- [ ] 11. RED/GREEN: push, digest and Today render from the unit's current text and instant, one
-      line per unit, every row of the unit surfaced (D5).
-- [ ] 12. Doc 02 §7 and doc 07. Run `make check-all`, then open the PR.
+PR 4 — `fix/push-retries-undelivered`
+- [ ] 13. RED: the retry pushes once per pass and skips rows already touched. A `Surface`
+      conflict is benign, with a case in
+      `due_scan_concurrent_test.go`.
+- [ ] 14. GREEN: the retry, the sent-set, and the digest carrying recurring rows only (D3).
+- [ ] 15. Doc 02 §7. Run `make check-all`, then open the PR.
 
-PR 5 — `feat/proactive-language`
-- [ ] 13. RED/GREEN, L3: migration with `units.language` and its backfill, the schema golden,
-      `LatestLanguage`.
-- [ ] 14. GREEN: capture writes the language. Push uses the unit's language and the digest uses
-      the latest one (D7). L2 test in Spanish.
-- [ ] 15. Doc 02 §5 (close ADR-0022's gap), doc 03 `units`. Run `make check-all`, then open the PR.
+PR 5 — `fix/reminder-renders-the-unit`
+- [ ] 16. RED/GREEN, L1: the new `phrase.Set` fields and `Set.Date` in `en` and `es`.
+- [ ] 17. RED/GREEN: push, digest and Today render the unit's current text and instant. Date-only
+      events show no time. Rows of one unit sent in one pass become one message, each surfaced (D5).
+- [ ] 18. Doc 02 §7, doc 07. Run `make check-all`, then open the PR.
+
+PR 6 — `feat/proactive-language`
+- [ ] 19. RED/GREEN, L3: migration with `units.language` and its backfill (earliest row,
+      `NULLIF`), the schema golden, and `LatestLanguage` in the port, sqlite and memrepo.
+- [ ] 20. GREEN: capture writes the language. Push and digest pick it as D7 says. L2 test in
+      Spanish.
+- [ ] 21. Doc 02 §5 (ADR-0022's gap), doc 03 `units`. Run `make check-all`, then open the PR.
 
 ## Review Workload Forecast
 
 | Link | Impl+docs | Tests (apart) | Risk |
 |---|---|---|---|
-| 2 | ~360 | ~380 | Medium: scan behaviour, one port method |
-| 3 | ~240 | ~320 | Medium: arms a reminder from the scan; exactly-once rests on the id |
-| 4 | ~260 | ~250 | Low: rendering |
-| 5 | ~220 | ~200 | Medium: migration + backfill |
+| 2 | ~300 | ~350 | Medium: gate, one port method |
+| 3 | ~380 | ~400 | High: arms from the scan; exactly-once rests on the id |
+| 4 | ~170 | ~250 | Medium: retry and its bounds |
+| 5 | ~260 | ~250 | Low |
+| 6 | ~220 | ~200 | Medium: migration + backfill |
 
-Every link is under 400. Chained PRs recommended: Yes (stacked to main). Decision needed before
-apply: none. ADR-0032 is accepted and the open question is answered.
+Every link is under 400. Decision needed before apply: none.
 
 Follow-up, not in this chain: the correction on 2026-10-10T19:35Z that stored "Es a las 08:00."
-as the unit's text and left its time at 09:00 (design §2, defect 2) needs its own change.
+as the unit's text and left its time at 09:00 (design §2) needs its own change.

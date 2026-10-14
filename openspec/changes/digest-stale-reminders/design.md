@@ -2,8 +2,7 @@
 
 A fix change. The client report (2026-10-14) and the PM's read-only evidence are the requirement;
 [ADR-0032](../../../docs/adr/0032-a-reminder-says-what-is-true-now.md) (Accepted by the client,
-2026-10-14) records the product decisions, cited here as P1-P5. There is no `proposal.md`/`spec.md` yet: the PM owns
-them. Line numbers are at `efa0a1c`.
+2026-10-14) records the product decisions, cited here as P1-P5. Lines are at `7d2b98a`.
 
 ## 1. What happened on the client's vault
 
@@ -18,8 +17,7 @@ Read-only queries of `~/.nooma/pablo.nooma/nooma.db`, 2026-10-14:
 | `4269326a` | same; armed by a later correction of the **same unit** | 10-12 13:00Z (**past**) | "…a París…10:00." (duplicate unit) |
 | `de28990a`, `17152cfa` | same shape | 10-15, 10-16 | raw sentences |
 
-Every one fired minutes after capture, through a vault with no channel, and waited in
-`Undelivered` until the first digest after Telegram was enabled.
+Each fired minutes after capture, with no channel, and waited for the first digest.
 
 ## 2. Root causes
 
@@ -29,9 +27,7 @@ Every one fired minutes after capture, through a vault with no channel, and wait
   `lead_days: 7` and no `lead_minutes`/`event_at`: the binary before #317 armed one trigger
   `EventLeadDays` (7) before the event and clamped it to now (`arm.go@8ec6576:12, :188, :208`;
   rationale text `capture.go@8ec6576:1078`). Every event less than 7 days out fired at once. The
-  client's binary was rebuilt between 16:43:03Z and 16:45:54Z on 10-13: the rows armed after carry
-  `lead_minutes`, `event_at` and `user_leads_minutes` and sit at the user's leads. Main arms
-  correctly (I33/I34).
+  client's binary was rebuilt on 10-13 between 16:43Z and 16:45Z; later rows sit at the leads.
 - **A trigger is judged once.** `check.go:116` runs the verdict only on `Due` (armed) rows. The
   "never late" check (`check.go:412-418`) applies only to a one-shot row with `lead_minutes > 0`,
   so neither a legacy row nor an at-once row is ever checked against its event. Doc 02 §7 states
@@ -45,7 +41,6 @@ Every one fired minutes after capture, through a vault with no channel, and wait
   `Undelivered`, `:108`/`:118` rank all of it, `:152` sends all of it. `deliver.go:21`'s "a later
   pass picks it up" means tomorrow's digest: no pass retries a push. `today.go:145-165` mirrors the
   same list on `/ui`.
-- **It came at 11:51 local** because no digest had ever been sent (`DigestDue` already true).
 
 ### Defect 2 — frozen, raw text
 
@@ -57,12 +52,9 @@ Every one fired minutes after capture, through a vault with no channel, and wait
   19:35:53 therefore never reached `480914d7`, which fired at 19:37:46. Nor is it framed as a
   reminder: the line is the user's capture sentence.
 
-**Follow-up, not in this change** (client, 2026-10-14): the correction at 2026-10-10T19:35:53Z
-wrote the correction sentence itself as the unit's content (`previous` "Tengo un vuelo el
-2026-10-11 a las 09:00.", `next` "Es a las 08:00.") and left `event_at` at 09:00 local. That is
-the correction extraction, after `fix-unit-correction-form` and `fix-correction-date-follows`
-merged, and it gets its own change. Rendering from the unit (D5) will faithfully show that broken
-unit; the unit is what needs fixing.
+**Follow-up, its own change** (client, 2026-10-14): the 2026-10-10T19:35:53Z correction stored
+its own sentence "Es a las 08:00." as the unit's content and left `event_at` at 09:00 local.
+Rendering from the unit (D5) will show that broken unit faithfully.
 
 ### Defect 3 — English proactive messages
 
@@ -78,173 +70,171 @@ unit; the unit is what needs fixing.
 
 - Not a re-arm leaving an armed trigger alive. `dad3c936` was **moved** by the 20:26:12
   correction, then **fired** at 20:30:11 (undelivered). The 21:04:50 correction saw only armed
-  rows (`correction_reminder.go:43`), found none, and armed `4269326a`. Main does the same: a
-  fired-undelivered row keeps its old date and old text.
-- `fix-correction-date-follows` put fired triggers out of scope as "history"; one that never
-  reached the user is not history.
+  rows (`correction_reminder.go:43`), found none, and armed `4269326a`. Main does the same;
+  `fix-correction-date-follows` called fired rows "history", but an undelivered one is not.
 
 ### The push path
 
-Same defects: frozen text and English literals in `renderPush`; a failed or channel-less push
-falls to the ungated digest; an at-once row is never checked against its event. Timers are not
-affected (one fired without a channel is lost, not piled up; noted, not changed).
+Same defects: frozen text and English literals in `renderPush`, a failed or channel-less push
+falling to the ungated digest. Timers are not affected (noted, not changed).
 
 ## 3. Decisions
 
-**D1. One gate, `prospection.ReminderVerdict`** (P1). Pure:
+**D1. One gate, `prospection.ReminderVerdict`** (P1), pure:
+`(q QuietHours) ReminderVerdict(r Reminder, now) (Verdict, LapseReason)`, where `Reminder` is
+`{FireAt; About time.Time (zero = unknown); Current *time.Time; Recurring, Waiting bool}`.
 
-```go
-type Reminder struct {
-    FireAt    time.Time
-    About     time.Time  // the instant it reminds of; zero when unknown
-    Current   *time.Time // the unit's instant now; nil when not an event/task or unknown
-    Recurring bool
-}
-func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseReason)
-```
+1. One-shot, `About` and `Current` known, different after truncating both to the second →
+   `Stale`/`superseded`.
+2. `About` (one-shot: else `Current`) at or before `now` → `Stale`/`passed`.
+3. `Waiting` (a recurring row waiting for its digest) → `Deliver`. ADR-0009's window is a
+   push's; a birthday fired at 14:05 waits for tomorrow's 08:00 digest, as do rows the
+   low-energy gate holds (`digest.go:197`).
+4. Else `q.TriggerVerdict(FireAt, now)`; its `Stale` is `overdue`. Quiet hours still answer
+   `Defer` before staleness (`staleness.go:92-94`).
 
-In order: one-shot with `About` and `Current` both known and different → `Stale`/`superseded`;
-`About` (else `Current`) at or before `now` → `Stale`/`passed`; else `q.TriggerVerdict(FireAt,
-now)` (`Stale` there is `overdue`). `About` is resolved in brain from the payload: `event_at`,
-else `fire_at + lead_minutes`, else `fire_at + lead_days` days for a recurring row, else the
-unit's current instant (legacy at-once rows). `EventReminderVerdict` becomes this with `Current`
-nil, so I34 holds unchanged. The scan reads the unit of a one-shot trigger (`UnitRepo.ByID`)
-before judging it. remind-me-reminders' task reminders use `due_at` as `Current` (§5).
+`About` comes from the payload. It is `event_at` when present, else `fire_at + lead_minutes` when
+`lead_minutes > 0`, else unknown. `fire_at + lead_days` is never used: a clamped recurring row's
+sum is not its occurrence, so a recurring row without `event_at` is never `passed`. `Current` is
+the unit's `event_at` (`due_at` for a task unit, §5), read with `UnitRepo.ByID`. A nil `units`
+port or `ErrUnitNotFound` gives `Current` nil; any other read error aborts the pass like every
+repository error. `EventReminderVerdict` becomes D1 with `Current` nil, so I34 is unchanged.
 
-**D2. The gate runs on every delivery attempt.** At fire time (replacing `triggerVerdict`), on
-the push retry (D3), in the digest and in Today's mirror, through one brain helper
-`deliverable(ctx, []DueTrigger, now)` so the four cannot disagree.
+**D2. Where the gate runs.** At fire time (replacing `triggerVerdict`, `check.go:412-418`), in
+the push retry (D3) and in the digest. Today's mirror runs it read-only (I27): it hides what the
+digest would drop, and its counts (`today.go:149`) are taken after the gate. Everything goes
+through one brain helper, so the paths cannot disagree.
 
-**D3. Undelivered one-shot reminders are retried by push** (P2). After the due loop, the scan
-reads `Undelivered`; for each one-shot row: `Deliver` → `deliver()` (send, then `Surface`);
-`Defer`/`Pending` → nothing; `Stale` → lapse (D4). The digest carries only recurring rows, so a
-one-shot reminder is never listed in a digest, and neither is Today's mirror. A transport outage
-writes one `check.delivery.failed` per pass per reminder, bounded by the 6 h window.
+**D3. Undelivered one-shot rows are retried by push** (P2). After the due loop, the scan reads
+`Undelivered` and judges each one-shot row: `Deliver` sends it, `Stale` lapses it (D4), and
+anything else is left. Rows this pass already fired or attempted are skipped, so there is one
+send and one failure row per pass. If `Send` succeeds and `Surface` then fails, the id goes into
+a set the `CheckService` keeps across passes, and the retry skips it until restart. That bounds
+the resend to once per process. A `Surface` conflict (`ErrTriggerStatusConflict`) means another
+pass recorded the send: it is skipped, not fatal (`deliver.go:121-126` aborts today). Only
+recurring rows reach the digest, so one-shot rows are never listed in a digest or on Today.
+Lapsing a `passed` recurring row in the digest pass keeps it out of `Undelivered`.
 
-**D3a. A pass with no destination does not judge one-shot reminders** (P3). No channel or no
-conversation: the scan neither fires, expires nor lapses a one-shot row, and writes no row for
-it. Recurring rows keep today's handling. Reason: a vault without a channel, and `nooma check`,
-which never has one (`wiring.go:314`), used to fire reminders nobody could receive, then let
-them expire. Left armed, they are judged by the first pass that can speak, which is what makes
-D6's catch-up reachable when the channel appears days later. A row whose event passed in the
-meantime lapses then (D1 `passed`) and is never sent.
+No two passes with a channel run at once: both commands take the vault lock
+(`cmd/nooma/check.go:67`, `serve.go:84`), the proactive job is single-flight
+(`scheduler.go:72-108`), and `nooma check` has no channel. The conflict handling is defence.
 
-**D4. Lapse is a state transition.** New `TriggerRepo.Lapse(id)`: `fired` with `surfaced_at`
-NULL → `expired`, `fired_at` kept (it fired; it was never delivered). One row
-`check.trigger.lapsed` with `{id, fire_at, verdict: stale, reason}`. Nothing is deleted. No
-migration: `status` has no CHECK and `expired` already exists.
+**D3a. A nil channel judges only the past** (P3). With no channel (serve without Telegram,
+`nooma check`), a one-shot row that is `passed` or `superseded` is expired or lapsed. Every other
+one-shot row is left untouched and writes no row. This keeps D6 reachable when a channel appears
+days later. A channel with no conversation keeps today's loud `check.delivery.failed` at fire
+time (`deliver.go:101-112`, non-negotiable 7), and its retry is skipped silently, so that is one
+row per reminder. The pile is bounded: armed rows for events still ahead, at most one per lead,
+never re-created. This changes I15 for one-shot rows. Its test passes a nil channel
+(`i15_trigger_expires_not_fires_test.go:168`), so it gets a channel and a nil-channel case,
+amended through doc 02 §7 and ADR-0032 (ADR-0009 amended).
 
-**D5. Render from the unit** (P4). `phrase.Set` gains `Reminder` ("Reminder: %s — %s" /
-"Recordatorio: %s — %s"), `DigestLine` ("%s — %s"), `DigestHeaderOne/Many` ("Coming up:" /
-"Lo que viene:" family, no "for today"), `OneMore`, `RelationQuestion` (two %s), `Late`,
-`SomethingYouAsked`. The text is the unit's current `content`; the instant is `About`, in the
-scan clock's zone, through `Set.Time`. A missing unit falls back to `payload.action`. Due rows of
-one unit collapse to one line or one push, and every one of them is surfaced by that send.
-Today's mirror uses the same line builder.
+**D4. Lapse is a state transition.** `TriggerRepo.Lapse(id)` moves a `fired` row with
+`surfaced_at` NULL to `expired`, keeping `fired_at`. The combination `expired` + `fired_at` means
+"fired, never delivered". Doc 03, I15's comment and the status-vocabulary test
+(`due_scan_status_vocabulary_test.go`) name it. One `check.trigger.lapsed` row records
+`{id, fire_at, verdict, reason}`. Reasons are `passed`, `superseded`, `overdue` and `covered`. No
+migration.
 
-**D6. Re-plan once per event, after its late reminders are dropped** (P3). A one-shot row that
-goes stale as `overdue` (an armed row expired, or a fired row lapsed; `passed` and `superseded`
-never re-plan) adds its unit to the pass's re-plan set. After both loops, once per unit: if the
-unit is an event still ahead and has no armed one-shot trigger, the scan calls the new pure
-`prospection.CatchUp(eventAt, sent, prefs, interrupt, now) Following` and writes the result with
-the existing `reminderSet.apply` and a new `checkCause` (`check.reminder.armed`,
-`check.reminder.refused`):
+**D5. Render from the unit** (P4). The line is the unit's current `content`, verbatim, plus
+`About` in the scan clock's zone, through `Set.Time`. A date-only event (midnight local, ADR-0029's
+test) renders with a new `Set.Date` and no time. The content is the user's words. A date
+correction rewrites the date in it (`correction/follow.go:170`), so the two agree.
+When they do not, the unit is wrong (the follow-up in §2), and the instant shown is the truth
+being reminded of. `payload.action` and `followTriggerText` (`correction_reminder.go:191-208`)
+stay as they are, but only as the fallback when the unit cannot be read. New `phrase.Set` fields
+in `en`/`es`: `Reminder`, `DigestLine`, `DigestHeaderOne/Many` (no "for today"), `OneMore`,
+`RelationQuestion`, `Late`, `SomethingYouAsked`, `Date`. The rows being sent for one unit in one
+pass (all `fired`) become one message, and each is surfaced. Armed siblings are not touched.
 
-1. The leads still ahead, exactly as `FollowSent(eventAt, nil, sent, …)` plans them.
-2. None ahead and nothing in `sent` about this instant: **one** plan at once, the capture's
-   at-once plan, adjusted by ADR-0030's `deliverAt`: now when outside quiet hours; inside them,
-   quiet end when that is before the event; else nothing, recorded as `check.reminder.refused`
-   with `quiet_hours`. The user is not reminded, because the only moment left is the night.
-3. Otherwise nothing. Something about this instant already reached the user.
+**D6. Re-plan once per event** (P3). A one-shot row that goes stale as `overdue` (armed rows
+expired, fired rows lapsed) or as `superseded` adds its unit to the pass's re-plan set. `passed`
+never adds it. After both loops, the scan acts once per unit if all of these hold:
 
-**Exactly once.** The at-once plan is created with a deterministic id,
-`catch-up:<unit_id>:<event instant RFC3339>`, and payload `catch_up: true`. `TriggerRepo.Create`
-reports a duplicate primary key as the new `ports.ErrTriggerExists`, which the scan records as
-`check.conflict.skipped` and skips. Two passes, two lapsed leads, or a retry after a crash
-therefore produce one row at most, whatever its later status. Once that row exists, the next
-pass's re-plan of the same instant creates nothing: case 3 when it was delivered, the conflict
-otherwise. A catch-up that itself lapses is not re-planned: `CatchUp` is skipped when the stale
-row carries `catch_up`. A correction to another instant has a new key, so the new date can get
-its own catch-up.
+- the unit is an event whose current instant is ahead;
+- it has no armed one-shot row;
+- it has no undelivered row the gate would still `Deliver` or `Defer`.
 
-**After it goes out.** Every other undelivered row of that unit still due lapses with reason
-`covered`, so neither a later push nor Today repeats it, and the digest never lists one-shot rows
-(D3). The quiet-hours wait is also safe: if a pass reaches the catch-up after its event started,
-D1 lapses it as `passed`.
+It then calls the new pure `prospection.CatchUp(eventAt, sent, prefs, interrupt, now)`:
 
-**"Sent" means delivered**: `FiredForUnit` (`triggerrepo.go:264`) adds `surfaced_at IS NOT
-NULL`, so an undelivered row no longer covers a lead in the preference re-arm either (I35's "what
-went out is never sent again" keeps its meaning; what never went out is no longer counted).
+1. Leads still ahead are planned as `FollowSent(eventAt, nil, sent, …)` plans them.
+2. If none is ahead and nothing in `sent` is about this instant, it plans **one** at-once
+   reminder through ADR-0030's `deliverAt`. That gives `now` outside quiet hours, or quiet end
+   when quiet end comes before the event; otherwise the result is `ArmNothing`/`quiet_hours`,
+   recorded as `check.reminder.refused`. Only a `superseded` lapse can reach the quiet-hours
+   branches from the scan. An `overdue` row is `Defer`red there and never goes stale at night.
+3. Otherwise nothing is planned.
 
-**D7. Language on the unit** (P5). Migration adds `units.language TEXT NULL`, backfilled with
-`json_extract(context,'$.language')` from each unit's `capture.classify` row. Capture writes it
-(empty → NULL). `UnitRepo.LatestLanguage()` reads the newest unit's non-null language. A push
-renders with `phrase.For(unit.language)`; the digest with `LatestLanguage`; unknown → fallback.
-Corrections do not change it.
+Leads go through the existing `reminderSet.apply` with a new `checkCause`. The at-once catch-up
+does not: `armReminder` records before `Create` and draws `ids.New()`
+(`correction_reminder.go:221-229`). So a dedicated `armCatchUp` creates the row with id
+`catch-up:<unit_id>:<About in UTC, RFC3339>` and payload `catch_up: true`. Only after `Create`
+succeeds does it record `check.reminder.armed`. The existing `ports.ErrTriggerExists`
+(`ports/triggerrepo.go:234, :337`; sqlite `:131`, memrepo `:60`, repo contract `:134`) means
+already claimed: nothing is recorded and nothing is sent. The residual is that a crash between
+`Create` and the record leaves the row without its trail row. Its payload rationale still says
+why.
+
+- **One per event and instant, ever.** That covers several lapsed leads, several passes and
+  retries. A catch-up that lapses is never re-planned (`catch_up` is checked). Neither is one
+  that ends undelivered: it had ADR-0009's push window. An event corrected away and back to the
+  same instant gets no second catch-up, but its leads still ahead are armed.
+- **The flag is carried.** `moveReminder` keeps `catch_up` when a correction moves the row.
+  `TriggerPayload.CatchUp` and `payloadJSON` encode it.
+- **After it goes out,** the unit's other undelivered rows lapse as `covered`.
+- **"Sent" means delivered.** `FiredForUnit` (`sqlite/triggerrepo.go:261-265`) adds
+  `surfaced_at IS NOT NULL`, so a lapsed row never covers a lead, here or in I35's re-arm.
+
+**D7. Language on the unit** (P5). A migration adds `units.language TEXT NULL` and backfills it
+from the **earliest** `capture.classify` row of each unit. Later rows re-classify corrections:
+`UPDATE units SET language = (SELECT NULLIF(json_extract(context,'$.language'),'') FROM
+decision_log WHERE action='capture.classify' AND json_extract(context,'$.unit_id')=units.id
+ORDER BY occurred_at, seq LIMIT 1)`. Capture writes it, empty as NULL, and a correction never
+changes it. `UnitRepo.LatestLanguage()` returns the non-null language of the newest unit by
+`created_at`, archived units included: it is the person's language, not the unit's state. A
+push uses its unit's language, else `LatestLanguage`, else the fallback. The digest uses
+`LatestLanguage`, else the fallback.
+
+**Dry run** reaches every verdict and the re-plan, writes nothing and counts the same effects.
+`CheckReport` gains `TriggersLapsed`/`RemindersArmed`/`RemindersRefused` (I12 arithmetic,
+`cmd/nooma/check.go:122`). The three new actions go into `AllDecisionActions`, doc 02 §11 and
+`ui/activitylabel.go`.
 
 ## 4. Behaviour in plain terms
 
-- A reminder about something that already happened is never sent, however it got stuck.
-- A vault with no channel keeps its event reminders waiting for the first check that can deliver.
-- A reminder that could not go out is tried again on the next check while it is still on time.
-  Once it is late it is dropped, and the event gets the reminders the user's leads still have
-  ahead. When none is left and the event has not happened, the event gets **one** reminder right
-  away, or at quiet end when that is still before the event, and never a second one. On the
-  client's vault, the first check after deploy drops all seven:
-  - The three flights that departed send nothing.
-  - Tomorrow's dentist gets its 2-hour reminder.
-  - The 10-15 flight gets its 24-hour reminder 9 minutes later (the 16:45 duplicate unit already
-    has its own).
-  - The 10-16 flight gets its leads, moved out of the night.
-- A one-shot reminder never appears in the digest, so one that went out is not listed again.
-- A reminder reads "Recordatorio: Tengo una cita con el dentista… — jue 15 oct, 11:00", using the
-  unit's text and time as they are now. One unit gives one line.
-- The digest and every reminder speak Spanish to a user who writes in Spanish.
+ADR-0032's decision, applied to the client's vault: the first check after deploy drops all seven.
+The departed flights send nothing. The dentist gets its 2-hour reminder, the 10-15 flight its
+24-hour one, and the 10-16 flight its leads, moved out of the night.
 
 ## 5. Interactions with remind-me-reminders (#337)
 
-- Numbering: #337 takes ADR-0031, migration 0008 and I36; this change takes ADR-0032, the next
-  migration and I37. Whichever merges second renumbers. Both add a `units` column, so both touch
-  the schema golden.
-- Its task reminders must write `event_at` (the `About`) in the payload. Otherwise a legacy-style
-  row resolves through `Current`, which D1 reads as `due_at` for a task unit.
-- Its quiet-hours exemption for asked reminders must live in the verdict D1 calls. If it does not,
-  the retry and the fire-time paths disagree.
+#337 takes ADR-0031, migration 0008 and I36. This change takes ADR-0032, the next migration and
+I37. Whichever merges second renumbers. Its task reminders must write `event_at` (D1 reads
+`due_at` as `Current`), and its quiet-hours exemption must live inside D1's `TriggerVerdict`.
 
-## 6. Chain (stacked to main)
+## 6. Chain (stacked to main; every link leaves main consistent)
 
-| PR | Branch | Content | Forecast impl+docs |
+| PR | Branch | Content | Impl+docs |
 |---|---|---|---|
-| 1 | `plan/digest-stale-reminders` | ADR-0032 (Accepted), this design, tasks | ~380 |
-| 2 | `fix/undelivered-reminder-gate` | D1-D4, D3a; doc 02 §7/§11, doc 03 `triggers`, doc 06 I37, doc 07 | ~360 |
-| 3 | `fix/lapsed-reminder-replans` | D6 with the catch-up, `ErrTriggerExists`; doc 02 §7/§11 | ~240 |
-| 4 | `fix/reminder-renders-the-unit` | D5 with both languages' sentences, rendered in the fallback | ~260 |
-| 5 | `feat/proactive-language` | D7; migration, schema golden, doc 02 §5, doc 03 `units` | ~220 |
+| 1 | `plan/digest-stale-reminders` | ADR-0032, this design, tasks | this PR |
+| 2 | `fix/never-remind-of-the-past` | D1 `passed` only, D4, `FiredForUnit`; the gate at fire time, in the digest and Today; doc 02 §7/§11, doc 03, doc 06 I37 | ~300 |
+| 3 | `fix/late-reminders-replan` | D1 `superseded`/`overdue`, D3a, D6 with the catch-up, I15 amended; doc 02 §5/§7/§11 | ~380 |
+| 4 | `fix/push-retries-undelivered` | D3: the retry, the one-shot rows out of the digest, the conflict and the sent-set | ~170 |
+| 5 | `fix/reminder-renders-the-unit` | D5 | ~260 |
+| 6 | `feat/proactive-language` | D7; migration, golden, doc 02 §5, doc 03 | ~220 |
 
-Link 2 is what stops a stale reminder from being sent. Link 3 carries the one at-once reminder.
+Link 2 lapses only the past; link 3 brings `overdue` and the re-plan together; until link 4 the
+gated digest stays the re-attempt path.
 
 ## 7. Tests (written first, watched red)
 
-- L2 `TestI37_AnUndeliveredReminderIsJudgedAgain`: the client's seven rows, as fixtures in
-  memrepo at 2026-10-14T14:51:36Z with a channel. Nothing past is sent. Each row lapses with its
-  reason. The superseded row lapses even with its event ahead. A row within its window is pushed
-  on the next pass, not by the digest. A pass with no channel leaves every one-shot row untouched
-  and writes no row.
-- L2 I34 kept green unchanged. I35 widened: a fired, undelivered row covers no lead.
-- L1: `ReminderVerdict` table (superseded, passed, overdue, defer, boundaries, legacy `About`
-  resolution); `phrase` completeness keeps both languages total.
-- L3: `Lapse` precondition in the repo contract; `Create` of an existing id is
-  `ErrTriggerExists`; the migration backfill; `LatestLanguage`.
-- Link 3, L1: the `CatchUp` table covers leads ahead, every lead behind with nothing sent (one at
-  once), the same with something sent (nothing), inside quiet hours with quiet end before the
-  event (at quiet end), and quiet end at or after it (refused).
-- Link 3, L2: `TestI37_AnEventNeverRemindedGetsOneReminder`. Two lapsed leads of one event in one
-  pass give one catch-up. Three further passes, delivered and undelivered, give no second one.
-  A lapsed catch-up is not re-planned. After the catch-up goes out, the event's other undelivered
-  row lapses as `covered`, and the digest lists none of them.
-- Link 5, L2: a Spanish unit's reminder and a Spanish-last vault's digest render in Spanish.
-
-Mutation probes, recorded in each PR body: drop the gate from the digest; drop the superseded
-check; let the retry fall to the digest; judge one-shot rows with no destination; use a random
-catch-up id; re-plan a lapsed catch-up; count an undelivered row as sent; render
-`payload.action`; ignore the unit's language.
+- L1 `ReminderVerdict`: each reason; second-precision `superseded`; `Waiting`; `About`
+  resolution with a zero lead and with a clamped recurring row. L1 `CatchUp`: every branch.
+- L2 `TestI37_*` (link 2): the client's seven rows: the past is never sent, the four ahead stay.
+  Link 3: they lapse and re-plan as §4 says; a superseded fired row re-plans the new instant;
+  two lapsed leads in one pass, then three more passes, give one catch-up; a viable sibling
+  blocks it; a nil channel touches no row ahead; a recurring row waiting 18 h is carried. Link 4:
+  a failed push is retried once per pass.
+- L2: I15 amended, I34 unchanged, I35 widened, I27 held. L3: `Lapse`, backfill, `LatestLanguage`.
+- Mutation probes, per PR: drop each reason; `overdue` on waiting rows; a random catch-up id;
+  re-plan a lapsed catch-up; count an undelivered row as sent; render `payload.action`.
