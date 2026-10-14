@@ -2,8 +2,7 @@ package prospection
 
 import "time"
 
-// LapseReason is why a reminder is not sent (ADR-0032). It travels with a
-// Stale verdict so the trail says which of the two ended the reminder.
+// LapseReason is why a Stale reminder is not sent (ADR-0032).
 type LapseReason string
 
 const (
@@ -14,27 +13,24 @@ const (
 )
 
 // Reminder is what the delivery gate judges: the facts a stored trigger and
-// its unit give, unjudged. The gate resolves the event the reminder is about
-// itself, so every caller (the due scan, the digest, Today) reads it one way.
+// its unit give. The gate resolves the event itself, so every caller reads it
+// one way.
 type Reminder struct {
 	// FireAt is when the reminder came due, in any zone: it is stored in UTC.
 	FireAt time.Time
-	// EventAt is the event instant the trigger's payload carries, zero when
-	// it carries none (a row armed before ADR-0029 or at once).
+	// EventAt is the event instant the payload carries, zero when none.
 	EventAt time.Time
-	// LeadMinutes is the payload's lead: FireAt plus it is the event, when
-	// positive. Zero means a reminder armed at once, which names no event.
+	// LeadMinutes: FireAt plus it is the event, when positive. Zero is a
+	// reminder armed at once, which names no event.
 	LeadMinutes int
-	// Rule and Anchor are set for a recurring reminder, whose event is its
-	// next occurrence after FireAt.
+	// Rule and Anchor are set for a recurring reminder.
 	Rule   *Rule
 	Anchor *Anchor
-	// Current is the instant the reminder's unit holds for its event now,
-	// nil when unknown. It is read only for a one-shot reminder: a recurring
-	// unit's event_at is an anchor, its year discarded (doc 02 §7).
+	// Current is the unit's event now, nil when unknown. Never read for a
+	// recurring reminder: its unit's event_at is an anchor (doc 02 §7).
 	Current *time.Time
-	// Waiting is a reminder fired and waiting for its digest. ADR-0009's
-	// window belongs to a push, so lateness does not judge it.
+	// Waiting is a fired reminder waiting for its digest; lateness (a
+	// push's window) does not judge it.
 	Waiting bool
 }
 
@@ -42,23 +38,20 @@ type Reminder struct {
 // (ADR-0032 point 1), in this order:
 //
 //  1. Its event is past: Stale, LapsePassed.
-//  2. It is waiting for the digest: Deliver. Only the event judges it.
-//  3. Otherwise TriggerVerdict, whose Stale is LapseOverdue. Quiet hours
-//     still answer Defer first.
+//  2. It is waiting for the digest: Deliver.
+//  3. Otherwise TriggerVerdict, whose Stale is LapseOverdue (Defer still first).
 //
-// The event is, in order: the payload's own; FireAt plus a positive lead; for
-// a recurring reminder, the occurrence NextOccurrence derives from FireAt read
-// in now's zone (FireAt is stored in UTC and NextOccurrence takes its zone from
-// its argument, so the UTC reading lands on UTC noon, hours off the local
-// calendar day), which assumes a period longer than the lead; and for a
+// The event is, in order: the payload's; FireAt plus a positive lead; for a
+// recurring reminder, the occurrence NextOccurrence derives from FireAt read in
+// now's zone (FireAt is stored in UTC, and the UTC reading lands on UTC noon,
+// hours off the local day), assuming a period longer than the lead; and for a
 // one-shot reminder with none of those, Current. A reminder naming no event is
 // never passed: lead_minutes 0 is not an event at FireAt.
 //
-// An event is past once its instant has gone, except a day-granular one: a
-// recurring occurrence (anchored at noon, but a calendar day) and a date-only
-// event (stored as local midnight, the test reminderInstants applies) are
-// reminded about all of their day, and are past from the next local midnight in
-// now's zone. A timed event keeps the instant rule.
+// An event is past once its instant has gone, except a day-granular one, a
+// recurring occurrence (noon, but a calendar day) or a date-only event (local
+// midnight, as reminderInstants reads it): it is reminded about all of its day
+// and is past from the next local midnight in now's zone.
 func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseReason) {
 	if about, known := r.about(now.Location()); known && r.passed(about, now) {
 		return VerdictStale, LapsePassed
