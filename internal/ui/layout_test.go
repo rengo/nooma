@@ -91,6 +91,7 @@ func TestLayout_NavMarksTheCurrentPage(t *testing.T) {
 		"nooma — units":    "/ui/units",
 		"nooma — unit":     "/ui/units",
 		"nooma — activity": "/ui/activity",
+		"nooma — admin":    "/ui/admin",
 	} {
 		var buf strings.Builder
 		if err := ui.Page(title, templ.NopComponent).Render(context.Background(), &buf); err != nil {

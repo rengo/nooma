@@ -56,6 +56,14 @@ type Activity interface {
 	Page(ctx context.Context, kind string, before *ports.DecisionCursor) (brain.ActivityPage, error)
 }
 
+// Admin is /ui/admin's own entry point (m4e2-admin design §3.3): View for the
+// page, Update for the one POST. Update takes a ConfigField, so a name outside
+// the five settings has no way in. *brain.AdminService satisfies it.
+type Admin interface {
+	View(ctx context.Context) (brain.AdminView, error)
+	Update(ctx context.Context, field brain.ConfigField, raw string) (brain.UpdateResult, error)
+}
+
 // Deps is what New needs to build the mirror's handler. Today, Units,
 // Search, Capture, Beliefs and Activity are nil until wired (cmd/nooma's own transitional
 // state, and every test fixture that does not need a real view); each nil
@@ -70,7 +78,9 @@ type Deps struct {
 	Activity Activity
 	// Preferences is the reminder and quiet-hours preferences page's.
 	Preferences Preferences
-	Serving     Serving
+	// Admin is the settings and job status page's.
+	Admin   Admin
+	Serving Serving
 	// Now reads the injected clock (ports.Clock.Now); the UI takes its zone from
 	// the instant it returns and nothing else. A func, not ports.Clock, so Deps
 	// stays free of interfaces that are not a brain entrance (I22's gate).
@@ -134,6 +144,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.servePreferences(w, r)
 	case "POST /ui/preferences":
 		h.servePreferencesSave(w, r)
+	case "GET /ui/admin":
+		h.serveAdmin(w, r)
+	case "POST /ui/admin":
+		h.serveAdminSave(w, r)
 	default:
 		http.NotFound(w, r)
 	}
