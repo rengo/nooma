@@ -56,10 +56,11 @@ func (f *fxH) carryTrigger(t *testing.T, trigID, unitID string, w float64) {
 	}); err != nil {
 		t.Fatalf("seed unit %s: %v", unitID, err)
 	}
-	uid, fireAt := unitID, todayNow.Add(-time.Hour)
+	uid, fireAt, yearly := unitID, todayNow.Add(-time.Hour), prospection.RuleYearly
 	if err := f.triggers.Create(ctx, ports.Trigger{
 		ID: trigID, UnitID: &uid, Kind: ports.TriggerKindTimeBased,
 		Payload: ports.TriggerPayload{ActionText: "act on " + trigID}, FireAt: &fireAt, CreatedAt: todayNow,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 	}); err != nil {
 		t.Fatalf("seed trigger %s: %v", trigID, err)
 	}

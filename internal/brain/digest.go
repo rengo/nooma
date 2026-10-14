@@ -76,13 +76,19 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 
 	// A reminder whose event is past is lapsed before anything reads the list
 	// (ADR-0032); lateness is a push's window and does not judge it here.
-	pending, past, err := splitPast(ctx, r.units, r.night, pending, now)
+	pending, past, err := splitPast(ctx, r.gate(), pending, now)
 	if err != nil {
 		return 0, 0, err
 	}
-	lapsed, err := r.lapsePast(ctx, past, now, commit)
-	if err != nil {
-		return 0, 0, err
+	lapsed := 0
+	for _, t := range past {
+		done, err := r.retire(ctx, staleRow{t, false, prospection.LapsePassed}, now, commit)
+		if err != nil {
+			return 0, 0, err
+		}
+		if done {
+			lapsed++
+		}
 	}
 
 	// The digest's SECOND item source, and it does not enter Carry's

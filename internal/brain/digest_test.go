@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,8 +54,13 @@ func (u *digestUnits) LiveFocusCandidates(_ context.Context, ids []string) ([]fo
 	return out, nil
 }
 
+// digestTrigger is a recurring reminder that fired an hour before the digest:
+// what actually waits for it (a one-shot reminder is pushed, or re-planned
+// when late, ADR-0032).
 func digestTrigger(id, unitID, text string) ports.DueTrigger {
-	t := ports.DueTrigger{ID: id, FireAt: digestNow.Add(-time.Hour), Payload: ports.TriggerPayload{ActionText: text}}
+	yearly := prospection.RuleYearly
+	t := ports.DueTrigger{ID: id, FireAt: digestNow.Add(-time.Hour), Payload: ports.TriggerPayload{ActionText: text},
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25}}
 	if unitID != "" {
 		t.UnitID = &unitID
 	}
@@ -798,5 +804,74 @@ func TestDigest_ExpiresBeforeItSends(t *testing.T) {
 	}
 	if n := countAction(t, log, digestNow, ports.ActionCheckQuestionExpired); n != 1 {
 		t.Errorf("%d question_expired row(s), want 1", n)
+	}
+}
+
+// lapseRecorder records what the digest lapsed.
+type lapseRecorder struct {
+	undeliveredTriggers
+	lapsed []string
+}
+
+func (r *lapseRecorder) Lapse(_ context.Context, id string) error {
+	r.lapsed = append(r.lapsed, id)
+	return nil
+}
+
+// TestI37_DigestSkipsHeldAndStaleOneShotRows: the re-plan step owns a one-shot
+// row that is late or superseded, whether it re-planned it or holds it for a
+// catch-up; the digest neither sends nor lapses it, and carries the rows
+// beside it. A past row is still the digest's to lapse.
+func TestI37_DigestSkipsHeldAndStaleOneShotRows(t *testing.T) {
+	oneShot := func(id, unit, text string) ports.DueTrigger {
+		t := digestTrigger(id, unit, text)
+		t.RecurrenceRule, t.RecurrenceAnchor = nil, nil
+		return t
+	}
+	fresh := oneShot("fresh", "u-1", "fresh one")
+	stale := oneShot("stale", "u-2", "stale one")
+	stale.FireAt = digestNow.Add(-12 * time.Hour)
+	past := oneShot("past", "u-3", "past one")
+	past.Payload.About = digestNow.Add(-time.Hour)
+	triggers := &lapseRecorder{undeliveredTriggers: undeliveredTriggers{pending: []ports.DueTrigger{fresh, stale, past}}}
+	ch := &sendingChannel{}
+
+	carried, lapsed, err := digestRunner(t, triggers, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), ch).
+		assembleDigest(context.Background(), digestNow, true)
+	if err != nil {
+		t.Fatalf("assembleDigest: %v", err)
+	}
+
+	if carried != 1 || lapsed != 1 || !slices.Equal(triggers.lapsed, []string{"past"}) || !slices.Equal(triggers.surfaced, []string{"fresh"}) {
+		t.Errorf("carried %d, lapsed %v (%d), surfaced %v; want only fresh carried and only past lapsed", carried, triggers.lapsed, lapsed, triggers.surfaced)
+	}
+	if len(ch.sent) != 1 || strings.Contains(ch.sent[0], "stale one") || strings.Contains(ch.sent[0], "past one") {
+		t.Errorf("sent %q, want only the fresh row", ch.sent)
+	}
+}
+
+// TestI37_LowEnergyHeldRowIsNotOverdue: a recurring reminder the care gate has
+// held through three digests is carried at last, however long ago it fired:
+// it waits for the digest, and waiting is not lateness.
+func TestI37_LowEnergyHeldRowIsNotOverdue(t *testing.T) {
+	yearly := prospection.RuleYearly
+	birthday := digestTrigger("rec", "", "Leo's birthday")
+	birthday.FireAt = digestNow.AddDate(0, 0, -4)
+	birthday.RecurrenceRule, birthday.RecurrenceAnchor = &yearly, &prospection.Anchor{Month: time.August, Day: 12}
+	triggers := &undeliveredTriggers{pending: []ports.DueTrigger{birthday}}
+	state := memrepo.NewState()
+	state.RecordEnergy(prospection.EnergyReading{Level: prospection.LowEnergyMax - 0.1, RecordedAt: digestNow.Add(-time.Hour)})
+	log := memrepo.NewDecisionLog()
+	for i := 1; i <= prospection.MaxDigestDeferrals; i++ {
+		if err := log.Record(context.Background(), ports.Decision{ID: "held-" + strconv.Itoa(i), Action: ports.ActionCheckDigestHeld,
+			Rationale: "held", Context: []byte(`{"id":"rec"}`), OccurredAt: digestNow.AddDate(0, 0, -i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ch := &sendingChannel{}
+
+	carried, lapsed, err := digestRunner(t, triggers, &digestUnits{}, state, log, ch).assembleDigest(context.Background(), digestNow, true)
+	if err != nil || carried != 1 || lapsed != 0 || !slices.Equal(triggers.surfaced, []string{"rec"}) {
+		t.Errorf("carried %d, lapsed %d, surfaced %v, err %v; want the held birthday carried", carried, lapsed, triggers.surfaced, err)
 	}
 }

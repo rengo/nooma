@@ -25,7 +25,10 @@ PR 2 — `fix/never-remind-of-the-past` (D1 `passed`, D4, `FiredForUnit`)
       `FiredForUnit`, `check.trigger.lapsed` (action, label, counter, dry run). Doc 02 §7/§11,
       doc 03, doc 07, I37 row. `make check-all`, open the PR.
 
-PR 3 — `fix/late-reminders-replan` (D1 rest, D8, D6 without the catch-up)
+PR 3a `fix/late-reminders-held` and PR 3b `fix/late-reminders-replan` (D1 rest, D8, D6 without the catch-up).
+Split (the client's vault would otherwise lose its reminders): 3a judges and HOLDS, retiring only `passed` rows;
+3b writes the plan first and then retires the late and superseded rows. 3a owns the digest-skip, verdict, D8,
+`BirthdayWaiting`, `LowEnergyHeld`, `CannotDeliverExpiresAsToday` and I35 tests below; 3b owns the rest.
 - [ ] 4. RED tests:
   - `TestI37_StaleL24HealthyL2KeepsOneAtTheTwoHourLead` (C1): stale 24 h + healthy 2 h →
     exactly one armed row, at the 2 h lead.

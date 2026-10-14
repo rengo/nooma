@@ -685,3 +685,36 @@ func (v i35Vault) rowsOrFail(t *testing.T) []ports.Decision {
 	}
 	return all
 }
+
+// TestI35_QuietPulledLeadInFlightCovers: the 2 h lead was pulled to 22:00 and
+// fired, its push failed, and at 23:00 the user drops every lead but the 2 h
+// one. A reminder still being delivered on time counts as sent (ADR-0032 point
+// 3), so the lead is covered: nothing is armed at once for it, and the 6 h
+// reminder, which serves a lead no longer wanted, is cancelled rather than
+// carried onto an immediate send of a lead already out.
+func TestI35_QuietPulledLeadInFlightCovers(t *testing.T) {
+	ctx := context.Background()
+	flight := time.Date(2026, 10, 15, 5, 0, 0, 0, time.UTC)
+	evening := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
+	pulled := time.Date(2026, 10, 14, 22, 0, 0, 0, time.UTC)
+	six := time.Date(2026, 10, 14, 23, 0, 0, 0, time.UTC)
+
+	v := newI35(t, evening)
+	leads := "[360,120]"
+	v.cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+	v.unit(t, "flight", unit.TypeEvent, flight, evening)
+	v.serve(t, "flight-2h", "flight", pulled, flight, 420, 120)
+	v.serve(t, "flight-6h", "flight", six, flight, 360, 360)
+	if err := v.triggers.Fire(ctx, "flight-2h", pulled); err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	p := i35Defaults()
+	p.LeadMinutes = []int{120}
+
+	if _, err := v.at(six).Save(ctx, p); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if got := v.armedAt(t, "flight"); len(got) != 0 {
+		t.Errorf("flight reminders = %v, want none armed: the 2 h lead is in flight and covered", got)
+	}
+}

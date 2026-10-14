@@ -1356,10 +1356,17 @@ box can audit it):
     `surfaced_at` NULL (`TriggerRepo.Lapse`), recorded as `check.trigger.lapsed`, counted in the
     check report, and no longer covering a lead a re-arm would skip (`FiredForUnit` reads `fired`
     rows only).
-  Lateness does not judge a fired reminder waiting for the digest (ADR-0009's window is a push's),
-  and an armed trigger keeps today's verdict on it. Only the digest lapses, so a past fired row
-  stays `fired` until a digest is due while Today and the digest ignore it. Today applies the same
-  gate and writes nothing (I27).
+  A recurring fired reminder waits for the digest and lateness does not judge it (ADR-0009's
+  window is a push's). A one-shot fired row is judged late, and a reminder is **superseded** when
+  its payload's `event_at` differs, to the second, from its unit's current `event_at`, or when it
+  names no event and its unit has since armed a one-shot reminder (a legacy row). A late or
+  superseded row whose event is still ahead is **held**: not sent, not lapsed, and not carried by
+  the digest or counted by Today, until the re-plan step (ADR-0032 point 3) arms its replacement
+  and retires it; only a past row is retired now, and an armed trigger overdue past ADR-0009's
+  window expires as before. Only the digest lapses, so a past fired row stays `fired` until a
+  digest is due while Today and the digest ignore it. Today applies the same gate and writes
+  nothing (I27). A unit a pass cannot read is judged without it, for a reminder that names its own
+  event, and recorded once per unit as `check.delivery_failed`.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the

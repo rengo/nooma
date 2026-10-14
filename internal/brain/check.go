@@ -108,6 +108,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	// r is this scan's copy: the user's night, read once, is what every
 	// verdict and the digest below are judged in.
 	r.night = r.quietHours(ctx)
+	r.unreadable = map[string]error{}
 
 	due, err := r.triggers.Due(ctx, now)
 	if err != nil {
@@ -115,10 +116,16 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	}
 	report.TriggersDue = len(due)
 
+	g := r.gate()
 	for _, t := range due {
-		verdict, reason, err := judgeReminder(ctx, r.units, r.night, t, false, now)
+		verdict, reason, err := g.judge(ctx, t, false, now)
 		if err != nil {
 			return CheckReport{}, err
+		}
+		if reason == prospection.LapseSuperseded {
+			// Held, untouched: its event moved, and until the re-plan step
+			// exists, retiring it would lose the unit's reminder.
+			continue
 		}
 		status, writes := triggerTransition(verdict)
 		if !writes {
@@ -136,30 +143,13 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		if status != ports.TriggerStatusExpired {
 			return CheckReport{}, fmt.Errorf("check: trigger %q: no write path for status %q", t.ID, status)
 		}
-		if !commit {
-			report.TriggersExpired++
-			continue
-		}
-		if err := r.triggers.Expire(ctx, t.ID); err != nil {
-			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
-			if skipErr != nil {
-				return CheckReport{}, skipErr
-			}
-			if skipped {
-				continue
-			}
-			return CheckReport{}, fmt.Errorf("check: expire trigger %q: %w", t.ID, err)
-		}
-		rationale := fmt.Sprintf("trigger %q was overdue past its staleness window and expired rather than firing late", t.ID)
-		detail := checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale)}
-		if reason == prospection.LapsePassed {
-			rationale = fmt.Sprintf("trigger %q came due after the event it is about was no longer ahead, and expired rather than firing", t.ID)
-			detail.Reason = string(reason)
-		}
-		if err := r.record(ctx, now, ports.ActionCheckTriggerExpired, rationale, detail); err != nil {
+		done, err := r.retire(ctx, staleRow{t, true, reason}, now, commit)
+		if err != nil {
 			return CheckReport{}, err
 		}
-		report.TriggersExpired++
+		if done {
+			report.TriggersExpired++
+		}
 	}
 
 	dueTimers, err := r.timers.Due(ctx, now)
@@ -257,6 +247,9 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		report.TriggersLapsed = lapsed
 	}
 
+	if err := r.reportUnreadable(ctx, now, commit); err != nil {
+		return CheckReport{}, err
+	}
 	return report, nil
 }
 
@@ -291,6 +284,8 @@ type checkRunner struct {
 	// whose digest is due at DigestHour exactly as the default's is.
 	config ports.ConfigRepo
 	night  prospection.QuietHours
+	// unreadable is the units this scan judged without (see reminderGate).
+	unreadable map[string]error
 	// llm words a timer at delivery. Nil is legal: a vault with no
 	// provider bound delivers the user's own words, which is what the
 	// rephrasing falls back to anyway.
