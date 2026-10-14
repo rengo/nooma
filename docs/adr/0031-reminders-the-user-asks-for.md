@@ -1,6 +1,6 @@
 # ADR-0031 — A reminder the user asks for is set from their own words, asked about when unclear, and stopped only when they say so
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client, 2026-10-14)
 - **Date**: 2026-10-14
 - **Supersedes**: [ADR-0027](0027-pending-question-store.md) **in part**: the table's shape
   only. ADR-0027's decision that a question lives in a dedicated store stands. Its own reversal

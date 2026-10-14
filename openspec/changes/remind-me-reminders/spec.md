@@ -1,7 +1,7 @@
 # Spec — remind-me-reminders
 
 What MUST be true after this change, in testable form. How is `design.md`'s job. The rules are
-ADR-0031 (Proposed), on top of ADR-0029, ADR-0030 and ADR-0032 (Accepted). The client decisions
+ADR-0031 (Accepted by the client, 2026-10-14), on top of ADR-0029, ADR-0030 and ADR-0032. The client decisions
 are in `proposal.md`.
 
 **Terms.**
