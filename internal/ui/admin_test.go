@@ -2,6 +2,9 @@ package ui_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -132,5 +135,164 @@ func TestAdminPage_AnswersPlainlyWhenItCannotRender(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "deadline") {
 		t.Errorf("the error text reached the browser: %q", rec.Body.String())
+	}
+}
+
+func adminPost(t *testing.T, admin ui.Admin, body string, headers ...string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/ui/admin", strings.NewReader(body))
+	req.Pattern = "POST /ui/admin"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for i := 0; i+1 < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+	rec := httptest.NewRecorder()
+	ui.New(ui.Deps{Admin: admin}).ServeHTTP(rec, req)
+	return rec
+}
+
+func TestAdminPost_SavesTheNamedFieldAndShowsTheNewValueInForce(t *testing.T) {
+	t.Parallel()
+	after := defaultAdminView()
+	after.Settings.WeightThreshold = 0.6
+	fake := &fakeAdmin{view: after, result: brain.UpdateResult{Field: brain.ConfigWeightThreshold, Changed: true}}
+
+	rec := adminPost(t, fake, "field=weight_threshold&value=0.6", "HX-Request", "true", "HX-Boosted", "true")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if len(fake.updates) != 1 || fake.updates[0] != (adminUpdate{brain.ConfigWeightThreshold, "0.6"}) {
+		t.Fatalf("Update calls = %v, want exactly one for weight_threshold with the raw text", fake.updates)
+	}
+	assertContains(t, rec.Body.String(), `data-outcome="saved"`, "Saved.", `name="value" value="0.6"`)
+	if got := rec.Header().Get("HX-Replace-Url"); got != "/ui/admin" {
+		t.Errorf("HX-Replace-Url = %q, want /ui/admin so a reload does not resubmit", got)
+	}
+}
+
+func TestAdminPost_AValueAlreadyInForceSaysNothingChanged(t *testing.T) {
+	t.Parallel()
+	fake := &fakeAdmin{view: defaultAdminView(), result: brain.UpdateResult{Field: brain.ConfigGoalStagnationDays}}
+	rec := adminPost(t, fake, "field=goal_stagnation_days&value=21")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	assertContains(t, rec.Body.String(), "Nothing changed")
+	if strings.Contains(rec.Body.String(), "Saved.") {
+		t.Error("a no-op is reported as saved")
+	}
+}
+
+// C21: a name outside the five settings is answered before the brain is
+// reached, so no mapping of Update's error can let one through.
+func TestAdminPost_UnknownFieldNeverCallsUpdate(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"relation thresholds":       "field=relation_thresholds&value=0.5",
+		"consolidation last run at": "field=consolidation_last_run_at&value=2026-01-01",
+		"a bogus name":              "field=bogus&value=1",
+		"an empty name":             "field=&value=1",
+		"no name at all":            "value=1",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeAdmin{view: defaultAdminView()}
+			rec := adminPost(t, fake, body)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400", rec.Code)
+			}
+			if len(fake.updates) != 0 {
+				t.Errorf("Update was called %d time(s), want 0", len(fake.updates))
+			}
+		})
+	}
+}
+
+func TestAdminPost_ARefusedValueIs400AndTheFormComesBackWithTheMessageAndTheText(t *testing.T) {
+	t.Parallel()
+	refused := &brain.ConfigRangeError{Field: brain.ConfigWeightThreshold, Raw: "abc<b>", Message: "enter a number from 0 to 2"}
+	rec := adminPost(t, &fakeAdmin{view: defaultAdminView(), err: refused}, "field=weight_threshold&value=abc%3Cb%3E")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	body := rec.Body.String()
+	assertContains(t, body, `data-outcome="invalid"`, "Nothing was saved.", `data-error="weight_threshold"`, "enter a number from 0 to 2",
+		`name="value" value="abc&lt;b&gt;"`)
+	// The other settings still show what is in force.
+	assertContains(t, body, `name="value" value="0.05"`)
+}
+
+func TestAdminPost_AFailureIs500WithoutItsCause(t *testing.T) {
+	t.Parallel()
+	rec := adminPost(t, &fakeAdmin{view: defaultAdminView(), err: errors.New("disk is on fire")}, "field=weight_threshold&value=0.6")
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "disk is on fire") {
+		t.Errorf("the cause reached the browser: %q", rec.Body.String())
+	}
+}
+
+func TestAdminPost_RefusesWhatItCannotRead(t *testing.T) {
+	t.Parallel()
+	fake := &fakeAdmin{view: defaultAdminView()}
+	if rec := adminPost(t, nil, "field=weight_threshold&value=0.6"); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("nil Admin: status = %d, want 503", rec.Code)
+	}
+	huge := "field=weight_threshold&value=" + strings.Repeat("9", 100<<10)
+	if rec := adminPost(t, fake, huge); rec.Code != http.StatusBadRequest || len(fake.updates) != 0 {
+		t.Errorf("a body over the limit: status = %d, calls = %d; want 400 and none", rec.Code, len(fake.updates))
+	}
+}
+
+// C19. Not parallel: it swaps slog's default logger.
+func TestAdminPost_WriteLandedRendersSuccessNoticeAndWarns(t *testing.T) {
+	rec := &recordingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(rec))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	landed := fmt.Errorf("admin: %w", &brain.WriteLandedError{Record: true, Err: errors.New("log: disk is on fire")})
+	after := defaultAdminView()
+	after.Settings.MentalLoadThreshold = 9
+	resp := adminPost(t, &fakeAdmin{view: after, result: brain.UpdateResult{Field: brain.ConfigMentalLoadThreshold, Changed: true}, err: landed},
+		"field=mental_load_threshold&value=9")
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: the value is stored", resp.Code)
+	}
+	body := resp.Body.String()
+	assertContains(t, body, `data-outcome="saved-with-notice"`, "Saved, but the activity record of it could not be written.", `name="value" value="9"`)
+	if strings.Contains(body, "disk is on fire") || strings.Contains(body, "internal error") {
+		t.Errorf("the cause or a generic error reached the browser:\n%s", body)
+	}
+	if len(rec.records) != 1 || rec.records[0].Level != slog.LevelWarn {
+		t.Fatalf("slog records = %v, want exactly one WARN", rec.records)
+	}
+	var cause string
+	rec.records[0].Attrs(func(a slog.Attr) bool {
+		if a.Key == "err" {
+			cause = a.Value.String()
+		}
+		return true
+	})
+	if !strings.Contains(cause, "disk is on fire") {
+		t.Errorf("the warning's err = %q, want the cause", cause)
+	}
+}
+
+// A write that landed is still reported when the page cannot be re-read.
+func TestAdminPost_ASavedWriteIsReportedEvenIfThePageCannotBeReRead(t *testing.T) {
+	t.Parallel()
+	fake := &fakeAdmin{viewErr: errors.New("disk is on fire"), result: brain.UpdateResult{Changed: true}}
+	rec := adminPost(t, fake, "field=weight_threshold&value=0.6")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: the value is stored", rec.Code)
+	}
+	assertContains(t, rec.Body.String(), `data-outcome="saved"`)
+	if strings.Contains(rec.Body.String(), "disk is on fire") {
+		t.Error("the cause reached the browser")
 	}
 }

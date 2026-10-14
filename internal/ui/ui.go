@@ -146,6 +146,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.servePreferencesSave(w, r)
 	case "GET /ui/admin":
 		h.serveAdmin(w, r)
+	case "POST /ui/admin":
+		h.serveAdminSave(w, r)
 	default:
 		http.NotFound(w, r)
 	}

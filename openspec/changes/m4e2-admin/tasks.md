@@ -182,17 +182,22 @@ Files: `internal/ui/{admin.go,admin.templ,ui.go,layout.templ}`, `internal/httpap
 `test/conformance/{ui_entrances_test,httpapi_ui_wiring_test,ui_cross_origin_test,ui_read_views_write_nothing_test}.go`,
 **`internal/httpapi/server_test.go`**, `docs/06-harness.md` §4.
 
-- [ ] **2.1** SCAFFOLD — `ui.Admin` interface type (`View`, `Update`); `wireAdmin(db)`
+- [x] **2.1** SCAFFOLD — `ui.Admin` interface type (`View`, `Update`); `wireAdmin(db)`
   (`systemClock{}`, `NewConfigRepo`, `NewRelationRepo`, `NewDecisionLog`) and `uiDeps(..., admin)`
   with the typed-nil guard, `serve.go` call site; `admin.templ` placeholder; `make templ`.
-- [ ] **2.2** RED conformance — `wantUIMuxWiring` rows `GET /ui/admin` and `POST /ui/admin`;
+  *Applied differently:* `wireAdmin` also takes `uuidGen{}` (`NewAdminService` needs an
+  `IDGen`, 1b); no separate scaffold commit, RED was run against a stub handler. PR 2 lands as two
+  commits, the read-only page (GET, wiring, nav, G7) and the POST (guard rows, C18-C21, C13).
+- [x] **2.2** RED conformance — `wantUIMuxWiring` rows `GET /ui/admin` and `POST /ui/admin`;
   counting `Admin` stub on m4e's shared counter; `uiCrossOriginBodies["POST /ui/admin"] =
   "field=weight_threshold&value=0.6"` and no new exemption (C18; m4e's coverage test fails if the
   entry is missing); `Admin` field on `ui.Deps` (G12 red: `View`, `Update`); G7 admin GET over
   write-counting decorators of `ConfigRepo`, `RelationRepo`, `DecisionLog`;
   **`internal/httpapi/server_test.go:117` `TestUIGuardedLeavesEachReachAView`: add leaf `/ui/admin`,
-  marker `ADMIN` and a stub `Admin`.**
-- [ ] **2.3** RED ui — C11 unknown field never reaches `Update`, C21
+  marker `ADMIN` and a stub `Admin`.** *Applied differently:* C20 runs in `test/conformance`
+  (`admin_ui_test.go`), where the real `AdminService` over memrepo already has its fixtures; the
+  `internal/ui` test keeps the stubbed refusal. C13 lives there too, beside `hysteresisVault`.
+- [x] **2.3** RED ui — C11 unknown field never reaches `Update`, C21
   `TestAdminPost_UnknownFieldNeverCallsUpdate` (`relation_thresholds`, `consolidation_last_run_at`,
   bogus, empty: 400, `Update` calls == 0), C19 `…WriteLandedRendersSuccessNoticeAndWarns`
   (`&brain.WriteLandedError{Record: true}`, recording `slog` handler: status, notice, no error
@@ -203,11 +208,13 @@ Files: `internal/ui/{admin.go,admin.templ,ui.go,layout.templ}`, `internal/httpap
   `wiring_admin_test.go` over a real empty migrated vault (`View` answers never / enabled / no
   learned rows), `TestUIDeps_NilServicesStayNilInterfaces` `Admin` case, nil dep 503, relation
   thresholds shown with the learned note and no input.
-- [ ] **2.4** GREEN — routes in `ui.go` and the `server.go` switch; `ParseConfigField` before
+- [x] **2.4** GREEN — routes in `ui.go` and the `server.go` switch; `ParseConfigField` before
   `Update`; 400 handling; HTMX fragment vs full page; `MaxBytesReader`; `admin.templ`;
-  **`layout.templ` gains the admin link**; whitelist `View`, `Update` (G12).
-- [ ] **2.5** DOCS — harness §4 I22 row names `View`, `Update`. Verify `scripts/docs-sync.sh`.
-- [ ] **2.6** PROBES C11 accept `relation_thresholds`; C18 no body entry / invalid body (0 calls);
+  **`layout.templ` gains the admin link**; whitelist `View`, `Update` (G12). *Applied
+  differently:* the POST always answers the full page (with `HX-Replace-Url` when boosted), as
+  `/ui/preferences` does: every form is `hx-boost`ed, so an HTMX fragment would replace the body.
+- [x] **2.5** DOCS — harness §4 I22 row names `View`, `Update`. Verify `scripts/docs-sync.sh`.
+- [x] **2.6** PROBES C11 accept `relation_thresholds`; C18 no body entry / invalid body (0 calls);
   C19 map to 500 or 400 / skip the Warn / generic error text; C20 200 or 500 / write before
   validating; C21 call `Update` first; G6 POST unguarded; G7 a GET that records or seeds.
 
@@ -215,7 +222,7 @@ Files: `internal/ui/{admin.go,admin.templ,ui.go,layout.templ}`, `internal/httpap
 
 ## Closing (each PR)
 
-- [ ] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
+- [x] **C.1** `make check-all`, `go vet -tags integration,e2e ./...`, `scripts/docs-sync.sh` in an
   isolated worktree at the PR's commit; PR per `nooma-pr`; PR body lists impl+docs vs test lines
   and the measured multiplier.
 - [x] **C.2** After 1a merges compute actual / estimate and apply the cut rule before 1b. *Recorded:*

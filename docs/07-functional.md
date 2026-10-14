@@ -274,6 +274,14 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
     reminders already set for upcoming events, and shows up in Activity with the values it
     replaced. A later end of quiet hours also delays the morning digest, which never goes out
     twice in one day.
+11. **Lets you tune five settings and see how the nightly job is doing** (`/ui/admin`). The page
+    shows, and saves one at a time, the archive threshold, the focus margin, the days before a
+    goal counts as stagnant, the mental-load threshold and whether the nightly consolidation runs.
+    A value outside what the brain accepts is refused with a message and saves nothing; a saved
+    one takes effect on the next request and shows up in Activity with the value it replaced.
+    It also shows, read-only, when the last full consolidation ran (or that none has), the
+    relation thresholds learned so far, and the latest effects of the nightly pass, labelled as
+    effects: a night that decides nothing leaves none.
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
 Activity does, rather than rendering nothing; so does a unit page's relations section when the
@@ -281,7 +289,7 @@ unit is connected to nothing. A digest with nothing to carry but items held back
 it holds. Beliefs says it once when every facet is empty, and under each empty facet otherwise.
 
 **You end up with** a product you can use without a terminal, for what exists today. The graph
-and admin screens are not built (see below).
+screen is not built (see below).
 
 ---
 
@@ -305,7 +313,7 @@ As of 2026-10-08. "Shipped" means closed and archived, or recorded as closed in 
 | Graph view with edge curation | Blocked: `m4d` waits on ADR-0019 (still `Proposed`) | ADR-0019; 05 §M4 |
 | Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
-| Admin view (a small set of settings, job status) | In progress: `m4e2`, planned, nothing built | 05 §M4 |
+| Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
 | Timer list and cancel from chat and UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Planned: M5 | doc 02 §9; 05 §M5 |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |

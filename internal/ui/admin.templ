@@ -10,6 +10,11 @@ templ AdminPage(p adminPage) {
 templ adminBody(p adminPage) {
 	<section data-view="admin">
 		<h2>ADMIN</h2>
+		<div id="admin-result" aria-live="polite">
+			if p.Outcome != nil {
+				@beliefOutcomeView(*p.Outcome)
+			}
+		</div>
 		<h3>Settings</h3>
 		<p data-hint>Each setting is saved on its own and recorded in Activity.</p>
 		for _, s := range p.Settings {
@@ -67,7 +72,10 @@ templ adminSettingForm(s adminSetting) {
 				<option value="false" selected?={ s.Value == "false" }>disabled</option>
 			</select>
 		} else {
-			<input type="text" id={ "admin-" + string(s.Field) } name="value" value={ s.Value } inputmode="decimal" autocomplete="off"/>
+			<input type="text" id={ "admin-" + string(s.Field) } name="value" value={ s.Value } inputmode="decimal" autocomplete="off" aria-invalid?={ s.Error != "" }/>
+		}
+		if s.Error != "" {
+			<p data-error={ string(s.Field) }>{ s.Error }</p>
 		}
 		<p data-hint>{ s.Hint }</p>
 		<button type="submit">
