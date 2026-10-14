@@ -1,6 +1,6 @@
 # ADR-0032 — A reminder says what is true when it is sent, in the user's language
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client, 2026-10-14)
 - **Date**: 2026-10-14
 - **Supersedes**: —
 - **Superseded by**: —
@@ -32,7 +32,8 @@ Four decisions were missing, not one:
 |---|---|---|
 | Backlog | Send every undelivered reminder whose event is still ahead, late | Rejected: ADR-0009 expires a trigger overdue past its window rather than send it out of context, and a five-day-old "you have a flight" is that |
 | Backlog | Expire it and send nothing | Rejected: the user was never reminded of tomorrow's dentist |
-| Backlog | **Expire what is late; re-plan the event's leads still ahead** | Chosen: nothing is sent late, and the user gets exactly the reminders a capture made now would get |
+| Backlog | Expire what is late; re-plan only the event's leads still ahead | Rejected by the client: an event whose every lead passed would get no reminder at all |
+| Backlog | **Expire what is late; re-plan the leads still ahead, or one reminder at once when none is** | Chosen: nothing is sent late, and an upcoming event the user was never reminded of gets one reminder |
 | Text | Re-word the frozen text with a model at delivery | Rejected: a model call per digest line, and a correction already gives the current text for free |
 | Text | **Render from the unit as it is now: its text and its instant, in a fixed frame** | Chosen |
 | Language | A `language` setting | Rejected for ADR-0022's reasons |
@@ -50,8 +51,13 @@ Four decisions were missing, not one:
    tomorrow's digest arrives after the thing it is about.
 3. **A backlog is re-planned, not replayed.** When a reminder lapses and its event is still
    ahead with no other reminder armed for it, the event gets the reminders the user's leads still
-   have ahead, by the same rule a corrected date uses (no at-once reminder). A reminder counts as
-   sent only once it reached the user.
+   have ahead, by the same rule a corrected date uses. **When every lead has passed and nothing
+   about that event reached the user, it gets exactly one reminder at once** (client, 2026-10-14):
+   one per event instant, never one per lapsed lead, never twice. It obeys quiet hours like any
+   other push: inside them it waits for quiet end, and when quiet end is at or after the event
+   nothing is sent and the trail says so. A reminder counts as sent only once it reached the user.
+   A pass that has nowhere to speak leaves event reminders as they are, so a backlog is judged
+   by the first pass that can deliver it.
 4. **A reminder says the unit as it is now**: its current text and its current instant, framed as
    a reminder ("Recordatorio: … — jue 15 oct, 11:00"). One unit is one line, however many of its
    triggers are due together.
