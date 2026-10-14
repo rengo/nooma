@@ -3,6 +3,8 @@ package prospection
 import (
 	"slices"
 	"time"
+
+	"github.com/rengo/nooma/internal/core/classify"
 )
 
 // The default event reminders (doc 02 §7 "Lead time", ADR-0029): a timed
@@ -17,6 +19,9 @@ const (
 	// event reminder is moved to when its lead falls in quiet hours and
 	// the event is at or before quiet end (ADR-0030).
 	DefaultEveningReminderHour = 22
+	// DefaultRemindMeLeadMinutes is how long before a named time an asked
+	// reminder fires when the user has not chosen (ADR-0031 point 2).
+	DefaultRemindMeLeadMinutes = 15
 )
 
 // TimeOfDay is a local wall-clock time.
@@ -31,15 +36,19 @@ type ReminderPrefs struct {
 	DateOnlyAt TimeOfDay
 	QuietEnd   TimeOfDay
 	EveningAt  TimeOfDay
+	// RemindMeLead is how long before a named time a one-shot asked
+	// reminder fires (ADR-0031 point 2).
+	RemindMeLead time.Duration
 }
 
 // DefaultReminderPrefs is ADR-0029's and ADR-0030's defaults.
 func DefaultReminderPrefs() ReminderPrefs {
 	return ReminderPrefs{
-		TimedLeads: []time.Duration{DefaultEventLeadFarHours * time.Hour, DefaultEventLeadNearHours * time.Hour},
-		DateOnlyAt: TimeOfDay{Hour: DefaultDateOnlyReminderHour},
-		QuietEnd:   TimeOfDay{Hour: QuietHoursEndHour},
-		EveningAt:  TimeOfDay{Hour: DefaultEveningReminderHour},
+		TimedLeads:   []time.Duration{DefaultEventLeadFarHours * time.Hour, DefaultEventLeadNearHours * time.Hour},
+		DateOnlyAt:   TimeOfDay{Hour: DefaultDateOnlyReminderHour},
+		QuietEnd:     TimeOfDay{Hour: QuietHoursEndHour},
+		EveningAt:    TimeOfDay{Hour: DefaultEveningReminderHour},
+		RemindMeLead: DefaultRemindMeLeadMinutes * time.Minute,
 	}
 }
 
@@ -106,58 +115,146 @@ func dueAt(nominal, eventAt time.Time, zone *time.Location, prefs ReminderPrefs)
 	return nominal
 }
 
-// eventReminders arms the one-shot reminders a dated event owns: one per
-// lead still ahead of now, in firing order, or one at once when every lead
-// is behind and the event is not. An event at or before now arms nothing —
-// doc 02 §5.1 refuses to arm on a date it cannot trust, and a nudge for
-// something already over is the same refusal pointing the other way.
-// sent is what already went out for the unit (FollowSent), nil for a
-// capture or a correction.
+// lead is one nominal reminder instant of a unit's instant, before any
+// quiet-hours move. asked marks the one the user's own words asked for.
+type lead struct {
+	at    time.Time
+	asked bool
+}
+
+// leadSet is the nominal instants a unit's reminders aim at (ADR-0031 D3). An
+// event, or a recurring reminder read as one, keeps its ADR-0029 leads; an
+// asked unit adds the asked lead: at minus RemindMeLead for a named time, that
+// local day at DateOnlyAt for a day alone. An unasked kind other than those two
+// has none.
+func leadSet(kind classify.Kind, asked bool, at time.Time, dayOnly bool, prefs ReminderPrefs, zone *time.Location) []lead {
+	var out []lead
+	if kind == classify.KindEvent || kind == classify.KindRecurringReminder {
+		// What the event's own leads read as a date is the model's bare date for an
+		// asked unit (D5), and ADR-0029's midnight rule for one nobody asked about.
+		dateOnly := dayOnly
+		if !asked {
+			dateOnly = isDateOnly(at.In(zone))
+		}
+		for _, n := range instants(at, dateOnly, prefs, zone) {
+			out = append(out, lead{at: n})
+		}
+	}
+	if asked {
+		n := at.Add(-prefs.RemindMeLead)
+		if dayOnly {
+			n = prefs.DateOnlyAt.on(at.In(zone), 0, zone)
+		}
+		out = append(out, lead{at: n, asked: true})
+	}
+	return out
+}
+
+// eventReminders is reminders for an unasked dated event: the ADR-0029 leads.
+// sent is what already went out for the unit (FollowSent), nil for a capture
+// or a correction.
 func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
-	if !eventAt.After(now) {
+	leads := leadSet(classify.KindEvent, false, eventAt, false, prefs, now.Location())
+	return reminders(eventAt, false, leads, prefs, now, interrupt, sent)
+}
+
+// reminders arms the one-shot reminders a dated unit owns: one per lead still
+// ahead of now, in firing order, or one at once when every lead is behind and
+// the unit's instant is not. An instant at or before now arms nothing — doc 02
+// §5.1 refuses to arm on a date it cannot trust, and a nudge for something
+// already over is the same refusal pointing the other way. A day-only unit's
+// instant is its whole local day: it is over at the next local midnight.
+//
+// An asked lead is stronger than the night (ADR-0031 point 6): at a named time
+// it is neither moved nor dropped by quiet hours, and a behind one becomes an
+// at-once reminder whatever the hour, refused too_late only when less than
+// AtOnceMarginMinutes remain (the instant, or the day's end).
+func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
+	zone := now.Location()
+	end := at
+	if dayOnly {
+		y, m, d := at.In(zone).Date()
+		end = time.Date(y, m, d+1, 0, 0, 0, 0, zone)
+	}
+	if !end.After(now) {
 		return []Plan{{What: ArmNothing, Why: RefusalAlreadyPast, Interrupt: interrupt}}, false
 	}
-	nominal := leadsAhead(eventAt, prefs, now)
-	atOnce := len(nominal) == 0
-	if atOnce {
-		nominal = []time.Time{now} // ADR-0029 point 3's at-once reminder
+	type item struct {
+		lead
+		once bool // sent at once rather than at a lead
+	}
+	var items []item
+	askedBehind := false
+	for _, l := range leads {
+		switch {
+		case !l.at.Before(now):
+			items = append(items, item{lead: l})
+		case l.asked:
+			askedBehind = true
+		}
+	}
+	switch {
+	case askedBehind:
+		items = append(items, item{lead: lead{at: now, asked: true}, once: true}) // ADR-0031 point 2
+	case len(items) == 0:
+		items = append(items, item{lead: lead{at: now}, once: true}) // ADR-0029 point 3's at-once reminder
 	}
 	var plans []Plan
-	covered := false
-	for _, n := range nominal {
-		if coveredBy(sent, eventAt, n, dueAt(n, eventAt, now.Location(), prefs)) {
+	covered, tooLate := false, false
+	for _, it := range items {
+		if it.asked && it.once && end.Sub(now) < AtOnceMarginMinutes*time.Minute {
+			tooLate = true
+			continue
+		}
+		exempt := it.asked && (it.once || !dayOnly)
+		due := it.at
+		if !exempt {
+			due = dueAt(it.at, end, zone, prefs)
+		}
+		if coveredBy(sent, at, it.at, due) {
 			covered = true
 			continue
 		}
-		fireAt, ok := deliverAt(n, eventAt, now, prefs)
-		if !ok {
-			continue
+		fireAt := it.at
+		if !exempt {
+			var ok bool
+			if fireAt, ok = deliverAt(it.at, end, now, prefs); !ok {
+				continue
+			}
 		}
+		servesLead := !it.once && (!it.asked || !dayOnly)
 		// Two leads landing on one instant are one reminder serving both.
 		if i := slices.IndexFunc(plans, func(p Plan) bool { return p.FireAt.Equal(fireAt) }); i >= 0 {
-			if !atOnce {
-				plans[i].Leads = append(plans[i].Leads, eventAt.Sub(n))
+			plans[i].Asked = plans[i].Asked || it.asked
+			plans[i].NightExempt = plans[i].NightExempt || exempt
+			if d := at.Sub(it.at); servesLead && !slices.Contains(plans[i].Leads, d) {
+				plans[i].Leads = append(plans[i].Leads, d)
 			}
 			continue
 		}
 		// Immediate is "sent at once rather than at a lead": the at-once
 		// reminder, or one deliverAt pulled to now. A lead that is exactly
 		// now is still that lead.
-		immediate := fireAt.Equal(now) && (atOnce || !n.Equal(now))
-		plan := Plan{What: ArmTrigger, FireAt: fireAt, About: eventAt, Immediate: immediate, Interrupt: interrupt}
-		if !atOnce {
-			plan.Leads = []time.Duration{eventAt.Sub(n)}
+		immediate := fireAt.Equal(now) && (it.once || !it.at.Equal(now))
+		plan := Plan{What: ArmTrigger, FireAt: fireAt, About: at, Immediate: immediate, Interrupt: interrupt,
+			Asked: it.asked, DayOnly: dayOnly, NightExempt: exempt}
+		if servesLead {
+			plan.Leads = []time.Duration{at.Sub(it.at)}
 		}
-		if !plan.Immediate {
-			plan.LeadMinutes = int(eventAt.Sub(fireAt) / time.Minute)
+		if m := int(at.Sub(fireAt) / time.Minute); !plan.Immediate && m > 0 {
+			plan.LeadMinutes = m
 		}
 		plans = append(plans, plan)
 	}
-	if len(plans) == 0 && covered {
-		return []Plan{{What: ArmNothing, Why: RefusalCovered, Interrupt: interrupt}}, false
-	}
 	if len(plans) == 0 {
-		return []Plan{{What: ArmNothing, Why: RefusalQuietHours, Interrupt: interrupt}}, false
+		why := RefusalQuietHours
+		switch {
+		case covered:
+			why = RefusalCovered
+		case tooLate:
+			why = RefusalTooLate
+		}
+		return []Plan{{What: ArmNothing, Why: why, Interrupt: interrupt}}, false
 	}
 	slices.SortFunc(plans, func(a, b Plan) int { return a.FireAt.Compare(b.FireAt) })
 	return plans, true
@@ -170,8 +267,14 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, inter
 // before it, as absolute durations: 24 hours before is 24 hours before
 // across a DST change too.
 func reminderInstants(eventAt time.Time, prefs ReminderPrefs, zone *time.Location) []time.Time {
+	return instants(eventAt, isDateOnly(eventAt.In(zone)), prefs, zone)
+}
+
+// instants is reminderInstants once it is known whether eventAt names a date
+// alone or a time.
+func instants(eventAt time.Time, dateOnly bool, prefs ReminderPrefs, zone *time.Location) []time.Time {
 	local := eventAt.In(zone)
-	if isDateOnly(local) {
+	if dateOnly {
 		y, m, d := local.Date()
 		return []time.Time{time.Date(y, m, d-1, prefs.DateOnlyAt.Hour, prefs.DateOnlyAt.Minute, 0, 0, zone)}
 	}

@@ -60,18 +60,18 @@ func TestResolveReminderPrefs(t *testing.T) {
 	def := DefaultReminderPrefs()
 	str := func(s string) *string { return &s }
 
-	if got := ResolveReminderPrefs(nil, nil, nil, nil); !reflect.DeepEqual(got, def) {
+	if got := ResolveReminderPrefs(nil, nil, nil, nil, nil); !reflect.DeepEqual(got, def) {
 		t.Errorf("nothing stored = %+v, want the defaults", got)
 	}
-	got := ResolveReminderPrefs(str(`[180]`), str("20:30"), nil, nil)
-	if !reflect.DeepEqual(got, ReminderPrefs{TimedLeads: []time.Duration{3 * time.Hour}, DateOnlyAt: TimeOfDay{20, 30}, QuietEnd: def.QuietEnd, EveningAt: def.EveningAt}) {
+	got := ResolveReminderPrefs(str(`[180]`), str("20:30"), nil, nil, nil)
+	if !reflect.DeepEqual(got, ReminderPrefs{TimedLeads: []time.Duration{3 * time.Hour}, DateOnlyAt: TimeOfDay{20, 30}, QuietEnd: def.QuietEnd, EveningAt: def.EveningAt, RemindMeLead: def.RemindMeLead}) {
 		t.Errorf("both stored = %+v", got)
 	}
-	got = ResolveReminderPrefs(str(`[0]`), str("20:30"), nil, nil)
+	got = ResolveReminderPrefs(str(`[0]`), str("20:30"), nil, nil, nil)
 	if !reflect.DeepEqual(got.TimedLeads, def.TimedLeads) || got.DateOnlyAt != (TimeOfDay{20, 30}) {
 		t.Errorf("a corrupt lead list = %+v, want default leads and the stored time", got)
 	}
-	got = ResolveReminderPrefs(str(`[180]`), str("25:00"), nil, nil)
+	got = ResolveReminderPrefs(str(`[180]`), str("25:00"), nil, nil, nil)
 	if !reflect.DeepEqual(got.TimedLeads, []time.Duration{3 * time.Hour}) || got.DateOnlyAt != def.DateOnlyAt {
 		t.Errorf("a corrupt time = %+v, want the stored leads and the default time", got)
 	}
@@ -128,7 +128,7 @@ func TestResolveReminderPrefs_TheNight(t *testing.T) {
 		{"an evening before the stored quiet end falls back", str("09:00"), str("08:00"), TimeOfDay{9, 0}, def.EveningAt},
 		{"an evening judged against the resolved quiet end, not the corrupt one", str("13:00"), str("08:00"), def.QuietEnd, TimeOfDay{8, 0}},
 	} {
-		got := ResolveReminderPrefs(nil, nil, tc.quietEnd, tc.evening)
+		got := ResolveReminderPrefs(nil, nil, tc.quietEnd, tc.evening, nil)
 		if got.QuietEnd != tc.wantQuiet || got.EveningAt != tc.wantEve {
 			t.Errorf("%s: QuietEnd, EveningAt = %v, %v; want %v, %v", tc.name, got.QuietEnd, got.EveningAt, tc.wantQuiet, tc.wantEve)
 		}

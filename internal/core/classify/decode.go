@@ -38,8 +38,8 @@ func fieldSpecs() []fieldSpec {
 		{"structured_data", false, assignRaw},
 		{"weight", true, assignFloat(func(c *Classification, v *float64) { c.Weight = v })},
 		{"decay_rate", true, assignFloat(func(c *Classification, v *float64) { c.DecayRate = v })},
-		{"event_at", false, assignTime(func(c *Classification, v *time.Time) { c.EventAt = v })},
-		{"due_at", false, assignTime(func(c *Classification, v *time.Time) { c.DueAt = v })},
+		{"event_at", false, assignTime(func(c *Classification, v *time.Time, dayOnly bool) { c.EventAt, c.EventAtDayOnly = v, dayOnly })},
+		{"due_at", false, assignTime(func(c *Classification, v *time.Time, dayOnly bool) { c.DueAt, c.DueAtDayOnly = v, dayOnly })},
 		{"nudge_outcome", false, assignEnum(AllNudgeOutcomes, func(c *Classification, v *NudgeOutcome) { c.NudgeOutcome = v })},
 		{"relation_outcome", false, assignEnum(AllRelationOutcomes, func(c *Classification, v *RelationOutcome) { c.RelationOutcome = v })},
 		{"state_outcome", false, assignEnum(AllStateOutcomes, func(c *Classification, v *StateOutcome) { c.StateOutcome = v })},
@@ -216,17 +216,18 @@ func assignFloat(set func(*Classification, *float64)) func(json.RawMessage, *Cla
 // assignTime is the only assigner that reads now, and it reads only its
 // location — design D2's two accepted formats. RFC3339 carries its own
 // offset and keeps it; a date-only value has none, so it becomes midnight in
-// now's location. Anything else is ReasonBadFormat: the JSON type was right
+// now's location and set is told so (dayOnly): the value's shape, which a
+// timestamp at midnight does not share (ADR-0031 D2). Anything else is ReasonBadFormat: the JSON type was right
 // (a string), and dates are not a vocabulary, so neither of the other two
 // reasons describes it.
-func assignTime(set func(*Classification, *time.Time)) func(json.RawMessage, *Classification, time.Time) Reason {
+func assignTime(set func(*Classification, *time.Time, bool)) func(json.RawMessage, *Classification, time.Time) Reason {
 	return func(raw json.RawMessage, c *Classification, now time.Time) Reason {
 		var s string
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return ReasonWrongType
 		}
 		if t, err := time.Parse(time.RFC3339, s); err == nil {
-			set(c, &t)
+			set(c, &t, false)
 			return ""
 		}
 		if t, err := time.ParseInLocation(dateOnlyLayout, s, now.Location()); err == nil {
@@ -236,7 +237,7 @@ func assignTime(set func(*Classification, *time.Time)) func(json.RawMessage, *Cl
 			for i := 0; i < 4 && t.Format(dateOnlyLayout) != s; i++ {
 				t = t.Add(30 * time.Minute)
 			}
-			set(c, &t)
+			set(c, &t, true)
 			return ""
 		}
 		return ReasonBadFormat

@@ -644,6 +644,6 @@ func TestArm_WeeklyAnchorsOnTheEventsOwnWeekday(t *testing.T) {
 // armFirst is Arm with the default preferences, reduced to its first plan:
 // every case in this file arms at most one row, or asserts on the earliest.
 func armFirst(c classify.Classification, now time.Time) (Plan, bool) {
-	plans, ok := Arm(c, DefaultReminderPrefs(), now)
+	plans, ok := Arm(c, false, DefaultReminderPrefs(), now)
 	return plans[0], ok
 }

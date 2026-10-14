@@ -23,7 +23,7 @@ func TestFollow(t *testing.T) {
 
 	event := classify.KindEvent
 	fresh := func(at time.Time) []Plan {
-		p, _ := Arm(classify.Classification{Kind: &event, EventAt: &at}, prefs, now)
+		p, _ := Arm(classify.Classification{Kind: &event, EventAt: &at}, false, prefs, now)
 		return p
 	}
 
@@ -114,7 +114,7 @@ func TestFollow_KeepsALeadPulledToNow(t *testing.T) {
 		{"the default leads at 23:00: the 2h one pulled to now", DefaultReminderPrefs(), at(15, 23, 0), []time.Time{at(15, 23, 0)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fresh, _ := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, tc.prefs, tc.now)
+			fresh, _ := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, false, tc.prefs, tc.now)
 			got := Follow(eventAt, nil, tc.prefs, nil, tc.now)
 			if !reflect.DeepEqual(got.Plans, fresh) {
 				t.Fatalf("Follow plans = %+v, want the capture's %+v", got.Plans, fresh)
