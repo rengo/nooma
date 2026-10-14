@@ -56,22 +56,6 @@ func TestI37_BirthdayWaitingForTheDigestIsCarried(t *testing.T) {
 	}
 }
 
-// TestI37_CannotDeliverExpiresAsToday: with no channel nothing is re-planned
-// (ADR-0032 point 3): an overdue armed reminder expires exactly as before.
-func TestI37_CannotDeliverExpiresAsToday(t *testing.T) {
-	v := newI37Vault(t)
-	v.silent = true
-	event := i37Day(14, 20, 0)
-	v.event("u", &event)
-	v.row("a24", "u", "dentist", i37Day(13, 20, 0), modern(event, 24*60))
-
-	report := v.check(false)
-
-	if got := v.armed("u"); len(got) != 0 || report.TriggersExpired != 1 || report.RemindersArmed != 0 {
-		t.Errorf("armed = %+v, report %+v; want it expired and nothing planned", got, report)
-	}
-}
-
 // TestI37_SupersededHeldWhenItCannotBeReplanned: with no channel a superseded
 // armed reminder is not sent and not expired: nothing could replace it, so it
 // is left for the first pass that can.

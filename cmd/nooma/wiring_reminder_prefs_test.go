@@ -10,6 +10,7 @@ import (
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/config"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/sqlite/sqlitetest"
@@ -116,10 +117,11 @@ func deferToStoredQuietEnd(t *testing.T, wire func(ports.Clock, *sqlite.Vault, *
 	db, cfg := gateVault(t)
 	sqlitetest.SeedQuietHoursEnd(t, db, "09:00")
 	day := func(hour, minute int) time.Time { return time.Date(2099, 1, 10, hour, minute, 0, 0, time.UTC) }
-	fireAt := day(7, 30)
+	fireAt, yearly := day(7, 30), prospection.RuleYearly
 	if err := sqlite.NewTriggerRepo(db).Create(ctx, ports.Trigger{
 		ID: "trg", Kind: ports.TriggerKindTimeBased, FireAt: &fireAt,
-		Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 270}, CreatedAt: day(0, 0),
+		Payload: ports.TriggerPayload{ActionText: "birthday", LeadDays: 7}, CreatedAt: day(0, 0),
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.January, Day: 17},
 	}); err != nil {
 		t.Fatalf("arming: %v", err)
 	}

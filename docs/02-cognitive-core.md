@@ -738,7 +738,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
        created; any further armed trigger expires. **A correction never creates an at-once
        reminder**: when every lead of the new instant is behind and nothing is armed, nothing is
-       armed — the at-once reminder is a capture's, sent once; an armed one is still pulled to
+       armed — the at-once reminder is a capture's, sent once (the one other at-once reminder
+       is §7's catch-up); an armed one is still pulled to
        now, and one already due keeps its instant. A reminder whose lead was ahead but that the
        night rule pulls to now (§7 "Lead time", ADR-0030) is not that at-once reminder: a
        correction arms it with the rest of the set, exactly as a capture does. When the
@@ -1191,7 +1192,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   deliverable instant, `trigger_staleness_hours` (6,
   `internal/core/prospection.TriggerStalenessHours`) and `timer_staleness_hours` (3,
   `internal/core/prospection.TimerStalenessHours`) govern expiry, quiet hours are evaluated
-  before staleness, and overdue by more, a trigger goes `expired` and a timer goes
+  before staleness, and overdue by more, a trigger goes `expired` (a one-shot one only on a pass that can speak, ADR-0032) and a timer goes
   `cancelled` — never fired (ADR-0009). A delivered-but-late item mentions the delay
   explicitly once overdue reaches `delay_caveat_minutes` (15 minutes — three shipped
   `proactive_check` ticks, `internal/core/prospection.DelayCaveatMinutes`).
@@ -1298,7 +1299,8 @@ have N nudges; a pattern watcher does not hang off any unit):
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is
   not, a capture arms **one reminder at once**: the system is not late for an event it only
-  just learned about. A correction follows §5 step 4 and never creates that at-once reminder.
+  just learned about. A correction follows §5 step 4 and never creates that at-once reminder; the one other
+  is the catch-up below.
   **The night is respected at arm time** ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)):
   every instant above, the at-once one included, is adjusted before it is stored, by
   `internal/core/prospection.eventReminders`, so the reply, the trail and a correction (§5
@@ -1401,9 +1403,20 @@ box can audit it):
   each with its `reason`). A late row never counts as a healthy armed row or as sent, so a stale
   24-hour reminder beside a healthy 2-hour one leaves exactly the 2-hour one. A pass that dies
   between the two leaves the late rows un-retired and the next carries the plan, creating nothing
-  twice. A unit whose every lead is behind and nothing of which was sent is **held**: its rows are
-  neither sent nor retired. A pass that cannot deliver only retires rows whose event passed, and an
-  armed trigger overdue past ADR-0009's window expires as before. A dry run computes the same plan
+  twice. A unit whose every lead is behind, with nothing live and nothing sent about the event
+  (`prospection.CatchUp`), is owed **one catch-up** at once, or at quiet end when that is before
+  the event: id `catch-up:<unit>:<event instant UTC>:<attempt>`, `payload.catch_up`, created
+  before it is recorded (`check.reminder.armed`) so two passes racing for an attempt resolve to
+  one. One that fired and was never delivered lapses like any late row and the event, still ahead,
+  is owed attempt n+1; one delivered, or still being delivered, covers the event. When quiet
+  end is at or after the event, or a lead still ahead falls in the night with no instant left,
+  nothing is sent and `check.reminder.refused` (`quiet_hours`) says so for any unit left with
+  no live reminder. A date-only event is owed its catch-up until its day ends. A catch-up moved onto another instant by a correction is an ordinary reminder. A pass that cannot deliver (no channel, or a channel with no
+  conversation) retires only rows whose event passed and leaves every other one-shot row as it
+  found it: nothing is fired into a state it cannot leave, and an overdue armed trigger is kept,
+  amending ADR-0009 (I15) — its expiry belongs to a pass that can re-plan. A channel with no
+  conversation says so in one `check.delivery_failed` row per reminder per process. Today lists
+  the armed one-shot reminders due within a day, so a vault that cannot speak still shows them. A dry run computes the same plan
   and writes nothing. Only the digest lapses a past row, so it stays `fired` until a digest is due
   while Today and the digest ignore it. Today applies the same gate and writes nothing (I27). A
   unit a pass cannot read is judged without it for a reminder that names its own event, its late
@@ -1589,7 +1602,7 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
 
 - **A reminder that is not sent says why**: `check.trigger.expired` (armed) or
   `check.trigger.lapsed` (fired, never delivered), each with `reason` `passed`, `overdue` or
-  `superseded`; the re-plan step's changes are `check.reminder.armed`, `moved` and `cancelled`.
+  `superseded`; the re-plan step's changes are `check.reminder.armed`, `moved`, `cancelled` and `refused`.
 - **A rationale states what happened, never what was configured.** The distance between a
   firing and the thing it is about is measured from the two instants, not read off
   the configured lead: a trigger armed for an event an hour out fires at the capture instant, and

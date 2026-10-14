@@ -371,6 +371,22 @@ func (r *Triggers) ArmedUnitIDs(_ context.Context) ([]string, error) {
 	return out, nil
 }
 
+// OneShotForUnit implements ports.TriggerRepo.
+func (r *Triggers) OneShotForUnit(_ context.Context, unitID string) ([]ports.DueTrigger, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]ports.DueTrigger, 0)
+	for _, stored := range r.triggers {
+		t := stored.trigger
+		if t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil || t.FireAt == nil {
+			continue
+		}
+		out = append(out, ports.DueTrigger{ID: t.ID, UnitID: copyString(t.UnitID), FireAt: *t.FireAt, Payload: t.Payload, InterruptLevel: copyFloat64(t.InterruptLevel)})
+	}
+	return out, nil
+}
+
 // FiredForUnit implements ports.TriggerRepo: unitID's one-shot triggers
 // still fired, with the instant Fire was given. A lapsed row is not one.
 func (r *Triggers) FiredForUnit(_ context.Context, unitID string) ([]ports.FiredTrigger, error) {

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
@@ -234,8 +235,12 @@ func seedCheckVault(t *testing.T) (vault, dbPath string) {
 	staleAt := now.Add(-48 * time.Hour)
 	dueAt := now.Add(-time.Minute)
 
+	// Recurring: with no channel `nooma check` leaves an overdue one-shot
+	// reminder as it found it (ADR-0032), and a recurring one still expires.
+	yearly, soon := prospection.RuleYearly, now.AddDate(0, 0, 10)
 	if err := sqlite.NewTriggerRepo(db).Create(ctx, ports.Trigger{
 		ID: "trg-stale", Kind: ports.TriggerKindTimeBased, FireAt: &staleAt, CreatedAt: staleAt,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: soon.Month(), Day: soon.Day()},
 	}); err != nil {
 		t.Fatalf("seeding the trigger: %v", err)
 	}
@@ -269,4 +274,29 @@ func decisionActions(t *testing.T, dbPath string) []ports.DecisionAction {
 		actions = append(actions, row.Action)
 	}
 	return actions
+}
+
+// TestRenderCheckReport_SaysWhatTheStepDid: the re-plan step's effects are part
+// of the report the command prints, refusals included, and a dry run says
+// "would".
+func TestRenderCheckReport_SaysWhatTheStepDid(t *testing.T) {
+	t.Parallel()
+	report := brain.CheckReport{TriggersLapsed: 1, RemindersArmed: 2, RemindersMoved: 3, RemindersCancelled: 4, RemindersRefused: 5}
+
+	var wet, dry bytes.Buffer
+	if err := renderCheckReport(&wet, report, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderCheckReport(&dry, report, true); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"lapsed 1 ", "armed 2 ", "moved 3 ", "cancelled 4 ", "refused 5 "} {
+		if !strings.Contains(wet.String(), want) {
+			t.Errorf("report %q is missing %q", wet.String(), want)
+		}
+	}
+	if !strings.Contains(dry.String(), "would refuse 5 ") {
+		t.Errorf("dry report %q does not say it would refuse 5", dry.String())
+	}
 }

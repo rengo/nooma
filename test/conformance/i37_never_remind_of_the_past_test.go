@@ -46,6 +46,9 @@ type i37Vault struct {
 	silent bool
 	// noConversation: a channel, but nowhere to push to.
 	noConversation bool
+	// svc is the one long-lived service every pass of a test goes through.
+	svc   *brain.CheckService
+	clock *i37Clock
 }
 
 func newI37Vault(t *testing.T) *i37Vault {
@@ -93,22 +96,32 @@ func (v *i37Vault) check(dry bool) brain.CheckReport {
 	return v.checkAt(i37Now, dry)
 }
 
+// i37Clock is a clock a test moves between passes of one long-lived service.
+type i37Clock struct{ now time.Time }
+
+func (c *i37Clock) Now() time.Time { return c.now }
+
 func (v *i37Vault) checkAt(now time.Time, dry bool) brain.CheckReport {
 	v.t.Helper()
-	var repo ports.TriggerRepo = v.triggers
-	if v.repo != nil {
-		repo = v.repo
+	if v.svc == nil {
+		var repo ports.TriggerRepo = v.triggers
+		if v.repo != nil {
+			repo = v.repo
+		}
+		var channel ports.Channel = v.ch
+		if v.silent {
+			channel = nil
+		}
+		conversation := ports.ConversationID("12449194")
+		if v.noConversation {
+			conversation = ""
+		}
+		v.clock = &i37Clock{}
+		v.svc = brain.NewCheckService(v.clock, repo, v.timers, &counterIDs{}, v.log, channel,
+			v.units, memrepo.NewState(), nil, conversation, nil, nil)
 	}
-	var channel ports.Channel = v.ch
-	if v.silent {
-		channel = nil
-	}
-	conversation := ports.ConversationID("12449194")
-	if v.noConversation {
-		conversation = ""
-	}
-	report, err := brain.NewCheckService(fixedClock{now: now}, repo, v.timers, &counterIDs{}, v.log, channel,
-		v.units, memrepo.NewState(), nil, conversation, nil, nil).Check(context.Background(), brain.CheckRequest{DryRun: dry})
+	v.clock.now = now
+	report, err := v.svc.Check(context.Background(), brain.CheckRequest{DryRun: dry})
 	if err != nil {
 		v.t.Fatalf("Check: %v", err)
 	}

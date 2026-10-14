@@ -75,10 +75,11 @@ type payloadJSON struct {
 	LeadMinutes      int    `json:"lead_minutes,omitempty"`
 	About            string `json:"event_at,omitempty"`
 	UserLeadsMinutes []int  `json:"user_leads_minutes,omitempty"`
+	CatchUp          bool   `json:"catch_up,omitempty"`
 }
 
 func encodePayload(p ports.TriggerPayload) ([]byte, error) {
-	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes}
+	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes, CatchUp: p.CatchUp}
 	if !p.About.IsZero() {
 		s.About = formatUnitTime(p.About)
 	}
@@ -90,7 +91,7 @@ func decodePayload(raw string) (ports.TriggerPayload, error) {
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		return ports.TriggerPayload{}, err
 	}
-	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes}
+	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes, CatchUp: s.CatchUp}
 	if s.About != "" {
 		about, err := time.Parse(unitTimeLayout, s.About)
 		if err != nil {
@@ -265,6 +266,27 @@ func (r *TriggerRepo) ArmedUnitIDs(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("select units with armed triggers: %w", err)
 	}
 	return out, nil
+}
+
+// OneShotForUnit implements ports.TriggerRepo.
+func (r *TriggerRepo) OneShotForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor, payload
+		 FROM triggers WHERE unit_id = ? AND recurrence_rule IS NULL AND fire_at IS NOT NULL`, unitID)
+	if err != nil {
+		return nil, fmt.Errorf("select one-shot triggers of unit %q: %w", unitID, err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := make([]ports.DueTrigger, 0)
+	for rows.Next() {
+		d, err := scanDueTrigger(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
 // FiredForUnit implements ports.TriggerRepo.

@@ -255,3 +255,21 @@ func TestTodayView_DigestEmptyStateReadsTheWholeDigest(t *testing.T) {
 		t.Errorf("an empty digest lacks its line:\n%s", page)
 	}
 }
+
+// The upcoming reminders are a section of their own, listed with their time,
+// and absent when there are none: a vault that cannot speak shows them here.
+func TestTodayView_ListsUpcomingRemindersOnlyWhenThereAreSome(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 9, 22, 18, 0, 0, 0, time.UTC)
+
+	with := renderToday(t, brain.Today{Upcoming: []brain.DigestLine{{TriggerID: "r1", Text: "Dentist at eight", FireAt: at}}})
+	if !strings.Contains(with, `data-view="upcoming"`) || !strings.Contains(with, "UPCOMING REMINDERS") || !strings.Contains(with, "Dentist at eight") {
+		t.Errorf("the upcoming section is missing its heading or its reminder:\n%s", with)
+	}
+	if !strings.Contains(with, "2026-09-22 18:00") {
+		t.Errorf("the upcoming reminder does not say when:\n%s", with)
+	}
+	if without := renderToday(t, brain.Today{}); strings.Contains(without, `data-view="upcoming"`) {
+		t.Errorf("an empty upcoming list rendered a section:\n%s", without)
+	}
+}

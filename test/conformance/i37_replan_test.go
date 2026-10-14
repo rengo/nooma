@@ -133,26 +133,6 @@ func TestI37_DentistLapsedInDigestPathIsReplanned(t *testing.T) {
 	}
 }
 
-// TestI37_UnitOwedOnlyACatchUpIsHeld: every lead of an event an hour away has
-// passed and nothing about it reached the user. Its one reminder is link 4's
-// catch-up, so until then the row is neither sent nor lapsed, and the pass
-// writes nothing.
-func TestI37_UnitOwedOnlyACatchUpIsHeld(t *testing.T) {
-	v := newI37Vault(t)
-	event := i37Day(14, 11, 0)
-	v.event("u", &event)
-	v.fired("late", "u", "dentist", i37Day(13, 11, 0), modern(event, 24*60))
-
-	report := v.check(false)
-
-	if all, _ := v.log.Since(context.Background(), time.Time{}, -1); len(all) != 0 {
-		t.Errorf("the pass wrote %+v, want nothing", all)
-	}
-	if !v.undelivered()["late"] || report.DigestCarried != 0 || report.TriggersLapsed != 0 || len(v.ch.texts) != 0 {
-		t.Errorf("report = %+v (sent %d, undelivered %v); want the row held", report, len(v.ch.texts), v.undelivered())
-	}
-}
-
 // TestI37_LegacyRowSupersededByNewerArming (D8): a row that names no event
 // cannot be compared with its unit, but a unit that has since armed a reminder
 // of its own has moved on from the legacy one, which lapses as superseded
@@ -241,7 +221,7 @@ func TestI37_DryRunEqualsTheRealScan(t *testing.T) {
 	if preview != report {
 		t.Errorf("dry run reported %+v, the real pass %+v", preview, report)
 	}
-	if report.RemindersArmed != 4 || report.RemindersMoved != 0 || report.TriggersLapsed != 4 || report.TriggersExpired != 2 || report.TriggersFired != 1 {
+	if report.RemindersArmed != 5 || report.RemindersMoved != 0 || report.TriggersLapsed != 5 || report.TriggersExpired != 2 || report.TriggersFired != 1 {
 		t.Errorf("real report = %+v; the scenario no longer exercises every step", report)
 	}
 	if all, _ := dry.log.Since(context.Background(), time.Time{}, -1); len(all) != 0 || len(dry.armed("u")) != 0 || len(dry.armed("u2")) != 1 || len(dry.armed("u5")) != 1 || len(dry.armed("u7")) != 1 || len(dry.undelivered()) != 5 {

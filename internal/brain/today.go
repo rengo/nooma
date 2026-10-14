@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/focus"
@@ -10,6 +11,9 @@ import (
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
+
+// upcomingWindow is how far ahead Today lists armed reminders.
+const upcomingWindow = 24 * time.Hour
 
 // TodayService assembles the Today view model — the mirror's first read
 // model (design §3.6). CheckService's own shell/worker shape: this struct
@@ -50,7 +54,10 @@ type Today struct {
 	Now     time.Time
 	Focuses []Focus // focus.AllKinds() order: task, then load
 	Digest  PendingDigest
-	Status  VaultStatus
+	// Upcoming is the armed one-shot reminders due within a day: the only place
+	// a vault that cannot speak shows them.
+	Upcoming []DigestLine
+	Status   VaultStatus
 }
 
 // Focus is one focus.Kind's own top-N: focus.Select over the previous focus
@@ -149,11 +156,32 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	// Counted after the gate the digest applies, never before: a reminder whose
 	// event is no longer ahead is neither listed nor counted. Today only
 	// judges it; lapsing it is the digest pass's write (I27).
-	pending, _, err = splitPast(ctx, reminderGate{units: r.units, triggers: r.triggers, night: prospection.DefaultQuietHours()}, pending, now)
+	g := reminderGate{units: r.units, triggers: r.triggers, night: prospection.DefaultQuietHours(), lenient: true}
+	pending, _, err = splitPast(ctx, g, pending, now)
 	if err != nil {
 		return Today{}, fmt.Errorf("today: %w", err)
 	}
 	out.Status.Undelivered = len(pending)
+
+	// A vault that cannot speak shows its armed one-shot reminders here, read
+	// through the same gate: a past or moved one is not upcoming.
+	soon, err := r.triggers.Due(ctx, now.Add(upcomingWindow))
+	if err != nil {
+		return Today{}, fmt.Errorf("today: upcoming reminders: %w", err)
+	}
+	for _, t := range soon {
+		if t.RecurrenceRule != nil {
+			continue
+		}
+		verdict, reason, err := g.judge(ctx, t, false, now)
+		if err != nil {
+			slog.Warn("a reminder could not be judged and is left out", "trigger", t.ID, "error", err)
+			continue
+		}
+		if verdict != prospection.VerdictStale || reason == prospection.LapseOverdue {
+			out.Upcoming = append(out.Upcoming, DigestLine{TriggerID: t.ID, UnitID: t.UnitID, Text: t.Payload.ActionText, FireAt: t.FireAt})
+		}
+	}
 
 	history, err := r.log.Since(ctx, now.AddDate(0, 0, -digestHistoryDays), -1)
 	if err != nil {

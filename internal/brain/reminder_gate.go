@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -22,6 +23,9 @@ type reminderGate struct {
 	// unreadable collects the units a pass could not read, judged without
 	// them; the pass reports each once. Nil (Today) collects nothing.
 	unreadable map[string]error
+	// lenient skips, and logs, a reminder it cannot judge instead of failing: a
+	// read-only page must not vanish for one damaged unit row.
+	lenient bool
 }
 
 func (r checkRunner) gate() reminderGate {
@@ -103,6 +107,8 @@ func splitPast(ctx context.Context, g reminderGate, pending []ports.DueTrigger, 
 	for _, t := range pending {
 		verdict, reason, err := g.judge(ctx, t, true, now)
 		switch {
+		case err != nil && g.lenient:
+			slog.Warn("a reminder could not be judged and is left out", "trigger", t.ID, "error", err)
 		case err != nil:
 			return nil, nil, err
 		case verdict != prospection.VerdictStale:

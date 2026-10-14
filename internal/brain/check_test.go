@@ -160,6 +160,9 @@ func (r *conflictingTriggers) Reschedule(context.Context, string, ports.TriggerM
 	return nil
 }
 func (r *conflictingTriggers) Lapse(context.Context, string) error { return nil }
+func (r *conflictingTriggers) OneShotForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
 
 func (r *conflictingTriggers) Expire(_ context.Context, id string) error {
 	if id == r.conflictOnID {
@@ -196,7 +199,7 @@ func TestCheck_ConflictIsRecordedAndTheScanContinues(t *testing.T) {
 		triggers: triggers,
 		timers:   &emptyTimers{},
 		ids:      &countingIDs{},
-		log:      log,
+		log:      log, channel: &sendingChannel{}, conversation: testConversation,
 	}.at(context.Background(), now, true)
 	if err != nil {
 		t.Fatalf("at: %v — a transition another pass already made is not this pass's failure", err)
@@ -294,7 +297,7 @@ func TestCheck_AnyOtherErrorStillAbortsTheScan(t *testing.T) {
 		err: errors.New("disk went away"),
 	}
 
-	if _, err := (checkRunner{triggers: broken, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}}).
+	if _, err := (checkRunner{triggers: broken, timers: &emptyTimers{}, ids: &countingIDs{}, log: &recordingLog{}, channel: &sendingChannel{}, conversation: testConversation}).
 		at(context.Background(), now, true); err == nil {
 		t.Fatal("at returned nil for a non-conflict repository error — only a conflict is survivable")
 	}
@@ -322,6 +325,9 @@ func (r *failingTriggers) Reschedule(context.Context, string, ports.TriggerMove)
 	return r.err
 }
 func (r *failingTriggers) Lapse(context.Context, string) error { return r.err }
+func (r *failingTriggers) OneShotForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+	return nil, r.err
+}
 
 type emptyTriggers struct{}
 
@@ -340,6 +346,9 @@ func (emptyTriggers) FiredForUnit(context.Context, string) ([]ports.FiredTrigger
 }
 func (emptyTriggers) Reschedule(context.Context, string, ports.TriggerMove) error { return nil }
 func (emptyTriggers) Lapse(context.Context, string) error                         { return nil }
+func (emptyTriggers) OneShotForUnit(context.Context, string) ([]ports.DueTrigger, error) {
+	return nil, nil
+}
 
 type emptyTimers struct{}
 

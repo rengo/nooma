@@ -76,8 +76,12 @@ func TestCheckEffectCompleteness(t *testing.T) {
 
 			triggers, timers, decisions := freshCheckFakes(t)
 			at := fireAt
+			// Recurring: a one-shot reminder is pushed (two rows) and, with no
+			// channel, left alone; a recurring one is fired for the digest or expired.
+			yearly := prospection.RuleYearly
 			if err := triggers.Create(context.Background(), ports.Trigger{
 				ID: "trg", Kind: ports.TriggerKindTimeBased, FireAt: &at, CreatedAt: fireAt.Add(-time.Hour),
+				RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 			}); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
@@ -187,7 +191,7 @@ func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	effects := report.TriggersExpired + report.TriggersLapsed + report.RemindersArmed + report.RemindersMoved + report.RemindersCancelled
+	effects := report.TriggersExpired + report.TriggersLapsed + report.RemindersArmed + report.RemindersMoved + report.RemindersCancelled + report.RemindersRefused
 	if effects != 7 || len(rows) != effects {
 		t.Errorf("report = %+v, decision_log rows = %d; want one row per expiry, lapse and re-planned reminder", report, len(rows))
 	}
@@ -203,5 +207,33 @@ func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
 	}
 	if rows, _ := dry.log.Since(context.Background(), time.Time{}, -1); len(rows) != 0 {
 		t.Errorf("dry run wrote %d rows", len(rows))
+	}
+}
+
+// TestCheckEffectCompleteness_RefusedInTheNight is I12 for a reminder that
+// cannot be sent: a night event whose late reminder lapses writes the lapse and
+// the refusal, the report's arithmetic equals the rows, and a dry run reports
+// the same and writes none.
+func TestCheckEffectCompleteness_RefusedInTheNight(t *testing.T) {
+	seed := func() *i37Vault {
+		v := newI37Vault(t)
+		event := i37Day(15, 6, 0)
+		v.event("u", &event)
+		v.fired("late", "u", "dentist", i37Day(14, 6, 0), modern(i37Day(14, 9, 0), 180))
+		return v
+	}
+	real, dry := seed(), seed()
+	night := i37Day(15, 2, 0)
+
+	report := real.checkAt(night, false)
+	preview := dry.checkAt(night, true)
+
+	rows, _ := real.log.Since(context.Background(), time.Time{}, -1)
+	effects := report.TriggersExpired + report.TriggersLapsed + report.RemindersArmed + report.RemindersMoved + report.RemindersCancelled + report.RemindersRefused
+	if effects != 2 || len(rows) != effects || report.RemindersRefused != 1 {
+		t.Errorf("report = %+v, decision_log rows = %d; want a lapse and a refusal, one row each", report, len(rows))
+	}
+	if all, _ := dry.log.Since(context.Background(), time.Time{}, -1); preview != report || len(all) != 0 {
+		t.Errorf("dry run %+v with %d rows, real %+v", preview, len(all), report)
 	}
 }

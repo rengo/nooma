@@ -185,7 +185,8 @@ func TestDeliver_ASentButUnrecordedDeliveryIsLoud(t *testing.T) {
 }
 
 // TestDeliver_NoChannelIsNotAFailure: `nooma check` on a vault with no
-// Telegram still fires and expires. It simply has nowhere to speak.
+// Telegram has nowhere to speak, so it leaves a one-shot reminder as it found
+// it (ADR-0032): not fired into a state it cannot leave, and no error.
 func TestDeliver_NoChannelIsNotAFailure(t *testing.T) {
 	triggers := &deliveringTriggers{due: []ports.DueTrigger{
 		pushTrigger("trg-1", deliverFireAt, 0.9),
@@ -196,11 +197,8 @@ func TestDeliver_NoChannelIsNotAFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("at with no channel: %v", err)
 	}
-	if report.TriggersFired != 1 {
-		t.Errorf("TriggersFired = %d, want 1 — the pass still does its work", report.TriggersFired)
-	}
-	if len(triggers.surfaced) != 0 {
-		t.Errorf("surfaced %v with no channel — nothing reached the user", triggers.surfaced)
+	if report.TriggersFired != 0 || len(triggers.surfaced) != 0 {
+		t.Errorf("fired %d, surfaced %v; want the reminder left armed", report.TriggersFired, triggers.surfaced)
 	}
 }
 

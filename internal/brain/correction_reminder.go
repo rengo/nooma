@@ -130,6 +130,9 @@ func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports
 		text = body // the reminder said what the unit said, and the unit now says this
 	}
 	move := ports.TriggerMove{FireAt: plan.FireAt, Payload: armedPayload(text, plan)}
+	// A catch-up is owed for one event instant: moved onto another it is an
+	// ordinary reminder, and the new instant is owed its own.
+	move.Payload.CatchUp = t.Payload.CatchUp && t.Payload.About.Equal(plan.About)
 
 	fields := []string{}
 	previous, next := map[string]any{}, map[string]any{}

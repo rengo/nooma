@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
@@ -26,7 +28,7 @@ type settledRow struct {
 }
 
 // reminderTally counts what the re-plan step did to a unit's armed set.
-type reminderTally struct{ armed, moved, cancelled int }
+type reminderTally struct{ armed, moved, cancelled, refused int }
 
 // replan is the reminder step (ADR-0032 point 3). The stale one-shot rows are
 // the armed ones the due loop deferred and the undelivered ones that are late or
@@ -94,6 +96,7 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 	report.RemindersArmed += tally.armed
 	report.RemindersMoved += tally.moved
 	report.RemindersCancelled += tally.cancelled
+	report.RemindersRefused += tally.refused
 	return nil
 }
 
@@ -144,13 +147,25 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 	fired = slices.DeleteFunc(fired, func(f ports.FiredTrigger) bool { return stale[f.ID] })
 
 	live, byID := liveSet(armed)
-	f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired, *u.EventAt), prefs, group[0].InterruptLevel, now)
-	// Held: FollowSent answers "every lead behind, nothing live" with ArmNothing and
-	// no refusal (the others carry one: passed, quiet hours, covered). Link 4's
-	// catch-up replaces this branch, so the coupling is deliberate and tested
-	// (TestI37_UnitOwedOnlyACatchUpIsHeld).
-	if p := f.Plans[0]; p.What == prospection.ArmNothing && p.Why == prospection.RefusalNone {
-		return true, nil
+	sent := sentReminders(fired, *u.EventAt)
+	interrupt := group[0].InterruptLevel
+	f := prospection.FollowSent(*u.EventAt, live, sent, prefs, interrupt, now)
+	// Nothing live and nothing planned is the unit's whole trail unless it says
+	// why. Quiet hours with no instant left is a refusal; every lead behind (or a
+	// date-only event on its day, which FollowSent reads as past) is a catch-up,
+	// unless something about the event already reached the user or is on its way,
+	// when the late rows simply lapse. Covered and past events lapse as they are.
+	if p := f.Plans[0]; p.What == prospection.ArmNothing && len(live) == 0 {
+		switch p.Why {
+		case prospection.RefusalQuietHours:
+			return false, r.refuse(ctx, u, tally, now, commit)
+		case prospection.RefusalNone, prospection.RefusalAlreadyPast:
+			plan, owed := prospection.CatchUp(*u.EventAt, live, sent, prefs, prospection.ResolveInterrupt(interrupt), now)
+			if !owed {
+				return false, nil
+			}
+			return false, r.armCatchUp(ctx, u, plan, tally, now, commit)
+		}
 	}
 	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: checkCause(), tally: tally, dry: !commit}
 	return false, w.apply(ctx, u, f, byID, *u.EventAt, u.Content, false, now)
@@ -167,4 +182,71 @@ func checkCause() reminderCause {
 		passed:  "the event has already passed",
 		covered: "a reminder of the event already sent covers its leads",
 	}
+}
+
+// armCatchUp arms the catch-up an event is owed, or says why it cannot be sent.
+// Its id names the unit, the event instant and the attempt, and the create comes
+// first: the id is what lets two passes racing for the same attempt resolve to
+// one reminder, and the loser must leave no row. The attempt follows the ids
+// already used for that instant, not their mark (a correction clears the mark of
+// a catch-up it moves, and the id stays), so an undelivered catch-up lapses and
+// the event, still ahead, is owed the next number.
+func (r checkRunner) armCatchUp(ctx context.Context, u unit.Unit, plan prospection.Plan, tally *reminderTally, now time.Time, commit bool) error {
+	if plan.What == prospection.ArmNothing {
+		return r.refuse(ctx, u, tally, now, commit)
+	}
+	if !commit {
+		tally.armed++
+		return nil
+	}
+	tried, err := r.triggers.OneShotForUnit(ctx, u.ID)
+	if err != nil {
+		return fmt.Errorf("check: read the reminders of unit %q: %w", u.ID, err)
+	}
+	prefix := fmt.Sprintf("catch-up:%s:%s:", u.ID, rfc3339(plan.About))
+	attempt := 1
+	for _, t := range tried {
+		if n, err := strconv.Atoi(strings.TrimPrefix(t.ID, prefix)); err == nil && strings.HasPrefix(t.ID, prefix) && n >= attempt {
+			attempt = n + 1
+		}
+	}
+	trigger := armedTrigger(prefix+strconv.Itoa(attempt), &u.ID, u.Content, plan, now)
+	trigger.Payload.CatchUp = true
+	err = r.triggers.Create(ctx, trigger)
+	switch {
+	case err == nil:
+		tally.armed++
+		w := reminderSet{log: r.log, ids: r.ids, cause: checkCause()}
+		return w.recordReminder(ctx, ports.ActionCheckReminderArmed,
+			fmt.Sprintf("armed a catch-up (attempt %d) for unit %q: %s", attempt, u.ID, armRationale(plan)),
+			reminderChange{UnitID: u.ID, TriggerID: trigger.ID, Fields: []string{"fire_at"},
+				Previous: map[string]any{"fire_at": nil}, Next: map[string]any{"fire_at": rfc3339(plan.FireAt)},
+				About: rfc3339(plan.About), Immediate: plan.Immediate}, now)
+	case errors.Is(err, ports.ErrTriggerExists):
+		// Another pass took this attempt between the scan above and this create,
+		// and records it. The scan already counts every id used before then, so
+		// there is no number to try next.
+		return nil
+	default:
+		return fmt.Errorf("check: arm a catch-up for unit %q: %w", u.ID, err)
+	}
+}
+
+// refuse says that no reminder could be sent for a unit that is left with none:
+// every moment left before its event is in quiet hours (ADR-0030).
+func (r checkRunner) refuse(ctx context.Context, u unit.Unit, tally *reminderTally, now time.Time, commit bool) error {
+	tally.refused++
+	if !commit {
+		return nil
+	}
+	return r.recordDetail(ctx, now, ports.ActionCheckReminderRefused,
+		fmt.Sprintf("no reminder was sent for unit %q: every moment left before its event is in quiet hours, when nothing is sent", u.ID),
+		refusedDetail{UnitID: u.ID, Why: string(prospection.RefusalQuietHours), About: rfc3339(*u.EventAt)})
+}
+
+// refusedDetail is the context of a check.reminder.refused row.
+type refusedDetail struct {
+	UnitID string `json:"unit_id"`
+	Why    string `json:"why"`
+	About  string `json:"about"`
 }

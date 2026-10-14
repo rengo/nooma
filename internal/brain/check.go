@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/prospection"
@@ -24,6 +25,28 @@ type CheckService struct {
 	run   checkRunner
 }
 
+// loudSet remembers, for the life of the process, the reminders a pass with
+// nowhere to push to has already said so about, so a vault that stays
+// misconfigured says it once per reminder rather than every five minutes.
+type loudSet struct {
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
+// first reports whether id is new to the set, adding it. A nil set always is.
+func (l *loudSet) first(id string) bool {
+	if l == nil {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.seen[id] {
+		return false
+	}
+	l.seen[id] = true
+	return true
+}
+
 // NewCheckService wires a CheckService over the ports one scan needs.
 // clock is read exactly once per Check call; run never sees it.
 // NewCheckService builds the scan. conversation is the vault's one push
@@ -38,6 +61,7 @@ func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports
 			triggers: triggers, timers: timers, ids: ids, log: log,
 			channel: channel, units: units, state: state, llm: llm,
 			conversation: conversation, questions: questions, focus: keeper,
+			loud: &loudSet{seen: map[string]bool{}},
 		},
 	}
 }
@@ -66,11 +90,12 @@ type CheckReport struct {
 	// TriggersLapsed counts fired reminders never delivered that this pass
 	// retired: past, late or superseded (ADR-0032).
 	TriggersLapsed int
-	// RemindersArmed, RemindersMoved and RemindersCancelled count what the
-	// re-plan step did to a unit's armed set (ADR-0032 point 3).
-	RemindersArmed, RemindersMoved, RemindersCancelled int
-	TimersFired                                        int
-	TimersCancelled                                    int
+	// RemindersArmed, Moved, Cancelled and Refused count what the re-plan step
+	// did for a unit: its armed set changed, a catch-up armed (Armed), or no
+	// reminder sent because only the night was left (Refused) (ADR-0032 point 3).
+	RemindersArmed, RemindersMoved, RemindersCancelled, RemindersRefused int
+	TimersFired                                                          int
+	TimersCancelled                                                      int
 }
 
 // CheckRequest selects how one Check call behaves. Its zero value is an
@@ -132,8 +157,19 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 			stale = append(stale, staleRow{t, true, reason})
 			continue
 		}
-		if reason == prospection.LapseSuperseded {
-			// A pass that cannot speak holds it: nothing is re-planned.
+		if t.RecurrenceRule == nil && !canDeliver && (verdict == prospection.VerdictDeliver || (verdict == prospection.VerdictStale && reason != prospection.LapsePassed)) {
+			// A pass with nowhere to speak leaves a one-shot reminder whose event
+			// is ahead as it found it: firing it would only strand it undelivered,
+			// expiring it would lose what a later pass could re-plan (ADR-0032).
+			// A channel with no conversation says so, once per reminder.
+			if commit && r.channel != nil && r.loud.first(t.ID) {
+				if err := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+					fmt.Sprintf("trigger %q is due but this vault has no conversation to push to; "+
+						"allowed_chat_ids must name exactly one for a reminder to have a destination", t.ID),
+					checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)}); err != nil {
+					return CheckReport{}, err
+				}
+			}
 			continue
 		}
 		status, writes := triggerTransition(verdict)
@@ -280,9 +316,9 @@ type checkRunner struct {
 	ids      ports.IDGen
 	log      ports.DecisionLog
 	// channel is where a delivery goes. Nil is legal and means this vault
-	// has no channel configured — the pass still fires and expires, it
-	// simply has nowhere to speak, which is what `nooma check` on a
-	// Telegram-less vault is.
+	// has no channel configured: the pass leaves its one-shot reminders as it
+	// found them (a recurring one still fires and expires), which is what
+	// `nooma check` on a Telegram-less vault is.
 	channel ports.Channel
 	// conversation is WHO a delivery goes to, and empty is legal for the
 	// same reason a nil channel is: a vault that cannot name exactly one
@@ -321,6 +357,8 @@ type checkRunner struct {
 	// means no incumbent: `nooma check` passes nil, and every digest test
 	// that does not exercise the focus does too.
 	focus *FocusKeeper
+	// loud is the process's memory of the reminders it has said it cannot push.
+	loud *loudSet
 }
 
 // checkDetail is every check.* row's context shape. One shape for all
