@@ -48,9 +48,14 @@ Read these files fully before any work:
     `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. On rework, fix on the same
     branch, rerun `make check-all`, push, and update the PR. After a rebase, rerun `make check-all`.
 11. Never merge. Never push to `main`.
-12. Processes: record the PID of every process you start (`$!`) and stop only those PIDs; never
-    kill by name or pattern (`pkill`, `killall`, `pgrep -x nooma`). A port already in use belongs
-    to someone else (often the maintainer's real `nooma serve`): pick another port, never free it.
+12. Processes: start every background process in one Bash call as `cmd > <scratch>/x.log 2>&1 & echo $! >>
+    <scratch>/pids` (shell state does not survive between calls and `run_in_background` yields no
+    `$!`, so a bare `pid=$!` is lost). Never pipe it: in `cmd | tee log &` the `$!` is tee's PID.
+    Before returning, on success and on every failure path, stop exactly the PIDs in that file (`xargs
+    -r kill < <scratch>/pids`) and verify they are gone (`ps -p <pid>`). Never kill by name or pattern
+    (`pkill`, `killall`, `pgrep -x nooma`, `kill $(pgrep ...)`): the maintainer's real `nooma serve`
+    has the same name as yours. A port already in use belongs to someone else, usually that real
+    server: pick another free port, never free it.
 13. Never `git stash` in the shared repository: stashes are shared by every worktree, and a
     foreign one can be popped by mistake.
 

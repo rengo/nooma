@@ -109,11 +109,14 @@ retarget check). Then:
    never `make binary` in the maintainer's checkout, which would overwrite the binary their real
    `nooma serve` runs), not a QA worktree's. Run `nooma-qa`'s `~/.nooma` path-set diff (before the
    first call and at the end); any added or removed path is an incident: stop and report it.
-   Never the maintainer's real `~/.nooma` or vault. Record the PID of every process you start
-   (`$!`) and stop only those PIDs; never kill by name or pattern (`pkill`, `killall`,
-   `pgrep -x nooma`), because the maintainer's real `nooma serve` has the same name. A port
-   already in use belongs to someone else: pick another, never free it. Never `git stash` in the
-   shared repository. If a step fails, it is a regression: fix it through the cycle before telling the
+   Never the maintainer's real `~/.nooma` or vault. Start every background process in one Bash call as `cmd > <scratch>/x.log 2>&1 & echo $! >>
+   <scratch>/pids` (shell state does not survive between calls and `run_in_background` yields no
+   `$!`, so a bare `pid=$!` is lost). Never pipe it: in `cmd | tee log &` the `$!` is tee's PID.
+   Before returning, on success and on every failure path, stop exactly the PIDs in that file (`xargs
+   -r kill < <scratch>/pids`) and verify they are gone (`ps -p <pid>`). Never kill by name or pattern
+   (`pkill`, `killall`, `pgrep -x nooma`, `kill $(pgrep ...)`): the maintainer's real `nooma serve`
+   has the same name as yours. A port already in use belongs to someone else, usually that real
+   server: pick another free port, never free it. Never `git stash` in the shared repository. If a step fails, it is a regression: fix it through the cycle before telling the
    client anything.
 
 ## Hot-Path Escalation
