@@ -11,8 +11,8 @@ import (
 )
 
 // fireAndDeliver moves one due trigger armed -> fired and, when it routes
-// to push (triggerRoute), sends it and records that it reached
-// the user. It reports how many it fired and how many it delivered.
+// to push (triggerRoute), queues it for the pass's pushes (pushQueue). A real
+// delivery happens when the queue is flushed; delivered is a dry run's preview.
 //
 // **The two counts differ on purpose.** Firing is a decision this pass
 // made; delivering is an outcome it may not have achieved. A digest-routed
@@ -20,12 +20,12 @@ import (
 // push-routed one whose send fails fires and is not delivered either, and
 // a later pass picks it up from Undelivered.
 //
-// The ordering is the whole of R2.1: **Send first, Surface second.** A
+// The ordering is the whole of R2.1, kept by deliver: **Send first, Surface second.** A
 // trigger the user never saw must not be recorded as delivered, and m3b
 // left surfaced_at NULL precisely so this could be the thing that fills
 // it. Writing it first would make the failure invisible — the row would
 // claim a delivery, and the retry path would never see it again.
-func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now time.Time, commit bool) (fired, delivered int, err error) {
+func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now time.Time, commit bool, q *pushQueue) (fired, delivered int, err error) {
 	if !commit {
 		// A dry run reaches the same verdict and reports the same intent.
 		// It does not send: a preview that messaged the user would be a
@@ -61,14 +61,8 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 		return 1, 0, nil
 	}
 
-	sent, err := r.deliver(ctx, t, now)
-	if err != nil {
-		return 1, 0, err
-	}
-	if !sent {
-		return 1, 0, nil
-	}
-	return 1, 1, nil
+	q.add(t)
+	return 1, 0, nil
 }
 
 // triggerRoute is where a due trigger goes: an event reminder (one-shot) is
@@ -77,27 +71,27 @@ func triggerRoute(t ports.DueTrigger) prospection.Route {
 	return prospection.RouteTrigger(t.RecurrenceRule != nil, prospection.ResolveInterrupt(t.InterruptLevel))
 }
 
-// deliver sends one trigger and records that it reached the user. It
-// reports whether the message actually went out, because a recorded
+// deliver sends the reminders of one unit as one message and records that it
+// reached the user, and reports how many reminders it delivered. A recorded
 // failure is not an error the pass should stop for — and returning only an
-// error would make a failed send indistinguishable from a successful one
-// to the caller counting deliveries.
+// error would make a failed send indistinguishable from a successful one to the
+// caller counting deliveries.
 //
-// A send failure is recorded and swallowed: the trigger stays fired with
-// surfaced_at NULL, so the next pass finds it in Undelivered and tries
+// A send failure is recorded and swallowed: the triggers stay fired with
+// surfaced_at NULL, so the next pass finds them in Undelivered and tries
 // again. Failing the pass would cost every trigger behind this one for a
 // transport problem that is usually momentary — the same posture
 // skipOnConflict takes toward a lost race.
-func (r checkRunner) deliver(ctx context.Context, t ports.DueTrigger, now time.Time) (bool, error) {
+func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now time.Time) (int, error) {
 	if r.channel == nil {
 		// No channel configured. Not an error and not a failure to
 		// record: a vault with no channel has nowhere to speak, and
 		// saying so once per trigger would fill the glass box with the
 		// same fact.
-		return false, nil
+		return 0, nil
 	}
 
-	conversation := r.conversationFor(t)
+	conversation := r.conversationFor(group[0])
 	if conversation == "" {
 		// A channel with nowhere to address. Recorded rather than silent,
 		// because unlike a missing channel this is a config the user
@@ -105,42 +99,66 @@ func (r checkRunner) deliver(ctx context.Context, t ports.DueTrigger, now time.T
 		// name one conversation to push to. Sending anyway is what
 		// produced a five-minute loop reporting a strconv parse error,
 		// which names the symptom and hides the cause.
-		return false, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
-			fmt.Sprintf("trigger %q fired but this vault has no conversation to push to; "+
-				"allowed_chat_ids must name exactly one for a nudge to have a destination", t.ID),
-			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)})
+		for _, t := range group {
+			if err := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+				fmt.Sprintf("trigger %q fired but this vault has no conversation to push to; "+
+					"allowed_chat_ids must name exactly one for a nudge to have a destination", t.ID),
+				checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)}); err != nil {
+				return 0, err
+			}
+		}
+		return 0, nil
 	}
 
-	text := renderPush(t, now)
-	if err := r.channel.Send(ctx, conversation, text); err != nil {
-		if !r.outage.first(t.ID) {
-			// Said already in this outage; the retry each pass makes is not news.
-			return false, nil
+	if err := r.channel.Send(ctx, conversation, r.pushText(ctx, group, now)); err != nil {
+		for _, t := range group {
+			if !r.outage.first(t.ID) {
+				// Said already in this outage; the retry each pass makes is not news.
+				continue
+			}
+			if recErr := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
+				fmt.Sprintf("trigger %q fired but could not be delivered; it stays undelivered and a later pass will try again: %v", t.ID, err),
+				checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)}); recErr != nil {
+				return 0, recErr
+			}
 		}
-		return false, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
-			fmt.Sprintf("trigger %q fired but could not be delivered; it stays undelivered and a later pass will try again: %v", t.ID, err),
-			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)})
+		return 0, nil
 	}
 
 	r.outage.clear()
 
-	if err := r.triggers.Surface(ctx, t.ID, now); err != nil {
-		// Another pass moved the row on first: its business, not a failure.
-		skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
-		if skipErr != nil || skipped {
-			return false, skipErr
+	// Every row went out in this one message, so each is marked even when an
+	// earlier one could not be: a row left unmarked is resent by a restart.
+	delivered := 0
+	var failed error
+	for _, t := range group {
+		if err := r.triggers.Surface(ctx, t.ID, now); err != nil {
+			// Another pass moved the row on first: its business, not a failure.
+			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
+			if skipErr != nil {
+				return delivered, skipErr
+			}
+			if skipped {
+				continue
+			}
+			// The message went out and the row could not record it. Loud:
+			// this is the one state the ordering cannot make safe. The retry
+			// would send it again every pass, so the process remembers it and
+			// never does; a restart, which forgets, sends it once more.
+			r.unmarked.first(t.ID)
+			if failed == nil {
+				failed = fmt.Errorf("check: trigger %q was sent but not marked delivered: %w", t.ID, err)
+			}
+			continue
 		}
-		// The message went out and the row could not record it. Loud:
-		// this is the one state the ordering cannot make safe. The retry
-		// would send it again every pass, so the process remembers it and
-		// never does; a restart, which forgets, sends it once more.
-		r.unmarked.first(t.ID)
-		return false, fmt.Errorf("check: trigger %q was sent but not marked delivered: %w", t.ID, err)
+		delivered++
+		if err := r.record(ctx, now, ports.ActionCheckTriggerDelivered,
+			fmt.Sprintf("trigger %q was delivered", t.ID),
+			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)}); err != nil {
+			return delivered, err
+		}
 	}
-
-	return true, r.record(ctx, now, ports.ActionCheckTriggerDelivered,
-		fmt.Sprintf("trigger %q was delivered", t.ID),
-		checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)})
+	return delivered, failed
 }
 
 // conversationFor is where a trigger's delivery goes.
@@ -176,13 +194,20 @@ func ProactiveConversation(allowedChatIDs []int64) ports.ConversationID {
 	return ports.ConversationID(strconv.FormatInt(allowedChatIDs[0], 10))
 }
 
-// renderPush is what a pushed trigger says.
+// renderPush is what a pushed trigger says when its unit cannot be read.
 func renderPush(t ports.DueTrigger, now time.Time) string {
-	text := t.Payload.ActionText
-	if text == "" {
-		text = "You asked me to remind you about something."
+	return withDelayCaveat(frozenText(t), t.FireAt, now)
+}
+
+func frozenText(t ports.DueTrigger) string {
+	if t.Payload.ActionText == "" {
+		return "You asked me to remind you about something."
 	}
-	if prospection.DelayCaveat(now.Sub(t.FireAt)) {
+	return clip(t.Payload.ActionText)
+}
+
+func withDelayCaveat(text string, fireAt, now time.Time) string {
+	if prospection.DelayCaveat(now.Sub(fireAt)) {
 		return text + " (This is later than intended.)"
 	}
 	return text

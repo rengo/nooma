@@ -249,3 +249,40 @@ func TestReminderVerdict_SupersededWhoseCurrentEventIsPastIsPassed(t *testing.T)
 		}
 	}
 }
+
+// TestReminderOccasion_ShownInstant: what a message about a reminder names. A
+// one-shot reminder names its unit's event now; a recurring one its occurrence
+// (the unit's event_at is an anchor); a bare date or an occurrence is a day.
+func TestReminderOccasion_ShownInstant(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*3600)
+	now := time.Date(2026, 10, 14, 10, 0, 0, 0, zone)
+	current := time.Date(2026, 10, 15, 11, 0, 0, 0, zone)
+	midnight := time.Date(2026, 10, 16, 0, 0, 0, 0, zone)
+	yearly := RuleYearly
+
+	cases := []struct {
+		name    string
+		r       Reminder
+		want    time.Time
+		dayOnly bool
+		known   bool
+	}{
+		{"the unit's event now beats the payload's", Reminder{EventAt: current.Add(-time.Hour), Current: &current}, current, false, true},
+		{"a legacy reminder with no event of its own", Reminder{Current: &current}, current, false, true},
+		{"a payload instant when the unit is unknown", Reminder{EventAt: current}, current, false, true},
+		{"a midnight reads as a bare date", Reminder{Current: &midnight}, midnight, true, true},
+		{"an asked midnight is a time", Reminder{Current: &midnight, Asked: true}, midnight, false, true},
+		{"an asked day-only reminder is a day", Reminder{Current: &midnight, Asked: true, DayOnly: true}, midnight, true, true},
+		{"a recurring reminder renders its occurrence, not the anchor", Reminder{
+			Rule: &yearly, Anchor: &Anchor{Month: time.October, Day: 21}, Current: &current,
+			FireAt: time.Date(2026, 10, 14, 19, 0, 0, 0, time.UTC),
+		}, time.Date(2026, 10, 21, RecurrenceAnchorHour, 0, 0, 0, zone), true, true},
+		{"no instant at all", Reminder{}, time.Time{}, false, false},
+	}
+	for _, c := range cases {
+		got, dayOnly, known := c.r.Occasion(now.Location())
+		if known != c.known || !got.Equal(c.want) || dayOnly != c.dayOnly {
+			t.Errorf("%s: Occasion = (%v, day %v, known %v), want (%v, day %v, known %v)", c.name, got, dayOnly, known, c.want, c.dayOnly, c.known)
+		}
+	}
+}

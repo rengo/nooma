@@ -60,8 +60,8 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 	// Act 1 — two triggers are armed: one loud, one quiet. The quiet one
 	// is a recurring reminder, because a one-shot event reminder is pushed
 	// whatever its level (ADR-0030) and only a recurring one is digested.
-	seedUnit(t, db, "unit-loud")
-	seedUnit(t, db, "unit-quiet")
+	seedUnit(t, db, "unit-loud", "call the clinic back")
+	seedUnit(t, db, "unit-quiet", "water the plants")
 	loud, quiet := 0.9, 0.2
 	yearly := prospection.RuleYearly
 	for _, seed := range []struct {
@@ -188,12 +188,14 @@ func strPtr(s string) *string { return &s }
 // asserting that the whole binary's parts fit together, and reaching past
 // one of them to place a fixture would be assembling a vault this code
 // could not have produced.
-func seedUnit(t *testing.T, db *sqlite.Vault, id string) {
+// A reminder says its unit's words (ADR-0032 point 4), so the unit holds the
+// text the demo expects the user to receive.
+func seedUnit(t *testing.T, db *sqlite.Vault, id, content string) {
 	t.Helper()
 
 	at := time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC)
 	if err := sqlite.NewUnitRepo(db).Create(context.Background(), unit.Unit{
-		ID: id, Type: unit.TypeTask, Content: "demo fixture", Status: unit.StatusPool,
+		ID: id, Type: unit.TypeTask, Content: content, Status: unit.StatusPool,
 		Weight: 1.0, WeightDecayRate: 0.01, LastTouchedAt: at,
 		Source: "chat", CreatedAt: at, UpdatedAt: at,
 	}); err != nil {

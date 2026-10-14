@@ -82,17 +82,25 @@ PR 5 — `fix/push-retries-undelivered`
 - [x] 9. GREEN: the retry and its bounds. Doc 02 §7. Run `make check-all`, then open the PR.
 
 PR 6 — `fix/reminder-renders-the-unit`
-- [ ] 10. RED tests: `TestPhraseSetsComplete`; `TestRenderUsesCurrentContentAndInstant`;
+- [x] 10. RED tests: `TestPhraseSetsComplete`; `TestRenderUsesCurrentContentAndInstant`;
       `TestDateOnlyEventRendersWithoutATime`; `TestOneMessagePerUnitArmedSiblingUntouched`;
       `TestMissingUnitFallsBackToAction`.
-- [ ] 11. GREEN: render from the unit. Doc 02 §7, doc 07. Run `make check-all`, then open the PR.
+- [x] 11. GREEN: render from the unit. Doc 02 §7, doc 07. Run `make check-all`, then open the PR.
 
 PR 7 — `feat/proactive-language`
 - [ ] 12. RED tests: `TestBackfillTakesTheEarliestClassifyByRowid`; `TestBackfillEmptyLanguageIsNull`;
       `TestLatestLanguageIncludesArchived`; `TestI37_SpanishUnitPushAndDigestInSpanish`;
       `TestPushFallsBackToLatestThenEnglish`.
+      Also the sentences link 6 deferred (D5): `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
+      `RelationQuestion`, `Late`, `SomethingYouAsked`; the digest, the lateness caveat and the
+      check-in wording still use English literals.
 - [ ] 13. GREEN: the migration, the golden, `LatestLanguage`, capture writing the language. Doc 02
       §5, doc 03. Run `make check-all`, then open the PR.
+
+Follow-up (own change): Today's lines (`today.go`) still show the payload text; render them from the
+unit like the push and the digest.
+Follow-up (own change): the 500-rune cap is per line, so a digest of dozens of items can still exceed
+Telegram's 4096-character limit; bound the whole message.
 
 ## Review Workload Forecast
 

@@ -180,7 +180,7 @@ func TestI37_AnArmedRecurringReminderDoesNotSupersedeALegacyRow(t *testing.T) {
 
 	report := v.check(false)
 
-	if report.TriggersDelivered != 1 || report.TriggersLapsed != 0 || len(v.ch.texts) != 1 || !strings.HasPrefix(v.ch.texts[0], "dentist") {
+	if report.TriggersDelivered != 1 || report.TriggersLapsed != 0 || len(v.ch.texts) != 1 || !strings.Contains(v.ch.texts[0], "dentist") {
 		t.Errorf("report = %+v (sent %q); want the legacy reminder pushed", report, v.ch.texts)
 	}
 }
