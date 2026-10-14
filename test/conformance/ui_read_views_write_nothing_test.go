@@ -149,6 +149,46 @@ func TestUIReadViewsWriteNothing_ActivityGet(t *testing.T) {
 	}
 }
 
+// TestUIReadViewsWriteNothing_AdminGet is G7 for /ui/admin (R8): the page
+// reads config, the learned thresholds and the log, and reaches none of the
+// seven config writes, the relation writes or DecisionLog.Record. Rows are
+// seeded through the undecorated stores, so the guards stay armed.
+func TestUIReadViewsWriteNothing_AdminGet(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 9, 1, 3, 0, 0, 0, time.UTC)
+
+	innerCfg := memrepo.NewConfig()
+	if err := innerCfg.RecordConsolidationRun(ctx, at); err != nil {
+		t.Fatalf("seed last run: %v", err)
+	}
+	innerRels := memrepo.NewRelations()
+	innerRels.SeedThreshold(t, "supports", 0.55, 0.75)
+	innerLog := memrepo.NewDecisionLog()
+	if err := innerLog.Record(ctx, ports.Decision{ID: "d-1", Action: ports.ActionArchiveArchived, Rationale: "went cold overnight", OccurredAt: at}); err != nil {
+		t.Fatalf("seed effect: %v", err)
+	}
+	log := &rvwDecisionLog{DecisionLog: innerLog, t: t}
+
+	svc := brain.NewAdminService(fixedClock{now: at}, &counterIDs{}, &i27Config{Config: innerCfg, t: t}, &i27Relations{Relations: innerRels, t: t}, log)
+	h := httpapi.Handler(httpapi.Deps{Version: "test", UI: ui.New(ui.Deps{Admin: svc})})
+	for i := 0; i < 3; i++ {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ui/admin", nil))
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /ui/admin request %d = %d, want 200: %s", i+1, rec.Code, body)
+		}
+		for _, want := range []string{"2026-09-01 03:00", "supports", "went cold overnight"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("GET /ui/admin request %d does not render %q — the view must actually run for this gate to mean anything:\n%s", i+1, want, body)
+			}
+		}
+	}
+	if log.beforeReads != 3 {
+		t.Errorf("Before was read %d time(s) over three requests, want 3 — the view did not go through the decorated log", log.beforeReads)
+	}
+}
+
 // rvwT is the slice of *testing.T the decorators use, so the classification
 // check below can hand them a recorder and watch which methods fail.
 type rvwT interface {

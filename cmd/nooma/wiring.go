@@ -418,6 +418,14 @@ func wirePreferences(db *sqlite.Vault) *brain.PreferencesService {
 		sqlite.NewUnitRepo(db), sqlite.NewTriggerRepo(db))
 }
 
+// wireAdmin builds a *brain.AdminService over db: the five settings, the
+// learned relation thresholds and the recent consolidation effects behind
+// /ui/admin. It resolves no provider, wireUnits' reason, and is wired
+// unconditionally at vault open.
+func wireAdmin(db *sqlite.Vault) *brain.AdminService {
+	return brain.NewAdminService(systemClock{}, uuidGen{}, sqlite.NewConfigRepo(db), sqlite.NewRelationRepo(db), sqlite.NewDecisionLog(db))
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {

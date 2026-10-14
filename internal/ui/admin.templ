@@ -1,0 +1,77 @@
+package ui
+
+import "time"
+
+// AdminPage is GET /ui/admin's full page.
+templ AdminPage(p adminPage) {
+	@Page("nooma — admin", adminBody(p))
+}
+
+templ adminBody(p adminPage) {
+	<section data-view="admin">
+		<h2>ADMIN</h2>
+		<h3>Settings</h3>
+		<p data-hint>Each setting is saved on its own and recorded in Activity.</p>
+		for _, s := range p.Settings {
+			@adminSettingForm(s)
+		}
+		<h3>Nightly consolidation</h3>
+		<p data-last-run>
+			Last full consolidation:
+			if p.View.LastRun == nil {
+				<strong>never</strong>
+			} else {
+				<time datetime={ p.View.LastRun.UTC().Format(time.RFC3339) }>{ formatTime(ctx, *p.View.LastRun) }</time>
+			}
+		</p>
+		<p data-consolidation-enabled>
+			if p.View.Settings.ConsolidationEnabled {
+				Consolidation is enabled.
+			} else {
+				Consolidation is disabled.
+			}
+		</p>
+		<h4>Recent effects of the nightly pass</h4>
+		if len(p.View.RecentEffects) == 0 {
+			<p data-empty>Nothing recorded yet. A night that decides nothing leaves no effects, so the last full consolidation above is what says the pass ran.</p>
+		}
+		<ol data-effects>
+			for _, row := range p.View.RecentEffects {
+				<li data-decision-id={ row.ID }>
+					<strong>{ activityTitle(row.Action) }</strong>
+					<time datetime={ row.OccurredAt.UTC().Format(time.RFC3339) }>{ formatTime(ctx, row.OccurredAt) }</time>
+					<p data-rationale>{ localizeProse(ctx, row.Rationale) }</p>
+				</li>
+			}
+		</ol>
+		<h3>Relation thresholds</h3>
+		<p data-hint>These are learned by the nightly learning pass (M5); not editable here.</p>
+		<ul data-thresholds>
+			for _, l := range p.View.Learned {
+				<li data-relation-type={ l.RelationType }>{ l.RelationType }: persist at { formatNumber(l.Persist) }, surface at { formatNumber(l.Surface) }</li>
+			}
+			<li data-relation-type="">every other type: persist at { formatNumber(p.View.OtherTypes.Persist) }, surface at { formatNumber(p.View.OtherTypes.Surface) }</li>
+		</ul>
+	</section>
+}
+
+// adminSettingForm is one setting's own form: the field name is fixed, the
+// value is the only input. A boolean is a choice, not free text.
+templ adminSettingForm(s adminSetting) {
+	<form method="post" action="/ui/admin" hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop" data-setting={ string(s.Field) }>
+		<input type="hidden" name="field" value={ string(s.Field) }/>
+		<label for={ "admin-" + string(s.Field) }>{ s.Label }</label>
+		if s.Field == "consolidation_enabled" {
+			<select id={ "admin-" + string(s.Field) } name="value">
+				<option value="true" selected?={ s.Value == "true" }>enabled</option>
+				<option value="false" selected?={ s.Value == "false" }>disabled</option>
+			</select>
+		} else {
+			<input type="text" id={ "admin-" + string(s.Field) } name="value" value={ s.Value } inputmode="decimal" autocomplete="off"/>
+		}
+		<p data-hint>{ s.Hint }</p>
+		<button type="submit">
+			@submitLabel("Save", "Saving…")
+		</button>
+	</form>
+}
