@@ -3,8 +3,9 @@
 - **Status**: Accepted (by the client, 2026-10-14)
 - **Date**: 2026-10-14
 - **Supersedes**: [ADR-0027](0027-pending-question-store.md) **in part**: the table's shape
-  only. ADR-0027's decision that a question lives in a dedicated store stands. Its own reversal
-  criterion ("a second question kind … with no relation to name") is the reason.
+  only. ADR-0027's decision that a question lives in a dedicated store stands. Its reversal
+  criterion anticipated a *differently-shaped store*; this widens the same store instead, so the
+  supersession is partial and covers the shape alone.
 - **Superseded by**: —
 - **Extends** (none edited):
   - [ADR-0029](0029-event-reminders-follow-the-users-leads.md) points 3 and 7;
@@ -97,8 +98,9 @@ literally.
      Nooma chose (09:00) keeps the night rules.
 7. **The reply** says exactly when: "Anotado para el jue 15 oct 10:00. Te aviso 15 minutos
    antes." / "Te aviso todos los días a las 21:00.". When nothing was set, it says why.
-8. **Not changed:** timers, recurring reminders that were not asked for, and events and tasks
-   that were not asked about.
+8. **Not changed:** timers, and events and tasks that were not asked about. A recurring
+   reminder nobody asked for keeps its timing, and is now re-armed after each occurrence, as
+   point 3 says.
 
 ## Consequences
 
