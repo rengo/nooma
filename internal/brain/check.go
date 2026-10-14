@@ -25,16 +25,18 @@ type CheckService struct {
 	run   checkRunner
 }
 
-// loudSet remembers, for the life of the process, the reminders a pass with
-// nowhere to push to has already said so about, so a vault that stays
-// misconfigured says it once per reminder rather than every five minutes.
-type loudSet struct {
+// idSet is a set of trigger ids a process remembers for its own life. A nil
+// set remembers nothing, so a runner built without one (a test) behaves as a
+// process that has just started.
+type idSet struct {
 	mu   sync.Mutex
 	seen map[string]bool
 }
 
+func newIDSet() *idSet { return &idSet{seen: map[string]bool{}} }
+
 // first reports whether id is new to the set, adding it. A nil set always is.
-func (l *loudSet) first(id string) bool {
+func (l *idSet) first(id string) bool {
 	if l == nil {
 		return true
 	}
@@ -45,6 +47,24 @@ func (l *loudSet) first(id string) bool {
 	}
 	l.seen[id] = true
 	return true
+}
+
+func (l *idSet) has(id string) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.seen[id]
+}
+
+func (l *idSet) clear() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	clear(l.seen)
 }
 
 // NewCheckService wires a CheckService over the ports one scan needs.
@@ -61,7 +81,7 @@ func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports
 			triggers: triggers, timers: timers, ids: ids, log: log,
 			channel: channel, units: units, state: state, llm: llm,
 			conversation: conversation, questions: questions, focus: keeper,
-			loud: &loudSet{seen: map[string]bool{}},
+			loud: newIDSet(), outage: newIDSet(), unmarked: newIDSet(),
 		},
 	}
 }
@@ -358,7 +378,13 @@ type checkRunner struct {
 	// that does not exercise the focus does too.
 	focus *FocusKeeper
 	// loud is the process's memory of the reminders it has said it cannot push.
-	loud *loudSet
+	loud *idSet
+	// outage is the reminders a failing transport has already been reported for;
+	// a send that gets through ends the outage and clears it.
+	outage *idSet
+	// unmarked is the reminders this process sent and could not record as
+	// delivered. It never resends them: only a restart, which forgets, may.
+	unmarked *idSet
 }
 
 // checkDetail is every check.* row's context shape. One shape for all

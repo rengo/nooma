@@ -44,6 +44,7 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 		return fmt.Errorf("check: undelivered triggers: %w", err)
 	}
 	g := r.gate()
+	var retry []ports.DueTrigger
 	for _, t := range undelivered {
 		if t.RecurrenceRule != nil {
 			continue
@@ -52,8 +53,14 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 		if err != nil {
 			return err
 		}
-		if verdict == prospection.VerdictStale && reason != prospection.LapsePassed {
+		switch {
+		case verdict == prospection.VerdictStale && reason != prospection.LapsePassed:
 			stale = append(stale, staleRow{t, false, reason})
+		case verdict == prospection.VerdictDeliver:
+			_, touched := settled[t.ID]
+			if !touched && !r.unmarked.has(t.ID) {
+				retry = append(retry, t)
+			}
 		}
 	}
 
@@ -91,6 +98,22 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 			case done:
 				report.TriggersLapsed++
 			}
+		}
+	}
+	// A one-shot reminder that could not be pushed is pushed again, while its
+	// event is ahead (ADR-0032 point 2). Not one this pass fired or already
+	// tried, and not one sent that the vault could not record.
+	for _, t := range retry {
+		if !commit {
+			report.TriggersDelivered++
+			continue
+		}
+		sent, err := r.deliver(ctx, t, now)
+		if err != nil {
+			return err
+		}
+		if sent {
+			report.TriggersDelivered++
 		}
 	}
 	report.RemindersArmed += tally.armed

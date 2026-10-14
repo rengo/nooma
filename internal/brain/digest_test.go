@@ -820,8 +820,9 @@ func (r *lapseRecorder) Lapse(_ context.Context, id string) error {
 
 // TestI37_DigestSkipsHeldAndStaleOneShotRows: the re-plan step owns a one-shot
 // row that is late or superseded, whether it re-planned it or holds it for a
-// catch-up; the digest neither sends nor lapses it, and carries the rows
-// beside it. A past row is still the digest's to lapse.
+// catch-up, and the push path retries the rest; the digest neither sends nor
+// lapses them, and carries the recurring row beside them. A past row is still
+// the digest's to lapse.
 func TestI37_DigestSkipsHeldAndStaleOneShotRows(t *testing.T) {
 	oneShot := func(id, unit, text string) ports.DueTrigger {
 		t := digestTrigger(id, unit, text)
@@ -829,11 +830,12 @@ func TestI37_DigestSkipsHeldAndStaleOneShotRows(t *testing.T) {
 		return t
 	}
 	fresh := oneShot("fresh", "u-1", "fresh one")
+	recurring := digestTrigger("rec", "u-4", "recurring one")
 	stale := oneShot("stale", "u-2", "stale one")
 	stale.FireAt = digestNow.Add(-12 * time.Hour)
 	past := oneShot("past", "u-3", "past one")
 	past.Payload.About = digestNow.Add(-time.Hour)
-	triggers := &lapseRecorder{undeliveredTriggers: undeliveredTriggers{pending: []ports.DueTrigger{fresh, stale, past}}}
+	triggers := &lapseRecorder{undeliveredTriggers: undeliveredTriggers{pending: []ports.DueTrigger{fresh, stale, past, recurring}}}
 	ch := &sendingChannel{}
 
 	carried, lapsed, err := digestRunner(t, triggers, &digestUnits{}, memrepo.NewState(), memrepo.NewDecisionLog(), ch).
@@ -842,11 +844,11 @@ func TestI37_DigestSkipsHeldAndStaleOneShotRows(t *testing.T) {
 		t.Fatalf("assembleDigest: %v", err)
 	}
 
-	if carried != 1 || lapsed != 1 || !slices.Equal(triggers.lapsed, []string{"past"}) || !slices.Equal(triggers.surfaced, []string{"fresh"}) {
-		t.Errorf("carried %d, lapsed %v (%d), surfaced %v; want only fresh carried and only past lapsed", carried, triggers.lapsed, lapsed, triggers.surfaced)
+	if carried != 1 || lapsed != 1 || !slices.Equal(triggers.lapsed, []string{"past"}) || !slices.Equal(triggers.surfaced, []string{"rec"}) {
+		t.Errorf("carried %d, lapsed %v (%d), surfaced %v; want only rec carried and only past lapsed", carried, triggers.lapsed, lapsed, triggers.surfaced)
 	}
-	if len(ch.sent) != 1 || strings.Contains(ch.sent[0], "stale one") || strings.Contains(ch.sent[0], "past one") {
-		t.Errorf("sent %q, want only the fresh row", ch.sent)
+	if len(ch.sent) != 1 || strings.Contains(ch.sent[0], "stale one") || strings.Contains(ch.sent[0], "past one") || strings.Contains(ch.sent[0], "fresh one") {
+		t.Errorf("sent %q, want only the recurring row", ch.sent)
 	}
 }
 

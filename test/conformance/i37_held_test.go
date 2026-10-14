@@ -167,7 +167,7 @@ func TestI37_ADryRunWritesNothingForAnUnreadableUnit(t *testing.T) {
 
 // TestI37_AnArmedRecurringReminderDoesNotSupersedeALegacyRow: the unit's
 // replacement must be a one-shot reminder. A birthday the unit also carries is
-// recurring and says nothing about the legacy one-shot, which is still sent.
+// recurring and says nothing about the legacy one-shot, which is still pushed.
 func TestI37_AnArmedRecurringReminderDoesNotSupersedeALegacyRow(t *testing.T) {
 	v := newI37Vault(t)
 	yearly := prospection.RuleYearly
@@ -180,7 +180,7 @@ func TestI37_AnArmedRecurringReminderDoesNotSupersedeALegacyRow(t *testing.T) {
 
 	report := v.check(false)
 
-	if report.DigestCarried != 1 || len(v.ch.texts) != 1 {
-		t.Errorf("report = %+v (sent %q); want the legacy reminder carried", report, v.ch.texts)
+	if report.TriggersDelivered != 1 || report.TriggersLapsed != 0 || len(v.ch.texts) != 1 || !strings.HasPrefix(v.ch.texts[0], "dentist") {
+		t.Errorf("report = %+v (sent %q); want the legacy reminder pushed", report, v.ch.texts)
 	}
 }

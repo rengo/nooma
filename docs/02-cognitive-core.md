@@ -1421,6 +1421,16 @@ box can audit it):
   while Today and the digest ignore it. Today applies the same gate and writes nothing (I27). A
   unit a pass cannot read is judged without it for a reminder that names its own event, its late
   rows are held, and it is recorded once per unit as `check.delivery_failed`.
+  **A one-shot reminder that could not be pushed is pushed again** (ADR-0032 point 2): the step
+  ends by pushing every one-shot row that fired and never reached the user and that the gate still
+  calls deliverable (a night defers it, a late, superseded or past one is the step's above). A row
+  this pass fired or already tried is skipped, so a reminder is tried at most once per pass, and it
+  never falls back to the digest, which carries only recurring reminders waiting for it. A failing
+  transport writes one `check.delivery_failed` row per reminder per outage, and a send that gets
+  through ends the outage. A `Surface` that finds the row already moved on is recorded
+  (`check.conflict_skipped`) and skipped, never a pass abort. A message sent whose row could not be
+  marked delivered fails the pass, and the process never sends it again (a restart, which forgets,
+  may once more).
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
