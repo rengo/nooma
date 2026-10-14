@@ -145,6 +145,10 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 
 	live, byID := liveSet(armed)
 	f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired, *u.EventAt), prefs, group[0].InterruptLevel, now)
+	// Held: FollowSent answers "every lead behind, nothing live" with ArmNothing and
+	// no refusal (the others carry one: passed, quiet hours, covered). Link 4's
+	// catch-up replaces this branch, so the coupling is deliberate and tested
+	// (TestI37_UnitOwedOnlyACatchUpIsHeld).
 	if p := f.Plans[0]; p.What == prospection.ArmNothing && p.Why == prospection.RefusalNone {
 		return true, nil
 	}

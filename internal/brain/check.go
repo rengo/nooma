@@ -64,7 +64,7 @@ type CheckReport struct {
 	DigestCarried   int
 	TriggersExpired int
 	// TriggersLapsed counts fired reminders never delivered that this pass
-	// retired because their event is no longer ahead (ADR-0032).
+	// retired: past, late or superseded (ADR-0032).
 	TriggersLapsed int
 	// RemindersArmed, RemindersMoved and RemindersCancelled count what the
 	// re-plan step did to a unit's armed set (ADR-0032 point 3).

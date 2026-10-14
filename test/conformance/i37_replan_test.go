@@ -225,6 +225,12 @@ func TestI37_DryRunEqualsTheRealScan(t *testing.T) {
 			modern(noon, 120)(tr)
 			tr.Payload.UserLeadsMinutes = nil
 		})
+		// A reminder expired as passed in this pass is no longer a live row of
+		// its unit, though a dry run, which expires nothing, still reads it armed.
+		evening := i37Day(14, 20, 0)
+		v.event("u7", &evening)
+		v.row("passed-lead", "u7", "dentist", i37Day(14, 8, 0), func(tr *ports.Trigger) { tr.Payload.LeadMinutes = 120 })
+		v.fired("late7", "u7", "dentist", i37Day(13, 20, 0), modern(evening, 24*60))
 	}
 	dry, real := newI37Vault(t), newI37Vault(t)
 	seed(dry)
@@ -235,10 +241,10 @@ func TestI37_DryRunEqualsTheRealScan(t *testing.T) {
 	if preview != report {
 		t.Errorf("dry run reported %+v, the real pass %+v", preview, report)
 	}
-	if report.RemindersArmed != 3 || report.RemindersMoved != 0 || report.TriggersLapsed != 3 || report.TriggersExpired != 1 || report.TriggersFired != 1 {
+	if report.RemindersArmed != 4 || report.RemindersMoved != 0 || report.TriggersLapsed != 4 || report.TriggersExpired != 2 || report.TriggersFired != 1 {
 		t.Errorf("real report = %+v; the scenario no longer exercises every step", report)
 	}
-	if all, _ := dry.log.Since(context.Background(), time.Time{}, -1); len(all) != 0 || len(dry.armed("u")) != 0 || len(dry.armed("u2")) != 1 || len(dry.armed("u5")) != 1 || len(dry.undelivered()) != 4 {
+	if all, _ := dry.log.Since(context.Background(), time.Time{}, -1); len(all) != 0 || len(dry.armed("u")) != 0 || len(dry.armed("u2")) != 1 || len(dry.armed("u5")) != 1 || len(dry.armed("u7")) != 1 || len(dry.undelivered()) != 5 {
 		t.Errorf("the dry run wrote: log %+v, armed u %d, u2 %d, undelivered %v", all, len(dry.armed("u")), len(dry.armed("u2")), dry.undelivered())
 	}
 }
@@ -261,5 +267,102 @@ func TestI37_AnUnreadableUnitHoldsItsStaleRowsAndIsReported(t *testing.T) {
 	}
 	if got := v.rows(ports.ActionCheckDeliveryFailed); len(got) != 1 {
 		t.Errorf("check.delivery_failed rows = %+v, want one for the unit", got)
+	}
+}
+
+// TestI37_ALateRowThatServedBothLeadsDoesNotCoverTheTwoHourLead: the late 24-hour
+// reminder was merged with the 2-hour lead (its payload serves both) and never
+// reached the user. It must not count as sent, or the 2-hour lead would be
+// "covered" by a reminder nobody saw and the unit would be left with nothing.
+func TestI37_ALateRowThatServedBothLeadsDoesNotCoverTheTwoHourLead(t *testing.T) {
+	v := newI37Vault(t)
+	event := i37Day(14, 20, 0)
+	v.event("u", &event)
+	v.fired("both", "u", "dentist", i37Day(13, 20, 0), func(tr *ports.Trigger) {
+		modern(event, 24*60)(tr)
+		tr.Payload.UserLeadsMinutes = []int{24 * 60, 120}
+	})
+
+	report := v.check(false)
+
+	if got := v.armed("u"); len(got) != 1 || !got[0].FireAt.Equal(i37Day(14, 18, 0)) || report.RemindersArmed != 1 {
+		t.Errorf("armed = %+v, report %+v; want the 2 h lead armed at 18:00", got, report)
+	}
+}
+
+// TestI37_APassThatCannotDeliverReplansNothing: with no channel, or a
+// channel and nowhere to push to, a superseded or late fired row is neither
+// re-planned, nor lapsed, nor sent.
+func TestI37_APassThatCannotDeliverReplansNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		silent, noConv bool
+	}{{"no channel", true, false}, {"a channel and no conversation", false, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := newI37Vault(t)
+			v.silent, v.noConversation = tc.silent, tc.noConv
+			supersededUnit(v)
+			event := i37Day(14, 20, 0)
+			v.event("late", &event)
+			v.fired("older", "late", "dentist", i37Day(13, 20, 0), modern(event, 24*60))
+
+			report := v.check(false)
+
+			if report.RemindersArmed+report.RemindersMoved+report.RemindersCancelled+report.TriggersLapsed != 0 || len(v.armed("u"))+len(v.armed("late")) != 0 || len(v.undelivered()) != 2 || len(v.ch.texts) != 0 {
+				t.Errorf("report = %+v (undelivered %v, sent %d); want nothing re-planned, lapsed or sent", report, v.undelivered(), len(v.ch.texts))
+			}
+		})
+	}
+}
+
+// TestI37_AStaleRowOfAMissingUnitIsRetired: a unit that is gone cannot be
+// planned for, but unlike one that cannot be read it is not coming back, so the
+// late row is retired rather than held for ever.
+func TestI37_AStaleRowOfAMissingUnitIsRetired(t *testing.T) {
+	v := newI37Vault(t)
+	v.fired("orphan", "gone", "dentist", i37Day(13, 9, 0), nil)
+
+	report := v.check(false)
+
+	if report.TriggersLapsed != 1 || report.RemindersArmed != 0 || v.undelivered()["orphan"] {
+		t.Errorf("report = %+v (undelivered %v); want the orphan lapsed", report, v.undelivered())
+	}
+}
+
+// TestI37_TheReplacementKeepsTheLevelOfTheRowItReplaces: the reminders the step
+// arms take the interrupt level of the late row they stand in for.
+func TestI37_TheReplacementKeepsTheLevelOfTheRowItReplaces(t *testing.T) {
+	v := newI37Vault(t)
+	level := 0.9
+	corrected := i37Day(16, 11, 0)
+	v.event("u", &corrected)
+	v.fired("old", "u", "dentist", i37Day(14, 8, 0), func(tr *ports.Trigger) {
+		modern(i37Day(15, 11, 0), 27*60)(tr)
+		tr.InterruptLevel = &level
+	})
+
+	v.check(false)
+
+	got := v.armed("u")
+	if len(got) != 2 || got[0].InterruptLevel == nil || *got[0].InterruptLevel != level || got[1].InterruptLevel == nil || *got[1].InterruptLevel != level {
+		t.Errorf("armed = %+v, want both replacements at level %v", got, level)
+	}
+}
+
+// TestI37_AnOverdueRecurringRowExpiresAndIsNeverReplanned: a recurring armed
+// reminder overdue past the window expires as it always has; the re-plan step is
+// for one-shot reminders, and a unit carrying a recurring one gets no leads.
+func TestI37_AnOverdueRecurringRowExpiresAndIsNeverReplanned(t *testing.T) {
+	v := newI37Vault(t)
+	yearly := prospection.RuleYearly
+	v.event("u", i37At(21, 12))
+	v.row("b", "u", "Leo's birthday", i37Day(13, 20, 0), func(tr *ports.Trigger) {
+		tr.RecurrenceRule, tr.RecurrenceAnchor = &yearly, &prospection.Anchor{Month: time.October, Day: 21}
+	})
+
+	report := v.check(false)
+
+	if report.TriggersExpired != 1 || report.RemindersArmed != 0 || len(v.armed("u")) != 0 {
+		t.Errorf("report = %+v, armed %d; want it expired and nothing planned", report, len(v.armed("u")))
 	}
 }

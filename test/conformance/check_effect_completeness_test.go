@@ -168,6 +168,16 @@ func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
 		v.event("u-ahead", i37At(20, 9))
 		v.fired("gone", "u-gone", "flight already gone", *i37At(9, 16), nil)
 		v.row("overdue", "u-ahead", "dentist", *i37At(13, 20), nil) // armed, 14 hours late
+		// A unit whose late armed row is replaced, and whose healthy rows the plan
+		// moves (one is missing the leads it serves) and cancels (one is surplus).
+		evening := i37Day(14, 20, 0)
+		v.event("u-mix", &evening)
+		v.row("stale", "u-mix", "dentist", i37Day(13, 20, 0), modern(evening, 24*60))
+		v.row("keep", "u-mix", "dentist", i37Day(14, 18, 0), func(tr *ports.Trigger) {
+			modern(evening, 120)(tr)
+			tr.Payload.UserLeadsMinutes = nil
+		})
+		v.row("extra", "u-mix", "dentist", i37Day(14, 19, 0), modern(evening, 60))
 	}
 
 	real := newI37Vault(t)
@@ -178,11 +188,11 @@ func TestCheckEffectCompleteness_LapseAndExpireInOnePass(t *testing.T) {
 		t.Fatal(err)
 	}
 	effects := report.TriggersExpired + report.TriggersLapsed + report.RemindersArmed + report.RemindersMoved + report.RemindersCancelled
-	if effects != 4 || len(rows) != effects {
+	if effects != 7 || len(rows) != effects {
 		t.Errorf("report = %+v, decision_log rows = %d; want one row per expiry, lapse and re-planned reminder", report, len(rows))
 	}
-	if report.TriggersExpired != 1 || report.TriggersLapsed != 1 {
-		t.Errorf("report = %+v, want one expired and one lapsed", report)
+	if report.TriggersExpired != 2 || report.TriggersLapsed != 1 || report.RemindersArmed != 2 || report.RemindersMoved != 1 || report.RemindersCancelled != 1 {
+		t.Errorf("report = %+v, want two expired, one lapsed, two armed, one moved and one cancelled", report)
 	}
 
 	dry := newI37Vault(t)

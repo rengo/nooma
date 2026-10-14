@@ -44,6 +44,8 @@ type i37Vault struct {
 	repo ports.TriggerRepo
 	// silent: the scan has no channel, as `nooma check` on a vault without one.
 	silent bool
+	// noConversation: a channel, but nowhere to push to.
+	noConversation bool
 }
 
 func newI37Vault(t *testing.T) *i37Vault {
@@ -101,8 +103,12 @@ func (v *i37Vault) checkAt(now time.Time, dry bool) brain.CheckReport {
 	if v.silent {
 		channel = nil
 	}
+	conversation := ports.ConversationID("12449194")
+	if v.noConversation {
+		conversation = ""
+	}
 	report, err := brain.NewCheckService(fixedClock{now: now}, repo, v.timers, &counterIDs{}, v.log, channel,
-		v.units, memrepo.NewState(), nil, "12449194", nil, nil).Check(context.Background(), brain.CheckRequest{DryRun: dry})
+		v.units, memrepo.NewState(), nil, conversation, nil, nil).Check(context.Background(), brain.CheckRequest{DryRun: dry})
 	if err != nil {
 		v.t.Fatalf("Check: %v", err)
 	}

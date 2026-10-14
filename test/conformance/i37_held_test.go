@@ -97,7 +97,9 @@ func TestI37_ASupersededRowWhoseNewEventPassesIsRetiredAsPassed(t *testing.T) {
 	moved := i37Day(14, 12, 0)
 	for _, fired := range []bool{false, true} {
 		v := newI37Vault(t)
-		v.silent = !fired // the fired row is the digest's, which needs a channel
+		// A pass that cannot re-plan: no channel at all, or one with nowhere to
+		// push to (the digest still lapses what has passed).
+		v.silent, v.noConversation = !fired, fired
 		v.event("u", &moved)
 		if fired {
 			v.fired("old", "u", "dentist", i37Day(14, 8, 0), modern(i37Day(15, 11, 0), 27*60))

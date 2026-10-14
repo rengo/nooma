@@ -121,7 +121,7 @@ func renderCheckReport(out io.Writer, report brain.CheckReport, dryRun bool) err
 	}{
 		{report.TriggersExpired, "expired %d trigger(s)", "would expire %d trigger(s)"},
 		{report.TriggersLapsed, "lapsed %d undelivered trigger(s)", "would lapse %d undelivered trigger(s)"},
-		{report.RemindersArmed, "re-planned %d reminder(s)", "would re-plan %d reminder(s)"},
+		{report.RemindersArmed, "armed %d replacement reminder(s)", "would arm %d replacement reminder(s)"},
 		{report.RemindersMoved, "moved %d reminder(s)", "would move %d reminder(s)"},
 		{report.RemindersCancelled, "cancelled %d reminder(s)", "would cancel %d reminder(s)"},
 		{report.TimersFired, "fired %d timer(s)", "would fire %d timer(s)"},
