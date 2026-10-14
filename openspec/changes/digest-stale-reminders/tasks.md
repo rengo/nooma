@@ -76,10 +76,10 @@ PR 4 — `fix/no-destination-and-catch-up`
       §11, `ui/activitylabel.go`). Doc 02 §5/§7, doc 07. `make check-all`, open the PR.
 
 PR 5 — `fix/push-retries-undelivered`
-- [ ] 8. RED tests: `TestI37_FailedPushRetriedOncePerPass` (not twice in the pass that fired
+- [x] 8. RED tests: `TestI37_FailedPushRetriedOncePerPass` (not twice in the pass that fired
       it); `TestI37_SurfaceFailureIsNotResentByTheProcess`; `TestI37_OutageWritesOneRowPerReminder`;
       `TestDueScanConcurrent_SurfaceConflictIsBenign`; `TestI37_DigestCarriesRecurringOnly`.
-- [ ] 9. GREEN: the retry and its bounds. Doc 02 §7. Run `make check-all`, then open the PR.
+- [x] 9. GREEN: the retry and its bounds. Doc 02 §7. Run `make check-all`, then open the PR.
 
 PR 6 — `fix/reminder-renders-the-unit`
 - [ ] 10. RED tests: `TestPhraseSetsComplete`; `TestRenderUsesCurrentContentAndInstant`;

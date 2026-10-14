@@ -454,10 +454,11 @@ func slotSevenAfterDigest(t *testing.T, digestKeeper func(shared *brain.FocusKee
 	seed("k-1", unit.TypeKnowledge, 1)
 	digestAt := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
 	triggers := sqlite.NewTriggerRepo(db)
-	uid, fireAt := "k-1", digestAt.Add(-time.Hour)
+	uid, fireAt, yearly := "k-1", digestAt.Add(-time.Hour), prospection.RuleYearly
 	if err := triggers.Create(ctx, ports.Trigger{
 		ID: "trg-1", UnitID: &uid, Kind: ports.TriggerKindTimeBased,
 		Payload: ports.TriggerPayload{ActionText: "act on k-1"}, FireAt: &fireAt, CreatedAt: seededAt,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 	}); err != nil {
 		t.Fatalf("seed trigger: %v", err)
 	}
@@ -567,10 +568,11 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 		w          float64
 	}{{"trg-hi", "k-hi", 3}, {"trg-1", "k-p", 1}, {"trg-2", "k-q", 1}, {"trg-lo", "k-lo", 0.2}} {
 		seed(p.unit, unit.TypeKnowledge, p.w)
-		uid, fireAt := p.unit, digestAt.Add(-time.Hour)
+		uid, fireAt, yearly := p.unit, digestAt.Add(-time.Hour), prospection.RuleYearly
 		if err := triggers.Create(ctx, ports.Trigger{
 			ID: p.trig, UnitID: &uid, Kind: ports.TriggerKindTimeBased,
 			Payload: ports.TriggerPayload{ActionText: "act on " + p.trig}, FireAt: &fireAt, CreatedAt: seededAt,
+			RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 		}); err != nil {
 			t.Fatalf("seed trigger %s: %v", p.trig, err)
 		}

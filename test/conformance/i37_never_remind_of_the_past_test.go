@@ -20,14 +20,22 @@ import (
 // hours, so a digest is due and nothing is deferred.
 var i37Now = time.Date(2026, 10, 14, 10, 0, 0, 0, time.UTC)
 
-// i37Channel records what a pass sent.
-type i37Channel struct{ texts []string }
+// i37Channel records what a pass sent. attempts is every Send, texts the ones
+// that went out; failIf, when set, makes a Send of that text fail.
+type i37Channel struct {
+	texts, attempts []string
+	failIf          func(text string) bool
+}
 
 func (c *i37Channel) Name() string                                            { return "test" }
 func (c *i37Channel) Receive(context.Context) ([]ports.ChannelMessage, error) { return nil, nil }
 func (c *i37Channel) Confirm(context.Context, string) error                   { return nil }
 func (c *i37Channel) Close() error                                            { return nil }
 func (c *i37Channel) Send(_ context.Context, _ ports.ConversationID, text string) error {
+	c.attempts = append(c.attempts, text)
+	if c.failIf != nil && c.failIf(text) {
+		return errors.New("the transport is down")
+	}
 	c.texts = append(c.texts, text)
 	return nil
 }
@@ -49,6 +57,10 @@ type i37Vault struct {
 	// svc is the one long-lived service every pass of a test goes through.
 	svc   *brain.CheckService
 	clock *i37Clock
+	// cfg, when set, is the vault's stored preferences (the user's quiet end).
+	cfg ports.ConfigRepo
+	// ids outlives a service, so a test can restart the process.
+	ids counterIDs
 }
 
 func newI37Vault(t *testing.T) *i37Vault {
@@ -103,6 +115,16 @@ func (c *i37Clock) Now() time.Time { return c.now }
 
 func (v *i37Vault) checkAt(now time.Time, dry bool) brain.CheckReport {
 	v.t.Helper()
+	report, err := v.tryCheckAt(now, dry)
+	if err != nil {
+		v.t.Fatalf("Check: %v", err)
+	}
+	return report
+}
+
+// tryCheckAt is checkAt for a test that expects the pass to be able to fail.
+func (v *i37Vault) tryCheckAt(now time.Time, dry bool) (brain.CheckReport, error) {
+	v.t.Helper()
 	if v.svc == nil {
 		var repo ports.TriggerRepo = v.triggers
 		if v.repo != nil {
@@ -117,15 +139,14 @@ func (v *i37Vault) checkAt(now time.Time, dry bool) brain.CheckReport {
 			conversation = ""
 		}
 		v.clock = &i37Clock{}
-		v.svc = brain.NewCheckService(v.clock, repo, v.timers, &counterIDs{}, v.log, channel,
+		v.svc = brain.NewCheckService(v.clock, repo, v.timers, &v.ids, v.log, channel,
 			v.units, memrepo.NewState(), nil, conversation, nil, nil)
 	}
-	v.clock.now = now
-	report, err := v.svc.Check(context.Background(), brain.CheckRequest{DryRun: dry})
-	if err != nil {
-		v.t.Fatalf("Check: %v", err)
+	if v.cfg != nil {
+		v.svc.WithQuietHours(v.cfg)
 	}
-	return report
+	v.clock.now = now
+	return v.svc.Check(context.Background(), brain.CheckRequest{DryRun: dry})
 }
 
 // rows are the decision_log rows of one action, as the ids and reasons they name.
@@ -366,7 +387,7 @@ func i37Day(day, hour, minute int) time.Time {
 // TestI37_DateOnlyEventIsCarriedOnItsDay: a date-only event is stored as local
 // midnight, so "at or before now" would call it passed from the first minute of
 // its own day. It names a day, and is passed only once that day has ended: the
-// undelivered reminder is carried at ten on the day and lapsed the next one.
+// undelivered reminder is pushed at ten on the day and lapsed the next one.
 // The unit alone says the event (a legacy row), and so does the payload.
 func TestI37_DateOnlyEventIsCarriedOnItsDay(t *testing.T) {
 	day := i37Day(14, 0, 0)
@@ -382,8 +403,8 @@ func TestI37_DateOnlyEventIsCarriedOnItsDay(t *testing.T) {
 			v.event("u1", &day)
 			v.fired("r", "u1", "passport appointment", i37Day(14, 8, 0), shape.mutate)
 			report := v.checkAt(i37Day(14, 10, 0), false)
-			if report.TriggersLapsed != 0 || report.DigestCarried != 1 {
-				t.Errorf("report = %+v; want the reminder carried on the event's own day", report)
+			if report.TriggersLapsed != 0 || report.TriggersDelivered != 1 {
+				t.Errorf("report = %+v; want the reminder pushed on the event's own day", report)
 			}
 		})
 		t.Run(shape.name+"/the next day", func(t *testing.T) {
@@ -515,8 +536,8 @@ func TestI37_ACorruptUnitDoesNotStallAModernRow(t *testing.T) {
 
 	report := v.check(false)
 
-	if report.TriggersDelivered != 2 || report.TimersFired != 1 || report.DigestCarried != 1 {
-		t.Errorf("report = %+v; want both modern rows pushed, the timer fired and the waiting row carried", report)
+	if report.TriggersDelivered != 3 || report.TimersFired != 1 || report.DigestCarried != 0 {
+		t.Errorf("report = %+v; want both modern rows and the waiting row pushed and the timer fired", report)
 	}
 	if got := v.rows(ports.ActionCheckDeliveryFailed); len(got) != 2 {
 		t.Errorf("check.delivery_failed rows = %+v, want one per unit judged without its row", got)

@@ -113,15 +113,28 @@ func (r checkRunner) deliver(ctx context.Context, t ports.DueTrigger, now time.T
 
 	text := renderPush(t, now)
 	if err := r.channel.Send(ctx, conversation, text); err != nil {
+		if !r.outage.first(t.ID) {
+			// Said already in this outage; the retry each pass makes is not news.
+			return false, nil
+		}
 		return false, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("trigger %q fired but could not be delivered; it stays undelivered and a later pass will try again: %v", t.ID, err),
 			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)})
 	}
 
+	r.outage.clear()
+
 	if err := r.triggers.Surface(ctx, t.ID, now); err != nil {
+		// Another pass moved the row on first: its business, not a failure.
+		skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
+		if skipErr != nil || skipped {
+			return false, skipErr
+		}
 		// The message went out and the row could not record it. Loud:
-		// this is the one state the ordering cannot make safe, and a
-		// silent one would mean re-delivering the same nudge every pass.
+		// this is the one state the ordering cannot make safe. The retry
+		// would send it again every pass, so the process remembers it and
+		// never does; a restart, which forgets, sends it once more.
+		r.unmarked.first(t.ID)
 		return false, fmt.Errorf("check: trigger %q was sent but not marked delivered: %w", t.ID, err)
 	}
 

@@ -78,9 +78,12 @@ func (f *fxH) fxL(t *testing.T) {
 	f.carryTrigger(t, carryTwo, "u-q", 1)
 	f.carryTrigger(t, "trg-lo", "u-lo", 0.2)
 	ctx := context.Background()
+	// Recurring like the rest: the digest carries only recurring reminders.
+	yearly, fireAt := prospection.RuleYearly, todayNow.Add(-time.Hour)
 	if err := f.triggers.Create(ctx, ports.Trigger{
-		ID: "trg-nil", Kind: ports.TriggerKindPatternBased,
+		ID: "trg-nil", Kind: ports.TriggerKindPatternBased, FireAt: &fireAt,
 		Payload: ports.TriggerPayload{ActionText: "act on trg-nil"}, CreatedAt: todayNow,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 	}); err != nil {
 		t.Fatalf("seed nil-unit trigger: %v", err)
 	}
