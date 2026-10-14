@@ -383,7 +383,7 @@ func (r *Triggers) FiredForUnit(_ context.Context, unitID string) ([]ports.Fired
 		if stored.status != ports.TriggerStatusFired || stored.firedAt == nil || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil {
 			continue
 		}
-		out = append(out, ports.FiredTrigger{FireAt: *t.FireAt, FiredAt: *stored.firedAt, Payload: t.Payload})
+		out = append(out, ports.FiredTrigger{ID: t.ID, FireAt: *t.FireAt, FiredAt: *stored.firedAt, Payload: t.Payload})
 	}
 	return out, nil
 }

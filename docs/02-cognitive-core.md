@@ -1356,10 +1356,29 @@ box can audit it):
     `surfaced_at` NULL (`TriggerRepo.Lapse`), recorded as `check.trigger.lapsed`, counted in the
     check report, and no longer covering a lead a re-arm would skip (`FiredForUnit` reads `fired`
     rows only).
-  Lateness does not judge a fired reminder waiting for the digest (ADR-0009's window is a push's),
-  and an armed trigger keeps today's verdict on it. Only the digest lapses, so a past fired row
-  stays `fired` until a digest is due while Today and the digest ignore it. Today applies the same
-  gate and writes nothing (I27).
+  A recurring fired reminder waits for the digest and lateness does not judge it (ADR-0009's
+  window is a push's). A one-shot fired row is judged late, and a reminder is **superseded** when
+  its payload's `event_at` differs, to the second, from its unit's current `event_at`, or when it
+  names no event and its unit has since armed a one-shot reminder (a legacy row). The digest
+  neither sends, carries nor lapses such a row, and Today does not count it. Superseded is judged
+  before passed, so a moved row is held, not retired, while its unit's new event is ahead; once
+  that is past too it has nothing to wait for and is retired as `passed`.
+  **The re-plan step** (ADR-0032 point 3) runs in a pass that can deliver (a channel and a
+  conversation), after the due loop and before the digest, and owns every late or superseded
+  one-shot row, armed (the due loop defers it) or fired. For each unit it arms the reminders its
+  current event still has ahead, by the rule a corrected date uses and carrying the unit's healthy
+  armed rows, **written first** (`check.reminder.armed`, `moved`, `cancelled`), and only then
+  expires the armed rows and lapses the fired ones (`check.trigger.expired`, `check.trigger.lapsed`,
+  each with its `reason`). A late row never counts as a healthy armed row or as sent, so a stale
+  24-hour reminder beside a healthy 2-hour one leaves exactly the 2-hour one. A pass that dies
+  between the two leaves the late rows un-retired and the next carries the plan, creating nothing
+  twice. A unit whose every lead is behind and nothing of which was sent is **held**: its rows are
+  neither sent nor retired. A pass that cannot deliver only retires rows whose event passed, and an
+  armed trigger overdue past ADR-0009's window expires as before. A dry run computes the same plan
+  and writes nothing. Only the digest lapses a past row, so it stays `fired` until a digest is due
+  while Today and the digest ignore it. Today applies the same gate and writes nothing (I27). A
+  unit a pass cannot read is judged without it for a reminder that names its own event, its late
+  rows are held, and it is recorded once per unit as `check.delivery_failed`.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
@@ -1539,8 +1558,9 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
 `decision_log`: ONE table for all modules (`action`, `rationale`, `context` JSON,
 `occurred_at`). Every automatic decision with an effect is recorded with its reasoning.
 
-- **A reminder retired because its event passed says so**: `check.trigger.expired` (armed) or
-  `check.trigger.lapsed` (fired, never delivered), each with `reason: passed`.
+- **A reminder that is not sent says why**: `check.trigger.expired` (armed) or
+  `check.trigger.lapsed` (fired, never delivered), each with `reason` `passed`, `overdue` or
+  `superseded`; the re-plan step's changes are `check.reminder.armed`, `moved` and `cancelled`.
 - **A rationale states what happened, never what was configured.** The distance between a
   firing and the thing it is about is measured from the two instants, not read off
   the configured lead: a trigger armed for an event an hour out fires at the capture instant, and

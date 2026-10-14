@@ -64,10 +64,13 @@ type CheckReport struct {
 	DigestCarried   int
 	TriggersExpired int
 	// TriggersLapsed counts fired reminders never delivered that this pass
-	// retired because their event is no longer ahead (ADR-0032).
-	TriggersLapsed  int
-	TimersFired     int
-	TimersCancelled int
+	// retired: past, late or superseded (ADR-0032).
+	TriggersLapsed int
+	// RemindersArmed, RemindersMoved and RemindersCancelled count what the
+	// re-plan step did to a unit's armed set (ADR-0032 point 3).
+	RemindersArmed, RemindersMoved, RemindersCancelled int
+	TimersFired                                        int
+	TimersCancelled                                    int
 }
 
 // CheckRequest selects how one Check call behaves. Its zero value is an
@@ -108,6 +111,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	// r is this scan's copy: the user's night, read once, is what every
 	// verdict and the digest below are judged in.
 	r.night = r.quietHours(ctx)
+	r.unreadable = map[string]error{}
 
 	due, err := r.triggers.Due(ctx, now)
 	if err != nil {
@@ -115,10 +119,22 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 	}
 	report.TriggersDue = len(due)
 
+	g, canDeliver := r.gate(), r.canDeliver()
+	var stale []staleRow
+	settled := map[string]settledRow{}
 	for _, t := range due {
-		verdict, reason, err := judgeReminder(ctx, r.units, r.night, t, false, now)
+		verdict, reason, err := g.judge(ctx, t, false, now)
 		if err != nil {
 			return CheckReport{}, err
+		}
+		if verdict == prospection.VerdictStale && reason != prospection.LapsePassed && t.RecurrenceRule == nil && canDeliver {
+			// A pass that can speak re-plans before it retires (ADR-0032 point 3).
+			stale = append(stale, staleRow{t, true, reason})
+			continue
+		}
+		if reason == prospection.LapseSuperseded {
+			// A pass that cannot speak holds it: nothing is re-planned.
+			continue
 		}
 		status, writes := triggerTransition(verdict)
 		if !writes {
@@ -131,35 +147,22 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 			}
 			report.TriggersFired += fired
 			report.TriggersDelivered += delivered
+			if fired > 0 {
+				settled[t.ID] = settledRow{row: t, fired: true}
+			}
 			continue
 		}
 		if status != ports.TriggerStatusExpired {
 			return CheckReport{}, fmt.Errorf("check: trigger %q: no write path for status %q", t.ID, status)
 		}
-		if !commit {
-			report.TriggersExpired++
-			continue
-		}
-		if err := r.triggers.Expire(ctx, t.ID); err != nil {
-			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
-			if skipErr != nil {
-				return CheckReport{}, skipErr
-			}
-			if skipped {
-				continue
-			}
-			return CheckReport{}, fmt.Errorf("check: expire trigger %q: %w", t.ID, err)
-		}
-		rationale := fmt.Sprintf("trigger %q was overdue past its staleness window and expired rather than firing late", t.ID)
-		detail := checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale)}
-		if reason == prospection.LapsePassed {
-			rationale = fmt.Sprintf("trigger %q came due after the event it is about was no longer ahead, and expired rather than firing", t.ID)
-			detail.Reason = string(reason)
-		}
-		if err := r.record(ctx, now, ports.ActionCheckTriggerExpired, rationale, detail); err != nil {
+		done, err := r.retire(ctx, staleRow{t, true, reason}, now, commit)
+		if err != nil {
 			return CheckReport{}, err
 		}
-		report.TriggersExpired++
+		if done {
+			report.TriggersExpired++
+			settled[t.ID] = settledRow{row: t}
+		}
 	}
 
 	dueTimers, err := r.timers.Due(ctx, now)
@@ -248,15 +251,24 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (CheckR
 		}
 	}
 
+	if canDeliver {
+		if err := r.replan(ctx, &report, stale, settled, now, commit); err != nil {
+			return CheckReport{}, err
+		}
+	}
+
 	if r.channel != nil && r.units != nil && r.state != nil {
 		carried, lapsed, err := r.assembleDigest(ctx, now, commit)
 		if err != nil {
 			return CheckReport{}, err
 		}
 		report.DigestCarried = carried
-		report.TriggersLapsed = lapsed
+		report.TriggersLapsed += lapsed
 	}
 
+	if err := r.reportUnreadable(ctx, now, commit); err != nil {
+		return CheckReport{}, err
+	}
 	return report, nil
 }
 
@@ -291,6 +303,8 @@ type checkRunner struct {
 	// whose digest is due at DigestHour exactly as the default's is.
 	config ports.ConfigRepo
 	night  prospection.QuietHours
+	// unreadable is the units this scan judged without (see reminderGate).
+	unreadable map[string]error
 	// llm words a timer at delivery. Nil is legal: a vault with no
 	// provider bound delivers the user's own words, which is what the
 	// rephrasing falls back to anyway.
@@ -324,6 +338,9 @@ type checkDetail struct {
 	// its event was no longer ahead (ADR-0032). It is empty on an overdue
 	// expiry, which is ADR-0009's and says nothing more.
 	Reason string `json:"reason,omitempty"`
+	// UnitID names the unit a row is about, on the rows that are not about a
+	// trigger.
+	UnitID string `json:"unit_id,omitempty"`
 	// Table names which of the two a conflict row is about, and is empty
 	// on the effect rows, where the action already says. Putting the
 	// table into Verdict instead would have made one field mean two

@@ -10,6 +10,8 @@ const (
 	LapsePassed LapseReason = "passed"
 	// LapseOverdue: the reminder is late past ADR-0009's window.
 	LapseOverdue LapseReason = "overdue"
+	// LapseSuperseded: the unit's event is no longer the one it is about.
+	LapseSuperseded LapseReason = "superseded"
 )
 
 // Reminder is what the delivery gate judges: the facts a stored trigger and
@@ -32,14 +34,24 @@ type Reminder struct {
 	// Waiting is a fired reminder waiting for its digest; lateness (a
 	// push's window) does not judge it.
 	Waiting bool
+	// Newer: the unit has armed a one-shot reminder of its own since (D8).
+	// Only a reminder that names no event can be superseded by it. "Since" is
+	// not known (a trigger carries no creation instant), so a legacy row can be
+	// held beside a reminder that was in fact armed before it: accepted.
+	Newer bool
 }
 
 // ReminderVerdict decides whether a reminder may be sent, in q's night
 // (ADR-0032 point 1), in this order:
 //
-//  1. Its event is past: Stale, LapsePassed.
-//  2. It is waiting for the digest: Deliver.
-//  3. Otherwise TriggerVerdict, whose Stale is LapseOverdue (Defer still first).
+//  1. It is superseded: Stale, LapseSuperseded, or LapsePassed when the unit's
+//     new event is past too. Its payload's event is not the
+//     unit's current one (compared to the second), or it names no event and
+//     the unit has armed a newer reminder. A lead, a rule or no event cannot
+//     be contradicted otherwise.
+//  2. Its event is past: Stale, LapsePassed.
+//  3. It is waiting for the digest: Deliver.
+//  4. Otherwise TriggerVerdict, whose Stale is LapseOverdue (Defer still first).
 //
 // The event is, in order: the payload's; FireAt plus a positive lead; for a
 // recurring reminder, the occurrence NextOccurrence derives from FireAt read in
@@ -51,6 +63,14 @@ type Reminder struct {
 // An event is past once its instant has gone, except a day-granular one (a
 // recurring occurrence or a date-only event): past from the next local midnight.
 func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseReason) {
+	if r.superseded() {
+		// Held for a re-plan while the unit's new event is ahead; when it is
+		// past too there is nothing to re-plan and the row has passed.
+		if r.Current != nil && r.passed(*r.Current, now) {
+			return VerdictStale, LapsePassed
+		}
+		return VerdictStale, LapseSuperseded
+	}
 	if about, known := r.about(now.Location()); known && r.passed(about, now) {
 		return VerdictStale, LapsePassed
 	}
@@ -64,8 +84,17 @@ func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseRe
 	return v, ""
 }
 
+func (r Reminder) superseded() bool {
+	if !r.EventAt.IsZero() {
+		return r.Current != nil && !r.EventAt.Truncate(time.Second).Equal(r.Current.Truncate(time.Second))
+	}
+	return !r.NamesEvent() && r.Newer
+}
+
 // NamesEvent reports whether the reminder carries its own event (a payload
-// instant, a positive lead or a rule); only one that does not needs its unit read.
+// instant, a positive lead or a rule). One that does not needs its unit's event
+// to be judged at all; one whose event is the payload's reads the unit too, to
+// see whether it moved.
 func (r Reminder) NamesEvent() bool {
 	return !r.EventAt.IsZero() || r.LeadMinutes > 0 || r.Rule != nil
 }
