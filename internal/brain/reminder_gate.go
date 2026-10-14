@@ -12,18 +12,19 @@ import (
 
 // judgeReminder is the one place a stored trigger becomes
 // prospection.ReminderVerdict's input, so the due scan, the digest and Today
-// read a reminder the same way (ADR-0032 point 1). A one-shot reminder is
-// judged with its unit's event as it is now: a correction to another date
-// moves the unit and leaves a fired reminder behind, and only the unit says so.
-// A nil units port or a unit that is gone means that event is unknown; any other
-// read error aborts the pass, because a vault that cannot be read is not a
-// reminder that may be sent.
+// read a reminder the same way (ADR-0032 point 1). A reminder that names its own
+// event (its payload's, its lead or its rule) is judged on that and reads no
+// unit, so a damaged unit row cannot stall a pass. Only a legacy one-shot row,
+// which names none, is judged on its unit's event as it is now. A nil units port
+// or a unit that is gone means that event is unknown; any other read error
+// aborts the pass, because a vault that cannot be read is not a reminder that
+// may be sent.
 func judgeReminder(ctx context.Context, units ports.UnitRepo, night prospection.QuietHours, t ports.DueTrigger, waiting bool, now time.Time) (prospection.Verdict, prospection.LapseReason, error) {
 	reminder := prospection.Reminder{
 		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,
 		Rule: t.RecurrenceRule, Anchor: t.RecurrenceAnchor, Waiting: waiting,
 	}
-	if t.RecurrenceRule == nil && t.UnitID != nil && units != nil {
+	if !reminder.NamesEvent() && t.UnitID != nil && units != nil {
 		u, err := units.ByID(ctx, *t.UnitID)
 		switch {
 		case err == nil:
@@ -41,10 +42,10 @@ func judgeReminder(ctx context.Context, units ports.UnitRepo, night prospection.
 // the digest: lateness is a push's concern (ADR-0032 point 1), so a reminder
 // that fired hours ago with its event ahead stays. It writes nothing, which is
 // what lets Today and a dry run share it with the real pass.
-func splitPast(ctx context.Context, units ports.UnitRepo, pending []ports.DueTrigger, now time.Time) (kept, past []ports.DueTrigger, err error) {
+func splitPast(ctx context.Context, units ports.UnitRepo, night prospection.QuietHours, pending []ports.DueTrigger, now time.Time) (kept, past []ports.DueTrigger, err error) {
 	kept = make([]ports.DueTrigger, 0, len(pending))
 	for _, t := range pending {
-		verdict, _, err := judgeReminder(ctx, units, prospection.DefaultQuietHours(), t, true, now)
+		verdict, _, err := judgeReminder(ctx, units, night, t, true, now)
 		if err != nil {
 			return nil, nil, err
 		}

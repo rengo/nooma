@@ -1336,7 +1336,7 @@ box can audit it):
   `interrupt_level`, a degraded one included (`internal/core/prospection.RouteTrigger`); waiting
   for tomorrow's digest would deliver it after the thing it is about. Quiet hours still defer
   it, as below. **It is never late**: one whose event has started (`fire_at + lead_minutes`) is
-  expired with a `check.trigger.expired` row instead of sent (`EventReminderVerdict`).
+  expired with a `check.trigger.expired` row instead of sent (`ReminderVerdict`).
   **Exception**: a reminder armed at once carries no lead, so its event is not known at delivery
   and this check does not apply to it; it falls under `TriggerVerdict`'s staleness alone. It is
   due the minute it is armed, so only a vault that is off between arming and the event can send
@@ -1351,7 +1351,11 @@ box can audit it):
   after `fire_at`, derived with `fire_at` read in the clock's zone (it is stored in UTC, and the
   occurrence is a local calendar day); and, for a one-shot reminder with none of those (a row armed
   before ADR-0029, or at once), the event its unit holds now. A reminder that names no event is
-  never past: `lead_minutes` 0 is not an event at `fire_at`. An event at or before now is **past**:
+  never past: `lead_minutes` 0 is not an event at `fire_at`. A timed event is **past** once its
+  instant is at or before now. A day-granular one, a recurring occurrence (anchored at noon) or a
+  date-only event (stored as local midnight, as `reminderInstants` reads it), names a calendar
+  day and is past only from the next local midnight in the clock's zone: a birthday is still
+  reminded at 15:00 on the day. A past event means:
   - an armed trigger is expired (`check.trigger.expired`, with reason `passed`);
   - a fired trigger that never reached the user is **lapsed**, `fired` to `expired` with
     `fired_at` kept and `surfaced_at` still NULL (`TriggerRepo.Lapse`), recorded as
@@ -1361,7 +1365,9 @@ box can audit it):
   Lateness does not judge a fired reminder waiting for the digest: ADR-0009's window belongs to a
   push, so the digest carries one that fired hours ago while its event is ahead. An armed
   trigger keeps today's verdict on lateness. Today applies the same gate to what it counts and
-  lists, and writes nothing (I27).
+  lists, and writes nothing (I27). Because only the digest lapses, a past fired row stays
+  `fired` until a digest is due (none at all on a vault without a channel) while Today and the
+  digest already ignore it.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the

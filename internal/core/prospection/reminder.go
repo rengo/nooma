@@ -41,7 +41,7 @@ type Reminder struct {
 // ReminderVerdict decides whether a reminder may be sent, in q's night
 // (ADR-0032 point 1), in this order:
 //
-//  1. Its event is at or before now: Stale, LapsePassed.
+//  1. Its event is past: Stale, LapsePassed.
 //  2. It is waiting for the digest: Deliver. Only the event judges it.
 //  3. Otherwise TriggerVerdict, whose Stale is LapseOverdue. Quiet hours
 //     still answer Defer first.
@@ -53,8 +53,14 @@ type Reminder struct {
 // calendar day), which assumes a period longer than the lead; and for a
 // one-shot reminder with none of those, Current. A reminder naming no event is
 // never passed: lead_minutes 0 is not an event at FireAt.
+//
+// An event is past once its instant has gone, except a day-granular one: a
+// recurring occurrence (anchored at noon, but a calendar day) and a date-only
+// event (stored as local midnight, the test reminderInstants applies) are
+// reminded about all of their day, and are past from the next local midnight in
+// now's zone. A timed event keeps the instant rule.
 func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseReason) {
-	if about, known := r.about(now.Location()); known && !now.Before(about) {
+	if about, known := r.about(now.Location()); known && r.passed(about, now) {
 		return VerdictStale, LapsePassed
 	}
 	if r.Waiting {
@@ -65,6 +71,24 @@ func (q QuietHours) ReminderVerdict(r Reminder, now time.Time) (Verdict, LapseRe
 		return v, LapseOverdue
 	}
 	return v, ""
+}
+
+// NamesEvent reports whether the reminder carries its own event: a payload
+// instant, a positive lead or a recurrence rule. Only a reminder that does not
+// (a row armed before ADR-0029, or at once) needs the unit's event read.
+func (r Reminder) NamesEvent() bool {
+	return !r.EventAt.IsZero() || r.LeadMinutes > 0 || r.Rule != nil
+}
+
+// passed is whether the event at about is behind now, by the day for a
+// day-granular one.
+func (r Reminder) passed(about, now time.Time) bool {
+	local := about.In(now.Location())
+	if r.Rule != nil || (local.Hour() == 0 && local.Minute() == 0 && local.Second() == 0 && local.Nanosecond() == 0) {
+		y, m, d := local.Date()
+		return !now.Before(time.Date(y, m, d+1, 0, 0, 0, 0, now.Location()))
+	}
+	return !now.Before(about)
 }
 
 // about is the event instant the reminder is about, and whether it is known.

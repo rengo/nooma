@@ -70,7 +70,7 @@ undelivered. The next correction saw no armed row (`correction_reminder.go:43`) 
 4. otherwise unknown.
 `Current` is the unit's `event_at` (a task unit's `due_at`, §5) via `UnitRepo.ByID`. A nil port
 or `ErrUnitNotFound` means unknown. Any other read error aborts the pass.
-`EventReminderVerdict` is D1 with `Current` nil, so I34 is unchanged.
+`EventReminderVerdict` is removed in link 2 (D1 replaced its only caller); I34's cases live on in `ReminderVerdict`'s tests.
 
 **D2. Where it runs.** At fire time (`check.go:412-418`), in D6 and in the digest, through one
 helper. Today runs it read-only (I27) and counts after it (`today.go:149`).

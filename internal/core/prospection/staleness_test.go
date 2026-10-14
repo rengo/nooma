@@ -359,29 +359,3 @@ func TestAllVerdicts_CoversEveryVerdictThatVerdictCanReturn(t *testing.T) {
 		t.Fatalf("only %d distinct verdicts were reached (%v) — this test stopped covering what it claims to", len(observed), observed)
 	}
 }
-
-// TestEventReminderVerdict is ADR-0030 point 4 at delivery: an event
-// reminder is never sent once its event has started; before that it is
-// TriggerVerdict's.
-func TestEventReminderVerdict(t *testing.T) {
-	event := time.Date(2026, 10, 16, 8, 0, 0, 0, time.UTC)
-	fireAt := event.Add(-time.Hour)
-	for _, tc := range []struct {
-		now  time.Time
-		want Verdict
-	}{
-		{fireAt.Add(-time.Minute), VerdictPending},
-		{event.Add(-time.Nanosecond), VerdictDeliver},
-		{event, VerdictStale},
-		{event.Add(30 * time.Minute), VerdictStale},
-	} {
-		if got := EventReminderVerdict(fireAt, event, tc.now); got != tc.want {
-			t.Errorf("EventReminderVerdict at %v = %s, want %s", tc.now, got, tc.want)
-		}
-	}
-	// In quiet hours, before the event: deferred, as TriggerVerdict.
-	quietFire := time.Date(2026, 10, 16, 3, 0, 0, 0, time.UTC)
-	if got := EventReminderVerdict(quietFire, event, quietFire.Add(time.Minute)); got != VerdictDefer {
-		t.Errorf("in quiet hours = %s, want defer", got)
-	}
-}

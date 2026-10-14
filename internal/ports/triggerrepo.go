@@ -301,6 +301,8 @@ type TriggerRepo interface {
 	// Expire moves id from armed to expired (I15: a trigger past its
 	// window expires, it does not fire late). triggers carries no
 	// expired_at column, so no timestamp is written and none is invented.
+	// An expired row with a fired_at is the other way to be expired: a fired
+	// reminder that lapsed (Lapse below), whose firing did happen.
 	//
 	// It returns the same two errors as Fire, for the same reasons.
 	Expire(ctx context.Context, id string) error

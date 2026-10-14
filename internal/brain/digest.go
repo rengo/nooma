@@ -78,7 +78,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// before anything else reads the list: it fired while nothing could deliver
 	// it, and the digest is not an exception to "never remind of the past"
 	// (ADR-0032). Lateness does not judge it: ADR-0009's window is a push's.
-	pending, past, err := splitPast(ctx, r.units, pending, now)
+	pending, past, err := splitPast(ctx, r.units, r.night, pending, now)
 	if err != nil {
 		return 0, 0, err
 	}
