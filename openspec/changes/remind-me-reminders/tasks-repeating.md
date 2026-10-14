@@ -78,7 +78,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestSuccessor_RefusesNilAnchor` → `ErrNoAnchor`; the pass goes on (item 11).
   - `TestSuccessor_ClampedDailyNoSecondFireOnDayOne`: a daily captured at 10:00 for 12:00 (clamped, fired 10:00) → the successor is not before 00:00 the next local day (round 3, item 8).
   - `TestRouteTrigger_AskedRecurringIsPushed`: degraded interrupt → push (round 3, item 9). `TestGate_AskedRecurringIsNotWaiting`: a fired asked recurring row → not `Waiting`, judged as a push.
-  - `TestGate_AskedRecurringJudgedByOccursAt`: an asked night-exempt daily, `occurs_at` 06:30, quiet end 08:00 → at 06:30, `about` is `occurs_at` (not `NextOccurrence(fire_at)`) and `Deliver`, never `passed` nor `Defer`; at 12:31 → `Stale` `overdue` (6 h from `fire_at`); an asked "No" daily at 09:00 with quiet end 10:00 → `Defer` until 10:00.
+  - `TestGate_AskedRecurringJudgedByOccursAt`: an asked night-exempt daily, `occurs_at` 06:30, quiet end 08:00 → at 06:30, `about` is `occurs_at` (not `NextOccurrence(fire_at)`) and `Deliver`, never `passed` nor `Defer`; at 12:31 → `Stale` `overdue` (6 h from `fire_at`); an asked "No" daily at 09:00 with quiet end 10:00 → `Defer` until 10:00. An asked night-exempt daily at 23:00, checked the next day: at 00:30 → `Deliver` (not `passed`, not `Defer`); at 05:01 → `Stale` `overdue`. This kills the mutation "asked rows keep main's midnight rule".
   - `TestGate_UnaskedRecurringJudgedByOccursAtDayGranular`: an unasked birthday row with `occurs_at` 10-20 12:00 → not passed at 23:59 on 10-20; `passed` from 10-21 00:00 local; `Waiting` when fired.
   - `TestAnchorTimeRoundTrip`, `TestNextOccurrenceUsesAnchorTime`.
 - [ ] 7.2 RED, I36 recurring:
@@ -95,6 +95,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestI36_BirthdayCorrectionKeepsOccursAt`: a corrected unasked recurring row → `occurs_at` is the new occurrence (item 12).
   - `TestI36_CorrectedLegacyClampedRowIsNotLate`: a clamped legacy daily, corrected → `occurs_at` written, the successor is not 7 days late (item 11).
   - `TestRecurringRootsLatestStatus` (L3, by id prefix); `TestCheckReportCountsReArms` (I12); `TestDryRunCreatesNoSuccessorAndNoRepair`.
+- [ ] 7.2b Apply note: design-repeating D30's "would be passed the moment it is due" is wrong for main, where recurring rows pass from the next local midnight (`reminder.go:78-85`). The exemption actually lets a late-evening occurrence still be sent after midnight. Correct that design text in this link.
 - [ ] 7.3 GREEN: `LegacyOccurrence`, `RecurringRoots`, `RouteTrigger`'s asked branch, the gate rule (design-repeating D30); doc 03 (anchor `hour`/`minute`, the `occurs_at` key); doc 02 §11 (`check.trigger.rearmed`); doc 02 §7 "Recurrence" (the re-arm becomes true; P2 stated as a change); doc 07; corpus case `classify-task-remind-me-daily-pills.json`; `make check-all`.
 
 ## PR 8 — `feat/remind-me-ask-back` (D40-D43; needs links 3, 5, 6, 7)
