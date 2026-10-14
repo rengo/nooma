@@ -44,10 +44,10 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestArmAsked_AnyKindWithADate`: a `mental_load` with a `due_at` → armed. `TestArmAsked_TimerUnchanged`.
   - `TestArmUnasked_EveryExistingArmAndFollowTestUnchanged`: the existing suite stays green.
   - `TestParseRemindMeLead_Bounds`: 0 → error, 1 → ok, 43200 → ok, 43201 → error, NULL → 15.
-  - `TestAtOnceMarginMatchesProactiveInterval`.
+  - `test/conformance/TestAtOnceMarginMatchesProactiveInterval` (L2, so core imports no scheduler).
   - `TestVerdict_NightExemptOverdueFromFireAt`: an exempt 03:00 row at 09:05, with a 6 h window → stale `overdue`; an unexempt one → deferred, then delivered (round 2, item 3).
   - `TestVerdict_AskedNamedMidnightPassesAtMidnight`: an asked row about 10-16 00:00 with no `day_only` → `passed` at 00:00, not at the next midnight (item 4). `TestVerdict_UnaskedMidnightKeepsDayGranular`.
-- [ ] 1.4 GREEN; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
+- [ ] 1.4 GREEN, including the call-site edits for the new signatures: `Arm` at `brain/capture.go:317`, and `ResolveReminderPrefs` at `brain/capture.go:121` and `brain/preferences.go:207`, plus their test callers; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
 
 ## PR 2 — `feat/remind-me-one-shot` (D5, D7, D8, D4 scan; first usable)
 
@@ -60,6 +60,11 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestI36_TheReplyNamesTheAskedReminder`: exact "Anotado para el jue 15 oct 10:00. Te aviso 15 minutos antes." and the English counterpart.
   - `TestI36_TheReplyStatesTheArmedHour`: `DateOnlyAt` 08:30 → "…ese día a las 08:30."
   - `TestI36_AskedButNotArmedSaysWhy`: past, quiet, too late → the refusal row and the reason sentence.
+- [ ] 2.1b RED, the seams with #343 and #344 (round 3, item 4):
+  - `TestReplanKeepsTheAskedLeadOfAnEvent`: an asked event with a stale 24 h row → `replanUnit` keeps the +15 row, with `asked` and `night_exempt`.
+  - `TestReplanOfAskedDayOnlyKeepsDateOnlyAt`: the re-plan of an asked day-only unit → at `DateOnlyAt`, `day_only` kept.
+  - `TestCurrentEventReadsDueAtForRemindMe`: an asked task → `currentEvent` is `due_at`; an unasked task → nil.
+  - `TestCorrectedAskedTaskOldRowIsNotSentAtItsOldTime` (link 3 expectation, red until link 3): 10:00 → 11:00 → nothing at 09:45; one row at 10:45.
 - [ ] 2.2 RED L3: migration M1; `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens.
 - [ ] 2.3 GREEN: the store, capture, phrase, channels and gate branch; the corpus case `classify-task-remind-me-coffee.json`; L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
 
