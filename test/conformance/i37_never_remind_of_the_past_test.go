@@ -57,6 +57,8 @@ type i37Vault struct {
 	// svc is the one long-lived service every pass of a test goes through.
 	svc   *brain.CheckService
 	clock *i37Clock
+	// cfg, when set, is the vault's stored preferences (the user's quiet end).
+	cfg ports.ConfigRepo
 	// ids outlives a service, so a test can restart the process.
 	ids counterIDs
 }
@@ -139,6 +141,9 @@ func (v *i37Vault) tryCheckAt(now time.Time, dry bool) (brain.CheckReport, error
 		v.clock = &i37Clock{}
 		v.svc = brain.NewCheckService(v.clock, repo, v.timers, &v.ids, v.log, channel,
 			v.units, memrepo.NewState(), nil, conversation, nil, nil)
+	}
+	if v.cfg != nil {
+		v.svc.WithQuietHours(v.cfg)
 	}
 	v.clock.now = now
 	return v.svc.Check(context.Background(), brain.CheckRequest{DryRun: dry})

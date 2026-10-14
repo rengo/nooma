@@ -97,7 +97,8 @@ type CheckReport struct {
 	// TriggersDelivered how many of those reached the user. They differ
 	// on purpose: firing is a decision this pass made, delivering is an
 	// outcome it may not have achieved — a digest-routed trigger fires
-	// and waits, and a failed send fires and is retried later.
+	// and waits, and a failed send fires and is retried later. A retry
+	// that gets through counts in TriggersDelivered, not in TriggersFired.
 	TriggersFired     int
 	TriggersDelivered int
 	// TriggersExpired, TimersFired and TimersCancelled are the effects.

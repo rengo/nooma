@@ -11,6 +11,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // pushes counts the Send attempts that were a pushed reminder saying text, not
@@ -206,5 +207,58 @@ func TestI37_DigestCarriesRecurringOnly(t *testing.T) {
 	}
 	if got := v.undelivered(); !got["a"] || got["b"] {
 		t.Errorf("undelivered = %v, want only the one-shot reminder still waiting for its retry", got)
+	}
+}
+
+// TestI37_QuietHoursHoldARetryUntilQuietEnd: a push that failed before the night
+// is not retried in it, and the first pass after the user's quiet end sends it
+// once. The quiet end is 03:00 here, so the retry is still inside ADR-0009's
+// window when it is let go.
+func TestI37_QuietHoursHoldARetryUntilQuietEnd(t *testing.T) {
+	v := newI37Vault(t)
+	v.cfg = memrepo.NewConfig()
+	quietEnd := "03:00"
+	v.cfg.(*memrepo.Config).SeedConfig(t, ports.VaultConfig{QuietHoursEnd: &quietEnd})
+	event := i37Day(15, 20, 0)
+	v.event("u", &event)
+	v.row("r", "u", "dentist", i37Day(14, 23, 50), modern(event, 1210))
+	v.ch.failIf = func(string) bool { return true }
+
+	v.checkAt(i37Day(14, 23, 55), false)
+	v.ch.failIf = nil
+	night := v.checkAt(i37Day(15, 1, 0), false)
+	if got := pushes(v.ch, "dentist"); got != 1 || night.TriggersDelivered != 0 || !v.undelivered()["r"] {
+		t.Fatalf("pushes %d, report %+v, undelivered %v; want nothing sent in the night", got, night, v.undelivered())
+	}
+	if got := v.failedRows()["r"]; got != 1 {
+		t.Errorf("failure rows for r = %d, want the one from before the night", got)
+	}
+
+	v.checkAt(i37Day(15, 3, 5), false)
+	v.checkAt(i37Day(15, 3, 10), false)
+	if got := pushes(v.ch, "dentist"); got != 2 || v.undelivered()["r"] {
+		t.Errorf("pushes %d, undelivered %v; want one push at quiet end and none after", got, v.undelivered())
+	}
+}
+
+// TestI37_DryRunCountsARetryAndSendsNothing: a dry run reports the retry the
+// real pass will make, writes nothing and sends nothing.
+func TestI37_DryRunCountsARetryAndSendsNothing(t *testing.T) {
+	seed := func(v *i37Vault) {
+		event := i37Day(14, 20, 0)
+		v.event("u", &event)
+		v.fired("r", "u", "dentist", i37Day(14, 9, 0), modern(event, 660))
+	}
+	dry, real := newI37Vault(t), newI37Vault(t)
+	seed(dry)
+	seed(real)
+
+	preview, report := dry.check(true), real.check(false)
+
+	if preview != report || report.TriggersDelivered != 1 {
+		t.Errorf("dry run reported %+v, the real pass %+v; want the same, with the retry delivered", preview, report)
+	}
+	if len(dry.ch.attempts) != 0 || !dry.undelivered()["r"] {
+		t.Errorf("the dry run sent %q, undelivered %v; want it to touch nothing", dry.ch.attempts, dry.undelivered())
 	}
 }
