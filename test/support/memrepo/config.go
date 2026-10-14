@@ -21,6 +21,8 @@ type Config struct {
 	// design §3.4's "no migration seeds it" rule at the fake's own
 	// zero-value level.
 	row *ports.VaultConfig
+	// updatedAt is the instant of the last write that stamps one.
+	updatedAt time.Time
 }
 
 // Assert at compile time, following internal/store/sqlite/unitrepo.go:33's
@@ -87,13 +89,37 @@ func (c *Config) SetReminderPrefs(_ context.Context, u ports.ReminderPrefsUpdate
 	return nil
 }
 
-// The five admin setters — see ports.ConfigRepo.
-func (c *Config) SetWeightThreshold(context.Context, float64, time.Time) error  { return nil }
-func (c *Config) SetHysteresisMargin(context.Context, float64, time.Time) error { return nil }
-func (c *Config) SetGoalStagnationDays(context.Context, int, time.Time) error   { return nil }
-func (c *Config) SetMentalLoadThreshold(context.Context, int, time.Time) error  { return nil }
-func (c *Config) SetConsolidationEnabled(context.Context, bool, time.Time) error {
+// set lazily creates the row (every other field nil, as in
+// RecordConsolidationRun), applies f, and stamps updated_at. f replaces a
+// pointer rather than writing through it, so a VaultConfig returned by an
+// earlier Load never changes under its reader.
+func (c *Config) set(at time.Time, f func(row *ports.VaultConfig)) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.row == nil {
+		c.row = &ports.VaultConfig{}
+	}
+	f(c.row)
+	c.updatedAt = at
 	return nil
+}
+
+// The five admin setters — see ports.ConfigRepo.
+func (c *Config) SetWeightThreshold(_ context.Context, v float64, at time.Time) error {
+	return c.set(at, func(r *ports.VaultConfig) { r.WeightThreshold = &v })
+}
+func (c *Config) SetHysteresisMargin(_ context.Context, v float64, at time.Time) error {
+	return c.set(at, func(r *ports.VaultConfig) { r.HysteresisMargin = &v })
+}
+func (c *Config) SetGoalStagnationDays(_ context.Context, v int, at time.Time) error {
+	return c.set(at, func(r *ports.VaultConfig) { r.GoalStagnationDays = &v })
+}
+func (c *Config) SetMentalLoadThreshold(_ context.Context, v int, at time.Time) error {
+	return c.set(at, func(r *ports.VaultConfig) { r.MentalLoadThreshold = &v })
+}
+func (c *Config) SetConsolidationEnabled(_ context.Context, v bool, at time.Time) error {
+	return c.set(at, func(r *ports.VaultConfig) { r.ConsolidationEnabled = &v })
 }
 
 // SeedConfig implements repocontract.ConfigHarness. Replaces the row
@@ -116,4 +142,12 @@ func (c *Config) RowExists(_ *testing.T) bool {
 	defer c.mu.Unlock()
 
 	return c.row != nil
+}
+
+// UpdatedAt implements repocontract.ConfigHarness.
+func (c *Config) UpdatedAt(_ *testing.T) time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.updatedAt
 }

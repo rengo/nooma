@@ -37,3 +37,12 @@ func TestRelationRepo_MemRepo_ExistingPairs(t *testing.T) {
 		return memrepo.NewRelations()
 	})
 }
+
+// TestRelationRepo_MemRepo_LearnedThresholds runs
+// repocontract.RunLearnedThresholds against the same fake.
+func TestRelationRepo_MemRepo_LearnedThresholds(t *testing.T) {
+	repocontract.RunLearnedThresholds(t, func(t *testing.T) repocontract.RelationHarness {
+		t.Helper()
+		return memrepo.NewRelations()
+	})
+}

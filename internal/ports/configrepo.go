@@ -14,7 +14,7 @@ import (
 type VaultConfig struct {
 	WeightThreshold        *float64   // → consolidation.ResolveWeightThreshold
 	HysteresisMargin       *float64   // → focus.ResolveMargin, read by brain.FocusKeeper
-	ConsolidationEnabled   *bool      // → internal/scheduler (catchup.go, scheduler.go)
+	ConsolidationEnabled   *bool      // → internal/scheduler (catchup.go:36, scheduler.go:247)
 	GoalStagnationDays     *int       // → consolidation.ResolveGoalStagnationDays
 	MentalLoadThreshold    *int       // → consolidation.ResolveMentalLoadThreshold
 	ConsolidationLastRunAt *time.Time // → passContext.since, and m2d's boot catch-up

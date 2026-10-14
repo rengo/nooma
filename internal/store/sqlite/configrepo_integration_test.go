@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"io/fs"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -421,8 +422,23 @@ func (h configHarness) SeedConfig(t *testing.T, cfg ports.VaultConfig) {
 		t.Fatalf("seeding config row: %v", err)
 	}
 	set := map[string]any{}
+	if cfg.WeightThreshold != nil {
+		set["weight_threshold"] = *cfg.WeightThreshold
+	}
+	if cfg.HysteresisMargin != nil {
+		set["hysteresis_margin"] = *cfg.HysteresisMargin
+	}
+	if cfg.ConsolidationEnabled != nil {
+		set["consolidation_enabled"] = *cfg.ConsolidationEnabled
+	}
 	if cfg.GoalStagnationDays != nil {
 		set["goal_stagnation_days"] = *cfg.GoalStagnationDays
+	}
+	if cfg.MentalLoadThreshold != nil {
+		set["mental_load_threshold"] = *cfg.MentalLoadThreshold
+	}
+	if cfg.ConsolidationLastRunAt != nil {
+		set["consolidation_last_run_at"] = formatUnitTime(*cfg.ConsolidationLastRunAt)
 	}
 	for col, v := range map[string]*string{
 		"event_reminder_leads": cfg.EventReminderLeads, "date_only_reminder_at": cfg.DateOnlyReminderAt,
@@ -437,6 +453,19 @@ func (h configHarness) SeedConfig(t *testing.T, cfg ports.VaultConfig) {
 			t.Fatalf("seeding config.%s: %v", col, err)
 		}
 	}
+}
+
+func (h configHarness) UpdatedAt(t *testing.T) time.Time {
+	t.Helper()
+	var text string
+	if err := h.db.QueryRowContext(context.Background(), `SELECT updated_at FROM config WHERE id = 1`).Scan(&text); err != nil {
+		t.Fatalf("reading config.updated_at: %v", err)
+	}
+	at, err := time.Parse(unitTimeLayout, text)
+	if err != nil {
+		t.Fatalf("parsing config.updated_at %q: %v", text, err)
+	}
+	return at
 }
 
 func (h configHarness) RowExists(t *testing.T) bool { return configRowExists(t, h.db) }
@@ -498,5 +527,57 @@ func TestConfigRepo_SetReminderPrefsRefreshesUpdatedAtOnAnExistingRow(t *testing
 	}
 	if updatedAt != later.Format(unitTimeLayout) {
 		t.Errorf("updated_at = %q, want the update's instant %q", updatedAt, later.Format(unitTimeLayout))
+	}
+}
+
+// TestConfigRepo_Setters runs the five admin setters' contract against the
+// real store (C1).
+func TestConfigRepo_Setters(t *testing.T) {
+	repocontract.RunConfigSetters(t, func(t *testing.T) repocontract.ConfigHarness {
+		t.Helper()
+		v := openTestVault(t)
+		return configHarness{ConfigRepo: NewConfigRepo(v), db: v.db}
+	})
+}
+
+// TestConfigRepo_SetterLazyCreateUsesMigrationDefaults is C2: a setter on an
+// empty vault creates the row naming only id, its column and updated_at, so
+// every other column takes the migration's own default. The expected values
+// are literals on purpose: a statement that spelled the defaults out in Go
+// would diverge from the DDL the moment one was mistyped.
+func TestConfigRepo_SetterLazyCreateUsesMigrationDefaults(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		name  string
+		set   func(r *ConfigRepo) error
+		moves func(c *ports.VaultConfig)
+	}{
+		{"SetWeightThreshold", func(r *ConfigRepo) error { return r.SetWeightThreshold(ctx, 0.9, configFixtureTime) },
+			func(c *ports.VaultConfig) { v := 0.9; c.WeightThreshold = &v }},
+		{"SetHysteresisMargin", func(r *ConfigRepo) error { return r.SetHysteresisMargin(ctx, 0.25, configFixtureTime) },
+			func(c *ports.VaultConfig) { v := 0.25; c.HysteresisMargin = &v }},
+		{"SetGoalStagnationDays", func(r *ConfigRepo) error { return r.SetGoalStagnationDays(ctx, 45, configFixtureTime) },
+			func(c *ports.VaultConfig) { v := 45; c.GoalStagnationDays = &v }},
+		{"SetMentalLoadThreshold", func(r *ConfigRepo) error { return r.SetMentalLoadThreshold(ctx, 12, configFixtureTime) },
+			func(c *ports.VaultConfig) { v := 12; c.MentalLoadThreshold = &v }},
+		{"SetConsolidationEnabled", func(r *ConfigRepo) error { return r.SetConsolidationEnabled(ctx, false, configFixtureTime) },
+			func(c *ports.VaultConfig) { v := false; c.ConsolidationEnabled = &v }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			repo := NewConfigRepo(openTestVault(t))
+			if err := c.set(repo); err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			got, err := repo.Load(ctx)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			w, m, g, l, e := 0.5, 0.05, 21, 7, true
+			want := ports.VaultConfig{WeightThreshold: &w, HysteresisMargin: &m, GoalStagnationDays: &g, MentalLoadThreshold: &l, ConsolidationEnabled: &e}
+			c.moves(&want)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("Load() after a lazy create = %+v, want the migration defaults except the written column: %+v", got, want)
+			}
+		})
 	}
 }
