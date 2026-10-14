@@ -177,8 +177,9 @@ candidate** (P7). The rules apply in order:
 
 The candidates are:
 
-- **for a stop:** asked units with an armed or recently delivered trigger, plus the unit of a
-  unique last delivery (a birthday included);
+- **for a stop:** asked units with an armed or recently delivered trigger, units with an armed
+  recurring trigger (a birthday, by name), and the units of every row tied for the last delivery
+  (up to 5), so a tie always asks;
 - **for a done:** asked triggers delivered inside the window.
 
 Otherwise Nooma asks "¿Cuál?" with at most the 5 most recent candidates, keeping the intent. A
@@ -193,8 +194,8 @@ done that no rule binds does nothing.
 
 Check-in resolution never takes a message the phrases consumed. A message consumed by any
 answer, phrase or check-in expires every older open reminder question. Every reminder question
-has a window, and a newer delivery expires an open `keep_or_stop` or `which_reminder`, so a late
-"no" never deletes.
+has a window, and a newer delivery expires every open reminder question, so a late "no" never
+deletes nor makes a daily reminder.
 
 Replies: "Listo, no te lo recuerdo más: tomar pastillas." / "Bien, te lo sigo recordando." /
 "Hecho por hoy.".
