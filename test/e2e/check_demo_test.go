@@ -169,8 +169,12 @@ func seedDueWork(t *testing.T, dbPath string) {
 	staleAt := now.Add(-48 * time.Hour)
 	dueAt := now.Add(-time.Minute)
 
+	// Recurring: `nooma check` has no channel, and leaves an overdue one-shot
+	// reminder as it found it (ADR-0032); a recurring one still expires.
+	yearly, soon := prospection.RuleYearly, now.AddDate(0, 0, 10)
 	if err := sqlite.NewTriggerRepo(db).Create(ctx, ports.Trigger{
 		ID: "trg-overdue", Kind: ports.TriggerKindTimeBased, FireAt: &staleAt, CreatedAt: staleAt,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: soon.Month(), Day: soon.Day()},
 	}); err != nil {
 		t.Fatalf("seeding the trigger: %v", err)
 	}

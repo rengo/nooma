@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -524,6 +525,54 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		got, err := repo.FiredForUnit(ctx, "unit-shared")
 		if err != nil || len(got) != 1 || !got[0].FiredAt.Equal(contractNow) {
 			t.Errorf("FiredForUnit after the lapse = %+v, %v; want only trg-fired: a lapsed row was never sent and covers nothing", got, err)
+		}
+	})
+
+	t.Run("OneShotForUnit returns the unit's one-shot triggers at every status, expired included, with the catch-up mark", func(t *testing.T) {
+		repo := newRepo(t)
+		unitID := "unit-oneshot"
+		at := contractNow.Add(time.Hour)
+		yearly := prospection.RuleYearly
+		for _, id := range []string{"trg-armed", "trg-fired", "trg-expired", "trg-lapsed", "trg-recurring"} {
+			trg := fixtureTrigger(id, &at)
+			trg.UnitID = &unitID
+			if id == "trg-recurring" {
+				trg.RecurrenceRule, trg.RecurrenceAnchor = &yearly, &prospection.Anchor{Month: 10, Day: 1}
+			}
+			if id == "trg-lapsed" {
+				trg.Payload.CatchUp = true
+			}
+			createTrigger(t, repo, trg)
+		}
+		for _, id := range []string{"trg-fired", "trg-lapsed"} {
+			if err := repo.Fire(ctx, id, at); err != nil {
+				t.Fatalf("Fire %s: %v", id, err)
+			}
+		}
+		if err := repo.Lapse(ctx, "trg-lapsed"); err != nil {
+			t.Fatalf("Lapse: %v", err)
+		}
+		if err := repo.Expire(ctx, "trg-expired"); err != nil {
+			t.Fatalf("Expire: %v", err)
+		}
+
+		got, err := repo.OneShotForUnit(ctx, unitID)
+		if err != nil {
+			t.Fatalf("OneShotForUnit: %v", err)
+		}
+		ids, marked := []string{}, false
+		for _, g := range got {
+			ids = append(ids, g.ID)
+			if g.ID == "trg-lapsed" {
+				marked = g.Payload.CatchUp
+			}
+		}
+		slices.Sort(ids)
+		if want := []string{"trg-armed", "trg-expired", "trg-fired", "trg-lapsed"}; !slices.Equal(ids, want) || !marked {
+			t.Errorf("OneShotForUnit = %v (catch-up mark %v), want %v with the mark kept", ids, marked, want)
+		}
+		if other, _ := repo.OneShotForUnit(ctx, "unit-nothing"); len(other) != 0 {
+			t.Errorf("OneShotForUnit of a unit with none = %+v", other)
 		}
 	})
 

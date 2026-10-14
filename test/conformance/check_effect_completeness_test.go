@@ -76,8 +76,12 @@ func TestCheckEffectCompleteness(t *testing.T) {
 
 			triggers, timers, decisions := freshCheckFakes(t)
 			at := fireAt
+			// Recurring: a one-shot reminder is pushed (two rows) and, with no
+			// channel, left alone; a recurring one is fired for the digest or expired.
+			yearly := prospection.RuleYearly
 			if err := triggers.Create(context.Background(), ports.Trigger{
 				ID: "trg", Kind: ports.TriggerKindTimeBased, FireAt: &at, CreatedAt: fireAt.Add(-time.Hour),
+				RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.December, Day: 25},
 			}); err != nil {
 				t.Fatalf("Create: %v", err)
 			}

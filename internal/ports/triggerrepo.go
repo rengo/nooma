@@ -117,6 +117,9 @@ type TriggerPayload struct {
 	// out is never sent again (doc 02 §7). Empty on rows armed before.
 	About            time.Time
 	UserLeadsMinutes []int
+	// CatchUp marks the at-once reminder an event is owed when every lead of
+	// it has passed (ADR-0032): its id is catch-up:<unit>:<about>:<attempt>.
+	CatchUp bool
 }
 
 // FiredTrigger is a one-shot trigger that fired: when it was to fire, when
@@ -314,6 +317,11 @@ type TriggerRepo interface {
 	// ErrTriggerStatusConflict if id is not fired or was already surfaced,
 	// and ErrTriggerNotFound if it does not exist.
 	Lapse(ctx context.Context, id string) error
+
+	// OneShotForUnit returns every one-shot trigger of unitID at any status,
+	// expired and lapsed ones included, in no particular order: the catch-ups
+	// already attempted for an event, which only a read of every status counts.
+	OneShotForUnit(ctx context.Context, unitID string) ([]DueTrigger, error)
 
 	// ArmedForUnit returns every armed trigger hanging off unitID, ordered
 	// by (fire_at, id) — the reminders a corrected date moves (I29).

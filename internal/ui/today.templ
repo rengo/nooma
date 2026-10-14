@@ -64,6 +64,16 @@ templ todayBody(today brain.Today, serving Serving) {
 			}
 			<p data-held>{ fmt.Sprintf("Held: %d", today.Digest.Held) }</p>
 		</section>
+		if len(today.Upcoming) > 0 {
+			<section data-view="upcoming">
+				<h2>UPCOMING REMINDERS</h2>
+				<ul>
+					for _, line := range today.Upcoming {
+						<li>{ line.Text + " — " + formatTime(ctx, line.FireAt) }</li>
+					}
+				</ul>
+			</section>
+		}
 		<section data-view="system">
 			<h2>SYSTEM</h2>
 			<ul>

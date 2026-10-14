@@ -57,7 +57,7 @@ Split (the client's vault would otherwise lose its reminders): 3a judges and HOL
       Doc 02 §7/§11. Run `make check-all`, then open the PR.
 
 PR 4 — `fix/no-destination-and-catch-up`
-- [ ] 6. RED tests:
+- [x] 6. RED tests:
   - `TestI37_LoneStaleFiredRowYieldsACatchUp` (C2): one stale fired row, every lead behind →
     one at-once row.
   - `TestI37_TwoLapsedLeadsOnePassOneCatchUp`, and `ThreeMorePassesNoSecond`.
@@ -71,7 +71,7 @@ PR 4 — `fix/no-destination-and-catch-up`
   - `TestMoveReminderClearsCatchUpOnANewInstant`.
   - Repo contract: `OneShotForUnit` returns expired rows; `Create` of a taken attempt id →
     `ErrTriggerExists`.
-- [ ] 7. GREEN: cannot-deliver, Today's list, `OneShotForUnit` (sqlite, memrepo), `CatchUp`,
+- [x] 7. GREEN: cannot-deliver, Today's list, `OneShotForUnit` (sqlite, memrepo), `CatchUp`,
       `armCatchUp`, `TriggerPayload.CatchUp`, the refused writer, `check.reminder.refused` (doc 02
       §11, `ui/activitylabel.go`). Doc 02 §5/§7, doc 07. `make check-all`, open the PR.
 

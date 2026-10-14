@@ -234,8 +234,12 @@ func seedCheckVault(t *testing.T) (vault, dbPath string) {
 	staleAt := now.Add(-48 * time.Hour)
 	dueAt := now.Add(-time.Minute)
 
+	// Recurring: with no channel `nooma check` leaves an overdue one-shot
+	// reminder as it found it (ADR-0032), and a recurring one still expires.
+	yearly, soon := prospection.RuleYearly, now.AddDate(0, 0, 10)
 	if err := sqlite.NewTriggerRepo(db).Create(ctx, ports.Trigger{
 		ID: "trg-stale", Kind: ports.TriggerKindTimeBased, FireAt: &staleAt, CreatedAt: staleAt,
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: soon.Month(), Day: soon.Day()},
 	}); err != nil {
 		t.Fatalf("seeding the trigger: %v", err)
 	}

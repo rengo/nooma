@@ -27,6 +27,7 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionCheckReminderArmed:        "Reminder re-planned",
 	ports.ActionCheckReminderMoved:        "Reminder moved by a check",
 	ports.ActionCheckReminderCancelled:    "Reminder cancelled by a check",
+	ports.ActionCheckReminderRefused:      "Reminder not sent, no time left",
 	ports.ActionCheckTimerFired:           "Timer went off",
 	ports.ActionCheckTimerCancelled:       "Timer cancelled",
 	ports.ActionCheckConflictSkipped:      "Skipped a conflicting update",

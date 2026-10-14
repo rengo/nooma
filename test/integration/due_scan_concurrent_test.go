@@ -89,11 +89,11 @@ func TestDueScan_ConcurrentPassesTransitionExactlyOnce(t *testing.T) {
 	svcA := brain.NewCheckService(fixedClock{now: now},
 		barrierTriggers{TriggerRepo: triggers, barrier: triggerReads},
 		barrierTimers{TimerRepo: timers, barrier: timerReads},
-		&prefixedIDs{prefix: "a"}, decisions, nil, nil, nil, nil, "", nil, nil)
+		&prefixedIDs{prefix: "a"}, decisions, noopChannel{}, nil, nil, nil, "1", nil, nil)
 	svcB := brain.NewCheckService(fixedClock{now: now},
 		barrierTriggers{TriggerRepo: triggers, barrier: triggerReads},
 		barrierTimers{TimerRepo: timers, barrier: timerReads},
-		&prefixedIDs{prefix: "b"}, decisions, nil, nil, nil, nil, "", nil, nil)
+		&prefixedIDs{prefix: "b"}, decisions, noopChannel{}, nil, nil, nil, "1", nil, nil)
 
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
@@ -238,3 +238,14 @@ func assertActionCount(t *testing.T, raw *sql.DB, action string, want int) {
 		t.Errorf("%d %q rows, want %d", got, action, want)
 	}
 }
+
+// noopChannel is a destination that is never written to: a pass needs one to
+// expire an overdue reminder (ADR-0032), and this test's reminders never reach
+// a send.
+type noopChannel struct{}
+
+func (noopChannel) Name() string                                             { return "test" }
+func (noopChannel) Receive(context.Context) ([]ports.ChannelMessage, error)  { return nil, nil }
+func (noopChannel) Send(context.Context, ports.ConversationID, string) error { return nil }
+func (noopChannel) Confirm(context.Context, string) error                    { return nil }
+func (noopChannel) Close() error                                             { return nil }
