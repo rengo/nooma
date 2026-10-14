@@ -252,3 +252,60 @@ func TestPhraseSetsComplete(t *testing.T) {
 		t.Errorf("English frame = %q, want %q", got, want)
 	}
 }
+
+// TestProactiveSentences pins what Nooma says without being asked (ADR-0032
+// point 5): the digest's header in agreement with its count, its bullet, its
+// question and the lateness note, in every language, with no broken verb.
+func TestProactiveSentences(t *testing.T) {
+	for _, l := range classify.AllLanguages() {
+		s := For(l)
+		for n, got := range map[int]string{1: s.DigestHeader(1), 3: s.DigestHeader(3), 0: s.DigestHeader(0)} {
+			if got == "" || strings.Contains(got, "%!") || (n > 1 && !strings.Contains(got, fmt.Sprint(n))) {
+				t.Errorf("%s: DigestHeader(%d) = %q", l, n, got)
+			}
+		}
+		if s.DigestHeader(1) == s.DigestHeader(2) {
+			t.Errorf("%s: DigestHeader ignores whether there is one line or several", l)
+		}
+		for _, c := range []struct{ name, got, word string }{
+			{"DigestItem", s.DigestItem("dentist"), "dentist"},
+			{"Question", s.Question("plan", "budget"), "plan"},
+			{"Delayed", s.Delayed("dentist"), "dentist"},
+		} {
+			if strings.Contains(c.got, "%!") || !strings.Contains(c.got, c.word) {
+				t.Errorf("%s: %s = %q renders a broken verb or drops its words", l, c.name, c.got)
+			}
+		}
+		if q := s.Question("plan", "budget"); !strings.Contains(q, "budget") {
+			t.Errorf("%s: Question = %q, want both endpoints", l, q)
+		}
+		if s.OneMore == "" || s.SomethingYouAsked == "" {
+			t.Errorf("%s: a proactive sentence is empty", l)
+		}
+	}
+	es := For(classify.LanguageES)
+	for got, want := range map[string]string{
+		es.DigestHeader(1):               "Hoy hay 1 cosa:",
+		es.DigestHeader(3):               "Hoy hay 3 cosas:",
+		es.Question("plan", "budget"):    `Relacioné "plan" con "budget". ¿Tienen relación?`,
+		es.Delayed("Recordatorio: x"):    "Recordatorio: x (Esto llega más tarde de lo previsto.)",
+		es.SomethingYouAsked:             "Me pediste que te recordara algo.",
+		es.OneMore:                       "Una más — ",
+		es.DigestItem("x"):               "• x",
+		For(classify.LanguageEN).OneMore: "One more — ",
+	} {
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	}
+	en := For(classify.LanguageEN)
+	if got, want := en.Question("plan", "budget"), `I linked "plan" with "budget". Are they related?`; got != want {
+		t.Errorf("en.Question = %q, want %q", got, want)
+	}
+	if got, want := en.Delayed("x"), "x (This is later than intended.)"; got != want {
+		t.Errorf("en.Delayed = %q, want %q", got, want)
+	}
+	if en.DigestHeader(1) != "Here is 1 thing for today:" || en.DigestHeader(2) != "Here are 2 things for today:" {
+		t.Errorf("en headers = %q, %q", en.DigestHeader(1), en.DigestHeader(2))
+	}
+}

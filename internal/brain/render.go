@@ -10,6 +10,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/phrase"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -67,29 +68,65 @@ func (r checkRunner) flush(ctx context.Context, q *pushQueue, now time.Time) (in
 	return delivered, nil
 }
 
-// sentences are the fallback language's until a unit carries its own (ADR-0032).
+// sentences are the fallback language's: what a message says when no unit has
+// told which language its person writes in (ADR-0032 point 5).
 func sentences() phrase.Set { return phrase.For(classify.Fallback()) }
 
-// unitWords is what a reminder says: its unit's text now and when its event is,
-// in the clock's zone, with no hour for a whole day (ADR-0032 point 4). ok is
-// false when the unit cannot be read: the caller says what it was armed with.
-func (r checkRunner) unitWords(ctx context.Context, t ports.DueTrigger, now time.Time) (text, when string, ok bool) {
+// setFor is the sentences a message speaks: own, when it names a language Nooma
+// holds, else the newest unit's, else the fallback's (ADR-0032 point 5). A read
+// that fails is logged and answered with the fallback: a message in English
+// beats no message.
+func (r checkRunner) setFor(ctx context.Context, own string) phrase.Set {
+	if l, ok := heldLanguage(own); ok {
+		return phrase.For(l)
+	}
+	if r.units == nil {
+		return sentences()
+	}
+	latest, err := r.units.LatestLanguage(ctx)
+	if err != nil {
+		slog.Warn("the newest unit's language could not be read, so a message speaks the fallback", "error", err)
+		return sentences()
+	}
+	if l, ok := heldLanguage(latest); ok {
+		return phrase.For(l)
+	}
+	return sentences()
+}
+
+// heldLanguage is s as a language Nooma has sentences for.
+func heldLanguage(s string) (classify.Language, bool) {
+	for _, l := range classify.AllLanguages() {
+		if string(l) == s {
+			return l, true
+		}
+	}
+	return "", false
+}
+
+// readUnit is the unit a reminder is about, or ok false when it has none or it
+// cannot be read or says nothing a reminder could frame: the caller then says
+// what the reminder was armed with.
+func (r checkRunner) readUnit(ctx context.Context, t ports.DueTrigger) (u unit.Unit, ok bool) {
 	if t.UnitID == nil || r.units == nil {
-		return "", "", false
+		return unit.Unit{}, false
 	}
 	u, err := r.units.ByID(ctx, *t.UnitID)
 	if err != nil {
 		if !errors.Is(err, ports.ErrUnitNotFound) {
 			slog.Warn("a reminder's unit could not be read, so it says what it was armed with", "trigger", t.ID, "error", err)
 		}
-		return "", "", false
+		return unit.Unit{}, false
 	}
-	if strings.TrimSpace(u.Content) == "" {
-		return "", "", false
-	}
+	return u, strings.TrimSpace(u.Content) != ""
+}
+
+// unitWords is what a reminder says of u: its text now and when its event is, in
+// the clock's zone, with no hour for a whole day (ADR-0032 point 4), in set's
+// words for the days.
+func unitWords(u unit.Unit, t ports.DueTrigger, now time.Time, set phrase.Set) (text, when string) {
 	reminder := newReminder(t, true)
 	reminder.Current = currentEvent(u)
-	set := sentences()
 	if at, dayOnly, known := reminder.Occasion(now.Location()); known {
 		if at = at.In(now.Location()); dayOnly {
 			when = set.Date(at)
@@ -97,23 +134,26 @@ func (r checkRunner) unitWords(ctx context.Context, t ports.DueTrigger, now time
 			when = set.Time(at)
 		}
 	}
-	return clip(u.Content), when, true
+	return clip(u.Content), when
 }
 
-// pushText is the one message for a unit's reminders due together. It admits
-// being late only when every reminder in it is.
+// pushText is the one message for a unit's reminders due together, in the unit's
+// language. It admits being late only when every reminder in it is.
 func (r checkRunner) pushText(ctx context.Context, group []ports.DueTrigger, now time.Time) string {
 	latest := group[len(group)-1].FireAt // groups come sorted by fire time
-	if text, when, ok := r.unitWords(ctx, group[0], now); ok {
-		return withDelayCaveat(sentences().Remind(text, when), latest, now)
+	u, ok := r.readUnit(ctx, group[0])
+	set := r.setFor(ctx, u.Language)
+	if ok {
+		text, when := unitWords(u, group[0], now, set)
+		return withDelayCaveat(set.Remind(text, when), latest, now, set)
 	}
 	var lines []string
 	for _, t := range group {
-		if line := frozenText(t); !slices.Contains(lines, line) {
+		if line := frozenText(t, set); !slices.Contains(lines, line) {
 			lines = append(lines, line)
 		}
 	}
-	return withDelayCaveat(strings.Join(lines, "\n"), latest, now)
+	return withDelayCaveat(strings.Join(lines, "\n"), latest, now, set)
 }
 
 // reminderTextRunes bounds how much of a unit's own text one reminder says.

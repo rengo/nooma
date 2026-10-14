@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -172,7 +172,9 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		carry, held = prospection.Carry(items, carryAdjacency(round.adjacent, pending), low, now)
 	}
 
-	if err := r.channel.Send(ctx, r.conversation, renderDigest(carry, r.saidNow(ctx, pending, now), question)); err != nil {
+	// The digest speaks the newest capture's language (ADR-0032 point 5).
+	set := r.setFor(ctx, "")
+	if err := r.channel.Send(ctx, r.conversation, renderDigest(set, carry, r.saidNow(ctx, pending, now, set), question)); err != nil {
 		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
 			checkDetail{})
@@ -357,12 +359,13 @@ func heldCounts(history []ports.Decision) map[string]int {
 
 // saidNow is pending as the digest says it: each text is its unit's now, with
 // when, or the one it was armed with when the unit cannot be read (ADR-0032).
-func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, now time.Time) []ports.DueTrigger {
+func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, now time.Time, set phrase.Set) []ports.DueTrigger {
 	out := slices.Clone(pending)
 	for i, t := range out {
-		if text, when, ok := r.unitWords(ctx, t, now); ok {
+		if u, ok := r.readUnit(ctx, t); ok {
+			text, when := unitWords(u, t, now, set)
 			if when != "" {
-				text = sentences().Line(text, when)
+				text = set.Line(text, when)
 			}
 			out[i].Payload.ActionText = text
 		} else {
@@ -378,7 +381,7 @@ func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, no
 // Held items are not mentioned. A digest that listed what it withheld
 // would defeat the low-energy gate it came from — the point of holding
 // something back is that the person does not have to think about it today.
-func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) string {
+func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) string {
 	byID := make(map[string]ports.DueTrigger, len(pending))
 	for _, t := range pending {
 		byID[t.ID] = t
@@ -398,15 +401,15 @@ func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, qu
 		}
 		line := t.Payload.ActionText
 		if line == "" {
-			line = "something you asked me to remind you about"
+			line = set.SomethingYouAsked
 		}
 		lines = append(lines, line)
 	}
 	var b strings.Builder
 	if len(lines) > 0 {
-		b.WriteString("Here " + plural(len(lines)) + ":")
+		b.WriteString(set.DigestHeader(len(lines)))
 		for _, line := range lines {
-			b.WriteString("\n\u2022 " + line)
+			b.WriteString("\n" + set.DigestItem(line))
 		}
 	}
 
@@ -419,17 +422,17 @@ func renderDigest(carry []prospection.DigestItem, pending []ports.DueTrigger, qu
 		// The question itself is written once, in questionLine, so the two
 		// shapes cannot drift into two different questions.
 		if b.Len() > 0 {
-			b.WriteString("\n\nOne more \u2014 ")
+			b.WriteString("\n\n" + set.OneMore)
 		}
-		b.WriteString(questionLine(*question))
+		b.WriteString(questionLine(set, *question))
 	}
 	return b.String()
 }
 
 // questionLine is the digest's relation question, in doc 02 §4's own
 // wording ("I linked X with Y, are they related?").
-func questionLine(q ports.RelationQuestion) string {
-	return "I linked \"" + snippet(q.FromContent) + "\" with \"" + snippet(q.ToContent) + "\". Are they related?"
+func questionLine(set phrase.Set, q ports.RelationQuestion) string {
+	return set.Question(snippet(q.FromContent), snippet(q.ToContent))
 }
 
 // snippet is one endpoint's own text, bounded to questionSnippetRunes.
@@ -443,13 +446,6 @@ func snippet(s string) string {
 		return s
 	}
 	return string(runes[:questionSnippetRunes]) + "\u2026"
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return "is 1 thing for today"
-	}
-	return "are " + strconv.Itoa(n) + " things for today"
 }
 
 // questionSnippetRunes bounds how much of a unit's own text a digest

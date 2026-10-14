@@ -81,6 +81,22 @@ type Set struct {
 	Reminder string
 	AtWhen   string
 
+	// The sentences Nooma says first, without being asked (ADR-0032 point 5).
+	// DigestLine frames one digest bullet: one %s, the line. DigestHeaderOne
+	// heads a digest of one line and takes nothing; DigestHeaderMany takes one
+	// %d, the number of lines. OneMore opens the digest's question when lines
+	// came before it. RelationQuestion takes two %s: what was linked, then
+	// what it was linked with. Late is the note a reminder carries when it is
+	// sent later than intended, and SomethingYouAsked is what a reminder says
+	// when it has nothing of its own to say.
+	DigestLine        string
+	DigestHeaderOne   string
+	DigestHeaderMany  string
+	OneMore           string
+	RelationQuestion  string
+	Late              string
+	SomethingYouAsked string
+
 	// The four lead-time phrases NotedFor's second %s is filled with.
 	// LeadDays takes one %d.
 	LeadImmediate string
@@ -139,6 +155,14 @@ var sets = map[classify.Language]Set{
 		Reminder: "Reminder: %s",
 		AtWhen:   "%s \u2014 %s",
 
+		DigestLine:        "\u2022 %s",
+		DigestHeaderOne:   "Here is 1 thing for today:",
+		DigestHeaderMany:  "Here are %d things for today:",
+		OneMore:           "One more \u2014 ",
+		RelationQuestion:  "I linked \"%s\" with \"%s\". Are they related?",
+		Late:              "(This is later than intended.)",
+		SomethingYouAsked: "You asked me to remind you about something.",
+
 		LeadImmediate: "right away",
 		LeadHours:     "a few hours before",
 		LeadDayBefore: "the day before",
@@ -177,6 +201,14 @@ var sets = map[classify.Language]Set{
 
 		Reminder: "Recordatorio: %s",
 		AtWhen:   "%s \u2014 %s",
+
+		DigestLine:        "\u2022 %s",
+		DigestHeaderOne:   "Hoy hay 1 cosa:",
+		DigestHeaderMany:  "Hoy hay %d cosas:",
+		OneMore:           "Una más \u2014 ",
+		RelationQuestion:  "Relacioné \"%s\" con \"%s\". ¿Tienen relación?",
+		Late:              "(Esto llega más tarde de lo previsto.)",
+		SomethingYouAsked: "Me pediste que te recordara algo.",
 
 		LeadImmediate: "ahora mismo",
 		LeadHours:     "unas horas antes",
@@ -238,6 +270,23 @@ func (s Set) Remind(text, when string) string {
 	}
 	return fmt.Sprintf(s.Reminder, text)
 }
+
+// DigestHeader heads a digest of n lines, in agreement with n.
+func (s Set) DigestHeader(n int) string {
+	if n == 1 {
+		return s.DigestHeaderOne
+	}
+	return fmt.Sprintf(s.DigestHeaderMany, n)
+}
+
+// DigestItem frames one digest line.
+func (s Set) DigestItem(line string) string { return fmt.Sprintf(s.DigestLine, line) }
+
+// Question asks whether two things Nooma linked are related.
+func (s Set) Question(from, to string) string { return fmt.Sprintf(s.RelationQuestion, from, to) }
+
+// Delayed notes that text is being said later than intended.
+func (s Set) Delayed(text string) string { return text + " " + s.Late }
 
 // Found renders the header over a recall's results, in agreement with n.
 func (s Set) Found(n int) string {

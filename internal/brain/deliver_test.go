@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -229,7 +231,7 @@ func TestDeliver_DryRunSendsNothing(t *testing.T) {
 // TestRenderPush_SaysWhenItIsLate is R4.2's half that belongs to a push.
 func TestRenderPush_SaysWhenItIsLate(t *testing.T) {
 	t.Run("on time, no caveat", func(t *testing.T) {
-		got := renderPush(pushTrigger("t", deliverFireAt, 0.9), deliverFireAt.Add(time.Minute))
+		got := renderPush(pushTrigger("t", deliverFireAt, 0.9), deliverFireAt.Add(time.Minute), sentences())
 		if got != "renew the passport" {
 			t.Errorf("render = %q, want the text alone", got)
 		}
@@ -237,9 +239,22 @@ func TestRenderPush_SaysWhenItIsLate(t *testing.T) {
 
 	t.Run("late enough, the caveat appears", func(t *testing.T) {
 		late := deliverFireAt.Add(time.Duration(prospection.DelayCaveatMinutes) * time.Minute)
-		got := renderPush(pushTrigger("t", deliverFireAt, 0.9), late)
+		got := renderPush(pushTrigger("t", deliverFireAt, 0.9), late, sentences())
 		if got == "renew the passport" {
 			t.Errorf("render = %q at exactly the caveat boundary, want the delay mentioned — DelayCaveat is inclusive by m3a's F6", got)
 		}
 	})
+}
+
+// TestRenderPush_SpeaksTheSetItIsGiven: a reminder with nothing of its own to say
+// and the lateness note speak the set's language.
+func TestRenderPush_SpeaksTheSetItIsGiven(t *testing.T) {
+	es := phrase.For(classify.LanguageES)
+	late := deliverFireAt.Add(time.Duration(prospection.DelayCaveatMinutes) * time.Minute)
+	tr := pushTrigger("t", deliverFireAt, 0.9)
+	tr.Payload.ActionText = ""
+
+	if got, want := renderPush(tr, late, es), "Me pediste que te recordara algo. (Esto llega más tarde de lo previsto.)"; got != want {
+		t.Errorf("renderPush() = %q, want %q", got, want)
+	}
 }
