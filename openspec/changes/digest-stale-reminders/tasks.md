@@ -106,6 +106,9 @@ unit like the push and the digest.
 Follow-up (own change): the 500-rune cap is per line, so a digest of dozens of items can still exceed
 Telegram's 4096-character limit; bound the whole message. Cutting lines means deciding what happens to the
 reminders not shown (they must stay undelivered), which is a product call.
+PM decisions for those follow-ups: (1) timer wording follows the newest unit's language; (2) a digest over
+4096 characters drops the overflow lines, which stay undelivered for tomorrow, and appends "and N more" /
+"y N más"; (3) Today lines render from the unit.
 Done in link 7: the 3-byte clip test, a repeated unreadable text, and the joined flush error on an aborted pass.
 
 ## Review Workload Forecast

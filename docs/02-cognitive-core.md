@@ -550,7 +550,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        row). A pushed reminder speaks its unit's language; the digest (header, lines' frame,
        lateness note, relation question) speaks the language of the most recently created unit
        that has one, archived or not. A unit that knows none speaks the newest unit's, and
-       none known at all, the fallback.
+       none known at all, the fallback. **A timer's wording is the exception for now**: a timer
+       is not a unit, and its generic nudge and lateness note stay English until a follow-up
+       makes them follow the newest unit's language.
 
    - **Two of the thirteen are not memory, and they route before anything is built**
      ([ADR-0021](adr/0021-conversation-boundary.md)) — `chitchat` and `out_of_scope`. Neither

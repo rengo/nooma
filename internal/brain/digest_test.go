@@ -900,4 +900,7 @@ func TestRenderDigest_SpeaksTheSetItIsGiven(t *testing.T) {
 	if got != want {
 		t.Errorf("renderDigest() =\n%q\nwant\n%q", got, want)
 	}
+	if got, want := renderDigest(sentences(), carry[1:], pending, nil), "Here is 1 thing for today:\n\u2022 You asked me to remind you about something."; got != want {
+		t.Errorf("English renderDigest() = %q, want %q", got, want)
+	}
 }
