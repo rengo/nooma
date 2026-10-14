@@ -82,6 +82,7 @@ order, with no correspondence to anything.
 | [0028](0028-ui-cookie-handshake.md) | The UI cookie carries the token itself; cross-origin UI requests are refused structurally | Accepted | M4a |
 | [0029](0029-event-reminders-follow-the-users-leads.md) | Event reminders: the day before and two hours before, as the user's own preference | Accepted | M4 |
 | [0030](0030-event-reminders-are-pushed-and-respect-the-night.md) | Event reminders are pushed during the day, held through the night, and never late | Accepted | M4 |
+| [0031](0031-reminders-the-user-asks-for.md) | A reminder the user asks for is set from their own words, asked about when unclear, and stopped only when they say so | Accepted | M4 |
 | [0032](0032-a-reminder-says-what-is-true-now.md) | A reminder says what is true when it is sent, in the user's language | Accepted | M4 |
 
 ## Template

@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-09-05
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0031](0031-reminders-the-user-asks-for.md), the table's shape only (the dedicated store stands)
 - **Enables**: M3e
 
 ## Context
