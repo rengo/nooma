@@ -193,9 +193,9 @@ func (r *TriggerRepo) Surface(ctx context.Context, id string, at time.Time) erro
 		formatUnitTime(at), id, string(ports.TriggerStatusFired))
 }
 
-// Lapse implements ports.TriggerRepo. One UPDATE under a fired-and-unsurfaced
-// precondition, Surface's own, so a pass lapsing a row and a pass delivering
-// it cannot both win. fired_at is left as it is: the row did fire.
+// Lapse implements ports.TriggerRepo: one UPDATE under Surface's own
+// fired-and-unsurfaced precondition, so lapsing and delivering cannot both win.
+// fired_at stays: the row did fire.
 func (r *TriggerRepo) Lapse(ctx context.Context, id string) error {
 	return r.guardedUpdate(ctx, id,
 		`UPDATE triggers SET status = ? WHERE id = ? AND status = ? AND surfaced_at IS NULL`,

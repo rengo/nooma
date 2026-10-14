@@ -10,12 +10,11 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// judgeReminder is the one place a stored trigger becomes
-// prospection.ReminderVerdict's input, so the due scan, the digest and Today
-// read a reminder the same way (ADR-0032 point 1). A reminder that names its own
-// event reads no unit, so a damaged unit row cannot stall a pass; only a legacy
-// one-shot row is judged on its unit's event now. A nil port or a missing unit
-// means unknown; any other read error aborts the pass.
+// judgeReminder is where a stored trigger becomes prospection.ReminderVerdict's
+// input, for the due scan, the digest and Today alike (ADR-0032 point 1). A
+// reminder that names its own event reads no unit, so a damaged unit row cannot
+// stall a pass; a legacy row is judged on its unit's event. A nil port or a
+// missing unit means unknown; any other read error aborts the pass.
 func judgeReminder(ctx context.Context, units ports.UnitRepo, night prospection.QuietHours, t ports.DueTrigger, waiting bool, now time.Time) (prospection.Verdict, prospection.LapseReason, error) {
 	reminder := prospection.Reminder{
 		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,
@@ -54,9 +53,9 @@ func splitPast(ctx context.Context, units ports.UnitRepo, night prospection.Quie
 	return kept, past, nil
 }
 
-// lapsePast retires each of past, never delivered, and says why in the trail.
-// A row another pass already surfaced or lapsed is skipped, not counted. It
-// returns how many it lapsed, or would have when commit is false.
+// lapsePast retires each of past and says why in the trail. A row another pass
+// already surfaced or lapsed is skipped. It returns how many it lapsed, or
+// would have when commit is false.
 func (r checkRunner) lapsePast(ctx context.Context, past []ports.DueTrigger, now time.Time, commit bool) (int, error) {
 	lapsed := 0
 	for _, t := range past {

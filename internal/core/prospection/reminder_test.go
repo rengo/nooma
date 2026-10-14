@@ -158,3 +158,27 @@ func TestReminder_NamesEvent(t *testing.T) {
 		}
 	}
 }
+
+// TestIsDateOnly: the one test for "a bare date, stored as local midnight",
+// shared by reminderInstants and the delivery gate. Any sub-midnight component
+// makes the event timed.
+func TestIsDateOnly(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	midnight := time.Date(2026, 10, 15, 0, 0, 0, 0, zone)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want bool
+	}{
+		{"local midnight", midnight, true},
+		{"local midnight read from UTC", midnight.UTC(), true},
+		{"a minute past", midnight.Add(time.Minute), false},
+		{"a second past", midnight.Add(time.Second), false},
+		{"a nanosecond past", midnight.Add(time.Nanosecond), false},
+		{"an hour past", midnight.Add(time.Hour), false},
+	} {
+		if got := isDateOnly(tc.at.In(zone)); got != tc.want {
+			t.Errorf("%s: isDateOnly = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

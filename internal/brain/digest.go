@@ -74,10 +74,8 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, 0, fmt.Errorf("check: undelivered triggers: %w", err)
 	}
 
-	// A reminder whose event is no longer ahead is not carried, and is lapsed
-	// before anything else reads the list: it fired while nothing could deliver
-	// it, and the digest is not an exception to "never remind of the past"
-	// (ADR-0032). Lateness does not judge it: ADR-0009's window is a push's.
+	// A reminder whose event is past is lapsed before anything reads the list
+	// (ADR-0032); lateness is a push's window and does not judge it here.
 	pending, past, err := splitPast(ctx, r.units, r.night, pending, now)
 	if err != nil {
 		return 0, 0, err
