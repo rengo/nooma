@@ -130,7 +130,13 @@ type lead struct {
 func leadSet(kind classify.Kind, asked bool, at time.Time, dayOnly bool, prefs ReminderPrefs, zone *time.Location) []lead {
 	var out []lead
 	if kind == classify.KindEvent || kind == classify.KindRecurringReminder {
-		for _, n := range reminderInstants(at, prefs, zone) {
+		// What the event's own leads read as a date is the model's bare date for an
+		// asked unit (D5), and ADR-0029's midnight rule for one nobody asked about.
+		dateOnly := dayOnly
+		if !asked {
+			dateOnly = isDateOnly(at.In(zone))
+		}
+		for _, n := range instants(at, dateOnly, prefs, zone) {
 			out = append(out, lead{at: n})
 		}
 	}
@@ -221,8 +227,8 @@ func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, no
 		if i := slices.IndexFunc(plans, func(p Plan) bool { return p.FireAt.Equal(fireAt) }); i >= 0 {
 			plans[i].Asked = plans[i].Asked || it.asked
 			plans[i].NightExempt = plans[i].NightExempt || exempt
-			if servesLead {
-				plans[i].Leads = append(plans[i].Leads, at.Sub(it.at))
+			if d := at.Sub(it.at); servesLead && !slices.Contains(plans[i].Leads, d) {
+				plans[i].Leads = append(plans[i].Leads, d)
 			}
 			continue
 		}
@@ -261,8 +267,14 @@ func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, no
 // before it, as absolute durations: 24 hours before is 24 hours before
 // across a DST change too.
 func reminderInstants(eventAt time.Time, prefs ReminderPrefs, zone *time.Location) []time.Time {
+	return instants(eventAt, isDateOnly(eventAt.In(zone)), prefs, zone)
+}
+
+// instants is reminderInstants once it is known whether eventAt names a date
+// alone or a time.
+func instants(eventAt time.Time, dateOnly bool, prefs ReminderPrefs, zone *time.Location) []time.Time {
 	local := eventAt.In(zone)
-	if isDateOnly(local) {
+	if dateOnly {
 		y, m, d := local.Date()
 		return []time.Time{time.Date(y, m, d-1, prefs.DateOnlyAt.Hour, prefs.DateOnlyAt.Minute, 0, 0, zone)}
 	}

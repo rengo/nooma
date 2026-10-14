@@ -68,8 +68,8 @@ func TestArmAsked_DayOnly(t *testing.T) {
 		t.Fatalf("plans = %+v, want one", plans)
 	}
 	wantPlan(t, plans[0], f.at(15, 9, 0), due)
-	if !plans[0].DayOnly || plans[0].NightExempt || plans[0].LeadMinutes != 0 {
-		t.Errorf("plan = %+v, want day-only, not night-exempt, lead 0", plans[0])
+	if !plans[0].DayOnly || plans[0].NightExempt || plans[0].LeadMinutes != 0 || len(plans[0].Leads) != 0 {
+		t.Errorf("plan = %+v, want day-only, not night-exempt, lead 0, serving no lead", plans[0])
 	}
 }
 
@@ -142,8 +142,15 @@ func TestArmAsked_EventLeadsThatLandTogetherAreOneAskedReminder(t *testing.T) {
 		t.Fatalf("plans = %+v, want the 24 h and one merged 2 h", plans)
 	}
 	merged := plans[1]
-	if !merged.Asked || !merged.NightExempt || len(merged.Leads) != 2 {
-		t.Errorf("merged = %+v, want asked, night-exempt, serving both leads", merged)
+	if !merged.Asked || !merged.NightExempt || len(merged.Leads) != 1 || merged.Leads[0] != 2*time.Hour {
+		t.Errorf("merged = %+v, want asked, night-exempt, serving the 2 h lead once", merged)
+	}
+	// A different asked lead on the same instant as another lead is still two leads' worth.
+	prefs.TimedLeads = []time.Duration{24 * time.Hour, 3 * time.Hour}
+	prefs.RemindMeLead = 3 * time.Hour
+	plans = f.arm(t, classify.Classification{Kind: &k, EventAt: &at}, f.now, prefs)
+	if len(plans) != 2 || len(plans[1].Leads) != 1 {
+		t.Errorf("plans = %+v, want the 3 h lead once", plans)
 	}
 }
 
@@ -200,8 +207,9 @@ func TestArmAsked_TooLateTodayRefused(t *testing.T) {
 				}
 				return
 			}
-			if !ok || len(plans) != 1 || !plans[0].FireAt.Equal(tc.now) || !plans[0].Immediate {
-				t.Fatalf("Arm = %+v, %v, want one at-once reminder", plans, ok)
+			if !ok || len(plans) != 1 || !plans[0].FireAt.Equal(tc.now) || !plans[0].Immediate ||
+				!plans[0].NightExempt || !plans[0].DayOnly || len(plans[0].Leads) != 0 {
+				t.Fatalf("Arm = %+v, %v, want one at-once, night-exempt day-only reminder serving no lead", plans, ok)
 			}
 		})
 	}
@@ -209,6 +217,15 @@ func TestArmAsked_TooLateTodayRefused(t *testing.T) {
 		plans, ok := Arm(dueClass(classify.KindTask, f.at(14, 20, 3), false), true, DefaultReminderPrefs(), f.now)
 		if ok || plans[0].Why != RefusalTooLate {
 			t.Errorf("Arm = %+v, %v, want too_late", plans, ok)
+		}
+	})
+	t.Run("an asked lead still ahead is armed, whatever is left before the instant", func(t *testing.T) {
+		prefs := DefaultReminderPrefs()
+		prefs.RemindMeLead = time.Minute
+		due := f.now.Add(3 * time.Minute)
+		plans, ok := Arm(dueClass(classify.KindTask, due, false), true, prefs, f.now)
+		if !ok || len(plans) != 1 || plans[0].Immediate || !plans[0].FireAt.Equal(f.now.Add(2*time.Minute)) {
+			t.Errorf("Arm = %+v, %v, want one reminder at the lead, two minutes from now", plans, ok)
 		}
 	})
 	t.Run("a day already over is past, not too late", func(t *testing.T) {
@@ -308,6 +325,9 @@ func TestVerdict_NightExemptOverdueFromFireAt(t *testing.T) {
 	if v, _ := q.ReminderVerdict(exempt, fire.Add(time.Minute)); v != VerdictDeliver {
 		t.Errorf("exempt row inside the night = %q, want deliver, never defer", v)
 	}
+	if v, _ := q.ReminderVerdict(exempt, f.at(15, 7, 0)); v != VerdictDeliver {
+		t.Errorf("exempt 03:00 row at 07:00 = %q, want deliver: four hours late is inside the 6 h trigger window", v)
+	}
 	plain := exempt
 	plain.NightExempt = false
 	if v, _ := q.ReminderVerdict(plain, f.at(15, 3, 1)); v != VerdictDefer {
@@ -343,5 +363,134 @@ func TestVerdict_UnaskedMidnightKeepsDayGranular(t *testing.T) {
 	unasked := Reminder{FireAt: f.at(15, 23, 45), EventAt: f.at(16, 0, 0), Waiting: true}
 	if v, _ := DefaultQuietHours().ReminderVerdict(unasked, f.at(16, 0, 0)); v != VerdictDeliver {
 		t.Errorf("unasked midnight row at 00:00 = %q, want deliver: the midnight heuristic still reads it as a day", v)
+	}
+}
+
+func TestArmAsked_ABehindAskedLeadRingsAtOnceEvenWhenOthersAreAhead(t *testing.T) {
+	f := newAsked()
+	at := f.at(15, 10, 0)
+	k := classify.KindEvent
+	prefs := DefaultReminderPrefs()
+	prefs.RemindMeLead = 30 * time.Hour // 10-14 04:00, behind; the 2 h lead (10-15 08:00) is ahead
+	plans := f.arm(t, classify.Classification{Kind: &k, EventAt: &at}, f.now, prefs)
+	if len(plans) != 2 {
+		t.Fatalf("plans = %+v, want the at-once reminder and the 2 h lead", plans)
+	}
+	if !plans[0].FireAt.Equal(f.now) || !plans[0].Immediate || !plans[0].Asked || !plans[0].NightExempt || len(plans[0].Leads) != 0 {
+		t.Errorf("first = %+v, want an asked, night-exempt reminder at once serving no lead (D3 read literally)", plans[0])
+	}
+	if !plans[1].FireAt.Equal(f.at(15, 8, 0)) || plans[1].Asked {
+		t.Errorf("second = %+v, want the unasked 2 h lead", plans[1])
+	}
+}
+
+func TestArm_AnUnaskedEventMinutesAwayStillRingsAtOnce(t *testing.T) {
+	f := newAsked()
+	at := f.now.Add(3 * time.Minute) // every lead behind and less than the asked margin left
+	k := classify.KindEvent
+	plans, ok := Arm(classify.Classification{Kind: &k, EventAt: &at}, false, DefaultReminderPrefs(), f.now)
+	if !ok || len(plans) != 1 || !plans[0].Immediate || plans[0].Asked || plans[0].NightExempt {
+		t.Errorf("plans = %+v, %v, want ADR-0029 point 3's unasked at-once reminder, margin not applied", plans, ok)
+	}
+}
+
+func TestArmAsked_AnAskedRepeatingRequestIsTheOneShotUntilLink7(t *testing.T) {
+	f := newAsked()
+	rule := classify.RecurrenceRuleDaily
+	for _, k := range []classify.Kind{classify.KindTask, classify.KindRecurringReminder, classify.KindEvent} {
+		due := f.at(15, 21, 0) // far enough ahead that an event's 24 h and 2 h leads are ahead too
+		c := classify.Classification{Kind: &k, DueAt: &due, EventAt: &due, RecurrenceRule: &rule}
+		plans, ok := Arm(c, true, DefaultReminderPrefs(), f.now)
+		if !ok || len(plans) == 0 {
+			t.Fatalf("%s: Arm = %+v, %v", k, plans, ok)
+		}
+		for _, p := range plans {
+			if p.What != ArmTrigger || p.LeadDays != 0 || p.Rule != "" {
+				t.Errorf("%s: plan = %+v, want a one-shot trigger, never the 7-day recurring row", k, p)
+			}
+		}
+		last := plans[len(plans)-1]
+		if k != classify.KindEvent && (len(plans) != 1 || !last.FireAt.Equal(f.at(15, 20, 45)) || !last.Asked) {
+			t.Errorf("%s: plans = %+v, want one asked one-shot at 20:45", k, plans)
+		}
+	}
+	// Unasked, a recurring reminder keeps its recurring trigger.
+	k := classify.KindRecurringReminder
+	at := f.at(20, 12, 0)
+	plans, _ := Arm(classify.Classification{Kind: &k, EventAt: &at, RecurrenceRule: &rule}, false, DefaultReminderPrefs(), f.now)
+	if plans[0].What != ArmRecurring {
+		t.Errorf("unasked plan = %+v, want the recurring trigger", plans[0])
+	}
+}
+
+func TestArmAsked_WhichFieldTheUnitIsRemindedAbout(t *testing.T) {
+	f := newAsked()
+	eventAt, dueAt := f.at(17, 10, 0), f.at(16, 10, 0)
+	both := func(k classify.Kind) classify.Classification {
+		return classify.Classification{Kind: &k, EventAt: &eventAt, DueAt: &dueAt}
+	}
+	for _, tc := range []struct {
+		name string
+		c    classify.Classification
+		last time.Time // the asked lead, the last plan
+		at   time.Time
+	}{
+		{"an event reads event_at", both(classify.KindEvent), f.at(17, 9, 45), eventAt},
+		{"a recurring reminder reads event_at", both(classify.KindRecurringReminder), f.at(17, 9, 45), eventAt},
+		{"a task reads due_at", both(classify.KindTask), f.at(16, 9, 45), dueAt},
+		{"a mental load reads due_at", both(classify.KindMentalLoad), f.at(16, 9, 45), dueAt},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plans := f.arm(t, tc.c, f.now, DefaultReminderPrefs())
+			last := plans[len(plans)-1]
+			wantPlan(t, last, tc.last, tc.at)
+		})
+	}
+	t.Run("a task falling back to a bare-date event_at keeps its day-only shape", func(t *testing.T) {
+		bare := f.bareDate(16)
+		k := classify.KindTask
+		plans := f.arm(t, classify.Classification{Kind: &k, EventAt: &bare, EventAtDayOnly: true}, f.now, DefaultReminderPrefs())
+		wantPlan(t, plans[0], f.at(16, 9, 0), bare)
+		if !plans[0].DayOnly {
+			t.Errorf("plan = %+v, want day-only", plans[0])
+		}
+	})
+	t.Run("an event falling back to a bare-date due_at keeps its day-only shape", func(t *testing.T) {
+		bare := f.bareDate(16)
+		k := classify.KindMentalLoad
+		c := classify.Classification{Kind: &k, DueAt: &bare, DueAtDayOnly: true}
+		wantPlan(t, f.arm(t, c, f.now, DefaultReminderPrefs())[0], f.at(16, 9, 0), bare)
+		k = classify.KindEvent
+		plans := f.arm(t, classify.Classification{Kind: &k, DueAt: &bare, DueAtDayOnly: true}, f.now, DefaultReminderPrefs())
+		wantPlan(t, plans[len(plans)-1], f.at(16, 9, 0), bare)
+		if !plans[len(plans)-1].DayOnly {
+			t.Errorf("plan = %+v, want day-only", plans[len(plans)-1])
+		}
+	})
+}
+
+func TestArmAsked_AnAskedEventsOtherLeadsFollowTheDayOnlyFlagNotTheMidnight(t *testing.T) {
+	f := newAsked()
+	k := classify.KindEvent
+	named := f.at(17, 0, 0) // said "a medianoche": a named time
+	plans := f.arm(t, classify.Classification{Kind: &k, EventAt: &named}, f.now, DefaultReminderPrefs())
+	fires := []time.Time{f.at(16, 7, 0), f.at(16, 22, 0), f.at(16, 23, 45)} // the 24 h lead leaves the night (ADR-0030)
+	if len(plans) != 3 {
+		t.Fatalf("plans = %+v, want the 24 h, 2 h and asked leads of a timed event", plans)
+	}
+	for i, p := range plans {
+		if !p.FireAt.Equal(fires[i]) || p.DayOnly {
+			t.Errorf("plan %d = %+v, want %v, not day-only", i, p, fires[i])
+		}
+	}
+	bare := f.bareDate(17)
+	plans = f.arm(t, classify.Classification{Kind: &k, EventAt: &bare, EventAtDayOnly: true}, f.now, DefaultReminderPrefs())
+	if len(plans) != 2 || !plans[0].FireAt.Equal(f.at(16, 9, 0)) || !plans[1].FireAt.Equal(f.at(17, 9, 0)) {
+		t.Errorf("plans = %+v, want the day before and that day at 09:00", plans)
+	}
+	// Unasked, the midnight heuristic of ADR-0029 is untouched.
+	un, ok := Arm(classify.Classification{Kind: &k, EventAt: &named}, false, DefaultReminderPrefs(), f.now)
+	if !ok || len(un) != 1 || !un[0].FireAt.Equal(f.at(16, 9, 0)) {
+		t.Errorf("unasked plans = %+v, want one reminder the day before at 09:00 (a midnight reads as a date)", un)
 	}
 }

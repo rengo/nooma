@@ -135,7 +135,7 @@ type Plan struct {
 // asked is whether the user's own words asked to be reminded
 // (classify.AsksToBeReminded). An asked unit of any kind that persists one arms
 // its instant (its own field, else the other) through leadSet, as ADR-0031
-// decides; a timer and an asked recurrence keep their own branches below.
+// decides; a timer keeps its own branch below.
 func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Time) ([]Plan, bool) {
 	// Resolved once, for every branch including the ones that arm nothing.
 	// A zero Interrupt would report itself degraded and therefore look
@@ -151,12 +151,19 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 		return nothing(RefusalNoKind)
 	}
 
-	if _, persists := c.Kind.UnitType(); asked && persists && (*c.Kind != classify.KindRecurringReminder || c.RecurrenceRule == nil) {
+	if _, persists := c.Kind.UnitType(); asked && persists {
 		at, dayOnly, ok := askedInstant(c)
 		if !ok {
 			return nothing(RefusalNoDate)
 		}
-		leads := leadSet(*c.Kind, true, at, dayOnly, prefs, now.Location())
+		// Until the recurring branch takes an asked request (a later link), a
+		// repeating request is its one-shot occurrence, and a recurring_reminder
+		// with a rule is not an event whose ADR-0029 leads apply (D3).
+		kind := *c.Kind
+		if kind == classify.KindRecurringReminder && c.RecurrenceRule != nil {
+			kind = classify.KindTask
+		}
+		leads := leadSet(kind, true, at, dayOnly, prefs, now.Location())
 		return reminders(at, dayOnly, leads, prefs, now, interrupt, nil)
 	}
 
