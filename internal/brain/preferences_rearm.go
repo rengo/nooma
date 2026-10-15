@@ -62,7 +62,7 @@ func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.Remind
 		}
 		live, byID := liveSet(armed)
 		f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired, *u.EventAt), prefs, armed[0].InterruptLevel, now)
-		if err := w.apply(ctx, u, f, byID, *u.EventAt, u.Content, false, now); err != nil {
+		if err := w.apply(ctx, u, f, byID, *u.EventAt, shownText(u), false, now); err != nil {
 			return err
 		}
 	}

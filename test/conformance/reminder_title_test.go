@@ -112,3 +112,72 @@ func TestFrozenTextUsesTheTitle(t *testing.T) {
 		}
 	}
 }
+
+// The three places that arm a reminder from a unit that already exists must
+// agree on what it says: its title. A new row is only written by a re-plan, a
+// catch-up or a preference re-arm, and each of them reads the unit itself.
+
+// TestReplanArmsTheTitle: a unit corrected to a new date is re-planned by the
+// due scan, and the reminders it arms say the title.
+func TestReplanArmsTheTitle(t *testing.T) {
+	v := newI37Vault(t)
+	corrected := i37Day(16, 11, 0)
+	v.titled("u", "Reunión con Juan", "Reunión con Juan el 2026-10-16 a las 11:00", &corrected)
+	v.fired("old", "u", "dentist", i37Day(14, 8, 0), modern(i37Day(15, 11, 0), 27*60))
+
+	v.check(false)
+
+	got := v.armed("u")
+	if len(got) == 0 {
+		t.Fatal("nothing was armed for the corrected date")
+	}
+	for _, tr := range got {
+		if tr.Payload.ActionText != "Reunión con Juan" {
+			t.Errorf("re-planned reminder %s says %q, want the title", tr.ID, tr.Payload.ActionText)
+		}
+	}
+}
+
+// TestCatchUpArmsTheTitle: the catch-up an event is owed says the title.
+func TestCatchUpArmsTheTitle(t *testing.T) {
+	v := newI37Vault(t)
+	event := i37Day(14, 11, 0)
+	v.titled("u", "Reunión con Juan", "Reunión con Juan el 2026-10-14 a las 11:00", &event)
+	v.fired("late-a", "u", "dentist", event.Add(-24*time.Hour), modern(event, 24*60))
+
+	v.check(false)
+
+	got := v.catchUps("u")
+	if len(got) != 1 || got[0].Payload.ActionText != "Reunión con Juan" {
+		t.Errorf("catch-ups = %+v, want one saying the title", got)
+	}
+}
+
+// TestPreferenceReArmArmsTheTitle: a lead added by a preference save arms a
+// reminder that says the title.
+func TestPreferenceReArmArmsTheTitle(t *testing.T) {
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	flight := time.Date(2026, 10, 16, 15, 0, 0, 0, time.UTC)
+	v := newI35(t, now)
+	v.unit(t, "flight", unit.TypeEvent, flight, now)
+	if err := v.units.UpdateTitle(context.Background(), "flight", "Vuelo a Lisboa", now); err != nil {
+		t.Fatal(err)
+	}
+	v.arm(t, "flight-3h", "flight", flight.Add(-3*time.Hour), 180, nil)
+
+	p := i35Defaults()
+	p.LeadMinutes = []int{180, 30}
+	if _, err := v.svc.Save(context.Background(), p); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := v.triggers.ArmedForUnit(context.Background(), "flight")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("armed = %+v, %v; want the 3 h reminder and the new 30 min one", got, err)
+	}
+	for _, tr := range got {
+		if tr.ID != "flight-3h" && tr.Payload.ActionText != "Vuelo a Lisboa" {
+			t.Errorf("the new reminder %s says %q, want the title", tr.ID, tr.Payload.ActionText)
+		}
+	}
+}
