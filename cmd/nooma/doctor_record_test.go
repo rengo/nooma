@@ -154,7 +154,7 @@ func TestDoctorRecordWritesResponsesWithAFakeProvider(t *testing.T) {
 func TestRecordSkipsRecordedWithoutForce(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "again.json")
-	body := `{"id":"again","provider":"p","model":"m","task":"classify","message":"hola","record":true,"response":"OLD"}`
+	body := `{"id":"again","provider":"p","model":"m","task":"classify","message":"hola","record":true,"response":"OLD","expect":{}}`
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -297,5 +297,26 @@ func TestRecordWritesTheFormatPhrasingsAreAuthoredIn(t *testing.T) {
 	}
 	if !bytes.Equal(back, data) {
 		t.Fatalf("round trip changed the file:\n%s\nwas:\n%s", back, data)
+	}
+}
+
+func TestRecordValidatesACaseBeforeSpendingACall(t *testing.T) {
+	dir := t.TempDir()
+	writePhrasing(t, dir, "a", "uno")
+	// A typo in the expectation: found now, not when the answer comes back.
+	bad := `{"id":"b","task":"classify","message":"dos","record":true,"expect":{"reminder_intent":"stopp"}}`
+	if err := os.WriteFile(filepath.Join(dir, "b.json"), []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fake := &scriptedLLM{reply: recordReply}
+	err := recordPhrasings(context.Background(), recordOpts(dir, fake), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "stopp") {
+		t.Fatalf("recordPhrasings = %v, want the invalid expectation named", err)
+	}
+	if len(fake.prompts) != 1 {
+		t.Fatalf("%d calls made, want exactly the one for the valid case before it", len(fake.prompts))
+	}
+	if _, recorded := readFields(t, filepath.Join(dir, "b.json"))["response"]; recorded {
+		t.Fatal("an invalid case was recorded")
 	}
 }

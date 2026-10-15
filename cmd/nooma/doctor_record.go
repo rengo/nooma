@@ -110,6 +110,9 @@ func recordPhrasings(ctx context.Context, opts recordOptions, out io.Writer) err
 				return fmt.Errorf("%s: now: %w", entry.Name(), err)
 			}
 		}
+		if err := reading.ValidateCase(c); err != nil {
+			return fmt.Errorf("%s: %w (nothing was sent for it)", entry.Name(), err)
+		}
 		prompt := reading.PromptAt(c, now)
 
 		callCtx, cancel := context.WithTimeout(ctx, recordTimeout)
