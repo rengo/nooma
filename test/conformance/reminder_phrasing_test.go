@@ -102,6 +102,8 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 	for _, prefix := range []string{"no te olvides de recordarme", "haceme acordar", "acordate de avisarme", "poneme un recordatorio", "que no se me olvide"} {
 		has("R1's "+prefix, func(c llm.Case) bool { return strings.HasPrefix(c.Message, prefix) })
 	}
+	// The typographic apostrophe is what a phone keyboard types.
+	has("don’t remind me anymore, with a curly apostrophe", func(c llm.Case) bool { return strings.HasPrefix(c.Message, "don’t remind me anymore") })
 	has("don't remind me anymore", func(c llm.Case) bool { return strings.HasPrefix(c.Message, "don't remind me anymore") })
 
 	// The negatives: a bare answer while the candidate list is not empty.
