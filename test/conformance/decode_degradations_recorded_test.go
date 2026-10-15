@@ -4,6 +4,9 @@ package conformance
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -45,6 +48,12 @@ func captureAnyDecisions(t *testing.T, message, response string) ([]ports.Decisi
 // named; otherwise the chat task shares the classifier's provider.
 func captureWithChat(t *testing.T, message, response, chatCase string) ([]ports.Decision, error) {
 	t.Helper()
+	return captureFull(t, message, response, chatCase, nil)
+}
+
+// captureFull also lets the embedding provider fail when embedErr is set.
+func captureFull(t *testing.T, message, response, chatCase string, embedErr error) ([]ports.Decision, error) {
+	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)
 	decisions, embeddings := memrepo.NewDecisionLog(), memrepo.NewEmbeddings()
@@ -57,8 +66,12 @@ func captureWithChat(t *testing.T, message, response, chatCase string) ([]ports.
 	if chatCase != "" {
 		chat = fakeprovider.New(t, testdataLLMCasesDir(t), chatCase)
 	}
+	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
+	if embedErr != nil {
+		embed = fakeprovider.NewEmbeddingFakeWithError(embedFakeModel, embedErr)
+	}
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(), embeddings, memrepo.NewLexical(),
-		memrepo.NewRelations(), decisions, llm, llm, chat, fakeprovider.NewEmbeddingFake(embedFakeModel),
+		memrepo.NewRelations(), decisions, llm, llm, chat, embed,
 		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
 	_, capErr := svc.Capture(ctx, brain.CaptureInput{Text: message, Channel: "chat"})
 	rows, err := decisions.Since(ctx, time.Time{}, -1)
@@ -282,10 +295,18 @@ func TestI12_EveryRowAfterDecodeCarriesTheDegradations(t *testing.T) {
 			[]ports.DecisionAction{ports.ActionCaptureArmRefused}, nil},
 		{"dated event", `{"type":"event","normalized_content":"Dentista el 2026-10-16 a las 10:00","weight":0.7,"decay_rate":0.05,"event_at":"2026-10-16T10:00:00Z",` + bad + `}`,
 			[]ports.DecisionAction{ports.ActionCaptureClassify}, nil},
+		{"ambiguous person", `{"type":"task","normalized_content":"Llamar a Ana","weight":0.5,"decay_rate":0.03,"person_ref_status":"ambiguous",` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCapturePersonRefAmbiguous}, nil},
+		{"embedding failed", `{"type":"task","normalized_content":"Llamar a Ana","weight":0.5,"decay_rate":0.03,` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCaptureEmbeddingFailed}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rows, _ := captureAnyDecisions(t, "algo", tc.response)
+			var embedErr error
+			if tc.name == "embedding failed" {
+				embedErr = errors.New("embedding provider down")
+			}
+			rows, _ := captureFull(t, "algo", tc.response, "", embedErr)
 			for _, want := range tc.want {
 				decisionByAction(t, rows, want)
 			}
@@ -348,5 +369,65 @@ func TestI12_CorrectionReminderRowsCarryTheDegradations(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("%d correction.reminder.moved rows, want 1", len(rows))
 	}
+	everyRowCarries(t, rows)
+}
+
+// TestI12_RelationRowsOfACaptureCarryTheDegradations: the judge's rows for a
+// capture (here relation.persisted) are written after the decode of that same
+// message, so they carry its list; the nightly job's relation.* rows involve no
+// reading and carry none.
+func TestI12_RelationRowsOfACaptureCarryTheDegradations(t *testing.T) {
+	const candidateID, judgeCase = "3527ca73-93c4-4688-a680-145243ce1e04", "relation-related-uncertain-band"
+	const response = `{"type":"task","normalized_content":"Pick up the dry cleaning","weight":0.5,"decay_rate":0.03,"title":"Pick up 2026-10-16"}`
+	ctx := context.Background()
+	now := time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)
+	dir := i28Case(t, "degraded", "Pick up the dry cleaning", response)
+	judge, err := os.ReadFile(filepath.Join(testdataLLMCasesDir(t), judgeCase+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, judgeCase+".json"), judge, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	units, decisions, embeddings := memrepo.NewUnits(), memrepo.NewDecisionLog(), memrepo.NewEmbeddings()
+	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
+	vec, err := embed.Embed(ctx, ports.EmbedRequest{Text: "Pick up the dry cleaning"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := units.Create(ctx, poolUnit(candidateID, "unrelated stored text")); err != nil {
+		t.Fatal(err)
+	}
+	if err := embeddings.Put(ctx, ports.Embedding{UnitID: candidateID, Model: embedFakeModel, Vector: vec.Vector, At: now}); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	llm := fakeprovider.New(t, dir, "degraded", judgeCase)
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(),
+		memrepo.NewRelations(), decisions, llm, llm, llm, embed,
+		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
+	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "Pick up the dry cleaning", Channel: "chat"}); err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+	rows, err := decisions.Since(ctx, time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionByAction(t, rows, ports.ActionRelationPersisted)
+	everyRowCarries(t, rows)
+}
+
+// TestI12_CheckInRowCarriesTheDegradations: an answer to a question nobody is
+// asking writes capture.relation_checkin.unmatched after the decode, so it
+// carries what that reading lost.
+func TestI12_CheckInRowCarriesTheDegradations(t *testing.T) {
+	const response = `{"type":"chitchat","normalized_content":"yes, they're related","weight":0.1,"decay_rate":0.5,"relation_outcome":"confirmed","title":"Yes 2026-10-16"}`
+	rows, _ := captureWithChat(t, "yes, they're related", response, "chat-hello-reply")
+
+	decisionByAction(t, rows, ports.ActionCaptureRelationCheckInUnmatched)
 	everyRowCarries(t, rows)
 }

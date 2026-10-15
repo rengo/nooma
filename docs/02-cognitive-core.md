@@ -928,11 +928,14 @@ the brain stamps each `decision_log` row that capture or correction writes after
 is every action from `capture.classify` and `capture.unit.created` through
 `capture.classify.unclassifiable` (where the missing `type` is the whole explanation),
 `capture.out_of_scope`, `capture.chitchat.answered`, `capture.chat.failed`, the
-`capture.armed.*` and `capture.arm.refused` rows and the check-in, relation and embedding rows, to
-`correction.applied`, `correction.ambiguous` and `correction.reminder.*`. Two things write none:
-a recall, which writes no row, and `capture.classify.unparseable`, where nothing was read and so
-nothing degraded. A row without a `degradations` key therefore means a clean reading, for the
-actions this paragraph names.
+`capture.armed.*` and `capture.arm.refused` rows, `capture.person_ref.ambiguous`, the
+`capture.dedup.*`, `capture.embedding.failed`, check-in (`capture.*checkin.*`) and `relation.*`
+rows that handling that capture writes, to `correction.applied`, `correction.ambiguous` and
+`correction.reminder.*`. Two things write none: a recall, which writes no row, and
+`capture.classify.unparseable`, where nothing was read and so nothing degraded. The scope of
+"no `degradations` key means a clean reading" is exactly the rows a capture or a correction
+writes. Rows written with no reading at all carry no key and mean nothing by it: the nightly
+job's `relation.*` rows, and a relation confirmed or rejected from the UI.
 
 **Truncation is a per-field event, not a per-response one.** A model whose output is cut off
 mid-sentence has still emitted complete fields before the cut. Those fields are read and kept;
