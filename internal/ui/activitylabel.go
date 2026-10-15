@@ -99,6 +99,8 @@ func fieldLabel(name string) string {
 		return "Event"
 	case "due_at":
 		return "Due"
+	case "title":
+		return "Title"
 	case "fire_at":
 		return "Fires at"
 	}
