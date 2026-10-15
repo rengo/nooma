@@ -18,10 +18,12 @@ const MaxTitleRunes = 60
 var datedTitle = regexp.MustCompile(`\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}`)
 
 // ResolveTitle is the title the model's text stands for, or nil when it stands
-// for none (spec R12, I14). It is trimmed, which leaves a visible character or
-// nothing. A blank one, one holding a newline, a control, separator or format
-// character, one over MaxTitleRunes, or one holding an ISO date or an HH:MM is
-// dropped, never repaired: the unit then reads its content.
+// for none (spec R12, I14). It is trimmed. A blank one, one holding any
+// non-graphic rune (a control character, a line or paragraph separator, a
+// format character such as a zero-width or bidi one), one over MaxTitleRunes, or
+// one holding an ISO date or an HH:MM is dropped, never repaired: the unit then
+// reads its content. What is checked is the rune's class, not how it renders: a
+// graphic character that draws as blank is not caught.
 func ResolveTitle(raw string) *string {
 	title := strings.TrimSpace(raw)
 	if title == "" || utf8.RuneCountInString(title) > MaxTitleRunes || datedTitle.MatchString(title) {
