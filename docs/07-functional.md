@@ -309,7 +309,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
 | Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; edited on `/ui/preferences`, which moves the reminders already set; editing them by chat is pending | doc 02 §7; ADR-0029 |
 | Event reminders pushed by day, moved out of the night, never sent after the event | Shipped; quiet end (07:00) and evening time (22:00) are vault preferences edited on `/ui/preferences`; editing them by chat is pending | doc 02 §7; ADR-0030 |
-| A reminder is never sent once its event is past, by the push, the digest or Today (the rest of ADR-0032 is pending) | Shipped | doc 02 §7; ADR-0032 |
+| A reminder is never sent once its event is past, by the push, the digest or Today | Shipped | doc 02 §7; ADR-0032 |
 | An event whose every reminder lapsed gets one catch-up at once (or at quiet end); a vault with no channel keeps its reminders (an overdue one-shot, a unit-less one included, stays listed on Today) | Shipped | doc 02 §7; ADR-0032 |
 | A reminder that could not be pushed is pushed again on a later pass while its event is ahead, once per pass, never twice for one outage report; the digest carries only recurring reminders | Shipped | doc 02 §7; ADR-0032 |
 | A reminder, pushed or in the digest, says its unit's current text and instant ("Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
