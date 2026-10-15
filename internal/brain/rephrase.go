@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -14,10 +15,9 @@ import (
 // same way "classify" does.
 const rephraseTask = "timer_rephrase"
 
-// genericNudge is what a timer with no action_text says. doc 02 §8: NULL
+// A timer with no action_text says the set's TimerNudge. doc 02 §8: NULL
 // action_text is "remind me in 15 min" with no object — the user asked to
 // be interrupted and said nothing about why.
-const genericNudge = "You asked me to remind you about something now."
 
 // rephrasePrompt asks the model to word one timer at delivery.
 //
@@ -27,13 +27,14 @@ const genericNudge = "You asked me to remind you about something now."
 // output schema every degradation rule is written against; this carries
 // none — whatever comes back is one line of text, and if it comes back
 // wrong the fallback is the user's own words.
-func rephrasePrompt(actionText string, overdue time.Duration) string {
+func rephrasePrompt(actionText string, overdue time.Duration, set phrase.Set) string {
 	var b strings.Builder
 	b.WriteString("Reword this reminder as one short, warm sentence addressed to the person who set it. ")
 	b.WriteString("Do not add information, do not ask a question, do not use their name. ")
 	if prospection.DelayCaveat(overdue) {
 		b.WriteString("It is being delivered later than they asked, so acknowledge the delay in the same sentence. ")
 	}
+	b.WriteString("Write it in " + set.LanguageName + ". ")
 	b.WriteString("Answer with the sentence and nothing else.\n\nReminder: ")
 	b.WriteString(actionText)
 	return b.String()
@@ -63,17 +64,20 @@ type timerDelivery struct {
 // embedding failure (doc 02 §5's product rule).
 func (r checkRunner) renderTimer(ctx context.Context, t ports.DueTimer, now time.Time) (timerDelivery, error) {
 	overdue := now.Sub(t.FireAt)
+	// A timer is not a unit and has no language of its own: it speaks the newest
+	// unit's, like the digest, and English when none is known (ADR-0032 point 5).
+	set := r.setFor(ctx, "")
 
 	if t.ActionText == nil || *t.ActionText == "" {
 		// Nothing to reword. No provider call at all: spending one on a
 		// nudge with no content would be paying for a sentence the model
 		// would have to invent.
-		return timerDelivery{text: withCaveat(genericNudge, overdue)}, nil
+		return timerDelivery{text: withCaveat(set.TimerNudge, overdue, set)}, nil
 	}
 	verbatim := *t.ActionText
 
 	if r.llm == nil {
-		return timerDelivery{text: withCaveat(verbatim, overdue)}, nil
+		return timerDelivery{text: withCaveat(verbatim, overdue, set)}, nil
 	}
 
 	// **JSONOnly is deliberately not set.** This is the one LLM call in the
@@ -82,7 +86,7 @@ func (r checkRunner) renderTimer(ctx context.Context, t ports.DueTimer, now time
 	// downstream reads — the fallback below would then fire on every timer,
 	// silently, since a JSON object is not an empty string.
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{
-		Prompt: rephrasePrompt(verbatim, overdue),
+		Prompt: rephrasePrompt(verbatim, overdue, set),
 		Task:   rephraseTask,
 	})
 	if err != nil || strings.TrimSpace(resp.Text) == "" {
@@ -94,7 +98,7 @@ func (r checkRunner) renderTimer(ctx context.Context, t ports.DueTimer, now time
 			checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339)}); logErr != nil {
 			return timerDelivery{}, logErr
 		}
-		return timerDelivery{text: withCaveat(verbatim, overdue)}, nil
+		return timerDelivery{text: withCaveat(verbatim, overdue, set)}, nil
 	}
 
 	worded := strings.TrimSpace(resp.Text)
@@ -110,9 +114,9 @@ func (r checkRunner) renderTimer(ctx context.Context, t ports.DueTimer, now time
 //
 // DelayCaveat decides and this picks the words — doc 02 §7's own division
 // of labour, and nothing here re-derives the threshold.
-func withCaveat(text string, overdue time.Duration) string {
+func withCaveat(text string, overdue time.Duration, set phrase.Set) string {
 	if !prospection.DelayCaveat(overdue) {
 		return text
 	}
-	return text + " (This is later than you asked for.)"
+	return text + " " + set.TimerLate
 }

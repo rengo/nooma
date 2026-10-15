@@ -550,9 +550,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        row). A pushed reminder speaks its unit's language; the digest (header, lines' frame,
        lateness note, relation question) speaks the language of the most recently created unit
        that has one, archived or not. A unit that knows none speaks the newest unit's, and
-       none known at all, the fallback. **A timer's wording is the exception for now**: a timer
-       is not a unit, and its generic nudge and lateness note stay English until a follow-up
-       makes them follow the newest unit's language.
+       none known at all, the fallback. A timer is not a unit and has no language of its own, so
+       its generic nudge, its lateness note and the language its rephrasing is asked for follow
+       the newest unit's, as the digest does. Today speaks the digest's language, since it
+       previews it.
 
    - **Two of the thirteen are not memory, and they route before anything is built**
      ([ADR-0021](adr/0021-conversation-boundary.md)) — `chitchat` and `out_of_scope`. Neither
@@ -1448,6 +1449,13 @@ box can audit it):
   The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.
+  **A digest fits one message.** Telegram refuses a message over 4096 UTF-16 units, which would
+  fail every pass, so a digest that would exceed it drops its last lines (a unit's reminders are
+  one line), ends with one sentence saying how many more (`AndMore`: "and N more"), and never drops
+  its question. The dropped reminders stay undelivered, so tomorrow's digest carries them; only the
+  sent ones are marked delivered, `DigestCarried` and the `check.digest.sent` row count only those,
+  and a dropped reminder is not a held one (no `check.digest.held` row, no deferral). A dry run counts
+  the lines the bound keeps in Carry's order, without the focus adjacency the real pass adds.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
@@ -1502,7 +1510,9 @@ now, computed from the same reads and the same `Carry`, but rendering it writes 
 vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
 (I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
 (§3), which the next digest then reads. Viewing `/ui` can therefore change a later low-energy
-digest's order, and which items it carries, though it still marks nothing delivered.
+digest's order, and which items it carries, though it still marks nothing delivered. Its lines
+say what a push and the digest say: the unit's text and instant now (the armed text only when the
+unit cannot be read), in the newest unit's language.
 
 **Degradation** (owner ruling 1; `internal/core/prospection.ResolveInterrupt`,
 `Interrupt.Route`): classify emits `interrupt_level` per message. A `NULL` or unparseable

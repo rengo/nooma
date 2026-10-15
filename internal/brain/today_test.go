@@ -179,8 +179,8 @@ func TestToday_DigestMirrorsCarry(t *testing.T) {
 				t.Fatalf("Items[%d].TriggerID = %q, want %q — pending's own (fired_at, id) order", i, item.TriggerID, want)
 			}
 		}
-		if today.Digest.Items[0].Text != "item trg-1" || today.Digest.Items[0].FireAt.IsZero() {
-			t.Fatalf("Items[0] = %+v — not joined back to trg-1's own Text/FireAt", today.Digest.Items[0])
+		if today.Digest.Items[0].Text != "u-trg-1" || today.Digest.Items[0].FireAt.IsZero() {
+			t.Fatalf("Items[0] = %+v — not joined back to trg-1 with its unit's text now (ADR-0032 point 4) and its FireAt", today.Digest.Items[0])
 		}
 		if today.Digest.Held != 0 {
 			t.Fatalf("Held = %d, want 0", today.Digest.Held)

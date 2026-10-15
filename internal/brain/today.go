@@ -163,6 +163,12 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	}
 	out.Status.Undelivered = len(pending)
 
+	// Today says its lines as a push and the digest do (ADR-0032 point 4): the
+	// unit's text and instant as they are now, the frozen text only when the unit
+	// cannot be read. It previews the digest, so it speaks the digest's language:
+	// the newest unit's, else English. Every read here; none writes (I27).
+	set := proactiveSet(ctx, r.units, "")
+
 	// A vault that cannot speak shows its armed one-shot reminders here, read
 	// through the same gate: a past or moved one is not upcoming.
 	soon, err := r.triggers.Due(ctx, now.Add(upcomingWindow))
@@ -179,7 +185,8 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 			continue
 		}
 		if verdict != prospection.VerdictStale || reason == prospection.LapseOverdue {
-			out.Upcoming = append(out.Upcoming, DigestLine{TriggerID: t.ID, UnitID: t.UnitID, Text: t.Payload.ActionText, FireAt: t.FireAt})
+			said := saidNow(ctx, r.units, []ports.DueTrigger{t}, now, set)[0]
+			out.Upcoming = append(out.Upcoming, DigestLine{TriggerID: t.ID, UnitID: t.UnitID, Text: said.Payload.ActionText, FireAt: t.FireAt})
 		}
 	}
 
@@ -197,7 +204,7 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 	// P' (round.nextAdjacent), not the P this request loaded (design m4c §3.5).
 	carry, held := prospection.Carry(items, carryAdjacency(round.nextAdjacent, pending), low, now)
 	out.Digest.LowEnergy = low
-	out.Digest.Items = joinDigestLines(carry, pending)
+	out.Digest.Items = joinDigestLines(carry, saidNow(ctx, r.units, pending, now, set))
 	out.Digest.Held = len(held)
 
 	// No question on a low-energy morning — assembleDigest's own rule

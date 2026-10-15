@@ -231,7 +231,7 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
      (`focus_size`, [§13](02-cognitive-core.md#13-calibration--numbers-vs-mechanisms)). Focus is
      computed on demand and never stored ([doc 02 §3](02-cognitive-core.md#3-focus--computed-never-persisted)).
    - **Pending digest.** What the next digest would carry, including any relation question
-     waiting to be asked. Looking at it changes nothing in the vault: **viewing is not
+     waiting to be asked, worded from each unit as it is now. Looking at it changes nothing in the vault: **viewing is not
      delivering** ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
    - **System.** Last consolidation, the latest energy reading and where it came from, counts of
      undelivered items and open questions, and the bind address.
@@ -312,7 +312,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | An event whose every reminder lapsed gets one catch-up at once (or at quiet end); a vault with no channel keeps its reminders (an overdue one-shot, a unit-less one included, stays listed on Today) | Shipped | doc 02 §7; ADR-0032 |
 | A reminder that could not be pushed is pushed again on a later pass while its event is ahead, once per pass, never twice for one outage report; the digest carries only recurring reminders | Shipped | doc 02 §7; ADR-0032 |
 | A reminder, pushed or in the digest, says its unit's current text and instant ("Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
-| What Nooma says first speaks the user's language: a pushed reminder, in its unit's; the digest (header, lines, question, lateness note), in the newest capture's; English when none is known | Shipped; a timer's wording is not covered | doc 02 §5, §7; ADR-0032 |
+| A digest that would exceed one Telegram message drops its last lines, says "and N more", and the dropped reminders come in tomorrow's | Shipped | doc 02 §7; ADR-0032 |
+| What Nooma says first speaks the user's language: a pushed reminder, in its unit's; the digest (header, lines, question, lateness note), in the newest capture's; English when none is known; a timer's wording and Today follow the newest unit's | Shipped | doc 02 §5, §7; ADR-0032 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |
