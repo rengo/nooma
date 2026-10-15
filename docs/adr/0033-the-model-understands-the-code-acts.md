@@ -47,38 +47,43 @@ MAPING de textos… el LLM debería evaluar sobre la marcha").
    - `question_answer` ∈ {`none`, `when`, `no`, `choice`}, with `choice_number` for `choice`:
      how the message answers the reminder question Nooma has open. The prompt shows that
      question, and its numbered options, only when one is open.
+   - `reminder_target`, a position (1-5) or `unclear`: which reminder a stop or done is about.
+     The prompt shows a numbered list of the candidates the code built (title or content, and
+     date) only when there are any.
 
    **No phrase list in core.** The prompt explains the fields with examples in both languages.
 2. **The code acts.** The model never names a unit, a trigger or a question.
-   - The code builds the real candidates (the open question, asked reminders armed or delivered
-     recently, the units of a tie for the last delivery, armed recurring reminders), applies the
-     binding rules ADR-0031 settled (one unambiguous candidate, a tie always asks, at most 5
-     options), and acts only on a binding.
-   - Ambiguous means asking which.
-   - A `choice_number` is a position in a list Nooma itself sent. The code maps it to the unit it
-     stored with the question, and refuses a position outside the list.
+   - The code builds the real candidates: the open question, asked reminders armed or delivered
+     recently, armed recurring reminders, and the unit of the last delivery, asked or not. Units
+     are deduplicated, so a tie inside one unit is one candidate, and there are at most 5.
+   - A `choice_number` or `reminder_target` is a position in a list the code built. The code maps
+     it to the unit it stored, and binds only on a valid position.
+   - `unclear`, an out-of-range position, or a missing one means asking which. There is no word
+     matching and no blind single-candidate bind.
 3. **Durable actions are confirmed by the user's own explicit words, with an undo.** These are
    stopping for good and deleting.
    - An explicit stop ("no me lo recuerdes más") counts as the confirmation: Nooma stops at once
      and says which reminder it stopped.
-   - For `stop_undo_window_minutes` (10) afterwards, "no, seguí" restores it.
+   - The stop reply opens a pending undo for `stop_undo_window_minutes` (10). Only a `keep`
+     answering that undo ("no, seguí") restores exactly the rows the stop retired, by id. A
+     reminder that came due meanwhile is dropped and named in the reply. The same undo covers
+     what an answer to Nooma's question armed.
    - A bare "listo" never stops anything by itself: it asks first (ADR-0031 point 5), and that
      answer is the confirmation turn for a delete.
    - Nothing in the vault is deleted in either case: a stop is a tombstone.
-4. **A model failure, or any degraded reminder field, means no reminder action.** The message
-   takes the plain capture path, and the decision log says the reading was degraded.
+4. **A degraded reminder field means no reminder action.** The message takes the plain capture
+   path, and the decision log says the reading was degraded. A **failed** classify call saves
+   nothing, as for every capture (I31). Until m4f gives stopping a UI route, a stop cannot be
+   made during a model outage: a known limit.
 5. **Testing measures quality instead of asserting it.**
    - No test calls a real model (non-negotiable 5).
-   - Four existing classify recordings whose messages ask to be reminded are re-recorded:
-     "remind me about my mother's birthday…", "…water the plants every Sunday", "acordate de
-     comprar café", "remind me to send the contract at 3pm…".
-   - Three expected classify cases gain the new fields.
-   - A new reminder phrasing set records about 36 phrasings, each with its expected fields.
-     It includes every phrasing the reviewers raised, with the question open when there is one.
-     CI replays the set through the decoder and the binding.
-   - `nooma doctor`'s "llm quality" check gains a line, "reminder reading: k of n phrasings
-     read as expected", run live against the configured provider. A prompt change is judged by
-     that number.
+   - Existing recordings are not re-recorded, because conformance tests depend on their content.
+     A new reminder phrasing set records about 44 phrasings, each with its expected fields, in
+     one session against the final prompt. It includes every phrasing the reviewers raised, with
+     the question or candidate list open when there is one. CI replays the set.
+   - `nooma doctor --reading` (opt-in, about 44 calls) reports "reminder reading: k of n" and a
+     separate hard line: stop or delete false positives on the negatives must be 0. A prompt
+     change is judged by those numbers.
 
 ## Consequences
 

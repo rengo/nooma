@@ -36,8 +36,9 @@ ADR-0031 (Accepted by the client, 2026-10-14), its detection superseded by ADR-0
 
 ### R1 — The model reads, the code decides (ADR-0033)
 
-**MUST**: the classify call returns the reminder fields: `remind_request`, `reminder_intent` and
-`question_answer` (with `choice_number`).
+**MUST**: the classify call returns the reminder fields: `remind_request` (a bool, or null; any
+other value degrades), `reminder_intent`, `question_answer` (with `choice_number`) and
+`reminder_target` (a position or `unclear`).
 
 - Each is optional and degrades independently (I14).
 - A degraded or absent reminder field is `none`: no reminder action, the plain capture path, and
@@ -109,6 +110,10 @@ para el jue 15 oct 10:00. Te aviso 15 minutos antes.", "… Te aviso ese día a 
 When the user asked and nothing was armed, a `capture.arm.refused` row records the reason and the
 reply says why. Never a bare "Anotado.".
 
+**MUST** (PM Q4): when a stored unit has an instant, the model did not flag `remind_request`, and
+nothing was armed, the reply adds one clause: "Anotado. No puse aviso; si querés, decime
+«recordame»." A missed request is visible, never silent.
+
 ### R6 — Follow
 
 **MUST**: a correction of an asked unit's instant leaves what a fresh capture of the new instant
@@ -147,21 +152,32 @@ classification reads `question_answer` for it:
   that preference does not move it.
 
 Any other message is a capture of its own, and the question expires. An expired question leaves
-the unit stored with no reminder.
+the unit stored with no reminder. A consumed answer's reply names what it did ("Listo: te recuerdo
+X todos los días a las 09:00"), and opens the same 10-minute undo as a stop (R9).
 
 ### R9 — Stopping, chat first
 
-**MUST**: an **explicit stop** (`reminder_intent: stop`) counts as the user's confirmation
+**MUST**: an **explicit stop** (`reminder_intent: stop`, bound) is the user's confirmation
 (ADR-0033 point 3):
 
-- records a durable stop on the unit first;
-- dismisses the unit's armed triggers and lapses its fired, undelivered ones;
-- leaves nothing of that unit sendable afterwards, by any path (the delivery gate, the digest,
-  corrections, the re-plan, the re-arm, preferences).
+- it records first, in `reminder.stopped`, a durable stop on the unit and the id and snapshot of
+  every row it retires;
+- it dismisses the armed rows (a conflict is tolerated) and lapses the fired, undelivered ones;
+- nothing of that unit is sendable afterwards, by any path (the delivery gate, the digest,
+  corrections, the re-plan, the re-arm, preferences);
+- stopping a one-shot event dismisses its remaining leads.
 
-The reply names what stopped. For 10 minutes, "no, seguí" (`keep`) restores it. Otherwise only
-a **new explicit ask** (P6) brings the reminder back, as a new unit. A correction of a
-stopped unit is refused with the reason `stopped`, and the reply says so.
+**Undo (PM Q1, Q2).** The stop reply ("Listo, no te lo recuerdo más: <title> — <date>") opens a
+pending undo for 10 minutes.
+
+- Only a `keep` answering that pending undo ("no, seguí") restores the reminder. A stray
+  "seguí" elsewhere restores nothing.
+- The undo clears the stop and restores exactly the retired rows, by id, from the snapshot. A row
+  whose time passed meanwhile is dropped with a reason and named ("te lo sigo recordando; el aviso
+  de las 21:00 ya pasó").
+- While an undo is open, the repair pass skips that unit.
+- Otherwise only a **new explicit ask** (P6) brings the reminder back, as a new unit. A correction
+  of a stopped unit is refused `stopped`, and the reply says so.
 
 **MUST**: a **done** (`reminder_intent: done`; "listo, nos vemos mañana" reads `none`) acts on
 the asked reminder it binds:
@@ -172,44 +188,45 @@ the asked reminder it binds:
 | Repeating, marked | done for today; it keeps recurring |
 | One-shot | resolves it; an event's remaining leads are dismissed |
 
-The answer to the question:
+The answer, read only while that `keep_or_stop` question is open (PM Q10):
 
-- `keep` ("seguí") marks it;
-- `delete` ("borralo") or a `no` answer (PM) stops it, and that answer is the confirmation turn;
-- anything else leaves it unmarked, and the next bare done asks again.
+- `keep`, or "sí", marks it;
+- `delete` ("borralo") or `no` (PM) stops it, and that answer is the confirmation turn;
+- anything else leaves it unmarked, and the next done asks again.
 
-**MUST**: the model never names a reminder. The code binds, and binds without asking only on
-**one unambiguous candidate** (P7). A `choice_number` is a position in the list Nooma sent. The rules apply in order:
+A `delete`, or a `question_answer`, with no question open does nothing, and is never coerced into
+a check-in outcome.
 
-1. The message's content words match exactly one candidate.
-2. The single newest delivery of any trigger, with no tie on `surfaced_at`, is a candidate and
-   lies inside the window.
-3. For a stop only: exactly one candidate exists.
+**MUST** (PM Q5, Q6): **binding**. The model never names a reminder.
 
-The candidates are:
-
-- **for a stop:** asked units with an armed or recently delivered trigger, units with an armed
-  recurring trigger (a birthday, by name), and the units of every row tied for the last delivery
-  (up to 5), so a tie always asks;
-- **for a done:** asked triggers delivered inside the window.
-
-Otherwise Nooma asks "¿Cuál?" with at most the 5 most recent candidates, keeping the intent. A
-done that no rule binds does nothing.
+- **Candidates.** Whenever there are stop or done candidates, the prompt carries a numbered list
+  of at most 5, deduplicated by unit, each with title (or content) and date:
+  - for a stop: asked units with an armed or recently delivered trigger, units with an armed
+    recurring trigger, and the unit of the last delivery, asked or not;
+  - for a done: asked reminders delivered inside the window.
+- **Binding.** The model returns `reminder_target`, and the code binds only on a valid position.
+  `unclear`, an out-of-range position, or a missing one asks "¿Cuál?" with the same list, keeping
+  the intent. There is no word matching and no blind single-candidate bind.
+- **Nothing to bind (PM Q3).** A stop or done with no candidate replies "No encontré qué
+  recordatorio cortar" (done: "…marcar como hecho"), and the message is not stored.
 
 **MUST**: one fixed precedence:
 
-- the explicit referent, when a surface gives one;
+- the explicit referent, when a surface gives one (the reminder fields are read there too);
 - then the newest open question, answered by `question_answer` or `reminder_intent`;
 - then `reminder_intent`;
 - then the capture.
 
-Check-in resolution never takes a message a reminder intent consumed. A message consumed by any
-answer, intent or check-in expires every older open reminder question. Every reminder question
-has a window, and a newer delivery expires every open reminder question, so a late "no" never
+A message consumed by a reminder intent skips all three check-in resolvers (task, state and
+relation). A stop that also reads `relation_outcome: rejected` deletes no relation (PM Q9).
+
+Questions expire when they are read, and a resolve succeeds only on an open question. A message
+consumed by any answer, intent or check-in expires every older open reminder question. Every
+reminder question has a window, and a newer delivery expires them all, so a late "no" never
 deletes nor makes a daily reminder.
 
-Replies: "Listo, no te lo recuerdo más: tomar pastillas." / "Bien, te lo sigo recordando." /
-"Hecho por hoy.".
+Replies: "Listo, no te lo recuerdo más: tomar pastillas — 21:00." / "Bien, te lo sigo
+recordando." / "Hecho por hoy.".
 
 ### R10 — Reminders nobody asked for
 
@@ -220,13 +237,19 @@ Replies: "Listo, no te lo recuerdo más: tomar pastillas." / "Bien, te lo sigo r
 
 ### R12 — The reminder's words (client, 2026-10-14)
 
-**MUST**: classify returns an optional `title` for `event` and `task` units: short (at most 60
-characters), date-free, in the message's language. A title that is empty, too long or holds a
-`YYYY-MM-DD` or `HH:MM` token is dropped (I14). The unit stores it. A correction that
-re-classifies writes the new title with its pre-image.
+**MUST**: classify returns an optional `title` for every unit an armed kind stores, in the
+message's language.
 
-**MUST**: a reminder (push, digest, Today) reads "Recordatorio: <title> — <date>", and uses the
-content when the unit has no title. Scenario: "Tengo reunión con Juan hoy a las 22:30" →
+- **Validation:** it is trimmed. A blank title, one with a newline or control character, one over
+  60 runes, or one with an ISO date or time is dropped (I14). The unit stores what is kept.
+- **Known limit (PM Q8):** relative and weekday words ("mañana", "jueves", "3pm") cannot be
+  caught without a word list. A prompt rule and the doctor measure cover them.
+- **Corrections:** a correction that re-classifies writes the new title with its pre-image. A
+  content edit that brings no valid title **clears** it, and a date-only correction keeps it.
+
+**MUST**: a push reads "Recordatorio: <title> — <date>". A digest line and Today read "• <title> —
+<when>". All three use the content when the unit has no title, and so does the frozen fallback
+text. The stop reply and the "¿Cuál?" options use title and date too. Scenario: "Tengo reunión con Juan hoy a las 22:30" →
 "Recordatorio: Reunión con Juan — mié 14 oct, 22:30". The phrasing set holds title cases, and
 doctor measures how many titles come back date-free and short.
 
