@@ -297,6 +297,11 @@ func (g *rvwUnits) UpdateDueAt(context.Context, string, time.Time, time.Time) er
 	return nil
 }
 
+func (g *rvwUnits) UpdateTitle(context.Context, string, string, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "UpdateTitle")
+	return nil
+}
+
 func (g *rvwUnits) SetStatus(context.Context, string, unit.Status, unit.Status, time.Time) error {
 	rvwFail(g.t, "UnitRepo", "SetStatus")
 	return nil

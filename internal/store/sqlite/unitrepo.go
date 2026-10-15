@@ -172,6 +172,18 @@ func (r *UnitRepo) UpdateDueAt(ctx context.Context, id string, dueAt, at time.Ti
 	return requireRowAffected(res, ports.ErrUnitNotFound)
 }
 
+// UpdateTitle implements ports.UnitRepo.
+func (r *UnitRepo) UpdateTitle(ctx context.Context, id, title string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE units SET title = ?, updated_at = ? WHERE id = ?`,
+		textToNull(title), formatUnitTime(at), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update unit %q title: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrUnitNotFound)
+}
+
 // SetStatus implements ports.UnitRepo. from is an optimistic-concurrency
 // precondition, not a validation — unit.ValidateTransition already decided
 // legality (design D5).

@@ -17,6 +17,7 @@ var updateMethodNames = map[string]bool{
 	"UpdateContent": true,
 	"UpdateEventAt": true,
 	"UpdateDueAt":   true,
+	"UpdateTitle":   true,
 }
 
 // TestI23_CorrectionAuditPrecedesEveryUpdate is design D5 Layer 2, the AST
@@ -26,7 +27,7 @@ var updateMethodNames = map[string]bool{
 // internal/ports/** (which declare and implement the methods rather than
 // calling them), on either:
 //
-//  1. a call to UpdateContent, UpdateEventAt or UpdateDueAt outside a
+//  1. a call to UpdateContent, UpdateEventAt, UpdateDueAt or UpdateTitle outside a
 //     function named dispatchEdits; or
 //  2. applyWithPreImage's own body calling dispatchEdits at a position
 //     that is not strictly after recordPreImage — including either call

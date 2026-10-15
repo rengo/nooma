@@ -220,6 +220,10 @@ func (g *unitsWriteGuard) UpdateDueAt(context.Context, string, time.Time, time.T
 	unitsWriteGuardFail(g.t, "UpdateDueAt")
 	return nil
 }
+func (g *unitsWriteGuard) UpdateTitle(context.Context, string, string, time.Time) error {
+	unitsWriteGuardFail(g.t, "UpdateTitle")
+	return nil
+}
 func (g *unitsWriteGuard) SetStatus(context.Context, string, unit.Status, unit.Status, time.Time) error {
 	unitsWriteGuardFail(g.t, "SetStatus")
 	return nil

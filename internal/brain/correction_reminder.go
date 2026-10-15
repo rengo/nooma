@@ -26,18 +26,21 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	}
 	var eventAt time.Time
 	moved := false
-	body := shownText(target)
-	bodyChanged := false
+	// What the armed reminders say follows what the unit will say: its title
+	// after the edits, else its content.
+	changed := target
 	for _, e := range plan {
 		if v, ok := e.EventAt(); ok {
 			eventAt, moved = v, true
 		}
 		if v, ok := e.Content(); ok {
-			changed := target
 			changed.Content = v
-			body, bodyChanged = shownText(changed), shownText(changed) != shownText(target)
+		}
+		if v, ok := e.Title(); ok {
+			changed.Title = v
 		}
 	}
+	body, bodyChanged := shownText(changed), shownText(changed) != shownText(target)
 	if !moved {
 		return nil
 	}

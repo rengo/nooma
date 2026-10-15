@@ -130,6 +130,10 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 	// A moved date carries the body that states it (doc 02 §5 step 4, I29).
 	// now's zone is the user's: the frame the body was most likely written
 	// in.
+	// The title follows the body (spec R12). The model's title is its answer for
+	// the unit only when the correction prompt showed it this very unit.
+	plan = correction.WithTitle(plan, c, *target, explicit != nil && explicit.Content == target.Content)
+
 	plan = correction.CarryText(plan, *target, now.Location())
 	wanted := plan
 
@@ -329,6 +333,10 @@ func (r correctionRunner) recordPreImage(ctx context.Context, target unit.Unit, 
 			previous[f] = target.DueAt
 			v, _ := e.DueAt()
 			next[f] = v
+		case correction.FieldTitle:
+			// An absent title is null in the pre-image, not an empty string.
+			v, _ := e.Title()
+			previous[f], next[f] = nullIfEmpty(target.Title), nullIfEmpty(v)
 		}
 	}
 
@@ -376,7 +384,7 @@ func (r correctionRunner) recordPreImage(ctx context.Context, target unit.Unit, 
 // per plan entry — a total switch over correction.Field, each arm reading
 // the accessor named after the column its method writes (design D3's
 // crossed-wiring argument). This is the ONLY function in this package
-// permitted to call UpdateContent/UpdateEventAt/UpdateDueAt — design D5
+// permitted to call UpdateContent/UpdateEventAt/UpdateDueAt/UpdateTitle — design D5
 // Layer 2's AST guard enforces that no other call site exists anywhere
 // under internal/ outside internal/store/**/internal/ports/**.
 func (r correctionRunner) dispatchEdits(ctx context.Context, id string, plan []correction.Edit, now time.Time) error {
@@ -396,6 +404,11 @@ func (r correctionRunner) dispatchEdits(ctx context.Context, id string, plan []c
 			v, _ := e.DueAt()
 			if err := r.units.UpdateDueAt(ctx, id, v, now); err != nil {
 				return fmt.Errorf("correction: update due_at for unit %q: %w", id, err)
+			}
+		case correction.FieldTitle:
+			v, _ := e.Title()
+			if err := r.units.UpdateTitle(ctx, id, v, now); err != nil {
+				return fmt.Errorf("correction: update title for unit %q: %w", id, err)
 			}
 		default:
 			return fmt.Errorf("correction: unknown edit field %q for unit %q", e.Field(), id)
@@ -448,4 +461,13 @@ func (r correctionRunner) recordCorrectionSignal(ctx context.Context, id string,
 		return fmt.Errorf("correction: record signal for unit %q: %w", id, err)
 	}
 	return nil
+}
+
+// nullIfEmpty is s, or nil when s is empty, so a pre-image shows an absent title
+// as null.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

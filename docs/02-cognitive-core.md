@@ -720,6 +720,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      an edit whose value the unit already holds (read again as the edit lands) writes no
      `correction.applied` row and no learning signal, and the answer says nothing changed; only
      the reminder step still runs, so the repair above works.
+     **The title follows the body** (spec R12). Beside the edits above the plan may carry a
+     `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in
+     `fields` with `previous` and `next` like any other): a valid title the model answered
+     for the unit it was shown, when it differs from the unit's, is written; a plan that
+     rewrites the body and brings no such title **clears** it (`next` is `null`), since it
+     described a body that is gone; a date-only plan leaves it alone. A title the model wrote
+     without being shown the unit (the chat path) names the utterance and is never taken. The
+     text an armed reminder falls back to follows the title as it follows the date.
      **New text beside a new date is both edits** (I30). When the correction changes what the
      unit says and when it happens at once, and the model — shown the unit — returns text that
      differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`

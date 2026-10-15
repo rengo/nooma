@@ -78,6 +78,12 @@ type UnitRepo interface {
 	// comment for why dueAt is not nullable.
 	UpdateDueAt(ctx context.Context, id string, dueAt, at time.Time) error
 
+	// UpdateTitle rewrites id's Title to title and UpdatedAt to at, leaving every
+	// other column unchanged. An empty title clears it (NULL). It returns
+	// ErrUnitNotFound if no unit with id exists. Like the other Update*
+	// methods, only a correction's applyWithPreImage calls it (ADR-0016).
+	UpdateTitle(ctx context.Context, id, title string, at time.Time) error
+
 	// SetStatus moves id from status from to status to, recording at.
 	// from is an optimistic-concurrency precondition, not a validation —
 	// the legality of the transition is unit.ValidateTransition's

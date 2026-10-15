@@ -171,6 +171,11 @@ func (u *updateCallCountingUnits) UpdateEventAt(ctx context.Context, id string, 
 	return u.Units.UpdateEventAt(ctx, id, eventAt, at)
 }
 
+func (u *updateCallCountingUnits) UpdateTitle(ctx context.Context, id, title string, at time.Time) error {
+	u.updateCalls++
+	return u.Units.UpdateTitle(ctx, id, title, at)
+}
+
 func (u *updateCallCountingUnits) UpdateDueAt(ctx context.Context, id string, dueAt, at time.Time) error {
 	u.updateCalls++
 	return u.Units.UpdateDueAt(ctx, id, dueAt, at)

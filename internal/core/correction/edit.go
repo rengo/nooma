@@ -14,13 +14,14 @@ const (
 	FieldContent Field = "content"
 	FieldEventAt Field = "event_at"
 	FieldDueAt   Field = "due_at"
+	FieldTitle   Field = "title"
 )
 
 // AllFields returns every Field the plan can produce. Its own completeness
 // table lives in edit_test.go: every member here must have exactly one
 // Edit constructor and accessor pair covering it.
 func AllFields() []Field {
-	return []Field{FieldContent, FieldEventAt, FieldDueAt}
+	return []Field{FieldContent, FieldEventAt, FieldDueAt, FieldTitle}
 }
 
 // Edit is one field and its new value. Its state is unexported, and it
@@ -35,6 +36,7 @@ type Edit struct {
 	content string
 	eventAt time.Time
 	dueAt   time.Time
+	title   string
 }
 
 // NewContentEdit builds an Edit that writes content.
@@ -50,6 +52,12 @@ func NewEventAtEdit(t time.Time) Edit {
 // NewDueAtEdit builds an Edit that writes due_at.
 func NewDueAtEdit(t time.Time) Edit {
 	return Edit{field: FieldDueAt, dueAt: t}
+}
+
+// NewTitleEdit builds an Edit that writes the unit's title. An empty title
+// clears it (the column becomes NULL).
+func NewTitleEdit(s string) Edit {
+	return Edit{field: FieldTitle, title: s}
 }
 
 // Field reports which column e writes.
@@ -73,6 +81,12 @@ func (e Edit) DueAt() (time.Time, bool) {
 	return e.dueAt, e.field == FieldDueAt
 }
 
+// Title reports e's new title and whether e writes the title at all — true
+// only when e.Field() == FieldTitle. An empty title means "clear it".
+func (e Edit) Title() (string, bool) {
+	return e.title, e.field == FieldTitle
+}
+
 // Changes returns the edits of plan that would alter u: a content edit
 // whose text is u's own, or a date edit whose instant is u's own, writes
 // nothing and is not a change. A repeated correction finds its work done;
@@ -87,6 +101,8 @@ func Changes(plan []Edit, u unit.Unit) []Edit {
 			same = u.EventAt != nil && u.EventAt.Equal(v)
 		} else if v, ok := e.DueAt(); ok {
 			same = u.DueAt != nil && u.DueAt.Equal(v)
+		} else if v, ok := e.Title(); ok {
+			same = v == u.Title
 		}
 		if !same {
 			out = append(out, e)
