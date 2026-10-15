@@ -1,4 +1,4 @@
-# Tasks — remind-me-reminders, links 1-4 (links 5-9: `tasks-repeating.md`)
+# Tasks — remind-me-reminders, links 1, 1a, 1a′ and 2-4 (links 5-8: `tasks-repeating.md`)
 
 Stacked to main (design §4). Strict TDD. **Apply gate:** every named RED test below is written
 and watched failing for the stated reason before its link's GREEN code. Zone in examples:
@@ -9,15 +9,18 @@ opens.
 
 | Link | Impl+docs | Tests | Risk |
 |---|---|---|---|
-| 1 | ~260 | ~420 | Medium: the planner every event uses |
+| 1 | merged (#346, #347) | — | — |
+| 1a | ~380 | ~350 | Medium: classify fields, the prompt, the title, migration 0009 |
+| 1a′ | ~260 | ~250 | Medium: recording format, `--record`, `doctor --reading`, the merge gate |
 | 2 | ~350 | ~350 | Medium: migration, payload, gate, reply |
 | 3 | ~190 | ~230 | Medium: I29, I35 amendments |
 | 4 | ~110 | ~120 | Low |
 
-Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating; tasks-repeating.
-- [x] 0.1 Written; client answers and review rounds 1-2 folded in.
+Plan chain, 3 PRs: #350 (ADR-0033, proposal, spec); #356 (design, tasks); #357 (design-repeating,
+tasks-repeating).
+- [x] 0.1 Written; client answers, the done descope and review rounds 1-3 folded in.
 
-## PR 1 — `feat/remind-me-decision` (D1-D4 core, D6)
+## Link 1 — `feat/remind-me-decision` (D2-D4 core, D6; merged as 1.2-1.4), and links 1a and 1a′ (1.1 and 1.1′: D1, D1b, D1c)
 
 - [ ] 1.1 Link 1a — `feat/classify-reminder-fields` (ADR-0033, D1, D1b):
   - RED L1 `TestDecode_ReminderFields`: `remind_request`, `reminder_intent`, `question_answer`, `choice_number` decode; an unknown enum, a wrong type or a `choice_number` outside 1-5 degrades that field alone (I14); `TestAllReminderIntentsAndAnswersSwept`.
@@ -37,7 +40,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - RED `TestDoctorRecordWritesResponsesWithAFakeProvider`: only `"record": true` cases; `expect` untouched; `provider`, `model` and `now` written; `record` cleared. `TestRecordSkipsRecordedWithoutForce`; `TestRecordRefusesUnderCI`; `TestRecordSendsNilBeliefs`.
   - RED `TestValidateAllowsAwaitingRecording` (replay skips it and reports the count); `scripts/recordings-complete.sh` and its test `TestRecordingsCompleteFailsOnPendingCase`; `TestCasesMatchesTheSourceFiles` covers `reminders/`; `format.md` and its format test.
   - RED `TestKnownMisreadStaysMarked`: a `known_misread` case that reads as expected fails, so its mark is removed.
-  - RED (round 2): `TestReplayFailsOnPromptHashMismatch`; `TestRecordingsCompleteScript` (the step runs in `ci.yml`'s required `lint` job; doc 06 §6 states why it is not in `check-all`); `TestDoctorReportsCheckinOutcomeRates` and `TestDoctorReportsDayOnlyRate`. Recorded cases include day-only phrasings expecting bare dates, check-in answers, and "a single candidate plus a message about something else → `unclear`".
+  - RED (round 2): `TestReplayFailsOnPromptHashMismatch`; **Maintainer-reviewed docs edit in this PR:** CLAUDE.md's Workflow section gains the `check-all` exception for `recordings-complete.sh`. `TestRecordingsCompleteScript` (the step runs in `ci.yml`'s required `lint` job; doc 06 §6 states why it is not in `check-all`); `TestDoctorReportsCheckinOutcomeRates` and `TestDoctorReportsDayOnlyRate`. Recorded cases include day-only phrasings expecting bare dates, check-in answers, and "a single candidate plus a message about something else → `unclear`".
   - RED `TestDoctorReadingIsOptIn` (plain `doctor` makes no reading calls); `TestDoctorReportsReminderReadingRate`; `TestDoctorFalsePositiveLineFailsOnOne` (its negatives include a bare no/sí/listo/ya answering an open relation question or check-in with a non-empty candidate list); `TestDoctorReportsTitleRate` (fake provider).
   - Corpus, recorded once by the maintainer in one session, against the final prompt of link 1a (which already holds every later link's prompt text):
     - no existing recording is re-recorded; I18, I26, `arming_capture_keeps_its_unit` and `classify_golden_cases_decode_clean` assert their content;

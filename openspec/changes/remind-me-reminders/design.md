@@ -19,7 +19,7 @@
 | A correction follows `event_at` of an `event` only, and never creates an at-once reminder (I29) | `brain/correction_reminder.go:23-41`, `follow.go:56-57` |
 | The preference re-arm keeps `event` units with `event_at` ahead | `brain/preferences_rearm.go:49` |
 | Check-in resolution engages `Delivered()[0]` from the model's outcome, before any reminder binding could run | `brain/checkin.go:19-55`, `capture.go:302` |
-| The migration runner already rejects a gap or a duplicate version | `internal/store/sqlite/migrate_test.go:55` |
+| The migration runner already rejects a gap or a duplicate version | `internal/store/sqlite/migrate_test.go:59` |
 | `ReminderVerdict` reads the payload's `event_at` first, treats day-granular events (`isDateOnly`, or a rule) as passed from the next local midnight, and defers through quiet hours, measuring overdue from quiet end (`staleness.go:116`) | `core/prospection/reminder.go:53-100` |
 | `DueTrigger` carries no `created_at` | `ports/triggerrepo.go` |
 
@@ -114,8 +114,7 @@
   in which case its own replay fails on the hash and names the cases to record again.
 - **Synthetic only, gated:** `recordings-complete.sh` also rejects a case whose message or
   response holds a vault path, a ULID-shaped unit id or an e-mail address. The `check-all`
-  exception is a CLAUDE.md edit, listed as a maintainer step, since an agent does not edit
-  CLAUDE.md.
+  exception is a CLAUDE.md edit, made in link 1a′'s PR and reviewed by the maintainer there.
 - **Existing recordings:** none is re-recorded. I18, I26, `arming_capture_keeps_its_unit` and
   `classify_golden_cases_decode_clean` assert their content, and the new fields are absent from
   them, which reads as none.
