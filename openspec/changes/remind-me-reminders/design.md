@@ -121,7 +121,9 @@
   them, which reads as none.
 - **Doctor:** `nooma doctor --reading` is opt-in, about 40 calls and a minute or two. It prints
   "reminder reading: k of n" (90% is the reversal threshold), a **hard** line "stop false
-  positives: 0 of N negatives" that fails doctor when non-zero, "titles: k of n valid",
+  positives: 0 of N negatives" that fails doctor when non-zero (the negatives include a bare
+  "no", "sí", "listo" or "ya" answering an open relation question or check-in while the
+  candidate list is non-empty), "titles: k of n valid",
   "day only: k of n bare dates", and the `task_checkin_outcome`, `nudge_outcome` and
   `relation_outcome` rates over the check-in answers in the set, so a regression link 1a
   introduces there shows.
