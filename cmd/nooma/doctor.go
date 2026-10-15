@@ -52,6 +52,50 @@ var doctorChecks = []doctorCheck{
 	{"vault coverage", checkVaultCoverage},
 }
 
+// doctorArgs is what `nooma doctor` was asked.
+type doctorArgs struct {
+	record string // the directory of phrasings to record, "" for a plain run
+	force  bool
+	vault  string // "" for the default vault
+}
+
+// parseDoctorArgs reads the flags wherever they are written. Go's flag package
+// stops at the first argument that is not a flag, so `--record dir --force
+// vault` left --force unread and the command recorded with it off, silently.
+// It parses again after each positional argument instead.
+func parseDoctorArgs(args []string, errOut io.Writer) (doctorArgs, error) {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	fs.Usage = func() {
+		_, _ = fmt.Fprint(errOut, "usage: nooma doctor [vault]\n       nooma doctor --record <dir> [--force] [vault]\n")
+	}
+	record := fs.String("record", "", "record the reminder phrasings of `dir` that await it, against the vault's provider")
+	force := fs.Bool("force", false, "with --record: record again a phrasing that already has a response")
+
+	var positional []string
+	for rest := args; ; {
+		if err := fs.Parse(rest); err != nil {
+			return doctorArgs{}, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		positional = append(positional, fs.Arg(0))
+		rest = fs.Args()[1:]
+	}
+	if len(positional) > 1 {
+		return doctorArgs{}, fmt.Errorf("doctor takes at most one vault path, got %d", len(positional))
+	}
+	if *force && *record == "" {
+		return doctorArgs{}, errors.New("--force only means something with --record")
+	}
+	opts := doctorArgs{record: *record, force: *force}
+	if len(positional) == 1 {
+		opts.vault = positional[0]
+	}
+	return opts, nil
+}
+
 // runDoctor diagnoses a vault without starting anything.
 //
 // What it deliberately does NOT check, per spec R13.4: provider connectivity and
@@ -60,27 +104,15 @@ var doctorChecks = []doctorCheck{
 // than an absent one, because its passing means nothing — and doctor's whole
 // value is that a green line can be believed.
 func runDoctor(args []string, out, errOut io.Writer) error {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	fs.SetOutput(errOut)
-	fs.Usage = func() {
-		_, _ = fmt.Fprint(errOut, "usage: nooma doctor [vault]\n       nooma doctor --record <dir> [--force] [vault]\n")
-	}
-	record := fs.String("record", "", "record the reminder phrasings of `dir` that await it, against the vault's provider")
-	force := fs.Bool("force", false, "with --record: record again a phrasing that already has a response")
-	if err := fs.Parse(args); err != nil {
+	opts, err := parseDoctorArgs(args, errOut)
+	if err != nil {
 		return err
 	}
-	if fs.NArg() > 1 {
-		return fmt.Errorf("doctor takes at most one vault path, got %d", fs.NArg())
-	}
-	if *force && *record == "" {
-		return errors.New("--force only means something with --record")
-	}
-	if *record != "" {
-		return runRecord(*record, *force, fs.Arg(0), out)
+	if opts.record != "" {
+		return runRecord(opts.record, opts.force, opts.vault, out)
 	}
 
-	vault, err := config.ResolveVault(fs.Arg(0))
+	vault, err := config.ResolveVault(opts.vault)
 	if err != nil {
 		return err
 	}

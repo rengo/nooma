@@ -5,6 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,8 +17,11 @@ import (
 
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/selfmodel"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/reading"
+	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/testdata/llm"
 )
 
@@ -318,5 +325,102 @@ func TestRecordValidatesACaseBeforeSpendingACall(t *testing.T) {
 	}
 	if _, recorded := readFields(t, filepath.Join(dir, "b.json"))["response"]; recorded {
 		t.Fatal("an invalid case was recorded")
+	}
+}
+
+// Go's flag package stops at the first argument that is not a flag, so
+// `--record dir --force vault` used to leave --force unread and record with it
+// off, silently. Every flag works wherever it is written.
+func TestDoctorFlagsWorkWhereverTheyAreWritten(t *testing.T) {
+	for name, args := range map[string][]string{
+		"flags first":        {"--record", "ph", "--force", "vault"},
+		"force after vault":  {"--record", "ph", "vault", "--force"},
+		"record after vault": {"vault", "--force", "--record", "ph"},
+		"equals form":        {"vault", "--record=ph", "-force"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := parseDoctorArgs(args, &bytes.Buffer{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.record != "ph" || !got.force || got.vault != "vault" {
+				t.Fatalf("parsed %+v, want record ph, force, vault vault", got)
+			}
+		})
+	}
+	if _, err := parseDoctorArgs([]string{"--record", "ph", "one", "two"}, &bytes.Buffer{}); err == nil {
+		t.Error("two vault paths were accepted")
+	}
+	if _, err := parseDoctorArgs([]string{"vault", "--force"}, &bytes.Buffer{}); err == nil {
+		t.Error("--force without --record was accepted")
+	}
+}
+
+// TestRecordNeverSendsAnythingFromTheVault seeds a vault with a marker in a
+// unit, a belief and its .env, records against a loopback provider that keeps
+// every request body it receives, and finds the marker in none of them. A
+// recording is made of synthetic phrasings only (design D1c): the vault is
+// where the provider's name and key come from, and nothing else.
+func TestRecordNeverSendsAnythingFromTheVault(t *testing.T) {
+	const marker = "VAULT-MARKER-7f3a9c"
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, r.URL.Path+" "+string(b))
+		w.Header().Set("Content-Type", "application/json")
+		reply, _ := json.Marshal(recordReply)
+		_, _ = fmt.Fprintf(w, `{"model":"m","response":%s,"done":true}`, reply)
+	}))
+	t.Cleanup(srv.Close)
+
+	vault := writeVault(t, fmt.Sprintf("providers:\n  local:\n    type: ollama\n    model: m\n    endpoint: %s\ntasks:\n  capture_processing: {provider: local}\n", srv.URL))
+	if err := os.WriteFile(filepath.Join(vault, ".env"), []byte("NOOMA_TEST_MARKER="+marker+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Unsetenv("NOOMA_TEST_MARKER") })
+
+	cfg, err := loadVaultConfig(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath, _ := cfg.DatabasePath(vault)
+	db, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := sqlite.NewUnitRepo(db).Create(context.Background(), unit.Unit{
+		ID: "u1", Type: unit.TypeKnowledge, Content: "my secret is " + marker, Status: unit.StatusPool,
+		Weight: 0.5, WeightDecayRate: 0.1, LastTouchedAt: now, Source: "test", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlite.NewSelfModelRepo(db).UpsertByTopicKey(context.Background(), ports.Belief{
+		ID: "b1", Facet: selfmodel.FacetGoal, TopicKey: "goal/secret", Content: marker, Confidence: 0.8,
+		Origin: selfmodel.OriginDerived, Status: selfmodel.StatusActive, LastReinforcedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	dir := t.TempDir()
+	path := writePhrasing(t, dir, "a", "recordame comprar café mañana a las 10")
+	t.Setenv("CI", "")
+	if err := runDoctor([]string{"--record", dir, vault}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runDoctor --record = %v", err)
+	}
+
+	if len(bodies) != 1 {
+		t.Fatalf("%d requests reached the provider, want 1: the test proves nothing without one", len(bodies))
+	}
+	for _, leak := range []string{marker, vault} {
+		for _, body := range bodies {
+			if strings.Contains(body, leak) {
+				t.Errorf("a request carries %q from the vault:\n%s", leak, body)
+			}
+		}
+	}
+	if _, recorded := readFields(t, path)["response"]; !recorded {
+		t.Error("the phrasing was not recorded through the real provider path")
 	}
 }
