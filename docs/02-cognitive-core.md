@@ -468,6 +468,22 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      wire value, never inferred from a midnight, so a timestamp at midnight is a named time and a
      bare date on a day whose midnight a DST change skips is still a bare date
      ([ADR-0031](adr/0031-reminders-the-user-asks-for.md)).
+   - **The model reads whether a message is about a reminder; the code acts**
+     ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)). The same call returns four
+     optional reminder fields, each degrading alone (I14) to nil, which the brain reads as no
+     reminder action: `remind_request` (a JSON bool or null; anything else degrades),
+     `reminder_intent` (`none | stop | keep`), `question_answer` (`none | when | no | choice`)
+     with `choice_number`, and `reminder_target`. The last two are positions, 1 to
+     `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
+     `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades;
+     an explicit `null` is an absent field, not a loss. Core holds no phrase list: the prompt
+     explains the fields with examples in both languages.
+   - **`title` is the short, date-free name a reminder says** (optional, in the message's
+     language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
+     any non-graphic character (a control, a line or paragraph separator, a format character:
+     U+2028, U+200B, U+202E…), exceeds `max_title_runes`, or holds an ISO date or an `HH:MM`; a dropped title degrades the field (I14) and the unit is then read by its content.
+     Relative words ("mañana", "jueves", "3pm") are a known limit: catching them takes a word
+     list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
      "on Friday"), open check-ins.
@@ -1729,6 +1745,8 @@ module; those that say *user-overridable* are the user's own preferences, stored
 
 | Knob | Default |
 |---|---|
+| `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position (§5 step 1, ADR-0033); chosen, a list a person can read in one message |
+| `max_title_runes` (`internal/core/classify.MaxTitleRunes`) | 60 — the longest title a unit keeps (§5 step 1); one line beside a date, chosen |
 | `calendar_days` (`internal/core/classify.CalendarDays`) | 14 — how many days, today included, the classify context lists (§5 step 1); the furthest a bare weekday reaches is seven days out, so a week of margin |
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |

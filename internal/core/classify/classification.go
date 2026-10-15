@@ -84,6 +84,28 @@ type Classification struct {
 	// switch on.
 	Language *Language
 
+	// The reminder fields of ADR-0033 point 1. The model reads; the code acts
+	// on them only after checking them against what it built (a position in a
+	// list it sent). Each is optional on the wire and degrades alone (I14); a
+	// degraded or absent one is nil, which the brain reads as no reminder
+	// action.
+	//
+	// RemindRequest is nil for an absent, null or degraded value: "not a
+	// request" and "did not say" take the same plain capture path.
+	RemindRequest  *bool
+	ReminderIntent *ReminderIntent
+	QuestionAnswer *QuestionAnswer
+	// ChoiceNumber is a position in a list the code sent, 1 to
+	// MaxReminderChoices. It means something only beside QuestionAnswer
+	// choice, and the code binds only on a position inside that list.
+	ChoiceNumber   *int
+	ReminderTarget *ReminderTarget
+
+	// Title is the short, date-free name a reminder says for the unit
+	// (ADR-0033's sibling decision, spec R12), already checked by
+	// ResolveTitle: nil when the model gave none or gave one the check drops.
+	Title *string
+
 	// Degradations records what was lost and why, in fieldSpecs' order. It
 	// exists because I12 requires internal/brain to write a rationale into
 	// decision_log: a decoder that discarded *why* a field vanished would

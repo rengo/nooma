@@ -98,3 +98,12 @@ func TestLatestLanguageIncludesArchived(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_Title runs repocontract.RunTitle against the same fake
+// (spec R12).
+func TestUnitRepo_MemRepo_Title(t *testing.T) {
+	repocontract.RunTitle(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}

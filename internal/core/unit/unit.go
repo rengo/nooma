@@ -30,7 +30,11 @@ type Unit struct {
 	Confidence      *float64 // always nil in Phase A — proposal §8 Q2
 	// Language is the language the capture was written in, "" when none is known
 	// (stored as NULL). Written once at capture; a correction never changes it.
-	Language  string
+	Language string
+	// Title is the short, date-free name a reminder says for the unit, "" when
+	// it has none (stored as NULL; spec R12). A reminder reads Title, falling
+	// back to Content. A re-classifying correction rewrites it.
+	Title     string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
