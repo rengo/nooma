@@ -73,8 +73,8 @@ func TestReplayFailsOnPromptHashMismatch(t *testing.T) {
 	c := recorded(t, baseCase())
 	c.Message = "recordame llamar a Ana a las 5" // the prompt moved on after the recording
 	err := Replay(c, readsAsRequest)
-	if err == nil || !strings.Contains(err.Error(), "prompt hash") || !strings.Contains(err.Error(), "record") {
-		t.Fatalf("Replay = %v, want a prompt hash mismatch that says to record again", err)
+	if err == nil || !strings.Contains(err.Error(), "prompt hash") || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("Replay = %v, want a prompt hash mismatch that says to record again with --force", err)
 	}
 }
 
@@ -206,5 +206,21 @@ func TestValidateCaseRejectsWhatReplayCouldNotMean(t *testing.T) {
 	}
 	if err := ValidateCase(baseCase()); err != nil {
 		t.Fatalf("ValidateCase of a good case = %v", err)
+	}
+}
+
+func TestReminderMissedCountsOnlyTheReminderFields(t *testing.T) {
+	for _, field := range ReminderFields {
+		if !ReminderMissed([]string{field}) {
+			t.Errorf("a miss on %s is a miss of the reminder reading", field)
+		}
+	}
+	for _, field := range []string{FieldTitle, FieldDayOnly, FieldTaskCheckinOutcome, FieldNudgeOutcome, FieldRelationOutcome} {
+		if ReminderMissed([]string{field}) {
+			t.Errorf("a miss on %s is not a miss of the reminder reading (ADR-0033's rate is the intent fields)", field)
+		}
+	}
+	if ReminderMissed(nil) || !ReminderMissed([]string{FieldTitle, "(response)"}) {
+		t.Error("no miss is no miss; an unreadable response is a miss")
 	}
 }

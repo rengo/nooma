@@ -42,6 +42,14 @@ var ReminderFields = []string{
 	FieldRemindRequest, FieldReminderIntent, FieldQuestionAnswer, FieldChoiceNumber, FieldReminderTarget,
 }
 
+// ReminderMissed says whether misses (from Check) include a reminder field, or
+// an answer that could not be read at all. ADR-0033's reversal criterion, the
+// reading rate, counts only these: a bad title or day-only flag does not make
+// a phrasing misread.
+func ReminderMissed(misses []string) bool {
+	return slices.ContainsFunc(misses, func(m string) bool { return m == "(response)" || slices.Contains(ReminderFields, m) })
+}
+
 // Prompt is the prompt production sends for c, at the instant c records.
 func Prompt(c llm.Case) (string, error) {
 	now, err := time.Parse(time.RFC3339, c.Now)
@@ -86,7 +94,7 @@ func Replay(c llm.Case, response string) error {
 	}
 	if got := Hash(prompt); got != c.PromptSHA256 {
 		return fmt.Errorf("case %s: prompt hash mismatch: it was recorded against another prompt; "+
-			"set record to true and record it again (nooma doctor --record)", c.ID)
+			"set record to true and run nooma doctor --record --force on it", c.ID)
 	}
 	now, _ := time.Parse(time.RFC3339, c.Now)
 	misses := []string{"(response)"}
