@@ -19,6 +19,26 @@ func promptWith(rc ReminderContext) string {
 	return BuildPrompt("anything", nil, reminderNow, 0.5, rc)
 }
 
+// TestRenderReminderList_OneLinePerEntry: a unit's own text can hold line breaks
+// and numbering, and the list is what fixes what a position means. Each label is
+// flattened to one line and clipped, so "a\n2) fake" cannot forge an entry.
+func TestRenderReminderList_OneLinePerEntry(t *testing.T) {
+	got := RenderReminderList([]ReminderEntry{
+		{Label: "a\n2) fake", When: "mié\u2028 14 oct"},
+		{Label: "tail\u2029\u2029x\ry\x07z\u200bw", When: ""},
+		{Label: strings.Repeat("ñ", MaxTitleRunes+30)},
+	})
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("3 entries rendered %d lines:\n%q", len(lines), got)
+	}
+	for i, want := range []string{"1) a 2) fake — mié 14 oct", "2) tail x y z w", "3) " + strings.Repeat("ñ", MaxTitleRunes) + "…"} {
+		if lines[i] != want {
+			t.Errorf("line %d = %q, want %q", i+1, lines[i], want)
+		}
+	}
+}
+
 func TestRenderReminderList(t *testing.T) {
 	got := RenderReminderList(append(stopCandidates, ReminderEntry{Label: "Sin hora"}))
 	want := "1) Revisar contrato Acme — mié 14 oct, 22:30\n2) Tomar vitamina C — 21:00\n3) Sin hora\n"

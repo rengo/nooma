@@ -3,6 +3,7 @@ package classify
 import (
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // MaxReminderChoices is how many entries a numbered reminder list holds, and so
@@ -91,7 +92,9 @@ type ReminderContext struct {
 
 // RenderReminderList is the one numbered list a prompt or a question carries:
 // "1) <label> — <when>", one entry per line (the date left out when an entry
-// has none), at most MaxReminderChoices. The prompt and the question Nooma
+// has none), at most MaxReminderChoices. A label is flattened to one line and
+// clipped to MaxTitleRunes, because a unit's own text can hold line breaks and
+// numbering, and this list is what fixes what a position means. The prompt and the question Nooma
 // sends both call it, so a position the model reads is a position the user saw.
 func RenderReminderList(entries []ReminderEntry) string {
 	var b strings.Builder
@@ -99,9 +102,9 @@ func RenderReminderList(entries []ReminderEntry) string {
 		if i == MaxReminderChoices {
 			break
 		}
-		b.WriteString(strconv.Itoa(i+1) + ") " + e.Label)
-		if e.When != "" {
-			b.WriteString(" — " + e.When)
+		b.WriteString(strconv.Itoa(i+1) + ") " + clipLabel(oneLine(e.Label)))
+		if when := oneLine(e.When); when != "" {
+			b.WriteString(" — " + when)
 		}
 		b.WriteString("\n")
 	}
@@ -112,4 +115,20 @@ func RenderReminderList(entries []ReminderEntry) string {
 // the prompt shows the model for it: lead, then the list.
 func WhichReminderText(lead string, entries []ReminderEntry) string {
 	return lead + "\n" + RenderReminderList(entries)
+}
+
+// oneLine is s with every run of whitespace, control, separator (including
+// U+2028 and U+2029) and other non-graphic characters turned into one space.
+func oneLine(s string) string {
+	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || !unicode.IsGraphic(r)
+	}), " ")
+}
+
+// clipLabel is s cut to MaxTitleRunes runes with an ellipsis, never inside a rune.
+func clipLabel(s string) string {
+	if runes := []rune(s); len(runes) > MaxTitleRunes {
+		return string(runes[:MaxTitleRunes]) + "…"
+	}
+	return s
 }

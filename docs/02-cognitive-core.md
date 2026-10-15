@@ -522,7 +522,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      nothing. **One list per prompt**: an open `which_reminder` question carries its own, and the
      stop candidates are then left out, so a position means one thing. Both lists come from
      `classify.RenderReminderList`, the renderer of the question Nooma sends, so a position the
-     model reads is a position the user saw. The relation rule above is unchanged.
+     model reads is a position the user saw. Each label is flattened to one line and
+     clipped, so a unit's own line breaks and numbering cannot forge a position. The relation rule above is unchanged.
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
      brings down the whole classification. For `relation_outcome` this is load-bearing rather
      than merely tidy: an answer worded outside the vocabulary degrades to null and deletes
