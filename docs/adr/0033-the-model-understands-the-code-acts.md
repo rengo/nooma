@@ -1,6 +1,7 @@
 # ADR-0033 — Reminders: the model understands, the code acts
 
-- **Status**: Accepted (by the client, 2026-10-14, with option A of point 3)
+- **Status**: Accepted (by the client, 2026-10-14, choosing that an explicit stop takes effect at
+  once, with a 10-minute undo, rather than asking for confirmation first; point 3)
 - **Date**: 2026-10-14
 - **Supersedes**: [ADR-0031](0031-reminders-the-user-asks-for.md) **in part**: only how a
   request, a stop or an answer is *detected*. That is its point 1's "closed list per language",
@@ -38,7 +39,7 @@ MAPING de textos… el LLM debería evaluar sobre la marcha").
 
 ## Decision
 
-1. **The model understands.** The existing classify call (no second call) returns three new
+1. **The model understands.** The existing classify call (no second call) returns four new
    optional fields, each degrading independently (I14):
    - `remind_request` (bool): the user asks Nooma to remind them of what this message stores.
      Its time, recurrence and day-only-ness are the fields that already exist: `event_at` or

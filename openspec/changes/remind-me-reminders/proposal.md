@@ -35,7 +35,7 @@ PM decisions, binding:
 - **P4:** quoted or reported speech is out of scope; under ADR-0033 it is measured, not pinned.
 - **P5:** a stop is durable state on the unit, never inferred from the request flag.
 - **P6:** only a new explicit ask brings a stopped reminder back, as a new unit, except for the
-  10-minute undo ADR-0033 proposes.
+  10-minute undo ADR-0033 decides.
 - **P7:** a stop binds without asking only on one unambiguous candidate; a tie asks, with a
   list capped at 5.
 
@@ -63,14 +63,14 @@ the lead by chat; quoted speech (P4); units captured before this change.
 
 | Field | Value |
 |---|---|
-| Changed lines (impl + docs) | ~2,400 across 9 implementation links (~2,500 test lines apart) |
+| Changed lines (impl + docs) | ~2,200 across 9 remaining implementation links: 1a, 1a′ and 2-8 (link 1 merged; old link 9 deferred) (~2,300 test lines apart) |
 | 400-line budget risk | High as one PR |
 | Chained PRs | Yes: stacked to main, each link under 400 |
 | Decision needed before apply | None. ADR-0031 is accepted |
 
-The plan is a chain of four PRs, each under 400 lines: (1) ADR-0031, this proposal, `spec.md`;
-(2) `design.md` and `tasks.md`, one-shot links 1-4; (3) `design-repeating.md`, links 5-9; (4)
-`tasks-repeating.md`.
+The plan is a chain of three PRs, each under 400 lines: #350 (ADR-0033, this proposal,
+`spec.md`); #356 (`design.md` and `tasks.md`, links 1a, 1a′ and 2-4); #357
+(`design-repeating.md` and `tasks-repeating.md`, links 5-8).
 
 **Link 2 delivers the first usable thing**: "recordame X a las H", "…mañana", and "recordame" on
 an event.
