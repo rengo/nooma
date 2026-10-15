@@ -268,6 +268,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w: %w", ErrModelOutput, err)
 	}
 
+	// Every row written from here on says what Decode lost (doc 02 §5.1, I12).
+	r = r.withDegradedLog(c)
+
 	// **Every outcome below is answered in the same language, so it is
 	// stamped once here rather than at each of the eleven returns.** A
 	// deferred write to the named result is the only shape that survives
@@ -767,19 +770,12 @@ func (r captureRunner) recordClassifyDecision(ctx context.Context, c classify.Cl
 	if c.Language != nil {
 		language = string(*c.Language)
 	}
-	//
-	// **What the decoder lost is written here too** (doc 02 §5.1, I12): a
-	// degraded field leaves the unit, so without this row nothing would say the
-	// model had been asked for a title and gave an unusable one.
-	degradations := degradationEntries(c)
-	rationale = withDegradations(rationale, degradations)
 	contextJSON, err := json.Marshal(struct {
-		Kind         string             `json:"kind"`
-		UnitID       string             `json:"unit_id"`
-		Source       string             `json:"source"`
-		Language     string             `json:"language"`
-		Degradations []degradationEntry `json:"degradations,omitempty"`
-	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source, Language: language, Degradations: degradations})
+		Kind     string `json:"kind"`
+		UnitID   string `json:"unit_id"`
+		Source   string `json:"source"`
+		Language string `json:"language"`
+	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source, Language: language})
 	if err != nil {
 		return fmt.Errorf("capture: encode decision context: %w", err)
 	}
@@ -810,14 +806,11 @@ func (r captureRunner) recordClassifyDecision(ctx context.Context, c classify.Cl
 // gives.
 func (r captureRunner) recordUnitCreatedDecision(ctx context.Context, c classify.Classification, u unit.Unit, now time.Time) error {
 	rationale := fmt.Sprintf("classified as %q with an ambiguous person reference, and persisted a %s unit rather than holding it", string(*c.Kind), u.Status)
-	degradations := degradationEntries(c)
-	rationale = withDegradations(rationale, degradations)
 	contextJSON, err := json.Marshal(struct {
-		Kind         string             `json:"kind"`
-		UnitID       string             `json:"unit_id"`
-		Source       string             `json:"source"`
-		Degradations []degradationEntry `json:"degradations,omitempty"`
-	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source, Degradations: degradations})
+		Kind   string `json:"kind"`
+		UnitID string `json:"unit_id"`
+		Source string `json:"source"`
+	}{Kind: string(*c.Kind), UnitID: u.ID, Source: u.Source})
 	if err != nil {
 		return fmt.Errorf("capture: encode unit-created decision context: %w", err)
 	}

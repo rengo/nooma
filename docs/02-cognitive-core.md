@@ -834,8 +834,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      inference stays reversible. The row is written first — if it fails, the edit does not happen.
      - **The pre-image's shape**, settled by the PR that implements it, since ADR-0016 leaves its
        exact keys open: one `correction.applied` row whose `context` carries
-       `{unit_id, fields, previous, next, referent}`, `previous`/`next` objects keyed by column
-       name (never by position, so a reader never consults a tag to know what a value means) —
+       `{unit_id, fields, previous, next, referent}` (plus `degradations` when the reading lost a
+       field, §5.1), `previous`/`next` objects keyed by column name (never by position, so a
+       reader never consults a tag to know what a value means) —
 
        ```json
        {
@@ -921,12 +922,17 @@ unit from the fields that survived. The record exists because §11 requires the 
 an automatic decision to be written down: a decoder that discarded *why* a field vanished would
 force the rest of the pipeline to guess.
 
-**The record is the decision row's.** The brain writes every degradation, field and reason, as
-a `degradations` list in the context of the row that accounts for the classification
-(`capture.classify`, or `capture.unit.created` for an ambiguous person reference; for a
-correction, which decodes through the same function, `correction.applied` or
-`correction.ambiguous`), and names them in its rationale. A capture with nothing lost writes neither the key nor the sentence, so a
-row without a `degradations` key means a clean reading.
+**The record is on every row the flow writes after the decode.** When a reading lost a field,
+the brain stamps each `decision_log` row that capture or correction writes afterwards with a
+`degradations` list of `{field, reason}` in its context and names the loss in its rationale. That
+is every action from `capture.classify` and `capture.unit.created` through
+`capture.classify.unclassifiable` (where the missing `type` is the whole explanation),
+`capture.out_of_scope`, `capture.chitchat.answered`, `capture.chat.failed`, the
+`capture.armed.*` and `capture.arm.refused` rows and the check-in, relation and embedding rows, to
+`correction.applied`, `correction.ambiguous` and `correction.reminder.*`. Two things write none:
+a recall, which writes no row, and `capture.classify.unparseable`, where nothing was read and so
+nothing degraded. A row without a `degradations` key therefore means a clean reading, for the
+actions this paragraph names.
 
 **Truncation is a per-field event, not a per-response one.** A model whose output is cut off
 mid-sentence has still emitted complete fields before the cut. Those fields are read and kept;

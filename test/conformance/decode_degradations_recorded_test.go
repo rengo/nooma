@@ -4,6 +4,7 @@ package conformance
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,24 @@ type degradationRow struct {
 // test's own, non-negotiable 5) and returns every decision_log row written.
 func captureDecisions(t *testing.T, message, response string) []ports.Decision {
 	t.Helper()
+	rows, err := captureAnyDecisions(t, message, response)
+	if err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+	return rows
+}
+
+// captureAnyDecisions is captureDecisions for a capture that may fail: a
+// failed capture writes decision rows too (an unclassifiable one among them).
+func captureAnyDecisions(t *testing.T, message, response string) ([]ports.Decision, error) {
+	t.Helper()
+	return captureWithChat(t, message, response, "")
+}
+
+// captureWithChat scripts the chat task from a recorded case when chatCase is
+// named; otherwise the chat task shares the classifier's provider.
+func captureWithChat(t *testing.T, message, response, chatCase string) ([]ports.Decision, error) {
+	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)
 	decisions, embeddings := memrepo.NewDecisionLog(), memrepo.NewEmbeddings()
@@ -34,17 +53,19 @@ func captureDecisions(t *testing.T, message, response string) []ports.Decision {
 		t.Fatal(err)
 	}
 	llm := fakeprovider.New(t, i28Case(t, "degraded", message, response), "degraded")
-	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(), embeddings, memrepo.NewLexical(),
-		memrepo.NewRelations(), decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
-	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: message, Channel: "chat"}); err != nil {
-		t.Fatalf("Capture: %v", err)
+	chat := llm
+	if chatCase != "" {
+		chat = fakeprovider.New(t, testdataLLMCasesDir(t), chatCase)
 	}
+	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, memrepo.NewUnits(), embeddings, memrepo.NewLexical(),
+		memrepo.NewRelations(), decisions, llm, llm, chat, fakeprovider.NewEmbeddingFake(embedFakeModel),
+		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
+	_, capErr := svc.Capture(ctx, brain.CaptureInput{Text: message, Channel: "chat"})
 	rows, err := decisions.Since(ctx, time.Time{}, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return rows
+	return rows, capErr
 }
 
 // decisionByAction returns the single row written under action.
@@ -118,6 +139,9 @@ func TestI12_AmbiguousPersonCaptureRecordsTheDegradation(t *testing.T) {
 	got, present := degradationsOf(t, row)
 	if !present || len(got) != 1 || got[0] != (degradationRow{Field: "title", Reason: "bad_format"}) {
 		t.Errorf("degradations = %+v (present %v), want exactly [title: bad_format]", got, present)
+	}
+	if !strings.Contains(row.Rationale, "title") || !strings.Contains(row.Rationale, "bad_format") {
+		t.Errorf("rationale %q does not name the degradation", row.Rationale)
 	}
 }
 
@@ -202,4 +226,127 @@ func TestI12_AskedCorrectionRecordsTheDegradation(t *testing.T) {
 	if !strings.Contains(row.Rationale, "title") || !strings.Contains(row.Rationale, "bad_format") {
 		t.Errorf("rationale %q does not name the degradation", row.Rationale)
 	}
+}
+
+// everyRowCarries fails for each row that does not hold exactly the title
+// degradation: "every degradation" is every row the flow writes after Decode,
+// not the rows somebody remembered.
+func everyRowCarries(t *testing.T, rows []ports.Decision, want ...degradationRow) {
+	t.Helper()
+	if len(want) == 0 {
+		want = []degradationRow{{Field: "title", Reason: "bad_format"}}
+	}
+	for _, r := range rows {
+		got, present := degradationsOf(t, r)
+		if !present || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: degradations = %+v (present %v), want exactly %+v", r.Action, got, present, want)
+		}
+		if !strings.Contains(r.Rationale, want[0].Reason) {
+			t.Errorf("%s: rationale %q does not name the degradation", r.Action, r.Rationale)
+		}
+	}
+}
+
+// everyRowClean is the control: no row carries the key or the sentence.
+func everyRowClean(t *testing.T, rows []ports.Decision) {
+	t.Helper()
+	for _, r := range rows {
+		if got, present := degradationsOf(t, r); present {
+			t.Errorf("%s: degradations = %+v, want the key absent on a clean reading", r.Action, got)
+		}
+		if strings.Contains(r.Rationale, "degrad") {
+			t.Errorf("%s: rationale %q mentions a degradation on a clean reading", r.Action, r.Rationale)
+		}
+	}
+}
+
+// TestI12_EveryRowAfterDecodeCarriesTheDegradations pins each action the
+// capture flow writes after Decode, one scenario per action family.
+func TestI12_EveryRowAfterDecodeCarriesTheDegradations(t *testing.T) {
+	const bad = `"title":"Cosa 2026-10-16"`
+	cases := []struct {
+		name     string
+		response string
+		want     []ports.DecisionAction
+		lost     []degradationRow
+	}{
+		{"unclassifiable", `{"normalized_content":"algo","weight":0.5,"decay_rate":0.03,` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCaptureUnclassifiable},
+			// The missing type is the whole explanation of this row.
+			[]degradationRow{{Field: "type", Reason: "absent"}, {Field: "title", Reason: "bad_format"}}},
+		{"out of scope", `{"type":"out_of_scope","normalized_content":"el clima","weight":0.1,"decay_rate":0.5,` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCaptureOutOfScope}, nil},
+		{"timer armed", `{"type":"timer","normalized_content":"Sacar el pan","weight":0.1,"decay_rate":0.5,"due_at":"2026-10-14T08:40:00Z",` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCaptureArmedTimer}, nil},
+		{"timer refused", `{"type":"timer","normalized_content":"Sacar el pan","weight":0.1,"decay_rate":0.5,` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCaptureArmRefused}, nil},
+		{"dated event", `{"type":"event","normalized_content":"Dentista el 2026-10-16 a las 10:00","weight":0.7,"decay_rate":0.05,"event_at":"2026-10-16T10:00:00Z",` + bad + `}`,
+			[]ports.DecisionAction{ports.ActionCaptureClassify}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, _ := captureAnyDecisions(t, "algo", tc.response)
+			for _, want := range tc.want {
+				decisionByAction(t, rows, want)
+			}
+			everyRowCarries(t, rows, tc.lost...)
+		})
+	}
+}
+
+// TestI12_ChitchatRowsCarryTheDegradations: the chat task answers or fails, and
+// either row is one the flow wrote after Decode.
+func TestI12_ChitchatRowsCarryTheDegradations(t *testing.T) {
+	const response = `{"type":"chitchat","normalized_content":"hola","weight":0.1,"decay_rate":0.5,"title":"Hola 2026-10-16"}`
+	for chatCase, want := range map[string]ports.DecisionAction{
+		"chat-hello-reply":     ports.ActionCaptureConversed,
+		"chat-provider-outage": ports.ActionCaptureChatFailed,
+	} {
+		rows, _ := captureWithChat(t, "hola", response, chatCase)
+		decisionByAction(t, rows, want)
+		everyRowCarries(t, rows)
+	}
+}
+
+// TestI12_CleanAmbiguousPersonCaptureRecordsNone and its siblings are the
+// controls for the rows above: a clean reading leaves every row unchanged.
+func TestI12_CleanAmbiguousPersonCaptureRecordsNone(t *testing.T) {
+	rows := captureDecisions(t, "llamar a Ana", `{"type":"task","normalized_content":"Llamar a Ana","weight":0.5,"decay_rate":0.03,"title":"Llamar a Ana","person_ref_status":"ambiguous","language":"es"}`)
+	decisionByAction(t, rows, ports.ActionCaptureUnitCreated)
+	everyRowClean(t, rows)
+}
+
+func TestI12_CleanAskedCorrectionRecordsNone(t *testing.T) {
+	rows := correctionDecisions(t, `{"type":"chitchat","normalized_content":"hola","weight":0.1,"decay_rate":0.03,"title":"Hola","language":"es"}`)
+	decisionByAction(t, rows, ports.ActionCorrectionAmbiguous)
+	everyRowClean(t, rows)
+}
+
+// TestI12_UnclassifiableCaptureNamesTheMissingType: with nothing else lost, the
+// row says the type was absent, and says nothing more.
+func TestI12_UnclassifiableCaptureNamesTheMissingType(t *testing.T) {
+	rows, _ := captureAnyDecisions(t, "algo", `{"normalized_content":"algo","weight":0.5,"decay_rate":0.03}`)
+	decisionByAction(t, rows, ports.ActionCaptureUnclassifiable)
+	everyRowCarries(t, rows, degradationRow{Field: "type", Reason: "absent"})
+}
+
+// TestI12_CorrectionReminderRowsCarryTheDegradations: the row a correction
+// writes when it moves an armed reminder is change-shaped for /ui/activity, and
+// carries the list beside previous and next.
+func TestI12_CorrectionReminderRowsCarryTheDegradations(t *testing.T) {
+	now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+	original := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	const response = `{"type":"event","normalized_content":"Dentista hoy a las 10:00","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-09T10:00:00Z","title":"Dentista 2026-10-09","language":"es"}`
+	u := unit.Unit{ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "Dentista el 2026-10-16 a las 10:00",
+		EventAt: &original, Source: "cli", CreatedAt: now, UpdatedAt: now}
+	f := newI29(t, now, u, response)
+	f.arm(t, "t1", "dentist", time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC), u.Content, nil, nil)
+
+	f.capture(t, "dentist")
+
+	rows := f.rows(t, ports.ActionCorrectionReminderMoved)
+	if len(rows) != 1 {
+		t.Fatalf("%d correction.reminder.moved rows, want 1", len(rows))
+	}
+	everyRowCarries(t, rows)
 }

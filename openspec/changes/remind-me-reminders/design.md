@@ -53,8 +53,9 @@
 - **Brain:** `asked := c.RemindRequest != nil && *c.RemindRequest`. A degraded field reads as
   none and takes the plain capture path. **Recorded:** `Decode` puts each degradation
   on `Classification.Degradations`, and the brain writes them (field and reason) into the
-  `degradations` key of the `capture.classify` row's context, naming them in its rationale; a
-  clean capture carries neither. An invalid title or a bad `recurrence_rule` therefore leaves
+  `degradations` key of the context of every row the flow writes after the decode
+  (`capture.classify`, the `capture.armed.*` rows, a correction's rows, doc 02 §5.1), naming
+  them in each rationale; a clean reading carries neither. An invalid title or a bad `recurrence_rule` therefore leaves
   its trace in `decision_log`, as doc 02 §5.1 and I12 say. (This closed a gap that predated
   this change: the brain had never read the field.) A failed call saves nothing (I31).
 - **Missed request (Q4):** a stored unit with an instant, not asked, nothing armed, gets
