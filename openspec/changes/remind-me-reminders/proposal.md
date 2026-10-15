@@ -32,11 +32,20 @@ PM decisions, binding:
   §7 already promises, with no double fire and no burst. That is a change for them, and R10 says
   so.
 - **P3:** a bare "no" to "¿seguís o borramos?" deletes.
-- **P4:** quoted or reported speech is a known limit, pinned by a test.
+- **P4:** quoted or reported speech is out of scope; under ADR-0033 it is measured, not pinned.
 - **P5:** a stop is durable state on the unit, never inferred from the request flag.
-- **P6:** only a new explicit ask brings a stopped reminder back, as a new unit.
+- **P6:** only a new explicit ask brings a stopped reminder back, as a new unit, except for the
+  10-minute undo ADR-0033 proposes.
 - **P7:** a stop binds without asking only on one unambiguous candidate; a tie asks, with a
   list capped at 5.
+
+## Detection changed (client, 2026-10-14)
+
+"La IA entiende y el código actúa." ADR-0033 (Accepted, 2026-10-14, option A) replaces the phrase lists with fields
+the classify call returns. The code still binds, confirms and degrades. Everything the user
+sees is unchanged, except the undo after a stop. The client also asked that a reminder say a
+short title ("Recordatorio: Reunión con Juan — mié 14 oct, 22:30") instead of the content with
+its date twice (spec R12), and that every real-model recording be made in one session.
 
 ## Out of scope
 
