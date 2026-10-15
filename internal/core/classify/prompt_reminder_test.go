@@ -210,6 +210,11 @@ func TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection(t *testing.T) {
 		}
 	}
 	untitled := BuildCorrectionPrompt("no, el viernes", unit.Unit{Content: "x"}, nil, reminderNow, 0.5, ReminderContext{})
+	// The title rule itself lists day words as what a title must not hold, so only
+	// the section about the unit being corrected is searched.
+	if strings.Contains(untitled[strings.Index(untitled, "Correcting this unit"):], "jueves") {
+		t.Errorf("the rule for a stale title still carries a day word as its example:\n%s", untitled)
+	}
 	if !strings.Contains(untitled, "Current title (quoted): none") {
 		t.Errorf("a unit with no title is not shown as none:\n%s", untitled)
 	}

@@ -358,8 +358,8 @@ func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
 	b.WriteString("  An instant shown as a bare date has no time: when only its day changes, answer\n")
 	b.WriteString("  the new bare date, YYYY-MM-DD, and add no time.\n")
 	b.WriteString("  If the message changes the day or the time, also answer a fresh title, with no\n")
-	b.WriteString("  date, day or time in it as always: a title that still names the old day\n")
-	b.WriteString("  (\"Reunión del jueves\") is stale once the day has moved.\n\n")
+	b.WriteString("  date, day or time in it as always: a title that still names the old day or\n")
+	b.WriteString("  time is stale once it has moved.\n\n")
 }
 
 // writeCalendar renders the next CalendarDays days, today first and marked,
