@@ -33,7 +33,7 @@ func doctorChecksFor(withReading bool) []doctorCheck {
 // checkReading sends the reminder phrasing set to the vault's
 // capture_processing provider and reports how it reads (ADR-0033 point 5).
 // It fails only on what must never happen: a stop read from a message that
-// is not one, or a provider that cannot be reached. A rate below the
+// is not one, a provider that cannot be reached, or no provider to ask. A rate below the
 // threshold is reported, and judged by the person who changed the prompt.
 func checkReading(_ string, cfg *config.Config) error {
 	cases, err := llm.ReminderCases()
@@ -42,7 +42,9 @@ func checkReading(_ string, cfg *config.Config) error {
 	}
 	provider, bound := qualityGateProviders(cfg, os.LookupEnv)["capture_processing"]
 	if !bound {
-		return readingDetail("(capture_processing is not bound to a provider: nothing was read)")
+		// A run that measured nothing must not read as a pass: the hard line
+		// would be "0 of 0", and a green doctor would say so.
+		return errors.New("capture_processing is not bound to a provider that can answer, so nothing was read: configure one first (`nooma init`)")
 	}
 	report := runReading(context.Background(), provider, cases, time.Now(), recordTimeout)
 	if err := readingError(report); err != nil {
@@ -81,7 +83,8 @@ type readingReport struct {
 	falsePositives []string // ids of those read as a stop
 
 	titleN, titleOK     int
-	dayOnlyN, dayOnlyOK int
+	dayOnlyN, dayOnlyOK int // phrasings expecting a bare date
+	timedN, timedOK     int // phrasings expecting a named time
 	outcomes            []outcomeRate
 
 	unreachable string // set instead of everything above when the provider stopped answering
@@ -136,11 +139,13 @@ func (r *readingReport) add(c llm.Case, misses []string, readAsStop bool) {
 		}
 	}
 
+	// The rate is ADR-0033's: only the reminder fields decide whether a
+	// phrasing was read. A wrong title or day-only flag has its own line.
 	r.n++
-	if len(misses) == 0 {
-		r.ok++
-	} else {
+	if reading.ReminderMissed(misses) {
 		r.missed = append(r.missed, fmt.Sprintf("%s (%s)", c.ID, strings.Join(misses, ", ")))
+	} else {
+		r.ok++
 	}
 	if e.ReminderIntent != string(classify.ReminderIntentStop) {
 		r.negatives++
@@ -151,8 +156,11 @@ func (r *readingReport) add(c llm.Case, misses []string, readAsStop bool) {
 	if e.Title != nil {
 		count(&r.titleN, &r.titleOK, reading.FieldTitle)
 	}
-	if e.DayOnly != nil {
+	if e.DayOnly != nil && *e.DayOnly {
 		count(&r.dayOnlyN, &r.dayOnlyOK, reading.FieldDayOnly)
+	}
+	if e.DayOnly != nil && !*e.DayOnly {
+		count(&r.timedN, &r.timedOK, reading.FieldDayOnly)
 	}
 	for i, expected := range []string{e.TaskCheckinOutcome, e.NudgeOutcome, e.RelationOutcome} {
 		if expected != "" {
@@ -185,7 +193,10 @@ func (r readingReport) String() string {
 		fmt.Fprintf(&b, "\ntitles: %d of %d date-free and short", r.titleOK, r.titleN)
 	}
 	if r.dayOnlyN > 0 {
-		fmt.Fprintf(&b, "\nday only: %d of %d bare dates", r.dayOnlyOK, r.dayOnlyN)
+		fmt.Fprintf(&b, "\nday only: %d of %d bare dates read as bare dates", r.dayOnlyOK, r.dayOnlyN)
+	}
+	if r.timedN > 0 {
+		fmt.Fprintf(&b, "\nnamed times: %d of %d kept their time", r.timedOK, r.timedN)
 	}
 	for _, o := range r.outcomes {
 		if o.n > 0 {

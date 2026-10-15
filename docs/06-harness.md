@@ -368,12 +368,16 @@ touches `expect`. It skips a case that already has a response unless `--force`. 
 so a prompt change names the cases to record again; a case still awaiting its recording is
 skipped and counted.
 
-`nooma doctor --reading` (opt-in, about 50 live calls) sends the same set to the vault's
-provider and reports "reminder reading: k of n" (ADR-0033's reversal threshold is 90%), the
-`task_checkin_outcome`, `nudge_outcome` and `relation_outcome` rates, "day only: k of n bare
-dates" and "titles: k of n date-free and short", plus one **hard** line, "stop false positives:
-0 of N negatives", where a negative is every phrasing that does not expect a stop. It fails
-doctor when that line is not 0, or when the provider cannot be reached. A prompt change is
+`nooma doctor --reading` (opt-in, about 50 live calls; a plain `doctor` makes none) sends the
+same set to the vault's provider and reports "reminder reading: k of n", ADR-0033's reversal
+criterion (90%), which counts only the reminder fields (`remind_request`, `reminder_intent`,
+`question_answer`, `choice_number`, `reminder_target`). A wrong title, day-only flag or
+check-in outcome does not make a phrasing misread; each has its own line: "titles: k of n
+date-free and short", "day only: k of n bare dates read as bare dates", "named times: k of n
+kept their time", and the `task_checkin_outcome`, `nudge_outcome` and `relation_outcome` rates.
+One **hard** line, "stop false positives: 0 of N negatives", counts every phrasing that does not
+expect a stop. It fails doctor when it is not 0, when the provider cannot be reached, and when no
+provider is bound, so a run that measured nothing is never a pass. A prompt change is
 judged by these numbers.
 
 ---
