@@ -54,9 +54,10 @@ var doctorChecks = []doctorCheck{
 
 // doctorArgs is what `nooma doctor` was asked.
 type doctorArgs struct {
-	record string // the directory of phrasings to record, "" for a plain run
-	force  bool
-	vault  string // "" for the default vault
+	record  string // the directory of phrasings to record, "" for a plain run
+	force   bool
+	reading bool   // also read the phrasing set (opt-in, about 50 live calls)
+	vault   string // "" for the default vault
 }
 
 // parseDoctorArgs reads the flags wherever they are written. Go's flag package
@@ -67,10 +68,11 @@ func parseDoctorArgs(args []string, errOut io.Writer) (doctorArgs, error) {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	fs.Usage = func() {
-		_, _ = fmt.Fprint(errOut, "usage: nooma doctor [vault]\n       nooma doctor --record <dir> [--force] [vault]\n")
+		_, _ = fmt.Fprint(errOut, "usage: nooma doctor [vault]\n       nooma doctor --reading [vault]\n       nooma doctor --record <dir> [--force] [vault]\n")
 	}
 	record := fs.String("record", "", "record the reminder phrasings of `dir` that await it, against the vault's provider")
 	force := fs.Bool("force", false, "with --record: record again a phrasing that already has a response")
+	readingFlag := fs.Bool("reading", false, "also read the reminder phrasing set against the vault's provider (about 50 live calls)")
 
 	var positional []string
 	for rest := args; ; {
@@ -89,7 +91,10 @@ func parseDoctorArgs(args []string, errOut io.Writer) (doctorArgs, error) {
 	if *force && *record == "" {
 		return doctorArgs{}, errors.New("--force only means something with --record")
 	}
-	opts := doctorArgs{record: *record, force: *force}
+	if *record != "" && *readingFlag {
+		return doctorArgs{}, errors.New("--record and --reading are separate runs")
+	}
+	opts := doctorArgs{record: *record, force: *force, reading: *readingFlag}
 	if len(positional) == 1 {
 		opts.vault = positional[0]
 	}
@@ -123,7 +128,8 @@ func runDoctor(args []string, out, errOut io.Writer) error {
 	cfg, cfgErr := loadVaultConfig(vault)
 
 	failed := 0
-	for _, check := range doctorChecks {
+	checks := doctorChecksFor(opts.reading)
+	for _, check := range checks {
 		// A configuration that will not load fails its own check and makes the
 		// rest unrunnable; one that loads still has to be validated, which is the
 		// check's actual job. An earlier version of this switch returned cfgErr
@@ -158,7 +164,7 @@ func runDoctor(args []string, out, errOut io.Writer) error {
 	}
 
 	if failed > 0 {
-		return fmt.Errorf("%d of %d checks failed", failed, len(doctorChecks))
+		return fmt.Errorf("%d of %d checks failed", failed, len(checks))
 	}
 	_, err = fmt.Fprintf(out, "\n%s looks healthy\n", vault)
 	return err

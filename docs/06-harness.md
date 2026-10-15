@@ -368,6 +368,14 @@ touches `expect`. It skips a case that already has a response unless `--force`. 
 so a prompt change names the cases to record again; a case still awaiting its recording is
 skipped and counted.
 
+`nooma doctor --reading` (opt-in, about 50 live calls) sends the same set to the vault's
+provider and reports "reminder reading: k of n" (ADR-0033's reversal threshold is 90%), the
+`task_checkin_outcome`, `nudge_outcome` and `relation_outcome` rates, "day only: k of n bare
+dates" and "titles: k of n date-free and short", plus one **hard** line, "stop false positives:
+0 of N negatives", where a negative is every phrasing that does not expect a stop. It fails
+doctor when that line is not 0, or when the provider cannot be reached. A prompt change is
+judged by these numbers.
+
 ---
 
 ## 6. CI gates
