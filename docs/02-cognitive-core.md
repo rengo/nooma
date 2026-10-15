@@ -902,7 +902,12 @@ force the rest of the pipeline to guess.
 mid-sentence has still emitted complete fields before the cut. Those fields are read and kept;
 only what never arrived is missing. The rule is that a member is either read in full or treated
 as absent — a half-read value is never stored, because a plausible-looking fragment is worse
-than a recorded absence.
+than a recorded absence. **A number is complete only when something follows it.** A numeric
+member that runs to the last byte of a cut response may have lost digits (a `25` arriving as
+`2`), so it is not read, for any field and wherever the object starts (after a code fence or a
+line of prose too): a position bound to the wrong reminder is worse than none. A *required*
+number cut this way (`weight`, `decay_rate`) is recorded as truncated, not stored as the value
+it began with.
 
 The floor: a response from which **no** field can be read at all is not a classification with
 every field null. It is a failed classification, and it is reported as one. A payload with no
