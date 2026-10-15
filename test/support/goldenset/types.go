@@ -3,14 +3,20 @@
 // testdata/{recall,classify,llm}/format.md (spec R10.1-R10.4, design.md
 // §10, docs/06-harness.md §5).
 //
-// This package deliberately imports nothing beyond the standard library
-// (design §3), mirroring test/support/schema: M1's real implementation can
-// depend on it later without internal/core ever seeing test-only code.
+// This package deliberately imports nothing beyond the standard library and
+// testdata/llm, itself standard-library only (design §3), mirroring
+// test/support/schema: M1's real implementation can depend on it later
+// without internal/core ever seeing test-only code. testdata/llm is here for
+// one reason: the reminder phrasing set's Question, Entry and Expect types
+// are written once, in the package the quality gate embeds, not twice.
 package goldenset
 
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/rengo/nooma/testdata/llm"
 )
 
 // Validator is implemented by every golden-set example type so DecodeStrict
@@ -321,6 +327,35 @@ type LLMExample struct {
 
 	Response string `json:"response,omitempty"`
 	Error    string `json:"error,omitempty"`
+
+	// The reminder phrasing set's fields (design D1c, format.md). Record
+	// marks a case awaiting its recording session; Now and PromptSHA256 are
+	// written by `nooma doctor --record`, and Expect by hand, never by it.
+	Record         bool          `json:"record,omitempty"`
+	Now            string        `json:"now,omitempty"`
+	OpenQuestion   *llm.Question `json:"open_question,omitempty"`
+	CandidatesList []llm.Entry   `json:"candidates_list,omitempty"`
+	Expect         *llm.Expect   `json:"expect,omitempty"`
+	KnownMisread   string        `json:"known_misread,omitempty"`
+	PromptSHA256   string        `json:"prompt_sha256,omitempty"`
+}
+
+// Case is the part of e the quality gate and the reading need at runtime,
+// the same slice testdata/llm's own loader gives a case (never the response).
+func (e *LLMExample) Case() llm.Case {
+	var candidates []llm.Candidate
+	if len(e.Candidates) > 0 {
+		candidates = make([]llm.Candidate, len(e.Candidates))
+		for i, c := range e.Candidates {
+			candidates[i] = llm.Candidate{ID: c.ID, Content: c.Content}
+		}
+	}
+	return llm.Case{
+		ID: e.ID, Task: e.Task, Message: e.Message, Candidates: candidates,
+		Record: e.Record, Now: e.Now, OpenQuestion: e.OpenQuestion,
+		CandidatesList: e.CandidatesList, Expect: e.Expect,
+		KnownMisread: e.KnownMisread, PromptSHA256: e.PromptSHA256,
+	}
 }
 
 // LLMCandidate is one relation_evaluation recall candidate an LLMExample
@@ -335,24 +370,38 @@ type LLMCandidate struct {
 // Validate implements Validator: id/provider/model/task/message are
 // required, and exactly one of Response or Error must be set.
 func (e *LLMExample) Validate() error {
-	for _, f := range [...]struct{ name, value string }{
-		{"id", e.ID},
-		{"provider", e.Provider},
-		{"model", e.Model},
-		{"task", e.Task},
-		{"message", e.Message},
-	} {
+	required := []struct{ name, value string }{
+		{"id", e.ID}, {"task", e.Task}, {"message", e.Message},
+	}
+	if !e.Record {
+		// A case awaiting its recording has not been answered by anyone yet.
+		required = append(required, struct{ name, value string }{"provider", e.Provider},
+			struct{ name, value string }{"model", e.Model})
+	}
+	for _, f := range required {
 		if f.value == "" {
 			return fmt.Errorf("%s is required and must not be empty", f.name)
 		}
 	}
 	hasResponse := e.Response != ""
 	hasError := e.Error != ""
-	if !hasResponse && !hasError {
+	switch {
+	case e.Record && hasError:
+		return fmt.Errorf("record cannot be set beside error")
+	case e.Record:
+		// Awaiting recording, or a re-record request that keeps its old answer.
+	case !hasResponse && !hasError:
 		return fmt.Errorf("exactly one of response or error is required, both are empty")
-	}
-	if hasResponse && hasError {
+	case hasResponse && hasError:
 		return fmt.Errorf("exactly one of response or error is required, both are set")
+	}
+	if e.Now != "" {
+		if _, err := time.Parse(time.RFC3339, e.Now); err != nil {
+			return fmt.Errorf("now must be RFC 3339: %w", err)
+		}
+	}
+	if e.PromptSHA256 != "" && e.Now == "" {
+		return fmt.Errorf("now is required beside prompt_sha256: the hash is of the prompt built at that instant")
 	}
 	return nil
 }

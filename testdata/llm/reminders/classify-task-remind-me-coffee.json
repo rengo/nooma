@@ -1,0 +1,11 @@
+{
+  "id": "classify-task-remind-me-coffee",
+  "task": "classify",
+  "message": "recordame comprar café mañana a las 10",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "day_only": false,
+    "title": true
+  }
+}

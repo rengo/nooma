@@ -197,3 +197,68 @@ func TestRecallExample_ValidateVectorCrossField(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateAllowsAwaitingRecording pins the one shape a reminder phrasing
+// may have before its recording session: record true, no response, no
+// provider and no model (design D1c). Everything else about a case stays as
+// strict as before.
+func TestValidateAllowsAwaitingRecording(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{
+			name: "awaiting recording: no provider, model or response",
+			data: `{"id":"x","task":"classify","message":"m","record":true}`,
+		},
+		{
+			name: "a re-record request keeps its old response",
+			data: `{"id":"x","provider":"p","model":"m","task":"classify","message":"m","record":true,"response":"r"}`,
+		},
+		{
+			name:    "awaiting recording still needs a message",
+			data:    `{"id":"x","task":"classify","record":true}`,
+			wantErr: "message is required",
+		},
+		{
+			name:    "a recorded case still needs a provider",
+			data:    `{"id":"x","task":"classify","message":"m","response":"r"}`,
+			wantErr: "provider is required",
+		},
+		{
+			name:    "a recorded error is not a recording request",
+			data:    `{"id":"x","task":"classify","message":"m","record":true,"error":"timeout"}`,
+			wantErr: "record cannot be set beside error",
+		},
+		{
+			name:    "an unknown field is still rejected",
+			data:    `{"id":"x","task":"classify","message":"m","record":true,"recorded":true}`,
+			wantErr: "unknown field",
+		},
+		{
+			name:    "a prompt hash without the now it was built at is rejected",
+			data:    `{"id":"x","provider":"p","model":"m","task":"classify","message":"m","response":"r","prompt_sha256":"abc"}`,
+			wantErr: "now is required beside prompt_sha256",
+		},
+		{
+			name:    "a now that is not RFC 3339 is rejected",
+			data:    `{"id":"x","provider":"p","model":"m","task":"classify","message":"m","response":"r","now":"yesterday"}`,
+			wantErr: "now must be RFC 3339",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := DecodeStrict([]byte(tt.data), &LLMExample{})
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("DecodeStrict(%s) = %v, want nil", tt.data, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("DecodeStrict(%s) = %v, want an error containing %q", tt.data, err, tt.wantErr)
+			}
+		})
+	}
+}

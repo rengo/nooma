@@ -580,43 +580,56 @@ func TestLLMQualityFailureStringNamesTheFailureKind(t *testing.T) {
 // otherwise send a live provider a prompt built from DIFFERENT inputs than
 // the ones the golden-set tests exercise, and nothing would notice.
 func TestCasesMatchesTheSourceFiles(t *testing.T) {
-	dir := testdataLLMCasesDir(t)
-	allEntries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("reading %s: %v", dir, err)
-	}
-	// .gitkeep (format.md's own convention for an otherwise-empty corpus
-	// directory) is not a case file — filtered out rather than embedded.
-	var entries []os.DirEntry
-	for _, entry := range allEntries {
-		if strings.HasSuffix(entry.Name(), ".json") {
-			entries = append(entries, entry)
-		}
-	}
+	// Both embedded sets: the quality gate's cases/ and the reminder
+	// phrasing set (design D1c), which Cases() deliberately leaves out so a
+	// plain doctor run makes no reading calls.
+	for _, set := range []struct {
+		dir  string
+		load func() ([]llm.Case, error)
+	}{
+		{"cases", llm.Cases},
+		{"reminders", llm.ReminderCases},
+	} {
+		t.Run(set.dir, func(t *testing.T) {
+			dir := testdataLLMDir(t, set.dir)
+			allEntries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatalf("reading %s: %v", dir, err)
+			}
+			// .gitkeep (format.md's own convention for an otherwise-empty corpus
+			// directory) is not a case file — filtered out rather than embedded.
+			var entries []os.DirEntry
+			for _, entry := range allEntries {
+				if strings.HasSuffix(entry.Name(), ".json") {
+					entries = append(entries, entry)
+				}
+			}
 
-	embedded, err := llm.Cases()
-	if err != nil {
-		t.Fatalf("llm.Cases(): %v", err)
-	}
-	byID := make(map[string]llm.Case, len(embedded))
-	for _, c := range embedded {
-		byID[c.ID] = c
-	}
+			embedded, err := set.load()
+			if err != nil {
+				t.Fatalf("loading the embedded %s: %v", set.dir, err)
+			}
+			byID := make(map[string]llm.Case, len(embedded))
+			for _, c := range embedded {
+				byID[c.ID] = c
+			}
 
-	if len(embedded) != len(entries) {
-		t.Fatalf("llm.Cases() returned %d case(s), testdata/llm/cases/ has %d .json file(s)", len(embedded), len(entries))
-	}
-	for _, entry := range entries {
-		id := strings.TrimSuffix(entry.Name(), ".json")
-		want := loadCase(t, dir, id)
-		got, ok := byID[id]
-		if !ok {
-			t.Errorf("testdata/llm/cases/%s has no embedded counterpart", entry.Name())
-			continue
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("embedded case %q = %+v, want %+v (source file)", id, got, want)
-		}
+			if len(embedded) != len(entries) {
+				t.Fatalf("embedded %d case(s), testdata/llm/%s/ has %d .json file(s)", len(embedded), set.dir, len(entries))
+			}
+			for _, entry := range entries {
+				id := strings.TrimSuffix(entry.Name(), ".json")
+				want := loadCase(t, dir, id)
+				got, ok := byID[id]
+				if !ok {
+					t.Errorf("testdata/llm/%s/%s has no embedded counterpart", set.dir, entry.Name())
+					continue
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("embedded case %q = %+v, want %+v (source file)", id, got, want)
+				}
+			}
+		})
 	}
 }
 
@@ -647,18 +660,7 @@ func loadCase(t *testing.T, dir, id string) llm.Case {
 	if err := goldenset.Load(filepath.Join(dir, id+".json"), &ex); err != nil {
 		t.Fatalf("loading corpus case %q: %v", id, err)
 	}
-	// nil, not an empty non-nil slice, when ex.Candidates carries nothing —
-	// matching corpus.go's own json.Unmarshal straight into llm.Case, so
-	// TestCasesMatchesTheSourceFiles's reflect.DeepEqual compares like for
-	// like on a classify-tagged case, which never carries candidates at all.
-	var candidates []llm.Candidate
-	if len(ex.Candidates) > 0 {
-		candidates = make([]llm.Candidate, len(ex.Candidates))
-		for i, cand := range ex.Candidates {
-			candidates[i] = llm.Candidate{ID: cand.ID, Content: cand.Content}
-		}
-	}
-	return llm.Case{ID: ex.ID, Task: ex.Task, Message: ex.Message, Candidates: candidates}
+	return ex.Case()
 }
 
 // testdataLLMCasesDir locates testdata/llm/cases from this test file's own
@@ -668,11 +670,17 @@ func loadCase(t *testing.T, dir, id string) llm.Case {
 // unexported to that package.
 func testdataLLMCasesDir(t *testing.T) string {
 	t.Helper()
+	return testdataLLMDir(t, "cases")
+}
+
+// testdataLLMDir is testdataLLMCasesDir for any directory under testdata/llm.
+func testdataLLMDir(t *testing.T, name string) string {
+	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller(0) failed to report this test file's path")
 	}
 	// thisFile is .../cmd/nooma/doctor_test.go
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
-	return filepath.Join(repoRoot, "testdata", "llm", "cases")
+	return filepath.Join(repoRoot, "testdata", "llm", name)
 }
