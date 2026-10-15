@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/phrase"
@@ -134,17 +135,22 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	// This first split is the VERDICT, not what is sent: its length decides the
-	// two returns below, and adjacency changes which items carry and in what
-	// order, never how many, so it needs none. The split that is sent is
-	// re-ranked with adjacency once the focus is computed, after every return
-	// that does not send.
+	// two returns below. Adjacency changes which items carry and in what order,
+	// and how many only on a low-energy morning, when Carry truncates; a dry
+	// run's count under the message bound can then differ from the real pass's
+	// (doc 02 §7). The split that is sent is re-ranked with adjacency once the
+	// focus is computed, after every return that does not send.
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
 	if len(carry) == 0 && question == nil {
 		return 0, lapsed, nil
 	}
 	if !commit {
-		return len(carry), lapsed, nil
+		// The count of the lines the message bound keeps. Adjacency can reorder
+		// the real pass's carry, which a dry run does not compute (it reads no
+		// focus), so under a bound that cuts the two may keep different lines.
+		_, sent := r.digestText(ctx, now, carry, pending, question)
+		return len(sent), lapsed, nil
 	}
 
 	if r.conversation == "" {
@@ -172,11 +178,11 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		carry, held = prospection.Carry(items, carryAdjacency(round.adjacent, pending), low, now)
 	}
 
-	// The digest speaks the newest capture's language (ADR-0032 point 5).
-	set := r.setFor(ctx, "")
-	if err := r.channel.Send(ctx, r.conversation, renderDigest(set, carry, r.saidNow(ctx, pending, now, set), question)); err != nil {
+	// What fits one message is sent; the rest stays undelivered for tomorrow.
+	text, sent := r.digestText(ctx, now, carry, pending, question)
+	if err := r.channel.Send(ctx, r.conversation, text); err != nil {
 		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
-			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(carry), err),
+			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(sent), err),
 			checkDetail{})
 	}
 	// The user has now seen this digest, so its selection becomes the
@@ -191,7 +197,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		r.focus.publish(round)
 	}
 
-	for _, item := range carry {
+	for _, item := range sent {
 		if err := r.triggers.Surface(ctx, item.ID, now); err != nil {
 			return 0, lapsed, fmt.Errorf("check: digest was sent but trigger %q was not marked delivered: %w", item.ID, err)
 		}
@@ -210,7 +216,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		}
 	}
 	if err := r.record(ctx, now, ports.ActionCheckDigestSent,
-		fmt.Sprintf("the daily digest carried %d item(s) and held %d", len(carry), len(held)),
+		digestSentRationale(len(sent), len(held), len(carry)-len(sent)),
 		checkDetail{}); err != nil {
 		return 0, lapsed, err
 	}
@@ -227,7 +233,24 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		}
 	}
 
-	return len(carry), lapsed, nil
+	return len(sent), lapsed, nil
+}
+
+// digestSentRationale is the check.digest.sent row's text; it mentions the lines
+// the message bound left for tomorrow only when there were any.
+func digestSentRationale(sent, held, dropped int) string {
+	text := fmt.Sprintf("the daily digest carried %d item(s) and held %d", sent, held)
+	if dropped > 0 {
+		text += fmt.Sprintf(" and left %d for tomorrow because the message would not fit", dropped)
+	}
+	return text
+}
+
+// digestText is the digest's message and the carried items it holds. The digest
+// speaks the newest capture's language (ADR-0032 point 5).
+func (r checkRunner) digestText(ctx context.Context, now time.Time, carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
+	set := r.setFor(ctx, "")
+	return renderDigest(set, carry, r.saidNow(ctx, pending, now, set), question)
 }
 
 // digestFocus computes the focus the digest is about to be sent against. A
@@ -360,9 +383,14 @@ func heldCounts(history []ports.Decision) map[string]int {
 // saidNow is pending as the digest says it: each text is its unit's now, with
 // when, or the one it was armed with when the unit cannot be read (ADR-0032).
 func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, now time.Time, set phrase.Set) []ports.DueTrigger {
+	return saidNow(ctx, r.units, pending, now, set)
+}
+
+// saidNow is the method over any unit repo; Today says its lines the same way.
+func saidNow(ctx context.Context, units ports.UnitRepo, pending []ports.DueTrigger, now time.Time, set phrase.Set) []ports.DueTrigger {
 	out := slices.Clone(pending)
 	for i, t := range out {
-		if u, ok := r.readUnit(ctx, t); ok {
+		if u, ok := readUnit(ctx, units, t); ok {
 			text, when := unitWords(u, t, now, set)
 			if when != "" {
 				text = set.Line(text, when)
@@ -375,13 +403,30 @@ func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, no
 	return out
 }
 
-// renderDigest is what the digest says: a header naming the count, then
-// one line per item.
+// digestMessageUnits is Telegram's bound on one message, in the UTF-16 units it
+// counts (render.go's reminderTextRunes bounds a line; nothing bounded the sum).
+// A rendering bound nothing else branches on, like questionSnippetRunes, so it
+// carries no docs/02 §13 row.
+const digestMessageUnits = 4096
+
+// digestLine is one line of the digest and the carried items it stands for: a
+// unit's reminders are one line.
+type digestLine struct {
+	text  string
+	items []prospection.DigestItem
+}
+
+// renderDigest is what the digest says: a header naming the count, then one
+// line per item, and the carried items it holds. A digest over digestMessageUnits
+// drops the lines past the bound (the last first) and ends saying how many: the
+// items of a dropped line are not in the second result, so the caller leaves
+// them undelivered and tomorrow's digest carries them. The question, when there
+// is one, is never the thing dropped.
 //
 // Held items are not mentioned. A digest that listed what it withheld
 // would defeat the low-energy gate it came from — the point of holding
 // something back is that the person does not have to think about it today.
-func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) string {
+func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
 	byID := make(map[string]ports.DueTrigger, len(pending))
 	for _, t := range pending {
 		byID[t.ID] = t
@@ -389,27 +434,48 @@ func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []port
 
 	// One line per unit, however many of its reminders are carried (ADR-0032
 	// point 4); a reminder of no unit stands alone.
-	var lines []string
-	seen := map[string]bool{}
+	var lines []digestLine
+	lineOf := map[string]int{}
 	for _, item := range carry {
 		t := byID[item.ID]
 		if t.UnitID != nil {
-			if seen[*t.UnitID] {
+			if i, seen := lineOf[*t.UnitID]; seen {
+				lines[i].items = append(lines[i].items, item)
 				continue
 			}
-			seen[*t.UnitID] = true
+			lineOf[*t.UnitID] = len(lines)
 		}
 		line := t.Payload.ActionText
 		if line == "" {
 			line = set.SomethingYouAsked
 		}
-		lines = append(lines, line)
+		lines = append(lines, digestLine{text: line, items: []prospection.DigestItem{item}})
 	}
+
+	keep := len(lines)
+	text := composeDigest(set, lines, keep, question)
+	for keep > 1 && utf16Len(text) > digestMessageUnits {
+		keep--
+		text = composeDigest(set, lines, keep, question)
+	}
+	var sent []prospection.DigestItem
+	for _, l := range lines[:keep] {
+		sent = append(sent, l.items...)
+	}
+	return text, sent
+}
+
+// composeDigest is the message with the first keep lines, and the note of the
+// lines left out when there are any.
+func composeDigest(set phrase.Set, lines []digestLine, keep int, question *ports.RelationQuestion) string {
 	var b strings.Builder
-	if len(lines) > 0 {
-		b.WriteString(set.DigestHeader(len(lines)))
-		for _, line := range lines {
-			b.WriteString("\n" + set.DigestItem(line))
+	if keep > 0 {
+		b.WriteString(set.DigestHeader(keep))
+		for _, l := range lines[:keep] {
+			b.WriteString("\n" + set.DigestItem(l.text))
+		}
+		if keep < len(lines) {
+			b.WriteString("\n" + set.More(len(lines)-keep))
 		}
 	}
 
@@ -427,6 +493,15 @@ func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []port
 		b.WriteString(questionLine(set, *question))
 	}
 	return b.String()
+}
+
+// utf16Len is how long Telegram counts s: in UTF-16 code units.
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		n += utf16.RuneLen(r)
+	}
+	return n
 }
 
 // questionLine is the digest's relation question, in doc 02 §4's own

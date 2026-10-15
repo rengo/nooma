@@ -77,13 +77,18 @@ func sentences() phrase.Set { return phrase.For(classify.Fallback()) }
 // that fails is logged and answered with the fallback: a message in English
 // beats no message.
 func (r checkRunner) setFor(ctx context.Context, own string) phrase.Set {
+	return proactiveSet(ctx, r.units, own)
+}
+
+// proactiveSet is setFor over any unit repo: Today speaks without a check runner.
+func proactiveSet(ctx context.Context, units ports.UnitRepo, own string) phrase.Set {
 	if l, ok := heldLanguage(own); ok {
 		return phrase.For(l)
 	}
-	if r.units == nil {
+	if units == nil {
 		return sentences()
 	}
-	latest, err := r.units.LatestLanguage(ctx)
+	latest, err := units.LatestLanguage(ctx)
 	if err != nil {
 		slog.Warn("the newest unit's language could not be read, so a message speaks the fallback", "error", err)
 		return sentences()
@@ -108,10 +113,15 @@ func heldLanguage(s string) (classify.Language, bool) {
 // cannot be read or says nothing a reminder could frame: the caller then says
 // what the reminder was armed with.
 func (r checkRunner) readUnit(ctx context.Context, t ports.DueTrigger) (u unit.Unit, ok bool) {
-	if t.UnitID == nil || r.units == nil {
+	return readUnit(ctx, r.units, t)
+}
+
+// readUnit is the method over any unit repo, for Today.
+func readUnit(ctx context.Context, units ports.UnitRepo, t ports.DueTrigger) (u unit.Unit, ok bool) {
+	if t.UnitID == nil || units == nil {
 		return unit.Unit{}, false
 	}
-	u, err := r.units.ByID(ctx, *t.UnitID)
+	u, err := units.ByID(ctx, *t.UnitID)
 	if err != nil {
 		if !errors.Is(err, ports.ErrUnitNotFound) {
 			slog.Warn("a reminder's unit could not be read, so it says what it was armed with", "trigger", t.ID, "error", err)

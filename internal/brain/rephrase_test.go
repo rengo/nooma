@@ -109,7 +109,7 @@ func TestRenderTimer_AGenericNudgeMakesNoProviderCall(t *testing.T) {
 	if llm.calls != 0 {
 		t.Fatalf("%d provider calls for a generic nudge, want 0", llm.calls)
 	}
-	if got.text != genericNudge {
+	if got.text != sentences().TimerNudge {
 		t.Errorf("text = %q, want the generic nudge", got.text)
 	}
 	if got.rendered != nil {
@@ -158,8 +158,8 @@ func TestRenderTimer_TheDelayCaveatIsSweptAcrossItsBoundary(t *testing.T) {
 // rephrasing carries the caveat in its own sentence, so the prompt has to
 // be the thing that asks — appending afterwards would say it twice.
 func TestRephrasePrompt_AsksForTheDelayOnlyWhenItIsLate(t *testing.T) {
-	onTime := rephrasePrompt("x", time.Minute)
-	late := rephrasePrompt("x", time.Duration(prospection.DelayCaveatMinutes)*time.Minute)
+	onTime := rephrasePrompt("x", time.Minute, sentences())
+	late := rephrasePrompt("x", time.Duration(prospection.DelayCaveatMinutes)*time.Minute, sentences())
 
 	if strings.Contains(onTime, "later than they asked") {
 		t.Errorf("an on-time prompt asks for a delay note:\n%s", onTime)

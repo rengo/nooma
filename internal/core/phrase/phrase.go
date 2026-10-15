@@ -97,6 +97,15 @@ type Set struct {
 	Late              string
 	SomethingYouAsked string
 
+	// AndMore ends a digest that dropped lines to fit a message: one %d, how
+	// many lines it left for tomorrow. TimerNudge is what a timer with no words
+	// says, TimerLate the note a timer carries when it is delivered later than
+	// asked, and LanguageName is what the model is told to reword a timer in.
+	AndMore      string
+	TimerNudge   string
+	TimerLate    string
+	LanguageName string
+
 	// The four lead-time phrases NotedFor's second %s is filled with.
 	// LeadDays takes one %d.
 	LeadImmediate string
@@ -162,6 +171,10 @@ var sets = map[classify.Language]Set{
 		RelationQuestion:  "I linked \"%s\" with \"%s\". Are they related?",
 		Late:              "(This is later than intended.)",
 		SomethingYouAsked: "You asked me to remind you about something.",
+		AndMore:           "\u2026and %d more.",
+		TimerNudge:        "You asked me to remind you about something now.",
+		TimerLate:         "(This is later than you asked for.)",
+		LanguageName:      "English",
 
 		LeadImmediate: "right away",
 		LeadHours:     "a few hours before",
@@ -209,6 +222,10 @@ var sets = map[classify.Language]Set{
 		RelationQuestion:  "Relacioné \"%s\" con \"%s\". ¿Tienen relación?",
 		Late:              "(Esto llega más tarde de lo previsto.)",
 		SomethingYouAsked: "Me pediste que te recordara algo.",
+		AndMore:           "\u2026y %d más.",
+		TimerNudge:        "Me pediste que te recordara algo ahora.",
+		TimerLate:         "(Esto llega más tarde de lo que pediste.)",
+		LanguageName:      "Spanish",
 
 		LeadImmediate: "ahora mismo",
 		LeadHours:     "unas horas antes",
@@ -284,6 +301,9 @@ func (s Set) DigestItem(line string) string { return fmt.Sprintf(s.DigestLine, l
 
 // Question asks whether two things Nooma linked are related.
 func (s Set) Question(from, to string) string { return fmt.Sprintf(s.RelationQuestion, from, to) }
+
+// More says how many digest lines were left for tomorrow.
+func (s Set) More(n int) string { return fmt.Sprintf(s.AndMore, n) }
 
 // Delayed notes that text is being said later than intended.
 func (s Set) Delayed(text string) string { return text + " " + s.Late }
