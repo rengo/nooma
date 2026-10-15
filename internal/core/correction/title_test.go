@@ -26,13 +26,16 @@ func TestWithTitle(t *testing.T) {
 	}{
 		{"a valid new title is written", dateOnly, title("Reunión del viernes"), titled, true, []string{"Reunión del viernes"}},
 		{"a title that repeats the unit's is no edit", dateOnly, title("Reunión del jueves"), titled, true, nil},
-		{"a date-only edit with no title keeps it", dateOnly, nil, titled, true, nil},
+		{"a date edit with no fresh title clears it: it names the old day", dateOnly, nil, titled, true, []string{""}},
+		{"a date edit with no title on a unit with none clears nothing", dateOnly, nil, unit.Unit{Content: "x"}, true, nil},
+		{"a date that repeats the unit's changes nothing and clears nothing", []Edit{NewEventAtEdit(at)}, nil,
+			unit.Unit{Content: "x", Title: "Reunión del jueves", EventAt: &at}, true, nil},
 		{"a content edit with no title clears it", withContent, nil, titled, true, []string{""}},
 		{"a date edit with the model's own text and no title clears it", withDateAndText, nil, titled, true, []string{""}},
 		{"a content edit with a valid title writes it", withContent, title("Reunión con Juan y Ana"), titled, true, []string{"Reunión con Juan y Ana"}},
 		{"a content edit that repeats the title keeps it", withContent, title("Reunión del jueves"), titled, true, nil},
 		{"clearing a unit with no title is no edit", withContent, nil, unit.Unit{Content: "x"}, true, nil},
-		{"a title the model wrote without seeing the unit is not trusted", dateOnly, title("Cambio al viernes"), titled, false, nil},
+		{"a title the model wrote without seeing the unit is not trusted, and a moved date clears the stale one", dateOnly, title("Cambio al viernes"), titled, false, []string{""}},
 		{"and a content edit then clears the stale one", withContent, title("Cambio al viernes"), titled, false, []string{""}},
 	}
 	for _, tt := range tests {

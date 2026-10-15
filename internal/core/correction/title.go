@@ -12,14 +12,16 @@ import (
 //     written when it differs from the unit's. A correction prompt asks for a
 //     fresh one whenever the day or time moves, so "Reunión del jueves" can
 //     become "Reunión del viernes".
-//   - A plan that rewrites the body and brings no such title clears the unit's
-//     title: it described a body that is gone. A date-only plan leaves it alone.
-//   - A title the model wrote without being shown the unit (the chat path, where
-//     the referent is found after the answer) names the utterance, not the
-//     unit, and is never taken.
+//   - Otherwise a plan that really changes the unit (a moved date, or a rewritten
+//     body) clears its title: it names a day or a body that is gone, and the unit
+//     then reads its content, which follows the new date. This covers a date-only
+//     edit with no fresh title and the chat path, where the referent is found
+//     after the model answered, so a title it wrote names the utterance and is
+//     never taken.
 //
-// A title that equals the unit's is no edit, and a unit with no title is not
-// cleared.
+// A title that equals the unit's is no edit, a unit with no title is not cleared,
+// and a correction that changes nothing (a date the unit already holds) clears
+// nothing.
 func WithTitle(plan []Edit, c classify.Classification, target unit.Unit, sawUnit bool) []Edit {
 	if sawUnit && c.Title != nil {
 		if *c.Title == target.Title {
@@ -27,10 +29,8 @@ func WithTitle(plan []Edit, c classify.Classification, target unit.Unit, sawUnit
 		}
 		return append(append([]Edit(nil), plan...), NewTitleEdit(*c.Title))
 	}
-	for _, e := range plan {
-		if _, ok := e.Content(); ok && target.Title != "" {
-			return append(append([]Edit(nil), plan...), NewTitleEdit(""))
-		}
+	if target.Title != "" && len(Changes(plan, target)) > 0 {
+		return append(append([]Edit(nil), plan...), NewTitleEdit(""))
 	}
 	return plan
 }

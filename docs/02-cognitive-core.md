@@ -722,12 +722,15 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      the reminder step still runs, so the repair above works.
      **The title follows the body** (spec R12). Beside the edits above the plan may carry a
      `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in
-     `fields` with `previous` and `next` like any other): a valid title the model answered
-     for the unit it was shown, when it differs from the unit's, is written; a plan that
-     rewrites the body and brings no such title **clears** it (`next` is `null`), since it
-     described a body that is gone; a date-only plan leaves it alone. A title the model wrote
-     without being shown the unit (the chat path) names the utterance and is never taken. The
-     text an armed reminder falls back to follows the title as it follows the date.
+     `fields` with `previous` and `next` like any other). A valid title the model answered for
+     the unit it was shown, when it differs from the unit's, is written. **Otherwise a plan that
+     really changes the unit (a moved date, or a rewritten body) clears the title** (`next` is
+     `null`): it names a day or a body that is gone, and the unit then reads its content, which
+     already follows the new date. That covers a date-only edit with no fresh title, and the
+     chat path, where the referent is found after the model answered: a title it wrote names the
+     utterance and is never taken. A title equal to the unit's, a unit with none, and a
+     correction that changes nothing (a date the unit already holds) write and clear nothing.
+     The text an armed reminder falls back to follows the title as it follows the date.
      **New text beside a new date is both edits** (I30). When the correction changes what the
      unit says and when it happens at once, and the model — shown the unit — returns text that
      differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`

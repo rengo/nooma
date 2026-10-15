@@ -104,13 +104,49 @@ func TestCorrectionContentEditWithoutTitleClearsIt(t *testing.T) {
 	}
 }
 
-// TestCorrectionDateOnlyEditKeepsTitle: a date moved with no new title touches
-// the title not at all.
-func TestCorrectionDateOnlyEditKeepsTitle(t *testing.T) {
+// TestCorrectionDateOnlyEditWithoutFreshTitleClearsIt: a moved date with no fresh
+// title leaves one that names the old day ("Reunión del jueves — vie 16"), so it
+// is cleared and the unit reads its content, which already follows the date.
+func TestCorrectionDateOnlyEditWithoutFreshTitleClearsIt(t *testing.T) {
 	u, applied := titledCorrection(t, `{"type":"correction","normalized_content":"no, es el viernes","weight":1,"decay_rate":0.05,"event_at":"2026-10-16T10:00:00Z"}`)
-	fields, _, _ := appliedTitles(t, applied)
-	if u.Title != "Reunión del jueves" || hasField(fields, "title") {
-		t.Errorf("title %q, fields %v; want the title kept and not listed", u.Title, fields)
+	fields, previous, next := appliedTitles(t, applied)
+	if u.Title != "" || !hasField(fields, "title") || previous != "Reunión del jueves" || next != nil {
+		t.Errorf("title %q, fields %v, previous %v, next %v; want it cleared", u.Title, fields, previous, next)
+	}
+	if u.Content != "Reunión con Juan el 2026-10-16 a las 10:00" {
+		t.Errorf("content %q, want the body moved to the new date", u.Content)
+	}
+}
+
+// TestCorrectionDateOnlyEditWithFreshTitleTakesIt: the same correction with a
+// fresh title the model answered for the unit it was shown writes that one.
+func TestCorrectionDateOnlyEditWithFreshTitleTakesIt(t *testing.T) {
+	u, applied := titledCorrection(t, `{"type":"correction","normalized_content":"no, es el viernes","weight":1,"decay_rate":0.05,"event_at":"2026-10-16T10:00:00Z","title":"Reunión del viernes"}`)
+	fields, previous, next := appliedTitles(t, applied)
+	if u.Title != "Reunión del viernes" || !hasField(fields, "title") || previous != "Reunión del jueves" || next != "Reunión del viernes" {
+		t.Errorf("title %q, fields %v, previous %v, next %v; want the fresh title", u.Title, fields, previous, next)
+	}
+}
+
+// TestChatPathCorrectionNeverTakesTheModelsTitle: on the chat path the model was
+// not shown the unit, so a title it returns names the utterance ("Cambio al
+// viernes"). It is not stored; the moved date clears the stale title instead.
+func TestChatPathCorrectionNeverTakesTheModelsTitle(t *testing.T) {
+	now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+	original := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	const response = `{"type":"correction","normalized_content":"Dentista hoy a las 10:00","weight":0.6,"decay_rate":0.03,"event_at":"2026-10-09T10:00:00Z","title":"Cambio al viernes","language":"es"}`
+	u := unit.Unit{ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "Dentista el 2026-10-16 a las 10:00",
+		Title: "Dentista del viernes", EventAt: &original, Source: "cli", CreatedAt: now, UpdatedAt: now}
+	f := newI29(t, now, u, response)
+
+	f.capture(t, "") // no referent: the chat path finds the unit by recall
+
+	got := f.unit(t, "dentist")
+	if got.Title == "Cambio al viernes" {
+		t.Fatalf("the model's title for the utterance was stored: %q", got.Title)
+	}
+	if got.Title != "" {
+		t.Errorf("title %q, want the stale one cleared by the moved date", got.Title)
 	}
 }
 
