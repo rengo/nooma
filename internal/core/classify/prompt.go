@@ -63,8 +63,8 @@ type Belief struct {
 // nooma.yml, and the real Clock adapter's time.Now() already carries the
 // process zone. A test Clock fixing a Location is what makes these assertions
 // stable.
-func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold float64) string {
-	return buildPrompt(text, nil, beliefs, now, archiveThreshold)
+func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold float64, rc ReminderContext) string {
+	return buildPrompt(text, nil, beliefs, now, archiveThreshold, rc)
 }
 
 // BuildCorrectionPrompt is BuildPrompt for a message that corrects target,
@@ -73,11 +73,11 @@ func BuildPrompt(text string, beliefs []Belief, now time.Time, archiveThreshold 
 // is a patch. Without the unit, "Es a las 8am" names no date, so the model
 // could only answer with content, and its normalization of the utterance
 // replaced the unit's whole body while the date stayed where it was.
-func BuildCorrectionPrompt(text string, target unit.Unit, beliefs []Belief, now time.Time, archiveThreshold float64) string {
-	return buildPrompt(text, &target, beliefs, now, archiveThreshold)
+func BuildCorrectionPrompt(text string, target unit.Unit, beliefs []Belief, now time.Time, archiveThreshold float64, rc ReminderContext) string {
+	return buildPrompt(text, &target, beliefs, now, archiveThreshold, rc)
 }
 
-func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time, archiveThreshold float64) string {
+func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time, archiveThreshold float64, rc ReminderContext) string {
 	var b strings.Builder
 
 	b.WriteString("You classify a single message into Nooma's memory model.\n")
@@ -203,6 +203,12 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("                       event_at is when a thing happens in the world; due_at is\n")
 	b.WriteString("                       when something is owed. A timer has no world event, so its\n")
 	b.WriteString("                       instant belongs in due_at and never in event_at\n")
+	b.WriteString("  title                a short name for what to remember, in the message's own\n")
+	b.WriteString("                       language, at most " + strconv.Itoa(MaxTitleRunes) + " characters, **with no date, no\n")
+	b.WriteString("                       day and no time in it**: not \"2026-10-14\", not \"22:30\", not\n")
+	b.WriteString("                       \"mañana\", \"jueves\" or \"3pm\". \"Reunión con Juan\", never\n")
+	b.WriteString("                       \"Reunión con Juan mañana a las 22:30\". Give one for anything\n")
+	b.WriteString("                       that has a date or that the user asks to be reminded of\n")
 	b.WriteString("  interrupt_level      0-1, how urgently this should interrupt the user " +
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
@@ -247,6 +253,8 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("  effect, and a correction that omits them changes nothing.\n")
 	b.WriteString("  A correction still answers every required field above, like any other type.\n\n")
 
+	writeReminders(&b, rc)
+
 	if target != nil {
 		writeTarget(&b, *target, now)
 	}
@@ -255,6 +263,60 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString(text + "\n")
 
 	return b.String()
+}
+
+// writeReminders renders the reminder fields (ADR-0033 point 1) and, only when
+// there is one, the question Nooma has open and the numbered list a position
+// refers to. The model reads what the user means; the code checks every answer
+// against what it sent, so this section explains and never asks the model to
+// name a reminder.
+//
+// **One list.** An open which_reminder question carries its own list inside its
+// text, and then the candidates are left out: two lists in one prompt would
+// give "2" two meanings. Any other open question leaves the candidates in.
+func writeReminders(b *strings.Builder, rc ReminderContext) {
+	b.WriteString("Reminders\n")
+	b.WriteString("  Read what the user MEANS in any language. These fields only say what you read;\n")
+	b.WriteString("  Nooma checks them before it does anything.\n")
+	b.WriteString("  remind_request     true when the user asks Nooma to remind them of what THIS\n")
+	b.WriteString("                     message stores: \"recordame comprar café mañana a las 10\",\n")
+	b.WriteString("                     \"remind me to call Ana at 5pm\", \"si no, avisame\", \"no te\n")
+	b.WriteString("                     olvides de recordarme X\", \"haceme acordar\". false (or null) for\n")
+	b.WriteString("                     everything else: a plain note; a question, as in \"recordame qué\n")
+	b.WriteString("                     hablamos con Juan\" (that asks what was said: a recall); a\n")
+	b.WriteString("                     reminder someone else sent, as in \"my dentist sent a reminder to\n")
+	b.WriteString("                     confirm\"; the past, as in \"recordé que tenía que comprar café\";\n")
+	b.WriteString("                     or reported speech, as in \"Ana me dijo 'avisame cuando llegues'\"\n")
+	b.WriteString("  reminder_intent    one of: " + joinVocabulary(AllReminderIntents()) + "\n")
+	b.WriteString("                     stop: the user asks to stop being reminded of something that\n")
+	b.WriteString("                     already exists (\"no me lo recuerdes más\", \"don't remind me\n")
+	b.WriteString("                     anymore\"). Saying a thing is done (\"listo\", \"ya lo hice\", \"listo,\n")
+	b.WriteString("                     nos vemos mañana\") is none, not stop.\n")
+	b.WriteString("                     keep: only while the open question below is an undo, when the\n")
+	b.WriteString("                     user says the stop was a mistake (\"no, seguí\", \"keep it\"). A\n")
+	b.WriteString("                     bare \"sí\", \"ok\" or \"dale\" is none\n")
+	b.WriteString("  question_answer    one of: " + joinVocabulary(AllQuestionAnswers()) + ", and only while a\n")
+	b.WriteString("                     question below is open: when (it gives a day or time), no (it\n")
+	b.WriteString("                     declines: \"no\", \"no hace falta\", \"nope\"), choice (it picks an\n")
+	b.WriteString("                     entry of the numbered list; put the position in choice_number,\n")
+	b.WriteString("                     1 to " + strconv.Itoa(MaxReminderChoices) + "). Otherwise none or leave it out\n")
+	b.WriteString("  reminder_target    for a stop: the position, 1 to " + strconv.Itoa(MaxReminderChoices) +
+		", of the numbered reminder it is\n")
+	b.WriteString("                     about, or \"" + ReminderTargetUnclear + "\" when the one the user describes is not\n")
+	b.WriteString("                     in the list or you cannot tell. Never invent a position\n")
+	if rc.Open != nil {
+		b.WriteString("\n" + openQuestionHeading + " (" + string(rc.Open.Kind) + ")\n")
+		// Verbatim and unindented: the text, and the list in it, are what the
+		// user read, and a position means the line that starts with it.
+		b.WriteString("  Nooma asked the user, in these words:\n")
+		b.WriteString(strings.TrimRight(rc.Open.Text, "\n") + "\n")
+		b.WriteString("  The message may be the answer. Read it as one only if it answers THIS question.\n")
+	}
+	if len(rc.Candidates) > 0 && (rc.Open == nil || rc.Open.Kind != QuestionWhichReminder) {
+		b.WriteString("\n" + candidatesHeading + "\n")
+		b.WriteString(RenderReminderList(rc.Candidates))
+	}
+	b.WriteString("\n")
 }
 
 // writeTarget renders the unit a correction patches, its instants in the
@@ -368,3 +430,11 @@ func pad(name string, width int) string {
 func trimFloat(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
+
+// The headings of the two optional reminder sections. A section is written only
+// when there is something under it, so the heading's presence is the test that
+// it was.
+const (
+	openQuestionHeading = "Open reminder question"
+	candidatesHeading   = "Reminders that may be stopped"
+)

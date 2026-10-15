@@ -428,7 +428,7 @@ func qualityGatePrompt(task string, c llm.Case, now time.Time) string {
 		// answer this prompt's SHAPE, and a per-vault number would make
 		// two vaults score the same provider differently on a question
 		// that is not about them (ADR-0023).
-		return classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold)
+		return classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, classify.ReminderContext{})
 	case "relation_evaluation":
 		candidates := make([]unit.Unit, len(c.Candidates))
 		for i, cand := range c.Candidates {

@@ -477,7 +477,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
      `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades;
      an explicit `null` is an absent field, not a loss. Core holds no phrase list: the prompt
-     explains the fields with examples in both languages.
+     explains the fields with examples in both languages, shows the open reminder question and
+     the numbered list only when there is one, and carries the fields on the correction path
+     too, so an explicit-referent stop is read there. The prompt describes all three question
+     kinds (`remind_when`, `which_reminder`, `undo`) now, so it is final in this link and a
+     recording made against it stays valid.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
@@ -509,6 +513,16 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      (`open_relation_questions: N`), so the audit trail shows a choice was made rather than
      implying there was only one. **An answer matching nothing open resolves nothing and,
      above all, deletes nothing.**
+   - **The one exception is narrower than the rule, and is for reminders**
+     ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)): the prompt may carry the
+     reminder question Nooma has open and one numbered list of at most `max_reminder_choices`
+     reminders, so the model can answer a **position** in a list the code built. It never names
+     an id and never a relation. The code binds only on a position inside that list, an
+     out-of-range or `unclear` one asks which, and a stop it binds is undoable and deletes
+     nothing. **One list per prompt**: an open `which_reminder` question carries its own, and the
+     stop candidates are then left out, so a position means one thing. Both lists come from
+     `classify.RenderReminderList`, the renderer of the question Nooma sends, so a position the
+     model reads is a position the user saw. The relation rule above is unchanged.
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
      brings down the whole classification. For `relation_outcome` this is load-bearing rather
      than merely tidy: an answer worded outside the vocabulary degrades to null and deletes

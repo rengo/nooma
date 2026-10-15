@@ -24,10 +24,11 @@ tasks-repeating).
 
 - [ ] 1.1 Link 1a — `feat/classify-reminder-fields` (ADR-0033, D1, D1b):
   - [x] RED L1 `TestDecode_ReminderFields`: `remind_request`, `reminder_intent`, `question_answer`, `choice_number` decode; an unknown enum, a wrong type or a `choice_number` outside 1-5 degrades that field alone (I14); `TestAllReminderIntentsAndAnswersSwept`.
-  - RED L1 `TestBuildPromptDescribesReminderFields`: both languages' examples; the open question appears only when one is passed.
+  - [x] RED L1 `TestBuildPromptDescribesReminderFields`: both languages' examples; the open question appears only when one is passed.
   - [x] RED L1 `TestDecode_RemindRequestBoolOrNull`: `true`/`false`/`null` decode; `"yes"` → degraded. `TestDecode_ReminderTarget`: 1-5 and `"unclear"` decode; 0, 6, `"2"` → degraded.
-  - RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
-  - RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output); `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
+  - [x] RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
+  - [x] RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output).
+  - RED L1 (round 2): `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
   - [x] RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
   - [x] RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
   - [x] RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.

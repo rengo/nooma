@@ -232,7 +232,7 @@ type captureRunner struct {
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (result CaptureResult, err error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
-	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold)
+	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{})
 
 	// **A correction that names its unit is classified against it** (doc 02
 	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the
@@ -246,7 +246,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
 		}
 		explicit = &u
-		prompt = classify.BuildCorrectionPrompt(in.Text, u, nil, now, r.archiveThreshold)
+		prompt = classify.BuildCorrectionPrompt(in.Text, u, nil, now, r.archiveThreshold, classify.ReminderContext{})
 	}
 
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: prompt, Task: taskCaptureProcessing, JSONOnly: true})
