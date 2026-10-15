@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/reading"
 	"github.com/rengo/nooma/test/support/goldenset"
 	"github.com/rengo/nooma/testdata/llm"
@@ -140,5 +143,89 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 	// Links 2 and 7 replay these two.
 	for _, id := range []string{"classify-task-remind-me-coffee", "classify-task-remind-me-daily-pills"} {
 		has(id, func(c llm.Case) bool { return c.ID == id })
+	}
+}
+
+// listsOf is every numbered entry a case shows the model: the candidate list,
+// and the which_reminder question's own list.
+func listsOf(c llm.Case) []llm.Entry {
+	entries := append([]llm.Entry(nil), c.CandidatesList...)
+	if c.OpenQuestion != nil {
+		entries = append(entries, c.OpenQuestion.List...)
+	}
+	return entries
+}
+
+// TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites: production
+// writes a candidate's date through internal/core/phrase (Time for an instant,
+// Date for a whole day) and the list through classify.RenderReminderList. The
+// set is recorded against exactly those bytes, so a different rendering later
+// would be a different prompt, and this fails first. The set's lists are in
+// Spanish, the fallback of a user who has written in it.
+func TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites(t *testing.T) {
+	cases, err := llm.ReminderCases()
+	if err != nil {
+		t.Fatal(err)
+	}
+	es := phrase.For(classify.LanguageES)
+	seen := 0
+	for _, c := range cases {
+		for _, e := range listsOf(c) {
+			seen++
+			at, err := time.Parse(time.RFC3339, e.At)
+			if err != nil {
+				t.Errorf("%s: entry %q has no instant (at): %v", c.ID, e.Label, err)
+				continue
+			}
+			want := es.Time(at)
+			if e.DayOnly {
+				want = es.Date(at)
+			}
+			if e.When != want {
+				t.Errorf("%s: entry %q says %q, the renderer writes %q", c.ID, e.Label, e.When, want)
+			}
+		}
+		q := c.OpenQuestion
+		if q == nil || q.Kind != string(classify.QuestionWhichReminder) {
+			continue
+		}
+		lead, _, _ := strings.Cut(q.Text, "\n")
+		var entries []classify.ReminderEntry
+		for _, e := range q.List {
+			entries = append(entries, classify.ReminderEntry{Label: e.Label, When: e.When})
+		}
+		if want := classify.WhichReminderText(lead, entries); q.Text != want {
+			t.Errorf("%s: the which_reminder text is not lead + RenderReminderList:\n%q\nwant\n%q", c.ID, q.Text, want)
+		}
+	}
+	if seen == 0 {
+		t.Error("the set lists no reminder at all")
+	}
+}
+
+// TestReminderPhrasingSetContextIsInTheFutureOfItsNow: a case that shows the
+// model a list or a question carries the now it was written at, and every
+// listed reminder is after it. Without an authored now the recording would use
+// the clock of the day it is made, and a list of reminders already in the past
+// is a prompt production never sends.
+func TestReminderPhrasingSetContextIsInTheFutureOfItsNow(t *testing.T) {
+	cases, err := llm.ReminderCases()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		if len(c.CandidatesList) == 0 && c.OpenQuestion == nil {
+			continue
+		}
+		now, err := time.Parse(time.RFC3339, c.Now)
+		if err != nil {
+			t.Errorf("%s: a case with a list or an open question needs an authored now: %v", c.ID, err)
+			continue
+		}
+		for _, e := range listsOf(c) {
+			if at, err := time.Parse(time.RFC3339, e.At); err == nil && !at.After(now) {
+				t.Errorf("%s: entry %q is at %s, not after now %s", c.ID, e.Label, e.At, c.Now)
+			}
+		}
 	}
 }

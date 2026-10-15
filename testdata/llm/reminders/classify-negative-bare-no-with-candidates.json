@@ -3,10 +3,12 @@
   "task": "classify",
   "message": "no",
   "record": true,
+  "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
       "label": "Comprar café",
-      "when": "jue 15 oct 10:00"
+      "when": "jue 15 oct, 10:00",
+      "at": "2026-10-15T10:00:00-03:00"
     }
   ],
   "expect": {}

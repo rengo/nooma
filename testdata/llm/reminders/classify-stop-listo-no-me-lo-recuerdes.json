@@ -3,14 +3,18 @@
   "task": "classify",
   "message": "listo, no me lo recuerdes más",
   "record": true,
+  "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
       "label": "Llamar a Ana",
-      "when": "jue 15 oct 17:00"
+      "when": "jue 15 oct, 17:00",
+      "at": "2026-10-15T17:00:00-03:00"
     },
     {
       "label": "Pagar el gas",
-      "when": "vie 16 oct"
+      "when": "vie 16 oct",
+      "at": "2026-10-16T00:00:00-03:00",
+      "day_only": true
     }
   ],
   "expect": {

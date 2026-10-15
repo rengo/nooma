@@ -6,13 +6,23 @@ package llm
 type Question struct {
 	Kind string `json:"kind"`
 	Text string `json:"text"`
+	// List is the which_reminder question's numbered entries as data, so a test
+	// can check the numbered list inside Text against the renderer. The prompt
+	// reads Text alone.
+	List []Entry `json:"list,omitempty"`
 }
 
 // Entry is one line of the numbered candidate list a phrasing is read with
 // (classify.ReminderEntry).
+//
+// When is the text the prompt shows. At and DayOnly are the instant it renders,
+// kept so a test can check When against internal/core/phrase and that the
+// instant is after the case's now; the prompt never reads them.
 type Entry struct {
-	Label string `json:"label"`
-	When  string `json:"when,omitempty"`
+	Label   string `json:"label"`
+	When    string `json:"when,omitempty"`
+	At      string `json:"at,omitempty"`
+	DayOnly bool   `json:"day_only,omitempty"`
 }
 
 // Expect is the reading a phrasing should get, written by hand and never by

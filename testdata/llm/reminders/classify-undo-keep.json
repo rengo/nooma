@@ -3,9 +3,10 @@
   "task": "classify",
   "message": "no, seguí",
   "record": true,
+  "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
-    "text": "Listo, dejé de recordarte «Comprar café». (Si fue un error, decime «no, seguí».)"
+    "text": "Listo, no te lo recuerdo más: Comprar café — jue 15 oct, 10:00. (Si fue un error, decime «no, seguí».)"
   },
   "expect": {
     "reminder_intent": "keep"

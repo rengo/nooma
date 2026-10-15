@@ -3,9 +3,28 @@
   "task": "classify",
   "message": "gracias, nos vemos",
   "record": true,
+  "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
-    "text": "¿De cuál hablás?\n1) Comprar café — jue 15 oct 10:00\n2) Llamar a Ana — jue 15 oct 17:00\n3) Pagar el gas — vie 16 oct\n"
+    "text": "¿De cuál hablás?\n1) Comprar café — jue 15 oct, 10:00\n2) Llamar a Ana — jue 15 oct, 17:00\n3) Pagar el gas — vie 16 oct\n",
+    "list": [
+      {
+        "label": "Comprar café",
+        "when": "jue 15 oct, 10:00",
+        "at": "2026-10-15T10:00:00-03:00"
+      },
+      {
+        "label": "Llamar a Ana",
+        "when": "jue 15 oct, 17:00",
+        "at": "2026-10-15T17:00:00-03:00"
+      },
+      {
+        "label": "Pagar el gas",
+        "when": "vie 16 oct",
+        "at": "2026-10-16T00:00:00-03:00",
+        "day_only": true
+      }
+    ]
   },
   "expect": {}
 }

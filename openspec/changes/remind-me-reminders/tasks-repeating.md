@@ -13,7 +13,7 @@ deferred (client, 2026-10-14).
 
 ## PR 5 — `feat/question-store-widens` (D10-D13)
 
-- The question text the phrasing set was recorded with (`testdata/llm/reminders/`, `open_question.text`) is exactly what this link must send: `the `remind_when` question, "¿Cuándo querés que te avise?"`. A different wording is a different prompt, and the replay will not know. Change the text in the code and the cases together, then record again.
+- The texts the phrasing set was recorded with (`testdata/llm/reminders/`, `open_question.text`) are exactly what this link must send: the `remind_when` question, "¿Cuándo querés que te avise?". A different wording is a different prompt, and the replay will not know: change the code and the cases together, then record again.
 
 - [ ] 5.1 RED:
   - L3 `TestM2_RebuildKeepsEveryRelationQuestionAndIndex`: rows and both indexes are the same after.
@@ -28,7 +28,7 @@ deferred (client, 2026-10-14).
 
 ## PR 6 — `feat/remind-me-stop` (D20-D24)
 
-- The question text the phrasing set was recorded with (`testdata/llm/reminders/`, `open_question.text`) is exactly what this link must send: `the `which_reminder` lead, "¿De cuál hablás?" with its numbered list, and the `undo` reply, "Listo, dejé de recordarte «…». (Si fue un error, decime «no, seguí».)"`. A different wording is a different prompt, and the replay will not know. Change the text in the code and the cases together, then record again.
+- The texts the phrasing set was recorded with (`testdata/llm/reminders/`) are exactly what this link must send. Question texts (`open_question.text`): the `which_reminder` lead, "¿De cuál hablás?", then its numbered list; and the `undo` reply, "Listo, no te lo recuerdo más: <title> — <date>. (Si fue un error, decime «no, seguí».)". **The candidate list format is pinned too**: each entry is `RenderReminderList`'s "<n>) <title or content> — <when>", with `<when>` written by `phrase.For(lang).Time` ("jue 15 oct, 10:00", with the comma) for an instant and `.Date` ("vie 16 oct") for a whole day, and `TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites` fails if either changes. A different wording or format is a different prompt, and the replay will not know: change the code and the cases together, then record again.
 
 - [ ] 6.1 RED, the stop reading (ADR-0033), replayed from the phrasing set (link 1a):
   - "no me lo recuerdes más", "listo, no me lo recuerdes más", "don’t / don't / dont remind me anymore" → `reminder_intent: stop`; "no me recuerdes la clave" → `none`.
@@ -110,7 +110,7 @@ deferred (client, 2026-10-14).
 
 ## PR 8 — `feat/remind-me-ask-back` (D40-D43; needs links 3, 5, 6, 7)
 
-- The question text the phrasing set was recorded with (`testdata/llm/reminders/`, `open_question.text`) is exactly what this link must send: `the `remind_when` question, "¿Cuándo querés que te avise?"`. A different wording is a different prompt, and the replay will not know. Change the text in the code and the cases together, then record again.
+- The texts the phrasing set was recorded with (`testdata/llm/reminders/`, `open_question.text`) are exactly what this link must send: the `remind_when` question, "¿Cuándo querés que te avise?". A different wording is a different prompt, and the replay will not know: change the code and the cases together, then record again.
 
 - [ ] 8.1 RED, the answer reading, replayed with `remind_when` open in the prompt:
   - "mañana a las 10", "en 1 semana", "in 2 hours" → `question_answer: when` with an instant; "mañana llamo a Juan" → `none` (a new capture).
