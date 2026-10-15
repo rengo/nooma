@@ -36,8 +36,8 @@ PM decisions, binding:
 - **P5:** a stop is durable state on the unit, never inferred from the request flag.
 - **P6:** only a new explicit ask brings a stopped reminder back, as a new unit, except for the
   10-minute undo ADR-0033 decides.
-- **P7:** a stop binds without asking only on one unambiguous candidate; a tie asks, with a
-  list capped at 5.
+- **P7:** a stop binds without asking only when the model's choice from the numbered candidate
+  list names one unambiguous candidate; a tie or `unclear` asks, with a list capped at 5.
 
 ## Detection changed (client, 2026-10-14)
 
@@ -63,10 +63,10 @@ the lead by chat; quoted speech (P4); units captured before this change.
 
 | Field | Value |
 |---|---|
-| Changed lines (impl + docs) | ~2,200 across 9 remaining implementation links: 1a, 1a′ and 2-8 (link 1 merged; old link 9 deferred) (~2,300 test lines apart) |
+| Changed lines (impl + docs) | ~2,580 across 9 remaining implementation links: 1a, 1a′ and 2-8 (link 1 merged; old link 9 deferred) (~2,720 test lines apart), the sums of the link tables in `tasks.md` and `tasks-repeating.md` |
 | 400-line budget risk | High as one PR |
 | Chained PRs | Yes: stacked to main, each link under 400 |
-| Decision needed before apply | None. ADR-0031 is accepted |
+| Decision needed before apply | None. ADR-0031 and ADR-0033 are accepted by the client |
 
 The plan is a chain of three PRs, each under 400 lines: #350 (ADR-0033, this proposal,
 `spec.md`); #356 (`design.md` and `tasks.md`, links 1a, 1a′ and 2-4); #357

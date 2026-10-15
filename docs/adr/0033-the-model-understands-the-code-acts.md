@@ -3,15 +3,17 @@
 - **Status**: Accepted (by the client, 2026-10-14, choosing that an explicit stop takes effect at
   once, with a 10-minute undo, rather than asking for confirmation first; point 3)
 - **Date**: 2026-10-14
-- **Supersedes**: [ADR-0031](0031-reminders-the-user-asks-for.md) **in part**: only how a
-  request, a stop or an answer is *detected*. That is its point 1's "closed list per language",
-  point 4's "made of date and time words, or a no", and point 5's "read from phrase lists".
+- **Supersedes**: [ADR-0031](0031-reminders-the-user-asks-for.md) **in part**: how a request, a
+  stop or an answer is *detected* (point 1's "closed list per language", point 4's "made of date
+  and time words, or a no", and point 5's "read from phrase lists"), and point 5's stop binding
+  ("the only one there is" is replaced by a numbered candidate list the model chooses from).
   **Deferred by the client on 2026-10-14:** point 5's handling of a bare "listo" or "ya lo
   hice" (the keep-or-delete question and its done-for-today mark). Everything else ADR-0031
   decides about what Nooma *does* stands.
 - **Superseded by**: —
-- **On acceptance**: ADR-0031's header names ADR-0033 in `Superseded by`, for detection only. The
-  index allows that field and nothing else, as with ADR-0027.
+- **On acceptance**: ADR-0031's header names ADR-0033 in `Superseded by`, for detection, the stop
+  binding and the deferred bare-"listo" handling. The index allows that field and nothing else,
+  as with ADR-0027.
 
 ## Context
 
