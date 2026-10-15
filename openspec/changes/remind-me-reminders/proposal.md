@@ -18,8 +18,8 @@ day. In short:
   lead is added to its 24 h and 2 h.
 - **Repeating.** An asked repetition is a recurring task at the named time. "recordame X" with
   no day or time asks back, and "No" makes it daily.
-- **Stopping.** A reminder stops only when the user says so in chat. A bare "listo" asks once
-  whether to keep going.
+- **Stopping.** A reminder stops only when the user says "no me lo recuerdes más" in chat. A
+  daily rings every day until then.
 - **Night and reply.** A named time rings through quiet hours, and the reply says exactly when.
 
 PM decisions, binding:
@@ -31,7 +31,7 @@ PM decisions, binding:
 - **P2:** recurring reminders nobody asked for are re-armed after each occurrence too, as doc 02
   §7 already promises, with no double fire and no burst. That is a change for them, and R10 says
   so.
-- **P3:** a bare "no" to "¿seguís o borramos?" deletes.
+- **P3:** deferred with the done handling (below).
 - **P4:** quoted or reported speech is out of scope; under ADR-0033 it is measured, not pinned.
 - **P5:** a stop is durable state on the unit, never inferred from the request flag.
 - **P6:** only a new explicit ask brings a stopped reminder back, as a new unit, except for the
@@ -46,6 +46,13 @@ the classify call returns. The code still binds, confirms and degrades. Everythi
 sees is unchanged, except the undo after a stop. The client also asked that a reminder say a
 short title ("Recordatorio: Reunión con Juan — mié 14 oct, 22:30") instead of the content with
 its date twice (spec R12), and that every real-model recording be made in one session.
+
+## Deferred (client, 2026-10-14)
+
+Done handling: a bare "listo" or "ya lo hice" on a reminder, the "¿seguís o borramos?"
+question, its done-for-today mark, and old link 9 ("cuando me recuerde tomar la pastilla no voy
+a decir 'listo'"). "listo" keeps M3's behaviour. This is a follow-up, to be planned when
+the client asks for it.
 
 ## Out of scope
 

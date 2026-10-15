@@ -53,8 +53,7 @@ every phrasing below. CI replays it, and `nooma doctor` reports the live rate.
 | "recordame comprar café mañana a las 10", "Remind me to call Ana at 5pm", "si no, avisame", "si no puedo, avisame", "no te olvides de recordarme X", "recordámelo", "haceme acordar", "acordate de avisarme", "poneme un recordatorio", "que no se me olvide" | `remind_request` |
 | "comprar café mañana a las 10"; "recordame qué hablamos con Juan" (a recall); "my dentist sent a reminder to confirm"; "recordé que tenía que comprar café"; "Ana me dijo 'avisame cuando llegues'" | no request |
 | "no me lo recuerdes más", "listo, no me lo recuerdes más", "don’t / don't / dont remind me anymore" | `reminder_intent: stop` |
-| "listo", "ya lo hice" | `done` |
-| "listo, nos vemos mañana" | `none` |
+| "listo", "ya lo hice", "listo, nos vemos mañana" | `none` (done handling deferred; M3 check-ins answer them) |
 
 ### R2 — One-shot
 
@@ -186,42 +185,27 @@ a misread with a normal stop or correction; an answer has no undo of its own (PM
 - **Corrections:** a correction of a stopped unit applies its field edit and refuses only the
   re-arming. The reply says the reminder stays stopped.
 
-**MUST**: a **done** (`reminder_intent: done`; "listo, nos vemos mañana" reads `none`) acts on
-the asked reminder it binds:
-
-| Reminder | Effect |
-|---|---|
-| Repeating, not marked | asks once "¿Querés que te lo siga recordando o borramos el recordatorio?" |
-| Repeating, marked | done for today; it keeps recurring |
-| One-shot | resolves it; an event's remaining leads are dismissed |
-
-The answer, read only while that `keep_or_stop` question is open (PM Q10):
-
-- `keep`, or "sí", marks it;
-- `delete` ("borralo") or `no` (PM) stops it, and that answer is the confirmation turn;
-- anything else leaves it unmarked, and the next done asks again.
-
-A `delete`, or a `question_answer`, with no question open does nothing, and is never coerced into
-a check-in outcome.
+**Deferred (client, 2026-10-14): done handling.** There is no `done` reading, no keep-or-delete
+question and no done-for-today mark. A daily reminder rings every day until the user stops it.
+A bare "listo" keeps M3's behaviour: it answers an open check-in or nudge. A `keep` or a
+`question_answer` with no matching open question does nothing, and is never coerced into a
+check-in outcome.
 
 **MUST** (PM Q5, Q6): **binding**. The model never names a reminder.
 
-- **Candidates.** Whenever there are stop or done candidates, the prompt carries a numbered list
+- **Candidates.** Whenever there are stop candidates, the prompt carries a numbered list
   of at most 5, deduplicated by unit, each with title (or content) and date:
   - for a stop, in this order: the unit of the last delivery, asked or not; then asked
     reminders delivered within 120 minutes or armed; then the rest by next fire time (armed
-    recurring reminders);
-  - for a done: asked reminders delivered within 120 minutes.
+    recurring reminders).
 
   The prompt says to answer `unclear` when the described reminder is not in the list.
 - **Binding.** The model returns `reminder_target`, and the code binds only on a valid position.
   `unclear`, an out-of-range position, or a missing one asks "¿Cuál?" with the same list, keeping
   the intent. There is no word matching and no blind single-candidate bind.
-- **Nothing to bind (PM Q3).** A stop or done with no candidate is consumed only when no check-in,
-  nudge or relation question is open. It then replies "No encontré qué recordatorio cortar"
-  (done: "…marcar como hecho") and stores nothing. Otherwise it falls through to the check-in
-  resolvers, so "listo" still closes an open task check-in.
-- **Done before link 9:** a `done` reading always falls through.
+- **Nothing to bind (PM Q3).** A stop with no candidate is consumed only when no check-in, nudge
+  or relation question is open. It then replies "No encontré qué recordatorio cortar" and stores
+  nothing. Otherwise it falls through to the check-in resolvers.
 
 **MUST**: one fixed precedence:
 
@@ -235,13 +219,13 @@ relation). A stop that also reads `relation_outcome: rejected` deletes no relati
 
 Questions expire when they are read, and a resolve succeeds only on an open question. A message
 consumed by any answer, intent or check-in expires every older open reminder question. Every
-reminder question has a window. A newer delivery expires an open `keep_or_stop` or
-`which_reminder`, so a late "no" never deletes. It does not expire a `remind_when` within its
+reminder question has a window. A newer delivery expires an open `which_reminder`, so a late
+answer never stops the wrong reminder. It does not expire a `remind_when` within its
 window, but a check-in or nudge delivered after it owns the next message, so that message falls
 through to the resolvers and never makes a daily reminder.
 
-Replies: "Listo, no te lo recuerdo más: tomar pastillas — 21:00." / "Bien, te lo sigo
-recordando." / "Hecho por hoy.".
+Reply: "Listo, no te lo recuerdo más: tomar pastillas — 21:00. (Si fue un error, decime «no,
+seguí».)".
 
 ### R10 — Reminders nobody asked for
 

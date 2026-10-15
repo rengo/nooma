@@ -3,9 +3,11 @@
 - **Status**: Accepted (by the client, 2026-10-14, with option A of point 3)
 - **Date**: 2026-10-14
 - **Supersedes**: [ADR-0031](0031-reminders-the-user-asks-for.md) **in part**: only how a
-  request, a stop, a done or an answer is *detected*. That is its point 1's "closed list per
-  language", point 4's "made of date and time words, or a no", and point 5's "read from phrase
-  lists". Everything ADR-0031 decides about what Nooma *does* stands.
+  request, a stop or an answer is *detected*. That is its point 1's "closed list per language",
+  point 4's "made of date and time words, or a no", and point 5's "read from phrase lists".
+  **Deferred by the client on 2026-10-14:** point 5's handling of a bare "listo" or "ya lo
+  hice" (the keep-or-delete question and its done-for-today mark). Everything else ADR-0031
+  decides about what Nooma *does* stands.
 - **Superseded by**: —
 - **On acceptance**: ADR-0031's header names ADR-0033 in `Superseded by`, for detection only. The
   index allows that field and nothing else, as with ADR-0027.
@@ -42,12 +44,12 @@ MAPING de textos… el LLM debería evaluar sobre la marcha").
      Its time, recurrence and day-only-ness are the fields that already exist: `event_at` or
      `due_at`, `recurrence_rule`, and the decoder's day-only flag, which is read from the shape
      of the value, not from a model claim.
-   - `reminder_intent` ∈ {`none`, `stop`, `done`, `keep`, `delete`}: what a chat message says
-     about a reminder.
+   - `reminder_intent` ∈ {`none`, `stop`, `keep`}: a stop, or (only as the answer to an open
+     undo) a keep.
    - `question_answer` ∈ {`none`, `when`, `no`, `choice`}, with `choice_number` for `choice`:
      how the message answers the reminder question Nooma has open. The prompt shows that
      question, and its numbered options, only when one is open.
-   - `reminder_target`, a position (1-5) or `unclear`: which reminder a stop or done is about.
+   - `reminder_target`, a position (1-5) or `unclear`: which reminder a stop is about.
      The prompt shows a numbered list of the candidates the code built (title or content, and
      date) only when there are any.
 
@@ -69,9 +71,10 @@ MAPING de textos… el LLM debería evaluar sobre la marcha").
      restores exactly the rows the stop retired, by id. A bare "sí", "ok" or "dale" is not that.
      A reminder that came due meanwhile is dropped and named in the reply. A repeating one keeps
      repeating.
-   - A bare "listo" never stops anything by itself: it asks first (ADR-0031 point 5), and that
-     answer is the confirmation turn for a delete.
-   - Nothing in the vault is deleted in either case: a stop is a tombstone.
+   - **Deferred (client, 2026-10-14):** there is no done handling. A bare "listo" keeps M3's
+     behaviour and answers an open check-in or nudge. A daily reminder rings every day until
+     the user says "no me lo recuerdes más".
+   - Nothing in the vault is deleted: a stop is a tombstone.
 4. **A degraded reminder field means no reminder action.** The message takes the plain capture
    path, and the decision log says the reading was degraded. A **failed** classify call saves
    nothing, as for every capture (I31). Until m4f gives stopping a UI route, a stop cannot be
@@ -81,11 +84,11 @@ MAPING de textos… el LLM debería evaluar sobre la marcha").
 5. **Testing measures quality instead of asserting it.**
    - No test calls a real model (non-negotiable 5).
    - Existing recordings are not re-recorded, because conformance tests depend on their content.
-     A new reminder phrasing set records about 44 phrasings, each with its expected fields, in
+     A new reminder phrasing set records about 40 phrasings, each with its expected fields, in
      one session against the final prompt. It includes every phrasing the reviewers raised, with
      the question or candidate list open when there is one. CI replays the set.
-   - `nooma doctor --reading` (opt-in, about 44 calls) reports "reminder reading: k of n" and a
-     separate hard line: stop or delete false positives on the negatives must be 0. A prompt
+   - `nooma doctor --reading` (opt-in, about 40 calls) reports "reminder reading: k of n" and a
+     separate hard line: stop false positives on the negatives must be 0. A prompt
      change is judged by those numbers.
 
 ## Consequences
