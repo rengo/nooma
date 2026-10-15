@@ -697,7 +697,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		yearly := prospection.RuleYearly
 		f := newI29(t, now, dentist(now), toLater)
-		f.arm(t, "r1", "dentist", time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC), "Dentista el 2026-10-30", &yearly, &prospection.Anchor{Month: time.October, Day: 29})
+		f.arm(t, "r1", "dentist", time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC), "Dentista el 2026-10-30 a las 10:00", &yearly, &prospection.Anchor{Month: time.October, Day: 29})
 		f.capture(t, "dentist")
 		rows := reminderRows(t, f)
 		if len(rows) != 1 {

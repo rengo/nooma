@@ -730,7 +730,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      chat path, where the referent is found after the model answered: a title it wrote names the
      utterance and is never taken. A title equal to the unit's, a unit with none, and a
      correction that changes nothing (a date the unit already holds) write and clear nothing.
-     The text an armed reminder falls back to follows the title as it follows the date.
+     The text an armed reminder falls back to follows what the unit says, whether or not a date
+     moved: a wording or title change rewrites the text of each armed reminder of the unit,
+     whatever its type, that does not say what the unit says now (a recurring reminder's unit is
+     an event, and an asked task's reminder hangs off a task), recorded first as a
+     `correction.reminder.moved` row whose only field is `action_text`. It never changes when the
+     reminder fires, and a row is compared with the unit's text *now*, not with what it said
+     before, so a correction the unit already holds repairs a row a failed step left stale. A
+     reminder moved with a date takes the unit's text now by the same rule.
      **New text beside a new date is both edits** (I30). When the correction changes what the
      unit says and when it happens at once, and the model — shown the unit — returns text that
      differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`
@@ -788,8 +795,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        decided by `internal/core/prospection.Follow`, which calls the very functions `Arm` does,
        leads and pull-to-now included ([ADR-0029](adr/0029-event-reminders-follow-the-users-leads.md)).
        Armed triggers are carried onto the new reminders in firing order and moved (their
-       `fire_at`, their payload as a fresh arming writes it, their text as above, and a recurring
-       one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
+       `fire_at`, their payload as a fresh arming writes it, their text (what the unit says now: its
+       title, else its body with the date moved as above), and a recurring one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
        created; any further armed trigger expires. **A correction never creates an at-once
        reminder**: when every lead of the new instant is behind and nothing is armed, nothing is
        armed — the at-once reminder is a capture's, sent once (the one other at-once reminder
@@ -812,9 +819,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        **A failed reminder step leaves a partial state**, because the unit and its triggers share
        no transaction: the unit holds the new date, the reminders are unmoved or partly moved,
        the caller gets the error, and the learning signal is not written. The same correction
-       again repairs it — the decision is made from what is armed then, and a reminder's text is
-       rewritten from the trigger's own instant (`fire_at` plus its `lead_minutes`, or a
-       recurring one's lead days), which is exact unless that firing had been pulled forward.
+       again repairs it — the decision is made from what is armed then, and every reminder
+       the correction moves or rewrites takes the text the unit says **now** (its title, else
+       its body), compared with the unit as it is, so a retry that finds the unit already
+       holding the new date, title and body still repairs a reminder left saying the old name.
+       Guessing the previous instant from the trigger's own (`fire_at` plus its `lead_minutes`,
+       or a recurring one's lead days, exact unless that firing had been pulled forward) is no
+       longer how a correction rewrites a reminder's text: it applies only to the preference
+       re-arm and the due scan's re-plan, which edit no text.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
@@ -1500,7 +1512,8 @@ box can audit it):
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
   delivered. The text a reminder was armed with (the title the capture classified, else the
-  content) is only the fallback when the unit cannot be read.
+  content) is only the fallback when the unit cannot be read; a correction keeps it equal to
+  what the unit says (§5 step 4).
   The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.

@@ -18,30 +18,45 @@ import (
 // functions a fresh capture arms with, and each move, creation or expiry
 // writes its change-shaped decision row before its trigger write —
 // ADR-0016's order, applied to the reminder. A due_at edit, or a unit of
-// any other type, touches no trigger: nothing a unit-keeping capture arms
-// is about either.
+// any other type, moves no trigger: nothing a unit-keeping capture arms
+// is about either. What every armed reminder SAYS, though, follows the
+// unit's text and title whatever its type, whether or not a date moved:
+// a reminder moved with the date takes the unit's text as it is now
+// (moveReminder, sayBody), and a wording or title edit with no moved date
+// rewrites the rest (retextReminders). Both compare with the text now, not
+// the text before, so a retried correction repairs a row a failed step
+// left stale.
 func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, plan []correction.Edit, interruptLevel *float64, now time.Time) error {
-	if target.Type != unit.TypeEvent {
-		return nil
-	}
 	var eventAt time.Time
 	moved := false
 	// What the armed reminders say follows what the unit will say: its title
 	// after the edits, else its content.
 	changed := target
+	editsWhatTheUnitSays := false
 	for _, e := range plan {
 		if v, ok := e.EventAt(); ok {
 			eventAt, moved = v, true
 		}
 		if v, ok := e.Content(); ok {
 			changed.Content = v
+			editsWhatTheUnitSays = true
 		}
 		if v, ok := e.Title(); ok {
 			changed.Title = v
+			editsWhatTheUnitSays = true
 		}
 	}
-	body, bodyChanged := shownText(changed), shownText(changed) != shownText(target)
-	if !moved {
+	body := shownText(changed)
+	if target.Type != unit.TypeEvent || !moved {
+		// Nothing is re-planned (a task or a due_at has no lead to follow), but what
+		// an armed reminder says when its unit cannot be read later must still be
+		// what the unit says now, whatever its type: a recurring reminder's unit is
+		// an event, and an asked task's reminder is armed on a task. A correction
+		// the unit already holds (a retry) reaches here too, which is how a row a
+		// failed step left stale is repaired.
+		if editsWhatTheUnitSays {
+			return r.retextReminders(ctx, target, body, now)
+		}
 		return nil
 	}
 
@@ -52,7 +67,41 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	live, byID := liveSet(armed)
 	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config), interruptLevel, now)
 	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: correctionCause()}
-	return w.apply(ctx, target, f, byID, eventAt, body, bodyChanged, now)
+	// A moved reminder says what the unit says now, whatever it said before: a
+	// retry after a failed step finds the unit already holding the new text.
+	return w.apply(ctx, target, f, byID, eventAt, body, true, now)
+}
+
+// retextReminders rewrites the text of the unit's armed reminders to now, what
+// the unit says after the correction, with no change to when they fire. A row is
+// compared with that current text rather than with what the unit said before, so
+// a correction the unit already holds (a retry after a failed step) repairs a row
+// the first attempt left saying the old name. Each rewrite is recorded first, as a
+// moved reminder whose only field is action_text (ADR-0016's order).
+func (r correctionRunner) retextReminders(ctx context.Context, target unit.Unit, now string, at time.Time) error {
+	armed, err := r.triggers.ArmedForUnit(ctx, target.ID)
+	if err != nil {
+		return fmt.Errorf("correction: read reminders of unit %q: %w", target.ID, err)
+	}
+	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: correctionCause()}
+	for _, t := range armed {
+		if t.Payload.ActionText == now {
+			continue
+		}
+		was := t.Payload.ActionText
+		payload := t.Payload
+		payload.ActionText = now
+		if err := w.recordReminder(ctx, w.cause.moved,
+			fmt.Sprintf("changed what the reminder of unit %q says to the unit's corrected text", target.ID),
+			reminderChange{UnitID: target.ID, TriggerID: t.ID, Fields: []string{"action_text"},
+				Previous: map[string]any{"action_text": was}, Next: map[string]any{"action_text": now}}, at); err != nil {
+			return err
+		}
+		if err := r.triggers.Reschedule(ctx, t.ID, ports.TriggerMove{FireAt: t.FireAt, Payload: payload, RecurrenceAnchor: t.RecurrenceAnchor}); err != nil {
+			return fmt.Errorf("correction: change the text of reminder %q: %w", t.ID, err)
+		}
+	}
+	return nil
 }
 
 // liveSet is a unit's armed triggers as Follow reads them, and by id.
@@ -101,12 +150,12 @@ type reminderSet struct {
 	dry   bool
 }
 
-func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.Following, byID map[string]ports.DueTrigger, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
+func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.Following, byID map[string]ports.DueTrigger, eventAt time.Time, body string, sayBody bool, now time.Time) error {
 	for i, plan := range f.Plans {
 		var err error
 		switch {
 		case f.Carry[i] != "":
-			err = r.moveReminder(ctx, target, byID[f.Carry[i]], plan, eventAt, body, bodyChanged, now)
+			err = r.moveReminder(ctx, target, byID[f.Carry[i]], plan, eventAt, body, sayBody, now)
 		case plan.What != prospection.ArmNothing:
 			err = r.armReminder(ctx, target.ID, body, plan, now)
 		}
@@ -123,16 +172,19 @@ func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.
 }
 
 // moveReminder reschedules t to plan, with the payload a fresh arming of
-// plan writes and its text following the date as the unit's body did. A
-// move that changes nothing the reminder says or is read by writes nothing:
+// plan writes. Its text is body, what the unit says now, when sayBody (a
+// correction: the plan's text already carries the moved date, and a retry finds
+// the unit holding the new text while the row still says the old); otherwise
+// it follows the date through followTriggerText (the preference re-arm and the
+// due scan's re-plan, which edit no text). A move that changes nothing the reminder says or is read by writes nothing:
 // not its instant, its text, its lead, what it is about, the leads it
 // serves or its anchor. lead_days is not
 // compared: only a legacy reminder carries one, nothing but the text
 // follower reads it, and a new arming of the same date never does.
-func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
+func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, sayBody bool, now time.Time) error {
 	text := followTriggerText(t, target.EventAt, eventAt, now.Location())
-	if bodyChanged && t.Payload.ActionText == shownText(target) {
-		text = body // the reminder said what the unit said, and the unit now says this
+	if sayBody {
+		text = body // the unit says this now; so does every reminder moved with it
 	}
 	move := ports.TriggerMove{FireAt: plan.FireAt, Payload: armedPayload(text, plan)}
 	// A catch-up is owed for one event instant: moved onto another it is an
@@ -201,10 +253,12 @@ func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports
 
 // followTriggerText rewrites t's text from the instant it was about to
 // eventAt. That instant is the unit's previous event_at; when the unit
-// already holds eventAt — a retry after the reminder step failed — it is
-// the trigger's own, fire_at plus its lead (days for a recurring trigger,
-// minutes for an event reminder), exact unless the firing had been pulled
-// forward to its capture.
+// already holds eventAt it is the trigger's own, fire_at plus its lead (days
+// for a recurring trigger, minutes for an event reminder), exact unless the
+// firing had been pulled forward to its capture. A correction does not use
+// it any more (it passes sayBody and the unit's current text, so its retry is
+// repaired by the text, not by this guess); the preference re-arm and the due
+// scan's re-plan still do.
 func followTriggerText(t ports.DueTrigger, previous *time.Time, eventAt time.Time, zone *time.Location) string {
 	candidates := []time.Time{}
 	if previous != nil {
