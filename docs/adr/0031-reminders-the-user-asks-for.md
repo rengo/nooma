@@ -6,7 +6,7 @@
   only. ADR-0027's decision that a question lives in a dedicated store stands. Its reversal
   criterion anticipated a *differently-shaped store*; this widens the same store instead, so the
   supersession is partial and covers the shape alone.
-- **Superseded by**: —
+- **Superseded by**: [ADR-0033](0033-the-model-understands-the-code-acts.md), detection (the closed phrase lists of points 1, 4 and 5) and point 5's stop binding ("the only one there is" is replaced by a numbered candidate list the model chooses from); point 5's bare-"listo" handling deferred (client, 2026-10-14)
 - **Extends** (none edited):
   - [ADR-0029](0029-event-reminders-follow-the-users-leads.md) points 3 and 7;
   - [ADR-0030](0030-event-reminders-are-pushed-and-respect-the-night.md) points 1-4;
