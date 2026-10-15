@@ -95,10 +95,10 @@ own instant:
 
 A day-only one keeps ADR-0030's night rules.
 
-A day-only or "hoy" request reminds at once unless **less than** one check interval (5 minutes)
-remains in the local day, when it is refused `too_late`. Scenarios: "todos los días a las 06:30",
-quiet end 08:00 → 06:30; "a las 6:30" at 06:20 → at once; "hoy" at 23:50 or 23:55 → at once; at
-23:56 → refused.
+A day-only or "hoy" request reminds at once unless **less than** 7 minutes (one 5-minute check
+interval plus 2 of slack) remain in the local day, when it is refused `too_late`. Scenarios:
+"todos los días a las 06:30", quiet end 08:00 → 06:30; "a las 6:30" at 06:20 → at once; "hoy" at
+23:50 or 23:53 → at once; at 23:54 → refused.
 
 ### R5 — The reply
 
@@ -130,7 +130,9 @@ re-plan uses capture's lead set. A stopped unit is never re-armed by any of thes
 
 **MUST**: an asked message with a `recurrence_rule` and an instant creates a **`task`** unit,
 whatever the kind. It arms a recurring trigger at the named time on each occurrence (the
-date-only time when none was named). It has no lead and is pushed.
+date-only time when none was named). It has no lead and is pushed. Until this ships (link 7), a
+repeating request is armed once, and the reply says so: "Por ahora te lo recuerdo solo esta vez;
+el aviso diario llega pronto".
 
 **MUST**: every recurring trigger, asked or not, has a successor armed for the next occurrence
 after the later of its own occurrence and now, when it fires, when it expires, and after a crash
@@ -173,10 +175,14 @@ a misread with a normal stop or correction; an answer has no undo of its own (PM
 
 - **Window:** 10 minutes, time only. The newer-delivery, not-the-answer and consumed expiries do
   not touch it, and it is idempotent by id.
+- **Its own slot:** an undo is exempt from "one reminder question open at a time", and a newer
+  question never expires it. Two stops in 10 minutes leave two undos: a `keep` restores the most
+  recent, and a second `keep` the earlier one.
 - **Trigger:** only a message the model reads as `keep` while it is open restores. A bare "sí",
   "ok" or "dale" does not, and a stray "seguí" elsewhere restores nothing.
 - **Restore:** the undo clears the stop and restores exactly the retired rows, by id, from the
-  snapshot.
+  snapshot. If the unit's instant or anchor changed since the stop, it re-plans from the unit as
+  it is now, and the reply names the new time.
 - **Rows that passed:** a row whose time passed meanwhile is dropped and named ("te lo sigo
   recordando; el aviso de las 21:00 ya pasó"). A repeating reminder whose row was dropped gets
   its next occurrence armed in the same step, so it keeps repeating.
@@ -184,6 +190,9 @@ a misread with a normal stop or correction; an answer has no undo of its own (PM
 - **After the window:** only a **new explicit ask** (P6) brings the reminder back, as a new unit.
 - **Corrections:** a correction of a stopped unit applies its field edit and refuses only the
   re-arming. The reply says the reminder stays stopped.
+- **A stop and a request together** ("no me lo recuerdes más, y recordame llamar a Juan
+  mañana"): the stop is applied and the capture continues, as a check-in answer lets it
+  (`checkin.go:15-18`). The reply names both.
 
 **Deferred (client, 2026-10-14): done handling.** There is no `done` reading, no keep-or-delete
 question and no done-for-today mark. A daily reminder rings every day until the user stops it.
@@ -195,9 +204,12 @@ check-in outcome.
 
 - **Candidates.** Whenever there are stop candidates, the prompt carries a numbered list
   of at most 5, deduplicated by unit, each with title (or content) and date:
-  - for a stop, in this order: the unit of the last delivery, asked or not; then asked
-    reminders delivered within 120 minutes or armed; then the rest by next fire time (armed
-    recurring reminders).
+  - for a stop, in this order: the unit of the last delivery within 120 minutes, asked or not
+    (a check-in or nudge included, so "no me lo recuerdes más" said to a task check-in binds that
+    unit); then asked reminders delivered within 120 minutes or armed; then the rest by next
+    fire time (armed recurring reminders).
+  - **Known limit:** past 5 candidates, the 6th and later cannot be stopped by chat until m4f's
+    UI.
 
   The prompt says to answer `unclear` when the described reminder is not in the list.
 - **Binding.** The model returns `reminder_target`, and the code binds only on a valid position.
