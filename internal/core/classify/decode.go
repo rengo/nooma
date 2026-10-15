@@ -60,6 +60,16 @@ func fieldSpecs() []fieldSpec {
 		// absent weight is: it falls back and nothing is lost.
 		{"language", false, assignEnum(AllLanguages,
 			func(c *Classification, v *Language) { c.Language = v })},
+		// The reminder fields (ADR-0033 point 1) are optional for the reason
+		// language is: no existing recording carries them, and an absent one
+		// reads as none rather than as a loss.
+		{"remind_request", false, assignRemindRequest},
+		{"reminder_intent", false, assignEnum(AllReminderIntents,
+			func(c *Classification, v *ReminderIntent) { c.ReminderIntent = v })},
+		{"question_answer", false, assignEnum(AllQuestionAnswers,
+			func(c *Classification, v *QuestionAnswer) { c.QuestionAnswer = v })},
+		{"choice_number", false, assignChoiceNumber},
+		{"reminder_target", false, assignReminderTarget},
 	}
 }
 
@@ -287,5 +297,62 @@ func assignInterruptLevel(raw json.RawMessage, c *Classification, _ time.Time) R
 // and this is the one row that can never degrade.
 func assignRaw(raw json.RawMessage, c *Classification, _ time.Time) Reason {
 	c.StructuredData = raw
+	return ""
+}
+
+// assignRemindRequest reads remind_request: a JSON bool, or null. A null is an
+// answer the model may give ("not a request"), so it leaves the field nil
+// without a degradation; any other type degrades.
+func assignRemindRequest(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var b *bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return ReasonWrongType
+	}
+	c.RemindRequest = b
+	return ""
+}
+
+// readPosition reads a whole number from 1 to MaxReminderChoices. A fraction,
+// a string or a null is the wrong type; a whole number outside the list is a
+// value this field does not read (ReasonBadFormat).
+func readPosition(raw json.RawMessage) (int, Reason) {
+	var n *int
+	if err := json.Unmarshal(raw, &n); err != nil || n == nil {
+		return 0, ReasonWrongType
+	}
+	if *n < 1 || *n > MaxReminderChoices {
+		return 0, ReasonBadFormat
+	}
+	return *n, ""
+}
+
+func assignChoiceNumber(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	n, r := readPosition(raw)
+	if r != "" {
+		return r
+	}
+	c.ChoiceNumber = &n
+	return ""
+}
+
+// assignReminderTarget reads reminder_target: a position or the word
+// "unclear". Any other string is outside the vocabulary.
+func assignReminderTarget(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var s *string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		if s == nil {
+			return ReasonWrongType
+		}
+		if *s != ReminderTargetUnclear {
+			return ReasonUnknownEnum
+		}
+		c.ReminderTarget = &ReminderTarget{Unclear: true}
+		return ""
+	}
+	n, r := readPosition(raw)
+	if r != "" {
+		return r
+	}
+	c.ReminderTarget = &ReminderTarget{Position: n}
 	return ""
 }

@@ -468,6 +468,15 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      wire value, never inferred from a midnight, so a timestamp at midnight is a named time and a
      bare date on a day whose midnight a DST change skips is still a bare date
      ([ADR-0031](adr/0031-reminders-the-user-asks-for.md)).
+   - **The model reads whether a message is about a reminder; the code acts**
+     ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)). The same call returns four
+     optional reminder fields, each degrading alone (I14) to nil, which the brain reads as no
+     reminder action: `remind_request` (a JSON bool or null; anything else degrades),
+     `reminder_intent` (`none | stop | keep`), `question_answer` (`none | when | no | choice`)
+     with `choice_number`, and `reminder_target`. The last two are positions, 1 to
+     `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
+     `unclear` for `reminder_target`; a position outside 1-5 degrades. Core holds no phrase
+     list: the prompt explains the fields with examples in both languages.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
      "on Friday"), open check-ins.
@@ -1729,6 +1738,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 
 | Knob | Default |
 |---|---|
+| `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position (§5 step 1, ADR-0033); chosen, a list a person can read in one message |
 | `calendar_days` (`internal/core/classify.CalendarDays`) | 14 — how many days, today included, the classify context lists (§5 step 1); the furthest a bare weekday reaches is seven days out, so a week of margin |
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
 | `incomplete_expiry_hours` (`internal/core/consolidation.IncompleteExpiryHours`) | 24 |

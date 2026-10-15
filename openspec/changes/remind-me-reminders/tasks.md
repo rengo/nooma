@@ -23,9 +23,9 @@ tasks-repeating).
 ## Link 1 — `feat/remind-me-decision` (D2-D4 core, D6; merged as 1.2-1.4), and links 1a and 1a′ (1.1 and 1.1′: D1, D1b, D1c)
 
 - [ ] 1.1 Link 1a — `feat/classify-reminder-fields` (ADR-0033, D1, D1b):
-  - RED L1 `TestDecode_ReminderFields`: `remind_request`, `reminder_intent`, `question_answer`, `choice_number` decode; an unknown enum, a wrong type or a `choice_number` outside 1-5 degrades that field alone (I14); `TestAllReminderIntentsAndAnswersSwept`.
+  - [x] RED L1 `TestDecode_ReminderFields`: `remind_request`, `reminder_intent`, `question_answer`, `choice_number` decode; an unknown enum, a wrong type or a `choice_number` outside 1-5 degrades that field alone (I14); `TestAllReminderIntentsAndAnswersSwept`.
   - RED L1 `TestBuildPromptDescribesReminderFields`: both languages' examples; the open question appears only when one is passed.
-  - RED L1 `TestDecode_RemindRequestBoolOrNull`: `true`/`false`/`null` decode; `"yes"` → degraded. `TestDecode_ReminderTarget`: 1-5 and `"unclear"` decode; 0, 6, `"2"` → degraded.
+  - [x] RED L1 `TestDecode_RemindRequestBoolOrNull`: `true`/`false`/`null` decode; `"yes"` → degraded. `TestDecode_ReminderTarget`: 1-5 and `"unclear"` decode; 0, 6, `"2"` → degraded.
   - RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
   - RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output); `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
   - RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
