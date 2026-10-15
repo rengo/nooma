@@ -281,3 +281,24 @@ func TestDoctorReadingFlagWorksWhereverItIsWritten(t *testing.T) {
 		t.Error("--record with --reading was accepted: they are separate runs")
 	}
 }
+
+// A "no, seguí" that undoes a stop expects keep. Read as a stop it would stop
+// the reminder again, so it is a negative of the hard line like any message
+// that does not expect a stop; counting only the empty expectations missed it.
+func TestDoctorFalsePositiveLineCountsAKeepReadAsAStop(t *testing.T) {
+	stop := reply(`,"reminder_intent":"stop","reminder_target":1`)
+	keep := reply(`,"reminder_intent":"keep"`)
+	undo := func(answer string) readCase {
+		rc := phrasing("keep", "no, seguí", llm.Expect{ReminderIntent: "keep"}, answer)
+		rc.c.OpenQuestion = &llm.Question{Kind: "undo", Text: "Listo, no te lo recuerdo más. (Si fue un error, decime «no, seguí».)"}
+		return rc
+	}
+
+	r := readAll(t, undo(stop))
+	if r.negatives != 1 || len(r.falsePositives) != 1 || !r.failed() {
+		t.Fatalf("a keep read as a stop: negatives %d, false positives %v, failed %v; want 1, [keep], true", r.negatives, r.falsePositives, r.failed())
+	}
+	if ok := readAll(t, undo(keep)); len(ok.falsePositives) != 0 || ok.failed() {
+		t.Fatalf("a keep read as a keep failed doctor: %v", ok.falsePositives)
+	}
+}
