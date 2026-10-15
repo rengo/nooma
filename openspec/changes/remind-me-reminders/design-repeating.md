@@ -9,13 +9,13 @@ This continues `design.md` (D1-D9). The rules are ADR-0031, with detection by AD
 | Claim | Where |
 |---|---|
 | A fired recurring trigger is never re-armed; `NextOccurrence` has no caller in `brain` | `rg NextOccurrence internal/brain` → none |
-| `NextOccurrence` reads its zone from its argument, and `fire_at` is stored in UTC | `recurrence.go:88-89`, `sqlite/triggerrepo.go:427` |
-| An unasked recurring row fires 7 days before its occurrence, clamped to now (`arm.go:190`), so for a daily rule `NextOccurrence(fire_at)` is the **same** occurrence | `arm.go:147-171` |
-| The due loop expires a stale trigger with no follow-up (`check.go:121-152`) | `brain/check.go` |
+| `NextOccurrence` reads its zone from its argument, and `fire_at` is stored in UTC | `recurrence.go:88-89`, `sqlite/unitrepo.go:407` (`formatUnitTime`) |
+| An unasked recurring row fires 7 days before its occurrence, clamped to now (`arm.go:240`), so for a daily rule `NextOccurrence(fire_at)` is the **same** occurrence | `arm.go:226-251` |
+| The due loop expires a stale trigger with no follow-up (`check.go:180-231`) | `brain/check.go` |
 | `Follow`'s recurring branch re-anchors with `recurringTrigger(eventAt, rule, …)`: lead 7 days, anchor hour 12 | `follow.go:52-54`, `correction_reminder.go:129` |
 | `TriggerMove` can rewrite `RecurrenceAnchor` | `ports/triggerrepo.go:204` |
 | `TriggerStatusDismissed` exists, but no port method writes it | `ports/triggerrepo.go:26-33` |
-| `Delivered` breaks a `surfaced_at` tie by uuid, and a digest surfaces many rows with one `now` | `sqlite/triggerrepo.go:354`, `digest.go:182` |
+| `Delivered` breaks a `surfaced_at` tie by uuid, and a digest surfaces many rows with one `now` | `sqlite/triggerrepo.go:376`, `digest.go:182` |
 | `resolveCheckIn` engages `open[0]` whatever it is | `checkin.go:48` |
 | `armedPayload` writes `event_at` only for one-shot plans, so a corrected recurring row loses any payload instant | `capture.go:976-986` |
 | `DueTrigger` has no `created_at`, and `Reschedule` keeps the original | `ports/triggerrepo.go` |
@@ -65,7 +65,7 @@ earlier one.
 | `which_reminder` | `which_reminder_window_minutes` (60) |
 | `undo` | `stop_undo_window_minutes` (10): time only, exempt from (b), (c) and (d) |
 
-All four constants, and `stop_reply_window_minutes` (120), land in link 5 with the sweep that
+These three constants, and `stop_reply_window_minutes` (120), land in link 5 with the sweep that
 checks them.
 
 A reminder question expires when any of these happens:
