@@ -921,6 +921,12 @@ unit from the fields that survived. The record exists because §11 requires the 
 an automatic decision to be written down: a decoder that discarded *why* a field vanished would
 force the rest of the pipeline to guess.
 
+**The record is the decision row's.** The brain writes every degradation, field and reason, as
+a `degradations` list in the context of the row that accounts for the classification
+(`capture.classify`, or `capture.unit.created` for an ambiguous person reference), and names
+them in its rationale. A capture with nothing lost writes neither the key nor the sentence, so a
+row without a `degradations` key means a clean reading.
+
 **Truncation is a per-field event, not a per-response one.** A model whose output is cut off
 mid-sentence has still emitted complete fields before the cut. Those fields are read and kept;
 only what never arrived is missing. The rule is that a member is either read in full or treated
