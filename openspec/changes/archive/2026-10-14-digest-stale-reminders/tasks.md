@@ -109,7 +109,7 @@ reminders not shown (they must stay undelivered), which is a product call.
 PM decisions for those follow-ups: (1) timer wording follows the newest unit's language; (2) a digest over
 4096 characters drops the overflow lines, which stay undelivered for tomorrow, and appends "and N more" /
 "y N más"; (3) Today lines render from the unit.
-Done in `fix/proactive-followups` (#354, an eighth PR, not a link): (1) a timer's nudge, lateness note and
+Done in `fix/proactive-followups` (#354, merged; an eighth PR, not a link): (1) a timer's nudge, lateness note and
 rephrase language follow the newest unit's language; (2) a digest over 4096 UTF-16 units drops its last lines,
 says "and N more" / "y N más" and leaves them undelivered for tomorrow, counting only what it sent; (3) Today's
 lines render from the unit, in the newest unit's language, with the armed text as the fallback.
