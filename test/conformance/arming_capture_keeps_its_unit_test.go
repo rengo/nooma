@@ -122,12 +122,20 @@ func captureAndArmWithUnits(t *testing.T, now time.Time, llmCase string) (
 	*memrepo.Units, *memrepo.Triggers, *memrepo.Timers, brain.CaptureResult) {
 	t.Helper()
 
+	return captureAndArmFrom(t, testdataLLMCasesDir(t), now, llmCase)
+}
+
+// captureAndArmFrom is captureAndArmWithUnits over the cases in dir.
+func captureAndArmFrom(t *testing.T, dir string, now time.Time, llmCase string) (
+	*memrepo.Units, *memrepo.Triggers, *memrepo.Timers, brain.CaptureResult) {
+	t.Helper()
+
 	ctx := context.Background()
 	units := memrepo.NewUnits()
 	embeddings := memrepo.NewEmbeddings()
 	triggers := memrepo.NewTriggers()
 	timers := memrepo.NewTimers()
-	llm := fakeprovider.New(t, testdataLLMCasesDir(t), llmCase)
+	llm := fakeprovider.New(t, dir, llmCase)
 	embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
 
 	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)

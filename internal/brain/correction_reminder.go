@@ -26,14 +26,16 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	}
 	var eventAt time.Time
 	moved := false
-	body := target.Content
+	body := shownText(target)
 	bodyChanged := false
 	for _, e := range plan {
 		if v, ok := e.EventAt(); ok {
 			eventAt, moved = v, true
 		}
 		if v, ok := e.Content(); ok {
-			body, bodyChanged = v, v != target.Content
+			changed := target
+			changed.Content = v
+			body, bodyChanged = shownText(changed), shownText(changed) != shownText(target)
 		}
 	}
 	if !moved {
@@ -126,7 +128,7 @@ func (r reminderSet) apply(ctx context.Context, target unit.Unit, f prospection.
 // follower reads it, and a new arming of the same date never does.
 func (r reminderSet) moveReminder(ctx context.Context, target unit.Unit, t ports.DueTrigger, plan prospection.Plan, eventAt time.Time, body string, bodyChanged bool, now time.Time) error {
 	text := followTriggerText(t, target.EventAt, eventAt, now.Location())
-	if bodyChanged && t.Payload.ActionText == target.Content {
+	if bodyChanged && t.Payload.ActionText == shownText(target) {
 		text = body // the reminder said what the unit said, and the unit now says this
 	}
 	move := ports.TriggerMove{FireAt: plan.FireAt, Payload: armedPayload(text, plan)}

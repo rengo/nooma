@@ -923,7 +923,7 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		// The trigger payload is JSON, not a nullable column, so a degraded
 		// normalized_content lands as the empty string rather than as a key
 		// meaning "generic nudge" — triggers have no such concept.
-		trigger := armedTrigger(id, unitID, derefString(c.NormalizedContent), plan, now)
+		trigger := armedTrigger(id, unitID, armedText(c), plan, now)
 		action := ports.ActionCaptureArmedTrigger
 		if plan.What == prospection.ArmRecurring {
 			action = ports.ActionCaptureArmedRecurring
@@ -948,6 +948,15 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		Outcome: OutcomeArmed,
 		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate},
 	}, nil
+}
+
+// armedText is what a trigger armed from c says when its unit cannot be read
+// later: the classified title, else the normalized content (spec R12).
+func armedText(c classify.Classification) string {
+	if c.Title != nil {
+		return *c.Title
+	}
+	return derefString(c.NormalizedContent)
 }
 
 // armedTrigger is the one row a dated or recurring Plan becomes. Every

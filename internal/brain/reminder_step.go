@@ -185,7 +185,7 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 		}
 	}
 	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: checkCause(), tally: tally, dry: !commit}
-	return false, w.apply(ctx, u, f, byID, *u.EventAt, u.Content, false, now)
+	return false, w.apply(ctx, u, f, byID, *u.EventAt, shownText(u), false, now)
 }
 
 // checkCause is a due scan's re-plan of an event's reminders (ADR-0032).
@@ -227,7 +227,7 @@ func (r checkRunner) armCatchUp(ctx context.Context, u unit.Unit, plan prospecti
 			attempt = n + 1
 		}
 	}
-	trigger := armedTrigger(prefix+strconv.Itoa(attempt), &u.ID, u.Content, plan, now)
+	trigger := armedTrigger(prefix+strconv.Itoa(attempt), &u.ID, shownText(u), plan, now)
 	trigger.Payload.CatchUp = true
 	err = r.triggers.Create(ctx, trigger)
 	switch {

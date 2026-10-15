@@ -1481,12 +1481,15 @@ box can audit it):
   marked delivered fails the pass, and the process never sends it again (a restart, which forgets,
   may once more).
   **A reminder says its unit as it is now** (ADR-0032 point 4): a push and a digest line carry the
-  unit's current `content` and current instant in the clock's zone, in a fixed frame
-  (`Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00`), never a model call. A recurring one
+  unit's current `title`, else its current `content` (spec R12), and current instant in the
+  clock's zone, in a fixed frame (`Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00`; with
+  a title, `Recordatorio: Reunión con Juan — mié 14 oct, 22:30`), never a model call. A digest
+  line is the same words without the push's frame. A recurring one
   names its next occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
-  delivered. The text a reminder was armed with is only the fallback when the unit cannot be read.
+  delivered. The text a reminder was armed with (the title the capture classified, else the
+  content) is only the fallback when the unit cannot be read.
   The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.

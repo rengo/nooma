@@ -32,9 +32,9 @@ tasks-repeating).
   - [x] RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
   - [x] RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
   - [x] RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.
-  - RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
+  - [x] RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
   - RED `TestCorrectionRewritesTheTitle`: a re-classified correction → the new title in `correction.applied`, with the old one as pre-image. `TestCorrectionContentEditWithoutTitleClearsIt` → `title: null`. `TestCorrectionDateOnlyEditKeepsTitle`. `TestAllFields_EveryEditReportsExactlyOneAccessorTrue` gains `FieldTitle`.
-  - RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.
+  - [x] RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.
   - Asked capture: link 2 reads `asked` from `c.RemindRequest`. The day-only flag (1.2, #346) stays; the phrase reader never merged.
   - GREEN; doc 02 §5 step 1 (the fields, the title), §5.1 lines 483-495 (the narrower injection rule), §5 step 4 and §11 (`FieldTitle`), §7 (the render); doc 03 (`units.title`); §13 `max_title_runes`; `make check-all`.
 - [ ] 1.1′ Link 1a′ — `feat/doctor-record-and-reading` (D1c):
