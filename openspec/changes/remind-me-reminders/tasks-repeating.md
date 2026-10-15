@@ -1,7 +1,8 @@
-# Tasks — remind-me-reminders, links 5-9 (`design-repeating.md`; plan PR 4 of 4)
+# Tasks — remind-me-reminders, links 5-8 (`design-repeating.md`)
 
 **Apply gate:** every named RED test below is written and watched failing for its stated reason
-before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link that repeats) → 8 → 9.
+before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link that repeats) → 8. Old link 9 (done handling) is
+deferred (client, 2026-10-14).
 
 | Link | Impl+docs | Tests | Risk |
 |---|---|---|---|
@@ -9,7 +10,6 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
 | 6 | ~390 | ~480 | High: a durable stop through every path |
 | 7 | ~380 | ~420 | High: every recurring trigger changes (P2) |
 | 8 | ~300 | ~300 | High: binding without the model |
-| 9 | ~260 | ~260 | Medium |
 
 ## PR 5 — `feat/question-store-widens` (D10-D13)
 
@@ -19,7 +19,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - Contract `TestAskExpiresTheOpenReminderQuestion`: two `Ask` calls → one open.
   - `TestRelationReadsIgnoreReminderKinds`.
   - `TestLatestOpenAskedAtSpansKinds`.
-  - `TestEveryReminderKindHasAWindow`: a sweep over the new kinds → each has its §13 window; `ask_back_window_minutes`, `which_or_keep_window_minutes` and `stop_reply_window_minutes` all land in this link (round 3, item 3).
+  - `TestEveryReminderKindHasAWindow`: a sweep over the new kinds → each has its §13 window; `ask_back_window_minutes`, `which_reminder_window_minutes` and `stop_reply_window_minutes` all land in this link (round 3, item 3).
   - `TestUndoKindVocabularyAndWindow`: `undo` with `{unit_id, snapshot}`, resolutions `restored`/`expired`, window 10, exempt from (b), (c) and (d).
 - [ ] 5.2 GREEN: port, sqlite, memrepo, goldens; doc 03; §11 actions; `make check-all`.
 
@@ -35,7 +35,7 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestI38_StopIsDurableAgainstCorrection`: stop, then a date correction → nothing armed (item 3).
   - `TestI38_StopIsDurableAgainstRePlanAndPreferences`: #344's re-plan (`replanUnit`) and a lead change → nothing armed.
   - `TestI38_StopWinsTheRaceWithReArm`: a guarded insert after the tombstone → `ErrUnitStopped`.
-  - `TestI38_AmbiguousStopAsksWhichAndKeepsTheIntent`: answer "2" → the second is stopped.
+  - `TestI38_AmbiguousStopAsksWhich`: answer "2" → the second is stopped.
   - `TestI38_ABirthdayCanBeStopped` (P1).
   - `TestI38_IntentConsumedMessageSkipsCheckIn`: "no me recuerdes más" with an unasked check-in open → the check-in is untouched (item 9).
   - `TestI38_MixedIntentAndRequestIsConsumedKnownLimit` (pinned).
@@ -50,18 +50,18 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestI38_CorrectionOfStoppedUnitAppliesEditKeepsStopped`: the date is corrected, nothing is armed, `correction.reminder.refused` (`stopped`), and the reply says it stays stopped (PM).
   - `TestEveryCreateCallerSkipsErrUnitStopped`: an AST sweep of `brain` (item 6).
   - `TestI38_ConsumedRelationAnswerExpiresOlderRemindWhen`: `remind_when`, then a newer relation question, then "sí" → the relation is answered and `remind_when` expired; a later "no" → no daily (item 7).
-  - `TestI38_NewerDeliveryExpiresKeepOrStop`: `keep_or_stop` asked, then a push delivered, then "no" → nothing deleted (item 13).
+  - `TestI38_NewerDeliveryExpiresWhichReminder`: `which_reminder` asked, then a push delivered, then "2" → nothing stopped (item 13).
   - `TestI38_CheckinAfterRemindWhenOwnsTheNo`: `remind_when` seeded through `Ask`, then a check-in delivered, then "no" → the check-in is resolved, `remind_when` is still open, and no daily is made (A-W7).
   - `TestI38_ListoWithOnlyAnAskedDeliveryLeavesUnaskedCheckInAlone`: `resolveCheckIn` filters asked rows; when none remain → no-op (item 9).
   - Undo (Q1, Q2): `TestI38_StopUndoRecurringKeepsRecurringAt2100`; `TestI38_StopUndoDayOnly`; `TestI38_StopUndoLapsedFiredRowIsRecreated`; `TestI38_UndoThenNextScanSendsNoDouble`; `TestI38_UndoDropsARowThatPassedAndSaysSo`; `TestI38_StraySeguiRestoresNothing`; `TestRepairSkipsAUnitWithAnOpenUndo`.
-  - Binding (Q3, Q5, Q6): `TestI38_StopWithNoCandidateSaysNotFoundAndStoresNothing` and its done twin; `TestI38_TargetUnclearAsksWhich`; `TestI38_TargetOutOfRangeAsksWhich`; `TestI38_SingleCandidateStillNeedsTheModelsChoice`; `TestI38_StopAnUnaskedEventPushJustReceived` (its remaining leads dismissed); `TestI38_TieInsideOneUnitIsOneCandidate`; `TestI38_StopReplyAndOptionsUseTitleAndDate`.
+  - Binding (Q3, Q5, Q6): `TestI38_StopWithNoCandidateSaysNotFoundAndStoresNothing`; `TestChoiceOutsideTheListIsRefused` (`choice_number` 4 with 3 options → nothing bound, the question stays open); `TestI38_QuestionAnswerNotCoercedIntoNudge`; `TestI38_KeepWithNoOpenUndoDoesNothing`; `TestI38_BareListoKeepsM3Behaviour` ("listo" reads `none` and resolves an open task check-in; no reminder is touched; done handling deferred); `TestI38_TargetUnclearAsksWhich`; `TestI38_TargetOutOfRangeAsksWhich`; `TestI38_SingleCandidateStillNeedsTheModelsChoice`; `TestI38_StopAnUnaskedEventPushJustReceived` (its remaining leads dismissed); `TestI38_TieInsideOneUnitIsOneCandidate`; `TestI38_StopReplyAndOptionsUseTitleAndDate`.
   - Mechanics: `TestI38_ExplicitReferentStopRunsAboveTheCorrectionFork`; `TestOpenReminderQuestionExpiresAtRead`; `TestResolveIsCompareAndSet`; `TestStopToleratesADismissConflict`.
   - Round 2: `TestI38_UnboundListoWithOpenCheckinResolvesTheCheckin` (zero candidates); `TestI38_UnboundNoYaNoResolvesTheNudge`; `TestI38_DoneFallsThroughBeforeLink9`; `TestI38_StopAt2058UndoAt2103DailyRingsTomorrowAt2100`; `TestRepairHealsADismissedRootOfAnUnstoppedUnit`; `TestI38_BareSiDoesNotUndo`; `TestI38_StopReplyEndsWithTheUndoHint`; `TestUndoIsOneTransactionAgainstAConcurrentReplan`; `TestUndoWindowIgnoresANewerDelivery`; `TestStopCandidateOrder` (last delivery, asked, then by next fire).
   - `TestI38_ExplicitReferentBindsTheStop`: a UI or API stop with `unit_id` → that unit, even with other candidates.
 - [ ] 6.3 RED, precedence (D24), one per pair:
   - `TestPrecedence_RemindWhenNewerThanRelation_NoGoesToRemindWhen`;
   - `TestPrecedence_RelationNewerThanRemindWhen_NoGoesToModel`;
-  - `TestPrecedence_KeepOrStopVsRelation`;
+  - `TestPrecedence_UndoVsRelation`;
   - `TestPrecedence_WhichReminderVsRelation_TwoIsAnOption`;
   - `TestPrecedence_NewReminderQuestionExpiresTheOlder` (each reminder-kind pair);
   - `TestPrecedence_TieOrderByKind`.
@@ -120,21 +120,3 @@ before its link's GREEN code. Order (P1): 5 → 6 (stop) → 7 (the first link t
   - `TestI38_ScanExpiresAStaleQuestion`: `check.question.expired`; the unit is kept with no reminder.
   - `TestI38_AnswerReplyNamesWhatItDid`; `TestI38_AnswerReplyStatesTheRealRingTimeInQuietHours` (`DateOnlyAt` 06:00, quiet end 08:00 → "…a las 08:00"). There is no answer undo (PM).
 - [ ] 8.3 GREEN; doc 02 §5; doc 07; `make check-all`.
-
-## PR 9 — `feat/remind-me-done` (D50-D52; needs 6, 7)
-
-- [ ] 9.1 RED:
-  - Replayed: "listo", "ya lo hice." → `reminder_intent: done`; "listo, nos vemos mañana" → `none`; "seguí" → `keep`; "borralo" → `delete`; with `keep_or_stop` open, "no" → `question_answer: no` (P3).
-  - `TestChoiceOutsideTheListIsRefused`: `choice_number` 4 with 3 options → nothing bound, the question stays open.
-  - `TestI38_ABareListoAsksKeepOrDeleteOnce`.
-  - `TestI38_SeguiMakesListoDoneForToday`: the next "listo" → no question, it keeps recurring.
-  - `TestI38_BorraloStops`.
-  - `TestI38_BareNoToKeepOrStopDeletes` (P3).
-  - `TestI38_OtherAnswerLeavesUnmarkedAndAsksAgain`.
-  - `TestI38_TheDailyFromNoFollowsTheSameRule`.
-  - `TestI38_ABareListoWithNothingRecentStopsNothing`.
-  - `TestI38_DoneOnOneShotResolvesWithoutAsking`.
-  - `TestI38_DoneOnADeliveredOneShotNotArmed`: the reminder fired and was delivered, nothing armed → it binds (done candidates, item 10).
-  - `TestI38_BorraloWithNothingOpenDoesNothing` (Q10); `TestI38_QuestionAnswerNotCoercedIntoNudge`; `TestI38_SiInKeepOrStopIsKeep`.
-  - `TestI38_DoneOnAnAskedEventDismissesTheRemainingLeads`: "ya lo hice" after the 24 h lead → the 2 h and the +15 min leads are dismissed.
-- [ ] 9.2 GREEN: M4, `reminder.kept`, `reminder.done_today`; doc 02 §5, §11; doc 03; doc 07; `make check-all`.

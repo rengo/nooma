@@ -1,4 +1,4 @@
-# Design — remind-me-reminders, links 5-9: question store, stop, recurring, ask-back, done
+# Design — remind-me-reminders, links 5-8: question store, stop, recurring, ask-back
 
 This continues `design.md` (D1-D9). The rules are ADR-0031, with detection by ADR-0033
 (Accepted): the classify fields of D1 replace every phrase list below. P1-P5 are the PM's decisions in
@@ -31,9 +31,9 @@ the indexes recreated:
 - `relation_id` becomes nullable;
 - `unit_id` and `options` (JSON) are added, with no FK (ADR-0027's reasons).
 
-The `kind` vocabulary gains `remind_when`, `keep_or_stop`, `which_reminder` and `undo`. The
-resolution vocabulary gains `answered`, `declined`, `kept`, `deleted` and `restored`. `options`
-holds `{intent: stop|done, unit_ids: [...]}` for `which_reminder`, and `{unit_id, snapshot}` for
+The `kind` vocabulary gains `remind_when`, `which_reminder` and `undo`. The resolution vocabulary
+gains `answered`, `declined` and `restored`. `options` holds `{unit_ids: [...]}` for
+`which_reminder`, and `{unit_id, snapshot}` for
 `undo`. The M2 column comments, the vocabulary DDL test
 (`pending_question_vocabulary_ddl_test.go`) and doc 03 change together.
 
@@ -57,8 +57,7 @@ same store (window `stop_undo_window_minutes`, 10).
 | Kind | Window (§13) |
 |---|---|
 | `remind_when` | `ask_back_window_minutes` (60) |
-| `keep_or_stop` | `which_or_keep_window_minutes` (60) |
-| `which_reminder` | `which_or_keep_window_minutes` (60) |
+| `which_reminder` | `which_reminder_window_minutes` (60) |
 | `undo` | `stop_undo_window_minutes` (10): time only, exempt from (b), (c) and (d) |
 
 All four constants, and `stop_reply_window_minutes` (120), land in link 5 with the sweep that
@@ -72,8 +71,8 @@ A reminder question expires when any of these happens:
   `capture.question.expired`.
 - **(c) Consumed:** a message is consumed by any other answer, a reminder intent or a check-in. The older
   open reminder question expires in the same step (round 2, item 7).
-- **(d) Newer delivery:** a reminder or check-in delivered after a `keep_or_stop` or
-  `which_reminder` was asked expires it, so a late "no" never deletes. It does **not** expire a
+- **(d) Newer delivery:** a reminder or check-in delivered after a `which_reminder` was asked
+  expires it, so a late answer never stops the wrong reminder. It does **not** expire a
   `remind_when` inside its window. Instead, D24 step 1 lets a check-in or nudge delivered after
   it own the next message, which falls through to the resolvers. A check-in's "no" therefore
   never makes a daily reminder, and the user can still answer the ask-back afterwards.
@@ -84,7 +83,7 @@ A reminder question expires when any of these happens:
 - `capture.question.answered`
 - `capture.question.expired`
 - `check.question.expired`
-- `capture.reminder.unbound` (a stop or done that found nothing, Q3)
+- `capture.reminder.unbound` (a stop that found nothing, Q3)
 - `reminder.stopped` and `reminder.restored` (an undo), with I12 and the `AllDecisionActions` sweep
 
 ### Link 6: the stop (D20-D24) — lands before anything repeats (P1)
@@ -115,7 +114,7 @@ tombstone with its instant. `remind_me` keeps its history.
   «recordame…»". Nothing but the undo clears the tombstone.
 
 **D21. Stop intent** (ADR-0033 points 2-3). A stop is `reminder_intent: stop`. The prompt states
-that a stop outweighs a done ("listo, no me lo recuerdes más" is a stop), and the phrasing set
+that "listo, no me lo recuerdes más" is a stop, and the phrasing set
 measures it. A bound stop is its own confirmation.
 
 **D22. Candidates and binding by position** (PM Q5, Q6).
@@ -129,17 +128,13 @@ measures it. A bound stop is its own confirmation.
   They are deduplicated by unit, so a tie inside one unit is one candidate, and cut to 5. Each is
   rendered by `RenderReminderList` as "<n>) <title or content> — <date>". The prompt says to
   answer `unclear` when the described reminder is not listed.
-- **Done candidates:** asked reminders delivered within `stop_reply_window_minutes` (120).
 - **Prompt:** the classify prompt carries the list whenever it is non-empty.
 - **Binding:** the model answers `reminder_target`. Code binds only on a position inside the list
   it sent. `unclear`, out of range or absent asks `which_reminder {intent, unit_ids}` with the
   same list. There is no word matching and no blind single-candidate bind.
-- **Unbound (Q3, round 2 C1):** a stop or done that binds nothing is consumed **only when no
-  check-in, nudge or relation question is open**. It then replies "No encontré qué recordatorio
-  cortar" (done: "…marcar como hecho") and stores nothing. Otherwise it falls through to the
-  resolvers (`checkin.go:23-55`).
-- **`done` before link 9:** links 6-8 leave `done` out of D24, and a `done` reading falls
-  through.
+- **Unbound (Q3, round 2 C1):** a stop that binds nothing is consumed **only when no check-in,
+  nudge or relation question is open**. It then replies "No encontré qué recordatorio cortar" and
+  stores nothing. Otherwise it falls through to the resolvers (`checkin.go:23-55`).
 
 **D23. Stopping, and its undo** (PM Q1, Q2).
 
@@ -182,26 +177,25 @@ reminder question in its prompt (D1). Then the code reads the fields in this ord
 
 0. **The intent step runs above the correction fork** (`capture.go:283-290`), and
    `BuildCorrectionPrompt` carries the fields. An explicit referent (UI or API `unit_id`; chat
-   has none today) binds a stop or done to that unit directly, skipping D22.
+   has none today) binds a stop to that unit directly, skipping D22.
 1. **The open question that owns the message.** Q is the most recently asked open question of
-   any kind (`LatestOpenAskedAt`). Ties go `which_reminder` > `keep_or_stop` > `remind_when` >
-   `relation`.
+   any kind (`LatestOpenAskedAt`). Ties go `which_reminder` > `undo` > `remind_when` > `relation`.
    - If Q is a reminder kind inside its window and the reading fits Q, the message is consumed.
      The fitting readings are: `question_answer` `when` or `no` for `remind_when` (D42);
-     `reminder_intent` `keep` or `delete`, or `question_answer` `no` for `keep_or_stop` (D51);
      `question_answer` `choice` within the list for `which_reminder`; and `reminder_intent: keep`
      for `undo` (never a bare "sí").
    - A check-in or nudge delivered after Q was asked outranks Q: the message goes to step 3's
      resolvers (D12 (d)).
    - If Q is a reminder kind and the reading does not fit, Q expires (D12) and the steps go on.
    - If Q is a relation question, the steps go on: `relation_outcome` binds it as in m3e.
-2. **`reminder_intent` `stop`** (and `done` from link 9) binds through D22. If it binds or asks,
+2. **`reminder_intent` `stop`** binds through D22. If it binds or asks,
    the message is consumed; if it finds nothing, see D22's unbound rule. **None of the three check-in resolvers runs** (task, state and
    relation), so a stop that also reads `relation_outcome: rejected` deletes nothing (PM Q9).
-   `delete`, `keep` or a `question_answer` with no matching open question does nothing, and is
-   never coerced into `nudge_outcome` (PM Q10).
+   A `keep` or a `question_answer` with no matching open question does nothing, and is never
+   coerced into `nudge_outcome` (PM Q10).
 3. **Capture.** From link 6, `resolveCheckIn` drops triggers with `asked` in their payload from
-   `open` and does nothing when none remain, so a done never engages an older unasked check-in.
+   `open` and does nothing when none remain. A bare "listo" keeps M3's behaviour and answers an
+   open check-in or nudge: done handling is deferred.
 
 A message whose intent binds is consumed whole, even if it also carried a request; a pinned test
 states this limit.
@@ -319,37 +313,17 @@ into the anchor**, so a later change of the preference does not move it. The fir
 today when that time is still ahead, otherwise tomorrow. The reply reads "Te aviso todos los días
 a las <anchor time>".
 
-### Link 9: done and keep (D50-D52)
+### Deferred: done handling (old link 9, D50-D52)
 
-**D50. Done.** A done is `reminder_intent: done`. The prompt reserves it for a message saying the
-reminded thing is done ("listo", "ya lo hice", "done"). "listo, nos vemos mañana" reads `none`,
-and the phrasing set measures that. The binding follows D22 rules 1 and 2 only.
-
-**D51. The keep-or-stop answer.**
-
-- **Keep:** `reminder_intent: keep` ("seguí", "keep going"), and "sí" answering this question.
-- **Delete:** `reminder_intent: delete` ("borralo", "delete it"), or `question_answer: no` (P3).
-  This answer is the confirmation turn ADR-0033 point 3 asks of a delete.
-
-**D52. Effects.** Migration M4 adds `units.done_means_today INTEGER NOT NULL DEFAULT 0`. It lives
-on the unit because the trigger rows are replaced at every occurrence.
-
-| Reading | Reminder | Effect | Reply |
-|---|---|---|---|
-| done | one-shot | resolve `engaged`; for an asked event, its remaining armed leads are `Dismiss`ed | "Hecho." |
-| done | repeating, not marked | `keep_or_stop` asked | "¿Querés que te lo siga recordando o borramos el recordatorio?" |
-| done | repeating, marked | resolve the delivered one `engaged`; it keeps recurring | "Hecho por hoy." |
-| keep | the question's unit | `reminder.kept` first, then the mark; resolved `kept` | "Bien, te lo sigo recordando." |
-| delete or "no" | the question's unit | D23 stop; resolved `deleted` | D23's |
-
-Any other message makes the question expire, so the next bare done asks again. The "No" daily
-follows the same table.
+Client, 2026-10-14. This drops the bare "listo" and "ya lo hice" on a reminder, the
+`keep_or_stop` question, its done-for-today mark (and its migration), and the done candidate set.
+A daily rings every day until stopped. It is a follow-up, to be planned when the client asks.
 
 ## 3. Invariant I38 and doc changes
 
-I38: a reminder question, a stop and a done are bound without the model, the stop is durable, and
-nothing repeats unstoppably. Doc 02 changes: §5 (links 6, 8, 9), §7 "Recurrence" (link 7: the
+I38: a reminder question and a stop are bound without the model, the stop is durable, and
+nothing repeats unstoppably. Doc 02 changes: §5 (links 6 and 8), §7 "Recurrence" (link 7: the
 re-arm is made true, an anchor's time, unasked rows changed per P2), and §11 (each link's
-actions). Doc 03 changes with links 5, 6, 7 and 9, and doc 07 with each link. The §13 constants
-are `ask_back_window_minutes`, `which_or_keep_window_minutes` and `stop_reply_window_minutes`, all
-in link 5. New lapse reason: `stopped` (link 6).
+actions). Doc 03 changes with links 5, 6 and 7, and doc 07 with each link. The §13 constants
+are `ask_back_window_minutes`, `which_reminder_window_minutes`, `stop_reply_window_minutes` and
+`stop_undo_window_minutes`, all in link 5. New lapse reason: `stopped` (link 6).
