@@ -28,8 +28,8 @@ tasks-repeating).
   - [x] RED L1 `TestDecode_RemindRequestBoolOrNull`: `true`/`false`/`null` decode; `"yes"` → degraded. `TestDecode_ReminderTarget`: 1-5 and `"unclear"` decode; 0, 6, `"2"` → degraded.
   - RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
   - RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output); `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
-  - RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
-  - RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
+  - [x] RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
+  - [x] RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
   - RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.
   - RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
   - RED `TestCorrectionRewritesTheTitle`: a re-classified correction → the new title in `correction.applied`, with the old one as pre-image. `TestCorrectionContentEditWithoutTitleClearsIt` → `title: null`. `TestCorrectionDateOnlyEditKeepsTitle`. `TestAllFields_EveryEditReportsExactlyOneAccessorTrue` gains `FieldTitle`.

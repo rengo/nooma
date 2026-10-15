@@ -101,6 +101,11 @@ type Classification struct {
 	ChoiceNumber   *int
 	ReminderTarget *ReminderTarget
 
+	// Title is the short, date-free name a reminder says for the unit
+	// (ADR-0033's sibling decision, spec R12), already checked by
+	// ResolveTitle: nil when the model gave none or gave one the check drops.
+	Title *string
+
 	// Degradations records what was lost and why, in fieldSpecs' order. It
 	// exists because I12 requires internal/brain to write a rationale into
 	// decision_log: a decoder that discarded *why* a field vanished would

@@ -63,6 +63,7 @@ func fieldSpecs() []fieldSpec {
 		// The reminder fields (ADR-0033 point 1) are optional for the reason
 		// language is: no existing recording carries them, and an absent one
 		// reads as none rather than as a loss.
+		{"title", false, assignTitle},
 		{"remind_request", false, assignRemindRequest},
 		{"reminder_intent", false, assignEnum(AllReminderIntents,
 			func(c *Classification, v *ReminderIntent) { c.ReminderIntent = v })},
@@ -354,5 +355,21 @@ func assignReminderTarget(raw json.RawMessage, c *Classification, _ time.Time) R
 		return r
 	}
 	c.ReminderTarget = &ReminderTarget{Position: n}
+	return ""
+}
+
+// assignTitle reads title and keeps what ResolveTitle keeps. A title the check
+// drops is a value this field does not read (ReasonBadFormat), recorded so the
+// decision log shows the model was asked for one and gave an unusable one.
+func assignTitle(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var s *string
+	if err := json.Unmarshal(raw, &s); err != nil || s == nil {
+		return ReasonWrongType
+	}
+	title := ResolveTitle(*s)
+	if title == nil {
+		return ReasonBadFormat
+	}
+	c.Title = title
 	return ""
 }
