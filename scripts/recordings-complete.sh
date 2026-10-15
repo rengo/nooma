@@ -16,6 +16,13 @@ set -u
 dir=${1:-testdata/llm/reminders}
 status=0
 
+# A set that is not there is not a recorded set. Without this, renaming the
+# directory would turn the gate into a pass that checks nothing.
+if ! ls "$dir"/*.json >/dev/null 2>&1; then
+  echo "FAIL: no phrasings found in $dir (the directory is missing, renamed or empty); this gate checks the phrasing set and must find it."
+  exit 1
+fi
+
 pending=$(grep -lE '"record"[[:space:]]*:[[:space:]]*true' "$dir"/*.json 2>/dev/null || true)
 if [ -n "$pending" ]; then
   echo "FAIL: these phrasings still await their recording (\"record\": true):"

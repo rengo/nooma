@@ -127,3 +127,16 @@ func TestRecordingsCompleteScript(t *testing.T) {
 		}
 	}
 }
+
+// A set that is not there is not a recorded set: a renamed directory must not
+// turn the gate into a pass that checks nothing.
+func TestRecordingsCompleteFailsOnAMissingOrEmptySet(t *testing.T) {
+	cmd := exec.Command("sh", filepath.Join(repoRootFromCaller(t), "scripts", "recordings-complete.sh"), filepath.Join(t.TempDir(), "renamed"))
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "FAIL") {
+		t.Fatalf("a missing directory = %v, output %q: want exit 1 and FAIL", err, out)
+	}
+	if out, code := runRecordingsComplete(t, map[string]string{"notes.md": "no phrasings here"}); code != 1 || !strings.Contains(out, "no phrasings") {
+		t.Fatalf("an empty set: exit %d, output %q: want exit 1 saying there are no phrasings", code, out)
+	}
+}
