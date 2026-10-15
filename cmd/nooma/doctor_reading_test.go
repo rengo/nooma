@@ -271,3 +271,13 @@ func TestDoctorReadingRunsOnlyWhenAsked(t *testing.T) {
 		t.Errorf("doctor --reading did not run the reading check:\n%s", asked)
 	}
 }
+
+func TestDoctorReadingFlagWorksWhereverItIsWritten(t *testing.T) {
+	got, err := parseDoctorArgs([]string{"vault", "--reading"}, &bytes.Buffer{})
+	if err != nil || !got.reading || got.vault != "vault" {
+		t.Fatalf("parsed %+v, %v: want reading on, vault vault", got, err)
+	}
+	if _, err := parseDoctorArgs([]string{"--reading", "--record", "ph"}, &bytes.Buffer{}); err == nil {
+		t.Error("--record with --reading was accepted: they are separate runs")
+	}
+}
