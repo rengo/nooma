@@ -1,0 +1,11 @@
+{
+  "id": "classify-request-que-no-se-me-olvide",
+  "task": "classify",
+  "message": "que no se me olvide regar las plantas mañana",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "day_only": true,
+    "title": true
+  }
+}

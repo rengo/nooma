@@ -1,0 +1,10 @@
+{
+  "id": "classify-title-has-no-date",
+  "task": "classify",
+  "message": "recordame la reunión con Juan mañana a las 22:30",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "title": true
+  }
+}

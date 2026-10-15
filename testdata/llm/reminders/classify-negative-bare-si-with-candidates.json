@@ -1,0 +1,13 @@
+{
+  "id": "classify-negative-bare-si-with-candidates",
+  "task": "classify",
+  "message": "sí",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct 10:00"
+    }
+  ],
+  "expect": {}
+}

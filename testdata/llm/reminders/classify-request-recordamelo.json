@@ -1,0 +1,9 @@
+{
+  "id": "classify-request-recordamelo",
+  "task": "classify",
+  "message": "recordámelo",
+  "record": true,
+  "expect": {
+    "remind_request": true
+  }
+}

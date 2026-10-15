@@ -1,0 +1,9 @@
+{
+  "id": "classify-nudge-engaged",
+  "task": "classify",
+  "message": "dale, contame",
+  "record": true,
+  "expect": {
+    "nudge_outcome": "engaged"
+  }
+}

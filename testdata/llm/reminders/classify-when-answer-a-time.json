@@ -1,0 +1,14 @@
+{
+  "id": "classify-when-answer-a-time",
+  "task": "classify",
+  "message": "mañana a las 8",
+  "record": true,
+  "open_question": {
+    "kind": "remind_when",
+    "text": "¿Cuándo querés que te avise?"
+  },
+  "expect": {
+    "question_answer": "when",
+    "day_only": false
+  }
+}

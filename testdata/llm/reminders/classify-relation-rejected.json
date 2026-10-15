@@ -1,0 +1,9 @@
+{
+  "id": "classify-relation-rejected",
+  "task": "classify",
+  "message": "no, no tienen nada que ver",
+  "record": true,
+  "expect": {
+    "relation_outcome": "rejected"
+  }
+}

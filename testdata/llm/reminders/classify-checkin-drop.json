@@ -1,0 +1,9 @@
+{
+  "id": "classify-checkin-drop",
+  "task": "classify",
+  "message": "dejalo, ya no hace falta",
+  "record": true,
+  "expect": {
+    "task_checkin_outcome": "drop"
+  }
+}

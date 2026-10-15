@@ -1,0 +1,15 @@
+{
+  "id": "classify-negative-bare-listo-with-candidates",
+  "task": "classify",
+  "message": "listo",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct 10:00"
+    }
+  ],
+  "expect": {
+    "task_checkin_outcome": "done"
+  }
+}

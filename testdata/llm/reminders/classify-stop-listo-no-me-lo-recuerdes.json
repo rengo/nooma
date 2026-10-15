@@ -1,0 +1,20 @@
+{
+  "id": "classify-stop-listo-no-me-lo-recuerdes",
+  "task": "classify",
+  "message": "listo, no me lo recuerdes más",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Llamar a Ana",
+      "when": "jue 15 oct 17:00"
+    },
+    {
+      "label": "Pagar el gas",
+      "when": "vie 16 oct"
+    }
+  ],
+  "expect": {
+    "reminder_intent": "stop",
+    "reminder_target": "unclear"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "classify-negative-ya-lo-hice-with-candidates",
+  "task": "classify",
+  "message": "ya lo hice",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Llamar a Ana",
+      "when": "jue 15 oct 17:00"
+    },
+    {
+      "label": "Pagar el gas",
+      "when": "vie 16 oct"
+    }
+  ],
+  "expect": {
+    "task_checkin_outcome": "done"
+  }
+}

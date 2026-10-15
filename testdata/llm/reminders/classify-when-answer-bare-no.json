@@ -1,0 +1,13 @@
+{
+  "id": "classify-when-answer-bare-no",
+  "task": "classify",
+  "message": "no",
+  "record": true,
+  "open_question": {
+    "kind": "remind_when",
+    "text": "¿Cuándo querés que te avise?"
+  },
+  "expect": {
+    "question_answer": "no"
+  }
+}

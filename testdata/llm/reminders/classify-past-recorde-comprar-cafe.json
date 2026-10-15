@@ -1,0 +1,7 @@
+{
+  "id": "classify-past-recorde-comprar-cafe",
+  "task": "classify",
+  "message": "recordé que tenía que comprar café",
+  "record": true,
+  "expect": {}
+}

@@ -1,0 +1,11 @@
+{
+  "id": "classify-undo-bare-dale-is-not-keep",
+  "task": "classify",
+  "message": "dale",
+  "record": true,
+  "open_question": {
+    "kind": "undo",
+    "text": "Listo, dejé de recordarte «Comprar café». (Si fue un error, decime «no, seguí».)"
+  },
+  "expect": {}
+}

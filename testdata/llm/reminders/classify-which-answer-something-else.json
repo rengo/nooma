@@ -1,0 +1,11 @@
+{
+  "id": "classify-which-answer-something-else",
+  "task": "classify",
+  "message": "gracias, nos vemos",
+  "record": true,
+  "open_question": {
+    "kind": "which_reminder",
+    "text": "¿De cuál hablás?\n1) Comprar café — jue 15 oct 10:00\n2) Llamar a Ana — jue 15 oct 17:00\n3) Pagar el gas — vie 16 oct\n"
+  },
+  "expect": {}
+}

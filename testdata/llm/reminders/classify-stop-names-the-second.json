@@ -1,0 +1,20 @@
+{
+  "id": "classify-stop-names-the-second",
+  "task": "classify",
+  "message": "ya no me avises del gimnasio",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Dentista",
+      "when": "vie 16 oct 10:00"
+    },
+    {
+      "label": "Gimnasio",
+      "when": "todos los días 07:00"
+    }
+  ],
+  "expect": {
+    "reminder_intent": "stop",
+    "reminder_target": "2"
+  }
+}

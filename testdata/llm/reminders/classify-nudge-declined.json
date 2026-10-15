@@ -1,0 +1,9 @@
+{
+  "id": "classify-nudge-declined",
+  "task": "classify",
+  "message": "ahora no, gracias",
+  "record": true,
+  "expect": {
+    "nudge_outcome": "declined"
+  }
+}

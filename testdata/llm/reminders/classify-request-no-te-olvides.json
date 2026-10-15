@@ -1,0 +1,10 @@
+{
+  "id": "classify-request-no-te-olvides",
+  "task": "classify",
+  "message": "no te olvides de recordarme pagar el gas el jueves",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "title": true
+  }
+}

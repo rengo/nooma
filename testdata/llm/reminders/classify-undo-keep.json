@@ -1,0 +1,13 @@
+{
+  "id": "classify-undo-keep",
+  "task": "classify",
+  "message": "no, seguí",
+  "record": true,
+  "open_question": {
+    "kind": "undo",
+    "text": "Listo, dejé de recordarte «Comprar café». (Si fue un error, decime «no, seguí».)"
+  },
+  "expect": {
+    "reminder_intent": "keep"
+  }
+}

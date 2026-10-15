@@ -1,0 +1,16 @@
+{
+  "id": "classify-stop-one-candidate-other-topic",
+  "task": "classify",
+  "message": "no me recuerdes más lo del curso de inglés",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct 10:00"
+    }
+  ],
+  "expect": {
+    "reminder_intent": "stop",
+    "reminder_target": "unclear"
+  }
+}

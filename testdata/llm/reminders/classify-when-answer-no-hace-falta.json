@@ -1,0 +1,13 @@
+{
+  "id": "classify-when-answer-no-hace-falta",
+  "task": "classify",
+  "message": "no hace falta",
+  "record": true,
+  "open_question": {
+    "kind": "remind_when",
+    "text": "¿Cuándo querés que te avise?"
+  },
+  "expect": {
+    "question_answer": "no"
+  }
+}

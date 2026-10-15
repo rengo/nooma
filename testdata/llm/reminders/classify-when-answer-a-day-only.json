@@ -1,0 +1,14 @@
+{
+  "id": "classify-when-answer-a-day-only",
+  "task": "classify",
+  "message": "el viernes",
+  "record": true,
+  "open_question": {
+    "kind": "remind_when",
+    "text": "¿Cuándo querés que te avise?"
+  },
+  "expect": {
+    "question_answer": "when",
+    "day_only": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "classify-request-haceme-acordar",
+  "task": "classify",
+  "message": "haceme acordar de llamar al médico mañana a las 9",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "title": true
+  }
+}

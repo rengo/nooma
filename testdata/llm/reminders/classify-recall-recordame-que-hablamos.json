@@ -1,0 +1,7 @@
+{
+  "id": "classify-recall-recordame-que-hablamos",
+  "task": "classify",
+  "message": "recordame qué hablamos con Juan",
+  "record": true,
+  "expect": {}
+}

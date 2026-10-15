@@ -1,0 +1,9 @@
+{
+  "id": "classify-request-si-no-puedo-avisame",
+  "task": "classify",
+  "message": "si no puedo, avisame",
+  "record": true,
+  "expect": {
+    "remind_request": true
+  }
+}

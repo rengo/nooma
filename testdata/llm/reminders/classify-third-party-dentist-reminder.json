@@ -1,0 +1,7 @@
+{
+  "id": "classify-third-party-dentist-reminder",
+  "task": "classify",
+  "message": "my dentist sent a reminder to confirm",
+  "record": true,
+  "expect": {}
+}

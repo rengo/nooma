@@ -1,0 +1,7 @@
+{
+  "id": "classify-reported-speech-avisame",
+  "task": "classify",
+  "message": "Ana me dijo 'avisame cuando llegues'",
+  "record": true,
+  "expect": {}
+}

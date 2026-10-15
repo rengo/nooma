@@ -1,0 +1,10 @@
+{
+  "id": "classify-request-acordate-de-avisarme",
+  "task": "classify",
+  "message": "acordate de avisarme que vence el seguro el viernes",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "title": true
+  }
+}

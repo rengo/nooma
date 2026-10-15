@@ -1,0 +1,11 @@
+{
+  "id": "classify-request-day-only-english",
+  "task": "classify",
+  "message": "remind me to renew the passport tomorrow",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "day_only": true,
+    "title": true
+  }
+}

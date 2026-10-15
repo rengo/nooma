@@ -1,0 +1,11 @@
+{
+  "id": "classify-task-remind-me-daily-pills",
+  "task": "classify",
+  "message": "recordame tomar las pastillas todos los días a las 9pm",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "day_only": false,
+    "title": true
+  }
+}

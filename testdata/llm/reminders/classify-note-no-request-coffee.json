@@ -1,0 +1,9 @@
+{
+  "id": "classify-note-no-request-coffee",
+  "task": "classify",
+  "message": "comprar café mañana a las 10",
+  "record": true,
+  "expect": {
+    "title": true
+  }
+}

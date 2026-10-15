@@ -1,0 +1,13 @@
+{
+  "id": "classify-negative-listo-nos-vemos-with-candidates",
+  "task": "classify",
+  "message": "listo, nos vemos mañana",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct 10:00"
+    }
+  ],
+  "expect": {}
+}

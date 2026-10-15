@@ -1,0 +1,20 @@
+{
+  "id": "classify-stop-english-names-the-first",
+  "task": "classify",
+  "message": "don't remind me anymore about the dentist",
+  "record": true,
+  "candidates_list": [
+    {
+      "label": "Dentista",
+      "when": "vie 16 oct 10:00"
+    },
+    {
+      "label": "Gimnasio",
+      "when": "todos los días 07:00"
+    }
+  ],
+  "expect": {
+    "reminder_intent": "stop",
+    "reminder_target": "1"
+  }
+}

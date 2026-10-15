@@ -1,0 +1,11 @@
+{
+  "id": "classify-request-english-call-ana",
+  "task": "classify",
+  "message": "Remind me to call Ana at 5pm",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "day_only": false,
+    "title": true
+  }
+}

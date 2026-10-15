@@ -1,0 +1,11 @@
+{
+  "id": "classify-request-day-only-thursday",
+  "task": "classify",
+  "message": "recordame pagar el gas el jueves",
+  "record": true,
+  "expect": {
+    "remind_request": true,
+    "day_only": true,
+    "title": true
+  }
+}

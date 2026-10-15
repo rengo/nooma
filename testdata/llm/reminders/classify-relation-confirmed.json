@@ -1,0 +1,9 @@
+{
+  "id": "classify-relation-confirmed",
+  "task": "classify",
+  "message": "yes, they're related",
+  "record": true,
+  "expect": {
+    "relation_outcome": "confirmed"
+  }
+}

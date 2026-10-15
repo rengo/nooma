@@ -286,24 +286,30 @@ func TestRecordRejectsAFieldItDoesNotKnow(t *testing.T) {
 }
 
 // TestRecordWritesTheFormatPhrasingsAreAuthoredIn: editing a file by key and
-// writing it back with nothing set returns the same bytes, so a recording's
-// diff is only what the recording added.
+// writing it back with nothing set returns the same bytes, for every phrasing
+// of the set, so a recording's diff is only what the recording added.
 func TestRecordWritesTheFormatPhrasingsAreAuthoredIn(t *testing.T) {
-	path := filepath.Join(testdataLLMDir(t, "reminders"), "classify-task-remind-me-coffee.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	dir := testdataLLMDir(t, "reminders")
+	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no phrasings in %s: %v", dir, err)
 	}
-	fields, err := splitFields(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	back, err := joinFields(fields)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(back, data) {
-		t.Fatalf("round trip changed the file:\n%s\nwas:\n%s", back, data)
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields, err := splitFields(data)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		back, err := joinFields(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(back, data) {
+			t.Errorf("round trip changed %s:\n%s", filepath.Base(path), back)
+		}
 	}
 }
 
