@@ -103,6 +103,13 @@ One CI gate `check-all` cannot cover: `docs-sync.yml`'s `internal/core/` <->
 list, which only exist once a PR is open on GitHub. Its logic still ships as
 `scripts/docs-sync.sh` and is tested directly, without GitHub Actions.
 
+One gate that `check-all` runs **on purpose not**, and the rule above does not apply to:
+`scripts/recordings-complete.sh`, a step of `ci.yml`'s required `lint` job. It fails while a
+reminder phrasing in `testdata/llm/reminders/` still awaits its recording (`"record": true`), so
+a PR that adds phrasings stays red until the maintainer runs `nooma doctor --record`. `check-all`
+runs before every push and has to pass while those cases still await it. The script is tested
+directly (`test/harness/recordings_complete_test.go`); `docs/06-harness.md` §6 says the same.
+
 Skills that cover the details: `nooma-pr` (branch naming, opening the PR, merging),
 `work-unit-commits` (how to slice commits), `chained-pr` (splitting when implementation plus docs
 exceed 400 lines).

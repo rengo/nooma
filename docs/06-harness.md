@@ -385,6 +385,14 @@ All of the following runs on every PR and blocks the merge:
 | Schema golden | Apply all migrations from scratch and compare the resulting schema against a versioned dump |
 | docs↔code sync | See below |
 
+**The recordings gate** (`scripts/recordings-complete.sh`) is a step of the `lint` job, so the
+`protect-main` ruleset already requires it. It fails while any phrasing of
+`testdata/llm/reminders/` still reads `"record": true`, and rejects a vault path, a ULID-shaped
+id or an e-mail address in any of them. **It is the one gate `make check-all` does not run, on
+purpose:** `check-all` runs before every push and has to pass while cases still await their
+recording; the script is tested directly (`test/harness/recordings_complete_test.go`), like
+`docs-sync.sh`. A PR that adds phrasings is therefore red until the maintainer records them.
+
 **Schema golden** deserves a note: it is the gate that stops the real schema from drifting away
 from [`03-data-model.md`](03-data-model.md). A migration that changes a table without updating
 the dump fails CI, and the dump's diff is what gets reviewed in the PR. The committed dump lives

@@ -32,6 +32,10 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: go vet
         run: go vet ./...
+      # The merge gate of the reminder phrasing set (docs/06-harness.md §6):
+      # fails while a phrasing awaits its recording. Not in `make check-all`.
+      - name: reminder phrasings are recorded
+        run: sh scripts/recordings-complete.sh
 
   # L1 (pure) and L2 (conformance) from docs/06-harness.md §3. Both are untagged,
   # so a plain `go test ./...` runs exactly these two and nothing else.
