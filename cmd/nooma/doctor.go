@@ -62,12 +62,22 @@ var doctorChecks = []doctorCheck{
 func runDoctor(args []string, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(errOut)
-	fs.Usage = func() { _, _ = fmt.Fprint(errOut, "usage: nooma doctor [vault]\n") }
+	fs.Usage = func() {
+		_, _ = fmt.Fprint(errOut, "usage: nooma doctor [vault]\n       nooma doctor --record <dir> [--force] [vault]\n")
+	}
+	record := fs.String("record", "", "record the reminder phrasings of `dir` that await it, against the vault's provider")
+	force := fs.Bool("force", false, "with --record: record again a phrasing that already has a response")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 1 {
 		return fmt.Errorf("doctor takes at most one vault path, got %d", fs.NArg())
+	}
+	if *force && *record == "" {
+		return errors.New("--force only means something with --record")
+	}
+	if *record != "" {
+		return runRecord(*record, *force, fs.Arg(0), out)
 	}
 
 	vault, err := config.ResolveVault(fs.Arg(0))

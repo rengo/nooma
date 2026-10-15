@@ -36,3 +36,12 @@ type Expect struct {
 	NudgeOutcome       string `json:"nudge_outcome,omitempty"`
 	RelationOutcome    string `json:"relation_outcome,omitempty"`
 }
+
+// FileFields are the keys of a recorded example in the order they are written
+// (goldenset.LLMExample's field order). `nooma doctor --record` edits a file by
+// key, so a value it does not set, `expect` first of all, is written back byte
+// for byte; a key outside this list makes it refuse the file.
+var FileFields = []string{
+	"id", "provider", "model", "task", "message", "candidates", "response", "error",
+	"record", "now", "open_question", "candidates_list", "expect", "known_misread", "prompt_sha256",
+}

@@ -357,6 +357,17 @@ fenced-but-clean object must decode with **zero** degradations, not a recorded o
 Real responses from each provider, recorded once and replayed by a fake provider. They allow
 testing the full pipeline without network and without cost.
 
+**The reminder phrasing set** (`testdata/llm/reminders/`, ADR-0033) is the one set made on
+purpose for one prompt. A phrasing is authored with `record: true` and the reading it should
+get (`expect`), then recorded in one maintainer session: `nooma doctor --record
+testdata/llm/reminders [vault]`. The command refuses to run under `CI`, sends each case through
+the production `classify.BuildPrompt` with no beliefs, writes the response, the provider, the
+model, the `now` it told the model and the SHA-256 of the prompt, clears `record`, and never
+touches `expect`. It skips a case that already has a response unless `--force`. Replay
+(`TestReminderPhrasingSetReadsAsExpected`) rebuilds each prompt and fails on a hash mismatch,
+so a prompt change names the cases to record again; a case still awaiting its recording is
+skipped and counted.
+
 ---
 
 ## 6. CI gates
