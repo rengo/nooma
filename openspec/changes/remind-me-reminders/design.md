@@ -3,7 +3,8 @@
 - **Rules:** ADR-0031 (Accepted by the client, 2026-10-14); its detection is superseded by ADR-0033
   (Accepted, 2026-10-14): the model understands, the code acts.
 - **Requirements:** `spec.md`.
-- **Links 5-9** (question store, stop, recurring, ask-back, done) are in `design-repeating.md`.
+- **Links 5-8** (question store, stop, recurring, ask-back) are in `design-repeating.md`. Done
+  handling (old link 9) is deferred (client, 2026-10-14).
 - **Lines** refer to `dd1ba9a`.
 
 ## 1. Ground truth
@@ -28,7 +29,8 @@
 
 - **Wire** (optional, each degrading on its own, I14):
   - `remind_request`: a JSON bool or null, anything else degrades;
-  - `reminder_intent` ∈ `AllReminderIntents()` = {none, stop, done, keep, delete};
+  - `reminder_intent` ∈ `AllReminderIntents()` = {none, stop, keep}, `keep` only as the answer
+    to an open undo;
   - `question_answer` ∈ {none, when, no, choice} with `choice_number`;
   - `reminder_target`: a position 1-5 or `"unclear"`;
   - `title` (D1b).
@@ -36,9 +38,9 @@
   - `BuildPrompt` and `BuildCorrectionPrompt` both describe the fields, so an explicit-referent
     stop is read too.
   - Examples in es and en cover a recall, a third party's reminder, reported speech, and
-    "listo, nos vemos".
+    "listo" (which reads `none`: done handling is deferred).
   - **One numbered list per prompt:** the open `which_reminder` question's options when it is
-    open, otherwise the stop or done candidates (design-repeating D22). It appears only when
+    open, otherwise the stop candidates (design-repeating D22). It appears only when
     there is one. The list, and the question text Nooma sends, come from one renderer,
     `classify.RenderReminderList`. `TestPromptListEqualsTheQuestionText` compares the two, and
     the recordings are made from the same output.
@@ -63,8 +65,8 @@
 - **Storage:** migration **0009** (0008 shipped as `units.language`): `units.title TEXT NULL`.
   `unit.Unit.Title`, `ToUnit`, the store and memrepo carry it. There is no backfill, and later
   migrations take fixed numbers: **0010** `units.remind_me` and the lead (link 2), **0011** the
-  `pending_questions` rebuild (link 5), **0012** `units.reminder_stopped_at` (link 6), **0013**
-  `units.done_means_today` (link 9). The runner's gap and duplicate test catches a collision.
+  `pending_questions` rebuild (link 5), **0012** `units.reminder_stopped_at` (link 6). The
+  runner's gap and duplicate test catches a collision.
 - **Correction:** `correction.Field` gains `FieldTitle`, and `AllFields` and its sweep
   (`edit_test.go`) follow. A re-classifying correction with a valid title writes it. A content
   edit without one writes `title: null`, which clears it. A date-only edit leaves the title
@@ -107,9 +109,9 @@
 - **Existing recordings:** none is re-recorded. I18, I26, `arming_capture_keeps_its_unit` and
   `classify_golden_cases_decode_clean` assert their content, and the new fields are absent from
   them, which reads as none.
-- **Doctor:** `nooma doctor --reading` is opt-in, about 44 calls and a minute or two. It prints
-  "reminder reading: k of n" (90% is the reversal threshold), a **hard** line "stop or delete
-  false positives: 0 of N negatives" that fails doctor when non-zero, "titles: k of n valid",
+- **Doctor:** `nooma doctor --reading` is opt-in, about 40 calls and a minute or two. It prints
+  "reminder reading: k of n" (90% is the reversal threshold), a **hard** line "stop false
+  positives: 0 of N negatives" that fails doctor when non-zero, "titles: k of n valid",
   "day only: k of n bare dates", and the `task_checkin_outcome`, `nudge_outcome` and
   `relation_outcome` rates over the check-in answers in the set, so a regression link 1a
   introduces there shows.
@@ -219,7 +221,7 @@ Completeness is swept over both languages.
 
 §13 constants: `default_remind_me_lead_minutes` (15) and `at_once_margin_minutes` (5) in link 1;
 `max_title_runes` (60) in link 1a;
-`ask_back_window_minutes` (60), `which_or_keep_window_minutes` (60) and
+`ask_back_window_minutes` (60), `which_reminder_window_minutes` (60) and
 `stop_reply_window_minutes` (120) and `stop_undo_window_minutes` (10, ADR-0033), all in link 5.
 
 ## 4. Chain (stacked to main; P1: the stop lands before anything repeats)
@@ -236,10 +238,9 @@ Completeness is swept over both languages.
 | 6 | `feat/remind-me-stop` | D20-D24 | ~390 | "no me lo recuerdes más" |
 | 7 | `feat/recurring-rearm` | D30-D35 | ~380 | "todos los días a las 9pm"; birthdays re-arm |
 | 8 | `feat/remind-me-ask-back` | D40-D43 | ~300 | "recordame X" asks; "No" makes it daily |
-| 9 | `feat/remind-me-done` | D50-D52 | ~260 | bare "listo" |
 
 Dependencies: 1 → 1a → 1a′ → 2 → 3 → 4. Link 5 stands alone. Link 6 needs 2 and 5. Link 7 needs 6. Link 8
-needs 3, 5, 6 and 7. Link 9 needs 6 and 7.
+needs 3, 5, 6 and 7. Old link 9 (done) is deferred.
 
 **Seam with ADR-0032 (landed: #343, #344, `OneShotForUnit`, the renderer, `units.language`):**
 

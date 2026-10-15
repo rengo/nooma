@@ -41,7 +41,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - RED `TestDoctorReadingIsOptIn` (plain `doctor` makes no reading calls); `TestDoctorReportsReminderReadingRate`; `TestDoctorFalsePositiveLineFailsOnOne`; `TestDoctorReportsTitleRate` (fake provider).
   - Corpus, recorded once by the maintainer in one session, against the final prompt of link 1a (which already holds every later link's prompt text):
     - no existing recording is re-recorded; I18, I26, `arming_capture_keeps_its_unit` and `classify_golden_cases_decode_clean` assert their content;
-    - about 44 new in `testdata/llm/reminders/`: every phrasing of spec R1's table, the stop, done, keep, delete and answer phrasings (with `open_question` or the candidate list), the negatives for the hard false-positive line, and the title cases.
+    - about 40 new in `testdata/llm/reminders/`: every phrasing of spec R1's table, the stop, undo-keep and answer phrasings, "listo" reading `none` (with `open_question` or the candidate list), the negatives for the hard false-positive line, and the title cases.
   - RED then GREEN L2 `TestReminderPhrasingSetReadsAsExpected`: replays every case.
   - Doc 06 §5 (the record step); `make check-all`.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
