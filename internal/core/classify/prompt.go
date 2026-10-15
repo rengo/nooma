@@ -322,11 +322,22 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 // writeTarget renders the unit a correction patches, its instants in the
 // user's own frame (the one the message speaks in), and the patch rule.
 func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
+	// An instant that is the first moment of its local day is a day with no
+	// time: shown as the bare date the model would write it as, never as a
+	// midnight it would then be told to "keep".
 	instant := func(t *time.Time) string {
 		if t == nil {
 			return "none"
 		}
-		return t.In(now.Location()).Format(exampleLayout)
+		local := t.In(now.Location())
+		if start, ok := parseDateOnly(local.Format(dateOnlyLayout), now.Location()); ok && start.Equal(local) {
+			return local.Format(dateOnlyLayout)
+		}
+		return local.Format(exampleLayout)
+	}
+	title := "none"
+	if u.Title != "" {
+		title = strconv.Quote(u.Title)
 	}
 	b.WriteString("Correcting this unit\n")
 	b.WriteString("  The message below corrects this unit, whatever it reads like on its own.\n")
@@ -335,6 +346,7 @@ func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
 	b.WriteString("  Current text (quoted): " + strconv.Quote(u.Content) + "\n")
 	b.WriteString("  Current event_at: " + instant(u.EventAt) + "\n")
 	b.WriteString("  Current due_at: " + instant(u.DueAt) + "\n")
+	b.WriteString("  Current title (quoted): " + title + "\n")
 	b.WriteString("  A correction is a PATCH: change only what the message speaks about and keep\n")
 	b.WriteString("  everything else.\n")
 	b.WriteString("  normalized_content is the unit's WHOLE corrected text — the current text with\n")
@@ -342,7 +354,12 @@ func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
 	b.WriteString("  If the message changes the day or the time of event_at or due_at, answer that\n")
 	b.WriteString("  field with the complete new instant:\n")
 	b.WriteString("  keep the current date when only the time changes,\n")
-	b.WriteString("  and keep the current time when only the date changes.\n\n")
+	b.WriteString("  and keep the current time when only the date changes.\n")
+	b.WriteString("  An instant shown as a bare date has no time: when only its day changes, answer\n")
+	b.WriteString("  the new bare date, YYYY-MM-DD, and add no time.\n")
+	b.WriteString("  If the message changes the day or the time, also answer a fresh title, with no\n")
+	b.WriteString("  date, day or time in it as always: a title that still names the old day\n")
+	b.WriteString("  (\"Reunión del jueves\") is stale once the day has moved.\n\n")
 }
 
 // writeCalendar renders the next CalendarDays days, today first and marked,

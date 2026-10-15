@@ -739,6 +739,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        content: observed on 2026-10-10 against a live model, the body became "Es a las 08:00."
        while `event_at` stayed at 09:00. With it, the time comes back as `event_at`, and the
        text follows the date below.
+       An instant that is the first moment of its local day (a day with no time) is shown as the
+       bare `YYYY-MM-DD`, never as a midnight the model would be told to keep, and a changed day
+       comes back as a bare date. The unit's current `title` is shown too, and a message that
+       moves the day or the time is asked for a fresh date-free one (spec R12).
      - **Content may not lose the instant the unit keeps.** On the content fallback, new content
        must still state the date token the body states for the unit's `event_at` or `due_at`,
        and the `HH:MM` anchored to it where the body anchors one (in the frames the text rule

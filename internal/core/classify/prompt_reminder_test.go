@@ -145,3 +145,52 @@ func TestBuildCorrectionPromptCarriesReminderFields(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildCorrectionPromptRendersDayOnlyAsBareDate: a unit whose instant is
+// the first moment of its local day is shown as the bare date the model would
+// write it as, never as midnight, so "keep the current time" cannot carry a
+// 00:00 the user never said (ADR-0031 D2, design D1).
+func TestBuildCorrectionPromptRendersDayOnlyAsBareDate(t *testing.T) {
+	midnight := time.Date(2026, 10, 16, 0, 0, 0, 0, buenosAires)
+	dueMorning := time.Date(2026, 10, 17, 0, 30, 0, 0, buenosAires)
+	p := BuildCorrectionPrompt("no, el sábado", unit.Unit{Content: "Pagar la luz", EventAt: &midnight, DueAt: &dueMorning},
+		nil, reminderNow, 0.5, ReminderContext{})
+	for _, want := range []string{"Current event_at: 2026-10-16\n", "Current due_at: 2026-10-17T00:30:00-03:00\n"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the correction prompt never says %q:\n%s", want, p)
+		}
+	}
+	// A bare date on a day whose midnight a DST change skips (Chile springs
+	// forward at 24:00) is stored at 01:00, and is still a bare date.
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gapDay, ok := parseDateOnly("2026-09-06", santiago)
+	if !ok || gapDay.Hour() != 1 {
+		t.Fatalf("setup: the first instant of 2026-09-06 in Santiago is %v, want 01:00", gapDay)
+	}
+	p = BuildCorrectionPrompt("no, el lunes", unit.Unit{Content: "x", DueAt: &gapDay}, nil,
+		time.Date(2026, 9, 1, 9, 0, 0, 0, santiago), 0.5, ReminderContext{})
+	if !strings.Contains(p, "Current due_at: 2026-09-06\n") {
+		t.Errorf("a DST day's bare date was shown with its 01:00:\n%s", p)
+	}
+}
+
+// TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection: the unit's
+// current title is shown, and a message that moves the day or time is asked for
+// a fresh one, so "Reunión del jueves" can become "Reunión del viernes".
+func TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection(t *testing.T) {
+	p := BuildCorrectionPrompt("no, el viernes", unit.Unit{Content: "x", Title: "Reunión del jueves"}, nil,
+		reminderNow, 0.5, ReminderContext{})
+	flat := strings.Join(strings.Fields(p), " ")
+	for _, want := range []string{`Current title (quoted): "Reunión del jueves"`, "answer a fresh title"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the correction prompt never says %q:\n%s", want, p)
+		}
+	}
+	untitled := BuildCorrectionPrompt("no, el viernes", unit.Unit{Content: "x"}, nil, reminderNow, 0.5, ReminderContext{})
+	if !strings.Contains(untitled, "Current title (quoted): none") {
+		t.Errorf("a unit with no title is not shown as none:\n%s", untitled)
+	}
+}

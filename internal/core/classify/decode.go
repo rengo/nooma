@@ -242,18 +242,27 @@ func assignTime(set func(*Classification, *time.Time, bool)) func(json.RawMessag
 			set(c, &t, false)
 			return ""
 		}
-		if t, err := time.ParseInLocation(dateOnlyLayout, s, now.Location()); err == nil {
-			// A day whose midnight does not exist (Chile springs forward at
-			// 24:00) parses onto the previous civil day. A bare date is the
-			// first instant of its own day, so step forward to it.
-			for i := 0; i < 4 && t.Format(dateOnlyLayout) != s; i++ {
-				t = t.Add(30 * time.Minute)
-			}
+		if t, ok := parseDateOnly(s, now.Location()); ok {
 			set(c, &t, true)
 			return ""
 		}
 		return ReasonBadFormat
 	}
+}
+
+// parseDateOnly is the first instant of the civil day s names, in loc. A day
+// whose midnight does not exist (Chile springs forward at 24:00) parses onto the
+// previous civil day, and a bare date is the first instant of its own day, so
+// the parse steps forward to it.
+func parseDateOnly(s string, loc *time.Location) (time.Time, bool) {
+	t, err := time.ParseInLocation(dateOnlyLayout, s, loc)
+	if err != nil {
+		return time.Time{}, false
+	}
+	for i := 0; i < 4 && t.Format(dateOnlyLayout) != s; i++ {
+		t = t.Add(30 * time.Minute)
+	}
+	return t, true
 }
 
 // assignInterruptLevel is interrupt_level's own assigner (design §3.8) —
