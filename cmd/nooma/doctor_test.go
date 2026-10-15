@@ -180,7 +180,7 @@ func TestCheckLLMQuality_SendsClassifyBuildPromptForCaptureProcessing(t *testing
 	if len(seen) != 1 {
 		t.Fatalf("provider saw %d Complete call(s) for one corpus case, want exactly 1 — spec R5.4 forbids a retry", len(seen))
 	}
-	want := classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold)
+	want := classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, classify.ReminderContext{})
 	if seen[0] != want {
 		t.Errorf("sent prompt %q, want classify.BuildPrompt's own output %q — spec R5.3: the gate must build the real prompt, never replay a corpus field", seen[0], want)
 	}

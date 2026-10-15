@@ -477,7 +477,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
      `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades;
      an explicit `null` is an absent field, not a loss. Core holds no phrase list: the prompt
-     explains the fields with examples in both languages.
+     explains the fields with examples in both languages, shows the open reminder question and
+     the numbered list only when there is one, and carries the fields on the correction path
+     too, so an explicit-referent stop is read there. The prompt describes all three question
+     kinds (`remind_when`, `which_reminder`, `undo`) now, so it is final in this link and a
+     recording made against it stays valid.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
@@ -509,6 +513,17 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      (`open_relation_questions: N`), so the audit trail shows a choice was made rather than
      implying there was only one. **An answer matching nothing open resolves nothing and,
      above all, deletes nothing.**
+   - **The one exception is narrower than the rule, and is for reminders**
+     ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)): the prompt may carry the
+     reminder question Nooma has open and one numbered list of at most `max_reminder_choices`
+     reminders, so the model can answer a **position** in a list the code built. It never names
+     an id and never a relation. The code binds only on a position inside that list, an
+     out-of-range or `unclear` one asks which, and a stop it binds is undoable and deletes
+     nothing. **One list per prompt**: an open `which_reminder` question carries its own, and the
+     stop candidates are then left out, so a position means one thing. Both lists come from
+     `classify.RenderReminderList`, the renderer of the question Nooma sends, so a position the
+     model reads is a position the user saw. Each label is flattened to one line and
+     clipped, so a unit's own line breaks and numbering cannot forge a position. The relation rule above is unchanged.
    - Robustness: a malformed field degrades to null (that resolution is ignored), it never
      brings down the whole classification. For `relation_outcome` this is load-bearing rather
      than merely tidy: an answer worded outside the vocabulary degrades to null and deletes
@@ -705,6 +720,24 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      an edit whose value the unit already holds (read again as the edit lands) writes no
      `correction.applied` row and no learning signal, and the answer says nothing changed; only
      the reminder step still runs, so the repair above works.
+     **The title follows the body** (spec R12). Beside the edits above the plan may carry a
+     `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in
+     `fields` with `previous` and `next` like any other). A valid title the model answered for
+     the unit it was shown, when it differs from the unit's, is written. **Otherwise a plan that
+     really changes the unit (a moved date, or a rewritten body) clears the title** (`next` is
+     `null`): it names a day or a body that is gone, and the unit then reads its content, which
+     already follows the new date. That covers a date-only edit with no fresh title, and the
+     chat path, where the referent is found after the model answered: a title it wrote names the
+     utterance and is never taken. A title equal to the unit's, a unit with none, and a
+     correction that changes nothing (a date the unit already holds) write and clear nothing.
+     The text an armed reminder falls back to follows what the unit says, whether or not a date
+     moved: a wording or title change rewrites the text of each armed reminder of the unit,
+     whatever its type, that does not say what the unit says now (a recurring reminder's unit is
+     an event, and an asked task's reminder hangs off a task), recorded first as a
+     `correction.reminder.moved` row whose only field is `action_text`. It never changes when the
+     reminder fires, and a row is compared with the unit's text *now*, not with what it said
+     before, so a correction the unit already holds repairs a row a failed step left stale. A
+     reminder moved with a date takes the unit's text now by the same rule.
      **New text beside a new date is both edits** (I30). When the correction changes what the
      unit says and when it happens at once, and the model — shown the unit — returns text that
      differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`
@@ -725,6 +758,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        content: observed on 2026-10-10 against a live model, the body became "Es a las 08:00."
        while `event_at` stayed at 09:00. With it, the time comes back as `event_at`, and the
        text follows the date below.
+       An instant that is the first moment of its local day (a day with no time) is shown as the
+       bare `YYYY-MM-DD`, never as a midnight the model would be told to keep, and a changed day
+       comes back as a bare date. The unit's current `title` is shown too, and a message that
+       moves the day or the time is asked for a fresh date-free one (spec R12).
      - **Content may not lose the instant the unit keeps.** On the content fallback, new content
        must still state the date token the body states for the unit's `event_at` or `due_at`,
        and the `HH:MM` anchored to it where the body anchors one (in the frames the text rule
@@ -758,8 +795,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        decided by `internal/core/prospection.Follow`, which calls the very functions `Arm` does,
        leads and pull-to-now included ([ADR-0029](adr/0029-event-reminders-follow-the-users-leads.md)).
        Armed triggers are carried onto the new reminders in firing order and moved (their
-       `fire_at`, their payload as a fresh arming writes it, their text as above, and a recurring
-       one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
+       `fire_at`, their payload as a fresh arming writes it, their text (what the unit says now: its
+       title, else its body with the date moved as above), and a recurring one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
        created; any further armed trigger expires. **A correction never creates an at-once
        reminder**: when every lead of the new instant is behind and nothing is armed, nothing is
        armed — the at-once reminder is a capture's, sent once (the one other at-once reminder
@@ -782,9 +819,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        **A failed reminder step leaves a partial state**, because the unit and its triggers share
        no transaction: the unit holds the new date, the reminders are unmoved or partly moved,
        the caller gets the error, and the learning signal is not written. The same correction
-       again repairs it — the decision is made from what is armed then, and a reminder's text is
-       rewritten from the trigger's own instant (`fire_at` plus its `lead_minutes`, or a
-       recurring one's lead days), which is exact unless that firing had been pulled forward.
+       again repairs it — the decision is made from what is armed then, and every reminder
+       the correction moves or rewrites takes the text the unit says **now** (its title, else
+       its body), compared with the unit as it is, so a retry that finds the unit already
+       holding the new date, title and body still repairs a reminder left saying the old name.
+       Guessing the previous instant from the trigger's own (`fire_at` plus its `lead_minutes`,
+       or a recurring one's lead days, exact unless that firing had been pulled forward) is no
+       longer how a correction rewrites a reminder's text: it applies only to the preference
+       re-arm and the due scan's re-plan, which edit no text.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
      The user asked for the change, so the edit is authorised; but *which* unit it lands on is
      inferred, and an inference that destroys is the thing §4 refuses. Writing the previous values
@@ -883,7 +925,12 @@ force the rest of the pipeline to guess.
 mid-sentence has still emitted complete fields before the cut. Those fields are read and kept;
 only what never arrived is missing. The rule is that a member is either read in full or treated
 as absent — a half-read value is never stored, because a plausible-looking fragment is worse
-than a recorded absence.
+than a recorded absence. **A number is complete only when something follows it.** A numeric
+member that runs to the last byte of a cut response may have lost digits (a `25` arriving as
+`2`), so it is not read, for any field and wherever the object starts (after a code fence or a
+line of prose too): a position bound to the wrong reminder is worse than none. A *required*
+number cut this way (`weight`, `decay_rate`) is recorded as truncated, not stored as the value
+it began with.
 
 The floor: a response from which **no** field can be read at all is not a classification with
 every field null. It is a failed classification, and it is reported as one. A payload with no
@@ -1457,12 +1504,16 @@ box can audit it):
   marked delivered fails the pass, and the process never sends it again (a restart, which forgets,
   may once more).
   **A reminder says its unit as it is now** (ADR-0032 point 4): a push and a digest line carry the
-  unit's current `content` and current instant in the clock's zone, in a fixed frame
-  (`Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00`), never a model call. A recurring one
+  unit's current `title`, else its current `content` (spec R12), and current instant in the
+  clock's zone, in a fixed frame (`Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00`; with
+  a title, `Recordatorio: Reunión con Juan — mié 14 oct, 22:30`), never a model call. A digest
+  line is the same words without the push's frame. A recurring one
   names its next occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
-  delivered. The text a reminder was armed with is only the fallback when the unit cannot be read.
+  delivered. The text a reminder was armed with (the title the capture classified, else the
+  content) is only the fallback when the unit cannot be read; a correction keeps it equal to
+  what the unit says (§5 step 4).
   The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.

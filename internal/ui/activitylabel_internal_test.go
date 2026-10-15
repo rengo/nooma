@@ -21,3 +21,13 @@ func TestActivityTitle_EveryActionHasOne(t *testing.T) {
 		t.Errorf("a retired action titled %q, want its code", got)
 	}
 }
+
+// TestFieldLabel_NamesEveryColumnACorrectionWrites: a correction can now write
+// the title, and the activity page labels it in plain words, not as stored.
+func TestFieldLabel_NamesEveryColumnACorrectionWrites(t *testing.T) {
+	for column, want := range map[string]string{"content": "Text", "event_at": "Event", "due_at": "Due", "title": "Title"} {
+		if got := fieldLabel(column); got != want {
+			t.Errorf("fieldLabel(%q) = %q, want %q", column, got, want)
+		}
+	}
+}

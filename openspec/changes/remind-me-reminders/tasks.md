@@ -22,20 +22,21 @@ tasks-repeating).
 
 ## Link 1 — `feat/remind-me-decision` (D2-D4 core, D6; merged as 1.2-1.4), and links 1a and 1a′ (1.1 and 1.1′: D1, D1b, D1c)
 
-- [ ] 1.1 Link 1a — `feat/classify-reminder-fields` (ADR-0033, D1, D1b):
+- [x] 1.1 Link 1a — `feat/classify-reminder-fields` (ADR-0033, D1, D1b):
   - [x] RED L1 `TestDecode_ReminderFields`: `remind_request`, `reminder_intent`, `question_answer`, `choice_number` decode; an unknown enum, a wrong type or a `choice_number` outside 1-5 degrades that field alone (I14); `TestAllReminderIntentsAndAnswersSwept`.
-  - RED L1 `TestBuildPromptDescribesReminderFields`: both languages' examples; the open question appears only when one is passed.
+  - [x] RED L1 `TestBuildPromptDescribesReminderFields`: both languages' examples; the open question appears only when one is passed.
   - [x] RED L1 `TestDecode_RemindRequestBoolOrNull`: `true`/`false`/`null` decode; `"yes"` → degraded. `TestDecode_ReminderTarget`: 1-5 and `"unclear"` decode; 0, 6, `"2"` → degraded.
-  - RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
-  - RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output); `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
+  - [x] RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
+  - [x] RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output).
+  - [x] RED L1 (round 2): `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
   - [x] RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
   - [x] RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
   - [x] RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.
-  - RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
-  - RED `TestCorrectionRewritesTheTitle`: a re-classified correction → the new title in `correction.applied`, with the old one as pre-image. `TestCorrectionContentEditWithoutTitleClearsIt` → `title: null`. `TestCorrectionDateOnlyEditKeepsTitle`. `TestAllFields_EveryEditReportsExactlyOneAccessorTrue` gains `FieldTitle`.
-  - RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.
+  - [x] RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
+  - [x] RED `TestCorrectionRewritesTheTitle`: a re-classified correction → the new title in `correction.applied`, with the old one as pre-image. `TestCorrectionContentEditWithoutTitleClearsIt` → `title: null`. `TestCorrectionDateOnlyEditKeepsTitle`. `TestAllFields_EveryEditReportsExactlyOneAccessorTrue` gains `FieldTitle`.
+  - [x] RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.
   - Asked capture: link 2 reads `asked` from `c.RemindRequest`. The day-only flag (1.2, #346) stays; the phrase reader never merged.
-  - GREEN; doc 02 §5 step 1 (the fields, the title), §5.1 lines 483-495 (the narrower injection rule), §5 step 4 and §11 (`FieldTitle`), §7 (the render); doc 03 (`units.title`); §13 `max_title_runes`; `make check-all`.
+  - [x] GREEN; doc 02 §5 step 1 (the fields, the title), §5.1 lines 483-495 (the narrower injection rule), §5 step 4 and §11 (`FieldTitle`), §7 (the render); doc 03 (`units.title`); §13 `max_title_runes`; `make check-all`.
 - [ ] 1.1′ Link 1a′ — `feat/doctor-record-and-reading` (D1c):
   - RED `TestDoctorRecordWritesResponsesWithAFakeProvider`: only `"record": true` cases; `expect` untouched; `provider`, `model` and `now` written; `record` cleared. `TestRecordSkipsRecordedWithoutForce`; `TestRecordRefusesUnderCI`; `TestRecordSendsNilBeliefs`.
   - RED `TestValidateAllowsAwaitingRecording` (replay skips it and reports the count); `scripts/recordings-complete.sh` and its test `TestRecordingsCompleteFailsOnPendingCase`; `TestCasesMatchesTheSourceFiles` covers `reminders/`; `format.md` and its format test.

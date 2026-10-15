@@ -80,6 +80,13 @@ func Salvage(raw []byte) (fields map[string]json.RawMessage, truncatedAfter bool
 		if err := dec.Decode(&value); err != nil {
 			return fields, true
 		}
+		// A number that runs to the last byte may have lost digits ("25" cut to
+		// "2"), and a complete object always has a '}' after its last member. A
+		// positional answer bound to the wrong entry is worse than none, so it
+		// is not a completed member.
+		if isNumber(value) && int(dec.InputOffset()) == len(raw)-start {
+			return fields, true
+		}
 		fields[key] = value
 	}
 
@@ -92,4 +99,9 @@ func Salvage(raw []byte) (fields map[string]json.RawMessage, truncatedAfter bool
 	}
 
 	return fields, false
+}
+
+// isNumber reports whether a raw JSON value is a number.
+func isNumber(v json.RawMessage) bool {
+	return len(v) > 0 && (v[0] == '-' || v[0] >= '0' && v[0] <= '9')
 }

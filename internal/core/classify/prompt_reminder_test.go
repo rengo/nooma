@@ -1,0 +1,221 @@
+package classify
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
+)
+
+var reminderNow = time.Date(2026, 10, 14, 9, 0, 0, 0, buenosAires)
+
+var stopCandidates = []ReminderEntry{
+	{Label: "Revisar contrato Acme", When: "mié 14 oct, 22:30"},
+	{Label: "Tomar vitamina C", When: "21:00"},
+}
+
+func promptWith(rc ReminderContext) string {
+	return BuildPrompt("anything", nil, reminderNow, 0.5, rc)
+}
+
+// TestRenderReminderList_OneLinePerEntry: a unit's own text can hold line breaks
+// and numbering, and the list is what fixes what a position means. Each label is
+// flattened to one line and clipped, so "a\n2) fake" cannot forge an entry.
+func TestRenderReminderList_OneLinePerEntry(t *testing.T) {
+	got := RenderReminderList([]ReminderEntry{
+		{Label: "a\n2) fake", When: "mié\u2028 14 oct"},
+		{Label: "tail\u2029\u2029x\ry\x07z\u200bw", When: ""},
+		{Label: strings.Repeat("ñ", MaxTitleRunes+30)},
+	})
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("3 entries rendered %d lines:\n%q", len(lines), got)
+	}
+	for i, want := range []string{"1) a 2) fake — mié 14 oct", "2) tail x y z w", "3) " + strings.Repeat("ñ", MaxTitleRunes) + "…"} {
+		if lines[i] != want {
+			t.Errorf("line %d = %q, want %q", i+1, lines[i], want)
+		}
+	}
+}
+
+func TestRenderReminderList(t *testing.T) {
+	got := RenderReminderList(append(stopCandidates, ReminderEntry{Label: "Sin hora"}))
+	want := "1) Revisar contrato Acme — mié 14 oct, 22:30\n2) Tomar vitamina C — 21:00\n3) Sin hora\n"
+	if got != want {
+		t.Errorf("RenderReminderList =\n%q\nwant\n%q", got, want)
+	}
+	many := make([]ReminderEntry, MaxReminderChoices+2)
+	for i := range many {
+		many[i] = ReminderEntry{Label: "r", When: "w"}
+	}
+	if n := strings.Count(RenderReminderList(many), "\n"); n != MaxReminderChoices {
+		t.Errorf("a list of %d entries rendered %d lines, want %d", len(many), n, MaxReminderChoices)
+	}
+	if got := RenderReminderList(nil); got != "" {
+		t.Errorf("RenderReminderList(nil) = %q, want empty", got)
+	}
+}
+
+// TestBuildPromptDescribesReminderFields: the prompt explains every reminder
+// field, with examples in both languages, a recall, a third party's reminder,
+// reported speech, and "listo" reading none (ADR-0033 point 1).
+func TestBuildPromptDescribesReminderFields(t *testing.T) {
+	// Flattened: the prompt wraps its sentences, and the phrases below do not.
+	p := strings.Join(strings.Fields(promptWith(ReminderContext{})), " ")
+	for _, want := range []string{
+		"remind_request", "reminder_intent", "question_answer", "choice_number", "reminder_target", "title",
+		joinVocabulary(AllReminderIntents()), joinVocabulary(AllQuestionAnswers()), ReminderTargetUnclear,
+		"recordame comprar café mañana a las 10", "remind me to call Ana at 5pm",
+		"no me lo recuerdes más", "don't remind me anymore",
+		"recordame qué hablamos con Juan", "my dentist sent a reminder to confirm",
+		"Ana me dijo", "\"listo\"",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the prompt never says %q:\n%s", want, p)
+		}
+	}
+}
+
+func TestBuildPromptOpenQuestionOnlyWhenPassed(t *testing.T) {
+	if p := promptWith(ReminderContext{}); strings.Contains(p, openQuestionHeading) {
+		t.Errorf("with no question open the prompt still has %q", openQuestionHeading)
+	}
+	text := "¿Algún día y hora en particular?"
+	p := promptWith(ReminderContext{Open: &OpenQuestion{Kind: QuestionRemindWhen, Text: text}})
+	if !strings.Contains(p, openQuestionHeading) || !strings.Contains(p, text) {
+		t.Errorf("an open question is not in the prompt:\n%s", p)
+	}
+	for _, kind := range []ReminderQuestionKind{QuestionRemindWhen, QuestionWhichReminder, QuestionUndo} {
+		p := promptWith(ReminderContext{Open: &OpenQuestion{Kind: kind, Text: text}})
+		if !strings.Contains(p, "("+string(kind)+")") {
+			t.Errorf("the prompt does not say that a %s question is open", kind)
+		}
+	}
+}
+
+func TestBuildPromptCandidateListOnlyWhenGiven(t *testing.T) {
+	if p := promptWith(ReminderContext{}); strings.Contains(p, candidatesHeading) {
+		t.Errorf("with no candidates the prompt still has %q", candidatesHeading)
+	}
+	p := promptWith(ReminderContext{Candidates: stopCandidates})
+	if !strings.Contains(p, candidatesHeading) || !strings.Contains(p, "1) Revisar contrato Acme — mié 14 oct, 22:30\n2) Tomar vitamina C — 21:00") {
+		t.Errorf("the numbered candidates are not in the prompt:\n%s", p)
+	}
+}
+
+// TestBuildPromptRendersOneListOnly: a which_reminder question open together
+// with stop candidates shows the question's list alone, so a position means one
+// thing (design D1).
+func TestBuildPromptRendersOneListOnly(t *testing.T) {
+	options := []ReminderEntry{{Label: "Llamar a Ana", When: "jue 15 oct"}, {Label: "Pagar luz", When: "vie 16 oct"}}
+	open := &OpenQuestion{Kind: QuestionWhichReminder, Text: WhichReminderText("¿Cuál?", options)}
+	p := promptWith(ReminderContext{Open: open, Candidates: stopCandidates})
+	for _, e := range options {
+		if !strings.Contains(p, e.Label) {
+			t.Errorf("the question's option %q is not in the prompt", e.Label)
+		}
+	}
+	for _, e := range stopCandidates {
+		if strings.Contains(p, e.Label) {
+			t.Errorf("candidate %q is in the prompt beside the question's list", e.Label)
+		}
+	}
+	if strings.Contains(p, candidatesHeading) {
+		t.Errorf("the candidates heading is in a prompt that has a which_reminder list")
+	}
+	if n := strings.Count(p, "\n1) "); n != 1 {
+		t.Errorf("the prompt has %d lists starting at 1), want 1", n)
+	}
+	// Another kind of open question leaves the candidates alone.
+	other := promptWith(ReminderContext{Open: &OpenQuestion{Kind: QuestionUndo, Text: "Listo."}, Candidates: stopCandidates})
+	if !strings.Contains(other, "1) Revisar contrato Acme") {
+		t.Errorf("an open undo hid the stop candidates")
+	}
+}
+
+// TestPromptListEqualsTheQuestionText: the list in the prompt and the list in
+// the question Nooma sends come from one renderer.
+func TestPromptListEqualsTheQuestionText(t *testing.T) {
+	list := RenderReminderList(stopCandidates)
+	text := WhichReminderText("¿Cuál?", stopCandidates)
+	if !strings.HasPrefix(text, "¿Cuál?\n") || !strings.HasSuffix(text, list) {
+		t.Errorf("WhichReminderText = %q, want the lead then %q", text, list)
+	}
+	asQuestion := promptWith(ReminderContext{Open: &OpenQuestion{Kind: QuestionWhichReminder, Text: text}})
+	asCandidates := promptWith(ReminderContext{Candidates: stopCandidates})
+	for name, p := range map[string]string{"question": asQuestion, "candidates": asCandidates} {
+		if n := strings.Count(p, list); n != 1 {
+			t.Errorf("the %s prompt holds the rendered list %d times, want once:\n%s", name, n, p)
+		}
+	}
+}
+
+// TestBuildCorrectionPromptCarriesReminderFields: an explicit-referent stop is
+// read on the correction path too.
+func TestBuildCorrectionPromptCarriesReminderFields(t *testing.T) {
+	target := unit.Unit{Content: "Dentista 2026-10-15 10:00"}
+	open := &OpenQuestion{Kind: QuestionRemindWhen, Text: "¿Cuándo?"}
+	p := BuildCorrectionPrompt("no me lo recuerdes más", target, nil, reminderNow, 0.5,
+		ReminderContext{Open: open, Candidates: stopCandidates})
+	for _, want := range []string{"reminder_intent", "question_answer", "reminder_target", "remind_request",
+		openQuestionHeading, "¿Cuándo?", candidatesHeading, RenderReminderList(stopCandidates), "Correcting this unit"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the correction prompt never says %q", want)
+		}
+	}
+}
+
+// TestBuildCorrectionPromptRendersDayOnlyAsBareDate: a unit whose instant is
+// the first moment of its local day is shown as the bare date the model would
+// write it as, never as midnight, so "keep the current time" cannot carry a
+// 00:00 the user never said (ADR-0031 D2, design D1).
+func TestBuildCorrectionPromptRendersDayOnlyAsBareDate(t *testing.T) {
+	midnight := time.Date(2026, 10, 16, 0, 0, 0, 0, buenosAires)
+	dueMorning := time.Date(2026, 10, 17, 0, 30, 0, 0, buenosAires)
+	p := BuildCorrectionPrompt("no, el sábado", unit.Unit{Content: "Pagar la luz", EventAt: &midnight, DueAt: &dueMorning},
+		nil, reminderNow, 0.5, ReminderContext{})
+	for _, want := range []string{"Current event_at: 2026-10-16\n", "Current due_at: 2026-10-17T00:30:00-03:00\n"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the correction prompt never says %q:\n%s", want, p)
+		}
+	}
+	// A bare date on a day whose midnight a DST change skips (Chile springs
+	// forward at 24:00) is stored at 01:00, and is still a bare date.
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gapDay, ok := parseDateOnly("2026-09-06", santiago)
+	if !ok || gapDay.Hour() != 1 {
+		t.Fatalf("setup: the first instant of 2026-09-06 in Santiago is %v, want 01:00", gapDay)
+	}
+	p = BuildCorrectionPrompt("no, el lunes", unit.Unit{Content: "x", DueAt: &gapDay}, nil,
+		time.Date(2026, 9, 1, 9, 0, 0, 0, santiago), 0.5, ReminderContext{})
+	if !strings.Contains(p, "Current due_at: 2026-09-06\n") {
+		t.Errorf("a DST day's bare date was shown with its 01:00:\n%s", p)
+	}
+}
+
+// TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection: the unit's
+// current title is shown, and a message that moves the day or time is asked for
+// a fresh one, so "Reunión del jueves" can become "Reunión del viernes".
+func TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection(t *testing.T) {
+	p := BuildCorrectionPrompt("no, el viernes", unit.Unit{Content: "x", Title: "Reunión del jueves"}, nil,
+		reminderNow, 0.5, ReminderContext{})
+	flat := strings.Join(strings.Fields(p), " ")
+	for _, want := range []string{`Current title (quoted): "Reunión del jueves"`, "answer a fresh title"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the correction prompt never says %q:\n%s", want, p)
+		}
+	}
+	untitled := BuildCorrectionPrompt("no, el viernes", unit.Unit{Content: "x"}, nil, reminderNow, 0.5, ReminderContext{})
+	// The title rule itself lists day words as what a title must not hold, so only
+	// the section about the unit being corrected is searched.
+	if strings.Contains(untitled[strings.Index(untitled, "Correcting this unit"):], "jueves") {
+		t.Errorf("the rule for a stale title still carries a day word as its example:\n%s", untitled)
+	}
+	if !strings.Contains(untitled, "Current title (quoted): none") {
+		t.Errorf("a unit with no title is not shown as none:\n%s", untitled)
+	}
+}

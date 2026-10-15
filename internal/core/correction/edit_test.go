@@ -21,10 +21,12 @@ func TestAllFields_EveryEditReportsExactlyOneAccessorTrue(t *testing.T) {
 		wantContent bool
 		wantEventAt bool
 		wantDueAt   bool
+		wantTitle   bool
 	}{
-		{FieldContent, NewContentEdit("It's Ana, not Anna"), true, false, false},
-		{FieldEventAt, NewEventAtEdit(when), false, true, false},
-		{FieldDueAt, NewDueAtEdit(when), false, false, true},
+		{FieldContent, NewContentEdit("It's Ana, not Anna"), true, false, false, false},
+		{FieldEventAt, NewEventAtEdit(when), false, true, false, false},
+		{FieldDueAt, NewDueAtEdit(when), false, false, true, false},
+		{FieldTitle, NewTitleEdit("Reunión con Juan"), false, false, false, true},
 	}
 
 	seen := map[Field]bool{}
@@ -48,8 +50,13 @@ func TestAllFields_EveryEditReportsExactlyOneAccessorTrue(t *testing.T) {
 			t.Errorf("%s: DueAt() ok = %v, want %v", tt.field, gotDueAt, tt.wantDueAt)
 		}
 
+		_, gotTitle := tt.edit.Title()
+		if gotTitle != tt.wantTitle {
+			t.Errorf("%s: Title() ok = %v, want %v", tt.field, gotTitle, tt.wantTitle)
+		}
+
 		trueCount := 0
-		for _, ok := range []bool{gotContent, gotEventAt, gotDueAt} {
+		for _, ok := range []bool{gotContent, gotEventAt, gotDueAt, gotTitle} {
 			if ok {
 				trueCount++
 			}
@@ -100,7 +107,7 @@ func TestNewDueAtEdit_ValueRoundTrips(t *testing.T) {
 func TestChanges(t *testing.T) {
 	at := time.Date(2026, 12, 20, 9, 0, 0, 0, time.UTC)
 	due := time.Date(2026, 12, 21, 9, 0, 0, 0, time.UTC)
-	u := unit.Unit{Content: "body", EventAt: &at, DueAt: &due}
+	u := unit.Unit{Content: "body", Title: "Name", EventAt: &at, DueAt: &due}
 	otherZone := at.In(time.FixedZone("ART", -3*60*60)) // the same instant
 	later := at.Add(time.Hour)
 
@@ -118,6 +125,10 @@ func TestChanges(t *testing.T) {
 		{"new due_at", []Edit{NewDueAtEdit(later)}, u, 1},
 		{"a date the unit lacks", []Edit{NewEventAtEdit(at)}, unit.Unit{Content: "body"}, 1},
 		{"a due_at the unit lacks", []Edit{NewDueAtEdit(due)}, unit.Unit{Content: "body"}, 1},
+		{"same title", []Edit{NewTitleEdit("Name")}, u, 0},
+		{"new title", []Edit{NewTitleEdit("Other")}, u, 1},
+		{"clearing a title the unit has", []Edit{NewTitleEdit("")}, u, 1},
+		{"clearing a title the unit lacks", []Edit{NewTitleEdit("")}, unit.Unit{Content: "body"}, 0},
 		{"only the edits that change", []Edit{NewEventAtEdit(at), NewContentEdit("other")}, u, 1},
 	}
 	for _, tt := range tests {

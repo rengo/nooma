@@ -232,7 +232,7 @@ type captureRunner struct {
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (result CaptureResult, err error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
-	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold)
+	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{})
 
 	// **A correction that names its unit is classified against it** (doc 02
 	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the
@@ -246,7 +246,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			return CaptureResult{}, fmt.Errorf("capture: correction: %w", err)
 		}
 		explicit = &u
-		prompt = classify.BuildCorrectionPrompt(in.Text, u, nil, now, r.archiveThreshold)
+		prompt = classify.BuildCorrectionPrompt(in.Text, u, nil, now, r.archiveThreshold, classify.ReminderContext{})
 	}
 
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: prompt, Task: taskCaptureProcessing, JSONOnly: true})
@@ -923,7 +923,7 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		// The trigger payload is JSON, not a nullable column, so a degraded
 		// normalized_content lands as the empty string rather than as a key
 		// meaning "generic nudge" — triggers have no such concept.
-		trigger := armedTrigger(id, unitID, derefString(c.NormalizedContent), plan, now)
+		trigger := armedTrigger(id, unitID, armedText(c), plan, now)
 		action := ports.ActionCaptureArmedTrigger
 		if plan.What == prospection.ArmRecurring {
 			action = ports.ActionCaptureArmedRecurring
@@ -948,6 +948,15 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 		Outcome: OutcomeArmed,
 		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate},
 	}, nil
+}
+
+// armedText is what a trigger armed from c says when its unit cannot be read
+// later: the classified title, else the normalized content (spec R12).
+func armedText(c classify.Classification) string {
+	if c.Title != nil {
+		return *c.Title
+	}
+	return derefString(c.NormalizedContent)
 }
 
 // armedTrigger is the one row a dated or recurring Plan becomes. Every

@@ -144,7 +144,16 @@ func unitWords(u unit.Unit, t ports.DueTrigger, now time.Time, set phrase.Set) (
 			when = set.Time(at)
 		}
 	}
-	return clip(u.Content), when
+	return clip(shownText(u)), when
+}
+
+// shownText is what a reminder calls u: its title when it has one, else its
+// content (spec R12).
+func shownText(u unit.Unit) string {
+	if u.Title != "" {
+		return u.Title
+	}
+	return u.Content
 }
 
 // pushText is the one message for a unit's reminders due together, in the unit's

@@ -1264,10 +1264,34 @@ func RunLanguage(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 }
 
 // RunTitle pins the title a unit carries (spec R12): it is stored at Create and
-// read back, and an absent one stays empty rather than becoming the content.
+// read back, an absent one stays empty rather than becoming the content, and
+// UpdateTitle rewrites or clears it touching nothing else but updated_at.
 func RunTitle(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 	t.Helper()
 	ctx := context.Background()
+	t.Run("UpdateTitle rewrites and clears the title", func(t *testing.T) {
+		repo := newRepo(t)
+		u := fixtureUnit("retitled", unit.StatusPool)
+		u.Title = "Reunión del jueves"
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		at := u.UpdatedAt.Add(time.Hour)
+		for _, title := range []string{"Reunión del viernes", ""} {
+			if err := repo.UpdateTitle(ctx, u.ID, title, at); err != nil {
+				t.Fatalf("UpdateTitle(%q): %v", title, err)
+			}
+			got, err := repo.ByID(ctx, u.ID)
+			want := u
+			want.Title, want.UpdatedAt = title, at
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("after UpdateTitle(%q): %+v, %v; want only Title and UpdatedAt changed: %+v", title, got, err, want)
+			}
+		}
+		if err := repo.UpdateTitle(ctx, "does-not-exist", "x", at); !errors.Is(err, ports.ErrUnitNotFound) {
+			t.Fatalf("UpdateTitle on a missing id: %v, want ErrUnitNotFound", err)
+		}
+	})
 	repo := newRepo(t)
 	for id, title := range map[string]string{"titled": "Reunión con Juan", "untitled": ""} {
 		u := fixtureUnit(id, unit.StatusPool)

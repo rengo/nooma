@@ -3,7 +3,11 @@
 package sqlite
 
 import (
+	"context"
 	"testing"
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
 )
 
 // TestMigration0009AddsUnitTitle: the migration adds one nullable TEXT column,
@@ -24,5 +28,30 @@ func TestMigration0009AddsUnitTitle(t *testing.T) {
 	var title *string
 	if err := db.QueryRow(`SELECT title FROM units WHERE id = 'old'`).Scan(&title); err != nil || title != nil {
 		t.Errorf("a unit from before the migration has title %v, %v; want NULL", title, err)
+	}
+}
+
+// TestNoTitleIsNullNotEmpty: a unit created without a title, and one whose title
+// is cleared, hold NULL. The repo reads both as empty, so only a raw read tells
+// them apart from an empty string (doc 03: "NULL or the short name").
+func TestNoTitleIsNullNotEmpty(t *testing.T) {
+	ctx := context.Background()
+	v := openTestVault(t)
+	repo := NewUnitRepo(v)
+	at := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	for id, title := range map[string]string{"created-bare": "", "cleared": "Reunión del jueves"} {
+		if err := repo.Create(ctx, unit.Unit{ID: id, Type: unit.TypeTask, Content: "x", Status: unit.StatusPool, Weight: 1,
+			Title: title, LastTouchedAt: at, CreatedAt: at, UpdatedAt: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.UpdateTitle(ctx, "cleared", "", at); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"created-bare", "cleared"} {
+		var isNull bool
+		if err := v.db.QueryRowContext(ctx, `SELECT title IS NULL FROM units WHERE id = ?`, id).Scan(&isNull); err != nil || !isNull {
+			t.Errorf("%s: title IS NULL = %v, %v; want NULL, not an empty string", id, isNull, err)
+		}
 	}
 }

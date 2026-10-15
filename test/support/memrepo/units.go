@@ -138,6 +138,21 @@ func (r *Units) UpdateDueAt(_ context.Context, id string, dueAt, at time.Time) e
 	return nil
 }
 
+// UpdateTitle implements ports.UnitRepo.
+func (r *Units) UpdateTitle(_ context.Context, id, title string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	u, ok := r.units[id]
+	if !ok {
+		return ports.ErrUnitNotFound
+	}
+	u.Title = title
+	u.UpdatedAt = at
+	r.units[id] = u
+	return nil
+}
+
 // SetStatus implements ports.UnitRepo.
 func (r *Units) SetStatus(_ context.Context, id string, from, to unit.Status, at time.Time) error {
 	r.mu.Lock()
