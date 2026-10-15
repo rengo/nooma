@@ -344,3 +344,11 @@ func TestUnitRepo_Language(t *testing.T) {
 		return NewUnitRepo(openTestVault(t))
 	})
 }
+
+// TestUnitRepo_Title runs repocontract.RunTitle against a real migrated vault
+// (spec R12).
+func TestUnitRepo_Title(t *testing.T) {
+	repocontract.RunTitle(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}

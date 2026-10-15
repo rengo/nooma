@@ -30,9 +30,17 @@ func backfilled(t *testing.T, seed func(exec func(query string, args ...any))) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := all[:len(all)-1]
-	if last := all[len(all)-1]; last.Name != "0008_unit_language.sql" {
-		t.Fatalf("the newest migration is %s; this test is about 0008_unit_language.sql", last.Name)
+	// Everything before 0008, whatever came after it: this test is about that
+	// migration's backfill, and a later one must not change what it measures.
+	var before []migration
+	for _, m := range all {
+		if m.Name == "0008_unit_language.sql" {
+			break
+		}
+		before = append(before, m)
+	}
+	if len(before) != 7 {
+		t.Fatalf("found %d migrations before 0008_unit_language.sql, want 7", len(before))
 	}
 	if err := migrateMigrations(ctx, db, before); err != nil {
 		t.Fatal(err)

@@ -30,7 +30,7 @@ tasks-repeating).
   - RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output); `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
   - [x] RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
   - [x] RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
-  - RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.
+  - [x] RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.
   - RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
   - RED `TestCorrectionRewritesTheTitle`: a re-classified correction → the new title in `correction.applied`, with the old one as pre-image. `TestCorrectionContentEditWithoutTitleClearsIt` → `title: null`. `TestCorrectionDateOnlyEditKeepsTitle`. `TestAllFields_EveryEditReportsExactlyOneAccessorTrue` gains `FieldTitle`.
   - RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.

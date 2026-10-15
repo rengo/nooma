@@ -307,3 +307,21 @@ func TestToUnit_CarriesTheClassifiedLanguage(t *testing.T) {
 		t.Errorf("ToUnit(no language).Language = %q, %v; want empty", u.Language, err)
 	}
 }
+
+// TestToUnit_CarriesTheClassifiedTitle: the validated title is stored on the
+// unit (spec R12), and a classification with none leaves it empty rather than
+// copying the content.
+func TestToUnit_CarriesTheClassifiedTitle(t *testing.T) {
+	title := "Reunión con Juan"
+	c := wholeClassification()
+	c.Title = &title
+
+	u, err := ToUnit(c, "unit-1", "chat", ingestedAt, defaultPriors())
+	if err != nil || u.Title != title {
+		t.Errorf("ToUnit(title).Title = %q, %v; want %q", u.Title, err, title)
+	}
+	u, err = ToUnit(wholeClassification(), "unit-2", "chat", ingestedAt, defaultPriors())
+	if err != nil || u.Title != "" {
+		t.Errorf("ToUnit(no title).Title = %q, %v; want empty", u.Title, err)
+	}
+}

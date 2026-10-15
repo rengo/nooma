@@ -49,11 +49,11 @@ func (r *UnitRepo) Create(ctx context.Context, u unit.Unit) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO units
 			(id, type, content, status, weight, weight_decay_rate, last_touched_at,
-			 structured_data, source, event_at, due_at, confidence, language, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 structured_data, source, event_at, due_at, confidence, language, title, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, string(u.Type), u.Content, string(u.Status), u.Weight, u.WeightDecayRate,
 		formatUnitTime(u.LastTouchedAt), rawMessageToNull(u.StructuredData), u.Source,
-		timePtrToNull(u.EventAt), timePtrToNull(u.DueAt), floatPtrToNull(u.Confidence), languageToNull(u.Language),
+		timePtrToNull(u.EventAt), timePtrToNull(u.DueAt), floatPtrToNull(u.Confidence), textToNull(u.Language), textToNull(u.Title),
 		formatUnitTime(u.CreatedAt), formatUnitTime(u.UpdatedAt),
 	)
 	if err != nil {
@@ -333,7 +333,7 @@ func (r *UnitRepo) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, e
 // unitSelectColumns is shared by ByID and LiveByIDs — one column list, one
 // place, so the two read paths and scanUnit cannot drift apart.
 const unitSelectColumns = `SELECT id, type, content, status, weight, weight_decay_rate, last_touched_at,
-	structured_data, source, event_at, due_at, confidence, language, created_at, updated_at`
+	structured_data, source, event_at, due_at, confidence, language, title, created_at, updated_at`
 
 // unitRow is satisfied by both *sql.Row (ByID) and *sql.Rows (LiveByIDs).
 type unitRow interface {
@@ -350,12 +350,12 @@ func scanUnit(row unitRow) (unit.Unit, error) {
 		structuredData                      sql.NullString
 		eventAt, dueAt                      sql.NullString
 		confidence                          sql.NullFloat64
-		language                            sql.NullString
+		language, title                     sql.NullString
 	)
 
 	err := row.Scan(
 		&u.ID, &typ, &u.Content, &status, &u.Weight, &u.WeightDecayRate, &lastTouchedAt,
-		&structuredData, &u.Source, &eventAt, &dueAt, &confidence, &language, &createdAt, &updatedAt,
+		&structuredData, &u.Source, &eventAt, &dueAt, &confidence, &language, &title, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return unit.Unit{}, err
@@ -379,6 +379,7 @@ func scanUnit(row unitRow) (unit.Unit, error) {
 		return unit.Unit{}, fmt.Errorf("unit %q: updated_at: %w", u.ID, err)
 	}
 	u.Language = language.String
+	u.Title = title.String
 	if structuredData.Valid {
 		u.StructuredData = json.RawMessage(structuredData.String)
 	}
@@ -426,8 +427,9 @@ func timePtrToNull(t *time.Time) any {
 	return formatUnitTime(*t)
 }
 
-// languageToNull stores "no language known" as NULL, never as an empty string.
-func languageToNull(l string) any {
+// textToNull stores "no value known" as NULL, never as an
+// empty string.
+func textToNull(l string) any {
 	if l == "" {
 		return nil
 	}

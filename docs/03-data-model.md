@@ -37,7 +37,8 @@ CREATE TABLE units (
   confidence         REAL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
-  language           TEXT                        -- en|es|NULL: the language the capture was written in (ADR-0032); never changed by a correction
+  language           TEXT,                       -- en|es|NULL: the language the capture was written in (ADR-0032); never changed by a correction
+  title              TEXT                        -- NULL or the short, date-free name a reminder says (spec R12); rewritten by a re-classifying correction
 );
 CREATE INDEX idx_units_status_touched ON units(status, last_touched_at);
 

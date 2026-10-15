@@ -89,6 +89,7 @@ func ToUnit(c Classification, id, source string, now time.Time, p Priors) (unit.
 		// classification named none (ADR-0032 point 5). Never Fallback: that
 		// would record English as a fact about a message nobody classified.
 		Language:  languageText(c.Language),
+		Title:     titleText(c.Title),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}, nil
@@ -100,6 +101,14 @@ func languageText(l *Language) string {
 		return ""
 	}
 	return string(*l)
+}
+
+// titleText is t as the text a unit stores, empty when the model gave none.
+func titleText(t *string) string {
+	if t == nil {
+		return ""
+	}
+	return *t
 }
 
 // orPrior returns the model's value when it supplied one, and the prior when

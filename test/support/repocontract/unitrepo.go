@@ -1262,3 +1262,23 @@ func RunLanguage(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		}
 	})
 }
+
+// RunTitle pins the title a unit carries (spec R12): it is stored at Create and
+// read back, and an absent one stays empty rather than becoming the content.
+func RunTitle(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+	ctx := context.Background()
+	repo := newRepo(t)
+	for id, title := range map[string]string{"titled": "Reunión con Juan", "untitled": ""} {
+		u := fixtureUnit(id, unit.StatusPool)
+		u.Title = title
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create %s: %v", id, err)
+		}
+	}
+	for id, want := range map[string]string{"titled": "Reunión con Juan", "untitled": ""} {
+		if got, err := repo.ByID(ctx, id); err != nil || got.Title != want {
+			t.Errorf("ByID(%s).Title = %q, %v; want %q", id, got.Title, err, want)
+		}
+	}
+}

@@ -61,7 +61,7 @@ func TestMigrateFromScratchSetsUserVersion(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 8 // 0001_core_tables.sql through 0008_unit_language.sql are all published
+	const wantVersion = 9 // 0001_core_tables.sql through 0009_unit_title.sql are all published
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version = %d, want %d (opening a fresh vault must apply every published migration)", userVersion, wantVersion)
 	}
@@ -101,7 +101,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 8
+	const wantVersion = 9
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version after reopening an already-migrated vault = %d, want %d (unchanged)", userVersion, wantVersion)
 	}
@@ -169,7 +169,7 @@ func TestVaultNewerThanBinaryRefusesToOpen(t *testing.T) {
 	if versionErr.VaultVersion != futureVersion {
 		t.Errorf("VersionError.VaultVersion = %d, want %d", versionErr.VaultVersion, futureVersion)
 	}
-	if versionErr.BinaryVersion != 8 {
+	if versionErr.BinaryVersion != 9 {
 		t.Errorf("VersionError.BinaryVersion = %d, want 8 (0001 through 0008 are all published at this stage)", versionErr.BinaryVersion)
 	}
 
@@ -232,7 +232,7 @@ func TestMigrationsAreEmbeddedNotReadFromDisk(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 8
+	const wantVersion = 9
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version = %d, want %d (migrations must apply even with no .sql file anywhere on disk)", userVersion, wantVersion)
 	}
@@ -340,9 +340,9 @@ func TestMigrateAppliesOnlyPendingMigrations(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 8
+	const wantVersion = 9
 	if userVersion != wantVersion {
-		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (0002 through 0008 should have applied)", userVersion, wantVersion)
+		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (0002 through 0009 should have applied)", userVersion, wantVersion)
 	}
 
 	// Prove 0002 actually ran — not just that the version counter moved —
