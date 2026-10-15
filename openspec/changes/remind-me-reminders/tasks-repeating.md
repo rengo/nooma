@@ -21,6 +21,7 @@ deferred (client, 2026-10-14).
   - `TestLatestOpenAskedAtSpansKinds`.
   - `TestEveryReminderKindHasAWindow`: a sweep over the new kinds → each has its §13 window; `ask_back_window_minutes`, `which_reminder_window_minutes` and `stop_reply_window_minutes` all land in this link (round 3, item 3).
   - `TestUndoKindVocabularyAndWindow`: `undo` with `{unit_id, snapshot}`, resolutions `restored`/`expired`, window 10, exempt from (b), (c) and (d).
+  - Round 3: `TestUndoHasItsOwnSlot` (`Ask` never expires an undo); `TestOpenReminderQuestionIsAPureRead`; `TestAskLogsTheExpiryItCauses`; `TestDryRunAndTodayWriteNoExpiry`. Stated exception: these methods get their first caller in link 6.
 - [ ] 5.2 GREEN: port, sqlite, memrepo, goldens; doc 03; §11 actions; `make check-all`.
 
 ## PR 6 — `feat/remind-me-stop` (D20-D24)
@@ -38,13 +39,13 @@ deferred (client, 2026-10-14).
   - `TestI38_AmbiguousStopAsksWhich`: answer "2" → the second is stopped.
   - `TestI38_ABirthdayCanBeStopped` (P1).
   - `TestI38_IntentConsumedMessageSkipsCheckIn`: "no me recuerdes más" with an unasked check-in open → the check-in is untouched (item 9).
-  - `TestI38_MixedIntentAndRequestIsConsumedKnownLimit` (pinned).
+  - Round 3: `TestI38_StopThenRemindWhenThenKeepRestoresTheStop` (stop, `remind_when` at +2 min, "no, seguí" at +4 → the stop is undone); `TestI38_TwoStopsTwoKeeps` (the most recent first); `TestI38_StopAndRequestTogether` (both happen, and the reply names both); `TestStopCandidateOneBoundedByTheWindow`; `TestI38_StopToATaskCheckinBindsThatUnit`; `TestDigestPathStoppedUnitIsLapsedNotKept`; `TestDigestPathUnreadableUnitIsHeldNotKept`; `TestPlanUndo_ArmedRowAfterACrashIsKeptAsIs`.
   - `TestI38_StoppedBirthdayNotCarriedByTheDigest`: a digest-routed birthday, fired, stopped before the digest → not carried, lapsed `stopped` (round 2, item 1).
   - `TestI38_CrashAfterTombstoneSendsNothing`: the tombstone is written, then the pass aborts before the dismissals; the next due scan and the digest → nothing sent.
   - `TestI38_BirthdayInTheListCanBeChosenADayLater`: an armed recurring birthday is a candidate; `reminder_target` naming it → stopped.
   - `TestI38_UnreadableUnitHoldsTheRow`: `ByID` fails → `Defer`, not sent; a missing unit → judged as usual (round 3, item 2).
   - `TestI38_StopCheckReadsTheUnitForEveryRow`: a recurring row and a lead row of a stopped unit → `LapseStopped`.
-  - `TestI38_WhichListCappedAtFive`: 12 birthdays → 5 options, newest first.
+  - `TestI38_WhichListCappedAtFiveByNextFireTime`: 12 birthdays → 5 options, ordered by next fire time; `TestI38_SixthCandidateIsAStatedLimit` (round 3).
   - `TestI38_ReAskAfterStopIsANewUnit`: stop, then "recordame tomar pastillas todos los días a las 9pm" → a new unit is armed and the reply says when; the old unit stays stopped (P6).
   - `TestI38_AskedMessageClassifiedCorrectionIsANewCapture`: the model says `correction` for an asked re-ask → no correction fork; a new unit (round 3, minor).
   - `TestI38_CorrectionOfStoppedUnitAppliesEditKeepsStopped`: the date is corrected, nothing is armed, `correction.reminder.refused` (`stopped`), and the reply says it stays stopped (PM).
@@ -52,7 +53,7 @@ deferred (client, 2026-10-14).
   - `TestI38_ConsumedRelationAnswerExpiresOlderRemindWhen`: `remind_when`, then a newer relation question, then "sí" → the relation is answered and `remind_when` expired; a later "no" → no daily (item 7).
   - `TestI38_NewerDeliveryExpiresWhichReminder`: `which_reminder` asked, then a push delivered, then "2" → nothing stopped (item 13).
   - `TestI38_CheckinAfterRemindWhenOwnsTheNo`: `remind_when` seeded through `Ask`, then a check-in delivered, then "no" → the check-in is resolved, `remind_when` is still open, and no daily is made (A-W7).
-  - `TestI38_ListoWithOnlyAnAskedDeliveryLeavesUnaskedCheckInAlone`: `resolveCheckIn` filters asked rows; when none remain → no-op (item 9).
+  - `TestListoOnAnAskedDeliveryResolvesItLikeM3`: done is deferred, so "listo" engages the newest delivered check-in, asked or not, exactly as M3 does (round 3).
   - Undo (Q1, Q2): `TestI38_StopUndoRecurringKeepsRecurringAt2100`; `TestI38_StopUndoDayOnly`; `TestI38_StopUndoLapsedFiredRowIsRecreated`; `TestI38_UndoThenNextScanSendsNoDouble`; `TestI38_UndoDropsARowThatPassedAndSaysSo`; `TestI38_StraySeguiRestoresNothing`; `TestRepairSkipsAUnitWithAnOpenUndo`.
   - Binding (Q3, Q5, Q6): `TestI38_StopWithNoCandidateSaysNotFoundAndStoresNothing`; `TestChoiceOutsideTheListIsRefused` (`choice_number` 4 with 3 options → nothing bound, the question stays open); `TestI38_QuestionAnswerNotCoercedIntoNudge`; `TestI38_KeepWithNoOpenUndoDoesNothing`; `TestI38_BareListoKeepsM3Behaviour` ("listo" reads `none` and resolves an open task check-in; no reminder is touched; done handling deferred); `TestI38_TargetUnclearAsksWhich`; `TestI38_TargetOutOfRangeAsksWhich`; `TestI38_SingleCandidateStillNeedsTheModelsChoice`; `TestI38_StopAnUnaskedEventPushJustReceived` (its remaining leads dismissed); `TestI38_TieInsideOneUnitIsOneCandidate`; `TestI38_StopReplyAndOptionsUseTitleAndDate`.
   - Mechanics: `TestI38_ExplicitReferentStopRunsAboveTheCorrectionFork`; `TestOpenReminderQuestionExpiresAtRead`; `TestResolveIsCompareAndSet`; `TestStopToleratesADismissConflict`.
@@ -67,6 +68,7 @@ deferred (client, 2026-10-14).
   - `TestPrecedence_TieOrderByKind`.
   - `TestPrecedence_StopSkipsTaskCheckin`, `…StateCheckin`, `…RelationCheckin`; `TestPrecedence_StopWithRelationRejectedDeletesNoRelation` (Q9).
 - [ ] 6.4 RED L3 contract: `TriggerRepo.Dismiss` armed → dismissed, any other status → conflict; `LastDeliveries` returns every tied row; guarded `Create`. The I03 sweep stays green. The link-6 tests seed open questions through `PendingQuestionRepo.Ask`.
+  - Contract (round 3): `TestRestoreContract` (dismissed→armed only); `TestUndoStopContract`; `TestUndoStopRollsBackOnAMidTransactionFailure`; `TestUndoStopRefusesWhenTheTombstoneChanged`; `TestUndoStopTreatsErrTriggerExistsAsDone`.
 - [ ] 6.5 GREEN: M3, the guards on every arming path, the reply; the I38 row in doc 06 §4; the `stopped` lapse reason in doc 02 §7/§11 and doc 03; doc 02 §5; doc 07; `make check-all`.
 
 ## PR 7 — `feat/recurring-rearm` (D30-D35)
@@ -86,6 +88,7 @@ deferred (client, 2026-10-14).
   - `TestGate_UnaskedRecurringJudgedByOccursAtDayGranular`: an unasked birthday row with `occurs_at` 10-20 12:00 → not passed at 23:59 on 10-20; `passed` from 10-21 00:00 local; `Waiting` when fired.
   - `TestAnchorTimeRoundTrip`, `TestNextOccurrenceUsesAnchorTime`.
 - [ ] 7.2 RED, I36 recurring:
+  - `TestI38_UndoAfterACorrectionReplansFromTheUnit`: stop a daily at 21:00, correct it to 22:00, undo → it rings at 22:00, and the reply says 22:00 (round 3).
   - `TestI36_AnAskedRecurrenceIsARecurringTask`: "todos los días a las 9pm" → a `task`; the row has `occurs_at` 21:00 and `night_exempt`.
   - `TestI36_RecurringReArmsOnFire` and `TestI36_RecurringReArmsOnExpire` (stale >6 h, and `passed`).
   - `TestI36_CrashBetweenCreateAndFire`: create succeeds, fire is not reached; the next pass → `ErrTriggerExists` and one fire, no double.
