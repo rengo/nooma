@@ -35,6 +35,9 @@ type correctionRunner struct {
 	triggers ports.TriggerRepo
 	// config holds the reminder preferences the followed set is armed at.
 	config ports.ConfigRepo
+	// degraded is what the decoder lost in the classification being acted on,
+	// set by at on its own copy of the runner and never on the shared one.
+	degraded []degradationEntry
 }
 
 // referentSource records how applyWithPreImage's caller resolved target's
@@ -60,6 +63,9 @@ type referentSource struct {
 // is written, and the returned *Correction carries Ambiguous == true for
 // the caller to map onto OutcomeAsked.
 func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Classification, explicit *unit.Unit, now time.Time) (*Correction, error) {
+	// r is a copy: this classification's degradations ride on it to the rows
+	// the correction writes (doc 02 §5.1, I12), so no signature carries them.
+	r.degraded = degradationEntries(c)
 	target, ref, err := r.resolveReferent(ctx, in, explicit, now)
 	if err != nil {
 		return nil, err
@@ -253,11 +259,25 @@ func (r correctionRunner) recordAmbiguousDecision(ctx context.Context, now time.
 	if err != nil {
 		return fmt.Errorf("correction: encode ambiguous decision context: %w", err)
 	}
+	// The ask rows are built from many shapes, so the list is merged into the
+	// encoded object rather than added to each.
+	if len(r.degraded) > 0 {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(contextJSON, &fields); err != nil {
+			return fmt.Errorf("correction: decode ambiguous decision context: %w", err)
+		}
+		if fields["degradations"], err = json.Marshal(r.degraded); err != nil {
+			return fmt.Errorf("correction: encode degradations: %w", err)
+		}
+		if contextJSON, err = json.Marshal(fields); err != nil {
+			return fmt.Errorf("correction: encode ambiguous decision context: %w", err)
+		}
+	}
 
 	d := ports.Decision{
 		ID:         r.ids.New(),
 		Action:     ports.ActionCorrectionAmbiguous,
-		Rationale:  "correction could not resolve unambiguously — no unit was edited",
+		Rationale:  withDegradations("correction could not resolve unambiguously — no unit was edited", r.degraded),
 		Context:    contextJSON,
 		OccurredAt: now,
 	}
@@ -351,6 +371,7 @@ func (r correctionRunner) recordPreImage(ctx context.Context, target unit.Unit, 
 			RunnerUpScore *float64 `json:"runner_up_score,omitempty"`
 			Margin        *float64 `json:"margin,omitempty"`
 		} `json:"referent"`
+		Degradations []degradationEntry `json:"degradations,omitempty"`
 	}{
 		UnitID:   target.ID,
 		Fields:   fields,
@@ -362,6 +383,7 @@ func (r correctionRunner) recordPreImage(ctx context.Context, target unit.Unit, 
 			RunnerUpScore *float64 `json:"runner_up_score,omitempty"`
 			Margin        *float64 `json:"margin,omitempty"`
 		}{Source: ref.Source, Score: ref.Score, RunnerUpScore: ref.RunnerUpScore, Margin: ref.Margin},
+		Degradations: r.degraded,
 	})
 	if err != nil {
 		return "", fmt.Errorf("correction: encode pre-image context: %w", err)
@@ -370,7 +392,7 @@ func (r correctionRunner) recordPreImage(ctx context.Context, target unit.Unit, 
 	d := ports.Decision{
 		ID:         r.ids.New(),
 		Action:     ports.ActionCorrectionApplied,
-		Rationale:  fmt.Sprintf("correction about to write %v to unit %q; previous values recorded before the edit", fields, target.ID),
+		Rationale:  withDegradations(fmt.Sprintf("correction about to write %v to unit %q; previous values recorded before the edit", fields, target.ID), r.degraded),
 		Context:    contextJSON,
 		OccurredAt: now,
 	}
