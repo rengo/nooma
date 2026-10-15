@@ -1,7 +1,8 @@
 # Design — remind-me-reminders, links 5-9: question store, stop, recurring, ask-back, done
 
-This continues `design.md` (D1-D9). The rules are ADR-0031. P1-P5 are the PM's decisions in
-`proposal.md`, with P6 and P7 added in round 2. Lines are at `8f45531`.
+This continues `design.md` (D1-D9). The rules are ADR-0031, with detection by ADR-0033
+(Accepted): the classify fields of D1 replace every phrase list below. P1-P5 are the PM's decisions in
+`proposal.md`, with P6 and P7 added in round 2. Lines are at `dd1ba9a`.
 
 ## 1. Ground truth
 
@@ -30,21 +31,26 @@ the indexes recreated:
 - `relation_id` becomes nullable;
 - `unit_id` and `options` (JSON) are added, with no FK (ADR-0027's reasons).
 
-The `kind` vocabulary gains `remind_when`, `keep_or_stop` and `which_reminder`. The resolution
-vocabulary gains `answered`, `declined`, `kept` and `deleted`. `options` holds `{intent:
-stop|done, unit_ids: [...]}`. The M2 column comments, the vocabulary DDL test
+The `kind` vocabulary gains `remind_when`, `keep_or_stop`, `which_reminder` and `undo`. The
+resolution vocabulary gains `answered`, `declined`, `kept`, `deleted` and `restored`. `options`
+holds `{intent: stop|done, unit_ids: [...]}` for `which_reminder`, and `{unit_id, snapshot}` for
+`undo`. The M2 column comments, the vocabulary DDL test
 (`pending_question_vocabulary_ddl_test.go`) and doc 03 change together.
 
 **D11. Port.**
 
 - `Ask(ctx, ReminderQuestion)` creates a reminder question already asked.
 - `OpenReminderQuestion(ctx)` returns the single open reminder question, or none.
-- `Resolve(ctx, id, resolution, at)`.
+- `Resolve(ctx, id, resolution, at)`: compare-and-set on `resolved_at IS NULL`. It returns
+  `ErrQuestionClosed` when another path closed the question first, and the caller then does
+  nothing (S1).
 - `LatestOpenAskedAt(ctx)` returns the newest `asked_at` across every kind, relations included.
 
 The relation reads keep `kind = 'relation'` and are unchanged, and the m3e tests stay green. A
 new reminder question expires the open one first: **at most one reminder question is open at a
-time**.
+time**. `OpenReminderQuestion` expires a question past its window **when it reads it**, so no
+path ever sees a stale question as open. The new kind `undo {unit_id, snapshot}` lives in the
+same store (window `stop_undo_window_minutes`, 10).
 
 **D12. Windows and expiry, for every reminder kind.**
 
@@ -53,8 +59,9 @@ time**.
 | `remind_when` | `ask_back_window_minutes` (60) |
 | `keep_or_stop` | `which_or_keep_window_minutes` (60) |
 | `which_reminder` | `which_or_keep_window_minutes` (60) |
+| `undo` | `stop_undo_window_minutes` (10): time only, exempt from (b), (c) and (d) |
 
-All three constants, and `stop_reply_window_minutes` (120), land in link 5 with the sweep that
+All four constants, and `stop_reply_window_minutes` (120), land in link 5 with the sweep that
 checks them.
 
 A reminder question expires when any of these happens:
@@ -63,11 +70,13 @@ A reminder question expires when any of these happens:
   `OpenReminderQuestion`, and never through the digest's relation sweep.
 - **(b) Not the answer:** a message is not its answer (D24). Capture writes
   `capture.question.expired`.
-- **(c) Consumed:** a message is consumed by any other answer, a phrase or a check-in. The older
+- **(c) Consumed:** a message is consumed by any other answer, a reminder intent or a check-in. The older
   open reminder question expires in the same step (round 2, item 7).
-- **(d) Newer delivery:** a reminder or check-in is delivered after it was asked, for every
-  reminder kind, `remind_when` included. A late "no" can therefore never delete, nor turn a
-  check-in's "no" into a daily reminder (round 3, item 7).
+- **(d) Newer delivery:** a reminder or check-in delivered after a `keep_or_stop` or
+  `which_reminder` was asked expires it, so a late "no" never deletes. It does **not** expire a
+  `remind_when` inside its window. Instead, D24 step 1 lets a check-in or nudge delivered after
+  it own the next message, which falls through to the resolvers. A check-in's "no" therefore
+  never makes a daily reminder, and the user can still answer the ask-back afterwards.
 
 **D13. Actions** (§11 entries, `AllDecisionActions`, `ui/activitylabel.go`, I12):
 
@@ -75,6 +84,8 @@ A reminder question expires when any of these happens:
 - `capture.question.answered`
 - `capture.question.expired`
 - `check.question.expired`
+- `capture.reminder.unbound` (a stop or done that found nothing, Q3)
+- `reminder.stopped` and `reminder.restored` (an undo), with I12 and the `AllDecisionActions` sweep
 
 ### Link 6: the stop (D20-D24) — lands before anything repeats (P1)
 
@@ -89,7 +100,7 @@ tombstone with its instant. `remind_me` keeps its history.
   never aborts its pass: the capture correction fork, `Follow`, the preference re-arm, ADR-0032's
   re-plan and `CatchUp`, and D33.
 - **Sending:** today the gate reads the unit only for a row that names no event
-  (`reminder_gate.go:23` on main; `reminderGate.judge` once #343 lands, which link 6 rebases onto).
+  (`reminderGate.judge`, landed with #343).
   Link 6 adds an **unconditional**
   unit read for the stop check. `prospection.Reminder` gains `Stopped`, and `ReminderVerdict`
   answers `Stale`, `LapseStopped`, before any other rule. A unit that cannot be read (any error
@@ -98,69 +109,102 @@ tombstone with its instant. `remind_me` keeps its history.
   fired row that was never delivered, sends nothing.
 - **P6:** a new explicit ask is a new capture and a new unit, armed normally. With `asked`, the
   free-capture correction fork is skipped even when the model says `correction`, so a re-ask
-  never lands on the stopped unit. A correction that
-  reaches a stopped unit is refused `stopped`, with the reply "Ese recordatorio está detenido;
-  pedímelo de nuevo con «recordame…»". Nothing else clears the tombstone.
+  never lands on the stopped unit. A correction that reaches a stopped unit **applies its field
+  edit** and refuses only the re-arming (`correction.reminder.refused`, reason `stopped`). The
+  reply says so: "Corregido. El recordatorio sigue detenido; pedímelo de nuevo con
+  «recordame…»". Nothing but the undo clears the tombstone.
 
-**D21. Stop phrases** (`StopsReminding`, D1's reader, swept): es "no me lo recuerdes más", "no me
-recuerdes más", "dejá de recordarme", "no me avises más"; en "stop reminding me", "don't remind me
-anymore". A stop anywhere in the message wins: "listo, no me lo recuerdes más" is a stop.
+**D21. Stop intent** (ADR-0033 points 2-3). A stop is `reminder_intent: stop`. The prompt states
+that a stop outweighs a done ("listo, no me lo recuerdes más" is a stop), and the phrasing set
+measures it. A bound stop is its own confirmation.
 
-**D22. Candidates and binding (P7: bind without asking only on one unambiguous candidate).**
+**D22. Candidates and binding by position** (PM Q5, Q6).
 
-- **Stop candidates:** units that are not stopped and have an armed or recently delivered asked
-  trigger, **plus** units with an armed recurring trigger (so "lo del cumple de Ana" names a
-  birthday any day), **plus** the units of every row tied for the last delivery, up to 5. A tie
-  therefore always leaves at least two candidates and asks (round 3, item 1).
-- **Done candidates:** asked triggers delivered inside `stop_reply_window_minutes` (120, §13),
-  one-shot or recurring, armed or not (round 2, item 10).
-- **`TriggerRepo.LastDeliveries(ctx)`** (new) returns every trigger sharing the newest
-  `surfaced_at`, across all units. More than one means a tie.
+- **Stop candidates** (`brain.reminderCandidates`, built before the classify call), in this order
+  (PM):
+  1. the unit of the last delivery (`TriggerRepo.LastDeliveries`), asked or not;
+  2. asked units with a trigger delivered within `stop_reply_window_minutes` (120) or armed;
+  3. the rest by next fire time: armed recurring reminders.
 
-Rules, in order:
+  They are deduplicated by unit, so a tie inside one unit is one candidate, and cut to 5. Each is
+  rendered by `RenderReminderList` as "<n>) <title or content> — <date>". The prompt says to
+  answer `unclear` when the described reminder is not listed.
+- **Done candidates:** asked reminders delivered within `stop_reply_window_minutes` (120).
+- **Prompt:** the classify prompt carries the list whenever it is non-empty.
+- **Binding:** the model answers `reminder_target`. Code binds only on a position inside the list
+  it sent. `unclear`, out of range or absent asks `which_reminder {intent, unit_ids}` with the
+  same list. There is no word matching and no blind single-candidate bind.
+- **Unbound (Q3, round 2 C1):** a stop or done that binds nothing is consumed **only when no
+  check-in, nudge or relation question is open**. It then replies "No encontré qué recordatorio
+  cortar" (done: "…marcar como hecho") and stores nothing. Otherwise it falls through to the
+  resolvers (`checkin.go:23-55`).
+- **`done` before link 9:** links 6-8 leave `done` out of D24, and a `done` reading falls
+  through.
 
-1. **Named:** the content words, minus the phrase words and stopwords, overlap exactly one
-   candidate's content.
-2. **Last delivery:** `LastDeliveries` returns exactly one row, inside the window, belonging to a
-   candidate. A tie (a digest surfaces many with one `now`) never binds.
-3. **Single candidate:** a stop with exactly one candidate.
+**D23. Stopping, and its undo** (PM Q1, Q2).
 
-When no rule binds and there are candidates, a `which_reminder` question holds `{intent,
-unit_ids}` for at most **5**, most recently delivered or armed first: "¿Cuál? 1) … 2) …". With no
-candidates, a stop is captured as usual and a done does nothing.
-
-**D23. Stopping.** The stop applies in this order:
-
-1. `reminder.stopped {unit_id, dismissed: [ids], previous: {reminder_stopped_at: null}}` is
-   recorded (ADR-0016).
+1. `reminder.stopped {unit_id, rows: [{id, status, fire_at, payload, rule, anchor,
+   interrupt_level}], previous: {reminder_stopped_at: null}}` is recorded first (ADR-0016).
 2. The unit's `reminder_stopped_at` is set.
-3. Each armed trigger goes through `TriggerRepo.Dismiss(id, at)` (new; port, sqlite, memrepo, the
-   contract, and the I03 reflection sweep, which it passes with no `Delete` prefix).
-4. Each fired, undelivered trigger is `Lapse`d (`check.trigger.lapsed`, reason `stopped`).
-5. The reply is "Listo, no te lo recuerdo más: <content>.".
+3. Armed rows are `Dismiss`ed. `ports.ErrTriggerStatusConflict` (the row fired meanwhile) is tolerated, and
+   the row goes to step 4 (S2). `Dismiss` is new: port, sqlite, memrepo, contract, and the I03
+   sweep, which it passes with no `Delete` prefix.
+4. Fired, undelivered rows are `Lapse`d (reason `stopped`). Stopping a one-shot event retires all
+   of its leads.
+5. An `undo {unit_id, snapshot}` question is asked with the reply "Listo, no te lo recuerdo más:
+   <title> — <date>. (Si fue un error, decime «no, seguí».)".
 
-A crash after step 2 leaves rows that D20's gate never sends.
+**Undo:**
 
-**D24. Precedence — one total order** for every inbound message:
+- **Trigger:** only `reminder_intent: keep` read while the undo is open (D24 step 1). A bare "sí",
+  "ok" or "dale" is not keep. A stray "seguí" elsewhere restores nothing.
+- **One transaction:** recording `reminder.restored {unit_id, restored, dropped, rearmed}`,
+  clearing the tombstone, and restoring every row happen in one store transaction (a new
+  port, `ports.StopStore.UndoStop`, implemented as one SQLite transaction across `units`,
+  `triggers` and `decision_log`, and in memrepo under one lock; it is the first port that writes
+  across tables). A re-plan pass running at the same time
+  sees either the stopped unit, which the gate holds, or the restored rows, never half of each.
+  The undo resolves its question `restored` (compare-and-set), and the first writer wins.
+- **Restore by id:** a dismissed row whose `about` (payload `event_at` or `occurs_at`) is still
+  ahead returns to `armed` (`TriggerRepo.Restore(id)`, dismissed→armed). A lapsed row whose
+  `about` is still ahead is recreated from its snapshot with id `<id>:restored`.
+- **Past rows:** a row whose `about` passed during the window is dropped with reason
+  `passed_during_stop`, and the reply names it ("te lo sigo recordando; el aviso de las 21:00 ya
+  pasó"). **A recurring root whose row was dropped gets `Successor(row, now, zone)` armed in the
+  same transaction**, so a daily keeps ringing (round 2, C2).
+- **One authoring path:** the undo never goes through `Follow`. The repair pass (D34) skips a
+  unit with an open undo, so restore and repair never both arm.
 
-0. **An explicit referent** (UI or API `unit_id`; chat has none today) binds a stop or done to
-   that unit directly, skipping D22.
+A crash after step 2 leaves rows that D20's gate never sends. The undo is idempotent by id.
+
+**D24. Precedence — one total order.** The single classify call runs first, with the open
+reminder question in its prompt (D1). Then the code reads the fields in this order:
+
+0. **The intent step runs above the correction fork** (`capture.go:283-290`), and
+   `BuildCorrectionPrompt` carries the fields. An explicit referent (UI or API `unit_id`; chat
+   has none today) binds a stop or done to that unit directly, skipping D22.
 1. **The open question that owns the message.** Q is the most recently asked open question of
    any kind (`LatestOpenAskedAt`). Ties go `which_reminder` > `keep_or_stop` > `remind_when` >
    `relation`.
-   - If Q is a reminder kind inside its window and the message matches Q's answer lexicon (D42,
-     D51, a number or an option for `which_reminder`), the message is consumed.
-   - If Q is a reminder kind and the message does not match, Q expires (D12) and the steps go on.
-   - If Q is a relation question, the steps go on: the model's `relation_outcome` binds it as in
-     m3e.
-2. **The phrase table** (D21, D50). If it binds, the message is consumed: no classification, and
-   check-in resolution does not run.
-3. **Classification and capture.** From link 6, `resolveCheckIn` drops triggers with `asked` in
-   their payload from `open` and does nothing when none remain (round 2, item 9). This keeps
-   I38's "without the model" true and keeps "listo" from engaging an older unasked check-in.
+   - If Q is a reminder kind inside its window and the reading fits Q, the message is consumed.
+     The fitting readings are: `question_answer` `when` or `no` for `remind_when` (D42);
+     `reminder_intent` `keep` or `delete`, or `question_answer` `no` for `keep_or_stop` (D51);
+     `question_answer` `choice` within the list for `which_reminder`; and `reminder_intent: keep`
+     for `undo` (never a bare "sí").
+   - A check-in or nudge delivered after Q was asked outranks Q: the message goes to step 3's
+     resolvers (D12 (d)).
+   - If Q is a reminder kind and the reading does not fit, Q expires (D12) and the steps go on.
+   - If Q is a relation question, the steps go on: `relation_outcome` binds it as in m3e.
+2. **`reminder_intent` `stop`** (and `done` from link 9) binds through D22. If it binds or asks,
+   the message is consumed; if it finds nothing, see D22's unbound rule. **None of the three check-in resolvers runs** (task, state and
+   relation), so a stop that also reads `relation_outcome: rejected` deletes nothing (PM Q9).
+   `delete`, `keep` or a `question_answer` with no matching open question does nothing, and is
+   never coerced into `nudge_outcome` (PM Q10).
+3. **Capture.** From link 6, `resolveCheckIn` drops triggers with `asked` in their payload from
+   `open` and does nothing when none remain, so a done never engages an older unasked check-in.
 
-This replaces the earlier "before classification" and "after check-in" wording. A message mixing
-a phrase and a new capture is consumed by the phrase; a pinned test states this limit.
+A message whose intent binds is consumed whole, even if it also carried a request; a pinned test
+states this limit.
 
 ### Link 7: recurring (D30-D35)
 
@@ -180,8 +224,9 @@ present, and `NextOccurrence(fire_at)` (D32) otherwise.
 
 - **Unasked row:** day-granular, as #340 has it. It is passed from the next local midnight after
   `occurs_at`, and keeps `Waiting` and its digest routing.
-- **Asked row:** never judged `passed`, because it fires *at* `occurs_at` and would be passed the
-  moment it is due. It is judged by lateness only, and its successor (D33) carries the next
+- **Asked row:** never judged `passed`. Main's rule would pass it from the next local midnight
+  after `occurs_at` (`reminder.go:78-85`), so a late-evening occurrence delivered after midnight
+  would be dropped. It is judged by lateness only, and its successor (D33) carries the next
   occurrence.
   - With `night_exempt` (a named time): no quiet-hours `Defer`, and stale `TriggerStalenessHours`
     after `fire_at`. So "todos los días a las 06:30" rings at 06:30, and is dropped after 12:30 if
@@ -226,7 +271,8 @@ daily never fires twice on its first day (round 3, item 8). As a result:
   `ErrUnitStopped` means nothing is armed. Expire covers a stale row (>6 h) and a `passed` one.
 - **Repair** (each pass): `TriggerRepo.RecurringRoots(ctx)` (new) returns each root, by id prefix,
   with its latest row's status. A root whose latest row is `fired` or `expired`, with no armed
-  successor and its unit not stopped, gets one. This heals vaults that fired before this link.
+  successor, its unit not stopped and no `undo` open for it, gets one. So does a root whose latest
+  row is `dismissed` while its unit is not stopped and has no open undo. This heals vaults that fired before this link.
 - The re-arm is recorded as `check.trigger.rearmed`, counted in `CheckReport.TriggersReArmed`
   (I12, `cmd/nooma/check.go`). **DryRun** computes successors and repairs and writes neither.
 
@@ -251,14 +297,16 @@ the window can answer (D24).
 
 **D42. Answers.**
 
-- **No-answer:** `IsNoAnswer` ("no", "nop", "no hace falta", "no, gracias", "nope", "no
-  thanks"). The unit becomes daily (D43), the question is resolved `declined`, and the reply
+- Each consumed answer's reply names what it did ("Listo: te recuerdo X todos los días a las
+  09:00"), with the real ring time when quiet hours move it. An answer has no undo of its own
+  (PM): a misread is fixed with a normal stop or correction.
+- **`question_answer: no`** ("no", "no hace falta", "nope"): the unit becomes daily (D43), the question is resolved `declined`, and the reply
   states the actual hour.
-- **Time answer:** `IsOnlyWhen` holds when nothing is left after removing date and time words,
-  numbers, durations ("en 1 semana", "en 3 días", "in 2 hours") and stopwords. The message then
-  runs as an **explicit correction** of the unit (link 3). The patch writes the unit's instant
-  field (`event_at` for an `event`, `due_at` otherwise) from whichever field the model filled.
-  D9's first-arming rule allows at once.
+- **`question_answer: when`** ("mañana a las 10", "en 1 semana"): the same classification
+  resolved the instant, because the prompt showed the question's unit. The correction path's
+  patch writer (link 3) writes the unit's instant field (`event_at` for an `event`, `due_at`
+  otherwise) from whichever field the model filled, recorded as `correction.applied` with its
+  pre-image. D9's first-arming rule allows at once.
   - With no resolvable instant: the reply is "¿Cuándo?", nothing is written, and the question
     stays open for the rest of its window.
   - Otherwise: the question is resolved `answered`, with R5's reply.
@@ -273,21 +321,20 @@ a las <anchor time>".
 
 ### Link 9: done and keep (D50-D52)
 
-**D50. Bare done.** `SaysDone` holds only when the whole message, after trimming punctuation,
-emoji and the fillers "gracias", "ok" and "dale", is a done phrase: "listo", "ya lo hice", "ya
-está", "hecho", "done", "I did it". "listo, nos vemos mañana" is not one. The binding follows D22
-rules 1 and 2 only.
+**D50. Done.** A done is `reminder_intent: done`. The prompt reserves it for a message saying the
+reminded thing is done ("listo", "ya lo hice", "done"). "listo, nos vemos mañana" reads `none`,
+and the phrasing set measures that. The binding follows D22 rules 1 and 2 only.
 
 **D51. The keep-or-stop answer.**
 
-- `SaysKeep`: "seguí", "seguilo", "sí, seguí", "que siga", "keep going".
-- `SaysDelete`: "borralo", "borrá el recordatorio", "eliminalo", "delete it", plus a bare "no",
-  "nop" or "no, gracias" (P3).
+- **Keep:** `reminder_intent: keep` ("seguí", "keep going"), and "sí" answering this question.
+- **Delete:** `reminder_intent: delete` ("borralo", "delete it"), or `question_answer: no` (P3).
+  This answer is the confirmation turn ADR-0033 point 3 asks of a delete.
 
 **D52. Effects.** Migration M4 adds `units.done_means_today INTEGER NOT NULL DEFAULT 0`. It lives
 on the unit because the trigger rows are replaced at every occurrence.
 
-| Phrase | Reminder | Effect | Reply |
+| Reading | Reminder | Effect | Reply |
 |---|---|---|---|
 | done | one-shot | resolve `engaged`; for an asked event, its remaining armed leads are `Dismiss`ed | "Hecho." |
 | done | repeating, not marked | `keep_or_stop` asked | "¿Querés que te lo siga recordando o borramos el recordatorio?" |
