@@ -51,8 +51,12 @@
   open questions so the model can name an id" gains the narrower reminder rule: a position in a
   code-built list, validated by code, undoable, and never a relation.
 - **Brain:** `asked := c.RemindRequest != nil && *c.RemindRequest`. A degraded field reads as
-  none and takes the plain capture path, recorded in `capture.classify`. A failed call saves
-  nothing (I31).
+  none and takes the plain capture path. **Not recorded today:** `Decode` puts each degradation
+  on `Classification.Degradations`, but the brain never reads it, and the `capture.classify`
+  row carries only kind, unit, source and language. Only `nooma doctor` reads degradations. An
+  invalid title or a bad `recurrence_rule` therefore leaves no trace in `decision_log`: a gap
+  that predates this change (doc 02 §5.1 and I12 say it is recorded), reported to the PM and
+  not fixed here. A failed call saves nothing (I31).
 - **Missed request (Q4):** a stored unit with an instant, not asked, nothing armed, gets
   `CaptureResult.NoReminderHint`, rendered as "No puse aviso; si querés, decime «recordame»".
 
