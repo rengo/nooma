@@ -36,6 +36,7 @@ nooma/
 │   │   └── learning/       # signals → knob adjustment
 │   ├── ports/              # interfaces: repos, providers, channels, Clock, IDGen
 │   ├── brain/              # services orchestrating core + ports (capture, consolidate…)
+│   ├── reading/            # NOT core: rebuilds, hashes and judges a reminder phrasing's prompt and response for doctor and the replay test (ADR-0033)
 │   ├── store/              # SQLite: migrations, repos, vec, fts, lockfile
 │   ├── providers/          # anthropic, openai, ollama, whisper
 │   ├── channels/           # telegram, whatsapp (disabled)
