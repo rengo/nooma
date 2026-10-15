@@ -268,6 +268,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		return CaptureResult{}, fmt.Errorf("capture: decode classification: %w: %w", ErrModelOutput, err)
 	}
 
+	// Every row written from here on says what Decode lost (doc 02 §5.1, I12).
+	r = r.withDegradedLog(c)
+
 	// **Every outcome below is answered in the same language, so it is
 	// stamped once here rather than at each of the eleven returns.** A
 	// deferred write to the named result is the only shape that survives
