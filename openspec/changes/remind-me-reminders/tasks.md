@@ -58,7 +58,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestArmAsked_AnyKindWithADate`: a `mental_load` with a `due_at` → armed. `TestArmAsked_TimerUnchanged`.
   - `TestArmUnasked_EveryExistingArmAndFollowTestUnchanged`: the existing suite stays green.
   - `TestParseRemindMeLead_Bounds`: 0 → error, 1 → ok, 43200 → ok, 43201 → error, NULL → 15.
-  - `test/conformance/TestAtOnceMarginMatchesProactiveInterval` (L2, so core imports no scheduler).
+  - `test/conformance/TestAtOnceMarginMatchesProactiveInterval` (L2, so core imports no scheduler). Link 2 renames it `TestAtOnceMarginExceedsProactiveInterval` (margin > interval).
   - `TestVerdict_NightExemptOverdueFromFireAt`: an exempt 03:00 row at 09:05, with a 6 h window → stale `overdue`; an unexempt one → deferred, then delivered (round 2, item 3).
   - `TestVerdict_AskedNamedMidnightPassesAtMidnight`: an asked row about 10-16 00:00 with no `day_only` → `passed` at 00:00, not at the next midnight (item 4). `TestVerdict_UnaskedMidnightKeepsDayGranular`.
 - [x] 1.4 GREEN, including the call-site edits for the new signatures: `Arm` at `brain/capture.go:317`, and `ResolveReminderPrefs` at `brain/capture.go:121` and `brain/preferences.go:207`, plus their test callers; doc 02 §5 step 1, §7, §13; I34 row amended; `make check-all`.
@@ -80,7 +80,8 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
   - `TestCurrentEventReadsDueAtForRemindMe`: an asked task → `currentEvent` is `due_at`; an unasked task → nil.
   - `TestAskedRecurrenceBeforeLink7IsOneShot`: "recordame tomar pastillas todos los días a las 9pm" in links 2-6 → a unit of the type the model's kind maps to (the `task` mapping is link 7's), `remind_me=1`, one one-shot trigger at 20:45 today, never the 7-day recurring row (named time minus the lead), reply "Anotado para el … 21:00. Te aviso 15 minutos antes."; no recurring row (P1). Link 7 replaces this test with its I36 recurring tests.
 - [ ] 2.2 RED L3: migration M1; `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens.
-- [ ] 2.3 GREEN: the store, capture, phrase, channels and gate branch; the I36 row in doc 06 §4; the corpus case `classify-task-remind-me-coffee.json`; L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
+- [ ] 2.2b RED (round 3): `TestArmAsked_TooLateTodayRefused` updated: "hoy" at 23:53 → at once (7 min left), 23:54 → `too_late`; `TestAtOnceMarginExceedsProactiveInterval`; `TestI36_RepeatingRequestBeforeLink7SaysOnlyThisOnce` (the reply names the one-shot and "solo esta vez").
+- [ ] 2.3 GREEN: the margin raised to 7 (doc 02 §13); the store, capture, phrase, channels and gate branch; the I36 row in doc 06 §4; replaying `classify-task-remind-me-coffee.json` (recorded in the 1a′ session); L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
 
 ## PR 3 — `feat/remind-me-follows` (D9)
 

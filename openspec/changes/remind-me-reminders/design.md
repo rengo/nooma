@@ -64,9 +64,10 @@
   are a known limit, covered by a prompt rule and the doctor measure.
 - **Storage:** migration **0009** (0008 shipped as `units.language`): `units.title TEXT NULL`.
   `unit.Unit.Title`, `ToUnit`, the store and memrepo carry it. There is no backfill, and later
-  migrations take fixed numbers: **0010** `units.remind_me` and the lead (link 2), **0011** the
-  `pending_questions` rebuild (link 5), **0012** `units.reminder_stopped_at` (link 6). The
-  runner's gap and duplicate test catches a collision.
+  migrations' numbers are indicative: **0010** `units.remind_me` and the lead (link 2), **0011**
+  the `pending_questions` rebuild (link 5), **0012** `units.reminder_stopped_at` (link 6). Each
+  takes the next free number when it merges, and the runner's gap and duplicate test catches a
+  collision.
 - **Correction:** `correction.Field` gains `FieldTitle`, and `AllFields` and its sweep
   (`edit_test.go`) follow. A re-classifying correction with a valid title writes it. A content
   edit without one writes `title: null`, which clears it. A date-only edit leaves the title
@@ -106,6 +107,15 @@
 - **Known misread:** `known_misread: "<why>"` keeps a misread phrasing in the corpus, visibly
   marked. Replay asserts that it still misreads, and doctor counts it as a miss. Nobody
   hand-edits a response.
+- **One session:** link 1a renders every question text (`remind_when`, `which_reminder`,
+  `undo`) and every prompt rule the later links use, so the prompt hash is final in 1a. The 1a′
+  session records the whole set, `classify-task-remind-me-coffee` and `…-daily-pills` included.
+  **No later link needs another maintainer session**, unless a later link changes the prompt,
+  in which case its own replay fails on the hash and names the cases to record again.
+- **Synthetic only, gated:** `recordings-complete.sh` also rejects a case whose message or
+  response holds a vault path, a ULID-shaped unit id or an e-mail address. The `check-all`
+  exception is a CLAUDE.md edit, listed as a maintainer step, since an agent does not edit
+  CLAUDE.md.
 - **Existing recordings:** none is re-recorded. I18, I26, `arming_capture_keeps_its_unit` and
   `classify_golden_cases_decode_clean` assert their content, and the new fields are absent from
   them, which reads as none.
@@ -136,9 +146,11 @@ instants, each tagged `asked`:
 `reminders(at, leads, …)` replaces `eventReminders`, with merging and `FollowSent` coverage
 unchanged. An asked lead that is behind while `at` is ahead becomes **at once** (PM default).
 **Too late:** an at-once asked arming is refused `too_late` only when **less than**
-`AtOnceMarginMinutes` (5, §13, equal to `scheduler.ProactiveCheckInterval`) remain before its
-instant, or before the end of its local day for a day-only or "hoy" request (`end − now < 5 min`,
-strict): 23:55 → at once, 23:56 → refused. The reply says so (spec R4).
+`AtOnceMarginMinutes` remain before its instant, or before the end of its local day for a
+day-only or "hoy" request (`end − now < margin`, strict). The margin must sit strictly above
+`scheduler.ProactiveCheckInterval`, with slack: **7** (5 + 2). Link 1 merged it as 5. Link 2
+raises it to 7 and moves the client-visible boundary: 23:53 → at once, 23:54 → refused. The
+reply says so (spec R4).
 
 **D4. The night.** An asked lead at a named time, and any asked at-once arming, skip both
 `dueAt`'s move and `deliverAt`'s quiet drop. So "a las 6:30" said at 06:20 rings at once, and
@@ -152,7 +164,7 @@ and, in link 7, `OccursAt`). **I34 is amended** in link 1:
 - `units.remind_me INTEGER NOT NULL DEFAULT 0`;
 - `config.remind_me_lead_minutes INTEGER` (nullable).
 
-Migration **0010** (D1b's fixed numbering; 0008 shipped as `units.language`). Payload keys, per
+Migration **0010** (indicative, D1b; 0008 shipped as `units.language`). Payload keys, per
 row shape:
 
 | Row | `lead_minutes` | `event_at` | `occurs_at` | `asked` | `day_only` | `night_exempt` |
@@ -219,7 +231,7 @@ Completeness is swept over both languages.
 | 3 | I29 amended (first arming); I35 amended; doc 02 §5 step 4, §7 |
 | 5-9 | `design-repeating.md` §3 |
 
-§13 constants: `default_remind_me_lead_minutes` (15) and `at_once_margin_minutes` (5) in link 1;
+§13 constants: `default_remind_me_lead_minutes` (15) and `at_once_margin_minutes` (7, raised from 5 in link 2);
 `max_title_runes` (60) in link 1a;
 `ask_back_window_minutes` (60), `which_reminder_window_minutes` (60) and
 `stop_reply_window_minutes` (120) and `stop_undo_window_minutes` (10, ADR-0033), all in link 5.
@@ -239,7 +251,9 @@ Completeness is swept over both languages.
 | 7 | `feat/recurring-rearm` | D30-D35 | ~380 | "todos los días a las 9pm"; birthdays re-arm |
 | 8 | `feat/remind-me-ask-back` | D40-D43 | ~300 | "recordame X" asks; "No" makes it daily |
 
-Dependencies: 1 → 1a → 1a′ → 2 → 3 → 4. Link 5 stands alone. Link 6 needs 2 and 5. Link 7 needs 6. Link 8
+Dependencies: 1 → 1a → 1a′ → 2 → 3 → 4. Link 5 needs 2. It is a stated exception to "no method
+without a caller": `Ask`, `OpenReminderQuestion` and `Resolve` land with the schema rebuild and
+get their first caller in link 6, because the rebuild of published data is best reviewed alone. Link 6 needs 2 and 5. Link 7 needs 6. Link 8
 needs 3, 5, 6 and 7. Old link 9 (done) is deferred.
 
 **Seam with ADR-0032 (landed: #343, #344, `OneShotForUnit`, the renderer, `units.language`):**
