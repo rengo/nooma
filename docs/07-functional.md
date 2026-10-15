@@ -231,7 +231,8 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
      (`focus_size`, [§13](02-cognitive-core.md#13-calibration--numbers-vs-mechanisms)). Focus is
      computed on demand and never stored ([doc 02 §3](02-cognitive-core.md#3-focus--computed-never-persisted)).
    - **Pending digest.** What the next digest would carry, including any relation question
-     waiting to be asked, worded from each unit as it is now. Looking at it changes nothing in the vault: **viewing is not
+     waiting to be asked, worded from each unit as it is now. Today is a page, so it lists every
+     reminder waiting; a digest that reaches Telegram's message bound sends fewer and says "and N more". Looking at it changes nothing in the vault: **viewing is not
      delivering** ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
    - **System.** Last consolidation, the latest energy reading and where it came from, counts of
      undelivered items and open questions, and the bind address.

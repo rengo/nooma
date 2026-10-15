@@ -1425,7 +1425,8 @@ box can audit it):
   amending ADR-0009 (I15) — its expiry belongs to a pass that can re-plan. A channel with no
   conversation says so in one `check.delivery_failed` row per reminder per process. Today lists
   the armed one-shot reminders due within a day, so a vault that cannot speak still shows them. A dry run computes the same plan
-  and writes nothing. Only the digest lapses a past row, so it stays `fired` until a digest is due
+  and writes nothing (its digest count can differ from the real pass's on a low-energy morning
+  under the message bound, below). Only the digest lapses a past row, so it stays `fired` until a digest is due
   while Today and the digest ignore it. Today applies the same gate and writes nothing (I27). A
   unit a pass cannot read is judged without it for a reminder that names its own event, its late
   rows are held, and it is recorded once per unit as `check.delivery_failed`.
@@ -1455,7 +1456,9 @@ box can audit it):
   its question. The dropped reminders stay undelivered, so tomorrow's digest carries them; only the
   sent ones are marked delivered, `DigestCarried` and the `check.digest.sent` row count only those,
   and a dropped reminder is not a held one (no `check.digest.held` row, no deferral). A dry run counts
-  the lines the bound keeps in Carry's order, without the focus adjacency the real pass adds.
+  the lines the bound keeps in Carry's order, without the focus adjacency the real pass adds; the two
+  can differ only on a low-energy morning (Carry returns its items untouched otherwise) whose kept
+  lines run past the bound.
 
 - `interrupt_level >= 0.7` → **immediate push**: a dedicated poll (the proactive_check),
   skipping cadence and gates. Quiet hours `[00:00, quiet end)` local time, quiet end the
@@ -1506,7 +1509,9 @@ box can audit it):
     one exemption to the softening above.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
-now, computed from the same reads and the same `Carry`, but rendering it writes nothing to the
+now, computed from the same reads and the same `Carry`, except for the message bound: Today is a
+page, so it lists every reminder waiting, while a digest that reaches the bound sends fewer and says
+"and N more". Rendering it writes nothing to the
 vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
 (I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
 (§3), which the next digest then reads. Viewing `/ui` can therefore change a later low-energy

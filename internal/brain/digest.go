@@ -135,10 +135,11 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	// This first split is the VERDICT, not what is sent: its length decides the
-	// two returns below, and adjacency changes which items carry and in what
-	// order, never how many, so it needs none. The split that is sent is
-	// re-ranked with adjacency once the focus is computed, after every return
-	// that does not send.
+	// two returns below. Adjacency changes which items carry and in what order,
+	// and how many only on a low-energy morning, when Carry truncates; a dry
+	// run's count under the message bound can then differ from the real pass's
+	// (doc 02 §7). The split that is sent is re-ranked with adjacency once the
+	// focus is computed, after every return that does not send.
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
 	if len(carry) == 0 && question == nil {
@@ -215,8 +216,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		}
 	}
 	if err := r.record(ctx, now, ports.ActionCheckDigestSent,
-		fmt.Sprintf("the daily digest carried %d item(s), held %d and left %d for tomorrow because the message would not fit",
-			len(sent), len(held), len(carry)-len(sent)),
+		digestSentRationale(len(sent), len(held), len(carry)-len(sent)),
 		checkDetail{}); err != nil {
 		return 0, lapsed, err
 	}
@@ -234,6 +234,16 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	return len(sent), lapsed, nil
+}
+
+// digestSentRationale is the check.digest.sent row's text; it mentions the lines
+// the message bound left for tomorrow only when there were any.
+func digestSentRationale(sent, held, dropped int) string {
+	text := fmt.Sprintf("the daily digest carried %d item(s) and held %d", sent, held)
+	if dropped > 0 {
+		text += fmt.Sprintf(" and left %d for tomorrow because the message would not fit", dropped)
+	}
+	return text
 }
 
 // digestText is the digest's message and the carried items it holds. The digest

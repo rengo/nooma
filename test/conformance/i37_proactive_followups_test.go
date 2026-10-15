@@ -177,3 +177,15 @@ func TestTodayFallsBackToEnglish(t *testing.T) {
 		t.Errorf("Today = %+v, %v; want the English line", today.Digest.Items, err)
 	}
 }
+
+// TestTodayListsEveryReminderPastTheMessageBound: Today is a page, not a Telegram
+// message, so the digest's bound does not cut it.
+func TestTodayListsEveryReminderPastTheMessageBound(t *testing.T) {
+	v := longDigest(t, 14, "", func(i int) string { return fmt.Sprintf("%02d%s", i, strings.Repeat("x", 430)) })
+	v.silent = true
+
+	today, err := newI37Today(v).Today(context.Background())
+	if err != nil || len(today.Digest.Items) != 14 {
+		t.Errorf("Today lists %d of 14 waiting reminders, %v", len(today.Digest.Items), err)
+	}
+}
