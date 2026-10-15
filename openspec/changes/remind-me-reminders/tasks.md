@@ -19,17 +19,31 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
 
 ## PR 1 — `feat/remind-me-decision` (D1-D4 core, D6)
 
-- [ ] 1.1 RED L1 `core/classify`, the cue reader (D1). Each test asserts `AsksToBeReminded`:
-  - `TestAsks_ObservedMessage`: "recordame comprar café mañana a las 10" → true.
-  - `TestAsks_ConditionalClauseIsNotNegation`: "si no, avisame" and "si no puedo, avisame" → true.
-  - `TestAsks_NoTeOlvidesDeRecordarme` → true. `TestAsks_NoMeRecuerdesMasIsAStopNotARequest` → false.
-  - `TestAsks_Variants`: "recordámelo", "haceme acordar", "acordate de avisarme", "poneme un recordatorio", "que no se me olvide" → true.
-  - `TestAsks_RecallQuestion`: "recordame qué hablamos con Juan" → false.
-  - `TestAsks_DentistReminderToConfirm`: "my dentist sent a reminder to confirm" → false.
-  - `TestAsks_ApostropheForms`: "don’t remind me", "don't remind me", "dont remind me" → all false, the same.
-  - `TestAsks_AccentFoldTable`: "RECUÉRDAME" and "recuerdame" → true; every fold-table entry is covered.
-  - `TestQuotedSpeechCountsAsAskedKnownLimit`: "Ana me dijo 'avisame cuando llegues'" → true (P4, pinned).
-  - `TestRemindCuesCoverEveryLanguage`: a sweep over `AllLanguages()`.
+- [ ] 1.1 Link 1a — `feat/classify-reminder-fields` (ADR-0033, D1, D1b):
+  - RED L1 `TestDecode_ReminderFields`: `remind_request`, `reminder_intent`, `question_answer`, `choice_number` decode; an unknown enum, a wrong type or a `choice_number` outside 1-5 degrades that field alone (I14); `TestAllReminderIntentsAndAnswersSwept`.
+  - RED L1 `TestBuildPromptDescribesReminderFields`: both languages' examples; the open question appears only when one is passed.
+  - RED L1 `TestDecode_RemindRequestBoolOrNull`: `true`/`false`/`null` decode; `"yes"` → degraded. `TestDecode_ReminderTarget`: 1-5 and `"unclear"` decode; 0, 6, `"2"` → degraded.
+  - RED L1 `TestBuildCorrectionPromptCarriesReminderFields`; `TestBuildPromptCandidateListOnlyWhenGiven` (numbered, title or content plus date).
+  - RED L1 (round 2): `TestBuildPromptRendersOneListOnly` (a `which_reminder` open plus candidates → only the question's list); `TestPromptListEqualsTheQuestionText` (`RenderReminderList` output); `TestBuildCorrectionPromptRendersDayOnlyAsBareDate`; `TestBuildCorrectionPromptAsksForAFreshTitleOnDateCorrection`.
+  - RED L1 `TestResolveTitle_TrimsAndRejectsControl`: "  Reunión  " → "Reunión"; "a\nb", "a\x07b", "   " → null.
+  - RED L1 `TestResolveTitle`: "Reunión con Juan" kept; "" → null; 61 runes → null; "Reunión 2026-10-14", "Reunión a las 22:30" → null.
+  - RED L3 `TestMigration0009AddsUnitTitle`; title round trip; goldens.
+  - RED `TestRenderUsesTheTitleWhenPresent`: "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"; `TestRenderFallsBackToContentWithoutTitle`.
+  - RED `TestCorrectionRewritesTheTitle`: a re-classified correction → the new title in `correction.applied`, with the old one as pre-image. `TestCorrectionContentEditWithoutTitleClearsIt` → `title: null`. `TestCorrectionDateOnlyEditKeepsTitle`. `TestAllFields_EveryEditReportsExactlyOneAccessorTrue` gains `FieldTitle`.
+  - RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.
+  - Asked capture: link 2 reads `asked` from `c.RemindRequest`. The day-only flag (1.2, #346) stays; the phrase reader never merged.
+  - GREEN; doc 02 §5 step 1 (the fields, the title), §5.1 lines 483-495 (the narrower injection rule), §5 step 4 and §11 (`FieldTitle`), §7 (the render); doc 03 (`units.title`); §13 `max_title_runes`; `make check-all`.
+- [ ] 1.1′ Link 1a′ — `feat/doctor-record-and-reading` (D1c):
+  - RED `TestDoctorRecordWritesResponsesWithAFakeProvider`: only `"record": true` cases; `expect` untouched; `provider`, `model` and `now` written; `record` cleared. `TestRecordSkipsRecordedWithoutForce`; `TestRecordRefusesUnderCI`; `TestRecordSendsNilBeliefs`.
+  - RED `TestValidateAllowsAwaitingRecording` (replay skips it and reports the count); `scripts/recordings-complete.sh` and its test `TestRecordingsCompleteFailsOnPendingCase`; `TestCasesMatchesTheSourceFiles` covers `reminders/`; `format.md` and its format test.
+  - RED `TestKnownMisreadStaysMarked`: a `known_misread` case that reads as expected fails, so its mark is removed.
+  - RED (round 2): `TestReplayFailsOnPromptHashMismatch`; `TestRecordingsCompleteScript` (the step runs in `ci.yml`'s required `lint` job; doc 06 §6 states why it is not in `check-all`); `TestDoctorReportsCheckinOutcomeRates` and `TestDoctorReportsDayOnlyRate`. Recorded cases include day-only phrasings expecting bare dates, check-in answers, and "a single candidate plus a message about something else → `unclear`".
+  - RED `TestDoctorReadingIsOptIn` (plain `doctor` makes no reading calls); `TestDoctorReportsReminderReadingRate`; `TestDoctorFalsePositiveLineFailsOnOne`; `TestDoctorReportsTitleRate` (fake provider).
+  - Corpus, recorded once by the maintainer in one session, against the final prompt of link 1a (which already holds every later link's prompt text):
+    - no existing recording is re-recorded; I18, I26, `arming_capture_keeps_its_unit` and `classify_golden_cases_decode_clean` assert their content;
+    - about 44 new in `testdata/llm/reminders/`: every phrasing of spec R1's table, the stop, done, keep, delete and answer phrasings (with `open_question` or the candidate list), the negatives for the hard false-positive line, and the title cases.
+  - RED then GREEN L2 `TestReminderPhrasingSetReadsAsExpected`: replays every case.
+  - Doc 06 §5 (the record step); `make check-all`.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.
@@ -53,7 +67,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
 
 - [ ] 2.1 RED L2, the I36 row:
   - `TestI36_AnAskedReminderIsArmedBeforeItsTime`: the observed message → a `task` unit with `remind_me=1`, one trigger at 09:45, payload `{lead_minutes:15, event_at:10:00, asked, night_exempt}`.
-  - `TestI36_TheWordsDecideNotTheModel`: the same classification without the cue → no trigger.
+  - `TestI36_ARequestComesFromTheField`: the same classification with `remind_request: false` → no trigger, and the Q4 reply "Anotado. No puse aviso; si querés, decime «recordame»". `TestI36_NoHintWithoutAnInstant`.
   - `TestI36_ADayAloneRemindsThatDayAtNine`: payload `{lead_minutes:0, event_at:midnight, day_only}`.
   - `TestI36_AskedDayOnlyIsNotPassedAtNine` (the gate): a 09:00 delivery → `Deliver`, not `passed`.
   - `TestI36_ANamedTimeRingsThroughTheNight`: an asked 03:00 row at 02:46 → `Deliver`, not `Defer`.
@@ -73,6 +87,7 @@ Plan chain, 4 PRs: ADR-0031 + proposal + spec; design + tasks; design-repeating;
 - [ ] 3.1 RED:
   - `TestCorrectedAskedTaskOldRowIsNotSentAtItsOldTime`: an asked task 10:00 → 11:00 → nothing at 09:45; one row at 10:45 (the #343 `currentEvent` seam).
   - `TestI36_AnAskedReminderFollowsItsInstant`: an asked task due 10:00, armed 09:45; "a las 11" → moved to 10:45, one `correction.reminder.moved`.
+  - `TestFollowKeepsDayOnlyAcrossDateCorrection`: "recordame el jueves" then "no, el viernes" → Friday 09:00 `day_only`, never Thursday 23:45 night-exempt (round 2, C3).
   - `TestI29_FirstArmingOfAnAskedUnitMayBeAtOnce`: refused as past at capture; corrected to 2 minutes ahead → armed at once.
   - `TestI29_SecondCorrectionNeverCreatesAtOnce`: a unit that had a trigger, every lead behind → nothing.
   - `TestI36_UnaskedTaskDueAtEditMovesNothing`.
