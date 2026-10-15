@@ -478,8 +478,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades; an explicit `null` is an absent field, not a loss. Core holds no phrase
      list: the prompt explains the fields with examples in both languages.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
-     language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds a
-     newline or any control character, exceeds `max_title_runes`, or holds an ISO date or an
+     language; spec R12). `classify.ResolveTitle` trims it and drops one that has no visible
+     character, holds a newline, a control, separator or format character (U+2028, U+200B,
+     U+202E…), exceeds `max_title_runes`, or holds an ISO date or an
      `HH:MM`; a dropped title degrades the field (I14) and the unit is then read by its content.
      Relative words ("mañana", "jueves", "3pm") are a known limit: catching them takes a word
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
