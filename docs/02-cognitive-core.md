@@ -475,7 +475,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `reminder_intent` (`none | stop | keep`), `question_answer` (`none | when | no | choice`)
      with `choice_number`, and `reminder_target`. The last two are positions, 1 to
      `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
-     `unclear` for `reminder_target`; a position outside 1-5 degrades. Core holds no phrase
+     `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades; an explicit `null` is an absent field, not a loss. Core holds no phrase
      list: the prompt explains the fields with examples in both languages.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds a

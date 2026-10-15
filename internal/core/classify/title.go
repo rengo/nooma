@@ -18,15 +18,28 @@ const MaxTitleRunes = 60
 var datedTitle = regexp.MustCompile(`\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}`)
 
 // ResolveTitle is the title the model's text stands for, or nil when it stands
-// for none (spec R12, I14). It is trimmed. A blank one, one holding a newline
-// or any control character, one over MaxTitleRunes, or one holding an ISO date
+// for none (spec R12, I14). It is trimmed. A blank one, one with no visible
+// character, one holding a newline, a control, separator or format character, one over MaxTitleRunes, or one holding an ISO date
 // or an HH:MM is dropped, never repaired: the unit then reads its content.
 func ResolveTitle(raw string) *string {
 	title := strings.TrimSpace(raw)
 	if title == "" || utf8.RuneCountInString(title) > MaxTitleRunes || datedTitle.MatchString(title) {
 		return nil
 	}
-	if strings.IndexFunc(title, unicode.IsControl) >= 0 {
+	visible := false
+	for _, r := range title {
+		// Graphic is letters, marks, numbers, punctuation, symbols and spaces:
+		// it leaves out control characters, line and paragraph separators and
+		// format characters (zero-width, bidi override), which a reader cannot
+		// see and a line cannot hold.
+		if !unicode.IsGraphic(r) {
+			return nil
+		}
+		if !unicode.IsSpace(r) {
+			visible = true
+		}
+	}
+	if !visible {
 		return nil
 	}
 	return &title

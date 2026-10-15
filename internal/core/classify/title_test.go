@@ -9,7 +9,13 @@ func TestResolveTitle_TrimsAndRejectsControl(t *testing.T) {
 	if got := ResolveTitle("  Reunión  "); got == nil || *got != "Reunión" {
 		t.Errorf("ResolveTitle(padded) = %v, want %q", got, "Reunión")
 	}
-	for _, in := range []string{"a\nb", "a\x07b", "a\tb", "   ", ""} {
+	// A control character in any position, the first included, and anything that
+	// cannot be seen: line and paragraph separators, zero-width and bidi format
+	// characters, or nothing visible at all.
+	for _, in := range []string{
+		"a\nb", "a\x07b", "a\tb", "   ", "", "\x07abc", "abc\x07",
+		"a\u2028b", "a\u200bb", "\u202eabc", "\u200b", "\u200b \u200b", "\ufeffabc",
+	} {
 		if got := ResolveTitle(in); got != nil {
 			t.Errorf("ResolveTitle(%q) = %q, want nil", in, *got)
 		}
@@ -46,7 +52,6 @@ func TestDecode_Title(t *testing.T) {
 		{`"Reunión 2026-10-14"`, ReasonBadFormat},
 		{`"   "`, ReasonBadFormat},
 		{`7`, ReasonWrongType},
-		{`null`, ReasonWrongType},
 	} {
 		c, _ := Decode(reminderPayload(`,"title":`+tc.raw), testNow)
 		assertOnlyDegraded(t, c, "title", tc.reason)

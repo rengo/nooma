@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// reminderBase is a classification whose only reminder fields are the ones a
+// reminderPayload is a classification whose only reminder fields are the ones a
 // test adds to it, so "the rest survived" is a claim about a known baseline.
 func reminderPayload(extra string) string {
 	return `{"type":"task","normalized_content":"buy milk","weight":0.6,"decay_rate":0.1` + extra + `}`
@@ -64,7 +64,6 @@ func TestDecode_ReminderFields(t *testing.T) {
 		{"choice past the list", `,"choice_number":` + strconv.Itoa(MaxReminderChoices+1), "choice_number", ReasonBadFormat},
 		{"choice as text", `,"choice_number":"2"`, "choice_number", ReasonWrongType},
 		{"choice with a fraction", `,"choice_number":2.5`, "choice_number", ReasonWrongType},
-		{"choice null", `,"choice_number":null`, "choice_number", ReasonWrongType},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, err := Decode(reminderPayload(tc.extra), testNow)
@@ -121,7 +120,7 @@ func TestDecode_ReminderTarget(t *testing.T) {
 	for _, tc := range []struct {
 		raw    string
 		reason Reason
-	}{{`0`, ReasonBadFormat}, {`6`, ReasonBadFormat}, {`"2"`, ReasonUnknownEnum}, {`null`, ReasonWrongType}, {`true`, ReasonWrongType}} {
+	}{{`0`, ReasonBadFormat}, {`6`, ReasonBadFormat}, {`"2"`, ReasonUnknownEnum}, {`true`, ReasonWrongType}} {
 		c, _ := Decode(reminderPayload(`,"reminder_target":`+tc.raw), testNow)
 		assertOnlyDegraded(t, c, "reminder_target", tc.reason)
 		if c.ReminderTarget != nil {
@@ -131,3 +130,19 @@ func TestDecode_ReminderTarget(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+// TestDecode_NullIsAbsentForTheOptionalReminderFields: an explicit null is the
+// model saying "nothing here", as remind_request: null already is. It is not a
+// loss, so it must not log a degradation (and lower the doctor's clean rate) for
+// every plain note answered with "title": null.
+func TestDecode_NullIsAbsentForTheOptionalReminderFields(t *testing.T) {
+	for _, field := range []string{"title", "reminder_intent", "question_answer", "choice_number", "reminder_target", "remind_request"} {
+		c, err := Decode(reminderPayload(`,"`+field+`":null`), testNow)
+		if err != nil || len(c.Degradations) != 0 {
+			t.Errorf("%s: null decoded with %v, degraded %v; want absent and clean", field, err, c.Degradations)
+		}
+		if c.Title != nil || c.ReminderIntent != nil || c.QuestionAnswer != nil || c.ChoiceNumber != nil || c.ReminderTarget != nil {
+			t.Errorf("%s: null left a value on the classification: %+v", field, c)
+		}
+	}
+}

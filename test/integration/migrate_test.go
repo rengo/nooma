@@ -19,7 +19,7 @@ import (
 // TestMigrateFromScratchSetsUserVersion asserts R3.2/R3.3: opening a
 // brand-new vault applies every published migration and leaves
 // PRAGMA user_version at the highest published version (design §5.2; seven
-// migrations, 0001 through 0008, are published as of this change — R3.8).
+// migrations, 0001 through 0009, are published as of this change — R3.8).
 //
 // user_version is a persistent property of the database file header, not a
 // per-connection setting (same reasoning TestOpenAppliesPragmas already
@@ -170,7 +170,7 @@ func TestVaultNewerThanBinaryRefusesToOpen(t *testing.T) {
 		t.Errorf("VersionError.VaultVersion = %d, want %d", versionErr.VaultVersion, futureVersion)
 	}
 	if versionErr.BinaryVersion != 9 {
-		t.Errorf("VersionError.BinaryVersion = %d, want 8 (0001 through 0008 are all published at this stage)", versionErr.BinaryVersion)
+		t.Errorf("VersionError.BinaryVersion = %d, want 9 (0001 through 0009 are all published at this stage)", versionErr.BinaryVersion)
 	}
 
 	after, err := os.ReadFile(dbPath)

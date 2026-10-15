@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"bytes"
 	"encoding/json"
 	"time"
 )
@@ -63,14 +64,14 @@ func fieldSpecs() []fieldSpec {
 		// The reminder fields (ADR-0033 point 1) are optional for the reason
 		// language is: no existing recording carries them, and an absent one
 		// reads as none rather than as a loss.
-		{"title", false, assignTitle},
+		{"title", false, nullIsAbsent(assignTitle)},
 		{"remind_request", false, assignRemindRequest},
-		{"reminder_intent", false, assignEnum(AllReminderIntents,
-			func(c *Classification, v *ReminderIntent) { c.ReminderIntent = v })},
-		{"question_answer", false, assignEnum(AllQuestionAnswers,
-			func(c *Classification, v *QuestionAnswer) { c.QuestionAnswer = v })},
-		{"choice_number", false, assignChoiceNumber},
-		{"reminder_target", false, assignReminderTarget},
+		{"reminder_intent", false, nullIsAbsent(assignEnum(AllReminderIntents,
+			func(c *Classification, v *ReminderIntent) { c.ReminderIntent = v }))},
+		{"question_answer", false, nullIsAbsent(assignEnum(AllQuestionAnswers,
+			func(c *Classification, v *QuestionAnswer) { c.QuestionAnswer = v }))},
+		{"choice_number", false, nullIsAbsent(assignChoiceNumber)},
+		{"reminder_target", false, nullIsAbsent(assignReminderTarget)},
 	}
 }
 
@@ -372,4 +373,18 @@ func assignTitle(raw json.RawMessage, c *Classification, _ time.Time) Reason {
 	}
 	c.Title = title
 	return ""
+}
+
+// nullIsAbsent makes an explicit JSON null the same as an absent key for an
+// optional reminder field: the model saying "nothing here" is not a loss, and
+// logging a degradation for every plain note answered with "title": null would
+// lower the doctor's clean rate for nothing. remind_request reads null the same
+// way in its own assigner.
+func nullIsAbsent(assign func(json.RawMessage, *Classification, time.Time) Reason) func(json.RawMessage, *Classification, time.Time) Reason {
+	return func(raw json.RawMessage, c *Classification, now time.Time) Reason {
+		if string(bytes.TrimSpace(raw)) == "null" {
+			return ""
+		}
+		return assign(raw, c, now)
+	}
 }
