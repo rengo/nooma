@@ -1,6 +1,6 @@
 # Design — digest-stale-reminders
 
-The decisions are [ADR-0032](../../../docs/adr/0032-a-reminder-says-what-is-true-now.md)
+The decisions are [ADR-0032](../../../../docs/adr/0032-a-reminder-says-what-is-true-now.md)
 (Accepted by the client on 2026-10-14), cited as P1-P5. Lines are at `7d2b98a`.
 
 ## 1. Evidence (read-only, `~/.nooma/pablo.nooma/nooma.db`, 2026-10-14)
