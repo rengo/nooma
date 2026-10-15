@@ -64,17 +64,20 @@ MAPING de textos… el LLM debería evaluar sobre la marcha").
    stopping for good and deleting.
    - An explicit stop ("no me lo recuerdes más") counts as the confirmation: Nooma stops at once
      and says which reminder it stopped.
-   - The stop reply opens a pending undo for `stop_undo_window_minutes` (10). Only a `keep`
-     answering that undo ("no, seguí") restores exactly the rows the stop retired, by id. A
-     reminder that came due meanwhile is dropped and named in the reply. The same undo covers
-     what an answer to Nooma's question armed.
+   - **A stop is undoable for 10 minutes.** The stop reply ends with "(Si fue un error, decime
+     «no, seguí».)". Within `stop_undo_window_minutes`, a message the model reads as `keep`
+     restores exactly the rows the stop retired, by id. A bare "sí", "ok" or "dale" is not that.
+     A reminder that came due meanwhile is dropped and named in the reply. A repeating one keeps
+     repeating.
    - A bare "listo" never stops anything by itself: it asks first (ADR-0031 point 5), and that
      answer is the confirmation turn for a delete.
    - Nothing in the vault is deleted in either case: a stop is a tombstone.
 4. **A degraded reminder field means no reminder action.** The message takes the plain capture
    path, and the decision log says the reading was degraded. A **failed** classify call saves
    nothing, as for every capture (I31). Until m4f gives stopping a UI route, a stop cannot be
-   made during a model outage: a known limit.
+   made during a model outage: a known limit. A degraded `reminder_intent` on a message meant as
+   a stop is captured with the plain "Anotado.". The reply claims nothing, but it cannot say
+   "nothing was stopped" without a word list: also a known limit.
 5. **Testing measures quality instead of asserting it.**
    - No test calls a real model (non-negotiable 5).
    - Existing recordings are not re-recorded, because conformance tests depend on their content.
