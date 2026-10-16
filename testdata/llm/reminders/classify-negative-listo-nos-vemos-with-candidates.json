@@ -1,8 +1,10 @@
 {
   "id": "classify-negative-listo-nos-vemos-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo, nos vemos mañana",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Listo, nos vemos el 2026-10-15.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -11,5 +13,6 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {}
+  "expect": {},
+  "prompt_sha256": "2500c1cc4d5834d89f63743f1aab1b015c85cf277ad1cfe2d120dddd549c53b2"
 }

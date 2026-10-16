@@ -1,9 +1,13 @@
 {
   "id": "classify-checkin-snooze",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "después lo veo",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Después lo veo.\",\"weight\":0.4,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-16T08:45:02-03:00",
   "expect": {
     "task_checkin_outcome": "snooze"
-  }
+  },
+  "prompt_sha256": "6e2905b25caa13f3b8b72b6b1469c42adfa7ea740700328bc0f5bad6320883ed"
 }

@@ -1,8 +1,10 @@
 {
   "id": "classify-negative-bare-ya-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"La tarea ya está hecha.\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -11,5 +13,6 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {}
+  "expect": {},
+  "prompt_sha256": "ccbd8deb6afe675d0d81c65b7fb2b29292be9236448133399e6417f0364e8280"
 }

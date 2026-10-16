@@ -1,8 +1,10 @@
 {
   "id": "classify-negative-bare-listo-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"La tarea está hecha.\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -13,5 +15,6 @@
   ],
   "expect": {
     "task_checkin_outcome": "done"
-  }
+  },
+  "prompt_sha256": "07abd55c71e01f0155191f7dfedd0793a5e6d29d6c1f10d9c70d579b4e0995ce"
 }

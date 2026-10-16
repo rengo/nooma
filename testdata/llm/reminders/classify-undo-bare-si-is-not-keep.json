@@ -1,12 +1,15 @@
 {
   "id": "classify-undo-bare-si-is-not-keep",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
     "text": "Listo, no te lo recuerdo más: Comprar café — jue 15 oct, 10:00. (Si fue un error, decime «no, seguí».)"
   },
-  "expect": {}
+  "expect": {},
+  "prompt_sha256": "0ba4390f687f438a13142d590b03c62a888ece69e7c5e69c63fd242c4d1ddbf9"
 }

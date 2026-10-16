@@ -1,9 +1,13 @@
 {
   "id": "classify-checkin-drop",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "dejalo, ya no hace falta",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"La tarea ya no hace falta.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"task_checkin_outcome\":\"drop\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-16T08:45:02-03:00",
   "expect": {
     "task_checkin_outcome": "drop"
-  }
+  },
+  "prompt_sha256": "1dfcc4eae11dfdf4675badf906add0db7cf896cbf8cee3cead3d076e0d85ad60"
 }

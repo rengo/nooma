@@ -1,7 +1,11 @@
 {
   "id": "classify-third-party-dentist-reminder",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "my dentist sent a reminder to confirm",
-  "record": true,
-  "expect": {}
+  "response": "{\"type\":\"task\",\"normalized_content\":\"I need to confirm something with my dentist; my dentist sent me a reminder.\",\"weight\":0.65,\"decay_rate\":0.06,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-16T08:45:02-03:00",
+  "expect": {},
+  "prompt_sha256": "765f479b590a3624adfbf1bebe85415f08e9989df2033ca38fd8fb862fd57b7b"
 }

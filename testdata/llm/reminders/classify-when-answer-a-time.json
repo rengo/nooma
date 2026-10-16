@@ -1,8 +1,10 @@
 {
   "id": "classify-when-answer-a-time",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "mañana a las 8",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Quiero que me avises el 2026-10-15 a las 08:00.\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-15T08:00:00-03:00\",\"question_answer\":\"when\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -11,5 +13,6 @@
   "expect": {
     "question_answer": "when",
     "day_only": false
-  }
+  },
+  "prompt_sha256": "9bf50f968b95b44af2e28dcc62665d9d9b95d6a31fb1cf753a10cbd91312160a"
 }

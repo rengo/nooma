@@ -1,8 +1,10 @@
 {
   "id": "classify-when-answer-no-hace-falta",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no hace falta",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No hace falta que me avises.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"no\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -10,5 +12,6 @@
   },
   "expect": {
     "question_answer": "no"
-  }
+  },
+  "prompt_sha256": "a29a34f9ee58d9ba9a584f0ec649424985803ccabce0ad3b4a2161155b8bee10"
 }

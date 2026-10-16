@@ -1,12 +1,15 @@
 {
   "id": "classify-undo-bare-dale-is-not-keep",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "dale",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
     "text": "Listo, no te lo recuerdo más: Comprar café — jue 15 oct, 10:00. (Si fue un error, decime «no, seguí».)"
   },
-  "expect": {}
+  "expect": {},
+  "prompt_sha256": "ec59f1c5b81e40c0c32beb1ffd2b2fdab0e2b19b7880c053528976a302e4c8f2"
 }

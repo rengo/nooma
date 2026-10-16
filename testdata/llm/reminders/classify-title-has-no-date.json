@@ -1,10 +1,14 @@
 {
   "id": "classify-title-has-no-date",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame la reunión con Juan mañana a las 22:30",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Recordarme la reunión con Juan el 2026-10-17 a las 22:30.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-17T22:30:00-03:00\",\"title\":\"Reunión con Juan\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-16T08:45:02-03:00",
   "expect": {
     "remind_request": true,
     "title": true
-  }
+  },
+  "prompt_sha256": "a13166cd26e7053f04b3d992e76dddf099b27d7d9243d4f42ca4717185c6318e"
 }

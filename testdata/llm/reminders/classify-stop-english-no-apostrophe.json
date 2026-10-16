@@ -1,8 +1,10 @@
 {
   "id": "classify-stop-english-no-apostrophe",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "dont remind me anymore",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"I don't want to be reminded to buy coffee anymore.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"en\",\"title\":\"Buying coffee\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1,\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -14,5 +16,6 @@
   "expect": {
     "reminder_intent": "stop",
     "reminder_target": "1"
-  }
+  },
+  "prompt_sha256": "5cdae6f00cd16935e3da1c021dfa3c46a5d10c00794ea5afd976c720d4b02725"
 }

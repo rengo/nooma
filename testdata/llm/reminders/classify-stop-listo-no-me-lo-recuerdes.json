@@ -1,8 +1,10 @@
 {
   "id": "classify-stop-listo-no-me-lo-recuerdes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo, no me lo recuerdes más",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Ya terminé la tarea y no quiero que me la recuerden más.\",\"weight\":0.25,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -20,5 +22,6 @@
   "expect": {
     "reminder_intent": "stop",
     "reminder_target": "unclear"
-  }
+  },
+  "prompt_sha256": "eeef9b9143c93e35c3c6e9dbea0a87f5fb2d5e2efd48aa82e46f91b6e5e0d2b2"
 }

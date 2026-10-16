@@ -1,8 +1,10 @@
 {
   "id": "classify-which-answer-by-name",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "el de Ana",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"El recordatorio de llamar a Ana.\",\"weight\":0.3,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -29,5 +31,6 @@
   "expect": {
     "question_answer": "choice",
     "choice_number": 2
-  }
+  },
+  "prompt_sha256": "eff3faa77d88232b3549901fd2a9fed16ba3f6e785950852d6d3590413a17caa"
 }

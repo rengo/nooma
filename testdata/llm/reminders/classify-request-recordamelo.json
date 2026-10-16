@@ -1,9 +1,13 @@
 {
   "id": "classify-request-recordamelo",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordámelo",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recuérdamelo.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"title\":\"Recordatorio\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-16T08:45:02-03:00",
   "expect": {
     "remind_request": true
-  }
+  },
+  "prompt_sha256": "9e0bc3fbe8e223bd8dff66c46ee414cb0c48f938859bf7854725eafa763fcccf"
 }
