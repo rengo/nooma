@@ -132,7 +132,9 @@ const (
 // **Snooze resolves nothing, and that is the honest reading rather than a
 // gap.** Snooze means "ask me later": the check-in is neither engaged nor
 // declined, and forcing it into either would record an answer the user did
-// not give. It stays open, and the next digest or push asks again.
+// not give. It stays open. Nothing asks a delivered check-in again yet: the
+// digest reads only undelivered triggers, so a snoozed one-shot is not
+// re-asked (tasks.md, link 1b, owes that).
 func ResolveCheckin(c Classification) (CheckinResolution, bool) {
 	if c.NudgeOutcome != nil {
 		switch *c.NudgeOutcome {

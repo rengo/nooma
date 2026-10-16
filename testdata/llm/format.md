@@ -86,7 +86,10 @@ change with `nooma doctor --record testdata/llm/reminders [vault]` (docs/06-harn
 check-in (spec: a bare "listo" keeps M3's behaviour), and the model is never shown whether one
 is open: the store decides which one it answers. So it expects `type: chitchat` (it stores no
 unit) and the outcome the word means: "sí" is `nudge_outcome: engaged`, "ya" and "listo" are
-`task_checkin_outcome: done`. With a question open, the word answers that question instead.
+`task_checkin_outcome: done`, and "no" is `task_checkin_outcome: snooze` with no `nudge_outcome`
+(the client's ruling: a bare no is "not yet, ask again later"; only an explicit refusal, to do
+the task or to be asked about it, is `drop` or `declined`). With a question open, the word
+answers that question instead.
 
 ## Cross-field constraint
 

@@ -195,3 +195,20 @@ func TestBuildPromptAShortReplyAnswersACheckin(t *testing.T) {
 		t.Errorf("the check-in section quotes words:\n%s", s)
 	}
 }
+
+// TestBuildPromptAShortDeclineIsNotYet: the client ruled on a bare "no" to a
+// check-in (#365): ask again later, unless the user explicitly refuses. A short
+// decline alone is snooze, and only an explicit refusal to do the task, or to
+// be asked about it, closes the check-in as drop or declined.
+func TestBuildPromptAShortDeclineIsNotYet(t *testing.T) {
+	s := section(promptWith(ReminderContext{}), checkinHeading)
+	flat := strings.Join(strings.Fields(s), " ")
+	for _, want := range []string{
+		"A short decline alone means not yet: task_checkin_outcome snooze, and no nudge_outcome",
+		"Only an explicit refusal, to do the task or to be asked about it, is drop or declined",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the check-in section never says %q:\n%s", want, s)
+		}
+	}
+}

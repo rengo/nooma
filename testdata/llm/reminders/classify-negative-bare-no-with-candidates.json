@@ -13,6 +13,6 @@
   ],
   "expect": {
     "type": "chitchat",
-    "nudge_outcome": "declined"
+    "task_checkin_outcome": "snooze"
   }
 }

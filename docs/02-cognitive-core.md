@@ -519,7 +519,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      that only answers Nooma is `chitchat`: it stores no unit (the capture converses), and its
      answer travels in the outcome fields; a bare "listo" read as a `task` stored "La tarea
      está hecha" as a memory. With no reminder question open, a message that is only a short
-     reply answers the check-in, and the prompt asks for the outcome it means.
+     reply answers the check-in, and the prompt asks for the outcome it means. A short decline
+     alone means not yet, `snooze` (the client's ruling): only an explicit refusal, to do the
+     task or to be asked about it, is `drop` or `declined`. `snooze` leaves the check-in open,
+     and **nothing asks a delivered check-in again yet**: the digest reads only triggers that
+     have not reached the user, so a snoozed one-shot reminder is not re-asked.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
      check-in outcome closes the most recently delivered open check-in, by one mapping,
      `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline
