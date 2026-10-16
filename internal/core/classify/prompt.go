@@ -324,6 +324,11 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 			b.WriteString("  choice_number, and nothing else. The answer is not itself a stop: reminder_intent\n")
 			b.WriteString("  is none and reminder_target is left out. Nooma completes the stop it holds.\n")
 		}
+	} else {
+		// Said, not left to be noticed: "only while a question is open" asked the
+		// model to see an absence, and a bare "no" was read as an answer.
+		b.WriteString("\n  No reminder question is open, so question_answer is none, whatever the\n")
+		b.WriteString("  message sounds like.\n")
 	}
 	if len(rc.Candidates) > 0 && (rc.Open == nil || rc.Open.Kind != QuestionWhichReminder) {
 		b.WriteString("\n" + candidatesHeading + "\n")

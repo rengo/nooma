@@ -11,6 +11,5 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {},
-  "known_misread": "reads question_answer no although no reminder question is open (the prompt allows it only while one is); no production code reads question_answer yet, and link 6 owns the rule that it acts only with a question open"
+  "expect": {}
 }

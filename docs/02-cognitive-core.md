@@ -480,7 +480,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      gives in `due_at`, or `event_at` for an event, a day alone as a bare date: the prompt says
      so, because a day left only in `normalized_content` arms nothing. Core holds no phrase list: the prompt
      explains the fields with examples in both languages, shows the open reminder question and
-     the numbered list only when there is one, and carries the fields on the correction path
+     the numbered list only when there is one, says when no question is open that
+     `question_answer` is none (an answer with no question open is never acted on),
+     and carries the fields on the correction path
      too, so an explicit-referent stop is read there. The prompt describes all three question
      kinds (`remind_when`, `which_reminder`, `undo`). Every recording of the reminder phrasing
      set is hashed against the prompt it was made with (`prompt_sha256`), so a change to the

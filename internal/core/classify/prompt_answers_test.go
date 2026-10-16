@@ -100,3 +100,22 @@ func TestBuildPromptWhichAnswerIsNotAStop(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptNoQuestionOpenMeansNoAnswer: a bare "no" next to a list of
+// reminders came back as question_answer no although no question was open
+// (link 1b). "Only while a question below is open" asked the model to notice an
+// absence; with none open, the prompt now says so, and that question_answer is
+// none. With one open, it does not.
+func TestBuildPromptNoQuestionOpenMeansNoAnswer(t *testing.T) {
+	const rule = "No reminder question is open, so question_answer is none"
+	for _, rc := range []ReminderContext{{}, {Candidates: stopCandidates}} {
+		if flat := strings.Join(strings.Fields(promptWith(rc)), " "); !strings.Contains(flat, rule) {
+			t.Errorf("with no question open the prompt never says %q: %+v", rule, rc)
+		}
+	}
+	for _, kind := range []ReminderQuestionKind{QuestionRemindWhen, QuestionWhichReminder, QuestionUndo} {
+		if p := promptWith(ReminderContext{Open: &OpenQuestion{Kind: kind, Text: "¿?"}}); strings.Contains(p, rule) {
+			t.Errorf("with a %s question open the prompt says %q", kind, rule)
+		}
+	}
+}
