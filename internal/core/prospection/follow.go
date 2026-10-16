@@ -50,7 +50,7 @@ func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs
 	interrupt := ResolveInterrupt(interruptLevel)
 	for i, l := range live {
 		if l.Rule != nil {
-			return settle([]Plan{recurringTrigger(eventAt, *l.Rule, now, interrupt)}, live, []int{i})
+			return settle([]Plan{recurringTrigger(eventAt, *l.Rule, prefs, now, interrupt)}, live, []int{i})
 		}
 	}
 	plans, arms := eventReminders(eventAt, prefs, now, interrupt, sent)

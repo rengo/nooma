@@ -19,8 +19,7 @@ func TestArmedTrigger(t *testing.T) {
 	about := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
 	level := 0.8
 	unitID := "u1"
-	oneShot := prospection.Plan{What: prospection.ArmTrigger, FireAt: fireAt, About: about,
-		LeadDays: prospection.EventLeadDays, Interrupt: prospection.ResolveInterrupt(&level)}
+	oneShot := prospection.Plan{What: prospection.ArmTrigger, FireAt: fireAt, About: about, Interrupt: prospection.ResolveInterrupt(&level)}
 
 	t.Run("a one-shot plan", func(t *testing.T) {
 		got := armedTrigger("t1", &unitID, "Dentista", oneShot, now)
@@ -32,7 +31,7 @@ func TestArmedTrigger(t *testing.T) {
 			t.Errorf("InterruptLevel = %v, want %v", got.InterruptLevel, level)
 		}
 		// A one-shot reminder records the event instant it is about.
-		want := ports.TriggerPayload{ActionText: "Dentista", Rationale: armRationale(oneShot), LeadDays: prospection.EventLeadDays, About: about}
+		want := ports.TriggerPayload{ActionText: "Dentista", Rationale: armRationale(oneShot), About: about}
 		if !reflect.DeepEqual(got.Payload, want) || !strings.Contains(got.Payload.Rationale, "2026-10-30T10:00:00Z") {
 			t.Errorf("Payload = %+v, want %+v", got.Payload, want)
 		}

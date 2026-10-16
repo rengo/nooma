@@ -21,8 +21,7 @@ import (
 //
 // Together is the claim. Each act has its own test at L1 or L2; what no
 // other test says is that one vault, one clock and one channel carry a
-// trigger from armed to pushed, a quieter one from armed to held to
-// digested, and a timer from pending to worded-at-delivery — with
+// trigger from armed to pushed, a quieter one held and digested, and a timer from pending to worded-at-delivery — with
 // decision_log telling all of it and nothing delivered during quiet hours
 // except the timer.
 //
@@ -57,9 +56,9 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 	morning := time.Date(2026, 8, 5, prospection.DigestHour, 5, 0, 0, time.UTC)
 	quietHour := time.Date(2026, 8, 5, prospection.QuietHoursStartHour+1, 0, 0, 0, time.UTC)
 
-	// Act 1 — two triggers are armed: one loud, one quiet. The quiet one
-	// is a recurring reminder, because a one-shot event reminder is pushed
-	// whatever its level (ADR-0030) and only a recurring one is digested.
+	// Act 1 — two triggers: one loud and armed, one quiet. Every trigger is
+	// pushed now (ADR-0030, ADR-0034), so the quiet one is a recurring
+	// reminder that fired before ADR-0034 and waits for its digest.
 	seedUnit(t, db, "unit-loud", "call the clinic back")
 	seedUnit(t, db, "unit-quiet", "water the plants")
 	loud, quiet := 0.9, 0.2
@@ -85,6 +84,9 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("arming %s: %v", seed.id, err)
 		}
+	}
+	if err := triggers.Fire(ctx, "trg-quiet", morning.Add(-12*time.Hour)); err != nil {
+		t.Fatalf("firing trg-quiet: %v", err)
 	}
 
 	// Act 2 — a timer, due during quiet hours, and late enough to say so.
@@ -126,7 +128,7 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 	}
 
 	// Act 4 — the morning pass. The loud one is pushed; the quiet one
-	// fires and waits for the digest, which the same pass assembles.
+	// reaches the digest, which the same pass assembles.
 	morningReport := check(morning)
 	if morningReport.TriggersDelivered != 1 {
 		t.Fatalf("want exactly one pushed trigger, got %+v", morningReport)

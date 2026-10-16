@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-10-10
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0034](0034-a-recurring-reminder-rings-on-its-day.md), point 7 only (a recurring reminder now rings on its occurrence, not seven days before)
 - **Enables**: M4 (the settings page and the chat intent that edit these preferences)
 
 ## Context

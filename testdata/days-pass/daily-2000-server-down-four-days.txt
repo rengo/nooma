@@ -1,0 +1,9 @@
+# "Take the pills", daily from "2026-10-15T20:00:00-03:00", captured Fri 2026-10-16 10:00 -03:00, lived 12 days with a check every 30m0s, the server down from Tue 10-20 12:00 to Sat 10-24 21:00
+Fri 2026-10-16 20:00  Reminder: Take the pills — Fri 16 Oct
+Sat 2026-10-17 20:00  Reminder: Take the pills — Sat 17 Oct
+Sun 2026-10-18 20:00  Reminder: Take the pills — Sun 18 Oct
+Mon 2026-10-19 20:00  Reminder: Take the pills — Mon 19 Oct
+Sat 2026-10-24 21:30  Reminder: Take the pills — Sat 24 Oct (This is later than intended.)
+Sun 2026-10-25 20:00  Reminder: Take the pills — Sun 25 Oct
+Mon 2026-10-26 20:00  Reminder: Take the pills — Mon 26 Oct
+Tue 2026-10-27 20:00  Reminder: Take the pills — Tue 27 Oct

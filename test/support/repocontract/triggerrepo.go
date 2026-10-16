@@ -374,7 +374,7 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		fireAt := contractNow
 
 		rule := prospection.RuleYearly
-		anchor := prospection.Anchor{Month: time.September, Day: 4}
+		anchor := prospection.Anchor{Month: time.September, Day: 4, At: &prospection.TimeOfDay{Hour: 8, Minute: 30}}
 		trg := fixtureTrigger("trg-recurring", &fireAt)
 		trg.RecurrenceRule = &rule
 		trg.RecurrenceAnchor = &anchor
@@ -1098,6 +1098,9 @@ func sameAnchor(got, want *prospection.Anchor) bool {
 		return got == want
 	}
 	if got.Month != want.Month || got.Day != want.Day {
+		return false
+	}
+	if (got.At == nil) != (want.At == nil) || (got.At != nil && *got.At != *want.At) {
 		return false
 	}
 	switch {

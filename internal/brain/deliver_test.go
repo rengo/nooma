@@ -49,6 +49,7 @@ type deliveringTriggers struct {
 	emptyTriggers
 	due        []ports.DueTrigger
 	fired      []string
+	next       []ports.Trigger
 	surfaced   []string
 	surfaceErr error
 }
@@ -60,6 +61,11 @@ func (r *deliveringTriggers) Due(context.Context, time.Time) ([]ports.DueTrigger
 func (r *deliveringTriggers) Fire(_ context.Context, id string, _ time.Time) error {
 	r.fired = append(r.fired, id)
 	return nil
+}
+
+func (r *deliveringTriggers) Rearm(ctx context.Context, id string, firedAt *time.Time, next ports.Trigger) error {
+	r.next = append(r.next, next)
+	return r.Fire(ctx, id, *firedAt)
 }
 
 func (r *deliveringTriggers) Surface(_ context.Context, id string, _ time.Time) error {
@@ -111,13 +117,16 @@ func TestDeliver_APushRoutedTriggerIsSentAndMarked(t *testing.T) {
 	}
 }
 
-// TestDeliver_ADigestRoutedTriggerFiresAndWaits: it is not sent, and it is
-// not marked — the digest finds it in Undelivered. Recurring, because a
-// one-shot event reminder is pushed whatever its level (ADR-0030).
-func TestDeliver_ADigestRoutedTriggerFiresAndWaits(t *testing.T) {
+// TestDeliver_ALowInterruptRecurringTriggerIsPushedAndRearmed: a recurring
+// reminder fires on its day, so it is pushed whatever its level, like an
+// event reminder, and its next occurrence is armed in the same write
+// (ADR-0034).
+func TestDeliver_ALowInterruptRecurringTriggerIsPushedAndRearmed(t *testing.T) {
 	low := pushTrigger("trg-1", deliverFireAt, 0.2) // below PushThreshold
 	yearly := prospection.RuleYearly
 	low.RecurrenceRule = &yearly
+	low.RecurrenceAnchor = &prospection.Anchor{Month: deliverFireAt.Month(), Day: deliverFireAt.Day(),
+		At: &prospection.TimeOfDay{Hour: deliverFireAt.Hour(), Minute: deliverFireAt.Minute()}}
 	triggers := &deliveringTriggers{due: []ports.DueTrigger{low}}
 	ch := &sendingChannel{}
 
@@ -127,14 +136,11 @@ func TestDeliver_ADigestRoutedTriggerFiresAndWaits(t *testing.T) {
 		t.Fatalf("at: %v", err)
 	}
 
-	if len(triggers.fired) != 1 {
-		t.Fatalf("fired %v, want one — a digest-routed trigger still fires", triggers.fired)
+	if ch.count() != 1 || len(triggers.surfaced) != 1 || report.TriggersDelivered != 1 {
+		t.Fatalf("sent %d, surfaced %v, delivered %d — a recurring reminder is pushed", ch.count(), triggers.surfaced, report.TriggersDelivered)
 	}
-	if ch.count() != 0 || len(triggers.surfaced) != 0 {
-		t.Fatalf("sent %d and surfaced %v — a digest-routed trigger waits for the digest", ch.count(), triggers.surfaced)
-	}
-	if report.TriggersDelivered != 0 {
-		t.Errorf("TriggersDelivered = %d, want 0", report.TriggersDelivered)
+	if len(triggers.next) != 1 || !triggers.next[0].FireAt.Equal(deliverFireAt.AddDate(1, 0, 0)) || triggers.next[0].UnitID != low.UnitID {
+		t.Errorf("re-armed %+v, want one successor on the same unit a year on", triggers.next)
 	}
 }
 

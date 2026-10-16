@@ -6,28 +6,6 @@ import (
 	"github.com/rengo/nooma/internal/core/classify"
 )
 
-// EventLeadDays is doc 02 §7's notification horizon for a recurring
-// reminder: how far before its next occurrence it fires. A dated event is
-// reminded at the user's own leads instead (reminders.go, ADR-0029).
-// Untyped and not a time.Duration, for the reason QuietHoursStartHour's own
-// comment gives.
-const EventLeadDays = 7
-
-// LeadTime returns the instant EventLeadDays before eventAt, in eventAt's
-// own location.
-//
-// Deliberately unclamped (spec R5.2, Finding F5): it answers "when is the
-// horizon for this event", which is a fact about the event, and returns an
-// instant in the past when the event is closer than the horizon. Arm applies
-// the now-clamp at its own call site, because "do not arm in the past" is a
-// fact about arming rather than about the horizon. Two layers, so each is
-// testable on its own terms.
-func LeadTime(eventAt time.Time) time.Time {
-	y, m, d := eventAt.Date()
-	return time.Date(y, m, d-EventLeadDays, eventAt.Hour(), eventAt.Minute(),
-		eventAt.Second(), eventAt.Nanosecond(), eventAt.Location())
-}
-
 // Armament is what a classification arms, if anything.
 type Armament string
 
@@ -79,7 +57,7 @@ const (
 // Plan is one row of Arm's decision: what to arm and with what. A dated
 // event arms several, one Plan each (ADR-0029).
 //
-// Rule, Anchor and LeadDays are meaningful only for ArmRecurring, and
+// Rule and Anchor are meaningful only for ArmRecurring, and
 // LeadMinutes only for a one-shot ArmTrigger — a timer fires at the instant
 // the user named, with no horizon in front of it.
 type Plan struct {
@@ -90,14 +68,14 @@ type Plan struct {
 	// occurrence a recurrence lands on.
 	//
 	// **They are routinely different, and reporting one as the other is
-	// how a correct reading looks like a misparse.** LeadTime moves a
-	// firing days ahead of its event and clampToNow can pull it to the
+	// how a correct reading looks like a misparse.** A lead moves a
+	// firing ahead of its event and an at-once arming pulls it to the
 	// capture instant, so "Reminder set for <FireAt>" answers a question
 	// nobody asked. Zero when What is ArmNothing.
 	FireAt time.Time
 	About  time.Time
-	// Immediate is true when clampToNow moved the firing to the capture
-	// instant, because the notification horizon was already behind.
+	// Immediate is true when the firing was moved to the capture instant,
+	// because the notification horizon was already behind.
 	//
 	// It is carried rather than re-derived: a reader comparing FireAt to
 	// About sees a gap of hours or days and describes the nudge as
@@ -105,7 +83,6 @@ type Plan struct {
 	// right and the promise is false — which is exactly the class of
 	// defect this whole change exists to end.
 	Immediate bool
-	LeadDays  int
 	// LeadMinutes is how far before About a one-shot event reminder was
 	// armed to fire; 0 for one armed at once.
 	LeadMinutes int
@@ -191,7 +168,7 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 			return eventReminders(*c.EventAt, prefs, now, interrupt, nil)
 		}
 
-		return []Plan{recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), now, interrupt)}, true
+		return []Plan{recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), prefs, now, interrupt)}, true
 
 	case classify.KindEvent:
 		if c.EventAt == nil {
@@ -223,7 +200,11 @@ func askedInstant(c classify.Classification) (at time.Time, dayOnly, ok bool) {
 // recurringTrigger arms the recurring trigger a dated occurrence and a
 // rule own. A function rather than a branch of Arm so that any other
 // decision arming a recurrence re-anchors by the very rule capture uses.
-func recurringTrigger(eventAt time.Time, rule Rule, now time.Time, interrupt Interrupt) Plan {
+//
+// It fires ON the next occurrence, with no lead (ADR-0034): at the event's
+// own time of day, or at prefs.DateOnlyAt for a bare date (local midnight,
+// the reading an unasked one-shot gets). Firing re-arms the next one.
+func recurringTrigger(eventAt time.Time, rule Rule, prefs ReminderPrefs, now time.Time, interrupt Interrupt) Plan {
 	// The weekday is always stated, derived from the capture's own
 	// dated occurrence — "every Sunday" arrives as an event_at that is
 	// a Sunday. Set for every rule rather than only for weekly: it
@@ -231,35 +212,17 @@ func recurringTrigger(eventAt time.Time, rule Rule, now time.Time, interrupt Int
 	// was decoded is an anchor that means different things in
 	// different rows.
 	weekday := eventAt.Weekday()
-	anchor := Anchor{Month: eventAt.Month(), Day: eventAt.Day(), Weekday: &weekday}
+	at := TimeOfDay{Hour: eventAt.Hour(), Minute: eventAt.Minute()}
+	if isDateOnly(eventAt) {
+		at = prefs.DateOnlyAt
+	}
+	anchor := Anchor{Month: eventAt.Month(), Day: eventAt.Day(), Weekday: &weekday, At: &at}
 	// The next occurrence, re-derived from the anchor rather than the
 	// date the user stated: a birthday captured after this year's has
 	// passed arms for next year's, and About must name the instant the
 	// nudge is actually about.
 	next := NextOccurrence(rule, anchor, now)
-	fireAt, immediate := clampToNow(LeadTime(next), now)
-	return Plan{
-		What:      ArmRecurring,
-		FireAt:    fireAt,
-		About:     next,
-		Immediate: immediate,
-		LeadDays:  EventLeadDays,
-		Rule:      rule,
-		Anchor:    anchor,
-		Interrupt: interrupt,
-	}
-}
-
-// clampToNow is the layer LeadTime deliberately does not have (Finding F5).
-// An event captured two days before it happens has a horizon five days in
-// the past, and arming there hands the staleness gate something born
-// expired. The lead time is a notification horizon, and the system is not
-// late for an event it only just learned about.
-func clampToNow(fireAt, now time.Time) (time.Time, bool) {
-	if fireAt.Before(now) {
-		return now, true
-	}
-	return fireAt, false
+	return Plan{What: ArmRecurring, FireAt: next, About: next, Rule: rule, Anchor: anchor, Interrupt: interrupt}
 }
 
 // recurrenceRule converts classify's own vocabulary into this package's.

@@ -48,9 +48,22 @@ type Anchor struct {
 	// Arm always states it, derived from the capture's own event_at, so
 	// nil can only arrive from a row stored before weekly existed.
 	Weekday *time.Weekday
+	// At is the local time of day an occurrence lands on: the event's own
+	// time, or the day-only time of a bare date. nil reads as
+	// RecurrenceAnchorHour, which is every row armed before this field.
+	At *TimeOfDay
 }
 
-// RecurrenceAnchorHour is the local wall clock an anniversary lands on.
+// clock is the hour and minute an occurrence of the anchor lands on.
+func (a Anchor) clock() (hour, minute int) {
+	if a.At != nil {
+		return a.At.Hour, a.At.Minute
+	}
+	return RecurrenceAnchorHour, 0
+}
+
+// RecurrenceAnchorHour is the local wall clock an occurrence lands on when its
+// anchor has no time of day: a row armed before ADR-0034.
 const RecurrenceAnchorHour = 12
 
 // NextOccurrence returns the first occurrence strictly after `after`,
@@ -75,7 +88,8 @@ const RecurrenceAnchorHour = 12
 // many times the trigger has re-armed, so re-arming is a pure function of
 // (rule, anchor, now) and never of the trigger's own history.
 //
-// The result lands at RecurrenceAnchorHour in after's own location — the
+// The result lands at the anchor's time of day (RecurrenceAnchorHour when it
+// has none) in after's own location — the
 // zone travels inside the instant, as everywhere else in this package.
 //
 // An unrecognised Rule resolves as yearly rather than panicking or returning
@@ -87,6 +101,7 @@ const RecurrenceAnchorHour = 12
 // TestNextOccurrence_UnknownRuleFallsBackToYearly pins it.
 func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 	loc := after.Location()
+	hour, minute := anchor.clock()
 
 	// A boolean switch rather than one on rule alone, so "a weekly rule
 	// with no weekday" is not a case that falls out of the weekly arm
@@ -101,12 +116,12 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 		// day, and the occurrence stays at the anchor hour rather than
 		// sliding by the offset change.
 		candidate := time.Date(after.Year(), after.Month(), after.Day(),
-			RecurrenceAnchorHour, 0, 0, 0, loc)
+			hour, minute, 0, 0, loc)
 		if candidate.After(after) {
 			return candidate
 		}
 		return time.Date(after.Year(), after.Month(), after.Day()+1,
-			RecurrenceAnchorHour, 0, 0, 0, loc)
+			hour, minute, 0, 0, loc)
 
 	case rule == RuleWeekly && anchor.Weekday != nil:
 		// Step forward to the named weekday, then past it if today's
@@ -116,19 +131,19 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 		// step and the occurrence lands in the past.
 		step := (int(*anchor.Weekday) - int(after.Weekday()) + 7) % 7
 		candidate := time.Date(after.Year(), after.Month(), after.Day()+step,
-			RecurrenceAnchorHour, 0, 0, 0, loc)
+			hour, minute, 0, 0, loc)
 		if candidate.After(after) {
 			return candidate
 		}
 		return time.Date(after.Year(), after.Month(), after.Day()+step+7,
-			RecurrenceAnchorHour, 0, 0, 0, loc)
+			hour, minute, 0, 0, loc)
 
 	case rule == RuleMonthly:
 		// Walk months from after's own, so the first candidate is either
 		// this month's occurrence (when it is still ahead) or next month's.
 		y, m := after.Year(), after.Month()
 		for {
-			if candidate := clampedDate(y, m, anchor.Day, loc); candidate.After(after) {
+			if candidate := clampedDate(y, m, anchor.Day, hour, minute, loc); candidate.After(after) {
 				return candidate
 			}
 			y, m = nextMonth(y, m)
@@ -136,12 +151,28 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 	default:
 		year := after.Year()
 		for {
-			if candidate := clampedDate(year, anchor.Month, anchor.Day, loc); candidate.After(after) {
+			if candidate := clampedDate(year, anchor.Month, anchor.Day, hour, minute, loc); candidate.After(after) {
 				return candidate
 			}
 			year++
 		}
 	}
+}
+
+// Rearmed is the occurrence a recurring trigger re-arms for when its row,
+// due at fireAt, leaves armed at now, fired or expired (doc 02 §7, I17): the
+// first occurrence after fireAt that is not over. A row fires on its
+// occurrence, so that is the next one; a series the server slept through
+// rings at most once on return (today's occurrence, if today has one) and
+// never once per missed date; and a row armed days ahead of its occurrence
+// before ADR-0034 re-arms for that occurrence itself. Read in now's zone.
+func Rearmed(rule Rule, anchor Anchor, fireAt, now time.Time) time.Time {
+	after := fireAt.In(now.Location())
+	y, m, d := now.Date()
+	if today := time.Date(y, m, d, 0, 0, 0, 0, now.Location()); after.Before(today) {
+		after = today.Add(-time.Nanosecond)
+	}
+	return NextOccurrence(rule, anchor, after)
 }
 
 // clampedDate builds the anchor's instant in the given month, with the day
@@ -160,7 +191,7 @@ func NextOccurrence(rule Rule, anchor Anchor, after time.Time) time.Time {
 // anchor above the first would then clamp to the first — a 25 December
 // anniversary firing on 1 December, silently, in one zone. Only the
 // resulting date is built in the caller's location.
-func clampedDate(year int, month time.Month, day int, loc *time.Location) time.Time {
+func clampedDate(year int, month time.Month, day, hour, minute int, loc *time.Location) time.Time {
 	// Month is clamped for the reason Day is, and the cost is higher: the
 	// zero Anchor carries month 0, which time.Date normalises BACKWARD into
 	// December of the PREVIOUS YEAR — an anniversary landing in a year the
@@ -191,7 +222,7 @@ func clampedDate(year int, month time.Month, day int, loc *time.Location) time.T
 	if day > last {
 		day = last
 	}
-	return time.Date(year, month, day, RecurrenceAnchorHour, 0, 0, 0, loc)
+	return time.Date(year, month, day, hour, minute, 0, 0, loc)
 }
 
 func nextMonth(year int, month time.Month) (int, time.Month) {

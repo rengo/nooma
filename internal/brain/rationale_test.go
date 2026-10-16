@@ -33,7 +33,6 @@ func TestArmRationale_StatesTheRealDistanceNotTheConfiguredOne(t *testing.T) {
 			What:      prospection.ArmTrigger,
 			FireAt:    capture,
 			About:     appointment,
-			LeadDays:  prospection.EventLeadDays,
 			Immediate: true,
 		})
 
@@ -55,10 +54,9 @@ func TestArmRationale_StatesTheRealDistanceNotTheConfiguredOne(t *testing.T) {
 		fireAt := event.AddDate(0, 0, -7)
 
 		got := armRationale(prospection.Plan{
-			What:     prospection.ArmTrigger,
-			FireAt:   fireAt,
-			About:    event,
-			LeadDays: prospection.EventLeadDays,
+			What:   prospection.ArmTrigger,
+			FireAt: fireAt,
+			About:  event,
 		})
 
 		if !strings.Contains(got, "7 days ahead") {
@@ -75,10 +73,9 @@ func TestArmRationale_StatesTheRealDistanceNotTheConfiguredOne(t *testing.T) {
 		event := capture.AddDate(0, 0, 2)
 
 		got := armRationale(prospection.Plan{
-			What:     prospection.ArmTrigger,
-			FireAt:   capture,
-			About:    event,
-			LeadDays: prospection.EventLeadDays,
+			What:   prospection.ArmTrigger,
+			FireAt: capture,
+			About:  event,
 		})
 
 		if strings.Contains(got, "7 days") {

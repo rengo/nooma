@@ -861,7 +861,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        its body), compared with the unit as it is, so a retry that finds the unit already
        holding the new date, title and body still repairs a reminder left saying the old name.
        Guessing the previous instant from the trigger's own (`fire_at` plus its `lead_minutes`,
-       or a recurring one's lead days, exact unless that firing had been pulled forward) is no
+       or a legacy recurring one's lead days, exact unless that firing had been pulled forward) is no
        longer how a correction rewrites a reminder's text: it applies only to the preference
        re-arm and the due scan's re-plan, which edit no text.
    - **What it overwrites is recorded before it is overwritten** ([ADR-0016](adr/0016-correction-pre-image.md)).
@@ -907,7 +907,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    one table, and never both — a `timer` becomes one `timers` row whose `fire_at` is the
    classification's own `due_at`; a dated `event` becomes one `triggers` row per reminder,
    carrying `payload.lead_minutes`, and a `recurring_reminder` one row carrying
-   `payload.lead_days`, `recurrence_rule` and `recurrence_anchor` — all `kind = time_based`
+   `recurrence_rule` and `recurrence_anchor` — all `kind = time_based`
    with the resolved `interrupt_level` (§7's `NULL` ↔ degraded contract).
    **What arms is not what decides whether a unit is kept — the kind is.** A `timer` persists no
    unit, and §8's "a timer is NEVER a unit" is what routes it before the unit is ever built. A
@@ -1353,8 +1353,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   never arrived falls back to the yearly reading of the date the user did state, rather than
   repeating on a Sunday nobody asked for. A daily occurrence is simply the next `recurrence_anchor_hour` strictly after the
   instant being re-derived from, built on the wall clock so a day on which the zone shifts is
-  still one calendar day. On firing, the next one is created automatically pointing at the SAME
-  source unit — memory is not duplicated, only the nudge is re-armed.
+  still one calendar day. On firing, or expiring, the next one is armed in the same write
+  (`TriggerRepo.Rearm`, [ADR-0034](adr/0034-a-recurring-reminder-rings-on-its-day.md)) pointing
+  at the SAME source unit — memory is not duplicated, only the nudge is re-armed; the fired row
+  stays fired. It is the first occurrence after the row's `fire_at` that is not over
+  (`prospection.Rearmed`), so a server down across several rings **at most once** on return.
   **The vocabulary is declared twice and must stay one set.** Classification decodes it and
   prospection acts on it, and prospection imports classification rather than the reverse, so
   the conversion between them lives at prospection's own call site. That conversion is written
@@ -1371,7 +1374,10 @@ have N nudges; a pattern watcher does not hang off any unit):
   re-armed, which is what lets re-arming be a pure function of `(rule, anchor, now)` rather than
   of the trigger's own history. Skipping the months that lack the day is rejected for the obvious
   reason: a day-31 reminder would fire seven times a year and never in February.
-  Occurrences land at `recurrence_anchor_hour` local, which is deliberately not midnight. How many
+  Occurrences land at the anchor's time of day (`recurrence_anchor.at`): the event's own time,
+  or `date_only_reminder_at` for a bare date (a local midnight, as an unasked one-shot reads it).
+  A row armed before ADR-0034 has none and lands at `recurrence_anchor_hour` local, which is
+  deliberately not midnight. How many
   days a month has is read from the calendar, never from the user's zone: a zone that deleted the
   very day being looked up would otherwise report the wrong length — Pacific/Kiritimati skipped
   1994-12-31, so asking it for December's last day answers "the 1st", and every anchor above the
@@ -1463,7 +1469,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   still ahead, and is refused `too_late` only when less than `at_once_margin_minutes` remain
   before the instant or, for a day alone, before the end of its local day: exactly that many
   minutes left still arms. An asked repeating request ("todos los días a las 9pm") is, until the
-  recurring branch takes it in a later link, its one-shot occurrence, never the 7-day recurring
+  recurring branch takes it in a later link, its one-shot occurrence, never the recurring
   trigger. **A named time is not moved or dropped by quiet
   hours, and neither is any asked reminder armed at once**: "a las 6:30" said at 06:20 rings at
   once, and the delivery gate does not defer such a row (`payload.night_exempt`) and measures its
@@ -1472,9 +1478,9 @@ have N nudges; a pattern watcher does not hang off any unit):
   row nobody asked about keeps the midnight reading. A timer, and a unit nobody asked about, arm
   as before. Until capture computes `asked` and stores the payload keys (the next link of the
   change), the planner and the gate are ready and capture passes `asked = false`.
-  A **recurring reminder** keeps one trigger `event_lead_days` before its next occurrence,
-  stored in `payload.lead_days` (the re-arm propagates it). Triggers armed before ADR-0029 keep
-  the instant they were armed for; a correction of their date re-arms them as the new set.
+  A **recurring reminder** keeps one trigger **on** its next occurrence (ADR-0034); one armed a
+  week ahead before it keeps that instant and re-arms on the occurrence. Triggers armed before
+  ADR-0029 keep the instant they were armed for; a correction of their date re-arms them as the new set.
   A recurring reminder's `event_at` is an **anchor**, not a spent instant: its year is discarded
   and only the month and day survive, so a birth date decades past still arms. The at-or-before-now
   refusal above governs a one-shot occurrence — the same date is a spent instant without a
@@ -1488,23 +1494,23 @@ have N nudges; a pattern watcher does not hang off any unit):
 **Delivery — digest vs push** (`interrupt_level` 0–1, persisted on the trigger so the glass
 box can audit it):
 
-- **An event reminder is always pushed** ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)):
-  a one-shot trigger — every trigger without a recurrence rule — goes out when due whatever its
-  `interrupt_level`, a degraded one included (`internal/core/prospection.RouteTrigger`); waiting
-  for tomorrow's digest would deliver it after the thing it is about. Quiet hours still defer
+- **Every trigger is pushed** ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md),
+  [ADR-0034](adr/0034-a-recurring-reminder-rings-on-its-day.md)): a one-shot trigger and a
+  recurring one go out when due whatever their `interrupt_level`, a degraded one included;
+  waiting for tomorrow's digest would deliver it after the thing it is about, and a recurring
+  one rings on its own day. Quiet hours still defer
   it, as below. **It is never late**: one whose event has started (`fire_at + lead_minutes`) is
   expired with a `check.trigger.expired` row instead of sent (`ReminderVerdict`).
   A reminder armed at once carries no lead but names its event in `payload.event_at`, and a
   legacy one is judged on its unit's event: both fall under the gate below (ADR-0032).
-  The interrupt split below, and its "a degraded reading never
-  pushes" guarantee, govern every recurring reminder.
+  The digest still carries a recurring row fired before ADR-0034 and waiting for it.
 
 - **A reminder never speaks of the past** ([ADR-0032](adr/0032-a-reminder-says-what-is-true-now.md),
   `internal/core/prospection.ReminderVerdict`). One gate judges a reminder against its event when
   its trigger comes due, when the digest assembles and when Today previews it. The event is, in
   order: the payload's `event_at`; `fire_at + lead_minutes` when the lead is positive; for a
-  recurring reminder, the occurrence after `fire_at` read in the clock's zone (`fire_at` is stored
-  in UTC); and, for a one-shot reminder with none of those, the event its unit holds now. One that
+  recurring reminder, the occurrence at or after `fire_at` read in the clock's zone (`fire_at` is
+  stored in UTC; a legacy row fired a week ahead and reads the occurrence after it); and, for a one-shot reminder with none of those, the event its unit holds now. One that
   names no event is never past: `lead_minutes` 0 is not an event at `fire_at`. A timed event is
   past once its instant is at or before now; a day-granular one, a recurring occurrence (noon) or a
   date-only event (local midnight, as `reminderInstants` reads it), only from the next local
@@ -1515,7 +1521,7 @@ box can audit it):
     `surfaced_at` NULL (`TriggerRepo.Lapse`), recorded as `check.trigger.lapsed`, counted in the
     check report, and no longer covering a lead a re-arm would skip (`FiredForUnit` reads `fired`
     rows only).
-  A recurring fired reminder waits for the digest and lateness does not judge it (ADR-0009's
+  A recurring fired reminder from before ADR-0034 waits for the digest and lateness does not judge it (ADR-0009's
   window is a push's). A one-shot fired row is judged late, and a reminder is **superseded** when
   its payload's `event_at` differs, to the second, from its unit's current `event_at`, or when it
   names no event and its unit has since armed a one-shot reminder (a legacy row). The digest
@@ -1565,7 +1571,7 @@ box can audit it):
   clock's zone, in a fixed frame (`Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00`; with
   a title, `Recordatorio: Reunión con Juan — mié 14 oct, 22:30`), never a model call. A digest
   line is the same words without the push's frame. A recurring one
-  names its next occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
+  names its occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
   delivered. The text a reminder was armed with (the title the capture classified, else the
@@ -1903,7 +1909,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |
 | `resurface_max_hops` (`internal/core/weight.ResurfaceMaxHops`) | 2 |
 | `resurface_attenuation` (`internal/core/weight.ResurfaceAttenuation`) | 0.5 |
-| `urgency_lead_days` (`internal/core/focus.UrgencyLeadDays`) | 7 — a separate knob from "Event lead time" below, despite the identical default: one is prospection's notification horizon, this is the ranking's |
+| `urgency_lead_days` (`internal/core/focus.UrgencyLeadDays`) | 7 — how far ahead a dated unit ranks as urgent; the ranking's horizon, not a reminder's |
 | `urgency_max` (`internal/core/focus.UrgencyMax`) | 3.0 |
 | `age_weight` (`internal/core/focus.AgeWeight`) | 0.20 |
 | `age_horizon_days` (`internal/core/focus.AgeHorizonDays`) | 15 — owner ruling 10; was 30 under ruling 9 |
@@ -1918,7 +1924,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`internal/core/prospection.PushThreshold`) | 0.70 — `interrupt_level >= this value` routes to push (R3.2), inclusive; gains a constant here, value unchanged |
 | `default_interrupt_level` (`internal/core/prospection.DefaultInterruptLevel`) | 0.0 — fills a degraded or out-of-range `interrupt_level`; behaviourally inert below the push threshold, chosen so an audit reads "no claim was made" (design §3.4) |
-| `recurrence_anchor_hour` (`internal/core/prospection.RecurrenceAnchorHour`) | 12 — derived: the local wall clock a recurring occurrence lands on. Not midnight, because a DST gap there normalises *backward* onto the previous calendar date (`internal/core/consolidation.NextDailyRun` records Havana mapping local 00:00 to 23:00 the previous evening), which would nudge an anniversary a day early once a year. Noon clears every transition shorter than twelve hours, and the only known longer ones delete the whole calendar date |
+| `recurrence_anchor_hour` (`internal/core/prospection.RecurrenceAnchorHour`) | 12 — derived: the local wall clock a recurring occurrence lands on when its anchor has no time of day (a row armed before ADR-0034). Not midnight, because a DST gap there normalises *backward* onto the previous calendar date (`internal/core/consolidation.NextDailyRun` records Havana mapping local 00:00 to 23:00 the previous evening), which would nudge an anniversary a day early once a year. Noon clears every transition shorter than twelve hours, and the only known longer ones delete the whole calendar date |
 | `digest_hour` (`internal/core/prospection.DigestHour`) | 7 — the local hour the daily digest becomes due (owner ruling 2). Equals `quiet_hours_end_hour` today and is deliberately a separate knob: one is a delivery window's edge, the other a cadence. The asserted relation is `digest_hour >= quiet_hours_end_hour`, not their equality |
 | `low_energy_max` (`internal/core/prospection.LowEnergyMax`) | 0.5 — chosen: `energy` is declared on [0,1] with no calibration data behind it, and the midpoint is the only point on such a scale that is not an invention. The comparison is strict, because the gate suppresses delivery |
 | `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
@@ -1928,10 +1934,9 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `max_reasks_per_digest` (`internal/core/prospection.MaxReasksPerDigest`) | 3 — how many check-ins one morning digest asks again at most, the longest waiting first; the rest wait, uncounted (§7). Chosen: a short list after the day's items, at most a low-energy digest's whole carry (`low_energy_digest_size`), and with each clipped to a day line's length it keeps the block well inside one message |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split. The default of an event reminder's quiet end, user-overridable: `config.quiet_hours_end` (ADR-0030) |
-| `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a recurring reminder's next occurrence its trigger fires; a dated event uses the three rows below (ADR-0029). A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
 | Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours` + `ResolveReminderPrefs`) | 24 — hours before a timed event its first reminder fires (ADR-0029). User-overridable: `config.event_reminder_leads` |
 | Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours` + `ResolveReminderPrefs`) | 2 — hours before a timed event its second reminder fires. User-overridable, same column |
-| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded. User-overridable: `config.date_only_reminder_at` |
+| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded, and the hour a recurring occurrence of a bare date rings on its day (ADR-0034). User-overridable: `config.date_only_reminder_at` |
 | `default_evening_reminder_hour` (`internal/core/prospection.DefaultEveningReminderHour` + `ResolveReminderPrefs`) | 22 — local hour, the evening before, an event reminder is armed at when its instant falls in quiet hours and the event is at or before quiet end (ADR-0030). User-overridable: `config.evening_reminder_at` |
 | `max_quiet_end_hour` (`internal/core/prospection.MaxQuietEndHour`) | 12 — the latest quiet end a user may set; a bound on input, not a default |
 | `max_event_reminder_leads` (`internal/core/prospection.MaxEventReminderLeads`) | 5 — the most reminders a user may set per timed event; a bound on input, not a default |

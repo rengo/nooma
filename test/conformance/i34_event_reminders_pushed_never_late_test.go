@@ -97,8 +97,8 @@ func TestI34_EventRemindersAreArmedAroundQuietHours(t *testing.T) {
 
 // TestI34_EventRemindersArePushedAndNeverLate is the delivery half
 // (ADR-0030 points 1 and 4): a due event reminder is pushed whatever its
-// interrupt level, a degraded one included; a recurring reminder keeps its
-// interrupt routing; and a reminder whose event has already started is
+// interrupt level, a degraded one included, and so is a recurring one, which
+// fires on its own day (ADR-0034); and a reminder whose event has already started is
 // expired with a check.trigger.expired row rather than sent.
 func TestI34_EventRemindersArePushedAndNeverLate(t *testing.T) {
 	now := time.Date(2026, 10, 16, 8, 30, 0, 0, time.UTC)
@@ -118,9 +118,9 @@ func TestI34_EventRemindersArePushedAndNeverLate(t *testing.T) {
 			Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 120}, FireAt: ptrTime(now.Add(-time.Minute))}, 1, 0},
 		{"a pre-ADR-0029 one-shot reminder is pushed", ports.Trigger{InterruptLevel: &low,
 			Payload: ports.TriggerPayload{ActionText: "dentist", LeadDays: 7}, FireAt: ptrTime(now.Add(-time.Minute))}, 1, 0},
-		{"a low-interrupt recurring reminder still waits for the digest", ports.Trigger{InterruptLevel: &low,
-			Payload: ports.TriggerPayload{ActionText: "birthday", LeadDays: 7}, FireAt: ptrTime(now.Add(-time.Minute)),
-			RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 23}}, 0, 0},
+		{"a low-interrupt recurring reminder is pushed too (ADR-0034)", ports.Trigger{InterruptLevel: &low,
+			Payload: ports.TriggerPayload{ActionText: "birthday"}, FireAt: ptrTime(now.Add(-time.Minute)),
+			RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 16, At: &prospection.TimeOfDay{Hour: 8, Minute: 29}}}, 1, 0},
 		{"a reminder whose event started 30 minutes ago is expired, not sent", ports.Trigger{InterruptLevel: &low,
 			Payload: ports.TriggerPayload{ActionText: "flight", LeadMinutes: 60}, FireAt: ptrTime(now.Add(-90 * time.Minute))}, 0, 1},
 	}
@@ -209,7 +209,7 @@ func TestI34_TheScanWaitsForTheStoredQuietEnd(t *testing.T) {
 	yearly := prospection.RuleYearly
 	for _, tr := range []ports.Trigger{
 		{ID: "event", UnitID: &unitID, Payload: ports.TriggerPayload{ActionText: "dentist", LeadMinutes: 270}, FireAt: ptrTime(day(7, 30))},
-		{ID: "birthday", InterruptLevel: &low, Payload: ports.TriggerPayload{ActionText: "birthday", LeadDays: prospection.EventLeadDays},
+		{ID: "birthday", InterruptLevel: &low, Payload: ports.TriggerPayload{ActionText: "birthday", LeadDays: 7},
 			FireAt: ptrTime(day(-2, 30)), RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 23}},
 	} {
 		tr.Kind, tr.CreatedAt = ports.TriggerKindTimeBased, day(0, 0).Add(-48*time.Hour)
@@ -217,9 +217,12 @@ func TestI34_TheScanWaitsForTheStoredQuietEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Yesterday's digest went out at 10:00, so the birthday reminder that
-	// fires at 22:30 waits for today's: the digest owed this morning has
+	// A birthday reminder fired at 22:30 before ADR-0034 waits for today's
+	// digest (yesterday's went out at 10:00): the digest owed this morning has
 	// an item, and sending it before the stored quiet end is observable.
+	if err := triggers.Fire(ctx, "birthday", day(-2, 30)); err != nil {
+		t.Fatal(err)
+	}
 	log := memrepo.NewDecisionLog()
 	if err := log.Record(ctx, ports.Decision{ID: "d0", Action: ports.ActionCheckDigestSent, Rationale: "yesterday's digest", OccurredAt: day(-14, 0)}); err != nil {
 		t.Fatal(err)
@@ -236,9 +239,6 @@ func TestI34_TheScanWaitsForTheStoredQuietEnd(t *testing.T) {
 		return report
 	}
 
-	if r := check(day(-1, 0)); r.TriggersFired != 1 || r.DigestCarried != 0 || ch.sent != 0 {
-		t.Fatalf("at 23:00 the evening before: %+v (sent %d), want the birthday fired and held for the digest", r, ch.sent)
-	}
 	if r := check(day(8, 30)); r.TriggersDelivered != 0 || r.DigestCarried != 0 || r.TriggersExpired != 0 || ch.sent != 0 {
 		t.Errorf("at 08:30, before the stored quiet end: %+v (sent %d), want nothing sent and nothing expired", r, ch.sent)
 	}

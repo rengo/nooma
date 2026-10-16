@@ -371,6 +371,10 @@ func copyAnchor(p *prospection.Anchor) *prospection.Anchor {
 		wd := *p.Weekday
 		v.Weekday = &wd
 	}
+	if p.At != nil {
+		at := *p.At
+		v.At = &at
+	}
 	return &v
 }
 

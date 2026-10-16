@@ -88,15 +88,3 @@ func (i Interrupt) Route() Route {
 	}
 	return RouteDigest
 }
-
-// RouteTrigger decides push vs digest for a due trigger (ADR-0030 point 1).
-// A one-shot trigger is an event reminder, armed at an instant chosen for
-// the user, and is pushed whatever its interrupt level: a reminder that
-// waits for tomorrow's digest arrives after the thing it is about. A
-// recurring one keeps Route's interrupt split, degraded guarantee included.
-func RouteTrigger(recurring bool, i Interrupt) Route {
-	if !recurring {
-		return RoutePush
-	}
-	return i.Route()
-}

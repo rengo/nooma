@@ -771,3 +771,61 @@ func TestNextOccurrence_WeeklyWithNoWeekdayKeepsTheUsersOwnDate(t *testing.T) {
 			"user's own stated date instead of inventing Sunday", got, want)
 	}
 }
+
+// TestRearmed is doc 02 §7's re-arm: a row that fired re-arms for the next
+// occurrence, and a row the server slept through re-arms for today's
+// occurrence if today has one, else the next — one ring on return, never one
+// per missed date (ADR-0034).
+func TestRearmed(t *testing.T) {
+	loc := time.FixedZone("UTC-3", -3*60*60)
+	at := func(day, hour int) time.Time { return time.Date(2026, time.October, day, hour, 0, 0, 0, loc) }
+	daily := Anchor{At: &TimeOfDay{Hour: 20}}
+
+	cases := []struct {
+		name        string
+		fireAt, now time.Time
+		want        time.Time
+	}{
+		{"fired on time, the next day's", at(16, 20), at(16, 20), at(17, 20)},
+		{"fired late the same day, still the next day's", at(16, 20), at(16, 23), at(17, 20)},
+		{"three days missed, back before today's: today's", at(13, 20), at(16, 10), at(16, 20)},
+		{"three days missed, back after today's: today's, at once and late", at(13, 20), at(16, 21), at(16, 20)},
+		{"expired as overdue today: tomorrow's", at(16, 20), at(17, 2), at(17, 20)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Rearmed(RuleDaily, daily, tc.fireAt, tc.now); !got.Equal(tc.want) {
+				t.Errorf("Rearmed = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("a row armed a week ahead before ADR-0034 re-arms for its own occurrence", func(t *testing.T) {
+		got := Rearmed(RuleYearly, Anchor{Month: time.October, Day: 21}, at(14, 12), at(16, 10))
+		if want := at(21, RecurrenceAnchorHour); !got.Equal(want) {
+			t.Errorf("Rearmed = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a weekly series missed for a month re-arms for its next week day, not a burst", func(t *testing.T) {
+		monday := time.Monday
+		weekly := Anchor{Weekday: &monday, At: &TimeOfDay{Hour: 8, Minute: 30}}
+		// Monday 5 October, back on Friday 6 November.
+		got := Rearmed(RuleWeekly, weekly, time.Date(2026, 10, 5, 8, 30, 0, 0, loc), time.Date(2026, 11, 6, 12, 0, 0, 0, loc))
+		if want := time.Date(2026, 11, 9, 8, 30, 0, 0, loc); !got.Equal(want) {
+			t.Errorf("Rearmed = %v, want %v", got, want)
+		}
+	})
+}
+
+// TestNextOccurrence_LandsOnTheAnchorTime: an anchor with a time of day lands
+// there; one without (a row armed before ADR-0034) keeps the anchor hour.
+func TestNextOccurrence_LandsOnTheAnchorTime(t *testing.T) {
+	after := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	if got := NextOccurrence(RuleDaily, Anchor{At: &TimeOfDay{Hour: 8, Minute: 30}}, after); !got.Equal(time.Date(2026, 10, 17, 8, 30, 0, 0, time.UTC)) {
+		t.Errorf("with a time of day: %v, want 2026-10-17 08:30", got)
+	}
+	if got := NextOccurrence(RuleDaily, Anchor{}, after); !got.Equal(time.Date(2026, 10, 16, RecurrenceAnchorHour, 0, 0, 0, time.UTC)) {
+		t.Errorf("without one: %v, want today at the anchor hour", got)
+	}
+}

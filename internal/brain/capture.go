@@ -988,7 +988,7 @@ func armedTrigger(id string, unitID *string, text string, plan prospection.Plan,
 
 // armedPayload is the payload an arming of plan writes, saying text.
 func armedPayload(text string, plan prospection.Plan) ports.TriggerPayload {
-	p := ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadDays: plan.LeadDays, LeadMinutes: plan.LeadMinutes}
+	p := ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadMinutes: plan.LeadMinutes}
 	if plan.What == prospection.ArmTrigger {
 		p.About = plan.About
 		for _, l := range plan.Leads {
@@ -1072,7 +1072,6 @@ func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.Dec
 		UnitID         *string  `json:"unit_id,omitempty"`
 		What           string   `json:"what"`
 		FireAt         string   `json:"fire_at"`
-		LeadDays       *int     `json:"lead_days,omitempty"`
 		LeadMinutes    int      `json:"lead_minutes,omitempty"`
 		RecurrenceRule *string  `json:"recurrence_rule,omitempty"`
 		InterruptLevel *float64 `json:"interrupt_level,omitempty"`
@@ -1093,8 +1092,8 @@ func (r captureRunner) recordArmedDecision(ctx context.Context, action ports.Dec
 		LeadMinutes:       plan.LeadMinutes,
 	}
 	if plan.What == prospection.ArmRecurring {
-		leadDays, rule := plan.LeadDays, string(plan.Rule)
-		ctxValue.LeadDays, ctxValue.RecurrenceRule = &leadDays, &rule
+		rule := string(plan.Rule)
+		ctxValue.RecurrenceRule = &rule
 	}
 
 	contextJSON, err := json.Marshal(ctxValue)
@@ -1131,9 +1130,8 @@ func armRationale(plan prospection.Plan) string {
 	case prospection.ArmTimer:
 		return fmt.Sprintf("armed a timer to fire at %s", plan.FireAt.UTC().Format(time.RFC3339))
 	case prospection.ArmRecurring:
-		return fmt.Sprintf("armed a %s recurring trigger for %s, firing at %s%s",
-			plan.Rule, plan.About.UTC().Format(time.RFC3339),
-			plan.FireAt.UTC().Format(time.RFC3339), leadPhrase(plan))
+		return fmt.Sprintf("armed a %s recurring trigger for %s, firing on the occurrence itself",
+			plan.Rule, plan.About.UTC().Format(time.RFC3339))
 	default:
 		return fmt.Sprintf("armed a trigger for %s, firing at %s%s",
 			plan.About.UTC().Format(time.RFC3339),

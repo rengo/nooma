@@ -258,7 +258,7 @@ Initial extraction:
 | I14 | A malformed `classify` field degrades to null; it never aborts the classification | §5 |
 | I15 | A trigger overdue past the threshold → `expired`, never `fired`. (`expired` with a `fired_at` is the other shape: a fired reminder that never reached the user and lapsed, I37). A one-shot reminder is expired only by a pass with a channel and a conversation; with a nil channel it is kept, a unit-less one included (`TestI15_OverdueExpiresWithAChannel`, `TestI15_OverdueIsKeptWithANilChannel`) | ADR-0009 |
 | I16 | Nothing is delivered during quiet hours except the timer, an explicit instruction | §7 |
-| I17 | Firing a recurring trigger creates the next one pointing at the **same** unit | §7 |
+| I17 | Firing (or expiring) a recurring trigger arms the next occurrence, in the same write, pointing at the **same** unit; days pass and it keeps ringing on each occurrence, a missed stretch rings once | §7 |
 | I18 | `event_at`, `created_at`, and `due_at` are never interchanged | §1 |
 | I19 | A challenger must beat the incumbent by more than `hysteresis_margin`. `focus.Select`'s production caller is `brain.FocusKeeper.compute`, reached from `/ui`'s Today view: `TestI19_TodayHoldsIncumbentInsideMargin` | §3 |
 | I20 | One active insight per metric; the previous one becomes `superseded` | §12, doc 03 |

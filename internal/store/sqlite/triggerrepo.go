@@ -60,6 +60,9 @@ type anchorJSON struct {
 	// text. The column is TEXT holding JSON and needs no DDL change to
 	// carry another key.
 	Weekday *int `json:"weekday,omitempty"`
+	// At is the occurrence's local "HH:MM" (ADR-0034); absent on a row
+	// armed before it, which reads as the anchor hour.
+	At string `json:"at,omitempty"`
 }
 
 // payloadJSON is ports.TriggerPayload's storage encoding, declared here for
@@ -573,6 +576,13 @@ func scanDueTrigger(rows *sql.Rows, extra ...any) (ports.DueTrigger, error) {
 			wd := time.Weekday(*stored.Weekday)
 			anchor.Weekday = &wd
 		}
+		if stored.At != "" {
+			at, err := prospection.ParseTimeOfDay(stored.At)
+			if err != nil {
+				return ports.DueTrigger{}, fmt.Errorf("trigger %q: recurrence_anchor: %w", d.ID, err)
+			}
+			anchor.At = &at
+		}
 		d.RecurrenceAnchor = anchor
 	}
 
@@ -620,6 +630,9 @@ func marshalAnchor(a *prospection.Anchor) (any, error) {
 	if a.Weekday != nil {
 		wd := int(*a.Weekday)
 		stored.Weekday = &wd
+	}
+	if a.At != nil {
+		stored.At = fmt.Sprintf("%02d:%02d", a.At.Hour, a.At.Minute)
 	}
 	encoded, err := json.Marshal(stored)
 	if err != nil {

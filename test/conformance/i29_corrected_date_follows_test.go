@@ -232,7 +232,7 @@ func TestI29_CorrectedDateCarriesTheText(t *testing.T) {
 func (f i29Fixture) arm(t *testing.T, id, unitID string, fireAt time.Time, text string, rule *prospection.Rule, anchor *prospection.Anchor) {
 	t.Helper()
 	if err := f.triggers.Create(context.Background(), ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
-		Payload: ports.TriggerPayload{ActionText: text, LeadDays: prospection.EventLeadDays}, FireAt: &fireAt,
+		Payload: ports.TriggerPayload{ActionText: text, LeadDays: 7}, FireAt: &fireAt,
 		RecurrenceRule: rule, RecurrenceAnchor: anchor}); err != nil {
 		t.Fatalf("seeding trigger %s: %v", id, err)
 	}
@@ -528,8 +528,8 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 
 		got := f.armed(t, "dentist")
 		if len(got) != 1 || got[0].ID != "r1" || got[0].RecurrenceRule == nil || got[0].RecurrenceAnchor == nil ||
-			got[0].RecurrenceAnchor.Day != 30 || got[0].FireAt.Month() != time.October || got[0].FireAt.Day() != 23 {
-			t.Fatalf("armed = %+v, want r1 still yearly, anchored on Oct 30", got)
+			got[0].RecurrenceAnchor.Day != 30 || !got[0].FireAt.Equal(time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)) {
+			t.Fatalf("armed = %+v, want r1 still yearly, anchored on Oct 30 and firing on it (ADR-0034)", got)
 		}
 	})
 
@@ -697,7 +697,7 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		yearly := prospection.RuleYearly
 		f := newI29(t, now, dentist(now), toLater)
-		f.arm(t, "r1", "dentist", time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC), "Dentista el 2026-10-30 a las 10:00", &yearly, &prospection.Anchor{Month: time.October, Day: 29})
+		f.arm(t, "r1", "dentist", time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC), "Dentista el 2026-10-30 a las 10:00", &yearly, &prospection.Anchor{Month: time.October, Day: 29})
 		f.capture(t, "dentist")
 		rows := reminderRows(t, f)
 		if len(rows) != 1 {

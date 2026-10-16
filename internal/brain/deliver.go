@@ -11,15 +11,14 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// fireAndDeliver moves one due trigger armed -> fired and, when it routes
-// to push (triggerRoute), queues it for the pass's pushes (pushQueue). A real
+// fireAndDeliver moves one due trigger armed -> fired (leave) and queues it for
+// the pass's pushes (pushQueue): every trigger is pushed (ADR-0034). A real
 // delivery happens when the queue is flushed; delivered is a dry run's preview.
 //
 // **The two counts differ on purpose.** Firing is a decision this pass
-// made; delivering is an outcome it may not have achieved. A digest-routed
-// trigger fires and is not delivered — it waits for the digest. A
-// push-routed one whose send fails fires and is not delivered either, and
-// a later pass picks it up from Undelivered.
+// made; delivering is an outcome it may not have achieved. A push whose
+// send fails fires and is not delivered, and a later pass picks it up from
+// Undelivered.
 //
 // The ordering is the whole of R2.1, kept by deliver: **Send first, Surface second.** A
 // trigger the user never saw must not be recorded as delivered, and m3b
@@ -31,13 +30,11 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 		// A dry run reaches the same verdict and reports the same intent.
 		// It does not send: a preview that messaged the user would be a
 		// preview of nothing (m3b's Q1 ruling, applied to a new effect).
-		if triggerRoute(t) == prospection.RoutePush {
-			return 1, 1, nil
-		}
-		return 1, 0, nil
+		return 1, 1, nil
 	}
 
-	if err := r.triggers.Fire(ctx, t.ID, now); err != nil {
+	next, err := r.leave(ctx, t, &now, now)
+	if err != nil {
 		skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
 		if skipErr != nil {
 			return 0, 0, skipErr
@@ -48,28 +45,38 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 		return 0, 0, fmt.Errorf("check: fire trigger %q: %w", t.ID, err)
 	}
 
-	route := triggerRoute(t)
 	if err := r.record(ctx, now, ports.ActionCheckTriggerFired,
-		fmt.Sprintf("trigger %q came due and fired, routed to %s", t.ID, route),
+		fmt.Sprintf("trigger %q came due and fired%s", t.ID, next),
 		checkDetail{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictDeliver)},
 	); err != nil {
 		return 0, 0, err
-	}
-
-	if route != prospection.RoutePush {
-		// The digest's, and it is already in Undelivered. Nothing more to
-		// do here, and no second row: waiting is not an effect.
-		return 1, 0, nil
 	}
 
 	q.add(t)
 	return 1, 0, nil
 }
 
-// triggerRoute is where a due trigger goes: an event reminder (one-shot) is
-// pushed, a recurring one follows its interrupt level (ADR-0030 point 1).
-func triggerRoute(t ports.DueTrigger) prospection.Route {
-	return prospection.RouteTrigger(t.RecurrenceRule != nil, prospection.ResolveInterrupt(t.InterruptLevel))
+// leave moves t out of armed: fired at *firedAt, or expired when nil. A
+// recurring trigger arms its next occurrence in the same write (doc 02 §7,
+// I17), and next says which, for the trail; "" for a one-shot.
+func (r checkRunner) leave(ctx context.Context, t ports.DueTrigger, firedAt *time.Time, now time.Time) (next string, err error) {
+	if t.RecurrenceRule == nil || t.RecurrenceAnchor == nil {
+		if firedAt != nil {
+			return "", r.triggers.Fire(ctx, t.ID, *firedAt)
+		}
+		return "", r.triggers.Expire(ctx, t.ID)
+	}
+	at := prospection.Rearmed(*t.RecurrenceRule, *t.RecurrenceAnchor, t.FireAt, now)
+	successor := ports.Trigger{
+		ID: r.ids.New(), UnitID: t.UnitID, Kind: ports.TriggerKindTimeBased, InterruptLevel: t.InterruptLevel,
+		Payload: ports.TriggerPayload{ActionText: t.Payload.ActionText,
+			Rationale: fmt.Sprintf("re-armed a %s recurring trigger for %s, after trigger %q", *t.RecurrenceRule, at.UTC().Format(time.RFC3339), t.ID)},
+		FireAt: &at, RecurrenceRule: t.RecurrenceRule, RecurrenceAnchor: t.RecurrenceAnchor, CreatedAt: now,
+	}
+	if err := r.triggers.Rearm(ctx, t.ID, firedAt, successor); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("; its next occurrence is trigger %q at %s", successor.ID, at.UTC().Format(time.RFC3339)), nil
 }
 
 // deliver sends the reminders of one unit as one message and records that it

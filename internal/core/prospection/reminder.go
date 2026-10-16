@@ -58,9 +58,8 @@ type Reminder struct {
 //  4. Otherwise TriggerVerdict, whose Stale is LapseOverdue (Defer still first).
 //
 // The event is, in order: the payload's; FireAt plus a positive lead; for a
-// recurring reminder, the occurrence NextOccurrence derives from FireAt read in
-// now's zone (FireAt is stored in UTC, and the UTC reading lands on UTC noon,
-// hours off the local day), assuming a period longer than the lead; and for a
+// recurring reminder, the occurrence at or after FireAt, read in now's zone
+// (FireAt is stored in UTC, hours off the local day); and for a
 // one-shot reminder with none of those, Current. A reminder naming no event is
 // never passed: lead_minutes 0 is not an event at FireAt.
 //
@@ -154,7 +153,9 @@ func (r Reminder) about(zone *time.Location) (time.Time, bool) {
 		if r.Anchor == nil {
 			return time.Time{}, false
 		}
-		return NextOccurrence(*r.Rule, *r.Anchor, r.FireAt.In(zone)), true
+		// At or after FireAt: a row fires on its occurrence (ADR-0034); one
+		// armed before that fired days ahead of it, and reads the same way.
+		return NextOccurrence(*r.Rule, *r.Anchor, r.FireAt.In(zone).Add(-time.Nanosecond)), true
 	case r.Current != nil:
 		return *r.Current, true
 	}
