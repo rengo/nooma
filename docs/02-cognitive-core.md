@@ -542,7 +542,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      open, the choice and the count are both written to `decision_log`
      (`open_relation_questions: N`), so the audit trail shows a choice was made rather than
      implying there was only one. **An answer matching nothing open resolves nothing and,
-     above all, deletes nothing.**
+     above all, deletes nothing.** Nor does one whose check-in the digest closed between the read
+     and the write (§7): it is recorded as unmatched and the capture goes on.
    - **The one exception is narrower than the rule, and is for reminders**
      ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)): the prompt may carry the
      reminder question Nooma has open and one numbered list of at most `max_reminder_choices`

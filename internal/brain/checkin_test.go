@@ -224,6 +224,34 @@ func TestSnoozeRecordsWhichCheckinItPutOff(t *testing.T) {
 	}
 }
 
+// closedUnderTheAnswer is an open check-in the digest closed between this
+// capture's read of Delivered and its Resolve.
+type closedUnderTheAnswer struct{ openCheckIns }
+
+func (r *closedUnderTheAnswer) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+	return ports.ErrTriggerStatusConflict
+}
+
+// TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure: when the digest
+// expires the check-in an answer was about to close, the answer is recorded as
+// matching nothing and the capture goes on; it never aborts the capture.
+func TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure(t *testing.T) {
+	triggers := &closedUnderTheAnswer{openCheckIns{open: []ports.DueTrigger{{ID: "trg-1"}}}}
+	log := &recordingLog{}
+
+	resolved, err := checkInRunner(triggers, log).
+		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeDone), checkInNow)
+	if err != nil {
+		t.Fatalf("resolveCheckIn: %v, want the race absorbed", err)
+	}
+	if resolved {
+		t.Error("an answer to a check-in closed under it reported a resolution")
+	}
+	if n := log.count(ports.ActionCaptureCheckInUnmatched); n != 1 {
+		t.Errorf("%d unmatched rows, want 1", n)
+	}
+}
+
 // recordingSignals records what was written and when, so an ordering can
 // be asserted rather than just two facts.
 type recordingSignals struct {

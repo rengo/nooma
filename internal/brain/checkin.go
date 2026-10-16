@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -57,7 +58,13 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 	// there was only one.
 	target := open[0]
 	if err := r.triggers.Resolve(ctx, target.ID, resolution, now); err != nil {
-		return false, fmt.Errorf("capture: resolving check-in %q: %w", target.ID, err)
+		if !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			return false, fmt.Errorf("capture: resolving check-in %q: %w", target.ID, err)
+		}
+		// The digest closed it under this answer (doc 02 §7): the answer now
+		// matches nothing, and the capture goes on.
+		return false, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInUnmatched,
+			fmt.Sprintf("an answer resolving to %q arrived as check-in %q closed unanswered", resolution, target.ID), target.ID, resolution, len(open))
 	}
 
 	return true, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInResolved,
