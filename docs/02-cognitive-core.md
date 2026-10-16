@@ -1512,7 +1512,7 @@ box can audit it):
   recurring reminder, the occurrence at or after `fire_at` read in the clock's zone (`fire_at` is
   stored in UTC; a legacy row fired a week ahead and reads the occurrence after it); and, for a one-shot reminder with none of those, the event its unit holds now. One that
   names no event is never past: `lead_minutes` 0 is not an event at `fire_at`. A timed event is
-  past once its instant is at or before now; a day-granular one, a recurring occurrence (noon) or a
+  past once its instant is at or before now; a day-granular one, a recurring occurrence (at its anchor's time) or a
   date-only event (local midnight, as `reminderInstants` reads it), only from the next local
   midnight in the clock's zone, so a birthday is still reminded at 15:00 on the day. A past
   event means:
@@ -1937,7 +1937,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split. The default of an event reminder's quiet end, user-overridable: `config.quiet_hours_end` (ADR-0030) |
 | Event reminder, far lead (`internal/core/prospection.DefaultEventLeadFarHours` + `ResolveReminderPrefs`) | 24 — hours before a timed event its first reminder fires (ADR-0029). User-overridable: `config.event_reminder_leads` |
 | Event reminder, near lead (`internal/core/prospection.DefaultEventLeadNearHours` + `ResolveReminderPrefs`) | 2 — hours before a timed event its second reminder fires. User-overridable, same column |
-| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded, and the hour a recurring occurrence of a bare date rings on its day (ADR-0034). User-overridable: `config.date_only_reminder_at` |
+| Date-only reminder hour (`internal/core/prospection.DefaultDateOnlyReminderHour` + `ResolveReminderPrefs`) | 9 — local hour, the day before, a date-only event is reminded, and the hour a recurring occurrence of a bare date rings on its day (ADR-0034). User-overridable: `config.date_only_reminder_at`; a change does not move a recurring series already armed, which keeps the time it was captured with |
 | `default_evening_reminder_hour` (`internal/core/prospection.DefaultEveningReminderHour` + `ResolveReminderPrefs`) | 22 — local hour, the evening before, an event reminder is armed at when its instant falls in quiet hours and the event is at or before quiet end (ADR-0030). User-overridable: `config.evening_reminder_at` |
 | `max_quiet_end_hour` (`internal/core/prospection.MaxQuietEndHour`) | 12 — the latest quiet end a user may set; a bound on input, not a default |
 | `max_event_reminder_leads` (`internal/core/prospection.MaxEventReminderLeads`) | 5 — the most reminders a user may set per timed event; a bound on input, not a default |

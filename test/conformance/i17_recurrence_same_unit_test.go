@@ -251,3 +251,18 @@ func TestI17_AFailedRecurringPushIsPushedAgain(t *testing.T) {
 		t.Errorf("sent:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// TestI17_ARecurringReminderDueAtNightWaitsForQuietEnd: an occurrence inside
+// quiet hours (00:00 to 07:00 by default) is held, then pushed at quiet end,
+// and the series moves on to the next night's (I16, ADR-0034).
+func TestI17_ARecurringReminderDueAtNightWaitsForQuietEnd(t *testing.T) {
+	got := i17Case{text: "Back up the server", eventAt: "2026-10-16T00:30:00-03:00", rule: "daily", interrupt: 0.8,
+		days: 2}.live(t)
+	want := []string{
+		"Sat 2026-10-17 07:00  Reminder: Back up the server — Sat 17 Oct (This is later than intended.)",
+		"Sun 2026-10-18 07:00  Reminder: Back up the server — Sun 18 Oct (This is later than intended.)",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

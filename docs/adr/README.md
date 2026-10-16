@@ -85,7 +85,7 @@ order, with no correspondence to anything.
 | [0031](0031-reminders-the-user-asks-for.md) | A reminder the user asks for is set from their own words, asked about when unclear, and stopped only when they say so | Accepted | M4 |
 | [0032](0032-a-reminder-says-what-is-true-now.md) | A reminder says what is true when it is sent, in the user's language | Accepted | M4 |
 | [0033](0033-the-model-understands-the-code-acts.md) | Reminders: the model understands, the code acts (supersedes ADR-0031 in part) | Accepted | M4 |
-| [0034](0034-a-recurring-reminder-rings-on-its-day.md) | A recurring reminder rings on its day, and moves on to the next one (supersedes ADR-0029 and ADR-0030 in part) | Accepted | M4 |
+| [0034](0034-a-recurring-reminder-rings-on-its-day.md) | A recurring reminder rings on its day, and moves on to the next one (supersedes ADR-0029 and ADR-0030 in part) | Proposed | M4 |
 
 ## Template
 
