@@ -1,9 +1,13 @@
 {
   "id": "classify-note-no-request-coffee",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "comprar café mañana a las 10",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar café el 2026-10-16 a las 10:00.\",\"weight\":0.7,\"decay_rate\":0.02,\"language\":\"es\",\"due_at\":\"2026-10-16T10:00:00-03:00\",\"title\":\"Comprar café\"}",
+  "now": "2026-10-15T21:26:28-03:00",
   "expect": {
     "title": true
-  }
+  },
+  "prompt_sha256": "eb9a34683d7f763724955e89e627b19eb762583d5e6848ad96cd8e6dadd3b135"
 }

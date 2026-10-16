@@ -1,7 +1,11 @@
 {
   "id": "classify-past-recorde-comprar-cafe",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordé que tenía que comprar café",
-  "record": true,
-  "expect": {}
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que comprar café.\",\"weight\":0.65,\"decay_rate\":0.08,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
+  "expect": {},
+  "prompt_sha256": "eeaa9ea498a5abb01f03f79a83ffd526a926b03eb694bb992544243ceecf2fe7"
 }

@@ -1,11 +1,15 @@
 {
   "id": "classify-request-que-no-se-me-olvide",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "que no se me olvide regar las plantas mañana",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"No olvidar regar las plantas el 2026-10-16.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-16\",\"title\":\"Regar las plantas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
-  }
+  },
+  "prompt_sha256": "a3b08870bfd8fd2be22dc3c810eaa921f42d7c97db08359662b85f8096589233"
 }

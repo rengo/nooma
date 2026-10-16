@@ -1,8 +1,10 @@
 {
   "id": "classify-negative-ya-lo-hice-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya lo hice",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya lo hice.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -19,5 +21,6 @@
   ],
   "expect": {
     "task_checkin_outcome": "done"
-  }
+  },
+  "prompt_sha256": "952a1ec1f657265bf39fa24f94eb515bb7fb73e92f12ff5892f9c8c9cc91e7f1"
 }

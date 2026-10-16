@@ -1,11 +1,15 @@
 {
   "id": "classify-request-poneme-un-recordatorio",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "poneme un recordatorio para sacar la basura a las 9pm",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que sacar la basura el 2026-10-16 a las 21:00.\",\"weight\":0.75,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-16T21:00:00-03:00\",\"title\":\"Sacar la basura\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
-  }
+  },
+  "prompt_sha256": "201499ace799d335e9a513f2f87fc0306855c13edcdb4bf13dca39698f465060"
 }

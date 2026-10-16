@@ -1,10 +1,14 @@
 {
   "id": "classify-request-haceme-acordar",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "haceme acordar de llamar al médico mañana a las 9",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que llamar al médico el 2026-10-16 a las 09:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-16T09:00:00-03:00\",\"title\":\"Llamar al médico\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
   "expect": {
     "remind_request": true,
     "title": true
-  }
+  },
+  "prompt_sha256": "d0f1a8a58753c5a4d860bc890051afa3a8eb0f0aa17a3b747f018db9f31d4a1e"
 }

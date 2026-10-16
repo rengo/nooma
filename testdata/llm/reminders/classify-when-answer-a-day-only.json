@@ -1,8 +1,10 @@
 {
   "id": "classify-when-answer-a-day-only",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "el viernes",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"El aviso será el viernes 2026-10-16.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"when\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -11,5 +13,6 @@
   "expect": {
     "question_answer": "when",
     "day_only": true
-  }
+  },
+  "prompt_sha256": "d906e7e7851b152586a7da04dfdee297cc7a074d9a41c1ea4a493032b8ffd0cb"
 }

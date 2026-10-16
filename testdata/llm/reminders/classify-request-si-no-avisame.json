@@ -1,9 +1,13 @@
 {
   "id": "classify-request-si-no-avisame",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "si no, avisame",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Si no ocurre, avísame.\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"title\":\"Aviso si no ocurre\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
   "expect": {
     "remind_request": true
-  }
+  },
+  "prompt_sha256": "53b5d886dc9db4bea53e57de82fbb69203e836ad1e4b2a442d9c9b50e4f8746e"
 }
