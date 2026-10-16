@@ -63,7 +63,15 @@ tasks-repeating).
   - [x] Review of #365, item 2: the coverage test asks for a phrasing per value of `classify.AllTaskCheckinOutcomes()` and `AllNudgeOutcomes()`, not a hand list.
   - [x] Review of #365 (second round): RED L1 `TestResolveCheckin`: `classify.ResolveCheckin` is the one mapping from a reading's check-in outcomes to the resolution (nudge over task, snooze resolving nothing), moved out of `brain.checkInResolution`, which now only translates it to the store's vocabulary. Doc 02 §5 step 1.
   - [x] `reading.Check` frees the unexpected check-in field only while `classify.ResolveCheckin` gives the reading the expected effect (a declined beside an expected done, or an engaged beside an expected snooze, now misses); a relation outcome beside an expected check-in outcome misses (the reviewer's surviving mutant). `format.md`; doc 02 §5 step 1.
-  - [x] Every `known_misread` mark is gone and the 50 phrasings await one re-recording against this prompt (red in `recordings-complete` until the maintainer records, as #364 was); `make check-all`.
+  - [x] Every `known_misread` mark went and the 50 phrasings were re-recorded by the maintainer against this prompt (882efdf): 45 of 50 read as expected, and the eight old misses all read right.
+  - [x] The five that did not, triaged by what production does with the reading with a check-in open and with none (none open: one unmatched log row, nothing else):
+    - `classify-negative-bare-no-with-candidates` reads `nudge_outcome declined`: `expect` fixed. The negative was written as a bare "no" answering an open check-in, to pin "not a stop", before outcomes were strict; a no to a check-in declines it.
+    - `classify-negative-bare-ya-with-candidates` reads `task_checkin_outcome done`: `expect` fixed, as for the bare "listo" (ADR-0033: a bare "listo" keeps answering an open check-in).
+    - `classify-negative-listo-nos-vemos-with-candidates` reads `done`: `known_misread`. It is a farewell, ADR-0033 names this reading as a misread, and it would close the newest open check-in.
+    - `classify-nudge-engaged` still reads no outcome: `known_misread`; an open nudge stays open.
+    - `classify-stop-listo-no-me-lo-recuerdes` reads the stop and `done`: `known_misread`. The done would close the newest open check-in, which need not be the reminder the stop is about (its target is unclear); link 6's I38 rule that a stop consumes the message is the code guard.
+  - [x] `make check-all`.
+  - **Prompt work owed (the next link that changes the classify prompt, recorded against 882efdf):** link 1b's line "Saying a thing is done (…, "listo, nos vemos mañana") is none, not stop: it is task_checkin_outcome done" sends the farewell to `done` too, and must not; a message that is a stop is not also a check-in answer; "dale, contame" still reads no `nudge_outcome`; and a bare "listo" or "ya" comes back as a `task` that capture persists ("La tarea está hecha"), which the set does not measure (its `type` is not checked).
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.

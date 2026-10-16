@@ -13,6 +13,8 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {},
+  "expect": {
+    "nudge_outcome": "declined"
+  },
   "prompt_sha256": "02a03e5c7f104629702f761091e6ad4d091ea5cb7c193fa0d068abb3e9e71539"
 }

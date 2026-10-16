@@ -14,5 +14,6 @@
     }
   ],
   "expect": {},
+  "known_misread": "reads task_checkin_outcome done for a farewell (ADR-0033 names this very reading as a misread): with a check-in open it closes the newest one as engaged, which the user did not answer; the prompt itself lists this phrase under saying a thing is done, so this is prompt work, see tasks.md",
   "prompt_sha256": "2500c1cc4d5834d89f63743f1aab1b015c85cf277ad1cfe2d120dddd549c53b2"
 }

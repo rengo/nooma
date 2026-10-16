@@ -13,6 +13,8 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {},
+  "expect": {
+    "task_checkin_outcome": "done"
+  },
   "prompt_sha256": "ccbd8deb6afe675d0d81c65b7fb2b29292be9236448133399e6417f0364e8280"
 }
