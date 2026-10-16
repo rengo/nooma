@@ -1,0 +1,10 @@
+{
+  "id": "classify-nudge-not-now",
+  "task": "classify",
+  "message": "ahora no, gracias",
+  "record": true,
+  "expect": {
+    "type": "chitchat",
+    "task_checkin_outcome": "snooze"
+  }
+}
