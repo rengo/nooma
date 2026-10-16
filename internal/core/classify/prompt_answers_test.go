@@ -57,3 +57,20 @@ func TestBuildPromptSaysWhatEachCheckinOutcomeMeans(t *testing.T) {
 		t.Errorf("the stop rule does not send a thing done to task_checkin_outcome done:\n%s", flat)
 	}
 }
+
+// TestBuildPromptAWhenAnswerCarriesItsInstant: "el viernes" answering an open
+// remind_when came back as question_answer when with the day only in
+// normalized_content, so the instant was lost (link 1b). A when answer puts the
+// day or time it gives in due_at or event_at, a day alone as a bare date.
+func TestBuildPromptAWhenAnswerCarriesItsInstant(t *testing.T) {
+	flat := strings.Join(strings.Fields(promptWith(ReminderContext{})), " ")
+	for _, want := range []string{
+		"when (it gives a day or time: put that instant in due_at, or in event_at for an event",
+		"a day with no time as a bare YYYY-MM-DD",
+		"normalized_content alone loses it",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the prompt never says %q:\n%s", want, flat)
+		}
+	}
+}

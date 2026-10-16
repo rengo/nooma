@@ -476,7 +476,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      with `choice_number`, and `reminder_target`. The last two are positions, 1 to
      `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
      `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades;
-     an explicit `null` is an absent field, not a loss. Core holds no phrase list: the prompt
+     an explicit `null` is an absent field, not a loss. A `when` answer carries the instant it
+     gives in `due_at`, or `event_at` for an event, a day alone as a bare date: the prompt says
+     so, because a day left only in `normalized_content` arms nothing. Core holds no phrase list: the prompt
      explains the fields with examples in both languages, shows the open reminder question and
      the numbered list only when there is one, and carries the fields on the correction path
      too, so an explicit-referent stop is read there. The prompt describes all three question

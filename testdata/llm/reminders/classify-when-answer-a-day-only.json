@@ -11,6 +11,5 @@
   "expect": {
     "question_answer": "when",
     "day_only": true
-  },
-  "known_misread": "answers when but writes no due_at or event_at: the day is only in normalized_content, so the instant is lost; prompt work for link 8"
+  }
 }

@@ -296,7 +296,11 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 	b.WriteString("                     user says the stop was a mistake (\"no, seguí\", \"keep it\"). A\n")
 	b.WriteString("                     bare \"sí\", \"ok\" or \"dale\" is none\n")
 	b.WriteString("  question_answer    one of: " + joinVocabulary(AllQuestionAnswers()) + ", and only while a\n")
-	b.WriteString("                     question below is open: when (it gives a day or time), no (it\n")
+	// **The instant, not only the words.** A bare day answering remind_when came
+	// back with the day in normalized_content alone, which arms nothing.
+	b.WriteString("                     question below is open: when (it gives a day or time: put that\n")
+	b.WriteString("                     instant in due_at, or in event_at for an event, a day with no time\n")
+	b.WriteString("                     as a bare YYYY-MM-DD; normalized_content alone loses it), no (it\n")
 	b.WriteString("                     declines: \"no\", \"no hace falta\", \"nope\"), choice (it picks an\n")
 	b.WriteString("                     entry of the numbered list; put the position in choice_number,\n")
 	b.WriteString("                     1 to " + strconv.Itoa(MaxReminderChoices) + "). Otherwise none or leave it out\n")
