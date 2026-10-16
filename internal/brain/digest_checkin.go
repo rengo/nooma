@@ -107,8 +107,8 @@ func checkinHistory(history []ports.Decision) (snoozed map[string]bool, reasks m
 	return snoozed, reasks
 }
 
-// reaskSaid is each check-in asked again as the digest says it: its unit's
-// words now, without an instant, which may be past (ADR-0032: a reminder never
+// reaskSaid is each check-in asked again as the digest names it: its unit's
+// title or content now, as a reminder says it, without an instant, which may be past (ADR-0032: a reminder never
 // speaks of the past), or the armed text when the unit cannot be read.
 func reaskSaid(ctx context.Context, units ports.UnitRepo, reasks []ports.DueTrigger, now time.Time, set phrase.Set) []ports.DueTrigger {
 	out := make([]ports.DueTrigger, len(reasks))

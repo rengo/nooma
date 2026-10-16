@@ -1570,7 +1570,7 @@ box can audit it):
   delivered. The text a reminder was armed with (the title the capture classified, else the
   content) is only the fallback when the unit cannot be read; a correction keeps it equal to
   what the unit says (§5 step 4).
-  The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
+  The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `AskAgain`, `AskDone`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.
   **A digest fits one message.** Telegram refuses a message over 4096 UTF-16 units, which would
@@ -1637,8 +1637,11 @@ reaches (§5 step 1). When a digest is due, each is judged by the mornings due s
 reached the user, counted in the user's night and zone whether or not a digest went out that
 morning. One the user put off (a `capture.checkin.snoozed` row) and whose unit is still something to do,
 a `task` or a `mental_load` (`prospection.pendingWork`, one case per kind), is **asked
-again** by the next digest: a digest line, the unit's words now with no instant (by then
-usually past, ADR-0032), the armed text when the unit cannot be read; after the send `Reask`
+again** by the next digest, in a block after the day's items that the header does not count and
+the message bound never drops: `AskAgain`, then one `AskDone` line per check-in naming its unit's
+title, else its content, now and no instant (by then usually past, ADR-0032), the client's
+wording of 2026-10-16 (`Te pregunto de nuevo:` / `• ¿Ya está «Comprar café»?`; `Asking again:` /
+`• Is "Buy coffee" done?`); after the send `Reask`
 restamps `surfaced_at`, so an answer reaches it, and `check.checkin.reasked` counts it. A re-ask
 is asked again at every later digest, put off again or left unanswered alike, up to
 `max_checkin_reasks`, and the digest after the last **closes** it: `ExpireUnanswered`,

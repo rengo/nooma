@@ -264,16 +264,11 @@ func digestSentRationale(sent, held, dropped int) string {
 }
 
 // digestText is the digest's message and the items it holds: the carried ones,
-// then the check-ins it asks again, one line per unit as every digest line. The
-// digest speaks the newest capture's language (ADR-0032 point 5).
+// then the check-ins it asks again (doc 02 §7). The digest speaks the newest
+// capture's language (ADR-0032 point 5).
 func (r checkRunner) digestText(ctx context.Context, now time.Time, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
 	set := r.setFor(ctx, "")
-	items := slices.Clone(carry)
-	for _, t := range reasks {
-		items = append(items, prospection.DigestItem{ID: t.ID})
-	}
-	said := append(r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set)...)
-	return renderDigest(set, items, said, question)
+	return renderDigest(set, carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question)
 }
 
 // digestFocus computes the focus the digest is about to be sent against. A
@@ -449,7 +444,7 @@ type digestLine struct {
 // Held items are not mentioned. A digest that listed what it withheld
 // would defeat the low-energy gate it came from — the point of holding
 // something back is that the person does not have to think about it today.
-func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
+func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
 	byID := make(map[string]ports.DueTrigger, len(pending))
 	for _, t := range pending {
 		byID[t.ID] = t
@@ -475,22 +470,33 @@ func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []port
 		lines = append(lines, digestLine{text: line, items: []prospection.DigestItem{item}})
 	}
 
+	// The check-ins asked again are a block after the day's items, never
+	// dropped by the bound: at most MaxCheckinReasks digests each, like the
+	// question.
+	asks := make([]string, 0, len(reasks))
+	for _, t := range reasks {
+		asks = append(asks, set.DigestItem(set.Done(t.Payload.ActionText)))
+	}
+
 	keep := len(lines)
-	text := composeDigest(set, lines, keep, question)
+	text := composeDigest(set, lines, keep, asks, question)
 	for keep > 1 && utf16Len(text) > digestMessageUnits {
 		keep--
-		text = composeDigest(set, lines, keep, question)
+		text = composeDigest(set, lines, keep, asks, question)
 	}
 	var sent []prospection.DigestItem
 	for _, l := range lines[:keep] {
 		sent = append(sent, l.items...)
+	}
+	for _, t := range reasks {
+		sent = append(sent, prospection.DigestItem{ID: t.ID})
 	}
 	return text, sent
 }
 
 // composeDigest is the message with the first keep lines, and the note of the
 // lines left out when there are any.
-func composeDigest(set phrase.Set, lines []digestLine, keep int, question *ports.RelationQuestion) string {
+func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, question *ports.RelationQuestion) string {
 	var b strings.Builder
 	if keep > 0 {
 		b.WriteString(set.DigestHeader(keep))
@@ -500,6 +506,12 @@ func composeDigest(set phrase.Set, lines []digestLine, keep int, question *ports
 		if keep < len(lines) {
 			b.WriteString("\n" + set.More(len(lines)-keep))
 		}
+	}
+	if len(asks) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(set.AskAgain + "\n" + strings.Join(asks, "\n"))
 	}
 
 	if question != nil {

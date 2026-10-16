@@ -273,7 +273,7 @@ func TestRenderDigest_DoesNotMentionWhatItHeld(t *testing.T) {
 		digestTrigger("trg-carried", "u-1", "the carried one"),
 		digestTrigger("trg-held", "u-2", "the held one"),
 	}
-	got, _ := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-carried"}}, pending, nil)
+	got, _ := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-carried"}}, pending, nil, nil)
 
 	if !strings.Contains(got, "the carried one") {
 		t.Errorf("the digest does not name what it carried:\n%s", got)
@@ -544,7 +544,7 @@ func TestRenderDigest_NamesBothEndpointsAfterTheItems(t *testing.T) {
 	pending := []ports.DueTrigger{digestTrigger("trg-1", "u-1", "renew the passport")}
 	q := question("q-1", digestQuestionNow, "plan the offsite", "the travel budget")
 
-	got, _ := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-1"}}, pending, &q)
+	got, _ := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-1"}}, pending, nil, &q)
 
 	want := "Here is 1 thing for today:\n• renew the passport\n\n" +
 		"One more — I linked \"plan the offsite\" with \"the travel budget\". Are they related?"
@@ -562,7 +562,7 @@ func TestRenderDigest_NamesBothEndpointsAfterTheItems(t *testing.T) {
 func TestRenderDigest_WithoutItemsDropsTheHeaderRatherThanLie(t *testing.T) {
 	q := question("q-1", digestQuestionNow, "plan the offsite", "the travel budget")
 
-	got, _ := renderDigest(sentences(), nil, nil, &q)
+	got, _ := renderDigest(sentences(), nil, nil, nil, &q)
 
 	if strings.Contains(got, "for today") {
 		t.Errorf("renderDigest() with no carried items still writes the item header:\n%q", got)
@@ -580,7 +580,7 @@ func TestRenderDigest_TruncatesEndpointsToTheSnippetBound(t *testing.T) {
 	long := strings.Repeat("á", questionSnippetRunes+20)
 	q := question("q-1", digestQuestionNow, long, "short")
 
-	got, _ := renderDigest(sentences(), nil, nil, &q)
+	got, _ := renderDigest(sentences(), nil, nil, nil, &q)
 
 	quoted := strings.Repeat("á", questionSnippetRunes) + "…"
 	if !strings.Contains(got, quoted) {
@@ -894,22 +894,22 @@ func TestRenderDigest_SpeaksTheSetItIsGiven(t *testing.T) {
 	}
 	carry := []prospection.DigestItem{{ID: "a"}, {ID: "b"}}
 
-	got, _ := renderDigest(es, carry, pending, &q)
+	got, _ := renderDigest(es, carry, pending, nil, &q)
 
 	want := "Hoy hay 2 cosas:\n• renovar el pasaporte\n• Me pediste que te recordara algo.\n\n" +
 		"Una más — Relacioné \"planear la salida\" con \"el presupuesto\". ¿Tienen relación?"
 	if got != want {
 		t.Errorf("renderDigest() =\n%q\nwant\n%q", got, want)
 	}
-	if got, _ := renderDigest(sentences(), carry[1:], pending, nil); got != "Here is 1 thing for today:\n\u2022 You asked me to remind you about something." {
+	if got, _ := renderDigest(sentences(), carry[1:], pending, nil, nil); got != "Here is 1 thing for today:\n\u2022 You asked me to remind you about something." {
 		want := "Here is 1 thing for today:\n\u2022 You asked me to remind you about something."
 		t.Errorf("English renderDigest() = %q, want %q", got, want)
 	}
 }
 
 // TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant: a check-in asked again
-// is its unit's words now, as a digest line, and never its instant, which by
-// the next morning is usually past (ADR-0032).
+// is asked about its unit's words now, never its instant, which by the next
+// morning is usually past (ADR-0032).
 func TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant(t *testing.T) {
 	ctx := context.Background()
 	units := memrepo.NewUnits()
@@ -925,11 +925,40 @@ func TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant(t *testing.T) {
 	r := digestRunner(t, &emptyTriggers{}, units, memrepo.NewState(), &recordingLog{}, nil)
 
 	text, sent := r.digestText(ctx, digestNow, nil, nil, []ports.DueTrigger{reask}, nil)
-	set := phrase.For(classify.Fallback())
-	if want := set.DigestHeader(1) + "\n" + set.DigestItem("buy coffee"); text != want {
+	if want := "Asking again:\n\u2022 Is \"buy coffee\" done?"; text != want {
 		t.Errorf("digest %q, want %q", text, want)
 	}
 	if len(sent) != 1 || sent[0].ID != "t-coffee" {
 		t.Errorf("sent %+v, want the re-ask", sent)
+	}
+}
+
+// TestRenderDigest_ReasksFollowTheDaysItems is the exact digest, in both
+// languages: the day's items and their header, then the block asking again,
+// then the relation question. The header counts the day's items only.
+func TestRenderDigest_ReasksFollowTheDaysItems(t *testing.T) {
+	pending := []ports.DueTrigger{{ID: "trg-1", Payload: ports.TriggerPayload{ActionText: "Cumpleaños de Ana \u2014 vie 25 dic"}}}
+	carry := []prospection.DigestItem{{ID: "trg-1"}}
+	reasks := []ports.DueTrigger{
+		{ID: "t-coffee", Payload: ports.TriggerPayload{ActionText: "Comprar café"}},
+		{ID: "t-bank", Payload: ports.TriggerPayload{ActionText: "Llamar al banco"}},
+	}
+	q := ports.RelationQuestion{FromContent: "plan", ToContent: "budget"}
+
+	es := phrase.For(classify.LanguageES)
+	got, sent := renderDigest(es, carry, pending, reasks, nil)
+	want := "Hoy hay 1 cosa:\n\u2022 Cumpleaños de Ana \u2014 vie 25 dic\n\n" +
+		"Te pregunto de nuevo:\n\u2022 ¿Ya está «Comprar café»?\n\u2022 ¿Ya está «Llamar al banco»?"
+	if got != want {
+		t.Errorf("Spanish digest =\n%q\nwant\n%q", got, want)
+	}
+	if len(sent) != 3 {
+		t.Errorf("sent %+v, want the item and both re-asks", sent)
+	}
+
+	got, _ = renderDigest(sentences(), nil, nil, reasks[:1], &q)
+	want = "Asking again:\n\u2022 Is \"Comprar café\" done?\n\nOne more \u2014 I linked \"plan\" with \"budget\". Are they related?"
+	if got != want {
+		t.Errorf("English digest =\n%q\nwant\n%q", got, want)
 	}
 }

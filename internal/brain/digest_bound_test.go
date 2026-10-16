@@ -51,11 +51,11 @@ func boundCase(t *testing.T, q *ports.RelationQuestion, extra int) (string, []pr
 	pad := 1
 	for range 3 { // converge: the length is linear in the padding
 		pending[1].Payload.ActionText = strings.Repeat("b", pad)
-		text, _ := renderDigest(sentences(), carry, pending, q)
+		text, _ := renderDigest(sentences(), carry, pending, nil, q)
 		pad += 4096 - utf16Len(text)
 	}
 	pending[1].Payload.ActionText = strings.Repeat("b", pad+extra)
-	return renderDigest(sentences(), carry, pending, q)
+	return renderDigest(sentences(), carry, pending, nil, q)
 }
 
 // TestDigestBoundEdge: a digest of exactly 4096 units is kept whole and one of
