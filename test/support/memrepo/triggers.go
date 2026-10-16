@@ -233,6 +233,7 @@ func (r *Triggers) Reask(_ context.Context, id string, at time.Time) error {
 	}
 	when := at
 	stored.surfacedAt = &when
+	stored.trigger.Payload.Reasks++
 	r.triggers[id] = stored
 	return nil
 }

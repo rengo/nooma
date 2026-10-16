@@ -120,6 +120,9 @@ type TriggerPayload struct {
 	// CatchUp marks the at-once reminder an event is owed when every lead of
 	// it has passed (ADR-0032): its id is catch-up:<unit>:<about>:<attempt>.
 	CatchUp bool
+	// Reasks is how many morning digests asked this check-in again; Reask
+	// counts it in the same write as its restamp (doc 02 §7).
+	Reasks int
 }
 
 // FiredTrigger is a one-shot trigger that fired: when it was to fire, when
@@ -295,9 +298,9 @@ type TriggerRepo interface {
 	// first so a caller resolving one answer takes the head.
 	Delivered(ctx context.Context) ([]OpenCheckIn, error)
 
-	// Reask records that the digest asked an open check-in again at at:
-	// surfaced_at = at, so it is the newest open one and an answer reaches
-	// it. It returns ErrTriggerStatusConflict unless id is fired, surfaced
+	// Reask records that the digest asked an open check-in again at at, in
+	// one write: surfaced_at = at, so it is the newest open one and an answer
+	// reaches it, and payload.Reasks counted up. It returns ErrTriggerStatusConflict unless id is fired, surfaced
 	// and unanswered, and ErrTriggerNotFound if it does not exist.
 	Reask(ctx context.Context, id string, at time.Time) error
 

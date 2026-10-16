@@ -912,6 +912,20 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		if !got[0].SurfacedAt.Equal(asked) {
 			t.Errorf("SurfacedAt = %s, want the re-ask's %s", got[0].SurfacedAt, asked)
 		}
+		if !got[1].SurfacedAt.Equal(contractNow.Add(time.Hour)) {
+			t.Errorf("the other's SurfacedAt = %s, want its own delivery", got[1].SurfacedAt)
+		}
+		// The count is written with the restamp, so no failure between them
+		// can grant a re-ask an extra life.
+		if got[0].Payload.Reasks != 1 || got[1].Payload.Reasks != 0 {
+			t.Errorf("Reasks = %d and %d, want 1 and 0", got[0].Payload.Reasks, got[1].Payload.Reasks)
+		}
+		if err := repo.Reask(ctx, "trg-a", asked.Add(time.Hour)); err != nil {
+			t.Fatalf("second Reask: %v", err)
+		}
+		if got, _ := repo.Delivered(ctx); got[0].Payload.Reasks != 2 || got[0].Payload.ActionText != "renew the passport" {
+			t.Errorf("after two re-asks: %+v, want Reasks 2 and the payload otherwise kept", got[0].Payload)
+		}
 	})
 
 	t.Run("Reask refuses an unsurfaced and an answered trigger, and an unknown id", func(t *testing.T) {

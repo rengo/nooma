@@ -76,10 +76,11 @@ type payloadJSON struct {
 	About            string `json:"event_at,omitempty"`
 	UserLeadsMinutes []int  `json:"user_leads_minutes,omitempty"`
 	CatchUp          bool   `json:"catch_up,omitempty"`
+	Reasks           int    `json:"reasks,omitempty"`
 }
 
 func encodePayload(p ports.TriggerPayload) ([]byte, error) {
-	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes, CatchUp: p.CatchUp}
+	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes, CatchUp: p.CatchUp, Reasks: p.Reasks}
 	if !p.About.IsZero() {
 		s.About = formatUnitTime(p.About)
 	}
@@ -91,7 +92,7 @@ func decodePayload(raw string) (ports.TriggerPayload, error) {
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		return ports.TriggerPayload{}, err
 	}
-	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes, CatchUp: s.CatchUp}
+	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes, CatchUp: s.CatchUp, Reasks: s.Reasks}
 	if s.About != "" {
 		about, err := time.Parse(unitTimeLayout, s.About)
 		if err != nil {
@@ -372,37 +373,34 @@ func (r *TriggerRepo) Undelivered(ctx context.Context) ([]ports.DueTrigger, erro
 	return r.firedWhere(ctx, `surfaced_at IS NULL`, `fired_at, id`)
 }
 
-// Delivered implements ports.TriggerRepo. Most recent first.
+// Delivered implements ports.TriggerRepo. Most recent first, surfaced_at read
+// in the same row as the rest.
 func (r *TriggerRepo) Delivered(ctx context.Context) ([]ports.OpenCheckIn, error) {
-	open, err := r.firedWhere(ctx, `surfaced_at IS NOT NULL AND responded_at IS NULL`, `surfaced_at DESC, id DESC`)
-	if err != nil {
-		return nil, err
-	}
-	// One more read for surfaced_at rather than a second projection of the
-	// shared scan, which every other read keeps narrow.
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, surfaced_at FROM triggers WHERE status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
+		`SELECT id, unit_id, fire_at, interrupt_level, recurrence_rule, recurrence_anchor, payload, surfaced_at
+		 FROM triggers WHERE status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL
+		 ORDER BY surfaced_at DESC, id DESC`,
 		string(ports.TriggerStatusFired))
 	if err != nil {
-		return nil, fmt.Errorf("select surfaced_at of open check-ins: %w", err)
+		return nil, fmt.Errorf("select open check-ins: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
-	surfaced := map[string]time.Time{}
+
+	out := make([]ports.OpenCheckIn, 0)
 	for rows.Next() {
-		var id, at string
-		if err := rows.Scan(&id, &at); err != nil {
-			return nil, fmt.Errorf("scan surfaced_at: %w", err)
+		var surfaced string
+		d, err := scanDueTrigger(rows, &surfaced)
+		if err != nil {
+			return nil, err
 		}
-		if surfaced[id], err = time.Parse(unitTimeLayout, at); err != nil {
-			return nil, fmt.Errorf("trigger %q surfaced_at: %w", id, err)
+		at, err := time.Parse(unitTimeLayout, surfaced)
+		if err != nil {
+			return nil, fmt.Errorf("trigger %q: surfaced_at: %w", d.ID, err)
 		}
+		out = append(out, ports.OpenCheckIn{DueTrigger: d, SurfacedAt: at})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("select surfaced_at of open check-ins: %w", err)
-	}
-	out := make([]ports.OpenCheckIn, 0, len(open))
-	for _, t := range open {
-		out = append(out, ports.OpenCheckIn{DueTrigger: t, SurfacedAt: surfaced[t.ID]})
+		return nil, fmt.Errorf("select open check-ins: %w", err)
 	}
 	return out, nil
 }
@@ -420,7 +418,8 @@ func (r *TriggerRepo) ExpireUnanswered(ctx context.Context, id string) error {
 // precondition.
 func (r *TriggerRepo) Reask(ctx context.Context, id string, at time.Time) error {
 	return r.guardedUpdate(ctx, id,
-		`UPDATE triggers SET surfaced_at = ?
+		`UPDATE triggers
+		 SET surfaced_at = ?, payload = json_set(payload, '$.reasks', COALESCE(json_extract(payload, '$.reasks'), 0) + 1)
 		 WHERE id = ? AND status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
 		func(current string) bool { return current == string(ports.TriggerStatusFired) },
 		formatUnitTime(at), id, string(ports.TriggerStatusFired))
@@ -492,7 +491,7 @@ func (r *TriggerRepo) transition(ctx context.Context, id string, to ports.Trigge
 }
 
 // scanDueTrigger reads one row of Due's projection.
-func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
+func scanDueTrigger(rows *sql.Rows, extra ...any) (ports.DueTrigger, error) {
 	var (
 		d                              ports.DueTrigger
 		unitID                         sql.NullString
@@ -502,7 +501,8 @@ func scanDueTrigger(rows *sql.Rows) (ports.DueTrigger, error) {
 		payload                        sql.NullString
 	)
 
-	if err := rows.Scan(&d.ID, &unitID, &fireAt, &interruptLevel, &recurrenceRule, &recurrenceAnch, &payload); err != nil {
+	dest := append([]any{&d.ID, &unitID, &fireAt, &interruptLevel, &recurrenceRule, &recurrenceAnch, &payload}, extra...)
+	if err := rows.Scan(dest...); err != nil {
 		return ports.DueTrigger{}, fmt.Errorf("scan due trigger: %w", err)
 	}
 
