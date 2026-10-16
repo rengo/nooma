@@ -361,6 +361,12 @@ func writeCheckins(b *strings.Builder) {
 	b.WriteString("  Nooma asks the user about a task it reminded them of, and nudges them toward\n")
 	b.WriteString("  something they meant to do. The open one is not shown here: say what the\n")
 	b.WriteString("  message answers, and Nooma matches it to what it asked, or drops it.\n")
+	// **The bare word's rule** (format.md): a short reply with nothing asked
+	// in front of the model is the check-in's answer. A bare yes and a nudge
+	// taken up read no outcome without it, and the nudge stayed open.
+	b.WriteString("  With no reminder question open, a message that is only a short reply\n")
+	b.WriteString("  (agreeing, declining, or saying it is done) answers the check-in: give the\n")
+	b.WriteString("  outcome it means.\n")
 	b.WriteString("  task_checkin_outcome, about a task:\n")
 	for _, o := range AllTaskCheckinOutcomes() {
 		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o) + "\n")

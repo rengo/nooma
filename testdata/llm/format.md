@@ -82,6 +82,12 @@ A phrasing is written with `record: true` and its `expect`, then recorded once p
 change with `nooma doctor --record testdata/llm/reminders [vault]` (docs/06-harness.md §5).
 `internal/reading` compares the replayed response to `expect`.
 
+**One rule for a bare word.** With no reminder question open, a bare word answers an open
+check-in (spec: a bare "listo" keeps M3's behaviour), and the model is never shown whether one
+is open: the store decides which one it answers. So it expects `type: chitchat` (it stores no
+unit) and the outcome the word means: "sí" is `nudge_outcome: engaged`, "ya" and "listo" are
+`task_checkin_outcome: done`. With a question open, the word answers that question instead.
+
 ## Cross-field constraint
 
 Exactly one of `response` or `error` must be set — never both, never

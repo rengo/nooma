@@ -179,3 +179,19 @@ func TestBuildPromptAReplyIsNotANewUnit(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptAShortReplyAnswersACheckin: the set's one rule for a bare
+// word (format.md): with no reminder question open, a reply that is only a yes,
+// a no or a done answers the check-in Nooma asked, so it carries the outcome
+// it gives. A bare yes and "dale, contame" read no outcome, and an open nudge
+// stayed open (review of #365). Said by meaning, never by the words.
+func TestBuildPromptAShortReplyAnswersACheckin(t *testing.T) {
+	const rule = "With no reminder question open, a message that is only a short reply (agreeing, declining, or saying it is done) answers the check-in: give the outcome it means"
+	s := section(promptWith(ReminderContext{}), checkinHeading)
+	if flat := strings.Join(strings.Fields(s), " "); !strings.Contains(flat, rule) {
+		t.Errorf("the check-in section never says %q:\n%s", rule, s)
+	}
+	if strings.Contains(s, "\"") {
+		t.Errorf("the check-in section quotes words:\n%s", s)
+	}
+}

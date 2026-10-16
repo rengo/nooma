@@ -518,7 +518,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      check-in answer: it carries no `task_checkin_outcome` and no `nudge_outcome`. A message
      that only answers Nooma is `chitchat`: it stores no unit (the capture converses), and its
      answer travels in the outcome fields; a bare "listo" read as a `task` stored "La tarea
-     está hecha" as a memory.
+     está hecha" as a memory. With no reminder question open, a message that is only a short
+     reply answers the check-in, and the prompt asks for the outcome it means.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
      check-in outcome closes the most recently delivered open check-in, by one mapping,
      `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline

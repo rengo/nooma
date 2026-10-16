@@ -12,6 +12,7 @@
     }
   ],
   "expect": {
-    "type": "chitchat"
+    "type": "chitchat",
+    "nudge_outcome": "engaged"
   }
 }

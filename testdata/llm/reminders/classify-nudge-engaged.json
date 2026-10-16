@@ -5,6 +5,5 @@
   "record": true,
   "expect": {
     "nudge_outcome": "engaged"
-  },
-  "known_misread": "still reads no outcome for a nudge taken up, so an open nudge stays open; the meanings alone did not reach it, so this is prompt work, see tasks.md"
+  }
 }
