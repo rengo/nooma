@@ -523,7 +523,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      alone means not yet, `snooze` (the client's ruling): only an explicit refusal, to do the
      task or to be asked about it, is `drop` or `declined`. `snooze` leaves the check-in open,
      and **nothing asks a delivered check-in again yet**: the digest reads only triggers that
-     have not reached the user, so a snoozed one-shot reminder is not re-asked.
+     have not reached the user, so a snoozed one-shot reminder is not re-asked. A message that
+     answers an open reminder question, or says whether two things are related, answers that
+     and not a check-in: it carries no `task_checkin_outcome` and no `nudge_outcome`.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
      check-in outcome closes the most recently delivered open check-in, by one mapping,
      `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline

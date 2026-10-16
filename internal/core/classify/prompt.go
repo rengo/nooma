@@ -371,6 +371,13 @@ func writeCheckins(b *strings.Builder) {
 	b.WriteString("  outcome it means. A short decline alone means not yet: task_checkin_outcome\n")
 	b.WriteString("  snooze, and no nudge_outcome. Only an explicit refusal, to do the task or to be\n")
 	b.WriteString("  asked about it, is drop or declined.\n")
+	// **The other half of the bare-word rule.** An answer to an undo or a
+	// remind_when, or to a relation question (never a reminder question), was
+	// invited to carry a check-in outcome too, and closed a check-in nobody
+	// answered.
+	b.WriteString("  A message that answers an open reminder question, or says whether two things\n")
+	b.WriteString("  are related, answers that and not a check-in: it carries no\n")
+	b.WriteString("  task_checkin_outcome and no nudge_outcome.\n")
 	b.WriteString("  task_checkin_outcome, about a task:\n")
 	for _, o := range AllTaskCheckinOutcomes() {
 		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o) + "\n")

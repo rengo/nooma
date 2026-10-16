@@ -212,3 +212,18 @@ func TestBuildPromptAShortDeclineIsNotYet(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptAnotherAnswerIsNotACheckinAnswer: the short-reply rule invited
+// a check-in outcome beside an answer to the open undo or remind_when question,
+// and beside a relation answer, where no reminder question is open at all, and
+// an engaged there closes a check-in the user never answered (review of #365).
+// The prompt says such a message answers that, not a check-in.
+func TestBuildPromptAnotherAnswerIsNotACheckinAnswer(t *testing.T) {
+	const rule = "A message that answers an open reminder question, or says whether two things are related, answers that and not a check-in: it carries no task_checkin_outcome and no nudge_outcome."
+	for _, rc := range []ReminderContext{{}, {Open: &OpenQuestion{Kind: QuestionUndo, Text: "Listo."}}} {
+		s := section(promptWith(rc), checkinHeading)
+		if flat := strings.Join(strings.Fields(s), " "); !strings.Contains(flat, rule) {
+			t.Errorf("the check-in section never says %q:\n%s", rule, s)
+		}
+	}
+}
