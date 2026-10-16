@@ -152,7 +152,8 @@ func TestCheckReminderFieldsAreStrict(t *testing.T) {
 // confirms or deletes a relation, and a state outcome records a signal, so
 // one the phrasing should not get is a misread (link 1b, review of #365).
 // The two check-in fields are one answer: a case that names either may get
-// the other beside it, as the recorded drop did.
+// the other beside it, as the recorded drop did, while the check-in is closed
+// as the expected outcome would close it.
 func TestCheckOutcomesWithASideEffectAreStrictWhenUnexpected(t *testing.T) {
 	const head = `{"type":"chitchat","normalized_content":"x","weight":0.2,"decay_rate":0.3`
 	for name, tc := range map[string]struct{ extra, miss string }{
@@ -172,6 +173,39 @@ func TestCheckOutcomesWithASideEffectAreStrictWhenUnexpected(t *testing.T) {
 	drop := decode(t, head+`,"nudge_outcome":"declined","task_checkin_outcome":"drop"}`)
 	if got := Check(llm.Case{Expect: &llm.Expect{TaskCheckinOutcome: "drop"}}, drop); len(got) != 0 {
 		t.Errorf("a drop with the nudge field beside it = %v, want no miss", got)
+	}
+	// The field left free is free only while the effect is the expected one:
+	// production reads the nudge first, so a declined beside a done closes the
+	// check-in as declined, and a nudge beside a snooze closes what a snooze
+	// leaves open (classify.ResolveCheckin).
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		extra  string
+	}{
+		"a declined beside a done":   {llm.Expect{TaskCheckinOutcome: "done"}, `,"task_checkin_outcome":"done","nudge_outcome":"declined"`},
+		"an engaged beside a snooze": {llm.Expect{TaskCheckinOutcome: "snooze"}, `,"task_checkin_outcome":"snooze","nudge_outcome":"engaged"`},
+		"a drop beside an engaged":   {llm.Expect{NudgeOutcome: "engaged"}, `,"nudge_outcome":"engaged","task_checkin_outcome":"drop"`},
+	} {
+		got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.extra+`}`))
+		free := FieldNudgeOutcome
+		if tc.expect.NudgeOutcome != "" {
+			free = FieldTaskCheckinOutcome
+		}
+		if name == "a drop beside an engaged" {
+			// The nudge wins, so the drop changes nothing: the same effect.
+			if len(got) != 0 {
+				t.Errorf("%s = %v, want no miss: the nudge decides", name, got)
+			}
+			continue
+		}
+		if len(got) != 1 || got[0] != free {
+			t.Errorf("%s = %v, want [%s]: it changes what the check-in is closed as", name, got, free)
+		}
+	}
+	// A check-in answer does not free the relation field.
+	related := decode(t, head+`,"task_checkin_outcome":"done","relation_outcome":"rejected"}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{TaskCheckinOutcome: "done"}}, related); len(got) != 1 || got[0] != FieldRelationOutcome {
+		t.Errorf("a rejection beside an expected done = %v, want [%s]", got, FieldRelationOutcome)
 	}
 	want := FieldTaskCheckinOutcome + "," + FieldNudgeOutcome + "," + FieldRelationOutcome
 	if got := Check(llm.Case{Expect: &llm.Expect{RelationOutcome: "confirmed"}}, drop); strings.Join(got, ",") != want {

@@ -517,7 +517,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      check-in outcome closes the most recently delivered open check-in, by one mapping,
      `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline
      it, `snooze` resolves nothing, and a reading with both fields is read by its
-     `nudge_outcome`. A `relation_outcome`
+     `nudge_outcome`. The recorded-reading judge (`internal/reading`) compares a recording
+     through the same function, so it measures the effect a reading has. A `relation_outcome`
      closes the most recently asked open relation question (§4). The classify prompt is never
      widened to inject open relation questions so the model can name an id: a model asked to
      pick one can pick a plausible wrong one, and for `relation_outcome: rejected` the wrong
