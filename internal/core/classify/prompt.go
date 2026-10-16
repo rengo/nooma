@@ -378,6 +378,10 @@ func writeCheckins(b *strings.Builder) {
 	b.WriteString("  A message that answers an open reminder question, or says whether two things\n")
 	b.WriteString("  are related, answers that and not a check-in: it carries no\n")
 	b.WriteString("  task_checkin_outcome and no nudge_outcome.\n")
+	// **A farewell is not a done.** It is a short reply, and one that began
+	// with the bare done word was read as done, ADR-0033's named misread.
+	b.WriteString("  A message that only closes the conversation, a goodbye or a thanks, answers\n")
+	b.WriteString("  no check-in, even when it begins with a word that alone would.\n")
 	b.WriteString("  task_checkin_outcome, about a task:\n")
 	for _, o := range AllTaskCheckinOutcomes() {
 		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o) + "\n")

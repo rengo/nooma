@@ -227,3 +227,15 @@ func TestBuildPromptAnotherAnswerIsNotACheckinAnswer(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptClosingTheConversationAnswersNoCheckin: a farewell that begins
+// with the bare done word is a short reply, and at 882efdf it was read as done,
+// the misread ADR-0033 names (review of #365). The prompt says a message that
+// closes the conversation answers no check-in, by meaning and with no example.
+func TestBuildPromptClosingTheConversationAnswersNoCheckin(t *testing.T) {
+	const rule = "A message that only closes the conversation, a goodbye or a thanks, answers no check-in, even when it begins with a word that alone would."
+	s := section(promptWith(ReminderContext{}), checkinHeading)
+	if flat := strings.Join(strings.Fields(s), " "); !strings.Contains(flat, rule) {
+		t.Errorf("the check-in section never says %q:\n%s", rule, s)
+	}
+}
