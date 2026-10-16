@@ -522,8 +522,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      reply answers the check-in, and the prompt asks for the outcome it means. A short decline
      alone means not yet, `snooze` (the client's ruling): only an explicit refusal, to do the
      task or to be asked about it, is `drop` or `declined`. `snooze` leaves the check-in open,
-     and **nothing asks a delivered check-in again yet**: the digest reads only triggers that
-     have not reached the user, so a snoozed one-shot reminder is not re-asked. A message that
+     and a reading that closes nothing and snoozes (`classify.Snoozes`) is recorded against the
+     newest open check-in as `capture.checkin.snoozed`; **nothing asks it again yet**. A message that
      answers an open reminder question, or says whether two things are related, answers that
      and not a check-in: it carries no `task_checkin_outcome` and no `nudge_outcome`. A message
      that only closes the conversation, a goodbye or a thanks, answers no check-in either, even when

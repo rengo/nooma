@@ -33,3 +33,24 @@ func TestResolveCheckin(t *testing.T) {
 		})
 	}
 }
+
+// TestSnoozes: a reading puts the open check-in off only when it closes
+// nothing, ResolveCheckin's nudge-over-task rule included.
+func TestSnoozes(t *testing.T) {
+	n := func(o NudgeOutcome) *NudgeOutcome { return &o }
+	k := func(o TaskCheckinOutcome) *TaskCheckinOutcome { return &o }
+	for name, tc := range map[string]struct {
+		c    Classification
+		want bool
+	}{
+		"nothing":                      {Classification{}, false},
+		"snooze":                       {Classification{TaskCheckinOutcome: k(TaskCheckinOutcomeSnooze)}, true},
+		"done":                         {Classification{TaskCheckinOutcome: k(TaskCheckinOutcomeDone)}, false},
+		"the nudge wins over a snooze": {Classification{NudgeOutcome: n(NudgeOutcomeDeclined), TaskCheckinOutcome: k(TaskCheckinOutcomeSnooze)}, false},
+		"an unknown nudge beside it":   {Classification{NudgeOutcome: n("maybe"), TaskCheckinOutcome: k(TaskCheckinOutcomeSnooze)}, true},
+	} {
+		if got := Snoozes(tc.c); got != tc.want {
+			t.Errorf("%s: Snoozes = %v, want %v", name, got, tc.want)
+		}
+	}
+}

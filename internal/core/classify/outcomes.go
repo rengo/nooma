@@ -132,9 +132,7 @@ const (
 // **Snooze resolves nothing, and that is the honest reading rather than a
 // gap.** Snooze means "ask me later": the check-in is neither engaged nor
 // declined, and forcing it into either would record an answer the user did
-// not give. It stays open. Nothing asks a delivered check-in again yet: the
-// digest reads only undelivered triggers, so a snoozed one-shot is not
-// re-asked (tasks.md, link 1b, owes that).
+// not give. It stays open, and Snoozes says it was put off.
 func ResolveCheckin(c Classification) (CheckinResolution, bool) {
 	if c.NudgeOutcome != nil {
 		switch *c.NudgeOutcome {
@@ -153,4 +151,14 @@ func ResolveCheckin(c Classification) (CheckinResolution, bool) {
 		}
 	}
 	return "", false
+}
+
+// Snoozes reports whether a reading puts the open check-in off: a snooze that
+// ResolveCheckin closes nothing with. Brain records which check-in it put off,
+// so the morning digest can ask it again (doc 02 §7).
+func Snoozes(c Classification) bool {
+	if _, closes := ResolveCheckin(c); closes {
+		return false
+	}
+	return c.TaskCheckinOutcome != nil && *c.TaskCheckinOutcome == TaskCheckinOutcomeSnooze
 }

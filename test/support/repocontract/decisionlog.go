@@ -321,6 +321,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCheckTimerRephraseFailed:        true,
 			ports.ActionCaptureCheckInResolved:          true,
 			ports.ActionCaptureCheckInUnmatched:         true,
+			ports.ActionCaptureCheckInSnoozed:           true,
 			ports.ActionCaptureDedupJudged:              true,
 			ports.ActionRelationPersisted:               true,
 			ports.ActionRelationDiscarded:               true,

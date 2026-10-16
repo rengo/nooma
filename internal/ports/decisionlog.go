@@ -84,10 +84,13 @@ const (
 	// ActionCheckFocusUnavailable records a digest sent without focus
 	// adjacency because the keeper could not compute one. The digest is owed
 	// to the user, so the failure is logged and not fatal (m4c design §3.5).
-	ActionCheckFocusUnavailable     DecisionAction = "check.focus.unavailable"
-	ActionCheckTimerRephraseFailed  DecisionAction = "check.timer.rephrase_failed"
-	ActionCaptureCheckInResolved    DecisionAction = "capture.checkin.resolved"
-	ActionCaptureCheckInUnmatched   DecisionAction = "capture.checkin.unmatched"
+	ActionCheckFocusUnavailable    DecisionAction = "check.focus.unavailable"
+	ActionCheckTimerRephraseFailed DecisionAction = "check.timer.rephrase_failed"
+	ActionCaptureCheckInResolved   DecisionAction = "capture.checkin.resolved"
+	ActionCaptureCheckInUnmatched  DecisionAction = "capture.checkin.unmatched"
+	// ActionCaptureCheckInSnoozed records which open check-in a "not yet"
+	// put off: the row the morning digest reads to ask it again (doc 02 §7).
+	ActionCaptureCheckInSnoozed     DecisionAction = "capture.checkin.snoozed"
 	ActionCaptureDedupJudged        DecisionAction = "capture.dedup.judged"
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
@@ -248,7 +251,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,
 		ActionCheckTriggerDelivered, ActionCheckDeliveryFailed,
 		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,
-		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched,
+		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched, ActionCaptureCheckInSnoozed,
 		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,

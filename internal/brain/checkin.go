@@ -22,13 +22,23 @@ import (
 // It returns whether anything was resolved, for the caller's own report.
 func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classification, now time.Time) (bool, error) {
 	resolution, ok := checkInResolution(c)
-	if !ok {
+	snoozed := classify.Snoozes(c)
+	if !ok && !snoozed {
 		return false, nil
 	}
 
 	open, err := r.triggers.Delivered(ctx)
 	if err != nil {
 		return false, fmt.Errorf("capture: reading open check-ins: %w", err)
+	}
+	if snoozed {
+		if len(open) == 0 {
+			return false, nil
+		}
+		// Nothing closes: the row is what lets the morning digest ask the
+		// newest open check-in again (doc 02 §7).
+		return false, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInSnoozed,
+			fmt.Sprintf("check-in %q was put off; the morning digest asks it again", open[0].ID), open[0].ID, "", len(open))
 	}
 	if len(open) == 0 {
 		// An answer with nothing open. Recorded and otherwise ignored: a
@@ -263,8 +273,9 @@ func (r captureRunner) ConfirmRelation(ctx context.Context, q ports.RelationQues
 // recordCheckIn writes one check-in row.
 func (r captureRunner) recordCheckIn(ctx context.Context, now time.Time, action ports.DecisionAction, rationale, triggerID string, resolution ports.TriggerResolution, openCount int) error {
 	ctxValue := struct {
-		TriggerID  string `json:"trigger_id,omitempty"`
-		Resolution string `json:"resolution"`
+		TriggerID string `json:"trigger_id,omitempty"`
+		// Resolution is empty on a snooze, which resolves nothing.
+		Resolution string `json:"resolution,omitempty"`
 		// OpenCheckIns is how many were open when the answer arrived. It
 		// is the field that makes "we chose the most recent" auditable
 		// rather than invisible: a 1 means there was nothing to choose,

@@ -188,6 +188,36 @@ func TestCheckIn_AClassificationWithNoOutcomeTouchesNothing(t *testing.T) {
 	}
 }
 
+// TestSnoozeRecordsWhichCheckinItPutOff: "not yet" closes nothing, and the
+// morning digest asks again only what it can tell was put off, so the snooze
+// is recorded against the check-in it answered, the newest open one.
+func TestSnoozeRecordsWhichCheckinItPutOff(t *testing.T) {
+	triggers := &openCheckIns{open: []ports.DueTrigger{{ID: "trg-newest"}, {ID: "trg-older"}}}
+	log := &recordingLog{}
+
+	resolved, err := checkInRunner(triggers, log).
+		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeSnooze), checkInNow)
+	if err != nil {
+		t.Fatalf("resolveCheckIn: %v", err)
+	}
+	if resolved || len(triggers.resolved) != 0 {
+		t.Fatalf("a snooze resolved %v; it must leave the check-in open", triggers.resolved)
+	}
+	if len(log.actions) != 1 || log.actions[0] != ports.ActionCaptureCheckInSnoozed {
+		t.Fatalf("rows %v, want one %q", log.actions, ports.ActionCaptureCheckInSnoozed)
+	}
+	var row struct {
+		TriggerID    string `json:"trigger_id"`
+		OpenCheckIns int    `json:"open_check_ins"`
+	}
+	if err := json.Unmarshal(log.contexts[0], &row); err != nil {
+		t.Fatal(err)
+	}
+	if row.TriggerID != "trg-newest" || row.OpenCheckIns != 2 {
+		t.Errorf("row %+v, want trigger_id trg-newest of 2 open", row)
+	}
+}
+
 // recordingSignals records what was written and when, so an ordering can
 // be asserted rather than just two facts.
 type recordingSignals struct {
