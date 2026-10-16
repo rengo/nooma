@@ -26,9 +26,9 @@ type Entry struct {
 }
 
 // Expect is the reading a phrasing should get, written by hand and never by
-// the recording command. The reminder fields are strict: an unset one means
-// the model must read none, false or absent. The rest are checked only when
-// set. internal/reading owns the comparison.
+// the recording command. The reminder fields and the outcomes are strict: an
+// unset one means the model must read none, false or absent. DayOnly and Title
+// are checked only when set. internal/reading owns the comparison.
 type Expect struct {
 	RemindRequest  *bool  `json:"remind_request,omitempty"`
 	ReminderIntent string `json:"reminder_intent,omitempty"`

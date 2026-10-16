@@ -35,6 +35,7 @@ const (
 	FieldTaskCheckinOutcome = "task_checkin_outcome"
 	FieldNudgeOutcome       = "nudge_outcome"
 	FieldRelationOutcome    = "relation_outcome"
+	FieldStateOutcome       = "state_outcome"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
@@ -111,8 +112,9 @@ func Replay(c llm.Case, response string) error {
 }
 
 // Check names the fields of cls that are not what c.Expect says, in a fixed
-// order. The reminder fields are strict: with nothing expected, anything but
-// none, false or absent is a miss. The others are checked only when expected.
+// order. The reminder fields and the outcomes are strict: with nothing
+// expected, anything but none, false or absent is a miss. Day only and title
+// are checked only when expected.
 func Check(c llm.Case, cls classify.Classification) []string {
 	e := llm.Expect{}
 	if c.Expect != nil {
@@ -135,10 +137,30 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	if e.Title != nil {
 		miss(FieldTitle, (cls.Title != nil) != *e.Title)
 	}
-	miss(FieldTaskCheckinOutcome, e.TaskCheckinOutcome != "" && ptrString(cls.TaskCheckinOutcome) != e.TaskCheckinOutcome)
-	miss(FieldNudgeOutcome, e.NudgeOutcome != "" && ptrString(cls.NudgeOutcome) != e.NudgeOutcome)
-	miss(FieldRelationOutcome, e.RelationOutcome != "" && ptrString(cls.RelationOutcome) != e.RelationOutcome)
+	// An outcome has an effect in production even when nobody expected it: a
+	// check-in outcome closes the most recent open check-in, a relation outcome
+	// confirms or deletes, a state outcome records a signal. So one the case
+	// does not name is a miss. The two check-in fields are one answer, and a
+	// case naming either leaves the other free (the recorded drop read both).
+	checkin := e.TaskCheckinOutcome != "" || e.NudgeOutcome != ""
+	miss(FieldTaskCheckinOutcome, outcomeMissed(e.TaskCheckinOutcome, ptrString(cls.TaskCheckinOutcome), checkin))
+	miss(FieldNudgeOutcome, outcomeMissed(e.NudgeOutcome, ptrString(cls.NudgeOutcome), checkin))
+	miss(FieldRelationOutcome, outcomeMissed(e.RelationOutcome, ptrString(cls.RelationOutcome), false))
+	// No phrasing expects a state answer: the set measures reminder reading.
+	miss(FieldStateOutcome, cls.StateOutcome != nil)
 	return misses
+}
+
+// outcomeMissed says whether an outcome field reads wrong: the expected value
+// when one is named, else nothing, unless a sibling field names the answer.
+func outcomeMissed(expected, got string, siblingExpected bool) bool {
+	switch {
+	case expected != "":
+		return got != expected
+	case siblingExpected:
+		return false
+	}
+	return got != ""
 }
 
 func ptrString[T ~string](p *T) string {
