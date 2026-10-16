@@ -90,9 +90,9 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	if err != nil {
 		return 0, 0, err
 	}
-	// What is left of the one-shot reminders belongs to the push path, which
-	// retries it. The digest carries only the recurring ones waiting for it.
-	pending = slices.DeleteFunc(pending, func(t ports.DueTrigger) bool { return t.RecurrenceRule == nil })
+	// A push belongs to the push path, which retries it. The digest carries
+	// only the recurring rows fired before ADR-0034 and waiting for it.
+	pending = slices.DeleteFunc(pending, pushed)
 	lapsed := 0
 	for _, t := range past {
 		done, err := r.retire(ctx, staleRow{t, false, prospection.LapsePassed}, now, commit)

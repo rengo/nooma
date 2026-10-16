@@ -17,8 +17,8 @@ import (
 //
 // **The two counts differ on purpose.** Firing is a decision this pass
 // made; delivering is an outcome it may not have achieved. A push whose
-// send fails fires and is not delivered, and a later pass picks it up from
-// Undelivered.
+// send fails fires and is not delivered, and the next pass's re-plan step
+// pushes it again (pushed).
 //
 // The ordering is the whole of R2.1, kept by deliver: **Send first, Surface second.** A
 // trigger the user never saw must not be recorded as delivered, and m3b
@@ -54,6 +54,13 @@ func (r checkRunner) fireAndDeliver(ctx context.Context, t ports.DueTrigger, now
 
 	q.add(t)
 	return 1, 0, nil
+}
+
+// pushed is whether a fired row is a push, retried until delivered: every row
+// but a recurring one armed before ADR-0034, which waits for its digest. A row
+// armed since carries its time of day in the anchor.
+func pushed(t ports.DueTrigger) bool {
+	return t.RecurrenceRule == nil || (t.RecurrenceAnchor != nil && t.RecurrenceAnchor.At != nil)
 }
 
 // leave moves t out of armed: fired at *firedAt, or expired when nil. A

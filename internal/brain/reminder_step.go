@@ -46,7 +46,7 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 	g := r.gate()
 	var retry []ports.DueTrigger
 	for _, t := range undelivered {
-		if t.RecurrenceRule != nil {
+		if !pushed(t) {
 			continue
 		}
 		verdict, reason, err := g.judge(ctx, t, true, now)
@@ -100,8 +100,8 @@ func (r checkRunner) replan(ctx context.Context, report *CheckReport, stale []st
 			}
 		}
 	}
-	// A one-shot reminder that could not be pushed is pushed again, while its
-	// event is ahead (ADR-0032 point 2). Not one this pass fired or already
+	// A reminder that could not be pushed is pushed again, while its event is
+	// ahead (ADR-0032 point 2; a recurring one while its day lasts, ADR-0034). Not one this pass fired or already
 	// tried, and not one sent that the vault could not record.
 	for _, t := range retry {
 		if commit {

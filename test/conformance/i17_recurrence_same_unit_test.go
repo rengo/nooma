@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,9 +111,11 @@ var i17Start = time.Date(2026, 10, 16, 10, 0, 0, 0, i17Zone)
 // occurrence on the half hour goes out on time.
 const i17Step = 30 * time.Minute
 
-// i17Channel records each message with the local minute it went out at.
+// i17Channel records each message with the local minute it went out at, and
+// refuses the first fail sends as a transport outage would.
 type i17Channel struct {
 	clock *i37Clock
+	fail  int
 	sent  []string
 }
 
@@ -121,16 +124,21 @@ func (c *i17Channel) Receive(context.Context) ([]ports.ChannelMessage, error) { 
 func (c *i17Channel) Confirm(context.Context, string) error                   { return nil }
 func (c *i17Channel) Close() error                                            { return nil }
 func (c *i17Channel) Send(_ context.Context, _ ports.ConversationID, text string) error {
+	if c.fail > 0 {
+		c.fail--
+		return errors.New("telegram is unreachable")
+	}
 	c.sent = append(c.sent, c.clock.now.In(i17Zone).Format("Mon 2006-01-02 15:04")+"  "+text)
 	return nil
 }
 
 // i17Case is one recurring reminder captured at i17Start and lived for days,
-// with the server down over [downFrom, downUntil) when those are set.
+// with the server down over [downFrom, downUntil) when those are set, and the
+// channel refusing its first failSends sends.
 type i17Case struct {
 	name, text, eventAt, rule string
 	interrupt                 float64
-	days                      int
+	days, failSends           int
 	downFrom, downUntil       time.Time
 }
 
@@ -151,7 +159,7 @@ func (c i17Case) live(t *testing.T) []string {
 		`"event_at":%q,"recurrence_rule":%q,"interrupt_level":%v}`, c.text, c.eventAt, c.rule, c.interrupt)
 	llm := fakeprovider.New(t, i28Case(t, "i17", c.text, response), "i17")
 	ids, log := &counterIDs{}, memrepo.NewDecisionLog()
-	ch := &i17Channel{clock: clock}
+	ch := &i17Channel{clock: clock, fail: c.failSends}
 	capture := brain.NewCaptureService(clock, ids, units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(), log,
 		llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), memrepo.NewSignals(),
 		triggers, memrepo.NewTimers(), 0.5, nil)
@@ -226,5 +234,20 @@ func TestI17_DaysPassAndARecurringReminderKeepsRinging(t *testing.T) {
 				t.Errorf("%s differs from what the channel was sent.\ngot:\n%s\nwant:\n%s", path, transcript, want)
 			}
 		})
+	}
+}
+
+// TestI17_AFailedRecurringPushIsPushedAgain: a recurring reminder is a push
+// (ADR-0034), so one whose send failed is pushed again on the next pass, as a
+// one-shot is (ADR-0032 point 2), and is not handed to the digest instead.
+func TestI17_AFailedRecurringPushIsPushedAgain(t *testing.T) {
+	got := i17Case{text: "Take the pills", eventAt: "2026-10-15T20:00:00-03:00", rule: "daily", interrupt: 0.8,
+		days: 2, failSends: 1}.live(t)
+	want := []string{
+		"Fri 2026-10-16 20:30  Reminder: Take the pills — Fri 16 Oct (This is later than intended.)",
+		"Sat 2026-10-17 20:00  Reminder: Take the pills — Sat 17 Oct",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
