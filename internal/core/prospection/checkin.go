@@ -1,6 +1,10 @@
 package prospection
 
-import "time"
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/core/unit"
+)
 
 // MaxCheckinReasks is how many times the morning digest asks a check-in the
 // user put off again before it closes by itself (doc 02 §7, the client's
@@ -28,9 +32,8 @@ type OpenCheckin struct {
 	// SurfacedAt is the last time it reached the user: its delivery, or the
 	// digest that last asked it again.
 	SurfacedAt time.Time
-	// HasUnit is whether it has a unit whose words can ask it again. A nudge
-	// with none is never asked again.
-	HasUnit bool
+	// UnitType is its unit's kind, empty for a nudge with no unit.
+	UnitType unit.Type
 	// Snoozed is whether the user put it off ("not yet").
 	Snoozed bool
 	// Reasks is how many digests have already asked it again.
@@ -54,12 +57,28 @@ func (q QuietHours) CheckinStep(c OpenCheckin, now time.Time) CheckinStep {
 		return CheckinWait
 	case c.Reasks >= MaxCheckinReasks:
 		return CheckinExpire
-	case c.Reasks > 0 || (c.Snoozed && c.HasUnit):
+	case c.Reasks > 0 || (c.Snoozed && pendingWork(c.UnitType)):
 		return CheckinReask
 	case digests > MaxCheckinReasks:
 		return CheckinExpire
 	}
 	return CheckinWait
+}
+
+// pendingWork reports whether a unit of kind t is still something to do, so a
+// check-in about it can be asked again: a task or a mental load, an open loop.
+// An event, and every kind that is memory rather than work, is not: asked the
+// morning after, an event is usually past, and a reminder never speaks of the
+// past (ADR-0032). One case per kind, so a kind added later is decided here.
+func pendingWork(t unit.Type) bool {
+	switch t {
+	case unit.TypeTask, unit.TypeMentalLoad:
+		return true
+	case unit.TypeEvent, unit.TypeKnowledge, unit.TypeProcedural, unit.TypeEmotional,
+		unit.TypeList, unit.TypeStructuredRef, unit.TypeInsight:
+		return false
+	}
+	return false
 }
 
 // digestsAfter counts the digest instants in (since, now], read on now's

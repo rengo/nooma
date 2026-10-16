@@ -8,6 +8,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -29,7 +30,7 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 	var ask []ports.DueTrigger
 	for _, c := range open {
 		step := r.night.CheckinStep(prospection.OpenCheckin{
-			SurfacedAt: c.SurfacedAt, HasUnit: c.UnitID != nil, Snoozed: snoozed[c.ID], Reasks: reasks[c.ID],
+			SurfacedAt: c.SurfacedAt, UnitType: r.checkinUnitType(ctx, c.DueTrigger), Snoozed: snoozed[c.ID], Reasks: reasks[c.ID],
 		}, now)
 		switch step {
 		case prospection.CheckinWait:
@@ -58,6 +59,15 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 		}
 	}
 	return ask, nil
+}
+
+// checkinUnitType is the kind of t's unit, or empty when it has none or it
+// cannot be read: a check-in whose words cannot be read is not asked again.
+func (r checkRunner) checkinUnitType(ctx context.Context, t ports.DueTrigger) unit.Type {
+	if u, ok := readUnit(ctx, r.units, t); ok {
+		return u.Type
+	}
+	return ""
 }
 
 // markReasked records that the digest just sent asked id again: surfaced_at

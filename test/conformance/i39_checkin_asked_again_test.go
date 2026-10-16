@@ -48,16 +48,22 @@ func newI39Vault() *i39Vault {
 		ids: &counterIDs{}, channel: fakechannel.New()}
 }
 
-// deliver stores a one-shot check-in about content (a unit when content is
-// not empty, a nudge with no unit otherwise) that reached the user at at.
+// deliver stores a one-shot check-in about a task with content (a nudge with
+// no unit when content is empty) that reached the user at at.
 func (v *i39Vault) deliver(t *testing.T, id, content string, at time.Time) {
+	t.Helper()
+	v.deliverKind(t, id, unit.TypeTask, content, at)
+}
+
+// deliverKind is deliver for a unit of kind.
+func (v *i39Vault) deliverKind(t *testing.T, id string, kind unit.Type, content string, at time.Time) {
 	t.Helper()
 	ctx := context.Background()
 	trg := ports.Trigger{ID: id, Kind: ports.TriggerKindTimeBased, FireAt: &at, CreatedAt: at.Add(-time.Hour),
 		Payload: ports.TriggerPayload{ActionText: "armed text"}}
 	if content != "" {
 		unitID := "u-" + id
-		if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeTask, Status: unit.StatusPool, Content: content,
+		if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: kind, Status: unit.StatusPool, Content: content,
 			Source: "chat", Weight: 1, LastTouchedAt: at, CreatedAt: at, UpdatedAt: at}); err != nil {
 			t.Fatal(err)
 		}
@@ -254,5 +260,27 @@ func TestI39_AnAnswerToAReaskReachesIt(t *testing.T) {
 	v.answer(t, "done", i39Done, i39Morning(1).Add(time.Hour))
 	if open := v.open(t); len(open) != 1 || open[0] != "t-later" {
 		t.Errorf("open check-ins %v, want only t-later: the answer was to the re-ask", open)
+	}
+}
+
+// TestI39_ASnoozedEventIsNotAsked: only something still to do is asked again.
+// "cena con Juan" put off is not asked the morning after the dinner (ADR-0032:
+// a reminder never speaks of the past); it closes on the same schedule.
+func TestI39_ASnoozedEventIsNotAsked(t *testing.T) {
+	v := newI39Vault()
+	v.deliverKind(t, "t-dinner", unit.TypeEvent, "dinner with Juan", i39Delivered)
+	v.answer(t, "no", i39NotYet, i39Delivered.Add(30*time.Minute))
+
+	for n := 1; n <= prospection.MaxCheckinReasks; n++ {
+		if sent := v.check(t, i39Morning(n)); mentions(sent, "dinner with Juan") {
+			t.Fatalf("digest %d asked a snoozed event again: %q", n, sent)
+		}
+	}
+	v.check(t, i39Morning(prospection.MaxCheckinReasks+1))
+	if open := v.open(t); len(open) != 0 {
+		t.Errorf("open check-ins %v, want the event closed at the third digest", open)
+	}
+	if n := v.rows(t, ports.ActionCheckCheckinReasked); n != 0 {
+		t.Errorf("%d check.checkin.reasked rows, want none", n)
 	}
 }

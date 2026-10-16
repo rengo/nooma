@@ -1635,7 +1635,8 @@ box can audit it):
 delivered trigger nobody answered is an open check-in, and the newest one is what an answer
 reaches (§5 step 1). When a digest is due, each is judged by the mornings due since it last
 reached the user, counted in the user's night and zone whether or not a digest went out that
-morning. One the user put off (a `capture.checkin.snoozed` row) and that has a unit is **asked
+morning. One the user put off (a `capture.checkin.snoozed` row) and whose unit is still something to do,
+a `task` or a `mental_load` (`prospection.pendingWork`, one case per kind), is **asked
 again** by the next digest: a digest line, the unit's words now with no instant (by then
 usually past, ADR-0032), the armed text when the unit cannot be read; after the send `Reask`
 restamps `surfaced_at`, so an answer reaches it, and `check.checkin.reasked` counts it. A re-ask
@@ -1643,7 +1644,9 @@ is asked again at every later digest, put off again or left unanswered alike, up
 `max_checkin_reasks`, and the digest after the last **closes** it: `ExpireUnanswered`,
 `check.checkin.expired`. One nobody answered or put off is never asked again and closes at the
 digest one put off the evening it went out would close at, the third after it; so does a nudge
-with no unit, which has no words to ask with. A dry run asks and closes nothing. Quiet hours need
+with no unit, which has no words to ask with, and a check-in about any other kind, an `event`
+included, put off or not: "cena con Juan" put off is not asked the morning after the dinner,
+because a reminder never speaks of the past (ADR-0032). A dry run asks and closes nothing. Quiet hours need
 no rule of their own: the digest waits for them. Today does not list re-asks.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
