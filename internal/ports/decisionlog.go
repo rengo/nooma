@@ -83,7 +83,8 @@ const (
 	ActionCheckDigestHeld           DecisionAction = "check.digest.held"
 	// ActionCheckCheckinReasked and ActionCheckCheckinExpired record the
 	// morning digest asking an open check-in again and closing one nobody
-	// answered (doc 02 §7); the reasked rows are its re-ask counter.
+	// answered (doc 02 §7). They are audit rows: the re-ask count lives on the
+	// trigger, in payload.reasks, written by Reask with its restamp.
 	ActionCheckCheckinReasked DecisionAction = "check.checkin.reasked"
 	ActionCheckCheckinExpired DecisionAction = "check.checkin.expired"
 	// ActionCheckCheckinReaskSkipped records a re-ask a morning could not

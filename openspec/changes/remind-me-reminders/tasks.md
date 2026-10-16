@@ -100,6 +100,9 @@ tasks-repeating).
     - [x] RED `TestI39_ABareAnswerReachesTheLastThingThePassSent` (QA's repro, both id orders): a late push and a re-ask in one pass shared `surfaced_at`; the pass now stamps everything it sends in one sequence.
     - [x] RED `TestDigest_AnUnreadableUnitSkipsOnlyTheReask` (PM's correction of item 6): a read error skips only that morning's re-ask, recorded once a morning as `check.checkin.reask_skipped`; the lifetime still closes the check-in.
     - [x] The reviewer's surviving mutants, each killed by its test: d7 `TestDigest_TheNewestSnoozeDecidesTheFirstReask`, g6 `TestDigest_TheSentRowCountsTheReasksLeftForLater`, d6 `TestDigest_AMissingUnitIsNoUnitNotAnUnreadableOne`.
+  - Reviewer's third round (CHANGES REQUESTED at 691dd51):
+    - [x] `TestDigest_ASkippedReaskIsSaidOnceAMorningAndNeverByADryRun` kills u3 (once a morning), u4 (dry run) and u5 (the day in the key); the `decisionlog.go` comment names `payload.reasks` as the count.
+    - [ ] RED: the skipped re-ask is written only when a re-ask was due.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.

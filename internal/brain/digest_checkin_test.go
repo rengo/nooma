@@ -437,3 +437,45 @@ func TestDigest_TheSentRowCountsTheReasksLeftForLater(t *testing.T) {
 		t.Errorf("%d check.digest.sent rows, want 1", sentRows)
 	}
 }
+
+// TestDigest_ASkippedReaskIsSaidOnceAMorningAndNeverByADryRun: an unreadable
+// unit's skipped re-ask is one row a morning however many passes run while the
+// digest is due, a new row the next morning, and none from a dry run.
+func TestDigest_ASkippedReaskIsSaidOnceAMorningAndNeverByADryRun(t *testing.T) {
+	ctx := context.Background()
+	v := newCheckinVault(t, true)
+	v.units = unreadableUnits{v.units}
+	said := newIDSet() // the process's own memory, shared by every pass
+	pass := func(at time.Time, commit bool) int {
+		t.Helper()
+		r := checkRunner{triggers: v.triggers, timers: &emptyTimers{}, ids: v.ids, log: v.log, channel: v.channel,
+			units: v.units, state: memrepo.NewState(), conversation: testConversation, unreadableCheckins: said}
+		if _, _, err := r.assembleDigest(ctx, at, commit); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := v.log.Since(ctx, checkinEvening.Add(time.Hour), -1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, d := range rows {
+			if d.Action == ports.ActionCheckCheckinReaskSkipped {
+				n++
+			}
+		}
+		return n
+	}
+
+	if n := pass(checkinMorning(1), false); n != 0 {
+		t.Errorf("a dry run wrote %d row(s)", n)
+	}
+	if n := pass(checkinMorning(1), true); n != 1 {
+		t.Errorf("first pass of the morning: %d row(s), want 1", n)
+	}
+	if n := pass(checkinMorning(1).Add(5*time.Minute), true); n != 1 {
+		t.Errorf("second pass of the same morning: %d row(s), want still 1", n)
+	}
+	if n := pass(checkinMorning(2), true); n != 2 {
+		t.Errorf("the next morning: %d row(s), want 2", n)
+	}
+}
