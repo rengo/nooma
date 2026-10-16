@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo, nos vemos mañana",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Listo, nos vemos el 2026-10-15.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Listo, nos vemos el 2026-10-15.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -13,6 +13,8 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {},
-  "prompt_sha256": "eb3f9c66df550e197a893935123819045759bc99cf158e41821cbb43b918dabf"
+  "expect": {
+    "type": "chitchat"
+  },
+  "prompt_sha256": "827766b78e3e88e68df4b4f7f520c990e1a4720da6b4173b10354cc351c8e26d"
 }

@@ -30,6 +30,8 @@ deferred (client, 2026-10-14).
 
 - The texts the phrasing set was recorded with (`testdata/llm/reminders/`) are exactly what this link must send. Question texts (`open_question.text`): the `which_reminder` lead, "¿De cuál hablás?", then its numbered list; and the `undo` reply, "Listo, no te lo recuerdo más: <title> — <date>. (Si fue un error, decime «no, seguí».)". **The candidate list format is pinned too**: each entry is `RenderReminderList`'s "<n>) <title or content> — <when>", with `<when>` written by `phrase.For(lang).Time` ("jue 15 oct, 10:00", with the comma) for an instant and `.Date` ("vie 16 oct") for a whole day, and `TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites` fails if either changes. A different wording or format is a different prompt, and the replay will not know: change the code and the cases together, then record again.
 
+- **The answers this link reads are `type: chitchat`** (link 1b's set expects it for the undo and `which_reminder` answers), and capture's chitchat fork returns before anything after it (`internal/brain/capture.go`, the `KindChitchat` branch). This link reads `reminder_intent: keep` and `question_answer: choice` before that fork, beside the check-in resolution.
+
 - [ ] 6.1 RED, the stop reading (ADR-0033), replayed from the phrasing set (link 1a):
   - "no me lo recuerdes más", "listo, no me lo recuerdes más", "don’t / don't / dont remind me anymore" → `reminder_intent: stop`; "no me recuerdes la clave" → `none`.
   - `TestStopIntentDegradedTakesNoAction`: `reminder_intent` with an unknown value → degraded, nothing stopped, plain capture.
@@ -111,6 +113,8 @@ deferred (client, 2026-10-14).
 ## PR 8 — `feat/remind-me-ask-back` (D40-D43; needs links 3, 5, 6, 7)
 
 - The texts the phrasing set was recorded with (`testdata/llm/reminders/`, `open_question.text`) are exactly what this link must send: the `remind_when` question, "¿Cuándo querés que te avise?". A different wording is a different prompt, and the replay will not know: change the code and the cases together, then record again.
+
+- **An answer to `remind_when` is `type: chitchat`** (link 1b's set expects it, so the answer stores no unit of its own), and capture's chitchat fork returns before arming (`internal/brain/capture.go`, the `KindChitchat` branch). This link reads the answer's `question_answer` and `due_at` before that fork, beside the check-in resolution, or a "mañana a las 8" sets nothing.
 
 - [ ] 8.1 RED, the answer reading, replayed with `remind_when` open in the prompt:
   - "mañana a las 10", "en 1 semana", "in 2 hours" → `question_answer: when` with an instant; "mañana llamo a Juan" → `none` (a new capture).

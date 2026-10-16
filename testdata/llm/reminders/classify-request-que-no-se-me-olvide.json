@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "que no se me olvide regar las plantas mañana",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"No olvidar regar las plantas el 2026-10-16.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-16\",\"title\":\"Regar las plantas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"No debo olvidar regar las plantas el 2026-10-17.\",\"weight\":0.7,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regar las plantas\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
   },
-  "prompt_sha256": "a3b08870bfd8fd2be22dc3c810eaa921f42d7c97db08359662b85f8096589233"
+  "prompt_sha256": "c7da54940fecd0ccf67cb14c464c6466327c91f85b3b1beae2dc89e66447eacf"
 }

@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "dont remind me anymore",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Stop reminding me to buy coffee.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"en\",\"title\":\"Buy coffee\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"I don't want to be reminded to buy coffee anymore.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -17,5 +17,5 @@
     "reminder_intent": "stop",
     "reminder_target": "1"
   },
-  "prompt_sha256": "9bdea30edcdca1cd5403d8f6c1f361786ffacfc4d244a8c82efa531129ca55da"
+  "prompt_sha256": "debb1578660660457a486a204fccc0cb446f1c8ac80073cb84846761c66d7df5"
 }

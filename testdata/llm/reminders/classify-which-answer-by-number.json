@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "el 2",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Quiero dejar de recibir el recordatorio de llamar a Ana.\",\"weight\":0.5,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"stop\",\"question_answer\":\"choice\",\"choice_number\":2,\"reminder_target\":2}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Elijo el recordatorio 2: llamar a Ana.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -29,9 +29,9 @@
     ]
   },
   "expect": {
+    "type": "chitchat",
     "question_answer": "choice",
     "choice_number": 2
   },
-  "known_misread": "adds a stop (reminder_intent stop, reminder_target 2) that is not in the user's words: the prompt never tells the model the which-question is about stopping, so it guesses, and ADR-0033 ties a stop to explicit words; prompt work, see tasks.md",
-  "prompt_sha256": "c2e9fd11b307cfa6601628ef00747455af229df3e3309b0832b49362e13b582a"
+  "prompt_sha256": "2a5cc59004822ebcb8f2475e2da5d5629d4b35d31eee73681113df33fdb1bed2"
 }

@@ -10,6 +10,8 @@
     "kind": "undo",
     "text": "Listo, no te lo recuerdo más: Comprar café — jue 15 oct, 10:00. (Si fue un error, decime «no, seguí».)"
   },
-  "expect": {},
-  "prompt_sha256": "231baf0b8a71d036837bfe3dbe45a0f3b59840af9b71b737e47503a543420c4b"
+  "expect": {
+    "type": "chitchat"
+  },
+  "prompt_sha256": "01c549de70688f777f20134b8706dddb58505d9d524260f5394792ddc4979594"
 }

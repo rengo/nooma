@@ -146,6 +146,73 @@ func TestCheckReminderFieldsAreStrict(t *testing.T) {
 	}
 }
 
+// TestCheckOutcomesWithASideEffectAreStrictWhenUnexpected: an outcome the
+// expectation does not name is not harmless. In production a nudge or task
+// check-in outcome closes the most recent open check-in, a relation outcome
+// confirms or deletes a relation, and a state outcome records a signal, so
+// one the phrasing should not get is a misread (link 1b, review of #365).
+// The two check-in fields are one answer: a case that names either may get
+// the other beside it, as the recorded drop did, while the check-in is closed
+// as the expected outcome would close it.
+func TestCheckOutcomesWithASideEffectAreStrictWhenUnexpected(t *testing.T) {
+	const head = `{"type":"chitchat","normalized_content":"x","weight":0.2,"decay_rate":0.3`
+	for name, tc := range map[string]struct{ extra, miss string }{
+		"a done":       {`,"task_checkin_outcome":"done"`, FieldTaskCheckinOutcome},
+		"a snooze":     {`,"task_checkin_outcome":"snooze"`, FieldTaskCheckinOutcome},
+		"an engaged":   {`,"nudge_outcome":"engaged"`, FieldNudgeOutcome},
+		"a rejection":  {`,"relation_outcome":"rejected"`, FieldRelationOutcome},
+		"a state read": {`,"state_outcome":"denied"`, FieldStateOutcome},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := Check(llm.Case{Expect: &llm.Expect{}}, decode(t, head+tc.extra+`}`))
+			if len(got) != 1 || got[0] != tc.miss {
+				t.Fatalf("Check = %v, want [%s]", got, tc.miss)
+			}
+		})
+	}
+	drop := decode(t, head+`,"nudge_outcome":"declined","task_checkin_outcome":"drop"}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{TaskCheckinOutcome: "drop"}}, drop); len(got) != 0 {
+		t.Errorf("a drop with the nudge field beside it = %v, want no miss", got)
+	}
+	// The field left free is free only while the effect is the expected one:
+	// production reads the nudge first, so a declined beside a done closes the
+	// check-in as declined, and a nudge beside a snooze closes what a snooze
+	// leaves open (classify.ResolveCheckin).
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		extra  string
+	}{
+		"a declined beside a done":   {llm.Expect{TaskCheckinOutcome: "done"}, `,"task_checkin_outcome":"done","nudge_outcome":"declined"`},
+		"an engaged beside a snooze": {llm.Expect{TaskCheckinOutcome: "snooze"}, `,"task_checkin_outcome":"snooze","nudge_outcome":"engaged"`},
+		"a drop beside an engaged":   {llm.Expect{NudgeOutcome: "engaged"}, `,"nudge_outcome":"engaged","task_checkin_outcome":"drop"`},
+	} {
+		got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.extra+`}`))
+		free := FieldNudgeOutcome
+		if tc.expect.NudgeOutcome != "" {
+			free = FieldTaskCheckinOutcome
+		}
+		if name == "a drop beside an engaged" {
+			// The nudge wins, so the drop changes nothing: the same effect.
+			if len(got) != 0 {
+				t.Errorf("%s = %v, want no miss: the nudge decides", name, got)
+			}
+			continue
+		}
+		if len(got) != 1 || got[0] != free {
+			t.Errorf("%s = %v, want [%s]: it changes what the check-in is closed as", name, got, free)
+		}
+	}
+	// A check-in answer does not free the relation field.
+	related := decode(t, head+`,"task_checkin_outcome":"done","relation_outcome":"rejected"}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{TaskCheckinOutcome: "done"}}, related); len(got) != 1 || got[0] != FieldRelationOutcome {
+		t.Errorf("a rejection beside an expected done = %v, want [%s]", got, FieldRelationOutcome)
+	}
+	want := FieldTaskCheckinOutcome + "," + FieldNudgeOutcome + "," + FieldRelationOutcome
+	if got := Check(llm.Case{Expect: &llm.Expect{RelationOutcome: "confirmed"}}, drop); strings.Join(got, ",") != want {
+		t.Errorf("check-in outcomes read for a relation answer = %v, want %s", got, want)
+	}
+}
+
 func TestCheckMatchesTheExpectedReminderReading(t *testing.T) {
 	c := llm.Case{Expect: &llm.Expect{ReminderIntent: "stop", ReminderTarget: "2"}}
 	const head = `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1`
@@ -166,7 +233,10 @@ func TestCheckOptionalFieldsOnlyWhenSet(t *testing.T) {
 	bare := decode(t, head+`,"due_at":"2026-10-16","title":"Dentista","task_checkin_outcome":"done"}`)
 	timed := decode(t, head+`,"due_at":"2026-10-16T10:00:00-03:00"}`)
 
-	if got := Check(llm.Case{}, bare); len(got) != 0 {
+	// Day only and title have no effect of their own, so unset they are not
+	// checked. (An unexpected outcome is: see the test above.)
+	untitled := decode(t, head+`,"due_at":"2026-10-16","title":"Dentista"}`)
+	if got := Check(llm.Case{}, untitled); len(got) != 0 {
 		t.Fatalf("unset optional expectations were checked: %v", got)
 	}
 	yes := llm.Case{Expect: &llm.Expect{DayOnly: boolp(true), Title: boolp(true), TaskCheckinOutcome: "done"}}
@@ -178,8 +248,68 @@ func TestCheckOptionalFieldsOnlyWhenSet(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("Check = %v, want %v", got, want)
 	}
-	if got := Check(llm.Case{Expect: &llm.Expect{DayOnly: boolp(false)}}, bare); len(got) != 1 || got[0] != FieldDayOnly {
+	if got := Check(llm.Case{Expect: &llm.Expect{DayOnly: boolp(false)}}, untitled); len(got) != 1 || got[0] != FieldDayOnly {
 		t.Fatalf("a bare date where a timed one was expected = %v, want [%s]", got, FieldDayOnly)
+	}
+}
+
+// TestCheckTypeOnlyWhenSet: a bare "listo" came back as a task and capture
+// stored "La tarea está hecha" as a new unit, which no field of the set saw
+// (review of #365). A case may name the type it should get; unset, any type
+// passes, since most phrasings are about their reminder fields.
+// TestCheckJudgesAClosingAnswerByEffect: the model is never shown whether the
+// open check-in is a task or a nudge, and the store decides which one an
+// answer closes (ADR-0033 point 2), so for an answer that closes it, done and
+// engaged are the same reading, and so are drop and declined (review of #365).
+// A snooze closes nothing, as no outcome does, so it keeps its exact value.
+func TestCheckJudgesAClosingAnswerByEffect(t *testing.T) {
+	const head = `{"type":"chitchat","normalized_content":"x","weight":0.2,"decay_rate":0.3`
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		read   string
+	}{
+		"declined, read drop only": {llm.Expect{NudgeOutcome: "declined"}, `,"task_checkin_outcome":"drop"`},
+		"engaged, read done only":  {llm.Expect{NudgeOutcome: "engaged"}, `,"task_checkin_outcome":"done"`},
+		"done, read engaged only":  {llm.Expect{TaskCheckinOutcome: "done"}, `,"nudge_outcome":"engaged"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.read+`}`)); len(got) != 0 {
+				t.Errorf("Check = %v, want no miss: the check-in closes the same way", got)
+			}
+		})
+	}
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		read   string
+		miss   string
+	}{
+		"done, read drop":       {llm.Expect{TaskCheckinOutcome: "done"}, `,"task_checkin_outcome":"drop"`, FieldTaskCheckinOutcome},
+		"engaged, read nothing": {llm.Expect{NudgeOutcome: "engaged"}, ``, FieldNudgeOutcome},
+		"declined, read snooze": {llm.Expect{NudgeOutcome: "declined"}, `,"task_checkin_outcome":"snooze"`, FieldTaskCheckinOutcome + "," + FieldNudgeOutcome},
+		"snooze, read nothing":  {llm.Expect{TaskCheckinOutcome: "snooze"}, ``, FieldTaskCheckinOutcome},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.read+`}`)); strings.Join(got, ",") != tc.miss {
+				t.Errorf("Check = %v, want [%s]", got, tc.miss)
+			}
+		})
+	}
+}
+
+func TestCheckTypeOnlyWhenSet(t *testing.T) {
+	task := decode(t, `{"type":"task","normalized_content":"La tarea está hecha.","weight":0.5,"decay_rate":0.1}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{}}, task); len(got) != 0 {
+		t.Errorf("an unset type was checked: %v", got)
+	}
+	if got := Check(llm.Case{Expect: &llm.Expect{Type: "chitchat"}}, task); len(got) != 1 || got[0] != FieldType {
+		t.Errorf("a task where chitchat was expected = %v, want [%s]", got, FieldType)
+	}
+	untyped := decode(t, `{"normalized_content":"x"}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{Type: "chitchat"}}, untyped); len(got) != 1 || got[0] != FieldType {
+		t.Errorf("no type where chitchat was expected = %v, want [%s]", got, FieldType)
+	}
+	if err := ValidateCase(llm.Case{ID: "x", Expect: &llm.Expect{Type: "memo"}}); err == nil {
+		t.Error("a type outside the vocabulary was accepted")
 	}
 }
 

@@ -1,0 +1,14 @@
+{
+  "id": "classify-checkin-done",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "ya lo terminé",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya lo terminé.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"task_checkin_outcome\":\"done\"}",
+  "now": "2026-10-16T10:42:25-03:00",
+  "expect": {
+    "type": "chitchat",
+    "task_checkin_outcome": "done"
+  },
+  "prompt_sha256": "ac50ea4516ec4c3a6c0df9e712019ac9bd57469b48dd556b6f498f88d6028d43"
+}

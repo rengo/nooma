@@ -4,11 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "después lo veo",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Después lo veo.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Lo veré después.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"reminder_intent\":\"none\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
+    "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "known_misread": "reads no outcome, so M3's check-in resolution (which depends on the model alone) would not close it; the prompt describes none of the outcome values, so this is prompt work for a later link",
-  "prompt_sha256": "e8cd4e3c75241db97b7241c1fd96b888b573c9eba9fa1b1ff7bbeac2cb0964e9"
+  "prompt_sha256": "fd4ff313af17485c581178d338588f81b5ac747b8ab1060600f973e490b2dc2d"
 }

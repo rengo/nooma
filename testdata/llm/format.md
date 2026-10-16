@@ -64,7 +64,7 @@ is documented here in prose rather than as a second block.
 | `now` | string, RFC 3339 | no | The instant the prompt was built at, with the user's UTC offset. `--record` stores the one it told the model, and replay builds the prompt at it, so the hash below can be reproduced |
 | `open_question` | `{kind, text, list}` | no | The reminder question Nooma has open when the phrasing is read: `kind` is `remind_when`, `which_reminder` or `undo`, and `text` is the exact words Nooma sent, numbered list included. For `which_reminder`, `list` holds the same entries as data (`{label, when, at, day_only}`, as in `candidates_list`), and a test checks `text` is the lead plus `classify.RenderReminderList` of them. The prompt shows it, and only it, as the list (`classify.RenderReminderList`) |
 | `candidates_list` | array of `{label, when, at, day_only}` | no | The stop candidates the code built, in position order; at most five. `when` is what the prompt shows and is written by `phrase.Set` (`Time`, "jue 15 oct, 10:00", or `Date` when `day_only` is true); `at` is the instant it renders, which a test checks against `when` and against the case's `now`. A case with a list or an open question carries an authored `now` before every listed instant. Shown to the model only when no `which_reminder` question is open |
-| `expect` | object | no, but every phrasing in `reminders/` has one | The reading the phrasing should get, written by hand and never touched by `--record`. The reminder fields (`remind_request`, `reminder_intent`, `question_answer`, `choice_number`, `reminder_target`) are strict: unset means the model must read none, false or absent. `day_only`, `title`, `task_checkin_outcome`, `nudge_outcome` and `relation_outcome` are checked only when set. `reminder_target` is `"1"` to `"5"` or `"unclear"` |
+| `expect` | object | no, but every phrasing in `reminders/` has one | The reading the phrasing should get, written by hand and never touched by `--record`. The reminder fields (`remind_request`, `reminder_intent`, `question_answer`, `choice_number`, `reminder_target`) are strict: unset means the model must read none, false or absent. The outcomes are strict too, because each has an effect in production: an unset `task_checkin_outcome`, `nudge_outcome` or `relation_outcome` means the model must read none (the model never sees whether the open check-in is a task or a nudge, so an expected outcome that closes it is judged by how the reading closes it, by `classify.ResolveCheckin`, the mapping production uses: `done` and `engaged` are one reading, `drop` and `declined` another; an expected `snooze` keeps its exact value, and the other field is free only while the effect is the same), and no phrasing may read a `state_outcome`. `day_only`, `title` and `type` (the classify type, so a reply that answers Nooma is caught when it comes back as a new unit) are checked only when set. `reminder_target` is `"1"` to `"5"` or `"unclear"` |
 | `known_misread` | string | no | Why a phrasing is kept although the model reads it wrong. Replay asserts that it still misreads, so the mark must be removed the day it reads right. Nobody edits a response by hand |
 | `prompt_sha256` | string | with `now`, on a recorded reminder phrasing | The SHA-256 of the prompt the response was recorded against. Replay rebuilds that prompt through `classify.BuildPrompt` and fails on a mismatch, so a prompt change cannot leave stale recordings green |
 | `response` | string | exactly one of `response`/`error` | The exact raw response text, recorded once and replayed verbatim by a fake provider — never re-sent to a real provider by a test |
@@ -81,6 +81,15 @@ rejects a vault path, a ULID-shaped id or an e-mail address in any of them.
 A phrasing is written with `record: true` and its `expect`, then recorded once per prompt
 change with `nooma doctor --record testdata/llm/reminders [vault]` (docs/06-harness.md §5).
 `internal/reading` compares the replayed response to `expect`.
+
+**One rule for a bare word.** With no reminder question open, a bare word answers an open
+check-in (spec: a bare "listo" keeps M3's behaviour), and the model is never shown whether one
+is open: the store decides which one it answers. So it expects `type: chitchat` (it stores no
+unit) and the outcome the word means: "sí" is `nudge_outcome: engaged`, "ya" and "listo" are
+`task_checkin_outcome: done`, and "no" is `task_checkin_outcome: snooze` with no `nudge_outcome`
+(the client's ruling: a bare no is "not yet, ask again later"; only an explicit refusal, to do
+the task or to be asked about it, is `drop` or `declined`). With a question open, the word
+answers that question instead.
 
 ## Cross-field constraint
 

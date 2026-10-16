@@ -3,11 +3,12 @@
   "provider": "openai",
   "model": "gpt-6-luna",
   "task": "classify",
-  "message": "ahora no, gracias",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ahora no, gracias.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"declined\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "message": "no, no quiero hablar de eso",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero hablar de eso.\",\"weight\":0.1,\"decay_rate\":0.5,\"language\":\"es\",\"nudge_outcome\":\"declined\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
+    "type": "chitchat",
     "nudge_outcome": "declined"
   },
-  "prompt_sha256": "68bde70ec5575e217f5d2cd4ddd9d7d218df96447935b5c9e200967228b445b4"
+  "prompt_sha256": "9c93e85879b45522df0c673803faa4d31b132d9693631cdf6d1c551c318cbe02"
 }

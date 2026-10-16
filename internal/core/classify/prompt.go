@@ -244,7 +244,12 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("               meeting, the dentist. Its day and time go in event_at.\n")
 	b.WriteString("  task         something the user has to GET DONE, by a deadline if one is named.\n")
 	b.WriteString("               The deadline goes in due_at.\n")
-	b.WriteString("  An appointment filed as a task gets no reminder.\n\n")
+	b.WriteString("  An appointment filed as a task gets no reminder.\n")
+	// **A reply is not a memory.** A bare "listo" came back as a task, and
+	// capture stored "La tarea está hecha" as a unit of its own.
+	b.WriteString("  chitchat     a message that only answers Nooma (a check-in, a nudge, a question it\n")
+	b.WriteString("               asked) or only talks, with nothing new to keep. It stores nothing:\n")
+	b.WriteString("               its answer travels in the outcome fields, never as a new task.\n\n")
 
 	b.WriteString("Corrections\n")
 	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")
@@ -290,13 +295,21 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 	b.WriteString("  reminder_intent    one of: " + joinVocabulary(AllReminderIntents()) + "\n")
 	b.WriteString("                     stop: the user asks to stop being reminded of something that\n")
 	b.WriteString("                     already exists (\"no me lo recuerdes más\", \"don't remind me\n")
-	b.WriteString("                     anymore\"). Saying a thing is done (\"listo\", \"ya lo hice\", \"listo,\n")
-	b.WriteString("                     nos vemos mañana\") is none, not stop.\n")
+	// **Done by its meaning, never by example.** Listing "listo, nos vemos
+	// mañana" here sent a farewell to done, the reading ADR-0033 names a
+	// misread, and a stop read a done beside it.
+	b.WriteString("                     anymore\"). A stop is not also a check-in answer: give it no\n")
+	b.WriteString("                     task_checkin_outcome and no nudge_outcome. Saying a task is\n")
+	b.WriteString("                     finished is none, not stop: it is task_checkin_outcome done.\n")
 	b.WriteString("                     keep: only while the open question below is an undo, when the\n")
 	b.WriteString("                     user says the stop was a mistake (\"no, seguí\", \"keep it\"). A\n")
 	b.WriteString("                     bare \"sí\", \"ok\" or \"dale\" is none\n")
 	b.WriteString("  question_answer    one of: " + joinVocabulary(AllQuestionAnswers()) + ", and only while a\n")
-	b.WriteString("                     question below is open: when (it gives a day or time), no (it\n")
+	// **The instant, not only the words.** A bare day answering remind_when came
+	// back with the day in normalized_content alone, which arms nothing.
+	b.WriteString("                     question below is open: when (it gives a day or time: put that\n")
+	b.WriteString("                     instant in due_at, or in event_at for an event, a day with no time\n")
+	b.WriteString("                     as a bare YYYY-MM-DD; normalized_content alone loses it), no (it\n")
 	b.WriteString("                     declines: \"no\", \"no hace falta\", \"nope\"), choice (it picks an\n")
 	b.WriteString("                     entry of the numbered list; put the position in choice_number,\n")
 	b.WriteString("                     1 to " + strconv.Itoa(MaxReminderChoices) + "). Otherwise none or leave it out\n")
@@ -311,12 +324,95 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		b.WriteString("  Nooma asked the user, in these words:\n")
 		b.WriteString(strings.TrimRight(rc.Open.Text, "\n") + "\n")
 		b.WriteString("  The message may be the answer. Read it as one only if it answers THIS question.\n")
+		// **The question is about a stop; the answer is not one.** Asked "which
+		// one" with no reason given, the model guessed the reason and read "el 2"
+		// as a stop of its own. The stop is the one Nooma holds (ADR-0033).
+		if rc.Open.Kind == QuestionWhichReminder {
+			b.WriteString("  Nooma asked this to learn which reminder a stop the user already asked for is\n")
+			b.WriteString("  about. An answer picks that reminder: set question_answer choice and\n")
+			b.WriteString("  choice_number, and nothing else. The answer is not itself a stop: reminder_intent\n")
+			b.WriteString("  is none and reminder_target is left out. Nooma completes the stop it holds.\n")
+		}
+	} else {
+		// Said, not left to be noticed: "only while a question is open" asked the
+		// model to see an absence, and a bare "no" was read as an answer.
+		b.WriteString("\n  No reminder question is open, so question_answer is none, whatever the\n")
+		b.WriteString("  message sounds like.\n")
 	}
 	if len(rc.Candidates) > 0 && (rc.Open == nil || rc.Open.Kind != QuestionWhichReminder) {
 		b.WriteString("\n" + candidatesHeading + "\n")
+		// The list is what a stop names a position in, so it is in every prompt
+		// that has one; it is not a hint that the user wants one stopped.
+		b.WriteString("  Shown so a stop can name one by its position. Being listed here is not a\n")
+		b.WriteString("  request to stop: only a message that asks to stop being reminded is a stop.\n")
 		b.WriteString(RenderReminderList(rc.Candidates))
 	}
 	b.WriteString("\n")
+	writeCheckins(b)
+}
+
+// writeCheckins says what each check-in outcome means (doc 02 §5 step 1). The
+// fields alone, with their values named and never explained, got no outcome
+// back for a task done or put off or a nudge taken up, and the code resolves a
+// check-in from the outcome alone. A meaning, never the words for it: the
+// model reads what the user means in any language.
+func writeCheckins(b *strings.Builder) {
+	b.WriteString(checkinHeading + "\n")
+	b.WriteString("  Nooma asks the user about a task it reminded them of, and nudges them toward\n")
+	b.WriteString("  something they meant to do. The open one is not shown here: say what the\n")
+	b.WriteString("  message answers, and Nooma matches it to what it asked, or drops it.\n")
+	// **The bare word's rule** (format.md): a short reply with nothing asked
+	// in front of the model is the check-in's answer. A bare yes and a nudge
+	// taken up read no outcome without it, and the nudge stayed open. A bare
+	// decline is "ask me later" (the client's ruling on #365): only an
+	// explicit refusal closes the check-in.
+	b.WriteString("  With no reminder question open, a message that is only a short reply\n")
+	b.WriteString("  (agreeing, declining, or saying it is done) answers the check-in: give the\n")
+	b.WriteString("  outcome it means. A short decline alone means not yet: task_checkin_outcome\n")
+	b.WriteString("  snooze, and no nudge_outcome. Only an explicit refusal, to do the task or to be\n")
+	b.WriteString("  asked about it, is drop or declined.\n")
+	// **The other half of the bare-word rule.** An answer to an undo or a
+	// remind_when, or to a relation question (never a reminder question), was
+	// invited to carry a check-in outcome too, and closed a check-in nobody
+	// answered.
+	b.WriteString("  A message that answers an open reminder question, or says whether two things\n")
+	b.WriteString("  are related, answers that and not a check-in: it carries no\n")
+	b.WriteString("  task_checkin_outcome and no nudge_outcome.\n")
+	// **A farewell is not a done.** It is a short reply, and one that began
+	// with the bare done word was read as done, ADR-0033's named misread.
+	b.WriteString("  A message that only closes the conversation, a goodbye or a thanks, answers\n")
+	b.WriteString("  no check-in, even when it begins with a word that alone would.\n")
+	b.WriteString("  task_checkin_outcome, about a task:\n")
+	for _, o := range AllTaskCheckinOutcomes() {
+		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o) + "\n")
+	}
+	b.WriteString("  nudge_outcome, about a nudge:\n")
+	for _, o := range AllNudgeOutcomes() {
+		b.WriteString("    " + pad(string(o), 9) + nudgeMeaning(o) + "\n")
+	}
+	b.WriteString("\n")
+}
+
+func taskCheckinMeaning(o TaskCheckinOutcome) string {
+	switch o {
+	case TaskCheckinOutcomeDone:
+		return "the user says the task is finished"
+	case TaskCheckinOutcomeSnooze:
+		return "the user puts the task off to later and still means to do it"
+	case TaskCheckinOutcomeDrop:
+		return "the user gives the task up: it no longer needs doing"
+	}
+	return ""
+}
+
+func nudgeMeaning(o NudgeOutcome) string {
+	switch o {
+	case NudgeOutcomeEngaged:
+		return "the user takes the nudge up: agrees to it, or asks to go on with it"
+	case NudgeOutcomeDeclined:
+		return "the user turns the nudge down"
+	}
+	return ""
 }
 
 // writeTarget renders the unit a correction patches, its instants in the
@@ -454,4 +550,5 @@ func trimFloat(f float64) string {
 const (
 	openQuestionHeading = "Open reminder question"
 	candidatesHeading   = "Reminders that may be stopped"
+	checkinHeading      = "Check-in answers"
 )

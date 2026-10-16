@@ -476,12 +476,17 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      with `choice_number`, and `reminder_target`. The last two are positions, 1 to
      `max_reminder_choices`, in a numbered list the code built and put in the prompt, or
      `unclear` for `reminder_target`; a position outside 1 to `max_reminder_choices` degrades;
-     an explicit `null` is an absent field, not a loss. Core holds no phrase list: the prompt
+     an explicit `null` is an absent field, not a loss. A `when` answer carries the instant it
+     gives in `due_at`, or `event_at` for an event, a day alone as a bare date: the prompt says
+     so, because a day left only in `normalized_content` arms nothing. Core holds no phrase list: the prompt
      explains the fields with examples in both languages, shows the open reminder question and
-     the numbered list only when there is one, and carries the fields on the correction path
+     the numbered list only when there is one, says when no question is open that
+     `question_answer` is none (an answer with no question open is never acted on),
+     and carries the fields on the correction path
      too, so an explicit-referent stop is read there. The prompt describes all three question
-     kinds (`remind_when`, `which_reminder`, `undo`) now, so it is final in this link and a
-     recording made against it stays valid.
+     kinds (`remind_when`, `which_reminder`, `undo`). Every recording of the reminder phrasing
+     set is hashed against the prompt it was made with (`prompt_sha256`), so a change to the
+     prompt's text sends the whole set back to be recorded.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
@@ -490,7 +495,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
-     "on Friday"), open check-ins.
+     "on Friday"). No open check-in: the model reads what an answer says, and the store
+     decides what it answers (below).
    - **A bare weekday is its next occurrence after today**; named on that same weekday it is
      next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
      "today" ("hoy") is today. The prompt states this rule and gives the model the calendar to
@@ -502,9 +508,32 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      orthogonal fields, not types: `nudge_outcome (engaged|declined)`,
      `relation_outcome (confirmed|rejected)`, `state_outcome (confirmed|denied)`,
      `task_checkin_outcome (done|snooze|drop)`, `list_op (append|delete|mark_done|remove)`,
-     `person_ref_status (resolved|new|ambiguous)`.
+     `person_ref_status (resolved|new|ambiguous)`. The prompt says what each
+     `task_checkin_outcome` and `nudge_outcome` value means, never the words that trigger it:
+     with the values only named, a real model read no outcome for a task done or put off or a
+     nudge taken up, and the code resolves a check-in from the outcome alone. Saying a task is
+     finished is `task_checkin_outcome: done`, never a stop, and is stated by that meaning with
+     no example: an example farewell ("listo, nos vemos mañana") was read as done, the misread
+     [ADR-0033](adr/0033-the-model-understands-the-code-acts.md) names. A stop is not also a
+     check-in answer: it carries no `task_checkin_outcome` and no `nudge_outcome`. A message
+     that only answers Nooma is `chitchat`: it stores no unit (the capture converses), and its
+     answer travels in the outcome fields; a bare "listo" read as a `task` stored "La tarea
+     está hecha" as a memory. With no reminder question open, a message that is only a short
+     reply answers the check-in, and the prompt asks for the outcome it means. A short decline
+     alone means not yet, `snooze` (the client's ruling): only an explicit refusal, to do the
+     task or to be asked about it, is `drop` or `declined`. `snooze` leaves the check-in open,
+     and **nothing asks a delivered check-in again yet**: the digest reads only triggers that
+     have not reached the user, so a snoozed one-shot reminder is not re-asked. A message that
+     answers an open reminder question, or says whether two things are related, answers that
+     and not a check-in: it carries no `task_checkin_outcome` and no `nudge_outcome`. A message
+     that only closes the conversation, a goodbye or a thanks, answers no check-in either, even when
+     it begins with a word that alone would.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
-     `nudge_outcome` closes the most recently delivered open check-in; a `relation_outcome`
+     check-in outcome closes the most recently delivered open check-in, by one mapping,
+     `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline
+     it, `snooze` resolves nothing, and a reading with both fields is read by its
+     `nudge_outcome`. The recorded-reading judge (`internal/reading`) compares a recording
+     through the same function, so it measures the effect a reading has. A `relation_outcome`
      closes the most recently asked open relation question (§4). The classify prompt is never
      widened to inject open relation questions so the model can name an id: a model asked to
      pick one can pick a plausible wrong one, and for `relation_outcome: rejected` the wrong
@@ -519,7 +548,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      reminders, so the model can answer a **position** in a list the code built. It never names
      an id and never a relation. The code binds only on a position inside that list, an
      out-of-range or `unclear` one asks which, and a stop it binds is undoable and deletes
-     nothing. **One list per prompt**: an open `which_reminder` question carries its own, and the
+     nothing. **The answer to the which-question is not a stop**: with that question open, the
+     prompt says Nooma asked it to learn which reminder a stop it already holds is about, and
+     that the answer sets only `question_answer: choice` and `choice_number`. A stop is tied to
+     the user's words, and the pending stop is what binds; for the same reason the stop
+     candidates are shown with the rule that being listed is not a request to stop, so a bare
+     "done" beside them stays a check-in answer. **One list per prompt**: an open
+     `which_reminder` question carries its own, and the
      stop candidates are then left out, so a position means one thing. Both lists come from
      `classify.RenderReminderList`, the renderer of the question Nooma sends, so a position the
      model reads is a position the user saw. Each label is flattened to one line and
