@@ -157,6 +157,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (report
 	// verdict and the digest below are judged in.
 	r.night = r.quietHours(ctx)
 	r.unreadable = map[string]error{}
+	r.stamps = &surfaceStamps{}
 
 	due, err := r.triggers.Due(ctx, now)
 	if err != nil {
@@ -380,6 +381,8 @@ type checkRunner struct {
 	night  prospection.QuietHours
 	// unreadable is the units this scan judged without (see reminderGate).
 	unreadable map[string]error
+	// stamps orders everything this pass marks as reaching the user.
+	stamps *surfaceStamps
 	// llm words a timer at delivery. Nil is legal: a vault with no
 	// provider bound delivers the user's own words, which is what the
 	// rephrasing falls back to anyway.
@@ -582,4 +585,21 @@ func timerTransition(v prospection.Verdict) (ports.TimerStatus, bool) {
 	default:
 		return "", false
 	}
+}
+
+// surfaceStamps hands one pass its surfaced_at instants, a second apart (the
+// column's precision) in the order the pass sends: pushes, then the digest's
+// lines, then its re-asks. The newest open check-in, which a bare answer
+// reaches, is then the last thing the pass showed (doc 02 §7), whichever
+// message it went out in.
+type surfaceStamps struct{ next time.Time }
+
+// take is the next stamp, never before now.
+func (s *surfaceStamps) take(now time.Time) time.Time {
+	if s.next.Before(now) {
+		s.next = now
+	}
+	at := s.next
+	s.next = at.Add(time.Second)
+	return at
 }

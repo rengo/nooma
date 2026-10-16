@@ -1660,8 +1660,9 @@ digest asks at most `max_reasks_per_digest`, the longest waiting first; the rest
 morning, unasked and uncounted. The message bound below drops re-asks before the day's lines, so
 re-asks never wedge a digest, and one left out also waits. The day's items and the re-asks are
 counted apart: `check.digest.sent` and the carried count (the dry run's too) are the day's
-reminders, and the row adds how many check-ins it asked again. The digest stamps `surfaced_at` in
-the order it shows, a second apart, so **a bare answer reaches the last item the digest showed**.
+reminders, and the row adds how many check-ins it asked again. A check pass stamps `surfaced_at` on
+everything it sends in send order, a second apart, pushes first and then the digest's lines and
+re-asks, so **a bare answer reaches the last thing the pass showed**, whichever message it was in.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
 now, computed from the same reads and the same `Carry`, except for the message bound: Today is a

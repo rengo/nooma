@@ -133,7 +133,7 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 	delivered := 0
 	var failed error
 	for _, t := range group {
-		if err := r.triggers.Surface(ctx, t.ID, now); err != nil {
+		if err := r.triggers.Surface(ctx, t.ID, r.stamp(now)); err != nil {
 			// Another pass moved the row on first: its business, not a failure.
 			skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", t.ID, t.FireAt)
 			if skipErr != nil {
@@ -212,4 +212,13 @@ func withDelayCaveat(text string, fireAt, now time.Time, set phrase.Set) string 
 		return set.Delayed(text)
 	}
 	return text
+}
+
+// stamp is the pass's next surfaced_at; a runner built without a pass (a test
+// calling one step directly) stamps now.
+func (r checkRunner) stamp(now time.Time) time.Time {
+	if r.stamps == nil {
+		return now
+	}
+	return r.stamps.take(now)
 }

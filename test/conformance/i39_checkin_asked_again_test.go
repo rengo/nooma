@@ -340,3 +340,40 @@ func TestI39_AnExpiredRecurringCheckinLeavesTheNextOccurrence(t *testing.T) {
 		t.Errorf("open %v, want the next occurrence delivered", open)
 	}
 }
+
+// TestI39_ABareAnswerReachesTheLastThingThePassSent is QA's repro on #366: in
+// one pass a late reminder is pushed as its own message and then the digest
+// asks a snoozed check-in again. The re-ask went out last, so "done" reaches
+// it, whichever id sorts first: the pass stamps everything it sends in send
+// order, not each message on its own.
+func TestI39_ABareAnswerReachesTheLastThingThePassSent(t *testing.T) {
+	for _, ids := range [][2]string{{"t-a", "t-z"}, {"t-z", "t-a"}} {
+		snoozed, pushed := ids[0], ids[1]
+		t.Run("snoozed "+snoozed, func(t *testing.T) {
+			ctx := context.Background()
+			v := newI39Vault()
+			v.deliver(t, snoozed, "snoozed one", i39Delivered)
+			v.answer(t, "no", i39NotYet, i39Delivered.Add(30*time.Minute))
+
+			dueAt := time.Date(2026, 10, 15, 7, 30, 0, 0, time.UTC)
+			unitID := "u-" + pushed
+			if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeTask, Status: unit.StatusPool, Content: "day item",
+				Source: "chat", Weight: 1, LastTouchedAt: i39Delivered, CreatedAt: i39Delivered, UpdatedAt: i39Delivered}); err != nil {
+				t.Fatal(err)
+			}
+			if err := v.triggers.Create(ctx, ports.Trigger{ID: pushed, UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+				FireAt: &dueAt, CreatedAt: i39Delivered, Payload: ports.TriggerPayload{ActionText: "day item"}}); err != nil {
+				t.Fatal(err)
+			}
+
+			sent := v.check(t, time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC))
+			if len(sent) != 2 || !strings.Contains(sent[0], "day item") || !strings.Contains(sent[1], "snoozed one") {
+				t.Fatalf("sent %q, want the push and then the re-ask", sent)
+			}
+			v.answer(t, "listo", i39Done, time.Date(2026, 10, 15, 8, 30, 0, 0, time.UTC))
+			if open := v.open(t); len(open) != 1 || open[0] != pushed {
+				t.Errorf("open %v, want only %s: the answer was to the re-ask, sent last", open, pushed)
+			}
+		})
+	}
+}

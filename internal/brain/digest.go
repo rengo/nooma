@@ -204,16 +204,13 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		r.focus.publish(round)
 	}
 
-	// Stamped in the order shown, a second apart (surfaced_at's precision), so
-	// the newest open check-in, which a bare answer reaches, is the digest's
-	// last line (doc 02 §7).
-	shown := 0
-	stamp := func() time.Time {
-		shown++
-		return now.Add(time.Duration(shown-1) * time.Second)
+	// Stamped in the order shown, after anything the pass pushed before, so
+	// the newest open check-in is the last thing the pass showed (doc 02 §7).
+	if r.stamps == nil {
+		r.stamps = &surfaceStamps{}
 	}
 	for _, item := range sent {
-		if err := r.triggers.Surface(ctx, item.ID, stamp()); err != nil {
+		if err := r.triggers.Surface(ctx, item.ID, r.stamp(now)); err != nil {
 			return 0, lapsed, fmt.Errorf("check: digest was sent but trigger %q was not marked delivered: %w", item.ID, err)
 		}
 	}
@@ -222,7 +219,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		reasked[t.ID] = t
 	}
 	for _, id := range asked {
-		if err := r.markReasked(ctx, reasked[id], stamp(), now); err != nil {
+		if err := r.markReasked(ctx, reasked[id], r.stamp(now), now); err != nil {
 			return 0, lapsed, err
 		}
 	}
