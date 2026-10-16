@@ -253,6 +253,27 @@ func TestCheckOptionalFieldsOnlyWhenSet(t *testing.T) {
 	}
 }
 
+// TestCheckTypeOnlyWhenSet: a bare "listo" came back as a task and capture
+// stored "La tarea está hecha" as a new unit, which no field of the set saw
+// (review of #365). A case may name the type it should get; unset, any type
+// passes, since most phrasings are about their reminder fields.
+func TestCheckTypeOnlyWhenSet(t *testing.T) {
+	task := decode(t, `{"type":"task","normalized_content":"La tarea está hecha.","weight":0.5,"decay_rate":0.1}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{}}, task); len(got) != 0 {
+		t.Errorf("an unset type was checked: %v", got)
+	}
+	if got := Check(llm.Case{Expect: &llm.Expect{Type: "chitchat"}}, task); len(got) != 1 || got[0] != FieldType {
+		t.Errorf("a task where chitchat was expected = %v, want [%s]", got, FieldType)
+	}
+	untyped := decode(t, `{"normalized_content":"x"}`)
+	if got := Check(llm.Case{Expect: &llm.Expect{Type: "chitchat"}}, untyped); len(got) != 1 || got[0] != FieldType {
+		t.Errorf("no type where chitchat was expected = %v, want [%s]", got, FieldType)
+	}
+	if err := ValidateCase(llm.Case{ID: "x", Expect: &llm.Expect{Type: "memo"}}); err == nil {
+		t.Error("a type outside the vocabulary was accepted")
+	}
+}
+
 func TestValidateCaseRejectsWhatReplayCouldNotMean(t *testing.T) {
 	bad := map[string]func(*llm.Case){
 		"intent":      func(c *llm.Case) { c.Expect = &llm.Expect{ReminderIntent: "delete"} },

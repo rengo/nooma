@@ -27,8 +27,8 @@ type Entry struct {
 
 // Expect is the reading a phrasing should get, written by hand and never by
 // the recording command. The reminder fields and the outcomes are strict: an
-// unset one means the model must read none, false or absent. DayOnly and Title
-// are checked only when set. internal/reading owns the comparison.
+// unset one means the model must read none, false or absent. DayOnly, Title
+// and Type are checked only when set. internal/reading owns the comparison.
 type Expect struct {
 	RemindRequest  *bool  `json:"remind_request,omitempty"`
 	ReminderIntent string `json:"reminder_intent,omitempty"`
@@ -41,6 +41,10 @@ type Expect struct {
 	DayOnly *bool `json:"day_only,omitempty"`
 	// Title says whether a valid, date-free title should come back.
 	Title *bool `json:"title,omitempty"`
+
+	// Type is the classify type the phrasing should get, checked only when set:
+	// a reply that answers Nooma is not a new unit.
+	Type string `json:"type,omitempty"`
 
 	TaskCheckinOutcome string `json:"task_checkin_outcome,omitempty"`
 	NudgeOutcome       string `json:"nudge_outcome,omitempty"`

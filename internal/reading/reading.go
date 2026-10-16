@@ -36,6 +36,7 @@ const (
 	FieldNudgeOutcome       = "nudge_outcome"
 	FieldRelationOutcome    = "relation_outcome"
 	FieldStateOutcome       = "state_outcome"
+	FieldType               = "type"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
@@ -113,8 +114,8 @@ func Replay(c llm.Case, response string) error {
 
 // Check names the fields of cls that are not what c.Expect says, in a fixed
 // order. The reminder fields and the outcomes are strict: with nothing
-// expected, anything but none, false or absent is a miss. Day only and title
-// are checked only when expected.
+// expected, anything but none, false or absent is a miss. Day only, title and
+// type are checked only when expected.
 func Check(c llm.Case, cls classify.Classification) []string {
 	e := llm.Expect{}
 	if c.Expect != nil {
@@ -149,6 +150,7 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	miss(FieldRelationOutcome, outcomeMissed(e.RelationOutcome, ptrString(cls.RelationOutcome), false))
 	// No phrasing expects a state answer: the set measures reminder reading.
 	miss(FieldStateOutcome, cls.StateOutcome != nil)
+	miss(FieldType, e.Type != "" && ptrString(cls.Kind) != e.Type)
 	return misses
 }
 
@@ -233,6 +235,7 @@ func ValidateCase(c llm.Case) error {
 	oneOf(FieldTaskCheckinOutcome, e.TaskCheckinOutcome, strs(classify.AllTaskCheckinOutcomes()))
 	oneOf(FieldNudgeOutcome, e.NudgeOutcome, strs(classify.AllNudgeOutcomes()))
 	oneOf(FieldRelationOutcome, e.RelationOutcome, strs(classify.AllRelationOutcomes()))
+	oneOf(FieldType, e.Type, strs(classify.AllKinds()))
 	if n := e.ChoiceNumber; n != nil && (*n < 1 || *n > classify.MaxReminderChoices) {
 		errs = append(errs, fmt.Errorf("choice_number %d is outside 1-%d", *n, classify.MaxReminderChoices))
 	}
