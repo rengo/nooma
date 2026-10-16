@@ -46,11 +46,7 @@ func DigestDue(lastDigestAt *time.Time, now time.Time) bool {
 // send against today's due time instead would send a second digest the day
 // the user moves the quiet end past the hour the first one went out.
 func (q QuietHours) DigestDue(lastDigestAt *time.Time, now time.Time) bool {
-	hour := TimeOfDay{Hour: DigestHour}
-	if hour.before(q.End) {
-		hour = q.End
-	}
-	if now.Before(hour.on(now, 0, now.Location())) {
+	if now.Before(q.digestAt(now)) {
 		return false
 	}
 	return lastDigestAt == nil || lastDigestAt.Before(TimeOfDay{}.on(now, 0, now.Location()))

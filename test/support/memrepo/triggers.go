@@ -2,7 +2,9 @@ package memrepo
 
 import (
 	"context"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -182,12 +184,58 @@ func (r *Triggers) Undelivered(_ context.Context) ([]ports.DueTrigger, error) {
 
 // Delivered implements ports.TriggerRepo. Most recent first, so a caller
 // resolving one answer takes the head.
-func (r *Triggers) Delivered(_ context.Context) ([]ports.DueTrigger, error) {
-	out := r.fired(func(s storedTrigger) bool { return s.surfacedAt != nil && s.respondedAt == nil })
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
+func (r *Triggers) Delivered(_ context.Context) ([]ports.OpenCheckIn, error) {
+	fired := r.fired(func(s storedTrigger) bool { return s.surfacedAt != nil && s.respondedAt == nil })
+	r.mu.Lock()
+	out := make([]ports.OpenCheckIn, 0, len(fired))
+	for _, t := range fired {
+		out = append(out, ports.OpenCheckIn{DueTrigger: t, SurfacedAt: *r.triggers[t.ID].surfacedAt})
 	}
+	r.mu.Unlock()
+	// surfaced_at DESC, id DESC, as the SQLite read orders.
+	slices.SortFunc(out, func(a, b ports.OpenCheckIn) int {
+		if c := b.SurfacedAt.Compare(a.SurfacedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(b.ID, a.ID)
+	})
 	return out, nil
+}
+
+// ExpireUnanswered implements ports.TriggerRepo.
+func (r *Triggers) ExpireUnanswered(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, ok := r.triggers[id]
+	if !ok {
+		return ports.ErrTriggerNotFound
+	}
+	if stored.status != ports.TriggerStatusFired || stored.surfacedAt == nil || stored.respondedAt != nil {
+		return ports.ErrTriggerStatusConflict
+	}
+	stored.status = ports.TriggerStatusExpired
+	r.triggers[id] = stored
+	return nil
+}
+
+// Reask implements ports.TriggerRepo.
+func (r *Triggers) Reask(_ context.Context, id string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, ok := r.triggers[id]
+	if !ok {
+		return ports.ErrTriggerNotFound
+	}
+	if stored.status != ports.TriggerStatusFired || stored.surfacedAt == nil || stored.respondedAt != nil {
+		return ports.ErrTriggerStatusConflict
+	}
+	when := at
+	stored.surfacedAt = &when
+	stored.trigger.Payload.Reasks++
+	r.triggers[id] = stored
+	return nil
 }
 
 // fired collects every fired trigger matching keep, ordered by id.
@@ -227,7 +275,7 @@ func (r *Triggers) Resolve(_ context.Context, id string, to ports.TriggerResolut
 	if !ok {
 		return ports.ErrTriggerNotFound
 	}
-	if stored.surfacedAt == nil || stored.respondedAt != nil {
+	if stored.status != ports.TriggerStatusFired || stored.surfacedAt == nil || stored.respondedAt != nil {
 		return ports.ErrTriggerStatusConflict
 	}
 	when := at
@@ -396,7 +444,8 @@ func (r *Triggers) FiredForUnit(_ context.Context, unitID string) ([]ports.Fired
 	out := make([]ports.FiredTrigger, 0)
 	for _, stored := range r.triggers {
 		t := stored.trigger
-		if stored.status != ports.TriggerStatusFired || stored.firedAt == nil || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil {
+		sent := stored.status == ports.TriggerStatusFired || (stored.status == ports.TriggerStatusExpired && stored.surfacedAt != nil)
+		if !sent || stored.firedAt == nil || t.FireAt == nil || t.UnitID == nil || *t.UnitID != unitID || t.RecurrenceRule != nil {
 			continue
 		}
 		out = append(out, ports.FiredTrigger{ID: t.ID, FireAt: *t.FireAt, FiredAt: *stored.firedAt, Payload: t.Payload})

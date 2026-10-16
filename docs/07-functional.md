@@ -185,7 +185,10 @@ of a black box.
    expired, never deleted, and is not asked again.
 7. **Asks its own check-ins.** Goal and task nudges are answered the same way: *engaged* or
    *declined* resolves the most recent open one; for a task check-in, *done* and *drop* resolve
-   it and *snooze* leaves it open ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
+   it and *snooze* ("not yet", a bare "no" included) leaves it open. A check-in about something still
+   to do (a task or an open loop) that you put off is asked again from the next day's morning digest ("Te pregunto de nuevo: • ¿Ya está «Comprar café»?"), at most twice, and then closes by itself; one never
+   answered, or about an event, is not asked again and closes after the same three mornings, so an old check-in
+   stops collecting answers ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
 
 **You end up with** a graph that you correct in one word from your phone, and a nightly job that
 learns what you consider a real connection (the learning itself is [M5](#the-learner-m5-planned)).

@@ -474,9 +474,11 @@ func (r *conflictingTriggers) Surface(context.Context, string, time.Time) error 
 func (r *conflictingTriggers) Undelivered(context.Context) ([]ports.DueTrigger, error) {
 	return nil, nil
 }
-func (r *conflictingTriggers) Delivered(context.Context) ([]ports.DueTrigger, error) {
+func (r *conflictingTriggers) Delivered(context.Context) ([]ports.OpenCheckIn, error) {
 	return nil, nil
 }
+func (r *conflictingTriggers) Reask(context.Context, string, time.Time) error { return nil }
+func (r *conflictingTriggers) ExpireUnanswered(context.Context, string) error { return nil }
 func (r *conflictingTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
 	return nil
 }
@@ -485,14 +487,18 @@ func (r *failingTriggers) Surface(context.Context, string, time.Time) error { re
 func (r *failingTriggers) Undelivered(context.Context) ([]ports.DueTrigger, error) {
 	return nil, nil
 }
-func (r *failingTriggers) Delivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
+func (r *failingTriggers) Delivered(context.Context) ([]ports.OpenCheckIn, error) { return nil, nil }
+func (r *failingTriggers) Reask(context.Context, string, time.Time) error         { return nil }
+func (r *failingTriggers) ExpireUnanswered(context.Context, string) error         { return nil }
 func (r *failingTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
 	return nil
 }
 
 func (emptyTriggers) Surface(context.Context, string, time.Time) error        { return nil }
 func (emptyTriggers) Undelivered(context.Context) ([]ports.DueTrigger, error) { return nil, nil }
-func (emptyTriggers) Delivered(context.Context) ([]ports.DueTrigger, error)   { return nil, nil }
+func (emptyTriggers) Delivered(context.Context) ([]ports.OpenCheckIn, error)  { return nil, nil }
+func (emptyTriggers) Reask(context.Context, string, time.Time) error          { return nil }
+func (emptyTriggers) ExpireUnanswered(context.Context, string) error          { return nil }
 func (emptyTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
 	return nil
 }

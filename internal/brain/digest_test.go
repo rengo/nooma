@@ -12,6 +12,7 @@ import (
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -903,5 +904,61 @@ func TestRenderDigest_SpeaksTheSetItIsGiven(t *testing.T) {
 	if got, _ := renderDigest(sentences(), carry[1:], pending, nil); got != "Here is 1 thing for today:\n\u2022 You asked me to remind you about something." {
 		want := "Here is 1 thing for today:\n\u2022 You asked me to remind you about something."
 		t.Errorf("English renderDigest() = %q, want %q", got, want)
+	}
+}
+
+// TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant: a check-in asked again
+// is asked about its unit's words now, never its instant, which by the next
+// morning is usually past (ADR-0032).
+func TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant(t *testing.T) {
+	ctx := context.Background()
+	units := memrepo.NewUnits()
+	due := digestNow.Add(-12 * time.Hour)
+	if err := units.Create(ctx, unit.Unit{ID: "u-coffee", Type: unit.TypeTask, Status: unit.StatusPool,
+		Content: "buy coffee", DueAt: &due, Source: "chat", Weight: 1,
+		LastTouchedAt: due, CreatedAt: due, UpdatedAt: due}); err != nil {
+		t.Fatal(err)
+	}
+	unitID := "u-coffee"
+	reask := ports.DueTrigger{ID: "t-coffee", UnitID: &unitID, FireAt: due.Add(-15 * time.Minute),
+		Payload: ports.TriggerPayload{ActionText: "armed text"}}
+	r := digestRunner(t, &emptyTriggers{}, units, memrepo.NewState(), &recordingLog{}, nil)
+
+	text, sent, asked := r.digestText(ctx, digestNow, nil, nil, []ports.DueTrigger{reask}, nil)
+	if want := "Asking again:\n\u2022 Is \"buy coffee\" done?"; text != want {
+		t.Errorf("digest %q, want %q", text, want)
+	}
+	if len(sent) != 0 || len(asked) != 1 || asked[0] != "t-coffee" {
+		t.Errorf("sent %+v and asked %v, want only the re-ask", sent, asked)
+	}
+}
+
+// TestRenderDigest_ReasksFollowTheDaysItems is the exact digest, in both
+// languages: the day's items and their header, then the block asking again,
+// then the relation question. The header counts the day's items only.
+func TestRenderDigest_ReasksFollowTheDaysItems(t *testing.T) {
+	pending := []ports.DueTrigger{{ID: "trg-1", Payload: ports.TriggerPayload{ActionText: "Cumpleaños de Ana \u2014 vie 25 dic"}}}
+	carry := []prospection.DigestItem{{ID: "trg-1"}}
+	reasks := []ports.DueTrigger{
+		{ID: "t-coffee", Payload: ports.TriggerPayload{ActionText: "Comprar café"}},
+		{ID: "t-bank", Payload: ports.TriggerPayload{ActionText: "Llamar al banco"}},
+	}
+	q := ports.RelationQuestion{FromContent: "plan", ToContent: "budget"}
+
+	es := phrase.For(classify.LanguageES)
+	got, sent, asked := digestMessage(es, carry, pending, reasks, nil)
+	want := "Hoy hay 1 cosa:\n\u2022 Cumpleaños de Ana \u2014 vie 25 dic\n\n" +
+		"Te pregunto de nuevo:\n\u2022 ¿Ya está «Comprar café»?\n\u2022 ¿Ya está «Llamar al banco»?"
+	if got != want {
+		t.Errorf("Spanish digest =\n%q\nwant\n%q", got, want)
+	}
+	if len(sent) != 1 || len(asked) != 2 || asked[0] != "t-coffee" || asked[1] != "t-bank" {
+		t.Errorf("sent %+v and asked %v, want the item, and both re-asks in the order shown", sent, asked)
+	}
+
+	got, _, _ = digestMessage(sentences(), nil, nil, reasks[:1], &q)
+	want = "Asking again:\n\u2022 Is \"Comprar café\" done?\n\nOne more \u2014 I linked \"plan\" with \"budget\". Are they related?"
+	if got != want {
+		t.Errorf("English digest =\n%q\nwant\n%q", got, want)
 	}
 }

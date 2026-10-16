@@ -309,3 +309,21 @@ func TestProactiveSentences(t *testing.T) {
 		t.Errorf("en headers = %q, %q", en.DigestHeader(1), en.DigestHeader(2))
 	}
 }
+
+// TestAskAgainSentences: the digest asks a check-in again with a header and one
+// question per check-in, the client's Spanish of 2026-10-16 and its English.
+func TestAskAgainSentences(t *testing.T) {
+	for l, want := range map[classify.Language][2]string{
+		classify.LanguageES: {"Te pregunto de nuevo:", "¿Ya está «Comprar café»?"},
+		classify.LanguageEN: {"Asking again:", "Is \"Buy coffee\" done?"},
+	} {
+		s := For(l)
+		if s.AskAgain != want[0] {
+			t.Errorf("%s: AskAgain = %q, want %q", l, s.AskAgain, want[0])
+		}
+		words := map[classify.Language]string{classify.LanguageES: "Comprar café", classify.LanguageEN: "Buy coffee"}[l]
+		if got := s.Done(words); got != want[1] {
+			t.Errorf("%s: Done = %q, want %q", l, got, want[1])
+		}
+	}
+}

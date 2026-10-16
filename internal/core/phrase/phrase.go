@@ -101,7 +101,11 @@ type Set struct {
 	// many lines it left for tomorrow. TimerNudge is what a timer with no words
 	// says, TimerLate the note a timer carries when it is delivered later than
 	// asked, and LanguageName is what the model is told to reword a timer in.
-	AndMore      string
+	AndMore string
+	// AskAgain heads the digest's block of check-ins asked again (doc 02 §7),
+	// and AskDone is one of them: one %s, the unit's title or content.
+	AskAgain     string
+	AskDone      string
 	TimerNudge   string
 	TimerLate    string
 	LanguageName string
@@ -172,6 +176,8 @@ var sets = map[classify.Language]Set{
 		Late:              "(This is later than intended.)",
 		SomethingYouAsked: "You asked me to remind you about something.",
 		AndMore:           "\u2026and %d more.",
+		AskAgain:          "Asking again:",
+		AskDone:           "Is \"%s\" done?",
 		TimerNudge:        "You asked me to remind you about something now.",
 		TimerLate:         "(This is later than you asked for.)",
 		LanguageName:      "English",
@@ -223,6 +229,8 @@ var sets = map[classify.Language]Set{
 		Late:              "(Esto llega más tarde de lo previsto.)",
 		SomethingYouAsked: "Me pediste que te recordara algo.",
 		AndMore:           "\u2026y %d más.",
+		AskAgain:          "Te pregunto de nuevo:",
+		AskDone:           "¿Ya está «%s»?",
 		TimerNudge:        "Me pediste que te recordara algo ahora.",
 		TimerLate:         "(Esto llega más tarde de lo que pediste.)",
 		LanguageName:      "Spanish",
@@ -301,6 +309,9 @@ func (s Set) DigestItem(line string) string { return fmt.Sprintf(s.DigestLine, l
 
 // Question asks whether two things Nooma linked are related.
 func (s Set) Question(from, to string) string { return fmt.Sprintf(s.RelationQuestion, from, to) }
+
+// Done asks whether the thing words name is done (AskDone).
+func (s Set) Done(words string) string { return fmt.Sprintf(s.AskDone, words) }
 
 // More says how many digest lines were left for tomorrow.
 func (s Set) More(n int) string { return fmt.Sprintf(s.AndMore, n) }

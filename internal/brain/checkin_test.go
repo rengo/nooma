@@ -23,7 +23,13 @@ type openCheckIns struct {
 	as       []ports.TriggerResolution
 }
 
-func (r *openCheckIns) Delivered(context.Context) ([]ports.DueTrigger, error) { return r.open, nil }
+func (r *openCheckIns) Delivered(context.Context) ([]ports.OpenCheckIn, error) {
+	out := make([]ports.OpenCheckIn, 0, len(r.open))
+	for _, t := range r.open {
+		out = append(out, ports.OpenCheckIn{DueTrigger: t})
+	}
+	return out, nil
+}
 
 func (r *openCheckIns) Resolve(_ context.Context, id string, to ports.TriggerResolution, _ time.Time) error {
 	r.resolved = append(r.resolved, id)
@@ -185,6 +191,64 @@ func TestCheckIn_AClassificationWithNoOutcomeTouchesNothing(t *testing.T) {
 	if resolved || len(triggers.resolved) != 0 || len(log.actions) != 0 {
 		t.Fatalf("a capture answering nothing resolved %v and wrote %v — most captures answer no check-in and must cost nothing",
 			triggers.resolved, log.actions)
+	}
+}
+
+// TestSnoozeRecordsWhichCheckinItPutOff: "not yet" closes nothing, and the
+// morning digest asks again only what it can tell was put off, so the snooze
+// is recorded against the check-in it answered, the newest open one.
+func TestSnoozeRecordsWhichCheckinItPutOff(t *testing.T) {
+	triggers := &openCheckIns{open: []ports.DueTrigger{{ID: "trg-newest"}, {ID: "trg-older"}}}
+	log := &recordingLog{}
+
+	resolved, err := checkInRunner(triggers, log).
+		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeSnooze), checkInNow)
+	if err != nil {
+		t.Fatalf("resolveCheckIn: %v", err)
+	}
+	if resolved || len(triggers.resolved) != 0 {
+		t.Fatalf("a snooze resolved %v; it must leave the check-in open", triggers.resolved)
+	}
+	if len(log.actions) != 1 || log.actions[0] != ports.ActionCaptureCheckInSnoozed {
+		t.Fatalf("rows %v, want one %q", log.actions, ports.ActionCaptureCheckInSnoozed)
+	}
+	var row struct {
+		TriggerID    string `json:"trigger_id"`
+		OpenCheckIns int    `json:"open_check_ins"`
+	}
+	if err := json.Unmarshal(log.contexts[0], &row); err != nil {
+		t.Fatal(err)
+	}
+	if row.TriggerID != "trg-newest" || row.OpenCheckIns != 2 {
+		t.Errorf("row %+v, want trigger_id trg-newest of 2 open", row)
+	}
+}
+
+// closedUnderTheAnswer is an open check-in the digest closed between this
+// capture's read of Delivered and its Resolve.
+type closedUnderTheAnswer struct{ openCheckIns }
+
+func (r *closedUnderTheAnswer) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
+	return ports.ErrTriggerStatusConflict
+}
+
+// TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure: when the digest
+// expires the check-in an answer was about to close, the answer is recorded as
+// matching nothing and the capture goes on; it never aborts the capture.
+func TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure(t *testing.T) {
+	triggers := &closedUnderTheAnswer{openCheckIns{open: []ports.DueTrigger{{ID: "trg-1"}}}}
+	log := &recordingLog{}
+
+	resolved, err := checkInRunner(triggers, log).
+		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeDone), checkInNow)
+	if err != nil {
+		t.Fatalf("resolveCheckIn: %v, want the race absorbed", err)
+	}
+	if resolved {
+		t.Error("an answer to a check-in closed under it reported a resolution")
+	}
+	if n := log.count(ports.ActionCaptureCheckInUnmatched); n != 1 {
+		t.Errorf("%d unmatched rows, want 1", n)
 	}
 }
 

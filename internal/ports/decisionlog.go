@@ -81,13 +81,25 @@ const (
 	ActionCheckDeliveryFailed       DecisionAction = "check.delivery_failed"
 	ActionCheckDigestSent           DecisionAction = "check.digest.sent"
 	ActionCheckDigestHeld           DecisionAction = "check.digest.held"
+	// ActionCheckCheckinReasked and ActionCheckCheckinExpired record the
+	// morning digest asking an open check-in again and closing one nobody
+	// answered (doc 02 §7). They are audit rows: the re-ask count lives on the
+	// trigger, in payload.reasks, written by Reask with its restamp.
+	ActionCheckCheckinReasked DecisionAction = "check.checkin.reasked"
+	ActionCheckCheckinExpired DecisionAction = "check.checkin.expired"
+	// ActionCheckCheckinReaskSkipped records a re-ask a morning could not
+	// make because the check-in's unit could not be read (doc 02 §7).
+	ActionCheckCheckinReaskSkipped DecisionAction = "check.checkin.reask_skipped"
 	// ActionCheckFocusUnavailable records a digest sent without focus
 	// adjacency because the keeper could not compute one. The digest is owed
 	// to the user, so the failure is logged and not fatal (m4c design §3.5).
-	ActionCheckFocusUnavailable     DecisionAction = "check.focus.unavailable"
-	ActionCheckTimerRephraseFailed  DecisionAction = "check.timer.rephrase_failed"
-	ActionCaptureCheckInResolved    DecisionAction = "capture.checkin.resolved"
-	ActionCaptureCheckInUnmatched   DecisionAction = "capture.checkin.unmatched"
+	ActionCheckFocusUnavailable    DecisionAction = "check.focus.unavailable"
+	ActionCheckTimerRephraseFailed DecisionAction = "check.timer.rephrase_failed"
+	ActionCaptureCheckInResolved   DecisionAction = "capture.checkin.resolved"
+	ActionCaptureCheckInUnmatched  DecisionAction = "capture.checkin.unmatched"
+	// ActionCaptureCheckInSnoozed records which open check-in a "not yet"
+	// put off: the row the morning digest reads to ask it again (doc 02 §7).
+	ActionCaptureCheckInSnoozed     DecisionAction = "capture.checkin.snoozed"
 	ActionCaptureDedupJudged        DecisionAction = "capture.dedup.judged"
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
@@ -247,8 +259,9 @@ func AllDecisionActions() []DecisionAction {
 		ActionCheckReminderCancelled, ActionCheckReminderRefused, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,
 		ActionCheckTriggerDelivered, ActionCheckDeliveryFailed,
-		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,
-		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched,
+		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckCheckinReasked, ActionCheckCheckinExpired, ActionCheckCheckinReaskSkipped,
+		ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,
+		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched, ActionCaptureCheckInSnoozed,
 		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,

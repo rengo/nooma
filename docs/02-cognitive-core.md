@@ -522,8 +522,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      reply answers the check-in, and the prompt asks for the outcome it means. A short decline
      alone means not yet, `snooze` (the client's ruling): only an explicit refusal, to do the
      task or to be asked about it, is `drop` or `declined`. `snooze` leaves the check-in open,
-     and **nothing asks a delivered check-in again yet**: the digest reads only triggers that
-     have not reached the user, so a snoozed one-shot reminder is not re-asked. A message that
+     and a reading that closes nothing and snoozes (`classify.Snoozes`) is recorded against the
+     newest open check-in as `capture.checkin.snoozed`, which the morning digest asks again
+     (§7, "An open check-in closes"). A message that
      answers an open reminder question, or says whether two things are related, answers that
      and not a check-in: it carries no `task_checkin_outcome` and no `nudge_outcome`. A message
      that only closes the conversation, a goodbye or a thanks, answers no check-in either, even when
@@ -541,7 +542,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      open, the choice and the count are both written to `decision_log`
      (`open_relation_questions: N`), so the audit trail shows a choice was made rather than
      implying there was only one. **An answer matching nothing open resolves nothing and,
-     above all, deletes nothing.**
+     above all, deletes nothing.** Nor does one whose check-in the digest closed between the read
+     and the write (§7): it is recorded as unmatched and the capture goes on.
    - **The one exception is narrower than the rule, and is for reminders**
      ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)): the prompt may carry the
      reminder question Nooma has open and one numbered list of at most `max_reminder_choices`
@@ -1320,7 +1322,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   `proactive_check` ticks, `internal/core/prospection.DelayCaveatMinutes`).
 - Delivery lifecycle: `fired_at` (fired) → `surfaced_at` (delivered to the user) →
   `responded_at` + `resolution` (`engaged` | `declined` | `self_healed` — fresh activity
-  resolved it before the user answered). One whose event passed first lapses (ADR-0032).
+  resolved it before the user answered). One whose event passed first lapses (ADR-0032). One
+  that reached the user and that nobody answered closes by itself (`ExpireUnanswered`: `fired`
+  to `expired`, `surfaced_at` kept, `responded_at` NULL); it went out, so it still covers its
+  lead (`FiredForUnit`), and no answer reaches it. Asking it again restamps `surfaced_at`
+  (`Reask`), so `surfaced_at` is the last time it reached the user.
 - **The due scan** reads the clock once and judges every trigger and timer that has come due
   against that one instant, so a pass's verdicts are consistent with each other. It decides
   nothing itself: staleness, quiet hours and the deliverable-from shift above are all evaluated
@@ -1565,11 +1571,12 @@ box can audit it):
   delivered. The text a reminder was armed with (the title the capture classified, else the
   content) is only the fallback when the unit cannot be read; a correction keeps it equal to
   what the unit says (§5 step 4).
-  The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `OneMore`,
+  The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `AskAgain`, `AskDone`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.
   **A digest fits one message.** Telegram refuses a message over 4096 UTF-16 units, which would
-  fail every pass, so a digest that would exceed it drops its last lines (a unit's reminders are
+  fail every pass, so a digest that would exceed it first leaves out its check-ins asked again
+  ("An open check-in closes", below), the last first, and then drops its last lines (a unit's reminders are
   one line), ends with one sentence saying how many more (`AndMore`: "and N more"), and never drops
   its question. The dropped reminders stay undelivered, so tomorrow's digest carries them; only the
   sent ones are marked delivered, `DigestCarried` and the `check.digest.sent` row count only those,
@@ -1625,6 +1632,41 @@ box can audit it):
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.
+
+**An open check-in closes** (the client's ruling of 2026-10-16; `prospection.CheckinStep`). A
+delivered trigger nobody answered is an open check-in, and the newest one is what an answer
+reaches (§5 step 1). When a digest is due, each is judged by its **mornings**: the later local
+calendar days, in the user's zone, whose digest is due by now, counted whether or not a digest
+went out ("el resumen de la mañana siguiente": one pushed at 07:00 with the digest at 08:00 is
+first asked the next day). One the user put off (the newest `capture.checkin.snoozed` row) is
+**asked again** from the morning after the snooze, and then every later morning, put off again or
+left unanswered alike, up to `max_checkin_reasks`, but only while its unit is still something to do,
+re-checked at every re-ask: a `task` or a `mental_load` still `pool` or `incomplete`
+(`prospection.stillToDo`, one case per kind). The morning after the last re-ask **closes** it:
+`ExpireUnanswered`, `check.checkin.expired`. Any other closes at the third morning after it last
+reached the user and is never asked: one nobody answered or put off, a nudge with no unit, which
+has no words to ask with, a unit archived or superseded, and any other kind, an `event`
+included: "cena con Juan" put off is not asked the morning after the dinner, because a reminder
+never speaks of the past (ADR-0032). `Reask` restamps `surfaced_at` and counts the re-ask on the
+row in the same write (`payload.reasks`), so a failure after it grants no extra re-ask;
+`check.checkin.reasked` is the audit row. A check-in with no `surfaced_at` is neither asked nor closed until a
+morning can decide it. One whose unit cannot be read that morning for any reason but its absence
+is not asked again that morning, since asking needs the unit's words, and, when a re-ask was due
+(`prospection.ReaskDue`: put off on an earlier day or asked before, under the cap), says so once a
+morning (`check.checkin.reask_skipped`); its lifetime needs no unit, so it still closes on schedule and an
+error that never clears cannot keep it open. A unit that is gone is no unit: its check-in only
+gets the lifetime. A dry run asks and closes nothing. Quiet hours need no rule of their own: the digest
+waits for them. Today does not list re-asks. The digest asks in the client's wording of 2026-10-16
+(`Te pregunto de nuevo:` / `• ¿Ya está «Comprar café»?`; `Asking again:` / `• Is "Buy coffee"
+done?`, `phrase` `AskAgain` and `AskDone`), naming the unit's title, else its content, now and no
+instant (by then usually past), clipped like a day line, in a block after the day's items. One
+digest asks at most `max_reasks_per_digest`, the longest waiting first; the rest wait for a later
+morning, unasked and uncounted. The message bound below drops re-asks before the day's lines, so
+re-asks never wedge a digest, and one left out also waits. The day's items and the re-asks are
+counted apart: `check.digest.sent` and the carried count (the dry run's too) are the day's
+reminders, and the row adds how many check-ins it asked again. A check pass stamps `surfaced_at` on
+everything it sends in send order, a second apart, pushes first and then the digest's lines and
+re-asks, so **a bare answer reaches the last thing the pass showed**, whichever message it was in.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
 now, computed from the same reads and the same `Carry`, except for the message bound: Today is a
@@ -1882,6 +1924,8 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
 | `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
+| `max_checkin_reasks` (`internal/core/prospection.MaxCheckinReasks`) | 2 — how many morning digests ask again a check-in the user put off; the digest after the last closes it, and a check-in nobody answered closes at that same digest, the third after it reached the user (§7). The client's ruling (2026-10-16), not a derivation |
+| `max_reasks_per_digest` (`internal/core/prospection.MaxReasksPerDigest`) | 3 — how many check-ins one morning digest asks again at most, the longest waiting first; the rest wait, uncounted (§7). Chosen: a short list after the day's items, at most a low-energy digest's whole carry (`low_energy_digest_size`), and with each clipped to a day line's length it keeps the block well inside one message |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split. The default of an event reminder's quiet end, user-overridable: `config.quiet_hours_end` (ADR-0030) |
 | `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a recurring reminder's next occurrence its trigger fires; a dated event uses the three rows below (ADR-0029). A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |
