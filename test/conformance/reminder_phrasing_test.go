@@ -139,11 +139,12 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 	has("a task check-in answer", expect(func(e *llm.Expect) bool { return e.TaskCheckinOutcome != "" }))
 	// Every outcome the check-in can be answered with, and a done that is not
 	// next to a list of reminders that may be stopped (link 1b).
-	for _, o := range []string{"done", "snooze", "drop"} {
-		has("a task check-in answered "+o, expect(func(e *llm.Expect) bool { return e.TaskCheckinOutcome == o }))
+	// From the vocabularies, so a value added later needs a phrasing too.
+	for _, o := range classify.AllTaskCheckinOutcomes() {
+		has("a task check-in answered "+string(o), expect(func(e *llm.Expect) bool { return e.TaskCheckinOutcome == string(o) }))
 	}
-	for _, o := range []string{"engaged", "declined"} {
-		has("a nudge answered "+o, expect(func(e *llm.Expect) bool { return e.NudgeOutcome == o }))
+	for _, o := range classify.AllNudgeOutcomes() {
+		has("a nudge answered "+string(o), expect(func(e *llm.Expect) bool { return e.NudgeOutcome == string(o) }))
 	}
 	has("a done with no list", func(c llm.Case) bool {
 		return len(c.CandidatesList) == 0 && c.Expect != nil && c.Expect.TaskCheckinOutcome == "done"
