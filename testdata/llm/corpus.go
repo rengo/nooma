@@ -37,6 +37,14 @@ import (
 //go:embed cases/*.json
 var casesFS embed.FS
 
+// remindersFS is the reminder phrasing set (design D1c), kept apart from
+// cases/ so the quality gate, which sends every Cases() entry to a live
+// provider on every doctor run, does not send forty more. ReminderCases
+// reads it, and `nooma doctor --reading` is the one thing that does.
+//
+//go:embed reminders/*.json
+var remindersFS embed.FS
+
 // Case is the one slice of a testdata/llm/ recorded example the quality
 // gate needs at runtime: which pipeline call it feeds, and the raw
 // message (plus, for relation_evaluation, the candidates) its real prompt
@@ -52,6 +60,16 @@ type Case struct {
 	Task       string      `json:"task"`
 	Message    string      `json:"message"`
 	Candidates []Candidate `json:"candidates,omitempty"`
+
+	// The fields below belong to the reminder phrasing set (design D1c);
+	// a cases/ example carries none of them.
+	Record         bool      `json:"record,omitempty"`
+	Now            string    `json:"now,omitempty"`
+	OpenQuestion   *Question `json:"open_question,omitempty"`
+	CandidatesList []Entry   `json:"candidates_list,omitempty"`
+	Expect         *Expect   `json:"expect,omitempty"`
+	KnownMisread   string    `json:"known_misread,omitempty"`
+	PromptSHA256   string    `json:"prompt_sha256,omitempty"`
 }
 
 // Candidate is one relation_evaluation candidate a Case carries — the same
@@ -66,14 +84,19 @@ type Candidate struct {
 // already guarantees (sorted by filename, and every case's filename is
 // its own id). json.Unmarshal ignores the response/error/provider/model
 // fields those files also carry — Case has no field to assign them into.
-func Cases() ([]Case, error) {
-	entries, err := casesFS.ReadDir("cases")
+func Cases() ([]Case, error) { return load(casesFS, "cases") }
+
+// ReminderCases is Cases for testdata/llm/reminders/, the phrasing set.
+func ReminderCases() ([]Case, error) { return load(remindersFS, "reminders") }
+
+func load(fsys embed.FS, dir string) ([]Case, error) {
+	entries, err := fsys.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("llm: reading embedded cases: %w", err)
+		return nil, fmt.Errorf("llm: reading embedded %s: %w", dir, err)
 	}
 	cases := make([]Case, 0, len(entries))
 	for _, entry := range entries {
-		data, err := casesFS.ReadFile("cases/" + entry.Name())
+		data, err := fsys.ReadFile(dir + "/" + entry.Name())
 		if err != nil {
 			return nil, fmt.Errorf("llm: reading embedded case %q: %w", entry.Name(), err)
 		}

@@ -37,17 +37,19 @@ tasks-repeating).
   - [x] RED `TestDigestLineHasNoRecordatorioPrefix` ("• Reunión con Juan — 22:30"); `TestFrozenTextUsesTheTitle`.
   - Asked capture: link 2 reads `asked` from `c.RemindRequest`. The day-only flag (1.2, #346) stays; the phrase reader never merged.
   - [x] GREEN; doc 02 §5 step 1 (the fields, the title), §5.1 lines 483-495 (the narrower injection rule), §5 step 4 and §11 (`FieldTitle`), §7 (the render); doc 03 (`units.title`); §13 `max_title_runes`; `make check-all`.
-- [ ] 1.1′ Link 1a′ — `feat/doctor-record-and-reading` (D1c):
-  - RED `TestDoctorRecordWritesResponsesWithAFakeProvider`: only `"record": true` cases; `expect` untouched; `provider`, `model` and `now` written; `record` cleared. `TestRecordSkipsRecordedWithoutForce`; `TestRecordRefusesUnderCI`; `TestRecordSendsNilBeliefs`.
-  - RED `TestValidateAllowsAwaitingRecording` (replay skips it and reports the count); `scripts/recordings-complete.sh` and its test `TestRecordingsCompleteFailsOnPendingCase`; `TestCasesMatchesTheSourceFiles` covers `reminders/`; `format.md` and its format test.
-  - RED `TestKnownMisreadStaysMarked`: a `known_misread` case that reads as expected fails, so its mark is removed.
-  - RED (round 2): `TestReplayFailsOnPromptHashMismatch`; **Maintainer-reviewed docs edit in this PR:** CLAUDE.md's Workflow section gains the `check-all` exception for `recordings-complete.sh`. `TestRecordingsCompleteScript` (the step runs in `ci.yml`'s required `lint` job; doc 06 §6 states why it is not in `check-all`); `TestDoctorReportsCheckinOutcomeRates` and `TestDoctorReportsDayOnlyRate`. Recorded cases include day-only phrasings expecting bare dates, check-in answers, and "a single candidate plus a message about something else → `unclear`".
-  - RED `TestDoctorReadingIsOptIn` (plain `doctor` makes no reading calls); `TestDoctorReportsReminderReadingRate`; `TestDoctorFalsePositiveLineFailsOnOne` (its negatives include a bare no/sí/listo/ya answering an open relation question or check-in with a non-empty candidate list); `TestDoctorReportsTitleRate` (fake provider).
-  - Corpus, recorded once by the maintainer in one session, against the final prompt of link 1a (which already holds every later link's prompt text):
-    - no existing recording is re-recorded; I18, I26, `arming_capture_keeps_its_unit` and `classify_golden_cases_decode_clean` assert their content;
-    - about 40 new in `testdata/llm/reminders/`: every phrasing of spec R1's table, the stop, undo-keep and answer phrasings, "listo" reading `none` (with `open_question` or the candidate list), the negatives for the hard false-positive line, and the title cases.
-  - RED then GREEN L2 `TestReminderPhrasingSetReadsAsExpected`: replays every case.
-  - Doc 06 §5 (the record step); `make check-all`.
+- [ ] 1.1′ Link 1a′, cut in three before opening because it measured about 640 impl+docs (PM approved the first cut 2026-10-15; the second followed the measurement), stacked to main: 1a′-a `feat/reminder-phrasing-replay` (the format and the replay), 1a′-b `feat/doctor-record` (`--record`), and 1a′-c `feat/reminder-phrasing-set` (the phrasing set, `--reading`, the merge gate; red until the maintainer records) (D1c):
+  - Link 1a′-a — `feat/reminder-phrasing-replay`:
+    - [x] RED `TestValidateAllowsAwaitingRecording` (a `record: true` case needs no response, provider or model; the rest stays strict); `TestLLMFormatDocumentsEveryField`; `TestCasesMatchesTheSourceFiles` covers `reminders/`; `format.md`.
+    - [x] RED L1 `internal/reading` (documented in doc 06 §1 as not core): `TestPromptSendsNilBeliefs`, `TestReplayFailsOnPromptHashMismatch`, `TestKnownMisreadStaysMarked`, the strict `Check`; L2 `TestReminderPhrasingSetReadsAsExpected` (replay skips cases awaiting recording and reports the count).
+  - Link 1a′-b — `feat/doctor-record`:
+    - [ ] RED `TestDoctorRecordWritesResponsesWithAFakeProvider`: only `"record": true` cases; `expect` untouched; `provider`, `model`, `now` and `prompt_sha256` written; `record` cleared. `TestRecordSkipsRecordedWithoutForce`; `TestRecordRefusesUnderCI`; `TestRecordSendsNilBeliefs`. Doc 06 §5 (the record step).
+  - Link 1a′-c — `feat/reminder-phrasing-set`:
+    - [ ] RED `scripts/recordings-complete.sh` and `TestRecordingsCompleteFailsOnPendingCase`; `TestRecordingsCompleteScript` (the step runs in `ci.yml`'s required `lint` job; doc 06 §6 states why it is not in `check-all`); **Maintainer-reviewed docs edit in this PR:** CLAUDE.md's Workflow section gains the `check-all` exception for `recordings-complete.sh`.
+    - [ ] RED `TestDoctorReadingIsOptIn` (plain `doctor` makes no reading calls); `TestDoctorReportsReminderReadingRate`; `TestDoctorFalsePositiveLineFailsOnOne` (its negatives include a bare no/sí/listo/ya answering an open relation question or check-in with a non-empty candidate list); `TestDoctorReportsTitleRate`; `TestDoctorReportsCheckinOutcomeRates` and `TestDoctorReportsDayOnlyRate` (fake provider).
+    - [ ] Corpus, recorded once by the maintainer in one session, against the final prompt of link 1a (which already holds every later link's prompt text):
+      - no existing recording is re-recorded; I18, I26, `arming_capture_keeps_its_unit` and `classify_golden_cases_decode_clean` assert their content;
+      - about 40 new in `testdata/llm/reminders/`: every phrasing of spec R1's table, the stop, undo-keep and answer phrasings, "listo" reading `none` (with `open_question` or the candidate list), the negatives for the hard false-positive line, the title cases, the day-only bare dates, the check-in answers, "a single candidate plus a message about something else → `unclear`", and `classify-task-remind-me-coffee` and `…-daily-pills`.
+    - [ ] Doc 06 §6; `make check-all`.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.

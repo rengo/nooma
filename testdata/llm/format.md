@@ -60,13 +60,33 @@ is documented here in prose rather than as a second block.
 | `task` | string | yes | Which pipeline call this recorded response feeds, e.g. `classify` or a judge task (`docs/02-cognitive-core.md` §5's dedup/relation judge). Not a closed enum today — ADR-0002 describes "a fixed set of classify and judge prompts" without naming every judge task, so the loader does not validate `task` against a fixed list |
 | `message` | string | yes | The raw text `nooma doctor`'s quality gate feeds to the real prompt builder — the user's message alone for a `classify`-tagged case, the new unit's content for a `relation_evaluation`-tagged case. Never the prompt itself: `cmd/nooma/doctor.go` builds the live prompt from this field through `classify.BuildPrompt` (capture_processing) or `brain.JudgePrompt` (relation_evaluation), the exact functions production calls, so a change to either builder reaches the gate automatically |
 | `candidates` | array of `{id, content}` | only for a `relation_evaluation`-tagged case | The recall candidates `brain.JudgePrompt` renders alongside `message` — one entry per candidate, `id`/`content` are the only two fields it reads. A documentation convention by task, not mechanized by the loader: a `classify`-tagged case simply omits it |
+| `record` | bool | no | `true` on a reminder phrasing awaiting its recording session (`reminders/` only). It has no `response`, `provider` or `model` yet. `nooma doctor --record` records it and clears the flag; a `record: true` that already has a `response` is a request to re-record, and only `--force` honors it. `scripts/recordings-complete.sh` fails the merge while any remains |
+| `now` | string, RFC 3339 | no | The instant the prompt was built at, with the user's UTC offset. `--record` stores the one it told the model, and replay builds the prompt at it, so the hash below can be reproduced |
+| `open_question` | `{kind, text}` | no | The reminder question Nooma has open when the phrasing is read: `kind` is `remind_when`, `which_reminder` or `undo`, and `text` is the exact words Nooma sent, numbered list included. The prompt shows it, and only it, as the list (`classify.RenderReminderList`) |
+| `candidates_list` | array of `{label, when}` | no | The stop candidates the code built, in position order; at most five. Shown to the model only when no `which_reminder` question is open |
+| `expect` | object | no, but every phrasing in `reminders/` has one | The reading the phrasing should get, written by hand and never touched by `--record`. The reminder fields (`remind_request`, `reminder_intent`, `question_answer`, `choice_number`, `reminder_target`) are strict: unset means the model must read none, false or absent. `day_only`, `title`, `task_checkin_outcome`, `nudge_outcome` and `relation_outcome` are checked only when set. `reminder_target` is `"1"` to `"5"` or `"unclear"` |
+| `known_misread` | string | no | Why a phrasing is kept although the model reads it wrong. Replay asserts that it still misreads, so the mark must be removed the day it reads right. Nobody edits a response by hand |
+| `prompt_sha256` | string | with `now`, on a recorded reminder phrasing | The SHA-256 of the prompt the response was recorded against. Replay rebuilds that prompt through `classify.BuildPrompt` and fails on a mismatch, so a prompt change cannot leave stale recordings green |
 | `response` | string | exactly one of `response`/`error` | The exact raw response text, recorded once and replayed verbatim by a fake provider — never re-sent to a real provider by a test |
 | `error` | string | exactly one of `response`/`error` | A recorded provider-level failure (timeout, HTTP error, rate limit) the fake provider must surface instead of a response. `docs/06-harness.md` §3 says providers are always served from fixtures, so a failure path can only ever be exercised from a recording like this one |
+
+## The reminder phrasing set
+
+`reminders/*.json` holds the phrasings that measure how well a model reads a reminder
+request, a stop, a keep and an answer (ADR-0033). It is embedded apart from `cases/`
+(`llm.ReminderCases`), so the quality gate does not send it on every `doctor` run;
+`nooma doctor --reading` does. Phrasings are synthetic: `scripts/recordings-complete.sh`
+rejects a vault path, a ULID-shaped id or an e-mail address in any of them.
+
+A phrasing is written with `record: true` and its `expect`, then recorded once per prompt
+change with `nooma doctor --record testdata/llm/reminders [vault]` (docs/06-harness.md §5).
+`internal/reading` compares the replayed response to `expect`.
 
 ## Cross-field constraint
 
 Exactly one of `response` or `error` must be set — never both, never
-neither. This is mechanized: `LLMExample.Validate`
+neither, except that a case with `record: true` is awaiting its recording and has
+neither (or keeps the old `response` it is to replace). This is mechanized: `LLMExample.Validate`
 (`test/support/goldenset/types.go`) rejects a case with both empty or both
 set.
 
