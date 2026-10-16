@@ -335,6 +335,14 @@ type TriggerRepo interface {
 	// It returns the same two errors as Fire, for the same reasons.
 	Expire(ctx context.Context, id string) error
 
+	// Rearm moves the recurring trigger id out of armed and creates next, its
+	// successor, armed, in one write: both happen or neither (doc 02 §7, I17).
+	// firedAt non-nil fires id as Fire does; nil expires it as Expire does. A
+	// series whose row left armed with no successor would never ring again.
+	// It returns Fire's two errors under Fire's precondition, and
+	// ErrTriggerExists when next.ID is taken; on any error nothing is written.
+	Rearm(ctx context.Context, id string, firedAt *time.Time, next Trigger) error
+
 	// Lapse moves id from fired to expired when it never reached the user
 	// (surfaced_at NULL), keeping fired_at: a reminder that fired and was
 	// judged no longer true to send (ADR-0032). It returns

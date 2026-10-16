@@ -226,6 +226,64 @@ func RunTriggerRepo(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		}
 	})
 
+	// successor is the next row of a recurring series, a day after contractNow.
+	successor := func(id string) ports.Trigger {
+		next := contractNow.AddDate(0, 0, 1)
+		trg := fixtureTrigger(id, &next)
+		trg.UnitID = nil
+		return trg
+	}
+
+	t.Run("Rearm fires the row and arms its successor in one write", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fireAt := contractNow
+		createTrigger(t, repo, fixtureTrigger("trg-series", &fireAt))
+
+		if err := repo.Rearm(ctx, "trg-series", &fireAt, successor("trg-series-2")); err != nil {
+			t.Fatalf("Rearm: %v", err)
+		}
+		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt))
+		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt.AddDate(0, 0, 1)), "trg-series-2")
+		assertDueTriggerIDs(t, undelivered(t, repo), "trg-series")
+	})
+
+	t.Run("Rearm with no firing expires the row and arms its successor", func(t *testing.T) {
+		repo := newRepo(t)
+		fireAt := contractNow
+		createTrigger(t, repo, fixtureTrigger("trg-series", &fireAt))
+
+		if err := repo.Rearm(context.Background(), "trg-series", nil, successor("trg-series-2")); err != nil {
+			t.Fatalf("Rearm: %v", err)
+		}
+		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt.AddDate(0, 0, 1)), "trg-series-2")
+		assertDueTriggerIDs(t, undelivered(t, repo))
+	})
+
+	t.Run("Rearm writes nothing when either half is refused", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fireAt := contractNow
+		createTrigger(t, repo, fixtureTrigger("trg-series", &fireAt))
+		createTrigger(t, repo, successor("trg-taken"))
+
+		if err := repo.Rearm(ctx, "trg-series", &fireAt, successor("trg-taken")); !errors.Is(err, ports.ErrTriggerExists) {
+			t.Fatalf("Rearm onto a taken id: got %v, want ErrTriggerExists", err)
+		}
+		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt), "trg-series")
+
+		if err := repo.Expire(ctx, "trg-series"); err != nil {
+			t.Fatalf("Expire: %v", err)
+		}
+		if err := repo.Rearm(ctx, "trg-series", &fireAt, successor("trg-new")); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+			t.Fatalf("Rearm of an expired row: got %v, want ErrTriggerStatusConflict", err)
+		}
+		if err := repo.Rearm(ctx, "does-not-exist", nil, successor("trg-new")); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Fatalf("Rearm of an unknown id: got %v, want ErrTriggerNotFound", err)
+		}
+		assertDueTriggerIDs(t, dueTriggers(t, repo, fireAt.AddDate(0, 0, 1)), "trg-taken")
+	})
+
 	t.Run("Due orders by fire_at then id", func(t *testing.T) {
 		repo := newRepo(t)
 		early := contractNow.Add(-time.Hour)
