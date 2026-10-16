@@ -4,6 +4,7 @@
   "message": "después lo veo",
   "record": true,
   "expect": {
+    "type": "chitchat",
     "task_checkin_outcome": "snooze"
   }
 }

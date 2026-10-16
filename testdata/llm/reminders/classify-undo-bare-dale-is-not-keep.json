@@ -8,5 +8,7 @@
     "kind": "undo",
     "text": "Listo, no te lo recuerdo más: Comprar café — jue 15 oct, 10:00. (Si fue un error, decime «no, seguí».)"
   },
-  "expect": {}
+  "expect": {
+    "type": "chitchat"
+  }
 }

@@ -4,6 +4,7 @@
   "message": "ya lo terminé",
   "record": true,
   "expect": {
+    "type": "chitchat",
     "task_checkin_outcome": "done"
   }
 }

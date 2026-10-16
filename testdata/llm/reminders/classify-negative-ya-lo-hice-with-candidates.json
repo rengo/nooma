@@ -18,6 +18,7 @@
     }
   ],
   "expect": {
+    "type": "chitchat",
     "task_checkin_outcome": "done"
   }
 }

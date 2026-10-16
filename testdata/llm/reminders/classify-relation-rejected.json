@@ -4,6 +4,7 @@
   "message": "no, no tienen nada que ver",
   "record": true,
   "expect": {
+    "type": "chitchat",
     "relation_outcome": "rejected"
   }
 }

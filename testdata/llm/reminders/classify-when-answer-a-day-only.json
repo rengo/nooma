@@ -9,6 +9,7 @@
     "text": "¿Cuándo querés que te avise?"
   },
   "expect": {
+    "type": "chitchat",
     "question_answer": "when",
     "day_only": true
   }

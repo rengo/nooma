@@ -27,6 +27,7 @@
     ]
   },
   "expect": {
+    "type": "chitchat",
     "question_answer": "choice",
     "choice_number": 2
   }

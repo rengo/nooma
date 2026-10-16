@@ -4,6 +4,7 @@
   "message": "yes, they're related",
   "record": true,
   "expect": {
+    "type": "chitchat",
     "relation_outcome": "confirmed"
   }
 }

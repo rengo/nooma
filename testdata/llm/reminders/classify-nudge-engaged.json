@@ -4,6 +4,7 @@
   "message": "dale, contame",
   "record": true,
   "expect": {
+    "type": "chitchat",
     "nudge_outcome": "engaged"
   }
 }
