@@ -1,10 +1,8 @@
 {
   "id": "classify-which-answer-by-name",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "el de Ana",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Me refiero al recordatorio de llamar a Ana.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"stop\",\"question_answer\":\"choice\",\"choice_number\":2,\"reminder_target\":2}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -32,6 +30,5 @@
     "question_answer": "choice",
     "choice_number": 2
   },
-  "known_misread": "adds a stop (reminder_intent stop, reminder_target 2) that is not in the user's words: the prompt never tells the model the which-question is about stopping, so it guesses, and ADR-0033 ties a stop to explicit words; prompt work, see tasks.md",
-  "prompt_sha256": "dd63bbd7504dab46cff467beafa8bb9667eaea16ef2ed64bedf9e89ac35537cf"
+  "known_misread": "adds a stop (reminder_intent stop, reminder_target 2) that is not in the user's words: the prompt never tells the model the which-question is about stopping, so it guesses, and ADR-0033 ties a stop to explicit words; prompt work, see tasks.md"
 }

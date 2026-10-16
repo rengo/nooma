@@ -291,7 +291,7 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 	b.WriteString("                     stop: the user asks to stop being reminded of something that\n")
 	b.WriteString("                     already exists (\"no me lo recuerdes más\", \"don't remind me\n")
 	b.WriteString("                     anymore\"). Saying a thing is done (\"listo\", \"ya lo hice\", \"listo,\n")
-	b.WriteString("                     nos vemos mañana\") is none, not stop.\n")
+	b.WriteString("                     nos vemos mañana\") is none, not stop: it is task_checkin_outcome done.\n")
 	b.WriteString("                     keep: only while the open question below is an undo, when the\n")
 	b.WriteString("                     user says the stop was a mistake (\"no, seguí\", \"keep it\"). A\n")
 	b.WriteString("                     bare \"sí\", \"ok\" or \"dale\" is none\n")
@@ -317,6 +317,50 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		b.WriteString(RenderReminderList(rc.Candidates))
 	}
 	b.WriteString("\n")
+	writeCheckins(b)
+}
+
+// writeCheckins says what each check-in outcome means (doc 02 §5 step 1). The
+// fields alone, with their values named and never explained, got no outcome
+// back for a task done or put off or a nudge taken up, and the code resolves a
+// check-in from the outcome alone. A meaning, never the words for it: the
+// model reads what the user means in any language.
+func writeCheckins(b *strings.Builder) {
+	b.WriteString(checkinHeading + "\n")
+	b.WriteString("  Nooma asks the user about a task it reminded them of, and nudges them toward\n")
+	b.WriteString("  something they meant to do. The open one is not shown here: say what the\n")
+	b.WriteString("  message answers, and Nooma matches it to what it asked, or drops it.\n")
+	b.WriteString("  task_checkin_outcome, about a task:\n")
+	for _, o := range AllTaskCheckinOutcomes() {
+		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o) + "\n")
+	}
+	b.WriteString("  nudge_outcome, about a nudge:\n")
+	for _, o := range AllNudgeOutcomes() {
+		b.WriteString("    " + pad(string(o), 9) + nudgeMeaning(o) + "\n")
+	}
+	b.WriteString("\n")
+}
+
+func taskCheckinMeaning(o TaskCheckinOutcome) string {
+	switch o {
+	case TaskCheckinOutcomeDone:
+		return "the user says the task is finished"
+	case TaskCheckinOutcomeSnooze:
+		return "the user puts the task off to later and still means to do it"
+	case TaskCheckinOutcomeDrop:
+		return "the user gives the task up: it no longer needs doing"
+	}
+	return ""
+}
+
+func nudgeMeaning(o NudgeOutcome) string {
+	switch o {
+	case NudgeOutcomeEngaged:
+		return "the user takes the nudge up: agrees to it, or asks to go on with it"
+	case NudgeOutcomeDeclined:
+		return "the user turns the nudge down"
+	}
+	return ""
 }
 
 // writeTarget renders the unit a correction patches, its instants in the
@@ -454,4 +498,5 @@ func trimFloat(f float64) string {
 const (
 	openQuestionHeading = "Open reminder question"
 	candidatesHeading   = "Reminders that may be stopped"
+	checkinHeading      = "Check-in answers"
 )

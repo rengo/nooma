@@ -137,6 +137,17 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 	has("a named time", expect(func(e *llm.Expect) bool { return e.DayOnly != nil && !*e.DayOnly }))
 	has("a title", expect(func(e *llm.Expect) bool { return e.Title != nil && *e.Title }))
 	has("a task check-in answer", expect(func(e *llm.Expect) bool { return e.TaskCheckinOutcome != "" }))
+	// Every outcome the check-in can be answered with, and a done that is not
+	// next to a list of reminders that may be stopped (link 1b).
+	for _, o := range []string{"done", "snooze", "drop"} {
+		has("a task check-in answered "+o, expect(func(e *llm.Expect) bool { return e.TaskCheckinOutcome == o }))
+	}
+	for _, o := range []string{"engaged", "declined"} {
+		has("a nudge answered "+o, expect(func(e *llm.Expect) bool { return e.NudgeOutcome == o }))
+	}
+	has("a done with no list", func(c llm.Case) bool {
+		return len(c.CandidatesList) == 0 && c.Expect != nil && c.Expect.TaskCheckinOutcome == "done"
+	})
 	has("a nudge answer", expect(func(e *llm.Expect) bool { return e.NudgeOutcome != "" }))
 	has("a relation answer", expect(func(e *llm.Expect) bool { return e.RelationOutcome != "" }))
 

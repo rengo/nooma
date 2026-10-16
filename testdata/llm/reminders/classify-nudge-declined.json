@@ -1,13 +1,9 @@
 {
   "id": "classify-nudge-declined",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "ahora no, gracias",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ahora no, gracias.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"declined\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "record": true,
   "expect": {
     "nudge_outcome": "declined"
-  },
-  "prompt_sha256": "68bde70ec5575e217f5d2cd4ddd9d7d218df96447935b5c9e200967228b445b4"
+  }
 }

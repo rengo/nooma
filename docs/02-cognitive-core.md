@@ -480,8 +480,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      explains the fields with examples in both languages, shows the open reminder question and
      the numbered list only when there is one, and carries the fields on the correction path
      too, so an explicit-referent stop is read there. The prompt describes all three question
-     kinds (`remind_when`, `which_reminder`, `undo`) now, so it is final in this link and a
-     recording made against it stays valid.
+     kinds (`remind_when`, `which_reminder`, `undo`). Every recording of the reminder phrasing
+     set is hashed against the prompt it was made with (`prompt_sha256`), so a change to the
+     prompt's text sends the whole set back to be recorded.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
@@ -490,7 +491,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
-     "on Friday"), open check-ins.
+     "on Friday"). No open check-in: the model reads what an answer says, and the store
+     decides what it answers (below).
    - **A bare weekday is its next occurrence after today**; named on that same weekday it is
      next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
      "today" ("hoy") is today. The prompt states this rule and gives the model the calendar to
@@ -502,7 +504,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      orthogonal fields, not types: `nudge_outcome (engaged|declined)`,
      `relation_outcome (confirmed|rejected)`, `state_outcome (confirmed|denied)`,
      `task_checkin_outcome (done|snooze|drop)`, `list_op (append|delete|mark_done|remove)`,
-     `person_ref_status (resolved|new|ambiguous)`.
+     `person_ref_status (resolved|new|ambiguous)`. The prompt says what each
+     `task_checkin_outcome` and `nudge_outcome` value means, never the words that trigger it:
+     with the values only named, a real model read no outcome for a task done or put off or a
+     nudge taken up, and the code resolves a check-in from the outcome alone. Saying a thing is
+     done is `task_checkin_outcome: done`, never a stop.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
      `nudge_outcome` closes the most recently delivered open check-in; a `relation_outcome`
      closes the most recently asked open relation question (§4). The classify prompt is never

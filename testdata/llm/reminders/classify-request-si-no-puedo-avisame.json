@@ -1,13 +1,9 @@
 {
   "id": "classify-request-si-no-puedo-avisame",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "si no puedo, avisame",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Avísame si no puedo.\",\"weight\":0.6,\"decay_rate\":0.05,\"language\":\"es\",\"title\":\"Aviso si no puedo\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "record": true,
   "expect": {
     "remind_request": true
-  },
-  "prompt_sha256": "e1af3c921af17f746dfceb3780c8e78a60df64a8cec80a69f69b63a27bfe5158"
+  }
 }

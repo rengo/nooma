@@ -1,13 +1,9 @@
 {
   "id": "classify-relation-confirmed",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "yes, they're related",
-  "response": "{\"type\":\"knowledge\",\"normalized_content\":\"They are related.\",\"weight\":0.7,\"decay_rate\":0.03,\"language\":\"en\",\"relation_outcome\":\"confirmed\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "record": true,
   "expect": {
     "relation_outcome": "confirmed"
-  },
-  "prompt_sha256": "67968073f1b2d9856e12fb98778ecb92da7035712c31d4cdc0f0a5442177bea4"
+  }
 }

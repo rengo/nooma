@@ -1,14 +1,10 @@
 {
   "id": "classify-request-no-te-olvides",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no te olvides de recordarme pagar el gas el jueves",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "now": "2026-10-15T21:26:28-03:00",
+  "record": true,
   "expect": {
     "remind_request": true,
     "title": true
-  },
-  "prompt_sha256": "08ed7d3b5f7e3a87af3b3e99b4a468c21fc5f6a6c87443d7c5c4cb04a37215fa"
+  }
 }

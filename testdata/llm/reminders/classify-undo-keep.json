@@ -1,10 +1,8 @@
 {
   "id": "classify-undo-keep",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, seguí",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Quiero que sigas recordándome comprar café.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"reminder_intent\":\"keep\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
@@ -12,6 +10,5 @@
   },
   "expect": {
     "reminder_intent": "keep"
-  },
-  "prompt_sha256": "d77b1dc5193beed575c6e290a19725ef98ee4cf1f90691d00993bf0870fa9817"
+  }
 }
