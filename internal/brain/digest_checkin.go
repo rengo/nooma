@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/phrase"
@@ -15,7 +17,8 @@ import (
 )
 
 // openCheckins closes every open check-in prospection.CheckinStep expires and
-// returns those this digest asks again (doc 02 §7). A dry run closes nothing.
+// returns those this digest asks again, at most MaxReasksPerDigest, the longest
+// waiting first (doc 02 §7). A dry run closes nothing.
 //
 // The re-ask count is the row's own (Reask writes it with the restamp); when
 // the user last put a check-in off is read from the audit trail the digest
@@ -29,7 +32,7 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 	}
 	snoozed := snoozedAt(history)
 
-	var ask []ports.DueTrigger
+	var ask []ports.OpenCheckIn
 	for _, c := range open {
 		if c.SurfacedAt.IsZero() {
 			continue
@@ -44,7 +47,7 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 		switch step {
 		case prospection.CheckinWait:
 		case prospection.CheckinReask:
-			ask = append(ask, c.DueTrigger)
+			ask = append(ask, c)
 		case prospection.CheckinExpire:
 			if !commit {
 				continue
@@ -56,7 +59,18 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 			return nil, fmt.Errorf("check: no path for check-in step %q", step)
 		}
 	}
-	return ask, nil
+	// The longest waiting first, and no more than one digest asks.
+	slices.SortFunc(ask, func(a, b ports.OpenCheckIn) int {
+		if c := a.SurfacedAt.Compare(b.SurfacedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	out := make([]ports.DueTrigger, 0, min(len(ask), prospection.MaxReasksPerDigest))
+	for _, c := range ask[:min(len(ask), prospection.MaxReasksPerDigest)] {
+		out = append(out, c.DueTrigger)
+	}
+	return out, nil
 }
 
 // expireCheckin closes c unanswered and records it; a row another pass

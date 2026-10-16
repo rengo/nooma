@@ -1575,7 +1575,8 @@ box can audit it):
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   newest unit's for the digest (§5, ADR-0032 point 5); the glass box stays English.
   **A digest fits one message.** Telegram refuses a message over 4096 UTF-16 units, which would
-  fail every pass, so a digest that would exceed it drops its last lines (a unit's reminders are
+  fail every pass, so a digest that would exceed it first leaves out its check-ins asked again
+  ("An open check-in closes", below), the last first, and then drops its last lines (a unit's reminders are
   one line), ends with one sentence saying how many more (`AndMore`: "and N more"), and never drops
   its question. The dropped reminders stay undelivered, so tomorrow's digest carries them; only the
   sent ones are marked delivered, `DigestCarried` and the `check.digest.sent` row count only those,
@@ -1653,8 +1654,14 @@ read that morning for any reason but its absence, is neither asked nor closed un
 decide it. A dry run asks and closes nothing. Quiet hours need no rule of their own: the digest
 waits for them. Today does not list re-asks. The digest asks in the client's wording of 2026-10-16
 (`Te pregunto de nuevo:` / `• ¿Ya está «Comprar café»?`; `Asking again:` / `• Is "Buy coffee"
-done?`), naming the unit's title, else its content, now and no instant (by then usually past),
-in a block after the day's items.
+done?`, `phrase` `AskAgain` and `AskDone`), naming the unit's title, else its content, now and no
+instant (by then usually past), clipped like a day line, in a block after the day's items. One
+digest asks at most `max_reasks_per_digest`, the longest waiting first; the rest wait for a later
+morning, unasked and uncounted. The message bound below drops re-asks before the day's lines, so
+re-asks never wedge a digest, and one left out also waits. The day's items and the re-asks are
+counted apart: `check.digest.sent` and the carried count (the dry run's too) are the day's
+reminders, and the row adds how many check-ins it asked again. The digest stamps `surfaced_at` in
+the order it shows, a second apart, so **a bare answer reaches the last item the digest showed**.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
 now, computed from the same reads and the same `Carry`, except for the message bound: Today is a
@@ -1913,6 +1920,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `max_checkin_reasks` (`internal/core/prospection.MaxCheckinReasks`) | 2 — how many morning digests ask again a check-in the user put off; the digest after the last closes it, and a check-in nobody answered closes at that same digest, the third after it reached the user (§7). The client's ruling (2026-10-16), not a derivation |
+| `max_reasks_per_digest` (`internal/core/prospection.MaxReasksPerDigest`) | 3 — how many check-ins one morning digest asks again at most, the longest waiting first; the rest wait, uncounted (§7). Chosen: a short list after the day's items, at most a low-energy digest's whole carry (`low_energy_digest_size`), and with each clipped to a day line's length it keeps the block well inside one message |
 | `quiet_hours_start_hour` (`internal/core/prospection.QuietHoursStartHour`) | 0 — local hour at which quiet hours open, inclusive; **replaces the former "Quiet hours" row**, split in two because a Default cell starting with `[` fails the calibration gate's anchored numeric parse |
 | `quiet_hours_end_hour` (`internal/core/prospection.QuietHoursEndHour`) | 7 — local hour at which quiet hours close, exclusive; the other half of the same split. The default of an event reminder's quiet end, user-overridable: `config.quiet_hours_end` (ADR-0030) |
 | `event_lead_days` (`internal/core/prospection.EventLeadDays`) | 7 — days before a recurring reminder's next occurrence its trigger fires; a dated event uses the three rows below (ADR-0029). A separate knob from `urgency_lead_days` above despite the identical default: this one is prospection's notification horizon, that one is the ranking's, and both ends are now checkable |

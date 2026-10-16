@@ -94,7 +94,7 @@ tasks-repeating).
     - [x] Race with capture: RED `TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure` (a `Resolve` conflict is unmatched, the capture goes on).
     - [x] RED contract: `Reask` counts `payload.reasks` in its own UPDATE; `Delivered` reads `surfaced_at` in the same row.
     - [x] RED L1: `TestCheckinStep_TheNextMorningIsTheNextCalendarDay` (a push at 07:00, digest at 08:00), `TestCheckinStep_EveryReaskRechecksTheUnit`, `TestCheckinStep_OnlyAnActiveUnitIsAskedAgain`, `TestCheckinStep_AcrossDSTAndMonthEnds`. RED brain: `TestDigest_ADryRunAsksAndClosesNothing` (kills the `!commit` mutation), `TestDigest_AReaskCountsEvenWhenItsRowFails`, `TestDigest_AnUnreadableUnitLeavesItsCheckinForTomorrow`, `TestDigest_ANoTimeCheckinIsNeverDecided`, `TestDigestHistoryCoversTheCheckinLifetime`.
-    - [ ] RED: the re-ask block bounded (`max_reasks_per_digest`), counted apart from the carried items, stamped in the order shown.
+    - [x] RED: `TestDigestBoundDropsReasksBeforeTheDaysItems`, `TestDigest_AtMostMaxReasksPerDigestOldestFirst`, `TestDigest_ReasksAreNotCountedAsCarriedReminders`, `TestDigest_ABareAnswerReachesTheLastItemShown`, `TestMaxReasksPerDigestIsAShortList`; §13 `max_reasks_per_digest` = 3.
     - [ ] RED: an expired recurring delivered trigger leaves the unit's next occurrence firing.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):

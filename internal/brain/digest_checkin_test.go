@@ -3,6 +3,8 @@ package brain
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -205,5 +207,114 @@ func TestDigest_ANoTimeCheckinIsNeverDecided(t *testing.T) {
 func TestDigestHistoryCoversTheCheckinLifetime(t *testing.T) {
 	if digestHistoryDays <= prospection.MaxCheckinReasks+1 {
 		t.Errorf("digestHistoryDays = %d, want more than MaxCheckinReasks + 1 = %d", digestHistoryDays, prospection.MaxCheckinReasks+1)
+	}
+}
+
+// addSnoozedTask adds one more delivered, snoozed task check-in to v.
+func (v *checkinVault) addSnoozedTask(t *testing.T, id string, surfaced time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	unitID := "u-" + id
+	if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeTask, Status: unit.StatusPool, Content: "task " + id,
+		Source: "chat", Weight: 1, LastTouchedAt: surfaced, CreatedAt: surfaced, UpdatedAt: surfaced}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Create(ctx, ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &surfaced, CreatedAt: surfaced}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Fire(ctx, id, surfaced); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Surface(ctx, id, surfaced); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.log.Record(ctx, ports.Decision{ID: "d-snooze-" + id, Action: ports.ActionCaptureCheckInSnoozed,
+		Context: []byte(`{"trigger_id":"` + id + `","open_check_ins":1}`), OccurredAt: surfaced.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestDigest_AtMostMaxReasksPerDigestOldestFirst: a morning asks at most
+// MaxReasksPerDigest check-ins again, the longest waiting first; the rest wait
+// for a later morning, uncounted.
+func TestDigest_AtMostMaxReasksPerDigestOldestFirst(t *testing.T) {
+	v := newCheckinVault(t, true)
+	extra := prospection.MaxReasksPerDigest + 1
+	for i := 0; i < extra; i++ {
+		v.addSnoozedTask(t, fmt.Sprintf("t-later-%d", i), checkinEvening.Add(time.Duration(i+1)*time.Minute))
+	}
+	if err := v.digest(t, checkinMorning(1), true); err != nil {
+		t.Fatal(err)
+	}
+	asked := map[string]bool{}
+	for _, c := range v.open(t) {
+		if c.Payload.Reasks == 1 {
+			asked[c.ID] = true
+		}
+	}
+	if len(asked) != prospection.MaxReasksPerDigest || !asked["t-coffee"] {
+		t.Errorf("asked %v, want %d, the oldest (t-coffee) among them", asked, prospection.MaxReasksPerDigest)
+	}
+}
+
+// TestDigest_ReasksAreNotCountedAsCarriedReminders: check.digest.sent, the
+// carried count and the dry run's count are the day's reminders; the re-asks
+// are counted apart.
+func TestDigest_ReasksAreNotCountedAsCarriedReminders(t *testing.T) {
+	v := newCheckinVault(t, true)
+	ctx := context.Background()
+	yearly := prospection.RuleYearly
+	fire := checkinMorning(1).Add(-time.Hour)
+	if err := v.triggers.Create(ctx, ports.Trigger{ID: "t-birthday", Kind: ports.TriggerKindTimeBased, FireAt: &fire, CreatedAt: fire,
+		Payload:        ports.TriggerPayload{ActionText: "Ana's birthday"},
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 20}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Fire(ctx, "t-birthday", fire); err != nil {
+		t.Fatal(err)
+	}
+	r := checkRunner{triggers: v.triggers, timers: &emptyTimers{}, ids: v.ids, log: v.log, channel: v.channel,
+		units: v.units, state: memrepo.NewState(), conversation: testConversation}
+
+	if dry, _, err := r.assembleDigest(ctx, checkinMorning(1), false); err != nil || dry != 1 {
+		t.Errorf("dry run carried %d (%v), want the one reminder", dry, err)
+	}
+	carried, _, err := r.assembleDigest(ctx, checkinMorning(1), true)
+	if err != nil || carried != 1 {
+		t.Fatalf("carried %d (%v), want the one reminder", carried, err)
+	}
+	rows, err := v.log.Since(ctx, checkinMorning(1).Add(-time.Minute), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range rows {
+		if d.Action == ports.ActionCheckDigestSent && !strings.Contains(d.Rationale, "carried 1 item(s)") || d.Action == ports.ActionCheckDigestSent && !strings.Contains(d.Rationale, "asked 1 check-in(s) again") {
+			t.Errorf("check.digest.sent says %q, want 1 carried and 1 asked again, apart", d.Rationale)
+		}
+	}
+}
+
+// TestDigest_ABareAnswerReachesTheLastItemShown: the digest stamps what it
+// shows in the order shown, so the newest open check-in, which a bare answer
+// reaches, is its last line: here the re-ask after the day's new item, whose
+// id would win a tie.
+func TestDigest_ABareAnswerReachesTheLastItemShown(t *testing.T) {
+	v := newCheckinVault(t, true)
+	ctx := context.Background()
+	yearly := prospection.RuleYearly
+	fire := checkinMorning(1).Add(-time.Hour)
+	if err := v.triggers.Create(ctx, ports.Trigger{ID: "zz-birthday", Kind: ports.TriggerKindTimeBased, FireAt: &fire, CreatedAt: fire,
+		Payload:        ports.TriggerPayload{ActionText: "Ana's birthday"},
+		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 20}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Fire(ctx, "zz-birthday", fire); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.digest(t, checkinMorning(1), true); err != nil {
+		t.Fatal(err)
+	}
+	if open := v.open(t); len(open) != 2 || open[0].ID != "t-coffee" {
+		t.Errorf("open %+v, want t-coffee, the last line shown, first", open)
 	}
 }

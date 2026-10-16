@@ -220,3 +220,12 @@ func TestCheckinStep_AcrossDSTAndMonthEnds(t *testing.T) {
 		}
 	}
 }
+
+// TestMaxReasksPerDigestIsAShortList: the block a digest asks again is a short
+// list after the day's items, never longer than a low-energy digest's whole
+// carry, and asks at least one.
+func TestMaxReasksPerDigestIsAShortList(t *testing.T) {
+	if MaxReasksPerDigest < 1 || MaxReasksPerDigest > LowEnergyDigestSize {
+		t.Errorf("MaxReasksPerDigest = %d, want 1 to LowEnergyDigestSize (%d)", MaxReasksPerDigest, LowEnergyDigestSize)
+	}
+}

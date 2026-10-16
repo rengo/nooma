@@ -14,6 +14,12 @@ import (
 // after it.
 const MaxCheckinReasks = 2
 
+// MaxReasksPerDigest is how many check-ins one morning digest asks again at
+// most, the longest waiting first; the rest wait, uncounted, for a later
+// morning. It bounds the block so a digest always fits one message, and keeps
+// it a short list after the day's items.
+const MaxReasksPerDigest = 3
+
 // CheckinStep is what the digest does with one open check-in: a delivered
 // trigger nobody has answered.
 type CheckinStep string

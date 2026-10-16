@@ -51,11 +51,11 @@ func boundCase(t *testing.T, q *ports.RelationQuestion, extra int) (string, []pr
 	pad := 1
 	for range 3 { // converge: the length is linear in the padding
 		pending[1].Payload.ActionText = strings.Repeat("b", pad)
-		text, _ := renderDigest(sentences(), carry, pending, nil, q)
+		text, _ := renderDigest(sentences(), carry, pending, q)
 		pad += 4096 - utf16Len(text)
 	}
 	pending[1].Payload.ActionText = strings.Repeat("b", pad+extra)
-	return renderDigest(sentences(), carry, pending, nil, q)
+	return renderDigest(sentences(), carry, pending, q)
 }
 
 // TestDigestBoundEdge: a digest of exactly 4096 units is kept whole and one of
@@ -135,5 +135,40 @@ func TestDigestSentRationale(t *testing.T) {
 				t.Errorf("rationale %q mentions %q though nothing was dropped", got, c.absent)
 			}
 		})
+	}
+}
+
+// TestDigestBoundDropsReasksBeforeTheDaysItems: re-asks never wedge a digest.
+// Long day items and as many long re-asks as a digest takes would overflow one
+// message; the re-asks that do not fit wait for tomorrow, each re-ask is
+// clipped like a day line, and the day's items all go out.
+func TestDigestBoundDropsReasksBeforeTheDaysItems(t *testing.T) {
+	var pending []ports.DueTrigger
+	var carry []prospection.DigestItem
+	for i := 0; i < 6; i++ {
+		id := fmt.Sprintf("d%d", i)
+		pending = append(pending, digestTrigger(id, "", strings.Repeat("d", 500)))
+		carry = append(carry, prospection.DigestItem{ID: id})
+	}
+	var reasks []ports.DueTrigger
+	for i := 0; i < prospection.MaxReasksPerDigest; i++ {
+		reasks = append(reasks, ports.DueTrigger{ID: fmt.Sprintf("r%d", i), Payload: ports.TriggerPayload{ActionText: strings.Repeat("r", 2000)}})
+	}
+
+	text, sent, asked := digestMessage(sentences(), carry, pending, reasks, nil)
+	if n := utf16Len(text); n > digestMessageUnits {
+		t.Errorf("the digest is %d units", n)
+	}
+	if len(sent) != len(carry) {
+		t.Errorf("%d of the day's %d items kept: re-asks must give way first", len(sent), len(carry))
+	}
+	if len(asked) == 0 || len(asked) >= len(reasks) {
+		t.Errorf("asked %v, want some re-asks kept and the rest left to wait", asked)
+	}
+	if n := strings.Count(text, "Is \""); n != len(asked) {
+		t.Errorf("the text asks %d check-in(s), the result names %d", n, len(asked))
+	}
+	if strings.Contains(text, strings.Repeat("r", reminderTextRunes+1)) {
+		t.Error("a re-ask was not clipped like a day line")
 	}
 }
