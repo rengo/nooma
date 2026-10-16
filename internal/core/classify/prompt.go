@@ -290,8 +290,12 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 	b.WriteString("  reminder_intent    one of: " + joinVocabulary(AllReminderIntents()) + "\n")
 	b.WriteString("                     stop: the user asks to stop being reminded of something that\n")
 	b.WriteString("                     already exists (\"no me lo recuerdes más\", \"don't remind me\n")
-	b.WriteString("                     anymore\"). Saying a thing is done (\"listo\", \"ya lo hice\", \"listo,\n")
-	b.WriteString("                     nos vemos mañana\") is none, not stop: it is task_checkin_outcome done.\n")
+	// **Done by its meaning, never by example.** Listing "listo, nos vemos
+	// mañana" here sent a farewell to done, the reading ADR-0033 names a
+	// misread, and a stop read a done beside it.
+	b.WriteString("                     anymore\"). A stop is not also a check-in answer: give it no\n")
+	b.WriteString("                     task_checkin_outcome and no nudge_outcome. Saying a task is\n")
+	b.WriteString("                     finished is none, not stop: it is task_checkin_outcome done.\n")
 	b.WriteString("                     keep: only while the open question below is an undo, when the\n")
 	b.WriteString("                     user says the stop was a mistake (\"no, seguí\", \"keep it\"). A\n")
 	b.WriteString("                     bare \"sí\", \"ok\" or \"dale\" is none\n")

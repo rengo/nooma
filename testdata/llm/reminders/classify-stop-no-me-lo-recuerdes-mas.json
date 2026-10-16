@@ -1,10 +1,8 @@
 {
   "id": "classify-stop-no-me-lo-recuerdes-mas",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no me lo recuerdes más",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"No quiero que me recuerden más que compre café.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -16,6 +14,5 @@
   "expect": {
     "reminder_intent": "stop",
     "reminder_target": "1"
-  },
-  "prompt_sha256": "56ce43b15930cafcb80736d64b021378eaca01a14dc1b143a22ee5ba86055bf3"
+  }
 }

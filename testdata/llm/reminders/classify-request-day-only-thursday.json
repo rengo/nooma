@@ -1,15 +1,11 @@
 {
   "id": "classify-request-day-only-thursday",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame pagar el gas el jueves",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "now": "2026-10-16T08:45:02-03:00",
+  "record": true,
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
-  },
-  "prompt_sha256": "cc225efc0e2fbda8da411e5108c1381b58ce5c84029a1dd57a234d97b8bbb74f"
+  }
 }

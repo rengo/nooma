@@ -59,7 +59,8 @@ func TestRenderReminderList(t *testing.T) {
 
 // TestBuildPromptDescribesReminderFields: the prompt explains every reminder
 // field, with examples in both languages, a recall, a third party's reminder,
-// reported speech, and "listo" reading none (ADR-0033 point 1).
+// and reported speech (ADR-0033 point 1). Saying a task is finished is stated
+// by its meaning, with no example (TestBuildPromptDoneIsAMeaningAndAStopAnswersNoCheckin).
 func TestBuildPromptDescribesReminderFields(t *testing.T) {
 	// Flattened: the prompt wraps its sentences, and the phrases below do not.
 	p := strings.Join(strings.Fields(promptWith(ReminderContext{})), " ")
@@ -69,7 +70,7 @@ func TestBuildPromptDescribesReminderFields(t *testing.T) {
 		"recordame comprar café mañana a las 10", "remind me to call Ana at 5pm",
 		"no me lo recuerdes más", "don't remind me anymore",
 		"recordame qué hablamos con Juan", "my dentist sent a reminder to confirm",
-		"Ana me dijo", "\"listo\"",
+		"Ana me dijo",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt never says %q:\n%s", want, p)

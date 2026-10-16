@@ -51,10 +51,35 @@ func TestBuildPromptSaysWhatEachCheckinOutcomeMeans(t *testing.T) {
 			t.Errorf("the check-in section never names %s", field)
 		}
 	}
-	// Saying a thing is done is not a stop, and it is the check-in's answer.
-	flat := strings.Join(strings.Fields(promptWith(ReminderContext{})), " ")
-	if !strings.Contains(flat, "is none, not stop: it is task_checkin_outcome done") {
-		t.Errorf("the stop rule does not send a thing done to task_checkin_outcome done:\n%s", flat)
+}
+
+// TestBuildPromptDoneIsAMeaningAndAStopAnswersNoCheckin: link 1b's first
+// prompt listed "listo, nos vemos mañana" under saying a thing is done and sent
+// it to task_checkin_outcome done, and the model obeyed: a farewell, the very
+// reading ADR-0033's context names a misread, closed the newest check-in, and
+// "listo, no me lo recuerdes más" read a done beside its stop. Done is stated
+// by what it means, with no example, and a stop answers no check-in.
+func TestBuildPromptDoneIsAMeaningAndAStopAnswersNoCheckin(t *testing.T) {
+	p := promptWith(ReminderContext{Candidates: stopCandidates})
+	if strings.Contains(p, "nos vemos") {
+		t.Errorf("the prompt still carries the farewell ADR-0033 names as misread as done")
+	}
+	flat := strings.Join(strings.Fields(p), " ")
+	for _, want := range []string{
+		"Saying a task is finished is none, not stop: it is task_checkin_outcome done.",
+		"A stop is not also a check-in answer: give it no task_checkin_outcome and no nudge_outcome.",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the prompt never says %q:\n%s", want, flat)
+		}
+	}
+	i := strings.Index(flat, "Saying a task is finished")
+	if i < 0 {
+		return
+	}
+	done := flat[i:]
+	if done = done[:strings.Index(done, ".")]; strings.Contains(done, "\"") {
+		t.Errorf("done is explained by quoted words, not by what it means: %q", done)
 	}
 }
 

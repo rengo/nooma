@@ -1,13 +1,9 @@
 {
   "id": "classify-checkin-done",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya lo terminé",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Ya lo terminé.\",\"weight\":0.6,\"decay_rate\":0.2,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "now": "2026-10-16T08:45:02-03:00",
+  "record": true,
   "expect": {
     "task_checkin_outcome": "done"
-  },
-  "prompt_sha256": "a9275aefb4aeec0868da3c4152957fbd37e323a902eecac215a08a6d5dce0393"
+  }
 }

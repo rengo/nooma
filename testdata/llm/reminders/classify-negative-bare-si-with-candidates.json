@@ -1,10 +1,8 @@
 {
   "id": "classify-negative-bare-si-with-candidates",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -13,6 +11,5 @@
       "at": "2026-10-15T10:00:00-03:00"
     }
   ],
-  "expect": {},
-  "prompt_sha256": "0b37e2d471edd8e7cfa4b44b4c27a520a3b9182b57039fe0a9e08f6664c525e5"
+  "expect": {}
 }

@@ -1,15 +1,11 @@
 {
   "id": "classify-request-named-time-friday",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame el dentista el viernes a las 10",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Recordarme la cita con el dentista el 2026-10-23 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-23T10:00:00-03:00\",\"title\":\"Cita con el dentista\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "now": "2026-10-16T08:45:02-03:00",
+  "record": true,
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
-  },
-  "prompt_sha256": "0d0a7de01d3a105e87a142ea97f48e58a0ea4a91bea32ddb63b4c7351d76c407"
+  }
 }

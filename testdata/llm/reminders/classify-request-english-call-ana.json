@@ -1,15 +1,11 @@
 {
   "id": "classify-request-english-call-ana",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "Remind me to call Ana at 5pm",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Remind me to call Ana at 2026-10-16 17:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"en\",\"due_at\":\"2026-10-16T17:00:00-03:00\",\"title\":\"Call Ana\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "now": "2026-10-16T08:45:02-03:00",
+  "record": true,
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
-  },
-  "prompt_sha256": "21a18651c07f89dded8759046303e0c3f4750e94a4b21a964b10094ef636bed1"
+  }
 }

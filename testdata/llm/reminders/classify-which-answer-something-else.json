@@ -1,10 +1,8 @@
 {
   "id": "classify-which-answer-something-else",
-  "provider": "openai",
-  "model": "gpt-6-luna",
   "task": "classify",
   "message": "gracias, nos vemos",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Gracias, nos vemos.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -28,6 +26,5 @@
       }
     ]
   },
-  "expect": {},
-  "prompt_sha256": "d5d844ef5582d4656ca1a0227c8a3e4af5f41c7ae58d77f33d3447d22472ab48"
+  "expect": {}
 }

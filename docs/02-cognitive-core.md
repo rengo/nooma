@@ -511,8 +511,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      `person_ref_status (resolved|new|ambiguous)`. The prompt says what each
      `task_checkin_outcome` and `nudge_outcome` value means, never the words that trigger it:
      with the values only named, a real model read no outcome for a task done or put off or a
-     nudge taken up, and the code resolves a check-in from the outcome alone. Saying a thing is
-     done is `task_checkin_outcome: done`, never a stop.
+     nudge taken up, and the code resolves a check-in from the outcome alone. Saying a task is
+     finished is `task_checkin_outcome: done`, never a stop, and is stated by that meaning with
+     no example: an example farewell ("listo, nos vemos mañana") was read as done, the misread
+     [ADR-0033](adr/0033-the-model-understands-the-code-acts.md) names. A stop is not also a
+     check-in answer: it carries no `task_checkin_outcome` and no `nudge_outcome`.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
      check-in outcome closes the most recently delivered open check-in, by one mapping,
      `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline
