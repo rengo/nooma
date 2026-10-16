@@ -1,10 +1,14 @@
 {
   "id": "classify-nudge-engaged",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "dale, contame",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale, contame.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "nudge_outcome": "engaged"
-  }
+  },
+  "prompt_sha256": "2d6bc228976d5373c92cb81a9958310dc47f995f1d298723ab732dca8fdee947"
 }

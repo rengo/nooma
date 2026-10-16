@@ -1,8 +1,10 @@
 {
   "id": "classify-negative-bare-no-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"en\",\"task_checkin_outcome\":\"snooze\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -14,5 +16,6 @@
   "expect": {
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
-  }
+  },
+  "prompt_sha256": "f538b5baf422bfbc697825a6f9667525dce9b1c9e6fe8ea4ca17ef9536c7b8c2"
 }

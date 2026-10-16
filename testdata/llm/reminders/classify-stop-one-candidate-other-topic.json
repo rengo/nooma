@@ -1,8 +1,10 @@
 {
   "id": "classify-stop-one-candidate-other-topic",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no me recuerdes más lo del curso de inglés",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero que me recuerdes más lo del curso de inglés.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"title\":\"Curso de inglés\",\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -14,5 +16,6 @@
   "expect": {
     "reminder_intent": "stop",
     "reminder_target": "unclear"
-  }
+  },
+  "prompt_sha256": "8a7308d74ab12474f04f02fe1ccef3b33a4a88ca08e8fa4cd5ba461e6a6f6973"
 }

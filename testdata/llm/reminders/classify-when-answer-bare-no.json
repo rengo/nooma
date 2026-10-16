@@ -1,8 +1,10 @@
 {
   "id": "classify-when-answer-bare-no",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"no\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -11,5 +13,6 @@
   "expect": {
     "type": "chitchat",
     "question_answer": "no"
-  }
+  },
+  "prompt_sha256": "f9c32be3c364b29812174ab8edabb9a0c37126fb81310954b3ff055d7c4b06fb"
 }

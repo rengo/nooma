@@ -1,8 +1,10 @@
 {
   "id": "classify-negative-bare-ya-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya lo hice.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -14,5 +16,6 @@
   "expect": {
     "type": "chitchat",
     "task_checkin_outcome": "done"
-  }
+  },
+  "prompt_sha256": "2d4f20d718ea15c20f54ccb91dbb8261c31e6dcd5d6840f8dc7efafd6bba2fb0"
 }

@@ -1,9 +1,13 @@
 {
   "id": "classify-request-recordamelo",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordámelo",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme eso.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"title\":\"Recordatorio\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true
-  }
+  },
+  "prompt_sha256": "22ef687a6b79eb245101eafdce4cc219dde589753932b9e4e74459fc34c91f1b"
 }

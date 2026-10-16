@@ -1,10 +1,14 @@
 {
   "id": "classify-relation-rejected",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, no tienen nada que ver",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No, no tienen nada que ver.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"relation_outcome\":\"rejected\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "relation_outcome": "rejected"
-  }
+  },
+  "prompt_sha256": "6122cc4c71803e8aa22c9dab52eea180c52e8f843f9915e6dfd1c5f0c06b3684"
 }

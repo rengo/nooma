@@ -1,8 +1,10 @@
 {
   "id": "classify-stop-english-names-the-first",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "don't remind me anymore about the dentist",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Don't remind me about the dentist anymore.\",\"weight\":0.3,\"decay_rate\":0.3,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -19,5 +21,6 @@
   "expect": {
     "reminder_intent": "stop",
     "reminder_target": "1"
-  }
+  },
+  "prompt_sha256": "d4e876df1b29a6ec7c3c5093201a9f136aab567a61b827516dbe809853d4b2f9"
 }

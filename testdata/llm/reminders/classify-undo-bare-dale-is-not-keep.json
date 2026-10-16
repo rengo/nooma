@@ -1,8 +1,10 @@
 {
   "id": "classify-undo-bare-dale-is-not-keep",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "dale",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
@@ -10,5 +12,6 @@
   },
   "expect": {
     "type": "chitchat"
-  }
+  },
+  "prompt_sha256": "5acf2f5ca99fd5305cf6b8134fdfe69742f798e4061ff58d2d7e901bbac1c9fe"
 }

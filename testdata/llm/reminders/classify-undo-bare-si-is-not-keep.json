@@ -1,8 +1,10 @@
 {
   "id": "classify-undo-bare-si-is-not-keep",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
@@ -10,5 +12,6 @@
   },
   "expect": {
     "type": "chitchat"
-  }
+  },
+  "prompt_sha256": "01c549de70688f777f20134b8706dddb58505d9d524260f5394792ddc4979594"
 }

@@ -1,8 +1,10 @@
 {
   "id": "classify-which-answer-by-number",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "el 2",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Elijo el recordatorio 2: llamar a Ana.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -30,5 +32,6 @@
     "type": "chitchat",
     "question_answer": "choice",
     "choice_number": 2
-  }
+  },
+  "prompt_sha256": "2a5cc59004822ebcb8f2475e2da5d5629d4b35d31eee73681113df33fdb1bed2"
 }

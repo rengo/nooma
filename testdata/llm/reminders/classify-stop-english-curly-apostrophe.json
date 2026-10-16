@@ -1,8 +1,10 @@
 {
   "id": "classify-stop-english-curly-apostrophe",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "don’t remind me anymore",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Stop reminding me about buying coffee.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"en\",\"title\":\"Buy coffee\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -14,5 +16,6 @@
   "expect": {
     "reminder_intent": "stop",
     "reminder_target": "1"
-  }
+  },
+  "prompt_sha256": "156097f1d013b9cdc575e5ffd4c04826a5b7b71e05a56238a576cf491c9b67bf"
 }

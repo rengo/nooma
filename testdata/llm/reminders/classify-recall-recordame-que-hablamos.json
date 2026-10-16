@@ -1,7 +1,11 @@
 {
   "id": "classify-recall-recordame-que-hablamos",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame qué hablamos con Juan",
-  "record": true,
-  "expect": {}
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"Recordame qué hablamos con Juan.\",\"weight\":0,\"decay_rate\":0.1,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-16T10:42:25-03:00",
+  "expect": {},
+  "prompt_sha256": "6388a5695acb412a41a8b9f14e977724371444e1d91577839c10a814785e6cb6"
 }

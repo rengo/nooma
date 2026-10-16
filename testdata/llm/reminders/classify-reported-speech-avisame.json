@@ -1,7 +1,11 @@
 {
   "id": "classify-reported-speech-avisame",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "Ana me dijo 'avisame cuando llegues'",
-  "record": true,
-  "expect": {}
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Debo avisarle a Ana cuando llegue.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"title\":\"Avisarle a Ana cuando llegue\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-16T10:42:25-03:00",
+  "expect": {},
+  "prompt_sha256": "28f116f572c3af0696f5a2eacc522e1f1ec46f32202a8f22ce281db21f6012a2"
 }

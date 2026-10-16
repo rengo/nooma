@@ -1,11 +1,15 @@
 {
   "id": "classify-task-remind-me-coffee",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame comprar café mañana a las 10",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar café el 2026-10-17 a las 10:00.\",\"weight\":0.7,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17T10:00:00-03:00\",\"title\":\"Comprar café\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
-  }
+  },
+  "prompt_sha256": "26bbfb00ae7b63c109ba38c43e90d460523039226531f1acdf4338a13121feaa"
 }
