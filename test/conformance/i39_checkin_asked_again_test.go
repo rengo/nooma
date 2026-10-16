@@ -284,3 +284,59 @@ func TestI39_ASnoozedEventIsNotAsked(t *testing.T) {
 		t.Errorf("%d check.checkin.reasked rows, want none", n)
 	}
 }
+
+// TestI39_AnExpiredRecurringCheckinLeavesTheNextOccurrence: closing a
+// delivered recurring reminder nobody answered moves that one row and nothing
+// else. The unit's next occurrence, armed on its own row, still fires and is
+// carried by its digest; the closed row keeps its rule, and Today and a
+// correction, which read armed rows only, see the series as before.
+func TestI39_AnExpiredRecurringCheckinLeavesTheNextOccurrence(t *testing.T) {
+	ctx := context.Background()
+	v := newI39Vault()
+	unitID := "u-t-birthday"
+	yearly := prospection.RuleYearly
+	anchor := &prospection.Anchor{Month: time.October, Day: 25}
+	if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeEvent, Status: unit.StatusPool, Content: "Ana's birthday",
+		Source: "chat", Weight: 1, LastTouchedAt: i39Delivered, CreatedAt: i39Delivered, UpdatedAt: i39Delivered}); err != nil {
+		t.Fatal(err)
+	}
+	delivered := i39Delivered
+	if err := v.triggers.Create(ctx, ports.Trigger{ID: "t-birthday", UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		FireAt: &delivered, CreatedAt: delivered, Payload: ports.TriggerPayload{ActionText: "Ana's birthday"},
+		RecurrenceRule: &yearly, RecurrenceAnchor: anchor}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Fire(ctx, "t-birthday", delivered); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.triggers.Surface(ctx, "t-birthday", delivered); err != nil {
+		t.Fatal(err)
+	}
+	next := i39Morning(prospection.MaxCheckinReasks + 3).Add(-time.Hour)
+	if err := v.triggers.Create(ctx, ports.Trigger{ID: "t-birthday-next", UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		FireAt: &next, CreatedAt: i39Delivered, Payload: ports.TriggerPayload{ActionText: "Ana's birthday"},
+		RecurrenceRule: &yearly, RecurrenceAnchor: anchor}); err != nil {
+		t.Fatal(err)
+	}
+
+	for n := 1; n <= prospection.MaxCheckinReasks+1; n++ {
+		v.check(t, i39Morning(n))
+	}
+	if open := v.open(t); len(open) != 0 {
+		t.Fatalf("open %v, want the delivered birthday reminder closed", open)
+	}
+	armed, err := v.triggers.ArmedForUnit(ctx, unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(armed) != 1 || armed[0].ID != "t-birthday-next" || armed[0].RecurrenceRule == nil || *armed[0].RecurrenceRule != yearly {
+		t.Fatalf("armed %+v, want the next occurrence untouched", armed)
+	}
+
+	if sent := v.check(t, i39Morning(prospection.MaxCheckinReasks+3)); !mentions(sent, "Ana's birthday") {
+		t.Errorf("the next occurrence's digest sent %q, want it carried", sent)
+	}
+	if open := v.open(t); len(open) != 1 || open[0] != "t-birthday-next" {
+		t.Errorf("open %v, want the next occurrence delivered", open)
+	}
+}

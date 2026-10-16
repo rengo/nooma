@@ -204,8 +204,9 @@ type DueTrigger struct {
 }
 
 // OpenCheckIn is Delivered's read shape: a delivered trigger nobody has
-// answered, and the last time it reached the user, which the morning digest
-// counts its digests from (doc 02 §7).
+// answered, and SurfacedAt, the last time it reached the user (its delivery,
+// or the digest that last asked it again), which the morning digest counts its
+// mornings from (doc 02 §7).
 type OpenCheckIn struct {
 	DueTrigger
 	SurfacedAt time.Time

@@ -9,9 +9,9 @@ import (
 // MaxCheckinReasks is how many times the morning digest asks a check-in the
 // user put off again before it closes by itself (doc 02 §7, the client's
 // ruling of 2026-10-16). It is also a check-in's lifetime when nobody
-// answers it: one left unanswered closes at the digest one put off the
-// evening it reached the user would close at, MaxCheckinReasks + 1 digests
-// after it.
+// answers it: one left unanswered closes at the morning one put off the
+// evening it reached the user would close at, the MaxCheckinReasks + 1st
+// morning after it last reached the user.
 const MaxCheckinReasks = 2
 
 // MaxReasksPerDigest is how many check-ins one morning digest asks again at
@@ -36,7 +36,8 @@ const (
 // OpenCheckin is an open check-in as the digest sees it.
 type OpenCheckin struct {
 	// SurfacedAt is the last time it reached the user: its delivery, or the
-	// digest that last asked it again.
+	// digest that last asked it again (Reask restamps it). Its mornings are
+	// counted from here.
 	SurfacedAt time.Time
 	// UnitType is its unit's kind, empty for a nudge with no unit.
 	UnitType unit.Type
