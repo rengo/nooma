@@ -34,43 +34,52 @@ type OpenCheckin struct {
 	SurfacedAt time.Time
 	// UnitType is its unit's kind, empty for a nudge with no unit.
 	UnitType unit.Type
-	// Snoozed is whether the user put it off ("not yet").
-	Snoozed bool
+	// UnitStatus is its unit's status now.
+	UnitStatus unit.Status
+	// SnoozedAt is when the user last put it off ("not yet"); zero if never.
+	SnoozedAt time.Time
 	// Reasks is how many digests have already asked it again.
 	Reasks int
 }
 
-// CheckinStep decides c at now, a pass in which a digest is due. Digests
-// are counted as the mornings due in q's night strictly after c.SurfacedAt,
-// in now's zone, so a digest that carried nothing still counts as a morning
-// passed.
+// CheckinStep decides c at now, a pass in which a digest is due. A morning is
+// a later local calendar day, in now's zone, whose digest is due by now: the
+// client's "next morning's digest", so a check-in pushed or put off on a day is
+// first asked the day after, even when that day's digest was still to come. A
+// morning counts whether or not a digest went out on it.
 //
-// A check-in asked again is asked again at every later digest, put off
-// again or left unanswered alike, until MaxCheckinReasks; the digest after
-// the last closes it. One put off and never asked yet is asked at the next
-// digest when it has a unit. Any other closes at the
-// MaxCheckinReasks + 1st digest after it reached the user.
+// A check-in is asked again only while its unit is still something to do
+// (stillToDo), re-checked at every re-ask: one put off is asked the morning
+// after the snooze, and once asked it is asked every later morning, put off
+// again or left unanswered alike, until MaxCheckinReasks; the morning after
+// the last closes it. Any other closes at the MaxCheckinReasks + 1st morning
+// after it last reached the user.
 func (q QuietHours) CheckinStep(c OpenCheckin, now time.Time) CheckinStep {
-	digests := q.digestsAfter(c.SurfacedAt, now, MaxCheckinReasks+1)
+	mornings := q.morningsAfter(c.SurfacedAt, now, MaxCheckinReasks+1)
 	switch {
-	case digests == 0:
+	case mornings == 0:
 		return CheckinWait
 	case c.Reasks >= MaxCheckinReasks:
 		return CheckinExpire
-	case c.Reasks > 0 || (c.Snoozed && pendingWork(c.UnitType)):
+	case stillToDo(c.UnitType, c.UnitStatus) &&
+		(c.Reasks > 0 || (!c.SnoozedAt.IsZero() && q.morningsAfter(c.SnoozedAt, now, 1) > 0)):
 		return CheckinReask
-	case digests > MaxCheckinReasks:
+	case mornings > MaxCheckinReasks:
 		return CheckinExpire
 	}
 	return CheckinWait
 }
 
-// pendingWork reports whether a unit of kind t is still something to do, so a
-// check-in about it can be asked again: a task or a mental load, an open loop.
-// An event, and every kind that is memory rather than work, is not: asked the
-// morning after, an event is usually past, and a reminder never speaks of the
-// past (ADR-0032). One case per kind, so a kind added later is decided here.
-func pendingWork(t unit.Type) bool {
+// stillToDo reports whether a unit of kind t and status s is still something
+// to do, so a check-in about it can be asked again: a task or a mental load,
+// an open loop, still live. An event, and every kind that is memory rather
+// than work, is not: asked the morning after, an event is usually past, and a
+// reminder never speaks of the past (ADR-0032). Archived and superseded units
+// are not live. One case per kind, so a kind added later is decided here.
+func stillToDo(t unit.Type, s unit.Status) bool {
+	if s != unit.StatusPool && s != unit.StatusIncomplete {
+		return false
+	}
 	switch t {
 	case unit.TypeTask, unit.TypeMentalLoad:
 		return true
@@ -81,16 +90,21 @@ func pendingWork(t unit.Type) bool {
 	return false
 }
 
-// digestsAfter counts the digest instants in (since, now], read on now's
-// wall clock, stopping at limit: an old check-in costs no more than a new one.
-func (q QuietHours) digestsAfter(since, now time.Time, limit int) int {
+// morningsAfter counts the local days after since's, up to now's, whose digest
+// is due by now, in now's zone, stopping at limit: an old check-in costs no
+// more than a new one.
+func (q QuietHours) morningsAfter(since, now time.Time, limit int) int {
+	loc := now.Location()
+	sy, sm, sd := since.In(loc).Date()
+	first := time.Date(sy, sm, sd+1, 0, 0, 0, 0, loc)
 	n := 0
-	for day := now; n < limit; day = day.AddDate(0, 0, -1) {
-		at := q.digestAt(day)
-		if !at.After(since) {
+	for back := 0; n < limit; back++ {
+		y, m, d := now.Date()
+		day := time.Date(y, m, d-back, 12, 0, 0, 0, loc)
+		if day.Before(first) {
 			break
 		}
-		if !at.After(now) {
+		if !q.digestAt(day).After(now) {
 			n++
 		}
 	}

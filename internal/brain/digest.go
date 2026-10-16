@@ -210,7 +210,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 	for _, item := range sent {
 		if t, ok := reasked[item.ID]; ok {
-			if err := r.markReasked(ctx, t, now); err != nil {
+			if err := r.markReasked(ctx, t, now, now); err != nil {
 				return 0, lapsed, err
 			}
 			continue

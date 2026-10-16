@@ -1634,24 +1634,27 @@ box can audit it):
 
 **An open check-in closes** (the client's ruling of 2026-10-16; `prospection.CheckinStep`). A
 delivered trigger nobody answered is an open check-in, and the newest one is what an answer
-reaches (§5 step 1). When a digest is due, each is judged by the mornings due since it last
-reached the user, counted in the user's night and zone whether or not a digest went out that
-morning. One the user put off (a `capture.checkin.snoozed` row) and whose unit is still something to do,
-a `task` or a `mental_load` (`prospection.pendingWork`, one case per kind), is **asked
-again** by the next digest, in a block after the day's items that the header does not count and
-the message bound never drops: `AskAgain`, then one `AskDone` line per check-in naming its unit's
-title, else its content, now and no instant (by then usually past, ADR-0032), the client's
-wording of 2026-10-16 (`Te pregunto de nuevo:` / `• ¿Ya está «Comprar café»?`; `Asking again:` /
-`• Is "Buy coffee" done?`); after the send `Reask`
-restamps `surfaced_at`, so an answer reaches it, and `check.checkin.reasked` counts it. A re-ask
-is asked again at every later digest, put off again or left unanswered alike, up to
-`max_checkin_reasks`, and the digest after the last **closes** it: `ExpireUnanswered`,
-`check.checkin.expired`. One nobody answered or put off is never asked again and closes at the
-digest one put off the evening it went out would close at, the third after it; so does a nudge
-with no unit, which has no words to ask with, and a check-in about any other kind, an `event`
-included, put off or not: "cena con Juan" put off is not asked the morning after the dinner,
-because a reminder never speaks of the past (ADR-0032). A dry run asks and closes nothing. Quiet hours need
-no rule of their own: the digest waits for them. Today does not list re-asks.
+reaches (§5 step 1). When a digest is due, each is judged by its **mornings**: the later local
+calendar days, in the user's zone, whose digest is due by now, counted whether or not a digest
+went out ("el resumen de la mañana siguiente": one pushed at 07:00 with the digest at 08:00 is
+first asked the next day). One the user put off (the newest `capture.checkin.snoozed` row) is
+**asked again** from the morning after the snooze, and then every later morning, put off again or
+left unanswered alike, up to `max_checkin_reasks`, but only while its unit is still something to do,
+re-checked at every re-ask: a `task` or a `mental_load` still `pool` or `incomplete`
+(`prospection.stillToDo`, one case per kind). The morning after the last re-ask **closes** it:
+`ExpireUnanswered`, `check.checkin.expired`. Any other closes at the third morning after it last
+reached the user and is never asked: one nobody answered or put off, a nudge with no unit, which
+has no words to ask with, a unit archived or superseded, and any other kind, an `event`
+included: "cena con Juan" put off is not asked the morning after the dinner, because a reminder
+never speaks of the past (ADR-0032). `Reask` restamps `surfaced_at` and counts the re-ask on the
+row in the same write (`payload.reasks`), so a failure after it grants no extra re-ask;
+`check.checkin.reasked` is the audit row. A check-in with no `surfaced_at`, or whose unit cannot be
+read that morning for any reason but its absence, is neither asked nor closed until a morning can
+decide it. A dry run asks and closes nothing. Quiet hours need no rule of their own: the digest
+waits for them. Today does not list re-asks. The digest asks in the client's wording of 2026-10-16
+(`Te pregunto de nuevo:` / `• ¿Ya está «Comprar café»?`; `Asking again:` / `• Is "Buy coffee"
+done?`), naming the unit's title, else its content, now and no instant (by then usually past),
+in a block after the day's items.
 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
 now, computed from the same reads and the same `Carry`, except for the message bound: Today is a
