@@ -186,7 +186,7 @@ func TestArmAsked_NamedTimeInsideQuietHoursNotMoved(t *testing.T) {
 
 func TestArmAsked_TooLateTodayRefused(t *testing.T) {
 	f := newAsked()
-	if AtOnceMarginMinutes != 5 {
+	if AtOnceMarginMinutes != 7 {
 		t.Fatal("the margin drifted from doc 02 §13's at_once_margin_minutes row")
 	}
 	today := dueClass(classify.KindTask, f.bareDate(14), true)
@@ -196,8 +196,8 @@ func TestArmAsked_TooLateTodayRefused(t *testing.T) {
 		late bool
 	}{
 		{"23:50 leaves ten minutes", f.at(14, 23, 50), false},
-		{"23:55 leaves exactly five", f.at(14, 23, 55), false},
-		{"23:56 leaves four", f.at(14, 23, 56), true},
+		{"23:53 leaves exactly seven", f.at(14, 23, 53), false},
+		{"23:54 leaves six", f.at(14, 23, 54), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plans, ok := Arm(today, true, DefaultReminderPrefs(), tc.now)
@@ -213,8 +213,8 @@ func TestArmAsked_TooLateTodayRefused(t *testing.T) {
 			}
 		})
 	}
-	t.Run("a named time under five minutes away", func(t *testing.T) {
-		plans, ok := Arm(dueClass(classify.KindTask, f.at(14, 20, 3), false), true, DefaultReminderPrefs(), f.now)
+	t.Run("a named time under seven minutes away", func(t *testing.T) {
+		plans, ok := Arm(dueClass(classify.KindTask, f.at(14, 20, 6), false), true, DefaultReminderPrefs(), f.now)
 		if ok || plans[0].Why != RefusalTooLate {
 			t.Errorf("Arm = %+v, %v, want too_late", plans, ok)
 		}
