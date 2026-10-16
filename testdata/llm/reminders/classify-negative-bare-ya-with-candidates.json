@@ -1,0 +1,18 @@
+{
+  "id": "classify-negative-bare-ya-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "ya",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-14T20:00:00-03:00",
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct, 10:00",
+      "at": "2026-10-15T10:00:00-03:00"
+    }
+  ],
+  "expect": {},
+  "prompt_sha256": "788a72012a88c122d40304af712da68f9d429620fd573551d69a08da0248c38e"
+}

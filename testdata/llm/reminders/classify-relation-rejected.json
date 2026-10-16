@@ -1,0 +1,13 @@
+{
+  "id": "classify-relation-rejected",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "no, no tienen nada que ver",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"No tienen nada que ver entre sí.\",\"weight\":0.7,\"decay_rate\":0.03,\"language\":\"es\",\"relation_outcome\":\"rejected\"}",
+  "now": "2026-10-15T21:26:28-03:00",
+  "expect": {
+    "relation_outcome": "rejected"
+  },
+  "prompt_sha256": "6f3cecb959cc43de0953cdcdf0d308c6cf293433420920b584f69ac211ba5d5f"
+}

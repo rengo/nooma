@@ -357,6 +357,29 @@ fenced-but-clean object must decode with **zero** degradations, not a recorded o
 Real responses from each provider, recorded once and replayed by a fake provider. They allow
 testing the full pipeline without network and without cost.
 
+**The reminder phrasing set** (`testdata/llm/reminders/`, ADR-0033) is the one set made on
+purpose for one prompt. A phrasing is authored with `record: true` and the reading it should
+get (`expect`), then recorded in one maintainer session: `nooma doctor --record
+testdata/llm/reminders [vault]`. The command refuses to run under `CI`, sends each case through
+the production `classify.BuildPrompt` with no beliefs, writes the response, the provider, the
+model, the `now` it told the model and the SHA-256 of the prompt, clears `record`, and never
+touches `expect`. It skips a case that already has a response unless `--force`. Replay
+(`TestReminderPhrasingSetReadsAsExpected`) rebuilds each prompt and fails on a hash mismatch,
+so a prompt change names the cases to record again; a case still awaiting its recording is
+skipped and counted.
+
+`nooma doctor --reading` (opt-in, about 50 live calls; a plain `doctor` makes none) sends the
+same set to the vault's provider and reports "reminder reading: k of n", ADR-0033's reversal
+criterion (90%), which counts only the reminder fields (`remind_request`, `reminder_intent`,
+`question_answer`, `choice_number`, `reminder_target`). A wrong title, day-only flag or
+check-in outcome does not make a phrasing misread; each has its own line: "titles: k of n
+date-free and short", "day only: k of n bare dates read as bare dates", "named times: k of n
+kept their time", and the `task_checkin_outcome`, `nudge_outcome` and `relation_outcome` rates.
+One **hard** line, "stop false positives: 0 of N negatives", counts every phrasing that does not
+expect a stop. It fails doctor when it is not 0, when the provider cannot be reached, and when no
+provider is bound, so a run that measured nothing is never a pass. A prompt change is
+judged by these numbers.
+
 ---
 
 ## 6. CI gates
@@ -373,6 +396,14 @@ All of the following runs on every PR and blocks the merge:
 | `templ generate` leaves a clean tree | The committed `_templ.go` files are current (ADR-0008) |
 | Schema golden | Apply all migrations from scratch and compare the resulting schema against a versioned dump |
 | docs↔code sync | See below |
+
+**The recordings gate** (`scripts/recordings-complete.sh`) is a step of the `lint` job, so the
+`protect-main` ruleset already requires it. It fails while any phrasing of
+`testdata/llm/reminders/` still reads `"record": true`, and rejects a vault path, a ULID-shaped
+id or an e-mail address in any of them. **It is the one gate `make check-all` does not run, on
+purpose:** `check-all` runs before every push and has to pass while cases still await their
+recording; the script is tested directly (`test/harness/recordings_complete_test.go`), like
+`docs-sync.sh`. A PR that adds phrasings is therefore red until the maintainer records them.
 
 **Schema golden** deserves a note: it is the gate that stops the real schema from drifting away
 from [`03-data-model.md`](03-data-model.md). A migration that changes a table without updating

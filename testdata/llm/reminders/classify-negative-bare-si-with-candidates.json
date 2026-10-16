@@ -1,0 +1,18 @@
+{
+  "id": "classify-negative-bare-si-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "sí",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-14T20:00:00-03:00",
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct, 10:00",
+      "at": "2026-10-15T10:00:00-03:00"
+    }
+  ],
+  "expect": {},
+  "prompt_sha256": "c64b41a11894c056fc7d4632a5d8698f290a270e580568b2a468e5a1860d6ba3"
+}

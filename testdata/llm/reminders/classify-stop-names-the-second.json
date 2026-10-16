@@ -1,0 +1,26 @@
+{
+  "id": "classify-stop-names-the-second",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "ya no me avises del gimnasio",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Ya no quiero recibir avisos del gimnasio.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":2}",
+  "now": "2026-10-14T20:00:00-03:00",
+  "candidates_list": [
+    {
+      "label": "Dentista",
+      "when": "vie 16 oct, 10:00",
+      "at": "2026-10-16T10:00:00-03:00"
+    },
+    {
+      "label": "Gimnasio",
+      "when": "sáb 17 oct, 07:00",
+      "at": "2026-10-17T07:00:00-03:00"
+    }
+  ],
+  "expect": {
+    "reminder_intent": "stop",
+    "reminder_target": "2"
+  },
+  "prompt_sha256": "90877e25efa54176c95bec23905a95b705c31aea42052efe4c33bcf35e618327"
+}

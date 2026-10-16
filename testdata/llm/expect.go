@@ -6,13 +6,23 @@ package llm
 type Question struct {
 	Kind string `json:"kind"`
 	Text string `json:"text"`
+	// List is the which_reminder question's numbered entries as data, so a test
+	// can check the numbered list inside Text against the renderer. The prompt
+	// reads Text alone.
+	List []Entry `json:"list,omitempty"`
 }
 
 // Entry is one line of the numbered candidate list a phrasing is read with
 // (classify.ReminderEntry).
+//
+// When is the text the prompt shows. At and DayOnly are the instant it renders,
+// kept so a test can check When against internal/core/phrase and that the
+// instant is after the case's now; the prompt never reads them.
 type Entry struct {
-	Label string `json:"label"`
-	When  string `json:"when,omitempty"`
+	Label   string `json:"label"`
+	When    string `json:"when,omitempty"`
+	At      string `json:"at,omitempty"`
+	DayOnly bool   `json:"day_only,omitempty"`
 }
 
 // Expect is the reading a phrasing should get, written by hand and never by
@@ -35,4 +45,13 @@ type Expect struct {
 	TaskCheckinOutcome string `json:"task_checkin_outcome,omitempty"`
 	NudgeOutcome       string `json:"nudge_outcome,omitempty"`
 	RelationOutcome    string `json:"relation_outcome,omitempty"`
+}
+
+// FileFields are the keys of a recorded example in the order they are written
+// (goldenset.LLMExample's field order). `nooma doctor --record` edits a file by
+// key, so a value it does not set, `expect` first of all, is written back byte
+// for byte; a key outside this list makes it refuse the file.
+var FileFields = []string{
+	"id", "provider", "model", "task", "message", "candidates", "response", "error",
+	"record", "now", "open_question", "candidates_list", "expect", "known_misread", "prompt_sha256",
 }

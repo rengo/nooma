@@ -1,0 +1,27 @@
+{
+  "id": "classify-negative-ya-lo-hice-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "ya lo hice",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya lo hice.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-14T20:00:00-03:00",
+  "candidates_list": [
+    {
+      "label": "Llamar a Ana",
+      "when": "jue 15 oct, 17:00",
+      "at": "2026-10-15T17:00:00-03:00"
+    },
+    {
+      "label": "Pagar el gas",
+      "when": "vie 16 oct",
+      "at": "2026-10-16T00:00:00-03:00",
+      "day_only": true
+    }
+  ],
+  "expect": {
+    "task_checkin_outcome": "done"
+  },
+  "known_misread": "reads no done outcome for ya lo hice, which keeps answering an open check-in (done handling itself is deferred); the prompt describes none of the outcome values, so this is prompt work for a later link",
+  "prompt_sha256": "952a1ec1f657265bf39fa24f94eb515bb7fb73e92f12ff5892f9c8c9cc91e7f1"
+}

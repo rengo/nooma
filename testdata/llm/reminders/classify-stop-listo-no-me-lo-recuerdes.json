@@ -1,0 +1,27 @@
+{
+  "id": "classify-stop-listo-no-me-lo-recuerdes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "listo, no me lo recuerdes más",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"No quiero que me lo recuerdes más.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\"}",
+  "now": "2026-10-14T20:00:00-03:00",
+  "candidates_list": [
+    {
+      "label": "Llamar a Ana",
+      "when": "jue 15 oct, 17:00",
+      "at": "2026-10-15T17:00:00-03:00"
+    },
+    {
+      "label": "Pagar el gas",
+      "when": "vie 16 oct",
+      "at": "2026-10-16T00:00:00-03:00",
+      "day_only": true
+    }
+  ],
+  "expect": {
+    "reminder_intent": "stop",
+    "reminder_target": "unclear"
+  },
+  "prompt_sha256": "54d9132d666d69d30880968489885ae7f57cefef00126544fdeec520ff792b0e"
+}

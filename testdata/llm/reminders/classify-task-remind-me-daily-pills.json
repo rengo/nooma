@@ -1,0 +1,15 @@
+{
+  "id": "classify-task-remind-me-daily-pills",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "recordame tomar las pastillas todos los días a las 9pm",
+  "response": "{\"type\":\"recurring_reminder\",\"normalized_content\":\"Recordarme tomar las pastillas todos los días a las 21:00.\",\"weight\":0.85,\"decay_rate\":0.01,\"language\":\"es\",\"structured_data\":{\"time\":\"21:00\"},\"title\":\"Tomar las pastillas\",\"interrupt_level\":0.5,\"recurrence_rule\":\"daily\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
+  "expect": {
+    "remind_request": true,
+    "day_only": false,
+    "title": true
+  },
+  "prompt_sha256": "cc5e8f9c4886e53a6d3e1e243afeb2d2a4d88aeaa29342e31683d7e57dacef39"
+}

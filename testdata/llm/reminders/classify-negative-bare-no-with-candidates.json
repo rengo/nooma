@@ -1,0 +1,19 @@
+{
+  "id": "classify-negative-bare-no-with-candidates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "no",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"no\"}",
+  "now": "2026-10-14T20:00:00-03:00",
+  "candidates_list": [
+    {
+      "label": "Comprar café",
+      "when": "jue 15 oct, 10:00",
+      "at": "2026-10-15T10:00:00-03:00"
+    }
+  ],
+  "expect": {},
+  "known_misread": "reads question_answer no although no reminder question is open (the prompt allows it only while one is); no production code reads question_answer yet, and link 6 owns the rule that it acts only with a question open",
+  "prompt_sha256": "7ee37720b0ccd916770544e00205678a6603aafca5cd8c560bbb349d29902201"
+}

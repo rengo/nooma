@@ -1,0 +1,14 @@
+{
+  "id": "classify-request-acordate-de-avisarme",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "acordate de avisarme que vence el seguro el viernes",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"El seguro vence el 2026-10-16.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-16\",\"title\":\"Vencimiento del seguro\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
+  "expect": {
+    "remind_request": true,
+    "title": true
+  },
+  "prompt_sha256": "ab6e042aa10c512b7e336822b764bd9f2af4748941f7b601f09681c3497ccf6c"
+}

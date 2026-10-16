@@ -1,0 +1,14 @@
+{
+  "id": "classify-nudge-engaged",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "dale, contame",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale, contame.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-15T21:26:28-03:00",
+  "expect": {
+    "nudge_outcome": "engaged"
+  },
+  "known_misread": "reads no outcome, so M3's check-in resolution (which depends on the model alone) would not close it; the prompt describes none of the outcome values, so this is prompt work for a later link",
+  "prompt_sha256": "8ec67100b33f4699bc1da8ecbce24c7672e21ba8a42c3a14757e92505cbc2b43"
+}
