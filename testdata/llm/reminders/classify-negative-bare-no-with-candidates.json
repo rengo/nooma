@@ -14,5 +14,6 @@
     }
   ],
   "expect": {},
+  "known_misread": "reads question_answer no although no reminder question is open (the prompt allows it only while one is); harmless today because the code acts on it only when one is open",
   "prompt_sha256": "7ee37720b0ccd916770544e00205678a6603aafca5cd8c560bbb349d29902201"
 }

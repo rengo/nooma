@@ -14,5 +14,6 @@
     "question_answer": "when",
     "day_only": true
   },
+  "known_misread": "answers when but writes no due_at or event_at: the day is only in normalized_content, so the instant is lost; prompt work for link 8",
   "prompt_sha256": "d906e7e7851b152586a7da04dfdee297cc7a074d9a41c1ea4a493032b8ffd0cb"
 }
