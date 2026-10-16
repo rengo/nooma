@@ -527,7 +527,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      reminders, so the model can answer a **position** in a list the code built. It never names
      an id and never a relation. The code binds only on a position inside that list, an
      out-of-range or `unclear` one asks which, and a stop it binds is undoable and deletes
-     nothing. **One list per prompt**: an open `which_reminder` question carries its own, and the
+     nothing. **The answer to the which-question is not a stop**: with that question open, the
+     prompt says Nooma asked it to learn which reminder a stop it already holds is about, and
+     that the answer sets only `question_answer: choice` and `choice_number`. A stop is tied to
+     the user's words, and the pending stop is what binds. **One list per prompt**: an open
+     `which_reminder` question carries its own, and the
      stop candidates are then left out, so a position means one thing. Both lists come from
      `classify.RenderReminderList`, the renderer of the question Nooma sends, so a position the
      model reads is a position the user saw. Each label is flattened to one line and

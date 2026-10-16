@@ -29,6 +29,5 @@
   "expect": {
     "question_answer": "choice",
     "choice_number": 2
-  },
-  "known_misread": "adds a stop (reminder_intent stop, reminder_target 2) that is not in the user's words: the prompt never tells the model the which-question is about stopping, so it guesses, and ADR-0033 ties a stop to explicit words; prompt work, see tasks.md"
+  }
 }

@@ -74,3 +74,29 @@ func TestBuildPromptAWhenAnswerCarriesItsInstant(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptWhichAnswerIsNotAStop: "el 2" answering the which-question
+// came back as a stop of its own (reminder_intent stop, reminder_target 2): the
+// prompt never said the question is asked for a stop Nooma already holds
+// (link 1b). With that question open, the prompt says the answer picks the
+// reminder, sets only the choice, and is not a stop; ADR-0033 ties a stop to the
+// user's words, and the pending stop is what binds.
+func TestBuildPromptWhichAnswerIsNotAStop(t *testing.T) {
+	const rule = "The answer is not itself a stop"
+	which := &OpenQuestion{Kind: QuestionWhichReminder, Text: WhichReminderText("¿De cuál hablás?", stopCandidates)}
+	flat := strings.Join(strings.Fields(promptWith(ReminderContext{Open: which})), " ")
+	for _, want := range []string{
+		"Nooma asked this to learn which reminder a stop the user already asked for is about",
+		"set question_answer choice and choice_number, and nothing else",
+		rule + ": reminder_intent is none and reminder_target is left out",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("with a which_reminder question open the prompt never says %q:\n%s", want, flat)
+		}
+	}
+	for _, rc := range []ReminderContext{{}, {Open: &OpenQuestion{Kind: QuestionRemindWhen, Text: "¿Cuándo?"}}, {Candidates: stopCandidates}} {
+		if p := promptWith(rc); strings.Contains(p, rule) {
+			t.Errorf("the which-answer rule is in a prompt with no which_reminder question open: %+v", rc)
+		}
+	}
+}

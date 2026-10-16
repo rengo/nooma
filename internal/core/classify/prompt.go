@@ -315,6 +315,15 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		b.WriteString("  Nooma asked the user, in these words:\n")
 		b.WriteString(strings.TrimRight(rc.Open.Text, "\n") + "\n")
 		b.WriteString("  The message may be the answer. Read it as one only if it answers THIS question.\n")
+		// **The question is about a stop; the answer is not one.** Asked "which
+		// one" with no reason given, the model guessed the reason and read "el 2"
+		// as a stop of its own. The stop is the one Nooma holds (ADR-0033).
+		if rc.Open.Kind == QuestionWhichReminder {
+			b.WriteString("  Nooma asked this to learn which reminder a stop the user already asked for is\n")
+			b.WriteString("  about. An answer picks that reminder: set question_answer choice and\n")
+			b.WriteString("  choice_number, and nothing else. The answer is not itself a stop: reminder_intent\n")
+			b.WriteString("  is none and reminder_target is left out. Nooma completes the stop it holds.\n")
+		}
 	}
 	if len(rc.Candidates) > 0 && (rc.Open == nil || rc.Open.Kind != QuestionWhichReminder) {
 		b.WriteString("\n" + candidatesHeading + "\n")
