@@ -52,6 +52,8 @@ tasks-repeating).
       - no existing recording is re-recorded; I18, I26, `arming_capture_keeps_its_unit` and `classify_golden_cases_decode_clean` assert their content;
       - about 40 new in `testdata/llm/reminders/`: every phrasing of spec R1's table, the stop, undo-keep and answer phrasings, "listo" reading `none` (with `open_question` or the candidate list), the negatives for the hard false-positive line, the title cases, the day-only bare dates, the check-in answers, "a single candidate plus a message about something else → `unclear`", and `classify-task-remind-me-coffee` and `…-daily-pills`.
     - [ ] Doc 06 §6; `make check-all`.
+- [ ] 1.2′ Link 1b — `fix/classify-prompt-misreads`: the prompt work the recorded set found, in one link so the prompt changes once and the set is recorded once:
+  - [x] L2 `TestCheckInAnswer_TheCodeActsOnlyOnTheModelsOutcome` (the live M3 bug, confirmed): the gpt-6-luna readings of a nudge taken up and a task done carry no outcome, and the open check-in stays open with nothing logged; the drop reading, which has one, closes it. The code needs nothing: the defect is the prompt's.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.
