@@ -54,42 +54,23 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 		fmt.Sprintf("check-in %q resolved as %q", target.ID, resolution), target.ID, resolution, len(open))
 }
 
-// checkInResolution maps an answer's outcome onto the resolution
-// vocabulary, reporting whether this classification answers a check-in at
-// all.
-//
-// **Snooze resolves nothing, and that is the honest reading rather than a
-// gap.** Spec R5.2 says a task_checkin_outcome "resolves an open task
-// check-in", and two of the three do. Snooze means "ask me later": the
-// check-in is neither engaged nor declined, and forcing it into either
-// would record an answer the user did not give. It stays open, and the
-// next digest or push asks again — which is what the user requested.
+// checkInResolution is classify.ResolveCheckin in the store's vocabulary: the
+// mapping itself, nudge over task and snooze resolving nothing, is core's, so
+// the recorded-reading judge (internal/reading) sees the effect this has.
 //
 // self_healed is in the resolution vocabulary and in neither classify
 // vocabulary, and that is also correct: nobody types it. It is the
 // system's own verdict for a nudge that fresh activity made moot, and
 // producing it is M4's.
 func checkInResolution(c classify.Classification) (ports.TriggerResolution, bool) {
-	if c.NudgeOutcome != nil {
-		switch *c.NudgeOutcome {
-		case classify.NudgeOutcomeEngaged:
-			return ports.ResolutionEngaged, true
-		case classify.NudgeOutcomeDeclined:
-			return ports.ResolutionDeclined, true
-		}
+	switch resolution, ok := classify.ResolveCheckin(c); {
+	case !ok:
+		return "", false
+	case resolution == classify.CheckinEngaged:
+		return ports.ResolutionEngaged, true
+	case resolution == classify.CheckinDeclined:
+		return ports.ResolutionDeclined, true
 	}
-
-	if c.TaskCheckinOutcome != nil {
-		switch *c.TaskCheckinOutcome {
-		case classify.TaskCheckinOutcomeDone:
-			return ports.ResolutionEngaged, true
-		case classify.TaskCheckinOutcomeDrop:
-			return ports.ResolutionDeclined, true
-		case classify.TaskCheckinOutcomeSnooze:
-			return "", false
-		}
-	}
-
 	return "", false
 }
 

@@ -514,7 +514,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      nudge taken up, and the code resolves a check-in from the outcome alone. Saying a thing is
      done is `task_checkin_outcome: done`, never a stop.
    - **Which thing an outcome answers is resolved from the STORE, never from the model.** A
-     `nudge_outcome` closes the most recently delivered open check-in; a `relation_outcome`
+     check-in outcome closes the most recently delivered open check-in, by one mapping,
+     `classify.ResolveCheckin`: `engaged` and `done` engage it, `declined` and `drop` decline
+     it, `snooze` resolves nothing, and a reading with both fields is read by its
+     `nudge_outcome`. A `relation_outcome`
      closes the most recently asked open relation question (§4). The classify prompt is never
      widened to inject open relation questions so the model can name an id: a model asked to
      pick one can pick a plausible wrong one, and for `relation_outcome: rejected` the wrong

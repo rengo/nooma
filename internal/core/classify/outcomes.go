@@ -110,3 +110,45 @@ func AllPersonRefStatuses() []PersonRefStatus {
 		PersonRefStatusResolved, PersonRefStatusNew, PersonRefStatusAmbiguous,
 	}
 }
+
+// CheckinResolution is how an answer closes the open check-in it answers: the
+// user's half of the resolution vocabulary (doc 02 §7; self_healed is the
+// system's own and nobody types it).
+type CheckinResolution string
+
+const (
+	CheckinEngaged  CheckinResolution = "engaged"
+	CheckinDeclined CheckinResolution = "declined"
+)
+
+// ResolveCheckin maps a reading's check-in outcomes onto the resolution it
+// closes the open check-in with, reporting whether it answers one at all. It is
+// the one mapping: brain acts on it, and internal/reading judges a recording by
+// the effect it has here.
+//
+// **The nudge outcome wins.** An answer carries no id, so one reading closes
+// one check-in, and a reading with both fields is read by its nudge_outcome.
+//
+// **Snooze resolves nothing, and that is the honest reading rather than a
+// gap.** Snooze means "ask me later": the check-in is neither engaged nor
+// declined, and forcing it into either would record an answer the user did
+// not give. It stays open, and the next digest or push asks again.
+func ResolveCheckin(c Classification) (CheckinResolution, bool) {
+	if c.NudgeOutcome != nil {
+		switch *c.NudgeOutcome {
+		case NudgeOutcomeEngaged:
+			return CheckinEngaged, true
+		case NudgeOutcomeDeclined:
+			return CheckinDeclined, true
+		}
+	}
+	if c.TaskCheckinOutcome != nil {
+		switch *c.TaskCheckinOutcome {
+		case TaskCheckinOutcomeDone:
+			return CheckinEngaged, true
+		case TaskCheckinOutcomeDrop:
+			return CheckinDeclined, true
+		}
+	}
+	return "", false
+}
