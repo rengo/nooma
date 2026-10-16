@@ -138,7 +138,7 @@ tasks-repeating).
   - `TestReplanOfAskedDayOnlyKeepsDateOnlyAt`: the re-plan of an asked day-only unit → at `DateOnlyAt`, `day_only` kept.
   - `TestCurrentEventReadsDueAtForRemindMe`: an asked task → `currentEvent` is `due_at`; an unasked task → nil.
   - `TestAskedRecurrenceBeforeLink7IsOneShot`: "recordame tomar pastillas todos los días a las 9pm" in links 2-6 → a unit of the type the model's kind maps to (the `task` mapping is link 7's), `remind_me=1`, one one-shot trigger at 20:45 today, never the 7-day recurring row (named time minus the lead), reply "Anotado para el … 21:00. Te aviso 15 minutos antes."; no recurring row (P1). Link 7 replaces this test with its I36 recurring tests.
-- [ ] 2.2 RED L3: migration M1; `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens.
+- [x] 2.2 RED L3: migration M1 (0010); `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens. The trigger payload also carries `asked`, `day_only` and `night_exempt` (round trip pinned in the trigger contract).
 - [ ] 2.2b RED (round 3): `TestArmAsked_TooLateTodayRefused` updated: "hoy" at 23:53 → at once (7 min left), 23:54 → `too_late`; `TestAtOnceMarginExceedsProactiveInterval`; `TestI36_RepeatingRequestBeforeLink7SaysOnlyThisOnce` (the reply names the one-shot and "solo esta vez").
 - [ ] 2.3 GREEN: the margin raised to 7 (doc 02 §13); the store, capture, phrase, channels and gate branch; the I36 row in doc 06 §4; replaying `classify-task-remind-me-coffee.json` (recorded in the 1a′ session); L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
 

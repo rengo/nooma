@@ -79,11 +79,14 @@ type payloadJSON struct {
 	About            string `json:"event_at,omitempty"`
 	UserLeadsMinutes []int  `json:"user_leads_minutes,omitempty"`
 	CatchUp          bool   `json:"catch_up,omitempty"`
+	Asked            bool   `json:"asked,omitempty"`
+	DayOnly          bool   `json:"day_only,omitempty"`
+	NightExempt      bool   `json:"night_exempt,omitempty"`
 	Reasks           int    `json:"reasks,omitempty"`
 }
 
 func encodePayload(p ports.TriggerPayload) ([]byte, error) {
-	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes, CatchUp: p.CatchUp, Reasks: p.Reasks}
+	s := payloadJSON{Action: p.ActionText, Rationale: p.Rationale, LeadDays: p.LeadDays, LeadMinutes: p.LeadMinutes, UserLeadsMinutes: p.UserLeadsMinutes, CatchUp: p.CatchUp, Asked: p.Asked, DayOnly: p.DayOnly, NightExempt: p.NightExempt, Reasks: p.Reasks}
 	if !p.About.IsZero() {
 		s.About = formatUnitTime(p.About)
 	}
@@ -95,7 +98,7 @@ func decodePayload(raw string) (ports.TriggerPayload, error) {
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		return ports.TriggerPayload{}, err
 	}
-	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes, CatchUp: s.CatchUp, Reasks: s.Reasks}
+	p := ports.TriggerPayload{ActionText: s.Action, Rationale: s.Rationale, LeadDays: s.LeadDays, LeadMinutes: s.LeadMinutes, UserLeadsMinutes: s.UserLeadsMinutes, CatchUp: s.CatchUp, Asked: s.Asked, DayOnly: s.DayOnly, NightExempt: s.NightExempt, Reasks: s.Reasks}
 	if s.About != "" {
 		about, err := time.Parse(unitTimeLayout, s.About)
 		if err != nil {

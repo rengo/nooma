@@ -22,6 +22,7 @@ type VaultConfig struct {
 	DateOnlyReminderAt     *string    // → prospection.ResolveReminderPrefs
 	QuietHoursEnd          *string    // → prospection.ResolveReminderPrefs (ADR-0030)
 	EveningReminderAt      *string    // → prospection.ResolveReminderPrefs
+	RemindMeLeadMinutes    *int       // → prospection.ResolveReminderPrefs (ADR-0031)
 }
 
 // ConfigRepo is the repository port over the config singleton row —
@@ -78,8 +79,9 @@ type ConfigRepo interface {
 // ReminderPrefsUpdate is the preference columns SetReminderPrefs writes,
 // in their stored form; nil leaves a column unchanged.
 type ReminderPrefsUpdate struct {
-	EventReminderLeads *string // a JSON array of minutes
-	DateOnlyReminderAt *string // HH:MM
-	QuietHoursEnd      *string // HH:MM
-	EveningReminderAt  *string // HH:MM
+	EventReminderLeads  *string // a JSON array of minutes
+	DateOnlyReminderAt  *string // HH:MM
+	QuietHoursEnd       *string // HH:MM
+	EveningReminderAt   *string // HH:MM
+	RemindMeLeadMinutes *int    // whole minutes
 }

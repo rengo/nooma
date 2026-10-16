@@ -13,7 +13,7 @@ CREATE TABLE config (
   mental_load_threshold     INTEGER NOT NULL DEFAULT 7,
   consolidation_last_run_at TEXT,                -- NULL = never ran
   updated_at                TEXT NOT NULL
-, event_reminder_leads TEXT, date_only_reminder_at TEXT, quiet_hours_end TEXT, evening_reminder_at TEXT);
+, event_reminder_leads TEXT, date_only_reminder_at TEXT, quiet_hours_end TEXT, evening_reminder_at TEXT, remind_me_lead_minutes INTEGER);
 
 CREATE TABLE current_state (
   id          TEXT PRIMARY KEY,
@@ -164,7 +164,7 @@ CREATE TABLE units (
   confidence         REAL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL
-, language TEXT, title TEXT);
+, language TEXT, title TEXT, remind_me INTEGER NOT NULL DEFAULT 0);
 
 CREATE VIRTUAL TABLE units_fts USING fts5(
   content, content='units', content_rowid='rowid'

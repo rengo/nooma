@@ -1306,3 +1306,23 @@ func RunTitle(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		}
 	}
 }
+
+// RunRemindMe pins the flag an asked unit carries (spec R1): it is stored at
+// Create and read back, and a unit that was not asked for stays false.
+func RunRemindMe(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+	ctx := context.Background()
+	repo := newRepo(t)
+	for id, asked := range map[string]bool{"asked": true, "plain": false} {
+		u := fixtureUnit(id, unit.StatusPool)
+		u.RemindMe = asked
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create %s: %v", id, err)
+		}
+	}
+	for id, want := range map[string]bool{"asked": true, "plain": false} {
+		if got, err := repo.ByID(ctx, id); err != nil || got.RemindMe != want {
+			t.Errorf("ByID(%s).RemindMe = %v, %v; want %v", id, got.RemindMe, err, want)
+		}
+	}
+}

@@ -352,3 +352,11 @@ func TestUnitRepo_Title(t *testing.T) {
 		return NewUnitRepo(openTestVault(t))
 	})
 }
+
+// TestUnitRepo_RemindMe runs repocontract.RunRemindMe against a real migrated
+// vault (spec R1).
+func TestUnitRepo_RemindMe(t *testing.T) {
+	repocontract.RunRemindMe(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}
