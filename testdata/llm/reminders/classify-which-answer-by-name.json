@@ -29,8 +29,10 @@
     ]
   },
   "expect": {
+    "reminder_intent": "stop",
     "question_answer": "choice",
-    "choice_number": 2
+    "choice_number": 2,
+    "reminder_target": "2"
   },
   "prompt_sha256": "dd63bbd7504dab46cff467beafa8bb9667eaea16ef2ed64bedf9e89ac35537cf"
 }
