@@ -71,6 +71,13 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, 0, err
 	}
 
+	// Read before this digest surfaces anything, so what it delivers now is
+	// not counted as open through it.
+	reasks, err := r.openCheckins(ctx, history, now, commit)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	pending, err := r.triggers.Undelivered(ctx)
 	if err != nil {
 		return 0, 0, fmt.Errorf("check: undelivered triggers: %w", err)
@@ -115,7 +122,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		}
 	}
 
-	if len(pending) == 0 && question == nil {
+	if len(pending) == 0 && len(reasks) == 0 && question == nil {
 		// **An empty digest is not sent**, and m3a left this to m3d
 		// explicitly ("Carry takes no position on whether an empty result
 		// is delivered"). A message every morning saying nothing happened
@@ -142,14 +149,14 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// focus is computed, after every return that does not send.
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
-	if len(carry) == 0 && question == nil {
+	if len(carry) == 0 && len(reasks) == 0 && question == nil {
 		return 0, lapsed, nil
 	}
 	if !commit {
 		// The count of the lines the message bound keeps. Adjacency can reorder
 		// the real pass's carry, which a dry run does not compute (it reads no
 		// focus), so under a bound that cuts the two may keep different lines.
-		_, sent := r.digestText(ctx, now, carry, pending, question)
+		_, sent := r.digestText(ctx, now, carry, pending, reasks, question)
 		return len(sent), lapsed, nil
 	}
 
@@ -179,7 +186,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	// What fits one message is sent; the rest stays undelivered for tomorrow.
-	text, sent := r.digestText(ctx, now, carry, pending, question)
+	text, sent := r.digestText(ctx, now, carry, pending, reasks, question)
 	if err := r.channel.Send(ctx, r.conversation, text); err != nil {
 		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(sent), err),
@@ -197,7 +204,17 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		r.focus.publish(round)
 	}
 
+	reasked := make(map[string]ports.DueTrigger, len(reasks))
+	for _, t := range reasks {
+		reasked[t.ID] = t
+	}
 	for _, item := range sent {
+		if t, ok := reasked[item.ID]; ok {
+			if err := r.markReasked(ctx, t, now); err != nil {
+				return 0, lapsed, err
+			}
+			continue
+		}
 		if err := r.triggers.Surface(ctx, item.ID, now); err != nil {
 			return 0, lapsed, fmt.Errorf("check: digest was sent but trigger %q was not marked delivered: %w", item.ID, err)
 		}
@@ -246,11 +263,17 @@ func digestSentRationale(sent, held, dropped int) string {
 	return text
 }
 
-// digestText is the digest's message and the carried items it holds. The digest
-// speaks the newest capture's language (ADR-0032 point 5).
-func (r checkRunner) digestText(ctx context.Context, now time.Time, carry []prospection.DigestItem, pending []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
+// digestText is the digest's message and the items it holds: the carried ones,
+// then the check-ins it asks again, one line per unit as every digest line. The
+// digest speaks the newest capture's language (ADR-0032 point 5).
+func (r checkRunner) digestText(ctx context.Context, now time.Time, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem) {
 	set := r.setFor(ctx, "")
-	return renderDigest(set, carry, r.saidNow(ctx, pending, now, set), question)
+	items := slices.Clone(carry)
+	for _, t := range reasks {
+		items = append(items, prospection.DigestItem{ID: t.ID})
+	}
+	said := append(r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set)...)
+	return renderDigest(set, items, said, question)
 }
 
 // digestFocus computes the focus the digest is about to be sent against. A

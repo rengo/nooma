@@ -12,6 +12,7 @@ import (
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
@@ -903,5 +904,32 @@ func TestRenderDigest_SpeaksTheSetItIsGiven(t *testing.T) {
 	if got, _ := renderDigest(sentences(), carry[1:], pending, nil); got != "Here is 1 thing for today:\n\u2022 You asked me to remind you about something." {
 		want := "Here is 1 thing for today:\n\u2022 You asked me to remind you about something."
 		t.Errorf("English renderDigest() = %q, want %q", got, want)
+	}
+}
+
+// TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant: a check-in asked again
+// is its unit's words now, as a digest line, and never its instant, which by
+// the next morning is usually past (ADR-0032).
+func TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant(t *testing.T) {
+	ctx := context.Background()
+	units := memrepo.NewUnits()
+	due := digestNow.Add(-12 * time.Hour)
+	if err := units.Create(ctx, unit.Unit{ID: "u-coffee", Type: unit.TypeTask, Status: unit.StatusPool,
+		Content: "buy coffee", DueAt: &due, Source: "chat", Weight: 1,
+		LastTouchedAt: due, CreatedAt: due, UpdatedAt: due}); err != nil {
+		t.Fatal(err)
+	}
+	unitID := "u-coffee"
+	reask := ports.DueTrigger{ID: "t-coffee", UnitID: &unitID, FireAt: due.Add(-15 * time.Minute),
+		Payload: ports.TriggerPayload{ActionText: "armed text"}}
+	r := digestRunner(t, &emptyTriggers{}, units, memrepo.NewState(), &recordingLog{}, nil)
+
+	text, sent := r.digestText(ctx, digestNow, nil, nil, []ports.DueTrigger{reask}, nil)
+	set := phrase.For(classify.Fallback())
+	if want := set.DigestHeader(1) + "\n" + set.DigestItem("buy coffee"); text != want {
+		t.Errorf("digest %q, want %q", text, want)
+	}
+	if len(sent) != 1 || sent[0].ID != "t-coffee" {
+		t.Errorf("sent %+v, want the re-ask", sent)
 	}
 }

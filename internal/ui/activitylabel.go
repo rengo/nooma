@@ -36,6 +36,8 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionCheckDeliveryFailed:       "Message not delivered",
 	ports.ActionCheckDigestSent:           "Morning digest sent",
 	ports.ActionCheckDigestHeld:           "Morning digest held back",
+	ports.ActionCheckCheckinReasked:       "Check-in asked again",
+	ports.ActionCheckCheckinExpired:       "Check-in closed unanswered",
 	ports.ActionCheckFocusUnavailable:     "Focus unavailable",
 	ports.ActionCheckTimerRephraseFailed:  "Could not reword a timer",
 	ports.ActionCaptureCheckInResolved:    "Check-in answered",
