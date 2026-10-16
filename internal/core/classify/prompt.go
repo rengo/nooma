@@ -244,7 +244,12 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("               meeting, the dentist. Its day and time go in event_at.\n")
 	b.WriteString("  task         something the user has to GET DONE, by a deadline if one is named.\n")
 	b.WriteString("               The deadline goes in due_at.\n")
-	b.WriteString("  An appointment filed as a task gets no reminder.\n\n")
+	b.WriteString("  An appointment filed as a task gets no reminder.\n")
+	// **A reply is not a memory.** A bare "listo" came back as a task, and
+	// capture stored "La tarea está hecha" as a unit of its own.
+	b.WriteString("  chitchat     a message that only answers Nooma (a check-in, a nudge, a question it\n")
+	b.WriteString("               asked) or only talks, with nothing new to keep. It stores nothing:\n")
+	b.WriteString("               its answer travels in the outcome fields, never as a new task.\n\n")
 
 	b.WriteString("Corrections\n")
 	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")

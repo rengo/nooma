@@ -163,3 +163,19 @@ func TestBuildPromptListedRemindersAreNotAStop(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptAReplyIsNotANewUnit: a bare "listo" or "ya" came back as a
+// task, and capture stored "La tarea está hecha" as a new unit (review of
+// #365). The prompt says what chitchat is: a message that only answers Nooma or
+// only talks stores nothing, and its answer travels in the outcome fields.
+func TestBuildPromptAReplyIsNotANewUnit(t *testing.T) {
+	flat := strings.Join(strings.Fields(promptWith(ReminderContext{})), " ")
+	for _, want := range []string{
+		"chitchat a message that only answers Nooma (a check-in, a nudge, a question it asked) or only talks, with nothing new to keep",
+		"its answer travels in the outcome fields, never as a new task",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the prompt never says %q", want)
+		}
+	}
+}

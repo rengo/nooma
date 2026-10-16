@@ -12,6 +12,7 @@
     }
   ],
   "expect": {
+    "type": "chitchat",
     "nudge_outcome": "declined"
   }
 }
