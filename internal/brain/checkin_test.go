@@ -23,7 +23,13 @@ type openCheckIns struct {
 	as       []ports.TriggerResolution
 }
 
-func (r *openCheckIns) Delivered(context.Context) ([]ports.DueTrigger, error) { return r.open, nil }
+func (r *openCheckIns) Delivered(context.Context) ([]ports.OpenCheckIn, error) {
+	out := make([]ports.OpenCheckIn, 0, len(r.open))
+	for _, t := range r.open {
+		out = append(out, ports.OpenCheckIn{DueTrigger: t})
+	}
+	return out, nil
+}
 
 func (r *openCheckIns) Resolve(_ context.Context, id string, to ports.TriggerResolution, _ time.Time) error {
 	r.resolved = append(r.resolved, id)

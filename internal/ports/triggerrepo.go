@@ -200,6 +200,14 @@ type DueTrigger struct {
 	RecurrenceAnchor *prospection.Anchor
 }
 
+// OpenCheckIn is Delivered's read shape: a delivered trigger nobody has
+// answered, and the last time it reached the user, which the morning digest
+// counts its digests from (doc 02 §7).
+type OpenCheckIn struct {
+	DueTrigger
+	SurfacedAt time.Time
+}
+
 // TriggerMove is what Reschedule rewrites on an armed trigger when the date
 // it watches is corrected (doc 02 §5 step 4, I29): when it fires, what it
 // will say, why and how far ahead (the payload a fresh arming would write),
@@ -213,7 +221,7 @@ type TriggerMove struct {
 
 // TriggerRepo is the repository port over triggers.
 //
-// Ten methods, and three absences that are deliberate:
+// Its methods, and three absences that are deliberate:
 //
 //   - No method whose name begins Delete, Remove, Purge, Drop or Destroy
 //     — I03's strengthened prefix set, asserted over this interface's own
@@ -285,7 +293,19 @@ type TriggerRepo interface {
 	// Delivered returns every trigger that reached the user and has no
 	// answer yet — doc 02 §5's "open check-ins", ordered most recent
 	// first so a caller resolving one answer takes the head.
-	Delivered(ctx context.Context) ([]DueTrigger, error)
+	Delivered(ctx context.Context) ([]OpenCheckIn, error)
+
+	// Reask records that the digest asked an open check-in again at at:
+	// surfaced_at = at, so it is the newest open one and an answer reaches
+	// it. It returns ErrTriggerStatusConflict unless id is fired, surfaced
+	// and unanswered, and ErrTriggerNotFound if it does not exist.
+	Reask(ctx context.Context, id string, at time.Time) error
+
+	// ExpireUnanswered closes an open check-in nobody answered: fired to
+	// expired, surfaced_at and fired_at kept, responded_at left NULL (doc
+	// 02 §7). It still went out, so FiredForUnit still returns it. It
+	// returns Reask's two errors under Reask's precondition.
+	ExpireUnanswered(ctx context.Context, id string) error
 
 	// Resolve records the user's answer: responded_at = at and
 	// resolution = to, under a surfaced-and-unanswered precondition.
@@ -298,8 +318,8 @@ type TriggerRepo interface {
 	// answer through classify's vocabulary — a value, not a status the
 	// transition implies.
 	//
-	// It returns ErrTriggerStatusConflict if id is not surfaced or is
-	// already answered, and ErrTriggerNotFound if it does not exist.
+	// It returns ErrTriggerStatusConflict if id is not surfaced, is
+	// already answered or closed unanswered (ExpireUnanswered), and ErrTriggerNotFound if it does not exist.
 	Resolve(ctx context.Context, id string, to TriggerResolution, at time.Time) error
 
 	// Expire moves id from armed to expired (I15: a trigger past its
@@ -333,10 +353,11 @@ type TriggerRepo interface {
 	// ArmedForUnit.
 	ArmedUnitIDs(ctx context.Context) ([]string, error)
 
-	// FiredForUnit returns unitID's one-shot triggers whose status is still
-	// fired, in no particular order: what a re-arm under new preferences
-	// must not send again. A lapsed row (expired, fired_at kept) was never
-	// sent and covers nothing.
+	// FiredForUnit returns unitID's one-shot triggers that fired and are
+	// still fired or reached the user, in no particular order: what a re-arm
+	// under new preferences must not send again. A lapsed row (expired,
+	// fired_at kept, surfaced_at NULL) was never sent and covers nothing; a
+	// check-in that expired unanswered was sent and covers its lead.
 	FiredForUnit(ctx context.Context, unitID string) ([]FiredTrigger, error)
 
 	// Reschedule applies m to id under an armed precondition: fire_at,

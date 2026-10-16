@@ -889,6 +889,101 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		assertDueTriggerIDs(t, delivered(t, repo), "trg-c", "trg-b", "trg-a")
 	})
 
+	t.Run("Reask restamps an open check-in, which becomes the newest", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		for i, id := range []string{"trg-a", "trg-b"} {
+			fire(t, repo, id)
+			if err := repo.Surface(ctx, id, contractNow.Add(time.Duration(i)*time.Hour)); err != nil {
+				t.Fatalf("Surface %s: %v", id, err)
+			}
+		}
+
+		asked := contractNow.Add(2 * time.Hour)
+		if err := repo.Reask(ctx, "trg-a", asked); err != nil {
+			t.Fatalf("Reask: %v", err)
+		}
+		// An answer to the re-ask takes the head, so the head must be it.
+		assertDueTriggerIDs(t, delivered(t, repo), "trg-a", "trg-b")
+		got, err := repo.Delivered(ctx)
+		if err != nil {
+			t.Fatalf("Delivered: %v", err)
+		}
+		if !got[0].SurfacedAt.Equal(asked) {
+			t.Errorf("SurfacedAt = %s, want the re-ask's %s", got[0].SurfacedAt, asked)
+		}
+	})
+
+	t.Run("Reask refuses an unsurfaced and an answered trigger, and an unknown id", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-unsent")
+		fire(t, repo, "trg-closed")
+		if err := repo.Surface(ctx, "trg-closed", contractNow); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+		if err := repo.ExpireUnanswered(ctx, "trg-closed"); err != nil {
+			t.Fatalf("ExpireUnanswered: %v", err)
+		}
+		assertDueTriggerIDs(t, delivered(t, repo))
+
+		for _, id := range []string{"trg-unsent", "trg-closed"} {
+			if err := repo.Reask(ctx, id, contractNow); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+				t.Errorf("Reask(%s): got %v, want ErrTriggerStatusConflict", id, err)
+			}
+		}
+		if err := repo.Reask(ctx, "trg-missing", contractNow); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Errorf("Reask of an unknown id: got %v, want ErrTriggerNotFound", err)
+		}
+	})
+
+	t.Run("ExpireUnanswered closes an open check-in that still covers its lead", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-1")
+		if err := repo.Surface(ctx, "trg-1", contractNow); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+		if err := repo.ExpireUnanswered(ctx, "trg-1"); err != nil {
+			t.Fatalf("ExpireUnanswered: %v", err)
+		}
+		assertDueTriggerIDs(t, delivered(t, repo))
+		assertDueTriggerIDs(t, undelivered(t, repo))
+		// It went out: a re-arm must not send its lead again.
+		sent, err := repo.FiredForUnit(ctx, "unit-trg-1")
+		if err != nil {
+			t.Fatalf("FiredForUnit: %v", err)
+		}
+		if len(sent) != 1 || sent[0].ID != "trg-1" {
+			t.Errorf("FiredForUnit = %+v, want the expired check-in", sent)
+		}
+		// An answer arriving later finds nothing open to reach.
+		if err := repo.Resolve(ctx, "trg-1", ports.ResolutionEngaged, contractNow); err == nil {
+			t.Error("Resolve after ExpireUnanswered succeeded; the check-in is closed")
+		}
+	})
+
+	t.Run("ExpireUnanswered refuses an unsurfaced and an answered trigger, and an unknown id", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		fire(t, repo, "trg-unsent")
+		fire(t, repo, "trg-answered")
+		if err := repo.Surface(ctx, "trg-answered", contractNow); err != nil {
+			t.Fatalf("Surface: %v", err)
+		}
+		if err := repo.Resolve(ctx, "trg-answered", ports.ResolutionEngaged, contractNow); err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		for _, id := range []string{"trg-unsent", "trg-answered"} {
+			if err := repo.ExpireUnanswered(ctx, id); !errors.Is(err, ports.ErrTriggerStatusConflict) {
+				t.Errorf("ExpireUnanswered(%s): got %v, want ErrTriggerStatusConflict", id, err)
+			}
+		}
+		if err := repo.ExpireUnanswered(ctx, "trg-missing"); !errors.Is(err, ports.ErrTriggerNotFound) {
+			t.Errorf("ExpireUnanswered of an unknown id: got %v, want ErrTriggerNotFound", err)
+		}
+	})
+
 	t.Run("both reads are empty on a repository with nothing fired", func(t *testing.T) {
 		repo := newRepo(t)
 		assertDueTriggerIDs(t, undelivered(t, repo))
@@ -911,7 +1006,11 @@ func delivered(t *testing.T, repo ports.TriggerRepo) []ports.DueTrigger {
 	if err != nil {
 		t.Fatalf("Delivered: %v", err)
 	}
-	return got
+	out := make([]ports.DueTrigger, 0, len(got))
+	for _, c := range got {
+		out = append(out, c.DueTrigger)
+	}
+	return out
 }
 
 // sameAnchor compares two anchors by value.

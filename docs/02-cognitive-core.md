@@ -1320,7 +1320,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   `proactive_check` ticks, `internal/core/prospection.DelayCaveatMinutes`).
 - Delivery lifecycle: `fired_at` (fired) → `surfaced_at` (delivered to the user) →
   `responded_at` + `resolution` (`engaged` | `declined` | `self_healed` — fresh activity
-  resolved it before the user answered). One whose event passed first lapses (ADR-0032).
+  resolved it before the user answered). One whose event passed first lapses (ADR-0032). One
+  that reached the user and that nobody answered closes by itself (`ExpireUnanswered`: `fired`
+  to `expired`, `surfaced_at` kept, `responded_at` NULL); it went out, so it still covers its
+  lead (`FiredForUnit`), and no answer reaches it. Asking it again restamps `surfaced_at`
+  (`Reask`), so `surfaced_at` is the last time it reached the user.
 - **The due scan** reads the clock once and judges every trigger and timer that has come due
   against that one instant, so a pass's verdicts are consistent with each other. It decides
   nothing itself: staleness, quiet hours and the deliverable-from shift above are all evaluated

@@ -208,9 +208,9 @@ func (r *TriggerRepo) Lapse(ctx context.Context, id string) error {
 func (r *TriggerRepo) Resolve(ctx context.Context, id string, to ports.TriggerResolution, at time.Time) error {
 	return r.guardedUpdate(ctx, id,
 		`UPDATE triggers SET responded_at = ?, resolution = ?
-		 WHERE id = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
+		 WHERE id = ? AND status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
 		func(string) bool { return true },
-		formatUnitTime(at), string(to), id)
+		formatUnitTime(at), string(to), id, string(ports.TriggerStatusFired))
 }
 
 // ArmedForUnit implements ports.TriggerRepo.
@@ -293,8 +293,9 @@ func (r *TriggerRepo) OneShotForUnit(ctx context.Context, unitID string) ([]port
 func (r *TriggerRepo) FiredForUnit(ctx context.Context, unitID string) ([]ports.FiredTrigger, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, fire_at, fired_at, payload FROM triggers
-		 WHERE unit_id = ? AND status = ? AND recurrence_rule IS NULL AND fired_at IS NOT NULL AND fire_at IS NOT NULL`,
-		unitID, string(ports.TriggerStatusFired))
+		 WHERE unit_id = ? AND recurrence_rule IS NULL AND fired_at IS NOT NULL AND fire_at IS NOT NULL
+		   AND (status = ? OR (status = ? AND surfaced_at IS NOT NULL))`,
+		unitID, string(ports.TriggerStatusFired), string(ports.TriggerStatusExpired))
 	if err != nil {
 		return nil, fmt.Errorf("select fired triggers of unit %q: %w", unitID, err)
 	}
@@ -372,8 +373,57 @@ func (r *TriggerRepo) Undelivered(ctx context.Context) ([]ports.DueTrigger, erro
 }
 
 // Delivered implements ports.TriggerRepo. Most recent first.
-func (r *TriggerRepo) Delivered(ctx context.Context) ([]ports.DueTrigger, error) {
-	return r.firedWhere(ctx, `surfaced_at IS NOT NULL AND responded_at IS NULL`, `surfaced_at DESC, id DESC`)
+func (r *TriggerRepo) Delivered(ctx context.Context) ([]ports.OpenCheckIn, error) {
+	open, err := r.firedWhere(ctx, `surfaced_at IS NOT NULL AND responded_at IS NULL`, `surfaced_at DESC, id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	// One more read for surfaced_at rather than a second projection of the
+	// shared scan, which every other read keeps narrow.
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, surfaced_at FROM triggers WHERE status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
+		string(ports.TriggerStatusFired))
+	if err != nil {
+		return nil, fmt.Errorf("select surfaced_at of open check-ins: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+	surfaced := map[string]time.Time{}
+	for rows.Next() {
+		var id, at string
+		if err := rows.Scan(&id, &at); err != nil {
+			return nil, fmt.Errorf("scan surfaced_at: %w", err)
+		}
+		if surfaced[id], err = time.Parse(unitTimeLayout, at); err != nil {
+			return nil, fmt.Errorf("trigger %q surfaced_at: %w", id, err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select surfaced_at of open check-ins: %w", err)
+	}
+	out := make([]ports.OpenCheckIn, 0, len(open))
+	for _, t := range open {
+		out = append(out, ports.OpenCheckIn{DueTrigger: t, SurfacedAt: surfaced[t.ID]})
+	}
+	return out, nil
+}
+
+// ExpireUnanswered implements ports.TriggerRepo, under Reask's precondition.
+func (r *TriggerRepo) ExpireUnanswered(ctx context.Context, id string) error {
+	return r.guardedUpdate(ctx, id,
+		`UPDATE triggers SET status = ?
+		 WHERE id = ? AND status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
+		func(current string) bool { return current == string(ports.TriggerStatusFired) },
+		string(ports.TriggerStatusExpired), id, string(ports.TriggerStatusFired))
+}
+
+// Reask implements ports.TriggerRepo, under Resolve's surfaced-and-unanswered
+// precondition.
+func (r *TriggerRepo) Reask(ctx context.Context, id string, at time.Time) error {
+	return r.guardedUpdate(ctx, id,
+		`UPDATE triggers SET surfaced_at = ?
+		 WHERE id = ? AND status = ? AND surfaced_at IS NOT NULL AND responded_at IS NULL`,
+		func(current string) bool { return current == string(ports.TriggerStatusFired) },
+		formatUnitTime(at), id, string(ports.TriggerStatusFired))
 }
 
 // firedWhere is the shared read behind Undelivered and Delivered. Both are
