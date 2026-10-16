@@ -93,12 +93,12 @@ tasks-repeating).
   - Review of #366 (CHANGES REQUESTED at df19477, two judges, QA PASS):
     - [x] Race with capture: RED `TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure` (a `Resolve` conflict is unmatched, the capture goes on).
     - [x] RED contract: `Reask` counts `payload.reasks` in its own UPDATE; `Delivered` reads `surfaced_at` in the same row.
-    - [x] RED L1: `TestCheckinStep_TheNextMorningIsTheNextCalendarDay` (a push at 07:00, digest at 08:00), `TestCheckinStep_EveryReaskRechecksTheUnit`, `TestCheckinStep_OnlyAnActiveUnitIsAskedAgain`, `TestCheckinStep_AcrossDSTAndMonthEnds`. RED brain: `TestDigest_ADryRunAsksAndClosesNothing` (kills the `!commit` mutation), `TestDigest_AReaskCountsEvenWhenItsRowFails`, `TestDigest_AnUnreadableUnitLeavesItsCheckinForTomorrow`, `TestDigest_ANoTimeCheckinIsNeverDecided`, `TestDigestHistoryCoversTheCheckinLifetime`.
+    - [x] RED L1: `TestCheckinStep_TheNextMorningIsTheNextCalendarDay` (a push at 07:00, digest at 08:00), `TestCheckinStep_EveryReaskRechecksTheUnit`, `TestCheckinStep_OnlyAnActiveUnitIsAskedAgain`, `TestCheckinStep_AcrossDSTAndMonthEnds`. RED brain: `TestDigest_ADryRunAsksAndClosesNothing` (kills the `!commit` mutation), `TestDigest_AReaskCountsEvenWhenItsRowFails`, `TestDigest_AnUnreadableUnitSkipsOnlyTheReask`, `TestDigest_ANoTimeCheckinIsNeverDecided`, `TestDigestHistoryCoversTheCheckinLifetime`.
     - [x] RED: `TestDigestBoundDropsReasksBeforeTheDaysItems`, `TestDigest_AtMostMaxReasksPerDigestOldestFirst`, `TestDigest_ReasksAreNotCountedAsCarriedReminders`, `TestDigest_ABareAnswerReachesTheLastItemShown`, `TestMaxReasksPerDigestIsAShortList`; §13 `max_reasks_per_digest` = 3.
     - [x] `TestI39_AnExpiredRecurringCheckinLeavesTheNextOccurrence` (regression guard, green at once: nothing on main creates the next occurrence when a recurring trigger fires, so expiring a delivered one cannot end a series; Today and corrections read armed rows only).
   - QA FAIL on #366 at eb94d82, and the reviewer's second round (CHANGES REQUESTED at eb94d82):
     - [x] RED `TestI39_ABareAnswerReachesTheLastThingThePassSent` (QA's repro, both id orders): a late push and a re-ask in one pass shared `surfaced_at`; the pass now stamps everything it sends in one sequence.
-    - [ ] RED: an unreadable unit skips only the re-ask, logged; the lifetime still closes it.
+    - [x] RED `TestDigest_AnUnreadableUnitSkipsOnlyTheReask` (PM's correction of item 6): a read error skips only that morning's re-ask, recorded once a morning as `check.checkin.reask_skipped`; the lifetime still closes the check-in.
     - [ ] RED: the surviving mutants (newest snooze, re-asks left for later, a missing unit).
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):

@@ -86,6 +86,9 @@ const (
 	// answered (doc 02 §7); the reasked rows are its re-ask counter.
 	ActionCheckCheckinReasked DecisionAction = "check.checkin.reasked"
 	ActionCheckCheckinExpired DecisionAction = "check.checkin.expired"
+	// ActionCheckCheckinReaskSkipped records a re-ask a morning could not
+	// make because the check-in's unit could not be read (doc 02 §7).
+	ActionCheckCheckinReaskSkipped DecisionAction = "check.checkin.reask_skipped"
 	// ActionCheckFocusUnavailable records a digest sent without focus
 	// adjacency because the keeper could not compute one. The digest is owed
 	// to the user, so the failure is logged and not fatal (m4c design §3.5).
@@ -255,7 +258,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCheckReminderCancelled, ActionCheckReminderRefused, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,
 		ActionCheckTriggerDelivered, ActionCheckDeliveryFailed,
-		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckCheckinReasked, ActionCheckCheckinExpired,
+		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckCheckinReasked, ActionCheckCheckinExpired, ActionCheckCheckinReaskSkipped,
 		ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,
 		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched, ActionCaptureCheckInSnoozed,
 		ActionCaptureDedupJudged,

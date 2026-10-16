@@ -1649,9 +1649,12 @@ has no words to ask with, a unit archived or superseded, and any other kind, an 
 included: "cena con Juan" put off is not asked the morning after the dinner, because a reminder
 never speaks of the past (ADR-0032). `Reask` restamps `surfaced_at` and counts the re-ask on the
 row in the same write (`payload.reasks`), so a failure after it grants no extra re-ask;
-`check.checkin.reasked` is the audit row. A check-in with no `surfaced_at`, or whose unit cannot be
-read that morning for any reason but its absence, is neither asked nor closed until a morning can
-decide it. A dry run asks and closes nothing. Quiet hours need no rule of their own: the digest
+`check.checkin.reasked` is the audit row. A check-in with no `surfaced_at` is neither asked nor closed until a
+morning can decide it. One whose unit cannot be read that morning for any reason but its absence
+is not asked again that morning, since asking needs the unit's words, and says so once a morning
+(`check.checkin.reask_skipped`); its lifetime needs no unit, so it still closes on schedule and an
+error that never clears cannot keep it open. A unit that is gone is no unit: its check-in only
+gets the lifetime. A dry run asks and closes nothing. Quiet hours need no rule of their own: the digest
 waits for them. Today does not list re-asks. The digest asks in the client's wording of 2026-10-16
 (`Te pregunto de nuevo:` / `• ¿Ya está «Comprar café»?`; `Asking again:` / `• Is "Buy coffee"
 done?`, `phrase` `AskAgain` and `AskDone`), naming the unit's title, else its content, now and no

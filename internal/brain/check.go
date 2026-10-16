@@ -81,7 +81,7 @@ func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports
 			triggers: triggers, timers: timers, ids: ids, log: log,
 			channel: channel, units: units, state: state, llm: llm,
 			conversation: conversation, questions: questions, focus: keeper,
-			loud: newIDSet(), outage: newIDSet(), unmarked: newIDSet(),
+			loud: newIDSet(), outage: newIDSet(), unmarked: newIDSet(), unreadableCheckins: newIDSet(),
 		},
 	}
 }
@@ -407,6 +407,10 @@ type checkRunner struct {
 	// unmarked is the reminders this process sent and could not record as
 	// delivered. It never resends them: only a restart, which forgets, may.
 	unmarked *idSet
+	// unreadableCheckins is the check-ins, by id and local day, whose skipped
+	// re-ask this process already recorded: a digest left unsent is retried
+	// every pass, and the row says it once a morning.
+	unreadableCheckins *idSet
 }
 
 // checkDetail is every check.* row's context shape. One shape for all

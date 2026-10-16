@@ -319,6 +319,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCheckDigestHeld:                 true,
 			ports.ActionCheckCheckinReasked:             true,
 			ports.ActionCheckCheckinExpired:             true,
+			ports.ActionCheckCheckinReaskSkipped:        true,
 			ports.ActionCheckFocusUnavailable:           true,
 			ports.ActionCheckTimerRephraseFailed:        true,
 			ports.ActionCaptureCheckInResolved:          true,

@@ -155,25 +155,40 @@ func (unreadableUnits) ByID(context.Context, string) (unit.Unit, error) {
 	return unit.Unit{}, errors.New("database is locked")
 }
 
-// TestDigest_AnUnreadableUnitLeavesItsCheckinForTomorrow: a unit that cannot
-// be read this morning, for any reason but its absence, is neither asked about
-// nor closed; the check-in waits for a morning that can read it.
-func TestDigest_AnUnreadableUnitLeavesItsCheckinForTomorrow(t *testing.T) {
-	for name, at := range map[string]time.Time{
-		"askable":   checkinMorning(1),
-		"expirable": checkinMorning(prospection.MaxCheckinReasks + 1),
-	} {
-		v := newCheckinVault(t, name == "askable")
-		v.units = unreadableUnits{v.units}
-		if err := v.digest(t, at, true); err != nil {
-			t.Fatalf("%s: %v", name, err)
+// TestDigest_AnUnreadableUnitSkipsOnlyTheReask: a unit that cannot be read
+// this morning, for any reason but its absence, skips that morning's re-ask,
+// which needs its words, and says so in decision_log; the lifetime does not
+// need the unit, so the check-in still closes on schedule and an error that
+// never clears cannot keep it open.
+func TestDigest_AnUnreadableUnitSkipsOnlyTheReask(t *testing.T) {
+	ctx := context.Background()
+	v := newCheckinVault(t, true)
+	v.units = unreadableUnits{v.units}
+	if err := v.digest(t, checkinMorning(1), true); err != nil {
+		t.Fatal(err)
+	}
+	if open := v.open(t); len(open) != 1 || open[0].Payload.Reasks != 0 || len(v.channel.sent) != 0 {
+		t.Errorf("open %+v, sent %q: want it neither asked nor closed this morning", open, v.channel.sent)
+	}
+	rows, err := v.log.Since(ctx, checkinEvening.Add(time.Hour), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skipped := 0
+	for _, d := range rows {
+		if d.Action == ports.ActionCheckCheckinReaskSkipped && strings.Contains(d.Rationale, "t-coffee") {
+			skipped++
 		}
-		if open := v.open(t); len(open) != 1 || open[0].Payload.Reasks != 0 {
-			t.Errorf("%s: open %+v, want the check-in left as it was", name, open)
-		}
-		if len(v.channel.sent) != 0 {
-			t.Errorf("%s: sent %q", name, v.channel.sent)
-		}
+	}
+	if skipped != 1 {
+		t.Errorf("%d check.checkin.reask_skipped rows about t-coffee, want 1", skipped)
+	}
+
+	if err := v.digest(t, checkinMorning(prospection.MaxCheckinReasks+1), true); err != nil {
+		t.Fatal(err)
+	}
+	if open := v.open(t); len(open) != 0 {
+		t.Errorf("open %+v, want it closed on schedule though its unit cannot be read", open)
 	}
 }
 

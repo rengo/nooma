@@ -22,9 +22,11 @@ import (
 //
 // The re-ask count is the row's own (Reask writes it with the restamp); when
 // the user last put a check-in off is read from the audit trail the digest
-// already loaded, heldCounts' way. A check-in with no surfaced_at, or whose
-// unit cannot be read this morning for any reason but its absence, is left
-// for a morning that can decide it.
+// already loaded, heldCounts' way. A check-in with no surfaced_at is left for
+// a morning that can decide it. One whose unit cannot be read this morning, for
+// any reason but its absence, is decided without the unit: it is not asked
+// again, which needs the unit's words, and that is recorded once a morning as
+// check.checkin.reask_skipped; its lifetime needs no unit and still closes it.
 func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision, now time.Time, commit bool) ([]ports.DueTrigger, error) {
 	open, err := r.triggers.Delivered(ctx)
 	if err != nil {
@@ -38,12 +40,16 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 			continue
 		}
 		u, readable := r.checkinUnit(ctx, c.DueTrigger)
-		if !readable {
-			continue
-		}
 		step := r.night.CheckinStep(prospection.OpenCheckin{
 			SurfacedAt: c.SurfacedAt, SnoozedAt: snoozed[c.ID], UnitType: u.Type, UnitStatus: u.Status, Reasks: c.Payload.Reasks,
 		}, now)
+		if !readable && step == prospection.CheckinWait && commit && r.unreadableCheckins.first(c.ID+"@"+now.Format(time.DateOnly)) {
+			if err := r.record(ctx, now, ports.ActionCheckCheckinReaskSkipped,
+				fmt.Sprintf("check-in %q was not asked again this morning because its unit could not be read; it still closes on schedule", c.ID),
+				checkDetail{ID: c.ID}); err != nil {
+				return nil, err
+			}
+		}
 		switch step {
 		case prospection.CheckinWait:
 		case prospection.CheckinReask:
@@ -88,7 +94,8 @@ func (r checkRunner) expireCheckin(ctx context.Context, c ports.OpenCheckIn, now
 }
 
 // checkinUnit is t's unit now, the zero unit when it has none or it is gone,
-// and readable false when the read failed for another reason.
+// and the zero unit with readable false when the read failed for another
+// reason.
 func (r checkRunner) checkinUnit(ctx context.Context, t ports.DueTrigger) (unit.Unit, bool) {
 	if t.UnitID == nil || r.units == nil {
 		return unit.Unit{}, true
@@ -98,7 +105,7 @@ func (r checkRunner) checkinUnit(ctx context.Context, t ports.DueTrigger) (unit.
 	case errors.Is(err, ports.ErrUnitNotFound):
 		return unit.Unit{}, true
 	case err != nil:
-		slog.Warn("a check-in's unit could not be read, so it is left for tomorrow's digest", "trigger", t.ID, "error", err)
+		slog.Warn("a check-in's unit could not be read, so it is not asked again this morning", "trigger", t.ID, "error", err)
 		return unit.Unit{}, false
 	}
 	return u, true
