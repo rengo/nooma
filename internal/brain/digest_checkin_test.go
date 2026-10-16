@@ -479,3 +479,55 @@ func TestDigest_ASkippedReaskIsSaidOnceAMorningAndNeverByADryRun(t *testing.T) {
 		t.Errorf("the next morning: %d row(s), want 2", n)
 	}
 }
+
+// TestDigest_ASkippedReaskIsSaidOnlyWhenOneWasDue: the row says a re-ask was
+// skipped, so it is written only when one was due: a check-in never put off,
+// or put off this morning (the next-day rule), would not have been asked, and
+// says nothing.
+func TestDigest_ASkippedReaskIsSaidOnlyWhenOneWasDue(t *testing.T) {
+	ctx := context.Background()
+	skipped := func(v *checkinVault) int {
+		t.Helper()
+		rows, err := v.log.Since(ctx, checkinEvening.Add(time.Hour), -1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, d := range rows {
+			if d.Action == ports.ActionCheckCheckinReaskSkipped {
+				n++
+			}
+		}
+		return n
+	}
+
+	never := newCheckinVault(t, false)
+	never.units = unreadableUnits{never.units}
+	for n := 1; n <= prospection.MaxCheckinReasks; n++ {
+		if err := never.digest(t, checkinMorning(n), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := skipped(never); n != 0 {
+		t.Errorf("never put off: %d row(s), want none", n)
+	}
+
+	today := newCheckinVault(t, false)
+	today.units = unreadableUnits{today.units}
+	if err := today.log.Record(ctx, ports.Decision{ID: "d-snooze-today", Action: ports.ActionCaptureCheckInSnoozed,
+		Context: []byte(`{"trigger_id":"t-coffee","open_check_ins":1}`), OccurredAt: checkinMorning(1).Add(-time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := today.digest(t, checkinMorning(1), true); err != nil {
+		t.Fatal(err)
+	}
+	if n := skipped(today); n != 0 {
+		t.Errorf("put off this morning: %d row(s), want none until tomorrow", n)
+	}
+	if err := today.digest(t, checkinMorning(2), true); err != nil {
+		t.Fatal(err)
+	}
+	if n := skipped(today); n != 1 {
+		t.Errorf("the morning after the snooze: %d row(s), want 1", n)
+	}
+}

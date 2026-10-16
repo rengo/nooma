@@ -25,7 +25,8 @@ import (
 // already loaded, heldCounts' way. A check-in with no surfaced_at is left for
 // a morning that can decide it. One whose unit cannot be read this morning, for
 // any reason but its absence, is decided without the unit: it is not asked
-// again, which needs the unit's words, and that is recorded once a morning as
+// again, which needs the unit's words, and when a re-ask was due
+// (prospection.ReaskDue) that is recorded once a morning as
 // check.checkin.reask_skipped; its lifetime needs no unit and still closes it.
 func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision, now time.Time, commit bool) ([]ports.DueTrigger, error) {
 	open, err := r.triggers.Delivered(ctx)
@@ -40,10 +41,11 @@ func (r checkRunner) openCheckins(ctx context.Context, history []ports.Decision,
 			continue
 		}
 		u, readable := r.checkinUnit(ctx, c.DueTrigger)
-		step := r.night.CheckinStep(prospection.OpenCheckin{
+		oc := prospection.OpenCheckin{
 			SurfacedAt: c.SurfacedAt, SnoozedAt: snoozed[c.ID], UnitType: u.Type, UnitStatus: u.Status, Reasks: c.Payload.Reasks,
-		}, now)
-		if !readable && step == prospection.CheckinWait && commit && r.unreadableCheckins.first(c.ID+"@"+now.Format(time.DateOnly)) {
+		}
+		step := r.night.CheckinStep(oc, now)
+		if !readable && r.night.ReaskDue(oc, now) && commit && r.unreadableCheckins.first(c.ID+"@"+now.Format(time.DateOnly)) {
 			if err := r.record(ctx, now, ports.ActionCheckCheckinReaskSkipped,
 				fmt.Sprintf("check-in %q was not asked again this morning because its unit could not be read; it still closes on schedule", c.ID),
 				checkDetail{ID: c.ID}); err != nil {

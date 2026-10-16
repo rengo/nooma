@@ -102,7 +102,7 @@ tasks-repeating).
     - [x] The reviewer's surviving mutants, each killed by its test: d7 `TestDigest_TheNewestSnoozeDecidesTheFirstReask`, g6 `TestDigest_TheSentRowCountsTheReasksLeftForLater`, d6 `TestDigest_AMissingUnitIsNoUnitNotAnUnreadableOne`.
   - Reviewer's third round (CHANGES REQUESTED at 691dd51):
     - [x] `TestDigest_ASkippedReaskIsSaidOnceAMorningAndNeverByADryRun` kills u3 (once a morning), u4 (dry run) and u5 (the day in the key); the `decisionlog.go` comment names `payload.reasks` as the count.
-    - [ ] RED: the skipped re-ask is written only when a re-ask was due.
+    - [x] RED `TestDigest_ASkippedReaskIsSaidOnlyWhenOneWasDue`, `TestReaskDue`: `check.checkin.reask_skipped` is written only when `prospection.ReaskDue` holds, so its wording stays true.
 - [x] 1.2 RED L1 `Decode` (D2): `TestDecode_BareDateIsDayOnly` → `DueAtDayOnly` true; `TestDecode_MidnightTimestampIsNotDayOnly` ("…T00:00:00-03:00") → false.
 - [x] 1.3 RED L1 `prospection` (D3, D4, D6):
   - `TestArmAsked_NamedTime`: due 10-15 10:00 → one plan at 09:45, `Asked`.

@@ -229,3 +229,26 @@ func TestMaxReasksPerDigestIsAShortList(t *testing.T) {
 		t.Errorf("MaxReasksPerDigest = %d, want 1 to LowEnergyDigestSize (%d)", MaxReasksPerDigest, LowEnergyDigestSize)
 	}
 }
+
+// TestReaskDue is the timing half of a re-ask, its unit aside: due the morning
+// after a snooze or after an earlier re-ask, under the cap; not for a check-in
+// never put off, not the morning of the snooze, not past the cap.
+func TestReaskDue(t *testing.T) {
+	q := DefaultQuietHours()
+	morning := checkinDay(15, DigestHour, 5)
+	for name, tc := range map[string]struct {
+		c    OpenCheckin
+		want bool
+	}{
+		"put off the evening before": {OpenCheckin{SurfacedAt: checkinDay(14, 21, 0), SnoozedAt: checkinDay(14, 21, 30)}, true},
+		"asked again yesterday":      {OpenCheckin{SurfacedAt: checkinDay(14, DigestHour, 5), Reasks: 1}, true},
+		"never put off":              {OpenCheckin{SurfacedAt: checkinDay(14, 21, 0)}, false},
+		"put off this morning":       {OpenCheckin{SurfacedAt: checkinDay(14, 21, 0), SnoozedAt: checkinDay(15, 6, 30)}, false},
+		"delivered this morning":     {OpenCheckin{SurfacedAt: checkinDay(15, 6, 0), SnoozedAt: checkinDay(15, 6, 30)}, false},
+		"at the cap":                 {OpenCheckin{SurfacedAt: checkinDay(14, DigestHour, 5), Reasks: MaxCheckinReasks}, false},
+	} {
+		if got := q.ReaskDue(tc.c, morning); got != tc.want {
+			t.Errorf("%s: ReaskDue = %v, want %v", name, got, tc.want)
+		}
+	}
+}

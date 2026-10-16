@@ -68,13 +68,24 @@ func (q QuietHours) CheckinStep(c OpenCheckin, now time.Time) CheckinStep {
 		return CheckinWait
 	case c.Reasks >= MaxCheckinReasks:
 		return CheckinExpire
-	case stillToDo(c.UnitType, c.UnitStatus) &&
-		(c.Reasks > 0 || (!c.SnoozedAt.IsZero() && q.morningsAfter(c.SnoozedAt, now, 1) > 0)):
+	case stillToDo(c.UnitType, c.UnitStatus) && q.ReaskDue(c, now):
 		return CheckinReask
 	case mornings > MaxCheckinReasks:
 		return CheckinExpire
 	}
 	return CheckinWait
+}
+
+// ReaskDue reports whether c's timing calls for a re-ask at now, its unit
+// aside: a morning has passed since it last reached the user, it is under
+// MaxCheckinReasks, and it was asked again before or put off on an earlier
+// day. CheckinStep asks only when the unit is also still to do; brain says a
+// re-ask was skipped only when this held.
+func (q QuietHours) ReaskDue(c OpenCheckin, now time.Time) bool {
+	if c.Reasks >= MaxCheckinReasks || q.morningsAfter(c.SurfacedAt, now, 1) == 0 {
+		return false
+	}
+	return c.Reasks > 0 || (!c.SnoozedAt.IsZero() && q.morningsAfter(c.SnoozedAt, now, 1) > 0)
 }
 
 // stillToDo reports whether a unit of kind t and status s is still something
