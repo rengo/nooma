@@ -333,3 +333,107 @@ func TestDigest_ABareAnswerReachesTheLastItemShown(t *testing.T) {
 		t.Errorf("open %+v, want t-coffee, the last line shown, first", open)
 	}
 }
+
+// TestDigest_TheNewestSnoozeDecidesTheFirstReask: put off in the evening and
+// again the next morning before its digest, a check-in waits for the morning
+// after the newer snooze, not the older one.
+func TestDigest_TheNewestSnoozeDecidesTheFirstReask(t *testing.T) {
+	v := newCheckinVault(t, true)
+	if err := v.log.Record(context.Background(), ports.Decision{ID: "d-snooze-again", Action: ports.ActionCaptureCheckInSnoozed,
+		Context: []byte(`{"trigger_id":"t-coffee","open_check_ins":1}`), OccurredAt: checkinMorning(1).Add(-time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.digest(t, checkinMorning(1), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.channel.sent) != 0 {
+		t.Fatalf("sent %q the morning of the newer snooze, want it to wait a day", v.channel.sent)
+	}
+	if err := v.digest(t, checkinMorning(2), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.channel.sent) != 1 {
+		t.Errorf("sent %q, want the re-ask the morning after the newer snooze", v.channel.sent)
+	}
+}
+
+// TestDigest_AMissingUnitIsNoUnitNotAnUnreadableOne: a check-in whose unit is
+// gone has no words to ask with and only gets the lifetime; it is not a read
+// failure, so nothing says a re-ask was skipped.
+func TestDigest_AMissingUnitIsNoUnitNotAnUnreadableOne(t *testing.T) {
+	v := newCheckinVault(t, true)
+	v.units = memrepo.NewUnits()
+	for n := 1; n <= prospection.MaxCheckinReasks+1; n++ {
+		if err := v.digest(t, checkinMorning(n), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(v.channel.sent) != 0 {
+		t.Errorf("sent %q for a check-in whose unit is gone", v.channel.sent)
+	}
+	if open := v.open(t); len(open) != 0 {
+		t.Errorf("open %+v, want it closed by its lifetime", open)
+	}
+	rows, err := v.log.Since(context.Background(), checkinEvening.Add(time.Hour), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range rows {
+		if d.Action == ports.ActionCheckCheckinReaskSkipped {
+			t.Errorf("a missing unit wrote %q: %s", d.Action, d.Rationale)
+		}
+	}
+}
+
+// TestDigest_TheSentRowCountsTheReasksLeftForLater: when the message bound
+// leaves re-asks out, check.digest.sent says how many wait for a later morning.
+func TestDigest_TheSentRowCountsTheReasksLeftForLater(t *testing.T) {
+	ctx := context.Background()
+	v := &checkinVault{triggers: memrepo.NewTriggers(), units: memrepo.NewUnits(), log: memrepo.NewDecisionLog(),
+		channel: &recordingChannel{}, ids: &countingIDs{}}
+	for i := 0; i < prospection.MaxReasksPerDigest; i++ {
+		id := fmt.Sprintf("t-long-%d", i)
+		v.addSnoozedTask(t, id, checkinEvening)
+		if err := v.units.UpdateContent(ctx, "u-"+id, strings.Repeat("w", 500), checkinEvening); err != nil {
+			t.Fatal(err)
+		}
+	}
+	yearly := prospection.RuleYearly
+	fire := checkinMorning(1).Add(-time.Hour)
+	for i := 0; i < 7; i++ {
+		id := fmt.Sprintf("t-day-%d", i)
+		if err := v.triggers.Create(ctx, ports.Trigger{ID: id, Kind: ports.TriggerKindTimeBased, FireAt: &fire, CreatedAt: fire,
+			Payload:        ports.TriggerPayload{ActionText: strings.Repeat("d", 500)},
+			RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.October, Day: 20}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := v.triggers.Fire(ctx, id, fire); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := v.digest(t, checkinMorning(1), true); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := v.log.Since(ctx, checkinMorning(1).Add(-time.Minute), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	for _, c := range v.open(t) {
+		asked += c.Payload.Reasks
+	}
+	want := fmt.Sprintf("left %d to ask on a later morning", prospection.MaxReasksPerDigest-asked)
+	sentRows := 0
+	for _, d := range rows {
+		if d.Action != ports.ActionCheckDigestSent {
+			continue
+		}
+		sentRows++
+		if asked == prospection.MaxReasksPerDigest || !strings.Contains(d.Rationale, want) {
+			t.Errorf("check.digest.sent says %q with %d asked, want %q", d.Rationale, asked, want)
+		}
+	}
+	if sentRows != 1 {
+		t.Errorf("%d check.digest.sent rows, want 1", sentRows)
+	}
+}
