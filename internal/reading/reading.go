@@ -141,12 +141,23 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	// An outcome has an effect in production even when nobody expected it: a
 	// check-in outcome closes the most recent open check-in, a relation outcome
 	// confirms or deletes, a state outcome records a signal. So one the case
-	// does not name is a miss. The two check-in fields are one answer: a case
-	// naming either leaves the other free only while the reading closes the
-	// check-in as the expected one would (the recorded drop read both).
-	checkin := (e.TaskCheckinOutcome != "" || e.NudgeOutcome != "") && sameCheckinEffect(e, cls)
-	miss(FieldTaskCheckinOutcome, outcomeMissed(e.TaskCheckinOutcome, ptrString(cls.TaskCheckinOutcome), checkin))
-	miss(FieldNudgeOutcome, outcomeMissed(e.NudgeOutcome, ptrString(cls.NudgeOutcome), checkin))
+	// does not name is a miss. The two check-in fields are one answer, and the
+	// model never sees whether the open check-in is a task or a nudge (the
+	// store decides, ADR-0033 point 2): an answer that closes it is judged by
+	// how it closes it alone, so done reads as engaged and drop as declined. A
+	// snooze closes nothing, as no outcome does, so it keeps its exact value,
+	// and the other field is free only while the effect is the same.
+	same, closes := checkinEffect(e, cls)
+	if closes {
+		// When the effect differs, the fields that are not what the case says
+		// are the ones named.
+		miss(FieldTaskCheckinOutcome, !same && ptrString(cls.TaskCheckinOutcome) != e.TaskCheckinOutcome)
+		miss(FieldNudgeOutcome, !same && ptrString(cls.NudgeOutcome) != e.NudgeOutcome)
+	} else {
+		checkin := (e.TaskCheckinOutcome != "" || e.NudgeOutcome != "") && same
+		miss(FieldTaskCheckinOutcome, outcomeMissed(e.TaskCheckinOutcome, ptrString(cls.TaskCheckinOutcome), checkin))
+		miss(FieldNudgeOutcome, outcomeMissed(e.NudgeOutcome, ptrString(cls.NudgeOutcome), checkin))
+	}
 	miss(FieldRelationOutcome, outcomeMissed(e.RelationOutcome, ptrString(cls.RelationOutcome), false))
 	// No phrasing expects a state answer: the set measures reminder reading.
 	miss(FieldStateOutcome, cls.StateOutcome != nil)
@@ -154,9 +165,10 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	return misses
 }
 
-// sameCheckinEffect says whether cls closes an open check-in as the expected
-// outcomes would, through the mapping production uses.
-func sameCheckinEffect(e llm.Expect, cls classify.Classification) bool {
+// checkinEffect says whether cls does to an open check-in what the expected
+// outcomes would (same), through the mapping production uses, and whether the
+// expected outcomes close it at all (closes).
+func checkinEffect(e llm.Expect, cls classify.Classification) (same, closes bool) {
 	var want classify.Classification
 	if e.NudgeOutcome != "" {
 		o := classify.NudgeOutcome(e.NudgeOutcome)
@@ -168,7 +180,7 @@ func sameCheckinEffect(e llm.Expect, cls classify.Classification) bool {
 	}
 	wantRes, wantOK := classify.ResolveCheckin(want)
 	gotRes, gotOK := classify.ResolveCheckin(cls)
-	return wantRes == gotRes && wantOK == gotOK
+	return wantRes == gotRes && wantOK == gotOK, wantOK
 }
 
 // outcomeMissed says whether an outcome field reads wrong: the expected value

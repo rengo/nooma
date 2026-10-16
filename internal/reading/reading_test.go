@@ -257,6 +257,45 @@ func TestCheckOptionalFieldsOnlyWhenSet(t *testing.T) {
 // stored "La tarea está hecha" as a new unit, which no field of the set saw
 // (review of #365). A case may name the type it should get; unset, any type
 // passes, since most phrasings are about their reminder fields.
+// TestCheckJudgesAClosingAnswerByEffect: the model is never shown whether the
+// open check-in is a task or a nudge, and the store decides which one an
+// answer closes (ADR-0033 point 2), so for an answer that closes it, done and
+// engaged are the same reading, and so are drop and declined (review of #365).
+// A snooze closes nothing, as no outcome does, so it keeps its exact value.
+func TestCheckJudgesAClosingAnswerByEffect(t *testing.T) {
+	const head = `{"type":"chitchat","normalized_content":"x","weight":0.2,"decay_rate":0.3`
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		read   string
+	}{
+		"declined, read drop only": {llm.Expect{NudgeOutcome: "declined"}, `,"task_checkin_outcome":"drop"`},
+		"engaged, read done only":  {llm.Expect{NudgeOutcome: "engaged"}, `,"task_checkin_outcome":"done"`},
+		"done, read engaged only":  {llm.Expect{TaskCheckinOutcome: "done"}, `,"nudge_outcome":"engaged"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.read+`}`)); len(got) != 0 {
+				t.Errorf("Check = %v, want no miss: the check-in closes the same way", got)
+			}
+		})
+	}
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		read   string
+		miss   string
+	}{
+		"done, read drop":       {llm.Expect{TaskCheckinOutcome: "done"}, `,"task_checkin_outcome":"drop"`, FieldTaskCheckinOutcome},
+		"engaged, read nothing": {llm.Expect{NudgeOutcome: "engaged"}, ``, FieldNudgeOutcome},
+		"declined, read snooze": {llm.Expect{NudgeOutcome: "declined"}, `,"task_checkin_outcome":"snooze"`, FieldTaskCheckinOutcome + "," + FieldNudgeOutcome},
+		"snooze, read nothing":  {llm.Expect{TaskCheckinOutcome: "snooze"}, ``, FieldTaskCheckinOutcome},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.read+`}`)); strings.Join(got, ",") != tc.miss {
+				t.Errorf("Check = %v, want [%s]", got, tc.miss)
+			}
+		})
+	}
+}
+
 func TestCheckTypeOnlyWhenSet(t *testing.T) {
 	task := decode(t, `{"type":"task","normalized_content":"La tarea está hecha.","weight":0.5,"decay_rate":0.1}`)
 	if got := Check(llm.Case{Expect: &llm.Expect{}}, task); len(got) != 0 {
