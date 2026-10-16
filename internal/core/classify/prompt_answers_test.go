@@ -119,3 +119,22 @@ func TestBuildPromptNoQuestionOpenMeansNoAnswer(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPromptListedRemindersAreNotAStop: the stop candidates are shown so
+// a stop can name one, and a bare "listo" with that list and no check-in open
+// must still not be a stop (the done descope, ADR-0033). The list says it is
+// not a request to stop anything; it is said only where the list is.
+func TestBuildPromptListedRemindersAreNotAStop(t *testing.T) {
+	const rule = "Being listed here is not a request to stop"
+	s := section(promptWith(ReminderContext{Candidates: stopCandidates}), candidatesHeading)
+	if flat := strings.Join(strings.Fields(s), " "); !strings.Contains(flat, rule+
+		": only a message that asks to stop being reminded is a stop") {
+		t.Errorf("the candidate list never says %q:\n%s", rule, s)
+	}
+	which := &OpenQuestion{Kind: QuestionWhichReminder, Text: WhichReminderText("¿Cuál?", stopCandidates)}
+	for _, rc := range []ReminderContext{{}, {Open: which, Candidates: stopCandidates}} {
+		if p := promptWith(rc); strings.Contains(p, rule) {
+			t.Errorf("the list rule is in a prompt that shows no candidate list: %+v", rc)
+		}
+	}
+}

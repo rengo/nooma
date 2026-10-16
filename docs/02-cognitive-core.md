@@ -532,7 +532,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      nothing. **The answer to the which-question is not a stop**: with that question open, the
      prompt says Nooma asked it to learn which reminder a stop it already holds is about, and
      that the answer sets only `question_answer: choice` and `choice_number`. A stop is tied to
-     the user's words, and the pending stop is what binds. **One list per prompt**: an open
+     the user's words, and the pending stop is what binds; for the same reason the stop
+     candidates are shown with the rule that being listed is not a request to stop, so a bare
+     "done" beside them stays a check-in answer. **One list per prompt**: an open
      `which_reminder` question carries its own, and the
      stop candidates are then left out, so a position means one thing. Both lists come from
      `classify.RenderReminderList`, the renderer of the question Nooma sends, so a position the

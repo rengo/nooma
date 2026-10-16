@@ -332,6 +332,10 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 	}
 	if len(rc.Candidates) > 0 && (rc.Open == nil || rc.Open.Kind != QuestionWhichReminder) {
 		b.WriteString("\n" + candidatesHeading + "\n")
+		// The list is what a stop names a position in, so it is in every prompt
+		// that has one; it is not a hint that the user wants one stopped.
+		b.WriteString("  Shown so a stop can name one by its position. Being listed here is not a\n")
+		b.WriteString("  request to stop: only a message that asks to stop being reminded is a stop.\n")
 		b.WriteString(RenderReminderList(rc.Candidates))
 	}
 	b.WriteString("\n")
