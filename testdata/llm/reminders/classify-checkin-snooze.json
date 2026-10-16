@@ -9,5 +9,6 @@
   "expect": {
     "task_checkin_outcome": "snooze"
   },
+  "known_misread": "reads no outcome, so M3's check-in resolution (which depends on the model alone) would not close it; the prompt describes none of the outcome values, so this is prompt work for a later link",
   "prompt_sha256": "e8cd4e3c75241db97b7241c1fd96b888b573c9eba9fa1b1ff7bbeac2cb0964e9"
 }

@@ -9,5 +9,6 @@
   "expect": {
     "nudge_outcome": "engaged"
   },
+  "known_misread": "reads no outcome, so M3's check-in resolution (which depends on the model alone) would not close it; the prompt describes none of the outcome values, so this is prompt work for a later link",
   "prompt_sha256": "8ec67100b33f4699bc1da8ecbce24c7672e21ba8a42c3a14757e92505cbc2b43"
 }
