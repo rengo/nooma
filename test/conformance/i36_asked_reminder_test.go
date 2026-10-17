@@ -238,6 +238,12 @@ func TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour(t *testing.T) {
 			if got := channels.RenderReply(result); got != tc.want {
 				t.Errorf("reply = %q, want %q", got, tc.want)
 			}
+			// The rationale says what happened: a ring on that day, not one
+			// that "has already arrived" because the day began at midnight.
+			if got := i36ArmedRationales(t, v.log); len(got) != 1 || got[0] != "armed a trigger for 2026-10-17T03:00:00Z, firing at "+
+				tc.fire.UTC().Format(time.RFC3339)+", on that day itself" {
+				t.Errorf("capture.armed.trigger rationales = %q", got)
+			}
 			// The gate reads the day from day_only: the row about that day's
 			// midnight is not passed at the hour it rings.
 			if got := reminders(v.pass(t, tc.fire)); len(got) != 1 {
@@ -441,6 +447,22 @@ func i36Expired(t *testing.T, log *memrepo.DecisionLog) []string {
 			t.Fatal(err)
 		}
 		out = append(out, c.Reason)
+	}
+	return out
+}
+
+// i36ArmedRationales is the rationales of the capture.armed.trigger rows.
+func i36ArmedRationales(t *testing.T, log *memrepo.DecisionLog) []string {
+	t.Helper()
+	all, err := log.Since(context.Background(), time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, d := range all {
+		if d.Action == ports.ActionCaptureArmedTrigger {
+			out = append(out, d.Rationale)
+		}
 	}
 	return out
 }

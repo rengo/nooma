@@ -1164,6 +1164,11 @@ func leadPhrase(plan prospection.Plan) string {
 	if plan.Immediate {
 		return ", firing at once because that horizon was already behind"
 	}
+	// A day alone is about its local midnight and rings later that day: the
+	// gap is negative and says nothing about whether the ring has arrived.
+	if plan.DayOnly {
+		return ", on that day itself"
+	}
 	gap := plan.About.Sub(plan.FireAt)
 	switch {
 	case gap <= 0:
