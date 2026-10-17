@@ -1,0 +1,301 @@
+// Package conformance — see test/conformance/doc.go for the package contract.
+package conformance
+
+import (
+	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/channels"
+	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/fakeprovider"
+	"github.com/rengo/nooma/test/support/memrepo"
+)
+
+// i36Zone is the observed message's zone, -03:00. The recorded case was
+// captured on 2026-10-16 at 10:42:25 local.
+var i36Zone = time.FixedZone("ART", -3*60*60)
+
+func i36At(day, hour, minute int) time.Time {
+	return time.Date(2026, 10, day, hour, minute, 0, 0, i36Zone)
+}
+
+var i36Now = time.Date(2026, 10, 16, 10, 42, 25, 0, i36Zone)
+
+// i36Done is the model's reading of a bare Spanish "listo" answering a check-in.
+const i36Done = `{"type":"chitchat","normalized_content":"Listo.","weight":0.2,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done","remind_request":false,"reminder_intent":"none"}`
+
+// i36Reading is a classification of "Comprar café" of kind, due at due (an
+// RFC 3339 instant or a bare date), asked or not, in language.
+func i36Reading(kind, due string, asked bool, language string) string {
+	ask := "false"
+	if asked {
+		ask = "true"
+	}
+	return `{"type":"` + kind + `","normalized_content":"Comprar café","title":"Comprar café","weight":0.7,"decay_rate":0.03,` +
+		`"language":"` + language + `","due_at":"` + due + `","remind_request":` + ask + `,"reminder_intent":"none","question_answer":"none"}`
+}
+
+func i36Recordings(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(repoRootFromCaller(t), "testdata", "llm", "reminders")
+}
+
+// i36Vault is one vault a capture and the check passes after it share, with
+// one digest state so a morning's digest is sent once.
+type i36Vault struct {
+	*i39Vault
+	state *memrepo.State
+	cfg   ports.ConfigRepo
+}
+
+func newI36Vault() *i36Vault { return &i36Vault{i39Vault: newI39Vault(), state: memrepo.NewState()} }
+
+// capture runs one capture at now, the model answering with case id in dir.
+func (v *i36Vault) capture(t *testing.T, now time.Time, dir, id, text string) brain.CaptureResult {
+	t.Helper()
+	ctx := context.Background()
+	embeddings := memrepo.NewEmbeddings()
+	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	llm := fakeprovider.New(t, dir, id)
+	svc := brain.NewCaptureService(fixedClock{now: now}, v.ids, v.units, embeddings, memrepo.NewLexical(),
+		memrepo.NewRelations(), v.log, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
+		memrepo.NewSignals(), v.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions())
+	if v.cfg != nil {
+		svc = svc.WithReminderPrefs(v.cfg)
+	}
+	result, err := svc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "chat"})
+	if err != nil {
+		t.Fatalf("Capture(%q): %v", text, err)
+	}
+	return result
+}
+
+// say captures the model reading response at now.
+func (v *i36Vault) say(t *testing.T, now time.Time, response string) brain.CaptureResult {
+	t.Helper()
+	return v.capture(t, now, i28Case(t, "i36", "replayed", response), "i36", "replayed")
+}
+
+// pass runs one check pass at at and returns what it sent.
+func (v *i36Vault) pass(t *testing.T, at time.Time) []string {
+	t.Helper()
+	before := len(v.channel.Sent(t))
+	if _, err := brain.NewCheckService(fixedClock{now: at}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
+		v.units, v.state, nil, "12449194", nil, nil).Check(context.Background(), brain.CheckRequest{}); err != nil {
+		t.Fatalf("Check at %s: %v", at, err)
+	}
+	var texts []string
+	for _, m := range v.channel.Sent(t)[before:] {
+		texts = append(texts, m.Text)
+	}
+	return texts
+}
+
+func (v *i36Vault) only(t *testing.T) ports.Trigger {
+	t.Helper()
+	rows := v.triggers.All()
+	if len(rows) != 1 {
+		t.Fatalf("triggers = %d, want one: %+v", len(rows), rows)
+	}
+	return rows[0]
+}
+
+func (v *i36Vault) unit(t *testing.T, id string) unit.Unit {
+	t.Helper()
+	u, err := v.units.ByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("the captured unit %q: %v", id, err)
+	}
+	return u
+}
+
+// reminders are the sent texts that are a reminder push, not a digest.
+func reminders(sent []string) []string {
+	var out []string
+	for _, s := range sent {
+		if strings.HasPrefix(s, "Recordatorio") {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// TestI36_TheObservedCoffeeRequestRingsOnce replays the real model's reading
+// of the message observed on 2026-10-14 (recorded in the phrasing set): it
+// stores a task that was asked for, arms one reminder 15 minutes before 10:00
+// the next day (ADR-0031 point 2), the reply says so, a check pass pushes it
+// once at 09:45 local and never again, and a bare "listo" then closes it as
+// the check-in it became.
+func TestI36_TheObservedCoffeeRequestRingsOnce(t *testing.T) {
+	v := newI36Vault()
+	result := v.capture(t, i36Now, i36Recordings(t), "classify-task-remind-me-coffee", "recordame comprar café mañana a las 10")
+
+	if u := v.unit(t, result.UnitID); u.Type != unit.TypeTask || !u.RemindMe || u.Title != "Comprar café" {
+		t.Errorf("unit = %+v, want the titled task that was asked for", u)
+	}
+	trg := v.only(t)
+	p := trg.Payload
+	if trg.FireAt == nil || !trg.FireAt.Equal(i36At(17, 9, 45)) || p.LeadMinutes != 15 || !p.About.Equal(i36At(17, 10, 0)) ||
+		!p.Asked || !p.NightExempt || p.DayOnly {
+		t.Fatalf("trigger = %+v, want 09:45 about 10:00 with lead 15, asked and night-exempt", trg)
+	}
+	if got, want := channels.RenderReply(result), "Anotado para el sáb 17 oct, 10:00. Te aviso 15 minutos antes."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+
+	v.pass(t, i36At(17, prospection.DigestHour, 5))
+	if got := reminders(v.pass(t, i36At(17, 9, 44))); len(got) != 0 {
+		t.Fatalf("at 09:44 sent %q, want nothing yet", got)
+	}
+	if got := reminders(v.pass(t, i36At(17, 9, 45))); len(got) != 1 || !strings.Contains(got[0], "Comprar café") {
+		t.Fatalf("at 09:45 sent %q, want the coffee reminder once", got)
+	}
+	for _, at := range []time.Time{i36At(17, 9, 50), i36At(17, 10, 0), i36At(17, 10, 30)} {
+		if got := reminders(v.pass(t, at)); len(got) != 0 {
+			t.Fatalf("at %s sent %q again", at.Format("15:04"), got)
+		}
+	}
+	if open := v.open(t); len(open) != 1 || open[0] != trg.ID {
+		t.Fatalf("open check-ins %v, want the delivered reminder %s", open, trg.ID)
+	}
+
+	v.answer(t, "listo", i36Done, i36At(17, 10, 40))
+	if open := v.open(t); len(open) != 0 {
+		t.Errorf("open check-ins %v after a bare listo, want it closed", open)
+	}
+	if got := v.rows(t, ports.ActionCaptureCheckInResolved); got != 1 {
+		t.Errorf("capture.checkin.resolved rows = %d, want 1", got)
+	}
+}
+
+// TestI36_APutOffAskedReminderIsAskedAgain: the delivered reminder is a
+// check-in like any other, so a bare "no" puts it off and the next morning's
+// digest asks it again (doc 02 §7, I39).
+func TestI36_APutOffAskedReminderIsAskedAgain(t *testing.T) {
+	v := newI36Vault()
+	v.capture(t, i36Now, i36Recordings(t), "classify-task-remind-me-coffee", "recordame comprar café mañana a las 10")
+	v.pass(t, i36At(17, prospection.DigestHour, 5))
+	v.pass(t, i36At(17, 9, 45))
+
+	v.answer(t, "no", i39NotYet, i36At(17, 10, 40))
+	sent := v.pass(t, i36At(18, prospection.DigestHour, 5))
+	if !strings.Contains(strings.Join(sent, "\n"), "Comprar café") {
+		t.Errorf("the next morning sent %q, want the coffee asked again", sent)
+	}
+}
+
+// TestI36_ARequestComesFromTheField: the same classification with
+// remind_request false arms nothing for a task, and the unit does not claim
+// it was asked for (ADR-0033: the model reads the words, the code acts).
+func TestI36_ARequestComesFromTheField(t *testing.T) {
+	v := newI36Vault()
+	result := v.say(t, i36Now, i36Reading("task", "2026-10-17T10:00:00-03:00", false, "es"))
+
+	if v.triggers.Count() != 0 || v.unit(t, result.UnitID).RemindMe {
+		t.Fatalf("armed %d triggers for a message that did not ask, unit %+v", v.triggers.Count(), v.unit(t, result.UnitID))
+	}
+	if got := channels.RenderReply(result); got != "Anotado." {
+		t.Errorf("reply = %q, want Anotado.", got)
+	}
+}
+
+// TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour: "pagar el gas mañana"
+// rings that day at the date-only hour, its row says it is a whole day, and
+// the reply names the day and the hour armed, not a lead.
+func TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour(t *testing.T) {
+	for name, tc := range map[string]struct {
+		at   *string
+		fire time.Time
+		want string
+	}{
+		"default": {nil, i36At(17, 9, 0), "Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."},
+		"08:30":   {ptr("08:30"), i36At(17, 8, 30), "Anotado para el sáb 17 oct. Te aviso ese día a las 08:30."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			v := newI36Vault()
+			if tc.at != nil {
+				cfg := memrepo.NewConfig()
+				cfg.SeedConfig(t, ports.VaultConfig{DateOnlyReminderAt: tc.at})
+				v.cfg = cfg
+			}
+			result := v.say(t, i36Now, i36Reading("task", "2026-10-17", true, "es"))
+
+			trg := v.only(t)
+			p := trg.Payload
+			if !trg.FireAt.Equal(tc.fire) || p.LeadMinutes != 0 || !p.About.Equal(i36At(17, 0, 0)) || !p.DayOnly || !p.Asked || p.NightExempt {
+				t.Errorf("trigger = %+v, want %s about that day's midnight, day-only, asked, not night-exempt", trg, tc.fire)
+			}
+			if got := channels.RenderReply(result); got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestI36_TodayAfterTheDateOnlyHourRingsAtOnce: "hoy" asked after 09:00 rings
+// at once, and the reply says so rather than an hour already gone.
+func TestI36_TodayAfterTheDateOnlyHourRingsAtOnce(t *testing.T) {
+	v := newI36Vault()
+	result := v.say(t, i36Now, i36Reading("task", "2026-10-16", true, "es"))
+
+	if trg := v.only(t); !trg.FireAt.Equal(i36Now) {
+		t.Errorf("trigger = %+v, want it at once", trg)
+	}
+	if got, want := channels.RenderReply(result), "Anotado para el vie 16 oct. Te aviso ahora mismo."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+// TestI36_TheReplyIsInTheMessagesLanguage: the asked reply in English.
+func TestI36_TheReplyIsInTheMessagesLanguage(t *testing.T) {
+	v := newI36Vault()
+	result := v.say(t, i36Now, i36Reading("task", "2026-10-17T10:00:00-03:00", true, "en"))
+	if got, want := channels.RenderReply(result), "Noted for Sat 17 Oct, 10:00. I will remind you 15 minutes before."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+// TestI36_TheLeadIsTheUsersPreference: the stored remind-me lead moves the
+// reminder and the reply (spec R3).
+func TestI36_TheLeadIsTheUsersPreference(t *testing.T) {
+	v := newI36Vault()
+	cfg := memrepo.NewConfig()
+	cfg.SeedConfig(t, ports.VaultConfig{RemindMeLeadMinutes: ptr(30)})
+	v.cfg = cfg
+	result := v.say(t, i36Now, i36Reading("task", "2026-10-17T10:00:00-03:00", true, "es"))
+
+	if trg := v.only(t); !trg.FireAt.Equal(i36At(17, 9, 30)) || trg.Payload.LeadMinutes != 30 {
+		t.Errorf("trigger = %+v, want 09:30 with lead 30", trg)
+	}
+	if got, want := channels.RenderReply(result), "Anotado para el sáb 17 oct, 10:00. Te aviso 30 minutos antes."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+// TestI36_AnAskedRepetitionKeepsRecurring replays the real model's reading of
+// "recordame tomar las pastillas todos los días a las 9pm": a recurring
+// reminder with a rule, asked, that wrote its time as due_at. It arms the
+// ADR-0034 recurring row at 21:00 rather than a one-shot that would drop the
+// repetition the message asked for.
+func TestI36_AnAskedRepetitionKeepsRecurring(t *testing.T) {
+	v := newI36Vault()
+	result := v.capture(t, i36Now, i36Recordings(t), "classify-task-remind-me-daily-pills",
+		"recordame tomar las pastillas todos los días a las 9pm")
+
+	trg := v.only(t)
+	if trg.RecurrenceRule == nil || *trg.RecurrenceRule != prospection.RuleDaily || !trg.FireAt.Equal(i36At(16, 21, 0)) {
+		t.Errorf("trigger = %+v, want the daily recurring row at 21:00 today", trg)
+	}
+	if got, want := channels.RenderReply(result), "Recordatorio recurrente puesto para el vie 16 oct, 21:00."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}

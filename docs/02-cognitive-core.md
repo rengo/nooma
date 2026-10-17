@@ -1456,28 +1456,31 @@ have N nudges; a pattern watcher does not hang off any unit):
   the day before; an 08:00 flight's 2-hour reminder goes out at 07:00. A correction that leaves
   a reminder no allowed instant expires it with the reason `quiet_hours`, not as a past date.
   **An asked reminder** ([ADR-0031](adr/0031-reminders-the-user-asks-for.md)): a unit of any
-  kind that persists one and that the caller says was asked for is armed through
-  `prospection.Arm`'s `asked` argument, at its instant (an event's `event_at`, otherwise
+  kind that persists one and whose classification reads `remind_request: true` (an absent or
+  degraded value does not ask, [ADR-0033](adr/0033-the-model-understands-the-code-acts.md)) is
+  stored with `units.remind_me` set and armed through `prospection.Arm`'s `asked` argument, at its instant (an event's `event_at`, otherwise
   `due_at`, then the other field). A **named time** is reminded `remind_me_lead` before it,
   default `default_remind_me_lead_minutes` (15). The planner reads it from the resolved
   preferences (`prospection.ReminderPrefs.RemindMeLead`, 1 minute to `max_event_lead_days` days
-  when set); the `config` column that stores it arrives with the next link of the change, and
-  until then every vault resolves the default. A **day alone** is reminded that day at the
+  when set), stored in `config.remind_me_lead_minutes`. A **day alone** is reminded that day at the
   date-only time. An `event` keeps its ADR-0029 leads and gains the asked one; those leads read a
   date alone from the model's bare date, not from a midnight, for an asked unit. A lead already
   behind while the instant is ahead becomes a reminder **at once**, even when other leads are
   still ahead, and is refused `too_late` only when less than `at_once_margin_minutes` remain
   before the instant or, for a day alone, before the end of its local day: exactly that many
-  minutes left still arms. An asked repeating request ("todos los días a las 9pm") is, until the
-  recurring branch takes it in a later link, its one-shot occurrence, never the recurring
-  trigger. **A named time is not moved or dropped by quiet
+  minutes left still arms. An asked `recurring_reminder` with a rule ("todos los días a las 9pm") keeps
+  the recurring trigger below, on its occurrence and with no lead, its time read from `event_at`
+  or else `due_at`: a one-shot would drop the repetition asked for. An asked task or event that
+  carries a rule is, until a later link, its one-shot occurrence. **A named time is not moved or dropped by quiet
   hours, and neither is any asked reminder armed at once**: "a las 6:30" said at 06:20 rings at
   once, and the delivery gate does not defer such a row (`payload.night_exempt`) and measures its
   lateness from its own `fire_at`. A day alone keeps the night rules. The gate judges an asked
   row day-granular only by its `day_only` key, so an asked named midnight passes at midnight; a
   row nobody asked about keeps the midnight reading. A timer, and a unit nobody asked about, arm
-  as before. Until capture computes `asked` and stores the payload keys (the next link of the
-  change), the planner and the gate are ready and capture passes `asked = false`.
+  as before. Capture writes the payload keys `asked`, `day_only` and `night_exempt` the gate
+  reads. The reply names the instant and the reminder: "Anotado para el sáb 17 oct, 10:00. Te
+  aviso 15 minutos antes." (a lead under an hour is said in minutes), and for a day alone the
+  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00.").
   A **recurring reminder** keeps one trigger **on** its next occurrence (ADR-0034); one armed a
   week ahead before it keeps that instant and re-arms on the occurrence. Triggers armed before
   ADR-0029 keep the instant they were armed for; a correction of their date re-arms them as the new set.

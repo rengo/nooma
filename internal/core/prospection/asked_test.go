@@ -394,10 +394,10 @@ func TestArm_AnUnaskedEventMinutesAwayStillRingsAtOnce(t *testing.T) {
 	}
 }
 
-func TestArmAsked_AnAskedRepeatingRequestIsTheOneShotUntilLink7(t *testing.T) {
+func TestArmAsked_AnAskedRepeatingTaskOrEventIsTheOneShotUntilLink7(t *testing.T) {
 	f := newAsked()
 	rule := classify.RecurrenceRuleDaily
-	for _, k := range []classify.Kind{classify.KindTask, classify.KindRecurringReminder, classify.KindEvent} {
+	for _, k := range []classify.Kind{classify.KindTask, classify.KindEvent} {
 		due := f.at(15, 21, 0) // far enough ahead that an event's 24 h and 2 h leads are ahead too
 		c := classify.Classification{Kind: &k, DueAt: &due, EventAt: &due, RecurrenceRule: &rule}
 		plans, ok := Arm(c, true, DefaultReminderPrefs(), f.now)
@@ -414,12 +414,29 @@ func TestArmAsked_AnAskedRepeatingRequestIsTheOneShotUntilLink7(t *testing.T) {
 			t.Errorf("%s: plans = %+v, want one asked one-shot at 20:45", k, plans)
 		}
 	}
-	// Unasked, a recurring reminder keeps its recurring trigger.
+}
+
+// An asked recurring reminder with a rule keeps the ADR-0034 recurring row,
+// asked or not: turning it into a one-shot would drop the repetition the
+// message asked for. Asked, it reads its time from due_at when the model
+// wrote no event_at (the recorded "todos los días a las 9pm").
+func TestArmAsked_AnAskedRecurringReminderKeepsRecurring(t *testing.T) {
+	f := newAsked()
+	rule := classify.RecurrenceRuleDaily
 	k := classify.KindRecurringReminder
-	at := f.at(20, 12, 0)
-	plans, _ := Arm(classify.Classification{Kind: &k, EventAt: &at, RecurrenceRule: &rule}, false, DefaultReminderPrefs(), f.now)
-	if plans[0].What != ArmRecurring {
-		t.Errorf("unasked plan = %+v, want the recurring trigger", plans[0])
+	at := f.at(15, 21, 0)
+	for name, tc := range map[string]struct {
+		c     classify.Classification
+		asked bool
+	}{
+		"unasked, event_at": {classify.Classification{Kind: &k, EventAt: &at, RecurrenceRule: &rule}, false},
+		"asked, event_at":   {classify.Classification{Kind: &k, EventAt: &at, RecurrenceRule: &rule}, true},
+		"asked, due_at":     {classify.Classification{Kind: &k, DueAt: &at, RecurrenceRule: &rule}, true},
+	} {
+		plans, ok := Arm(tc.c, tc.asked, DefaultReminderPrefs(), f.now)
+		if !ok || len(plans) != 1 || plans[0].What != ArmRecurring || plans[0].Rule != RuleDaily || plans[0].FireAt.Hour() != 21 || plans[0].FireAt.Minute() != 0 {
+			t.Errorf("%s: plans = %+v, %v, want the daily recurring row at its next 21:00", name, plans, ok)
+		}
 	}
 }
 

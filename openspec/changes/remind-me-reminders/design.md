@@ -140,7 +140,10 @@ midnight rule, which this change does not touch.
 **D3. `Arm(c, asked bool, prefs, now)`** for any kind that persists a unit with an instant (its
 own field, else the other); with `asked` and a `recurrence_rule`, `Arm` takes the recurring branch
 whatever the kind (link 7, `design-repeating.md` D31), and until link 7 it plans the one-shot
-occurrence. `leadSet(kind, asked, at, dayOnly, prefs, zone)` returns the nominal
+occurrence. *Amended in link 2, after #367 (ADR-0034):* an asked `recurring_reminder` with a rule
+already takes the ADR-0034 recurring branch, its time from `event_at` else `due_at`, without the
+asked or night-exempt marks link 7 adds; only a task or event with a rule is the one-shot, since
+wiring `asked` would otherwise turn a recurring reminder main already re-arms into a one-shot. `leadSet(kind, asked, at, dayOnly, prefs, zone)` returns the nominal
 instants, each tagged `asked`:
 
 | Case | Asked lead |

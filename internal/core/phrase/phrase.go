@@ -110,12 +110,16 @@ type Set struct {
 	TimerLate    string
 	LanguageName string
 
-	// The four lead-time phrases NotedFor's second %s is filled with.
-	// LeadDays takes one %d.
+	// The lead-time phrases NotedFor's second %s is filled with. LeadDays
+	// and LeadMinutes take one %d; LeadMinute is a lead of one minute.
+	// LeadThatDayAt takes one %s, the hour a day alone is reminded at.
 	LeadImmediate string
+	LeadMinute    string
+	LeadMinutes   string
 	LeadHours     string
 	LeadDayBefore string
 	LeadDays      string
+	LeadThatDayAt string
 	// And joins the last two of several lead phrases.
 	And string
 
@@ -183,9 +187,12 @@ var sets = map[classify.Language]Set{
 		LanguageName:      "English",
 
 		LeadImmediate: "right away",
+		LeadMinute:    "1 minute before",
+		LeadMinutes:   "%d minutes before",
 		LeadHours:     "a few hours before",
 		LeadDayBefore: "the day before",
 		LeadDays:      "%d days before",
+		LeadThatDayAt: "that day at %s",
 		And:           "and",
 
 		FoundOne:  "Found %d thing:",
@@ -236,9 +243,12 @@ var sets = map[classify.Language]Set{
 		LanguageName:      "Spanish",
 
 		LeadImmediate: "ahora mismo",
+		LeadMinute:    "1 minuto antes",
+		LeadMinutes:   "%d minutos antes",
 		LeadHours:     "unas horas antes",
 		LeadDayBefore: "el día anterior",
 		LeadDays:      "%d días antes",
+		LeadThatDayAt: "ese día a las %s",
 		And:           "y",
 
 		FoundOne:  "Encontré %d cosa:",
@@ -272,6 +282,11 @@ func For(l classify.Language) Set {
 // tell someone in Buenos Aires about a reminder at a time nobody set.
 func (s Set) Time(t time.Time) string {
 	return s.Date(t) + fmt.Sprintf(", %02d:%02d", t.Hour(), t.Minute())
+}
+
+// ThatDayAt names the hour on its own day a day alone is reminded at.
+func (s Set) ThatDayAt(fire time.Time) string {
+	return fmt.Sprintf(s.LeadThatDayAt, fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute()))
 }
 
 // Date renders an instant as Time does, without the clock: a whole day has no hour.
@@ -338,6 +353,14 @@ func (s Set) Found(n int) string {
 func (s Set) Lead(immediate bool, fire, about time.Time) string {
 	if immediate || !about.After(fire) {
 		return s.LeadImmediate
+	}
+	// Under an hour is said in minutes: an asked lead of 15 is not "a few
+	// hours before" (ADR-0031 point 7).
+	if gap := about.Sub(fire); gap < time.Hour {
+		if minutes := int(gap / time.Minute); minutes > 1 {
+			return fmt.Sprintf(s.LeadMinutes, minutes)
+		}
+		return s.LeadMinute
 	}
 	y, m, d := fire.In(about.Location()).Date()
 	ay, am, ad := about.Date()

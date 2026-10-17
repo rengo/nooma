@@ -118,7 +118,7 @@ func reminderPrefs(ctx context.Context, cfg ports.ConfigRepo) prospection.Remind
 	if err != nil {
 		return prospection.DefaultReminderPrefs()
 	}
-	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt, stored.QuietHoursEnd, stored.EveningReminderAt, nil)
+	return prospection.ResolveReminderPrefs(stored.EventReminderLeads, stored.DateOnlyReminderAt, stored.QuietHoursEnd, stored.EveningReminderAt, stored.RemindMeLeadMinutes)
 }
 
 // Capture is the package's only ports.Clock.Now() read (spec R4.1, design
@@ -317,9 +317,10 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// and I04 stays structural rather than remembered. Arm takes the
 	// instant Capture already read — there is no second clock read here,
 	// and captureRunner holds no clock to make one with.
-	// asked is false until capture reads the user's words (ADR-0031 link 2): the
-	// planner and the gate already honour it, no capture yet sets it.
-	plans, armable := prospection.Arm(c, false, reminderPrefs(ctx, r.config), now)
+	// asked is the model's reading of the user's own words (ADR-0033): only
+	// a remind_request of true asks; an absent or degraded one does not.
+	asked := c.RemindRequest != nil && *c.RemindRequest
+	plans, armable := prospection.Arm(c, asked, reminderPrefs(ctx, r.config), now)
 	plan := plans[0] // the refusal, when nothing is armed
 
 	// **A kind that persists NO unit arms and returns here.** That is the
@@ -432,6 +433,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	if err != nil {
 		return CaptureResult{}, fmt.Errorf("capture: build unit: %w: %w", ErrModelOutput, err)
 	}
+	// Kept on the unit even when nothing could be armed, so a correction or
+	// a re-plan still knows the user asked (ADR-0031).
+	u.RemindMe = asked
 
 	if err := r.units.Create(ctx, u); err != nil {
 		return CaptureResult{}, fmt.Errorf("capture: persist unit %q: %w", u.ID, err)
@@ -949,7 +953,7 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 
 	return CaptureResult{
 		Outcome: OutcomeArmed,
-		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate},
+		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate, DayOnly: plan.DayOnly},
 	}, nil
 }
 
@@ -988,7 +992,8 @@ func armedTrigger(id string, unitID *string, text string, plan prospection.Plan,
 
 // armedPayload is the payload an arming of plan writes, saying text.
 func armedPayload(text string, plan prospection.Plan) ports.TriggerPayload {
-	p := ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadMinutes: plan.LeadMinutes}
+	p := ports.TriggerPayload{ActionText: text, Rationale: armRationale(plan), LeadMinutes: plan.LeadMinutes,
+		Asked: plan.Asked, DayOnly: plan.DayOnly, NightExempt: plan.NightExempt}
 	if plan.What == prospection.ArmTrigger {
 		p.About = plan.About
 		for _, l := range plan.Leads {

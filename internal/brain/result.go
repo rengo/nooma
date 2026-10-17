@@ -173,6 +173,9 @@ type Armed struct {
 	// Later are the fire instants of an event's further reminders, in
 	// order, after the earliest one FireAt names (ADR-0029).
 	Later []time.Time
+	// DayOnly says About is a day alone, not a moment: the reply names the
+	// day and the hour it rings on it, never a lead (ADR-0031 point 7).
+	DayOnly bool
 }
 
 // ArmRefused is what CaptureResult carries when a capture classified as
