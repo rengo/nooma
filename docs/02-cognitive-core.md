@@ -487,6 +487,37 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      kinds (`remind_when`, `which_reminder`, `undo`). Every recording of the reminder phrasing
      set is hashed against the prompt it was made with (`prompt_sha256`), so a change to the
      prompt's text sends the whole set back to be recorded.
+   - **A chat message is read in its recent conversation**
+     ([ADR-0036](adr/0036-a-chat-message-is-read-in-its-conversation.md)). The serve process keeps,
+     per chat and in memory only, the last `conversation_context_turns` turns no older than
+     `conversation_context_minutes`: what the user wrote, what Nooma answered, and what it pushed
+     (a reminder, a check-in, the digest), each with the units it concerned. A restart forgets it,
+     which costs one follow-up being read alone, as every message was before. The prompt shows the
+     turns, oldest first, each clipped to `max_turn_runes` and tagged with the letter of every item
+     it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
+     from `A` in the order they first appear. Two optional fields
+     come back, each degrading alone (I14): `referent`, the letter of the listed item a
+     `correction` changes or `unclear`, and `clarifying_question`, beside `unclear`, the question
+     the model writes in the message's language to ask which item the user means (one line, at
+     most `max_turn_runes`). Letters, not numbers, so a bare "2" never reads as an item. The
+     prompt says by meaning what is not a correction: a message that tells something new, asks,
+     or only answers something Nooma said other than its question about which item is meant,
+     even about the same subject as a listed item, and a short reply to a reminder, check-in or
+     nudge Nooma pushed that only says it is done, agrees or declines, to which the check-in and
+     nudge rules still apply. **The answer to Nooma's which-item question has one home**, the Follow-ups section:
+     one that confirms or names a listed item is a `correction` with that referent and the change
+     the question was about; one that names none of them is `chitchat` with no referent, so it
+     changes nothing and never reaches the recall gate; neither carries a check-in outcome. Every
+     other section that could claim such a message (the types, the reminder fields, the check-in
+     answers) carries one identical line pointing there and no rule of its own: three rounds of
+     per-section clauses kept contradicting each other, and a structural test now keeps the
+     answer defined in one place. **All of this is written only beside a chat**: a prompt with no
+     conversation carries no Follow-ups section, no pointer and no follow-up field, and is
+     byte for byte the prompt the reminder phrasing set was read with before this rule (with
+     the follow-up text present, two nudge answers read no outcome). The code acts only on a
+     `correction` (`classify.ReadFollowUp`): a letter it listed binds (step 4); `unclear` with a
+     question asks; anything else, an unlisted letter included, is not a follow-up, and the message
+     takes the path it took before.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
@@ -495,7 +526,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
-     "on Friday"). No open check-in: the model reads what an answer says, and the store
+     "on Friday"), and for a chat message its recent conversation (above). No open check-in: the model reads what an answer says, and the store
      decides what it answers (below).
    - **A bare weekday is its next occurrence after today**; named on that same weekday it is
      next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
@@ -1928,6 +1959,9 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | Knob | Default |
 |---|---|
 | `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position (§5 step 1, ADR-0033); chosen, a list a person can read in one message |
+| `conversation_context_turns` (`internal/core/classify.ConversationTurns`) | 6 — the most recent turns a chat message is read in (§5 step 1, ADR-0036), and so the most items its prompt letters (`A` to `F`); chosen: a capture and its reply, a follow-up and its question, and room for one more exchange or a push |
+| `conversation_context_minutes` (`internal/core/classify.ConversationMinutes`) | 30 — the oldest a turn may be and still be shown (§5 step 1, ADR-0036); chosen: a follow-up comes in the same burst. Too small costs only what worked before (the message is read alone); too large invites reading an unrelated message as a correction |
+| `max_turn_runes` (`internal/core/classify.MaxTurnRunes`) | 280 — a turn is shown clipped to it, and a clarifying question longer than it degrades (§5 step 1); chosen: a digest can be long, a question is one line on a phone |
 | `max_title_runes` (`internal/core/classify.MaxTitleRunes`) | 60 — the longest title a unit keeps (§5 step 1); one line beside a date, chosen |
 | `calendar_days` (`internal/core/classify.CalendarDays`) | 14 — how many days, today included, the classify context lists (§5 step 1); the furthest a bare weekday reaches is seven days out, so a week of margin |
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |

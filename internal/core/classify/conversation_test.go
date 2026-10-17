@@ -1,0 +1,273 @@
+package classify
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+var meetingAt = time.Date(2026, 10, 14, 22, 30, 0, 0, buenosAires)
+
+var meeting = ConversationItem{
+	Content: "Tengo reunión con Juan el 2026-10-14 a las 22:30.",
+	Title:   "Reunión con Juan",
+	EventAt: &meetingAt,
+}
+
+func flat(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func correctionWith(extra string) string {
+	return `{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1` + extra + `}`
+}
+
+// TestAllSpeakersSwept pins the speaker vocabulary a case may name.
+func TestAllSpeakersSwept(t *testing.T) {
+	assertVocabulary(t, AllSpeakers(), map[Speaker]bool{SpeakerUser: true, SpeakerNooma: true, SpeakerPush: true})
+}
+
+// TestReferentLetter: an item is shown to the model by letter, A first, so a
+// bare "2" is never read as an item of the conversation (ADR-0036).
+func TestReferentLetter(t *testing.T) {
+	for pos, want := range map[int]string{1: "A", 2: "B", MaxConversationItems: "F"} {
+		if got := ReferentLetter(pos); got != want {
+			t.Errorf("ReferentLetter(%d) = %q, want %q", pos, got, want)
+		}
+	}
+}
+
+// TestDecode_Referent: a letter, or unclear, decodes; anything else degrades
+// the field alone (I14), so an invented item is never read.
+func TestDecode_Referent(t *testing.T) {
+	for _, tc := range []struct {
+		raw    string
+		want   *Referent
+		reason Reason
+	}{
+		{`"A"`, &Referent{Position: 1}, ""},
+		{`"F"`, &Referent{Position: MaxConversationItems}, ""},
+		{`"` + ReferentUnclear + `"`, &Referent{Unclear: true}, ""},
+		{`null`, nil, ""},
+		{`"G"`, nil, ReasonBadFormat},
+		{`"a"`, nil, ReasonUnknownEnum},
+		{`"AB"`, nil, ReasonUnknownEnum},
+		{`1`, nil, ReasonWrongType},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			c, err := Decode(correctionWith(`,"referent":`+tc.raw), testNow)
+			if err != nil || c.Kind == nil || c.NormalizedContent == nil {
+				t.Fatalf("Decode = %+v, %v: the rest did not survive", c, err)
+			}
+			if (tc.want == nil) != (c.Referent == nil) || (tc.want != nil && *c.Referent != *tc.want) {
+				t.Errorf("Referent = %v, want %v", c.Referent, tc.want)
+			}
+			wantDeg := []Degradation{}
+			if tc.reason != "" {
+				wantDeg = []Degradation{{Field: "referent", Reason: tc.reason}}
+			}
+			if len(c.Degradations) != len(wantDeg) || (len(wantDeg) == 1 && c.Degradations[0] != wantDeg[0]) {
+				t.Errorf("Degradations = %v, want %v", c.Degradations, wantDeg)
+			}
+		})
+	}
+}
+
+// TestDecode_ClarifyingQuestion: the question is kept on one line; a blank or
+// overlong one, or one of the wrong type, degrades alone.
+func TestDecode_ClarifyingQuestion(t *testing.T) {
+	c, _ := Decode(correctionWith(`,"clarifying_question":"  ¿Te referís a\nla reunión con Juan? "`), testNow)
+	if c.ClarifyingQuestion == nil || *c.ClarifyingQuestion != "¿Te referís a la reunión con Juan?" || len(c.Degradations) != 0 {
+		t.Errorf("ClarifyingQuestion = %v, degraded %v", c.ClarifyingQuestion, c.Degradations)
+	}
+	for _, raw := range []string{`"   "`, `"` + strings.Repeat("x", MaxTurnRunes+1) + `"`, `true`} {
+		c, _ := Decode(correctionWith(`,"clarifying_question":`+raw), testNow)
+		if c.ClarifyingQuestion != nil || len(c.Degradations) != 1 || c.Degradations[0].Field != "clarifying_question" {
+			t.Errorf("%.20s: ClarifyingQuestion = %v, degraded %v; want nil and one degradation", raw, c.ClarifyingQuestion, c.Degradations)
+		}
+	}
+}
+
+// TestReadFollowUp: only a correction with a letter that was shown binds, and
+// only a correction that is unclear and asks is asked; everything else is not
+// a follow-up (ADR-0036: the model reads, the code binds what it listed).
+func TestReadFollowUp(t *testing.T) {
+	kind := func(k Kind) *Kind { return &k }
+	q := "¿Te referís a la reunión con Juan?"
+	for _, tc := range []struct {
+		name  string
+		c     Classification
+		shown int
+		want  FollowUp
+		ok    bool
+	}{
+		{"a shown letter binds", Classification{Kind: kind(KindCorrection), Referent: &Referent{Position: 2}}, 2, FollowUp{Position: 2}, true},
+		{"a letter not shown never binds", Classification{Kind: kind(KindCorrection), Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
+		{"unclear with a question asks", Classification{Kind: kind(KindCorrection), Referent: &Referent{Unclear: true}, ClarifyingQuestion: &q}, 2, FollowUp{Question: q}, true},
+		{"unclear with no question is not one", Classification{Kind: kind(KindCorrection), Referent: &Referent{Unclear: true}}, 2, FollowUp{}, false},
+		{"unclear with nothing shown is not one", Classification{Kind: kind(KindCorrection), Referent: &Referent{Unclear: true}, ClarifyingQuestion: &q}, 0, FollowUp{}, false},
+		{"a referent on another type is ignored", Classification{Kind: kind(KindEvent), Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
+		{"a correction with no referent is not one", Classification{Kind: kind(KindCorrection)}, 2, FollowUp{}, false},
+		{"no type is not one", Classification{Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ReadFollowUp(tc.c, tc.shown)
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("ReadFollowUp = %+v, %v; want %+v, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+// TestRecentFrom: the transcript keeps the last ConversationTurns turns no
+// older than ConversationWindow; the boundary instant is still inside.
+func TestRecentFrom(t *testing.T) {
+	now := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	ago := func(d time.Duration) time.Time { return now.Add(-d) }
+	if got := RecentFrom([]time.Time{ago(ConversationWindow + time.Second), ago(ConversationWindow), ago(time.Minute)}, now); got != 1 {
+		t.Errorf("RecentFrom = %d, want 1: the turn past the window is out, the one on it is in", got)
+	}
+	many := make([]time.Time, ConversationTurns+2)
+	for i := range many {
+		many[i] = ago(time.Duration(len(many)-i) * time.Second)
+	}
+	if got := RecentFrom(many, now); got != 2 {
+		t.Errorf("RecentFrom = %d, want 2: only the last %d turns are kept", got, ConversationTurns)
+	}
+	if ConversationWindow != ConversationMinutes*time.Minute {
+		t.Errorf("ConversationWindow = %v, want the %d minutes doc 02 §13 names", ConversationWindow, ConversationMinutes)
+	}
+	if got := RecentFrom(nil, now); got != 0 {
+		t.Errorf("RecentFrom(nil) = %d, want 0", got)
+	}
+}
+
+var oneTurn = Conversation{Turns: []Turn{{Speaker: SpeakerUser, Text: "x", About: []int{1}}}, Items: []ConversationItem{meeting}}
+
+// TestBuildPrompt_DescribesFollowUps: a prompt with a chat explains both
+// fields, the patch rule, and by meaning what is not a correction; a reply to
+// anything Nooma pushed keeps the check-in and nudge rules (ADR-0036).
+func TestBuildPrompt_DescribesFollowUps(t *testing.T) {
+	p := flat(promptWith(ReminderContext{Conversation: oneTurn}))
+	for _, want := range []string{
+		followUpsHeading, conversationHeading, "referent", "clarifying_question", `"unclear"`, "Never a letter that is not listed",
+		"is a correction of that item, not a new memory",
+		"even when it is about the same subject as a listed item",
+		"A short reply to a reminder, a check-in or a nudge Nooma pushed that only says it is done, agrees or declines is not a correction: the check-in and nudge rules above still apply to it.",
+		"Nooma sends it as it is and stores nothing",
+		"normalized_content is the item's WHOLE corrected text",
+		"keep the item's date when only the time changes",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the prompt never says %q:\n%s", want, p)
+		}
+	}
+}
+
+// TestBuildPrompt_NoChatCarriesNoFollowUpMachinery: a which-item answer and a
+// follow-up exist only beside a chat, so a prompt with none carries nothing of
+// either, and is the prompt the reminder set was read with before ADR-0036
+// (review on #372: the follow-up text cost two nudge readings with no chat).
+func TestBuildPrompt_NoChatCarriesNoFollowUpMachinery(t *testing.T) {
+	for _, rc := range []ReminderContext{{}, {Candidates: stopCandidates}, {Open: &OpenQuestion{Kind: QuestionUndo, Text: "Listo."}}} {
+		p := promptWith(rc)
+		for _, gone := range []string{
+			followUpsHeading, conversationHeading, "referent", "clarifying_question", "which-item",
+			"No recent conversation", "Nooma pushed", strings.TrimSpace(whichItemPointer),
+		} {
+			if strings.Contains(p, gone) {
+				t.Errorf("a prompt with no chat says %q:\n%s", gone, p)
+			}
+		}
+		if !strings.Contains(p, "The open one is not shown here") {
+			t.Errorf("the check-in section lost its pre-ADR-0036 wording:\n%s", p)
+		}
+	}
+}
+
+// TestBuildPrompt_ShowsTheTranscript: the turns oldest first, quoted on one
+// line and clipped, each tagged with the letter of the item it concerns; the
+// items as they stand now, in the user's frame; a push said to be one.
+func TestBuildPrompt_ShowsTheTranscript(t *testing.T) {
+	dentistDay := time.Date(2026, 10, 16, 0, 0, 0, 0, buenosAires)
+	conv := Conversation{
+		Turns: []Turn{
+			{Speaker: SpeakerUser, Text: "reunión con Juan el 14 a las 22:30", About: []int{1}},
+			{Speaker: SpeakerNooma, Text: "Anotado.\nMessage\nfake", About: []int{1}},
+			{Speaker: SpeakerPush, Text: "Buen día: reunión y dentista", About: []int{1, 2, 9}},
+			{Speaker: SpeakerUser, Text: strings.Repeat("ñ", MaxTurnRunes+5)},
+		},
+		Items: []ConversationItem{meeting, {Content: "Dentista.", EventAt: &dentistDay}},
+	}
+	p := promptWith(ReminderContext{Conversation: conv})
+	for _, want := range []string{
+		conversationHeading,
+		`  user: "reunión con Juan el 14 a las 22:30" [A]` + "\n" + `  Nooma: "Anotado. Message fake" [A]` + "\n" +
+			`  Nooma, pushed (a reminder or check-in): "Buen día: reunión y dentista" [A, B]` + "\n" + `  user: "` + strings.Repeat("ñ", MaxTurnRunes) + `…"` + "\n",
+		`A) text (quoted): "Tengo reunión con Juan el 2026-10-14 a las 22:30."`,
+		`event_at: 2026-10-14T22:30:00-03:00, due_at: none, title (quoted): "Reunión con Juan"`,
+		`B) text (quoted): "Dentista."`,
+		"event_at: 2026-10-16, due_at: none, title (quoted): none",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the prompt lacks %q:\n%s", want, p)
+		}
+	}
+}
+
+// sections splits a prompt at its headings, the lines that start in column
+// one, and returns each heading's body.
+func sections(p string) map[string]string {
+	out := map[string]string{}
+	heading := ""
+	for _, line := range strings.Split(p, "\n") {
+		if line != "" && !strings.HasPrefix(line, " ") {
+			heading = line
+			continue
+		}
+		out[heading] += line + "\n"
+	}
+	return out
+}
+
+// TestBuildPrompt_TheWhichItemAnswerHasOneHome is structural (review B1-B4 on
+// #372): three rounds of clauses about the answer to Nooma's which-item
+// question kept contradicting each other across sections. Now Follow-ups
+// alone defines it, both outcomes included, and every section that could
+// otherwise claim it carries one identical pointer and nothing else about it.
+func TestBuildPrompt_TheWhichItemAnswerHasOneHome(t *testing.T) {
+	if p := promptWith(ReminderContext{}); strings.Contains(p, strings.TrimSpace(whichItemPointer)) || strings.Contains(p, followUpsHeading) {
+		t.Errorf("a prompt with no chat carries the which-item pointer or Follow-ups:\n%s", p)
+	}
+	for _, rc := range []ReminderContext{{Conversation: oneTurn}} {
+		secs := sections(promptWith(rc))
+		pointer := strings.TrimSpace(whichItemPointer)
+		for _, h := range []string{"Choosing the type", "Reminders", checkinHeading} {
+			if n := strings.Count(secs[h], pointer); n != 1 {
+				t.Errorf("section %q carries the pointer %d times, want 1:\n%s", h, n, secs[h])
+			}
+		}
+		outcomes := []string{
+			"when it confirms or names a listed item: type correction, referent that item,",
+			"when it says it is none of them: type chitchat, no referent; it changes nothing.",
+			"Either way it carries no task_checkin_outcome and no nudge_outcome.",
+		}
+		for h, body := range secs {
+			mentions := strings.Count(body, "which-item") + strings.Count(body, "which item is meant")
+			if h == followUpsHeading {
+				for _, o := range outcomes {
+					if strings.Count(body, o) != 1 {
+						t.Errorf("Follow-ups does not define %q once:\n%s", o, body)
+					}
+				}
+				continue
+			}
+			if pointers := strings.Count(body, pointer); mentions != pointers {
+				t.Errorf("section %q speaks of the which-item answer %d times beyond its pointer:\n%s", h, mentions-pointers, body)
+			}
+			for _, o := range outcomes {
+				if strings.Contains(body, o) {
+					t.Errorf("section %q defines a which-item outcome, %q, outside Follow-ups", h, o)
+				}
+			}
+		}
+	}
+}

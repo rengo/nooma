@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "recordámelo",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme eso.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"title\":\"Recordatorio\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true

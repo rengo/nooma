@@ -72,6 +72,9 @@ func fieldSpecs() []fieldSpec {
 			func(c *Classification, v *QuestionAnswer) { c.QuestionAnswer = v }))},
 		{"choice_number", false, nullIsAbsent(assignChoiceNumber)},
 		{"reminder_target", false, nullIsAbsent(assignReminderTarget)},
+		// ADR-0036's follow-up fields, optional for the same reason.
+		{"referent", false, nullIsAbsent(assignReferent)},
+		{"clarifying_question", false, nullIsAbsent(assignClarifyingQuestion)},
 	}
 }
 

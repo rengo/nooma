@@ -101,6 +101,14 @@ type Classification struct {
 	ChoiceNumber   *int
 	ReminderTarget *ReminderTarget
 
+	// Referent is which item of the recent conversation a correction patches
+	// (ADR-0036): a letter of the list the prompt carried, or unclear. The
+	// code binds only on a position inside that list.
+	Referent *Referent
+	// ClarifyingQuestion is the model's question, beside an unclear referent,
+	// asking which item the user means; Nooma sends it and stores nothing.
+	ClarifyingQuestion *string
+
 	// Title is the short, date-free name a reminder says for the unit
 	// (ADR-0033's sibling decision, spec R12), already checked by
 	// ResolveTitle: nil when the model gave none or gave one the check drops.
