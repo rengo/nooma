@@ -238,6 +238,11 @@ func TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour(t *testing.T) {
 			if got := channels.RenderReply(result); got != tc.want {
 				t.Errorf("reply = %q, want %q", got, tc.want)
 			}
+			// The gate reads the day from day_only: the row about that day's
+			// midnight is not passed at the hour it rings.
+			if got := reminders(v.pass(t, tc.fire)); len(got) != 1 {
+				t.Errorf("at %s sent %q, want the reminder once", tc.fire.Format("15:04"), got)
+			}
 		})
 	}
 }
@@ -354,6 +359,88 @@ func i36Refusals(t *testing.T, log *memrepo.DecisionLog) []map[string]any {
 			t.Fatal(err)
 		}
 		out = append(out, c)
+	}
+	return out
+}
+
+// i36Night is the passes a night of the scheduler runs, every five minutes
+// from from to to, and the reminder pushes each one sent, by local time.
+func (v *i36Vault) night(t *testing.T, from, to time.Time) map[string][]string {
+	t.Helper()
+	sent := map[string][]string{}
+	for at := from; !at.After(to); at = at.Add(5 * time.Minute) {
+		if got := reminders(v.pass(t, at)); len(got) > 0 {
+			sent[at.Format("01-02 15:04")] = got
+		}
+	}
+	return sent
+}
+
+// TestI36_ANamedTimeRingsThroughTheNight drives capture and then the check
+// passes over the night: "a las 3" asked at 01:00 is armed at 02:45 and pushed
+// then, once, never held for quiet end nor judged past after it (ADR-0031
+// point 6). Its twin, "a las 6:30" said at 06:20, is armed at once inside
+// quiet hours and pushed at once.
+func TestI36_ANamedTimeRingsThroughTheNight(t *testing.T) {
+	for name, tc := range map[string]struct {
+		now        time.Time
+		due, fired string
+	}{
+		"03:00 asked at 01:00": {i36At(17, 1, 0), "2026-10-17T03:00:00-03:00", "10-17 02:45"},
+		"06:30 said at 06:20":  {i36At(17, 6, 20), "2026-10-17T06:30:00-03:00", "10-17 06:20"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			v := newI36Vault()
+			v.say(t, tc.now, i36Reading("task", tc.due, true, "es"))
+			if trg := v.only(t); !trg.Payload.NightExempt {
+				t.Fatalf("trigger = %+v, want it night-exempt", trg)
+			}
+			sent := v.night(t, tc.now, i36At(17, 9, 0))
+			if len(sent) != 1 || len(sent[tc.fired]) != 1 {
+				t.Errorf("pushes by pass = %v, want exactly one at %s", sent, tc.fired)
+			}
+		})
+	}
+}
+
+// TestI36_AnAskedNamedMidnightPassesAtMidnight: an asked reminder about 00:00
+// is a moment, not a day (doc 02 §7: the gate reads a day only from the row's
+// day_only key). Armed 23:45, a pass that first runs at 00:00 finds it passed
+// and sends nothing; read as a day, as an unasked midnight is, it would go out
+// all of the next day.
+func TestI36_AnAskedNamedMidnightPassesAtMidnight(t *testing.T) {
+	v := newI36Vault()
+	v.say(t, i36At(17, 22, 0), i36Reading("task", "2026-10-18T00:00:00-03:00", true, "es"))
+	if trg := v.only(t); !trg.FireAt.Equal(i36At(17, 23, 45)) || trg.Payload.DayOnly {
+		t.Fatalf("trigger = %+v, want 23:45, not day-only", trg)
+	}
+	if sent := reminders(v.pass(t, i36At(18, 0, 0))); len(sent) != 0 {
+		t.Errorf("at 00:00 sent %q, want nothing: the midnight asked about has passed", sent)
+	}
+	if got := i36Expired(t, v.log); len(got) != 1 || got[0] != "passed" {
+		t.Errorf("check.trigger.expired reasons at 00:00 = %v, want one passed", got)
+	}
+}
+
+// i36Expired is the reasons of the check.trigger.expired rows.
+func i36Expired(t *testing.T, log *memrepo.DecisionLog) []string {
+	t.Helper()
+	all, err := log.Since(context.Background(), time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, d := range all {
+		if d.Action != ports.ActionCheckTriggerExpired {
+			continue
+		}
+		var c struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(d.Context, &c); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, c.Reason)
 	}
 	return out
 }
