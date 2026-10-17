@@ -45,12 +45,13 @@ type UnitRepo interface {
 	// ErrUnitNotFound if no unit with id exists.
 	ByID(ctx context.Context, id string) (unit.Unit, error)
 
-	// LatestLanguage returns the language of the most recently created unit
-	// that has one, at any status (an archived unit still tells which language
-	// the person writes in), or "" when no unit has one (ADR-0032 point 5). It
-	// is what the digest speaks, and what a reminder whose own unit knows no
-	// language falls back on.
-	LatestLanguage(ctx context.Context) (string, error)
+	// RecentLanguages returns the languages of the limit most recently created
+	// units that have one, newest first, at any status (an archived unit still
+	// tells which language the person writes in), and none when no unit has
+	// one. classify.UsualLanguage reads them into what the digest speaks, and
+	// what a reminder whose own unit knows no language falls back on
+	// (ADR-0035).
+	RecentLanguages(ctx context.Context, limit int) ([]string, error)
 
 	// LiveByIDs returns the units among ids whose status is pool
 	// (unit.Status.IsLive), in the order ids names them. An id that is

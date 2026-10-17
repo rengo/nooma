@@ -73,7 +73,8 @@ func (r checkRunner) flush(ctx context.Context, q *pushQueue, now time.Time) (in
 func sentences() phrase.Set { return phrase.For(classify.Fallback()) }
 
 // setFor is the sentences a message speaks: own, when it names a language Nooma
-// holds, else the newest unit's, else the fallback's (ADR-0032 point 5). A read
+// holds, else the one the person usually writes in (ADR-0035), else the
+// fallback's. A read
 // that fails is logged and answered with the fallback: a message in English
 // beats no message.
 func (r checkRunner) setFor(ctx context.Context, own string) phrase.Set {
@@ -88,12 +89,12 @@ func proactiveSet(ctx context.Context, units ports.UnitRepo, own string) phrase.
 	if units == nil {
 		return sentences()
 	}
-	latest, err := units.LatestLanguage(ctx)
+	recent, err := units.RecentLanguages(ctx, classify.UsualLanguageWindow)
 	if err != nil {
-		slog.Warn("the newest unit's language could not be read, so a message speaks the fallback", "error", err)
+		slog.Warn("the recent units' languages could not be read, so a message speaks the fallback", "error", err)
 		return sentences()
 	}
-	if l, ok := heldLanguage(latest); ok {
+	if l, ok := heldLanguage(classify.UsualLanguage(recent)); ok {
 		return phrase.For(l)
 	}
 	return sentences()

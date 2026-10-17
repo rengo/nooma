@@ -3,7 +3,7 @@
 - **Status**: Accepted (by the client, 2026-10-14)
 - **Date**: 2026-10-14
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0035](0035-nooma-speaks-first-in-the-usual-language.md), point 5's "the language of the most recently captured unit" only
 - **Amends** (none of them edited): [ADR-0009](0009-scheduler-downtime.md) (judged at
   every delivery attempt, by a pass that can deliver), [ADR-0022](0022-reply-language.md) (its
   "anything Nooma says first" gap), [ADR-0029](0029-event-reminders-follow-the-users-leads.md)

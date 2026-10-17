@@ -145,3 +145,32 @@ func TestBuildPrompt_AsksForTheMessagesLanguage(t *testing.T) {
 		}
 	}
 }
+
+// TestUsualLanguage: what Nooma says first speaks the language the person
+// usually writes in (ADR-0035): the most frequent among the recent units'
+// languages, newest first, a tie going to the newest; nothing known, "".
+func TestUsualLanguage(t *testing.T) {
+	for name, tc := range map[string]struct {
+		newestFirst []string
+		want        string
+	}{
+		"one English capture among Spanish ones":  {[]string{"en", "es", "es", "es"}, "es"},
+		"a tie goes to the newest":                {[]string{"en", "es", "es", "en"}, "en"},
+		"a tie goes to the newest, the other way": {[]string{"es", "en"}, "es"},
+		"one":                           {[]string{"es"}, "es"},
+		"none":                          {nil, ""},
+		"empty entries are no language": {[]string{"", "", "es"}, "es"},
+	} {
+		if got := UsualLanguage(tc.newestFirst); got != tc.want {
+			t.Errorf("%s: UsualLanguage(%v) = %q, want %q", name, tc.newestFirst, got, tc.want)
+		}
+	}
+}
+
+// TestUsualLanguageWindowIsPositive: a window of no units would read no
+// language and always speak the fallback.
+func TestUsualLanguageWindowIsPositive(t *testing.T) {
+	if UsualLanguageWindow < 1 {
+		t.Fatalf("UsualLanguageWindow = %d, want at least 1", UsualLanguageWindow)
+	}
+}

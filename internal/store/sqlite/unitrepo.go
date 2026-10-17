@@ -78,18 +78,26 @@ func (r *UnitRepo) ByID(ctx context.Context, id string) (unit.Unit, error) {
 	return u, nil
 }
 
-// LatestLanguage implements ports.UnitRepo.
-func (r *UnitRepo) LatestLanguage(ctx context.Context) (string, error) {
-	var language string
-	err := r.db.QueryRowContext(ctx,
-		`SELECT language FROM units WHERE language IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1`).Scan(&language)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
+// RecentLanguages implements ports.UnitRepo.
+func (r *UnitRepo) RecentLanguages(ctx context.Context, limit int) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT language FROM units WHERE language IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT ?`, limit)
 	if err != nil {
-		return "", fmt.Errorf("select latest language: %w", err)
+		return nil, fmt.Errorf("select recent languages: %w", err)
 	}
-	return language, nil
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var language string
+		if err := rows.Scan(&language); err != nil {
+			return nil, fmt.Errorf("scan recent language: %w", err)
+		}
+		out = append(out, language)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select recent languages: %w", err)
+	}
+	return out, nil
 }
 
 // LiveByIDs implements ports.UnitRepo. The SQL filters positively on

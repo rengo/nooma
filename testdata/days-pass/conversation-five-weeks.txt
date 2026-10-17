@@ -35,11 +35,11 @@ Sat 2026-10-17 10:00 ·· check-in "Comprar café": engaged
 Sat 2026-10-17 20:30 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
 Sat 2026-10-17 21:00 → Recordatorio: Tomar las pastillas — sáb 17 oct
 Sat 2026-10-17 22:15 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
-Sun 2026-10-18 07:00 → Asking again:
-                       • Is "Llamar al médico" done?
+Sun 2026-10-18 07:00 → Te pregunto de nuevo:
+                       • ¿Ya está «Llamar al médico»?
 Sun 2026-10-18 21:00 → Recordatorio: Tomar las pastillas — dom 18 oct
-Mon 2026-10-19 07:00 → Asking again:
-                       • Is "Llamar al médico" done?
+Mon 2026-10-19 07:00 → Te pregunto de nuevo:
+                       • ¿Ya está «Llamar al médico»?
 Mon 2026-10-19 21:00 → Recordatorio: Tomar las pastillas — lun 19 oct
 Mon 2026-10-19 22:00 ·· the server stops
 Thu 2026-10-22 21:30 ·· the server starts

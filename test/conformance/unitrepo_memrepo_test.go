@@ -90,9 +90,9 @@ func TestUnitRepo_MemRepo_LiveBrowsePage(t *testing.T) {
 	})
 }
 
-// TestLatestLanguageIncludesArchived runs repocontract.RunLanguage against the
-// same fake (ADR-0032 point 5).
-func TestLatestLanguageIncludesArchived(t *testing.T) {
+// TestRecentLanguagesIncludeArchived runs repocontract.RunLanguage against the
+// same fake (ADR-0035).
+func TestRecentLanguagesIncludeArchived(t *testing.T) {
 	repocontract.RunLanguage(t, func(t *testing.T) ports.UnitRepo {
 		t.Helper()
 		return memrepo.NewUnits()
