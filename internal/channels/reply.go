@@ -36,6 +36,11 @@ func RenderReply(result brain.CaptureResult) string {
 
 	switch result.Outcome {
 	case brain.OutcomeStored:
+		// Asked and not armed: the unit is kept, and the reply says why no
+		// reminder was set (ADR-0031 point 7).
+		if result.ArmRefused != nil {
+			return fmt.Sprintf(say.NotedNotSet, refusalReason(say, result.ArmRefused))
+		}
 		return say.Noted
 
 	case brain.OutcomeArmed:
@@ -134,6 +139,8 @@ func refusalReason(say phrase.Set, refused *brain.ArmRefused) string {
 		return say.RefusalNoDate
 	case prospection.RefusalAlreadyPast:
 		return say.RefusalPast
+	case prospection.RefusalTooLate:
+		return say.RefusalTooLate
 	default:
 		return refused.Message
 	}

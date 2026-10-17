@@ -124,23 +124,20 @@ tasks-repeating).
 
 ## PR 2 — `feat/remind-me-one-shot` (D5, D7, D8, D4 scan; first usable)
 
-- [ ] 2.1 RED L2, the I36 row:
-  - `TestI36_AnAskedReminderIsArmedBeforeItsTime`: the observed message → a `task` unit with `remind_me=1`, one trigger at 09:45, payload `{lead_minutes:15, event_at:10:00, asked, night_exempt}`.
-  - `TestI36_ARequestComesFromTheField`: the same classification with `remind_request: false` → no trigger, and the Q4 reply "Anotado. No puse aviso; si querés, decime «recordame»". `TestI36_NoHintWithoutAnInstant`.
-  - `TestI36_ADayAloneRemindsThatDayAtNine`: payload `{lead_minutes:0, event_at:midnight, day_only}`.
-  - `TestI36_AskedDayOnlyIsNotPassedAtNine` (the gate): a 09:00 delivery → `Deliver`, not `passed`.
-  - `TestI36_ANamedTimeRingsThroughTheNight`: an asked 03:00 row at 02:46 → `Deliver`, not `Defer`.
-  - `TestI36_TheReplyNamesTheAskedReminder`: exact "Anotado para el jue 15 oct 10:00. Te aviso 15 minutos antes." and the English counterpart.
-  - `TestI36_TheReplyStatesTheArmedHour`: `DateOnlyAt` 08:30 → "…ese día a las 08:30."
-  - `TestI36_AskedButNotArmedSaysWhy`: past, quiet, too late → the refusal row and the reason sentence.
-- [ ] 2.1b RED, the seams with #343 and #344 (round 3, item 4):
-  - `TestReplanKeepsTheAskedLeadOfAnEvent`: an asked event with a stale 24 h row → `replanUnit` keeps the +15 row, with `asked` and `night_exempt`.
-  - `TestReplanOfAskedDayOnlyKeepsDateOnlyAt`: the re-plan of an asked day-only unit → at `DateOnlyAt`, `day_only` kept.
-  - `TestCurrentEventReadsDueAtForRemindMe`: an asked task → `currentEvent` is `due_at`; an unasked task → nil.
-  - `TestAskedRecurrenceBeforeLink7IsOneShot`: "recordame tomar pastillas todos los días a las 9pm" in links 2-6 → a unit of the type the model's kind maps to (the `task` mapping is link 7's), `remind_me=1`, one one-shot trigger at 20:45 today, never the 7-day recurring row (named time minus the lead), reply "Anotado para el … 21:00. Te aviso 15 minutos antes."; no recurring row (P1). Link 7 replaces this test with its I36 recurring tests.
+Trimmed by the client (2026-10-16): wire `remind_request` into `Arm`, the reply says when, and
+the recorded coffee replay end to end. The Q4 hint for an unasked task ("No puse aviso; si querés,
+decime «recordame»") and the 2.1b re-plan seams are dropped: the replay passes without them.
+
+- [x] 2.1 RED L2, the I36 row (`test/conformance/i36_asked_reminder_test.go`):
+  - `TestI36_TheObservedCoffeeRequestRingsOnce`: the recorded `classify-task-remind-me-coffee` at 10-16 10:42:25 → a `task` with `remind_me`, one trigger at 10-17 09:45 `{lead_minutes:15, about:10:00, asked, night_exempt}`, the reply, one push at 09:45 and none after, and a bare "listo" closes the check-in. `TestI36_APutOffAskedReminderIsAskedAgain`: "no" → asked again the next morning (I39).
+  - `TestI36_ARequestComesFromTheField`: `remind_request: false` → no trigger, "Anotado." (the Q4 hint dropped).
+  - `TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour` (default and 08:30), `TestI36_TheLeadIsTheUsersPreference`, `TestI36_TheReplyIsInTheMessagesLanguage`.
+  - `TestI36_AskedButNotArmedSaysWhy`: past, too late, no date → the refusal row with `asked` and the reason sentence.
+  - The gate tests (`AskedDayOnlyIsNotPassedAtNine`, `ANamedTimeRingsThroughTheNight`) were already pinned at L1 in link 1 (`TestVerdict_*`); not repeated.
+- [-] 2.1b Dropped (client): the replay shows no failure without the re-plan seams. They stay link 3's (D9).
 - [x] 2.2 RED L3: migration M1 (0010); `remind_me` round trip; `SetReminderPrefs` writes only the named columns; goldens. The trigger payload also carries `asked`, `day_only` and `night_exempt` (round trip pinned in the trigger contract).
-- [ ] 2.2b RED (round 3): `TestArmAsked_TooLateTodayRefused` updated: "hoy" at 23:53 → at once (7 min left), 23:54 → `too_late`; `TestAtOnceMarginExceedsProactiveInterval`; `TestI36_RepeatingRequestBeforeLink7SaysOnlyThisOnce` (the reply names the one-shot and "solo esta vez").
-- [ ] 2.3 GREEN: the margin raised to 7 (doc 02 §13); the store, capture, phrase, channels and gate branch; the I36 row in doc 06 §4; replaying `classify-task-remind-me-coffee.json` (recorded in the 1a′ session); L4 of the observed message; doc 02 §5 step 5, §11; doc 03; doc 07; `make check-all`.
+- [x] 2.2b The margin raised to 7 (`TestArmAsked_TooLateTodayRefused`, `TestAtOnceMarginExceedsProactiveInterval`). Changed after #367 (ADR-0034): an asked `recurring_reminder` with a rule keeps the recurring row instead of a one-shot with a "solo esta vez" note (`TestArmAsked_AnAskedRecurringReminderKeepsRecurring`, `TestI36_AnAskedRepetitionKeepsRecurring` replaying `classify-task-remind-me-daily-pills`); an asked task or event with a rule stays the one-shot (`TestArmAsked_AnAskedRepeatingTaskOrEventIsTheOneShotUntilLink7`).
+- [x] 2.3 GREEN: capture reads `remind_request`, sets `remind_me`, writes the payload keys and the stored lead; the minute lead and day-alone phrases; the asked refusal row and reply; the I36 row in doc 06 §4; doc 02 §7, §11; doc 07. The L4 of the observed message is not added: the L2 replay drives the same capture and check services over the recorded reading.
 
 ## PR 3 — `feat/remind-me-follows` (D9)
 

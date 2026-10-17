@@ -128,7 +128,8 @@ type CaptureResult struct {
 	Armed *Armed
 
 	// ArmRefused names why a capture that asked for a nudge did not get
-	// one. Set only for Outcome == OutcomeArmRefused.
+	// one. Set for Outcome == OutcomeArmRefused, and for OutcomeStored when
+	// the user asked to be reminded of the kept unit and nothing was armed.
 	ArmRefused *ArmRefused
 
 	// Recalled holds the units RecallService.ForText found for a

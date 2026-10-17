@@ -51,7 +51,7 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "TimerSet": 1, "RecurringSet": 1, "NotedFor": 2,
+		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "RecurringSet": 1, "NotedFor": 2,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "FoundOne": 1, "FoundMany": 1,
 	}
 

@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -298,4 +299,61 @@ func TestI36_AnAskedRepetitionKeepsRecurring(t *testing.T) {
 	if got, want := channels.RenderReply(result), "Recordatorio recurrente puesto para el vie 16 oct, 21:00."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
+}
+
+// TestI36_AskedButNotArmedSaysWhy: the user asked and nothing could be armed.
+// The unit is kept and still says it was asked for, one capture.arm.refused
+// row names the reason, and the reply says it rather than a bare "Anotado."
+// (ADR-0031 point 7: when nothing was set, it says why).
+func TestI36_AskedButNotArmedSaysWhy(t *testing.T) {
+	cases := []struct {
+		name, reading string
+		now           time.Time
+		why, want     string
+	}{
+		{"the time has passed", i36Reading("task", "2026-10-16T09:00:00-03:00", true, "es"), i36Now, "already_past",
+			"Anotado, pero no puse aviso: la hora indicada ya pasó."},
+		{"too little of the day is left", i36Reading("task", "2026-10-16", true, "es"), i36At(16, 23, 54), "too_late",
+			"Anotado, pero no puse aviso: queda muy poco tiempo para esa hora."},
+		{"no time was given", `{"type":"task","normalized_content":"Comprar café","weight":0.7,"decay_rate":0.03,"language":"en","remind_request":true}`,
+			i36Now, "no_date", "Noted, but I did not set a reminder: no time was given, and guessing one is worse than not setting a reminder at all."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := newI36Vault()
+			result := v.say(t, tc.now, tc.reading)
+
+			if v.triggers.Count() != 0 || result.Outcome != brain.OutcomeStored || !v.unit(t, result.UnitID).RemindMe {
+				t.Fatalf("result = %+v, triggers %d; want the asked task kept and nothing armed", result, v.triggers.Count())
+			}
+			rows := i36Refusals(t, v.log)
+			if len(rows) != 1 || rows[0]["why"] != tc.why || rows[0]["unit_id"] != result.UnitID || rows[0]["asked"] != true {
+				t.Errorf("capture.arm.refused rows = %v, want one naming %s, the unit and asked", rows, tc.why)
+			}
+			if got := channels.RenderReply(result); got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// i36Refusals is the capture.arm.refused rows' contexts.
+func i36Refusals(t *testing.T, log *memrepo.DecisionLog) []map[string]any {
+	t.Helper()
+	all, err := log.Since(context.Background(), time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []map[string]any
+	for _, d := range all {
+		if d.Action != ports.ActionCaptureArmRefused {
+			continue
+		}
+		var c map[string]any
+		if err := json.Unmarshal(d.Context, &c); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, c)
+	}
+	return out
 }

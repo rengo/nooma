@@ -57,13 +57,17 @@ type Set struct {
 
 	// NotScheduled prefixes an arming refusal — one %s, the reason.
 	NotScheduled string
-	// RefusalNoDate and RefusalPast are the two reasons a refusal can
-	// carry, in the person's language. The typed prospection.Refusal
-	// travels to the renderer precisely so these can exist: the English
-	// sentence brain builds stays in the trail, where its audience is an
-	// auditor.
-	RefusalNoDate string
-	RefusalPast   string
+	// NotedNotSet answers a kept unit whose asked reminder was not set — one
+	// %s, the reason.
+	NotedNotSet string
+	// RefusalNoDate, RefusalPast and RefusalTooLate are the reasons a
+	// refusal can carry, in the person's language. The typed
+	// prospection.Refusal travels to the renderer precisely so these can
+	// exist: the English sentence brain builds stays in the trail, where its
+	// audience is an auditor.
+	RefusalNoDate  string
+	RefusalPast    string
+	RefusalTooLate string
 
 	// TimerSet takes one %s: the instant the timer fires, which for a
 	// timer is also what it is about.
@@ -161,9 +165,11 @@ var sets = map[classify.Language]Set{
 		AskWhichOne:  "I need one more thing before I can change that — which one did you mean?",
 		NothingFound: "I could not find anything about that.",
 
-		NotScheduled:  "I did not set that: %s",
-		RefusalNoDate: "no time was given, and guessing one is worse than not setting a reminder at all",
-		RefusalPast:   "the time given has already passed",
+		NotScheduled:   "I did not set that: %s",
+		NotedNotSet:    "Noted, but I did not set a reminder: %s.",
+		RefusalNoDate:  "no time was given, and guessing one is worse than not setting a reminder at all",
+		RefusalPast:    "the time given has already passed",
+		RefusalTooLate: "too little time is left before it",
 
 		TimerSet:     "Timer set for %s.",
 		RecurringSet: "Recurring reminder set for %s.",
@@ -217,9 +223,11 @@ var sets = map[classify.Language]Set{
 		AskWhichOne:  "Necesito una cosa más antes de cambiarlo: ¿a cuál te referías?",
 		NothingFound: "No encontré nada sobre eso.",
 
-		NotScheduled:  "No lo programé: %s",
-		RefusalNoDate: "no se indicó ninguna hora, y adivinarla es peor que no poner el recordatorio",
-		RefusalPast:   "la hora indicada ya pasó",
+		NotScheduled:   "No lo programé: %s",
+		NotedNotSet:    "Anotado, pero no puse aviso: %s.",
+		RefusalNoDate:  "no se indicó ninguna hora, y adivinarla es peor que no poner el recordatorio",
+		RefusalPast:    "la hora indicada ya pasó",
+		RefusalTooLate: "queda muy poco tiempo para esa hora",
 
 		TimerSet:     "Temporizador puesto para el %s.",
 		RecurringSet: "Recordatorio recurrente puesto para el %s.",

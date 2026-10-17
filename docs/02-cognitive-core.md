@@ -1480,7 +1480,10 @@ have N nudges; a pattern watcher does not hang off any unit):
   as before. Capture writes the payload keys `asked`, `day_only` and `night_exempt` the gate
   reads. The reply names the instant and the reminder: "Anotado para el sáb 17 oct, 10:00. Te
   aviso 15 minutos antes." (a lead under an hour is said in minutes), and for a day alone the
-  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00.").
+  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."). An
+  asked unit that arms nothing (`no_date`, `already_past`, `too_late`) is still stored with
+  `remind_me` set, writes one `capture.arm.refused` row carrying `asked`, and its reply says why
+  ("Anotado, pero no puse aviso: la hora indicada ya pasó.").
   A **recurring reminder** keeps one trigger **on** its next occurrence (ADR-0034); one armed a
   week ahead before it keeps that instant and re-arms on the occurrence. Triggers armed before
   ADR-0029 keep the instant they were armed for; a correction of their date re-arms them as the new set.
@@ -1869,7 +1872,10 @@ box stops being read.
 
 The rule, then, is not a list of refusals: **a refusal is recorded exactly when the capture would
 otherwise leave no trace at all.** A new refusal reason, or a new kind that can arm, is covered by
-that sentence without it being rewritten.
+that sentence without it being rewritten. A kept unit is a trace of the capture, not of why the
+reminder is missing, when nothing on it says so: an event left no instant by quiet hours, and a
+unit whose reminder the user asked for (`remind_me`) and did not get, each write one
+`capture.arm.refused` row.
 
 **A scan-time conflict is recorded and skipped, never fatal.** Two due scans overlapping is the
 normal state of something that runs every few minutes, and the precondition that keeps them from
