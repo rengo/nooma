@@ -396,11 +396,15 @@ never a real phrase living through real days. Two kinds of golden live here:
   - runs the check pass every `scheduler.ProactiveCheckInterval`, the digest included, for up to
     five weeks, with the server down for days in the middle;
   - writes one line per message, `Fri 2026-10-23 09:45 → <text>` from Nooma and `← <text>` from
-    the user.
+    the user, and a `··` line for each check-in a message answered, read from the decision_log
+    (`·· check-in "Comprar café": engaged`), because an answered check-in and an unanswered one
+    send nothing more either way.
 
   A reading that names a date is replayed only on the day it was recorded on, unless the scenario
   marks it late and its header says so. The chat answer and the relation judge are fixed
-  placeholders, because no reminder decision reads them.
+  placeholders, because no reminder decision reads them. Nightly consolidation does not run in the
+  walk, though serve's scheduler runs it: no golden depends on it today, since a unit with an armed
+  reminder is excluded from it, but five weeks with no nightly run is an assembly serve never has.
 
 Regenerate with `go test -tags integration ./test/integration/ -run TestDaysPass -update`, and
 read every changed line against doc 02 §7. A line that is wrong is a product bug to report, never

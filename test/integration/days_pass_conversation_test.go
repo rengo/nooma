@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -201,6 +202,10 @@ func (s dpScenario) live(t *testing.T) string {
 			}
 			clock.now = m.at
 			lines = append(lines, dpLine(m.at, "←", ex.Message))
+			open, err := triggers.Delivered(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
 			llm.next = &ex
 			if err := handle(ctx, ports.ChannelMessage{ID: m.id, Conversation: dpConversation, Text: ex.Message, Channel: ch.Name()}); err != nil {
 				t.Fatalf("%s: %v", m.id, err)
@@ -208,6 +213,7 @@ func (s dpScenario) live(t *testing.T) string {
 			if llm.next != nil {
 				t.Fatalf("%s: the capture never classified", m.id)
 			}
+			lines = append(lines, dpCheckins(t, decisions, open, m.at)...)
 		}
 		if down {
 			continue
@@ -221,6 +227,46 @@ func (s dpScenario) live(t *testing.T) string {
 		t.Fatalf("%d messages after the walk ended", len(pending))
 	}
 	return strings.Join(header, "\n") + "\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// dpCheckins is a line for each check-in a message answered, read from the
+// decision_log rows the capture wrote at at: what it was about, among the
+// check-ins open before it, and how it ended. A bare "listo" that resolves
+// nothing reads unlike one that closes its check-in, which the outbound lines
+// alone cannot show: neither is ever asked again.
+func dpCheckins(t *testing.T, log ports.DecisionLog, open []ports.OpenCheckIn, at time.Time) []string {
+	t.Helper()
+	rows, err := log.Since(context.Background(), at.Add(-time.Nanosecond), -1) // strictly after
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, d := range rows {
+		outcome := map[ports.DecisionAction]string{ports.ActionCaptureCheckInResolved: "", ports.ActionCaptureCheckInSnoozed: "put off",
+			ports.ActionCaptureCheckInUnmatched: "nothing open"}
+		said, ok := outcome[d.Action]
+		if !ok || !d.OccurredAt.Equal(at) {
+			continue
+		}
+		var c struct {
+			TriggerID  string `json:"trigger_id"`
+			Resolution string `json:"resolution"`
+		}
+		if err := json.Unmarshal(d.Context, &c); err != nil {
+			t.Fatal(err)
+		}
+		if said == "" {
+			said = c.Resolution
+		}
+		about := c.TriggerID
+		for _, o := range open {
+			if o.ID == c.TriggerID {
+				about = o.Payload.ActionText
+			}
+		}
+		out = append(out, dpLine(at, "··", fmt.Sprintf("check-in %q: %s", about, said)))
+	}
+	return out
 }
 
 // TestDaysPass_RecordedConversations is the gate. Each scenario's transcript
