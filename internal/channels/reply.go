@@ -57,7 +57,8 @@ func RenderReply(result brain.CaptureResult) string {
 			// A timer fires AT its subject: one instant, said once.
 			return fmt.Sprintf(say.TimerSet, say.Time(result.Armed.FireAt))
 		case prospection.ArmRecurring:
-			return fmt.Sprintf(say.RecurringSet, say.Time(result.Armed.About))
+			// When it rings every time, not its next ring alone (ADR-0031 point 7).
+			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)
 		default:
 			if result.Armed.DayOnly {
 				lead := say.ThatDayAt(result.Armed.FireAt)

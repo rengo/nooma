@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
 )
 
 // Set is every sentence, in one language. One struct per language, and a
@@ -72,9 +73,12 @@ type Set struct {
 	// TimerSet takes one %s: the instant the timer fires, which for a
 	// timer is also what it is about.
 	TimerSet string
-	// RecurringSet takes one %s: the next occurrence, never the date the
-	// person stated — for a birthday already past this year those differ.
-	RecurringSet string
+	// EveryDay, EveryWeek, EveryMonth and EveryYear say when a recurring
+	// reminder rings, every time it does (ADR-0031 point 7), rather than its
+	// next occurrence alone. EveryDay takes the time; EveryWeek the weekday's
+	// name and the time; EveryMonth the day of the month and the time;
+	// EveryYear the day, the month's name and the time.
+	EveryDay, EveryWeek, EveryMonth, EveryYear string
 	// NotedFor takes two %s: what the nudge is ABOUT, then when the nudge
 	// arrives. Never the firing instant as the first — that answers a
 	// question nobody asked (doc 02 §5 step 5).
@@ -143,6 +147,10 @@ type Set struct {
 	// paying it looks like.
 	Weekdays [7]string
 	Months   [12]string
+	// WeekdayNames and MonthNames are the same in full, for a sentence
+	// rather than a date: "todos los lunes", "el 23 de octubre".
+	WeekdayNames [7]string
+	MonthNames   [12]string
 	// DateOrder says whether the day number comes before the month name.
 	// English writes "Fri 28 Aug" and Spanish writes "vie 28 ago" — the
 	// same order here, but the field exists because the next language
@@ -171,9 +179,12 @@ var sets = map[classify.Language]Set{
 		RefusalPast:    "the time given has already passed",
 		RefusalTooLate: "too little time is left before it",
 
-		TimerSet:     "Timer set for %s.",
-		RecurringSet: "Recurring reminder set for %s.",
-		NotedFor:     "Noted for %s. I will remind you %s.",
+		TimerSet:   "Timer set for %s.",
+		EveryDay:   "I will remind you every day at %s.",
+		EveryWeek:  "I will remind you every %s at %s.",
+		EveryMonth: "I will remind you on day %s of every month at %s.",
+		EveryYear:  "I will remind you every year on %s %s at %s.",
+		NotedFor:   "Noted for %s. I will remind you %s.",
 
 		Reminder: "Reminder: %s",
 		AtWhen:   "%s \u2014 %s",
@@ -204,8 +215,11 @@ var sets = map[classify.Language]Set{
 		FoundOne:  "Found %d thing:",
 		FoundMany: "Found %d things:",
 
-		Weekdays:       [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
-		Months:         [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+		Weekdays:     [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
+		Months:       [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+		WeekdayNames: [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"},
+		MonthNames: [12]string{"January", "February", "March", "April", "May", "June", "July", "August", "September",
+			"October", "November", "December"},
 		DayBeforeMonth: true,
 	},
 
@@ -229,9 +243,12 @@ var sets = map[classify.Language]Set{
 		RefusalPast:    "la hora indicada ya pasó",
 		RefusalTooLate: "queda muy poco tiempo para esa hora",
 
-		TimerSet:     "Temporizador puesto para el %s.",
-		RecurringSet: "Recordatorio recurrente puesto para el %s.",
-		NotedFor:     "Anotado para el %s. Te aviso %s.",
+		TimerSet:   "Temporizador puesto para el %s.",
+		EveryDay:   "Te aviso todos los días a las %s.",
+		EveryWeek:  "Te aviso todos los %s a las %s.",
+		EveryMonth: "Te aviso el día %s de cada mes a las %s.",
+		EveryYear:  "Te aviso todos los años el %s de %s a las %s.",
+		NotedFor:   "Anotado para el %s. Te aviso %s.",
 
 		Reminder: "Recordatorio: %s",
 		AtWhen:   "%s \u2014 %s",
@@ -262,8 +279,12 @@ var sets = map[classify.Language]Set{
 		FoundOne:  "Encontré %d cosa:",
 		FoundMany: "Encontré %d cosas:",
 
-		Weekdays:       [7]string{"dom", "lun", "mar", "mié", "jue", "vie", "sáb"},
-		Months:         [12]string{"ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"},
+		Weekdays: [7]string{"dom", "lun", "mar", "mié", "jue", "vie", "sáb"},
+		Months:   [12]string{"ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"},
+		// Plural, as "todos los %s" says it: lunes to viernes are their own plural.
+		WeekdayNames: [7]string{"domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"},
+		MonthNames: [12]string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+			"octubre", "noviembre", "diciembre"},
 		DayBeforeMonth: true,
 	},
 }
@@ -295,6 +316,27 @@ func (s Set) Time(t time.Time) string {
 // ThatDayAt names the hour on its own day a day alone is reminded at.
 func (s Set) ThatDayAt(fire time.Time) string {
 	return fmt.Sprintf(s.LeadThatDayAt, fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute()))
+}
+
+// Every says when a recurring reminder of rule and anchor rings, every time:
+// at at's clock time, at's being the next occurrence. The weekday, day and
+// month are the anchor's, so a day-31 monthly reminder says 31 in November
+// too; an anchor with no weekday reads it from the occurrence.
+func (s Set) Every(rule prospection.Rule, anchor prospection.Anchor, at time.Time) string {
+	clock := fmt.Sprintf("%02d:%02d", at.Hour(), at.Minute())
+	switch rule {
+	case prospection.RuleDaily:
+		return fmt.Sprintf(s.EveryDay, clock)
+	case prospection.RuleWeekly:
+		weekday := at.Weekday()
+		if anchor.Weekday != nil {
+			weekday = *anchor.Weekday
+		}
+		return fmt.Sprintf(s.EveryWeek, s.WeekdayNames[weekday], clock)
+	case prospection.RuleMonthly:
+		return fmt.Sprintf(s.EveryMonth, strconv.Itoa(anchor.Day), clock)
+	}
+	return fmt.Sprintf(s.EveryYear, strconv.Itoa(anchor.Day), s.MonthNames[anchor.Month-1], clock)
 }
 
 // Date renders an instant as Time does, without the clock: a whole day has no hour.

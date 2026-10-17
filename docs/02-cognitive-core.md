@@ -1480,7 +1480,10 @@ have N nudges; a pattern watcher does not hang off any unit):
   as before. Capture writes the payload keys `asked`, `day_only` and `night_exempt` the gate
   reads. The reply names the instant and the reminder: "Anotado para el sáb 17 oct, 10:00. Te
   aviso 15 minutos antes." (a lead under an hour is said in minutes), and for a day alone the
-  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."). An
+  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."); a
+  recurring reminder, when it rings every time, at its anchor's weekday, day or date and time ("Te
+  aviso todos los días a las 21:00.", "todos los lunes a las 08:30", "el día 31 de cada mes a las
+  18:00", "todos los años el 23 de octubre a las 09:00"; `phrase.Every`). An
   asked unit that arms nothing (`no_date`, `already_past`, `too_late`) is still stored with
   `remind_me` set, writes one `capture.arm.refused` row carrying `asked`, and its reply says why
   ("Anotado, pero no puse aviso: la hora indicada ya pasó.").
