@@ -249,7 +249,14 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	// capture stored "La tarea está hecha" as a unit of its own.
 	b.WriteString("  chitchat     a message that only answers Nooma (a check-in, a nudge, a question it\n")
 	b.WriteString("               asked) or only talks, with nothing new to keep. It stores nothing:\n")
-	b.WriteString("               its answer travels in the outcome fields, never as a new task.\n\n")
+	b.WriteString("               its answer travels in the outcome fields, never as a new task.\n")
+	// **One place for the which-item answer.** It only answers Nooma, like a
+	// chitchat, and can settle a correction; three rounds of clauses here and
+	// in the check-in rules kept contradicting Follow-ups (ADR-0036).
+	if chatShown(rc) {
+		b.WriteString(whichItemPointer)
+	}
+	b.WriteString("\n")
 
 	b.WriteString("Corrections\n")
 	b.WriteString("  A correction carries the corrected VALUE, not a description of the change.\n")
@@ -259,6 +266,13 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("  A correction still answers every required field above, like any other type.\n\n")
 
 	writeReminders(&b, rc)
+	// **Only beside a chat** (ADR-0036). A follow-up and a which-item answer
+	// exist only when one is shown; without one the prompt is the one the
+	// reminder set was read with before, which the follow-up text cost two
+	// nudge readings.
+	if chatShown(rc) {
+		writeFollowUps(&b, rc.Conversation, now)
+	}
 
 	if target != nil {
 		writeTarget(&b, *target, now)
@@ -317,6 +331,9 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		", of the numbered reminder it is\n")
 	b.WriteString("                     about, or \"" + ReminderTargetUnclear + "\" when the one the user describes is not\n")
 	b.WriteString("                     in the list or you cannot tell. Never invent a position\n")
+	if chatShown(rc) {
+		b.WriteString(whichItemPointer)
+	}
 	if rc.Open != nil {
 		b.WriteString("\n" + openQuestionHeading + " (" + string(rc.Open.Kind) + ")\n")
 		// Verbatim and unindented: the text, and the list in it, are what the
@@ -348,7 +365,7 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		b.WriteString(RenderReminderList(rc.Candidates))
 	}
 	b.WriteString("\n")
-	writeCheckins(b)
+	writeCheckins(b, chatShown(rc))
 }
 
 // writeCheckins says what each check-in outcome means (doc 02 §5 step 1). The
@@ -356,10 +373,16 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 // back for a task done or put off or a nudge taken up, and the code resolves a
 // check-in from the outcome alone. A meaning, never the words for it: the
 // model reads what the user means in any language.
-func writeCheckins(b *strings.Builder) {
+func writeCheckins(b *strings.Builder, chat bool) {
 	b.WriteString(checkinHeading + "\n")
 	b.WriteString("  Nooma asks the user about a task it reminded them of, and nudges them toward\n")
-	b.WriteString("  something they meant to do. The open one is not shown here: say what the\n")
+	// With a chat shown, a push may be in it: it is which one is open that is
+	// never shown.
+	if chat {
+		b.WriteString("  something they meant to do. Which one is open is not shown here: say what the\n")
+	} else {
+		b.WriteString("  something they meant to do. The open one is not shown here: say what the\n")
+	}
 	b.WriteString("  message answers, and Nooma matches it to what it asked, or drops it.\n")
 	// **The bare word's rule** (format.md): a short reply with nothing asked
 	// in front of the model is the check-in's answer. A bare yes and a nudge
@@ -378,6 +401,9 @@ func writeCheckins(b *strings.Builder) {
 	b.WriteString("  A message that answers an open reminder question, or says whether two things\n")
 	b.WriteString("  are related, answers that and not a check-in: it carries no\n")
 	b.WriteString("  task_checkin_outcome and no nudge_outcome.\n")
+	if chat {
+		b.WriteString(whichItemPointer)
+	}
 	// **A farewell is not a done.** It is a short reply, and one that began
 	// with the bare done word was read as done, ADR-0033's named misread.
 	b.WriteString("  A message that only closes the conversation, a goodbye or a thanks, answers\n")
@@ -418,19 +444,7 @@ func nudgeMeaning(o NudgeOutcome) string {
 // writeTarget renders the unit a correction patches, its instants in the
 // user's own frame (the one the message speaks in), and the patch rule.
 func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
-	// An instant that is the first moment of its local day is a day with no
-	// time: shown as the bare date the model would write it as, never as a
-	// midnight it would then be told to "keep".
-	instant := func(t *time.Time) string {
-		if t == nil {
-			return "none"
-		}
-		local := t.In(now.Location())
-		if start, ok := parseDateOnly(local.Format(dateOnlyLayout), now.Location()); ok && start.Equal(local) {
-			return local.Format(dateOnlyLayout)
-		}
-		return local.Format(exampleLayout)
-	}
+	instant := func(t *time.Time) string { return shownInstant(t, now) }
 	title := "none"
 	if u.Title != "" {
 		title = strconv.Quote(u.Title)
@@ -456,6 +470,25 @@ func writeTarget(b *strings.Builder, u unit.Unit, now time.Time) {
 	b.WriteString("  If the message changes the day or the time, also answer a fresh title, with no\n")
 	b.WriteString("  date, day or time in it as always: a title that still names the old day or\n")
 	b.WriteString("  time is stale once it has moved.\n\n")
+}
+
+// chatShown is whether the prompt shows a recent chat, and so carries the
+// follow-up machinery (ADR-0036).
+func chatShown(rc ReminderContext) bool { return len(rc.Conversation.Turns) > 0 }
+
+// shownInstant is how the prompt shows a stored instant, in the user's frame.
+// An instant that is the first moment of its local day is a day with no time:
+// shown as the bare date the model would write it as, never as a midnight it
+// would then be told to "keep".
+func shownInstant(t *time.Time, now time.Time) string {
+	if t == nil {
+		return "none"
+	}
+	local := t.In(now.Location())
+	if start, ok := parseDateOnly(local.Format(dateOnlyLayout), now.Location()); ok && start.Equal(local) {
+		return local.Format(dateOnlyLayout)
+	}
+	return local.Format(exampleLayout)
 }
 
 // writeCalendar renders the next CalendarDays days, today first and marked,
@@ -549,6 +582,10 @@ func trimFloat(f float64) string {
 // it was.
 const (
 	openQuestionHeading = "Open reminder question"
-	candidatesHeading   = "Reminders that may be stopped"
-	checkinHeading      = "Check-in answers"
+	// whichItemPointer is the one line every section that could claim an
+	// answer to Nooma's which-item question carries instead of a rule of its
+	// own: the answer is defined in Follow-ups and nowhere else (ADR-0036).
+	whichItemPointer  = "  An answer to Nooma's which-item question is read under Follow-ups, not here.\n"
+	candidatesHeading = "Reminders that may be stopped"
+	checkinHeading    = "Check-in answers"
 )

@@ -411,6 +411,8 @@ type checkRunner struct {
 	// re-ask this process already recorded: a digest left unsent is retried
 	// every pass, and the row says it once a morning.
 	unreadableCheckins *idSet
+	// conv is the chat a push becomes a turn of (ADR-0036); nil records none.
+	conv *Conversation
 }
 
 // checkDetail is every check.* row's context shape. One shape for all
@@ -531,6 +533,13 @@ func (r checkRunner) skipOnConflict(ctx context.Context, now time.Time, err, sen
 // default night.
 func (s *CheckService) WithQuietHours(cfg ports.ConfigRepo) *CheckService {
 	s.run.config = cfg
+	return s
+}
+
+// WithConversation makes every push and digest a turn of the chat, about
+// the units it named (ADR-0036).
+func (s *CheckService) WithConversation(c *Conversation) *CheckService {
+	s.run.conv = c
 	return s
 }
 

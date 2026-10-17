@@ -1,0 +1,40 @@
+{
+  "id": "classify-followup-english-make-it-nine",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "make it 9am",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Call with Ana on 2026-10-15 at 09:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"en\",\"event_at\":\"2026-10-15T09:00:00-03:00\",\"title\":\"Call with Ana\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-14T18:00:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "user",
+        "text": "Call with Ana tomorrow at 5pm",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "speaker": "nooma",
+        "text": "Noted for Thu Oct 15, 17:00. I'll remind you the day before and a few hours before.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Call with Ana on 2026-10-15 at 17:00.",
+        "title": "Call with Ana",
+        "event_at": "2026-10-15T17:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "A",
+    "event_at": "2026-10-15T09:00:00-03:00"
+  },
+  "prompt_sha256": "65df18f9c685b646cf1c43f1cdbf0510b09a56c12a0ae23b3621baabf76f32a3"
+}

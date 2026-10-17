@@ -83,11 +83,13 @@ type OpenQuestion struct {
 }
 
 // ReminderContext is what the code puts in front of the model for the reminder
-// fields: the open question, and the stop candidates. The zero value is "none
-// open, none to stop", which adds nothing to the prompt.
+// fields and the follow-up field: the open question, the stop candidates, and
+// the recent conversation, newest first (ADR-0036). The zero value is "none
+// open, none to stop, no conversation".
 type ReminderContext struct {
-	Open       *OpenQuestion
-	Candidates []ReminderEntry
+	Open         *OpenQuestion
+	Candidates   []ReminderEntry
+	Conversation Conversation
 }
 
 // RenderReminderList is the one numbered list a prompt or a question carries:

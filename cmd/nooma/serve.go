@@ -131,7 +131,15 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// One keeper for the whole process: the previous focus lives in it.
 	focusKeeper := wireFocus(db)
 
-	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut, channel, focusKeeper)
+	// One chat log for the whole process, in memory only (ADR-0036): the
+	// channel's exchanges and the scheduler's pushes are its turns, and
+	// capture reads a chat message in it.
+	conv := brain.NewConversation()
+	if capture != nil {
+		capture.WithConversation(conv)
+	}
+
+	sched, err := wireScheduler(context.Background(), db, cfg, os.LookupEnv, errOut, channel, conv, focusKeeper)
 	if err != nil {
 		return fmt.Errorf("wiring the scheduler: %w", err)
 	}
@@ -180,7 +188,7 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// that accepts new work.
 	pollerDone := make(chan struct{})
 	if channel != nil {
-		runner := channels.NewRunner(channel, channels.CaptureHandler(capture, channel, errOut), errOut)
+		runner := channels.NewRunner(channel, channels.CaptureHandler(capture, channel, conv, errOut), errOut)
 		go func() {
 			defer close(pollerDone)
 			if err := runner.Run(ctx); err != nil {

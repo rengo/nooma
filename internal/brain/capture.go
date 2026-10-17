@@ -128,7 +128,10 @@ func reminderPrefs(ctx context.Context, cfg ports.ConfigRepo) prospection.Remind
 // second Capture call reads the clock again, as it must (two captures are
 // two operations), but within a single call there is exactly one read.
 func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (CaptureResult, error) {
-	return s.run.at(ctx, in, s.clock.Now())
+	now := s.clock.Now()
+	result, err := s.run.at(ctx, in, now)
+	result.At = now
+	return result, err
 }
 
 // captureRunner does the actual work of one capture, over every port
@@ -197,6 +200,9 @@ type captureRunner struct {
 	// config holds the user's event reminder preferences (ADR-0029); nil
 	// arms at the defaults.
 	config ports.ConfigRepo
+	// conv is the recent chat a message is read in (ADR-0036); nil reads
+	// every message alone.
+	conv *Conversation
 }
 
 // at runs one capture given the instant CaptureService.Capture already
@@ -232,7 +238,8 @@ type captureRunner struct {
 func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (result CaptureResult, err error) {
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
-	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{})
+	conv, shown := r.conversationFor(ctx, in, now)
+	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{Conversation: conv})
 
 	// **A correction that names its unit is classified against it** (doc 02
 	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the
@@ -293,6 +300,21 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// it, while the unit the user was looking at stayed as it was. The fork
 	// sits before check-in resolution and arming so none of those side
 	// effects is reachable; classification still ran, for the value.
+	// **A follow-up corrects the item it follows, in the moment** (ADR-0036).
+	// The model saw the chat and named an item by a letter the code listed;
+	// that item is then the referent the caller would have named, and the
+	// same call's fields are the patch, read against the unit as it was
+	// shown. Unsure which, it asked, and the question is the reply.
+	if f, ok := classify.ReadFollowUp(c, len(shown)); ok {
+		if f.Question != "" {
+			return r.askWhich(ctx, f.Question, shown, now)
+		}
+		u, err := r.correction.explicitReferent(ctx, shown[f.Position-1])
+		if err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: follow-up: %w", err)
+		}
+		explicit = &u
+	}
 	if explicit != nil {
 		return r.correct(ctx, in, c, explicit, now)
 	}

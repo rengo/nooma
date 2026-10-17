@@ -185,7 +185,12 @@ func (r correctionRunner) resolveReferent(ctx context.Context, in CaptureInput, 
 		if err != nil {
 			return nil, referentSource{}, err
 		}
-		return &u, referentSource{Source: "explicit"}, nil
+		// Named by the caller, or by a letter of the chat the model was shown.
+		source := "explicit"
+		if in.ReferentID == "" {
+			source = "conversation"
+		}
+		return &u, referentSource{Source: source}, nil
 	}
 
 	scored, _, err := r.recall.ScoredFor(ctx, in.Text)

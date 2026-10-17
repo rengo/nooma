@@ -331,13 +331,14 @@ type LLMExample struct {
 	// The reminder phrasing set's fields (design D1c, format.md). Record
 	// marks a case awaiting its recording session; Now and PromptSHA256 are
 	// written by `nooma doctor --record`, and Expect by hand, never by it.
-	Record         bool          `json:"record,omitempty"`
-	Now            string        `json:"now,omitempty"`
-	OpenQuestion   *llm.Question `json:"open_question,omitempty"`
-	CandidatesList []llm.Entry   `json:"candidates_list,omitempty"`
-	Expect         *llm.Expect   `json:"expect,omitempty"`
-	KnownMisread   string        `json:"known_misread,omitempty"`
-	PromptSHA256   string        `json:"prompt_sha256,omitempty"`
+	Record         bool              `json:"record,omitempty"`
+	Now            string            `json:"now,omitempty"`
+	OpenQuestion   *llm.Question     `json:"open_question,omitempty"`
+	CandidatesList []llm.Entry       `json:"candidates_list,omitempty"`
+	Conversation   *llm.Conversation `json:"conversation,omitempty"`
+	Expect         *llm.Expect       `json:"expect,omitempty"`
+	KnownMisread   string            `json:"known_misread,omitempty"`
+	PromptSHA256   string            `json:"prompt_sha256,omitempty"`
 }
 
 // Case is the part of e the quality gate and the reading need at runtime,
@@ -353,7 +354,7 @@ func (e *LLMExample) Case() llm.Case {
 	return llm.Case{
 		ID: e.ID, Task: e.Task, Message: e.Message, Candidates: candidates,
 		Record: e.Record, Now: e.Now, OpenQuestion: e.OpenQuestion,
-		CandidatesList: e.CandidatesList, Expect: e.Expect,
+		CandidatesList: e.CandidatesList, Conversation: e.Conversation, Expect: e.Expect,
 		KnownMisread: e.KnownMisread, PromptSHA256: e.PromptSHA256,
 	}
 }

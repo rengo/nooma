@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
@@ -192,6 +193,20 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(sent), err),
 			checkDetail{})
 	}
+	// The digest is a turn of the chat, about every unit it named (ADR-0036).
+	shown := make(map[string]ports.DueTrigger, len(pending)+len(reasks))
+	for _, t := range append(slices.Clone(pending), reasks...) {
+		shown[t.ID] = t
+	}
+	var named []ports.DueTrigger
+	for _, item := range sent {
+		named = append(named, shown[item.ID])
+	}
+	for _, id := range asked {
+		named = append(named, shown[id])
+	}
+	r.conv.Add(r.conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: unitsOf(named)})
+
 	// The user has now seen this digest, so its selection becomes the
 	// incumbent: published only after Send succeeds, because an unsent digest
 	// must not move a focus the user never saw. A question-only digest

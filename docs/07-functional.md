@@ -73,9 +73,12 @@ is on the 15th.
    admission floor come back, ranked. Over HTTP this is `POST /recall`; in `/ui/units` it is the
    `?q=` search ([doc 02 §5 step 2](02-cognitive-core.md#5-capture), ADR-0010, ADR-0020).
 7. **Corrects in place.** "Actually the dentist is on the 15th" is a `correction`. Where the
-   caller holds a unit id (the UI and the API do), that id wins. In chat there is none, so
-   Nooma finds the referent by recall and **asks** when it cannot tell which unit you mean
-   rather than guessing. A correction is a patch: from a unit page, "it's at 8am" is read
+   caller holds a unit id (the UI and the API do), that id wins. In chat there is none, so a
+   message is read in the last few minutes of the conversation: "Es a las 08:00." right after
+   a meeting, or "no, el jueves" after a reminder Nooma pushed, moves that item at once, and when
+   the model cannot tell which item you mean Nooma asks "¿Te referís a…?" right then and stores
+   nothing (ADR-0036, I40). With nothing in the conversation to name, Nooma finds the referent
+   by recall and **asks** when it cannot tell which unit you mean rather than guessing. A correction is a patch: from a unit page, "it's at 8am" is read
    against that unit, so the time moves and the rest of the text stays; a change that would
    replace the text with the correction itself, or leave text and date disagreeing, asks instead
    (I30). The edit changes the one field you corrected, with its pre-image

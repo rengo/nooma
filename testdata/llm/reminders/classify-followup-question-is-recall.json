@@ -1,0 +1,38 @@
+{
+  "id": "classify-followup-question-is-recall",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "¿a qué hora era la reunión?",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0,\"decay_rate\":0,\"language\":\"es\"}",
+  "now": "2026-10-13T21:10:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "user",
+        "text": "Tengo reunión con Juan mañana a las 22:30",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "speaker": "nooma",
+        "text": "Anotado para el mié 14 oct, 22:30. Te aviso el día anterior y unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Tengo reunión con Juan el 2026-10-14 a las 22:30.",
+        "title": "Reunión con Juan",
+        "event_at": "2026-10-14T22:30:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "recall"
+  },
+  "prompt_sha256": "efdfca8751e4f9fca8e83eb4d9468116053deed9842615e086a8b0ff6768546c"
+}

@@ -1,0 +1,32 @@
+{
+  "id": "classify-followup-listo-after-checkin",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "listo",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya llamé al banco.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-14T10:05:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "push",
+        "text": "Recordatorio: Llamar al banco",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Llamar al banco el 2026-10-14 a las 10:00.",
+        "title": "Llamar al banco",
+        "due_at": "2026-10-14T10:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "chitchat",
+    "task_checkin_outcome": "done"
+  },
+  "prompt_sha256": "23ef4b11c0c4686a93426b2e4c1c6728d8cb3e825a1d83e4baf70e748f6dbd6b"
+}

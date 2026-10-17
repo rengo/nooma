@@ -25,6 +25,31 @@ type Entry struct {
 	DayOnly bool   `json:"day_only,omitempty"`
 }
 
+// Conversation is the recent chat a phrasing is read in (ADR-0036,
+// classify.Conversation): the turns oldest first, and the items they tag.
+type Conversation struct {
+	Turns []ConversationTurn  `json:"turns"`
+	Items []ConversationEntry `json:"items,omitempty"`
+}
+
+// ConversationTurn is one turn: speaker is user, nooma or push (a reminder
+// Nooma sent), and about the letters of the items it concerns, if any.
+type ConversationTurn struct {
+	Speaker string   `json:"speaker"`
+	Text    string   `json:"text"`
+	About   []string `json:"about,omitempty"`
+}
+
+// ConversationEntry is one item as it stands: its text and title, and its
+// instants as RFC 3339 or a bare YYYY-MM-DD (a day with no time, in the
+// case's zone).
+type ConversationEntry struct {
+	Content string `json:"content"`
+	Title   string `json:"title,omitempty"`
+	EventAt string `json:"event_at,omitempty"`
+	DueAt   string `json:"due_at,omitempty"`
+}
+
 // Expect is the reading a phrasing should get, written by hand and never by
 // the recording command. The reminder fields and the outcomes are strict: an
 // unset one means the model must read none, false or absent. DayOnly, Title
@@ -49,6 +74,15 @@ type Expect struct {
 	TaskCheckinOutcome string `json:"task_checkin_outcome,omitempty"`
 	NudgeOutcome       string `json:"nudge_outcome,omitempty"`
 	RelationOutcome    string `json:"relation_outcome,omitempty"`
+
+	// Referent is the letter of the conversation item a follow-up corrects, or
+	// "unclear". It is strict: unset means the model must name none, since a
+	// referent corrects a unit in production (ADR-0036). A clarifying question
+	// must come back exactly when it is unclear.
+	Referent string `json:"referent,omitempty"`
+	// EventAt is the instant a follow-up moves its item to, RFC 3339, checked
+	// only when set.
+	EventAt string `json:"event_at,omitempty"`
 }
 
 // FileFields are the keys of a recorded example in the order they are written
@@ -57,5 +91,5 @@ type Expect struct {
 // for byte; a key outside this list makes it refuse the file.
 var FileFields = []string{
 	"id", "provider", "model", "task", "message", "candidates", "response", "error",
-	"record", "now", "open_question", "candidates_list", "expect", "known_misread", "prompt_sha256",
+	"record", "now", "open_question", "candidates_list", "conversation", "expect", "known_misread", "prompt_sha256",
 }

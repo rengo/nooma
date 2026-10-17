@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -45,7 +48,7 @@ func TestCaptureHandler_PassesTheTextAndTheChannelThrough(t *testing.T) {
 	capturer := &stubCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "u-1"}}
 	ch := &sendingChannel{}
 
-	handle := CaptureHandler(capturer, ch, nil)
+	handle := CaptureHandler(capturer, ch, nil, nil)
 	err := handle(context.Background(), ports.ChannelMessage{
 		ID: "1", Conversation: "conv", Text: "pick up the dry cleaning", Channel: "telegram",
 	})
@@ -74,7 +77,7 @@ func TestCaptureHandler_ACaptureErrorIsReturnedSoNothingIsConfirmed(t *testing.T
 	capturer := &stubCapturer{err: errors.New("the vault is closed")}
 	ch := &sendingChannel{}
 
-	err := CaptureHandler(capturer, ch, nil)(context.Background(), ports.ChannelMessage{ID: "1"})
+	err := CaptureHandler(capturer, ch, nil, nil)(context.Background(), ports.ChannelMessage{ID: "1"})
 	if err == nil {
 		t.Fatal("handle returned nil for a failed capture — the runner would confirm it and the message would be gone")
 	}
@@ -96,11 +99,36 @@ func TestCaptureHandler_AFailedReplyDoesNotUndoTheCapture(t *testing.T) {
 	ch := &sendingChannel{sendErr: errors.New("telegram is down")}
 	var log bytes.Buffer
 
-	err := CaptureHandler(capturer, ch, &log)(context.Background(), ports.ChannelMessage{ID: "1"})
+	err := CaptureHandler(capturer, ch, nil, &log)(context.Background(), ports.ChannelMessage{ID: "1"})
 	if err != nil {
 		t.Fatalf("handle returned %v for a failed reply — the message would be redelivered and captured twice", err)
 	}
 	if !strings.Contains(log.String(), "the capture stands") {
 		t.Errorf("the log does not say the capture survived the failed reply:\n%s", log.String())
+	}
+}
+
+// TestCaptureHandler_RecordsTheExchange: the message is read in its chat, and
+// afterwards the chat holds both turns, each about the unit the capture
+// stored, at the instant the capture read (ADR-0036).
+func TestCaptureHandler_RecordsTheExchange(t *testing.T) {
+	at := time.Date(2026, 10, 17, 9, 0, 0, 0, time.UTC)
+	capturer := &stubCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "u-1", At: at}}
+	conv := brain.NewConversation()
+	err := CaptureHandler(capturer, &sendingChannel{}, conv, nil)(context.Background(), ports.ChannelMessage{
+		ID: "1", Conversation: "42", Text: "reunión con Juan a las 22:30", Channel: "telegram",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := capturer.seen[0].Conversation; got != "42" {
+		t.Errorf("Conversation = %q, want the chat the message came from", got)
+	}
+	want := []brain.Turn{
+		{At: at, Speaker: classify.SpeakerUser, Text: "reunión con Juan a las 22:30", UnitIDs: []string{"u-1"}},
+		{At: at, Speaker: classify.SpeakerNooma, Text: RenderReply(capturer.result), UnitIDs: []string{"u-1"}},
+	}
+	if got := conv.Recent("42", at); !reflect.DeepEqual(got, want) {
+		t.Errorf("turns = %+v, want %+v", got, want)
 	}
 }

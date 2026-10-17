@@ -67,9 +67,12 @@ type Case struct {
 	Now            string    `json:"now,omitempty"`
 	OpenQuestion   *Question `json:"open_question,omitempty"`
 	CandidatesList []Entry   `json:"candidates_list,omitempty"`
-	Expect         *Expect   `json:"expect,omitempty"`
-	KnownMisread   string    `json:"known_misread,omitempty"`
-	PromptSHA256   string    `json:"prompt_sha256,omitempty"`
+	// Conversation is the recent conversation a follow-up is read in,
+	// newest first (ADR-0036).
+	Conversation *Conversation `json:"conversation,omitempty"`
+	Expect       *Expect       `json:"expect,omitempty"`
+	KnownMisread string        `json:"known_misread,omitempty"`
+	PromptSHA256 string        `json:"prompt_sha256,omitempty"`
 }
 
 // Candidate is one relation_evaluation candidate a Case carries — the same

@@ -37,6 +37,9 @@ const (
 	FieldRelationOutcome    = "relation_outcome"
 	FieldStateOutcome       = "state_outcome"
 	FieldType               = "type"
+	FieldReferent           = "referent"
+	FieldClarifyingQuestion = "clarifying_question"
+	FieldEventAt            = "event_at"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
@@ -73,7 +76,53 @@ func PromptAt(c llm.Case, now time.Time) string {
 	for _, e := range c.CandidatesList {
 		rc.Candidates = append(rc.Candidates, classify.ReminderEntry{Label: e.Label, When: e.When})
 	}
+	if conv := c.Conversation; conv != nil {
+		for _, t := range conv.Turns {
+			rc.Conversation.Turns = append(rc.Conversation.Turns, classify.Turn{
+				Speaker: classify.Speaker(t.Speaker), Text: t.Text, About: positionsOf(t.About),
+			})
+		}
+		for _, e := range conv.Items {
+			rc.Conversation.Items = append(rc.Conversation.Items, classify.ConversationItem{
+				Content: e.Content, Title: e.Title, EventAt: instantOf(e.EventAt, now), DueAt: instantOf(e.DueAt, now),
+			})
+		}
+	}
 	return classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, rc)
+}
+
+// positionOf is the position a letter names, 1 for A, or 0 for none.
+func positionOf(letter string) int {
+	for pos := 1; pos <= classify.MaxConversationItems; pos++ {
+		if letter == classify.ReferentLetter(pos) {
+			return pos
+		}
+	}
+	return 0
+}
+
+func positionsOf(letters []string) []int {
+	var out []int
+	for _, l := range letters {
+		out = append(out, positionOf(l))
+	}
+	return out
+}
+
+// instantOf reads a case's instant: RFC 3339, or a bare date as the first
+// moment of that day in now's zone. Empty or unreadable is none (ValidateCase
+// rejects the unreadable).
+func instantOf(s string, now time.Time) *time.Time {
+	if s == "" {
+		return nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return &t
+	}
+	if t, err := time.ParseInLocation(time.DateOnly, s, now.Location()); err == nil {
+		return &t
+	}
+	return nil
 }
 
 // Hash is the prompt_sha256 of a prompt.
@@ -162,6 +211,12 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	// No phrasing expects a state answer: the set measures reminder reading.
 	miss(FieldStateOutcome, cls.StateOutcome != nil)
 	miss(FieldType, e.Type != "" && ptrString(cls.Kind) != e.Type)
+	miss(FieldReferent, referentOf(cls.Referent) != e.Referent)
+	miss(FieldClarifyingQuestion, (cls.ClarifyingQuestion != nil) != (e.Referent == classify.ReferentUnclear))
+	if e.EventAt != "" {
+		want, err := time.Parse(time.RFC3339, e.EventAt)
+		miss(FieldEventAt, err != nil || cls.EventAt == nil || !cls.EventAt.Equal(want))
+	}
 	return misses
 }
 
@@ -228,6 +283,16 @@ func targetOf(t *classify.ReminderTarget) string {
 	return strconv.Itoa(t.Position)
 }
 
+func referentOf(r *classify.Referent) string {
+	switch {
+	case r == nil:
+		return ""
+	case r.Unclear:
+		return classify.ReferentUnclear
+	}
+	return classify.ReferentLetter(r.Position)
+}
+
 // ValidateCase rejects a case whose expectation or context names something
 // the vocabulary does not have, so a typo fails at once instead of reading as
 // a miss on the day the case is recorded.
@@ -266,10 +331,57 @@ func ValidateCase(c llm.Case) error {
 	if len(c.CandidatesList) > classify.MaxReminderChoices {
 		errs = append(errs, fmt.Errorf("candidates_list holds %d entries, at most %d", len(c.CandidatesList), classify.MaxReminderChoices))
 	}
+	errs = append(errs, validateConversation(c)...)
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("case %s: %w", c.ID, err)
 	}
 	return nil
+}
+
+// validateConversation checks the follow-up half of a case (ADR-0036): the
+// referent and every tag name a listed item, and every instant reads.
+func validateConversation(c llm.Case) []error {
+	var errs []error
+	items := 0
+	if conv := c.Conversation; conv != nil {
+		items = len(conv.Items)
+		if c.Now == "" {
+			errs = append(errs, errors.New("a case with a conversation carries an authored now"))
+		}
+		if len(conv.Turns) > classify.ConversationTurns || items > classify.MaxConversationItems {
+			errs = append(errs, fmt.Errorf("conversation holds %d turns and %d items, at most %d of each",
+				len(conv.Turns), items, classify.ConversationTurns))
+		}
+		for i, t := range conv.Turns {
+			if !slices.Contains(strs(classify.AllSpeakers()), t.Speaker) || t.Text == "" {
+				errs = append(errs, fmt.Errorf("turn %d needs a speaker of %v and a text", i+1, classify.AllSpeakers()))
+			}
+			for _, l := range t.About {
+				if positionOf(l) == 0 || positionOf(l) > items {
+					errs = append(errs, fmt.Errorf("turn %d tags item %q, which is not listed", i+1, l))
+				}
+			}
+		}
+		for i, item := range conv.Items {
+			if item.Content == "" {
+				errs = append(errs, fmt.Errorf("item %s has no content", classify.ReferentLetter(i+1)))
+			}
+			for _, at := range []string{item.EventAt, item.DueAt} {
+				if at != "" && instantOf(at, time.Time{}) == nil {
+					errs = append(errs, fmt.Errorf("item %s: %q is neither RFC 3339 nor YYYY-MM-DD", classify.ReferentLetter(i+1), at))
+				}
+			}
+		}
+	}
+	if r := c.Expect.Referent; r != "" && r != classify.ReferentUnclear && (positionOf(r) == 0 || positionOf(r) > items) {
+		errs = append(errs, fmt.Errorf("referent %q is not a listed item or %q", r, classify.ReferentUnclear))
+	}
+	if e := c.Expect.EventAt; e != "" {
+		if _, err := time.Parse(time.RFC3339, e); err != nil {
+			errs = append(errs, fmt.Errorf("expect.event_at %q is not RFC 3339", e))
+		}
+	}
+	return errs
 }
 
 func strs[T ~string](vs []T) []string {

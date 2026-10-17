@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -225,7 +226,11 @@ type Capturer interface {
 //
 // Only a capture error is returned, because only a capture error means the
 // message was not handled.
-func CaptureHandler(capture Capturer, ch ports.Channel, log io.Writer) Handler {
+//
+// conv is the chat's recent conversation (ADR-0036): the message is read in
+// it, and the exchange is added to it once answered. Nil reads every message
+// alone.
+func CaptureHandler(capture Capturer, ch ports.Channel, conv *brain.Conversation, log io.Writer) Handler {
 	if log == nil {
 		log = io.Discard
 	}
@@ -236,7 +241,8 @@ func CaptureHandler(capture Capturer, ch ports.Channel, log io.Writer) Handler {
 			Text: msg.Text,
 			// The channel's own name, carried in from the adapter rather
 			// than hardcoded here: provenance is the caller's fact.
-			Channel: msg.Channel,
+			Channel:      msg.Channel,
+			Conversation: msg.Conversation,
 		})
 		if err != nil {
 			return fmt.Errorf("capturing %s: %w", msg.ID, err)
@@ -249,6 +255,12 @@ func CaptureHandler(capture Capturer, ch ports.Channel, log io.Writer) Handler {
 			// nothing is worse than saying something plain.
 			reply = "Done."
 		}
+
+		// Both turns are added even when the reply fails to send: the capture
+		// stands, and a follow-up to it is still one.
+		about := result.ConcernedUnits()
+		conv.Add(msg.Conversation, brain.Turn{At: result.At, Speaker: classify.SpeakerUser, Text: msg.Text, UnitIDs: about})
+		conv.Add(msg.Conversation, brain.Turn{At: result.At, Speaker: classify.SpeakerNooma, Text: reply, UnitIDs: about})
 
 		if err := ch.Send(ctx, msg.Conversation, reply); err != nil {
 			mu.Lock()

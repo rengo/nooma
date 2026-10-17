@@ -3,6 +3,7 @@ package conformance
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -151,6 +152,25 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 	})
 	has("a nudge answer", expect(func(e *llm.Expect) bool { return e.NudgeOutcome != "" }))
 	has("a relation answer", expect(func(e *llm.Expect) bool { return e.RelationOutcome != "" }))
+
+	// The follow-ups ADR-0036 reads in the recent chat: one that corrects
+	// what it follows, one after a push, one that cannot tell and asks, the
+	// answers to that question, and new messages that stay new.
+	conv := func(f func(c llm.Case) bool) func(llm.Case) bool {
+		return func(c llm.Case) bool { return c.Conversation != nil && c.Expect != nil && f(c) }
+	}
+	has("a follow-up that corrects what it follows", conv(func(c llm.Case) bool { return c.Expect.Referent == "A" && c.Expect.EventAt != "" }))
+	has("a follow-up to a pushed reminder", conv(func(c llm.Case) bool {
+		return c.Expect.Referent != "" && slices.ContainsFunc(c.Conversation.Turns, func(t llm.ConversationTurn) bool { return t.Speaker == "push" })
+	}))
+	has("a follow-up that asks which", conv(func(c llm.Case) bool { return c.Expect.Referent == classify.ReferentUnclear }))
+	has("an answer whose referent is past A", conv(func(c llm.Case) bool {
+		return c.Expect.Referent != "" && c.Expect.Referent != "A" && c.Expect.Referent != classify.ReferentUnclear
+	}))
+	for _, k := range []string{"task", "knowledge", "recall"} {
+		has("a new "+k+" with a conversation shown", conv(func(c llm.Case) bool { return c.Expect.Type == k && c.Expect.Referent == "" }))
+	}
+	has("a check-in answered with a conversation shown", conv(func(c llm.Case) bool { return c.Expect.TaskCheckinOutcome == "done" }))
 
 	// Links 2 and 7 replay these two.
 	for _, id := range []string{"classify-task-remind-me-coffee", "classify-task-remind-me-daily-pills"} {

@@ -44,10 +44,15 @@ const dpConversation = "12449194"
 // dpSay is one message the user sends at a local minute, read by the model as
 // the recorded case id says. late marks a reading replayed later than it was
 // recorded, which the transcript header names.
+//
+// text and reading, when set, are a hand-written message and reading in
+// place of a recording: a phrasing not recorded yet. The transcript header
+// says so; a phrasing the set records moves to its recorded id once it is.
 type dpSay struct {
-	at   time.Time
-	id   string
-	late bool
+	at            time.Time
+	id            string
+	late          bool
+	text, reading string
 }
 
 // dpScenario is one life: preferences saved before the first message, the
@@ -154,9 +159,12 @@ func (s dpScenario) live(t *testing.T) string {
 		llm, llm, llm, fakeprovider.NewEmbeddingFake(consolidateITEmbedModel), brain.NewIndex(idx), sqlite.NewSignalRepo(v),
 		triggers, timers, 0.5, questions).WithReminderPrefs(config)
 	keeper := brain.NewFocusKeeper(units, config, relations)
+	// One chat log for the walk, as serve holds one for the process (ADR-0036).
+	conv := brain.NewConversation()
+	capture.WithConversation(conv)
 	check := brain.NewCheckService(clock, triggers, timers, ids, decisions, ch, units, sqlite.NewStateRepo(v),
-		llm, dpConversation, questions, keeper).WithQuietHours(config)
-	handle := channels.CaptureHandler(capture, ch, nil)
+		llm, dpConversation, questions, keeper).WithQuietHours(config).WithConversation(conv)
+	handle := channels.CaptureHandler(capture, ch, conv, nil)
 
 	header := []string{"# " + s.about,
 		fmt.Sprintf("# a check pass every %s from %s to %s", scheduler.ProactiveCheckInterval,
@@ -183,7 +191,10 @@ func (s dpScenario) live(t *testing.T) string {
 				t.Fatalf("%s: a message at %s while the server is down", m.id, m.at)
 			}
 			var ex goldenset.LLMExample
-			if err := goldenset.Load(filepath.Join(recordings, m.id+".json"), &ex); err != nil {
+			if m.reading != "" {
+				ex = goldenset.LLMExample{ID: m.id, Message: m.text, Response: m.reading, Model: "hand-written", Now: m.at.Format(time.RFC3339)}
+				header = append(header, fmt.Sprintf("# %q is read by a hand-written reading, not a recording", m.text))
+			} else if err := goldenset.Load(filepath.Join(recordings, m.id+".json"), &ex); err != nil {
 				t.Fatalf("recording %s: %v", m.id, err)
 			}
 			recorded, err := time.Parse(time.RFC3339, ex.Now)
@@ -294,6 +305,28 @@ func TestDaysPass_RecordedConversations(t *testing.T) {
 
 func dpScenarios() []dpScenario {
 	return []dpScenario{
+		{
+			// The live case of 2026-10-17 (ADR-0036): a follow-up is read in
+			// the chat it follows. "Es a las 08:00." moves the meeting it
+			// follows (A: the dentist, an hour earlier, is outside the window
+			// and not shown), stores no unit of its own, and so leaves nothing
+			// for the next morning's digest to ask about. Read alone, recall
+			// could not tell the two apart and asked.
+			name:  "follow-up-moves-meeting",
+			about: "a meeting is captured, and the next message moves it",
+			from:  dpAt(10, 13, 19, 55), until: dpAt(10, 15, 0, 0),
+			say: []dpSay{
+				{at: dpAt(10, 13, 20, 0), id: "hand-capture-dentist", text: "dentista el viernes a las 10",
+					reading: `{"type":"event","normalized_content":"Dentista el 2026-10-16 a las 10:00.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-16T10:00:00-03:00","title":"Dentista","language":"es"}`},
+				{at: dpAt(10, 13, 21, 5), id: "hand-capture-meeting", text: "Tengo reunión con Juan mañana a las 22:30",
+					reading: `{"type":"event","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 22:30.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-14T22:30:00-03:00","title":"Reunión con Juan","language":"es"}`},
+				{at: dpAt(10, 13, 21, 10), id: "classify-followup-time-moves-meeting", text: "Es a las 08:00.",
+					reading: `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 08:00.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-14T08:00:00-03:00","title":"Reunión con Juan","language":"es","referent":"A"}`},
+			},
+		},
 		{
 			name:  "five-weeks",
 			about: "every reminder kind the recordings hold, five weeks, the server down three days",

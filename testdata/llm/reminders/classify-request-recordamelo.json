@@ -4,10 +4,28 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordámelo",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme eso.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"title\":\"Recordatorio\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar el regalo de Ana el 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regalo de Ana\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "user",
+        "text": "tengo que comprar el regalo de Ana mañana",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Comprar el regalo de Ana el 2026-10-17.",
+        "title": "Regalo de Ana",
+        "due_at": "2026-10-17"
+      }
+    ]
+  },
   "expect": {
     "remind_request": true
   },
-  "prompt_sha256": "22ef687a6b79eb245101eafdce4cc219dde589753932b9e4e74459fc34c91f1b"
+  "prompt_sha256": "1ef4c6c90934eed1e55c2ea66b57c8b66cf95cf634459dfab4d009c65249d45c"
 }

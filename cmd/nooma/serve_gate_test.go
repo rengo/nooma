@@ -469,7 +469,7 @@ func slotSevenAfterDigest(t *testing.T, digestKeeper func(shared *brain.FocusKee
 	shared := wireFocus(db)
 	cfg.Channels.Telegram.AllowedChatIDs = []int64{12449194}
 	ch := fakechannel.New()
-	check, err := wireProactive(gateClock{now: digestAt}, db, cfg, func(string) (string, bool) { return "", false }, ch, digestKeeper(shared, db))
+	check, err := wireProactive(gateClock{now: digestAt}, db, cfg, func(string) (string, bool) { return "", false }, ch, nil, digestKeeper(shared, db))
 	if err != nil {
 		t.Fatalf("wireProactive: %v", err)
 	}
@@ -600,7 +600,7 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 
 	cfg.Channels.Telegram.AllowedChatIDs = []int64{12449194}
 	ch := fakechannel.New()
-	check, err := wireProactive(gateClock{now: digestAt}, db, cfg, func(string) (string, bool) { return "", false }, ch, digestKeeper(shared, db))
+	check, err := wireProactive(gateClock{now: digestAt}, db, cfg, func(string) (string, bool) { return "", false }, ch, nil, digestKeeper(shared, db))
 	if err != nil {
 		t.Fatalf("wireProactive: %v", err)
 	}

@@ -3,9 +3,11 @@ package brain
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
@@ -125,7 +127,8 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 		return 0, nil
 	}
 
-	if err := r.channel.Send(ctx, conversation, r.pushText(ctx, group, now)); err != nil {
+	text := r.pushText(ctx, group, now)
+	if err := r.channel.Send(ctx, conversation, text); err != nil {
 		for _, t := range group {
 			if !r.outage.first(t.ID) {
 				// Said already in this outage; the retry each pass makes is not news.
@@ -141,6 +144,7 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 	}
 
 	r.outage.clear()
+	r.conv.Add(conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: unitsOf(group)})
 
 	// Every row went out in this one message, so each is marked even when an
 	// earlier one could not be: a row left unmarked is resent by a restart.
@@ -235,4 +239,15 @@ func (r checkRunner) stamp(now time.Time) time.Time {
 		return now
 	}
 	return r.stamps.take(now)
+}
+
+// unitsOf is the units a group of triggers is about, each once, in order.
+func unitsOf(group []ports.DueTrigger) []string {
+	var ids []string
+	for _, t := range group {
+		if t.UnitID != nil && !slices.Contains(ids, *t.UnitID) {
+			ids = append(ids, *t.UnitID)
+		}
+	}
+	return ids
 }

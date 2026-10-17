@@ -87,6 +87,12 @@ type readingReport struct {
 	timedN, timedOK     int // phrasings expecting a named time
 	outcomes            []outcomeRate
 
+	// The follow-ups (ADR-0036): phrasings read in a conversation, and of those
+	// that change nothing, the ids read as correcting an item.
+	followN, followOK int
+	stillN            int
+	falseCorrections  []string
+
 	unreachable string // set instead of everything above when the provider stopped answering
 }
 
@@ -114,12 +120,14 @@ func runReading(ctx context.Context, provider ports.LLMProvider, cases []llm.Cas
 			return readingReport{unreachable: fmt.Sprintf("unreachable — %v (doctor waits up to %s per prompt)", err, timeout)}
 		}
 
-		misses, stop := []string{"(response)"}, false
+		misses, stop, referent := []string{"(response)"}, false, false
 		if cls, err := classify.Decode(resp.Text, at); err == nil {
 			misses = reading.Check(c, cls)
 			stop = cls.ReminderIntent != nil && *cls.ReminderIntent == classify.ReminderIntentStop
+			referent = cls.Referent != nil
 		}
 		r.add(c, misses, stop)
+		r.addFollowUp(c, misses, referent)
 	}
 	return r
 }
@@ -169,6 +177,25 @@ func (r *readingReport) add(c llm.Case, misses []string, readAsStop bool) {
 	}
 }
 
+// addFollowUp counts a phrasing read in a conversation: read as expected when
+// nothing at all was missed, and, when it changes nothing, whether it was read
+// as correcting an item anyway.
+func (r *readingReport) addFollowUp(c llm.Case, misses []string, readAReferent bool) {
+	if c.Conversation == nil {
+		return
+	}
+	r.followN++
+	if len(misses) == 0 {
+		r.followOK++
+	}
+	if c.Expect == nil || c.Expect.Referent == "" {
+		r.stillN++
+		if readAReferent {
+			r.falseCorrections = append(r.falseCorrections, c.ID)
+		}
+	}
+}
+
 func (r readingReport) String() string {
 	if r.unreachable != "" {
 		return "reading: " + r.unreachable
@@ -201,6 +228,13 @@ func (r readingReport) String() string {
 	for _, o := range r.outcomes {
 		if o.n > 0 {
 			fmt.Fprintf(&b, "\n%s: %d of %d", o.name, o.ok, o.n)
+		}
+	}
+	if r.followN > 0 {
+		fmt.Fprintf(&b, "\nfollow-ups: %d of %d read as expected", r.followOK, r.followN)
+		fmt.Fprintf(&b, "\nitems corrected that nobody changed: %d of %d", len(r.falseCorrections), r.stillN)
+		if len(r.falseCorrections) > 0 {
+			b.WriteString(" (" + strings.Join(r.falseCorrections, ", ") + ")")
 		}
 	}
 	return b.String()
