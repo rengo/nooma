@@ -1,0 +1,8 @@
+# a 12-hour asked lead whose ring the downtime ate, the server back at night
+# a check pass every 5m0s from Fri 2026-10-16 10:40 -03:00 to Sun 2026-10-18 12:00
+# an asked reminder rings 720 minutes before
+Fri 2026-10-16 10:42 ← recordame comprar café mañana a las 10
+Fri 2026-10-16 10:42 → Anotado para el sáb 17 oct, 10:00. Te aviso el día anterior.
+Fri 2026-10-16 21:00 ·· the server stops
+Sat 2026-10-17 04:30 ·· the server starts
+Sat 2026-10-17 07:00 → Recordatorio: Comprar café — sáb 17 oct, 10:00

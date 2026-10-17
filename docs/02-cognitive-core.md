@@ -1549,8 +1549,10 @@ box can audit it):
   it (`prospection.FollowAsked`), at the instant it asked about (an event's `event_at`, otherwise
   `due_at`), its asked lead included, so a healthy asked row is carried, never cancelled, and a
   unit of any kind is re-planned; its catch-up is the at-once asked reminder
-  (`prospection.CatchUpAsked`: night-exempt, refused `too_late` as at capture), owed while nothing
-  of it is live and nothing sent is about that instant, for a day alone until its day ends. A late row never counts as a healthy armed row or as sent, so a stale
+  (`prospection.CatchUpAsked`, refused `too_late` as at capture), owed while nothing of it is live
+  and nothing sent is about that instant, for a day alone until its day ends. Its instant is
+  Nooma's choice, not a time the user named, so it keeps the night rules (ADR-0031 point 6), as
+  the unasked catch-up does: at once, or at quiet end when that is before the instant. A late row never counts as a healthy armed row or as sent, so a stale
   24-hour reminder beside a healthy 2-hour one leaves exactly the 2-hour one. A pass that dies
   between the two leaves the late rows un-retired and the next carries the plan, creating nothing
   twice. A unit whose every lead is behind, with nothing live and nothing sent about the event

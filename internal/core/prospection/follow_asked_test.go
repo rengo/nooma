@@ -58,8 +58,8 @@ func TestCatchUpAsked(t *testing.T) {
 	day, prefs, interrupt := followAskedAt(22, 0, 0), DefaultReminderPrefs(), ResolveInterrupt(nil)
 	now := followAskedAt(22, 21, 30)
 	plan, owed := CatchUpAsked(day, false, true, nil, nil, prefs, interrupt, now)
-	if !owed || plan.What != ArmTrigger || !plan.FireAt.Equal(now) || !plan.Immediate || !plan.Asked || !plan.NightExempt || !plan.About.Equal(day) {
-		t.Errorf("catch-up = %+v, %v; want an asked at-once reminder about the day", plan, owed)
+	if !owed || plan.What != ArmTrigger || !plan.FireAt.Equal(now) || !plan.Immediate || !plan.Asked || plan.NightExempt || !plan.About.Equal(day) {
+		t.Errorf("catch-up = %+v, %v; want an asked at-once reminder about the day, under the night rules", plan, owed)
 	}
 	for name, tc := range map[string]struct {
 		live []Live
@@ -79,5 +79,24 @@ func TestCatchUpAsked(t *testing.T) {
 	// A sent reminder about another instant covers nothing.
 	if _, owed := CatchUpAsked(day, false, true, nil, []Sent{{About: followAskedAt(21, 0, 0)}}, prefs, interrupt, now); !owed {
 		t.Error("a send about another day covered this one")
+	}
+}
+
+// TestCatchUpAsked_KeepsTheNightRules: a catch-up's instant is Nooma's choice,
+// not a time the user named, so it keeps the night rules (ADR-0031 point 6):
+// due inside quiet hours it waits for quiet end when that is before the
+// instant, and when it is not, no instant is left and it is refused.
+func TestCatchUpAsked_KeepsTheNightRules(t *testing.T) {
+	prefs, interrupt := DefaultReminderPrefs(), ResolveInterrupt(nil)
+	prefs.RemindMeLead = 12 * time.Hour // the asked lead is behind at 04:30
+	now := followAskedAt(17, 4, 30)
+	plan, owed := CatchUpAsked(followAskedAt(17, 10, 0), false, false, nil, nil, prefs, interrupt, now)
+	if !owed || plan.What != ArmTrigger || !plan.FireAt.Equal(followAskedAt(17, 7, 0)) || plan.Immediate || plan.NightExempt ||
+		!plan.Asked || plan.LeadMinutes != 180 {
+		t.Errorf("catch-up at 04:30 for 10:00 = %+v, %v; want it at quiet end, 180 minutes before", plan, owed)
+	}
+	plan, owed = CatchUpAsked(followAskedAt(17, 6, 0), false, false, nil, nil, prefs, interrupt, now)
+	if !owed || plan.What != ArmNothing || plan.Why != RefusalQuietHours {
+		t.Errorf("catch-up at 04:30 for 06:00 = %+v, %v; want refused for quiet hours", plan, owed)
 	}
 }

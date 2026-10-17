@@ -382,6 +382,35 @@ expect a stop. It fails doctor when it is not 0, when the provider cannot be rea
 provider is bound, so a run that measured nothing is never a pass. A prompt change is
 judged by these numbers.
 
+### `testdata/days-pass/` — what the user would have seen
+
+Reminder bugs shipped while every unit test was green, because the tests exercised arithmetic,
+never a real phrase living through real days. Two kinds of golden live here:
+
+- **`<rule>-*.txt`** (`TestI17_DaysPassAndARecurringReminderKeepsRinging`, L2): recurrence
+  arithmetic over 400 days.
+- **`conversation-*.txt`** (`TestDaysPass_RecordedConversations`, L3,
+  `test/integration/days_pass_conversation_test.go`): the gate. Each scenario does the following:
+  - sends recorded phrasings from the set above, replaying each one's real reading, through the
+    channel's capture handler over a real migrated vault with the serve wiring;
+  - runs the check pass every `scheduler.ProactiveCheckInterval`, the digest included, for up to
+    five weeks, with the server down for days in the middle;
+  - writes one line per message, `Fri 2026-10-23 09:45 → <text>` from Nooma and `← <text>` from
+    the user, and a `··` line for each check-in a message answered, read from the decision_log
+    (`·· check-in "Comprar café": engaged`), because an answered check-in and an unanswered one
+    send nothing more either way.
+
+  A reading that names a date is replayed only on the day it was recorded on, unless the scenario
+  marks it late and its header says so. The chat answer and the relation judge are fixed
+  placeholders, because no reminder decision reads them. Nightly consolidation does not run in the
+  walk, though serve's scheduler runs it: no golden depends on it today, since a unit with an armed
+  reminder is excluded from it, but five weeks with no nightly run is an assembly serve never has.
+
+Regenerate with `go test -tags integration ./test/integration/ -run TestDaysPass -update`, and
+read every changed line against doc 02 §7. A line that is wrong is a product bug to report, never
+a golden to bless. The gate runs in `make test-integration`, so `make check-all` and CI's
+integration job run it.
+
 ---
 
 ## 6. CI gates

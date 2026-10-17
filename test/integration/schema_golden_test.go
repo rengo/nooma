@@ -22,7 +22,7 @@ import (
 
 // update regenerates both schema goldens instead of comparing against
 // them. `make schema-golden` runs this test with -update (design §9.2).
-var update = flag.Bool("update", false, "regenerate testdata/schema goldens instead of comparing against them")
+var update = flag.Bool("update", false, "regenerate the testdata/schema and testdata/days-pass goldens instead of comparing against them")
 
 const (
 	structureGoldenPath = "../../testdata/schema/structure.golden"

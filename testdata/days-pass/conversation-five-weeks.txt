@@ -1,0 +1,82 @@
+# every reminder kind the recordings hold, five weeks, the server down three days
+# a check pass every 5m0s from Fri 2026-10-16 10:40 -03:00 to Sat 2026-11-21 00:00
+# "Remind me to call Ana at 5pm" is replayed at Fri 10-16 17:30; its reading was recorded at Fri 10-16 10:42
+Fri 2026-10-16 10:42 ← recordame comprar café mañana a las 10
+Fri 2026-10-16 10:42 → Anotado para el sáb 17 oct, 10:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:43 ← recordame pagar el gas el jueves
+Fri 2026-10-16 10:43 → Anotado para el jue 22 oct. Te aviso ese día a las 09:00.
+Fri 2026-10-16 10:44 ← recordame el dentista el viernes a las 10
+Fri 2026-10-16 10:44 → Anotado para el vie 23 oct, 10:00. Te aviso el día anterior, unas horas antes y 15 minutos antes.
+Fri 2026-10-16 10:45 ← recordame tomar las pastillas todos los días a las 9pm
+Fri 2026-10-16 10:45 → Te aviso todos los días a las 21:00.
+Fri 2026-10-16 10:46 ← haceme acordar de llamar al médico mañana a las 9
+Fri 2026-10-16 10:46 → Anotado para el sáb 17 oct, 09:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:47 ← poneme un recordatorio para sacar la basura a las 9pm
+Fri 2026-10-16 10:47 → Anotado para el vie 16 oct, 21:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:48 ← acordate de avisarme que vence el seguro el viernes
+Fri 2026-10-16 10:48 → Anotado para el vie 23 oct. Te aviso el día anterior y ese día a las 09:00.
+Fri 2026-10-16 10:49 ← recordame la reunión con Juan mañana a las 22:30
+Fri 2026-10-16 10:49 → Anotado para el sáb 17 oct, 22:30. Te aviso el día anterior, unas horas antes y 15 minutos antes.
+Fri 2026-10-16 10:50 ← Ana me dijo 'avisame cuando llegues'
+Fri 2026-10-16 10:50 → Anotado.
+Fri 2026-10-16 17:30 ← Remind me to call Ana at 5pm
+Fri 2026-10-16 17:30 → Noted, but I did not set a reminder: the time given has already passed.
+Fri 2026-10-16 20:45 → Recordatorio: Sacar la basura — vie 16 oct, 21:00
+Fri 2026-10-16 21:00 → Recordatorio: Tomar las pastillas — vie 16 oct
+Fri 2026-10-16 22:30 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
+Sat 2026-10-17 08:45 → Recordatorio: Llamar al médico — sáb 17 oct, 09:00
+Sat 2026-10-17 08:50 ← después lo veo
+Sat 2026-10-17 08:50 → (chat reply)
+Sat 2026-10-17 08:50 ·· check-in "Llamar al médico": put off
+Sat 2026-10-17 09:45 → Recordatorio: Comprar café — sáb 17 oct, 10:00
+Sat 2026-10-17 10:00 ← listo
+Sat 2026-10-17 10:00 → (chat reply)
+Sat 2026-10-17 10:00 ·· check-in "Comprar café": engaged
+Sat 2026-10-17 20:30 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
+Sat 2026-10-17 21:00 → Recordatorio: Tomar las pastillas — sáb 17 oct
+Sat 2026-10-17 22:15 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
+Sun 2026-10-18 07:00 → Asking again:
+                       • Is "Llamar al médico" done?
+Sun 2026-10-18 21:00 → Recordatorio: Tomar las pastillas — dom 18 oct
+Mon 2026-10-19 07:00 → Asking again:
+                       • Is "Llamar al médico" done?
+Mon 2026-10-19 21:00 → Recordatorio: Tomar las pastillas — lun 19 oct
+Mon 2026-10-19 22:00 ·· the server stops
+Thu 2026-10-22 21:30 ·· the server starts
+Thu 2026-10-22 21:35 → Recordatorio: Tomar las pastillas — jue 22 oct (Esto llega más tarde de lo previsto.)
+Thu 2026-10-22 21:35 → Recordatorio: Pagar el gas — jue 22 oct
+Thu 2026-10-22 21:40 ← ya lo hice
+Thu 2026-10-22 21:40 → (chat reply)
+Thu 2026-10-22 21:40 ·· check-in "Pagar el gas": engaged
+Fri 2026-10-23 08:00 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
+Fri 2026-10-23 09:00 → Recordatorio: Vencimiento del seguro — vie 23 oct
+Fri 2026-10-23 09:45 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
+Fri 2026-10-23 21:00 → Recordatorio: Tomar las pastillas — vie 23 oct
+Sat 2026-10-24 21:00 → Recordatorio: Tomar las pastillas — sáb 24 oct
+Sun 2026-10-25 21:00 → Recordatorio: Tomar las pastillas — dom 25 oct
+Mon 2026-10-26 21:00 → Recordatorio: Tomar las pastillas — lun 26 oct
+Tue 2026-10-27 21:00 → Recordatorio: Tomar las pastillas — mar 27 oct
+Wed 2026-10-28 21:00 → Recordatorio: Tomar las pastillas — mié 28 oct
+Thu 2026-10-29 21:00 → Recordatorio: Tomar las pastillas — jue 29 oct
+Fri 2026-10-30 21:00 → Recordatorio: Tomar las pastillas — vie 30 oct
+Sat 2026-10-31 21:00 → Recordatorio: Tomar las pastillas — sáb 31 oct
+Sun 2026-11-01 21:00 → Recordatorio: Tomar las pastillas — dom 1 nov
+Mon 2026-11-02 21:00 → Recordatorio: Tomar las pastillas — lun 2 nov
+Tue 2026-11-03 21:00 → Recordatorio: Tomar las pastillas — mar 3 nov
+Wed 2026-11-04 21:00 → Recordatorio: Tomar las pastillas — mié 4 nov
+Thu 2026-11-05 21:00 → Recordatorio: Tomar las pastillas — jue 5 nov
+Fri 2026-11-06 21:00 → Recordatorio: Tomar las pastillas — vie 6 nov
+Sat 2026-11-07 21:00 → Recordatorio: Tomar las pastillas — sáb 7 nov
+Sun 2026-11-08 21:00 → Recordatorio: Tomar las pastillas — dom 8 nov
+Mon 2026-11-09 21:00 → Recordatorio: Tomar las pastillas — lun 9 nov
+Tue 2026-11-10 21:00 → Recordatorio: Tomar las pastillas — mar 10 nov
+Wed 2026-11-11 21:00 → Recordatorio: Tomar las pastillas — mié 11 nov
+Thu 2026-11-12 21:00 → Recordatorio: Tomar las pastillas — jue 12 nov
+Fri 2026-11-13 21:00 → Recordatorio: Tomar las pastillas — vie 13 nov
+Sat 2026-11-14 21:00 → Recordatorio: Tomar las pastillas — sáb 14 nov
+Sun 2026-11-15 21:00 → Recordatorio: Tomar las pastillas — dom 15 nov
+Mon 2026-11-16 21:00 → Recordatorio: Tomar las pastillas — lun 16 nov
+Tue 2026-11-17 21:00 → Recordatorio: Tomar las pastillas — mar 17 nov
+Wed 2026-11-18 21:00 → Recordatorio: Tomar las pastillas — mié 18 nov
+Thu 2026-11-19 21:00 → Recordatorio: Tomar las pastillas — jue 19 nov
+Fri 2026-11-20 21:00 → Recordatorio: Tomar las pastillas — vie 20 nov
