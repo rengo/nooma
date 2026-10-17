@@ -87,9 +87,12 @@ func FollowAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, pr
 }
 
 // CatchUpAsked is CatchUp for an asked unit whose every lead is behind: the
-// at-once reminder its capture would arm (ADR-0031 point 2), night-exempt and
-// refused too late as there, owed only while nothing of it is live and nothing
-// sent is about its instant. A day alone is ahead until its day ends.
+// at-once reminder its capture would arm (ADR-0031 point 2), refused too late
+// as there, owed only while nothing of it is live and nothing sent is about its
+// instant. A day alone is ahead until its day ends. Its instant is Nooma's
+// choice, not one the user named, so it keeps the night rules (ADR-0031 point
+// 6), as CatchUp does: inside quiet hours it waits for quiet end when that is
+// before the instant, and is refused (RefusalQuietHours, still owed) when not.
 func CatchUpAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, prefs ReminderPrefs, interrupt Interrupt, now time.Time) (Plan, bool) {
 	if len(live) > 0 || slices.ContainsFunc(sent, func(s Sent) bool { return s.About.Equal(at) }) {
 		return Plan{}, false
@@ -98,7 +101,20 @@ func CatchUpAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, p
 	if !arms || len(plans) != 1 || !atOnce(plans[0]) {
 		return Plan{}, false
 	}
-	return plans[0], true
+	plan, by := plans[0], at
+	if dayOnly {
+		y, m, d := at.In(now.Location()).Date()
+		by = time.Date(y, m, d+1, 0, 0, 0, 0, now.Location())
+	}
+	fire, ok := deliverAt(now, by, now, prefs)
+	if !ok {
+		return Plan{What: ArmNothing, Why: RefusalQuietHours, Interrupt: interrupt}, true
+	}
+	plan.FireAt, plan.Immediate, plan.NightExempt = fire, fire.Equal(now), false
+	if !plan.Immediate && !dayOnly {
+		plan.LeadMinutes = int(at.Sub(fire) / time.Minute)
+	}
+	return plan, true
 }
 
 // askedReminders is the reminders Arm plans for an asked unit at at.

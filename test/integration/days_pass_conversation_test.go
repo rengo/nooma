@@ -282,9 +282,10 @@ func dpScenarios() []dpScenario {
 		},
 		{
 			// The re-plan's catch-up of an asked unit is the asked one
-			// (CatchUpAsked): night-exempt, so it rings when the server
-			// returns at night, where an unasked catch-up would read the
-			// event's own leads, find the 2-hour one still ahead, and owe none.
+			// (CatchUpAsked): back at 04:30, it waits for quiet end (07:00),
+			// a time Nooma chose keeping the night rules (ADR-0031 point 6).
+			// Plain CatchUp would read an unasked event's leads, find the
+			// 2-hour one still ahead, and owe none.
 			name:         "long-lead-night-return",
 			about:        "a 12-hour asked lead whose ring the downtime ate, the server back at night",
 			remindMeLead: 720,

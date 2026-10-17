@@ -5,4 +5,4 @@ Fri 2026-10-16 10:42 ← recordame comprar café mañana a las 10
 Fri 2026-10-16 10:42 → Anotado para el sáb 17 oct, 10:00. Te aviso el día anterior.
 Fri 2026-10-16 21:00 ·· the server stops
 Sat 2026-10-17 04:30 ·· the server starts
-Sat 2026-10-17 04:35 → Recordatorio: Comprar café — sáb 17 oct, 10:00
+Sat 2026-10-17 07:00 → Recordatorio: Comprar café — sáb 17 oct, 10:00
