@@ -1632,6 +1632,13 @@ box can audit it):
     **At most one digest per local date**: once today's has gone out, it is today's, whatever the
     due time was when it went out — so moving the quiet end past the hour this morning's digest
     was sent delays tomorrow's, and never sends a second one today.
+    **A digest is a morning's, or none** (the client's ruling of 2026-10-16): one not out by
+    `digest_cutoff_hour` (12:00 local) is skipped for the day, and what it would have carried
+    waits for the next morning's. A server back at 22:55 sends no "morning digest" that night. A
+    quiet end at or past the cutoff keeps the digest due for `min_digest_window_minutes` from its
+    due time. A skipped digest sends and records nothing, so it counts toward nothing counted in
+    digests (an item's deferrals, a question's digests, a check-in's re-asks); a check-in's
+    mornings still count it, as they count a morning the vault was off.
   - if `current_state.energy` is low (recent reading), it holds back non-urgent items and only
     lets important ones through; deferred items resurface on recovery.
     **Low** is `energy < low_energy_max`, strict — this gate suppresses delivery, so the burden of
@@ -1948,6 +1955,8 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `default_interrupt_level` (`internal/core/prospection.DefaultInterruptLevel`) | 0.0 — fills a degraded or out-of-range `interrupt_level`; behaviourally inert below the push threshold, chosen so an audit reads "no claim was made" (design §3.4) |
 | `recurrence_anchor_hour` (`internal/core/prospection.RecurrenceAnchorHour`) | 12 — derived: the local wall clock a recurring occurrence lands on when its anchor has no time of day (a row armed before ADR-0034). Not midnight, because a DST gap there normalises *backward* onto the previous calendar date (`internal/core/consolidation.NextDailyRun` records Havana mapping local 00:00 to 23:00 the previous evening), which would nudge an anniversary a day early once a year. Noon clears every transition shorter than twelve hours, and the only known longer ones delete the whole calendar date |
 | `digest_hour` (`internal/core/prospection.DigestHour`) | 7 — the local hour the daily digest becomes due (owner ruling 2). Equals `quiet_hours_end_hour` today and is deliberately a separate knob: one is a delivery window's edge, the other a cadence. The asserted relation is `digest_hour >= quiet_hours_end_hour`, not their equality |
+| `digest_cutoff_hour` (`internal/core/prospection.DigestCutoffHour`) | 12 — the local hour by which a day's digest must have gone out, or it is skipped for the day (the client's ruling of 2026-10-16) |
+| `min_digest_window_minutes` (`internal/core/prospection.MinDigestWindowMinutes`) | 60 — how long a day's digest stays due at least, so a quiet end at or past `digest_cutoff_hour` (`max_quiet_end_hour` is 12) still leaves a morning digest |
 | `low_energy_max` (`internal/core/prospection.LowEnergyMax`) | 0.5 — chosen: `energy` is declared on [0,1] with no calibration data behind it, and the midpoint is the only point on such a scale that is not an invention. The comparison is strict, because the gate suppresses delivery |
 | `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
 | `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |

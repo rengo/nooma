@@ -19,12 +19,24 @@ import (
 // asserts the relation that actually matters between them.
 const DigestHour = 7
 
+// DigestCutoffHour is the local hour by which a day's morning digest must
+// have gone out; past it, that day's digest is skipped and its items carry to
+// the next morning (the client's ruling of 2026-10-16). A server back at 22:55
+// sent a "morning digest" at 23:02; a digest is a morning's, or none.
+const DigestCutoffHour = 12
+
+// MinDigestWindowMinutes is how long a day's digest stays due at least, so a
+// quiet end at or past the cutoff (MaxQuietEndHour is 12) still leaves a
+// window rather than skipping every digest: the cutoff is the later of
+// DigestCutoffHour and the due time plus this.
+const MinDigestWindowMinutes = 60
+
 // DigestDue reports whether a digest is owed at now, given the instant the
 // last one was delivered (nil when none ever was) — owner ruling 2, design
 // §3.5.
 //
-// Due iff now's local hour is at or past DigestHour AND no digest has been
-// delivered on today's local date. Written that way so downtime
+// Due iff now's local hour is at or past DigestHour and before
+// DigestCutoffHour, AND no digest has been delivered on today's local date. Written that way so downtime
 // is a normal case rather than a backlog: a vault that was off for three
 // days owes exactly one digest, because the question asked is "has today's
 // digest gone out", never "how many are outstanding".
@@ -45,8 +57,17 @@ func DigestDue(lastDigestAt *time.Time, now time.Time) bool {
 // today's, whatever the due time was when it went out. Judging the last
 // send against today's due time instead would send a second digest the day
 // the user moves the quiet end past the hour the first one went out.
+//
+// And only in the morning: past DigestCutoffHour (or the due time plus
+// MinDigestWindowMinutes, when later) today's digest is skipped, and what it
+// would have carried waits, unsent and so uncounted, for the next morning's.
 func (q QuietHours) DigestDue(lastDigestAt *time.Time, now time.Time) bool {
-	if now.Before(q.digestAt(now)) {
+	due := q.digestAt(now)
+	cutoff := TimeOfDay{Hour: DigestCutoffHour}.on(now, 0, now.Location())
+	if late := due.Add(MinDigestWindowMinutes * time.Minute); late.After(cutoff) {
+		cutoff = late
+	}
+	if now.Before(due) || !now.Before(cutoff) {
 		return false
 	}
 	return lastDigestAt == nil || lastDigestAt.Before(TimeOfDay{}.on(now, 0, now.Location()))

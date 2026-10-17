@@ -339,5 +339,19 @@ func dpScenarios() []dpScenario {
 			downFrom: dpAt(10, 16, 21, 0), downUntil: dpAt(10, 17, 4, 30),
 			say: []dpSay{{at: dpAt(10, 16, 10, 42), id: "classify-task-remind-me-coffee"}},
 		},
+		{
+			// A digest is a morning's, or none (the noon cutoff): back at
+			// 22:55 on Sunday, the server sends no digest that night, and the
+			// re-ask Sunday's would have carried comes Monday morning. The
+			// skipped morning burns no re-ask: both are still asked.
+			name:  "noon-cutoff",
+			about: "a check-in put off, the server down over the next morning and back at 22:55",
+			from:  dpAt(10, 16, 10, 40), until: dpAt(10, 21, 12, 0),
+			downFrom: dpAt(10, 17, 12, 0), downUntil: dpAt(10, 18, 22, 55),
+			say: []dpSay{
+				{at: dpAt(10, 16, 10, 46), id: "classify-request-haceme-acordar"},
+				{at: dpAt(10, 17, 8, 50), id: "classify-checkin-snooze"},
+			},
+		},
 	}
 }
