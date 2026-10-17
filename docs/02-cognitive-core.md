@@ -1480,7 +1480,12 @@ have N nudges; a pattern watcher does not hang off any unit):
   as before. Capture writes the payload keys `asked`, `day_only` and `night_exempt` the gate
   reads. The reply names the instant and the reminder: "Anotado para el sáb 17 oct, 10:00. Te
   aviso 15 minutos antes." (a lead under an hour is said in minutes), and for a day alone the
-  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."). An
+  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."), every
+  ring named, so an asked event on a day alone says the day before too ("Te aviso el día anterior
+  y ese día a las 09:00."); a
+  recurring reminder, when it rings every time, at its anchor's weekday, day or date and time ("Te
+  aviso todos los días a las 21:00.", "todos los lunes a las 08:30", "el día 31 de cada mes a las
+  18:00", "todos los años el 23 de octubre a las 09:00"; `phrase.Every`). An
   asked unit that arms nothing (`no_date`, `already_past`, `too_late`) is still stored with
   `remind_me` set, writes one `capture.arm.refused` row carrying `asked`, and its reply says why
   ("Anotado, pero no puse aviso: la hora indicada ya pasó.").
@@ -1540,7 +1545,12 @@ box can audit it):
   current event still has ahead, by the rule a corrected date uses and carrying the unit's healthy
   armed rows, **written first** (`check.reminder.armed`, `moved`, `cancelled`), and only then
   expires the armed rows and lapses the fired ones (`check.trigger.expired`, `check.trigger.lapsed`,
-  each with its `reason`). A late row never counts as a healthy armed row or as sent, so a stale
+  each with its `reason`). A unit the user asked to be reminded of is planned as its capture arms
+  it (`prospection.FollowAsked`), at the instant it asked about (an event's `event_at`, otherwise
+  `due_at`), its asked lead included, so a healthy asked row is carried, never cancelled, and a
+  unit of any kind is re-planned; its catch-up is the at-once asked reminder
+  (`prospection.CatchUpAsked`: night-exempt, refused `too_late` as at capture), owed while nothing
+  of it is live and nothing sent is about that instant, for a day alone until its day ends. A late row never counts as a healthy armed row or as sent, so a stale
   24-hour reminder beside a healthy 2-hour one leaves exactly the 2-hour one. A pass that dies
   between the two leaves the late rows un-retired and the next carries the plan, creating nothing
   twice. A unit whose every lead is behind, with nothing live and nothing sent about the event

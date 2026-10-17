@@ -177,6 +177,10 @@ type Armed struct {
 	// DayOnly says About is a day alone, not a moment: the reply names the
 	// day and the hour it rings on it, never a lead (ADR-0031 point 7).
 	DayOnly bool
+	// Rule and Anchor are a recurring reminder's, so the reply says when it
+	// rings every time (ADR-0031 point 7); zero for any other arming.
+	Rule   prospection.Rule
+	Anchor prospection.Anchor
 }
 
 // ArmRefused is what CaptureResult carries when a capture classified as

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
 )
 
 // TestSetsCoverEveryLanguage is the gate ADR-0022 asks for: widening
@@ -51,7 +52,7 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "RecurringSet": 1, "NotedFor": 2,
+		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "FoundOne": 1, "FoundMany": 1,
 	}
 
@@ -344,6 +345,54 @@ func TestAskAgainSentences(t *testing.T) {
 		words := map[classify.Language]string{classify.LanguageES: "Comprar café", classify.LanguageEN: "Buy coffee"}[l]
 		if got := s.Done(words); got != want[1] {
 			t.Errorf("%s: Done = %q, want %q", l, got, want[1])
+		}
+	}
+}
+
+// TestSet_Every: a recurring reply names the anchor's weekday, day and month,
+// never a clamped occurrence's, at the occurrence's clock time; a weekly anchor
+// with no weekday reads it from the occurrence.
+func TestSet_Every(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	nov30 := time.Date(2026, 11, 30, 18, 0, 0, 0, zone) // a day-31 monthly reminder's November ring
+	friday := time.Weekday(5)
+	es := For(classify.LanguageES)
+	for _, tc := range []struct {
+		rule   prospection.Rule
+		anchor prospection.Anchor
+		want   string
+	}{
+		{prospection.RuleDaily, prospection.Anchor{}, "Te aviso todos los días a las 18:00."},
+		{prospection.RuleWeekly, prospection.Anchor{Weekday: &friday}, "Te aviso todos los viernes a las 18:00."},
+		{prospection.RuleWeekly, prospection.Anchor{}, "Te aviso todos los lunes a las 18:00."},
+		{prospection.RuleMonthly, prospection.Anchor{Month: time.October, Day: 31}, "Te aviso el día 31 de cada mes a las 18:00."},
+		{prospection.RuleYearly, prospection.Anchor{Month: time.February, Day: 29}, "Te aviso todos los años el 29 de febrero a las 18:00."},
+	} {
+		if got := es.Every(tc.rule, tc.anchor, nov30); got != tc.want {
+			t.Errorf("Every(%s, %+v) = %q, want %q", tc.rule, tc.anchor, got, tc.want)
+		}
+	}
+}
+
+// TestSet_DayLeads: a day alone names a ring on the day by its hour and one on
+// an earlier day by how long before; at once is said as such; two alike once.
+func TestSet_DayLeads(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	day := time.Date(2026, 10, 23, 0, 0, 0, 0, zone)
+	at := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, zone) }
+	es := For(classify.LanguageES)
+	for _, tc := range []struct {
+		immediate bool
+		fires     []time.Time
+		want      string
+	}{
+		{false, []time.Time{at(23, 9)}, "ese día a las 09:00"},
+		{false, []time.Time{at(22, 9), at(23, 9)}, "el día anterior y ese día a las 09:00"},
+		{true, []time.Time{at(22, 21), at(23, 9)}, "ahora mismo y ese día a las 09:00"},
+		{false, []time.Time{at(23, 9), at(23, 9)}, "ese día a las 09:00"},
+	} {
+		if got := es.DayLeads(tc.immediate, day, tc.fires...); got != tc.want {
+			t.Errorf("DayLeads(%v, %v) = %q, want %q", tc.immediate, tc.fires, got, tc.want)
 		}
 	}
 }

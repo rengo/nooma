@@ -253,6 +253,20 @@ func TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour(t *testing.T) {
 	}
 }
 
+// TestI36_AnAskedDayEventNamesEveryRing replays the real model's reading of
+// "acordate de avisarme que vence el seguro el viernes": an asked event on a
+// day alone is reminded the day before (ADR-0029) and on the day itself
+// (ADR-0031 point 2), and the reply names both, as a timed event's names its
+// three, rather than only the day's.
+func TestI36_AnAskedDayEventNamesEveryRing(t *testing.T) {
+	v := newI36Vault()
+	result := v.capture(t, i36Now, i36Recordings(t), "classify-request-acordate-de-avisarme",
+		"acordate de avisarme que vence el seguro el viernes")
+	if got, want := channels.RenderReply(result), "Anotado para el vie 23 oct. Te aviso el día anterior y ese día a las 09:00."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
 // TestI36_TodayAfterTheDateOnlyHourRingsAtOnce: "hoy" asked after 09:00 rings
 // at once, and the reply says so rather than an hour already gone.
 func TestI36_TodayAfterTheDateOnlyHourRingsAtOnce(t *testing.T) {
@@ -307,8 +321,34 @@ func TestI36_AnAskedRepetitionKeepsRecurring(t *testing.T) {
 	if trg.RecurrenceRule == nil || *trg.RecurrenceRule != prospection.RuleDaily || !trg.FireAt.Equal(i36At(16, 21, 0)) {
 		t.Errorf("trigger = %+v, want the daily recurring row at 21:00 today", trg)
 	}
-	if got, want := channels.RenderReply(result), "Recordatorio recurrente puesto para el vie 16 oct, 21:00."; got != want {
+	if got, want := channels.RenderReply(result), "Te aviso todos los días a las 21:00."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+// TestI36_ARecurringReplySaysHowOften: the reply to a recurring reminder says
+// when it rings every time, as ADR-0031 point 7's "Te aviso todos los días a
+// las 21:00." does, for each rule: its weekday, its day of the month (the
+// anchor's, not a clamped occurrence's), its date in the year, at the
+// anchor's time, 09:00 for a bare date.
+func TestI36_ARecurringReplySaysHowOften(t *testing.T) {
+	for _, tc := range []struct{ rule, eventAt, language, want string }{
+		{"weekly", "2026-10-19T08:30:00-03:00", "es", "Te aviso todos los lunes a las 08:30."},
+		{"monthly", "2026-10-31T18:00:00-03:00", "es", "Te aviso el día 31 de cada mes a las 18:00."},
+		{"yearly", "1990-10-23", "es", "Te aviso todos los años el 23 de octubre a las 09:00."},
+		{"daily", "2026-10-16T21:00:00-03:00", "en", "I will remind you every day at 21:00."},
+		{"weekly", "2026-10-19T08:30:00-03:00", "en", "I will remind you every Monday at 08:30."},
+		{"monthly", "2026-10-31T18:00:00-03:00", "en", "I will remind you on day 31 of every month at 18:00."},
+		{"yearly", "1990-10-23", "en", "I will remind you every year on 23 October at 09:00."},
+	} {
+		t.Run(tc.rule+" "+tc.language, func(t *testing.T) {
+			v := newI36Vault()
+			result := v.say(t, i36Now, `{"type":"recurring_reminder","normalized_content":"Pay rent","weight":0.6,"decay_rate":0.02,`+
+				`"language":"`+tc.language+`","event_at":"`+tc.eventAt+`","recurrence_rule":"`+tc.rule+`","remind_request":true}`)
+			if got := channels.RenderReply(result); got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

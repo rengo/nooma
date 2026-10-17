@@ -958,7 +958,8 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 
 	return CaptureResult{
 		Outcome: OutcomeArmed,
-		Armed:   &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate, DayOnly: plan.DayOnly},
+		Armed: &Armed{What: plan.What, ID: id, FireAt: plan.FireAt, About: plan.About, Immediate: plan.Immediate, DayOnly: plan.DayOnly,
+			Rule: plan.Rule, Anchor: plan.Anchor},
 	}, nil
 }
 
