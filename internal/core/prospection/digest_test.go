@@ -64,6 +64,33 @@ func TestDigestDue(t *testing.T) {
 			want:       true,
 		},
 		{
+			// The client's noon cutoff (2026-10-16): a morning digest not out
+			// by DigestCutoffHour is skipped for the day, so a server back at
+			// 22:55 does not send a "morning digest" at night.
+			name:       "not out by the cutoff, skipped for the day",
+			lastDigest: ptr(at(6, DigestHour, 0)),
+			now:        at(7, DigestCutoffHour, 0),
+			want:       false,
+		},
+		{
+			name:       "a server back at 22:55 sends no digest that day",
+			lastDigest: ptr(at(4, DigestHour, 0)),
+			now:        at(7, 22, 55),
+			want:       false,
+		},
+		{
+			name:       "just before the cutoff it is still due",
+			lastDigest: ptr(at(6, DigestHour, 0)),
+			now:        at(7, DigestCutoffHour-1, 59),
+			want:       true,
+		},
+		{
+			name:       "and the next morning it is due again",
+			lastDigest: ptr(at(4, DigestHour, 0)),
+			now:        at(8, DigestHour, 0),
+			want:       true,
+		},
+		{
 			name:       "and once that digest is recorded, no more today",
 			lastDigest: ptr(at(7, DigestHour+3, 0)),
 			now:        at(7, 23, 59),
@@ -77,6 +104,27 @@ func TestDigestDue(t *testing.T) {
 				t.Errorf("DigestDue(%v, %v) = %v, want %v", tt.lastDigest, tt.now, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestDigestDue_ALateQuietEndKeepsAWindow: the latest quiet end a user may
+// set is MaxQuietEndHour, at or past the cutoff, and a digest due there must
+// still be due for MinDigestWindowMinutes rather than never.
+func TestDigestDue_ALateQuietEndKeepsAWindow(t *testing.T) {
+	loc := time.FixedZone("UTC-3", -3*60*60)
+	q := QuietHours{End: TimeOfDay{Hour: MaxQuietEndHour}}
+	at := func(hour, minute int) time.Time { return time.Date(2026, 10, 17, hour, minute, 0, 0, loc) }
+	for _, tc := range []struct {
+		now  time.Time
+		want bool
+	}{
+		{at(MaxQuietEndHour, 0), true},
+		{at(MaxQuietEndHour, MinDigestWindowMinutes-1), true},
+		{at(MaxQuietEndHour, MinDigestWindowMinutes), false},
+	} {
+		if got := q.DigestDue(nil, tc.now); got != tc.want {
+			t.Errorf("DigestDue at %s with quiet end %d:00 = %v, want %v", tc.now.Format("15:04"), MaxQuietEndHour, got, tc.want)
+		}
 	}
 }
 

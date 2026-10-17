@@ -429,8 +429,9 @@ func TestI37_DateOnlyEventIsCarriedOnItsDay(t *testing.T) {
 
 // TestI37_BirthdayIsCarriedAfterNoonOnItsDay: a recurring occurrence is
 // anchored at noon but names a calendar day, so a birthday reminder that never
-// reached the user is still carried at 13:00 on the birthday and lapses the
-// day after.
+// reached the user is still carried after noon on the birthday and lapses the
+// day after. A digest goes out after noon only for a user whose night ends at
+// noon (the noon cutoff, doc 02 §7), so this one's does.
 func TestI37_BirthdayIsCarriedAfterNoonOnItsDay(t *testing.T) {
 	yearly := prospection.RuleYearly
 	birthday := func(tr *ports.Trigger) {
@@ -442,11 +443,14 @@ func TestI37_BirthdayIsCarriedAfterNoonOnItsDay(t *testing.T) {
 		wantLapsed  int
 		wantCarried int
 	}{
-		{"13:00 on the day", i37Day(11, 13, 0), 0, 1},
-		{"the next day", i37Day(12, 10, 0), 1, 0},
+		{"12:30 on the day", i37Day(11, 12, 30), 0, 1},
+		{"the next day", i37Day(12, 12, 30), 1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := newI37Vault(t)
+			cfg := memrepo.NewConfig()
+			cfg.SeedConfig(t, ports.VaultConfig{QuietHoursEnd: ptr("12:00")})
+			v.cfg = cfg
 			v.event("u-ana", i37At(1, 12))
 			v.fired("ana", "u-ana", "Ana's birthday", i37Day(4, 12, 0), birthday)
 			report := v.checkAt(tc.now, false)

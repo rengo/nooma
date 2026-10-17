@@ -238,7 +238,7 @@ func TestI26_TheCapturedUnitKeepsItsLanguage(t *testing.T) {
 			if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "acordate de comprar café", Channel: "chat"}); err != nil {
 				t.Fatalf("Capture: %v", err)
 			}
-			if got, err := units.LatestLanguage(ctx); err != nil || got != want {
+			if got, err := units.RecentLanguages(ctx, 1); err != nil || strings.Join(got, "") != want {
 				t.Errorf("the stored unit's language = %q, %v; want %q", got, err, want)
 			}
 		})

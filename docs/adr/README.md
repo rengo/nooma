@@ -86,6 +86,7 @@ order, with no correspondence to anything.
 | [0032](0032-a-reminder-says-what-is-true-now.md) | A reminder says what is true when it is sent, in the user's language | Accepted | M4 |
 | [0033](0033-the-model-understands-the-code-acts.md) | Reminders: the model understands, the code acts (supersedes ADR-0031 in part) | Accepted | M4 |
 | [0034](0034-a-recurring-reminder-rings-on-its-day.md) | A recurring reminder rings on its day, and moves on to the next one (supersedes ADR-0029 and ADR-0030 in part) | Accepted | M4 |
+| [0035](0035-nooma-speaks-first-in-the-usual-language.md) | What Nooma says first speaks the language the user usually writes in (supersedes ADR-0032 in part) | Accepted | M4 |
 
 ## Template
 

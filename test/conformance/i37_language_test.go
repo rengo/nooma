@@ -91,6 +91,38 @@ func TestPushFallsBackToLatestThenEnglish(t *testing.T) {
 	}
 }
 
+// TestTheDigestSpeaksTheLanguageUsuallyWritten: three Spanish captures and a
+// newer English one; what Nooma says first, the digest and a push whose unit
+// knows no language, is in Spanish, the language the person usually writes in
+// (ADR-0035), not the newest capture's.
+func TestTheDigestSpeaksTheLanguageUsuallyWritten(t *testing.T) {
+	event := i37Day(15, 11, 0)
+	seed := func(v *i37Vault) {
+		for i, id := range []string{"es-1", "es-2", "es-3"} {
+			v.speaks(id, "es", i37Now.Add(-time.Duration(10-i)*time.Hour), nil)
+		}
+		v.speaks("newest-en", "en", i37Now.Add(-time.Hour), nil)
+	}
+
+	push := newI37Vault(t)
+	seed(push)
+	push.speaks("dentist", "", i37Now.Add(-48*time.Hour), &event)
+	push.row("r", "dentist", "Dentist", i37Now.Add(-time.Minute), modern(event, 1500))
+	push.check(false)
+	if want := "Recordatorio: Dentist — jue 15 oct, 11:00"; len(push.ch.texts) != 1 || push.ch.texts[0] != want {
+		t.Errorf("push sent %q, want exactly [%q]", push.ch.texts, want)
+	}
+
+	digest := newI37Vault(t)
+	seed(digest)
+	digest.speaks("dentist", "", i37Now.Add(-48*time.Hour), i37At(1, 12))
+	digest.fired("b", "dentist", "Dentist", i37Day(13, 16, 0), yearlyOn21)
+	digest.check(false)
+	if want := "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"; len(digest.ch.texts) != 1 || digest.ch.texts[0] != want {
+		t.Errorf("digest sent %q, want exactly [%q]", digest.ch.texts, want)
+	}
+}
+
 // TestFallbackSentencesSpeakTheLatestLanguage: the sentences that stand in for
 // a unit (one that cannot be read) and the lateness note speak the same
 // language as the rest of the message.

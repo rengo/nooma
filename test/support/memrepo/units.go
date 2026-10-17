@@ -63,18 +63,23 @@ func (r *Units) ByID(_ context.Context, id string) (unit.Unit, error) {
 	return deepCopy(u), nil
 }
 
-// LatestLanguage implements ports.UnitRepo.
-func (r *Units) LatestLanguage(_ context.Context) (string, error) {
+// RecentLanguages implements ports.UnitRepo.
+func (r *Units) RecentLanguages(_ context.Context, limit int) ([]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var newest unit.Unit
+	var with []unit.Unit
 	for _, u := range r.units {
-		if u.Language != "" && (newest.Language == "" || u.CreatedAt.After(newest.CreatedAt)) {
-			newest = u
+		if u.Language != "" {
+			with = append(with, u)
 		}
 	}
-	return newest.Language, nil
+	sort.SliceStable(with, func(i, j int) bool { return with[i].CreatedAt.After(with[j].CreatedAt) })
+	var out []string
+	for i := 0; i < len(with) && i < limit; i++ {
+		out = append(out, with[i].Language)
+	}
+	return out, nil
 }
 
 // LiveByIDs implements ports.UnitRepo.

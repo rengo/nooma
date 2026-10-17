@@ -21,6 +21,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -1215,8 +1216,8 @@ func sortStringsDesc(ss []string) {
 }
 
 // RunLanguage pins the language a unit carries (ADR-0032 point 5): it is stored
-// at Create and read back, and LatestLanguage answers the newest unit that has
-// one, at any status.
+// at Create and read back, and RecentLanguages answers the newest units that
+// have one, at any status, newest first (ADR-0035).
 func RunLanguage(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 	t.Helper()
 	ctx := context.Background()
@@ -1243,22 +1244,24 @@ func RunLanguage(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 
 	t.Run("no unit has a language", func(t *testing.T) {
 		repo := newRepo(t)
-		if got, err := repo.LatestLanguage(ctx); err != nil || got != "" {
-			t.Errorf("empty vault: LatestLanguage = %q, %v; want empty", got, err)
+		if got, err := repo.RecentLanguages(ctx, 5); err != nil || len(got) != 0 {
+			t.Errorf("empty vault: RecentLanguages = %q, %v; want none", got, err)
 		}
 		made(repo, "none", unit.StatusPool, "", 0)
-		if got, err := repo.LatestLanguage(ctx); err != nil || got != "" {
-			t.Errorf("only a unit with no language: LatestLanguage = %q, %v; want empty", got, err)
+		if got, err := repo.RecentLanguages(ctx, 5); err != nil || len(got) != 0 {
+			t.Errorf("only a unit with no language: RecentLanguages = %q, %v; want none", got, err)
 		}
 	})
 
-	t.Run("the newest unit that has one wins, archived included", func(t *testing.T) {
+	t.Run("the newest units that have one, newest first, archived included, at most limit", func(t *testing.T) {
 		repo := newRepo(t)
-		made(repo, "old-en", unit.StatusPool, "en", 0)
-		made(repo, "archived-es", unit.StatusArchived, "es", time.Hour)
-		made(repo, "newest-none", unit.StatusPool, "", 2*time.Hour)
-		if got, err := repo.LatestLanguage(ctx); err != nil || got != "es" {
-			t.Errorf("LatestLanguage = %q, %v; want es: the newest unit that has a language, archived or not", got, err)
+		made(repo, "oldest-en", unit.StatusPool, "en", 0)
+		made(repo, "old-es", unit.StatusPool, "es", time.Hour)
+		made(repo, "archived-es", unit.StatusArchived, "es", 2*time.Hour)
+		made(repo, "newest-none", unit.StatusPool, "", 3*time.Hour)
+		made(repo, "newest-en", unit.StatusPool, "en", 4*time.Hour)
+		if got, err := repo.RecentLanguages(ctx, 3); err != nil || strings.Join(got, ",") != "en,es,es" {
+			t.Errorf("RecentLanguages(3) = %q, %v; want en,es,es: the three newest with a language, archived or not", got, err)
 		}
 	})
 }

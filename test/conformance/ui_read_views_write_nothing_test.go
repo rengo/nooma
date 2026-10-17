@@ -322,7 +322,7 @@ var (
 	rvwDecisionReads  = []string{"Before", "Since"}
 	rvwUnitReads      = []string{
 		"ByID", "LiveByIDs", "CountLiveByType", "IncompleteOlderThan", "LiveDecayStates",
-		"LiveFocusCandidates", "LiveFocusCandidatesByType", "LiveBrowsePage", "LatestLanguage",
+		"LiveFocusCandidates", "LiveFocusCandidatesByType", "LiveBrowsePage", "RecentLanguages",
 	}
 )
 

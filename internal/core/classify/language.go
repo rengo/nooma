@@ -67,3 +67,29 @@ func (l *Language) Or() Language {
 	}
 	return *l
 }
+
+// UsualLanguageWindow is how many of the most recent units with a language
+// UsualLanguage reads (ADR-0035): enough that one capture in another language
+// does not flip what Nooma says first, few enough that a person who switched
+// languages is followed within a few days of captures.
+const UsualLanguageWindow = 20
+
+// UsualLanguage is the language a person usually writes in (ADR-0035), from
+// the languages the model read off their recent units, newest first: the most
+// frequent, a tie going to the one written most recently. "" when none is
+// known. Empty entries are no reading and count for nothing.
+func UsualLanguage(newestFirst []string) string {
+	count := map[string]int{}
+	for _, l := range newestFirst {
+		if l != "" {
+			count[l]++
+		}
+	}
+	usual := ""
+	for _, l := range newestFirst { // newest first: a later tie never displaces an earlier one
+		if l != "" && count[l] > count[usual] {
+			usual = l
+		}
+	}
+	return usual
+}

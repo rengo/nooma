@@ -318,7 +318,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | A reminder that could not be pushed is pushed again on a later pass while its event is ahead, once per pass, never twice for one outage report; the digest carries only recurring reminders | Shipped | doc 02 §7; ADR-0032 |
 | A reminder, pushed or in the digest, says its unit's current text and instant ("Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
 | A digest that would exceed one Telegram message drops its last lines, says "and N more", and the dropped reminders come in tomorrow's | Shipped | doc 02 §7; ADR-0032 |
-| What Nooma says first speaks the user's language: a pushed reminder, in its unit's; the digest (header, lines, question, lateness note), in the newest capture's; English when none is known; a timer's wording and Today follow the newest unit's | Shipped | doc 02 §5, §7; ADR-0032 |
+| What Nooma says first speaks the user's language: a pushed reminder, in its unit's; the digest (header, lines, question, lateness note, re-asks), in the language the user usually writes in (the most frequent among their 20 newest units); English when none is known; a timer's wording and Today follow the same | Shipped | doc 02 §5, §7; ADR-0032, ADR-0035 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |

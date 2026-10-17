@@ -76,7 +76,8 @@ func TestI37_SupersededHeldWhenItCannotBeReplanned(t *testing.T) {
 // TestI37_ASupersededRowWhoseNewEventPassesIsRetiredAsPassed: with no channel
 // nothing can re-plan, so a moved reminder stays held. It must not stay due
 // forever: once the unit's new event is past too, the row is retired as passed,
-// armed or fired alike.
+// armed or fired alike, the fired one by the next digest due (the next
+// morning: past the noon cutoff, none is due that day).
 func TestI37_ASupersededRowWhoseNewEventPassesIsRetiredAsPassed(t *testing.T) {
 	moved := i37Day(14, 12, 0)
 	for _, fired := range []bool{false, true} {
@@ -96,7 +97,7 @@ func TestI37_ASupersededRowWhoseNewEventPassesIsRetiredAsPassed(t *testing.T) {
 				t.Fatalf("fired=%v: retired at %v while the new event is ahead: %+v", fired, at, r)
 			}
 		}
-		report := v.checkAt(i37Day(14, 12, 5), false)
+		report := v.checkAt(i37Day(15, prospection.DigestHour, 5), false)
 
 		if report.TriggersExpired+report.TriggersLapsed != 1 || len(v.armed("u")) != 0 || v.undelivered()["old"] {
 			t.Errorf("fired=%v: report %+v, armed %d, undelivered %v; want the row retired once the new event passed", fired, report, len(v.armed("u")), v.undelivered())
