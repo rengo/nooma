@@ -1,0 +1,14 @@
+# a user whose night ends at 09:30: a named time rings inside it, a chosen one waits for its end
+# a check pass every 5m0s from Fri 2026-10-16 10:40 -03:00 to Sat 2026-10-24 12:00
+# quiet hours end at 09:30
+Fri 2026-10-16 10:43 ← recordame pagar el gas el jueves
+Fri 2026-10-16 10:43 → Anotado para el jue 22 oct. Te aviso ese día a las 09:30.
+Fri 2026-10-16 10:44 ← recordame el dentista el viernes a las 10
+Fri 2026-10-16 10:44 → Anotado para el vie 23 oct, 10:00. Te aviso el día anterior, 30 minutos antes y 15 minutos antes.
+Fri 2026-10-16 10:46 ← haceme acordar de llamar al médico mañana a las 9
+Fri 2026-10-16 10:46 → Anotado para el sáb 17 oct, 09:00. Te aviso 15 minutos antes.
+Sat 2026-10-17 08:45 → Recordatorio: Llamar al médico — sáb 17 oct, 09:00
+Thu 2026-10-22 09:30 → Recordatorio: Pagar el gas — jue 22 oct
+Thu 2026-10-22 10:00 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
+Fri 2026-10-23 09:30 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
+Fri 2026-10-23 09:45 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
