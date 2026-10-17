@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-10-13
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0034](0034-a-recurring-reminder-rings-on-its-day.md), point 6's recurring timing and routing only (a recurring reminder rings on its day and is pushed)
 - **Enables**: M4 (the settings page and the chat intent that edit these preferences)
 
 ## Context

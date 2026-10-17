@@ -60,6 +60,9 @@ type anchorJSON struct {
 	// text. The column is TEXT holding JSON and needs no DDL change to
 	// carry another key.
 	Weekday *int `json:"weekday,omitempty"`
+	// At is the occurrence's local "HH:MM" (ADR-0034); absent on a row
+	// armed before it, which reads as the anchor hour.
+	At string `json:"at,omitempty"`
 }
 
 // payloadJSON is ports.TriggerPayload's storage encoding, declared here for
@@ -109,6 +112,16 @@ func decodePayload(raw string) (ports.TriggerPayload, error) {
 // armed, and a default changed in a later migration must not be able to
 // change that quietly.
 func (r *TriggerRepo) Create(ctx context.Context, t ports.Trigger) error {
+	return createTrigger(ctx, r.db, t)
+}
+
+// execer is what a statement runs on: the vault, or a transaction in it.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func createTrigger(ctx context.Context, db execer, t ports.Trigger) error {
 	payload, err := encodePayload(t.Payload)
 	if err != nil {
 		return fmt.Errorf("marshal trigger %q payload: %w", t.ID, err)
@@ -119,7 +132,7 @@ func (r *TriggerRepo) Create(ctx context.Context, t ports.Trigger) error {
 		return fmt.Errorf("marshal trigger %q recurrence_anchor: %w", t.ID, err)
 	}
 
-	_, err = r.db.ExecContext(ctx,
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO triggers
 			(id, unit_id, kind, status, interrupt_level, payload, fire_at,
 			 recurrence_rule, recurrence_anchor, created_at)
@@ -173,7 +186,7 @@ func (r *TriggerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTrigger
 // surfaced_at is untouched: "NULL = pending delivery" (0001:52) is what a
 // fired-but-undelivered trigger is, and closing it is m3d's.
 func (r *TriggerRepo) Fire(ctx context.Context, id string, at time.Time) error {
-	return r.transition(ctx, id, ports.TriggerStatusFired, &at)
+	return transition(ctx, r.db, id, ports.TriggerStatusFired, &at)
 }
 
 // Expire implements ports.TriggerRepo. triggers carries no expired_at
@@ -181,7 +194,32 @@ func (r *TriggerRepo) Fire(ctx context.Context, id string, at time.Time) error {
 // would record a firing that never happened, which is exactly what I15
 // exists to prevent.
 func (r *TriggerRepo) Expire(ctx context.Context, id string) error {
-	return r.transition(ctx, id, ports.TriggerStatusExpired, nil)
+	return transition(ctx, r.db, id, ports.TriggerStatusExpired, nil)
+}
+
+// Rearm implements ports.TriggerRepo: Fire or Expire, then Create, in one
+// transaction, so a refused half rolls the other back.
+func (r *TriggerRepo) Rearm(ctx context.Context, id string, firedAt *time.Time, next ports.Trigger) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("rearm trigger %q: begin: %w", id, err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after a successful Commit; the error path already reports the real failure
+
+	to := ports.TriggerStatusExpired
+	if firedAt != nil {
+		to = ports.TriggerStatusFired
+	}
+	if err := transition(ctx, tx, id, to, firedAt); err != nil {
+		return err
+	}
+	if err := createTrigger(ctx, tx, next); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("rearm trigger %q: commit: %w", id, err)
+	}
+	return nil
 }
 
 // Surface implements ports.TriggerRepo. One UPDATE under a
@@ -461,9 +499,9 @@ func (r *TriggerRepo) firedWhere(ctx context.Context, where, order string) ([]po
 // precondition, and that is what decides a race: two scans over one due
 // trigger both pass the SELECT, and exactly one wins the UPDATE.
 // UnitRepo.SetStatus is built the same way, for the same two reasons.
-func (r *TriggerRepo) transition(ctx context.Context, id string, to ports.TriggerStatus, firedAt *time.Time) error {
+func transition(ctx context.Context, db execer, id string, to ports.TriggerStatus, firedAt *time.Time) error {
 	var current string
-	err := r.db.QueryRowContext(ctx, `SELECT status FROM triggers WHERE id = ?`, id).Scan(&current)
+	err := db.QueryRowContext(ctx, `SELECT status FROM triggers WHERE id = ?`, id).Scan(&current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ports.ErrTriggerNotFound
 	}
@@ -476,11 +514,11 @@ func (r *TriggerRepo) transition(ctx context.Context, id string, to ports.Trigge
 
 	var res sql.Result
 	if firedAt == nil {
-		res, err = r.db.ExecContext(ctx,
+		res, err = db.ExecContext(ctx,
 			`UPDATE triggers SET status = ? WHERE id = ? AND status = ?`,
 			string(to), id, string(ports.TriggerStatusArmed))
 	} else {
-		res, err = r.db.ExecContext(ctx,
+		res, err = db.ExecContext(ctx,
 			`UPDATE triggers SET status = ?, fired_at = ? WHERE id = ? AND status = ?`,
 			string(to), formatUnitTime(*firedAt), id, string(ports.TriggerStatusArmed))
 	}
@@ -538,6 +576,13 @@ func scanDueTrigger(rows *sql.Rows, extra ...any) (ports.DueTrigger, error) {
 			wd := time.Weekday(*stored.Weekday)
 			anchor.Weekday = &wd
 		}
+		if stored.At != "" {
+			at, err := prospection.ParseTimeOfDay(stored.At)
+			if err != nil {
+				return ports.DueTrigger{}, fmt.Errorf("trigger %q: recurrence_anchor: %w", d.ID, err)
+			}
+			anchor.At = &at
+		}
 		d.RecurrenceAnchor = anchor
 	}
 
@@ -585,6 +630,9 @@ func marshalAnchor(a *prospection.Anchor) (any, error) {
 	if a.Weekday != nil {
 		wd := int(*a.Weekday)
 		stored.Weekday = &wd
+	}
+	if a.At != nil {
+		stored.At = fmt.Sprintf("%02d:%02d", a.At.Hour, a.At.Minute)
 	}
 	encoded, err := json.Marshal(stored)
 	if err != nil {

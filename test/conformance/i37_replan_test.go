@@ -331,7 +331,9 @@ func TestI37_TheReplacementKeepsTheLevelOfTheRowItReplaces(t *testing.T) {
 
 // TestI37_AnOverdueRecurringRowExpiresAndIsNeverReplanned: a recurring armed
 // reminder overdue past the window expires as it always has; the re-plan step is
-// for one-shot reminders, and a unit carrying a recurring one gets no leads.
+// for one-shot reminders, and a unit carrying a recurring one gets no leads. Its
+// series re-arms (I17): this row was armed a week ahead of 21 October, so the
+// one row left armed rings on that day itself (ADR-0034).
 func TestI37_AnOverdueRecurringRowExpiresAndIsNeverReplanned(t *testing.T) {
 	v := newI37Vault(t)
 	yearly := prospection.RuleYearly
@@ -342,7 +344,9 @@ func TestI37_AnOverdueRecurringRowExpiresAndIsNeverReplanned(t *testing.T) {
 
 	report := v.check(false)
 
-	if report.TriggersExpired != 1 || report.RemindersArmed != 0 || len(v.armed("u")) != 0 {
-		t.Errorf("report = %+v, armed %d; want it expired and nothing planned", report, len(v.armed("u")))
+	armed := v.armed("u")
+	if report.TriggersExpired != 1 || report.RemindersArmed != 0 || len(armed) != 1 || armed[0].RecurrenceRule == nil ||
+		!armed[0].FireAt.Equal(time.Date(2026, 10, 21, prospection.RecurrenceAnchorHour, 0, 0, 0, armed[0].FireAt.Location())) {
+		t.Errorf("report = %+v, armed %+v; want it expired, nothing planned, and its series re-armed for 21 October", report, armed)
 	}
 }

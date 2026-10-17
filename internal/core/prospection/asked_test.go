@@ -405,8 +405,8 @@ func TestArmAsked_AnAskedRepeatingRequestIsTheOneShotUntilLink7(t *testing.T) {
 			t.Fatalf("%s: Arm = %+v, %v", k, plans, ok)
 		}
 		for _, p := range plans {
-			if p.What != ArmTrigger || p.LeadDays != 0 || p.Rule != "" {
-				t.Errorf("%s: plan = %+v, want a one-shot trigger, never the 7-day recurring row", k, p)
+			if p.What != ArmTrigger || p.Rule != "" {
+				t.Errorf("%s: plan = %+v, want a one-shot trigger, never the recurring row", k, p)
 			}
 		}
 		last := plans[len(plans)-1]

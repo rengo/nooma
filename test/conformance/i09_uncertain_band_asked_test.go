@@ -161,16 +161,20 @@ func TestI09_TheDigestNamesBothEndpointsOfTheQueuedQuestion(t *testing.T) {
 	triggers := memrepo.NewTriggers()
 	sourceID := "u-source"
 	fireAt := time.Date(2026, 8, 5, prospection.DigestHour, 0, 0, 0, time.UTC).Add(-time.Hour)
-	// Recurring, because a one-shot event reminder is pushed rather than
-	// digested (ADR-0030) and this fixture needs an item in the digest.
+	// A recurring reminder fired before ADR-0034 and still waiting for its
+	// digest: every trigger is pushed now, and this fixture needs an item in
+	// the digest.
 	yearly := prospection.RuleYearly
 	if err := triggers.Create(ctx, ports.Trigger{
 		ID: "trg-1", Kind: ports.TriggerKindTimeBased, FireAt: &fireAt, UnitID: &sourceID,
-		Payload:        ports.TriggerPayload{ActionText: "renew the passport", LeadDays: prospection.EventLeadDays},
+		Payload:        ports.TriggerPayload{ActionText: "renew the passport", LeadDays: 7},
 		RecurrenceRule: &yearly, RecurrenceAnchor: &prospection.Anchor{Month: time.August, Day: 12},
 		CreatedAt: fireAt.Add(-time.Hour),
 	}); err != nil {
 		t.Fatalf("seed trigger: %v", err)
+	}
+	if err := triggers.Fire(ctx, "trg-1", fireAt); err != nil {
+		t.Fatalf("fire trigger: %v", err)
 	}
 
 	ch := fakechannel.New()

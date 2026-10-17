@@ -60,6 +60,7 @@ internal/store/sqlite: func (*TriggerRepo) Fire(ctx context.Context, id string, 
 internal/store/sqlite: func (*TriggerRepo) FiredForUnit(ctx context.Context, unitID string) ([]ports.FiredTrigger, error)
 internal/store/sqlite: func (*TriggerRepo) Lapse(ctx context.Context, id string) error
 internal/store/sqlite: func (*TriggerRepo) OneShotForUnit(ctx context.Context, unitID string) ([]ports.DueTrigger, error)
+internal/store/sqlite: func (*TriggerRepo) Rearm(ctx context.Context, id string, firedAt *time.Time, next ports.Trigger) error
 internal/store/sqlite: func (*TriggerRepo) Reask(ctx context.Context, id string, at time.Time) error
 internal/store/sqlite: func (*TriggerRepo) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error
 internal/store/sqlite: func (*TriggerRepo) Resolve(ctx context.Context, id string, to ports.TriggerResolution, at time.Time) error

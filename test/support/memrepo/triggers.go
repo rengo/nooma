@@ -119,6 +119,33 @@ func (r *Triggers) Expire(_ context.Context, id string) error {
 	return r.transition(id, ports.TriggerStatusExpired)
 }
 
+// Rearm implements ports.TriggerRepo.
+// Both preconditions are checked under one lock before either write, as the
+// real implementation's transaction rolls both back.
+func (r *Triggers) Rearm(_ context.Context, id string, firedAt *time.Time, next ports.Trigger) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored, ok := r.triggers[id]
+	switch {
+	case !ok:
+		return ports.ErrTriggerNotFound
+	case stored.status != ports.TriggerStatusArmed:
+		return ports.ErrTriggerStatusConflict
+	}
+	if _, taken := r.triggers[next.ID]; taken {
+		return ports.ErrTriggerExists
+	}
+	stored.status = ports.TriggerStatusExpired
+	if firedAt != nil {
+		at := *firedAt
+		stored.status, stored.firedAt = ports.TriggerStatusFired, &at
+	}
+	r.triggers[id] = stored
+	r.triggers[next.ID] = storedTrigger{trigger: copyTrigger(next), status: ports.TriggerStatusArmed}
+	return nil
+}
+
 // transition is the armed precondition, enforced once for both callers
 // under the same mutex — the real implementation keeps it in a single
 // UPDATE's WHERE clause for the same reason: two scans racing over one due
@@ -343,6 +370,10 @@ func copyAnchor(p *prospection.Anchor) *prospection.Anchor {
 	if p.Weekday != nil {
 		wd := *p.Weekday
 		v.Weekday = &wd
+	}
+	if p.At != nil {
+		at := *p.At
+		v.At = &at
 	}
 	return &v
 }

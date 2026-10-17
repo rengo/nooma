@@ -149,6 +149,12 @@ func (r *conflictingTriggers) Due(context.Context, time.Time) ([]ports.DueTrigge
 }
 
 func (r *conflictingTriggers) Fire(context.Context, string, time.Time) error { return nil }
+func (r *conflictingTriggers) Rearm(ctx context.Context, id string, firedAt *time.Time, _ ports.Trigger) error {
+	if firedAt != nil {
+		return r.Fire(ctx, id, *firedAt)
+	}
+	return r.Expire(ctx, id)
+}
 func (r *conflictingTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
 	return nil, nil
 }
@@ -314,6 +320,12 @@ func (r *failingTriggers) Due(context.Context, time.Time) ([]ports.DueTrigger, e
 }
 func (r *failingTriggers) Fire(context.Context, string, time.Time) error { return nil }
 func (r *failingTriggers) Expire(context.Context, string) error          { return r.err }
+func (r *failingTriggers) Rearm(_ context.Context, _ string, firedAt *time.Time, _ ports.Trigger) error {
+	if firedAt != nil {
+		return nil
+	}
+	return r.err
+}
 func (r *failingTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
 	return nil, r.err
 }
@@ -336,7 +348,10 @@ func (emptyTriggers) Due(context.Context, time.Time) ([]ports.DueTrigger, error)
 	return nil, nil
 }
 func (emptyTriggers) Fire(context.Context, string, time.Time) error { return nil }
-func (emptyTriggers) Expire(context.Context, string) error          { return nil }
+func (emptyTriggers) Rearm(context.Context, string, *time.Time, ports.Trigger) error {
+	return nil
+}
+func (emptyTriggers) Expire(context.Context, string) error { return nil }
 func (emptyTriggers) ArmedForUnit(context.Context, string) ([]ports.DueTrigger, error) {
 	return nil, nil
 }

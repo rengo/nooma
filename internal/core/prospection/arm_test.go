@@ -7,45 +7,6 @@ import (
 	"github.com/rengo/nooma/internal/core/classify"
 )
 
-// TestLeadTime proves spec R5.2's arithmetic and its explicit refusal to
-// clamp at this layer.
-func TestLeadTime(t *testing.T) {
-	loc := time.FixedZone("UTC+2", 2*60*60)
-	at := func(day int) time.Time { return time.Date(2027, time.June, day, 9, 30, 0, 0, loc) }
-
-	t.Run("an event nine days out fires two days out", func(t *testing.T) {
-		if got, want := LeadTime(at(10)), at(3); !got.Equal(want) {
-			t.Errorf("LeadTime(%v) = %v, want %v", at(10), got, want)
-		}
-	})
-
-	t.Run("the wall clock and zone are carried, not reset", func(t *testing.T) {
-		got := LeadTime(at(10))
-		if got.Hour() != 9 || got.Minute() != 30 {
-			t.Errorf("LeadTime = %v, want the event's own wall clock (09:30) — the horizon "+
-				"shifts the date, not the time of day", got)
-		}
-		if got.Location().String() != loc.String() {
-			t.Errorf("LeadTime = %v, want the event's own zone", got)
-		}
-	})
-
-	t.Run("an event closer than the horizon returns a past instant, unclamped", func(t *testing.T) {
-		// Spec R5.2 is explicit that this layer does not clamp. The clamp is
-		// Arm's, because "do not arm in the past" is a fact about arming and
-		// this function answers a fact about the event.
-		eventAt := at(3)
-		got := LeadTime(eventAt)
-		if !got.Before(eventAt) {
-			t.Fatalf("LeadTime(%v) = %v, want an earlier instant", eventAt, got)
-		}
-		if want := time.Date(2027, time.May, 27, 9, 30, 0, 0, loc); !got.Equal(want) {
-			t.Errorf("LeadTime = %v, want %v — the horizon crosses the month boundary rather "+
-				"than stopping at it", got, want)
-		}
-	})
-}
-
 func armPtr[T any](v T) *T { return &v }
 
 // TestArm walks design §3.7's five-row table, one subtest per row, plus the
@@ -77,10 +38,6 @@ func TestArm(t *testing.T) {
 			t.Errorf("FireAt = %v, want the timer's own due_at (%v) — reading event_at here "+
 				"would fire in December", plan.FireAt, due)
 		}
-		if plan.LeadDays != 0 {
-			t.Errorf("LeadDays = %d, want 0 — a timer fires at the instant the user named, "+
-				"with no horizon in front of it", plan.LeadDays)
-		}
 	})
 
 	t.Run("a dated event arms a trigger at the lead-time horizon", func(t *testing.T) {
@@ -94,8 +51,8 @@ func TestArm(t *testing.T) {
 		if want := event.Add(-DefaultEventLeadFarHours * time.Hour); !plan.FireAt.Equal(want) {
 			t.Errorf("FireAt = %v, want the earliest lead %v", plan.FireAt, want)
 		}
-		if plan.LeadMinutes != DefaultEventLeadFarHours*60 || plan.LeadDays != 0 {
-			t.Errorf("LeadMinutes, LeadDays = %d, %d, want %d, 0", plan.LeadMinutes, plan.LeadDays, DefaultEventLeadFarHours*60)
+		if plan.LeadMinutes != DefaultEventLeadFarHours*60 {
+			t.Errorf("LeadMinutes = %d, want %d", plan.LeadMinutes, DefaultEventLeadFarHours*60)
 		}
 	})
 
@@ -141,12 +98,12 @@ func TestArm(t *testing.T) {
 			t.Errorf("Anchor = %+v, want {September, 4} — the anchor is the event's own month "+
 				"and day, not the instant it was captured", plan.Anchor)
 		}
-		if want := LeadTime(NextOccurrence(RuleYearly, plan.Anchor, now)); !plan.FireAt.Equal(want) {
-			t.Errorf("FireAt = %v, want %v", plan.FireAt, want)
+		if plan.Anchor.At == nil || *plan.Anchor.At != (TimeOfDay{Hour: event.Hour(), Minute: event.Minute()}) {
+			t.Errorf("Anchor.At = %v, want the event's own time of day", plan.Anchor.At)
 		}
-		if plan.LeadDays != EventLeadDays || plan.LeadMinutes != 0 {
-			t.Errorf("LeadDays, LeadMinutes = %d, %d, want %d, 0 — a recurrence keeps its seven days (ADR-0029 point 7)",
-				plan.LeadDays, plan.LeadMinutes, EventLeadDays)
+		next := NextOccurrence(RuleYearly, plan.Anchor, now)
+		if !plan.FireAt.Equal(next) || !plan.About.Equal(next) || plan.Immediate || plan.LeadMinutes != 0 {
+			t.Errorf("FireAt, About = %v, %v, want the occurrence itself, %v, with no lead (ADR-0034)", plan.FireAt, plan.About, next)
 		}
 	})
 
@@ -196,14 +153,8 @@ func TestArm(t *testing.T) {
 					"recurrence entirely", from, plan.Rule)
 			}
 
-			// Carried over from the hand-written table this sweep replaced.
-			// For the monthly rule the clamp is the ordinary case rather
-			// than the exception: the next occurrence of a given day is at
-			// most a month out, so a seven-day horizon in front of it
-			// frequently lands before now. A monthly reminder therefore
-			// arms at now more often than not, which is the correct reading
-			// of "the system is not late for something it just learned".
-			wantFire, _ := clampToNow(LeadTime(NextOccurrence(plan.Rule, plan.Anchor, now)), now)
+			// Every rule fires on its next occurrence itself (ADR-0034).
+			wantFire := NextOccurrence(plan.Rule, plan.Anchor, now)
 			if !plan.FireAt.Equal(wantFire) {
 				t.Errorf("%q: FireAt = %v, want %v", from, plan.FireAt, wantFire)
 			}
@@ -433,7 +384,7 @@ func TestArm_ReadsOneTimestampPerKind(t *testing.T) {
 		if !ok {
 			t.Fatal("Arm returned false for a dated event")
 		}
-		if plan.FireAt.Equal(due) || plan.FireAt.Equal(LeadTime(due)) {
+		if plan.FireAt.Equal(due) {
 			t.Errorf("FireAt = %v, derived from the DUE instant — an event that reads due_at "+
 				"arms against a timestamp that means something else", plan.FireAt)
 		}

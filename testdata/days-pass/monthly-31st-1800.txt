@@ -1,0 +1,14 @@
+# "Pay rent", monthly from "2026-10-31T18:00:00-03:00", captured Fri 2026-10-16 10:00 -03:00, lived 400 days with a check every 30m0s
+Sat 2026-10-31 18:00  Reminder: Pay rent — Sat 31 Oct
+Mon 2026-11-30 18:00  Reminder: Pay rent — Mon 30 Nov
+Thu 2026-12-31 18:00  Reminder: Pay rent — Thu 31 Dec
+Sun 2027-01-31 18:00  Reminder: Pay rent — Sun 31 Jan
+Sun 2027-02-28 18:00  Reminder: Pay rent — Sun 28 Feb
+Wed 2027-03-31 18:00  Reminder: Pay rent — Wed 31 Mar
+Fri 2027-04-30 18:00  Reminder: Pay rent — Fri 30 Apr
+Mon 2027-05-31 18:00  Reminder: Pay rent — Mon 31 May
+Wed 2027-06-30 18:00  Reminder: Pay rent — Wed 30 Jun
+Sat 2027-07-31 18:00  Reminder: Pay rent — Sat 31 Jul
+Tue 2027-08-31 18:00  Reminder: Pay rent — Tue 31 Aug
+Thu 2027-09-30 18:00  Reminder: Pay rent — Thu 30 Sep
+Sun 2027-10-31 18:00  Reminder: Pay rent — Sun 31 Oct

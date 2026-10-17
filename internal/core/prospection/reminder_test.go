@@ -286,3 +286,23 @@ func TestReminderOccasion_ShownInstant(t *testing.T) {
 		}
 	}
 }
+
+// TestReminderVerdict_RecurringOccurrenceAtFireAt: a recurring row fires on
+// its occurrence (ADR-0034), so the occurrence it is about is the one at
+// fire_at, not the next; one armed days ahead still reads the one after.
+func TestReminderVerdict_RecurringOccurrenceAtFireAt(t *testing.T) {
+	loc := time.FixedZone("UTC-3", -3*60*60)
+	daily := RuleDaily
+	anchor := &Anchor{At: &TimeOfDay{Hour: 20}}
+	fireAt := time.Date(2026, 10, 16, 20, 0, 0, 0, loc)
+	r := Reminder{FireAt: fireAt.UTC(), Rule: &daily, Anchor: anchor}
+	if about, _, _ := r.Occasion(loc); !about.Equal(fireAt) {
+		t.Errorf("Occasion = %v, want the occurrence at fire_at, %v", about, fireAt)
+	}
+	if v, _ := DefaultQuietHours().ReminderVerdict(r, fireAt.Add(5*time.Minute)); v != VerdictDeliver {
+		t.Errorf("verdict at its own occurrence = %s, want deliver", v)
+	}
+	if v, why := DefaultQuietHours().ReminderVerdict(r, time.Date(2026, 10, 17, 0, 0, 0, 0, loc)); v != VerdictStale || why != LapsePassed {
+		t.Errorf("verdict the next local midnight = %s %s, want stale passed", v, why)
+	}
+}

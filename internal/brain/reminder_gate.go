@@ -134,18 +134,23 @@ type staleRow struct {
 }
 
 // retire expires an armed row or lapses a fired one, and says why in the
-// trail. A row another pass already moved is skipped (false). commit false
-// reports the retirement without writing it.
+// trail; an expired recurring row arms its next occurrence (leave). A row
+// another pass already moved is skipped (false). commit false reports the
+// retirement without writing it.
 func (r checkRunner) retire(ctx context.Context, s staleRow, now time.Time, commit bool) (bool, error) {
 	if !commit {
 		return true, nil
 	}
 	action, verb := ports.ActionCheckTriggerLapsed, "fired and never reached the user, and was lapsed"
-	retire := r.triggers.Lapse
+	var next string
+	var err error
 	if s.armed {
-		action, verb, retire = ports.ActionCheckTriggerExpired, "came due and was expired", r.triggers.Expire
+		action, verb = ports.ActionCheckTriggerExpired, "came due and was expired"
+		next, err = r.leave(ctx, s.DueTrigger, nil, now)
+	} else {
+		err = r.triggers.Lapse(ctx, s.ID)
 	}
-	if err := retire(ctx, s.ID); err != nil {
+	if err != nil {
 		skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTriggerStatusConflict, "triggers", s.ID, s.FireAt)
 		if skipErr != nil || skipped {
 			return false, skipErr
@@ -153,7 +158,7 @@ func (r checkRunner) retire(ctx context.Context, s staleRow, now time.Time, comm
 		return false, fmt.Errorf("check: retire trigger %q: %w", s.ID, err)
 	}
 	return true, r.record(ctx, now, action,
-		fmt.Sprintf("trigger %q %s rather than sent: %s", s.ID, verb, lapseWhy(s.reason)),
+		fmt.Sprintf("trigger %q %s rather than sent: %s%s", s.ID, verb, lapseWhy(s.reason), next),
 		checkDetail{ID: s.ID, FireAt: s.FireAt.UTC().Format(time.RFC3339), Verdict: string(prospection.VerdictStale), Reason: string(s.reason)})
 }
 

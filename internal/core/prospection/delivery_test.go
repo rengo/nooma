@@ -279,18 +279,3 @@ func TestInterrupt_FieldsAreUnexported(t *testing.T) {
 		}
 	}
 }
-
-// TestRouteTrigger is ADR-0030 point 1: a one-shot event reminder is pushed
-// whatever its interrupt level, a degraded one included; a recurring
-// reminder keeps the interrupt split.
-func TestRouteTrigger(t *testing.T) {
-	low, high := 0.1, 0.9
-	for _, i := range []Interrupt{ResolveInterrupt(nil), ResolveInterrupt(&low), ResolveInterrupt(&high), {}} {
-		if got := RouteTrigger(false, i); got != RoutePush {
-			t.Errorf("RouteTrigger(one-shot, %+v) = %s, want push", i, got)
-		}
-		if got := RouteTrigger(true, i); got != i.Route() {
-			t.Errorf("RouteTrigger(recurring, %+v) = %s, want %s", i, got, i.Route())
-		}
-	}
-}
