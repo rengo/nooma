@@ -120,6 +120,10 @@ func RenderReply(result brain.CaptureResult) string {
 		return say.Corrected
 
 	case brain.OutcomeAsked:
+		// The model's own question about a follow-up, in the user's words.
+		if result.Reply != "" {
+			return result.Reply
+		}
 		return say.AskWhichOne
 	}
 	return ""

@@ -107,7 +107,7 @@ func TestTelegramDemo_AnAllowedMessageIsCapturedAndAnsweredAndAStrangerIsNot(t *
 	t.Cleanup(func() { _ = ch.Close() })
 
 	capturer := &capturedInput{}
-	runner := channels.NewRunner(ch, channels.CaptureHandler(capturer, ch, &log), &log)
+	runner := channels.NewRunner(ch, channels.CaptureHandler(capturer, ch, nil, &log), &log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -170,7 +170,7 @@ func TestTelegramDemo_TheBotTokenReachesNoLogAndNoReply(t *testing.T) {
 	t.Cleanup(func() { _ = ch.Close() })
 
 	capturer := &capturedInput{}
-	runner := channels.NewRunner(ch, channels.CaptureHandler(capturer, ch, &log), &log)
+	runner := channels.NewRunner(ch, channels.CaptureHandler(capturer, ch, nil, &log), &log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

@@ -1,0 +1,12 @@
+# a meeting is captured, and the next message moves it
+# a check pass every 5m0s from Tue 2026-10-13 19:55 -03:00 to Thu 2026-10-15 00:00
+# "dentista el viernes a las 10" is read by a hand-written reading, not a recording
+# "Tengo reunión con Juan mañana a las 22:30" is read by a hand-written reading, not a recording
+# "Es a las 08:00." is read by a hand-written reading, not a recording
+Tue 2026-10-13 20:00 ← dentista el viernes a las 10
+Tue 2026-10-13 20:00 → Anotado para el vie 16 oct, 10:00. Te aviso el día anterior y unas horas antes.
+Tue 2026-10-13 21:05 ← Tengo reunión con Juan mañana a las 22:30
+Tue 2026-10-13 21:05 → Anotado para el mié 14 oct, 22:30. Te aviso el día anterior y unas horas antes.
+Tue 2026-10-13 21:10 ← Es a las 08:00.
+Tue 2026-10-13 21:10 → Corregido.
+Wed 2026-10-14 07:00 → Recordatorio: Reunión con Juan — mié 14 oct, 08:00

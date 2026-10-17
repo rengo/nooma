@@ -8,6 +8,7 @@ import (
 	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
 )
 
 // CaptureInput is what a caller hands to CaptureService.Capture — the "in"
@@ -35,6 +36,10 @@ type CaptureInput struct {
 	// all, and an id naming no existing unit fails the correction rather
 	// than falling back to recall (m1c spec R1.5, design D7).
 	ReferentID string
+	// Conversation is the chat this message arrived in. When set, and with
+	// no ReferentID, the message is read in its recent conversation
+	// (ADR-0036); empty for a capture from anywhere but a chat.
+	Conversation ports.ConversationID
 }
 
 // CaptureOutcome is the closed vocabulary of every way a capture can end —
@@ -94,8 +99,13 @@ type CaptureResult struct {
 	// a stored capture are all answered, and all in the same language.
 	Language classify.Language
 
-	// Reply is the model's own answer to a chitchat. Set only for
-	// Outcome == OutcomeConversed, and **empty on that outcome means the
+	// At is the instant the capture read from the clock, the one every row it
+	// wrote carries; a chat records its turns at it (ADR-0036).
+	At time.Time
+
+	// Reply is the model's own answer to a chitchat, or the question it wrote
+	// for a follow-up it could not place (OutcomeAsked, AskReferentUnclear).
+	// For Outcome == OutcomeConversed, and **empty on that outcome means the
 	// chat task did not answer** — a provider outage, or a completion that
 	// came back blank. That is not a second outcome: nothing was going to
 	// be stored either way, so an outage loses nothing and the capture is
@@ -255,4 +265,8 @@ const (
 	// still holds — writing it would replace the unit with the utterance,
 	// or leave the body and the date disagreeing (I30).
 	AskContentLosesDate AskReason = "content_loses_date"
+	// AskReferentUnclear: a chat follow-up corrects an item of the recent
+	// conversation and the model could not tell which, so it asked in its
+	// own words, carried in CaptureResult.Reply (ADR-0036).
+	AskReferentUnclear AskReason = "referent_unclear"
 )

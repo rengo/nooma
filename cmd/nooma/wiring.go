@@ -510,7 +510,7 @@ func (p proactiveCheck) ProactiveCheck(ctx context.Context) error {
 // Unlike wireCheck, this one gets the channel: a scheduled pass is
 // precisely the thing that should speak, where `nooma check` is a
 // subcommand a person ran to look.
-func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService, error) {
+func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel, conv *brain.Conversation, keeper *brain.FocusKeeper) (*brain.CheckService, error) {
 	llm, _, _, err := resolveConsolidateProviders(cfg, lookup)
 	if err != nil {
 		// No provider bound. The pass still runs: a timer delivers the
@@ -538,10 +538,10 @@ func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, look
 		// The keeper serve built once and hands to Today too: the digest
 		// reads and writes the same previous focus.
 		keeper,
-	).WithQuietHours(sqlite.NewConfigRepo(db)), nil
+	).WithQuietHours(sqlite.NewConfigRepo(db)).WithConversation(conv), nil
 }
 
-func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel, keeper *brain.FocusKeeper) (*scheduler.Scheduler, error) {
+func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel, conv *brain.Conversation, keeper *brain.FocusKeeper) (*scheduler.Scheduler, error) {
 	if _, _, _, err := resolveConsolidateProviders(cfg, lookup); err != nil {
 		_, _ = fmt.Fprintf(log, "scheduler: consolidation not scheduled: %v\n", err)
 		return nil, nil
@@ -552,7 +552,7 @@ func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lo
 		return nil, fmt.Errorf("wiring the scheduler: %w", err)
 	}
 
-	check, err := wireProactive(systemClock{}, db, cfg, lookup, channel, keeper)
+	check, err := wireProactive(systemClock{}, db, cfg, lookup, channel, conv, keeper)
 	if err != nil {
 		return nil, fmt.Errorf("wiring the proactive pass: %w", err)
 	}

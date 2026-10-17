@@ -91,7 +91,7 @@ tasks:
 // only reachable through the stored 09:00.
 func TestWireProactive_DefersToTheStoredQuietEnd(t *testing.T) {
 	deferToStoredQuietEnd(t, func(clock ports.Clock, db *sqlite.Vault, cfg *config.Config) *brain.CheckService {
-		check, err := wireProactive(clock, db, cfg, func(string) (string, bool) { return "", false }, nil, nil)
+		check, err := wireProactive(clock, db, cfg, func(string) (string, bool) { return "", false }, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("wireProactive: %v", err)
 		}

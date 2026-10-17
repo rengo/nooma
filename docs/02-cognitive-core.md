@@ -715,12 +715,25 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
 4. **corrections**: a `correction` edits the referenced unit in place and emits a learning
    signal with the correction.
    - **Which unit it edits.** A caller holding an identifier passes it, and that identifier
-     wins — the UI and the API both have one. Chat has none, so there the referent is resolved
+     wins — the UI and the API both have one. Chat has none: there a follow-up names its referent
+     by a letter of the recent conversation (below), and otherwise the referent is resolved
      by running step 2's hybrid recall against the correction text and applying a gate over the
      **scored** candidates: with no candidate, or with the top two closer together than
      `correction_referent_margin`, the system asks instead of guessing. That is the product rule
      below rather than an exception to it — an ambiguous referent is exactly the ambiguity that
      blocks.
+     - **A follow-up names its referent from the chat** (I40,
+       [ADR-0036](adr/0036-a-chat-message-is-read-in-its-conversation.md)). On a chat message
+       whose classification is a `correction` with a `referent` the prompt listed, that item is the
+       referent, read again by id, exactly as if the caller had named it: the explicit path below,
+       with the same call's fields as the patch, since the model was shown the item as it stands,
+       which is what the correction prompt would have shown it. No recall runs, no unit is stored,
+       no relation is judged, and the pre-image's `referent.source` is `conversation`. A
+       `correction` with `referent: unclear` and a question stores nothing and answers with the
+       model's question (`OutcomeAsked`, reason `referent_unclear`, one `correction.ambiguous` row
+       naming the items shown). There is no pending-question state: the user's answer arrives with
+       that exchange in the conversation and is read as an ordinary correction with a referent.
+       Only a chat that names no listed item reaches the recall gate.
      - **An identifier also settles *whether* the message is a correction.** A capture that
        arrives naming its referent is a correction of that unit whatever `type` the
        classification gives the text: it persists no unit, arms nothing of its own (only the
