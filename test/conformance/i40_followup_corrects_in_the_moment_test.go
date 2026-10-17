@@ -37,6 +37,8 @@ type i40Fixture struct {
 	triggers  *memrepo.Triggers
 	decisions *memrepo.DecisionLog
 	conv      *brain.Conversation
+	relations *memrepo.Relations
+	questions *memrepo.PendingQuestions
 }
 
 var (
@@ -54,6 +56,7 @@ func newI40(t *testing.T, response string) i40Fixture {
 	f := i40Fixture{
 		llm: &scriptedLLM{response: response}, units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(),
 		decisions: memrepo.NewDecisionLog(), conv: brain.NewConversation(),
+		relations: memrepo.NewRelations(), questions: memrepo.NewPendingQuestions(),
 	}
 	if err := f.units.Create(ctx, unit.Unit{
 		ID: "meeting", Type: unit.TypeEvent, Status: unit.StatusPool, Source: "telegram",
@@ -71,8 +74,8 @@ func newI40(t *testing.T, response string) i40Fixture {
 		t.Fatal(err)
 	}
 	f.svc = brain.NewCaptureService(fixedClock{now: i40Now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(),
-		memrepo.NewRelations(), f.decisions, f.llm, f.llm, f.llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), memrepo.NewSignals(), f.triggers, memrepo.NewTimers(), 0.5, nil).WithConversation(f.conv)
+		f.relations, f.decisions, f.llm, f.llm, f.llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
+		brain.NewIndex(idx), memrepo.NewSignals(), f.triggers, memrepo.NewTimers(), 0.5, f.questions).WithConversation(f.conv)
 	return f
 }
 
@@ -278,5 +281,42 @@ func TestI40_AnAnswerNamingNoItemChangesNothing(t *testing.T) {
 		if d.Action == ports.ActionCorrectionApplied || d.Action == ports.ActionCorrectionAmbiguous {
 			t.Errorf("row %s written for an answer naming no item", d.Action)
 		}
+	}
+}
+
+// TestI40_ABoundFollowUpAnswersNoRelationQuestion: a relation question is
+// open, and the model's reading of a follow-up it binds also carries
+// relation_outcome confirmed, as the recorded answer to the which-item
+// question did (classify-followup-answer-si, known_misread). The follow-up
+// fork returns before relation resolution, so that outcome reaches nothing:
+// the question stays open and the relation keeps its confidence.
+func TestI40_ABoundFollowUpAnswersNoRelationQuestion(t *testing.T) {
+	f := newI40(t, `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 08:00.",`+
+		`"event_at":"2026-10-14T08:00:00-03:00","weight":0.7,"decay_rate":0.05,"referent":"A","relation_outcome":"confirmed"}`)
+	ctx := context.Background()
+	f.relations.EnsureUnit(t, "meeting")
+	f.relations.EnsureUnit(t, "other")
+	if err := f.relations.Upsert(ctx, ports.Relation{
+		ID: "rel-1", FromUnitID: "meeting", ToUnitID: "other", Type: "same_topic",
+		Strength: 0.5, Confidence: 0.4, CreatedBy: "consolidation", CreatedAt: i40Now.Add(-24 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.questions.EnsureRelation(t, "rel-1", "same_topic", "meeting", "other", "meeting", "other")
+	if err := f.questions.Create(ctx, ports.PendingQuestion{ID: "q-1", Kind: ports.QuestionKindRelation, RelationID: "rel-1", CreatedAt: i40Now.Add(-24 * time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.questions.MarkAsked(ctx, "q-1", i40Now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if res := f.capture(t, "sí"); res.Outcome != brain.OutcomeCorrected {
+		t.Fatalf("result = %+v, want the meeting corrected", res)
+	}
+	if open, err := f.questions.Open(ctx); err != nil || len(open) != 1 || open[0].ID != "q-1" {
+		t.Errorf("open relation questions = %+v, %v; want q-1 still open", open, err)
+	}
+	if rel, err := f.relations.ByID(ctx, "rel-1"); err != nil || rel.Confidence != 0.4 {
+		t.Errorf("relation = %+v, %v; want its confidence untouched at 0.4", rel, err)
 	}
 }
