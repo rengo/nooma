@@ -1,6 +1,6 @@
 # ADR-0034 — A recurring reminder rings on its day, and moves on to the next one
 
-- **Status**: Proposed (the client to confirm points 1 and 4: no week-ahead notice, every recurring item pushed)
+- **Status**: Accepted (by the client, 2026-10-16: a recurring item rings on its day, 09:00 for a bare date, with no week-ahead notice; every recurring item is pushed on its day)
 - **Date**: 2026-10-16
 - **Supersedes**: [ADR-0029](0029-event-reminders-follow-the-users-leads.md) point 7, and
   [ADR-0030](0030-event-reminders-are-pushed-and-respect-the-night.md) point 6's "a recurring
@@ -29,7 +29,8 @@ nothing after. Doc 02 §7 and I17 promised the re-arm; no code did it.
 5. **Series fired before this decision are not revived.** By the old code they fired with no
    successor, and they stay silent: they must be captured again. The client's ruling for the
    testing phase: "estamos en testing, así que el vault se borrará, no te preocupes por los
-   avisos o eventos viejos".
+   avisos o eventos viejos" ("we are in testing, so the vault will be wiped; don't worry about
+   the old reminders or events").
 
 ## Consequences
 
