@@ -1,8 +1,10 @@
 {
   "id": "classify-followup-ambiguous-asks",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "Es a las 08:00.",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Uno de los eventos es a las 08:00.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís al dentista o a la reunión con Juan?\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -31,5 +33,6 @@
   "expect": {
     "type": "correction",
     "referent": "unclear"
-  }
+  },
+  "prompt_sha256": "01b96351a99e6e8bd898a51ca0f8f9a89d77dae069d0c737201075623183de9d"
 }

@@ -1,8 +1,10 @@
 {
   "id": "classify-followup-unrelated-new-task",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "Comprar pan mañana",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar pan el 2026-10-14.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"due_at\":\"2026-10-14\",\"title\":\"Comprar pan\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -31,5 +33,6 @@
   },
   "expect": {
     "type": "task"
-  }
+  },
+  "prompt_sha256": "df6b75657904d985e36b42a81ff3a3a8ce7c9881af3ddc93057e57a569f9c6f4"
 }

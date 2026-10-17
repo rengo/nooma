@@ -1,8 +1,10 @@
 {
   "id": "classify-followup-same-topic-knowledge",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "A Juan le gusta el café",
-  "record": true,
+  "response": "{\"type\":\"knowledge\",\"normalized_content\":\"A Juan le gusta el café.\",\"weight\":0.65,\"decay_rate\":0.01,\"language\":\"es\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -31,5 +33,6 @@
   },
   "expect": {
     "type": "knowledge"
-  }
+  },
+  "prompt_sha256": "8bc5647494058084af5695233a961f4f030ff7df612ede196e2ed995220ae1b3"
 }

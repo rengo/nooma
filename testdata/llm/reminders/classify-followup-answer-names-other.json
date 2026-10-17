@@ -1,8 +1,10 @@
 {
   "id": "classify-followup-answer-names-other",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, al dentista",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -40,5 +42,6 @@
     "type": "correction",
     "referent": "A",
     "event_at": "2026-10-14T08:00:00-03:00"
-  }
+  },
+  "prompt_sha256": "006990f178895ea901931a37f454a70b3b061790d6a3ca4d45038cc83b31062e"
 }
