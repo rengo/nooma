@@ -51,8 +51,8 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "TimerSet": 1, "RecurringSet": 1, "NotedFor": 2,
-		"LeadDays": 1, "FoundOne": 1, "FoundMany": 1,
+		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "RecurringSet": 1, "NotedFor": 2,
+		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "FoundOne": 1, "FoundMany": 1,
 	}
 
 	for _, l := range classify.AllLanguages() {
@@ -135,6 +135,20 @@ func TestSet_Found_AgreesWithItsNumber(t *testing.T) {
 	}
 }
 
+// TestSet_ThatDayAt names the hour a day alone is reminded at, in the
+// language (ADR-0031 point 7).
+func TestSet_ThatDayAt(t *testing.T) {
+	fire := time.Date(2026, 10, 17, 8, 30, 0, 0, time.FixedZone("ART", -3*60*60))
+	for l, want := range map[classify.Language]string{
+		classify.LanguageES: "ese día a las 08:30",
+		classify.LanguageEN: "that day at 08:30",
+	} {
+		if got := For(l).ThatDayAt(fire); got != want {
+			t.Errorf("%s: ThatDayAt = %q, want %q", l, got, want)
+		}
+	}
+}
+
 // TestSet_Lead_ReadsImmediateRatherThanDerivingIt pins the distinction a
 // real defect produced: subtracting the two instants gives a true duration
 // and a false promise — 41 hours reads as "the day before" for a reminder
@@ -163,6 +177,12 @@ func TestSet_Lead_ReadsImmediateRatherThanDerivingIt(t *testing.T) {
 		{time.Date(2026, 10, 15, 0, 0, 0, 0, zone), es.LeadDayBefore},
 		{time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC), es.LeadDayBefore}, // 06:00 the 15th in ART
 		{about.Add(-72 * time.Hour), "3 días antes"},
+		// Under an hour is said in minutes: an asked "15 minutes before" is
+		// not "a few hours before" (ADR-0031 point 7).
+		{about.Add(-15 * time.Minute), "15 minutos antes"},
+		{about.Add(-59 * time.Minute), "59 minutos antes"},
+		{about.Add(-time.Minute), es.LeadMinute},
+		{about.Add(-time.Hour), es.LeadHours},
 	}
 	for _, tt := range tests {
 		if got := es.Lead(false, tt.fire, about); got != tt.want {

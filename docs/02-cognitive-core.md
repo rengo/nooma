@@ -1456,28 +1456,34 @@ have N nudges; a pattern watcher does not hang off any unit):
   the day before; an 08:00 flight's 2-hour reminder goes out at 07:00. A correction that leaves
   a reminder no allowed instant expires it with the reason `quiet_hours`, not as a past date.
   **An asked reminder** ([ADR-0031](adr/0031-reminders-the-user-asks-for.md)): a unit of any
-  kind that persists one and that the caller says was asked for is armed through
-  `prospection.Arm`'s `asked` argument, at its instant (an event's `event_at`, otherwise
+  kind that persists one and whose classification reads `remind_request: true` (an absent or
+  degraded value does not ask, [ADR-0033](adr/0033-the-model-understands-the-code-acts.md)) is
+  stored with `units.remind_me` set and armed through `prospection.Arm`'s `asked` argument, at its instant (an event's `event_at`, otherwise
   `due_at`, then the other field). A **named time** is reminded `remind_me_lead` before it,
   default `default_remind_me_lead_minutes` (15). The planner reads it from the resolved
   preferences (`prospection.ReminderPrefs.RemindMeLead`, 1 minute to `max_event_lead_days` days
-  when set); the `config` column that stores it arrives with the next link of the change, and
-  until then every vault resolves the default. A **day alone** is reminded that day at the
+  when set), stored in `config.remind_me_lead_minutes`. A **day alone** is reminded that day at the
   date-only time. An `event` keeps its ADR-0029 leads and gains the asked one; those leads read a
   date alone from the model's bare date, not from a midnight, for an asked unit. A lead already
   behind while the instant is ahead becomes a reminder **at once**, even when other leads are
   still ahead, and is refused `too_late` only when less than `at_once_margin_minutes` remain
   before the instant or, for a day alone, before the end of its local day: exactly that many
-  minutes left still arms. An asked repeating request ("todos los días a las 9pm") is, until the
-  recurring branch takes it in a later link, its one-shot occurrence, never the recurring
-  trigger. **A named time is not moved or dropped by quiet
+  minutes left still arms. An asked `recurring_reminder` with a rule ("todos los días a las 9pm") keeps
+  the recurring trigger below, on its occurrence and with no lead, its time read from `event_at`
+  or else `due_at`: a one-shot would drop the repetition asked for. An asked task or event that
+  carries a rule is, until a later link, its one-shot occurrence. **A named time is not moved or dropped by quiet
   hours, and neither is any asked reminder armed at once**: "a las 6:30" said at 06:20 rings at
   once, and the delivery gate does not defer such a row (`payload.night_exempt`) and measures its
   lateness from its own `fire_at`. A day alone keeps the night rules. The gate judges an asked
   row day-granular only by its `day_only` key, so an asked named midnight passes at midnight; a
   row nobody asked about keeps the midnight reading. A timer, and a unit nobody asked about, arm
-  as before. Until capture computes `asked` and stores the payload keys (the next link of the
-  change), the planner and the gate are ready and capture passes `asked = false`.
+  as before. Capture writes the payload keys `asked`, `day_only` and `night_exempt` the gate
+  reads. The reply names the instant and the reminder: "Anotado para el sáb 17 oct, 10:00. Te
+  aviso 15 minutos antes." (a lead under an hour is said in minutes), and for a day alone the
+  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."). An
+  asked unit that arms nothing (`no_date`, `already_past`, `too_late`) is still stored with
+  `remind_me` set, writes one `capture.arm.refused` row carrying `asked`, and its reply says why
+  ("Anotado, pero no puse aviso: la hora indicada ya pasó.").
   A **recurring reminder** keeps one trigger **on** its next occurrence (ADR-0034); one armed a
   week ahead before it keeps that instant and re-arms on the occurrence. Triggers armed before
   ADR-0029 keep the instant they were armed for; a correction of their date re-arms them as the new set.
@@ -1866,7 +1872,10 @@ box stops being read.
 
 The rule, then, is not a list of refusals: **a refusal is recorded exactly when the capture would
 otherwise leave no trace at all.** A new refusal reason, or a new kind that can arm, is covered by
-that sentence without it being rewritten.
+that sentence without it being rewritten. A kept unit is a trace of the capture, not of why the
+reminder is missing, when nothing on it says so: an event left no instant by quiet hours, and a
+unit whose reminder the user asked for (`remind_me`) and did not get, each write one
+`capture.arm.refused` row.
 
 **A scan-time conflict is recorded and skipped, never fatal.** Two due scans overlapping is the
 normal state of something that runs every few minutes, and the precondition that keeps them from
@@ -1942,8 +1951,8 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `max_quiet_end_hour` (`internal/core/prospection.MaxQuietEndHour`) | 12 — the latest quiet end a user may set; a bound on input, not a default |
 | `max_event_reminder_leads` (`internal/core/prospection.MaxEventReminderLeads`) | 5 — the most reminders a user may set per timed event; a bound on input, not a default |
 | `max_event_lead_days` (`internal/core/prospection.MaxEventLeadDays`) | 30 — the furthest ahead of a timed event a user may set a reminder |
-| `default_remind_me_lead_minutes` (`internal/core/prospection.DefaultRemindMeLeadMinutes` + `ResolveReminderPrefs`) | 15 — minutes before a named time an asked one-shot reminder fires (ADR-0031). Overridable by a `config.remind_me_lead_minutes` column that the next link adds (1 minute to `max_event_lead_days` days); until then the default applies |
-| `at_once_margin_minutes` (`internal/core/prospection.AtOnceMarginMinutes`) | 5 — the least time that must remain before an asked reminder's instant, or the end of its day, for an at-once arming (at least that much: 5 minutes left arms, 4 refuses); one `proactive_check_interval`, and `test/conformance` asserts the two are equal because core cannot import the scheduler |
+| `default_remind_me_lead_minutes` (`internal/core/prospection.DefaultRemindMeLeadMinutes` + `ResolveReminderPrefs`) | 15 — minutes before a named time an asked one-shot reminder fires (ADR-0031). Overridable by `config.remind_me_lead_minutes` (1 minute to `max_event_lead_days` days) |
+| `at_once_margin_minutes` (`internal/core/prospection.AtOnceMarginMinutes`) | 7 — the least time that must remain before an asked reminder's instant, or the end of its day, for an at-once arming (at least that much: 7 minutes left arms, 6 refuses); one `proactive_check_interval` (5) plus 2 minutes of slack for a pass that runs late, and `test/conformance` asserts the margin is strictly above the interval because core cannot import the scheduler |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | `provider_timeout` (`internal/config.DefaultProviderTimeout`; per provider `timeout:` overrides) | 60 s — how long one provider call may take before it fails as a timeout (I32). A local model on modest hardware may need more |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |

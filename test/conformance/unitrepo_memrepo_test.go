@@ -107,3 +107,12 @@ func TestUnitRepo_MemRepo_Title(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_RemindMe runs repocontract.RunRemindMe against the same
+// fake (spec R1).
+func TestUnitRepo_MemRepo_RemindMe(t *testing.T) {
+	repocontract.RunRemindMe(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}

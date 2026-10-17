@@ -647,6 +647,39 @@ func RunTriggerFollow(t *testing.T, newRepo func(t *testing.T) TriggerHarness) {
 		}
 	})
 
+	t.Run("an asked reminder keeps its asked, day_only and night_exempt keys through Create and Reschedule", func(t *testing.T) {
+		repo := newRepo(t)
+		seed(t, repo)
+		unitID := "unit-shared"
+		at := contractNow.Add(5 * time.Hour)
+		trg := fixtureTrigger("trg-asked", &at)
+		trg.UnitID = &unitID
+		trg.Payload.About, trg.Payload.Asked, trg.Payload.DayOnly, trg.Payload.NightExempt = at, true, true, true
+		createTrigger(t, repo, trg)
+		find := func() ports.DueTrigger {
+			for _, d := range armed(t, repo) {
+				if d.ID == "trg-asked" {
+					return d
+				}
+			}
+			t.Fatal("trg-asked is not armed")
+			return ports.DueTrigger{}
+		}
+		if got := find(); !got.Payload.Asked || !got.Payload.DayOnly || !got.Payload.NightExempt {
+			t.Errorf("after Create = %+v, want asked, day_only and night_exempt kept", got.Payload)
+		}
+		moved := ports.TriggerPayload{ActionText: "x", About: at, Asked: true}
+		if err := repo.Reschedule(ctx, "trg-asked", ports.TriggerMove{FireAt: at.Add(time.Hour), Payload: moved}); err != nil {
+			t.Fatalf("Reschedule: %v", err)
+		}
+		if got := find(); !got.Payload.Asked || got.Payload.DayOnly || got.Payload.NightExempt {
+			t.Errorf("after Reschedule = %+v, want only asked kept: the move writes the payload it is given", got.Payload)
+		}
+		if plain := armed(t, repo)[0]; plain.Payload.Asked || plain.Payload.DayOnly || plain.Payload.NightExempt {
+			t.Errorf("an unasked reminder reads %+v, want none of the keys", plain.Payload)
+		}
+	})
+
 	t.Run("ArmedForUnit returns the unit's armed triggers by fire_at", func(t *testing.T) {
 		repo := newRepo(t)
 		seed(t, repo)

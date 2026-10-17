@@ -34,7 +34,11 @@ type Unit struct {
 	// Title is the short, date-free name a reminder says for the unit, "" when
 	// it has none (stored as NULL; spec R12). A reminder reads Title, falling
 	// back to Content. A re-classifying correction rewrites it.
-	Title     string
+	Title string
+	// RemindMe is whether the user's own words asked to be reminded of this unit
+	// (spec R1): the classification's remind_request when it was stored. It is a
+	// fact about the capture, never a verdict on whether anything was armed.
+	RemindMe  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

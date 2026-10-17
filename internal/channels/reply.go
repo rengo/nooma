@@ -36,6 +36,11 @@ func RenderReply(result brain.CaptureResult) string {
 
 	switch result.Outcome {
 	case brain.OutcomeStored:
+		// Asked and not armed: the unit is kept, and the reply says why no
+		// reminder was set (ADR-0031 point 7).
+		if result.ArmRefused != nil {
+			return fmt.Sprintf(say.NotedNotSet, refusalReason(say, result.ArmRefused))
+		}
 		return say.Noted
 
 	case brain.OutcomeArmed:
@@ -54,6 +59,13 @@ func RenderReply(result brain.CaptureResult) string {
 		case prospection.ArmRecurring:
 			return fmt.Sprintf(say.RecurringSet, say.Time(result.Armed.About))
 		default:
+			if result.Armed.DayOnly {
+				lead := say.ThatDayAt(result.Armed.FireAt)
+				if result.Armed.Immediate {
+					lead = say.LeadImmediate
+				}
+				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), lead)
+			}
 			// Immediate is the plan's own fact, never re-derived from the
 			// two instants: subtracting them gives a true duration and a
 			// false promise — 41 hours reads as "the day before" for a
@@ -127,6 +139,8 @@ func refusalReason(say phrase.Set, refused *brain.ArmRefused) string {
 		return say.RefusalNoDate
 	case prospection.RefusalAlreadyPast:
 		return say.RefusalPast
+	case prospection.RefusalTooLate:
+		return say.RefusalTooLate
 	default:
 		return refused.Message
 	}

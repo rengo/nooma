@@ -128,7 +128,8 @@ type CaptureResult struct {
 	Armed *Armed
 
 	// ArmRefused names why a capture that asked for a nudge did not get
-	// one. Set only for Outcome == OutcomeArmRefused.
+	// one. Set for Outcome == OutcomeArmRefused, and for OutcomeStored when
+	// the user asked to be reminded of the kept unit and nothing was armed.
 	ArmRefused *ArmRefused
 
 	// Recalled holds the units RecallService.ForText found for a
@@ -173,6 +174,9 @@ type Armed struct {
 	// Later are the fire instants of an event's further reminders, in
 	// order, after the earliest one FireAt names (ADR-0029).
 	Later []time.Time
+	// DayOnly says About is a day alone, not a moment: the reply names the
+	// day and the hour it rings on it, never a lead (ADR-0031 point 7).
+	DayOnly bool
 }
 
 // ArmRefused is what CaptureResult carries when a capture classified as

@@ -264,6 +264,31 @@ func RunSetReminderPrefs(t *testing.T, newRepo func(t *testing.T) ConfigHarness)
 		}
 	})
 
+	t.Run("the remind-me lead is written alone, and an update without it keeps it", func(t *testing.T) {
+		repo := newRepo(t)
+		lead := func(m int) *int { return &m }
+		repo.SeedConfig(t, ports.VaultConfig{EventReminderLeads: str("[300]"), QuietHoursEnd: str("05:00")})
+		if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{RemindMeLeadMinutes: lead(30)}, at); err != nil {
+			t.Fatalf("SetReminderPrefs: %v", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got.RemindMeLeadMinutes == nil || *got.RemindMeLeadMinutes != 30 {
+			t.Errorf("RemindMeLeadMinutes = %v, want 30", got.RemindMeLeadMinutes)
+		}
+		if got.EventReminderLeads == nil || *got.EventReminderLeads != "[300]" || got.QuietHoursEnd == nil || *got.QuietHoursEnd != "05:00" {
+			t.Errorf("Load() = %+v, want the other preferences untouched by a lead-only write", got)
+		}
+		if err := repo.SetReminderPrefs(ctx, ports.ReminderPrefsUpdate{QuietHoursEnd: str("06:00")}, at); err != nil {
+			t.Fatalf("SetReminderPrefs: %v", err)
+		}
+		if got, _ := repo.Load(ctx); got.RemindMeLeadMinutes == nil || *got.RemindMeLeadMinutes != 30 {
+			t.Errorf("RemindMeLeadMinutes = %v, want the stored 30 kept by an update that leaves it out", got.RemindMeLeadMinutes)
+		}
+	})
+
 	// One subtest per column: all four seeded, an update that names every
 	// column but one, and the one left out keeps its value. Each COALESCE is
 	// what the subtest for its column guards.

@@ -133,14 +133,15 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 		if !ok {
 			return nothing(RefusalNoDate)
 		}
-		// Until the recurring branch takes an asked request (a later link), a
-		// repeating request is its one-shot occurrence, and a recurring_reminder
-		// with a rule is not an event whose ADR-0029 leads apply (D3).
-		kind := *c.Kind
-		if kind == classify.KindRecurringReminder && c.RecurrenceRule != nil {
-			kind = classify.KindTask
+		// A recurring reminder with a rule keeps its recurring row (ADR-0034),
+		// asked or not: a one-shot would drop the repetition the message asked
+		// for. Its time is the asked instant, so a due_at alone is read too.
+		// A task or event with a rule is, until a later link, its one-shot
+		// occurrence (D3).
+		if *c.Kind == classify.KindRecurringReminder && c.RecurrenceRule != nil {
+			return []Plan{recurringTrigger(at, recurrenceRule(*c.RecurrenceRule), prefs, now, interrupt)}, true
 		}
-		leads := leadSet(kind, true, at, dayOnly, prefs, now.Location())
+		leads := leadSet(*c.Kind, true, at, dayOnly, prefs, now.Location())
 		return reminders(at, dayOnly, leads, prefs, now, interrupt, nil)
 	}
 

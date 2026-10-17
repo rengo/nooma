@@ -62,6 +62,7 @@ func newReminder(t ports.DueTrigger, fired bool) prospection.Reminder {
 	return prospection.Reminder{
 		FireAt: t.FireAt, EventAt: t.Payload.About, LeadMinutes: t.Payload.LeadMinutes,
 		Rule: t.RecurrenceRule, Anchor: t.RecurrenceAnchor, Waiting: fired && (t.RecurrenceRule != nil || t.FireAt.IsZero()),
+		Asked: t.Payload.Asked, DayOnly: t.Payload.DayOnly, NightExempt: t.Payload.NightExempt,
 	}
 }
 

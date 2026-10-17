@@ -57,13 +57,17 @@ type Set struct {
 
 	// NotScheduled prefixes an arming refusal — one %s, the reason.
 	NotScheduled string
-	// RefusalNoDate and RefusalPast are the two reasons a refusal can
-	// carry, in the person's language. The typed prospection.Refusal
-	// travels to the renderer precisely so these can exist: the English
-	// sentence brain builds stays in the trail, where its audience is an
-	// auditor.
-	RefusalNoDate string
-	RefusalPast   string
+	// NotedNotSet answers a kept unit whose asked reminder was not set — one
+	// %s, the reason.
+	NotedNotSet string
+	// RefusalNoDate, RefusalPast and RefusalTooLate are the reasons a
+	// refusal can carry, in the person's language. The typed
+	// prospection.Refusal travels to the renderer precisely so these can
+	// exist: the English sentence brain builds stays in the trail, where its
+	// audience is an auditor.
+	RefusalNoDate  string
+	RefusalPast    string
+	RefusalTooLate string
 
 	// TimerSet takes one %s: the instant the timer fires, which for a
 	// timer is also what it is about.
@@ -110,12 +114,16 @@ type Set struct {
 	TimerLate    string
 	LanguageName string
 
-	// The four lead-time phrases NotedFor's second %s is filled with.
-	// LeadDays takes one %d.
+	// The lead-time phrases NotedFor's second %s is filled with. LeadDays
+	// and LeadMinutes take one %d; LeadMinute is a lead of one minute.
+	// LeadThatDayAt takes one %s, the hour a day alone is reminded at.
 	LeadImmediate string
+	LeadMinute    string
+	LeadMinutes   string
 	LeadHours     string
 	LeadDayBefore string
 	LeadDays      string
+	LeadThatDayAt string
 	// And joins the last two of several lead phrases.
 	And string
 
@@ -157,9 +165,11 @@ var sets = map[classify.Language]Set{
 		AskWhichOne:  "I need one more thing before I can change that — which one did you mean?",
 		NothingFound: "I could not find anything about that.",
 
-		NotScheduled:  "I did not set that: %s",
-		RefusalNoDate: "no time was given, and guessing one is worse than not setting a reminder at all",
-		RefusalPast:   "the time given has already passed",
+		NotScheduled:   "I did not set that: %s",
+		NotedNotSet:    "Noted, but I did not set a reminder: %s.",
+		RefusalNoDate:  "no time was given, and guessing one is worse than not setting a reminder at all",
+		RefusalPast:    "the time given has already passed",
+		RefusalTooLate: "too little time is left before it",
 
 		TimerSet:     "Timer set for %s.",
 		RecurringSet: "Recurring reminder set for %s.",
@@ -183,9 +193,12 @@ var sets = map[classify.Language]Set{
 		LanguageName:      "English",
 
 		LeadImmediate: "right away",
+		LeadMinute:    "1 minute before",
+		LeadMinutes:   "%d minutes before",
 		LeadHours:     "a few hours before",
 		LeadDayBefore: "the day before",
 		LeadDays:      "%d days before",
+		LeadThatDayAt: "that day at %s",
 		And:           "and",
 
 		FoundOne:  "Found %d thing:",
@@ -210,9 +223,11 @@ var sets = map[classify.Language]Set{
 		AskWhichOne:  "Necesito una cosa más antes de cambiarlo: ¿a cuál te referías?",
 		NothingFound: "No encontré nada sobre eso.",
 
-		NotScheduled:  "No lo programé: %s",
-		RefusalNoDate: "no se indicó ninguna hora, y adivinarla es peor que no poner el recordatorio",
-		RefusalPast:   "la hora indicada ya pasó",
+		NotScheduled:   "No lo programé: %s",
+		NotedNotSet:    "Anotado, pero no puse aviso: %s.",
+		RefusalNoDate:  "no se indicó ninguna hora, y adivinarla es peor que no poner el recordatorio",
+		RefusalPast:    "la hora indicada ya pasó",
+		RefusalTooLate: "queda muy poco tiempo para esa hora",
 
 		TimerSet:     "Temporizador puesto para el %s.",
 		RecurringSet: "Recordatorio recurrente puesto para el %s.",
@@ -236,9 +251,12 @@ var sets = map[classify.Language]Set{
 		LanguageName:      "Spanish",
 
 		LeadImmediate: "ahora mismo",
+		LeadMinute:    "1 minuto antes",
+		LeadMinutes:   "%d minutos antes",
 		LeadHours:     "unas horas antes",
 		LeadDayBefore: "el día anterior",
 		LeadDays:      "%d días antes",
+		LeadThatDayAt: "ese día a las %s",
 		And:           "y",
 
 		FoundOne:  "Encontré %d cosa:",
@@ -272,6 +290,11 @@ func For(l classify.Language) Set {
 // tell someone in Buenos Aires about a reminder at a time nobody set.
 func (s Set) Time(t time.Time) string {
 	return s.Date(t) + fmt.Sprintf(", %02d:%02d", t.Hour(), t.Minute())
+}
+
+// ThatDayAt names the hour on its own day a day alone is reminded at.
+func (s Set) ThatDayAt(fire time.Time) string {
+	return fmt.Sprintf(s.LeadThatDayAt, fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute()))
 }
 
 // Date renders an instant as Time does, without the clock: a whole day has no hour.
@@ -338,6 +361,14 @@ func (s Set) Found(n int) string {
 func (s Set) Lead(immediate bool, fire, about time.Time) string {
 	if immediate || !about.After(fire) {
 		return s.LeadImmediate
+	}
+	// Under an hour is said in minutes: an asked lead of 15 is not "a few
+	// hours before" (ADR-0031 point 7).
+	if gap := about.Sub(fire); gap < time.Hour {
+		if minutes := int(gap / time.Minute); minutes > 1 {
+			return fmt.Sprintf(s.LeadMinutes, minutes)
+		}
+		return s.LeadMinute
 	}
 	y, m, d := fire.In(about.Location()).Date()
 	ay, am, ad := about.Date()

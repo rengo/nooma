@@ -120,6 +120,10 @@ type TriggerPayload struct {
 	// CatchUp marks the at-once reminder an event is owed when every lead of
 	// it has passed (ADR-0032): its id is catch-up:<unit>:<about>:<attempt>.
 	CatchUp bool
+	// Asked, DayOnly and NightExempt are the keys the delivery gate reads for a
+	// reminder the user asked for (ADR-0031): it was asked for; its event is a
+	// bare date; quiet hours neither move nor hold it.
+	Asked, DayOnly, NightExempt bool
 	// Reasks is how many morning digests asked this check-in again; Reask
 	// counts it in the same write as its restamp (doc 02 §7).
 	Reasks int

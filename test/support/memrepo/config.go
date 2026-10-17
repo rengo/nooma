@@ -63,6 +63,10 @@ func (c *Config) RecordConsolidationRun(_ context.Context, at time.Time) error {
 // replaces its own, lazily creating the row as RecordConsolidationRun does.
 func (c *Config) SetReminderPrefs(_ context.Context, u ports.ReminderPrefsUpdate, at time.Time) error {
 	return c.set(at, func(r *ports.VaultConfig) {
+		if u.RemindMeLeadMinutes != nil {
+			v := *u.RemindMeLeadMinutes
+			r.RemindMeLeadMinutes = &v
+		}
 		for _, f := range []struct {
 			to **string
 			v  *string

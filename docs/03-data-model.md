@@ -38,7 +38,8 @@ CREATE TABLE units (
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
   language           TEXT,                       -- en|es|NULL: the language the capture was written in (ADR-0032); never changed by a correction
-  title              TEXT                        -- NULL or the short, date-free name a reminder says (spec R12); rewritten by a re-classifying correction
+  title              TEXT,                       -- NULL or the short, date-free name a reminder says (spec R12); rewritten by a re-classifying correction
+  remind_me          INTEGER NOT NULL DEFAULT 0  -- 1: the user's words asked to be reminded (ADR-0031); a fact about the capture, never edited
 );
 CREATE INDEX idx_units_status_touched ON units(status, last_touched_at);
 
@@ -72,7 +73,7 @@ CREATE TABLE triggers (
   status            TEXT NOT NULL DEFAULT 'armed', -- armed|fired|dismissed|expired (expired + fired_at = a fired reminder that lapsed, never delivered; expired + surfaced_at = a check-in that closed unanswered, doc 02 §7)
   condition         TEXT,                        -- JSON (event/pattern)
   interrupt_level   REAL,                        -- 0–1, persisted (auditable)
-  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days, lead_minutes, event_at, user_leads_minutes)
+  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days, lead_minutes, event_at, user_leads_minutes, and for a reminder the user asked for: asked, day_only, night_exempt)
   fire_at           TEXT,
   fired_at          TEXT,
   surfaced_at       TEXT,                        -- NULL = pending delivery
@@ -236,14 +237,15 @@ CREATE TABLE config (
   event_reminder_leads      TEXT,                -- JSON array of minutes, e.g. [1440,120]; NULL = default
   date_only_reminder_at     TEXT,                -- HH:MM local; NULL = default
   quiet_hours_end           TEXT,                -- HH:MM local, 00:01 to 12:00; NULL = default (07:00)
-  evening_reminder_at       TEXT                 -- HH:MM local, quiet end to 23:59; NULL = default (22:00)
+  evening_reminder_at       TEXT,                -- HH:MM local, quiet end to 23:59; NULL = default (22:00)
+  remind_me_lead_minutes    INTEGER              -- whole minutes, 1 to 43200 (30 days); how long before a named time an asked reminder fires; NULL = default (15)
 );
 ```
 
-(The two reminder columns are migration 0006's and the two quiet-hours columns migration
-0007's, appended by `ALTER TABLE`, hence after `updated_at`. They are the user's preferences,
-not calibration: `NULL` means "never chosen" and resolves to the default in
-`prospection.ResolveReminderPrefs`, ADR-0029 and ADR-0030.)
+(The two reminder columns are migration 0006's, the two quiet-hours columns migration 0007's
+and the remind-me lead migration 0010's, appended by `ALTER TABLE`, hence after `updated_at`.
+They are the user's preferences, not calibration: `NULL` means "never chosen" and resolves to
+the default in `prospection.ResolveReminderPrefs`, ADR-0029, ADR-0030 and ADR-0031.)
 
 (The schedule is neither here nor in `nooma.yml`: it is two constants in `internal/scheduler`,
 retired from configuration by [ADR-0025](adr/0025-the-schedule-is-not-a-setting.md). What this

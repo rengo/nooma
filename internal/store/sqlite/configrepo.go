@@ -45,7 +45,7 @@ func (r *ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error) {
 SELECT weight_threshold, hysteresis_margin, consolidation_enabled,
        goal_stagnation_days, mental_load_threshold, consolidation_last_run_at,
        event_reminder_leads, date_only_reminder_at,
-       quiet_hours_end, evening_reminder_at
+       quiet_hours_end, evening_reminder_at, remind_me_lead_minutes
 FROM config WHERE id = 1`
 
 	var (
@@ -55,11 +55,12 @@ FROM config WHERE id = 1`
 		consolidationLastRunAt                  sql.NullString
 		reminderLeads, dateOnlyAt               sql.NullString
 		quietEnd, eveningAt                     sql.NullString
+		remindMeLead                            sql.NullInt64
 	)
 	err := r.db.QueryRowContext(ctx, q).Scan(
 		&weightThreshold, &hysteresisMargin, &consolidationEnabled,
 		&goalStagnationDays, &mentalLoadThreshold, &consolidationLastRunAt,
-		&reminderLeads, &dateOnlyAt, &quietEnd, &eveningAt,
+		&reminderLeads, &dateOnlyAt, &quietEnd, &eveningAt, &remindMeLead,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ports.VaultConfig{}, nil
@@ -101,6 +102,10 @@ FROM config WHERE id = 1`
 	if eveningAt.Valid {
 		cfg.EveningReminderAt = &eveningAt.String
 	}
+	if remindMeLead.Valid {
+		v := int(remindMeLead.Int64)
+		cfg.RemindMeLeadMinutes = &v
+	}
 	if consolidationLastRunAt.Valid {
 		t, err := time.Parse(unitTimeLayout, consolidationLastRunAt.String)
 		if err != nil {
@@ -140,16 +145,17 @@ ON CONFLICT(id) DO UPDATE SET
 // RecordConsolidationRun's own lazy creation.
 func (r *ConfigRepo) SetReminderPrefs(ctx context.Context, u ports.ReminderPrefsUpdate, at time.Time) error {
 	const q = `
-INSERT INTO config (id, event_reminder_leads, date_only_reminder_at, quiet_hours_end, evening_reminder_at, updated_at)
-VALUES (1, ?, ?, ?, ?, ?)
+INSERT INTO config (id, event_reminder_leads, date_only_reminder_at, quiet_hours_end, evening_reminder_at, remind_me_lead_minutes, updated_at)
+VALUES (1, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   event_reminder_leads = COALESCE(excluded.event_reminder_leads, event_reminder_leads),
   date_only_reminder_at = COALESCE(excluded.date_only_reminder_at, date_only_reminder_at),
   quiet_hours_end = COALESCE(excluded.quiet_hours_end, quiet_hours_end),
   evening_reminder_at = COALESCE(excluded.evening_reminder_at, evening_reminder_at),
+  remind_me_lead_minutes = COALESCE(excluded.remind_me_lead_minutes, remind_me_lead_minutes),
   updated_at = excluded.updated_at`
 
-	if _, err := r.db.ExecContext(ctx, q, u.EventReminderLeads, u.DateOnlyReminderAt, u.QuietHoursEnd, u.EveningReminderAt, formatUnitTime(at)); err != nil {
+	if _, err := r.db.ExecContext(ctx, q, u.EventReminderLeads, u.DateOnlyReminderAt, u.QuietHoursEnd, u.EveningReminderAt, u.RemindMeLeadMinutes, formatUnitTime(at)); err != nil {
 		return fmt.Errorf("writing reminder preferences at %s: %w", at, err)
 	}
 	return nil
