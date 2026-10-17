@@ -55,6 +55,7 @@ type dpScenario struct {
 	name                string
 	about               string
 	quietEnd            string
+	remindMeLead        int
 	say                 []dpSay
 	from, until         time.Time
 	downFrom, downUntil time.Time
@@ -130,6 +131,9 @@ func (s dpScenario) live(t *testing.T) string {
 	if s.quietEnd != "" {
 		prefs.QuietHoursEnd = &s.quietEnd
 	}
+	if s.remindMeLead != 0 {
+		prefs.RemindMeLeadMinutes = &s.remindMeLead
+	}
 	if prefs != (ports.ReminderPrefsUpdate{}) {
 		if err := config.SetReminderPrefs(ctx, prefs, s.from); err != nil {
 			t.Fatal(err)
@@ -158,6 +162,9 @@ func (s dpScenario) live(t *testing.T) string {
 			s.from.Format("Mon 2006-01-02 15:04 -07:00"), s.until.Format("Mon 2006-01-02 15:04"))}
 	if s.quietEnd != "" {
 		header = append(header, "# quiet hours end at "+s.quietEnd)
+	}
+	if s.remindMeLead != 0 {
+		header = append(header, fmt.Sprintf("# an asked reminder rings %d minutes before", s.remindMeLead))
 	}
 	pending := s.say
 	for at := s.from; at.Before(s.until); at = at.Add(scheduler.ProactiveCheckInterval) {
@@ -272,6 +279,18 @@ func dpScenarios() []dpScenario {
 				{at: dpAt(10, 16, 10, 44), id: "classify-request-named-time-friday"},
 				{at: dpAt(10, 16, 10, 46), id: "classify-request-haceme-acordar"},
 			},
+		},
+		{
+			// The re-plan's catch-up of an asked unit is the asked one
+			// (CatchUpAsked): night-exempt, so it rings when the server
+			// returns at night, where an unasked catch-up would read the
+			// event's own leads, find the 2-hour one still ahead, and owe none.
+			name:         "long-lead-night-return",
+			about:        "a 12-hour asked lead whose ring the downtime ate, the server back at night",
+			remindMeLead: 720,
+			from:         dpAt(10, 16, 10, 40), until: dpAt(10, 18, 12, 0),
+			downFrom: dpAt(10, 16, 21, 0), downUntil: dpAt(10, 17, 4, 30),
+			say: []dpSay{{at: dpAt(10, 16, 10, 42), id: "classify-task-remind-me-coffee"}},
 		},
 	}
 }
