@@ -253,6 +253,20 @@ func TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour(t *testing.T) {
 	}
 }
 
+// TestI36_AnAskedDayEventNamesEveryRing replays the real model's reading of
+// "acordate de avisarme que vence el seguro el viernes": an asked event on a
+// day alone is reminded the day before (ADR-0029) and on the day itself
+// (ADR-0031 point 2), and the reply names both, as a timed event's names its
+// three, rather than only the day's.
+func TestI36_AnAskedDayEventNamesEveryRing(t *testing.T) {
+	v := newI36Vault()
+	result := v.capture(t, i36Now, i36Recordings(t), "classify-request-acordate-de-avisarme",
+		"acordate de avisarme que vence el seguro el viernes")
+	if got, want := channels.RenderReply(result), "Anotado para el vie 23 oct. Te aviso el día anterior y ese día a las 09:00."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
 // TestI36_TodayAfterTheDateOnlyHourRingsAtOnce: "hoy" asked after 09:00 rings
 // at once, and the reply says so rather than an hour already gone.
 func TestI36_TodayAfterTheDateOnlyHourRingsAtOnce(t *testing.T) {

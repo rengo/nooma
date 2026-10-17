@@ -60,19 +60,17 @@ func RenderReply(result brain.CaptureResult) string {
 			// When it rings every time, not its next ring alone (ADR-0031 point 7).
 			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)
 		default:
+			fires := append([]time.Time{result.Armed.FireAt}, result.Armed.Later...)
 			if result.Armed.DayOnly {
-				lead := say.ThatDayAt(result.Armed.FireAt)
-				if result.Armed.Immediate {
-					lead = say.LeadImmediate
-				}
-				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), lead)
+				// Every ring is named: an event on a day alone is also
+				// reminded the day before (ADR-0029, ADR-0031 point 2).
+				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), say.DayLeads(result.Armed.Immediate, result.Armed.About, fires...))
 			}
 			// Immediate is the plan's own fact, never re-derived from the
 			// two instants: subtracting them gives a true duration and a
 			// false promise — 41 hours reads as "the day before" for a
 			// reminder that arrives at once.
 			// Every reminder is named: a timed event has two (ADR-0029).
-			fires := append([]time.Time{result.Armed.FireAt}, result.Armed.Later...)
 			lead := say.Leads(result.Armed.Immediate, result.Armed.About, fires...)
 			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), lead)
 		}

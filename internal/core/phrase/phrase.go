@@ -431,7 +431,36 @@ func (s Set) Lead(immediate bool, fire, about time.Time) string {
 func (s Set) Leads(immediate bool, about time.Time, fires ...time.Time) string {
 	var said []string
 	for i, fire := range fires {
-		if p := s.Lead(immediate && i == 0, fire, about); !slices.Contains(said, p) {
+		said = append(said, s.Lead(immediate && i == 0, fire, about))
+	}
+	return s.join(said)
+}
+
+// DayLeads is Leads for a day alone, day being its local midnight: a ring on
+// the day itself names its hour (ThatDayAt), and one on another day says how
+// long before, so an asked event on a day alone names the day before too.
+func (s Set) DayLeads(immediate bool, day time.Time, fires ...time.Time) string {
+	var said []string
+	for i, fire := range fires {
+		y, m, d := fire.In(day.Location()).Date()
+		dy, dm, dd := day.Date()
+		switch {
+		case immediate && i == 0:
+			said = append(said, s.LeadImmediate)
+		case y == dy && m == dm && d == dd:
+			said = append(said, s.ThatDayAt(fire.In(day.Location())))
+		default:
+			said = append(said, s.Lead(false, fire, day))
+		}
+	}
+	return s.join(said)
+}
+
+// join says each lead once, in order, the last two joined in the language.
+func (s Set) join(leads []string) string {
+	var said []string
+	for _, p := range leads {
+		if !slices.Contains(said, p) {
 			said = append(said, p)
 		}
 	}

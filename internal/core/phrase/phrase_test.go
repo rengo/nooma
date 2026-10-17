@@ -373,3 +373,26 @@ func TestSet_Every(t *testing.T) {
 		}
 	}
 }
+
+// TestSet_DayLeads: a day alone names a ring on the day by its hour and one on
+// an earlier day by how long before; at once is said as such; two alike once.
+func TestSet_DayLeads(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	day := time.Date(2026, 10, 23, 0, 0, 0, 0, zone)
+	at := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, zone) }
+	es := For(classify.LanguageES)
+	for _, tc := range []struct {
+		immediate bool
+		fires     []time.Time
+		want      string
+	}{
+		{false, []time.Time{at(23, 9)}, "ese día a las 09:00"},
+		{false, []time.Time{at(22, 9), at(23, 9)}, "el día anterior y ese día a las 09:00"},
+		{true, []time.Time{at(22, 21), at(23, 9)}, "ahora mismo y ese día a las 09:00"},
+		{false, []time.Time{at(23, 9), at(23, 9)}, "ese día a las 09:00"},
+	} {
+		if got := es.DayLeads(tc.immediate, day, tc.fires...); got != tc.want {
+			t.Errorf("DayLeads(%v, %v) = %q, want %q", tc.immediate, tc.fires, got, tc.want)
+		}
+	}
+}
