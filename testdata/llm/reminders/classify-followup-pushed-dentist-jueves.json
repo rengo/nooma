@@ -1,0 +1,30 @@
+{
+  "id": "classify-followup-pushed-dentist-jueves",
+  "task": "classify",
+  "message": "no, el jueves",
+  "record": true,
+  "now": "2026-10-14T10:05:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "push",
+        "text": "Recordatorio: Dentista — vie 16 oct, 10:00",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Dentista el 2026-10-16 a las 10:00.",
+        "title": "Dentista",
+        "event_at": "2026-10-16T10:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "A",
+    "event_at": "2026-10-15T10:00:00-03:00"
+  }
+}

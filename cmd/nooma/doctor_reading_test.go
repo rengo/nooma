@@ -302,3 +302,35 @@ func TestDoctorFalsePositiveLineCountsAKeepReadAsAStop(t *testing.T) {
 		t.Fatalf("a keep read as a keep failed doctor: %v", ok.falsePositives)
 	}
 }
+
+// TestDoctorReportsFollowUpReading: the follow-ups (ADR-0036) have their own
+// line, judged on every follow-up field, and a referent read on a phrasing
+// that changes nothing is named: it would correct a unit nobody changed.
+func TestDoctorReportsFollowUpReading(t *testing.T) {
+	conv := &llm.Conversation{
+		Turns: []llm.ConversationTurn{{Speaker: "user", Text: "reunión con Juan a las 22:30", About: []string{"A"}}},
+		Items: []llm.ConversationEntry{{Content: "Reunión con Juan el 2026-10-15 a las 22:30.", EventAt: "2026-10-15T22:30:00-03:00"}},
+	}
+	followUp := func(id, msg string, e llm.Expect, answer string) readCase {
+		rc := phrasing(id, msg, e, answer)
+		rc.c.Conversation = conv
+		return rc
+	}
+	correctA := `{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A","event_at":"2026-10-15T08:00:00-03:00"}`
+	moved := llm.Expect{Type: "correction", Referent: "A", EventAt: "2026-10-15T08:00:00-03:00"}
+	r := readAll(t,
+		followUp("moves", "Es a las 08:00.", moved, correctA),
+		followUp("moves-wrong", "es a las 8", moved, reply(``)),
+		followUp("new", "Comprar pan", llm.Expect{Type: "task"}, reply(`,"referent":"A"`)),
+		followUp("new-ok", "Comprar leche", llm.Expect{Type: "task"}, reply(``)),
+	)
+	got := r.String()
+	for _, want := range []string{
+		"follow-ups: 2 of 4 read as expected",
+		"items corrected that nobody changed: 1 of 2 (new)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("report lacks %q:\n%s", want, got)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package reading
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -352,5 +353,130 @@ func TestReminderMissedCountsOnlyTheReminderFields(t *testing.T) {
 	}
 	if ReminderMissed(nil) || !ReminderMissed([]string{FieldTitle, "(response)"}) {
 		t.Error("no miss is no miss; an unreadable response is a miss")
+	}
+}
+
+var followUpConversation = &llm.Conversation{
+	Turns: []llm.ConversationTurn{
+		{Speaker: "user", Text: "reunión con Juan el 15 a las 22:30", About: []string{"A"}},
+		{Speaker: "nooma", Text: "Anotado.", About: []string{"A"}},
+		{Speaker: "push", Text: "Mañana: dentista", About: []string{"B"}},
+	},
+	Items: []llm.ConversationEntry{
+		{Content: "Tengo reunión con Juan el 2026-10-15 a las 22:30.", Title: "Reunión con Juan", EventAt: "2026-10-15T22:30:00-03:00"},
+		{Content: "Dentista.", EventAt: "2026-10-16"},
+	},
+}
+
+// TestPromptCarriesTheConversation: a case's transcript reaches the prompt as
+// production builds it, a bare date as the first moment of its day in the
+// case's zone (ADR-0036).
+func TestPromptCarriesTheConversation(t *testing.T) {
+	c := baseCase()
+	c.Conversation = followUpConversation
+	got, err := Prompt(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now, _ := time.Parse(time.RFC3339, testNow)
+	meeting := time.Date(2026, 10, 15, 22, 30, 0, 0, now.Location())
+	friday := time.Date(2026, 10, 16, 0, 0, 0, 0, now.Location())
+	want := classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, classify.ReminderContext{
+		Conversation: classify.Conversation{
+			Turns: []classify.Turn{
+				{Speaker: classify.SpeakerUser, Text: "reunión con Juan el 15 a las 22:30", About: []int{1}},
+				{Speaker: classify.SpeakerNooma, Text: "Anotado.", About: []int{1}},
+				{Speaker: classify.SpeakerPush, Text: "Mañana: dentista", About: []int{2}},
+			},
+			Items: []classify.ConversationItem{
+				{Content: "Tengo reunión con Juan el 2026-10-15 a las 22:30.", Title: "Reunión con Juan", EventAt: &meeting},
+				{Content: "Dentista.", EventAt: &friday},
+			},
+		},
+	})
+	if got != want {
+		t.Fatalf("Prompt is not the production prompt with the case's conversation:\n%s", got)
+	}
+}
+
+// TestCheckReferentIsStrict: a referent the case does not expect is a miss
+// (it would correct a unit in production), an expected one must match, and
+// a question comes back exactly when the referent is unclear.
+func TestCheckReferentIsStrict(t *testing.T) {
+	q := "¿Te referís a la reunión?"
+	for _, tc := range []struct {
+		name, want string
+		got        classify.Classification
+		miss       string
+	}{
+		{"none expected, none read", "", classify.Classification{}, ""},
+		{"none expected, one read", "", classify.Classification{Referent: &classify.Referent{Position: 1}}, FieldReferent},
+		{"A expected and read", "A", classify.Classification{Referent: &classify.Referent{Position: 1}}, ""},
+		{"A expected, B read", "A", classify.Classification{Referent: &classify.Referent{Position: 2}}, FieldReferent},
+		{"unclear expected, asked", "unclear", classify.Classification{Referent: &classify.Referent{Unclear: true}, ClarifyingQuestion: &q}, ""},
+		{"unclear expected, not asked", "unclear", classify.Classification{Referent: &classify.Referent{Unclear: true}}, FieldClarifyingQuestion},
+		{"a question beside a letter", "A", classify.Classification{Referent: &classify.Referent{Position: 1}, ClarifyingQuestion: &q}, FieldClarifyingQuestion},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			misses := Check(llm.Case{Expect: &llm.Expect{Referent: tc.want}}, tc.got)
+			for _, f := range []string{FieldReferent, FieldClarifyingQuestion} {
+				if got := slices.Contains(misses, f); got != (f == tc.miss) {
+					t.Errorf("misses = %v, want only %q", misses, tc.miss)
+				}
+			}
+		})
+	}
+}
+
+// TestCheckEventAtOnlyWhenSet: the instant a follow-up moves to is checked
+// when the case names one, as an instant whatever offset writes it.
+func TestCheckEventAtOnlyWhenSet(t *testing.T) {
+	at := time.Date(2026, 10, 15, 11, 0, 0, 0, time.UTC)
+	cls := classify.Classification{EventAt: &at}
+	missed := func(want string, cls classify.Classification) bool {
+		return slices.Contains(Check(llm.Case{Expect: &llm.Expect{EventAt: want}}, cls), FieldEventAt)
+	}
+	if missed("", cls) || missed("2026-10-15T08:00:00-03:00", cls) {
+		t.Error("the same instant, or none expected, was missed")
+	}
+	if !missed("2026-10-15T09:00:00-03:00", cls) || !missed("2026-10-15T08:00:00-03:00", classify.Classification{}) {
+		t.Error("another instant, or none at all, was accepted")
+	}
+}
+
+// TestValidateCaseChecksTheConversation: a referent, a transcript or an
+// instant the replay could not mean fails at once.
+func TestValidateCaseChecksTheConversation(t *testing.T) {
+	valid := func() llm.Case {
+		c := baseCase()
+		conv := *followUpConversation
+		conv.Turns = slices.Clone(conv.Turns)
+		conv.Items = slices.Clone(conv.Items)
+		c.Conversation = &conv
+		c.Expect = &llm.Expect{Referent: "B", EventAt: "2026-10-16T08:00:00-03:00"}
+		return c
+	}
+	if err := ValidateCase(valid()); err != nil {
+		t.Fatalf("a valid case was rejected: %v", err)
+	}
+	for name, mutate := range map[string]func(*llm.Case){
+		"a referent not listed":     func(c *llm.Case) { c.Expect.Referent = "C" },
+		"a number for a referent":   func(c *llm.Case) { c.Expect.Referent = "1" },
+		"an unreadable event_at":    func(c *llm.Case) { c.Expect.EventAt = "tomorrow" },
+		"an unreadable item date":   func(c *llm.Case) { c.Conversation.Items[1].EventAt = "16/10" },
+		"an item with no content":   func(c *llm.Case) { c.Conversation.Items[0].Content = "" },
+		"a turn tagging no item":    func(c *llm.Case) { c.Conversation.Turns[0].About = []string{"C"} },
+		"an unknown speaker":        func(c *llm.Case) { c.Conversation.Turns[0].Speaker = "bot" },
+		"a turn with no text":       func(c *llm.Case) { c.Conversation.Turns[1].Text = "" },
+		"too many turns":            func(c *llm.Case) { c.Conversation.Turns = make([]llm.ConversationTurn, classify.ConversationTurns+1) },
+		"a conversation and no now": func(c *llm.Case) { c.Now = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := valid()
+			mutate(&c)
+			if err := ValidateCase(c); err == nil {
+				t.Errorf("ValidateCase accepted %s", name)
+			}
+		})
 	}
 }
