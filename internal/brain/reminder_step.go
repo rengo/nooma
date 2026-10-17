@@ -136,9 +136,16 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 		r.unreadable[unitID] = err
 		return true, nil
 	}
-	if u.Type != unit.TypeEvent || u.EventAt == nil {
-		return false, nil
+	// An asked unit is planned at the instant it asked about, as a capture arms
+	// it (ADR-0031); any other unit has reminders only as a dated event.
+	at, asked := askedAt(u)
+	if !asked {
+		if u.Type != unit.TypeEvent || u.EventAt == nil {
+			return false, nil
+		}
+		at = *u.EventAt
 	}
+	event, dayOnly := u.Type == unit.TypeEvent, group[0].Payload.DayOnly
 	stale := map[string]bool{}
 	for _, s := range group {
 		stale[s.ID] = true
@@ -164,9 +171,12 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 	fired = slices.DeleteFunc(fired, func(f ports.FiredTrigger) bool { return stale[f.ID] })
 
 	live, byID := liveSet(armed)
-	sent := sentReminders(fired, *u.EventAt)
+	sent := sentReminders(fired, at)
 	interrupt := group[0].InterruptLevel
-	f := prospection.FollowSent(*u.EventAt, live, sent, prefs, interrupt, now)
+	f := prospection.FollowSent(at, live, sent, prefs, interrupt, now)
+	if asked {
+		f = prospection.FollowAsked(at, event, dayOnly, live, sent, prefs, interrupt, now)
+	}
 	// Nothing live and nothing planned is the unit's whole trail unless it says
 	// why. Quiet hours with no instant left is a refusal; every lead behind (or a
 	// date-only event on its day, which FollowSent reads as past) is a catch-up,
@@ -175,17 +185,38 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 	if p := f.Plans[0]; p.What == prospection.ArmNothing && len(live) == 0 {
 		switch p.Why {
 		case prospection.RefusalQuietHours:
-			return false, r.refuse(ctx, u, tally, now, commit)
+			return false, r.refuse(ctx, u, at, tally, now, commit)
 		case prospection.RefusalNone, prospection.RefusalAlreadyPast:
-			plan, owed := prospection.CatchUp(*u.EventAt, live, sent, prefs, prospection.ResolveInterrupt(interrupt), now)
+			plan, owed := prospection.CatchUp(at, live, sent, prefs, prospection.ResolveInterrupt(interrupt), now)
+			if asked {
+				plan, owed = prospection.CatchUpAsked(at, event, dayOnly, live, sent, prefs, prospection.ResolveInterrupt(interrupt), now)
+			}
 			if !owed {
 				return false, nil
 			}
-			return false, r.armCatchUp(ctx, u, plan, tally, now, commit)
+			return false, r.armCatchUp(ctx, u, at, plan, tally, now, commit)
 		}
 	}
 	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: checkCause(), tally: tally, dry: !commit}
-	return false, w.apply(ctx, u, f, byID, *u.EventAt, shownText(u), false, now)
+	return false, w.apply(ctx, u, f, byID, at, shownText(u), false, now)
+}
+
+// askedAt is the instant an asked unit is reminded about, as prospection.Arm
+// reads it: an event's event_at, any other kind's due_at, else the other
+// field. false for a unit nobody asked about, or one with no instant.
+func askedAt(u unit.Unit) (time.Time, bool) {
+	own, other := u.DueAt, u.EventAt
+	if u.Type == unit.TypeEvent {
+		own, other = other, own
+	}
+	switch {
+	case !u.RemindMe:
+	case own != nil:
+		return *own, true
+	case other != nil:
+		return *other, true
+	}
+	return time.Time{}, false
 }
 
 // checkCause is a due scan's re-plan of an event's reminders (ADR-0032).
@@ -208,9 +239,9 @@ func checkCause() reminderCause {
 // already used for that instant, not their mark (a correction clears the mark of
 // a catch-up it moves, and the id stays), so an undelivered catch-up lapses and
 // the event, still ahead, is owed the next number.
-func (r checkRunner) armCatchUp(ctx context.Context, u unit.Unit, plan prospection.Plan, tally *reminderTally, now time.Time, commit bool) error {
+func (r checkRunner) armCatchUp(ctx context.Context, u unit.Unit, about time.Time, plan prospection.Plan, tally *reminderTally, now time.Time, commit bool) error {
 	if plan.What == prospection.ArmNothing {
-		return r.refuse(ctx, u, tally, now, commit)
+		return r.refuse(ctx, u, about, tally, now, commit)
 	}
 	if !commit {
 		tally.armed++
@@ -251,14 +282,14 @@ func (r checkRunner) armCatchUp(ctx context.Context, u unit.Unit, plan prospecti
 
 // refuse says that no reminder could be sent for a unit that is left with none:
 // every moment left before its event is in quiet hours (ADR-0030).
-func (r checkRunner) refuse(ctx context.Context, u unit.Unit, tally *reminderTally, now time.Time, commit bool) error {
+func (r checkRunner) refuse(ctx context.Context, u unit.Unit, about time.Time, tally *reminderTally, now time.Time, commit bool) error {
 	tally.refused++
 	if !commit {
 		return nil
 	}
 	return r.recordDetail(ctx, now, ports.ActionCheckReminderRefused,
 		fmt.Sprintf("no reminder was sent for unit %q: every moment left before its event is in quiet hours, when nothing is sent", u.ID),
-		refusedDetail{UnitID: u.ID, Why: string(prospection.RefusalQuietHours), About: rfc3339(*u.EventAt)})
+		refusedDetail{UnitID: u.ID, Why: string(prospection.RefusalQuietHours), About: rfc3339(about)})
 }
 
 // refusedDetail is the context of a check.reminder.refused row.
