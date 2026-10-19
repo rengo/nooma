@@ -12,6 +12,7 @@ import (
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -84,6 +85,15 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		return 0, 0, fmt.Errorf("check: undelivered triggers: %w", err)
 	}
 
+	// The digest's THIRD source: the open tasks due (doc 02 §7). A task arms
+	// no reminder, so this is where its due date reaches the user. They are
+	// not Carry's candidates: the care gate never holds one on its day, and
+	// they take none of a low-energy digest's slots.
+	tasks, err := r.tasksDue(ctx, now)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	// A reminder whose event is past is lapsed before anything reads the list
 	// (ADR-0032). A late or superseded one-shot row is skipped, held for the
 	// re-plan step; a recurring one is not judged late (a push's window).
@@ -123,7 +133,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		}
 	}
 
-	if len(pending) == 0 && len(reasks) == 0 && question == nil {
+	if len(pending) == 0 && len(reasks) == 0 && question == nil && len(tasks) == 0 {
 		// **An empty digest is not sent**, and m3a left this to m3d
 		// explicitly ("Carry takes no position on whether an empty result
 		// is delivered"). A message every morning saying nothing happened
@@ -133,7 +143,9 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		// m3e widens the test rather than the rule: a digest that asks "I
 		// linked X with Y, are they related?" is not empty. It has content
 		// and it wants something, and without this a vault with an
-		// uncertain relation and no triggers would stay silent forever.
+		// uncertain relation and no triggers would stay silent forever. A task
+		// due today is content too: the client's ruling of 2026-10-19 is that
+		// the digest is what tells the user about it.
 		return 0, lapsed, nil
 	}
 
@@ -150,14 +162,14 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// focus is computed, after every return that does not send.
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
-	if len(carry) == 0 && len(reasks) == 0 && question == nil {
+	if len(carry) == 0 && len(reasks) == 0 && question == nil && len(tasks) == 0 {
 		return 0, lapsed, nil
 	}
 	if !commit {
 		// The count of the lines the message bound keeps. Adjacency can reorder
 		// the real pass's carry, which a dry run does not compute (it reads no
 		// focus), so under a bound that cuts the two may keep different lines.
-		_, sent, _ := r.digestText(ctx, now, carry, pending, reasks, question)
+		_, sent, _, _ := r.digestText(ctx, now, tasks, carry, pending, reasks, question)
 		return len(sent), lapsed, nil
 	}
 
@@ -187,7 +199,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	// What fits one message is sent; the rest stays undelivered for tomorrow.
-	text, sent, asked := r.digestText(ctx, now, carry, pending, reasks, question)
+	text, sent, asked, named := r.digestText(ctx, now, tasks, carry, pending, reasks, question)
 	if err := r.channel.Send(ctx, r.conversation, text); err != nil {
 		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(sent), err),
@@ -198,14 +210,20 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	for _, t := range append(slices.Clone(pending), reasks...) {
 		shown[t.ID] = t
 	}
-	var named []ports.DueTrigger
+	var spoken []ports.DueTrigger
 	for _, item := range sent {
-		named = append(named, shown[item.ID])
+		spoken = append(spoken, shown[item.ID])
 	}
 	for _, id := range asked {
-		named = append(named, shown[id])
+		spoken = append(spoken, shown[id])
 	}
-	r.conv.Add(r.conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: unitsOf(named)})
+	about := unitsOf(spoken)
+	for _, id := range named {
+		if !slices.Contains(about, id) {
+			about = append(about, id)
+		}
+	}
+	r.conv.Add(r.conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: about})
 
 	// The user has now seen this digest, so its selection becomes the
 	// incumbent: published only after Send succeeds, because an unsent digest
@@ -252,7 +270,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 		}
 	}
 	if err := r.record(ctx, now, ports.ActionCheckDigestSent,
-		digestSentRationale(len(sent), len(held), len(carry)-len(sent), len(asked), len(reasks)-len(asked)),
+		digestSentRationale(len(sent), len(held), len(carry)-len(sent), len(asked), len(reasks)-len(asked), len(named)),
 		checkDetail{}); err != nil {
 		return 0, lapsed, err
 	}
@@ -274,9 +292,13 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 
 // digestSentRationale is the check.digest.sent row's text: the day's items,
 // then the check-ins asked again, counted apart; it mentions what the message
-// bound left for later only when there was any.
-func digestSentRationale(sent, held, dropped, asked, waiting int) string {
+// bound left for later only when there was any, and the tasks due it named
+// only when it named any.
+func digestSentRationale(sent, held, dropped, asked, waiting, tasks int) string {
 	text := fmt.Sprintf("the daily digest carried %d item(s) and held %d", sent, held)
+	if tasks > 0 {
+		text += fmt.Sprintf("; it named %d task(s) due", tasks)
+	}
 	if dropped > 0 {
 		text += fmt.Sprintf(" and left %d for tomorrow because the message would not fit", dropped)
 	}
@@ -289,12 +311,47 @@ func digestSentRationale(sent, held, dropped, asked, waiting int) string {
 	return text
 }
 
-// digestText is the digest's message and the items it holds: the carried ones,
-// then the check-ins it asks again (doc 02 §7). The digest speaks the newest
-// capture's language (ADR-0032 point 5).
-func (r checkRunner) digestText(ctx context.Context, now time.Time, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem, []string) {
+// digestText is the digest's message and what it holds: the tasks due, the
+// carried items, then the check-ins it asks again (doc 02 §7). The digest
+// speaks the newest capture's language (ADR-0032 point 5).
+func (r checkRunner) digestText(ctx context.Context, now time.Time, tasks []unit.Unit, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem, []string, []string) {
 	set := r.setFor(ctx, "")
-	return digestMessage(set, carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question)
+	return digestMessageWith(set, dueLines(tasks, now, set), carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question)
+}
+
+// tasksDue reads the span prospection.DueTaskWindow names and lets
+// prospection.TasksDue decide which of its tasks the digest at now names.
+func (r checkRunner) tasksDue(ctx context.Context, now time.Time) ([]unit.Unit, error) {
+	from, to := prospection.DueTaskWindow(now)
+	units, err := r.units.LiveTasksDue(ctx, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("check: tasks due: %w", err)
+	}
+	byID := make(map[string]unit.Unit, len(units))
+	for _, u := range units {
+		byID[u.ID] = u
+	}
+	ids := prospection.TasksDue(units, now)
+	due := make([]unit.Unit, len(ids))
+	for i, id := range ids {
+		due[i] = byID[id]
+	}
+	return due, nil
+}
+
+// dueLine is a task due as the digest says it: its unit, and its title (else
+// its content) with its due date, the day alone in now's zone. A due date is a
+// day: a time is not said, since nothing records whether one was named.
+type dueLine struct {
+	unitID, text string
+}
+
+func dueLines(tasks []unit.Unit, now time.Time, set phrase.Set) []dueLine {
+	lines := make([]dueLine, 0, len(tasks))
+	for _, u := range tasks {
+		lines = append(lines, dueLine{unitID: u.ID, text: set.Line(clip(shownText(u)), set.Date(u.DueAt.In(now.Location())))})
+	}
+	return lines
 }
 
 // digestFocus computes the focus the digest is about to be sent against. A
@@ -482,15 +539,28 @@ func renderDigest(set phrase.Set, carry []prospection.DigestItem, pending []port
 // morning, unasked and uncounted, so re-asks never wedge a digest. It returns
 // the day's items kept and the ids of the check-ins asked, in the order shown.
 func digestMessage(set phrase.Set, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem, []string) {
+	text, sent, asked, _ := digestMessageWith(set, nil, carry, pending, reasks, question)
+	return text, sent, asked
+}
+
+// digestMessageWith is digestMessage with the tasks due, which lead: the
+// bound drops lines from the end, so a task due is the last line given up. It
+// also returns the units of the tasks kept.
+func digestMessageWith(set phrase.Set, tasks []dueLine, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem, []string, []string) {
 	byID := make(map[string]ports.DueTrigger, len(pending))
 	for _, t := range pending {
 		byID[t.ID] = t
 	}
 
 	// One line per unit, however many of its reminders are carried (ADR-0032
-	// point 4); a reminder of no unit stands alone.
+	// point 4); a reminder of no unit stands alone. A task due is its unit's
+	// line, so a reminder of the same unit joins it.
 	var lines []digestLine
 	lineOf := map[string]int{}
+	for _, task := range tasks {
+		lineOf[task.unitID] = len(lines)
+		lines = append(lines, digestLine{text: task.text})
+	}
 	for _, item := range carry {
 		t := byID[item.ID]
 		if t.UnitID != nil {
@@ -530,7 +600,11 @@ func digestMessage(set phrase.Set, carry []prospection.DigestItem, pending, reas
 	for _, t := range reasks[:ask] {
 		asked = append(asked, t.ID)
 	}
-	return text, sent, asked
+	var named []string
+	for _, task := range tasks[:min(keep, len(tasks))] {
+		named = append(named, task.unitID)
+	}
+	return text, sent, asked, named
 }
 
 // composeDigest is the message with the first keep lines, and the note of the

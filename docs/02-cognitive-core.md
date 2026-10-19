@@ -1760,6 +1760,29 @@ box can audit it):
     **Source, for display.** An energy reading now carries `source` (`user` | `consolidation`)
     alongside `level` and `recorded_at` — §10's `current_state` columns, where `source` is already
     named. This gate (`LowEnergy`) reads only `level` and `recorded_at` and is unchanged by it.
+  - **Tasks due** (the client's ruling of 2026-10-19: a dated task needs no reminder of its own,
+    "el resumen alcanza"). A `task` arms nothing (ADR-0029, ADR-0030), so the digest is where its
+    due date reaches the user: on the morning of its due day, a local calendar day in the user's
+    zone, the digest names every live `task` whose `due_at` falls on it, as its unit's line (its
+    title, else its content, and the due day alone, `Renovar el pasaporte — mar 20 oct`). One still
+    live after its day is named again on the following mornings, `due_task_digest_days` mornings
+    in all, and then no more: nothing lets the user tell the digest that a task with no reminder
+    is done, so the bound is what stops the line. A task the user asked to be reminded of
+    (`remind_me`) is left out, since its own reminder speaks for it. `prospection.TasksDue`
+    decides, from the units the store returns for `prospection.DueTaskWindow` and the instant.
+    The tasks due lead the digest, oldest due first, and a reminder of the same unit joins its
+    line; the message bound drops lines from the end, so a task due is the last line given up.
+    **The care gate never holds one**: they are not Carry's candidates and take none of a
+    low-energy digest's `low_energy_digest_size` slots, because a due date is the one thing a
+    depleted morning must still hear about. A digest with nothing else to say is still sent for
+    them. They are not reminders: the carried count and `DigestCarried` stay the day's reminders,
+    and the `check.digest.sent` row adds how many tasks it named. The digest is a turn about their
+    units (ADR-0036). **The capture reply says so**: such a task due on a later local day than
+    the capture's (`prospection.DueDayAhead`) is answered with its day and that morning's digest
+    (`Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.`; `Noted for Tue 20
+    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), never a
+    reminder it does not have; one due today or earlier, whose morning may be past, or with no
+    date, is `Anotado.`
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.
@@ -1802,7 +1825,7 @@ re-asks, so **a bare answer reaches the last thing the pass showed**, whichever 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
 now, computed from the same reads and the same `Carry`, except for the message bound: Today is a
 page, so it lists every reminder waiting, while a digest that reaches the bound sends fewer and says
-"and N more". Rendering it writes nothing to the
+"and N more". It does not list the tasks due the digest names (above). Rendering it writes nothing to the
 vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
 (I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
 (§3), which the next digest then reads. Viewing `/ui` can therefore change a later low-energy
@@ -2063,6 +2086,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `low_energy_max` (`internal/core/prospection.LowEnergyMax`) | 0.5 — chosen: `energy` is declared on [0,1] with no calibration data behind it, and the midpoint is the only point on such a scale that is not an invention. The comparison is strict, because the gate suppresses delivery |
 | `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
 | `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |
+| `due_task_digest_days` (`internal/core/prospection.DueTaskDigestDays`) | 3 — the mornings the digest names a live task by its due date: its due day and the two after it (§7, the client's ruling of 2026-10-19); chosen inside a band: more than 1, or a task missed on its day is never named again; fewer than a week, because nothing lets the user say a task with no reminder is done, and each morning past its day is a line they cannot answer |
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `max_checkin_reasks` (`internal/core/prospection.MaxCheckinReasks`) | 2 — how many morning digests ask again a check-in the user put off; the digest after the last closes it, and a check-in nobody answered closes at that same digest, the third after it reached the user (§7). The client's ruling (2026-10-16), not a derivation |
 | `max_reasks_per_digest` (`internal/core/prospection.MaxReasksPerDigest`) | 3 — how many check-ins one morning digest asks again at most, the longest waiting first; the rest wait, uncounted (§7). Chosen: a short list after the day's items, at most a low-energy digest's whole carry (`low_energy_digest_size`), and with each clipped to a day line's length it keeps the block well inside one message |

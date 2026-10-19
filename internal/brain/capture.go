@@ -533,6 +533,12 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	if asked {
 		stored.ArmRefused = &ArmRefused{Why: plan.Why, Message: refusalMessage(plan.Why)}
 	}
+	// The digest names a task nobody asked a reminder for (TasksDue), so the
+	// reply can promise its morning while that morning is ahead.
+	if u.Type == unit.TypeTask && !u.RemindMe && u.DueAt != nil && prospection.DueDayAhead(*u.DueAt, now) {
+		day := u.DueAt.In(now.Location())
+		stored.DueInDigest = &day
+	}
 	return stored, nil
 }
 

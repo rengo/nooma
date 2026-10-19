@@ -58,6 +58,13 @@ type UnitRepo interface {
 	// absent or not live is omitted, not an error.
 	LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, error)
 
+	// LiveTasksDue returns the tasks whose status is pool and whose due_at is
+	// at or after from and before to, in no promised order: the span
+	// prospection.DueTaskWindow names, which prospection.TasksDue decides on
+	// (doc 02 §7, the digest names a task on its due day). A bound, not the
+	// decision, as IncompleteOlderThan's cutoff is.
+	LiveTasksDue(ctx context.Context, from, to time.Time) ([]unit.Unit, error)
+
 	// UpdateContent rewrites id's Content and UpdatedAt to at, leaving
 	// every other column unchanged. It returns ErrUnitNotFound if no unit
 	// with id exists.

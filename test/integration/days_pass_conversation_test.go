@@ -196,6 +196,11 @@ func (s dpScenario) live(t *testing.T) string {
 				header = append(header, fmt.Sprintf("# %q is read by a hand-written reading, not a recording", m.text))
 			} else if err := goldenset.Load(filepath.Join(recordings, m.id+".json"), &ex); err != nil {
 				t.Fatalf("recording %s: %v", m.id, err)
+			} else if ex.Response == "" {
+				// A phrasing that awaits its recording session has no reading
+				// yet; the recordings gate (scripts/recordings-complete.sh)
+				// keeps the PR red until it has one.
+				t.Skipf("%s awaits its recording (nooma doctor --record)", m.id)
 			}
 			recorded, err := time.Parse(time.RFC3339, ex.Now)
 			if err != nil {
@@ -377,6 +382,17 @@ func dpScenarios() []dpScenario {
 					reading: `{"type":"event","normalized_content":"Renuevo el pasaporte el 2026-10-20.","weight":0.7,` +
 						`"decay_rate":0.05,"event_at":"2026-10-20","title":"Renovar el pasaporte","language":"es"}`},
 			},
+		},
+		{
+			// The live case of 2026-10-19 16:34: "mañana renuevo el pasaporte"
+			// is read as a task due tomorrow, and a task arms no reminder (doc
+			// 02 §7). Nothing rings on Monday; Tuesday's digest names it, and
+			// Wednesday's and Thursday's too while it stays open, up to
+			// DueTaskDigestDays mornings in all.
+			name:  "task-due-tomorrow",
+			about: "a task due tomorrow, with no reminder, named by the digest from its day",
+			from:  dpAt(10, 19, 16, 30), until: dpAt(10, 23, 12, 0),
+			say: []dpSay{{at: dpAt(10, 19, 16, 34), id: "classify-task-due-tomorrow-passport"}},
 		},
 		{
 			name:  "five-weeks",

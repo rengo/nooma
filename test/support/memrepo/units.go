@@ -99,6 +99,21 @@ func (r *Units) LiveByIDs(_ context.Context, ids []string) ([]unit.Unit, error) 
 	return live, nil
 }
 
+// LiveTasksDue implements ports.UnitRepo.
+func (r *Units) LiveTasksDue(_ context.Context, from, to time.Time) ([]unit.Unit, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var due []unit.Unit
+	for _, u := range r.units {
+		if u.Type != unit.TypeTask || !u.Status.IsLive() || u.DueAt == nil || u.DueAt.Before(from) || !u.DueAt.Before(to) {
+			continue
+		}
+		due = append(due, deepCopy(u))
+	}
+	return due, nil
+}
+
 // UpdateContent implements ports.UnitRepo.
 func (r *Units) UpdateContent(_ context.Context, id, content string, at time.Time) error {
 	r.mu.Lock()

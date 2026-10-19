@@ -133,6 +133,12 @@ type CaptureResult struct {
 	// embedding did not happen or recall found nothing.
 	Candidates []string
 
+	// DueInDigest is the due day, in the capture's zone, of a stored task that
+	// arms nothing and whose day's digest is still ahead
+	// (prospection.DueDayAhead): the reply names it and that morning's
+	// digest (doc 02 §7). Nil for anything else.
+	DueInDigest *time.Time
+
 	// Armed names what this capture armed. Set only for
 	// Outcome == OutcomeArmed.
 	Armed *Armed

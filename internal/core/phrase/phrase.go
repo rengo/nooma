@@ -95,6 +95,9 @@ type Set struct {
 	// arrives. Never the firing instant as the first — that answers a
 	// question nobody asked (doc 02 §5 step 5).
 	NotedFor string
+	// NotedForDigest takes one %s: the due day of a task that arms nothing,
+	// which that morning's digest names (doc 02 §7).
+	NotedForDigest string
 
 	// Reminder frames a pushed reminder (ADR-0032 point 4): one %s, the
 	// sentence. AtWhen joins a unit's words to its instant: two %s, in that order.
@@ -211,6 +214,8 @@ var sets = map[classify.Language]Set{
 		EveryYear:  "I will remind you every year on %s %s at %s.",
 		NotedFor:   "Noted for %s. I will remind you %s.",
 
+		NotedForDigest: "Noted for %s. I will mention it in that morning's digest.",
+
 		Reminder: "Reminder: %s",
 		AtWhen:   "%s \u2014 %s",
 
@@ -283,6 +288,8 @@ var sets = map[classify.Language]Set{
 		EveryMonth: "Te aviso el día %s de cada mes a las %s.",
 		EveryYear:  "Te aviso todos los años el %s de %s a las %s.",
 		NotedFor:   "Anotado para el %s. Te aviso %s.",
+
+		NotedForDigest: "Anotado para el %s. Te lo recuerdo en el resumen de esa mañana.",
 
 		Reminder: "Recordatorio: %s",
 		AtWhen:   "%s \u2014 %s",
