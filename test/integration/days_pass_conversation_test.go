@@ -361,9 +361,7 @@ func dpScenarios() []dpScenario {
 				{at: dpAt(10, 19, 9, 5), id: "hand-followup-es-a-las-11", text: "es a las11",
 					reading: `{"type":"correction","normalized_content":"Dentista el 2026-10-20 a las 11:00.","weight":0.7,` +
 						`"decay_rate":0.05,"event_at":"2026-10-20T11:00:00-03:00","title":"Dentista","language":"es","referent":"A"}`},
-				{at: dpAt(10, 19, 9, 10), id: "classify-followup-solo-una-hora-antes", text: "avisame solo 1 hora antes",
-					reading: `{"type":"correction","normalized_content":"Dentista el 2026-10-20 a las 11:00.","weight":0.7,` +
-						`"decay_rate":0.05,"language":"es","referent":"A","reminder_leads_minutes":[60]}`},
+				{at: dpAt(10, 19, 9, 10), id: "classify-followup-solo-una-hora-antes"},
 			},
 		},
 		{

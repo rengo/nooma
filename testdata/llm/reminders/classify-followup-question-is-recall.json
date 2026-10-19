@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿a qué hora era la reunión?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0,\"decay_rate\":0,\"language\":\"es\"}",
-  "record": true,
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0,\"decay_rate\":0,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -35,5 +34,5 @@
   "expect": {
     "type": "recall"
   },
-  "prompt_sha256": "efdfca8751e4f9fca8e83eb4d9468116053deed9842615e086a8b0ff6768546c"
+  "prompt_sha256": "a7fb1c3c4048dfc5c94261bf9de7f2bbc2463b08d7eec23db635199e21a9b190"
 }

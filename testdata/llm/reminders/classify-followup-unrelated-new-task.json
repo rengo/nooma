@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "Comprar pan mañana",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar pan el 2026-10-14.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"due_at\":\"2026-10-14\",\"title\":\"Comprar pan\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que comprar pan el 2026-10-14.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-14\",\"title\":\"Comprar pan\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -35,5 +34,5 @@
   "expect": {
     "type": "task"
   },
-  "prompt_sha256": "df6b75657904d985e36b42a81ff3a3a8ce7c9881af3ddc93057e57a569f9c6f4"
+  "prompt_sha256": "a08faa4b6d40586dcfe1c9475eb780775d193dc5d3f94ddbaaed8d8a8cc811e7"
 }
