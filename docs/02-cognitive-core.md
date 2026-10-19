@@ -1469,6 +1469,15 @@ have N nudges; a pattern watcher does not hang off any unit):
   hoy a las 09:00."), read from the capture instant, never as "the day before". The told day is a capture's own, and a correction's own (`prospection.Follow`); a
   preference re-arm and the check pass's re-plan take the unit's `created_at`, so the dropped
   lead does not come back on the capture day and a day-before reminder armed earlier stays.
+  **That kept reminder is never sent at once**
+  ([ADR-0039](adr/0039-a-kept-ring-is-never-at-once.md)): on the told day, for an event on a
+  later day whose every unasked lead is already behind, the one reminder rings on the event's
+  own day at the user's reminder time (09:00), or at quiet end when that is not before the event
+  (a date-only event being its whole day), quiet hours applying as to any reminder, and serves
+  no lead; a correction arms it as a capture does. With neither before the event, none is set
+  and `capture.arm.refused` (`quiet_hours`) says why. "Mañana renuevo el pasaporte", said at
+  13:32, is reminded tomorrow at 09:00 ("Te aviso ese día a las 09:00."). An event today keeps
+  the at-once reminder, and a re-plan on a later day keeps ADR-0032's catch-up.
   **The leads and the reminder time are the user's preferences**, not calibration: two
   `config` columns, `event_reminder_leads` (a JSON array of minutes) and
   `date_only_reminder_at` (`HH:MM`), read at arm time by capture and by a correction alike,

@@ -5,10 +5,12 @@ import (
 	"context"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
@@ -40,8 +42,9 @@ func TestI33_EventRemindersAtTheLeads(t *testing.T) {
 			[]time.Time{at(16, 9)}, []int{0}},
 		{"a date-only event: the day before at 09:00 local", dateOnly, at(13, 10),
 			[]time.Time{at(15, 9)}, []int{15 * 60}},
-		{"a date-only event after 09:00 the day before: at once", dateOnly, at(15, 12),
-			[]time.Time{at(15, 12)}, []int{0}},
+		// Not at once about what was just said: on its own day (ADR-0039).
+		{"a date-only event after 09:00 the day before: 09:00 on its day", dateOnly, at(15, 12),
+			[]time.Time{at(16, 9)}, []int{0}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -159,6 +162,61 @@ func TestI33_NoUnaskedRingOnTheDayTheEventIsTold(t *testing.T) {
 			}
 			if result.Armed == nil || len(result.Armed.Later) != len(tc.want)-1 {
 				t.Errorf("Armed = %+v, want the reply to name exactly the armed rings", result.Armed)
+			}
+		})
+	}
+}
+
+// TestI33_TheKeptRingIsNeverAtOnce is doc 02 §7's "Lead time" (ADR-0039): an
+// event on a later day than it is told, whose every lead is behind, is not
+// rung at once about what the user just said. A date-only one rings on its own
+// day at the date-only time; a timed one at that time on its day when it is
+// before the event, else at quiet end; with no daytime left before it, none.
+func TestI33_TheKeptRingIsNeverAtOnce(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(day, hour, minute int) time.Time { return time.Date(2026, 10, day, hour, minute, 0, 0, zone) }
+	event := func(instant string) string {
+		return `{"type":"event","normalized_content":"evento","weight":0.7,"decay_rate":0.05,"event_at":"` + instant + `"}`
+	}
+	str := func(s string) *string { return &s }
+
+	cases := []struct {
+		name, response string
+		leads          *string
+		now            time.Time
+		want           []time.Time
+	}{
+		{"a date-only event tomorrow told at 13:32: tomorrow at 09:00", event("2026-10-16"), nil, at(15, 13, 32), []time.Time{at(16, 9, 0)}},
+		{"a timed event tomorrow whose one lead is behind: 09:00 that day", event("2026-10-16T15:00:00-03:00"), str(`[1440]`), at(15, 16, 0), []time.Time{at(16, 9, 0)}},
+		{"before 09:00 it is quiet end that day", event("2026-10-16T08:30:00-03:00"), str(`[1440]`), at(15, 9, 0), []time.Time{at(16, 7, 0)}},
+		{"no daytime left before it: nothing", event("2026-10-16T00:30:00-03:00"), nil, at(15, 23, 0), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := memrepo.NewConfig()
+			cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: tc.leads})
+			triggers, log, result := i33CaptureWith(t, tc.now, tc.response, cfg)
+			var got []time.Time
+			for _, r := range triggers.All() {
+				got = append(got, *r.FireAt)
+			}
+			if !slices.EqualFunc(got, tc.want, time.Time.Equal) {
+				t.Errorf("fires at %v, want %v", got, tc.want)
+			}
+			if len(tc.want) > 0 && (result.Armed == nil || result.Armed.Immediate) {
+				t.Errorf("Armed = %+v, want a ring that is not at once", result.Armed)
+			}
+			if len(tc.want) == 0 {
+				rows, err := log.Since(context.Background(), time.Time{}, 100)
+				if err != nil {
+					t.Fatal(err)
+				}
+				refused := slices.ContainsFunc(rows, func(d ports.Decision) bool {
+					return d.Action == ports.ActionCaptureArmRefused && strings.Contains(string(d.Context), string(prospection.RefusalQuietHours))
+				})
+				if result.Outcome != brain.OutcomeStored || !refused {
+					t.Errorf("outcome %q, refused row %v; want the unit stored and a quiet_hours refusal row", result.Outcome, refused)
+				}
 			}
 		})
 	}

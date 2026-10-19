@@ -5,7 +5,8 @@
 - **Date**: 2026-10-19
 - **Supersedes**: [ADR-0029](0029-event-reminders-follow-the-users-leads.md) points 1, 2, 4 and
   6, in part: a lead nobody asked for that lands on the day the event was told is not armed.
-- **Superseded by**: —
+- **Superseded by**: [ADR-0039](0039-a-kept-ring-is-never-at-once.md), point 2 in part (the kept
+  reminder is never one sent at once: it rings on the event's own day)
 - **Enables**: M4
 
 ## Context

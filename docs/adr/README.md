@@ -90,6 +90,7 @@ order, with no correspondence to anything.
 | [0036](0036-a-chat-message-is-read-in-its-conversation.md) | A chat message is read in its recent conversation: a follow-up corrects what it follows, or Nooma asks which, in the moment | Accepted | M4 |
 | [0037](0037-no-default-ring-on-the-day-an-event-is-told.md) | No default reminder rings on the day the user told Nooma about the event (supersedes ADR-0029 in part) | Accepted | M4 |
 | [0038](0038-an-event-can-carry-its-own-reminder-leads.md) | An event can carry its own reminder leads, set from chat (supersedes ADR-0029 in part) | Accepted | M4 |
+| [0039](0039-a-kept-ring-is-never-at-once.md) | The reminder kept for an event on a later day is never sent at once: it rings on the event's own day (supersedes ADR-0037 in part) | Accepted | M4 |
 
 ## Template
 
