@@ -348,6 +348,25 @@ func dpScenarios() []dpScenario {
 			},
 		},
 		{
+			// The client's case of 2026-10-19 (I40, ADR-0038): the dentist is
+			// moved, then given its own lead. Each answer names what changed,
+			// and exactly one reminder rings, an hour before the new time.
+			name:  "dentist-lead",
+			about: "a dentist is captured, moved an hour, and told to ring only an hour before",
+			from:  dpAt(10, 19, 8, 55), until: dpAt(10, 21, 0, 0),
+			say: []dpSay{
+				{at: dpAt(10, 19, 9, 0), id: "hand-capture-dentist-tomorrow", text: "mañana tengo dentista a las 10",
+					reading: `{"type":"event","normalized_content":"Dentista el 2026-10-20 a las 10:00.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-20T10:00:00-03:00","title":"Dentista","language":"es"}`},
+				{at: dpAt(10, 19, 9, 5), id: "hand-followup-es-a-las-11", text: "es a las11",
+					reading: `{"type":"correction","normalized_content":"Dentista el 2026-10-20 a las 11:00.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-20T11:00:00-03:00","title":"Dentista","language":"es","referent":"A"}`},
+				{at: dpAt(10, 19, 9, 10), id: "classify-followup-solo-una-hora-antes", text: "avisame solo 1 hora antes",
+					reading: `{"type":"correction","normalized_content":"Dentista el 2026-10-20 a las 11:00.","weight":0.7,` +
+						`"decay_rate":0.05,"language":"es","referent":"A","reminder_leads_minutes":[60]}`},
+			},
+		},
+		{
 			name:  "five-weeks",
 			about: "every reminder kind the recordings hold, five weeks, the server down three days",
 			from:  dpAt(10, 16, 10, 40), until: dpAt(11, 21, 0, 0),

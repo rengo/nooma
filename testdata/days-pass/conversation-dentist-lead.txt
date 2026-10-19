@@ -1,0 +1,12 @@
+# a dentist is captured, moved an hour, and told to ring only an hour before
+# a check pass every 5m0s from Mon 2026-10-19 08:55 -03:00 to Wed 2026-10-21 00:00
+# "mañana tengo dentista a las 10" is read by a hand-written reading, not a recording
+# "es a las11" is read by a hand-written reading, not a recording
+# "avisame solo 1 hora antes" is read by a hand-written reading, not a recording
+Mon 2026-10-19 09:00 ← mañana tengo dentista a las 10
+Mon 2026-10-19 09:00 → Anotado para el mar 20 oct, 10:00. Te aviso unas horas antes.
+Mon 2026-10-19 09:05 ← es a las11
+Mon 2026-10-19 09:05 → Movido al mar 20 oct, 11:00.
+Mon 2026-10-19 09:10 ← avisame solo 1 hora antes
+Mon 2026-10-19 09:10 → Te aviso 1 hora antes.
+Tue 2026-10-20 10:00 → Recordatorio: Dentista — mar 20 oct, 11:00
