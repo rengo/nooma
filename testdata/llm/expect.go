@@ -83,6 +83,9 @@ type Expect struct {
 	// EventAt is the instant a follow-up moves its item to, RFC 3339, checked
 	// only when set.
 	EventAt string `json:"event_at,omitempty"`
+	// DueAt is the instant a task is due, RFC 3339 (a bare date is its local
+	// midnight), checked only when set.
+	DueAt string `json:"due_at,omitempty"`
 	// ReminderLeadsMinutes are the leads a follow-up sets on its item, in
 	// order. Strict: unset means none, since leads change reminders (I40).
 	ReminderLeadsMinutes []int `json:"reminder_leads_minutes,omitempty"`

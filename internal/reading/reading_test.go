@@ -444,6 +444,28 @@ func TestCheckEventAtOnlyWhenSet(t *testing.T) {
 	}
 }
 
+// TestCheckDueAtOnlyWhenSet: the instant a task is due is checked when the
+// case names one, as an instant whatever offset writes it, and an unreadable
+// one is refused before any replay.
+func TestCheckDueAtOnlyWhenSet(t *testing.T) {
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)
+	cls := classify.Classification{DueAt: &at}
+	missed := func(want string, cls classify.Classification) bool {
+		return slices.Contains(Check(llm.Case{Expect: &llm.Expect{DueAt: want}}, cls), FieldDueAt)
+	}
+	if missed("", cls) || missed("2026-10-20T00:00:00-03:00", cls) {
+		t.Error("the same instant, or none expected, was missed")
+	}
+	if !missed("2026-10-21T00:00:00-03:00", cls) || !missed("2026-10-20T00:00:00-03:00", classify.Classification{}) {
+		t.Error("another instant, or none at all, was accepted")
+	}
+	c := baseCase()
+	c.Expect = &llm.Expect{DueAt: "tomorrow"}
+	if err := ValidateCase(c); err == nil {
+		t.Error("an unreadable expect.due_at was accepted")
+	}
+}
+
 // TestValidateCaseChecksTheConversation: a referent, a transcript or an
 // instant the replay could not mean fails at once.
 func TestValidateCaseChecksTheConversation(t *testing.T) {

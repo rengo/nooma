@@ -40,6 +40,7 @@ const (
 	FieldReferent           = "referent"
 	FieldClarifyingQuestion = "clarifying_question"
 	FieldEventAt            = "event_at"
+	FieldDueAt              = "due_at"
 	FieldReminderLeads      = "reminder_leads_minutes"
 )
 
@@ -218,6 +219,10 @@ func Check(c llm.Case, cls classify.Classification) []string {
 		want, err := time.Parse(time.RFC3339, e.EventAt)
 		miss(FieldEventAt, err != nil || cls.EventAt == nil || !cls.EventAt.Equal(want))
 	}
+	if e.DueAt != "" {
+		want, err := time.Parse(time.RFC3339, e.DueAt)
+		miss(FieldDueAt, err != nil || cls.DueAt == nil || !cls.DueAt.Equal(want))
+	}
 	miss(FieldReminderLeads, !slices.Equal(cls.ReminderLeadsMinutes, e.ReminderLeadsMinutes))
 	return misses
 }
@@ -381,6 +386,11 @@ func validateConversation(c llm.Case) []error {
 	if e := c.Expect.EventAt; e != "" {
 		if _, err := time.Parse(time.RFC3339, e); err != nil {
 			errs = append(errs, fmt.Errorf("expect.event_at %q is not RFC 3339", e))
+		}
+	}
+	if e := c.Expect.DueAt; e != "" {
+		if _, err := time.Parse(time.RFC3339, e); err != nil {
+			errs = append(errs, fmt.Errorf("expect.due_at %q is not RFC 3339", e))
 		}
 	}
 	return errs
