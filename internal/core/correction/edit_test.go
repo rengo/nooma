@@ -1,6 +1,7 @@
 package correction
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -22,11 +23,13 @@ func TestAllFields_EveryEditReportsExactlyOneAccessorTrue(t *testing.T) {
 		wantEventAt bool
 		wantDueAt   bool
 		wantTitle   bool
+		wantLeads   bool
 	}{
-		{FieldContent, NewContentEdit("It's Ana, not Anna"), true, false, false, false},
-		{FieldEventAt, NewEventAtEdit(when), false, true, false, false},
-		{FieldDueAt, NewDueAtEdit(when), false, false, true, false},
-		{FieldTitle, NewTitleEdit("Reunión con Juan"), false, false, false, true},
+		{FieldContent, NewContentEdit("It's Ana, not Anna"), true, false, false, false, false},
+		{FieldEventAt, NewEventAtEdit(when), false, true, false, false, false},
+		{FieldDueAt, NewDueAtEdit(when), false, false, true, false, false},
+		{FieldTitle, NewTitleEdit("Reunión con Juan"), false, false, false, true, false},
+		{FieldReminderLeads, NewReminderLeadsEdit([]int{60}), false, false, false, false, true},
 	}
 
 	seen := map[Field]bool{}
@@ -55,8 +58,13 @@ func TestAllFields_EveryEditReportsExactlyOneAccessorTrue(t *testing.T) {
 			t.Errorf("%s: Title() ok = %v, want %v", tt.field, gotTitle, tt.wantTitle)
 		}
 
+		_, gotLeads := tt.edit.ReminderLeads()
+		if gotLeads != tt.wantLeads {
+			t.Errorf("%s: ReminderLeads() ok = %v, want %v", tt.field, gotLeads, tt.wantLeads)
+		}
+
 		trueCount := 0
-		for _, ok := range []bool{gotContent, gotEventAt, gotDueAt, gotTitle} {
+		for _, ok := range []bool{gotContent, gotEventAt, gotDueAt, gotTitle, gotLeads} {
 			if ok {
 				trueCount++
 			}
@@ -137,5 +145,32 @@ func TestChanges(t *testing.T) {
 				t.Errorf("Changes() = %+v, want %d edit(s)", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNewReminderLeadsEdit_ValueRoundTrips(t *testing.T) {
+	got, ok := NewReminderLeadsEdit([]int{1440, 60}).ReminderLeads()
+	if !ok || !slices.Equal(got, []int{1440, 60}) {
+		t.Errorf("ReminderLeads() = (%v, %v), want ([1440 60], true)", got, ok)
+	}
+}
+
+// TestChanges_ReminderLeads: the same leads again are no change; other leads,
+// or leads where the unit followed the preferences, are.
+func TestChanges_ReminderLeads(t *testing.T) {
+	own := unit.Unit{ReminderLeads: []int{60}}
+	for _, tc := range []struct {
+		name string
+		u    unit.Unit
+		edit []int
+		want int
+	}{
+		{"same leads", own, []int{60}, 0},
+		{"other leads", own, []int{120}, 1},
+		{"leads where the unit had none", unit.Unit{}, []int{60}, 1},
+	} {
+		if got := len(Changes([]Edit{NewReminderLeadsEdit(tc.edit)}, tc.u)); got != tc.want {
+			t.Errorf("%s: %d changes, want %d", tc.name, got, tc.want)
+		}
 	}
 }

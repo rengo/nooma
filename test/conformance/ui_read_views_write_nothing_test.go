@@ -302,6 +302,11 @@ func (g *rvwUnits) UpdateTitle(context.Context, string, string, time.Time) error
 	return nil
 }
 
+func (g *rvwUnits) UpdateReminderLeads(context.Context, string, []int, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "UpdateReminderLeads")
+	return nil
+}
+
 func (g *rvwUnits) SetStatus(context.Context, string, unit.Status, unit.Status, time.Time) error {
 	rvwFail(g.t, "UnitRepo", "SetStatus")
 	return nil

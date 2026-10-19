@@ -52,17 +52,25 @@ const i40Chat ports.ConversationID = "42"
 // two turns of that exchange, then answers the next message with response.
 func newI40(t *testing.T, response string) i40Fixture {
 	t.Helper()
+	return newI40With(t, response, func(*unit.Unit) {})
+}
+
+// newI40With is newI40 with the meeting changed by edit before it is seeded.
+func newI40With(t *testing.T, response string, edit func(*unit.Unit)) i40Fixture {
+	t.Helper()
 	ctx := context.Background()
 	f := i40Fixture{
 		llm: &scriptedLLM{response: response}, units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(),
 		decisions: memrepo.NewDecisionLog(), conv: brain.NewConversation(),
 		relations: memrepo.NewRelations(), questions: memrepo.NewPendingQuestions(),
 	}
-	if err := f.units.Create(ctx, unit.Unit{
+	meeting := unit.Unit{
 		ID: "meeting", Type: unit.TypeEvent, Status: unit.StatusPool, Source: "telegram",
 		Content: "Tengo reunión con Juan el 2026-10-14 a las 22:30.", Title: "Reunión con Juan",
 		EventAt: &i40Meeting, CreatedAt: i40Now, UpdatedAt: i40Now,
-	}); err != nil {
+	}
+	edit(&meeting)
+	if err := f.units.Create(ctx, meeting); err != nil {
 		t.Fatal(err)
 	}
 	said := i40Now.Add(-10 * time.Minute)

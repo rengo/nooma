@@ -23,6 +23,10 @@ import (
 // and a correction that changes nothing (a date the unit already holds) clears
 // nothing.
 func WithTitle(plan []Edit, c classify.Classification, target unit.Unit, sawUnit bool) []Edit {
+	// Leads say when to be reminded, not what the unit is called (I40).
+	if len(plan) == 1 && plan[0].Field() == FieldReminderLeads {
+		return plan
+	}
 	if sawUnit && c.Title != nil {
 		if *c.Title == target.Title {
 			return plan

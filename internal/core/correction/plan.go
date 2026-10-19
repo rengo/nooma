@@ -60,6 +60,21 @@ import (
 func PlanEdit(c classify.Classification, target unit.Unit, zone *time.Location) ([]Edit, bool) {
 	eventEcho, dueEcho := echoes(c.EventAt, target.EventAt), echoes(c.DueAt, target.DueAt)
 	newDate := c.EventAt != nil && !eventEcho || c.DueAt != nil && !dueEcho
+	// Leads say when to be reminded, not what the unit says (I40): beside a new
+	// date they travel with it, and alone they are the whole plan, the model's
+	// text never taken as the body.
+	if c.ReminderLeadsMinutes != nil {
+		leads := NewReminderLeadsEdit(c.ReminderLeadsMinutes)
+		if !newDate {
+			return []Edit{leads}, true
+		}
+		c.ReminderLeadsMinutes = nil
+		plan, ok := PlanEdit(c, target, zone)
+		if !ok {
+			return nil, false
+		}
+		return append(plan, leads), true
+	}
 	if (eventEcho || dueEcho) && !newDate && c.NormalizedContent != nil &&
 		*c.NormalizedContent != target.Content && KeepsInstant(*c.NormalizedContent, target, zone) {
 		return []Edit{NewContentEdit(*c.NormalizedContent)}, true

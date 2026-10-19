@@ -40,6 +40,7 @@ const (
 	FieldReferent           = "referent"
 	FieldClarifyingQuestion = "clarifying_question"
 	FieldEventAt            = "event_at"
+	FieldReminderLeads      = "reminder_leads_minutes"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
@@ -217,6 +218,7 @@ func Check(c llm.Case, cls classify.Classification) []string {
 		want, err := time.Parse(time.RFC3339, e.EventAt)
 		miss(FieldEventAt, err != nil || cls.EventAt == nil || !cls.EventAt.Equal(want))
 	}
+	miss(FieldReminderLeads, !slices.Equal(cls.ReminderLeadsMinutes, e.ReminderLeadsMinutes))
 	return misses
 }
 

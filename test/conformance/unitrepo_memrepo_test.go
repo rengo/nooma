@@ -116,3 +116,12 @@ func TestUnitRepo_MemRepo_RemindMe(t *testing.T) {
 		return memrepo.NewUnits()
 	})
 }
+
+// TestUnitRepo_MemRepo_ReminderLeads runs repocontract.RunReminderLeads against
+// the same fake (I40).
+func TestUnitRepo_MemRepo_ReminderLeads(t *testing.T) {
+	repocontract.RunReminderLeads(t, func(t *testing.T) ports.UnitRepo {
+		t.Helper()
+		return memrepo.NewUnits()
+	})
+}

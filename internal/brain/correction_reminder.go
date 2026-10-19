@@ -33,9 +33,16 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	// after the edits, else its content.
 	changed := target
 	editsWhatTheUnitSays := false
+	if target.EventAt != nil {
+		eventAt = *target.EventAt
+	}
 	for _, e := range plan {
 		if v, ok := e.EventAt(); ok {
 			eventAt, moved = v, true
+		}
+		// New leads re-plan the event at its instant as moving it does (I40).
+		if v, ok := e.ReminderLeads(); ok {
+			changed.ReminderLeads, moved = v, target.EventAt != nil || moved
 		}
 		if v, ok := e.Content(); ok {
 			changed.Content = v
@@ -65,7 +72,7 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 		return fmt.Errorf("correction: read reminders of unit %q: %w", target.ID, err)
 	}
 	live, byID := liveSet(armed)
-	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config), interruptLevel, now)
+	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config).WithEventLeads(changed.ReminderLeads), interruptLevel, now)
 	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: correctionCause()}
 	// A moved reminder says what the unit says now, whatever it said before: a
 	// retry after a failed step finds the unit already holding the new text.

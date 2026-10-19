@@ -164,7 +164,7 @@ CREATE TABLE units (
   confidence         REAL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL
-, language TEXT, title TEXT, remind_me INTEGER NOT NULL DEFAULT 0);
+, language TEXT, title TEXT, remind_me INTEGER NOT NULL DEFAULT 0, reminder_leads TEXT);
 
 CREATE VIRTUAL TABLE units_fts USING fts5(
   content, content='units', content_rowid='rowid'

@@ -155,3 +155,36 @@ func TestRenderReply_AMovedCorrectionNamesWhereTo(t *testing.T) {
 		})
 	}
 }
+
+// TestRenderReply_ALeadsCorrectionNamesTheReminders: "avisame solo 1 hora
+// antes" answered "Corregido." while nothing changed. A correction that set
+// the event's leads names the reminders now armed, as the user said them; one
+// that left none before the event says so; a moved time comes first. Leads
+// that could not be set are never answered as corrected (I40).
+func TestRenderReply_ALeadsCorrectionNamesTheReminders(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	at := time.Date(2026, 10, 20, 11, 0, 0, 0, zone)
+	leads := []correction.Field{correction.FieldReminderLeads}
+	for _, tc := range []struct {
+		name string
+		corr brain.Correction
+		want string
+	}{
+		{"one hour before", brain.Correction{UnitID: "u", Fields: leads, About: at, Reminders: []time.Time{at.Add(-time.Hour)}}, "Te aviso 1 hora antes."},
+		{"moved and one hour before", brain.Correction{UnitID: "u", Fields: append([]correction.Field{correction.FieldEventAt}, leads...),
+			MovedTo: &at, About: at, Reminders: []time.Time{at.Add(-time.Hour)}}, "Movido al mar 20 oct, 11:00. Te aviso 1 hora antes."},
+		{"none left", brain.Correction{UnitID: "u", Fields: leads, About: at}, "Ya no queda ningún aviso antes de esa hora."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: classify.LanguageES, Correction: &tc.corr})
+			if got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	refused := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeAsked, Language: classify.LanguageES,
+		Correction: &brain.Correction{UnitID: "u", Ambiguous: true, Why: brain.AskLeadsNotSet}})
+	if refused != "No cambié los avisos: solo puedo avisarte antes de algo con día y hora, hasta 30 días antes." {
+		t.Errorf("refused = %q, want the leads_not_set answer", refused)
+	}
+}

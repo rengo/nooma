@@ -39,6 +39,9 @@ type ReminderPrefs struct {
 	// RemindMeLead is how long before a named time a one-shot asked
 	// reminder fires (ADR-0031 point 2).
 	RemindMeLead time.Duration
+	// ownLeads marks TimedLeads as the event's own (WithEventLeads): the user
+	// named them, so the told-day rule leaves them (ADR-0038).
+	ownLeads bool
 }
 
 // DefaultReminderPrefs is ADR-0029's and ADR-0030's defaults.
@@ -155,7 +158,10 @@ func leadSet(kind classify.Kind, asked bool, at time.Time, dayOnly bool, prefs R
 // or a correction.
 func eventReminders(eventAt time.Time, prefs ReminderPrefs, told, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	leads := leadSet(classify.KindEvent, false, eventAt, false, prefs, now.Location())
-	return reminders(eventAt, false, skipToldDay(leads, eventAt, told, now), prefs, now, interrupt, sent)
+	if !prefs.ownLeads {
+		leads = skipToldDay(leads, eventAt, told, now)
+	}
+	return reminders(eventAt, false, leads, prefs, now, interrupt, sent)
 }
 
 // skipToldDay drops the leads nobody asked for that are still ahead and would

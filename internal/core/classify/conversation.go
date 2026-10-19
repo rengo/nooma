@@ -151,6 +151,32 @@ func assignClarifyingQuestion(raw json.RawMessage, c *Classification, _ time.Tim
 	return ""
 }
 
+// assignReminderLeads reads reminder_leads_minutes: a non-empty array of whole
+// minutes, each at least one. A value of another shape is wrong_type; an empty
+// array or a lead under a minute is bad_format.
+func assignReminderLeads(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return ReasonWrongType
+	}
+	if len(items) == 0 {
+		return ReasonBadFormat
+	}
+	leads := make([]int, len(items))
+	for i, item := range items {
+		m, err := strconv.Atoi(strings.TrimSpace(string(item)))
+		if err != nil {
+			return ReasonWrongType
+		}
+		if m < 1 {
+			return ReasonBadFormat
+		}
+		leads[i] = m
+	}
+	c.ReminderLeadsMinutes = leads
+	return ""
+}
+
 // writeFollowUps renders the two follow-up fields, the patch rule, the
 // transcript and the items it tags (ADR-0036). It is written only beside a
 // chat: without one there is nothing to follow up on. The model reads what
@@ -169,6 +195,15 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("                       you think most likely, named as the user would (\"¿Te referís\n")
 	b.WriteString("                       a la reunión con Juan?\"). Nooma sends it as it is and stores\n")
 	b.WriteString("                       nothing; the answer comes back with this exchange shown\n")
+	// **How long before, as a value** (I40, ADR-0038). "avisame solo 1 hora
+	// antes" was read as a rewrite of the item's text and answered "Corregido."
+	// while nothing about its reminders changed.
+	b.WriteString("  reminder_leads_minutes  only beside a referent: when the message changes how long\n")
+	b.WriteString("                       before the item the user wants to be reminded, every lead it\n")
+	b.WriteString("                       asks for, in whole minutes before the item: [60] for one hour\n")
+	b.WriteString("                       before, [1440, 120] for the day before and two hours before.\n")
+	b.WriteString("                       It replaces the item's reminders. Leave it out when the\n")
+	b.WriteString("                       message says nothing about when to be reminded\n")
 	b.WriteString("  A follow-up that changes a listed item (a new time, a new day, a different\n")
 	b.WriteString("  detail, even with no subject named in it) is a correction of that item, not a\n")
 	b.WriteString("  new memory.\n")
@@ -198,6 +233,8 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  changes, and its time when only the date changes. An instant shown as a bare\n")
 	b.WriteString("  date has no time: when only its day changes, answer the new bare date. Also\n")
 	b.WriteString("  answer a fresh title, with no date, day or time in it.\n")
+	b.WriteString("  A message that only changes when to be reminded keeps normalized_content the\n")
+	b.WriteString("  item's current text and answers no event_at, due_at or title.\n")
 
 	b.WriteString("\n" + conversationHeading + "\n")
 	b.WriteString("  The chat just before the message, oldest first. A turn about something Nooma\n")

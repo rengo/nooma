@@ -1,0 +1,42 @@
+{
+  "id": "classify-followup-dos-horas-antes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "avisame 2 horas antes",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"title\":\"Reunión con Ana\",\"referent\":\"A\",\"reminder_leads_minutes\":[120],\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-19T09:05:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "user",
+        "text": "el jueves tengo reunión con Ana a las 15",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "speaker": "nooma",
+        "text": "Anotado para el jue 22 oct, 15:00. Te aviso el día anterior y unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Reunión con Ana el 2026-10-22 a las 15:00.",
+        "title": "Reunión con Ana",
+        "event_at": "2026-10-22T15:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "A",
+    "reminder_leads_minutes": [
+      120
+    ]
+  },
+  "prompt_sha256": "081ae64c1f39a6d8ae6e654a84920a4d79227596938c63dc4fb79b60453c3c74"
+}

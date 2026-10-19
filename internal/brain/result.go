@@ -228,6 +228,12 @@ type Correction struct {
 	// alone; nil when no date moved. The reply names it (I40).
 	MovedTo        *time.Time
 	MovedToDayOnly bool
+	// Reminders are when the event's armed reminders ring after a correction
+	// that set its leads, earliest first, in the user's zone; empty when none is
+	// left before the event. The reply names them (I40).
+	Reminders []time.Time
+	// About is the event instant Reminders are before, in the user's zone.
+	About time.Time
 	// Unchanged is true for a correction that found the unit already
 	// holding everything it said: nothing was written or recorded as a
 	// change, Fields is empty, and the answer says so.
@@ -274,4 +280,8 @@ const (
 	// conversation and the model could not tell which, so it asked in its
 	// own words, carried in CaptureResult.Reply (ADR-0036).
 	AskReferentUnclear AskReason = "referent_unclear"
+	// AskLeadsNotSet: the message set reminder leads for a unit they cannot
+	// apply to (not an event with a time of day), or leads outside what a
+	// preference may hold; nothing was changed (I40).
+	AskLeadsNotSet AskReason = "leads_not_set"
 )

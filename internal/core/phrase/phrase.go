@@ -45,6 +45,15 @@ type Set struct {
 	// Moved answers a correction that moved the unit: one %s, the instant it
 	// moved to, named as NotedFor names it.
 	Moved string
+
+	// RemindYou answers a correction that set an event's leads: one %s, its
+	// reminders (ExactLeads). NoReminderLeft answers one that left none before
+	// the event. LeadsNotSet answers leads that could not be set: one %d, the
+	// furthest a lead may be, in days (I40).
+	RemindYou      string
+	NoReminderLeft string
+	LeadsNotSet    string
+
 	// OutOfScope refuses a request for something Nooma does not do
 	// (ADR-0021). It must not sound temporary: the capability is absent,
 	// not unavailable.
@@ -137,6 +146,11 @@ type Set struct {
 	// And joins the last two of several lead phrases.
 	And string
 
+	// LeadHour and LeadHoursExact (one %d) say a whole number of hours as
+	// that number, for leads the user just named (ExactLeads).
+	LeadHour       string
+	LeadHoursExact string
+
 	// FoundOne takes one %d and FoundMany takes one %d. Two fields rather
 	// than one plural rule because plural agreement is not a shared
 	// mechanism across languages, and pretending it is produces "1 things"
@@ -180,6 +194,10 @@ var sets = map[classify.Language]Set{
 		AskWhichOne:  "I need one more thing before I can change that — which one did you mean?",
 		NothingFound: "I could not find anything about that.",
 
+		RemindYou:      "I will remind you %s.",
+		NoReminderLeft: "No reminder is left before it.",
+		LeadsNotSet:    "I did not change the reminders: I can only remind you before something with a day and a time, up to %d days before.",
+
 		NotScheduled:   "I did not set that: %s",
 		NotedNotSet:    "Noted, but I did not set a reminder: %s.",
 		RefusalNoDate:  "no time was given, and guessing one is worse than not setting a reminder at all",
@@ -220,6 +238,9 @@ var sets = map[classify.Language]Set{
 		LeadTodayAt:   "today at %s",
 		And:           "and",
 
+		LeadHour:       "1 hour before",
+		LeadHoursExact: "%d hours before",
+
 		FoundOne:  "Found %d thing:",
 		FoundMany: "Found %d things:",
 
@@ -245,6 +266,10 @@ var sets = map[classify.Language]Set{
 		NoAnswer:     "No pude responder eso en este momento.",
 		AskWhichOne:  "Necesito una cosa más antes de cambiarlo: ¿a cuál te referías?",
 		NothingFound: "No encontré nada sobre eso.",
+
+		RemindYou:      "Te aviso %s.",
+		NoReminderLeft: "Ya no queda ningún aviso antes de esa hora.",
+		LeadsNotSet:    "No cambié los avisos: solo puedo avisarte antes de algo con día y hora, hasta %d días antes.",
 
 		NotScheduled:   "No lo programé: %s",
 		NotedNotSet:    "Anotado, pero no puse aviso: %s.",
@@ -285,6 +310,9 @@ var sets = map[classify.Language]Set{
 		LeadThatDayAt: "ese día a las %s",
 		LeadTodayAt:   "hoy a las %s",
 		And:           "y",
+
+		LeadHour:       "1 hora antes",
+		LeadHoursExact: "%d horas antes",
 
 		FoundOne:  "Encontré %d cosa:",
 		FoundMany: "Encontré %d cosas:",
@@ -448,6 +476,25 @@ func (s Set) Leads(immediate bool, told, about time.Time, fires ...time.Time) st
 			said = append(said, s.TodayAt(fire.In(about.Location())))
 		default:
 			said = append(said, s.Lead(immediate && i == 0, fire, about))
+		}
+	}
+	return s.join(said)
+}
+
+// ExactLeads is Leads for leads the user just named (I40): a reminder a whole
+// number of hours, under a day, before about is said as that number ("1 hora
+// antes"), where Lead would say "unas horas antes".
+func (s Set) ExactLeads(about time.Time, fires ...time.Time) string {
+	var said []string
+	for _, fire := range fires {
+		gap := about.Sub(fire)
+		switch {
+		case gap == time.Hour:
+			said = append(said, s.LeadHour)
+		case gap > time.Hour && gap < 24*time.Hour && gap%time.Hour == 0:
+			said = append(said, fmt.Sprintf(s.LeadHoursExact, int(gap/time.Hour)))
+		default:
+			said = append(said, s.Lead(false, fire, about))
 		}
 	}
 	return s.join(said)

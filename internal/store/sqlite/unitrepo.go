@@ -49,11 +49,11 @@ func (r *UnitRepo) Create(ctx context.Context, u unit.Unit) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO units
 			(id, type, content, status, weight, weight_decay_rate, last_touched_at,
-			 structured_data, source, event_at, due_at, confidence, language, title, remind_me, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 structured_data, source, event_at, due_at, confidence, language, title, remind_me, reminder_leads, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, string(u.Type), u.Content, string(u.Status), u.Weight, u.WeightDecayRate,
 		formatUnitTime(u.LastTouchedAt), rawMessageToNull(u.StructuredData), u.Source,
-		timePtrToNull(u.EventAt), timePtrToNull(u.DueAt), floatPtrToNull(u.Confidence), textToNull(u.Language), textToNull(u.Title), u.RemindMe,
+		timePtrToNull(u.EventAt), timePtrToNull(u.DueAt), floatPtrToNull(u.Confidence), textToNull(u.Language), textToNull(u.Title), u.RemindMe, leadsToNull(u.ReminderLeads),
 		formatUnitTime(u.CreatedAt), formatUnitTime(u.UpdatedAt),
 	)
 	if err != nil {
@@ -178,6 +178,27 @@ func (r *UnitRepo) UpdateDueAt(ctx context.Context, id string, dueAt, at time.Ti
 		return fmt.Errorf("update unit %q due_at: %w", id, err)
 	}
 	return requireRowAffected(res, ports.ErrUnitNotFound)
+}
+
+// UpdateReminderLeads implements ports.UnitRepo.
+func (r *UnitRepo) UpdateReminderLeads(ctx context.Context, id string, minutes []int, at time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE units SET reminder_leads = ?, updated_at = ? WHERE id = ?`,
+		leadsToNull(minutes), formatUnitTime(at), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update unit %q reminder_leads: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrUnitNotFound)
+}
+
+// leadsToNull is minutes as the column's JSON array, or NULL for nil.
+func leadsToNull(minutes []int) any {
+	if minutes == nil {
+		return nil
+	}
+	b, _ := json.Marshal(minutes) // a []int always marshals
+	return string(b)
 }
 
 // UpdateTitle implements ports.UnitRepo.
@@ -353,7 +374,7 @@ func (r *UnitRepo) LiveDecayStates(ctx context.Context) ([]consolidation.Cold, e
 // unitSelectColumns is shared by ByID and LiveByIDs — one column list, one
 // place, so the two read paths and scanUnit cannot drift apart.
 const unitSelectColumns = `SELECT id, type, content, status, weight, weight_decay_rate, last_touched_at,
-	structured_data, source, event_at, due_at, confidence, language, title, remind_me, created_at, updated_at`
+	structured_data, source, event_at, due_at, confidence, language, title, remind_me, reminder_leads, created_at, updated_at`
 
 // unitRow is satisfied by both *sql.Row (ByID) and *sql.Rows (LiveByIDs).
 type unitRow interface {
@@ -370,12 +391,12 @@ func scanUnit(row unitRow) (unit.Unit, error) {
 		structuredData                      sql.NullString
 		eventAt, dueAt                      sql.NullString
 		confidence                          sql.NullFloat64
-		language, title                     sql.NullString
+		language, title, leads              sql.NullString
 	)
 
 	err := row.Scan(
 		&u.ID, &typ, &u.Content, &status, &u.Weight, &u.WeightDecayRate, &lastTouchedAt,
-		&structuredData, &u.Source, &eventAt, &dueAt, &confidence, &language, &title, &u.RemindMe, &createdAt, &updatedAt,
+		&structuredData, &u.Source, &eventAt, &dueAt, &confidence, &language, &title, &u.RemindMe, &leads, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return unit.Unit{}, err
@@ -400,6 +421,11 @@ func scanUnit(row unitRow) (unit.Unit, error) {
 	}
 	u.Language = language.String
 	u.Title = title.String
+	if leads.Valid {
+		if err := json.Unmarshal([]byte(leads.String), &u.ReminderLeads); err != nil {
+			return unit.Unit{}, fmt.Errorf("unit %q: reminder_leads: %w", u.ID, err)
+		}
+	}
 	if structuredData.Valid {
 		u.StructuredData = json.RawMessage(structuredData.String)
 	}

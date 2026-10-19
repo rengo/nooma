@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -138,6 +139,21 @@ func (r *Units) UpdateDueAt(_ context.Context, id string, dueAt, at time.Time) e
 		return ports.ErrUnitNotFound
 	}
 	u.DueAt = &dueAt
+	u.UpdatedAt = at
+	r.units[id] = u
+	return nil
+}
+
+// UpdateReminderLeads implements ports.UnitRepo.
+func (r *Units) UpdateReminderLeads(_ context.Context, id string, minutes []int, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	u, ok := r.units[id]
+	if !ok {
+		return ports.ErrUnitNotFound
+	}
+	u.ReminderLeads = slices.Clone(minutes)
 	u.UpdatedAt = at
 	r.units[id] = u
 	return nil

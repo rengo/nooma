@@ -744,3 +744,32 @@ func TestI35_QuietPulledLeadInFlightCovers(t *testing.T) {
 		t.Errorf("flight reminders = %v, want none armed: the 2 h lead is in flight and covered", got)
 	}
 }
+
+// TestI35_APreferenceChangeKeepsAnEventsOwnLeads: an event whose leads a
+// correction set (I40, ADR-0038) keeps them when the user's preferences
+// change; the event beside it, which follows the preferences, is re-armed.
+func TestI35_APreferenceChangeKeepsAnEventsOwnLeads(t *testing.T) {
+	now := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	event := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	v := newI35(t, now)
+	v.unit(t, "own", unit.TypeEvent, event, now)
+	v.unit(t, "plain", unit.TypeEvent, event, now)
+	if err := v.units.UpdateReminderLeads(context.Background(), "own", []int{60}, now); err != nil {
+		t.Fatal(err)
+	}
+	v.arm(t, "own-1h", "own", event.Add(-time.Hour), 60, nil)
+	v.arm(t, "plain-24h", "plain", event.Add(-24*time.Hour), 1440, nil)
+	v.arm(t, "plain-2h", "plain", event.Add(-2*time.Hour), 120, nil)
+
+	p := i35Defaults()
+	p.LeadMinutes = []int{180}
+	if _, err := v.svc.Save(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+	if got := v.armedAt(t, "own"); !sameInstants(got, []time.Time{event.Add(-time.Hour)}) {
+		t.Errorf("own leads armed at %v, want only the hour before it kept", got)
+	}
+	if got := v.armedAt(t, "plain"); !sameInstants(got, []time.Time{event.Add(-3 * time.Hour)}) {
+		t.Errorf("the other event armed at %v, want the new 3-hour lead", got)
+	}
+}

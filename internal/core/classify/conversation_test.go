@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -86,6 +87,40 @@ func TestDecode_ClarifyingQuestion(t *testing.T) {
 	}
 }
 
+// TestDecode_ReminderLeadsMinutes: whole positive minutes decode, in the
+// order given; anything else degrades the field alone (I14), so a lead the
+// model invented in another unit or shape is never read (I40).
+func TestDecode_ReminderLeadsMinutes(t *testing.T) {
+	for _, tc := range []struct {
+		raw    string
+		want   []int
+		reason Reason
+	}{
+		{`[60]`, []int{60}, ""},
+		{`[1440, 120]`, []int{1440, 120}, ""},
+		{`null`, nil, ""},
+		{`[]`, nil, ReasonBadFormat},
+		{`[0]`, nil, ReasonBadFormat},
+		{`[1.5]`, nil, ReasonWrongType},
+		{`["60"]`, nil, ReasonWrongType},
+		{`60`, nil, ReasonWrongType},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			c, err := Decode(correctionWith(`,"reminder_leads_minutes":`+tc.raw), testNow)
+			if err != nil || c.Kind == nil {
+				t.Fatalf("Decode = %+v, %v: the rest did not survive", c, err)
+			}
+			if !slices.Equal(c.ReminderLeadsMinutes, tc.want) || (tc.want == nil) != (c.ReminderLeadsMinutes == nil) {
+				t.Errorf("ReminderLeadsMinutes = %v, want %v", c.ReminderLeadsMinutes, tc.want)
+			}
+			if tc.reason == "" && len(c.Degradations) != 0 ||
+				tc.reason != "" && (len(c.Degradations) != 1 || c.Degradations[0] != Degradation{Field: "reminder_leads_minutes", Reason: tc.reason}) {
+				t.Errorf("Degradations = %v, want reason %q", c.Degradations, tc.reason)
+			}
+		})
+	}
+}
+
 // TestReadFollowUp: only a correction with a letter that was shown binds, and
 // only a correction that is unclear and asks is asked; everything else is not
 // a follow-up (ADR-0036: the model reads, the code binds what it listed).
@@ -155,6 +190,9 @@ func TestBuildPrompt_DescribesFollowUps(t *testing.T) {
 		"Nooma sends it as it is and stores nothing",
 		"normalized_content is the item's WHOLE corrected text",
 		"keep the item's date when only the time changes",
+		// I40: how long before the item to remind is a structured field.
+		"reminder_leads_minutes",
+		"replaces the item's reminders",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt never says %q:\n%s", want, p)
@@ -170,7 +208,7 @@ func TestBuildPrompt_NoChatCarriesNoFollowUpMachinery(t *testing.T) {
 	for _, rc := range []ReminderContext{{}, {Candidates: stopCandidates}, {Open: &OpenQuestion{Kind: QuestionUndo, Text: "Listo."}}} {
 		p := promptWith(rc)
 		for _, gone := range []string{
-			followUpsHeading, conversationHeading, "referent", "clarifying_question", "which-item",
+			followUpsHeading, conversationHeading, "referent", "clarifying_question", "which-item", "reminder_leads_minutes",
 			"No recent conversation", "Nooma pushed", strings.TrimSpace(whichItemPointer),
 		} {
 			if strings.Contains(p, gone) {

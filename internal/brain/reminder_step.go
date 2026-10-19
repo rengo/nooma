@@ -173,6 +173,8 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 	live, byID := liveSet(armed)
 	sent := sentReminders(fired, at)
 	interrupt := group[0].InterruptLevel
+	// An event's own leads, when it has them, are its leads (I40).
+	prefs = prefs.WithEventLeads(u.ReminderLeads)
 	f := prospection.FollowSent(at, live, sent, prefs, interrupt, u.CreatedAt, now)
 	if asked {
 		f = prospection.FollowAsked(at, event, dayOnly, live, sent, prefs, interrupt, u.CreatedAt, now)

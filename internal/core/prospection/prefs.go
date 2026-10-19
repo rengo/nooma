@@ -49,6 +49,34 @@ func ParseEventReminderLeads(s string) ([]time.Duration, error) {
 	return leads, nil
 }
 
+// ValidEventLeads reports whether minutes are leads ParseEventReminderLeads
+// accepts.
+func ValidEventLeads(minutes []int) bool {
+	_, err := eventLeads(minutes)
+	return err == nil
+}
+
+// WithEventLeads is p with an event's own leads (I40, ADR-0038) in place of the
+// user's, when ValidEventLeads accepts them; otherwise p.
+func (p ReminderPrefs) WithEventLeads(minutes []int) ReminderPrefs {
+	if leads, err := eventLeads(minutes); err == nil {
+		p.TimedLeads, p.ownLeads = leads, true
+	}
+	return p
+}
+
+func eventLeads(minutes []int) ([]time.Duration, error) {
+	raw, err := json.Marshal(minutes)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEventReminderLeads(string(raw))
+}
+
+// TimedEvent reports whether at, read in zone, names a time of day rather than
+// a day alone, and so is reminded at leads (ADR-0029 points 1-2).
+func TimedEvent(at time.Time, zone *time.Location) bool { return !isDateOnly(at.In(zone)) }
+
 // ParseTimeOfDay reads config.date_only_reminder_at: HH:MM, 00:00 to 23:59.
 func ParseTimeOfDay(s string) (TimeOfDay, error) {
 	bad := fmt.Errorf("%w: time of day %q, want HH:MM from 00:00 to 23:59", ErrInvalidReminderPref, s)

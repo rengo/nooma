@@ -128,3 +128,17 @@ func TestFollow_ToldDay(t *testing.T) {
 		}
 	})
 }
+
+// TestFollow_AnEventsOwnLeadsAreAsked: leads the user named for this event
+// (I40, ADR-0038) are asked for, so the told-day rule leaves them: "avisame 1
+// día antes y 1 hora antes" today, about tomorrow at 10, rings today at 10 too.
+func TestFollow_AnEventsOwnLeadsAreAsked(t *testing.T) {
+	now, event := toldAt(19, 8, 44), toldAt(20, 10, 0)
+	own := DefaultReminderPrefs().WithEventLeads([]int{1440, 60})
+	if got := toldFires(Follow(event, nil, own, nil, now).Plans); !slices.Equal(got, []time.Time{toldAt(19, 10, 0), toldAt(20, 9, 0)}) {
+		t.Errorf("own leads fire at %v, want today at 10:00 and tomorrow at 09:00", got)
+	}
+	if got := toldFires(Follow(event, nil, DefaultReminderPrefs(), nil, now).Plans); !slices.Equal(got, []time.Time{toldAt(20, 8, 0)}) {
+		t.Errorf("the preferences' leads fire at %v, want the told-day rule to keep only 08:00 tomorrow", got)
+	}
+}
