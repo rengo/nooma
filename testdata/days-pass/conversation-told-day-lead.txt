@@ -1,0 +1,6 @@
+# an event tomorrow is captured before its 24-hour lead
+# a check pass every 5m0s from Mon 2026-10-19 08:40 -03:00 to Tue 2026-10-20 12:00
+# "mañana tengo dentista a las 10" is read by a hand-written reading, not a recording
+Mon 2026-10-19 08:44 ← mañana tengo dentista a las 10
+Mon 2026-10-19 08:44 → Anotado para el mar 20 oct, 10:00. Te aviso unas horas antes.
+Tue 2026-10-20 08:00 → Recordatorio: Dentista — mar 20 oct, 10:00

@@ -44,21 +44,27 @@ type Following struct {
 // the same correction again moves nothing. A lead that ADR-0030 pulled to
 // now is not that reminder — its lead was ahead — and is armed with the
 // rest of the set.
+//
+// A correction is the user telling Nooma about the event again, so its own
+// day is the told day (ADR-0037): a lead nobody asked for that lands on it is
+// not armed.
 func Follow(eventAt time.Time, live []Live, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
-	return FollowSent(eventAt, live, nil, prefs, interruptLevel, now)
+	return FollowSent(eventAt, live, nil, prefs, interruptLevel, now, now)
 }
 
 // FollowSent is Follow for a re-arm under new preferences (ADR-0029 point
 // 6): a lead a reminder already sent about this same event instant covers
-// (coveredBy) is not planned again. A nil sent is Follow.
-func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
+// (coveredBy) is not planned again. told is when the user told Nooma about
+// the event — the unit's capture for a re-plan nobody asked for — whose day
+// keeps no unasked lead (ADR-0037). A nil sent with told now is Follow.
+func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, told, now time.Time) Following {
 	interrupt := ResolveInterrupt(interruptLevel)
 	for i, l := range live {
 		if l.Rule != nil {
 			return settle([]Plan{recurringTrigger(eventAt, *l.Rule, prefs, now, interrupt)}, live, []int{i})
 		}
 	}
-	plans, arms := eventReminders(eventAt, prefs, now, interrupt, sent)
+	plans, arms := eventReminders(eventAt, prefs, told, now, interrupt, sent)
 	if !arms || (len(live) == 0 && everyLeadBehind(eventAt, prefs, now)) {
 		return settle([]Plan{{What: ArmNothing, Why: plans[0].Why, Interrupt: interrupt}}, live, []int{-1})
 	}
@@ -70,10 +76,10 @@ func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs
 // instant at — the asked lead, and ADR-0029's leads too when event — so a
 // re-plan carries an asked reminder instead of expiring it. dayOnly is a day
 // alone. Like a correction it plans no at-once reminder: a re-plan owes that
-// only as CatchUpAsked's catch-up.
-func FollowAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
+// only as CatchUpAsked's catch-up. told is FollowSent's.
+func FollowAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, told, now time.Time) Following {
 	interrupt := ResolveInterrupt(interruptLevel)
-	plans, arms := askedReminders(at, event, dayOnly, prefs, now, interrupt, sent)
+	plans, arms := askedReminders(at, event, dayOnly, prefs, told, now, interrupt, sent)
 	if arms {
 		plans = slices.DeleteFunc(plans, atOnce)
 	}
@@ -97,7 +103,7 @@ func CatchUpAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, p
 	if len(live) > 0 || slices.ContainsFunc(sent, func(s Sent) bool { return s.About.Equal(at) }) {
 		return Plan{}, false
 	}
-	plans, arms := askedReminders(at, event, dayOnly, prefs, now, interrupt, nil)
+	plans, arms := askedReminders(at, event, dayOnly, prefs, time.Time{}, now, interrupt, nil)
 	if !arms || len(plans) != 1 || !atOnce(plans[0]) {
 		return Plan{}, false
 	}
@@ -117,13 +123,15 @@ func CatchUpAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, p
 	return plan, true
 }
 
-// askedReminders is the reminders Arm plans for an asked unit at at.
-func askedReminders(at time.Time, event, dayOnly bool, prefs ReminderPrefs, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
+// askedReminders is the reminders Arm plans for an asked unit at at, told
+// being skipToldDay's.
+func askedReminders(at time.Time, event, dayOnly bool, prefs ReminderPrefs, told, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	kind := classify.KindTask
 	if event {
 		kind = classify.KindEvent
 	}
-	return reminders(at, dayOnly, leadSet(kind, true, at, dayOnly, prefs, now.Location()), prefs, now, interrupt, sent)
+	leads := skipToldDay(leadSet(kind, true, at, dayOnly, prefs, now.Location()), at, told, now)
+	return reminders(at, dayOnly, leads, prefs, now, interrupt, sent)
 }
 
 // atOnce is the asked reminder sent at once because its lead is behind: no

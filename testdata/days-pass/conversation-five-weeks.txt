@@ -16,14 +16,13 @@ Fri 2026-10-16 10:47 → Anotado para el vie 16 oct, 21:00. Te aviso 15 minutos 
 Fri 2026-10-16 10:48 ← acordate de avisarme que vence el seguro el viernes
 Fri 2026-10-16 10:48 → Anotado para el vie 23 oct. Te aviso el día anterior y ese día a las 09:00.
 Fri 2026-10-16 10:49 ← recordame la reunión con Juan mañana a las 22:30
-Fri 2026-10-16 10:49 → Anotado para el sáb 17 oct, 22:30. Te aviso el día anterior, unas horas antes y 15 minutos antes.
+Fri 2026-10-16 10:49 → Anotado para el sáb 17 oct, 22:30. Te aviso unas horas antes y 15 minutos antes.
 Fri 2026-10-16 10:50 ← Ana me dijo 'avisame cuando llegues'
 Fri 2026-10-16 10:50 → Anotado.
 Fri 2026-10-16 17:30 ← Remind me to call Ana at 5pm
 Fri 2026-10-16 17:30 → Noted, but I did not set a reminder: the time given has already passed.
 Fri 2026-10-16 20:45 → Recordatorio: Sacar la basura — vie 16 oct, 21:00
 Fri 2026-10-16 21:00 → Recordatorio: Tomar las pastillas — vie 16 oct
-Fri 2026-10-16 22:30 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
 Sat 2026-10-17 08:45 → Recordatorio: Llamar al médico — sáb 17 oct, 09:00
 Sat 2026-10-17 08:50 ← después lo veo
 Sat 2026-10-17 08:50 → (chat reply)

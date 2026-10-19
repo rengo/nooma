@@ -67,12 +67,13 @@ func newI37Vault(t *testing.T) *i37Vault {
 	return &i37Vault{t: t, triggers: memrepo.NewTriggers(), units: memrepo.NewUnits(), timers: memrepo.NewTimers(), log: memrepo.NewDecisionLog(), ch: &i37Channel{}}
 }
 
-// event stores an event unit whose instant is at (nil: it has none).
+// event stores an event unit whose instant is at (nil: it has none),
+// captured a week before i37Now, before any reminder seeded for it.
 func (v *i37Vault) event(id string, at *time.Time) {
 	v.t.Helper()
 	if err := v.units.Create(context.Background(), unit.Unit{
 		ID: id, Type: unit.TypeEvent, Status: unit.StatusPool, Content: id, Weight: 1,
-		EventAt: at, LastTouchedAt: i37Now, CreatedAt: i37Now, UpdatedAt: i37Now,
+		EventAt: at, LastTouchedAt: i37Now, CreatedAt: i37Now.AddDate(0, 0, -7), UpdatedAt: i37Now,
 	}); err != nil {
 		v.t.Fatalf("seed unit %s: %v", id, err)
 	}
