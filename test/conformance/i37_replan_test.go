@@ -350,3 +350,19 @@ func TestI37_AnOverdueRecurringRowExpiresAndIsNeverReplanned(t *testing.T) {
 		t.Errorf("report = %+v, armed %+v; want it expired, nothing planned, and its series re-armed for 21 October", report, armed)
 	}
 }
+
+// TestI37_AReplanKeepsAnEventsOwnLeads: the due scan re-plans an event whose
+// leads a correction set (I40, ADR-0038) at those leads, not the preferences'.
+func TestI37_AReplanKeepsAnEventsOwnLeads(t *testing.T) {
+	v := newI37Vault(t)
+	supersededUnit(v)
+	if err := v.units.UpdateReminderLeads(context.Background(), "u", []int{60}, i37Now); err != nil {
+		t.Fatal(err)
+	}
+
+	v.check(false)
+
+	if got := v.armed("u"); len(got) != 1 || !got[0].FireAt.Equal(i37Day(16, 10, 0)) {
+		t.Errorf("armed = %+v, want one reminder an hour before 16 October 11:00", got)
+	}
+}

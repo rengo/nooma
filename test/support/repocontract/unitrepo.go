@@ -1329,3 +1329,38 @@ func RunRemindMe(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		}
 	}
 }
+
+// RunReminderLeads pins an event's own reminder leads (I40, ADR-0038): stored at
+// Create and read back in order, nil for a unit that follows the preferences,
+// and UpdateReminderLeads rewrites them touching nothing else but updated_at.
+func RunReminderLeads(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
+	t.Helper()
+	ctx := context.Background()
+	repo := newRepo(t)
+	own := fixtureUnit("own", unit.StatusPool)
+	own.ReminderLeads = []int{1440, 60}
+	plain := fixtureUnit("plain", unit.StatusPool)
+	for _, u := range []unit.Unit{own, plain} {
+		if err := repo.Create(ctx, u); err != nil {
+			t.Fatalf("Create %s: %v", u.ID, err)
+		}
+	}
+	if got, err := repo.ByID(ctx, "own"); err != nil || !reflect.DeepEqual(got.ReminderLeads, []int{1440, 60}) {
+		t.Errorf("ByID(own).ReminderLeads = %v, %v; want [1440 60]", got.ReminderLeads, err)
+	}
+	if got, err := repo.ByID(ctx, "plain"); err != nil || got.ReminderLeads != nil {
+		t.Errorf("ByID(plain).ReminderLeads = %v, %v; want nil", got.ReminderLeads, err)
+	}
+	at := plain.UpdatedAt.Add(time.Hour)
+	if err := repo.UpdateReminderLeads(ctx, "plain", []int{60}, at); err != nil {
+		t.Fatalf("UpdateReminderLeads: %v", err)
+	}
+	want := plain
+	want.ReminderLeads, want.UpdatedAt = []int{60}, at
+	if got, err := repo.ByID(ctx, "plain"); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("after UpdateReminderLeads: %+v, %v; want only ReminderLeads and UpdatedAt changed: %+v", got, err, want)
+	}
+	if err := repo.UpdateReminderLeads(ctx, "does-not-exist", []int{60}, at); !errors.Is(err, ports.ErrUnitNotFound) {
+		t.Errorf("UpdateReminderLeads on a missing id: %v, want ErrUnitNotFound", err)
+	}
+}

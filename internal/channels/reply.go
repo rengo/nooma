@@ -2,9 +2,12 @@ package channels
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
 )
@@ -117,19 +120,39 @@ func RenderReply(result brain.CaptureResult) string {
 
 	case brain.OutcomeCorrected:
 		c := result.Correction
-		switch {
-		case c != nil && c.Unchanged:
-			return say.Unchanged
-		case c != nil && c.MovedTo != nil && c.MovedToDayOnly:
-			return fmt.Sprintf(say.Moved, say.Date(*c.MovedTo))
-		case c != nil && c.MovedTo != nil:
-			// Where it moved to, as the capture named it: a bare "Corrected."
-			// left the user unable to tell what Nooma understood.
-			return fmt.Sprintf(say.Moved, say.Time(*c.MovedTo))
+		if c == nil {
+			return say.Corrected
 		}
-		return say.Corrected
+		if c.Unchanged {
+			return say.Unchanged
+		}
+		// What changed, named (I40): a bare "Corrected." left the user unable
+		// to tell what Nooma understood, and once claimed a change of reminders
+		// that never happened. Wording alone keeps the short confirmation.
+		var said []string
+		switch {
+		case c.MovedTo != nil && c.MovedToDayOnly:
+			said = append(said, fmt.Sprintf(say.Moved, say.Date(*c.MovedTo)))
+		case c.MovedTo != nil:
+			said = append(said, fmt.Sprintf(say.Moved, say.Time(*c.MovedTo)))
+		}
+		switch {
+		case !slices.Contains(c.Fields, correction.FieldReminderLeads):
+		case len(c.Reminders) == 0:
+			said = append(said, say.NoReminderLeft)
+		default:
+			said = append(said, fmt.Sprintf(say.RemindYou, say.ExactLeads(c.About, c.Reminders...)))
+		}
+		if len(said) == 0 {
+			return say.Corrected
+		}
+		return strings.Join(said, " ")
 
 	case brain.OutcomeAsked:
+		// Leads that could not be set are never answered as set (I40).
+		if c := result.Correction; c != nil && c.Why == brain.AskLeadsNotSet {
+			return fmt.Sprintf(say.LeadsNotSet, prospection.MaxEventLeadDays)
+		}
 		// The model's own question about a follow-up, in the user's words.
 		if result.Reply != "" {
 			return result.Reply

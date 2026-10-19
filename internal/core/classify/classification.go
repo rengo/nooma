@@ -108,6 +108,11 @@ type Classification struct {
 	// ClarifyingQuestion is the model's question, beside an unclear referent,
 	// asking which item the user means; Nooma sends it and stores nothing.
 	ClarifyingQuestion *string
+	// ReminderLeadsMinutes is how many minutes before a listed item the user
+	// asks to be reminded, every lead in order, read beside a referent (I40,
+	// ADR-0038): whole positive minutes, nil when the message says nothing
+	// about when to be reminded. The code bounds it before acting.
+	ReminderLeadsMinutes []int
 
 	// Title is the short, date-free name a reminder says for the unit
 	// (ADR-0033's sibling decision, spec R12), already checked by

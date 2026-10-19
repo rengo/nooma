@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "sí",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Tengo reunión con Juan el 2026-10-14 a las 08:00.\",\"weight\":0.7,\"decay_rate\":0.01,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Reunión con Juan\",\"referent\":\"B\",\"relation_outcome\":\"confirmed\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [

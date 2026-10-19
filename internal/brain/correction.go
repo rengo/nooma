@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/correction"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -123,8 +125,22 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 	// the referent is found after the model answered, so its text is the
 	// utterance's, not the unit's — the date alone is the edit, and the
 	// body follows it (CarryText).
-	if len(plan) == 2 && (explicit == nil || explicit.Content != target.Content) {
-		plan = plan[:1]
+	if len(plan) > 1 && (explicit == nil || explicit.Content != target.Content) {
+		if _, isContent := plan[1].Content(); isContent {
+			plan = append(plan[:1:1], plan[2:]...)
+		}
+	}
+	// Leads count back from a time of day, so they apply only to an event that
+	// has one after this correction, and only within what a preference may hold
+	// (I40). Otherwise nothing is written and the answer says so.
+	if !leadsApply(plan, *target, now.Location()) {
+		if err := r.recordAmbiguousDecision(ctx, now, struct {
+			Reason AskReason `json:"reason"`
+			UnitID string    `json:"unit_id"`
+		}{Reason: AskLeadsNotSet, UnitID: target.ID}); err != nil {
+			return nil, err
+		}
+		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskLeadsNotSet}, nil
 	}
 
 	// A moved date carries the body that states it (doc 02 §5 step 4, I29).
@@ -159,8 +175,53 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 			out.MovedTo, out.MovedToDayOnly = movedTo(v, c.EventAtDayOnly, now)
 		} else if v, ok := e.DueAt(); ok {
 			out.MovedTo, out.MovedToDayOnly = movedTo(v, c.DueAtDayOnly, now)
+		} else if _, ok := e.ReminderLeads(); ok {
+			// leadsApply let leads through only with an event_at, and a moved
+			// one comes first in the plan.
+			out.About = target.EventAt.In(now.Location())
+			if out.MovedTo != nil {
+				out.About = *out.MovedTo
+			}
+			if out.Reminders, err = r.reminderTimes(ctx, target.ID, now); err != nil {
+				return nil, err
+			}
 		}
 	}
+	return out, nil
+}
+
+// leadsApply reports whether plan's leads, if it sets any, can apply to target:
+// an event whose event_at, after plan, has a time of day, and leads a
+// preference may hold.
+func leadsApply(plan []correction.Edit, target unit.Unit, zone *time.Location) bool {
+	at := target.EventAt
+	var leads []int
+	set := false
+	for _, e := range plan {
+		if v, ok := e.EventAt(); ok {
+			at = &v
+		}
+		if v, ok := e.ReminderLeads(); ok {
+			leads, set = v, true
+		}
+	}
+	return !set || target.Type == unit.TypeEvent && at != nil && prospection.TimedEvent(*at, zone) && prospection.ValidEventLeads(leads)
+}
+
+// reminderTimes is when the unit's armed one-shot reminders ring, earliest
+// first, in the user's zone (now's).
+func (r correctionRunner) reminderTimes(ctx context.Context, unitID string, now time.Time) ([]time.Time, error) {
+	armed, err := r.triggers.ArmedForUnit(ctx, unitID)
+	if err != nil {
+		return nil, fmt.Errorf("correction: read reminders of unit %q: %w", unitID, err)
+	}
+	var out []time.Time
+	for _, t := range armed {
+		if t.RecurrenceRule == nil {
+			out = append(out, t.FireAt.In(now.Location()))
+		}
+	}
+	slices.SortFunc(out, time.Time.Compare)
 	return out, nil
 }
 
@@ -354,6 +415,10 @@ func (r correctionRunner) recordPreImage(ctx context.Context, target unit.Unit, 
 			// An absent title is null in the pre-image, not an empty string.
 			v, _ := e.Title()
 			previous[f], next[f] = nullIfEmpty(target.Title), nullIfEmpty(v)
+		case correction.FieldReminderLeads:
+			// Leads the unit never had (it followed the preferences) are null.
+			v, _ := e.ReminderLeads()
+			previous[f], next[f] = target.ReminderLeads, v
 		}
 	}
 
@@ -426,6 +491,11 @@ func (r correctionRunner) dispatchEdits(ctx context.Context, id string, plan []c
 			v, _ := e.Title()
 			if err := r.units.UpdateTitle(ctx, id, v, now); err != nil {
 				return fmt.Errorf("correction: update title for unit %q: %w", id, err)
+			}
+		case correction.FieldReminderLeads:
+			v, _ := e.ReminderLeads()
+			if err := r.units.UpdateReminderLeads(ctx, id, v, now); err != nil {
+				return fmt.Errorf("correction: update reminder_leads for unit %q: %w", id, err)
 			}
 		default:
 			return fmt.Errorf("correction: unknown edit field %q for unit %q", e.Field(), id)

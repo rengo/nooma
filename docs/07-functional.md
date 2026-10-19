@@ -86,7 +86,10 @@ is on the 15th.
    (I30). The edit changes the one field you corrected, with its pre-image
    recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
    unit's reminders as a fresh capture of the new date would, and the answer names the new
-   instant ("Movido al mar 20 oct, 11:00."). A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
+   instant ("Movido al mar 20 oct, 11:00."). Right after an event, "avisame solo 1 hora antes"
+   gives that event its own reminders, one hour before, and the answer says so ("Te aviso 1 hora
+   antes."); they stay when it moves or your preferences change. Asked of something with no time
+   of day, Nooma says it did not change the reminders (ADR-0038). A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 
 **When the capture itself cannot proceed**, Nooma says why in plain words and saves nothing
 ([doc 02 §5.1](02-cognitive-core.md#51-what-degrades-to-null-means-field-by-field), I31). The CLI

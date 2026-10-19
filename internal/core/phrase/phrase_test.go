@@ -54,6 +54,7 @@ func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	want := map[string]int{
 		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "FoundOne": 1, "FoundMany": 1,
+		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1,
 	}
 
 	for _, l := range classify.AllLanguages() {
@@ -215,6 +216,30 @@ func TestSet_Leads_NamesEveryReminder(t *testing.T) {
 	}
 	if got, want := en.Leads(true, time.Time{}, about, hoursBefore), en.LeadImmediate; got != want {
 		t.Errorf("en.Leads(immediate) = %q, want %q", got, want)
+	}
+}
+
+// TestSet_ExactLeads: leads the user just named are said back as named, a whole
+// number of hours as that number (I40): "avisame 1 hora antes" answered "unas
+// horas antes" would read as not having understood. Anything else reads as
+// Lead does.
+func TestSet_ExactLeads(t *testing.T) {
+	en, es := For(classify.LanguageEN), For(classify.LanguageES)
+	about := time.Date(2026, 10, 20, 11, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		s     Set
+		fires []time.Time
+		want  string
+	}{
+		{es, []time.Time{about.Add(-time.Hour)}, "1 hora antes"},
+		{en, []time.Time{about.Add(-time.Hour)}, "1 hour before"},
+		{es, []time.Time{about.Add(-24 * time.Hour), about.Add(-2 * time.Hour)}, "el día anterior y 2 horas antes"},
+		{es, []time.Time{about.Add(-30 * time.Minute)}, "30 minutos antes"},
+		{es, []time.Time{about.Add(-90 * time.Minute)}, "unas horas antes"},
+	} {
+		if got := tc.s.ExactLeads(about, tc.fires...); got != tc.want {
+			t.Errorf("ExactLeads(%v) = %q, want %q", tc.fires, got, tc.want)
+		}
 	}
 }
 

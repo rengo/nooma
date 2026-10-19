@@ -1,6 +1,9 @@
 package correction
 
 import (
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/unit"
@@ -15,13 +18,15 @@ const (
 	FieldEventAt Field = "event_at"
 	FieldDueAt   Field = "due_at"
 	FieldTitle   Field = "title"
+	// FieldReminderLeads is an event's own reminder leads (I40, ADR-0038).
+	FieldReminderLeads Field = "reminder_leads"
 )
 
 // AllFields returns every Field the plan can produce. Its own completeness
 // table lives in edit_test.go: every member here must have exactly one
 // Edit constructor and accessor pair covering it.
 func AllFields() []Field {
-	return []Field{FieldContent, FieldEventAt, FieldDueAt, FieldTitle}
+	return []Field{FieldContent, FieldEventAt, FieldDueAt, FieldTitle, FieldReminderLeads}
 }
 
 // Edit is one field and its new value. Its state is unexported, and it
@@ -37,6 +42,8 @@ type Edit struct {
 	eventAt time.Time
 	dueAt   time.Time
 	title   string
+	// leads is the minutes joined by commas, so Edit stays comparable.
+	leads string
 }
 
 // NewContentEdit builds an Edit that writes content.
@@ -58,6 +65,16 @@ func NewDueAtEdit(t time.Time) Edit {
 // clears it (the column becomes NULL).
 func NewTitleEdit(s string) Edit {
 	return Edit{field: FieldTitle, title: s}
+}
+
+// NewReminderLeadsEdit builds an Edit that writes the event's own reminder
+// leads, in minutes.
+func NewReminderLeadsEdit(minutes []int) Edit {
+	parts := make([]string, len(minutes))
+	for i, m := range minutes {
+		parts[i] = strconv.Itoa(m)
+	}
+	return Edit{field: FieldReminderLeads, leads: strings.Join(parts, ",")}
 }
 
 // Field reports which column e writes.
@@ -87,6 +104,21 @@ func (e Edit) Title() (string, bool) {
 	return e.title, e.field == FieldTitle
 }
 
+// ReminderLeads reports e's new leads, in minutes, and whether e writes them at
+// all — true only when e.Field() == FieldReminderLeads.
+func (e Edit) ReminderLeads() ([]int, bool) {
+	if e.field != FieldReminderLeads {
+		return nil, false
+	}
+	var out []int
+	for _, p := range strings.Split(e.leads, ",") {
+		if m, err := strconv.Atoi(p); err == nil {
+			out = append(out, m)
+		}
+	}
+	return out, true
+}
+
 // Changes returns the edits of plan that would alter u: a content edit
 // whose text is u's own, or a date edit whose instant is u's own, writes
 // nothing and is not a change. A repeated correction finds its work done;
@@ -103,6 +135,8 @@ func Changes(plan []Edit, u unit.Unit) []Edit {
 			same = u.DueAt != nil && u.DueAt.Equal(v)
 		} else if v, ok := e.Title(); ok {
 			same = v == u.Title
+		} else if v, ok := e.ReminderLeads(); ok {
+			same = u.ReminderLeads != nil && slices.Equal(v, u.ReminderLeads)
 		}
 		if !same {
 			out = append(out, e)

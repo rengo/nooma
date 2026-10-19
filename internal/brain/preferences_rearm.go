@@ -61,7 +61,8 @@ func (s *PreferencesService) rearm(ctx context.Context, prefs prospection.Remind
 			return fmt.Errorf("read the reminders sent for unit %q: %w", id, err)
 		}
 		live, byID := liveSet(armed)
-		f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired, *u.EventAt), prefs, armed[0].InterruptLevel, u.CreatedAt, now)
+		// An event's own leads are not the preferences' to change (I40).
+		f := prospection.FollowSent(*u.EventAt, live, sentReminders(fired, *u.EventAt), prefs.WithEventLeads(u.ReminderLeads), armed[0].InterruptLevel, u.CreatedAt, now)
 		if err := w.apply(ctx, u, f, byID, *u.EventAt, shownText(u), false, now); err != nil {
 			return err
 		}

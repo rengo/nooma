@@ -38,7 +38,11 @@ type Unit struct {
 	// RemindMe is whether the user's own words asked to be reminded of this unit
 	// (spec R1): the classification's remind_request when it was stored. It is a
 	// fact about the capture, never a verdict on whether anything was armed.
-	RemindMe  bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	RemindMe bool
+	// ReminderLeads are how many minutes before its event_at this event's own
+	// reminders ring, set by a correction (I40, ADR-0038); nil follows the
+	// user's preferences (ADR-0029). Stored as a JSON array, NULL for nil.
+	ReminderLeads []int
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }

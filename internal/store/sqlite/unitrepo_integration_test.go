@@ -360,3 +360,11 @@ func TestUnitRepo_RemindMe(t *testing.T) {
 		return NewUnitRepo(openTestVault(t))
 	})
 }
+
+// TestUnitRepo_ReminderLeads runs repocontract.RunReminderLeads against a real
+// migrated vault (I40).
+func TestUnitRepo_ReminderLeads(t *testing.T) {
+	repocontract.RunReminderLeads(t, func(t *testing.T) ports.UnitRepo {
+		return NewUnitRepo(openTestVault(t))
+	})
+}

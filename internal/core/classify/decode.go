@@ -75,6 +75,7 @@ func fieldSpecs() []fieldSpec {
 		// ADR-0036's follow-up fields, optional for the same reason.
 		{"referent", false, nullIsAbsent(assignReferent)},
 		{"clarifying_question", false, nullIsAbsent(assignClarifyingQuestion)},
+		{"reminder_leads_minutes", false, nullIsAbsent(assignReminderLeads)},
 	}
 }
 

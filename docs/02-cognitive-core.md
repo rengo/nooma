@@ -495,11 +495,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      which costs one follow-up being read alone, as every message was before. The prompt shows the
      turns, oldest first, each clipped to `max_turn_runes` and tagged with the letter of every item
      it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
-     from `A` in the order they first appear. Two optional fields
+     from `A` in the order they first appear. Three optional fields
      come back, each degrading alone (I14): `referent`, the letter of the listed item a
-     `correction` changes or `unclear`, and `clarifying_question`, beside `unclear`, the question
+     `correction` changes or `unclear`; `clarifying_question`, beside `unclear`, the question
      the model writes in the message's language to ask which item the user means (one line, at
-     most `max_turn_runes`). Letters, not numbers, so a bare "2" never reads as an item. The
+     most `max_turn_runes`); and `reminder_leads_minutes`, beside a referent, every lead the
+     message asks to be reminded at, in whole positive minutes before the item (step 4,
+     ADR-0038). Letters, not numbers, so a bare "2" never reads as an item. The
      prompt says by meaning what is not a correction: a message that tells something new, asks,
      or only answers something Nooma said other than its question about which item is meant,
      even about the same subject as a listed item, and a short reply to a reminder, check-in or
@@ -806,8 +808,23 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      the reminder step still runs, so the repair above works.
      **The answer names what changed** (I40). A correction that moves `event_at` or `due_at`
      answers with the instant it moved to, named as the capture reply names it ("Movido al mar
-     20 oct, 11:00."; a day alone without a clock); one that changes only the wording or the
-     title answers a bare confirmation, which claims no time and no reminder.
+     20 oct, 11:00."; a day alone without a clock); one that sets the event's leads (below)
+     names the reminders then armed, as the user said them ("Te aviso 1 hora antes."), or that
+     none is left before the event; one that changes only the wording or the title answers a
+     bare confirmation, which claims no time and no reminder.
+     **A follow-up can set the event's own reminder leads** (I40,
+     [ADR-0038](adr/0038-an-event-can-carry-its-own-reminder-leads.md)). Beside a chat
+     `referent`, the classification may carry `reminder_leads_minutes`: every lead the message
+     asks for, in whole minutes before the item ("avisame solo 1 hora antes" is `[60]`). It is
+     an edit of its own, `reminder_leads` (`UnitRepo.UpdateReminderLeads`, listed in the
+     pre-image like any other; a unit that followed the preferences shows `null`). Alone it is
+     the whole plan: the model's text is not taken as the body and the title is neither written
+     nor cleared. Beside a new date it travels with the date. It applies only to an `event` whose
+     `event_at`, after the correction, has a time of day, with leads §7 accepts for the
+     preference; otherwise **nothing is written** and the answer says the reminders were not
+     changed (`OutcomeAsked`, reason `leads_not_set`, one `correction.ambiguous` row). The
+     armed set is then re-planned at those leads, as a moved date re-plans it (below). The field
+     is offered only beside a chat; with none, there is no follow-up to set it on.
      **The title follows the body** (spec R12). Beside the edits above the plan may carry a
      `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in
      `fields` with `previous` and `next` like any other). A valid title the model answered for
@@ -878,8 +895,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        instant** ("on the 14th", "el viernes", or a time alone) stays as written — the residual
        of not inferring. An earlier revision accepted a stale body outright; that cost is now
        paid only for wording capture was not asked to produce.
-     - **The reminder.** When the corrected field is an `event` unit's `event_at`, the unit ends
-       with exactly the armed triggers a fresh capture of the new date arms (§7 "Lead time") —
+     - **The reminder.** When the corrected field is an `event` unit's `event_at` or its own
+       leads, the unit ends with exactly the armed triggers a fresh capture of its date at its
+       leads arms (§7 "Lead time") —
        decided by `internal/core/prospection.Follow`, which calls the very functions `Arm` does,
        leads and pull-to-now included ([ADR-0029](adr/0029-event-reminders-follow-the-users-leads.md)).
        Armed triggers are carried onto the new reminders in firing order and moved (their
@@ -1458,8 +1476,13 @@ have N nudges; a pattern watcher does not hang off any unit):
   so a later change of default reaches everyone who never chose; a stored value that fails
   validation falls back to its own default. Valid: 1 to `max_event_reminder_leads` leads, each
   a whole number of minutes from 1 to `max_event_lead_days` days, no two equal; a time from
-  `00:00` to `23:59`. A change of preference re-arms every armed one-shot reminder of an event
-  still ahead, through the decision a correction uses (`prospection.Follow`), each move, creation
+  `00:00` to `23:59`. **An event can carry its own leads** (`units.reminder_leads`, the same
+  JSON array, [ADR-0038](adr/0038-an-event-can-carry-its-own-reminder-leads.md)), written only by
+  a correction (§5 step 4): every plan of that event — the correction, a later date correction, a
+  preference change and the due scan — uses them in place of the user's
+  (`ReminderPrefs.WithEventLeads`), and the told-day rule leaves them, since the user named them;
+  `NULL` follows the preferences. A change of preference
+  re-arms every armed one-shot reminder of an event still ahead, through the decision a correction uses (`prospection.Follow`), each move, creation
   or expiry recorded before its trigger write as `config.reminder.moved|armed|cancelled`; an
   event already past and a recurring reminder keep theirs. A reminder this creates takes the
   interrupt level of the event's earliest armed reminder. A re-arm that reaches every event

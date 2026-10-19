@@ -250,3 +250,38 @@ func TestPlanEdit_NewTextTravelsWithTheNewDate(t *testing.T) {
 		})
 	}
 }
+
+// TestPlanEdit_ReminderLeads: leads the model read are an edit of their own
+// (I40). Beside a new date they travel with it; alone they are the whole
+// plan, and the text the model wrote is not taken, so "avisame solo 1 hora
+// antes" never becomes the unit's body (I30) or asks because it lost the date.
+func TestPlanEdit_ReminderLeads(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	at := time.Date(2026, 10, 20, 10, 0, 0, 0, art)
+	moved := time.Date(2026, 10, 20, 11, 0, 0, 0, art)
+	dentist := unit.Unit{Content: "Dentista el 2026-10-20 a las 10:00.", EventAt: &at}
+	for _, tc := range []struct {
+		name string
+		c    classify.Classification
+		want []Edit
+	}{
+		{"leads alone, the text rewritten", classify.Classification{ReminderLeadsMinutes: []int{60},
+			NormalizedContent: strPtr("Avisar 1 hora antes del dentista.")}, []Edit{NewReminderLeadsEdit([]int{60})}},
+		{"leads beside an echoed date and a text change", classify.Classification{ReminderLeadsMinutes: []int{60}, EventAt: &at,
+			NormalizedContent: strPtr("Dentista el 2026-10-20 a las 10:00, avisar 1 hora antes.")}, []Edit{NewReminderLeadsEdit([]int{60})}},
+		{"leads beside a new date", classify.Classification{ReminderLeadsMinutes: []int{60}, EventAt: &moved,
+			NormalizedContent: &dentist.Content}, []Edit{NewEventAtEdit(moved), NewReminderLeadsEdit([]int{60})}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := PlanEdit(tc.c, dentist, art)
+			if !ok || len(got) != len(tc.want) {
+				t.Fatalf("PlanEdit() = %+v, %v; want %+v", got, ok, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("edit[%d] = %+v, want %+v", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}

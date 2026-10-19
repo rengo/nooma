@@ -15,6 +15,7 @@ func TestWithTitle(t *testing.T) {
 	withContent := []Edit{NewContentEdit("Reunión con Juan y Ana")}
 	withDateAndText := []Edit{NewEventAtEdit(at), NewContentEdit("Reunión con Juan el 2026-10-16 a las 10:00")}
 	titled := unit.Unit{Content: "x", Title: "Reunión del jueves"}
+	leadsOnly := []Edit{NewReminderLeadsEdit([]int{60})}
 
 	tests := []struct {
 		name  string
@@ -37,6 +38,10 @@ func TestWithTitle(t *testing.T) {
 		{"clearing a unit with no title is no edit", withContent, nil, unit.Unit{Content: "x"}, true, nil},
 		{"a title the model wrote without seeing the unit is not trusted, and a moved date clears the stale one", dateOnly, title("Cambio al viernes"), titled, false, []string{""}},
 		{"and a content edit then clears the stale one", withContent, title("Cambio al viernes"), titled, false, []string{""}},
+		// A lead says when to be reminded, not what the unit is called (I40).
+		{"a leads edit alone writes no title", leadsOnly, title("Turno con el dentista"), titled, true, nil},
+		{"and clears none", leadsOnly, nil, titled, true, nil},
+		{"a date edit beside leads still clears a stale title", append(dateOnly, leadsOnly...), nil, titled, true, []string{""}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

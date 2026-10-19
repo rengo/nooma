@@ -85,6 +85,12 @@ type UnitRepo interface {
 	// methods, only a correction's applyWithPreImage calls it (ADR-0016).
 	UpdateTitle(ctx context.Context, id, title string, at time.Time) error
 
+	// UpdateReminderLeads rewrites id's ReminderLeads to minutes and UpdatedAt
+	// to at, leaving every other column unchanged (I40). It returns
+	// ErrUnitNotFound if no unit with id exists. Like the other Update*
+	// methods, only a correction's applyWithPreImage calls it (ADR-0016).
+	UpdateReminderLeads(ctx context.Context, id string, minutes []int, at time.Time) error
+
 	// SetStatus moves id from status from to status to, recording at.
 	// from is an optimistic-concurrency precondition, not a validation —
 	// the legality of the transition is unit.ValidateTransition's

@@ -61,7 +61,7 @@ func TestMigrateFromScratchSetsUserVersion(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 10 // 0001_core_tables.sql through 0010_remind_me.sql are all published
+	const wantVersion = 11 // 0001_core_tables.sql through 0011_unit_reminder_leads.sql are all published
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version = %d, want %d (opening a fresh vault must apply every published migration)", userVersion, wantVersion)
 	}
@@ -101,7 +101,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 10
+	const wantVersion = 11
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version after reopening an already-migrated vault = %d, want %d (unchanged)", userVersion, wantVersion)
 	}
@@ -169,8 +169,8 @@ func TestVaultNewerThanBinaryRefusesToOpen(t *testing.T) {
 	if versionErr.VaultVersion != futureVersion {
 		t.Errorf("VersionError.VaultVersion = %d, want %d", versionErr.VaultVersion, futureVersion)
 	}
-	if versionErr.BinaryVersion != 10 {
-		t.Errorf("VersionError.BinaryVersion = %d, want 10 (0001 through 0010 are all published at this stage)", versionErr.BinaryVersion)
+	if versionErr.BinaryVersion != 11 {
+		t.Errorf("VersionError.BinaryVersion = %d, want 11 (0001 through 0011 are all published at this stage)", versionErr.BinaryVersion)
 	}
 
 	after, err := os.ReadFile(dbPath)
@@ -232,7 +232,7 @@ func TestMigrationsAreEmbeddedNotReadFromDisk(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 10
+	const wantVersion = 11
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version = %d, want %d (migrations must apply even with no .sql file anywhere on disk)", userVersion, wantVersion)
 	}
@@ -340,9 +340,9 @@ func TestMigrateAppliesOnlyPendingMigrations(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 10
+	const wantVersion = 11
 	if userVersion != wantVersion {
-		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (0002 through 0010 should have applied)", userVersion, wantVersion)
+		t.Errorf("PRAGMA user_version after reopening a vault seeded at version 1 = %d, want %d (0002 through 0011 should have applied)", userVersion, wantVersion)
 	}
 
 	// Prove 0002 actually ran — not just that the version counter moved —

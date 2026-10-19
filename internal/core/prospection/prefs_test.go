@@ -137,3 +137,30 @@ func TestResolveReminderPrefs_TheNight(t *testing.T) {
 		}
 	}
 }
+
+// TestWithEventLeads: an event's own leads replace the user's for that event
+// alone (I40, ADR-0038), by the rule a stored preference is judged by; nil or
+// leads that rule refuses leave the preferences as they are.
+func TestWithEventLeads(t *testing.T) {
+	prefs := DefaultReminderPrefs()
+	if got := prefs.WithEventLeads([]int{60}); !reflect.DeepEqual(got.TimedLeads, []time.Duration{time.Hour}) || got.QuietEnd != prefs.QuietEnd {
+		t.Errorf("WithEventLeads([60]) = %+v, want only the leads replaced", got)
+	}
+	for _, keep := range [][]int{nil, {60, 60}, {MaxEventLeadDays*24*60 + 1}, {1, 2, 3, 4, 5, 6}} {
+		if got := prefs.WithEventLeads(keep); !reflect.DeepEqual(got, prefs) {
+			t.Errorf("WithEventLeads(%v) = %+v, want the preferences unchanged", keep, got)
+		}
+	}
+	if !ValidEventLeads([]int{1440, 60}) || ValidEventLeads([]int{60, 60}) || ValidEventLeads(nil) {
+		t.Error("ValidEventLeads disagrees with ParseEventReminderLeads")
+	}
+}
+
+// TestTimedEvent: an instant at local midnight is a day alone, which is
+// reminded at date_only_reminder_at, not at leads (ADR-0029 point 2).
+func TestTimedEvent(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	if TimedEvent(time.Date(2026, 10, 20, 0, 0, 0, 0, zone), zone) || !TimedEvent(time.Date(2026, 10, 20, 10, 0, 0, 0, zone), zone) {
+		t.Error("TimedEvent misreads midnight or a time of day")
+	}
+}
