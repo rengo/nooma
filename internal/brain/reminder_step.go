@@ -173,9 +173,9 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 	live, byID := liveSet(armed)
 	sent := sentReminders(fired, at)
 	interrupt := group[0].InterruptLevel
-	f := prospection.FollowSent(at, live, sent, prefs, interrupt, now)
+	f := prospection.FollowSent(at, live, sent, prefs, interrupt, u.CreatedAt, now)
 	if asked {
-		f = prospection.FollowAsked(at, event, dayOnly, live, sent, prefs, interrupt, now)
+		f = prospection.FollowAsked(at, event, dayOnly, live, sent, prefs, interrupt, u.CreatedAt, now)
 	}
 	// Nothing live and nothing planned is the unit's whole trail unless it says
 	// why. Quiet hours with no instant left is a refusal; every lead behind (or a

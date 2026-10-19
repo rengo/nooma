@@ -153,9 +153,44 @@ func leadSet(kind classify.Kind, asked bool, at time.Time, dayOnly bool, prefs R
 // eventReminders is reminders for an unasked dated event: the ADR-0029 leads.
 // sent is what already went out for the unit (FollowSent), nil for a capture
 // or a correction.
-func eventReminders(eventAt time.Time, prefs ReminderPrefs, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
+func eventReminders(eventAt time.Time, prefs ReminderPrefs, told, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	leads := leadSet(classify.KindEvent, false, eventAt, false, prefs, now.Location())
-	return reminders(eventAt, false, leads, prefs, now, interrupt, sent)
+	return reminders(eventAt, false, skipToldDay(leads, eventAt, told, now), prefs, now, interrupt, sent)
+}
+
+// skipToldDay drops the leads nobody asked for that are still ahead and would
+// ring on the local day told — when the user told Nooma about the unit — for a
+// unit on a later day: they just said it (ADR-0037). The nominal instant
+// decides, before any quiet-hours move. When that leaves no lead ahead and none
+// asked, the nearest dropped one stays: a unit is never left with no reminder.
+// A zero told drops nothing.
+func skipToldDay(leads []lead, at, told, now time.Time) []lead {
+	zone := now.Location()
+	day := func(t time.Time) time.Time {
+		y, m, d := t.In(zone).Date()
+		return time.Date(y, m, d, 0, 0, 0, 0, zone)
+	}
+	if told.IsZero() || !day(at).After(day(told)) {
+		return leads
+	}
+	var kept []lead
+	var nearest *lead
+	left := false
+	for _, l := range leads {
+		ahead := !l.at.Before(now)
+		if !l.asked && ahead && day(l.at).Equal(day(told)) {
+			if nearest == nil || l.at.After(nearest.at) {
+				nearest = &l
+			}
+			continue
+		}
+		left = left || ahead || l.asked
+		kept = append(kept, l)
+	}
+	if !left && nearest != nil {
+		kept = append(kept, *nearest)
+	}
+	return kept
 }
 
 // reminders arms the one-shot reminders a dated unit owns: one per lead still

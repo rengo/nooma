@@ -88,6 +88,7 @@ order, with no correspondence to anything.
 | [0034](0034-a-recurring-reminder-rings-on-its-day.md) | A recurring reminder rings on its day, and moves on to the next one (supersedes ADR-0029 and ADR-0030 in part) | Accepted | M4 |
 | [0035](0035-nooma-speaks-first-in-the-usual-language.md) | What Nooma says first speaks the language the user usually writes in (supersedes ADR-0032 in part) | Accepted | M4 |
 | [0036](0036-a-chat-message-is-read-in-its-conversation.md) | A chat message is read in its recent conversation: a follow-up corrects what it follows, or Nooma asks which, in the moment | Accepted | M4 |
+| [0037](0037-no-default-ring-on-the-day-an-event-is-told.md) | No default reminder rings on the day the user told Nooma about the event (supersedes ADR-0029 in part) | Accepted | M4 |
 
 ## Template
 

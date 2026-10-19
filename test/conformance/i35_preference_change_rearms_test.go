@@ -38,9 +38,12 @@ func (v i35Vault) at(now time.Time) *brain.PreferencesService {
 	return brain.NewPreferencesService(fixedClock{now: now}, v.ids, v.cfg, v.log, v.units, v.triggers)
 }
 
+// unit seeds a unit captured a week before now, so the reminders seeded with
+// it are not on its capture day (ADR-0037 has its own test).
 func (v i35Vault) unit(t *testing.T, id string, typ unit.Type, eventAt time.Time, now time.Time) {
 	t.Helper()
-	u := unit.Unit{ID: id, Type: typ, Status: unit.StatusPool, Content: id, EventAt: &eventAt, Source: "cli", CreatedAt: now, UpdatedAt: now}
+	captured := now.AddDate(0, 0, -7)
+	u := unit.Unit{ID: id, Type: typ, Status: unit.StatusPool, Content: id, EventAt: &eventAt, Source: "cli", CreatedAt: captured, UpdatedAt: now}
 	if err := v.units.Create(context.Background(), u); err != nil {
 		t.Fatalf("seeding unit %s: %v", id, err)
 	}
@@ -85,6 +88,29 @@ func (v i35Vault) count(t *testing.T, action ports.DecisionAction) int {
 		}
 	}
 	return n
+}
+
+// TestI35_AReArmOnTheCaptureDayKeepsTheToldDayRule (ADR-0037): the dentist,
+// tomorrow at 10:00, was captured at 08:44 with only its 2-hour reminder armed;
+// a preference change at 09:00 the same day re-arms it without the 24-hour
+// ring, today at 10:00, that the capture left out.
+func TestI35_AReArmOnTheCaptureDayKeepsTheToldDayRule(t *testing.T) {
+	captured := time.Date(2026, 10, 19, 8, 44, 0, 0, time.UTC)
+	event := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	v := newI35(t, captured.Add(16*time.Minute))
+	if err := v.units.Create(context.Background(), unit.Unit{ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool,
+		Content: "dentist", EventAt: &event, Source: "cli", CreatedAt: captured, UpdatedAt: captured}); err != nil {
+		t.Fatal(err)
+	}
+	v.arm(t, "dentist-2h", "dentist", event.Add(-2*time.Hour), 120, nil)
+	p := i35Defaults()
+	p.DateOnlyAt = "08:00"
+	if _, err := v.svc.Save(context.Background(), p); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if got, want := v.armedAt(t, "dentist"), []time.Time{event.Add(-2 * time.Hour)}; !sameInstants(got, want) {
+		t.Errorf("dentist reminders = %v, want %v alone: the re-arm brought back the ring on the capture day", got, want)
+	}
 }
 
 func i35Defaults() brain.Preferences {

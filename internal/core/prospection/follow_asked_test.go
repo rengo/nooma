@@ -17,7 +17,7 @@ func followAskedAt(day, hour, minute int) time.Time {
 func TestFollowAsked_CarriesTheAskedLead(t *testing.T) {
 	now, event := followAskedAt(22, 21, 30), followAskedAt(23, 10, 0)
 	live := []Live{{ID: "two-hours", FireAt: followAskedAt(23, 8, 0)}, {ID: "asked", FireAt: followAskedAt(23, 9, 45)}}
-	f := FollowAsked(event, true, false, live, nil, DefaultReminderPrefs(), nil, now)
+	f := FollowAsked(event, true, false, live, nil, DefaultReminderPrefs(), nil, time.Time{}, now)
 	if len(f.Plans) != 2 || len(f.Expire) != 0 || f.Carry[0] != "two-hours" || f.Carry[1] != "asked" {
 		t.Fatalf("following = %+v, want both live rows carried", f)
 	}
@@ -31,7 +31,7 @@ func TestFollowAsked_CarriesTheAskedLead(t *testing.T) {
 func TestFollowAsked_ADayKeepsItsDay(t *testing.T) {
 	now, day := followAskedAt(22, 21, 30), followAskedAt(23, 0, 0)
 	live := []Live{{ID: "that-day", FireAt: followAskedAt(23, 9, 0)}}
-	f := FollowAsked(day, true, true, live, nil, DefaultReminderPrefs(), nil, now)
+	f := FollowAsked(day, true, true, live, nil, DefaultReminderPrefs(), nil, time.Time{}, now)
 	if len(f.Plans) != 1 || f.Carry[0] != "that-day" || !f.Plans[0].FireAt.Equal(followAskedAt(23, 9, 0)) || f.Plans[0].Immediate {
 		t.Errorf("following = %+v, want the day's 09:00 carried", f)
 	}
@@ -41,12 +41,12 @@ func TestFollowAsked_ADayKeepsItsDay(t *testing.T) {
 // behind plans nothing and expires what is live; the catch-up is CatchUpAsked's.
 func TestFollowAsked_EveryLeadBehindPlansNothing(t *testing.T) {
 	now, day := followAskedAt(22, 21, 30), followAskedAt(22, 0, 0)
-	f := FollowAsked(day, false, true, []Live{{ID: "x", FireAt: followAskedAt(22, 21, 30)}}, nil, DefaultReminderPrefs(), nil, now)
+	f := FollowAsked(day, false, true, []Live{{ID: "x", FireAt: followAskedAt(22, 21, 30)}}, nil, DefaultReminderPrefs(), nil, time.Time{}, now)
 	if len(f.Plans) != 1 || f.Plans[0].What != ArmNothing || f.Plans[0].Why != RefusalNone || len(f.Expire) != 1 {
 		t.Errorf("following = %+v, want nothing planned and the live row expired", f)
 	}
 	// A day already over is a refusal, not a catch-up.
-	if f := FollowAsked(day, false, true, nil, nil, DefaultReminderPrefs(), nil, followAskedAt(23, 1, 0)); f.Plans[0].Why != RefusalAlreadyPast {
+	if f := FollowAsked(day, false, true, nil, nil, DefaultReminderPrefs(), nil, time.Time{}, followAskedAt(23, 1, 0)); f.Plans[0].Why != RefusalAlreadyPast {
 		t.Errorf("a past day: %+v, want already_past", f.Plans[0])
 	}
 }

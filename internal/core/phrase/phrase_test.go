@@ -53,7 +53,7 @@ func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
 		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2,
-		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "FoundOne": 1, "FoundMany": 1,
+		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "FoundOne": 1, "FoundMany": 1,
 	}
 
 	for _, l := range classify.AllLanguages() {
@@ -204,16 +204,16 @@ func TestSet_Leads_NamesEveryReminder(t *testing.T) {
 	about := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
 	dayBefore, hoursBefore := about.Add(-24*time.Hour), about.Add(-2*time.Hour)
 
-	if got, want := en.Leads(false, about, dayBefore, hoursBefore), "the day before and a few hours before"; got != want {
+	if got, want := en.Leads(false, time.Time{}, about, dayBefore, hoursBefore), "the day before and a few hours before"; got != want {
 		t.Errorf("en.Leads = %q, want %q", got, want)
 	}
-	if got, want := es.Leads(false, about, dayBefore, hoursBefore), "el día anterior y unas horas antes"; got != want {
+	if got, want := es.Leads(false, time.Time{}, about, dayBefore, hoursBefore), "el día anterior y unas horas antes"; got != want {
 		t.Errorf("es.Leads = %q, want %q", got, want)
 	}
-	if got, want := en.Leads(false, about, about.Add(-3*time.Hour), hoursBefore), en.LeadHours; got != want {
+	if got, want := en.Leads(false, time.Time{}, about, about.Add(-3*time.Hour), hoursBefore), en.LeadHours; got != want {
 		t.Errorf("en.Leads of two alike = %q, want %q said once", got, want)
 	}
-	if got, want := en.Leads(true, about, hoursBefore), en.LeadImmediate; got != want {
+	if got, want := en.Leads(true, time.Time{}, about, hoursBefore), en.LeadImmediate; got != want {
 		t.Errorf("en.Leads(immediate) = %q, want %q", got, want)
 	}
 }
@@ -391,8 +391,38 @@ func TestSet_DayLeads(t *testing.T) {
 		{true, []time.Time{at(22, 21), at(23, 9)}, "ahora mismo y ese día a las 09:00"},
 		{false, []time.Time{at(23, 9), at(23, 9)}, "ese día a las 09:00"},
 	} {
-		if got := es.DayLeads(tc.immediate, day, tc.fires...); got != tc.want {
+		if got := es.DayLeads(tc.immediate, time.Time{}, day, tc.fires...); got != tc.want {
 			t.Errorf("DayLeads(%v, %v) = %q, want %q", tc.immediate, tc.fires, got, tc.want)
+		}
+	}
+}
+
+// TestSet_Leads_ARingOnTheToldDayIsToday (ADR-0037): a ring that falls on the
+// local day the user told Nooma about an event on a later day is named as
+// today at its hour, never "the day before" — the client's complaint.
+func TestSet_Leads_ARingOnTheToldDayIsToday(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	at := func(d, h, m int) time.Time { return time.Date(2026, 10, d, h, m, 0, 0, zone) }
+	en, es := For(classify.LanguageEN), For(classify.LanguageES)
+	told := at(19, 8, 0)
+
+	for _, tc := range []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"es, a timed event tomorrow kept today", es.Leads(false, told, at(20, 1, 30), at(19, 19, 0)), "hoy a las 19:00"},
+		{"en, a timed event tomorrow kept today", en.Leads(false, told, at(20, 1, 30), at(19, 19, 0)), "today at 19:00"},
+		{"es, today and tomorrow", es.Leads(false, told, at(20, 10, 0), at(19, 11, 0), at(20, 8, 0)), "hoy a las 11:00 y unas horas antes"},
+		{"es, an event later today is not today at", es.Leads(false, told, at(19, 20, 0), at(19, 18, 0)), "unas horas antes"},
+		{"es, at once stays at once", es.Leads(true, told, at(20, 10, 0), told), "ahora mismo"},
+		{"es, told on another day", es.Leads(false, at(18, 8, 0), at(20, 10, 0), at(19, 10, 0)), "el día anterior"},
+		{"es, a date-only event tomorrow", es.DayLeads(false, told, at(20, 0, 0), at(19, 9, 0)), "hoy a las 09:00"},
+		{"en, a date-only event tomorrow", en.DayLeads(false, told, at(20, 0, 0), at(19, 9, 0)), "today at 09:00"},
+		{"es, a date-only event tomorrow told the day before", es.DayLeads(false, at(18, 8, 0), at(20, 0, 0), at(19, 9, 0)), "el día anterior"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, tc.got, tc.want)
 		}
 	}
 }

@@ -123,6 +123,47 @@ func TestI33_EventRemindersFollowTheUsersPreferences(t *testing.T) {
 	}
 }
 
+// TestI33_NoUnaskedRingOnTheDayTheEventIsTold is doc 02 §7's "Lead time"
+// (ADR-0037): a lead nobody asked for that would ring on the local day the
+// event is captured, for an event on a later day, is not armed — the user just
+// said it — unless no other reminder would be left, when the nearest one stays.
+func TestI33_NoUnaskedRingOnTheDayTheEventIsTold(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	at := func(day, hour, minute int) time.Time { return time.Date(2026, 10, day, hour, minute, 0, 0, zone) }
+	const timed = `{"type":"event","normalized_content":"dentista el 2026-10-16 a las 10:00","weight":0.7,"decay_rate":0.05,"event_at":"2026-10-16T10:00:00-03:00"}`
+	const dateOnly = `{"type":"event","normalized_content":"renovar el pasaporte el 2026-10-16","weight":0.7,"decay_rate":0.05,"event_at":"2026-10-16"}`
+	str := func(s string) *string { return &s }
+
+	cases := []struct {
+		name, response string
+		leads          *string
+		now            time.Time
+		want           []time.Time
+	}{
+		{"tomorrow at 10 told at 08:44: only the 2-hour ring", timed, nil, at(15, 8, 44), []time.Time{at(16, 8, 0)}},
+		{"a date-only event tomorrow told at 08:00: its one ring stays", dateOnly, nil, at(15, 8, 0), []time.Time{at(15, 9, 0)}},
+		{"every lead lands today: the nearest stays", timed, str(`[1500,1560]`), at(15, 7, 30), []time.Time{at(15, 9, 0)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := memrepo.NewConfig()
+			cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: tc.leads})
+			triggers, _, result := i33CaptureWith(t, tc.now, tc.response, cfg)
+			var got []time.Time
+			for _, r := range triggers.All() {
+				got = append(got, *r.FireAt)
+			}
+			sort.Slice(got, func(i, j int) bool { return got[i].Before(got[j]) })
+			if !slices.EqualFunc(got, tc.want, time.Time.Equal) {
+				t.Errorf("fires at %v, want %v", got, tc.want)
+			}
+			if result.Armed == nil || len(result.Armed.Later) != len(tc.want)-1 {
+				t.Errorf("Armed = %+v, want the reply to name exactly the armed rings", result.Armed)
+			}
+		})
+	}
+}
+
 // i33Capture runs one capture of response at now over fresh fakes, with no
 // stored preferences.
 func i33Capture(t *testing.T, now time.Time, response string) (*memrepo.Triggers, ports.DecisionLog, brain.CaptureResult) {

@@ -142,7 +142,7 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 			return []Plan{recurringTrigger(at, recurrenceRule(*c.RecurrenceRule), prefs, now, interrupt)}, true
 		}
 		leads := leadSet(*c.Kind, true, at, dayOnly, prefs, now.Location())
-		return reminders(at, dayOnly, leads, prefs, now, interrupt, nil)
+		return reminders(at, dayOnly, skipToldDay(leads, at, now, now), prefs, now, interrupt, nil)
 	}
 
 	switch *c.Kind {
@@ -166,7 +166,7 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 			// The rule degraded, or the model never claimed one. The capture
 			// is honoured as its dated occurrence; the recurrence is not
 			// invented (doc 02 §5.1's own posture toward a degraded field).
-			return eventReminders(*c.EventAt, prefs, now, interrupt, nil)
+			return eventReminders(*c.EventAt, prefs, now, now, interrupt, nil)
 		}
 
 		return []Plan{recurringTrigger(*c.EventAt, recurrenceRule(*c.RecurrenceRule), prefs, now, interrupt)}, true
@@ -175,7 +175,7 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 		if c.EventAt == nil {
 			return nothing(RefusalNoDate)
 		}
-		return eventReminders(*c.EventAt, prefs, now, interrupt, nil)
+		return eventReminders(*c.EventAt, prefs, now, now, interrupt, nil)
 	}
 
 	return nothing(RefusalKindNotArming)

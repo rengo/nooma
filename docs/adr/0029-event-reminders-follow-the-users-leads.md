@@ -3,7 +3,9 @@
 - **Status**: Accepted
 - **Date**: 2026-10-10
 - **Supersedes**: —
-- **Superseded by**: [ADR-0034](0034-a-recurring-reminder-rings-on-its-day.md), point 7 only (a recurring reminder now rings on its occurrence, not seven days before)
+- **Superseded by**: [ADR-0034](0034-a-recurring-reminder-rings-on-its-day.md), point 7 only (a recurring reminder now rings on its occurrence, not seven days before);
+  [ADR-0037](0037-no-default-ring-on-the-day-an-event-is-told.md), points 1, 2, 4 and 6 in part (a
+  lead nobody asked for that lands on the day the event was told is not armed)
 - **Enables**: M4 (the settings page and the chat intent that edit these preferences)
 
 ## Context
