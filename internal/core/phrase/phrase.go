@@ -42,6 +42,9 @@ type Set struct {
 	Corrected string
 	// Unchanged answers a correction the unit already satisfied.
 	Unchanged string
+	// Moved answers a correction that moved the unit: one %s, the instant it
+	// moved to, named as NotedFor names it.
+	Moved string
 	// OutOfScope refuses a request for something Nooma does not do
 	// (ADR-0021). It must not sound temporary: the capability is absent,
 	// not unavailable.
@@ -171,6 +174,7 @@ var sets = map[classify.Language]Set{
 		Noted:        "Noted.",
 		Corrected:    "Corrected.",
 		Unchanged:    "Nothing changed: it already says that.",
+		Moved:        "Moved to %s.",
 		OutOfScope:   "That is not something I can do.",
 		NoAnswer:     "I could not answer that just now.",
 		AskWhichOne:  "I need one more thing before I can change that — which one did you mean?",
@@ -236,6 +240,7 @@ var sets = map[classify.Language]Set{
 		Noted:        "Anotado.",
 		Corrected:    "Corregido.",
 		Unchanged:    "No cambió nada: ya dice eso.",
+		Moved:        "Movido al %s.",
 		OutOfScope:   "Eso no es algo que pueda hacer.",
 		NoAnswer:     "No pude responder eso en este momento.",
 		AskWhichOne:  "Necesito una cosa más antes de cambiarlo: ¿a cuál te referías?",

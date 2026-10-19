@@ -152,11 +152,23 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		return nil, err
 	}
 
-	fields := make([]correction.Field, len(plan))
-	for i, e := range plan {
-		fields[i] = e.Field()
+	out := &Correction{UnitID: target.ID}
+	for _, e := range plan {
+		out.Fields = append(out.Fields, e.Field())
+		if v, ok := e.EventAt(); ok {
+			out.MovedTo, out.MovedToDayOnly = movedTo(v, c.EventAtDayOnly, now)
+		} else if v, ok := e.DueAt(); ok {
+			out.MovedTo, out.MovedToDayOnly = movedTo(v, c.DueAtDayOnly, now)
+		}
 	}
-	return &Correction{UnitID: target.ID, Fields: fields}, nil
+	return out, nil
+}
+
+// movedTo is the instant a correction moved its unit to, in the user's zone
+// (now's), for the reply to name.
+func movedTo(at time.Time, dayOnly bool, now time.Time) (*time.Time, bool) {
+	local := at.In(now.Location())
+	return &local, dayOnly
 }
 
 // resolveReferent is R1.5/R1.6's own fork: an explicit referent wins

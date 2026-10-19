@@ -126,6 +126,10 @@ func TestI40_AFollowUpCorrectsTheItemItFollows(t *testing.T) {
 	if got := f.meeting(t); got.EventAt == nil || !got.EventAt.Equal(want) || got.Content != "Tengo reunión con Juan el 2026-10-14 a las 08:00." {
 		t.Errorf("meeting = %q at %v, want moved to %v", got.Content, got.EventAt, want)
 	}
+	// The reply names where it moved to, so the result carries it (I40).
+	if m := res.Correction.MovedTo; m == nil || !m.Equal(want) || m.Location() != i40Now.Location() || res.Correction.MovedToDayOnly {
+		t.Errorf("MovedTo = %v (day only %v), want %v in the user's zone", m, res.Correction.MovedToDayOnly, want)
+	}
 	p := f.llm.prompts[0]
 	for _, shown := range []string{`user: "reunión con Juan hoy 22:30" [A]`, `Nooma: "Anotado." [A]`, `A) text (quoted): "Tengo reunión con Juan el 2026-10-14 a las 22:30."`} {
 		if !strings.Contains(p, shown) {

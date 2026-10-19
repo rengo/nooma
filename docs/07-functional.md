@@ -85,7 +85,8 @@ is on the 15th.
    replace the text with the correction itself, or leave text and date disagreeing, asks instead
    (I30). The edit changes the one field you corrected, with its pre-image
    recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
-   unit's reminders as a fresh capture of the new date would. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
+   unit's reminders as a fresh capture of the new date would, and the answer names the new
+   instant ("Movido al mar 20 oct, 11:00."). A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 
 **When the capture itself cannot proceed**, Nooma says why in plain words and saves nothing
 ([doc 02 §5.1](02-cognitive-core.md#51-what-degrades-to-null-means-field-by-field), I31). The CLI

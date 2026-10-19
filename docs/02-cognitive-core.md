@@ -804,6 +804,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      an edit whose value the unit already holds (read again as the edit lands) writes no
      `correction.applied` row and no learning signal, and the answer says nothing changed; only
      the reminder step still runs, so the repair above works.
+     **The answer names what changed** (I40). A correction that moves `event_at` or `due_at`
+     answers with the instant it moved to, named as the capture reply names it ("Movido al mar
+     20 oct, 11:00."; a day alone without a clock); one that changes only the wording or the
+     title answers a bare confirmation, which claims no time and no reminder.
      **The title follows the body** (spec R12). Beside the edits above the plan may carry a
      `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in
      `fields` with `previous` and `next` like any other). A valid title the model answered for

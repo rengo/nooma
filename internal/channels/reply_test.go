@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
@@ -120,5 +122,36 @@ func TestRenderReply_AnUnchangedCorrectionSaysNothingChanged(t *testing.T) {
 	}
 	if same == changed || !strings.Contains(same, "Nothing") {
 		t.Errorf("unchanged = %q, want a reply saying nothing changed", same)
+	}
+}
+
+// TestRenderReply_AMovedCorrectionNamesWhereTo: "es a las 11" answered
+// "Corrected." and the user could not tell what Nooma understood. A correction
+// that moves the unit says the instant it moved to, in the form the capture
+// reply names it; a day alone is named without a clock. A wording-only
+// correction keeps the short confirmation and claims no time.
+//
+// Mutation: answer say.Corrected for every applied correction and this fails.
+func TestRenderReply_AMovedCorrectionNamesWhereTo(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	at := time.Date(2026, 10, 20, 11, 0, 0, 0, zone)
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
+	for _, tc := range []struct {
+		name string
+		lang classify.Language
+		corr brain.Correction
+		want string
+	}{
+		{"time, Spanish", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldEventAt, correction.FieldContent}, MovedTo: &at}, "Movido al mar 20 oct, 11:00."},
+		{"time, English", classify.LanguageEN, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldDueAt}, MovedTo: &at}, "Moved to Tue 20 Oct, 11:00."},
+		{"a day alone", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldEventAt}, MovedTo: &day, MovedToDayOnly: true}, "Movido al mar 20 oct."},
+		{"wording only", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldContent, correction.FieldTitle}}, "Corregido."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: tc.lang, Correction: &tc.corr})
+			if got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
