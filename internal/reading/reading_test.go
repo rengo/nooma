@@ -480,3 +480,25 @@ func TestValidateCaseChecksTheConversation(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckReminderLeadsAreStrict: leads set an event's reminders in
+// production (I40), so leads nobody expected are a miss, and expected ones
+// must come back exactly, in order.
+func TestCheckReminderLeadsAreStrict(t *testing.T) {
+	const head = `{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A"`
+	for name, tc := range map[string]struct {
+		expect []int
+		extra  string
+		miss   bool
+	}{
+		"unexpected":      {nil, `,"reminder_leads_minutes":[60]`, true},
+		"expected":        {[]int{60}, `,"reminder_leads_minutes":[60]`, false},
+		"another lead":    {[]int{60}, `,"reminder_leads_minutes":[120]`, true},
+		"expected absent": {[]int{60}, ``, true},
+	} {
+		got := Check(llm.Case{Expect: &llm.Expect{Referent: "A", ReminderLeadsMinutes: tc.expect}}, decode(t, head+tc.extra+`}`))
+		if missed := slices.Contains(got, FieldReminderLeads); missed != tc.miss || len(got) > 1 {
+			t.Errorf("%s: Check = %v, want a %s miss only: %v", name, got, FieldReminderLeads, tc.miss)
+		}
+	}
+}

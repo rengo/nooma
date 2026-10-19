@@ -164,6 +164,8 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 		return c.Expect.Referent != "" && slices.ContainsFunc(c.Conversation.Turns, func(t llm.ConversationTurn) bool { return t.Speaker == "push" })
 	}))
 	has("a follow-up that asks which", conv(func(c llm.Case) bool { return c.Expect.Referent == classify.ReferentUnclear }))
+	// I40: the client's "avisame solo 1 hora antes", after the time moved.
+	has("a follow-up that sets an event's leads", conv(func(c llm.Case) bool { return len(c.Expect.ReminderLeadsMinutes) > 0 }))
 	has("an answer whose referent is past A", conv(func(c llm.Case) bool {
 		return c.Expect.Referent != "" && c.Expect.Referent != "A" && c.Expect.Referent != classify.ReferentUnclear
 	}))
