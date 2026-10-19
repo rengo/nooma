@@ -120,3 +120,25 @@ func TestDueTaskDigestDaysIsABoundThatCarries(t *testing.T) {
 		t.Errorf("DueTaskDigestDays = %d, want 2 to 6", DueTaskDigestDays)
 	}
 }
+
+// TestDueDayAhead: a capture's reply promises the digest of the task's due day
+// only when that day is after the capture's own, in the capture's zone; a task
+// due today or earlier gets no promise of a morning already past.
+func TestDueDayAhead(t *testing.T) {
+	now := time.Date(2026, 10, 19, 16, 34, 0, 0, dueZone)
+	for _, c := range []struct {
+		due  time.Time
+		want bool
+	}{
+		{time.Date(2026, 10, 20, 0, 0, 0, 0, dueZone), true},
+		// The 20th in UTC, still the 19th in the user's zone.
+		{time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC), false},
+		{time.Date(2026, 10, 19, 23, 59, 0, 0, dueZone), false},
+		{time.Date(2026, 10, 18, 0, 0, 0, 0, dueZone), false},
+		{time.Date(2026, 11, 2, 18, 0, 0, 0, dueZone), true},
+	} {
+		if got := DueDayAhead(c.due, now); got != c.want {
+			t.Errorf("DueDayAhead(%v) = %v, want %v", c.due, got, c.want)
+		}
+	}
+}

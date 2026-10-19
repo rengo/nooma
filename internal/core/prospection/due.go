@@ -29,6 +29,15 @@ func DueTaskWindow(now time.Time) (from, to time.Time) {
 	return time.Date(y, m, d-(DueTaskDigestDays-1), 0, 0, 0, 0, loc), time.Date(y, m, d+1, 0, 0, 0, 0, loc)
 }
 
+// DueDayAhead reports whether a task due at due falls on a local day after
+// now's, in now's zone: the day a capture's reply may promise that morning's
+// digest will name it (doc 02 §7). A task due today or earlier gets no such
+// promise, since its morning may already be past.
+func DueDayAhead(due, now time.Time) bool {
+	_, to := DueTaskWindow(now)
+	return !due.Before(to)
+}
+
 // TasksDue is what the digest at now names as due (doc 02 §7), as unit ids:
 // every live task whose due date, a local calendar day in now's zone, is today
 // or one of the DueTaskDigestDays-1 days before, oldest due first, then by id.

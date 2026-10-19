@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
@@ -91,5 +93,29 @@ func TestI41_ADryRunNamesNothing(t *testing.T) {
 	v.checkAt(time.Date(2026, 10, 15, 7, 0, 0, 0, time.UTC), true)
 	if len(v.ch.texts) != 0 || len(v.rows(ports.ActionCheckDigestSent)) != 0 {
 		t.Errorf("a dry run sent %q and recorded %d digest(s); want nothing", v.ch.texts, len(v.rows(ports.ActionCheckDigestSent)))
+	}
+}
+
+// TestI41_ADatedTaskIsAnsweredWithItsDayAndTheDigest: told on Friday, a task
+// due Saturday arms nothing and its reply names the day and the digest that
+// will mention it; a task due today, or with no date, is "Anotado.", since no
+// later morning is promised.
+func TestI41_ADatedTaskIsAnsweredWithItsDayAndTheDigest(t *testing.T) {
+	for _, c := range []struct{ name, reading, want string }{
+		{"due tomorrow", i36Reading("task", "2026-10-17", false, "es"),
+			"Anotado para el sáb 17 oct. Te lo recuerdo en el resumen de esa mañana."},
+		{"due today", i36Reading("task", "2026-10-16", false, "es"), "Anotado."},
+		{"no date", `{"type":"task","normalized_content":"Comprar café","weight":0.7,"decay_rate":0.03,"language":"es"}`, "Anotado."},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			v := newI36Vault()
+			result := v.say(t, i36Now, c.reading)
+			if v.triggers.Count() != 0 || result.Outcome != brain.OutcomeStored {
+				t.Fatalf("result = %+v, triggers %d; want the task stored and nothing armed", result, v.triggers.Count())
+			}
+			if got := channels.RenderReply(result); got != c.want {
+				t.Errorf("reply = %q, want %q", got, c.want)
+			}
+		})
 	}
 }

@@ -1777,7 +1777,12 @@ box can audit it):
     depleted morning must still hear about. A digest with nothing else to say is still sent for
     them. They are not reminders: the carried count and `DigestCarried` stay the day's reminders,
     and the `check.digest.sent` row adds how many tasks it named. The digest is a turn about their
-    units (ADR-0036).
+    units (ADR-0036). **The capture reply says so**: such a task due on a later local day than
+    the capture's (`prospection.DueDayAhead`) is answered with its day and that morning's digest
+    (`Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.`; `Noted for Tue 20
+    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), never a
+    reminder it does not have; one due today or earlier, whose morning may be past, or with no
+    date, is `Anotado.`
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.

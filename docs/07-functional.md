@@ -181,7 +181,8 @@ of a black box.
    three days owes one digest, not three. If your last energy reading is low, it holds back
    the non-urgent items and lets only a few through, and it softens its wording. This is the
    product rule in [doc 00](00-vision.md): Nooma looks after your *load*, not your feelings.
-   A task with a due date ("mañana renuevo el pasaporte") rings no reminder: the digest names it
+   A task with a due date ("mañana renuevo el pasaporte") rings no reminder: the reply says so
+   ("Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana."), and the digest names it
    first on its due day, and on the next two mornings while it is still open, even on a
    low-energy morning, and even when it is the only thing to say.
 4. **Asks about what it is unsure of.** A relation the nightly job judged into the uncertain

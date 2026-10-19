@@ -1,7 +1,7 @@
 # a task due tomorrow, with no reminder, named by the digest from its day
 # a check pass every 5m0s from Mon 2026-10-19 16:30 -03:00 to Fri 2026-10-23 12:00
 Mon 2026-10-19 16:34 ← mañana renuevo el pasaporte
-Mon 2026-10-19 16:34 → Anotado.
+Mon 2026-10-19 16:34 → Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.
 Tue 2026-10-20 07:00 → Hoy hay 1 cosa:
                        • Renovar el pasaporte — mar 20 oct
 Wed 2026-10-21 07:00 → Hoy hay 1 cosa:

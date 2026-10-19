@@ -196,7 +196,8 @@ func TestI36_APutOffAskedReminderIsAskedAgain(t *testing.T) {
 
 // TestI36_ARequestComesFromTheField: the same classification with
 // remind_request false arms nothing for a task, and the unit does not claim
-// it was asked for (ADR-0033: the model reads the words, the code acts).
+// it was asked for (ADR-0033: the model reads the words, the code acts). Its
+// reply promises no reminder, only the digest of its day (doc 02 §7, I41).
 func TestI36_ARequestComesFromTheField(t *testing.T) {
 	v := newI36Vault()
 	result := v.say(t, i36Now, i36Reading("task", "2026-10-17T10:00:00-03:00", false, "es"))
@@ -204,8 +205,8 @@ func TestI36_ARequestComesFromTheField(t *testing.T) {
 	if v.triggers.Count() != 0 || v.unit(t, result.UnitID).RemindMe {
 		t.Fatalf("armed %d triggers for a message that did not ask, unit %+v", v.triggers.Count(), v.unit(t, result.UnitID))
 	}
-	if got := channels.RenderReply(result); got != "Anotado." {
-		t.Errorf("reply = %q, want Anotado.", got)
+	if got, want := channels.RenderReply(result), "Anotado para el sáb 17 oct. Te lo recuerdo en el resumen de esa mañana."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
 

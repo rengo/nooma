@@ -44,6 +44,10 @@ func RenderReply(result brain.CaptureResult) string {
 		if result.ArmRefused != nil {
 			return fmt.Sprintf(say.NotedNotSet, refusalReason(say, result.ArmRefused))
 		}
+		// A dated task arms nothing: the digest of its day names it (doc 02 §7).
+		if result.DueInDigest != nil {
+			return fmt.Sprintf(say.NotedForDigest, say.Date(*result.DueInDigest))
+		}
 		return say.Noted
 
 	case brain.OutcomeArmed:
