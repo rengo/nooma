@@ -144,6 +144,31 @@ func (r *UnitRepo) LiveByIDs(ctx context.Context, ids []string) ([]unit.Unit, er
 	return live, nil
 }
 
+// LiveTasksDue implements ports.UnitRepo. due_at is stored as fixed-width
+// RFC 3339 in UTC (formatUnitTime), so the text comparison is the instant's.
+func (r *UnitRepo) LiveTasksDue(ctx context.Context, from, to time.Time) ([]unit.Unit, error) {
+	rows, err := r.db.QueryContext(ctx,
+		unitSelectColumns+` FROM units WHERE type = ? AND status = ? AND due_at >= ? AND due_at < ?`,
+		string(unit.TypeTask), string(unit.StatusPool), formatUnitTime(from), formatUnitTime(to))
+	if err != nil {
+		return nil, fmt.Errorf("select live tasks due: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	var due []unit.Unit
+	for rows.Next() {
+		u, err := scanUnit(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan live task due: %w", err)
+		}
+		due = append(due, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select live tasks due: %w", err)
+	}
+	return due, nil
+}
+
 // UpdateContent implements ports.UnitRepo.
 func (r *UnitRepo) UpdateContent(ctx context.Context, id, content string, at time.Time) error {
 	res, err := r.db.ExecContext(ctx,

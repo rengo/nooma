@@ -127,6 +127,46 @@ func RunUnitRepo(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		}
 	})
 
+	t.Run("LiveTasksDue returns live tasks due in [from, to)", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		zone := time.FixedZone("UTC-3", -3*60*60)
+		from := time.Date(2026, 10, 18, 0, 0, 0, 0, zone)
+		to := time.Date(2026, 10, 21, 0, 0, 0, 0, zone)
+
+		seed := func(id string, status unit.Status, typ unit.Type, due *time.Time) {
+			u := fixtureUnit(id, status)
+			u.Type, u.DueAt = typ, due
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", id, err)
+			}
+		}
+		at := func(t time.Time) *time.Time { return &t }
+		seed("at-from", unit.StatusPool, unit.TypeTask, at(from))
+		seed("before-to", unit.StatusPool, unit.TypeTask, at(to.Add(-time.Second)))
+		seed("at-to", unit.StatusPool, unit.TypeTask, at(to))
+		seed("before-from", unit.StatusPool, unit.TypeTask, at(from.Add(-time.Second)))
+		seed("undated", unit.StatusPool, unit.TypeTask, nil)
+		seed("archived", unit.StatusArchived, unit.TypeTask, at(from))
+		seed("incomplete", unit.StatusIncomplete, unit.TypeTask, at(from))
+		seed("event", unit.StatusPool, unit.TypeEvent, at(from))
+
+		got, err := repo.LiveTasksDue(ctx, from, to)
+		if err != nil {
+			t.Fatalf("LiveTasksDue: %v", err)
+		}
+		gotIDs := idsOf(got)
+		sort.Strings(gotIDs)
+		if want := []string{"at-from", "before-to"}; !reflect.DeepEqual(gotIDs, want) {
+			t.Fatalf("LiveTasksDue: got %v, want exactly %v", gotIDs, want)
+		}
+		for _, u := range got {
+			if u.DueAt == nil {
+				t.Fatalf("LiveTasksDue returned %s without its due_at", u.ID)
+			}
+		}
+	})
+
 	t.Run("UpdateContent leaves every other column unchanged", func(t *testing.T) {
 		repo := newRepo(t)
 		ctx := context.Background()
