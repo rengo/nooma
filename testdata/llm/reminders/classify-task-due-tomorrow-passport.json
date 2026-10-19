@@ -1,13 +1,16 @@
 {
   "id": "classify-task-due-tomorrow-passport",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "mañana renuevo el pasaporte",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Renuevo el pasaporte el 2026-10-20.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-20\",\"title\":\"Renovar el pasaporte\"}",
   "now": "2026-10-19T16:34:00-03:00",
   "expect": {
     "day_only": true,
     "title": true,
     "type": "task",
     "due_at": "2026-10-20T00:00:00-03:00"
-  }
+  },
+  "prompt_sha256": "f6430618092a2e2778e55ea2bbccd17bc475e6561e3895791a1673c91a688dc4"
 }
