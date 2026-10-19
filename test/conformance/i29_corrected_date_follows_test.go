@@ -397,10 +397,11 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 			want  []time.Time
 		}{
 			// The 6-hour lead, 23:00, lands on the day the correction told
-			// Nooma about the flight, so it is not armed (ADR-0037), as a
-			// fresh capture at 22:30 would not arm it either.
-			{"leads 6h and 2h at 22:30", strPtrI27(`[360,120]`), evening(22, 30), []time.Time{evening(22, 30)}},
-			{"the default leads at 23:00", nil, evening(23, 0), []time.Time{evening(23, 0)}},
+			// Nooma about the flight (ADR-0037), and the 2-hour one, pulled
+			// to now by the night, would ring at the moment it is told
+			// (ADR-0039): neither is armed, as a fresh capture arms neither.
+			{"leads 6h and 2h at 22:30", strPtrI27(`[360,120]`), evening(22, 30), nil},
+			{"the default leads at 23:00", nil, evening(23, 0), nil},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				f := newI29(t, tc.now, dentist(tc.now), flight)

@@ -365,6 +365,20 @@ func dpScenarios() []dpScenario {
 			},
 		},
 		{
+			// The live case of 2026-10-19 13:32 (ADR-0039): a date-only event
+			// tomorrow, told after its day-before ring, was rung at once about
+			// what the user had just said. It rings tomorrow at 09:00 instead,
+			// nothing rings today, and the reply names it.
+			name:  "kept-ring-on-its-day",
+			about: "a date-only event tomorrow is captured after its day-before ring",
+			from:  dpAt(10, 19, 13, 30), until: dpAt(10, 20, 12, 0),
+			say: []dpSay{
+				{at: dpAt(10, 19, 13, 32), id: "hand-capture-passport-tomorrow-afternoon", text: "mañana renuevo el pasaporte",
+					reading: `{"type":"event","normalized_content":"Renuevo el pasaporte el 2026-10-20.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-20","title":"Renovar el pasaporte","language":"es"}`},
+			},
+		},
+		{
 			name:  "five-weeks",
 			about: "every reminder kind the recordings hold, five weeks, the server down three days",
 			from:  dpAt(10, 16, 10, 40), until: dpAt(11, 21, 0, 0),

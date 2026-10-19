@@ -95,8 +95,10 @@ func TestFollow(t *testing.T) {
 
 // TestFollow_KeepsALeadPulledToNow is I29 under ADR-0030: a lead that
 // deliverAt pulled to now is a real reminder of the moved event, not
-// ADR-0029's at-once reminder, so a correction with nothing live arms the
-// whole set a fresh capture arms — never nothing in front of it.
+// ADR-0029's at-once reminder, so a re-arm with nothing live arms it. A
+// correction is the user telling Nooma about the event, though, and on that
+// day nothing of a later-day event rings at the moment it is told (ADR-0039):
+// the correction arms what a fresh capture arms, here nothing.
 func TestFollow_KeepsALeadPulledToNow(t *testing.T) {
 	zone := time.FixedZone("ART", -3*60*60)
 	at := func(day, hour, minute int) time.Time { return time.Date(2026, 10, day, hour, minute, 0, 0, zone) }
@@ -108,25 +110,19 @@ func TestFollow_KeepsALeadPulledToNow(t *testing.T) {
 		name  string
 		prefs ReminderPrefs
 		now   time.Time
-		want  []time.Time
 	}{
-		// The 6h lead, 23:00, lands on the day the correction is told, so
-		// neither the capture nor the correction arms it (ADR-0037).
-		{"leads 6h and 2h at 22:30: the 2h one pulled to now, the 6h one on the told day", custom, at(15, 22, 30), []time.Time{at(15, 22, 30)}},
-		{"the default leads at 23:00: the 2h one pulled to now", DefaultReminderPrefs(), at(15, 23, 0), []time.Time{at(15, 23, 0)}},
+		{"leads 6h and 2h at 22:30", custom, at(15, 22, 30)},
+		{"the default leads at 23:00", DefaultReminderPrefs(), at(15, 23, 0)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fresh, _ := Arm(classify.Classification{Kind: &event, EventAt: &eventAt}, false, tc.prefs, tc.now)
 			got := Follow(eventAt, nil, tc.prefs, nil, tc.now)
-			if !reflect.DeepEqual(got.Plans, fresh) {
-				t.Fatalf("Follow plans = %+v, want the capture's %+v", got.Plans, fresh)
+			if !reflect.DeepEqual(got.Plans, fresh) || got.Plans[0].What != ArmNothing {
+				t.Fatalf("Follow plans = %+v, want the capture's %+v, arming nothing", got.Plans, fresh)
 			}
-			fires := make([]time.Time, len(got.Plans))
-			for i, p := range got.Plans {
-				fires[i] = p.FireAt
-			}
-			if !slices.EqualFunc(fires, tc.want, time.Time.Equal) {
-				t.Errorf("fires at %v, want %v", fires, tc.want)
+			rearm := FollowSent(eventAt, nil, nil, tc.prefs, nil, at(13, 10, 0), tc.now)
+			if len(rearm.Plans) == 0 || !rearm.Plans[0].Immediate || !rearm.Plans[0].FireAt.Equal(tc.now) {
+				t.Errorf("re-arm plans = %+v, want the 2h lead pulled to now", rearm.Plans)
 			}
 		})
 	}

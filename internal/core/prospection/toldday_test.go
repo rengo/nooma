@@ -142,3 +142,75 @@ func TestFollow_AnEventsOwnLeadsAreAsked(t *testing.T) {
 		t.Errorf("the preferences' leads fire at %v, want the told-day rule to keep only 08:00 tomorrow", got)
 	}
 }
+
+// TestRingOnTheDay is ADR-0039: an event on a later day than it is told, every
+// lead behind, rings on its own day rather than at once, and a re-plan keeps
+// that ring rather than bringing back an at-once one.
+func TestRingOnTheDay(t *testing.T) {
+	event := classify.KindEvent
+	bare := toldAt(20, 0, 0)
+	prefs := DefaultReminderPrefs()
+
+	t.Run("a date-only event tomorrow told at 13:32 rings tomorrow at 09:00, serving no lead", func(t *testing.T) {
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &bare}, false, prefs, toldAt(19, 13, 32))
+		if !ok || len(plans) != 1 || !plans[0].FireAt.Equal(toldAt(20, 9, 0)) || plans[0].Immediate || len(plans[0].Leads) != 0 {
+			t.Errorf("Arm = %+v, want one ring at 09:00 tomorrow, not at once, serving no lead", plans)
+		}
+	})
+	t.Run("05:00 tomorrow said at 22:30: no ring pulled to now, none on its day, quiet_hours", func(t *testing.T) {
+		early := toldAt(20, 5, 0)
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &early}, false, prefs, toldAt(19, 22, 30))
+		if ok || plans[0].Why != RefusalQuietHours {
+			t.Errorf("Arm = %+v, want nothing armed, quiet_hours", plans)
+		}
+	})
+	t.Run("05:00 tomorrow said at 20:00: the evening-before ring at 22:00 is not at once and stays", func(t *testing.T) {
+		early := toldAt(20, 5, 0)
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &early}, false, prefs, toldAt(19, 20, 0))
+		if fires := toldFires(plans); !ok || !slices.EqualFunc(fires, []time.Time{toldAt(19, 22, 0)}, time.Time.Equal) {
+			t.Errorf("Arm fires at %v, want 22:00 today", fires)
+		}
+	})
+	t.Run("an event later today keeps ADR-0029's at-once reminder", func(t *testing.T) {
+		later := toldAt(19, 15, 0)
+		plans, _ := Arm(classify.Classification{Kind: &event, EventAt: &later}, false, prefs, toldAt(19, 14, 0))
+		if len(plans) != 1 || !plans[0].Immediate {
+			t.Errorf("Arm = %+v, want one at once", plans)
+		}
+	})
+	t.Run("a correction the day it is told carries the ring", func(t *testing.T) {
+		live := []Live{{ID: "a", FireAt: toldAt(20, 9, 0)}}
+		got := Follow(bare, live, prefs, nil, toldAt(19, 14, 0))
+		if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) || got.Carry[0] != "a" {
+			t.Errorf("Follow = %+v, want the 09:00 ring carried", got)
+		}
+	})
+	t.Run("a correction with nothing live arms the ring a capture arms", func(t *testing.T) {
+		got := Follow(bare, nil, prefs, nil, toldAt(19, 14, 0))
+		if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) {
+			t.Errorf("Follow = %+v, want the 09:00 ring created", got)
+		}
+	})
+	t.Run("a re-plan on the capture day keeps the ring", func(t *testing.T) {
+		live := []Live{{ID: "a", FireAt: toldAt(20, 9, 0)}}
+		got := FollowSent(bare, live, nil, prefs, nil, toldAt(19, 13, 32), toldAt(19, 15, 0))
+		if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) || len(got.Expire) != 0 {
+			t.Errorf("FollowSent = %+v, want the 09:00 ring kept", got)
+		}
+	})
+	t.Run("a re-plan on a later day is ADR-0032's, not this rule's", func(t *testing.T) {
+		timed := toldAt(21, 15, 0)
+		custom := prefs
+		custom.TimedLeads = []time.Duration{36 * time.Hour}
+		got := FollowSent(timed, nil, nil, custom, nil, toldAt(19, 13, 32), toldAt(20, 8, 0))
+		if got.Plans[0].What != ArmNothing {
+			t.Errorf("FollowSent = %+v, want nothing: the catch-up is owed by CatchUp", got)
+		}
+	})
+	t.Run("a zero told is ADR-0029's at-once reminder", func(t *testing.T) {
+		got := FollowSent(bare, []Live{{ID: "a", FireAt: toldAt(19, 13, 0)}}, nil, prefs, nil, time.Time{}, toldAt(19, 13, 32))
+		if len(got.Plans) != 1 || !got.Plans[0].Immediate {
+			t.Errorf("FollowSent = %+v, want the live one pulled to now", got)
+		}
+	})
+}

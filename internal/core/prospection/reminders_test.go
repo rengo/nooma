@@ -92,10 +92,9 @@ func TestArm_EventReminders(t *testing.T) {
 		e := at(16, 0, 0)
 		check(t, arm(e, at(10, 8, 0), defaults), e, want{at(15, 9, 0), 15 * 60, false})
 	})
-	t.Run("a date-only event after the reminder time the day before: at once", func(t *testing.T) {
+	t.Run("a date-only event after the reminder time the day before: 09:00 on its day (ADR-0039)", func(t *testing.T) {
 		e := at(16, 0, 0)
-		now := at(15, 12, 0)
-		check(t, arm(e, now, defaults), e, want{now, 0, true})
+		check(t, arm(e, at(15, 12, 0), defaults), e, want{at(16, 9, 0), 0, false})
 	})
 	t.Run("midnight in another zone is a timed event", func(t *testing.T) {
 		e := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC) // 21:00 the 15th in the clock's zone
