@@ -161,50 +161,49 @@ func leadSet(kind classify.Kind, asked bool, at time.Time, dayOnly bool, prefs R
 // or a correction.
 func eventReminders(eventAt time.Time, prefs ReminderPrefs, told, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	leads := leadSet(classify.KindEvent, false, eventAt, false, prefs, now.Location())
-	if !prefs.ownLeads {
-		leads = skipToldDay(leads, eventAt, told, now)
-		var ok bool
-		if leads, ok = ringOnTheDay(leads, eventAt, told, now, prefs); !ok {
-			return []Plan{{What: ArmNothing, Why: RefusalQuietHours, Interrupt: interrupt}}, false
-		}
+	if prefs.ownLeads {
+		return reminders(eventAt, false, leads, prefs, now, interrupt, sent)
 	}
-	return reminders(eventAt, false, leads, prefs, now, interrupt, sent)
+	plans, ok := reminders(eventAt, false, skipToldDay(leads, eventAt, told, now), prefs, now, interrupt, sent)
+	if !ok || !toldToday(eventAt, told, now) {
+		return plans, ok
+	}
+	// ADR-0039: on the told day, no ring of an event on a later day goes out
+	// at the moment it is told — the at-once one, or a lead the night pulled
+	// to now. With nothing else left, the one reminder rings on its own day.
+	if plans = slices.DeleteFunc(plans, func(p Plan) bool { return p.Immediate }); len(plans) > 0 {
+		return plans, true
+	}
+	ring, found := ringOnTheDay(eventAt, prefs, now.Location())
+	if !found {
+		return []Plan{{What: ArmNothing, Why: RefusalQuietHours, Interrupt: interrupt}}, false
+	}
+	return reminders(eventAt, false, []lead{{at: ring, own: true}}, prefs, now, interrupt, sent)
 }
 
-// ringOnTheDay keeps an event on a later local day than told from being rung
-// at once about what the user just said (ADR-0039): when every lead is behind
-// now and now is on told's local day, the one reminder rings on the event's
-// own day at DateOnlyAt, or at QuietEnd when that is not before the event (its
-// day's end for a date-only one), and false says no such time is left. A lead
-// ahead, a zero told, a re-plan on another day than told, or an event on the
-// told day leaves leads as they are.
-func ringOnTheDay(leads []lead, at, told, now time.Time, prefs ReminderPrefs) ([]lead, bool) {
+// toldToday is whether now is on the local day told, when the user told Nooma
+// about an event at at on a later local day (ADR-0039). A zero told never is.
+func toldToday(at, told, now time.Time) bool {
 	zone := now.Location()
-	local := at.In(zone)
 	day := func(t time.Time) time.Time { return TimeOfDay{}.on(t.In(zone), 0, zone) }
-	if told.IsZero() || !day(told).Equal(day(now)) || !day(at).After(day(told)) {
-		return leads, true
-	}
-	if slices.ContainsFunc(leads, func(l lead) bool { return !l.at.Before(now) }) {
-		return leads, true
-	}
+	return !told.IsZero() && day(told).Equal(day(now)) && day(at).After(day(told))
+}
+
+// ringOnTheDay is ADR-0039's one reminder of an event on its own day: at
+// DateOnlyAt, or at QuietEnd when that is not before the event (its day's end
+// for a date-only one), and false when neither is.
+func ringOnTheDay(at time.Time, prefs ReminderPrefs, zone *time.Location) (time.Time, bool) {
+	local := at.In(zone)
 	end := at
 	if isDateOnly(local) {
-		end = day(at).AddDate(0, 0, 1)
+		end = TimeOfDay{}.on(local, 1, zone)
 	}
 	for _, slot := range []TimeOfDay{prefs.DateOnlyAt, prefs.QuietEnd} {
 		if ring := slot.on(local, 0, zone); ring.Before(end) {
-			return append(leads, lead{at: ring, own: true}), true
+			return ring, true
 		}
 	}
-	return nil, false
-}
-
-// ringsOnTheDay is whether eventReminders plans ADR-0039's ring on the event's
-// day instead of an at-once one: what a correction arms like a capture.
-func ringsOnTheDay(eventAt time.Time, prefs ReminderPrefs, told, now time.Time) bool {
-	ring, _ := ringOnTheDay(nil, eventAt, told, now, prefs)
-	return !prefs.ownLeads && len(ring) > 0
+	return time.Time{}, false
 }
 
 // skipToldDay drops the leads nobody asked for that are still ahead and would

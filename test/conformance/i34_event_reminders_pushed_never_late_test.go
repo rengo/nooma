@@ -44,8 +44,10 @@ func TestI34_EventRemindersAreArmedAroundQuietHours(t *testing.T) {
 			"2026-10-16T07:00:00-03:00", at(13, 10, 0), []time.Time{at(15, 7, 0), at(15, 22, 0)}, []int{24 * 60, 9 * 60}, false},
 		{"dentist 10:00: daytime reminders are not moved",
 			"2026-10-16T10:00:00-03:00", at(13, 10, 0), []time.Time{at(15, 10, 0), at(16, 8, 0)}, []int{24 * 60, 120}, false},
-		{"flight 05:00 captured at 23:00, past the evening time: at once, not after the event",
-			"2026-10-16T05:00:00-03:00", at(15, 23, 0), []time.Time{at(15, 23, 0)}, []int{0}, false},
+		// Not at once about what was just said, and no daytime is left on
+		// its day before it (ADR-0039).
+		{"flight 05:00 captured at 23:00, past the evening time: nothing armed, the capture says why",
+			"2026-10-16T05:00:00-03:00", at(15, 23, 0), nil, nil, true},
 		{"flight 07:30 captured at 06:00: the at-once reminder waits for quiet end",
 			"2026-10-16T07:30:00-03:00", at(16, 6, 0), []time.Time{at(16, 7, 0)}, []int{30}, false},
 		{"flight 05:00 captured at 02:00: no allowed instant before it, nothing armed, the capture says why",

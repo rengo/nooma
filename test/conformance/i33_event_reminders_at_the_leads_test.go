@@ -190,6 +190,7 @@ func TestI33_TheKeptRingIsNeverAtOnce(t *testing.T) {
 		{"a timed event tomorrow whose one lead is behind: 09:00 that day", event("2026-10-16T15:00:00-03:00"), str(`[1440]`), at(15, 16, 0), []time.Time{at(16, 9, 0)}},
 		{"before 09:00 it is quiet end that day", event("2026-10-16T08:30:00-03:00"), str(`[1440]`), at(15, 9, 0), []time.Time{at(16, 7, 0)}},
 		{"no daytime left before it: nothing", event("2026-10-16T00:30:00-03:00"), nil, at(15, 23, 0), nil},
+		{"05:00 tomorrow said at 22:30: its 2-hour lead, pulled by the night to now, does not ring", event("2026-10-16T05:00:00-03:00"), nil, at(15, 22, 30), nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -157,6 +157,20 @@ func TestRingOnTheDay(t *testing.T) {
 			t.Errorf("Arm = %+v, want one ring at 09:00 tomorrow, not at once, serving no lead", plans)
 		}
 	})
+	t.Run("05:00 tomorrow said at 22:30: no ring pulled to now, none on its day, quiet_hours", func(t *testing.T) {
+		early := toldAt(20, 5, 0)
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &early}, false, prefs, toldAt(19, 22, 30))
+		if ok || plans[0].Why != RefusalQuietHours {
+			t.Errorf("Arm = %+v, want nothing armed, quiet_hours", plans)
+		}
+	})
+	t.Run("05:00 tomorrow said at 20:00: the evening-before ring at 22:00 is not at once and stays", func(t *testing.T) {
+		early := toldAt(20, 5, 0)
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &early}, false, prefs, toldAt(19, 20, 0))
+		if fires := toldFires(plans); !ok || !slices.EqualFunc(fires, []time.Time{toldAt(19, 22, 0)}, time.Time.Equal) {
+			t.Errorf("Arm fires at %v, want 22:00 today", fires)
+		}
+	})
 	t.Run("an event later today keeps ADR-0029's at-once reminder", func(t *testing.T) {
 		later := toldAt(19, 15, 0)
 		plans, _ := Arm(classify.Classification{Kind: &event, EventAt: &later}, false, prefs, toldAt(19, 14, 0))

@@ -65,7 +65,7 @@ func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs
 		}
 	}
 	plans, arms := eventReminders(eventAt, prefs, told, now, interrupt, sent)
-	if !arms || (len(live) == 0 && everyLeadBehind(eventAt, prefs, now) && !ringsOnTheDay(eventAt, prefs, told, now)) {
+	if !arms || (len(live) == 0 && everyLeadBehind(eventAt, prefs, now) && (prefs.ownLeads || !toldToday(eventAt, told, now))) {
 		return settle([]Plan{{What: ArmNothing, Why: plans[0].Why, Interrupt: interrupt}}, live, []int{-1})
 	}
 	return carryOnto(plans, live, now)
