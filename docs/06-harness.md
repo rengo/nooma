@@ -412,6 +412,27 @@ read every changed line against doc 02 §7. A line that is wrong is a product bu
 a golden to bless. The gate runs in `make test-integration`, so `make check-all` and CI's
 integration job run it.
 
+### Trying a message against the real model: `nooma try-chat`
+
+The goldens above replay a recorded reading, so they say nothing about what the configured model
+reads today. Before suggesting a message for someone to type into Telegram, try it:
+
+```sh
+cp -r ~/.nooma/<you>.nooma /tmp/try.nooma          # a COPY: the tool writes captures
+TZ=America/Argentina/Buenos_Aires nooma try-chat /tmp/try.nooma \
+  "mañana tengo dentista a las 10" "es a las 11" "avisame solo 1 hora antes"
+```
+
+Each message goes through `channels.CaptureHandler` in one in-memory conversation, with serve's
+`wireBrain` and the vault's own provider, as if from its first allowed chat. The output is a
+`← message` / `→ reply` pair per message, then every trigger the run armed or moved and every one
+it disarmed, with fire times in the process's zone (hence `TZ`). Replies go to an in-memory
+channel, never to Telegram, and no poller, scheduler or HTTP server starts. The vault path is
+required, never the default, and a vault held by a running serve is refused (the lock is an OS
+lock, so a copied lock file holds nothing). The database runs in WAL mode: copy the whole folder,
+so the `-wal` file travels with it, and the copy reads what serve had written. It calls the real
+provider and spends its tokens, so it is a developer's tool, not a test.
+
 ---
 
 ## 6. CI gates
