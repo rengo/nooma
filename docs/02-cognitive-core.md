@@ -1443,7 +1443,8 @@ have N nudges; a pattern watcher does not hang off any unit):
   armed, so "tomorrow at 10", said at 08:44, is reminded at 08:00 tomorrow only, and the reply
   names only that. When that would leave no lead ahead and none asked, the nearest stays (a
   date-only event tomorrow told before 09:00 keeps its 09:00 reminder today). An asked lead is
-  untouched. The told day is a capture's own, and a correction's own (`prospection.Follow`); a
+  untouched. A ring kept on the told day is named in the reply as today at its hour ("Te aviso
+  hoy a las 09:00."), read from the capture instant, never as "the day before". The told day is a capture's own, and a correction's own (`prospection.Follow`); a
   preference re-arm and the check pass's re-plan take the unit's `created_at`, so the dropped
   lead does not come back on the capture day and a day-before reminder armed earlier stays.
   **The leads and the reminder time are the user's preferences**, not calibration: two

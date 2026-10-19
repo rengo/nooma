@@ -332,11 +332,16 @@ func dpScenarios() []dpScenario {
 			// dentist tomorrow at 10:00, the 24-hour lead would ring today at
 			// 10:00, 75 minutes later, and the reply called it "the day
 			// before". It is not armed: the reply names the 2-hour ring only,
-			// and that is the one ring.
+			// and that is the one ring. A date-only event tomorrow, said at
+			// 08:00, keeps its one ring at 09:00 today, and the reply says
+			// "hoy a las 09:00", not "el día anterior".
 			name:  "told-day-lead",
-			about: "an event tomorrow is captured before its 24-hour lead",
-			from:  dpAt(10, 19, 8, 40), until: dpAt(10, 20, 12, 0),
+			about: "events tomorrow are captured before their day-before ring",
+			from:  dpAt(10, 19, 7, 55), until: dpAt(10, 20, 12, 0),
 			say: []dpSay{
+				{at: dpAt(10, 19, 8, 0), id: "hand-capture-passport-tomorrow", text: "mañana renuevo el pasaporte",
+					reading: `{"type":"event","normalized_content":"Renuevo el pasaporte el 2026-10-20.","weight":0.7,` +
+						`"decay_rate":0.05,"event_at":"2026-10-20","title":"Renovar el pasaporte","language":"es"}`},
 				{at: dpAt(10, 19, 8, 44), id: "hand-capture-dentist-tomorrow", text: "mañana tengo dentista a las 10",
 					reading: `{"type":"event","normalized_content":"Tengo dentista el 2026-10-20 a las 10:00.","weight":0.7,` +
 						`"decay_rate":0.05,"event_at":"2026-10-20T10:00:00-03:00","title":"Dentista","language":"es"}`},

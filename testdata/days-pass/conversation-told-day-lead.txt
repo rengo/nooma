@@ -1,6 +1,10 @@
-# an event tomorrow is captured before its 24-hour lead
-# a check pass every 5m0s from Mon 2026-10-19 08:40 -03:00 to Tue 2026-10-20 12:00
+# events tomorrow are captured before their day-before ring
+# a check pass every 5m0s from Mon 2026-10-19 07:55 -03:00 to Tue 2026-10-20 12:00
+# "mañana renuevo el pasaporte" is read by a hand-written reading, not a recording
 # "mañana tengo dentista a las 10" is read by a hand-written reading, not a recording
+Mon 2026-10-19 08:00 ← mañana renuevo el pasaporte
+Mon 2026-10-19 08:00 → Anotado para el mar 20 oct. Te aviso hoy a las 09:00.
 Mon 2026-10-19 08:44 ← mañana tengo dentista a las 10
 Mon 2026-10-19 08:44 → Anotado para el mar 20 oct, 10:00. Te aviso unas horas antes.
+Mon 2026-10-19 09:00 → Recordatorio: Renovar el pasaporte — mar 20 oct
 Tue 2026-10-20 08:00 → Recordatorio: Dentista — mar 20 oct, 10:00

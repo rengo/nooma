@@ -88,6 +88,29 @@ func TestRenderReply_NamesEveryReminder(t *testing.T) {
 	}
 }
 
+// TestRenderReply_ARingOnTheCaptureDayIsToday (ADR-0037): the reply reads the
+// capture instant (result.At), not FireAt minus About, so a date-only event
+// tomorrow told at 08:00 is "today at 09:00", not "the day before".
+func TestRenderReply_ARingOnTheCaptureDayIsToday(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
+	captured := time.Date(2026, 10, 19, 8, 0, 0, 0, zone)
+	armed := brain.Armed{What: prospection.ArmTrigger, FireAt: time.Date(2026, 10, 19, 9, 0, 0, 0, zone), About: day, DayOnly: true}
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, At: captured}); !strings.Contains(got, "I will remind you today at 09:00.") {
+		t.Errorf("date-only reply %q does not name today at 09:00", got)
+	}
+	// An unasked date-only event (a local midnight, ADR-0029) names its date
+	// alone, not "00:00".
+	armed.DayOnly = false
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, At: captured}); got != "Noted for Tue 20 Oct. I will remind you today at 09:00." {
+		t.Errorf("unasked date-only reply = %q", got)
+	}
+	timed := brain.Armed{What: prospection.ArmTrigger, FireAt: time.Date(2026, 10, 19, 19, 0, 0, 0, zone), About: time.Date(2026, 10, 20, 1, 30, 0, 0, zone)}
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &timed, At: captured}); !strings.Contains(got, "I will remind you today at 19:00.") {
+		t.Errorf("timed reply %q does not name today at 19:00", got)
+	}
+}
+
 // A correction that found the unit already saying it is not "Corrected."
 func TestRenderReply_AnUnchangedCorrectionSaysNothingChanged(t *testing.T) {
 	changed := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "u"}})

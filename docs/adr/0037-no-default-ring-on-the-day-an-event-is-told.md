@@ -1,7 +1,7 @@
 # ADR-0037 — No default reminder rings on the day the user told Nooma about the event
 
 - **Status**: Accepted (by the client, 2026-10-19: "si el recordatorio es mañana, te dice te aviso
-  un día antes, sería hoy mismo... ahí debería solo decir de unas horas antes")
+  un día antes, sería hoy mismo .. ahi deberia solo decir de unas horas antes")
 - **Date**: 2026-10-19
 - **Supersedes**: [ADR-0029](0029-event-reminders-follow-the-users-leads.md) points 1, 2, 4 and
   6, in part: a lead nobody asked for that lands on the day the event was told is not armed.
@@ -30,6 +30,10 @@ said it: a reminder that day tells them nothing, and the promise reads as false.
    day-before ring armed earlier stays. The at-once catch-up (`CatchUp`, `CatchUpAsked`) is
    unchanged: it arms only when every lead is behind.
 5. The nominal instant decides, before any quiet-hours move (ADR-0030).
+6. **The reply names a ring on the told day as today at its hour** ("Te aviso hoy a las
+   09:00."), whichever rule kept it (the fallback of point 2, or an asked lead), for an event on
+   a later day. It reads the capture instant, never `FireAt` minus `About`. An unasked date-only
+   event's reply names its date alone, not "00:00".
 
 ## Consequences
 

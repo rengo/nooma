@@ -61,17 +61,19 @@ func RenderReply(result brain.CaptureResult) string {
 			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)
 		default:
 			fires := append([]time.Time{result.Armed.FireAt}, result.Armed.Later...)
-			if result.Armed.DayOnly {
+			if a := result.Armed.About; result.Armed.DayOnly || (a.Hour() == 0 && a.Minute() == 0 && a.Second() == 0 && a.Nanosecond() == 0) {
 				// Every ring is named: an event on a day alone is also
-				// reminded the day before (ADR-0029, ADR-0031 point 2).
-				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), say.DayLeads(result.Armed.Immediate, result.Armed.About, fires...))
+				// reminded the day before (ADR-0029, ADR-0031 point 2). An
+				// unasked one is a local midnight, how a bare date is stored
+				// (ADR-0029 point 2): its date alone is named, not "00:00".
+				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), say.DayLeads(result.Armed.Immediate, result.At, result.Armed.About, fires...))
 			}
 			// Immediate is the plan's own fact, never re-derived from the
 			// two instants: subtracting them gives a true duration and a
 			// false promise — 41 hours reads as "the day before" for a
 			// reminder that arrives at once.
 			// Every reminder is named: a timed event has two (ADR-0029).
-			lead := say.Leads(result.Armed.Immediate, result.Armed.About, fires...)
+			lead := say.Leads(result.Armed.Immediate, result.At, result.Armed.About, fires...)
 			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), lead)
 		}
 

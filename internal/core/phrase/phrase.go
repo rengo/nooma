@@ -121,6 +121,8 @@ type Set struct {
 	// The lead-time phrases NotedFor's second %s is filled with. LeadDays
 	// and LeadMinutes take one %d; LeadMinute is a lead of one minute.
 	// LeadThatDayAt takes one %s, the hour a day alone is reminded at.
+	// LeadTodayAt takes one %s, the hour of a ring on the day the user told
+	// Nooma about an event on a later day (ADR-0037).
 	LeadImmediate string
 	LeadMinute    string
 	LeadMinutes   string
@@ -128,6 +130,7 @@ type Set struct {
 	LeadDayBefore string
 	LeadDays      string
 	LeadThatDayAt string
+	LeadTodayAt   string
 	// And joins the last two of several lead phrases.
 	And string
 
@@ -210,6 +213,7 @@ var sets = map[classify.Language]Set{
 		LeadDayBefore: "the day before",
 		LeadDays:      "%d days before",
 		LeadThatDayAt: "that day at %s",
+		LeadTodayAt:   "today at %s",
 		And:           "and",
 
 		FoundOne:  "Found %d thing:",
@@ -274,6 +278,7 @@ var sets = map[classify.Language]Set{
 		LeadDayBefore: "el día anterior",
 		LeadDays:      "%d días antes",
 		LeadThatDayAt: "ese día a las %s",
+		LeadTodayAt:   "hoy a las %s",
 		And:           "y",
 
 		FoundOne:  "Encontré %d cosa:",
@@ -427,19 +432,27 @@ func (s Set) Lead(immediate bool, fire, about time.Time) string {
 
 // Leads names every reminder of one event, earliest first, joined in the
 // language; two that read alike are said once. immediate is the earliest
-// firing's own fact.
-func (s Set) Leads(immediate bool, about time.Time, fires ...time.Time) string {
+// firing's own fact. told is when the user told Nooma about the event (the
+// capture instant): a ring on its local day, for an event on a later day, is
+// today at its hour (ADR-0037). A zero told names none so.
+func (s Set) Leads(immediate bool, told, about time.Time, fires ...time.Time) string {
 	var said []string
 	for i, fire := range fires {
-		said = append(said, s.Lead(immediate && i == 0, fire, about))
+		switch {
+		case (!immediate || i > 0) && s.onToldDay(told, about, fire):
+			said = append(said, s.TodayAt(fire.In(about.Location())))
+		default:
+			said = append(said, s.Lead(immediate && i == 0, fire, about))
+		}
 	}
 	return s.join(said)
 }
 
 // DayLeads is Leads for a day alone, day being its local midnight: a ring on
 // the day itself names its hour (ThatDayAt), and one on another day says how
-// long before, so an asked event on a day alone names the day before too.
-func (s Set) DayLeads(immediate bool, day time.Time, fires ...time.Time) string {
+// long before, so an asked event on a day alone names the day before too. A
+// ring on the told day, before the day, is today at its hour (ADR-0037).
+func (s Set) DayLeads(immediate bool, told, day time.Time, fires ...time.Time) string {
 	var said []string
 	for i, fire := range fires {
 		y, m, d := fire.In(day.Location()).Date()
@@ -447,6 +460,8 @@ func (s Set) DayLeads(immediate bool, day time.Time, fires ...time.Time) string 
 		switch {
 		case immediate && i == 0:
 			said = append(said, s.LeadImmediate)
+		case s.onToldDay(told, day, fire):
+			said = append(said, s.TodayAt(fire.In(day.Location())))
 		case y == dy && m == dm && d == dd:
 			said = append(said, s.ThatDayAt(fire.In(day.Location())))
 		default:
@@ -454,6 +469,24 @@ func (s Set) DayLeads(immediate bool, day time.Time, fires ...time.Time) string 
 		}
 	}
 	return s.join(said)
+}
+
+// onToldDay reports whether fire is on told's local day, about's zone, for an
+// about on a later local day.
+func (s Set) onToldDay(told, about, fire time.Time) bool {
+	if told.IsZero() {
+		return false
+	}
+	day := func(t time.Time) time.Time {
+		y, m, d := t.In(about.Location()).Date()
+		return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	}
+	return day(fire).Equal(day(told)) && day(about).After(day(told))
+}
+
+// TodayAt names the hour of a ring today.
+func (s Set) TodayAt(fire time.Time) string {
+	return fmt.Sprintf(s.LeadTodayAt, fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute()))
 }
 
 // join says each lead once, in order, the last two joined in the language.
