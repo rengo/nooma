@@ -116,8 +116,16 @@ func RenderReply(result brain.CaptureResult) string {
 		return say.List(contents)
 
 	case brain.OutcomeCorrected:
-		if result.Correction != nil && result.Correction.Unchanged {
+		c := result.Correction
+		switch {
+		case c != nil && c.Unchanged:
 			return say.Unchanged
+		case c != nil && c.MovedTo != nil && c.MovedToDayOnly:
+			return fmt.Sprintf(say.Moved, say.Date(*c.MovedTo))
+		case c != nil && c.MovedTo != nil:
+			// Where it moved to, as the capture named it: a bare "Corrected."
+			// left the user unable to tell what Nooma understood.
+			return fmt.Sprintf(say.Moved, say.Time(*c.MovedTo))
 		}
 		return say.Corrected
 

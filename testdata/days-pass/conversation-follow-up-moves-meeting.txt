@@ -8,5 +8,5 @@ Tue 2026-10-13 20:00 → Anotado para el vie 16 oct, 10:00. Te aviso el día ant
 Tue 2026-10-13 21:05 ← Tengo reunión con Juan mañana a las 22:30
 Tue 2026-10-13 21:05 → Anotado para el mié 14 oct, 22:30. Te aviso unas horas antes.
 Tue 2026-10-13 21:10 ← Es a las 08:00.
-Tue 2026-10-13 21:10 → Corregido.
+Tue 2026-10-13 21:10 → Movido al mié 14 oct, 08:00.
 Wed 2026-10-14 07:00 → Recordatorio: Reunión con Juan — mié 14 oct, 08:00

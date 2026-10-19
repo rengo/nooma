@@ -223,6 +223,11 @@ type Correction struct {
 	UnitID string
 	// Fields names the columns PlanEdit wrote, in order. Empty for Asked.
 	Fields []correction.Field
+	// MovedTo is the instant an applied correction moved the unit's event_at
+	// or due_at to, in the user's zone, and MovedToDayOnly whether it is a day
+	// alone; nil when no date moved. The reply names it (I40).
+	MovedTo        *time.Time
+	MovedToDayOnly bool
 	// Unchanged is true for a correction that found the unit already
 	// holding everything it said: nothing was written or recorded as a
 	// change, Fields is empty, and the answer says so.
