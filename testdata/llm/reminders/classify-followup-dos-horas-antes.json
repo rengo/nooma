@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame 2 horas antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120]}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120]}",
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,5 @@
     ]
   },
   "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: the follow-up binds a correction, and the correction path never reads remind_request (it returns before arming); the leads still come back as reminder_leads_minutes",
-  "prompt_sha256": "5f43ad320186c050ebfd90403d3420b4da3fb1e3f5e630335033065c1ef7f4d9"
+  "prompt_sha256": "93f0f135f9b4b39ae2fc38cdf6d27b484c6d2d1b2f53602190c07bc311fc7ad5"
 }

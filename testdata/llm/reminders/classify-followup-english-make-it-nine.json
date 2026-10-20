@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "make it 9am",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Call with Ana on 2026-10-15 at 09:00.\",\"weight\":0.85,\"decay_rate\":0.02,\"language\":\"en\",\"event_at\":\"2026-10-15T09:00:00-03:00\",\"title\":\"Call with Ana\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Call with Ana on 2026-10-15 at 09:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"en\",\"event_at\":\"2026-10-15T09:00:00-03:00\",\"title\":\"Call with Ana\",\"referent\":\"A\"}",
   "now": "2026-10-14T18:00:00-03:00",
   "conversation": {
     "turns": [
@@ -39,5 +38,5 @@
     "referent": "A",
     "event_at": "2026-10-15T09:00:00-03:00"
   },
-  "prompt_sha256": "af880e827a3c9151ff0d194bb44516d5291cb373fc2b567e037f86cf606bf358"
+  "prompt_sha256": "41f11ff1ecbbc587c227c0479955527ae34ef6c72e3f8d516979458de9e60ce6"
 }

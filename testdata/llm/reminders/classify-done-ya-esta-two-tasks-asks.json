@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya está",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte?\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte o a pagar la tarjeta?\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -36,5 +35,5 @@
     "task_checkin_outcome": "done",
     "referent": "unclear"
   },
-  "prompt_sha256": "b703c3055366dfece878eb59c15151373c268e61a6722bc702f70090ee25ee46"
+  "prompt_sha256": "318901145e48204b7b36e555a5581d7788f93b23e8a8b08f9ace53995117d58e"
 }
