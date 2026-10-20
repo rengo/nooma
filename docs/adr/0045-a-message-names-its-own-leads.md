@@ -1,6 +1,7 @@
 # ADR-0045 — A capture names its own leads, and a follow-up can add one
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-20: "avisame solo 1 hora antes"
+  must work, said in the capture message itself or added later)
 - **Date**: 2026-10-20
 - **Supersedes**: [ADR-0038](0038-an-event-can-carry-its-own-reminder-leads.md) points 1 and 2,
   in part (the leads are read for the event any message tells, with a chat or none, and a
