@@ -98,9 +98,9 @@ type Set struct {
 	// NotedForDigest takes one %s: the due day of a task that arms nothing,
 	// which that morning's digest names (doc 02 §7).
 	NotedForDigest string
-	// NotedOn takes one %s: the instant of an event nothing was armed for
-	// because every lead was behind when it was told (ADR-0047). It names
-	// what was read and promises no ring.
+	// NotedOn takes one %s: the instant of an event nothing was armed for,
+	// its leads behind when told (ADR-0047) or only night left before it
+	// (ADR-0030). It names what was read and promises no ring.
 	NotedOn string
 	// Closed takes one %s: the name of the task a done follow-up closed.
 	// NothingClosed answers a done that closed nothing (ADR-0040): never a

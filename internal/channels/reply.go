@@ -48,11 +48,14 @@ func RenderReply(result brain.CaptureResult) string {
 		if result.DueInDigest != nil {
 			return fmt.Sprintf(say.NotedForDigest, say.Date(*result.DueInDigest))
 		}
-		// An event with every lead behind when told names what was read and
-		// promises no ring (ADR-0047).
-		// A date-only event never gets here: on its own day it is past.
-		if result.NotArmedFor != nil {
-			return fmt.Sprintf(say.NotedOn, say.Time(*result.NotArmedFor))
+		// An event that got no reminder, its leads behind when told or only
+		// night left before it, names what was read and promises no ring
+		// (ADR-0047). A day alone is named by its date, not "00:00".
+		if at := result.NotArmedFor; at != nil {
+			if at.Hour() == 0 && at.Minute() == 0 && at.Second() == 0 && at.Nanosecond() == 0 {
+				return fmt.Sprintf(say.NotedOn, say.Date(*at))
+			}
+			return fmt.Sprintf(say.NotedOn, say.Time(*at))
 		}
 		return say.Noted
 

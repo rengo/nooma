@@ -322,3 +322,20 @@ func TestI33_NothingUnaskedRingsAtOnceOnTheToldDay(t *testing.T) {
 		})
 	}
 }
+
+// TestI33_AQuietHoursRefusalNamesWhatWasRead: an unasked event left with no
+// reminder because every instant before it is in quiet hours (ADR-0030 point
+// 4) is answered with what was read and no ring, as ADR-0047's leads_behind is.
+func TestI33_AQuietHoursRefusalNamesWhatWasRead(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	now := time.Date(2026, 10, 15, 23, 0, 0, 0, zone)
+	const response = `{"type":"event","normalized_content":"vuelo el 2026-10-16 a las 00:30","weight":0.7,"decay_rate":0.05,` +
+		`"language":"es","event_at":"2026-10-16T00:30:00-03:00"}`
+	triggers, _, result := i33Capture(t, now, response)
+	if n := len(triggers.All()); n != 0 {
+		t.Fatalf("triggers = %d, want none: only night is left", n)
+	}
+	if got, want := channels.RenderReply(result), "Anotado para el vie 16 oct, 00:30."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}

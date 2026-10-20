@@ -1659,7 +1659,8 @@ have N nudges; a pattern watcher does not hang off any unit):
   instant is outside quiet hours (except on the day the event is told, when it is dropped:
   ADR-0039, ADR-0047); when it is not, no allowed instant is left before the
   event and the reminder is not armed — a capture records why, `capture.arm.refused` with
-  reason `quiet_hours`, and the unit stays stored. Two reminders the adjustment lands on one
+  reason `quiet_hours`, the unit stays stored, and an unasked event's reply names what was read
+  with no ring ("Anotado para el vie 16 oct, 00:30.", ADR-0047). Two reminders the adjustment lands on one
   instant are armed once. `payload.lead_minutes` is the adjusted instant's distance to the
   event, so `fire_at + lead_minutes` still names it; a reminder armed at once — the at-once one,
   or a lead pulled to now — carries no lead. A 05:00 flight is reminded at 07:00 and at 22:00

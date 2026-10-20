@@ -569,7 +569,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	if asked {
 		stored.ArmRefused = &ArmRefused{Why: plan.Why, Message: refusalMessage(plan.Why)}
 	}
-	if !asked && plan.Why == prospection.RefusalLeadsBehind && u.EventAt != nil {
+	if !asked && (plan.Why == prospection.RefusalLeadsBehind || plan.Why == prospection.RefusalQuietHours) && u.EventAt != nil {
 		at := u.EventAt.In(now.Location())
 		stored.NotArmedFor = &at
 	}
