@@ -296,3 +296,28 @@ func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
 		t.Errorf("reply = %q, want the new leads named", reply)
 	}
 }
+
+// TestI40_ARemindMeNamesTheItemInTheUsersZone: the store hands a unit's
+// instants back in UTC (formatUnitTime/parse), while the clock and the user
+// are at -03. "recordámelo" of a task due at 10:00 local is answered with
+// 10:00, never the UTC hour, and the reminder rings at 09:45 local.
+func TestI40_ARemindMeNamesTheItemInTheUsersZone(t *testing.T) {
+	f := newI40(t, recordamelo(t))
+	due := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC) // 10:00 at -03, as the store returns it
+	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
+		Content: "Comprar el regalo de Ana el 2026-10-15 a las 10:00.", Title: "Regalo de Ana", DueAt: &due,
+		CreatedAt: i40Now, UpdatedAt: i40Now})
+
+	res := f.say(t, "recordámelo")
+
+	if got := channels.RenderReply(res); !strings.Contains(got, "10:00") || strings.Contains(got, "13:00") {
+		t.Errorf("reply = %q, want the task's local 10:00 named", got)
+	}
+	armed, err := f.triggers.ArmedForUnit(context.Background(), "gift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := due.Add(-15 * time.Minute); len(armed) != 1 || !armed[0].FireAt.Equal(want) {
+		t.Errorf("armed = %+v, want one reminder at %v", armed, want.In(i40Now.Location()))
+	}
+}

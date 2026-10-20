@@ -91,11 +91,14 @@ func (r captureRunner) moveThenRemind(ctx context.Context, in CaptureInput, c cl
 }
 
 // asCapture is u read as the capture that told it, for prospection.Arm: its
-// kind, its instants, and an instant at local midnight read as a day alone,
-// as the prompt shows it.
+// kind, its instants in the user's zone (now's), and an instant at local
+// midnight read as a day alone, as the prompt shows it. The store hands
+// instants back in UTC; a classification carries them in the user's frame,
+// and the reply names the plan's About as it stands, so an instant left in
+// UTC was answered at its UTC hour.
 func asCapture(u unit.Unit, now time.Time) classify.Classification {
 	kind := classify.Kind(u.Type)
-	c := classify.Classification{Kind: &kind, EventAt: u.EventAt, DueAt: u.DueAt, NormalizedContent: &u.Content,
+	c := classify.Classification{Kind: &kind, EventAt: inZone(u.EventAt, now), DueAt: inZone(u.DueAt, now), NormalizedContent: &u.Content,
 		EventAtDayOnly: atMidnight(u.EventAt, now), DueAtDayOnly: atMidnight(u.DueAt, now)}
 	if u.Title != "" {
 		c.Title = &u.Title
@@ -118,6 +121,15 @@ func askedOnly(c classify.Classification) classify.Classification {
 	task := classify.KindTask
 	c.Kind = &task
 	return c
+}
+
+// inZone is t in now's location, or nil.
+func inZone(t *time.Time, now time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	local := t.In(now.Location())
+	return &local
 }
 
 func atMidnight(t *time.Time, now time.Time) bool {
