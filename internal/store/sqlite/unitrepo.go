@@ -217,6 +217,15 @@ func (r *UnitRepo) UpdateReminderLeads(ctx context.Context, id string, minutes [
 	return requireRowAffected(res, ports.ErrUnitNotFound)
 }
 
+// SetRemindMe implements ports.UnitRepo.
+func (r *UnitRepo) SetRemindMe(ctx context.Context, id string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE units SET remind_me = 1, updated_at = ? WHERE id = ?`, formatUnitTime(at), id)
+	if err != nil {
+		return fmt.Errorf("update unit %q remind_me: %w", id, err)
+	}
+	return requireRowAffected(res, ports.ErrUnitNotFound)
+}
+
 // leadsToNull is minutes as the column's JSON array, or NULL for nil.
 func leadsToNull(minutes []int) any {
 	if minutes == nil {

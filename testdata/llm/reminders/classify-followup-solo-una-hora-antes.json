@@ -4,11 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame solo 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[60]}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"title\":\"Dentista\",\"referent\":\"A\",\"reminder_leads_minutes\":[60]}",
   "now": "2026-10-19T09:10:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-19T09:00:00-03:00",
         "speaker": "user",
         "text": "mañana tengo dentista a las 10",
         "about": [
@@ -16,6 +17,7 @@
         ]
       },
       {
+        "at": "2026-10-19T09:00:00-03:00",
         "speaker": "nooma",
         "text": "Anotado para el mar 20 oct, 10:00. Te aviso unas horas antes.",
         "about": [
@@ -23,6 +25,7 @@
         ]
       },
       {
+        "at": "2026-10-19T09:05:00-03:00",
         "speaker": "user",
         "text": "es a las11",
         "about": [
@@ -30,6 +33,7 @@
         ]
       },
       {
+        "at": "2026-10-19T09:05:00-03:00",
         "speaker": "nooma",
         "text": "Movido al mar 20 oct, 11:00.",
         "about": [
@@ -52,6 +56,5 @@
       60
     ]
   },
-  "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: the follow-up binds a correction, and the correction path never reads remind_request (it returns before arming); the leads still come back as reminder_leads_minutes",
-  "prompt_sha256": "b4fb6fac6a5105c31bcccd54720c326e97636937f313128a778e5e38daeb3fdd"
+  "prompt_sha256": "7146828fa107b5a9788b27e7cb7d5b66388a3ffa546929c10b7d1ddbdcca14dc"
 }

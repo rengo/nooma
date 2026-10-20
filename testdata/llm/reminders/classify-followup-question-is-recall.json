@@ -4,11 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿a qué hora era la reunión?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0,\"decay_rate\":0,\"language\":\"es\"}",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0.1,\"decay_rate\":0.1,\"language\":\"es\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-13T21:05:00-03:00",
         "speaker": "user",
         "text": "Tengo reunión con Juan mañana a las 22:30",
         "about": [
@@ -16,6 +17,7 @@
         ]
       },
       {
+        "at": "2026-10-13T21:05:00-03:00",
         "speaker": "nooma",
         "text": "Anotado para el mié 14 oct, 22:30. Te aviso el día anterior y unas horas antes.",
         "about": [
@@ -34,5 +36,5 @@
   "expect": {
     "type": "recall"
   },
-  "prompt_sha256": "d35b294b2408f09cbe923ca7812a689a806589cab40b01c3c878de1d02731baa"
+  "prompt_sha256": "bd2b631bfdcf3b21489ba43233ea99ce51753eeb572a6fa95338395b04c968de"
 }

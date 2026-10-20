@@ -307,6 +307,11 @@ func (g *rvwUnits) UpdateReminderLeads(context.Context, string, []int, time.Time
 	return nil
 }
 
+func (g *rvwUnits) SetRemindMe(context.Context, string, time.Time) error {
+	rvwFail(g.t, "UnitRepo", "SetRemindMe")
+	return nil
+}
+
 func (g *rvwUnits) SetStatus(context.Context, string, unit.Status, unit.Status, time.Time) error {
 	rvwFail(g.t, "UnitRepo", "SetStatus")
 	return nil

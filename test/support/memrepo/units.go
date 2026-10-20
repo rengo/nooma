@@ -174,6 +174,20 @@ func (r *Units) UpdateReminderLeads(_ context.Context, id string, minutes []int,
 	return nil
 }
 
+// SetRemindMe implements ports.UnitRepo.
+func (r *Units) SetRemindMe(_ context.Context, id string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	u, ok := r.units[id]
+	if !ok {
+		return ports.ErrUnitNotFound
+	}
+	u.RemindMe, u.UpdatedAt = true, at
+	r.units[id] = u
+	return nil
+}
+
 // UpdateTitle implements ports.UnitRepo.
 func (r *Units) UpdateTitle(_ context.Context, id, title string, at time.Time) error {
 	r.mu.Lock()

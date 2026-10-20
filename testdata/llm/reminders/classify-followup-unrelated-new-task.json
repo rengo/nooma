@@ -4,11 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "Comprar pan mañana",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar pan el 2026-10-14.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-14\",\"title\":\"Comprar pan\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que comprar pan el 2026-10-14.\",\"weight\":0.65,\"decay_rate\":0.025,\"language\":\"es\",\"due_at\":\"2026-10-14\",\"title\":\"Comprar pan\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-13T21:05:00-03:00",
         "speaker": "user",
         "text": "Tengo reunión con Juan mañana a las 22:30",
         "about": [
@@ -16,6 +17,7 @@
         ]
       },
       {
+        "at": "2026-10-13T21:05:00-03:00",
         "speaker": "nooma",
         "text": "Anotado para el mié 14 oct, 22:30. Te aviso el día anterior y unas horas antes.",
         "about": [
@@ -34,5 +36,5 @@
   "expect": {
     "type": "task"
   },
-  "prompt_sha256": "9a4fa7b9777501c1062dcae71bc304374ac73ad45df18e403812b1e45145f174"
+  "prompt_sha256": "4e095231ac66bb83bd27a2db75875f8ce8f095ef7dd808065919784ae0aba7a8"
 }

@@ -26,8 +26,14 @@ type Turn struct {
 	UnitIDs []string
 }
 
-// NewConversation returns the chat log stored in turns.
+// NewConversation returns the chat log stored in turns. It panics on a nil
+// store: a log that stores nothing would read every message alone and forget
+// every turn without a word, which is a wiring bug, not a state to run in. A
+// nil *Conversation is the legal "no chat".
 func NewConversation(turns ports.ConversationRepo) *Conversation {
+	if turns == nil {
+		panic("brain.NewConversation: no conversation store wired")
+	}
 	return &Conversation{turns: turns}
 }
 
@@ -117,7 +123,7 @@ func (r captureRunner) conversationFor(ctx context.Context, in CaptureInput, now
 		conv.Items = append(conv.Items, classify.ConversationItem{Content: u.Content, Title: u.Title, EventAt: u.EventAt, DueAt: u.DueAt})
 	}
 	for _, t := range turns {
-		ct := classify.Turn{Speaker: t.Speaker, Text: t.Text}
+		ct := classify.Turn{At: t.At, Speaker: t.Speaker, Text: t.Text}
 		for _, id := range t.UnitIDs {
 			if pos := slices.Index(shown, id); pos >= 0 {
 				ct.About = append(ct.About, pos+1)

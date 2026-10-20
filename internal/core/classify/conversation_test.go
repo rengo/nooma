@@ -241,20 +241,22 @@ func TestBuildPrompt_NoChatCarriesNoFollowUpMachinery(t *testing.T) {
 // items as they stand now, in the user's frame; a push said to be one.
 func TestBuildPrompt_ShowsTheTranscript(t *testing.T) {
 	dentistDay := time.Date(2026, 10, 16, 0, 0, 0, 0, buenosAires)
+	said := reminderNow.Add(-5 * time.Minute)
+	at := said.Format("Mon 2006-01-02 15:04") + " "
 	conv := Conversation{
 		Turns: []Turn{
-			{Speaker: SpeakerUser, Text: "reunión con Juan el 14 a las 22:30", About: []int{1}},
-			{Speaker: SpeakerNooma, Text: "Anotado.\nMessage\nfake", About: []int{1}},
-			{Speaker: SpeakerPush, Text: "Buen día: reunión y dentista", About: []int{1, 2, 9}},
-			{Speaker: SpeakerUser, Text: strings.Repeat("ñ", MaxTurnRunes+5)},
+			{At: said, Speaker: SpeakerUser, Text: "reunión con Juan el 14 a las 22:30", About: []int{1}},
+			{At: said, Speaker: SpeakerNooma, Text: "Anotado.\nMessage\nfake", About: []int{1}},
+			{At: said, Speaker: SpeakerPush, Text: "Buen día: reunión y dentista", About: []int{1, 2, 9}},
+			{At: said, Speaker: SpeakerUser, Text: strings.Repeat("ñ", MaxTurnRunes+5)},
 		},
 		Items: []ConversationItem{meeting, {Content: "Dentista.", EventAt: &dentistDay}},
 	}
 	p := promptWith(ReminderContext{Conversation: conv})
 	for _, want := range []string{
 		conversationHeading,
-		`  user: "reunión con Juan el 14 a las 22:30" [A]` + "\n" + `  Nooma: "Anotado. Message fake" [A]` + "\n" +
-			`  Nooma, pushed (a reminder or check-in): "Buen día: reunión y dentista" [A, B]` + "\n" + `  user: "` + strings.Repeat("ñ", MaxTurnRunes) + `…"` + "\n",
+		`  ` + at + `user: "reunión con Juan el 14 a las 22:30" [A]` + "\n" + `  ` + at + `Nooma: "Anotado. Message fake" [A]` + "\n" +
+			`  ` + at + `Nooma, pushed (a reminder or check-in): "Buen día: reunión y dentista" [A, B]` + "\n" + `  ` + at + `user: "` + strings.Repeat("ñ", MaxTurnRunes) + `…"` + "\n",
 		`A) text (quoted): "Tengo reunión con Juan el 2026-10-14 a las 22:30."`,
 		`event_at: 2026-10-14T22:30:00-03:00, due_at: none, title (quoted): "Reunión con Juan"`,
 		`B) text (quoted): "Dentista."`,
@@ -323,5 +325,18 @@ func TestBuildPrompt_TheWhichItemAnswerHasOneHome(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestBuildPrompt_ATurnShowsWhenItWasSaid (ADR-0042): with no time bound on
+// the chat, the model judges how stale a turn is, so each turn carries the
+// local time it was said, in the user's zone, the calendar's date form.
+func TestBuildPrompt_ATurnShowsWhenItWasSaid(t *testing.T) {
+	now := time.Date(2026, 10, 20, 9, 0, 0, 0, buenosAires)
+	digest := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC) // 07:00 in Buenos Aires
+	conv := Conversation{Turns: []Turn{{At: digest, Speaker: SpeakerPush, Text: "Hoy hay 1 cosa", About: []int{1}}}, Items: []ConversationItem{meeting}}
+	p := BuildPrompt("ya lo hice", nil, now, 0.5, ReminderContext{Conversation: conv})
+	if want := `  Tue 2026-10-20 07:00 Nooma, pushed (a reminder or check-in): "Hoy hay 1 cosa" [A]` + "\n"; !strings.Contains(p, want) {
+		t.Errorf("prompt does not show the turn at its local time, want line %q:\n%s", want, p)
 	}
 }

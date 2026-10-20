@@ -32,9 +32,11 @@ type Conversation struct {
 	Items []ConversationEntry `json:"items,omitempty"`
 }
 
-// ConversationTurn is one turn: speaker is user, nooma or push (a reminder
-// Nooma sent), and about the letters of the items it concerns, if any.
+// ConversationTurn is one turn: when it was said (RFC 3339, at or before the
+// case's now), speaker is user, nooma or push (a reminder Nooma sent), and
+// about the letters of the items it concerns, if any.
 type ConversationTurn struct {
+	At      string   `json:"at"`
 	Speaker string   `json:"speaker"`
 	Text    string   `json:"text"`
 	About   []string `json:"about,omitempty"`

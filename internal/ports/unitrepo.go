@@ -98,6 +98,12 @@ type UnitRepo interface {
 	// methods, only a correction's applyWithPreImage calls it (ADR-0016).
 	UpdateReminderLeads(ctx context.Context, id string, minutes []int, at time.Time) error
 
+	// SetRemindMe marks id as a unit the user asked to be reminded of, and
+	// UpdatedAt as at, leaving every other column unchanged: a follow-up that
+	// asks to be reminded of an item it names (ADR-0043). It returns
+	// ErrUnitNotFound if no unit with id exists.
+	SetRemindMe(ctx context.Context, id string, at time.Time) error
+
 	// SetStatus moves id from status from to status to, recording at.
 	// from is an optimistic-concurrency precondition, not a validation —
 	// the legality of the transition is unit.ValidateTransition's

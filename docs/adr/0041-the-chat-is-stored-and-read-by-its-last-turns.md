@@ -7,7 +7,8 @@
   chat kept in memory only, and the 30-minute bound on it), and its "A restart forgets the
   chat" cost; [ADR-0040](0040-a-done-follow-up-closes-the-task.md)'s cost "a done past the
   conversation window closes nothing": an answer hours after the digest is read with it shown
-- **Superseded by**: —
+- **Superseded by**: [ADR-0042](0042-a-turn-shows-when-it-was-said.md), the cost "the prompt
+  shows each turn's text, not when it was said" (each turn now shows its local time)
 - **Enables**: M4
 
 ## Context

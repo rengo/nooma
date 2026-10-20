@@ -4,11 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, el jueves",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-15 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-15T10:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-15 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"event_at\":\"2026-10-15T10:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T10:05:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-14T10:00:00-03:00",
         "speaker": "push",
         "text": "Recordatorio: Dentista — vie 16 oct, 10:00",
         "about": [
@@ -29,5 +30,5 @@
     "referent": "A",
     "event_at": "2026-10-15T10:00:00-03:00"
   },
-  "prompt_sha256": "0da1c8966ac03339cd1f08928e017c2043123b916596ae9ed1d79d2bc8863af8"
+  "prompt_sha256": "e7c52d68a9184366170710d2864572110a3ce7e2b5f7d1e7f27d4292ed9328a2"
 }

@@ -67,21 +67,10 @@ func RenderReply(result brain.CaptureResult) string {
 			// When it rings every time, not its next ring alone (ADR-0031 point 7).
 			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)
 		default:
-			fires := append([]time.Time{result.Armed.FireAt}, result.Armed.Later...)
-			if a := result.Armed.About; result.Armed.DayOnly || (a.Hour() == 0 && a.Minute() == 0 && a.Second() == 0 && a.Nanosecond() == 0) {
-				// Every ring is named: an event on a day alone is also
-				// reminded the day before (ADR-0029, ADR-0031 point 2). An
-				// unasked one is a local midnight, how a bare date is stored
-				// (ADR-0029 point 2): its date alone is named, not "00:00".
-				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), say.DayLeads(result.Armed.Immediate, result.At, result.Armed.About, fires...))
+			if dayOnly(result.Armed) {
+				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), askedLeads(say, result))
 			}
-			// Immediate is the plan's own fact, never re-derived from the
-			// two instants: subtracting them gives a true duration and a
-			// false promise — 41 hours reads as "the day before" for a
-			// reminder that arrives at once.
-			// Every reminder is named: a timed event has two (ADR-0029).
-			lead := say.Leads(result.Armed.Immediate, result.At, result.Armed.About, fires...)
-			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), lead)
+			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), askedLeads(say, result))
 		}
 
 	case brain.OutcomeArmRefused:
@@ -155,6 +144,14 @@ func RenderReply(result brain.CaptureResult) string {
 		default:
 			said = append(said, fmt.Sprintf(say.RemindYou, say.ExactLeads(c.About, c.Reminders...)))
 		}
+		// A remind-me that moved its item names the reminder it asked for,
+		// or why none was set (ADR-0043).
+		switch {
+		case result.Armed != nil:
+			said = append(said, fmt.Sprintf(say.RemindYou, askedLeads(say, result)))
+		case result.ArmRefused != nil:
+			said = append(said, fmt.Sprintf(say.NotedNotSet, refusalReason(say, result.ArmRefused)))
+		}
 		if len(said) == 0 {
 			return say.Corrected
 		}
@@ -172,6 +169,31 @@ func RenderReply(result brain.CaptureResult) string {
 		return say.AskWhichOne
 	}
 	return ""
+}
+
+// dayOnly reports whether an armed reminder is about a day alone: asked so,
+// or an unasked one at local midnight, how a bare date is stored (ADR-0029
+// point 2), whose date alone is named, not "00:00".
+func dayOnly(armed *brain.Armed) bool {
+	a := armed.About
+	return armed.DayOnly || (a.Hour() == 0 && a.Minute() == 0 && a.Second() == 0 && a.Nanosecond() == 0)
+}
+
+// askedLeads names when an armed one-shot reminder rings, every ring of it.
+// An event on a day alone is also reminded the day before (ADR-0029,
+// ADR-0031 point 2).
+//
+// Immediate is the plan's own fact, never re-derived from the two instants:
+// subtracting them gives a true duration and a false promise — 41 hours reads
+// as "the day before" for a reminder that arrives at once. Every reminder is
+// named: a timed event has two (ADR-0029).
+func askedLeads(say phrase.Set, result brain.CaptureResult) string {
+	a := result.Armed
+	fires := append([]time.Time{a.FireAt}, a.Later...)
+	if dayOnly(a) {
+		return say.DayLeads(a.Immediate, result.At, a.About, fires...)
+	}
+	return say.Leads(a.Immediate, result.At, a.About, fires...)
 }
 
 // refusalReason renders why nothing was scheduled, in the person's
