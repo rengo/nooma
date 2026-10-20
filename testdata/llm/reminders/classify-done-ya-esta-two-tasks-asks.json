@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya está",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.2,\"decay_rate\":0.1,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte o a pagar la tarjeta?\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -36,5 +35,6 @@
     "task_checkin_outcome": "done",
     "referent": "unclear"
   },
-  "prompt_sha256": "42138dadf6babc243ce895e1aae5ffa07ccadd53ca3e3fa2dd604c255e9bb30e"
+  "known_misread": "referent is absent where unclear and a question are expected: after a digest of two tasks the model names no item. Safe as read: beside a chat a done that names no item closes nothing, is recorded capture.checkin.unmatched (TestI43_ACheckInAnswerNamingNoItemClosesNoCheckIn), and the reply says nothing was closed (TestI42_ADoneThatClosesNothingSaysSo); the user is not asked which",
+  "prompt_sha256": "f5e27c1832bfea1bb00b0b3f5435283d06678ce7882d6379d14ed251e13d365e"
 }

@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "A Juan le gusta el café",
   "response": "{\"type\":\"knowledge\",\"normalized_content\":\"A Juan le gusta el café.\",\"weight\":0.7,\"decay_rate\":0.02,\"language\":\"es\"}",
-  "record": true,
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -37,5 +36,5 @@
   "expect": {
     "type": "knowledge"
   },
-  "prompt_sha256": "655a747d4b78f62b0b909aeb031189959331470dc34260e8edc35282e6835a4e"
+  "prompt_sha256": "2a6c10b7ce335c83f57a0da0166bab3c9b4d7527b6f84328d8f6d9456cd3ff1e"
 }

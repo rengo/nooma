@@ -1,8 +1,10 @@
 {
   "id": "classify-followup-tambien-una-hora-antes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "también 1 hora antes",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-21 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":true}",
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [
@@ -38,5 +40,6 @@
       60
     ],
     "reminder_leads_add": true
-  }
+  },
+  "prompt_sha256": "8a046b9022e345def2a5045ff935ffb3d0e7c14b40c45a48b287b3dcd3f85038"
 }

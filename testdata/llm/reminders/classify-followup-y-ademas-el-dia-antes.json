@@ -1,8 +1,10 @@
 {
   "id": "classify-followup-y-ademas-el-dia-antes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "y además el día antes",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Cena con Ana el 2026-10-23 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[1440],\"reminder_leads_add\":true}",
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [
@@ -38,5 +40,7 @@
       1440
     ],
     "reminder_leads_add": true
-  }
+  },
+  "known_misread": "remind_request is true: the model reads the added lead as a request to be reminded, as in classify-followup-dos-horas-antes. Harmless as read: leads win (ADR-0043), so a bound reading carrying reminder_leads_minutes takes the correction path and its remind_request is ignored (TestI40_LeadsWinOverAStrayRemindRequest); the lead and reminder_leads_add come back as expected",
+  "prompt_sha256": "ac9dcbe7fade5783e7871a7fedcb089bca1a98ca85a7a716bb1ca886fcda9dfd"
 }

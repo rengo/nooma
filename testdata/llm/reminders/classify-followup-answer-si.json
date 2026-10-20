@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Tengo reunión con Juan el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Reunión con Juan\",\"referent\":\"B\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Tengo reunión con Juan el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Reunión con Juan\",\"referent\":\"B\",\"relation_outcome\":\"confirmed\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -47,5 +46,6 @@
     "referent": "B",
     "event_at": "2026-10-14T08:00:00-03:00"
   },
-  "prompt_sha256": "ab274c2a4e0de4413be819f8c874efa5b432ab1b158c289bc27f5b18be8d44be"
+  "known_misread": "relation_outcome is confirmed: the model reads the answer to the which-item question as also confirming a relation. Harmless as read: a bound follow-up answers no relation question, whatever outcome its reading carries (TestI40_ABoundFollowUpAnswersNoRelationQuestion)",
+  "prompt_sha256": "0ce2377c6857085dd21a913ad6180fa932c0b48ed77ece63e10b67b4eb2c9f0a"
 }
