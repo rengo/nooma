@@ -5,10 +5,12 @@
   "task": "classify",
   "message": "make it 9am",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Call with Ana on 2026-10-15 at 09:00.\",\"weight\":0.85,\"decay_rate\":0.02,\"language\":\"en\",\"event_at\":\"2026-10-15T09:00:00-03:00\",\"title\":\"Call with Ana\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-14T18:00:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-14T17:55:00-03:00",
         "speaker": "user",
         "text": "Call with Ana tomorrow at 5pm",
         "about": [
@@ -16,6 +18,7 @@
         ]
       },
       {
+        "at": "2026-10-14T17:55:00-03:00",
         "speaker": "nooma",
         "text": "Noted for Thu Oct 15, 17:00. I'll remind you the day before and a few hours before.",
         "about": [

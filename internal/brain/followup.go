@@ -117,7 +117,7 @@ func (r captureRunner) conversationFor(ctx context.Context, in CaptureInput, now
 		conv.Items = append(conv.Items, classify.ConversationItem{Content: u.Content, Title: u.Title, EventAt: u.EventAt, DueAt: u.DueAt})
 	}
 	for _, t := range turns {
-		ct := classify.Turn{Speaker: t.Speaker, Text: t.Text}
+		ct := classify.Turn{At: t.At, Speaker: t.Speaker, Text: t.Text}
 		for _, id := range t.UnitIDs {
 			if pos := slices.Index(shown, id); pos >= 0 {
 				ct.About = append(ct.About, pos+1)

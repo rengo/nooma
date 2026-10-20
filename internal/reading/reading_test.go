@@ -358,9 +358,9 @@ func TestReminderMissedCountsOnlyTheReminderFields(t *testing.T) {
 
 var followUpConversation = &llm.Conversation{
 	Turns: []llm.ConversationTurn{
-		{Speaker: "user", Text: "reunión con Juan el 15 a las 22:30", About: []string{"A"}},
-		{Speaker: "nooma", Text: "Anotado.", About: []string{"A"}},
-		{Speaker: "push", Text: "Mañana: dentista", About: []string{"B"}},
+		{At: "2026-10-14T21:00:00-03:00", Speaker: "user", Text: "reunión con Juan el 15 a las 22:30", About: []string{"A"}},
+		{At: "2026-10-14T21:00:00-03:00", Speaker: "nooma", Text: "Anotado.", About: []string{"A"}},
+		{At: "2026-10-15T09:00:00-03:00", Speaker: "push", Text: "Mañana: dentista", About: []string{"B"}},
 	},
 	Items: []llm.ConversationEntry{
 		{Content: "Tengo reunión con Juan el 2026-10-15 a las 22:30.", Title: "Reunión con Juan", EventAt: "2026-10-15T22:30:00-03:00"},
@@ -381,12 +381,13 @@ func TestPromptCarriesTheConversation(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, testNow)
 	meeting := time.Date(2026, 10, 15, 22, 30, 0, 0, now.Location())
 	friday := time.Date(2026, 10, 16, 0, 0, 0, 0, now.Location())
+	told, pushed := time.Date(2026, 10, 14, 21, 0, 0, 0, now.Location()), time.Date(2026, 10, 15, 9, 0, 0, 0, now.Location())
 	want := classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, classify.ReminderContext{
 		Conversation: classify.Conversation{
 			Turns: []classify.Turn{
-				{Speaker: classify.SpeakerUser, Text: "reunión con Juan el 15 a las 22:30", About: []int{1}},
-				{Speaker: classify.SpeakerNooma, Text: "Anotado.", About: []int{1}},
-				{Speaker: classify.SpeakerPush, Text: "Mañana: dentista", About: []int{2}},
+				{At: told, Speaker: classify.SpeakerUser, Text: "reunión con Juan el 15 a las 22:30", About: []int{1}},
+				{At: told, Speaker: classify.SpeakerNooma, Text: "Anotado.", About: []int{1}},
+				{At: pushed, Speaker: classify.SpeakerPush, Text: "Mañana: dentista", About: []int{2}},
 			},
 			Items: []classify.ConversationItem{
 				{Content: "Tengo reunión con Juan el 2026-10-15 a las 22:30.", Title: "Reunión con Juan", EventAt: &meeting},
@@ -490,6 +491,8 @@ func TestValidateCaseChecksTheConversation(t *testing.T) {
 		"a turn tagging no item":    func(c *llm.Case) { c.Conversation.Turns[0].About = []string{"C"} },
 		"an unknown speaker":        func(c *llm.Case) { c.Conversation.Turns[0].Speaker = "bot" },
 		"a turn with no text":       func(c *llm.Case) { c.Conversation.Turns[1].Text = "" },
+		"a turn with no time":       func(c *llm.Case) { c.Conversation.Turns[0].At = "" },
+		"a turn after now":          func(c *llm.Case) { c.Conversation.Turns[2].At = "2026-10-15T09:31:00-03:00" },
 		"too many turns":            func(c *llm.Case) { c.Conversation.Turns = make([]llm.ConversationTurn, classify.ConversationTurns+1) },
 		"a conversation and no now": func(c *llm.Case) { c.Now = "" },
 	} {

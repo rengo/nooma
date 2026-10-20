@@ -5,10 +5,12 @@
   "task": "classify",
   "message": "Es a las 08:00.",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Tengo reunión con Juan el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Reunión con Juan\",\"referent\":\"A\"}",
+  "record": true,
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-13T21:05:00-03:00",
         "speaker": "user",
         "text": "Tengo reunión con Juan mañana a las 22:30",
         "about": [
@@ -16,6 +18,7 @@
         ]
       },
       {
+        "at": "2026-10-13T21:05:00-03:00",
         "speaker": "nooma",
         "text": "Anotado para el mié 14 oct, 22:30. Te aviso el día anterior y unas horas antes.",
         "about": [

@@ -139,7 +139,7 @@ func productionPrompt(t *testing.T, c llm.Case) string {
 					}
 				}
 			}
-			conv.Add(ctx, chat, brain.Turn{At: now, Speaker: classify.Speaker(turn.Speaker), Text: turn.Text, UnitIDs: about})
+			conv.Add(ctx, chat, brain.Turn{At: *caseInstant(t, turn.At, now), Speaker: classify.Speaker(turn.Speaker), Text: turn.Text, UnitIDs: about})
 		}
 	}
 	model := &scriptedLLM{response: `{"type":"chitchat","normalized_content":"x","weight":0.1,"decay_rate":0.3}`}

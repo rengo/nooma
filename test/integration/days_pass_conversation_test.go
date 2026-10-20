@@ -418,7 +418,7 @@ func dpScenarios() []dpScenario {
 				// (ADR-0041). The reading names no date, so said later it is
 				// the one the model gave.
 				{at: dpAt(10, 20, 9, 0), id: "classify-done-ya-lo-hice-after-digest", late: true,
-					shows: `Nooma, pushed (a reminder or check-in): "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct" [A]`},
+					shows: `Tue 2026-10-20 07:00 Nooma, pushed (a reminder or check-in): "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct" [A]`},
 			},
 		},
 		{

@@ -80,8 +80,12 @@ func PromptAt(c llm.Case, now time.Time) string {
 	}
 	if conv := c.Conversation; conv != nil {
 		for _, t := range conv.Turns {
+			var at time.Time
+			if when := instantOf(t.At, now); when != nil {
+				at = *when
+			}
 			rc.Conversation.Turns = append(rc.Conversation.Turns, classify.Turn{
-				Speaker: classify.Speaker(t.Speaker), Text: t.Text, About: positionsOf(t.About),
+				At: at, Speaker: classify.Speaker(t.Speaker), Text: t.Text, About: positionsOf(t.About),
 			})
 		}
 		for _, e := range conv.Items {
@@ -362,6 +366,12 @@ func validateConversation(c llm.Case) []error {
 		for i, t := range conv.Turns {
 			if !slices.Contains(strs(classify.AllSpeakers()), t.Speaker) || t.Text == "" {
 				errs = append(errs, fmt.Errorf("turn %d needs a speaker of %v and a text", i+1, classify.AllSpeakers()))
+			}
+			// The prompt shows when a turn was said (ADR-0042), so a case says it.
+			if at, err := time.Parse(time.RFC3339, t.At); err != nil {
+				errs = append(errs, fmt.Errorf("turn %d needs an RFC 3339 at: %q", i+1, t.At))
+			} else if now, err := time.Parse(time.RFC3339, c.Now); err == nil && at.After(now) {
+				errs = append(errs, fmt.Errorf("turn %d is said at %s, after the case's now", i+1, t.At))
 			}
 			for _, l := range t.About {
 				if positionOf(l) == 0 || positionOf(l) > items {

@@ -39,6 +39,7 @@ func AllSpeakers() []Speaker { return []Speaker{SpeakerUser, SpeakerNooma, Speak
 // positions, in Conversation.Items, of the items the turn concerns: none for
 // a remark, one for a capture, several for a digest.
 type Turn struct {
+	At      time.Time
 	Speaker Speaker
 	Text    string
 	About   []int
@@ -236,7 +237,10 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  item's current text and answers no event_at, due_at or title.\n")
 
 	b.WriteString("\n" + conversationHeading + "\n")
-	b.WriteString("  The chat just before the message, oldest first. A turn about something Nooma\n")
+	// **The last turns, not the moment before** (ADR-0042): the chat has no
+	// time bound, so a turn may be days old, and its time says so.
+	b.WriteString("  The latest turns of this chat, oldest first, each at the local time it was\n")
+	b.WriteString("  said; the oldest may be days before the message. A turn about something Nooma\n")
 	b.WriteString("  holds is tagged with its letter; the items follow, as they stand now.\n")
 	for _, t := range conv.Turns {
 		var tags []string
@@ -245,7 +249,9 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 				tags = append(tags, ReferentLetter(pos))
 			}
 		}
-		b.WriteString("  " + speakerLabel(t.Speaker) + ": " + strconv.Quote(clipTurn(t.Text)))
+		// **When, so the model can judge how stale a turn is** (ADR-0042):
+		// the chat has no time bound (ADR-0041).
+		b.WriteString("  " + t.At.In(now.Location()).Format(turnTimeLayout) + " " + speakerLabel(t.Speaker) + ": " + strconv.Quote(clipTurn(t.Text)))
 		if len(tags) > 0 {
 			b.WriteString(" [" + strings.Join(tags, ", ") + "]")
 		}
@@ -286,6 +292,10 @@ func clipTurn(s string) string {
 	}
 	return s
 }
+
+// turnTimeLayout is a turn's local time: the calendar's date form, with its
+// weekday and the time of day.
+const turnTimeLayout = "Mon 2006-01-02 15:04"
 
 const (
 	followUpsHeading    = "Follow-ups"

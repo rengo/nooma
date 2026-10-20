@@ -499,7 +499,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      without it, never failing what was already said. When the turns name more live units than
      there are letters, the ones the newest turns name are lettered, so the exchange a follow-up
      answers can always be bound. The prompt shows the
-     turns, oldest first, each clipped to `max_turn_runes` and tagged with the letter of every item
+     turns, oldest first, each at the local time it was said, in the user's zone
+     (`Tue 2026-10-20 07:00`, [ADR-0042](adr/0042-a-turn-shows-when-it-was-said.md)), so the model
+     judges how stale a turn is, each clipped to `max_turn_runes` and tagged with the letter of every item
      it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
      from `A` in the order they first appear. Three optional fields
      come back, each degrading alone (I14): `referent`, the letter of the listed item a

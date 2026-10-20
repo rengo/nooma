@@ -5,10 +5,12 @@
   "task": "classify",
   "message": "listo, ya renové el pasaporte",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya renové el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"A\"}",
+  "record": true,
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
       {
+        "at": "2026-10-20T07:00:00-03:00",
         "speaker": "push",
         "text": "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct",
         "about": [
