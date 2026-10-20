@@ -320,6 +320,11 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			if err != nil {
 				return CaptureResult{}, fmt.Errorf("capture: follow-up: %w", err)
 			}
+			// **A remind-me names what it reminds of** (ADR-0043):
+			// "recordámelo" right after a task asks for a reminder of it.
+			if c.RemindRequest != nil && *c.RemindRequest {
+				return r.remindReferent(ctx, u, now)
+			}
 			explicit = &u
 		}
 	}

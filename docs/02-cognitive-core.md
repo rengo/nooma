@@ -749,6 +749,15 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        naming the items shown). There is no pending-question state: the user's answer arrives with
        that exchange in the conversation and is read as an ordinary correction with a referent.
        Only a chat that names no listed item reaches the recall gate.
+     - **A remind-me reminds of the item it names** (I40,
+       [ADR-0043](adr/0043-a-remind-me-follow-up-reminds-of-the-item.md)). "recordámelo" right
+       after a task binds that task as above, and a bound reading with `remind_request: true` is
+       not a correction: the unit is marked asked (`remind_me`) and armed as an asked capture is
+       (ADR-0031), on the unit as it stands. No unit is stored and nothing else on it is
+       rewritten. Only the asked reminder is armed, so an event's own leads are never armed twice,
+       and one already armed at the same instant is not armed again. The answer is the asked
+       reminder's ("Te aviso ese día a las 09:00."); an item with no date is still marked asked,
+       and the answer says no reminder was set and why, with a `capture.arm.refused` row.
      - **A done closes the task it names** (I42,
        [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md); the client's ruling of
        2026-10-19). "ya lo hice" after the digest named a task binds that task as above, and

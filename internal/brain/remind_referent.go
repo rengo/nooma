@@ -1,0 +1,99 @@
+package brain
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
+)
+
+// remindReferent makes u, the item a chat follow-up named, an asked reminder
+// (ADR-0043): "recordámelo" right after a task. It is armed as a capture that
+// asked arms it (ADR-0031), on the unit it is, read as it stands: nothing is
+// stored and nothing about the unit is rewritten but the asked mark. Only the
+// asked reminder is armed, so an event's own leads are never armed twice, and
+// an asked reminder already armed at the same instant is not armed again. An
+// item with no date is still marked asked, and the answer says no reminder
+// was set and why, as an asked capture's does.
+func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, error) {
+	c := asCapture(u, now)
+	plans, armable := prospection.Arm(c, true, reminderPrefs(ctx, r.config), now)
+	if !u.RemindMe {
+		if err := r.units.SetRemindMe(ctx, u.ID, now); err != nil {
+			return CaptureResult{}, fmt.Errorf("capture: mark unit %q asked: %w", u.ID, err)
+		}
+	}
+	armed, err := r.triggers.ArmedForUnit(ctx, u.ID)
+	if err != nil {
+		return CaptureResult{}, fmt.Errorf("capture: read reminders of unit %q: %w", u.ID, err)
+	}
+	var asked []prospection.Plan
+	var already *prospection.Plan
+	for _, p := range plans {
+		if !armable || !p.Asked {
+			continue
+		}
+		if armedAt(armed, p.FireAt) {
+			already = &p
+			continue
+		}
+		asked = append(asked, p)
+	}
+	switch {
+	case len(asked) > 0:
+		res, err := r.armAll(ctx, c, asked, now, &u.ID)
+		if err != nil {
+			return CaptureResult{}, err
+		}
+		res.UnitID = u.ID
+		return res, nil
+	case already != nil:
+		p := *already
+		return CaptureResult{Outcome: OutcomeArmed, UnitID: u.ID, Armed: &Armed{What: p.What, FireAt: p.FireAt, About: p.About,
+			Immediate: p.Immediate, DayOnly: p.DayOnly, Rule: p.Rule, Anchor: p.Anchor}}, nil
+	}
+	why := plans[0].Why
+	if err := r.recordOrphanDecision(ctx, ports.ActionCaptureArmRefused, refusalMessage(why), now, struct {
+		Why    string `json:"why"`
+		UnitID string `json:"unit_id"`
+		Asked  bool   `json:"asked"`
+	}{Why: string(why), UnitID: u.ID, Asked: true}); err != nil {
+		return CaptureResult{}, err
+	}
+	return CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, ArmRefused: &ArmRefused{Why: why, Message: refusalMessage(why)}}, nil
+}
+
+// asCapture is u read as the capture that told it, for prospection.Arm: its
+// kind, its instants, and an instant at local midnight read as a day alone,
+// as the prompt shows it.
+func asCapture(u unit.Unit, now time.Time) classify.Classification {
+	kind := classify.Kind(u.Type)
+	c := classify.Classification{Kind: &kind, EventAt: u.EventAt, DueAt: u.DueAt, NormalizedContent: &u.Content,
+		EventAtDayOnly: atMidnight(u.EventAt, now), DueAtDayOnly: atMidnight(u.DueAt, now)}
+	if u.Title != "" {
+		c.Title = &u.Title
+	}
+	return c
+}
+
+func atMidnight(t *time.Time, now time.Time) bool {
+	if t == nil {
+		return false
+	}
+	h, m, s := t.In(now.Location()).Clock()
+	return h == 0 && m == 0 && s == 0 && t.Nanosecond() == 0
+}
+
+// armedAt reports whether an asked reminder is already armed at fireAt.
+func armedAt(armed []ports.DueTrigger, fireAt time.Time) bool {
+	for _, t := range armed {
+		if t.Payload.Asked && t.FireAt.Equal(fireAt) {
+			return true
+		}
+	}
+	return false
+}

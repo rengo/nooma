@@ -1351,7 +1351,9 @@ func RunTitle(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 }
 
 // RunRemindMe pins the flag an asked unit carries (spec R1): it is stored at
-// Create and read back, and a unit that was not asked for stays false.
+// Create and read back, a unit that was not asked for stays false, and
+// SetRemindMe marks one asked later (ADR-0043), touching nothing else but
+// updated_at.
 func RunRemindMe(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 	t.Helper()
 	ctx := context.Background()
@@ -1367,6 +1369,22 @@ func RunRemindMe(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 		if got, err := repo.ByID(ctx, id); err != nil || got.RemindMe != want {
 			t.Errorf("ByID(%s).RemindMe = %v, %v; want %v", id, got.RemindMe, err, want)
 		}
+	}
+	before, err := repo.ByID(ctx, "plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := before.UpdatedAt.Add(time.Hour)
+	if err := repo.SetRemindMe(ctx, "plain", at); err != nil {
+		t.Fatalf("SetRemindMe: %v", err)
+	}
+	want := before
+	want.RemindMe, want.UpdatedAt = true, at
+	if got, err := repo.ByID(ctx, "plain"); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("after SetRemindMe: %+v, %v; want only RemindMe and UpdatedAt changed: %+v", got, err, want)
+	}
+	if err := repo.SetRemindMe(ctx, "does-not-exist", at); !errors.Is(err, ports.ErrUnitNotFound) {
+		t.Errorf("SetRemindMe on a missing id: %v, want ErrUnitNotFound", err)
 	}
 }
 

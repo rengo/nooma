@@ -26,8 +26,8 @@
     ]
   },
   "expect": {
-    "remind_request": true
+    "remind_request": true,
+    "referent": "A"
   },
-  "known_misread": "referent is A: the model reads \"recordámelo\" as a correction of the task it follows. Harmful as read: a bound follow-up takes the correction path, which returns before remind_request is read, so no reminder is armed; remind_request itself is read right",
   "prompt_sha256": "8c390368759ca727cd0112d815a37802f13ef82c3f0c184f71650207b7143de6"
 }
