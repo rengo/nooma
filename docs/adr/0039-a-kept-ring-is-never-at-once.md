@@ -6,7 +6,8 @@
 - **Supersedes**: [ADR-0037](0037-no-default-ring-on-the-day-an-event-is-told.md) point 2, in
   part: the reminder kept so an event is never left without one is never one sent at once; and,
   on that day only, ADR-0029 point 3's at-once reminder and ADR-0030's lead pulled to now.
-- **Superseded by**: —
+- **Superseded by**: [ADR-0045](0045-a-message-names-its-own-leads.md), point 3 in part (an
+  event's own leads are never sent at once on the told day either)
 - **Enables**: M4
 
 ## Context

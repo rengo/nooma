@@ -5,7 +5,8 @@
 - **Date**: 2026-10-19
 - **Supersedes**: [ADR-0029](0029-event-reminders-follow-the-users-leads.md), points 1 and 6 in
   part (an event with its own leads is reminded at those, and a preference change leaves them)
-- **Superseded by**: —
+- **Superseded by**: [ADR-0045](0045-a-message-names-its-own-leads.md), points 1 and 2 in part
+  (a capture writes the leads it names, and a follow-up may add to them)
 - **Enables**: M4
 
 ## Context
