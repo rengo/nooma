@@ -74,7 +74,7 @@ func TestCheckInResolution_CoversEveryNudgeOutcome(t *testing.T) {
 
 		triggers := &openCheckIns{open: []ports.DueTrigger{{ID: "trg-1"}}}
 		resolved, err := checkInRunner(triggers, &recordingLog{}).
-			resolveCheckIn(context.Background(), nudge(o), checkInNow)
+			resolveCheckIn(context.Background(), nudge(o), nil, checkInNow)
 		if err != nil {
 			t.Fatalf("resolveCheckIn(%q): %v", o, err)
 		}
@@ -109,7 +109,7 @@ func TestCheckInResolution_CoversEveryTaskOutcome(t *testing.T) {
 
 		triggers := &openCheckIns{open: []ports.DueTrigger{{ID: "trg-1"}}}
 		resolved, err := checkInRunner(triggers, &recordingLog{}).
-			resolveCheckIn(context.Background(), taskCheckin(o), checkInNow)
+			resolveCheckIn(context.Background(), taskCheckin(o), nil, checkInNow)
 		if err != nil {
 			t.Fatalf("resolveCheckIn(%q): %v", o, err)
 		}
@@ -134,7 +134,7 @@ func TestCheckIn_AnAnswerWithNothingOpenIsRecordedAndChangesNothing(t *testing.T
 	log := &recordingLog{}
 
 	resolved, err := checkInRunner(triggers, log).
-		resolveCheckIn(context.Background(), nudge(classify.NudgeOutcomeEngaged), checkInNow)
+		resolveCheckIn(context.Background(), nudge(classify.NudgeOutcomeEngaged), nil, checkInNow)
 	if err != nil {
 		t.Fatalf("resolveCheckIn: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestCheckIn_TheMostRecentIsChosenAndTheChoiceIsRecorded(t *testing.T) {
 	log := &recordingLog{}
 
 	if _, err := checkInRunner(triggers, log).
-		resolveCheckIn(context.Background(), nudge(classify.NudgeOutcomeEngaged), checkInNow); err != nil {
+		resolveCheckIn(context.Background(), nudge(classify.NudgeOutcomeEngaged), nil, checkInNow); err != nil {
 		t.Fatalf("resolveCheckIn: %v", err)
 	}
 
@@ -183,7 +183,7 @@ func TestCheckIn_AClassificationWithNoOutcomeTouchesNothing(t *testing.T) {
 	log := &recordingLog{}
 
 	resolved, err := checkInRunner(triggers, log).
-		resolveCheckIn(context.Background(), classify.Classification{}, checkInNow)
+		resolveCheckIn(context.Background(), classify.Classification{}, nil, checkInNow)
 	if err != nil {
 		t.Fatalf("resolveCheckIn: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestSnoozeRecordsWhichCheckinItPutOff(t *testing.T) {
 	log := &recordingLog{}
 
 	resolved, err := checkInRunner(triggers, log).
-		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeSnooze), checkInNow)
+		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeSnooze), nil, checkInNow)
 	if err != nil {
 		t.Fatalf("resolveCheckIn: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestCheckIn_AnAnswerRacingTheDigestIsUnmatchedNotAFailure(t *testing.T) {
 	log := &recordingLog{}
 
 	resolved, err := checkInRunner(triggers, log).
-		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeDone), checkInNow)
+		resolveCheckIn(context.Background(), taskCheckin(classify.TaskCheckinOutcomeDone), nil, checkInNow)
 	if err != nil {
 		t.Fatalf("resolveCheckIn: %v, want the race absorbed", err)
 	}

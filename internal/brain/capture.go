@@ -344,7 +344,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// answer carries an outcome, not a Kind, and "yes, done — and remind
 	// me to call the dentist tomorrow" is one message that both resolves
 	// a nudge and arms a timer.
-	answered, err := r.resolveCheckIn(ctx, c, now)
+	answered, err := r.resolveCheckIn(ctx, c, shown, now)
 	if err != nil {
 		return CaptureResult{}, err
 	}
