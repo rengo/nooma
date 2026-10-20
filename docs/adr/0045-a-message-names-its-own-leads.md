@@ -64,8 +64,10 @@ as its reversal criteria.
 4. **With no chat too.** A chat's first message, read with no chat shown, reads its leads (the
    client's ruling, 2026-10-20, after "dentista mañana a las 10, avisame 1 hora antes" as a first
    message armed 07:00 and 09:45). The CLI and the API capture through the same reader.
-5. **A done that could be about more than one listed item asks which.** Follow-ups says so in
-   words: "ya está" after a digest of two tasks named none, and Nooma answered "No encontré nada
+5. **A done that could be about more than one listed item asks which**, `referent: unclear`
+   and the question, still with `task_checkin_outcome: done`, and a message that only names
+   leads, with nothing saying they come in addition, replaces (`reminder_leads_add` false).
+   Follow-ups says both in words: "ya está" after a digest of two tasks named none, and Nooma answered "No encontré nada
    pendiente para cerrar." while both were pending.
 
 ## Consequences

@@ -257,6 +257,8 @@ func TestBuildPrompt_AMessageAsksForItsOwnLeads(t *testing.T) {
 		"Beside a referent, reminder_leads_minutes says when to be reminded of that listed item.",
 		"reminder_leads_add only beside a referent and reminder_leads_minutes: true when the message adds those leads to the reminders the item already has",
 		"false or left out when they are all the reminders the user wants for it, which replace the ones it has",
+		// Review on #383: "avisame 2 horas antes" came back adding.
+		"A message that only names leads, with nothing saying they come in addition, names them all: false (\"avisame 2 horas antes\")",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("Follow-ups never says %q:\n%s", want, p)
@@ -275,7 +277,7 @@ func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 		"A message that says a listed item is done answers task_checkin_outcome done and that item's referent: Nooma closes it.",
 		// Review on #383: "ya está" after a digest of two tasks named none,
 		// and Nooma said there was nothing to close.
-		"When the message could be about more than one listed item and does not say which, referent \"unclear\" and the clarifying_question: Nooma asks.",
+		"When the message could be about more than one listed item and does not say which, referent \"unclear\" and the clarifying_question, still with task_checkin_outcome done: Nooma asks.",
 		"A short reply to a reminder, a check-in or a nudge Nooma pushed that only says it is done, agrees or declines is not a correction",
 	} {
 		if !strings.Contains(p, want) {

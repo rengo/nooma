@@ -165,7 +165,38 @@ func Replay(c llm.Case, response string) error {
 	case c.KnownMisread == "" && len(misses) > 0:
 		return fmt.Errorf("case %s: misread %s", c.ID, strings.Join(misses, ", "))
 	}
+	// A mark covers only the fields it names (review on #383): one set for a
+	// stray remind_request hid a misread of reminder_leads_add, the field the
+	// case exists to test.
+	var hidden []string
+	for _, m := range misses {
+		if !namesField(c.KnownMisread, m) {
+			hidden = append(hidden, m)
+		}
+	}
+	if len(hidden) > 0 {
+		return fmt.Errorf("case %s: misread %s, which its known_misread does not name", c.ID, strings.Join(hidden, ", "))
+	}
 	return nil
+}
+
+// namesField reports whether mark names field as a word of its own, so
+// remind_request is not named by remind_request_extra.
+func namesField(mark, field string) bool {
+	word := func(b byte) bool {
+		return b == '_' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
+	}
+	for i := 0; ; {
+		j := strings.Index(mark[i:], field)
+		if j < 0 {
+			return false
+		}
+		start, end := i+j, i+j+len(field)
+		if (start == 0 || !word(mark[start-1])) && (end == len(mark) || !word(mark[end])) {
+			return true
+		}
+		i = start + 1
+	}
 }
 
 // Check names the fields of cls that are not what c.Expect says, in a fixed

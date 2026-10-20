@@ -219,7 +219,11 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  reminder_leads_add   only beside a referent and reminder_leads_minutes: true when\n")
 	b.WriteString("                       the message adds those leads to the reminders the item\n")
 	b.WriteString("                       already has; false or left out when they are all the\n")
-	b.WriteString("                       reminders the user wants for it, which replace the ones it has\n")
+	b.WriteString("                       reminders the user wants for it, which replace the ones it has.\n")
+	// Review on #383: "avisame 2 horas antes" came back adding.
+	b.WriteString("                       A message that only names leads, with nothing saying they\n")
+	b.WriteString("                       come in addition, names them all: false (\"avisame 2 horas\n")
+	b.WriteString("                       antes\")\n")
 	b.WriteString("  A follow-up that changes a listed item (a new time, a new day, a different\n")
 	b.WriteString("  detail, even with no subject named in it) is a correction of that item, not a\n")
 	b.WriteString("  new memory.\n")
@@ -257,7 +261,8 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	// **Asked, not guessed** (review on #383): "ya está" after a digest of two
 	// tasks named none, and Nooma answered there was nothing to close.
 	b.WriteString("  When the message could be about more than one listed item and does not say\n")
-	b.WriteString("  which, referent \"" + ReferentUnclear + "\" and the clarifying_question: Nooma asks.\n")
+	b.WriteString("  which, referent \"" + ReferentUnclear + "\" and the clarifying_question, still with\n")
+	b.WriteString("  task_checkin_outcome done: Nooma asks.\n")
 	b.WriteString("  When referent names an item, the correction is a PATCH of that item: change\n")
 	b.WriteString("  only what the user speaks about and keep everything else.\n")
 	b.WriteString("  normalized_content is the item's WHOLE corrected text — its current text with\n")

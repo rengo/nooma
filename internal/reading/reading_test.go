@@ -95,7 +95,7 @@ func TestReplayFailsWhenTheReadingIsNotTheExpectedOne(t *testing.T) {
 
 func TestKnownMisreadStaysMarked(t *testing.T) {
 	c := recorded(t, baseCase())
-	c.KnownMisread = "the model reads a recall as a request"
+	c.KnownMisread = "remind_request is absent: the model reads a recall as a request"
 
 	err := Replay(c, readsAsRequest) // it reads as expected: the mark is stale
 	if err == nil || !strings.Contains(err.Error(), "known_misread") {
@@ -103,6 +103,23 @@ func TestKnownMisreadStaysMarked(t *testing.T) {
 	}
 	if err := Replay(c, `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1}`); err != nil {
 		t.Fatalf("a known_misread that still misreads = %v, want nil", err)
+	}
+}
+
+// TestKnownMisreadCoversOnlyTheFieldsItNames (review on #383): a mark set for
+// a stray remind_request hid "avisame 2 horas antes" coming back with
+// reminder_leads_add true, the field the case exists to test. A mark covers a
+// missed field only when it names it.
+func TestKnownMisreadCoversOnlyTheFieldsItNames(t *testing.T) {
+	c := recorded(t, baseCase())
+	c.KnownMisread = "title is absent: harmless"
+	err := Replay(c, `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1}`)
+	if err == nil || !strings.Contains(err.Error(), "remind_request") {
+		t.Fatalf("a mark naming another field = %v, want the remind_request miss reported", err)
+	}
+	c.KnownMisread = "remind_request_extra is not the field"
+	if err := Replay(c, `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1}`); err == nil {
+		t.Fatalf("a mark naming a longer word covered remind_request")
 	}
 }
 

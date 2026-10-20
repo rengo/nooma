@@ -521,7 +521,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      the message asks to be reminded at, in whole positive minutes before what it tells (§7,
      ADR-0045), and beside a referent before that listed item (step 4, ADR-0038). A done that
      could be about more than one listed item and does not say which answers `unclear` with the
-     question, so Nooma asks (ADR-0045). Letters, not numbers, so a bare "2" never reads as an item. The
+     question, still with `task_checkin_outcome: done`, so Nooma asks; and a message that only
+     names leads, nothing saying they come in addition, replaces them (ADR-0045). Letters, not numbers, so a bare "2" never reads as an item. The
      prompt says by meaning what is not a correction: a message that tells something new, asks,
      or only answers something Nooma said other than its question about which item is meant,
      even about the same subject as a listed item, and a short reply to a reminder, check-in or

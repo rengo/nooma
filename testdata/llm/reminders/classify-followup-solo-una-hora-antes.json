@@ -55,7 +55,8 @@
     "referent": "A",
     "reminder_leads_minutes": [
       60
-    ]
+    ],
+    "reminder_leads_add": false
   },
   "prompt_sha256": "da53650c22eedf80de4df3695cc68fb8b6144b6a3191ce4b26fc941bbecf047e"
 }
