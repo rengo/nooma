@@ -4,6 +4,7 @@ package conformance
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +38,7 @@ type i40Fixture struct {
 	triggers  *memrepo.Triggers
 	decisions *memrepo.DecisionLog
 	conv      *brain.Conversation
+	turns     *memrepo.Conversations
 	relations *memrepo.Relations
 	questions *memrepo.PendingQuestions
 }
@@ -61,9 +63,10 @@ func newI40With(t *testing.T, response string, edit func(*unit.Unit)) i40Fixture
 	ctx := context.Background()
 	f := i40Fixture{
 		llm: &scriptedLLM{response: response}, units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(),
-		decisions: memrepo.NewDecisionLog(), conv: brain.NewConversation(),
+		decisions: memrepo.NewDecisionLog(), turns: memrepo.NewConversations(),
 		relations: memrepo.NewRelations(), questions: memrepo.NewPendingQuestions(),
 	}
+	f.conv = brain.NewConversation(f.turns)
 	meeting := unit.Unit{
 		ID: "meeting", Type: unit.TypeEvent, Status: unit.StatusPool, Source: "telegram",
 		Content: "Tengo reunión con Juan el 2026-10-14 a las 22:30.", Title: "Reunión con Juan",
@@ -74,8 +77,8 @@ func newI40With(t *testing.T, response string, edit func(*unit.Unit)) i40Fixture
 		t.Fatal(err)
 	}
 	said := i40Now.Add(-10 * time.Minute)
-	f.conv.Add(i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "reunión con Juan hoy 22:30", UnitIDs: []string{"meeting"}})
-	f.conv.Add(i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerNooma, Text: "Anotado.", UnitIDs: []string{"meeting"}})
+	f.conv.Add(context.Background(), i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "reunión con Juan hoy 22:30", UnitIDs: []string{"meeting"}})
+	f.conv.Add(context.Background(), i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerNooma, Text: "Anotado.", UnitIDs: []string{"meeting"}})
 	embeddings := memrepo.NewEmbeddings()
 	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
 	if err != nil {
@@ -208,29 +211,91 @@ func TestI40_ANewMessageStaysNew(t *testing.T) {
 	}
 }
 
-// TestI40_OnlyARecentChatIsShown: a message with no conversation, or one
-// whose turns are older than the window, is read alone.
-func TestI40_OnlyARecentChatIsShown(t *testing.T) {
-	const knowledge = `{"type":"knowledge","normalized_content":"x","weight":0.6,"decay_rate":0.02}`
-	// Read alone, the prompt carries none of the follow-up machinery.
-	alone := func(p string) bool {
-		return !strings.Contains(p, "Recent conversation") && !strings.Contains(p, "Follow-ups")
-	}
-	f := newI40(t, knowledge)
+// TestI40_AMessageWithNoChatIsReadAlone: a capture from no chat is shown no
+// conversation and none of the follow-up machinery.
+func TestI40_AMessageWithNoChatIsReadAlone(t *testing.T) {
+	f := newI40(t, `{"type":"knowledge","normalized_content":"x","weight":0.6,"decay_rate":0.02}`)
 	if _, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: "x", Channel: "cli"}); err != nil {
 		t.Fatal(err)
 	}
-	if !alone(f.llm.prompts[0]) {
-		t.Errorf("a capture with no conversation was shown one")
+	if p := f.llm.prompts[0]; strings.Contains(p, "Recent conversation") || strings.Contains(p, "Follow-ups") {
+		t.Errorf("a capture with no conversation was shown one:\n%s", p)
 	}
+}
 
-	stale := newI40(t, knowledge)
-	stale.conv.Add("7", brain.Turn{At: i40Now.Add(-classify.ConversationWindow - time.Second), Speaker: classify.SpeakerUser, Text: "old", UnitIDs: []string{"meeting"}})
-	if _, err := stale.svc.Capture(context.Background(), brain.CaptureInput{Text: "x", Channel: "telegram", Conversation: "7"}); err != nil {
+// TestI40_TheChatIsItsLastTurnsAtAnyAge (ADR-0041): what a chat message is
+// read in is the chat's last classify.ConversationTurns turns, however old.
+// A digest pushed two hours ago is still shown; the turn before the last
+// ConversationTurns is not.
+func TestI40_TheChatIsItsLastTurnsAtAnyAge(t *testing.T) {
+	f := newI40(t, `{"type":"chitchat","normalized_content":"x","weight":0.1,"decay_rate":0.3}`)
+	f.conv.Add(context.Background(), "7", brain.Turn{At: i40Now.Add(-3 * time.Hour), Speaker: classify.SpeakerUser, Text: "turn 0"})
+	f.conv.Add(context.Background(), "7", brain.Turn{At: i40Now.Add(-2 * time.Hour), Speaker: classify.SpeakerPush, Text: "Buen día. Hoy: Reunión con Juan", UnitIDs: []string{"meeting"}})
+	for i := 2; i <= classify.ConversationTurns; i++ {
+		f.conv.Add(context.Background(), "7", brain.Turn{At: i40Now.Add(-time.Hour), Speaker: classify.SpeakerUser, Text: "turn " + strconv.Itoa(i)})
+	}
+	if _, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: "ya lo hice", Channel: "telegram", Conversation: "7"}); err != nil {
 		t.Fatal(err)
 	}
-	if !alone(stale.llm.prompts[0]) {
-		t.Errorf("a turn past the window was shown:\n%s", stale.llm.prompts[0])
+	p := f.llm.prompts[0]
+	if !strings.Contains(p, `Nooma, pushed (a reminder or check-in): "Buen día. Hoy: Reunión con Juan" [A]`) {
+		t.Errorf("the digest pushed two hours ago was not shown, tagged A:\n%s", p)
+	}
+	if strings.Contains(p, `"turn 0"`) {
+		t.Errorf("a turn before the last %d was shown:\n%s", classify.ConversationTurns, p)
+	}
+}
+
+// TestI40_TheNewestItemsAreLettered: a chat's turns can name more units than
+// a referent can letter, a digest naming several. The items lettered are the
+// ones the newest turns name, so the exchange just before a follow-up is
+// always one it can bind; past the last letter, the oldest turn's units go
+// untagged.
+func TestI40_TheNewestItemsAreLettered(t *testing.T) {
+	f := newI40(t, `{"type":"chitchat","normalized_content":"x","weight":0.1,"decay_rate":0.3}`)
+	ctx := context.Background()
+	seed := func(id string) {
+		if err := f.units.Create(ctx, unit.Unit{ID: id, Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
+			Content: "item " + id, CreatedAt: i40Now, UpdatedAt: i40Now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	digest := []string{"d1", "d2", "d3"}
+	for _, id := range digest {
+		seed(id)
+	}
+	f.conv.Add(ctx, "7", brain.Turn{At: i40Now, Speaker: classify.SpeakerPush, Text: "the digest", UnitIDs: digest})
+	for i := 1; i < classify.ConversationTurns; i++ {
+		id := "u" + strconv.Itoa(i)
+		seed(id)
+		f.conv.Add(ctx, "7", brain.Turn{At: i40Now, Speaker: classify.SpeakerUser, Text: "said " + id, UnitIDs: []string{id}})
+	}
+	if _, err := f.svc.Capture(ctx, brain.CaptureInput{Text: "x", Channel: "telegram", Conversation: "7"}); err != nil {
+		t.Fatal(err)
+	}
+	p := f.llm.prompts[0]
+	newest := `user: "said u` + strconv.Itoa(classify.ConversationTurns-1) + `" [`
+	if !strings.Contains(p, newest) {
+		t.Errorf("the newest turn is not lettered:\n%s", p)
+	}
+	if !strings.Contains(p, `"the digest"`) || strings.Contains(p, `"item d3"`) {
+		t.Errorf("the oldest turn's last unit was lettered, or the turn not shown:\n%s", p)
+	}
+}
+
+// TestI40_TheChatSurvivesARestart (ADR-0041): the chat is in the vault, so a
+// turn one brain recorded is shown by a new brain over the same vault, as a
+// restarted serve shows the digest it pushed before it stopped.
+func TestI40_TheChatSurvivesARestart(t *testing.T) {
+	f := newI40(t, `{"type":"chitchat","normalized_content":"x","weight":0.1,"decay_rate":0.3}`)
+	before := brain.NewConversation(f.turns)
+	before.Add(context.Background(), "7", brain.Turn{At: i40Now.Add(-time.Hour), Speaker: classify.SpeakerPush,
+		Text: "Buen día. Hoy: Reunión con Juan", UnitIDs: []string{"meeting"}})
+	if _, err := f.svc.Capture(context.Background(), brain.CaptureInput{Text: "ya lo hice", Channel: "telegram", Conversation: "7"}); err != nil {
+		t.Fatal(err)
+	}
+	if p := f.llm.prompts[0]; !strings.Contains(p, `"Buen día. Hoy: Reunión con Juan" [A]`) {
+		t.Errorf("a turn recorded before the restart was not shown:\n%s", p)
 	}
 }
 
@@ -249,8 +314,8 @@ func TestI40_AUnitNoLongerLiveIsNeverALetter(t *testing.T) {
 		t.Fatal(err)
 	}
 	said := i40Now.Add(-5 * time.Minute)
-	f.conv.Add(i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "cena con Ana a las 21", UnitIDs: []string{"old"}})
-	f.conv.Add(i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "algo que ya no está", UnitIDs: []string{"gone"}})
+	f.conv.Add(context.Background(), i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "cena con Ana a las 21", UnitIDs: []string{"old"}})
+	f.conv.Add(context.Background(), i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "algo que ya no está", UnitIDs: []string{"gone"}})
 
 	if res := f.capture(t, "Es a las 08:00."); res.Outcome == brain.OutcomeCorrected {
 		t.Errorf("result = %+v: a letter past the live items corrected a unit", res)
@@ -277,8 +342,8 @@ func TestI40_AUnitNoLongerLiveIsNeverALetter(t *testing.T) {
 func TestI40_AnAnswerNamingNoItemChangesNothing(t *testing.T) {
 	f := newI40(t, `{"type":"chitchat","normalized_content":"Ninguna de esas.","weight":0.1,"decay_rate":0.3,"language":"es"}`)
 	said := i40Now.Add(-time.Minute)
-	f.conv.Add(i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "Es a las 08:00."})
-	f.conv.Add(i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerNooma, Text: "¿Te referís a la reunión con Juan?"})
+	f.conv.Add(context.Background(), i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerUser, Text: "Es a las 08:00."})
+	f.conv.Add(context.Background(), i40Chat, brain.Turn{At: said, Speaker: classify.SpeakerNooma, Text: "¿Te referís a la reunión con Juan?"})
 	res := f.capture(t, "no, ninguna de esas")
 	if res.Outcome != brain.OutcomeConversed {
 		t.Errorf("result = %+v, want a conversed reply", res)

@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestDeliver_APushIsATurnOfTheChat(t *testing.T) {
 	push := pushTrigger("trg-1", deliverFireAt, 0.9)
 	push.UnitID = &unitID
 	for _, failing := range []bool{false, true} {
-		conv := NewConversation()
+		conv := NewConversation(memrepo.NewConversations())
 		ch := &sendingChannel{}
 		if failing {
 			ch.err = context.DeadlineExceeded
@@ -30,7 +31,7 @@ func TestDeliver_APushIsATurnOfTheChat(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := conv.Recent(testConversation, deliverNow)
+		got := conv.Recent(context.Background(), testConversation)
 		if failing {
 			if len(got) != 0 {
 				t.Errorf("a push that failed to send is a turn: %+v", got)
@@ -44,26 +45,49 @@ func TestDeliver_APushIsATurnOfTheChat(t *testing.T) {
 	}
 }
 
-// TestConversation_KeepsTheLastTurnsPerChat: each chat has its own turns,
-// and no more than a prompt shows are kept; a nil log holds nothing.
-func TestConversation_KeepsTheLastTurnsPerChat(t *testing.T) {
+// TestConversation_ShowsTheLastTurnsPerChat: each chat has its own turns,
+// and a prompt is shown no more than its last ConversationTurns, however old;
+// a nil log holds nothing.
+func TestConversation_ShowsTheLastTurnsPerChat(t *testing.T) {
+	ctx := context.Background()
 	now := time.Date(2026, 10, 17, 9, 0, 0, 0, time.UTC)
-	c := NewConversation()
+	c := NewConversation(memrepo.NewConversations())
 	for i := range classify.ConversationTurns + 2 {
-		c.Add("a", Turn{At: now, Text: string(rune('0' + i))})
+		c.Add(ctx, "a", Turn{At: now.Add(-time.Duration(i) * 24 * time.Hour), Text: string(rune('0' + i))})
 	}
-	c.Add("b", Turn{At: now, Text: "other"})
-	got := c.Recent("a", now)
+	c.Add(ctx, "b", Turn{At: now, Text: "other"})
+	got := c.Recent(ctx, "a")
 	if len(got) != classify.ConversationTurns || got[0].Text != "2" {
-		t.Errorf("chat a holds %+v, want the last %d", got, classify.ConversationTurns)
+		t.Errorf("chat a shows %+v, want the last %d", got, classify.ConversationTurns)
 	}
-	if b := c.Recent("b", now); len(b) != 1 || b[0].Text != "other" {
-		t.Errorf("chat b holds %+v", b)
+	if b := c.Recent(ctx, "b"); len(b) != 1 || b[0].Text != "other" {
+		t.Errorf("chat b shows %+v", b)
 	}
 	var none *Conversation
-	none.Add("a", Turn{At: now})
-	if got := none.Recent("a", now); got != nil {
+	none.Add(ctx, "a", Turn{At: now})
+	if got := none.Recent(ctx, "a"); got != nil {
 		t.Errorf("a nil log holds %+v", got)
+	}
+}
+
+// brokenTurns is a vault whose chat can be neither written nor read.
+type brokenTurns struct{}
+
+func (brokenTurns) Append(context.Context, ports.ConversationTurn) error {
+	return errors.New("disk I/O error")
+}
+
+func (brokenTurns) Last(context.Context, ports.ConversationID, int) ([]ports.ConversationTurn, error) {
+	return nil, errors.New("disk I/O error")
+}
+
+// TestConversation_AnUnreadableChatIsReadAlone: a chat the vault cannot
+// write or read fails nothing already said; the message is read alone.
+func TestConversation_AnUnreadableChatIsReadAlone(t *testing.T) {
+	c := NewConversation(brokenTurns{})
+	c.Add(context.Background(), "a", Turn{Text: "x"})
+	if got := c.Recent(context.Background(), "a"); got != nil {
+		t.Errorf("an unreadable chat shows %+v, want none", got)
 	}
 }
 
@@ -76,11 +100,11 @@ func TestDigest_IsATurnAboutTheUnitsItNamed(t *testing.T) {
 	units := &digestUnits{byID: map[string]focus.Candidate{"u-1": {ID: "u-1", Weight: 1}, "u-2": {ID: "u-2", Weight: 1}}}
 	ch := &sendingChannel{}
 	r := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), ch)
-	r.conv = NewConversation()
+	r.conv = NewConversation(memrepo.NewConversations())
 	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatal(err)
 	}
-	got := r.conv.Recent(testConversation, digestNow)
+	got := r.conv.Recent(context.Background(), testConversation)
 	if len(got) != 1 || got[0].Speaker != classify.SpeakerPush || got[0].Text != ch.sent[0] || !reflect.DeepEqual(got[0].UnitIDs, []string{"u-1", "u-2"}) {
 		t.Errorf("turns = %+v, want the digest about u-1 and u-2", got)
 	}

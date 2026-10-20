@@ -99,12 +99,12 @@ func TestDigest_TheTurnNamesTheDueTasks(t *testing.T) {
 	seedUnit(t, units, unit.Unit{ID: "u-1", Type: unit.TypeEvent, Content: "Ana's birthday", Weight: 1})
 	triggers := &undeliveredTriggers{pending: []ports.DueTrigger{digestTrigger("trg-1", "u-1", "Ana's birthday")}}
 	r := digestRunner(t, triggers, units, memrepo.NewState(), memrepo.NewDecisionLog(), &sendingChannel{})
-	r.conv = NewConversation()
+	r.conv = NewConversation(memrepo.NewConversations())
 
 	if _, _, err := r.assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatal(err)
 	}
-	got := r.conv.Recent(testConversation, digestNow)
+	got := r.conv.Recent(context.Background(), testConversation)
 	if len(got) != 1 || !reflect.DeepEqual(got[0].UnitIDs, []string{"u-1", "u-passport"}) {
 		t.Errorf("turns = %+v, want the digest about u-1 and u-passport", got)
 	}

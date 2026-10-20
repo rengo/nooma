@@ -7,7 +7,8 @@
 - **Date**: 2026-10-17
 - **Supersedes**: —
 - **Superseded by**: [ADR-0040](0040-a-done-follow-up-closes-the-task.md), points 3 and 5 in part
-  (a done with a listed referent binds too, and closes a task)
+  (a done with a listed referent binds too, and closes a task); [ADR-0041](0041-the-chat-is-stored-and-read-by-its-last-turns.md), point 1
+  (the chat is stored in the vault and read by its last turns, at any age)
 - **Enables**: M4
 
 ## Context

@@ -7,7 +7,8 @@
 - **Supersedes**: [ADR-0036](0036-a-chat-message-is-read-in-its-conversation.md) points 3 and 5,
   in part: a `task_checkin_outcome: done` with a listed `referent` binds too, not only a
   `correction`.
-- **Superseded by**: —
+- **Superseded by**: [ADR-0041](0041-the-chat-is-stored-and-read-by-its-last-turns.md), the cost
+  "a done past the conversation window closes nothing" (the chat has no time bound)
 - **Enables**: M4
 
 ## Context

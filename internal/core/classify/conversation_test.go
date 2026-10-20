@@ -29,7 +29,7 @@ func TestAllSpeakersSwept(t *testing.T) {
 // TestReferentLetter: an item is shown to the model by letter, A first, so a
 // bare "2" is never read as an item of the conversation (ADR-0036).
 func TestReferentLetter(t *testing.T) {
-	for pos, want := range map[int]string{1: "A", 2: "B", MaxConversationItems: "F"} {
+	for pos, want := range map[int]string{1: "A", 2: "B", MaxConversationItems: "T"} {
 		if got := ReferentLetter(pos); got != want {
 			t.Errorf("ReferentLetter(%d) = %q, want %q", pos, got, want)
 		}
@@ -45,10 +45,10 @@ func TestDecode_Referent(t *testing.T) {
 		reason Reason
 	}{
 		{`"A"`, &Referent{Position: 1}, ""},
-		{`"F"`, &Referent{Position: MaxConversationItems}, ""},
+		{`"T"`, &Referent{Position: MaxConversationItems}, ""},
 		{`"` + ReferentUnclear + `"`, &Referent{Unclear: true}, ""},
 		{`null`, nil, ""},
-		{`"G"`, nil, ReasonBadFormat},
+		{`"U"`, nil, ReasonBadFormat},
 		{`"a"`, nil, ReasonUnknownEnum},
 		{`"AB"`, nil, ReasonUnknownEnum},
 		{`1`, nil, ReasonWrongType},
@@ -162,26 +162,12 @@ func TestReadFollowUp(t *testing.T) {
 	}
 }
 
-// TestRecentFrom: the transcript keeps the last ConversationTurns turns no
-// older than ConversationWindow; the boundary instant is still inside.
-func TestRecentFrom(t *testing.T) {
-	now := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
-	ago := func(d time.Duration) time.Time { return now.Add(-d) }
-	if got := RecentFrom([]time.Time{ago(ConversationWindow + time.Second), ago(ConversationWindow), ago(time.Minute)}, now); got != 1 {
-		t.Errorf("RecentFrom = %d, want 1: the turn past the window is out, the one on it is in", got)
-	}
-	many := make([]time.Time, ConversationTurns+2)
-	for i := range many {
-		many[i] = ago(time.Duration(len(many)-i) * time.Second)
-	}
-	if got := RecentFrom(many, now); got != 2 {
-		t.Errorf("RecentFrom = %d, want 2: only the last %d turns are kept", got, ConversationTurns)
-	}
-	if ConversationWindow != ConversationMinutes*time.Minute {
-		t.Errorf("ConversationWindow = %v, want the %d minutes doc 02 §13 names", ConversationWindow, ConversationMinutes)
-	}
-	if got := RecentFrom(nil, now); got != 0 {
-		t.Errorf("RecentFrom(nil) = %d, want 0", got)
+// TestConversationTurns_AsDoc02Names: a chat message is read in the chat's
+// last twenty turns (doc 02 §13, ADR-0041), and so a referent letters up to T.
+func TestConversationTurns_AsDoc02Names(t *testing.T) {
+	if ConversationTurns != 20 || MaxConversationItems != ConversationTurns {
+		t.Errorf("ConversationTurns = %d, MaxConversationItems = %d, want the 20 doc 02 §13 names for both",
+			ConversationTurns, MaxConversationItems)
 	}
 }
 

@@ -488,11 +488,17 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      set is hashed against the prompt it was made with (`prompt_sha256`), so a change to the
      prompt's text sends the whole set back to be recorded.
    - **A chat message is read in its recent conversation**
-     ([ADR-0036](adr/0036-a-chat-message-is-read-in-its-conversation.md)). The serve process keeps,
-     per chat and in memory only, the last `conversation_context_turns` turns no older than
-     `conversation_context_minutes`: what the user wrote, what Nooma answered, and what it pushed
-     (a reminder, a check-in, the digest), each with the units it concerned. A restart forgets it,
-     which costs one follow-up being read alone, as every message was before. The prompt shows the
+     ([ADR-0036](adr/0036-a-chat-message-is-read-in-its-conversation.md),
+     [ADR-0041](adr/0041-the-chat-is-stored-and-read-by-its-last-turns.md)). Every turn of a chat
+     is stored in the vault (`conversation_turns`), append-only: what the user wrote, what Nooma
+     answered, and what it pushed (a reminder, a check-in, the digest), each with the units it
+     concerned. A chat message is read in the chat's last `conversation_context_turns` turns,
+     whatever their age: the bound is a count, never a time, so the morning digest is still shown
+     to a reply at noon, and a restart forgets nothing. Nothing is pruned; the read takes the
+     last turns. A turn that cannot be stored or read is warned about and the message is read
+     without it, never failing what was already said. When the turns name more live units than
+     there are letters, the ones the newest turns name are lettered, so the exchange a follow-up
+     answers can always be bound. The prompt shows the
      turns, oldest first, each clipped to `max_turn_runes` and tagged with the letter of every item
      it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
      from `A` in the order they first appear. Three optional fields
@@ -755,7 +761,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        one included (a done of one occurrence does not end the series), takes the path it took
        before: its open check-in, if any, is answered from the store. **Never a false
        confirmation**: a chat message read as a `chitchat` done that answered no check-in, with
-       turns shown or read alone (past the window, nothing is lettered), closed nothing, and says
+       turns shown or read alone (a chat with no turns letters nothing), closed nothing, and says
        so (`No encontré nada pendiente para cerrar.`; `I found nothing open to close.`; `phrase`
        `NothingClosed`) instead of the chat model's own words; so does a task that left the pool between the prompt and the
        write. A capture from the UI or the API is no chat answer: its done keeps the chitchat's
@@ -2071,8 +2077,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | Knob | Default |
 |---|---|
 | `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position (§5 step 1, ADR-0033); chosen, a list a person can read in one message |
-| `conversation_context_turns` (`internal/core/classify.ConversationTurns`) | 6 — the most recent turns a chat message is read in (§5 step 1, ADR-0036), and so the most items its prompt letters (`A` to `F`); chosen: a capture and its reply, a follow-up and its question, and room for one more exchange or a push |
-| `conversation_context_minutes` (`internal/core/classify.ConversationMinutes`) | 30 — the oldest a turn may be and still be shown (§5 step 1, ADR-0036); chosen: a follow-up comes in the same burst. Too small costs only what worked before (the message is read alone); too large invites reading an unrelated message as a correction |
+| `conversation_context_turns` (`internal/core/classify.ConversationTurns`) | 20 — the last turns of a chat a chat message is read in, at any age (§5 step 1, ADR-0041), and so the most items its prompt letters (`A` to `T`), the ones the newest turns name; chosen by the client (2026-10-19: "que recuerde por almacenamiento, los últimos N chats", N = 20): a morning digest and its reminders, several exchanges, and a follow-up and its question. Each turn adds at most about 330 characters to the prompt (`max_turn_runes` and its label). Too small drops the digest before the reply that answers it; too large lets old, unrelated turns sit beside a new message and grows every chat prompt |
 | `max_turn_runes` (`internal/core/classify.MaxTurnRunes`) | 280 — a turn is shown clipped to it, and a clarifying question longer than it degrades (§5 step 1); chosen: a digest can be long, a question is one line on a phone |
 | `max_title_runes` (`internal/core/classify.MaxTitleRunes`) | 60 — the longest title a unit keeps (§5 step 1); one line beside a date, chosen |
 | `calendar_days` (`internal/core/classify.CalendarDays`) | 14 — how many days, today included, the classify context lists (§5 step 1); the furthest a bare weekday reaches is seven days out, so a week of margin |
