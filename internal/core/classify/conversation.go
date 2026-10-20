@@ -77,18 +77,24 @@ type Referent struct {
 // never read as an item of the conversation.
 func ReferentLetter(position int) string { return string(rune('A' + position - 1)) }
 
-// FollowUp is what a follow-up reading asks the code to do: correct the item
-// at Position, or send Question and store nothing.
+// FollowUp is what a follow-up reading asks the code to do: act on the item
+// at Position (correct it, or, when Done, close it), or send Question and
+// store nothing.
 type FollowUp struct {
 	Position int
+	Done     bool
 	Question string
 }
 
 // ReadFollowUp decides whether c is a follow-up the code acts on, given how
-// many items the prompt showed: only a correction, a letter inside the list,
-// or unclear with a question. Anything else takes the path it took before.
+// many items the prompt showed: a correction, or a task_checkin_outcome done
+// of any type (ADR-0040), naming a letter inside the list, or unclear with a
+// question. A correction that also carries done stays a correction. Anything
+// else takes the path it took before.
 func ReadFollowUp(c Classification, shown int) (FollowUp, bool) {
-	if c.Kind == nil || *c.Kind != KindCorrection || c.Referent == nil {
+	correction := c.Kind != nil && *c.Kind == KindCorrection
+	done := c.TaskCheckinOutcome != nil && *c.TaskCheckinOutcome == TaskCheckinOutcomeDone
+	if (!correction && !done) || c.Referent == nil {
 		return FollowUp{}, false
 	}
 	if c.Referent.Unclear {
@@ -100,7 +106,7 @@ func ReadFollowUp(c Classification, shown int) (FollowUp, bool) {
 	if c.Referent.Position < 1 || c.Referent.Position > shown {
 		return FollowUp{}, false
 	}
-	return FollowUp{Position: c.Referent.Position}, true
+	return FollowUp{Position: c.Referent.Position, Done: !correction}, true
 }
 
 // RecentFrom is the index of the first of ats (oldest first) inside the
@@ -184,10 +190,15 @@ func assignReminderLeads(raw json.RawMessage, c *Classification, _ time.Time) Re
 func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString(followUpsHeading + "\n")
 	b.WriteString("  A chat message can follow up on the recent conversation, when one is shown below.\n")
-	b.WriteString("  referent             only for type correction: the letter of the listed item the\n")
+	b.WriteString("  referent             for type correction: the letter of the listed item the\n")
 	b.WriteString("                       message changes, or \"" + ReferentUnclear + "\" when it changes one of them and\n")
 	b.WriteString("                       you cannot tell which. Never a letter that is not listed.\n")
-	b.WriteString("                       Leave it out for every other type, and for a correction of\n")
+	// **A done names what it closes** (ADR-0040). "ya lo hice" after the
+	// digest named a task left it open: an answer carried no item.
+	b.WriteString("                       Beside task_checkin_outcome done, whatever the type: the\n")
+	b.WriteString("                       letter of the listed item the message says is done, or\n")
+	b.WriteString("                       \"" + ReferentUnclear + "\" when it is one of them and you cannot tell which.\n")
+	b.WriteString("                       Leave it out for everything else, and for a correction of\n")
 	b.WriteString("                       something not listed. An answer to Nooma's which-item\n")
 	b.WriteString("                       question names its referent as said below\n")
 	b.WriteString("  clarifying_question  only beside referent \"" + ReferentUnclear + "\": one short question, in the\n")
@@ -214,8 +225,10 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  here, and only here:\n")
 	b.WriteString("    when it confirms or names a listed item: type correction, referent that item,\n")
 	b.WriteString("    and the change the user asked for in the message the question was about;\n")
+	b.WriteString("    but when that message said the item is done: type chitchat, referent that item,\n")
+	b.WriteString("    and task_checkin_outcome done;\n")
 	b.WriteString("    when it says it is none of them: type chitchat, no referent; it changes nothing.\n")
-	b.WriteString("  Either way it carries no task_checkin_outcome and no nudge_outcome.\n")
+	b.WriteString("  Apart from that done, it carries no task_checkin_outcome and no nudge_outcome.\n")
 	b.WriteString("  Apart from that answer, a message that tells something new, asks a question, or\n")
 	b.WriteString("  only answers something else Nooma said is not a correction, even when it is\n")
 	b.WriteString("  about the same subject as a listed item.\n")
@@ -224,6 +237,8 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  A short reply to a reminder, a check-in or a nudge Nooma pushed that only says\n")
 	b.WriteString("  it is done, agrees or declines is not a correction: the check-in and nudge\n")
 	b.WriteString("  rules above still apply to it.\n")
+	b.WriteString("  A message that says a listed item is done answers task_checkin_outcome done and\n")
+	b.WriteString("  that item's referent: Nooma closes it.\n")
 	b.WriteString("  When referent names an item, the correction is a PATCH of that item: change\n")
 	b.WriteString("  only what the user speaks about and keep everything else.\n")
 	b.WriteString("  normalized_content is the item's WHOLE corrected text — its current text with\n")

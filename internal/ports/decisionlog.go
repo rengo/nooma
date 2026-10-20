@@ -99,7 +99,12 @@ const (
 	ActionCaptureCheckInUnmatched  DecisionAction = "capture.checkin.unmatched"
 	// ActionCaptureCheckInSnoozed records which open check-in a "not yet"
 	// put off: the row the morning digest reads to ask it again (doc 02 §7).
-	ActionCaptureCheckInSnoozed     DecisionAction = "capture.checkin.snoozed"
+	ActionCaptureCheckInSnoozed DecisionAction = "capture.checkin.snoozed"
+	// ActionCaptureTaskClosed records a task a chat follow-up said was done,
+	// archived with its armed reminders expired and its open check-ins
+	// answered (doc 02 §5 step 4, ADR-0040); change-shaped, like the
+	// reminder rows, so /ui/activity shows its status before and after.
+	ActionCaptureTaskClosed         DecisionAction = "capture.task.closed"
 	ActionCaptureDedupJudged        DecisionAction = "capture.dedup.judged"
 	ActionRelationPersisted         DecisionAction = "relation.persisted"
 	ActionRelationDiscarded         DecisionAction = "relation.discarded"
@@ -230,9 +235,10 @@ const (
 	ActionConfigRemindersFollowed DecisionAction = "config.reminders.followed"
 )
 
-// AllDecisionActions returns a fresh slice holding the sixty-two
+// AllDecisionActions returns a fresh slice holding the sixty-three
 // DecisionAction vocabulary members, in the order the constants above
-// declare them. ActionCheckFocusUnavailable is m4c's, listed after
+// declare them. ActionCaptureTaskClosed is ADR-0040's, listed after
+// ActionCaptureCheckInSnoozed. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
 // ActionDeriveRetiredEmbedFailed are m4e's, listed after
 // ActionDeriveBeliefReinforced. The last five are m3e's own: ActionConnectQuestionCreated,
@@ -262,6 +268,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCheckDigestSent, ActionCheckDigestHeld, ActionCheckCheckinReasked, ActionCheckCheckinExpired, ActionCheckCheckinReaskSkipped,
 		ActionCheckFocusUnavailable, ActionCheckTimerRephraseFailed,
 		ActionCaptureCheckInResolved, ActionCaptureCheckInUnmatched, ActionCaptureCheckInSnoozed,
+		ActionCaptureTaskClosed,
 		ActionCaptureDedupJudged,
 		ActionRelationPersisted, ActionRelationDiscarded, ActionRelationDuplicateRecorded,
 		ActionCorrectionApplied, ActionCorrectionAmbiguous,

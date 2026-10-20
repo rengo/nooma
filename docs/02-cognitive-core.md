@@ -497,7 +497,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
      from `A` in the order they first appear. Three optional fields
      come back, each degrading alone (I14): `referent`, the letter of the listed item a
-     `correction` changes or `unclear`; `clarifying_question`, beside `unclear`, the question
+     `correction` changes, or that a `task_checkin_outcome: done` of any type says is done
+     ([ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md)), or `unclear`; `clarifying_question`, beside `unclear`, the question
      the model writes in the message's language to ask which item the user means (one line, at
      most `max_turn_runes`); and `reminder_leads_minutes`, beside a referent, every lead the
      message asks to be reminded at, in whole positive minutes before the item (step 4,
@@ -506,10 +507,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      or only answers something Nooma said other than its question about which item is meant,
      even about the same subject as a listed item, and a short reply to a reminder, check-in or
      nudge Nooma pushed that only says it is done, agrees or declines, to which the check-in and
-     nudge rules still apply. **The answer to Nooma's which-item question has one home**, the Follow-ups section:
+     nudge rules still apply; one that says a listed item is done also names it in `referent`.
+     **The answer to Nooma's which-item question has one home**, the Follow-ups section:
      one that confirms or names a listed item is a `correction` with that referent and the change
-     the question was about; one that names none of them is `chitchat` with no referent, so it
-     changes nothing and never reaches the recall gate; neither carries a check-in outcome. Every
+     the question was about, or, when that message said the item is done, `chitchat` with that
+     referent and `task_checkin_outcome: done`; one that names none of them is `chitchat` with no
+     referent, so it changes nothing and never reaches the recall gate; apart from that done,
+     neither carries a check-in outcome. Every
      other section that could claim such a message (the types, the reminder fields, the check-in
      answers) carries one identical line pointing there and no rule of its own: three rounds of
      per-section clauses kept contradicting each other, and a structural test now keeps the
@@ -517,9 +521,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      conversation carries no Follow-ups section, no pointer and no follow-up field, and is
      byte for byte the prompt the reminder phrasing set was read with before this rule (with
      the follow-up text present, two nudge answers read no outcome). The code acts only on a
-     `correction` (`classify.ReadFollowUp`): a letter it listed binds (step 4); `unclear` with a
-     question asks; anything else, an unlisted letter included, is not a follow-up, and the message
-     takes the path it took before.
+     `correction`, or on a `task_checkin_outcome: done` of any other type (`classify.ReadFollowUp`;
+     a `correction` carrying done stays a correction): a letter it listed binds (step 4); `unclear`
+     with a question asks; anything else, an unlisted letter included, is not a follow-up, and the
+     message takes the path it took before.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
@@ -736,6 +741,25 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        naming the items shown). There is no pending-question state: the user's answer arrives with
        that exchange in the conversation and is read as an ordinary correction with a referent.
        Only a chat that names no listed item reaches the recall gate.
+     - **A done closes the task it names** (I42,
+       [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md); the client's ruling of
+       2026-10-19). "ya lo hice" after the digest named a task binds that task as above, and
+       when it is a `task` still `pool` whose reminders recur on no rule
+       (`prospection.DoneCloses`) it is closed: `pool → archived`, the only finished state the
+       status vocabulary has (§1; nothing is deleted), its armed reminders expired, its open
+       check-ins answered `engaged`, as a check-in `done` answers one, and one
+       `capture.task.closed` row, change-shaped (`status` before and after, the reminders and
+       check-ins it took with it). An archived task is no longer live, so no digest names it and
+       no later prompt letters it. The reply names it (`Listo, saqué «Renovar el pasaporte».`;
+       `Done, I closed "Renew the passport".`; `phrase` `Closed`). Any other item, a recurring
+       one included (a done of one occurrence does not end the series), takes the path it took
+       before: its open check-in, if any, is answered from the store. **Never a false
+       confirmation**: a chat message read as a `chitchat` done that answered no check-in, with
+       turns shown or read alone (past the window, nothing is lettered), closed nothing, and says
+       so (`No encontré nada pendiente para cerrar.`; `I found nothing open to close.`; `phrase`
+       `NothingClosed`) instead of the chat model's own words; so does a task that left the pool between the prompt and the
+       write. A capture from the UI or the API is no chat answer: its done keeps the chitchat's
+       reply.
      - **An identifier also settles *whether* the message is a correction.** A capture that
        arrives naming its referent is a correction of that unit whatever `type` the
        classification gives the text: it persists no unit, arms nothing of its own (only the
@@ -1766,8 +1790,8 @@ box can audit it):
     zone, the digest names every live `task` whose `due_at` falls on it, as its unit's line (its
     title, else its content, and the due day alone, `Renovar el pasaporte — mar 20 oct`). One still
     live after its day is named again on the following mornings, `due_task_digest_days` mornings
-    in all, and then no more: nothing lets the user tell the digest that a task with no reminder
-    is done, so the bound is what stops the line. A task the user asked to be reminded of
+    in all, and then no more. A task the user says is done in answer to the digest is closed and
+    named no more (§5 step 4, ADR-0040); the bound is what stops the line of one nobody answers. A task the user asked to be reminded of
     (`remind_me`) is left out, since its own reminder speaks for it. `prospection.TasksDue`
     decides, from the units the store returns for `prospection.DueTaskWindow` and the instant.
     The tasks due lead the digest, oldest due first, and a reminder of the same unit joins its
@@ -2086,7 +2110,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `low_energy_max` (`internal/core/prospection.LowEnergyMax`) | 0.5 — chosen: `energy` is declared on [0,1] with no calibration data behind it, and the midpoint is the only point on such a scale that is not an invention. The comparison is strict, because the gate suppresses delivery |
 | `energy_reading_max_age_hours` (`internal/core/prospection.EnergyReadingMaxAgeHours`) | 24 — derived from the cadence: the digest is once daily, so its input may not be older than one cycle. Coincides with `incomplete_expiry_hours` and `catch_up_staleness_hours` by coincidence, not by relation, and no test ties them |
 | `low_energy_digest_size` (`internal/core/prospection.LowEnergyDigestSize`) | 3 — half `focus_size`, by the same reading that puts `low_energy_max` at the midpoint. Declared in Go as `focus.DefaultSize / 2`, so a recalibration of `focus_size` carries it |
-| `due_task_digest_days` (`internal/core/prospection.DueTaskDigestDays`) | 3 — the mornings the digest names a live task by its due date: its due day and the two after it (§7, the client's ruling of 2026-10-19); chosen inside a band: more than 1, or a task missed on its day is never named again; fewer than a week, because nothing lets the user say a task with no reminder is done, and each morning past its day is a line they cannot answer |
+| `due_task_digest_days` (`internal/core/prospection.DueTaskDigestDays`) | 3 — the mornings the digest names a live task by its due date: its due day and the two after it (§7, the client's ruling of 2026-10-19); chosen inside a band: more than 1, or a task missed on its day is never named again; fewer than a week, because each morning past its day is a line the user must answer to stop (a done closes it, ADR-0040) |
 | `max_digest_deferrals` (`internal/core/prospection.MaxDigestDeferrals`) | 3 — chosen inside a derived band: more than 1, or anti-starvation is a one-day delay wearing the name; strictly less than `load_cooldown_days` (7), or an item could be silenced across exactly the window in which the load watcher has stopped looking |
 | `max_checkin_reasks` (`internal/core/prospection.MaxCheckinReasks`) | 2 — how many morning digests ask again a check-in the user put off; the digest after the last closes it, and a check-in nobody answered closes at that same digest, the third after it reached the user (§7). The client's ruling (2026-10-16), not a derivation |
 | `max_reasks_per_digest` (`internal/core/prospection.MaxReasksPerDigest`) | 3 — how many check-ins one morning digest asks again at most, the longest waiting first; the rest wait, uncounted (§7). Chosen: a short list after the day's items, at most a low-energy digest's whole carry (`low_energy_digest_size`), and with each clipped to a day line's length it keeps the block well inside one message |

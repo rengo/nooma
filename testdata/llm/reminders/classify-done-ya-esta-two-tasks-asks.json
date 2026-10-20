@@ -1,0 +1,38 @@
+{
+  "id": "classify-done-ya-esta-two-tasks-asks",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "ya está",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte?\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-20T07:20:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "push",
+        "text": "Hoy hay 2 cosas: • Renovar el pasaporte — mar 20 oct • Pagar la tarjeta — mar 20 oct",
+        "about": [
+          "A",
+          "B"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Renuevo el pasaporte el 2026-10-20.",
+        "title": "Renovar el pasaporte",
+        "due_at": "2026-10-20"
+      },
+      {
+        "content": "Pago la tarjeta el 2026-10-20.",
+        "title": "Pagar la tarjeta",
+        "due_at": "2026-10-20"
+      }
+    ]
+  },
+  "expect": {
+    "task_checkin_outcome": "done",
+    "referent": "unclear"
+  },
+  "prompt_sha256": "b703c3055366dfece878eb59c15151373c268e61a6722bc702f70090ee25ee46"
+}

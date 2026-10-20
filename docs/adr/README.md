@@ -91,6 +91,7 @@ order, with no correspondence to anything.
 | [0037](0037-no-default-ring-on-the-day-an-event-is-told.md) | No default reminder rings on the day the user told Nooma about the event (supersedes ADR-0029 in part) | Accepted | M4 |
 | [0038](0038-an-event-can-carry-its-own-reminder-leads.md) | An event can carry its own reminder leads, set from chat (supersedes ADR-0029 in part) | Accepted | M4 |
 | [0039](0039-a-kept-ring-is-never-at-once.md) | On the day an event on a later day is told, no reminder rings at that moment: it rings on the event's own day (supersedes ADR-0037, and ADR-0029 and ADR-0030 on that day, in part) | Accepted | M4 |
+| [0040](0040-a-done-follow-up-closes-the-task.md) | A chat follow-up that says a shown task is done closes it (supersedes ADR-0036 in part) | Accepted | M4 |
 
 ## Template
 

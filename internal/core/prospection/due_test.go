@@ -112,9 +112,8 @@ func TestDueTaskWindow_IsWhatTasksDueReads(t *testing.T) {
 }
 
 // TestDueTaskDigestDaysIsABoundThatCarries: more than one morning, or a task
-// missed on its day is never named again; fewer than a week, because nothing
-// lets the user tell the digest a task with no reminder is done, and every
-// morning past the bound is a line they cannot answer.
+// missed on its day is never named again; fewer than a week, because every
+// morning past its day is a line the user must answer to stop (ADR-0040).
 func TestDueTaskDigestDaysIsABoundThatCarries(t *testing.T) {
 	if DueTaskDigestDays <= 1 || DueTaskDigestDays >= 7 {
 		t.Errorf("DueTaskDigestDays = %d, want 2 to 6", DueTaskDigestDays)
@@ -139,6 +138,23 @@ func TestDueDayAhead(t *testing.T) {
 	} {
 		if got := DueDayAhead(c.due, now); got != c.want {
 			t.Errorf("DueDayAhead(%v) = %v, want %v", c.due, got, c.want)
+		}
+	}
+}
+
+// TestDoneCloses: a done said of a listed item closes it only when it is a
+// task still in the pool with no recurring reminder (ADR-0040). Every other
+// kind, status, and a series, closes nothing: a done of one occurrence must
+// not end every later one.
+func TestDoneCloses(t *testing.T) {
+	for _, typ := range unit.AllTypes() {
+		for _, st := range unit.AllStatuses() {
+			for _, recurring := range []bool{false, true} {
+				want := typ == unit.TypeTask && st == unit.StatusPool && !recurring
+				if got := DoneCloses(typ, st, recurring); got != want {
+					t.Errorf("DoneCloses(%s, %s, recurring %v) = %v, want %v", typ, st, recurring, got, want)
+				}
+			}
 		}
 	}
 }

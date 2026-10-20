@@ -305,15 +305,23 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// that item is then the referent the caller would have named, and the
 	// same call's fields are the patch, read against the unit as it was
 	// shown. Unsure which, it asked, and the question is the reply.
+	// **A done closes the task it names** (ADR-0040): "ya lo hice" after the
+	// digest named it. An item a done does not close takes the path below.
 	if f, ok := classify.ReadFollowUp(c, len(shown)); ok {
 		if f.Question != "" {
 			return r.askWhich(ctx, f.Question, shown, now)
 		}
-		u, err := r.correction.explicitReferent(ctx, shown[f.Position-1])
-		if err != nil {
-			return CaptureResult{}, fmt.Errorf("capture: follow-up: %w", err)
+		if f.Done {
+			if res, handled, err := r.closeDone(ctx, shown[f.Position-1], now); err != nil || handled {
+				return res, err
+			}
+		} else {
+			u, err := r.correction.explicitReferent(ctx, shown[f.Position-1])
+			if err != nil {
+				return CaptureResult{}, fmt.Errorf("capture: follow-up: %w", err)
+			}
+			explicit = &u
 		}
-		explicit = &u
 	}
 	if explicit != nil {
 		return r.correct(ctx, in, c, explicit, now)
@@ -324,7 +332,8 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// answer carries an outcome, not a Kind, and "yes, done — and remind
 	// me to call the dentist tomorrow" is one message that both resolves
 	// a nudge and arms a timer.
-	if _, err := r.resolveCheckIn(ctx, c, now); err != nil {
+	answered, err := r.resolveCheckIn(ctx, c, now)
+	if err != nil {
 		return CaptureResult{}, err
 	}
 	if err := r.resolveStateCheckIn(ctx, c, now); err != nil {
@@ -417,6 +426,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// for a different one ("nothing needs answering"), and only one of
 	// those two is true of a greeting.
 	if c.Kind != nil && *c.Kind == classify.KindChitchat {
+		if saidDoneOfNothing(c, in.Conversation != "", answered) {
+			return CaptureResult{Outcome: OutcomeCorrected, Correction: &Correction{NothingClosed: true}}, nil
+		}
 		return r.converse(ctx, in.Text, now)
 	}
 

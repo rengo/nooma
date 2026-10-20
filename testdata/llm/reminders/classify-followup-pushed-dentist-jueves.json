@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, el jueves",
-  "response": "{\n  \"type\": \"correction\",\n  \"normalized_content\": \"Dentista el 2026-10-15 a las 10:00.\",\n  \"weight\": 0.85,\n  \"decay_rate\": 0.1,\n  \"language\": \"es\",\n  \"event_at\": \"2026-10-15T10:00:00-03:00\",\n  \"title\": \"Dentista\",\n  \"referent\": \"A\"\n}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-15 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-15T10:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\"}",
   "now": "2026-10-14T10:05:00-03:00",
   "conversation": {
     "turns": [
@@ -29,5 +29,5 @@
     "referent": "A",
     "event_at": "2026-10-15T10:00:00-03:00"
   },
-  "prompt_sha256": "2883562efaf7bcf198c7e176c8e3fdab3ba6bfc43baca1910a9e2edb3dc99683"
+  "prompt_sha256": "0da1c8966ac03339cd1f08928e017c2043123b916596ae9ed1d79d2bc8863af8"
 }

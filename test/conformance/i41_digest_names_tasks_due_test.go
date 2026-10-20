@@ -51,8 +51,8 @@ func TestI41_TheDigestNamesATaskOnItsDueDay(t *testing.T) {
 
 // TestI41_AnOverdueTaskIsNamedForDueTaskDigestDaysMornings: a task still open
 // after its day is named on the mornings after it, DueTaskDigestDays mornings
-// in all, and then no more: nothing lets the user say a task with no reminder
-// is done, so the bound is what stops it.
+// in all, and then no more: the bound stops the line of a task nobody answers
+// (a done in reply closes it, I42).
 func TestI41_AnOverdueTaskIsNamedForDueTaskDigestDaysMornings(t *testing.T) {
 	v := newI37Vault(t)
 	v.task("passport", "Renew the passport", time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC))

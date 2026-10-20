@@ -130,6 +130,14 @@ func RenderReply(result brain.CaptureResult) string {
 		if c.Unchanged {
 			return say.Unchanged
 		}
+		// A done follow-up names what it closed, or says it closed nothing
+		// (ADR-0040).
+		if c.Closed != "" {
+			return fmt.Sprintf(say.Closed, c.Closed)
+		}
+		if c.NothingClosed {
+			return say.NothingClosed
+		}
 		// What changed, named (I40): a bare "Corrected." left the user unable
 		// to tell what Nooma understood, and once claimed a change of reminders
 		// that never happened. Wording alone keeps the short confirmation.

@@ -6,7 +6,8 @@
   mean…?'. Nooma is an LLM operating over defined entities")
 - **Date**: 2026-10-17
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0040](0040-a-done-follow-up-closes-the-task.md), points 3 and 5 in part
+  (a done with a listed referent binds too, and closes a task)
 - **Enables**: M4
 
 ## Context

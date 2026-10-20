@@ -1,0 +1,32 @@
+{
+  "id": "classify-done-todavia-no-changes-nothing",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "no, todavía no",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no he renovado el pasaporte.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "now": "2026-10-20T07:20:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "push",
+        "text": "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Renuevo el pasaporte el 2026-10-20.",
+        "title": "Renovar el pasaporte",
+        "due_at": "2026-10-20"
+      }
+    ]
+  },
+  "expect": {
+    "type": "chitchat",
+    "task_checkin_outcome": "snooze"
+  },
+  "prompt_sha256": "130e98db0c5c2828d6736303ba90c152a5ddd05d5404135ff3d66fa619719ef9"
+}

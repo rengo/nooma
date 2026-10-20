@@ -121,11 +121,13 @@ func TestDecode_ReminderLeadsMinutes(t *testing.T) {
 	}
 }
 
-// TestReadFollowUp: only a correction with a letter that was shown binds, and
-// only a correction that is unclear and asks is asked; everything else is not
-// a follow-up (ADR-0036: the model reads, the code binds what it listed).
+// TestReadFollowUp: only a correction or a done with a letter that was shown
+// binds, and only one that is unclear and asks is asked; everything else is
+// not a follow-up (ADR-0036, ADR-0040: the model reads, the code binds what it
+// listed).
 func TestReadFollowUp(t *testing.T) {
 	kind := func(k Kind) *Kind { return &k }
+	outcome := func(o TaskCheckinOutcome) *TaskCheckinOutcome { return &o }
 	q := "¿Te referís a la reunión con Juan?"
 	for _, tc := range []struct {
 		name  string
@@ -142,6 +144,14 @@ func TestReadFollowUp(t *testing.T) {
 		{"a referent on another type is ignored", Classification{Kind: kind(KindEvent), Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
 		{"a correction with no referent is not one", Classification{Kind: kind(KindCorrection)}, 2, FollowUp{}, false},
 		{"no type is not one", Classification{Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
+		// ADR-0040: a done names the item it closes, whatever the type.
+		{"a done with a shown letter binds a done", Classification{Kind: kind(KindChitchat), TaskCheckinOutcome: outcome(TaskCheckinOutcomeDone), Referent: &Referent{Position: 1}}, 2, FollowUp{Position: 1, Done: true}, true},
+		{"a done with no type binds a done", Classification{TaskCheckinOutcome: outcome(TaskCheckinOutcomeDone), Referent: &Referent{Position: 2}}, 2, FollowUp{Position: 2, Done: true}, true},
+		{"an unclear done asks", Classification{Kind: kind(KindChitchat), TaskCheckinOutcome: outcome(TaskCheckinOutcomeDone), Referent: &Referent{Unclear: true}, ClarifyingQuestion: &q}, 2, FollowUp{Question: q}, true},
+		{"a done with a letter not shown never binds", Classification{TaskCheckinOutcome: outcome(TaskCheckinOutcomeDone), Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
+		{"a snooze with a referent is not one", Classification{Kind: kind(KindChitchat), TaskCheckinOutcome: outcome(TaskCheckinOutcomeSnooze), Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
+		{"a drop with a referent is not one", Classification{Kind: kind(KindChitchat), TaskCheckinOutcome: outcome(TaskCheckinOutcomeDrop), Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
+		{"a correction carrying done stays a correction", Classification{Kind: kind(KindCorrection), TaskCheckinOutcome: outcome(TaskCheckinOutcomeDone), Referent: &Referent{Position: 1}}, 2, FollowUp{Position: 1}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := ReadFollowUp(tc.c, tc.shown)
@@ -197,6 +207,25 @@ func TestBuildPrompt_DescribesFollowUps(t *testing.T) {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt never says %q:\n%s", want, p)
 		}
+	}
+}
+
+// TestBuildPrompt_ADoneNamesItsItem: beside a chat, a message saying a listed
+// item is done names it in referent, whatever its type, or asks which; the
+// rule that a short reply to a push is no correction still holds (ADR-0040).
+func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
+	p := flat(promptWith(ReminderContext{Conversation: oneTurn}))
+	for _, want := range []string{
+		"Beside task_checkin_outcome done, whatever the type: the letter of the listed item the message says is done, or \"unclear\" when it is one of them and you cannot tell which.",
+		"A message that says a listed item is done answers task_checkin_outcome done and that item's referent: Nooma closes it.",
+		"A short reply to a reminder, a check-in or a nudge Nooma pushed that only says it is done, agrees or declines is not a correction",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the prompt never says %q:\n%s", want, p)
+		}
+	}
+	if p := promptWith(ReminderContext{}); strings.Contains(p, "Nooma closes it") {
+		t.Errorf("a prompt with no chat carries the done referent:\n%s", p)
 	}
 }
 
@@ -285,8 +314,9 @@ func TestBuildPrompt_TheWhichItemAnswerHasOneHome(t *testing.T) {
 		}
 		outcomes := []string{
 			"when it confirms or names a listed item: type correction, referent that item,",
+			"but when that message said the item is done: type chitchat, referent that item,",
 			"when it says it is none of them: type chitchat, no referent; it changes nothing.",
-			"Either way it carries no task_checkin_outcome and no nudge_outcome.",
+			"Apart from that done, it carries no task_checkin_outcome and no nudge_outcome.",
 		}
 		for h, body := range secs {
 			mentions := strings.Count(body, "which-item") + strings.Count(body, "which item is meant")
