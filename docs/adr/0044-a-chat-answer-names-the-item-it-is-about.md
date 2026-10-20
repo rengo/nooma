@@ -7,7 +7,8 @@
   in part (the answer names every ring the item has, not the asked one alone), and, beside a
   chat only, doc 02 §5 step 1's "a check-in outcome closes the most recently delivered open
   check-in"
-- **Superseded by**: —
+- **Superseded by**: [ADR-0046](0046-a-done-follow-up-closes-the-event-too.md), point 3 in part
+  (reminder leads beside a listed letter bind whatever the type, as a remind-me does)
 - **Enables**: M4
 
 ## Context

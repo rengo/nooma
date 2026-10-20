@@ -1,0 +1,42 @@
+{
+  "id": "classify-done-listo-ya-fui-after-event",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "listo, ya fui",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya fui al turno con el kinesiólogo.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"A\"}",
+  "now": "2026-10-20T16:00:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T15:58:00-03:00",
+        "speaker": "user",
+        "text": "hoy a las 21 tengo turno con el kinesiólogo",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T15:58:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el mar 20 oct, 21:00. Te aviso unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Turno con el kinesiólogo el 2026-10-20 a las 21:00.",
+        "title": "Turno con el kinesiólogo",
+        "event_at": "2026-10-20T21:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "chitchat",
+    "task_checkin_outcome": "done",
+    "referent": "A"
+  },
+  "prompt_sha256": "82c089f2c79ac39f6efa77269e8449360ce4ccf1d591aba1c1cffeb9a60ba99e"
+}

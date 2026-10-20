@@ -8,7 +8,9 @@
   in part: a `task_checkin_outcome: done` with a listed `referent` binds too, not only a
   `correction`.
 - **Superseded by**: [ADR-0041](0041-the-chat-is-stored-and-read-by-its-last-turns.md), the cost
-  "a done past the conversation window closes nothing" (the chat has no time bound)
+  "a done past the conversation window closes nothing" (the chat has no time bound);
+  [ADR-0046](0046-a-done-follow-up-closes-the-event-too.md), points 2 and 3 in part (a bound
+  event is closed as a task is)
 - **Enables**: M4
 
 ## Context

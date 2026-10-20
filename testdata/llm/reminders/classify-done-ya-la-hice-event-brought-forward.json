@@ -1,0 +1,42 @@
+{
+  "id": "classify-done-ya-la-hice-event-brought-forward",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "ya la hice, la adelantamos",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya hice la reunión con el contador; la adelantamos.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
+  "now": "2026-10-20T16:05:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T16:02:00-03:00",
+        "speaker": "user",
+        "text": "mañana a las 10 reunión con el contador",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T16:02:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el mié 21 oct, 10:00. Te aviso unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Reunión con el contador el 2026-10-21 a las 10:00.",
+        "title": "Reunión con el contador",
+        "event_at": "2026-10-21T10:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "chitchat",
+    "task_checkin_outcome": "done",
+    "referent": "A"
+  },
+  "prompt_sha256": "c89a7e44c3136ca5ec3d8d545e16ef24780c592c189d42606ddb67d3586d4b74"
+}

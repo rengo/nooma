@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordámelo",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Llevar el auto al service el 2026-10-23.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"title\":\"Llevar el auto al service\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"B\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Llevar el auto al service el 2026-10-23.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"title\":\"Llevar el auto al service\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"B\"}",
   "now": "2026-10-20T10:16:00-03:00",
   "conversation": {
     "turns": [
@@ -50,5 +50,5 @@
     "remind_request": true,
     "referent": "B"
   },
-  "prompt_sha256": "6e1c306c732433a2f80408db0750ccf8e33102cc3cbaaa041418717538b6e2d2"
+  "prompt_sha256": "921f739f85f8870819854e0a757b3bfe7e016bea640c23ac2addd402b3be24f8"
 }

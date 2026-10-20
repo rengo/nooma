@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya está",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está hecho.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Cuál de las dos cosas ya está hecha: renovar el pasaporte o pagar la tarjeta?\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya terminé.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte?\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -35,5 +35,5 @@
     "task_checkin_outcome": "done",
     "referent": "unclear"
   },
-  "prompt_sha256": "be1a22d7b0b93cce462777cf2dab613a7f451e3450b3cde24b4e89c10ffef3ea"
+  "prompt_sha256": "89a2a3a205383a51cfa655b0872eba1c0ac02acbf2807d7ba649bcec1c765aac"
 }

@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame solo 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-20T11:00:00-03:00\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"reminder_leads_minutes\":[60],\"referent\":\"A\",\"reminder_leads_add\":false}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.85,\"decay_rate\":0.01,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":false}",
   "now": "2026-10-19T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -58,5 +58,5 @@
     "reminder_leads_add": false
   },
   "known_misread": "remind_request is true beside the leads: the model reads \"avisame solo 1 hora antes\" as a request to be reminded. Harmless as read: leads win (ADR-0043), so the bound reading takes the correction path and the stray request is ignored (TestI40_LeadsWinOverAStrayRemindRequest); the user gets the item reminded 1 hour before, and nothing else",
-  "prompt_sha256": "171c437072b837a250e8e79818e3a1ce88e36ecff8c5699cf471e5a9f692a3a4"
+  "prompt_sha256": "590bdcfcb5d197a07c632b8b7804829a50509eeb1547aca704ca0cc9431b3faa"
 }

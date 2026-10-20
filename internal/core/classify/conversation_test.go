@@ -188,6 +188,10 @@ func TestReadFollowUp(t *testing.T) {
 		{"a remind-me with a shown letter binds", Classification{Kind: kind(KindTask), RemindRequest: &yes, Referent: &Referent{Position: 2}}, 2, FollowUp{Position: 2}, true},
 		{"a remind-me with a letter not shown never binds", Classification{Kind: kind(KindChitchat), RemindRequest: &yes, Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
 		{"a remind-me with no referent is not one", Classification{Kind: kind(KindTask), RemindRequest: &yes}, 2, FollowUp{}, false},
+		// ADR-0046 (review on #385): leads beside a shown letter bind, whatever the type.
+		{"leads with a shown letter bind", Classification{Kind: kind(KindEvent), ReminderLeadsMinutes: []int{120}, Referent: &Referent{Position: 1}}, 2, FollowUp{Position: 1}, true},
+		{"leads with a letter not shown never bind", Classification{Kind: kind(KindEvent), ReminderLeadsMinutes: []int{120}, Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
+		{"leads with no referent are not one", Classification{Kind: kind(KindEvent), ReminderLeadsMinutes: []int{120}}, 2, FollowUp{}, false},
 		{"a remind_request of false binds nothing", Classification{Kind: kind(KindTask), RemindRequest: &no, Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -274,7 +278,9 @@ func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 	for _, want := range []string{
 		"the letter of the listed item the message is about, or \"unclear\" when it is about one of them and you cannot tell which.",
 		"beside a check-in answer other than snooze, whatever the type (the item the message says is done, or the pushed item whose check-in it answers)",
-		"A message that says a listed item is done answers task_checkin_outcome done and that item's referent: Nooma closes it.",
+		// ADR-0046: "listo, ya fui" after an event told today read no item.
+		"A message that says a listed item is done, a task finished or an event that already took place, answers task_checkin_outcome done and that item's referent: Nooma closes it.",
+		"done the user says the task is finished, or that a listed event already took place",
 		// Review on #383: "ya está" after a digest of two tasks named none,
 		// and Nooma said there was nothing to close.
 		"When the message could be about more than one listed item and does not say which, referent \"unclear\" and the clarifying_question, still with task_checkin_outcome done: Nooma asks.",
@@ -284,7 +290,7 @@ func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 			t.Errorf("the prompt never says %q:\n%s", want, p)
 		}
 	}
-	if p := promptWith(ReminderContext{}); strings.Contains(p, "Nooma closes it") {
+	if p := promptWith(ReminderContext{}); strings.Contains(p, "Nooma closes it") || strings.Contains(p, "already took place") {
 		t.Errorf("a prompt with no chat carries the done referent:\n%s", p)
 	}
 }
