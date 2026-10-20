@@ -37,14 +37,16 @@ the at-once reminder on purpose. The client's standing rule is that nothing ring
 2. **A lead still ahead is kept.** A lead that is behind is dropped. For an event on a later day
    with nothing left, ADR-0039 point 1 applies unchanged (one ring on the event's own day). **For
    an event on the told day with nothing left, there is no reminder.** The unit is stored,
-   `capture.arm.refused` records the reason `leads_behind`, and the reply promises no ring. It
-   says "Anotado.", as it does for an unasked event refused for quiet hours. A correction expires
+   `capture.arm.refused` records the reason `leads_behind`, and the reply names what was read
+   and promises no ring: "Anotado para el mar 20 oct, 21:00." (the client's ruling through the
+   PM, 2026-10-20). A correction expires
    the reminders it no longer carries for that same reason.
 3. **A reminder already due is not rung by the telling.** A live reminder whose instant has
    already arrived keeps it (ADR-0029 point 4's "one already due keeps its instant"), so the
    same correction again changes nothing.
 4. **An asked ring is untouched.** An asked lead that is behind still rings at once, or is refused
-   `too_late` (ADR-0031 point 2). The user asked to be reminded and no earlier moment is left. An
+   `too_late` (ADR-0031 point 2). The user asked to be reminded, and the event is minutes away
+   (the client's ruling through the PM, 2026-10-20). An
    asked event's leads nobody asked for follow point 1: "recordame, mañana a las 5 tengo vuelo",
    said at 22:30, rings at 04:45 only. Before this ADR it also rang at once, its 2-hour lead
    pulled to now by the night.
@@ -60,8 +62,10 @@ the at-once reminder on purpose. The client's standing rule is that nothing ring
 - An event minutes away, told unasked, gets no reminder. The user is looking at it.
 - A lapse on the capture day still owes ADR-0032's catch-up: the check pass reads
   `leads_behind` as it reads every lead behind.
-- A reply with nothing armed no longer confirms the instant it read ("Anotado." rather than
-  "Anotado para el mar 20 oct, 21:00."). This matches the quiet-hours refusal.
+- The reply still confirms the instant it read, with no ring clause.
+- **Known limit**: a preference re-arm on a later day than the told day can still pull an armed
+  reminder to now. For example, an event in two days whose leads change to one week rings at
+  the save. The client accepted this for now (through the PM, 2026-10-20).
 
 ### Reversal criteria
 

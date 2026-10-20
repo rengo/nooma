@@ -139,6 +139,12 @@ type CaptureResult struct {
 	// digest (doc 02 §7). Nil for anything else.
 	DueInDigest *time.Time
 
+	// NotArmedFor is the instant of a stored event nobody asked about that
+	// arms nothing because every lead was behind when it was told
+	// (prospection.RefusalLeadsBehind, ADR-0047): the reply names it and
+	// promises no ring. Nil for anything else.
+	NotArmedFor *time.Time
+
 	// Armed names what this capture armed. Set only for
 	// Outcome == OutcomeArmed.
 	Armed *Armed

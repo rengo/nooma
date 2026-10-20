@@ -267,8 +267,8 @@ func i33CaptureWith(t *testing.T, now time.Time, response string, cfg ports.Conf
 // (ADR-0047): an event today, told when a lead nobody asked for is already
 // behind, never rings at the moment it is told. The lead behind is dropped, a
 // lead still ahead stays, and with none left there is no reminder: the unit is
-// stored, capture.arm.refused (leads_behind) says why, and the reply promises
-// no ring. The client's case, 2026-10-20 at 17:14: "hoy a las 21 tengo turno
+// stored, capture.arm.refused (leads_behind) says why, and the reply names the
+// instant it read and promises no ring. The client's case, 2026-10-20 at 17:14: "hoy a las 21 tengo turno
 // con el kinesiólogo" with a 4-hour lead was answered "Te aviso ahora mismo.".
 func TestI33_NothingUnaskedRingsAtOnceOnTheToldDay(t *testing.T) {
 	zone := time.FixedZone("ART", -3*60*60)
@@ -283,8 +283,8 @@ func TestI33_NothingUnaskedRingsAtOnceOnTheToldDay(t *testing.T) {
 		want           []time.Time
 		reply          string
 	}{
-		{"a 4-hour lead already behind: no ring", event + `}`, str(`[240]`), nil, "Anotado."},
-		{"its own 4-hour lead already behind: no ring", event + `,"reminder_leads_minutes":[240]}`, nil, nil, "Anotado."},
+		{"a 4-hour lead already behind: no ring", event + `}`, str(`[240]`), nil, "Anotado para el mar 20 oct, 21:00."},
+		{"its own 4-hour lead already behind: no ring", event + `,"reminder_leads_minutes":[240]}`, nil, nil, "Anotado para el mar 20 oct, 21:00."},
 		{"the 2-hour lead still ahead stays, the 24-hour one is dropped", event + `}`, nil,
 			[]time.Time{time.Date(2026, 10, 20, 19, 0, 0, 0, zone)}, "Anotado para el mar 20 oct, 21:00. Te aviso unas horas antes."},
 	}

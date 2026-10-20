@@ -98,6 +98,10 @@ type Set struct {
 	// NotedForDigest takes one %s: the due day of a task that arms nothing,
 	// which that morning's digest names (doc 02 §7).
 	NotedForDigest string
+	// NotedOn takes one %s: the instant of an event nothing was armed for
+	// because every lead was behind when it was told (ADR-0047). It names
+	// what was read and promises no ring.
+	NotedOn string
 	// Closed takes one %s: the name of the task a done follow-up closed.
 	// NothingClosed answers a done that closed nothing (ADR-0040): never a
 	// confirmation of something Nooma did not do.
@@ -220,6 +224,7 @@ var sets = map[classify.Language]Set{
 		NotedFor:   "Noted for %s. I will remind you %s.",
 
 		NotedForDigest: "Noted for %s. I will mention it in that morning's digest.",
+		NotedOn:        "Noted for %s.",
 		Closed:         "Done, I closed \"%s\".",
 		NothingClosed:  "I found nothing open to close.",
 
@@ -297,6 +302,7 @@ var sets = map[classify.Language]Set{
 		NotedFor:   "Anotado para el %s. Te aviso %s.",
 
 		NotedForDigest: "Anotado para el %s. Te lo recuerdo en el resumen de esa mañana.",
+		NotedOn:        "Anotado para el %s.",
 		Closed:         "Listo, saqué «%s».",
 		NothingClosed:  "No encontré nada pendiente para cerrar.",
 

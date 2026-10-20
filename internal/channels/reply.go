@@ -48,6 +48,12 @@ func RenderReply(result brain.CaptureResult) string {
 		if result.DueInDigest != nil {
 			return fmt.Sprintf(say.NotedForDigest, say.Date(*result.DueInDigest))
 		}
+		// An event with every lead behind when told names what was read and
+		// promises no ring (ADR-0047).
+		// A date-only event never gets here: on its own day it is past.
+		if result.NotArmedFor != nil {
+			return fmt.Sprintf(say.NotedOn, say.Time(*result.NotArmedFor))
+		}
 		return say.Noted
 
 	case brain.OutcomeArmed:

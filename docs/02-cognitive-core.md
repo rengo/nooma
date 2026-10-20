@@ -1579,11 +1579,13 @@ have N nudges; a pattern watcher does not hang off any unit):
   day itself** ([ADR-0047](adr/0047-nothing-unasked-rings-at-once-on-the-told-day.md)) is held to
   the same principle: a lead still ahead is kept, one behind or pulled to now is dropped, and
   with none left there is no reminder. The unit is stored, `capture.arm.refused`
-  (`leads_behind`) says why, and the reply promises no ring ("Anotado."): "hoy a las 21", told at
+  (`leads_behind`) says why, and the reply names what was read and promises no ring ("Anotado
+  para el mar 20 oct, 21:00."): "hoy a las 21", told at
   17:14 with a 4-hour lead, rings nothing; with the default leads it rings at 19:00 alone. A live
   reminder already due keeps its instant, and a correction expires the rest with that reason. An
   asked event's leads nobody asked for follow it too. A re-plan on a later day keeps ADR-0032's
-  catch-up, and a lapse on the capture day still owes it.
+  catch-up, and a lapse on the capture day still owes it. A preference re-arm on a later day can
+  still pull an armed reminder to now, a known limit of ADR-0047.
   **The leads and the reminder time are the user's preferences**, not calibration: two
   `config` columns, `event_reminder_leads` (a JSON array of minutes) and
   `date_only_reminder_at` (`HH:MM`), read at arm time by capture and by a correction alike,
