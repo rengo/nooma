@@ -119,7 +119,8 @@ func TestI43_ACheckInAnswerNamingNoItemClosesNoCheckIn(t *testing.T) {
 
 // TestI43_ACheckInAnswerClosesThePushedItemItNames: an answer that names the
 // pushed oculista item closes that item's check-in, not the newest open one,
-// which the chat never showed.
+// which the chat never showed. A done of an event closes the event too
+// (ADR-0046), so its check-in is answered in the close's own row.
 func TestI43_ACheckInAnswerClosesThePushedItemItNames(t *testing.T) {
 	f := newI43(t, `{"type":"chitchat","normalized_content":"Ya fui al oculista.","weight":0.1,"decay_rate":0.3,"language":"es",`+
 		`"task_checkin_outcome":"done","referent":"A"}`)
@@ -129,8 +130,21 @@ func TestI43_ACheckInAnswerClosesThePushedItemItNames(t *testing.T) {
 	if got := f.open(t); len(got) != 1 || got[0] != "t-unseen" {
 		t.Errorf("open check-ins = %v, want only t-unseen: the answer named the oculista", got)
 	}
-	if n := f.count(t, ports.ActionCaptureCheckInResolved); n != 1 {
-		t.Errorf("%d check-in(s) resolved, want the oculista's", n)
+	var answered []string
+	for _, d := range i40Actions(t, f.decisions) {
+		if d.Action != ports.ActionCaptureEventClosed {
+			continue
+		}
+		var c struct {
+			CheckIns []string `json:"checkins_answered"`
+		}
+		if err := json.Unmarshal(d.Context, &c); err != nil {
+			t.Fatal(err)
+		}
+		answered = append(answered, c.CheckIns...)
+	}
+	if len(answered) != 1 || answered[0] != "t-oculista" {
+		t.Errorf("check-ins answered by the close = %v, want the oculista's", answered)
 	}
 }
 

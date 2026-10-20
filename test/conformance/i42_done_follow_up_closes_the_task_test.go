@@ -210,44 +210,140 @@ func TestI42_NotYetChangesNothing(t *testing.T) {
 }
 
 // TestI42_ADoneThatClosesNothingSaysSo: never a false confirmation. A done
-// whose item is not a task, or that names no item while nothing is open,
-// closes nothing, and the reply says nothing was closed.
+// whose item is neither a task nor an event, or that names no item while
+// nothing is open, closes nothing, and the reply says nothing was closed.
 func TestI42_ADoneThatClosesNothingSaysSo(t *testing.T) {
 	for name, response := range map[string]string{
-		"no referent": `{"type":"chitchat","normalized_content":"Ya lo hice.","weight":0.1,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done"}`,
-		"not a task":  i42Done("A"),
+		"no referent":             `{"type":"chitchat","normalized_content":"Ya lo hice.","weight":0.1,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done"}`,
+		"not a task nor an event": i42Done("A"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newI42(t, response, "Renovar el pasaporte")
-			if name == "not a task" {
+			if name == "not a task nor an event" {
 				f = newI42(t, response)
-				f.seedEvent(t)
+				f.seedShown(t, unit.Unit{ID: "k1", Type: unit.TypeKnowledge, Content: "El pasaporte dura diez años.", Title: "Duración del pasaporte"},
+					brain.Turn{At: i42Digest, Speaker: classify.SpeakerNooma, Text: "Anotado.", UnitIDs: []string{"k1"}})
 			}
 			res := f.capture(t, "ya lo hice")
 			if got := channels.RenderReply(res); got != "No encontré nada pendiente para cerrar." {
 				t.Errorf("reply = %q (result %+v), want that nothing was closed", got, res)
 			}
-			if got := f.rows(t, ports.ActionCaptureTaskClosed); len(got) != 0 {
-				t.Errorf("rows = %+v, want no close", got)
+			if got := len(f.rows(t, ports.ActionCaptureTaskClosed)) + len(f.rows(t, ports.ActionCaptureEventClosed)); got != 0 {
+				t.Errorf("%d close rows, want none", got)
 			}
 		})
 	}
 }
 
-// seedEvent replaces the chat with a digest naming one event.
-func (f *i42Fixture) seedEvent(t *testing.T) {
+// seedShown stores u in the pool and replaces the chat with turns about it.
+func (f *i42Fixture) seedShown(t *testing.T, u unit.Unit, turns ...brain.Turn) {
 	t.Helper()
 	ctx := context.Background()
-	at := i42Now.Add(2 * time.Hour)
-	if err := f.units.Create(ctx, unit.Unit{ID: "e1", Type: unit.TypeEvent, Status: unit.StatusPool, Content: "Dentista.", Title: "Dentista",
-		Weight: 0.8, EventAt: &at, LastTouchedAt: i42Created, CreatedAt: i42Created, UpdatedAt: i42Created}); err != nil {
+	u.Status, u.Weight, u.LastTouchedAt, u.CreatedAt, u.UpdatedAt = unit.StatusPool, 0.8, i42Created, i42Created, i42Created
+	if err := f.units.Create(ctx, u); err != nil {
 		t.Fatal(err)
 	}
 	conv := brain.NewConversation(memrepo.NewConversations())
-	conv.Add(context.Background(), i40Chat, brain.Turn{At: i42Digest, Speaker: classify.SpeakerPush, Text: "Hoy hay 1 cosa", UnitIDs: []string{"e1"}})
+	for _, turn := range turns {
+		conv.Add(ctx, i40Chat, turn)
+	}
 	f.svc.WithConversation(conv)
-	if got := f.status(t, "e1"); got != unit.StatusPool {
-		t.Fatalf("seed: %q", got)
+}
+
+// i42Kine is the client's case of 2026-10-20: "hoy a las 21 tengo turno con
+// el kinesiólogo", answered with its hours-before ring, then "listo, ya fui".
+// The event is seeded with its two armed rings, both still ahead of the done.
+func (f *i42Fixture) i42Kine(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	told := i42Now.Add(-10 * time.Minute)
+	eventAt := time.Date(2026, 10, 20, 21, 0, 0, 0, i42Zone)
+	f.seedShown(t, unit.Unit{ID: "e1", Type: unit.TypeEvent, Source: "telegram", Content: "Turno con el kinesiólogo hoy a las 21:00.",
+		Title: "Turno con el kinesiólogo", EventAt: &eventAt},
+		brain.Turn{At: told, Speaker: classify.SpeakerUser, Text: "hoy a las 21 tengo turno con el kinesiólogo", UnitIDs: []string{"e1"}},
+		brain.Turn{At: told, Speaker: classify.SpeakerNooma, Text: "Anotado para el mar 20 oct, 21:00. Te aviso unas horas antes.", UnitIDs: []string{"e1"}})
+	unitID := "e1"
+	for id, at := range map[string]time.Time{"hours": eventAt.Add(-4 * time.Hour), "minutes": eventAt.Add(-15 * time.Minute)} {
+		if err := f.triggers.Create(ctx, ports.Trigger{ID: id, UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &at,
+			CreatedAt: told, Payload: ports.TriggerPayload{ActionText: "Turno con el kinesiólogo"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestI42_ADoneFollowUpClosesTheEventItFollows (ADR-0046): "listo, ya fui"
+// after an event told today says it happened. The event is archived (nothing
+// is deleted), its rings still armed are expired so none of them goes off,
+// one capture.event.closed row records the status before and after with the
+// rings it took, no unit is stored, and the reply names what was closed and
+// claims no ring.
+func TestI42_ADoneFollowUpClosesTheEventItFollows(t *testing.T) {
+	f := newI42(t, `{"type":"chitchat","normalized_content":"Ya fui.","weight":0.1,"decay_rate":0.3,"language":"es",`+
+		`"task_checkin_outcome":"done","referent":"A"}`)
+	f.i42Kine(t)
+	ctx := context.Background()
+	res := f.capture(t, "listo, ya fui")
+
+	if res.Outcome != brain.OutcomeCorrected || res.Correction == nil || res.Correction.Closed != "Turno con el kinesiólogo" || res.Correction.UnitID != "e1" {
+		t.Fatalf("result = %+v (correction %+v), want e1 closed by name", res, res.Correction)
+	}
+	if got := channels.RenderReply(res); got != "Listo, saqué «Turno con el kinesiólogo»." {
+		t.Errorf("reply = %q", got)
+	}
+	if got := f.status(t, "e1"); got != unit.StatusArchived {
+		t.Errorf("status = %q, want archived", got)
+	}
+	if n := f.units.Count(); n != 1 {
+		t.Errorf("units = %d, want 1: an answer is not a memory", n)
+	}
+	if armed, err := f.triggers.ArmedForUnit(ctx, "e1"); err != nil || len(armed) != 0 {
+		t.Errorf("armed = %v (%v), want no ring left", armed, err)
+	}
+	rows := f.rows(t, ports.ActionCaptureEventClosed)
+	var change struct {
+		UnitID           string            `json:"unit_id"`
+		Previous         map[string]string `json:"previous"`
+		Next             map[string]string `json:"next"`
+		RemindersExpired []string          `json:"reminders_expired"`
+	}
+	if len(rows) != 1 || json.Unmarshal(rows[0].Context, &change) != nil || change.UnitID != "e1" ||
+		change.Previous["status"] != "pool" || change.Next["status"] != "archived" || len(change.RemindersExpired) != 2 {
+		t.Errorf("rows = %+v, want one %s row, pool -> archived, two rings expired", rows, ports.ActionCaptureEventClosed)
+	}
+	if got := f.rows(t, ports.ActionCaptureTaskClosed); len(got) != 0 {
+		t.Errorf("rows = %+v: an event is not a task", got)
+	}
+}
+
+// TestI42_ADoneAnswersTheEventsCheckIn: a ring of the event was pushed this
+// morning and nobody answered it; "listo, ya fui" closes the event and
+// answers that check-in, in one row, as a task's done does.
+func TestI42_ADoneAnswersTheEventsCheckIn(t *testing.T) {
+	f := newI42(t, i42Done("A"))
+	f.i42Kine(t)
+	ctx := context.Background()
+	unitID, pushed := "e1", i42Digest
+	if err := f.triggers.Create(ctx, ports.Trigger{ID: "morning", UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &pushed,
+		CreatedAt: i42Created, Payload: ports.TriggerPayload{ActionText: "Turno con el kinesiólogo"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.triggers.Fire(ctx, "morning", pushed); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.triggers.Surface(ctx, "morning", pushed); err != nil {
+		t.Fatal(err)
+	}
+	if res := f.capture(t, "listo, ya fui"); res.Correction == nil || res.Correction.Closed == "" {
+		t.Fatalf("result = %+v, want the event closed", res)
+	}
+	if open, err := f.triggers.Delivered(ctx); err != nil || len(open) != 0 {
+		t.Errorf("open check-ins = %v (%v), want none", open, err)
+	}
+	if armed, err := f.triggers.ArmedForUnit(ctx, "e1"); err != nil || len(armed) != 0 {
+		t.Errorf("armed = %v (%v), want no ring left", armed, err)
+	}
+	if got := f.rows(t, ports.ActionCaptureEventClosed); len(got) != 1 {
+		t.Errorf("rows = %+v, want one close", got)
 	}
 }
 

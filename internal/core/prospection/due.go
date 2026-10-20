@@ -73,9 +73,10 @@ func TasksDue(units []unit.Unit, now time.Time) []string {
 }
 
 // DoneCloses reports whether a done the user said of a listed item closes it
-// (doc 02 §5 step 4, ADR-0040): a task still in the pool whose reminders
+// (doc 02 §5 step 4, ADR-0040, ADR-0046): a task the user got done or an
+// event the user says already happened, still in the pool, whose reminders
 // recur on no rule. A series is not ended by a done of one occurrence, and no
-// other kind is a thing to get done.
+// other kind is a thing that gets done or takes place.
 func DoneCloses(t unit.Type, s unit.Status, recurring bool) bool {
-	return t == unit.TypeTask && s == unit.StatusPool && !recurring
+	return (t == unit.TypeTask || t == unit.TypeEvent) && s == unit.StatusPool && !recurring
 }

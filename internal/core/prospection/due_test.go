@@ -143,14 +143,14 @@ func TestDueDayAhead(t *testing.T) {
 }
 
 // TestDoneCloses: a done said of a listed item closes it only when it is a
-// task still in the pool with no recurring reminder (ADR-0040). Every other
-// kind, status, and a series, closes nothing: a done of one occurrence must
-// not end every later one.
+// task or an event still in the pool with no recurring reminder (ADR-0040,
+// ADR-0046). Every other kind, status, and a series, closes nothing: a done
+// of one occurrence must not end every later one.
 func TestDoneCloses(t *testing.T) {
 	for _, typ := range unit.AllTypes() {
 		for _, st := range unit.AllStatuses() {
 			for _, recurring := range []bool{false, true} {
-				want := typ == unit.TypeTask && st == unit.StatusPool && !recurring
+				want := (typ == unit.TypeTask || typ == unit.TypeEvent) && st == unit.StatusPool && !recurring
 				if got := DoneCloses(typ, st, recurring); got != want {
 					t.Errorf("DoneCloses(%s, %s, recurring %v) = %v, want %v", typ, st, recurring, got, want)
 				}

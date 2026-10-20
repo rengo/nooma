@@ -796,23 +796,27 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        Leads win: a reading carrying `reminder_leads_minutes` ("avisame 2 horas antes") takes
        the correction path and sets the event's own leads, and a `remind_request` beside it is
        ignored.
-     - **A done closes the task it names** (I42,
-       [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md); the client's ruling of
-       2026-10-19). "ya lo hice" after the digest named a task binds that task as above, and
-       when it is a `task` still `pool` whose reminders recur on no rule
+     - **A done closes the task or event it names** (I42,
+       [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md),
+       [ADR-0046](adr/0046-a-done-follow-up-closes-the-event-too.md); the client's ruling of
+       2026-10-19). "ya lo hice" after the digest named a task, or "listo, ya fui" after an
+       event told or pushed, binds that item as above (beside a chat the prompt's done covers
+       a task finished and a listed event that already took place), and when it is a `task` or
+       an `event` still `pool` whose reminders recur on no rule
        (`prospection.DoneCloses`) it is closed: `pool → archived`, the only finished state the
-       status vocabulary has (§1; nothing is deleted), its armed reminders expired, its open
-       check-ins answered `engaged`, as a check-in `done` answers one, and one
-       `capture.task.closed` row, change-shaped (`status` before and after, the reminders and
-       check-ins it took with it). An archived task is no longer live, so no digest names it and
-       no later prompt letters it. The reply names it (`Listo, saqué «Renovar el pasaporte».`;
-       `Done, I closed "Renew the passport".`; `phrase` `Closed`). Any other item, a recurring
-       one included (a done of one occurrence does not end the series), takes the path it took
-       before: its open check-in, if any, is answered from the store. **Never a false
+       status vocabulary has (§1; nothing is deleted), its armed reminders expired, so an event
+       that happened rings no more, its open check-ins answered `engaged`, as a check-in `done`
+       answers one, and one `capture.task.closed` row, or `capture.event.closed` for an event,
+       change-shaped (`status` before and after, the reminders and check-ins it took with it).
+       An archived item is no longer live, so no digest names it and no later prompt letters
+       it. The reply names it (`Listo, saqué «Renovar el pasaporte».`; `Done, I closed "Renew
+       the passport".`; `phrase` `Closed`), for an event too, and names no ring. Any other
+       item, a recurring one included (a done of one occurrence does not end the series),
+       takes the path it took before: its open check-in, if any, is answered from the store. **Never a false
        confirmation**: a chat message read as a `chitchat` done that answered no check-in, with
        turns shown or read alone (a chat with no turns letters nothing), closed nothing, and says
        so (`No encontré nada pendiente para cerrar.`; `I found nothing open to close.`; `phrase`
-       `NothingClosed`) instead of the chat model's own words; so does a task that left the pool between the prompt and the
+       `NothingClosed`) instead of the chat model's own words; so does an item that left the pool between the prompt and the
        write. A capture from the UI or the API is no chat answer: its done keeps the chitchat's
        reply.
      - **An identifier also settles *whether* the message is a correction.** A capture that

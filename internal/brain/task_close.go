@@ -14,15 +14,16 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// closeDone closes the task a done follow-up named (doc 02 §5 step 4,
-// ADR-0040): archived, since nothing is deleted, its armed reminders expired,
-// and its open check-ins answered engaged, as a check-in done answers one.
+// closeDone closes the task or event a done follow-up named (doc 02 §5 step
+// 4, ADR-0040, ADR-0046): archived, since nothing is deleted, its armed
+// reminders expired, so an event that already happened rings no more, and its
+// open check-ins answered engaged, as a check-in done answers one.
 //
-// handled is false when the item is not a task a done closes (another kind,
+// handled is false when the item is not one a done closes (another kind,
 // or a series a done of one occurrence must not end, prospection.DoneCloses):
 // the capture then takes the path it took before, which answers an open
-// check-in if there is one. A task that left the pool between the prompt and
-// the write closed nothing, and the reply says so.
+// check-in if there is one. An item that left the pool between the prompt
+// and the write closed nothing, and the reply says so.
 func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) (CaptureResult, bool, error) {
 	u, err := r.correction.explicitReferent(ctx, id)
 	if err != nil {
@@ -46,7 +47,11 @@ func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) 
 		return CaptureResult{}, false, fmt.Errorf("capture: done: archive %q: %w", id, err)
 	}
 
-	change := taskClosed{UnitID: id, Fields: []string{"status"},
+	action, kind := ports.ActionCaptureTaskClosed, "task"
+	if u.Type == unit.TypeEvent {
+		action, kind = ports.ActionCaptureEventClosed, "event"
+	}
+	change := itemClosed{UnitID: id, Fields: []string{"status"},
 		Previous: map[string]string{"status": string(u.Status)}, Next: map[string]string{"status": string(unit.StatusArchived)}}
 	for _, t := range armed {
 		// One that fired meanwhile is no longer armed, and its check-in is
@@ -74,20 +79,21 @@ func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) 
 
 	contextJSON, err := json.Marshal(change)
 	if err != nil {
-		return CaptureResult{}, false, fmt.Errorf("capture: done: encode %s context: %w", ports.ActionCaptureTaskClosed, err)
+		return CaptureResult{}, false, fmt.Errorf("capture: done: encode %s context: %w", action, err)
 	}
-	if err := r.log.Record(ctx, ports.Decision{ID: r.ids.New(), Action: ports.ActionCaptureTaskClosed,
-		Rationale: fmt.Sprintf("the user said task %q is done; it was archived, %d reminder(s) expired and %d check-in(s) answered",
-			id, len(change.RemindersExpired), len(change.CheckInsAnswered)),
+	if err := r.log.Record(ctx, ports.Decision{ID: r.ids.New(), Action: action,
+		Rationale: fmt.Sprintf("the user said %s %q is done; it was archived, %d reminder(s) expired and %d check-in(s) answered",
+			kind, id, len(change.RemindersExpired), len(change.CheckInsAnswered)),
 		Context: contextJSON, OccurredAt: now}); err != nil {
-		return CaptureResult{}, false, fmt.Errorf("capture: done: record %s: %w", ports.ActionCaptureTaskClosed, err)
+		return CaptureResult{}, false, fmt.Errorf("capture: done: record %s: %w", action, err)
 	}
 	return CaptureResult{Outcome: OutcomeCorrected, Correction: &Correction{UnitID: id, Closed: clip(shownText(u))}}, true, nil
 }
 
-// taskClosed is the capture.task.closed row's context: change-shaped, so
-// /ui/activity shows the status before and after, with what went with it.
-type taskClosed struct {
+// itemClosed is the capture.task.closed and capture.event.closed rows'
+// context: change-shaped, so /ui/activity shows the status before and after,
+// with what went with it.
+type itemClosed struct {
 	UnitID           string            `json:"unit_id"`
 	Fields           []string          `json:"fields"`
 	Previous         map[string]string `json:"previous"`
