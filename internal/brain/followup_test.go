@@ -109,3 +109,15 @@ func TestDigest_IsATurnAboutTheUnitsItNamed(t *testing.T) {
 		t.Errorf("turns = %+v, want the digest about u-1 and u-2", got)
 	}
 }
+
+// TestNewConversation_RefusesNoStore: a chat log with no store would read
+// every message alone and forget every turn, silently. Wiring it so is a bug
+// the process must not start with; a nil *Conversation is the legal "no chat".
+func TestNewConversation_RefusesNoStore(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("NewConversation(nil) returned a log; want a panic naming the missing store")
+		}
+	}()
+	NewConversation(nil)
+}

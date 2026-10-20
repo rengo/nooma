@@ -26,8 +26,14 @@ type Turn struct {
 	UnitIDs []string
 }
 
-// NewConversation returns the chat log stored in turns.
+// NewConversation returns the chat log stored in turns. It panics on a nil
+// store: a log that stores nothing would read every message alone and forget
+// every turn without a word, which is a wiring bug, not a state to run in. A
+// nil *Conversation is the legal "no chat".
 func NewConversation(turns ports.ConversationRepo) *Conversation {
+	if turns == nil {
+		panic("brain.NewConversation: no conversation store wired")
+	}
 	return &Conversation{turns: turns}
 }
 
