@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -180,5 +181,68 @@ func TestI43_ARemindMeAfterAPushRemindsTheItemItFollows(t *testing.T) {
 	}
 	if got := f.open(t); len(got) != 2 {
 		t.Errorf("open check-ins = %v, want both still open", got)
+	}
+}
+
+// snoozedOf is the trigger each capture.checkin.snoozed row put off.
+func (f i40Fixture) snoozedOf(t *testing.T) []string {
+	t.Helper()
+	var ids []string
+	for _, d := range i40Actions(t, f.decisions) {
+		if d.Action != ports.ActionCaptureCheckInSnoozed {
+			continue
+		}
+		var row struct {
+			TriggerID string `json:"trigger_id"`
+		}
+		if err := json.Unmarshal(d.Context, &row); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, row.TriggerID)
+	}
+	return ids
+}
+
+// TestI43_ASnoozeNamingAPushedItemPutsOffItsCheckIn (review on #382): beside
+// a chat, a not-yet that names the pushed oculista item puts off that item's
+// check-in, never the newest open one, which the chat never showed. Nothing
+// closes.
+func TestI43_ASnoozeNamingAPushedItemPutsOffItsCheckIn(t *testing.T) {
+	f := newI43(t, `{"type":"chitchat","normalized_content":"Todavía no.","weight":0.1,"decay_rate":0.3,"language":"es",`+
+		`"task_checkin_outcome":"snooze","referent":"A"}`)
+
+	f.sayI43(t, "todavía no")
+
+	if got := f.snoozedOf(t); len(got) != 1 || got[0] != "t-oculista" {
+		t.Errorf("snoozed = %v, want the oculista's check-in put off", got)
+	}
+	if got := f.open(t); len(got) != 2 {
+		t.Errorf("open check-ins = %v, want both still open: a snooze closes nothing", got)
+	}
+}
+
+// TestI43_ASnoozeNamingNoItemPutsOffTheNewest: a not-yet that names no item
+// keeps today's behaviour, chat or not: the newest open check-in is put off.
+func TestI43_ASnoozeNamingNoItemPutsOffTheNewest(t *testing.T) {
+	f := newI43(t, `{"type":"chitchat","normalized_content":"Todavía no.","weight":0.1,"decay_rate":0.3,"language":"es",`+
+		`"task_checkin_outcome":"snooze"}`)
+
+	f.sayI43(t, "todavía no")
+
+	if got := f.snoozedOf(t); len(got) != 1 || got[0] != "t-unseen" {
+		t.Errorf("snoozed = %v, want the newest open check-in put off", got)
+	}
+}
+
+// TestI43_ASnoozeNamingAnItemWithNoCheckInPutsOffNone: the service task was
+// never pushed, so a not-yet naming it puts nothing off, the newest included.
+func TestI43_ASnoozeNamingAnItemWithNoCheckInPutsOffNone(t *testing.T) {
+	f := newI43(t, `{"type":"chitchat","normalized_content":"Todavía no.","weight":0.1,"decay_rate":0.3,"language":"es",`+
+		`"task_checkin_outcome":"snooze","referent":"B"}`)
+
+	f.sayI43(t, "todavía no")
+
+	if got := f.snoozedOf(t); len(got) != 0 {
+		t.Errorf("snoozed = %v, want none: the item named has no check-in", got)
 	}
 }

@@ -25,7 +25,8 @@ import (
 // **Beside a chat, the item it names** (ADR-0044): what Nooma asked is a
 // pushed turn of the chat shown (shown maps a letter to its unit), and the
 // answer names that turn's item in referent. An answer naming no item, or one
-// with no open check-in, answers none. Read alone, the newest open one.
+// with no open check-in, answers none. A snooze naming an item puts off its
+// check-in; one naming none, the newest. Read alone, the newest open one.
 func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classification, shown []string, now time.Time) (bool, error) {
 	resolution, ok := checkInResolution(c)
 	snoozed := classify.Snoozes(c)
@@ -38,6 +39,11 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 		return false, fmt.Errorf("capture: reading open check-ins: %w", err)
 	}
 	if snoozed {
+		// A not-yet that names a shown item puts off that item's check-in, or
+		// none when it has none (ADR-0044); one naming no item, the newest.
+		if named := namedItem(c, shown); named != "" {
+			open = checkInsOf(open, named)
+		}
 		if len(open) == 0 {
 			return false, nil
 		}

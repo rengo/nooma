@@ -29,6 +29,6 @@
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "known_misread": "referent is A beside the snooze: the model names the task the digest named, though the prompt gives referent only beside a check-in answer other than snooze. Harmless as read: a snooze with a referent is not a follow-up (TestReadFollowUp, \"a snooze with a referent is not one\"), and a snooze closes nothing",
+  "known_misread": "referent is A beside the snooze: the model names the task the digest named, though the prompt gives referent only beside a check-in answer other than snooze. Harmless as read: a snooze with a referent is not a follow-up (TestReadFollowUp, \"a snooze with a referent is not one\"), it closes nothing, and the task it names has no check-in to put off (TestI43_ASnoozeNamingAnItemWithNoCheckInPutsOffNone)",
   "prompt_sha256": "f7561f620098b5899e8f00bcd3fd31a1e5071c6fe04af3a1b7e5cba540774998"
 }

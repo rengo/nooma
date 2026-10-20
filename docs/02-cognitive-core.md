@@ -602,8 +602,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      and the write (§7): it is recorded as unmatched and the capture goes on. **Beside a chat,
      the check-in of the item named** (ADR-0044): a closing outcome closes only the open
      check-in of the unit its `referent` names among the letters shown, and one naming no item,
-     or an item with no open check-in, closes nothing and is recorded as unmatched; a `snooze`
-     is recorded against the newest, as read alone. The model names a letter the code listed,
+     or an item with no open check-in, closes nothing and is recorded as unmatched. A `snooze`
+     that names a shown item puts off that item's check-in, or none when it has none; one
+     naming no item puts off the newest, as read alone. The model names a letter the code listed,
      never an id: the binding ADR-0033 allows.
    - **The one exception is narrower than the rule, and is for reminders**
      ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)): the prompt may carry the

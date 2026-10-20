@@ -63,9 +63,10 @@ minutos antes.", while the day-before and hours-before rings stayed armed and un
    `remind_request: true` and a listed letter is a follow-up, as a done is (ADR-0040).
 4. **Beside a chat, a closing check-in answer closes only the open check-in of the item its
    `referent` names.** One that names no item, or an item with no open check-in, closes
-   nothing and is recorded as `capture.checkin.unmatched`. A `snooze` closes nothing and is
-   recorded against the newest open check-in, as before. Read alone (no chat shown), the newest
-   open check-in, as before.
+   nothing and is recorded as `capture.checkin.unmatched`. A `snooze` closes nothing: one that
+   names a shown item puts off that item's check-in (`capture.checkin.snoozed`), or none when it
+   has none, and one naming no item puts off the newest open check-in, as before. Read alone (no
+   chat shown), the newest open check-in, as before.
 5. **A remind-me's answer names every ring the item has** once the asked one is armed, as a
    capture's answer names all it armed: "Te aviso unas horas antes y 15 minutos antes.", never
    the asked one alone while the others ring unnamed.
