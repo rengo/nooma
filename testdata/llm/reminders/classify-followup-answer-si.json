@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Tengo reunión con Juan el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Reunión con Juan\",\"referent\":\"B\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Tengo reunión con Juan el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Reunión con Juan\",\"referent\":\"B\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -44,5 +43,5 @@
     "referent": "B",
     "event_at": "2026-10-14T08:00:00-03:00"
   },
-  "prompt_sha256": "e818d9ee2fe80e9fd973bfe29b3a07e352bb33a4df72e0d39bb3bd45443802c2"
+  "prompt_sha256": "2bf47d3e27dce5473a59465126ddeb672aaef85a59c0b229c218eb9ff53eec61"
 }

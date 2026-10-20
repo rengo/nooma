@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame solo 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"remind_request\":false,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[60]}",
   "now": "2026-10-19T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -53,5 +52,6 @@
       60
     ]
   },
-  "prompt_sha256": "00463a294840ed9546dc9eb1c41cbda46988dde2cf50bb0b59da3a96d62678e6"
+  "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: the follow-up binds a correction, and the correction path never reads remind_request (it returns before arming); the leads still come back as reminder_leads_minutes",
+  "prompt_sha256": "b4fb6fac6a5105c31bcccd54720c326e97636937f313128a778e5e38daeb3fdd"
 }

@@ -1,14 +1,16 @@
 {
   "id": "classify-done-ya-lo-hice-after-digest",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya lo hice",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya renové el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
       {
         "speaker": "push",
-        "text": "Hoy hay 1 cosa:\n• Renovar el pasaporte — mar 20 oct",
+        "text": "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct",
         "about": [
           "A"
         ]
@@ -26,5 +28,6 @@
     "type": "chitchat",
     "task_checkin_outcome": "done",
     "referent": "A"
-  }
+  },
+  "prompt_sha256": "6ecd4600b476bd059b08d5a63b416f1eb6fbb2a83aea458b64360a72bfaea28b"
 }

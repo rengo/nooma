@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "recordámelo",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar el regalo de Ana el 2026-10-17.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regalo de Ana\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "conversation": {
     "turns": [
@@ -28,5 +27,5 @@
   "expect": {
     "remind_request": true
   },
-  "prompt_sha256": "a1e2a90245b357adffc7aac25a445bc3a5c24b2b6c38feb1f8005045bd483cad"
+  "prompt_sha256": "ff677a0f900cda38a0bb24ef14eda3d4868a5da6794cc5d286405759267aa6e3"
 }
