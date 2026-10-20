@@ -256,8 +256,11 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  of the earlier push.\n")
 	b.WriteString("  A message that only asks to be reminded, naming nothing, asks it of the item it\n")
 	b.WriteString("  follows: remind_request true and that item's referent, never a chitchat.\n")
-	b.WriteString("  A message that says a listed item is done answers task_checkin_outcome done and\n")
-	b.WriteString("  that item's referent: Nooma closes it.\n")
+	// **An event is done too** (ADR-0046): "listo, ya fui" after an event
+	// told today closed nothing, and its rings still went off.
+	b.WriteString("  A message that says a listed item is done, a task finished or an event that\n")
+	b.WriteString("  already took place, answers task_checkin_outcome done and that item's\n")
+	b.WriteString("  referent: Nooma closes it.\n")
 	// **Asked, not guessed** (review on #383): "ya está" after a digest of two
 	// tasks named none, and Nooma answered there was nothing to close.
 	b.WriteString("  When the message could be about more than one listed item and does not say\n")

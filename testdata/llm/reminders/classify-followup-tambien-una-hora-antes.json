@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "también 1 hora antes",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-21 a las 10:00.\",\"weight\":0.85,\"decay_rate\":0.04,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":true,\"referent\":\"A\"}",
+  "record": true,
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [

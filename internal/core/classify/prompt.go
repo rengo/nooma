@@ -437,7 +437,7 @@ func writeCheckins(b *strings.Builder, chat bool) {
 	b.WriteString("  no check-in, even when it begins with a word that alone would.\n")
 	b.WriteString("  task_checkin_outcome, about a task:\n")
 	for _, o := range AllTaskCheckinOutcomes() {
-		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o) + "\n")
+		b.WriteString("    " + pad(string(o), 9) + taskCheckinMeaning(o, chat) + "\n")
 	}
 	b.WriteString("  nudge_outcome, about a nudge:\n")
 	for _, o := range AllNudgeOutcomes() {
@@ -446,9 +446,15 @@ func writeCheckins(b *strings.Builder, chat bool) {
 	b.WriteString("\n")
 }
 
-func taskCheckinMeaning(o TaskCheckinOutcome) string {
+// taskCheckinMeaning says what o means. Beside a chat a done also says a
+// listed event already took place (ADR-0046): the code closes the event it
+// names. With no chat no item is named, so the line is unchanged.
+func taskCheckinMeaning(o TaskCheckinOutcome, chat bool) string {
 	switch o {
 	case TaskCheckinOutcomeDone:
+		if chat {
+			return "the user says the task is finished, or that a listed event already took place"
+		}
 		return "the user says the task is finished"
 	case TaskCheckinOutcomeSnooze:
 		return "the user puts the task off to later and still means to do it"

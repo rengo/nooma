@@ -274,7 +274,9 @@ func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 	for _, want := range []string{
 		"the letter of the listed item the message is about, or \"unclear\" when it is about one of them and you cannot tell which.",
 		"beside a check-in answer other than snooze, whatever the type (the item the message says is done, or the pushed item whose check-in it answers)",
-		"A message that says a listed item is done answers task_checkin_outcome done and that item's referent: Nooma closes it.",
+		// ADR-0046: "listo, ya fui" after an event told today read no item.
+		"A message that says a listed item is done, a task finished or an event that already took place, answers task_checkin_outcome done and that item's referent: Nooma closes it.",
+		"done the user says the task is finished, or that a listed event already took place",
 		// Review on #383: "ya está" after a digest of two tasks named none,
 		// and Nooma said there was nothing to close.
 		"When the message could be about more than one listed item and does not say which, referent \"unclear\" and the clarifying_question, still with task_checkin_outcome done: Nooma asks.",
@@ -284,7 +286,7 @@ func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 			t.Errorf("the prompt never says %q:\n%s", want, p)
 		}
 	}
-	if p := promptWith(ReminderContext{}); strings.Contains(p, "Nooma closes it") {
+	if p := promptWith(ReminderContext{}); strings.Contains(p, "Nooma closes it") || strings.Contains(p, "already took place") {
 		t.Errorf("a prompt with no chat carries the done referent:\n%s", p)
 	}
 }
