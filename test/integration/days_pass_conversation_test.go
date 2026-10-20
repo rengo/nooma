@@ -395,6 +395,20 @@ func dpScenarios() []dpScenario {
 			say: []dpSay{{at: dpAt(10, 19, 16, 34), id: "classify-task-due-tomorrow-passport"}},
 		},
 		{
+			// The client's ruling of 2026-10-19 (ADR-0040): the digest that
+			// named the task is a turn of the chat, so "ya lo hice" answered
+			// after it closes that task, and no later morning names it.
+			name:  "task-done-from-chat",
+			about: "a task due tomorrow is named by the digest, and the answer that it is done closes it",
+			from:  dpAt(10, 19, 16, 30), until: dpAt(10, 23, 12, 0),
+			say: []dpSay{
+				{at: dpAt(10, 19, 16, 34), id: "classify-task-due-tomorrow-passport"},
+				// Inside the conversation window (ADR-0036): read alone, past it,
+				// the answer names no item and closes nothing.
+				{at: dpAt(10, 20, 7, 20), id: "classify-done-ya-lo-hice-after-digest"},
+			},
+		},
+		{
 			name:  "five-weeks",
 			about: "every reminder kind the recordings hold, five weeks, the server down three days",
 			from:  dpAt(10, 16, 10, 40), until: dpAt(11, 21, 0, 0),

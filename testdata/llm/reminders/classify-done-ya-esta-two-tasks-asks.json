@@ -1,0 +1,35 @@
+{
+  "id": "classify-done-ya-esta-two-tasks-asks",
+  "task": "classify",
+  "message": "ya está",
+  "record": true,
+  "now": "2026-10-20T07:20:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "speaker": "push",
+        "text": "Hoy hay 2 cosas:\n• Renovar el pasaporte — mar 20 oct\n• Pagar la tarjeta — mar 20 oct",
+        "about": [
+          "A",
+          "B"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Renuevo el pasaporte el 2026-10-20.",
+        "title": "Renovar el pasaporte",
+        "due_at": "2026-10-20"
+      },
+      {
+        "content": "Pago la tarjeta el 2026-10-20.",
+        "title": "Pagar la tarjeta",
+        "due_at": "2026-10-20"
+      }
+    ]
+  },
+  "expect": {
+    "task_checkin_outcome": "done",
+    "referent": "unclear"
+  }
+}

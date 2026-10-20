@@ -1,0 +1,8 @@
+# a task due tomorrow is named by the digest, and the answer that it is done closes it
+# a check pass every 5m0s from Mon 2026-10-19 16:30 -03:00 to Fri 2026-10-23 12:00
+Mon 2026-10-19 16:34 ← mañana renuevo el pasaporte
+Mon 2026-10-19 16:34 → Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.
+Tue 2026-10-20 07:00 → Hoy hay 1 cosa:
+                       • Renovar el pasaporte — mar 20 oct
+Tue 2026-10-20 07:20 ← ya lo hice
+Tue 2026-10-20 07:20 → Listo, saqué «Renovar el pasaporte».

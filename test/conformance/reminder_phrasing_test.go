@@ -173,6 +173,20 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 		has("a new "+k+" with a conversation shown", conv(func(c llm.Case) bool { return c.Expect.Type == k && c.Expect.Referent == "" }))
 	}
 	has("a check-in answered with a conversation shown", conv(func(c llm.Case) bool { return c.Expect.TaskCheckinOutcome == "done" }))
+	// ADR-0040: a done after the digest names the task it closes, asks which
+	// when the digest named two, and a not-yet names none.
+	digest := func(c llm.Case) bool {
+		return slices.ContainsFunc(c.Conversation.Turns, func(t llm.ConversationTurn) bool { return t.Speaker == "push" && len(t.About) > 0 })
+	}
+	has("a done that names the task the digest named", conv(func(c llm.Case) bool {
+		return digest(c) && c.Expect.TaskCheckinOutcome == "done" && c.Expect.Referent == "A"
+	}))
+	has("a done after a digest of two tasks that asks which", conv(func(c llm.Case) bool {
+		return digest(c) && len(c.Conversation.Items) > 1 && c.Expect.TaskCheckinOutcome == "done" && c.Expect.Referent == classify.ReferentUnclear
+	}))
+	has("a not-yet after the digest that names nothing", conv(func(c llm.Case) bool {
+		return digest(c) && c.Expect.TaskCheckinOutcome == "snooze" && c.Expect.Referent == ""
+	}))
 
 	// Links 2 and 7 replay these two.
 	for _, id := range []string{"classify-task-remind-me-coffee", "classify-task-remind-me-daily-pills"} {
