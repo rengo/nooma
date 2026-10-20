@@ -1,0 +1,71 @@
+{
+  "id": "classify-followup-new-event-after-remind-me",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "el jueves cena con Ana a las 21",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Tengo una cena con Ana el 2026-10-22 a las 21:00.\",\"weight\":0.7,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-22T21:00:00-03:00\",\"title\":\"Cena con Ana\"}",
+  "now": "2026-10-20T10:17:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T09:07:00-03:00",
+        "speaker": "push",
+        "text": "Recordatorio: Turno con el oculista — mar 20 oct, 11:00",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T10:15:00-03:00",
+        "speaker": "user",
+        "text": "el viernes tengo que llevar el auto al service",
+        "about": [
+          "B"
+        ]
+      },
+      {
+        "at": "2026-10-20T10:15:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el vie 23 oct. Te lo recuerdo en el resumen de esa mañana.",
+        "about": [
+          "B"
+        ]
+      },
+      {
+        "at": "2026-10-20T10:16:00-03:00",
+        "speaker": "user",
+        "text": "recordámelo",
+        "about": [
+          "B"
+        ]
+      },
+      {
+        "at": "2026-10-20T10:16:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el vie 23 oct. Te aviso ese día a las 09:00.",
+        "about": [
+          "B"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Turno con el oculista el 2026-10-20 a las 11:00.",
+        "title": "Turno con el oculista",
+        "event_at": "2026-10-20T11:00:00-03:00"
+      },
+      {
+        "content": "Llevar el auto al service el 2026-10-23.",
+        "title": "Llevar el auto al service",
+        "due_at": "2026-10-23"
+      }
+    ]
+  },
+  "expect": {
+    "type": "event",
+    "remind_request": false,
+    "event_at": "2026-10-22T21:00:00-03:00"
+  },
+  "prompt_sha256": "5a19824edc1ecfe7397fad715a00533d5dd849436bbf3bed2263572acc9f8b9f"
+}

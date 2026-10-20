@@ -504,9 +504,12 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      judges how stale a turn is, each clipped to `max_turn_runes` and tagged with the letter of every item
      it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
      from `A` in the order they first appear. Three optional fields
-     come back, each degrading alone (I14): `referent`, the letter of the listed item a
-     `correction` changes, or that a `task_checkin_outcome: done` of any type says is done
-     ([ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md)), or `unclear`; `clarifying_question`, beside `unclear`, the question
+     come back, each degrading alone (I14): `referent`, the letter of the listed item the message
+     is about, or `unclear`: the item a `correction` changes, the item a `remind_request: true`
+     asks to be reminded of, and, beside a check-in answer other than `snooze` of any type, the
+     item said to be done ([ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md)) or the
+     pushed item whose check-in it answers
+     ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)); `clarifying_question`, beside `unclear`, the question
      the model writes in the message's language to ask which item the user means (one line, at
      most `max_turn_runes`); and `reminder_leads_minutes`, beside a referent, every lead the
      message asks to be reminded at, in whole positive minutes before the item (step 4,
@@ -516,6 +519,12 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      even about the same subject as a listed item, and a short reply to a reminder, check-in or
      nudge Nooma pushed that only says it is done, agrees or declines, to which the check-in and
      nudge rules still apply; one that says a listed item is done also names it in `referent`.
+     **A message answers the latest exchange it follows** (ADR-0044): a short reply naming no
+     item is about the item of the newest turns, and answers a pushed check-in only while that
+     push is the latest exchange; a message that only asks to be reminded asks it of the item it
+     follows. With a push earlier that morning, "recordámelo" right after a new task was read as
+     the push's answer, while the check-in section said the open check-in was not shown; beside a
+     chat it now says what Nooma asked is a pushed turn, and an answer names that turn's item.
      **The answer to Nooma's which-item question has one home**, the Follow-ups section:
      one that confirms or names a listed item is a `correction` with that referent and the change
      the question was about, or, when that message said the item is done, `chitchat` with that
@@ -529,7 +538,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      conversation carries no Follow-ups section, no pointer and no follow-up field, and is
      byte for byte the prompt the reminder phrasing set was read with before this rule (with
      the follow-up text present, two nudge answers read no outcome). The code acts only on a
-     `correction`, or on a `task_checkin_outcome: done` of any other type (`classify.ReadFollowUp`;
+     `correction`, or on a `task_checkin_outcome: done` or a `remind_request: true` of any other
+     type (`classify.ReadFollowUp`;
      a `correction` carrying done stays a correction): a letter it listed binds (step 4); `unclear`
      with a question asks; anything else, an unlisted letter included, is not a follow-up, and the
      message takes the path it took before.
@@ -541,8 +551,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
-     "on Friday"), and for a chat message its recent conversation (above). No open check-in: the model reads what an answer says, and the store
-     decides what it answers (below).
+     "on Friday"), and for a chat message its recent conversation (above). No list of open check-ins: the model reads what an answer says, and
+     the store decides what it answers (below); beside a chat, a push is one of its turns.
    - **A bare weekday is its next occurrence after today**; named on that same weekday it is
      next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
      "today" ("hoy") is today. The prompt states this rule and gives the model the calendar to
@@ -589,7 +599,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      (`open_relation_questions: N`), so the audit trail shows a choice was made rather than
      implying there was only one. **An answer matching nothing open resolves nothing and,
      above all, deletes nothing.** Nor does one whose check-in the digest closed between the read
-     and the write (§7): it is recorded as unmatched and the capture goes on.
+     and the write (§7): it is recorded as unmatched and the capture goes on. **Beside a chat,
+     the check-in of the item named** (ADR-0044): a closing outcome closes only the open
+     check-in of the unit its `referent` names among the letters shown, and one naming no item,
+     or an item with no open check-in, closes nothing and is recorded as unmatched. A `snooze`
+     that names a shown item puts off that item's check-in, or none when it has none; one
+     naming no item puts off the newest, as read alone. The model names a letter the code listed,
+     never an id: the binding ADR-0033 allows.
    - **The one exception is narrower than the rule, and is for reminders**
      ([ADR-0033](adr/0033-the-model-understands-the-code-acts.md)): the prompt may carry the
      reminder question Nooma has open and one numbered list of at most `max_reminder_choices`
@@ -750,19 +766,23 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        that exchange in the conversation and is read as an ordinary correction with a referent.
        Only a chat that names no listed item reaches the recall gate.
      - **A remind-me reminds of the item it names** (I40,
-       [ADR-0043](adr/0043-a-remind-me-follow-up-reminds-of-the-item.md)). "recordámelo" right
-       after a task binds that task as above, and a bound reading with `remind_request: true` is
+       [ADR-0043](adr/0043-a-remind-me-follow-up-reminds-of-the-item.md), ADR-0044). "recordámelo"
+       right after a task binds that task as above, whatever the reading's type, and a bound reading with `remind_request: true` is
        not a correction: the unit is marked asked (`remind_me`) and armed as an asked capture is
        (ADR-0031), on the unit as it stands. No unit is stored and nothing else on it is
        rewritten. Only the asked reminder is armed, so an event's own leads are never armed twice,
-       and one already armed at the same instant is not armed again. The answer is the asked
-       reminder's ("Te aviso ese día a las 09:00."); an item with no date, or one too close for
-       the asked reminder while an own lead would still fit, is still marked asked, and the
+       and one already armed at the same instant is not armed again. The answer names every
+       ring the item has once the asked one is armed, as a capture's does ("Te aviso ese día a
+       las 09:00."; "Te aviso unas horas antes y 15 minutos antes.", ADR-0044); an item with no date, or
+       one too close for the asked reminder while an own lead would still fit, is still marked
+       asked, and the
        answer says no reminder was set and why, with a `capture.arm.refused` row. A remind-me
        whose reading names a new instant for the item ("es a las 11, recordámelo";
-       `correction.MovesDate`, an echoed instant is none) moves it first, through the correction
-       path above, and then arms the asked reminder on the moved unit; the answer names both
-       ("Movido al mar 20 oct, 11:00. Te aviso 15 minutos antes."). A correction that asks
+       `correction.MovesDate`: an echoed instant is none, and so is a bare date on the item's own
+       local day, the day the model restates beside "recordámelo", ADR-0044) moves it first, through the correction
+       path above, and then arms the asked reminder on the moved unit; the answer names the move
+       and every ring ("Movido al mar 20 oct, 11:00. Te aviso unas horas antes y 15 minutos
+       antes."). A correction that asks
        instead arms nothing. Text alone is not a change here: the reading restates its item.
        Leads win: a reading carrying `reminder_leads_minutes` ("avisame 2 horas antes") takes
        the correction path and sets the event's own leads, and a `remind_request` beside it is

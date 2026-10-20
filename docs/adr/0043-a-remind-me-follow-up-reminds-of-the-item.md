@@ -6,7 +6,8 @@
 - **Date**: 2026-10-19
 - **Supersedes**: [ADR-0036](0036-a-chat-message-is-read-in-its-conversation.md) point 3, in
   part: a bound follow-up with `remind_request: true` is not only corrected, it is reminded of
-- **Superseded by**: —
+- **Superseded by**: [ADR-0044](0044-a-chat-answer-names-the-item-it-is-about.md), points 3 and 4 in
+  part (the answer names every ring the item has)
 - **Enables**: M4
 
 ## Context

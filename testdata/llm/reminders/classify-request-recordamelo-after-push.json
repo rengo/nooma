@@ -1,0 +1,54 @@
+{
+  "id": "classify-request-recordamelo-after-push",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "recordámelo",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Llevar el auto al service el 2026-10-23.\",\"weight\":0.75,\"decay_rate\":0.02,\"language\":\"es\",\"title\":\"Llevar el auto al service\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"B\"}",
+  "now": "2026-10-20T10:16:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T09:07:00-03:00",
+        "speaker": "push",
+        "text": "Recordatorio: Turno con el oculista — mar 20 oct, 11:00",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T10:15:00-03:00",
+        "speaker": "user",
+        "text": "el viernes tengo que llevar el auto al service",
+        "about": [
+          "B"
+        ]
+      },
+      {
+        "at": "2026-10-20T10:15:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el vie 23 oct. Te lo recuerdo en el resumen de esa mañana.",
+        "about": [
+          "B"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Turno con el oculista el 2026-10-20 a las 11:00.",
+        "title": "Turno con el oculista",
+        "event_at": "2026-10-20T11:00:00-03:00"
+      },
+      {
+        "content": "Llevar el auto al service el 2026-10-23.",
+        "title": "Llevar el auto al service",
+        "due_at": "2026-10-23"
+      }
+    ]
+  },
+  "expect": {
+    "remind_request": true,
+    "referent": "B"
+  },
+  "prompt_sha256": "4002516d5c03f0a97dce9f75b3d19e5bba47e674533398fd15a90cf379257d49"
+}

@@ -129,6 +129,7 @@ func TestReadFollowUp(t *testing.T) {
 	kind := func(k Kind) *Kind { return &k }
 	outcome := func(o TaskCheckinOutcome) *TaskCheckinOutcome { return &o }
 	q := "¿Te referís a la reunión con Juan?"
+	yes, no := true, false
 	for _, tc := range []struct {
 		name  string
 		c     Classification
@@ -152,6 +153,11 @@ func TestReadFollowUp(t *testing.T) {
 		{"a snooze with a referent is not one", Classification{Kind: kind(KindChitchat), TaskCheckinOutcome: outcome(TaskCheckinOutcomeSnooze), Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
 		{"a drop with a referent is not one", Classification{Kind: kind(KindChitchat), TaskCheckinOutcome: outcome(TaskCheckinOutcomeDrop), Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
 		{"a correction carrying done stays a correction", Classification{Kind: kind(KindCorrection), TaskCheckinOutcome: outcome(TaskCheckinOutcomeDone), Referent: &Referent{Position: 1}}, 2, FollowUp{Position: 1}, true},
+		// ADR-0044: a remind-me names the item it asks to be reminded of, whatever the type.
+		{"a remind-me with a shown letter binds", Classification{Kind: kind(KindTask), RemindRequest: &yes, Referent: &Referent{Position: 2}}, 2, FollowUp{Position: 2}, true},
+		{"a remind-me with a letter not shown never binds", Classification{Kind: kind(KindChitchat), RemindRequest: &yes, Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
+		{"a remind-me with no referent is not one", Classification{Kind: kind(KindTask), RemindRequest: &yes}, 2, FollowUp{}, false},
+		{"a remind_request of false binds nothing", Classification{Kind: kind(KindTask), RemindRequest: &no, Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := ReadFollowUp(tc.c, tc.shown)
@@ -202,7 +208,8 @@ func TestBuildPrompt_DescribesFollowUps(t *testing.T) {
 func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 	p := flat(promptWith(ReminderContext{Conversation: oneTurn}))
 	for _, want := range []string{
-		"Beside task_checkin_outcome done, whatever the type: the letter of the listed item the message says is done, or \"unclear\" when it is one of them and you cannot tell which.",
+		"the letter of the listed item the message is about, or \"unclear\" when it is about one of them and you cannot tell which.",
+		"beside a check-in answer other than snooze, whatever the type (the item the message says is done, or the pushed item whose check-in it answers)",
 		"A message that says a listed item is done answers task_checkin_outcome done and that item's referent: Nooma closes it.",
 		"A short reply to a reminder, a check-in or a nudge Nooma pushed that only says it is done, agrees or declines is not a correction",
 	} {
@@ -212,6 +219,38 @@ func TestBuildPrompt_ADoneNamesItsItem(t *testing.T) {
 	}
 	if p := promptWith(ReminderContext{}); strings.Contains(p, "Nooma closes it") {
 		t.Errorf("a prompt with no chat carries the done referent:\n%s", p)
+	}
+}
+
+// TestBuildPrompt_ACheckInAnswerNamesThePushedItem (ADR-0044): beside a chat,
+// what Nooma asked is a pushed turn of it, and an answer names that item by its
+// letter, one home for both. "recordámelo" after a push was read as the push's
+// check-in answer and a chitchat: the check-in section said which one is open
+// is not shown, and a short reply answers it, while Follow-ups gave referent no
+// meaning beside a remind-me. Now a short reply is about the latest exchange,
+// and a bare remind-me names the item it follows.
+func TestBuildPrompt_ACheckInAnswerNamesThePushedItem(t *testing.T) {
+	p := promptWith(ReminderContext{Conversation: oneTurn})
+	checkin := flat(section(p, checkinHeading))
+	for _, want := range []string{
+		"What it asked is a pushed turn of the recent conversation, and an answer names that turn's item in referent: Nooma answers the check-in of the item named, and none when no item is named.",
+	} {
+		if !strings.Contains(checkin, want) {
+			t.Errorf("the check-in section never says %q:\n%s", want, checkin)
+		}
+	}
+	if strings.Contains(checkin, "is not shown here") {
+		t.Errorf("beside a chat the check-in section still says the open one is not shown:\n%s", checkin)
+	}
+	followUps := flat(section(p, followUpsHeading))
+	for _, want := range []string{
+		"beside remind_request true (the item the user asks to be reminded of)",
+		"A message answers the latest exchange it follows. A short reply that names no item is about the item the newest turns are about: it answers a pushed check-in only while that push is the latest exchange, and once the user has told Nooma something newer, it is about that newer item and answers no check-in of the earlier push.",
+		"A message that only asks to be reminded, naming nothing, asks it of the item it follows: remind_request true and that item's referent, never a chitchat.",
+	} {
+		if !strings.Contains(followUps, want) {
+			t.Errorf("Follow-ups never says %q:\n%s", want, followUps)
+		}
 	}
 }
 

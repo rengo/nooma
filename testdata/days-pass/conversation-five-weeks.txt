@@ -1,6 +1,8 @@
 # every reminder kind the recordings hold, five weeks, the server down three days
 # a check pass every 5m0s from Fri 2026-10-16 10:40 -03:00 to Sat 2026-11-21 00:00
 # "Remind me to call Ana at 5pm" is replayed at Fri 10-16 17:30; its reading was recorded at Fri 10-16 10:42
+# "listo" is read by a hand-written reading, not a recording
+# "ya lo hice" is read by a hand-written reading, not a recording
 Fri 2026-10-16 10:42 ← recordame comprar café mañana a las 10
 Fri 2026-10-16 10:42 → Anotado para el sáb 17 oct, 10:00. Te aviso 15 minutos antes.
 Fri 2026-10-16 10:43 ← recordame pagar el gas el jueves
@@ -29,8 +31,7 @@ Sat 2026-10-17 08:50 → (chat reply)
 Sat 2026-10-17 08:50 ·· check-in "Llamar al médico": put off
 Sat 2026-10-17 09:45 → Recordatorio: Comprar café — sáb 17 oct, 10:00
 Sat 2026-10-17 10:00 ← listo
-Sat 2026-10-17 10:00 → (chat reply)
-Sat 2026-10-17 10:00 ·· check-in "Comprar café": engaged
+Sat 2026-10-17 10:00 → Listo, saqué «Comprar café».
 Sat 2026-10-17 20:30 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
 Sat 2026-10-17 21:00 → Recordatorio: Tomar las pastillas — sáb 17 oct
 Sat 2026-10-17 22:15 → Recordatorio: Reunión con Juan — sáb 17 oct, 22:30
@@ -45,8 +46,7 @@ Thu 2026-10-22 21:30 ·· the server starts
 Thu 2026-10-22 21:35 → Recordatorio: Tomar las pastillas — jue 22 oct (Esto llega más tarde de lo previsto.)
 Thu 2026-10-22 21:35 → Recordatorio: Pagar el gas — jue 22 oct
 Thu 2026-10-22 21:40 ← ya lo hice
-Thu 2026-10-22 21:40 → (chat reply)
-Thu 2026-10-22 21:40 ·· check-in "Pagar el gas": engaged
+Thu 2026-10-22 21:40 → Listo, saqué «Pagar el gas».
 Fri 2026-10-23 08:00 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
 Fri 2026-10-23 09:00 → Recordatorio: Vencimiento del seguro — vie 23 oct
 Fri 2026-10-23 09:45 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00

@@ -21,7 +21,13 @@ import (
 // choose. So this resolves what it can and the pipeline continues.
 //
 // It returns whether anything was resolved, for the caller's own report.
-func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classification, now time.Time) (bool, error) {
+//
+// **Beside a chat, the item it names** (ADR-0044): what Nooma asked is a
+// pushed turn of the chat shown (shown maps a letter to its unit), and the
+// answer names that turn's item in referent. An answer naming no item, or one
+// with no open check-in, answers none. A snooze naming an item puts off its
+// check-in; one naming none, the newest. Read alone, the newest open one.
+func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classification, shown []string, now time.Time) (bool, error) {
 	resolution, ok := checkInResolution(c)
 	snoozed := classify.Snoozes(c)
 	if !ok && !snoozed {
@@ -33,6 +39,11 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 		return false, fmt.Errorf("capture: reading open check-ins: %w", err)
 	}
 	if snoozed {
+		// A not-yet that names a shown item puts off that item's check-in, or
+		// none when it has none (ADR-0044); one naming no item, the newest.
+		if named := namedItem(c, shown); named != "" {
+			open = checkInsOf(open, named)
+		}
 		if len(open) == 0 {
 			return false, nil
 		}
@@ -40,6 +51,13 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 		// newest open check-in again (doc 02 §7).
 		return false, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInSnoozed,
 			fmt.Sprintf("check-in %q was put off; the morning digest asks it again", open[0].ID), open[0].ID, "", len(open))
+	}
+	if len(shown) > 0 {
+		open = checkInsOf(open, namedItem(c, shown))
+		if len(open) == 0 {
+			return false, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInUnmatched,
+				fmt.Sprintf("an answer resolving to %q named no item of the chat with an open check-in", resolution), "", resolution, 0)
+		}
 	}
 	if len(open) == 0 {
 		// An answer with nothing open. Recorded and otherwise ignored: a
@@ -69,6 +87,27 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 
 	return true, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInResolved,
 		fmt.Sprintf("check-in %q resolved as %q", target.ID, resolution), target.ID, resolution, len(open))
+}
+
+// namedItem is the unit c's referent names among shown, or "" when it names
+// none of them.
+func namedItem(c classify.Classification, shown []string) string {
+	if c.Referent == nil || c.Referent.Unclear || c.Referent.Position < 1 || c.Referent.Position > len(shown) {
+		return ""
+	}
+	return shown[c.Referent.Position-1]
+}
+
+// checkInsOf is the open check-ins hanging off unitID, in their order; none
+// for "".
+func checkInsOf(open []ports.OpenCheckIn, unitID string) []ports.OpenCheckIn {
+	var of []ports.OpenCheckIn
+	for _, o := range open {
+		if unitID != "" && o.UnitID != nil && *o.UnitID == unitID {
+			of = append(of, o)
+		}
+	}
+	return of
 }
 
 // checkInResolution is classify.ResolveCheckin in the store's vocabulary: the

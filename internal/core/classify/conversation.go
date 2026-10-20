@@ -83,14 +83,16 @@ type FollowUp struct {
 }
 
 // ReadFollowUp decides whether c is a follow-up the code acts on, given how
-// many items the prompt showed: a correction, or a task_checkin_outcome done
-// of any type (ADR-0040), naming a letter inside the list, or unclear with a
-// question. A correction that also carries done stays a correction. Anything
-// else takes the path it took before.
+// many items the prompt showed: a correction, a task_checkin_outcome done of
+// any type (ADR-0040), or a remind_request of any type (ADR-0044), naming a
+// letter inside the list, or unclear with a question. A correction that also
+// carries done stays a correction. Anything else takes the path it took
+// before.
 func ReadFollowUp(c Classification, shown int) (FollowUp, bool) {
 	correction := c.Kind != nil && *c.Kind == KindCorrection
 	done := c.TaskCheckinOutcome != nil && *c.TaskCheckinOutcome == TaskCheckinOutcomeDone
-	if (!correction && !done) || c.Referent == nil {
+	remind := c.RemindRequest != nil && *c.RemindRequest
+	if (!correction && !done && !remind) || c.Referent == nil {
 		return FollowUp{}, false
 	}
 	if c.Referent.Unclear {
@@ -102,7 +104,7 @@ func ReadFollowUp(c Classification, shown int) (FollowUp, bool) {
 	if c.Referent.Position < 1 || c.Referent.Position > shown {
 		return FollowUp{}, false
 	}
-	return FollowUp{Position: c.Referent.Position, Done: !correction}, true
+	return FollowUp{Position: c.Referent.Position, Done: done && !correction}, true
 }
 
 // assignReferent reads referent: a capital letter up to the last item a
@@ -175,14 +177,19 @@ func assignReminderLeads(raw json.RawMessage, c *Classification, _ time.Time) Re
 func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString(followUpsHeading + "\n")
 	b.WriteString("  A chat message can follow up on the recent conversation, when one is shown below.\n")
-	b.WriteString("  referent             for type correction: the letter of the listed item the\n")
-	b.WriteString("                       message changes, or \"" + ReferentUnclear + "\" when it changes one of them and\n")
-	b.WriteString("                       you cannot tell which. Never a letter that is not listed.\n")
-	// **A done names what it closes** (ADR-0040). "ya lo hice" after the
-	// digest named a task left it open: an answer carried no item.
-	b.WriteString("                       Beside task_checkin_outcome done, whatever the type: the\n")
-	b.WriteString("                       letter of the listed item the message says is done, or\n")
-	b.WriteString("                       \"" + ReferentUnclear + "\" when it is one of them and you cannot tell which.\n")
+	// **One meaning, every use** (ADR-0040, ADR-0044): the item the message
+	// is about. A done names what it closes ("ya lo hice" after the digest
+	// left the task open), a remind-me what it reminds of, a check-in answer
+	// the push it answers: "recordámelo" after a push, with referent given no
+	// meaning beside a remind-me, was read as that push's answer.
+	b.WriteString("  referent             the letter of the listed item the message is about, or\n")
+	b.WriteString("                       \"" + ReferentUnclear + "\" when it is about one of them and you cannot tell which.\n")
+	b.WriteString("                       Never a letter that is not listed. It is given for type\n")
+	b.WriteString("                       correction (the item the message changes), beside\n")
+	b.WriteString("                       remind_request true (the item the user asks to be reminded\n")
+	b.WriteString("                       of), and beside a check-in answer other than snooze, whatever\n")
+	b.WriteString("                       the type (the item the message says is done, or the pushed\n")
+	b.WriteString("                       item whose check-in it answers).\n")
 	b.WriteString("                       Leave it out for everything else, and for a correction of\n")
 	b.WriteString("                       something not listed. An answer to Nooma's which-item\n")
 	b.WriteString("                       question names its referent as said below\n")
@@ -222,6 +229,16 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  A short reply to a reminder, a check-in or a nudge Nooma pushed that only says\n")
 	b.WriteString("  it is done, agrees or declines is not a correction: the check-in and nudge\n")
 	b.WriteString("  rules above still apply to it.\n")
+	// **The latest exchange, not the open check-in** (ADR-0044): with a push
+	// earlier that morning, "recordámelo" right after a new task answered the
+	// push.
+	b.WriteString("  A message answers the latest exchange it follows. A short reply that names no\n")
+	b.WriteString("  item is about the item the newest turns are about: it answers a pushed\n")
+	b.WriteString("  check-in only while that push is the latest exchange, and once the user has\n")
+	b.WriteString("  told Nooma something newer, it is about that newer item and answers no check-in\n")
+	b.WriteString("  of the earlier push.\n")
+	b.WriteString("  A message that only asks to be reminded, naming nothing, asks it of the item it\n")
+	b.WriteString("  follows: remind_request true and that item's referent, never a chitchat.\n")
 	b.WriteString("  A message that says a listed item is done answers task_checkin_outcome done and\n")
 	b.WriteString("  that item's referent: Nooma closes it.\n")
 	b.WriteString("  When referent names an item, the correction is a PATCH of that item: change\n")

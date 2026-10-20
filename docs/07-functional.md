@@ -201,7 +201,8 @@ of a black box.
 6. **Lets a question lapse.** One that goes unanswered through enough digests is marked
    expired, never deleted, and is not asked again.
 7. **Asks its own check-ins.** Goal and task nudges are answered the same way: *engaged* or
-   *declined* resolves the most recent open one; for a task check-in, *done* and *drop* resolve
+   *declined* resolves the most recent open one, or, in a chat, the one of the pushed item the
+   answer is about (a message about something told since answers none); for a task check-in, *done* and *drop* resolve
    it and *snooze* ("not yet", a bare "no" included) leaves it open. A check-in about something still
    to do (a task or an open loop) that you put off is asked again from the next day's morning digest ("Te pregunto de nuevo: • ¿Ya está «Comprar café»?"), at most twice, and then closes by itself; one never
    answered, or about an event, is not asked again and closes after the same three mornings, so an old check-in

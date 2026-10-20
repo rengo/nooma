@@ -376,14 +376,17 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 func writeCheckins(b *strings.Builder, chat bool) {
 	b.WriteString(checkinHeading + "\n")
 	b.WriteString("  Nooma asks the user about a task it reminded them of, and nudges them toward\n")
-	// With a chat shown, a push may be in it: it is which one is open that is
-	// never shown.
+	// **With a chat shown, what Nooma asked is in it** (ADR-0044): an answer
+	// names the pushed item, as every follow-up names its item. Told the open
+	// one was not shown, a remind-me after a push answered that push.
 	if chat {
-		b.WriteString("  something they meant to do. Which one is open is not shown here: say what the\n")
+		b.WriteString("  something they meant to do. What it asked is a pushed turn of the recent\n")
+		b.WriteString("  conversation, and an answer names that turn's item in referent: Nooma answers\n")
+		b.WriteString("  the check-in of the item named, and none when no item is named.\n")
 	} else {
 		b.WriteString("  something they meant to do. The open one is not shown here: say what the\n")
+		b.WriteString("  message answers, and Nooma matches it to what it asked, or drops it.\n")
 	}
-	b.WriteString("  message answers, and Nooma matches it to what it asked, or drops it.\n")
 	// **The bare word's rule** (format.md): a short reply with nothing asked
 	// in front of the model is the check-in's answer. A bare yes and a nudge
 	// taken up read no outcome without it, and the nudge stayed open. A bare

@@ -43,6 +43,13 @@ func recordamelo(t *testing.T) string {
 	return recordedReading(t, "classify-request-recordamelo")
 }
 
+// remindMeNamingNoInstant is "recordámelo" read with no instant of its own:
+// the recording restates its item's day (2026-10-17), which is an echo for
+// that item and a move for an undated one, so a fixture whose item is
+// undated replays this instead.
+const remindMeNamingNoInstant = `{"type":"task","normalized_content":"Comprar el regalo de Ana.","weight":0.8,"decay_rate":0.05,` +
+	`"language":"es","title":"Regalo de Ana","remind_request":true,"referent":"A"}`
+
 const remindChat ports.ConversationID = "9"
 
 // seedFollowed stores u and the exchange that told it, so the next message in
@@ -118,7 +125,7 @@ func TestI40_ARemindMeFollowUpRemindsTheItemItFollows(t *testing.T) {
 // cannot be reminded of. It is still marked asked, nothing is armed or stored,
 // and the answer says why, as an asked capture's does.
 func TestI40_ARemindMeOfAnUndatedItemSaysNoReminderWasSet(t *testing.T) {
-	f := newI40(t, recordamelo(t))
+	f := newI40(t, remindMeNamingNoInstant)
 	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
 		Content: "Comprar el regalo de Ana.", Title: "Regalo de Ana", CreatedAt: i40Now, UpdatedAt: i40Now})
 
@@ -140,7 +147,8 @@ func TestI40_ARemindMeOfAnUndatedItemSaysNoReminderWasSet(t *testing.T) {
 
 // TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder: an event already carries
 // its leads. Asked to be reminded, it gains the asked one, and its leads are
-// not armed a second time.
+// not armed a second time. The answer names every ring that remains, as a
+// capture's does (ADR-0044), not the asked one alone.
 func TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder(t *testing.T) {
 	f := newI40(t, `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 22:30.",`+
 		`"weight":0.7,"decay_rate":0.05,"language":"es","remind_request":true,"referent":"A"}`)
@@ -173,8 +181,8 @@ func TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder(t *testing.T) {
 	if res.Outcome != brain.OutcomeArmed || f.units.Count() != 1 {
 		t.Errorf("result = %+v, units = %d: want the meeting armed and no unit stored", res, f.units.Count())
 	}
-	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso 15 minutos antes.") {
-		t.Errorf("reply = %q, want the asked reminder's answer", got)
+	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso unas horas antes y 15 minutos antes.") {
+		t.Errorf("reply = %q, want every ring that remains named, the lead it had and the asked one", got)
 	}
 }
 
@@ -244,8 +252,11 @@ func TestI40_ARemindMeThatMovesTheItemMovesItThenReminds(t *testing.T) {
 		t.Fatalf("result = %+v, want the meeting corrected and its asked reminder armed", res)
 	}
 	reply := channels.RenderReply(res)
-	if !strings.HasPrefix(reply, "Movido al ") || !strings.HasSuffix(reply, ". Te aviso 15 minutos antes.") {
-		t.Errorf("reply = %q, want the move and the asked reminder named", reply)
+	// Every ring that remains (ADR-0044): the move armed the event's own lead
+	// beside the asked one, and naming the asked one alone was the live
+	// message 4's answer.
+	if !strings.HasPrefix(reply, "Movido al ") || !strings.HasSuffix(reply, ". Te aviso unas horas antes y 15 minutos antes.") {
+		t.Errorf("reply = %q, want the move and every ring that remains named", reply)
 	}
 }
 
@@ -299,13 +310,14 @@ func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
 
 // TestI40_ARemindMeNamesTheItemInTheUsersZone: the store hands a unit's
 // instants back in UTC (formatUnitTime/parse), while the clock and the user
-// are at -03. "recordámelo" of a task due at 10:00 local is answered with
+// are at -03. The recorded "recordámelo", which restates its item's day as a
+// bare 2026-10-17, of a task due that day at 10:00 local is answered with
 // 10:00, never the UTC hour, and the reminder rings at 09:45 local.
 func TestI40_ARemindMeNamesTheItemInTheUsersZone(t *testing.T) {
 	f := newI40(t, recordamelo(t))
-	due := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC) // 10:00 at -03, as the store returns it
+	due := time.Date(2026, 10, 17, 13, 0, 0, 0, time.UTC) // 10:00 at -03, as the store returns it
 	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
-		Content: "Comprar el regalo de Ana el 2026-10-15 a las 10:00.", Title: "Regalo de Ana", DueAt: &due,
+		Content: "Comprar el regalo de Ana el 2026-10-17 a las 10:00.", Title: "Regalo de Ana", DueAt: &due,
 		CreatedAt: i40Now, UpdatedAt: i40Now})
 
 	res := f.say(t, "recordámelo")
@@ -319,5 +331,32 @@ func TestI40_ARemindMeNamesTheItemInTheUsersZone(t *testing.T) {
 	}
 	if want := due.Add(-15 * time.Minute); len(armed) != 1 || !armed[0].FireAt.Equal(want) {
 		t.Errorf("armed = %+v, want one reminder at %v", armed, want.In(i40Now.Location()))
+	}
+}
+
+// TestI40_ARemindMeRestatingTheItemsDayDoesNotMoveIt (review B1 on #382): the
+// real model restates the item's day as a bare date beside "recordámelo". On
+// a task due that day at a set time, that day is the item's own: an echo,
+// never a move. Before, the task moved to midnight, its text was rewritten to
+// "a las 00:00" and the reply said "Movido al sáb 17 oct.".
+func TestI40_ARemindMeRestatingTheItemsDayDoesNotMoveIt(t *testing.T) {
+	f := newI40(t, `{"type":"task","normalized_content":"Comprar el regalo de Ana el 2026-10-17.","weight":0.8,"decay_rate":0.05,`+
+		`"language":"es","due_at":"2026-10-17","title":"Regalo de Ana","remind_request":true,"referent":"A"}`)
+	due := time.Date(2026, 10, 17, 10, 0, 0, 0, i40Now.Location())
+	const content = "Comprar el regalo de Ana el 2026-10-17 a las 10:00."
+	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
+		Content: content, Title: "Regalo de Ana", DueAt: &due, CreatedAt: i40Now, UpdatedAt: i40Now})
+
+	res := f.say(t, "recordámelo")
+
+	u, err := f.units.ByID(context.Background(), "gift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.DueAt == nil || !u.DueAt.Equal(due) || u.Content != content || !u.RemindMe {
+		t.Errorf("gift = due %v, %q, remind_me %v: want it where it was, its text unchanged, asked", u.DueAt, u.Content, u.RemindMe)
+	}
+	if got := channels.RenderReply(res); strings.HasPrefix(got, "Movido") || !strings.Contains(got, "15 minutos antes") {
+		t.Errorf("reply = %q, want the asked reminder and no move", got)
 	}
 }

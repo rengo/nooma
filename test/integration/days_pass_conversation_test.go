@@ -438,8 +438,17 @@ func dpScenarios() []dpScenario {
 				{at: dpAt(10, 16, 10, 50), id: "classify-reported-speech-avisame"},
 				{at: dpAt(10, 16, 17, 30), id: "classify-request-english-call-ana", late: true},
 				{at: dpAt(10, 17, 8, 50), id: "classify-checkin-snooze"},
-				{at: dpAt(10, 17, 10, 0), id: "classify-negative-bare-listo-with-candidates"},
-				{at: dpAt(10, 22, 21, 40), id: "classify-negative-ya-lo-hice-with-candidates"},
+				// Beside a chat, a check-in answer names the pushed item it
+				// answers (ADR-0044), as the chat-shown recording
+				// classify-followup-listo-after-checkin does; the recordings
+				// read alone, with no referent, now close nothing in a chat.
+				// A done naming an asked task closes it (ADR-0040).
+				{at: dpAt(10, 17, 10, 0), id: "hand-capture-listo-after-coffee-push", text: "listo",
+					reading: `{"type":"chitchat","normalized_content":"Listo.","weight":0.1,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done","referent":"H"}`,
+					shows:   `H) text (quoted): "Comprar café el 2026-10-17 a las 10:00."`},
+				{at: dpAt(10, 22, 21, 40), id: "hand-capture-ya-lo-hice-after-gas-push", text: "ya lo hice",
+					reading: `{"type":"chitchat","normalized_content":"Ya lo hice.","weight":0.1,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done","referent":"G"}`,
+					shows:   `G) text (quoted): "Recordarme pagar el gas el 2026-10-22."`},
 			},
 		},
 		{
