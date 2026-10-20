@@ -59,7 +59,7 @@ import (
 // (I29).
 func PlanEdit(c classify.Classification, target unit.Unit, zone *time.Location) ([]Edit, bool) {
 	eventEcho, dueEcho := echoes(c.EventAt, target.EventAt), echoes(c.DueAt, target.DueAt)
-	newDate := c.EventAt != nil && !eventEcho || c.DueAt != nil && !dueEcho
+	newDate := MovesDate(c, target)
 	// Leads say when to be reminded, not what the unit says (I40): beside a new
 	// date they travel with it, and alone they are the whole plan, the model's
 	// text never taken as the body.
@@ -117,6 +117,14 @@ func withText(date Edit, next time.Time, previous *time.Time, text *string, targ
 		return []Edit{date, NewContentEdit(*text)}
 	}
 	return []Edit{date}
+}
+
+// MovesDate reports whether c names an instant for target other than the one
+// it already holds: a date that echoes the unit's own is no change (I30). A
+// follow-up asking to be reminded moves its item first only when it does
+// (ADR-0044); the text the model restates beside it is never read as one.
+func MovesDate(c classify.Classification, target unit.Unit) bool {
+	return c.EventAt != nil && !echoes(c.EventAt, target.EventAt) || c.DueAt != nil && !echoes(c.DueAt, target.DueAt)
 }
 
 // echoes reports whether a classified date repeats the unit's current one:

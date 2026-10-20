@@ -95,6 +95,7 @@ order, with no correspondence to anything.
 | [0041](0041-the-chat-is-stored-and-read-by-its-last-turns.md) | The chat is stored in the vault and a chat message is read in its last twenty turns, at any age, across a restart (supersedes ADR-0036 point 1, and ADR-0040 in part) | Accepted | M4 |
 | [0042](0042-a-turn-shows-when-it-was-said.md) | Each turn of the chat shows the local time it was said, and a recorded prompt must be the one production sends (supersedes ADR-0041 in part) | Accepted | M4 |
 | [0043](0043-a-remind-me-follow-up-reminds-of-the-item.md) | A chat follow-up that asks to be reminded makes the item it names an asked reminder, storing nothing (supersedes ADR-0036 in part) | Accepted | M4 |
+| [0044](0044-a-remind-me-that-moves-the-item-moves-it-first.md) | A remind-me that also names a new instant for its item moves it first, then arms the asked reminder, and the answer names both (supersedes ADR-0043 in part) | Accepted | M4 |
 
 ## Template
 

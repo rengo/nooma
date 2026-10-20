@@ -10,6 +10,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/chat"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/relation"
@@ -322,7 +323,11 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			}
 			// **A remind-me names what it reminds of** (ADR-0043):
 			// "recordámelo" right after a task asks for a reminder of it.
+			// One that also moves it is moved first (ADR-0044).
 			if c.RemindRequest != nil && *c.RemindRequest {
+				if correction.MovesDate(c, u) {
+					return r.moveThenRemind(ctx, in, c, u, now)
+				}
 				return r.remindReferent(ctx, u, now)
 			}
 			explicit = &u

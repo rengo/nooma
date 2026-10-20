@@ -758,7 +758,13 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        and one already armed at the same instant is not armed again. The answer is the asked
        reminder's ("Te aviso ese día a las 09:00."); an item with no date, or one too close for
        the asked reminder while an own lead would still fit, is still marked asked, and the
-       answer says no reminder was set and why, with a `capture.arm.refused` row.
+       answer says no reminder was set and why, with a `capture.arm.refused` row. A remind-me
+       whose reading names a new instant for the item ("es a las 11, recordámelo";
+       `correction.MovesDate`, an echoed instant is none) moves it first, through the correction
+       path above, and then arms the asked reminder on the moved unit
+       ([ADR-0044](adr/0044-a-remind-me-that-moves-the-item-moves-it-first.md)); the answer names
+       both ("Movido al mar 20 oct, 11:00. Te aviso 15 minutos antes."). A correction that asks
+       instead arms nothing. Text alone is not a change here: the reading restates its item.
      - **A done closes the task it names** (I42,
        [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md); the client's ruling of
        2026-10-19). "ya lo hice" after the digest named a task binds that task as above, and

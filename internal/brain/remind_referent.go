@@ -67,6 +67,29 @@ func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time
 	return CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, ArmRefused: &ArmRefused{Why: why, Message: refusalMessage(why)}}, nil
 }
 
+// moveThenRemind is a remind-me that also moves the item it names ("es a
+// las 11, recordámelo", ADR-0044): the move is applied first, through the
+// correction path as any follow-up's is, and the asked reminder is then armed
+// on the moved unit. The answer names both. A correction that asks instead of
+// applying is answered as it is, and arms nothing: the item is not where the
+// user said, so a reminder of it would be of the wrong time.
+func (r captureRunner) moveThenRemind(ctx context.Context, in CaptureInput, c classify.Classification, u unit.Unit, now time.Time) (CaptureResult, error) {
+	res, err := r.correct(ctx, in, c, &u, now)
+	if err != nil || res.Outcome != OutcomeCorrected {
+		return res, err
+	}
+	moved, err := r.units.ByID(ctx, u.ID)
+	if err != nil {
+		return CaptureResult{}, fmt.Errorf("capture: read moved unit %q: %w", u.ID, err)
+	}
+	reminded, err := r.remindReferent(ctx, moved, now)
+	if err != nil {
+		return CaptureResult{}, err
+	}
+	res.Armed, res.ArmRefused = reminded.Armed, reminded.ArmRefused
+	return res, nil
+}
+
 // asCapture is u read as the capture that told it, for prospection.Arm: its
 // kind, its instants, and an instant at local midnight read as a day alone,
 // as the prompt shows it.

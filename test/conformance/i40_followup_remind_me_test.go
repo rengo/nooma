@@ -197,3 +197,64 @@ func TestI40_ARemindMeTooLateForItsLeadSaysWhy(t *testing.T) {
 		t.Errorf("armed = %+v, want none: only an asked reminder is armed by a remind-me", armed)
 	}
 }
+
+// TestI40_ARemindMeThatMovesTheItemMovesItThenReminds (ADR-0044): "es a las
+// 23, recordámelo" both moves the item it follows and asks to be reminded of
+// it. The move is applied first, through the correction path, and the asked
+// reminder is armed at the moved instant; the answer names both. Before, the
+// move was dropped and the answer confirmed a reminder of the old time.
+func TestI40_ARemindMeThatMovesTheItemMovesItThenReminds(t *testing.T) {
+	f := newI40(t, `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 23:00.",`+
+		`"event_at":"2026-10-14T23:00:00-03:00","weight":0.7,"decay_rate":0.05,"language":"es","remind_request":true,"referent":"A"}`)
+
+	res := f.capture(t, "es a las 23, recordámelo")
+
+	moved := time.Date(2026, 10, 14, 23, 0, 0, 0, i40Now.Location())
+	got := f.meeting(t)
+	if got.EventAt == nil || !got.EventAt.Equal(moved) || !got.RemindMe {
+		t.Errorf("meeting at %v, remind_me %v: want moved to %v and asked", got.EventAt, got.RemindMe, moved)
+	}
+	if n := f.units.Count(); n != 1 {
+		t.Errorf("units = %d, want 1: a follow-up is not a new memory", n)
+	}
+	armed, err := f.triggers.ArmedForUnit(context.Background(), "meeting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	for _, a := range armed {
+		if a.Payload.Asked {
+			asked++
+			if want := moved.Add(-15 * time.Minute); !a.FireAt.Equal(want) {
+				t.Errorf("asked reminder fires at %v, want %v, before the moved time", a.FireAt, want)
+			}
+		}
+	}
+	if asked != 1 {
+		t.Errorf("armed = %+v, want one asked reminder", armed)
+	}
+	if res.Outcome != brain.OutcomeCorrected || res.Correction == nil || res.Armed == nil {
+		t.Fatalf("result = %+v, want the meeting corrected and its asked reminder armed", res)
+	}
+	reply := channels.RenderReply(res)
+	if !strings.HasPrefix(reply, "Movido al ") || !strings.HasSuffix(reply, ". Te aviso 15 minutos antes.") {
+		t.Errorf("reply = %q, want the move and the asked reminder named", reply)
+	}
+}
+
+// TestI40_ARemindMeThatMovesTheItemTooLateSaysWhy: the move is applied, and
+// an asked reminder that no longer fits is said not to be set, and why.
+func TestI40_ARemindMeThatMovesTheItemTooLateSaysWhy(t *testing.T) {
+	f := newI40(t, `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 18:05.",`+
+		`"event_at":"2026-10-14T18:05:00-03:00","weight":0.7,"decay_rate":0.05,"language":"es","remind_request":true,"referent":"A"}`)
+
+	res := f.capture(t, "es a las 18:05, recordámelo")
+
+	if got := f.meeting(t); got.EventAt == nil || !got.EventAt.Equal(i40Now.Add(5*time.Minute)) {
+		t.Errorf("meeting at %v, want moved to 18:05", got.EventAt)
+	}
+	reply := channels.RenderReply(res)
+	if !strings.HasPrefix(reply, "Movido al ") || !strings.Contains(reply, "no puse aviso: queda muy poco tiempo para esa hora") {
+		t.Errorf("reply = %q, want the move named and the reminder said not set, and why", reply)
+	}
+}

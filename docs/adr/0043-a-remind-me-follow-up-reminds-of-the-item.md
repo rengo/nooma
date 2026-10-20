@@ -5,7 +5,8 @@
 - **Date**: 2026-10-19
 - **Supersedes**: [ADR-0036](0036-a-chat-message-is-read-in-its-conversation.md) point 3, in
   part: a bound follow-up with `remind_request: true` is not corrected, it is reminded of
-- **Superseded by**: —
+- **Superseded by**: [ADR-0044](0044-a-remind-me-that-moves-the-item-moves-it-first.md), its first
+  consequence (a remind-me that moves the item moves it first)
 - **Enables**: M4
 
 ## Context

@@ -285,3 +285,26 @@ func TestPlanEdit_ReminderLeads(t *testing.T) {
 		})
 	}
 }
+
+func TestMovesDate(t *testing.T) {
+	zone := time.FixedZone("ART", -3*3600)
+	at := time.Date(2026, 10, 14, 22, 30, 0, 0, zone)
+	same := at.UTC()
+	later := at.Add(time.Hour)
+	event := unit.Unit{EventAt: &at}
+	for name, tc := range map[string]struct {
+		c    classify.Classification
+		u    unit.Unit
+		want bool
+	}{
+		"no date":                   {classify.Classification{}, event, false},
+		"the event's own instant":   {classify.Classification{EventAt: &same}, event, false},
+		"a new event instant":       {classify.Classification{EventAt: &later}, event, true},
+		"a due instant it lacks":    {classify.Classification{DueAt: &later}, event, true},
+		"a date for an undated one": {classify.Classification{EventAt: &later}, unit.Unit{}, true},
+	} {
+		if got := MovesDate(tc.c, tc.u); got != tc.want {
+			t.Errorf("%s: MovesDate = %v, want %v", name, got, tc.want)
+		}
+	}
+}
