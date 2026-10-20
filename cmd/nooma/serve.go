@@ -131,10 +131,10 @@ func runServe(args []string, out, errOut io.Writer) error {
 	// One keeper for the whole process: the previous focus lives in it.
 	focusKeeper := wireFocus(db)
 
-	// One chat log for the whole process, in memory only (ADR-0036): the
+	// One chat log for the whole process, stored in the vault (ADR-0041): the
 	// channel's exchanges and the scheduler's pushes are its turns, and
-	// capture reads a chat message in it.
-	conv := brain.NewConversation()
+	// capture reads a chat message in it, across a restart too.
+	conv := brain.NewConversation(sqlite.NewConversationRepo(db))
 	if capture != nil {
 		capture.WithConversation(conv)
 	}

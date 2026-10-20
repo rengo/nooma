@@ -41,7 +41,7 @@ func newI42(t *testing.T, response string, titles ...string) i42Fixture {
 	t.Helper()
 	ctx := context.Background()
 	f := i42Fixture{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: memrepo.NewDecisionLog()}
-	conv := brain.NewConversation()
+	conv := brain.NewConversation(memrepo.NewConversations())
 	var ids []string
 	for i, title := range titles {
 		id := "t" + string(rune('1'+i))
@@ -53,7 +53,7 @@ func newI42(t *testing.T, response string, titles ...string) i42Fixture {
 			t.Fatal(err)
 		}
 	}
-	conv.Add(i40Chat, brain.Turn{At: i42Digest, Speaker: classify.SpeakerPush, Text: "Hoy hay cosas", UnitIDs: ids})
+	conv.Add(context.Background(), i40Chat, brain.Turn{At: i42Digest, Speaker: classify.SpeakerPush, Text: "Hoy hay cosas", UnitIDs: ids})
 	embeddings := memrepo.NewEmbeddings()
 	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
 	if err != nil {
@@ -243,8 +243,8 @@ func (f *i42Fixture) seedEvent(t *testing.T) {
 		Weight: 0.8, EventAt: &at, LastTouchedAt: i42Created, CreatedAt: i42Created, UpdatedAt: i42Created}); err != nil {
 		t.Fatal(err)
 	}
-	conv := brain.NewConversation()
-	conv.Add(i40Chat, brain.Turn{At: i42Digest, Speaker: classify.SpeakerPush, Text: "Hoy hay 1 cosa", UnitIDs: []string{"e1"}})
+	conv := brain.NewConversation(memrepo.NewConversations())
+	conv.Add(context.Background(), i40Chat, brain.Turn{At: i42Digest, Speaker: classify.SpeakerPush, Text: "Hoy hay 1 cosa", UnitIDs: []string{"e1"}})
 	f.svc.WithConversation(conv)
 	if got := f.status(t, "e1"); got != unit.StatusPool {
 		t.Fatalf("seed: %q", got)
@@ -271,8 +271,8 @@ func TestI42_ARecurringTaskIsNotEnded(t *testing.T) {
 	}
 }
 
-// TestI42_ADoneReadAloneClosesNothingAndSaysSo: past the conversation window
-// the digest is not shown, so a done names no item. It closes nothing, and
+// TestI42_ADoneReadAloneClosesNothingAndSaysSo: in a chat with no turns no
+// digest is shown, so a done names no item. It closes nothing, and
 // the reply says so instead of the chat model's own words, which could
 // confirm what Nooma did not do.
 func TestI42_ADoneReadAloneClosesNothingAndSaysSo(t *testing.T) {

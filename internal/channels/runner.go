@@ -259,8 +259,8 @@ func CaptureHandler(capture Capturer, ch ports.Channel, conv *brain.Conversation
 		// Both turns are added even when the reply fails to send: the capture
 		// stands, and a follow-up to it is still one.
 		about := result.ConcernedUnits()
-		conv.Add(msg.Conversation, brain.Turn{At: result.At, Speaker: classify.SpeakerUser, Text: msg.Text, UnitIDs: about})
-		conv.Add(msg.Conversation, brain.Turn{At: result.At, Speaker: classify.SpeakerNooma, Text: reply, UnitIDs: about})
+		conv.Add(ctx, msg.Conversation, brain.Turn{At: result.At, Speaker: classify.SpeakerUser, Text: msg.Text, UnitIDs: about})
+		conv.Add(ctx, msg.Conversation, brain.Turn{At: result.At, Speaker: classify.SpeakerNooma, Text: reply, UnitIDs: about})
 
 		if err := ch.Send(ctx, msg.Conversation, reply); err != nil {
 			mu.Lock()

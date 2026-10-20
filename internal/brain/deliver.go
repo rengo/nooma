@@ -144,7 +144,7 @@ func (r checkRunner) deliver(ctx context.Context, group []ports.DueTrigger, now 
 	}
 
 	r.outage.clear()
-	r.conv.Add(conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: unitsOf(group)})
+	r.conv.Add(ctx, conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: unitsOf(group)})
 
 	// Every row went out in this one message, so each is marked even when an
 	// earlier one could not be: a row left unmarked is resent by a restart.

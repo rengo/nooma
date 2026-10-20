@@ -223,7 +223,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 			about = append(about, id)
 		}
 	}
-	r.conv.Add(r.conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: about})
+	r.conv.Add(ctx, r.conversation, Turn{At: now, Speaker: classify.SpeakerPush, Text: text, UnitIDs: about})
 
 	// The user has now seen this digest, so its selection becomes the
 	// incumbent: published only after Send succeeds, because an unsent digest

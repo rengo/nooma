@@ -48,11 +48,15 @@ const dpConversation = "12449194"
 // text and reading, when set, are a hand-written message and reading in
 // place of a recording: a phrasing not recorded yet. The transcript header
 // says so; a phrasing the set records moves to its recorded id once it is.
+//
+// shows, when set, is a line the message's prompt must show: what of the chat
+// it was read in.
 type dpSay struct {
 	at            time.Time
 	id            string
 	late          bool
 	text, reading string
+	shows         string
 }
 
 // dpScenario is one life: preferences saved before the first message, the
@@ -74,8 +78,9 @@ type dpScenario struct {
 // testdata/llm/cases/relation-no-match-for-dry-cleaning.json. Any other call
 // fails the walk.
 type dpLLM struct {
-	t    *testing.T
-	next *goldenset.LLMExample
+	t      *testing.T
+	next   *goldenset.LLMExample
+	prompt string
 }
 
 func (l *dpLLM) Complete(_ context.Context, req ports.LLMRequest) (ports.LLMResponse, error) {
@@ -85,7 +90,7 @@ func (l *dpLLM) Complete(_ context.Context, req ports.LLMRequest) (ports.LLMResp
 			l.t.Fatalf("a second classification for one message: %q", req.Prompt)
 		}
 		ex := l.next
-		l.next = nil
+		l.next, l.prompt = nil, req.Prompt
 		return ports.LLMResponse{Text: ex.Response, Model: ex.Model}, nil
 	case "chat":
 		return ports.LLMResponse{Text: "(chat reply)", Model: "replay"}, nil
@@ -159,8 +164,8 @@ func (s dpScenario) live(t *testing.T) string {
 		llm, llm, llm, fakeprovider.NewEmbeddingFake(consolidateITEmbedModel), brain.NewIndex(idx), sqlite.NewSignalRepo(v),
 		triggers, timers, 0.5, questions).WithReminderPrefs(config)
 	keeper := brain.NewFocusKeeper(units, config, relations)
-	// One chat log for the walk, as serve holds one for the process (ADR-0036).
-	conv := brain.NewConversation()
+	// One chat log for the walk, in the vault, as serve holds it (ADR-0041).
+	conv := brain.NewConversation(sqlite.NewConversationRepo(v))
 	capture.WithConversation(conv)
 	check := brain.NewCheckService(clock, triggers, timers, ids, decisions, ch, units, sqlite.NewStateRepo(v),
 		llm, dpConversation, questions, keeper).WithQuietHours(config).WithConversation(conv)
@@ -228,6 +233,9 @@ func (s dpScenario) live(t *testing.T) string {
 			}
 			if llm.next != nil {
 				t.Fatalf("%s: the capture never classified", m.id)
+			}
+			if m.shows != "" && !strings.Contains(llm.prompt, m.shows) {
+				t.Errorf("%s: the prompt does not show %q:\n%s", m.id, m.shows, llm.prompt)
 			}
 			lines = append(lines, dpCheckins(t, decisions, open, m.at)...)
 		}
@@ -313,8 +321,9 @@ func dpScenarios() []dpScenario {
 		{
 			// The live case of 2026-10-17 (ADR-0036): a follow-up is read in
 			// the chat it follows. "Es a las 08:00." moves the meeting it
-			// follows (A: the dentist, an hour earlier, is outside the window
-			// and not shown), stores no unit of its own, and so leaves nothing
+			// follows (B: the dentist, an hour earlier, is shown too, as A,
+			// since the chat is its last turns at any age, ADR-0041), stores
+			// no unit of its own, and so leaves nothing
 			// for the next morning's digest to ask about. Read alone, recall
 			// could not tell the two apart and asked.
 			name:  "follow-up-moves-meeting",
@@ -329,7 +338,8 @@ func dpScenarios() []dpScenario {
 						`"decay_rate":0.05,"event_at":"2026-10-14T22:30:00-03:00","title":"Reunión con Juan","language":"es"}`},
 				{at: dpAt(10, 13, 21, 10), id: "classify-followup-time-moves-meeting", text: "Es a las 08:00.",
 					reading: `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 08:00.","weight":0.7,` +
-						`"decay_rate":0.05,"event_at":"2026-10-14T08:00:00-03:00","title":"Reunión con Juan","language":"es","referent":"A"}`},
+						`"decay_rate":0.05,"event_at":"2026-10-14T08:00:00-03:00","title":"Reunión con Juan","language":"es","referent":"B"}`,
+					shows: `B) text (quoted): "Tengo reunión con Juan el 2026-10-14 a las 22:30."`},
 			},
 		},
 		{
@@ -403,9 +413,12 @@ func dpScenarios() []dpScenario {
 			from:  dpAt(10, 19, 16, 30), until: dpAt(10, 23, 12, 0),
 			say: []dpSay{
 				{at: dpAt(10, 19, 16, 34), id: "classify-task-due-tomorrow-passport"},
-				// Inside the conversation window (ADR-0036): read alone, past it,
-				// the answer names no item and closes nothing.
-				{at: dpAt(10, 20, 7, 20), id: "classify-done-ya-lo-hice-after-digest"},
+				// Two hours after the digest, and still read with it shown, its
+				// task lettered: the chat is its last turns, at any age
+				// (ADR-0041). The reading names no date, so said later it is
+				// the one the model gave.
+				{at: dpAt(10, 20, 9, 0), id: "classify-done-ya-lo-hice-after-digest", late: true,
+					shows: `Nooma, pushed (a reminder or check-in): "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct" [A]`},
 			},
 		},
 		{

@@ -78,7 +78,7 @@ func runTryChat(args []string, out, errOut io.Writer) error {
 	if capture == nil {
 		return errors.New("this vault cannot capture: bind capture_processing, relation_evaluation, chat and embedding to a provider under tasks: in nooma.yml")
 	}
-	conv := brain.NewConversation()
+	conv := brain.NewConversation(sqlite.NewConversationRepo(db))
 	capture.WithConversation(conv)
 
 	triggers := sqlite.NewTriggerRepo(db)

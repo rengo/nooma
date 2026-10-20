@@ -99,7 +99,7 @@ type taskClosed struct {
 // saidDoneOfNothing is a chat message, read as a chitchat that says something
 // is done, that answered no check-in: it closed nothing, and the reply must
 // not sound as if it had (ADR-0040). With or without turns shown: a done read
-// alone, past the conversation window, closes nothing either. A capture from
+// alone, in a chat with no turns, closes nothing either. A capture from
 // the UI or the API is no chat answer and keeps the chitchat's reply.
 func saidDoneOfNothing(c classify.Classification, chat, answered bool) bool {
 	return chat && !answered && c.TaskCheckinOutcome != nil && *c.TaskCheckinOutcome == classify.TaskCheckinOutcomeDone

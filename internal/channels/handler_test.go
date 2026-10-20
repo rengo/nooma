@@ -12,6 +12,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // stubCapturer answers with a scripted result, and records what it was
@@ -114,7 +115,7 @@ func TestCaptureHandler_AFailedReplyDoesNotUndoTheCapture(t *testing.T) {
 func TestCaptureHandler_RecordsTheExchange(t *testing.T) {
 	at := time.Date(2026, 10, 17, 9, 0, 0, 0, time.UTC)
 	capturer := &stubCapturer{result: brain.CaptureResult{Outcome: brain.OutcomeStored, UnitID: "u-1", At: at}}
-	conv := brain.NewConversation()
+	conv := brain.NewConversation(memrepo.NewConversations())
 	err := CaptureHandler(capturer, &sendingChannel{}, conv, nil)(context.Background(), ports.ChannelMessage{
 		ID: "1", Conversation: "42", Text: "reunión con Juan a las 22:30", Channel: "telegram",
 	})
@@ -128,7 +129,7 @@ func TestCaptureHandler_RecordsTheExchange(t *testing.T) {
 		{At: at, Speaker: classify.SpeakerUser, Text: "reunión con Juan a las 22:30", UnitIDs: []string{"u-1"}},
 		{At: at, Speaker: classify.SpeakerNooma, Text: RenderReply(capturer.result), UnitIDs: []string{"u-1"}},
 	}
-	if got := conv.Recent("42", at); !reflect.DeepEqual(got, want) {
+	if got := conv.Recent(context.Background(), "42"); !reflect.DeepEqual(got, want) {
 		t.Errorf("turns = %+v, want %+v", got, want)
 	}
 }

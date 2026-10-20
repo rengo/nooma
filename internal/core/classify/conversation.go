@@ -7,14 +7,9 @@ import (
 	"time"
 )
 
-// ConversationTurns and ConversationMinutes bound the recent chat a message
-// is read in: the last six turns, none older than thirty minutes (doc 02
-// §13, ADR-0036, which says why).
-const (
-	ConversationTurns   = 6
-	ConversationMinutes = 30
-	ConversationWindow  = ConversationMinutes * time.Minute
-)
+// ConversationTurns bounds the recent chat a message is read in: the chat's
+// last twenty turns, whatever their age (doc 02 §13, ADR-0041, which says why).
+const ConversationTurns = 20
 
 // MaxConversationItems is the most items a transcript tags, and so the last
 // letter a referent may name.
@@ -107,17 +102,6 @@ func ReadFollowUp(c Classification, shown int) (FollowUp, bool) {
 		return FollowUp{}, false
 	}
 	return FollowUp{Position: c.Referent.Position, Done: !correction}, true
-}
-
-// RecentFrom is the index of the first of ats (oldest first) inside the
-// conversation window at now: the last ConversationTurns, none older than
-// ConversationWindow. A turn exactly ConversationWindow old is inside.
-func RecentFrom(ats []time.Time, now time.Time) int {
-	from := max(0, len(ats)-ConversationTurns)
-	for from < len(ats) && now.Sub(ats[from]) > ConversationWindow {
-		from++
-	}
-	return from
 }
 
 // assignReferent reads referent: a capital letter up to the last item a

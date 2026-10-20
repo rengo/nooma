@@ -77,7 +77,8 @@ is on the 15th.
    `?q=` search ([doc 02 §5 step 2](02-cognitive-core.md#5-capture), ADR-0010, ADR-0020).
 7. **Corrects in place.** "Actually the dentist is on the 15th" is a `correction`. Where the
    caller holds a unit id (the UI and the API do), that id wins. In chat there is none, so a
-   message is read in the last few minutes of the conversation: "Es a las 08:00." right after
+   message is read in the conversation's last twenty turns, however old, kept in the vault across
+   a restart (ADR-0041): "Es a las 08:00." right after
    a meeting, or "no, el jueves" after a reminder Nooma pushed, moves that item at once, and when
    the model cannot tell which item you mean Nooma asks "¿Te referís a…?" right then and stores
    nothing (ADR-0036, I40). With nothing in the conversation to name, Nooma finds the referent
