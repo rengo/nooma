@@ -4,6 +4,7 @@ package conformance
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,15 +19,14 @@ import (
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
-// recordamelo is the real model's recorded reading of "recordámelo" right
-// after a task (testdata/llm/reminders/classify-request-recordamelo.json):
-// the task it follows, and a request to be reminded of it. It is read from
-// the recording rather than copied, so a re-recording that reads it
-// otherwise is replayed here too.
-func recordamelo(t *testing.T) string {
+// recordedReading is the real model's recorded reading of a reminder phrasing
+// case (testdata/llm/reminders/<id>.json). It is read from the recording
+// rather than copied, so a re-recording that reads it otherwise is replayed
+// here too.
+func recordedReading(t *testing.T, id string) string {
 	t.Helper()
 	var ex goldenset.LLMExample
-	path := filepath.Join(repoRootFromCaller(t), "testdata", "llm", "reminders", "classify-request-recordamelo.json")
+	path := filepath.Join(repoRootFromCaller(t), "testdata", "llm", "reminders", id+".json")
 	if err := goldenset.Load(path, &ex); err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +34,13 @@ func recordamelo(t *testing.T) string {
 		t.Fatalf("%s holds no recorded response", path)
 	}
 	return ex.Response
+}
+
+// recordamelo is the recorded reading of "recordámelo" right after a task:
+// the task it follows, and a request to be reminded of it.
+func recordamelo(t *testing.T) string {
+	t.Helper()
+	return recordedReading(t, "classify-request-recordamelo")
 }
 
 const remindChat ports.ConversationID = "9"
@@ -198,7 +205,7 @@ func TestI40_ARemindMeTooLateForItsLeadSaysWhy(t *testing.T) {
 	}
 }
 
-// TestI40_ARemindMeThatMovesTheItemMovesItThenReminds (ADR-0044): "es a las
+// TestI40_ARemindMeThatMovesTheItemMovesItThenReminds (ADR-0043 point 4): "es a las
 // 23, recordámelo" both moves the item it follows and asks to be reminded of
 // it. The move is applied first, through the correction path, and the asked
 // reminder is armed at the moved instant; the answer names both. Before, the
@@ -256,5 +263,36 @@ func TestI40_ARemindMeThatMovesTheItemTooLateSaysWhy(t *testing.T) {
 	reply := channels.RenderReply(res)
 	if !strings.HasPrefix(reply, "Movido al ") || !strings.Contains(reply, "no puse aviso: queda muy poco tiempo para esa hora") {
 		t.Errorf("reply = %q, want the move named and the reminder said not set, and why", reply)
+	}
+}
+
+// TestI40_LeadsWinOverAStrayRemindRequest: "avisame 2 horas antes", as
+// recorded (classify-followup-dos-horas-antes), carries the event's new leads
+// and a stray remind_request. Leads win: the reading takes the correction
+// path, the event's own leads become [120], and no asked reminder is added,
+// nor the item marked asked, nor a 15-minute reminder named.
+func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
+	f := newI40(t, recordedReading(t, "classify-followup-dos-horas-antes"))
+
+	res := f.capture(t, "avisame 2 horas antes")
+
+	got := f.meeting(t)
+	if !slices.Equal(got.ReminderLeads, []int{120}) || got.RemindMe {
+		t.Errorf("meeting leads %v, remind_me %v: want its own leads [120] and not asked", got.ReminderLeads, got.RemindMe)
+	}
+	armed, err := f.triggers.ArmedForUnit(context.Background(), "meeting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range armed {
+		if a.Payload.Asked {
+			t.Errorf("armed = %+v, want no asked reminder: the user asked for leads", armed)
+		}
+	}
+	if res.Outcome != brain.OutcomeCorrected || res.Correction == nil || res.Armed != nil {
+		t.Fatalf("result = %+v, want the leads corrected and nothing armed as asked", res)
+	}
+	if reply := channels.RenderReply(res); strings.Contains(reply, "15 minutos") || !strings.HasPrefix(reply, "Te aviso ") {
+		t.Errorf("reply = %q, want the new leads named", reply)
 	}
 }

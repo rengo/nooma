@@ -68,7 +68,7 @@ func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time
 }
 
 // moveThenRemind is a remind-me that also moves the item it names ("es a
-// las 11, recordámelo", ADR-0044): the move is applied first, through the
+// las 11, recordámelo", ADR-0043 point 4): the move is applied first, through the
 // correction path as any follow-up's is, and the asked reminder is then armed
 // on the moved unit. The answer names both. A correction that asks instead of
 // applying is answered as it is, and arms nothing: the item is not where the

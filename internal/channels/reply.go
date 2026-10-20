@@ -145,7 +145,7 @@ func RenderReply(result brain.CaptureResult) string {
 			said = append(said, fmt.Sprintf(say.RemindYou, say.ExactLeads(c.About, c.Reminders...)))
 		}
 		// A remind-me that moved its item names the reminder it asked for,
-		// or why none was set (ADR-0044).
+		// or why none was set (ADR-0043).
 		switch {
 		case result.Armed != nil:
 			said = append(said, fmt.Sprintf(say.RemindYou, askedLeads(say, result)))

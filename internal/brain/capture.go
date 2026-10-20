@@ -323,8 +323,10 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			}
 			// **A remind-me names what it reminds of** (ADR-0043):
 			// "recordámelo" right after a task asks for a reminder of it.
-			// One that also moves it is moved first (ADR-0044).
-			if c.RemindRequest != nil && *c.RemindRequest {
+			// One that also moves it is moved first. Leads win: a reading
+			// that carries them says when to be reminded, and a
+			// remind_request beside them is ignored (ADR-0043).
+			if c.RemindRequest != nil && *c.RemindRequest && c.ReminderLeadsMinutes == nil {
 				if correction.MovesDate(c, u) {
 					return r.moveThenRemind(ctx, in, c, u, now)
 				}

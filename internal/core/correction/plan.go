@@ -122,7 +122,7 @@ func withText(date Edit, next time.Time, previous *time.Time, text *string, targ
 // MovesDate reports whether c names an instant for target other than the one
 // it already holds: a date that echoes the unit's own is no change (I30). A
 // follow-up asking to be reminded moves its item first only when it does
-// (ADR-0044); the text the model restates beside it is never read as one.
+// (ADR-0043); the text the model restates beside it is never read as one.
 func MovesDate(c classify.Classification, target unit.Unit) bool {
 	return c.EventAt != nil && !echoes(c.EventAt, target.EventAt) || c.DueAt != nil && !echoes(c.DueAt, target.DueAt)
 }

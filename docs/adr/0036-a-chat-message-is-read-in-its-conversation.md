@@ -9,7 +9,7 @@
 - **Superseded by**: [ADR-0040](0040-a-done-follow-up-closes-the-task.md), points 3 and 5 in part
   (a done with a listed referent binds too, and closes a task); [ADR-0041](0041-the-chat-is-stored-and-read-by-its-last-turns.md), point 1
   (the chat is stored in the vault and read by its last turns, at any age); [ADR-0043](0043-a-remind-me-follow-up-reminds-of-the-item.md),
-  point 3 in part (a bound remind-me is reminded of, not corrected)
+  point 3 in part (a bound remind-me is reminded of; it is corrected only for a new instant, first)
 - **Enables**: M4
 
 ## Context

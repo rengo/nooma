@@ -40,6 +40,6 @@
       120
     ]
   },
-  "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: the follow-up binds a correction, and the correction path never reads remind_request (it returns before arming); the leads still come back as reminder_leads_minutes",
+  "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: leads win (ADR-0043), so a bound reading carrying reminder_leads_minutes takes the correction path and its remind_request is ignored; the leads still come back as reminder_leads_minutes",
   "prompt_sha256": "93f0f135f9b4b39ae2fc38cdf6d27b484c6d2d1b2f53602190c07bc311fc7ad5"
 }
