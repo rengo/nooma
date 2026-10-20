@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -304,6 +305,43 @@ func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
 		t.Fatalf("result = %+v, want the leads corrected and nothing armed as asked", res)
 	}
 	if reply := channels.RenderReply(res); strings.Contains(reply, "15 minutos") || !strings.HasPrefix(reply, "Te aviso ") {
+		t.Errorf("reply = %q, want the new leads named", reply)
+	}
+}
+
+// TestI40_LeadsBindWhateverTheType (ADR-0046, review on #385): the recorded
+// "avisame 2 horas antes" comes back typed event, and it bound its item only
+// through a stray remind_request. The same reading without it must still set
+// the meeting's own leads, store no second unit and never answer "Anotado.":
+// leads beside a shown referent bind, as a remind-me does.
+func TestI40_LeadsBindWhateverTheType(t *testing.T) {
+	var reading map[string]any
+	if err := json.Unmarshal([]byte(recordedReading(t, "classify-followup-dos-horas-antes")), &reading); err != nil {
+		t.Fatal(err)
+	}
+	if reading["type"] == "correction" {
+		t.Fatalf("the recorded reading is typed correction: this case needs one that is not")
+	}
+	delete(reading, "remind_request")
+	raw, err := json.Marshal(reading)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newI40(t, string(raw))
+	before := f.units.Count()
+
+	res := f.capture(t, "avisame 2 horas antes")
+
+	if n := f.units.Count(); n != before {
+		t.Errorf("units %d -> %d: leads for a shown item store nothing", before, n)
+	}
+	if got := f.meeting(t); !slices.Equal(got.ReminderLeads, []int{120}) {
+		t.Errorf("meeting leads %v, want its own [120]", got.ReminderLeads)
+	}
+	if res.Outcome != brain.OutcomeCorrected {
+		t.Errorf("result = %+v, want the leads corrected", res)
+	}
+	if reply := channels.RenderReply(res); !strings.HasPrefix(reply, "Te aviso ") {
 		t.Errorf("reply = %q, want the new leads named", reply)
 	}
 }

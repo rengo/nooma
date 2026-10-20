@@ -188,6 +188,10 @@ func TestReadFollowUp(t *testing.T) {
 		{"a remind-me with a shown letter binds", Classification{Kind: kind(KindTask), RemindRequest: &yes, Referent: &Referent{Position: 2}}, 2, FollowUp{Position: 2}, true},
 		{"a remind-me with a letter not shown never binds", Classification{Kind: kind(KindChitchat), RemindRequest: &yes, Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
 		{"a remind-me with no referent is not one", Classification{Kind: kind(KindTask), RemindRequest: &yes}, 2, FollowUp{}, false},
+		// ADR-0046 (review on #385): leads beside a shown letter bind, whatever the type.
+		{"leads with a shown letter bind", Classification{Kind: kind(KindEvent), ReminderLeadsMinutes: []int{120}, Referent: &Referent{Position: 1}}, 2, FollowUp{Position: 1}, true},
+		{"leads with a letter not shown never bind", Classification{Kind: kind(KindEvent), ReminderLeadsMinutes: []int{120}, Referent: &Referent{Position: 3}}, 2, FollowUp{}, false},
+		{"leads with no referent are not one", Classification{Kind: kind(KindEvent), ReminderLeadsMinutes: []int{120}}, 2, FollowUp{}, false},
 		{"a remind_request of false binds nothing", Classification{Kind: kind(KindTask), RemindRequest: &no, Referent: &Referent{Position: 1}}, 2, FollowUp{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

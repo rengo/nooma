@@ -367,6 +367,32 @@ func TestI42_ARecurringTaskIsNotEnded(t *testing.T) {
 	}
 }
 
+// TestI42_ARecurringEventIsNotEnded (review on #385): a done said of one
+// occurrence of a weekly event keeps the series, as for a task: the event
+// stays in the pool and its ring stays armed.
+func TestI42_ARecurringEventIsNotEnded(t *testing.T) {
+	f := newI42(t, i42Done("A"))
+	f.i42Kine(t)
+	ctx := context.Background()
+	unitID, next := "e1", time.Date(2026, 10, 27, 17, 0, 0, 0, i42Zone)
+	tuesday := time.Tuesday
+	rule, anchor := prospection.RuleWeekly, prospection.Anchor{Weekday: &tuesday}
+	if err := f.triggers.Create(ctx, ports.Trigger{ID: "series", UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &next,
+		RecurrenceRule: &rule, RecurrenceAnchor: &anchor, CreatedAt: i42Created, Payload: ports.TriggerPayload{ActionText: "Turno con el kinesiólogo"}}); err != nil {
+		t.Fatal(err)
+	}
+	f.capture(t, "listo, ya fui")
+	if got := f.status(t, "e1"); got != unit.StatusPool {
+		t.Errorf("status = %q, want pool: a series outlives one occurrence", got)
+	}
+	if armed, err := f.triggers.ArmedForUnit(ctx, unitID); err != nil || len(armed) != 3 {
+		t.Errorf("armed = %v (%v), want the series and its rings kept", armed, err)
+	}
+	if got := f.rows(t, ports.ActionCaptureEventClosed); len(got) != 0 {
+		t.Errorf("rows = %+v, want no close", got)
+	}
+}
+
 // TestI42_ADoneReadAloneClosesNothingAndSaysSo: in a chat with no turns no
 // digest is shown, so a done names no item. It closes nothing, and
 // the reply says so instead of the chat model's own words, which could

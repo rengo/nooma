@@ -84,15 +84,19 @@ type FollowUp struct {
 
 // ReadFollowUp decides whether c is a follow-up the code acts on, given how
 // many items the prompt showed: a correction, a task_checkin_outcome done of
-// any type (ADR-0040), or a remind_request of any type (ADR-0044), naming a
-// letter inside the list, or unclear with a question. A correction that also
-// carries done stays a correction. Anything else takes the path it took
-// before.
+// any type (ADR-0040), a remind_request of any type (ADR-0044), or reminder
+// leads of any type (ADR-0046), naming a letter inside the list, or unclear
+// with a question. A correction that also carries done stays a correction.
+// Anything else takes the path it took before.
 func ReadFollowUp(c Classification, shown int) (FollowUp, bool) {
 	correction := c.Kind != nil && *c.Kind == KindCorrection
 	done := c.TaskCheckinOutcome != nil && *c.TaskCheckinOutcome == TaskCheckinOutcomeDone
 	remind := c.RemindRequest != nil && *c.RemindRequest
-	if (!correction && !done && !remind) || c.Referent == nil {
+	// **Leads name their item** (review on #385): "avisame 2 horas antes" came
+	// back typed event, and bound only through a stray remind_request; without
+	// it, a second unit was stored and answered "Anotado.".
+	leads := c.ReminderLeadsMinutes != nil
+	if (!correction && !done && !remind && !leads) || c.Referent == nil {
 		return FollowUp{}, false
 	}
 	if c.Referent.Unclear {

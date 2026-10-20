@@ -795,7 +795,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        instead arms nothing. Text alone is not a change here: the reading restates its item.
        Leads win: a reading carrying `reminder_leads_minutes` ("avisame 2 horas antes") takes
        the correction path and sets the event's own leads, and a `remind_request` beside it is
-       ignored.
+       ignored. Leads bind like a remind-me (`classify.ReadFollowUp`,
+       [ADR-0046](adr/0046-a-done-follow-up-closes-the-event-too.md)): beside a listed letter
+       they name their item whatever the reading's type, so one read as an `event` sets the
+       item's leads and never stores a second unit.
      - **A done closes the task or event it names** (I42,
        [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md),
        [ADR-0046](adr/0046-a-done-follow-up-closes-the-event-too.md); the client's ruling of

@@ -1,10 +1,11 @@
-# ADR-0046 — A chat follow-up that says a shown event already happened closes it
+# ADR-0046 — A chat follow-up that says a shown event already happened closes it, and leads name their item
 
 - **Status**: Proposed
 - **Date**: 2026-10-20
 - **Supersedes**: [ADR-0040](0040-a-done-follow-up-closes-the-task.md) points 2 and 3, in part:
   a bound `event` still `pool` with no recurring reminder is closed as a task is, rather than
-  keeping its path
+  keeping its path; and [ADR-0044](0044-a-chat-answer-names-the-item-it-is-about.md) point 3,
+  in part: reminder leads beside a listed letter bind whatever the type, as a remind-me does
 - **Superseded by**: —
 - **Enables**: M4
 
@@ -24,6 +25,15 @@ same for "ya la hice, la adelantamos" after "mañana a las 10 reunión con el co
 ring stayed armed. ADR-0040 point 3 kept a bound event on the path it took before (answer its
 open check-in from the store, if any), so an event told and not yet pushed had nothing to
 answer, closed nothing, and said so. The prompt's done meaning named a task only.
+
+Recording the chat-shown phrasings again for this change surfaced a second gap, in the same
+binding. "avisame 2 horas antes" after "reunión con Ana" came back typed `event`, with its
+leads, referent `A` and a stray `remind_request: true`. It bound its item only through that
+stray request (ADR-0044 point 3 binds a remind-me whatever its type). Without it, as the prompt
+asks, the same reading stored a second unit and answered "Anotado." while the meeting's leads
+stayed unset (review on #385). Leads beside a referent are a follow-up by what they mean, and
+the prompt already says so: "Beside a referent, reminder_leads_minutes says when to be reminded
+of that listed item".
 
 ## Options evaluated
 
@@ -46,7 +56,11 @@ answer, closed nothing, and said so. The prompt's done meaning named a task only
    it is a task finished or an event that already took place, and the check-in section's
    `done` meaning adds "or that a listed event already took place" beside a chat. With no chat
    the prompt is unchanged, byte for byte: nothing is listed, so no event can be named.
-4. Everything else ADR-0040 decided holds: no item named still says "No encontré nada pendiente
+4. **Leads bind like a remind-me.** `classify.ReadFollowUp` binds a reading carrying
+   `reminder_leads_minutes` beside a listed letter whatever its type, as it binds a
+   `remind_request`; leads still win over a stray request (ADR-0043). It is code reading a field
+   the model fills by meaning (ADR-0033); the prompt does not change.
+5. Everything else ADR-0040 decided holds: no item named still says "No encontré nada pendiente
    para cerrar.", two candidates still ask which, and a task closes exactly as before.
 
 ## Consequences
@@ -56,6 +70,9 @@ answer, closed nothing, and said so. The prompt's done meaning named a task only
 - "listo, ya fui" after an event told or pushed today closes it, and its remaining rings never
   go off.
 
+- "avisame 2 horas antes" sets the item's leads whatever type the model gives it, with or
+  without a stray `remind_request`.
+
 ### What it costs
 
 - **A misread can close an event the user still means to attend**, and its rings with it. It
@@ -63,6 +80,9 @@ answer, closed nothing, and said so. The prompt's done meaning named a task only
   records it.
 - **The chat-shown phrasings are recorded again**, since Follow-ups and the check-in section
   changed beside a chat.
+- **A stray referent beside a new event's own leads patches the listed item** instead of storing
+  the new event. It needs the model to name a letter where the prompt says to leave it out, the
+  same exposure a stray `remind_request` already had.
 - **One more decision action**, `capture.event.closed`, labelled "Event done" in
   `/ui/activity`.
 
