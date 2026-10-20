@@ -11,5 +11,6 @@
     "type": "chitchat",
     "nudge_outcome": "declined"
   },
+  "known_misread": "nudge_outcome is absent: \"no, no quiero hablar de eso\" is read as a plain chitchat, not a decline. The user gets a conversational reply; the open nudge is not closed as declined but stays open, unanswered, until it lapses on its own (CheckinStep), so the decline is never recorded. Pre-existing on main (measured 4/4)",
   "prompt_sha256": "9c93e85879b45522df0c673803faa4d31b132d9693631cdf6d1c551c318cbe02"
 }

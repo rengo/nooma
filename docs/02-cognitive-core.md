@@ -447,7 +447,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    `recurrence_rule` (`yearly | monthly | daily | weekly`, §7's recurrence, decoded rather than left inside
    `structured_data`; the prompt requires a recurring reminder to carry its first occurrence
    beside the rule, at the time of day named: "todos los días a las 9pm" with the rule alone
-   armed nothing), plus `language` (§5's own bullet below). Classification
+   armed nothing; a time of day named for a task or an event is a full timestamp, never a
+   bare date: "mañana a las 9" read as a bare date rang at 09:00, not before it), plus `language` (§5's own bullet below). Classification
    taxonomy: `task | mental_load | event | knowledge | procedural | emotional | chitchat |
    out_of_scope | recall | correction | timer | recurring_reminder | list`.
    - `recall`, `knowledge` and `correction` are separated by **what the message does, not

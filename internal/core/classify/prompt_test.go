@@ -197,6 +197,9 @@ func TestBuildPrompt_ARecurringReminderCarriesItsFirstOccurrence(t *testing.T) {
 		for _, want := range []string{
 			"A recurring reminder MUST also carry its first occurrence, in due_at, or in event_at for a thing that happens in the world, as a birthday; when the message names a time of day, as a full timestamp at that time: \"todos los días a las 9pm\" said in the morning is today at 21:00, never the rule alone",
 			"Leave it out unless the message names how long before. A time of day is not a lead: \"a las 9pm\" goes in due_at or event_at",
+			// Review on #383: "haceme acordar de llamar al médico mañana a las 9"
+			// came back as a bare date, rung at 09:00 instead of before it.
+			"When the message names a time of day for it, the field is a full timestamp at that time, never a bare date: \"mañana a las 9\" is tomorrow at 09:00 with its offset",
 		} {
 			if !strings.Contains(p, want) {
 				t.Errorf("the prompt (chat %v) never says %q", chatShown(rc), want)

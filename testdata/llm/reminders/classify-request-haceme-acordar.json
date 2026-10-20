@@ -9,7 +9,9 @@
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
-    "title": true
+    "title": true,
+    "day_only": false,
+    "due_at": "2026-10-17T09:00:00-03:00"
   },
   "prompt_sha256": "3ab63e96cf23297649e39fae5cdcae16489dd4d4f0eec692974946260b0f67bb"
 }

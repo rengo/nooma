@@ -200,6 +200,12 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("  event_at, due_at     absolute; either \"YYYY-MM-DD\" or an RFC3339 timestamp\n")
 	b.WriteString("                       carrying its offset, e.g. " + now.Format(exampleLayout) + ".\n")
 	b.WriteString("                       A timestamp without an offset is not accepted.\n")
+	// **A named time is never a bare date** (review on #383): "haceme acordar
+	// de llamar al médico mañana a las 9" came back as "2026-10-17" and rang at
+	// 09:00, not before it.
+	b.WriteString("                       When the message names a time of day for it, the field is a\n")
+	b.WriteString("                       full timestamp at that time, never a bare date: \"mañana a\n")
+	b.WriteString("                       las 9\" is tomorrow at 09:00 with its offset.\n")
 	b.WriteString("                       event_at is when a thing happens in the world; due_at is\n")
 	b.WriteString("                       when something is owed. A timer has no world event, so its\n")
 	b.WriteString("                       instant belongs in due_at and never in event_at\n")
