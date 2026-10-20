@@ -18,8 +18,32 @@ import (
 // asked reminder is armed, so an event's own leads are never armed twice, and
 // an asked reminder already armed at the same instant is not armed again. An
 // item with no date is still marked asked, and the answer says no reminder
-// was set and why, as an asked capture's does.
+// was set and why, as an asked capture's does. An armed answer names every
+// ring the item has (ADR-0044), as a capture's names all it armed.
 func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, error) {
+	res, err := r.remindReferentOnly(ctx, u, now)
+	if err != nil || res.Armed == nil {
+		return res, err
+	}
+	armed, err := r.triggers.ArmedForUnit(ctx, u.ID)
+	if err != nil {
+		return CaptureResult{}, fmt.Errorf("capture: read reminders of unit %q: %w", u.ID, err)
+	}
+	var fires []time.Time
+	for _, t := range armed { // ordered by fire time
+		if t.RecurrenceRule == nil {
+			fires = append(fires, t.FireAt)
+		}
+	}
+	if len(fires) > 0 {
+		res.Armed.FireAt, res.Armed.Later = fires[0], fires[1:]
+	}
+	return res, nil
+}
+
+// remindReferentOnly is remindReferent with an answer naming the asked
+// reminder alone.
+func (r captureRunner) remindReferentOnly(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, error) {
 	c := asCapture(u, now)
 	plans, armable := prospection.Arm(askedOnly(c), true, reminderPrefs(ctx, r.config), now)
 	if !u.RemindMe {

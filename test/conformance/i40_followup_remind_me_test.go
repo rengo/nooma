@@ -140,7 +140,8 @@ func TestI40_ARemindMeOfAnUndatedItemSaysNoReminderWasSet(t *testing.T) {
 
 // TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder: an event already carries
 // its leads. Asked to be reminded, it gains the asked one, and its leads are
-// not armed a second time.
+// not armed a second time. The answer names every ring that remains, as a
+// capture's does (ADR-0044), not the asked one alone.
 func TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder(t *testing.T) {
 	f := newI40(t, `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 22:30.",`+
 		`"weight":0.7,"decay_rate":0.05,"language":"es","remind_request":true,"referent":"A"}`)
@@ -173,8 +174,8 @@ func TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder(t *testing.T) {
 	if res.Outcome != brain.OutcomeArmed || f.units.Count() != 1 {
 		t.Errorf("result = %+v, units = %d: want the meeting armed and no unit stored", res, f.units.Count())
 	}
-	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso 15 minutos antes.") {
-		t.Errorf("reply = %q, want the asked reminder's answer", got)
+	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso unas horas antes y 15 minutos antes.") {
+		t.Errorf("reply = %q, want every ring that remains named, the lead it had and the asked one", got)
 	}
 }
 
@@ -244,8 +245,11 @@ func TestI40_ARemindMeThatMovesTheItemMovesItThenReminds(t *testing.T) {
 		t.Fatalf("result = %+v, want the meeting corrected and its asked reminder armed", res)
 	}
 	reply := channels.RenderReply(res)
-	if !strings.HasPrefix(reply, "Movido al ") || !strings.HasSuffix(reply, ". Te aviso 15 minutos antes.") {
-		t.Errorf("reply = %q, want the move and the asked reminder named", reply)
+	// Every ring that remains (ADR-0044): the move armed the event's own lead
+	// beside the asked one, and naming the asked one alone was the live
+	// message 4's answer.
+	if !strings.HasPrefix(reply, "Movido al ") || !strings.HasSuffix(reply, ". Te aviso unas horas antes y 15 minutos antes.") {
+		t.Errorf("reply = %q, want the move and every ring that remains named", reply)
 	}
 }
 

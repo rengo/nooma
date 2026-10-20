@@ -2,8 +2,10 @@
 
 - **Status**: Proposed (awaiting the client through the PM)
 - **Date**: 2026-10-20
-- **Supersedes**: beside a chat only, doc 02 §5 step 1's "a check-in outcome closes the most
-  recently delivered open check-in"
+- **Supersedes**: [ADR-0043](0043-a-remind-me-follow-up-reminds-of-the-item.md) points 3 and 4
+  in part (the answer names every ring the item has, not the asked one alone), and, beside a
+  chat only, doc 02 §5 step 1's "a check-in outcome closes the most recently delivered open
+  check-in"
 - **Superseded by**: —
 - **Enables**: M4
 
@@ -34,7 +36,8 @@ And the code closed the newest open check-in whatever the message followed.
 
 The next message, "el jueves cena con Ana a las 21", came back with `remind_request: true`: the
 chat now ended in Nooma asking "what and when should I remind you of", so the model read the
-event as that answer.
+event as that answer. Then "es a las 22, recordámelo" moved it and answered "Te aviso 15
+minutos antes.", while the day-before and hours-before rings stayed armed and unnamed.
 
 ## Options evaluated
 
@@ -62,6 +65,9 @@ event as that answer.
    nothing and is recorded as `capture.checkin.unmatched`. A `snooze` closes nothing and is
    recorded against the newest open check-in, as before. Read alone (no chat shown), the newest
    open check-in, as before.
+5. **A remind-me's answer names every ring the item has** once the asked one is armed, as a
+   capture's answer names all it armed: "Te aviso unas horas antes y 15 minutos antes.", never
+   the asked one alone while the others ring unnamed.
 
 ## Consequences
 

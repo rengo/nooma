@@ -770,14 +770,17 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        not a correction: the unit is marked asked (`remind_me`) and armed as an asked capture is
        (ADR-0031), on the unit as it stands. No unit is stored and nothing else on it is
        rewritten. Only the asked reminder is armed, so an event's own leads are never armed twice,
-       and one already armed at the same instant is not armed again. The answer is the asked
-       reminder's ("Te aviso ese día a las 09:00."); an item with no date, or one too close for
-       the asked reminder while an own lead would still fit, is still marked asked, and the
+       and one already armed at the same instant is not armed again. The answer names every
+       ring the item has once the asked one is armed, as a capture's does ("Te aviso ese día a
+       las 09:00."; "Te aviso unas horas antes y 15 minutos antes.", ADR-0044); an item with no date, or
+       one too close for the asked reminder while an own lead would still fit, is still marked
+       asked, and the
        answer says no reminder was set and why, with a `capture.arm.refused` row. A remind-me
        whose reading names a new instant for the item ("es a las 11, recordámelo";
        `correction.MovesDate`, an echoed instant is none) moves it first, through the correction
-       path above, and then arms the asked reminder on the moved unit; the answer names both
-       ("Movido al mar 20 oct, 11:00. Te aviso 15 minutos antes."). A correction that asks
+       path above, and then arms the asked reminder on the moved unit; the answer names the move
+       and every ring ("Movido al mar 20 oct, 11:00. Te aviso unas horas antes y 15 minutos
+       antes."). A correction that asks
        instead arms nothing. Text alone is not a change here: the reading restates its item.
        Leads win: a reading carrying `reminder_leads_minutes` ("avisame 2 horas antes") takes
        the correction path and sets the event's own leads, and a `remind_request` beside it is
