@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "y además el día antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Cena con Ana el 2026-10-23 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[1440],\"reminder_leads_add\":true,\"referent\":\"A\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Cena con Ana el 2026-10-23 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[1440],\"reminder_leads_add\":true}",
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [
@@ -43,5 +42,5 @@
     "reminder_leads_add": true
   },
   "known_misread": "remind_request is true beside the leads: the model reads \"y además el día antes\" as a request to be reminded. Harmless as read: leads win (ADR-0043), so the bound reading takes the correction path and the stray request is ignored (TestI40_LeadsWinOverAStrayRemindRequest); the user gets the day-before ring added to the item's rings",
-  "prompt_sha256": "5e58cb1728581610ec5eb28d7a91deccc68dfe64798f883e971813e140eef6bb"
+  "prompt_sha256": "d16c8ca82ff8f0c8e93eccac9f5ea39507f2a7bdd919961bdb453ae1ba3ea4bb"
 }

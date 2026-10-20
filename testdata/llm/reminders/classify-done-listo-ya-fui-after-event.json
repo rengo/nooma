@@ -1,8 +1,10 @@
 {
   "id": "classify-done-listo-ya-fui-after-event",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo, ya fui",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya fui al turno con el kinesiólogo.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"A\"}",
   "now": "2026-10-20T16:00:00-03:00",
   "conversation": {
     "turns": [
@@ -35,5 +37,6 @@
     "type": "chitchat",
     "task_checkin_outcome": "done",
     "referent": "A"
-  }
+  },
+  "prompt_sha256": "82c089f2c79ac39f6efa77269e8449360ce4ccf1d591aba1c1cffeb9a60ba99e"
 }

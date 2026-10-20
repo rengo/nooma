@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame 2 horas antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false,\"referent\":\"A\"}",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.85,\"decay_rate\":0.03,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false,\"referent\":\"A\"}",
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,6 +41,6 @@
     ],
     "reminder_leads_add": false
   },
-  "known_misread": "remind_request is true beside the leads: the model reads \"avisame 2 horas antes\" as a request to be reminded. Harmless as read: leads win (ADR-0043), so the bound reading takes the correction path and the stray request is ignored (TestI40_LeadsWinOverAStrayRemindRequest); the user gets the item reminded 2 hours before",
-  "prompt_sha256": "2c2e592423a17b2c520bc0ad0965455fa597bf1a20c88941ff118577ab4f0ba7"
+  "known_misread": "remind_request is true beside the leads, and type is event rather than correction: the model reads \"avisame 2 horas antes\" as a request to be reminded of the event it names. Harmless as read: the reading names referent A, and a bound remind-me binds whatever its type (ADR-0044 point 3); leads win (ADR-0043), so the bound reading takes the correction path and the stray request is ignored (TestI40_LeadsWinOverAStrayRemindRequest, which replays this very reading); no unit is stored and the user gets the item reminded 2 hours before",
+  "prompt_sha256": "86d0964fdf28f893fa5971848f9e75d62dede6f8c91c6132b8ae634a3f84afd8"
 }

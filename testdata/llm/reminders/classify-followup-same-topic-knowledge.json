@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "A Juan le gusta el café",
-  "response": "{\"type\":\"knowledge\",\"normalized_content\":\"A Juan le gusta el café.\",\"weight\":0.75,\"decay_rate\":0.01,\"language\":\"es\"}",
-  "record": true,
+  "response": "{\"type\":\"knowledge\",\"normalized_content\":\"A Juan le gusta el café.\",\"weight\":0.7,\"decay_rate\":0.01,\"language\":\"es\"}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -37,5 +36,5 @@
   "expect": {
     "type": "knowledge"
   },
-  "prompt_sha256": "2843ae9b80e8fe7455fd2a1775d10bcc964d6a595b1ae1370fc9b05c3f35ff63"
+  "prompt_sha256": "cc1237b80747e373c083e1d58452434273d1fc60b4dc8242204e777db7722ff4"
 }
