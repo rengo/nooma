@@ -21,7 +21,7 @@ import (
 // was set and why, as an asked capture's does.
 func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, error) {
 	c := asCapture(u, now)
-	plans, armable := prospection.Arm(c, true, reminderPrefs(ctx, r.config), now)
+	plans, armable := prospection.Arm(askedOnly(c), true, reminderPrefs(ctx, r.config), now)
 	if !u.RemindMe {
 		if err := r.units.SetRemindMe(ctx, u.ID, now); err != nil {
 			return CaptureResult{}, fmt.Errorf("capture: mark unit %q asked: %w", u.ID, err)
@@ -77,6 +77,23 @@ func asCapture(u unit.Unit, now time.Time) classify.Classification {
 	if u.Title != "" {
 		c.Title = &u.Title
 	}
+	return c
+}
+
+// askedOnly is c read for its asked reminder alone. Arm gives an event, or a
+// recurring reminder read as its occurrence, its own leads beside the asked
+// one, and those are already armed; a task gets the asked lead and nothing
+// else. So c is handed over as a task whose due instant is the one Arm would
+// have asked about. Arming it alone keeps the refusal Arm reports the asked
+// reminder's own ("too late") rather than none, when only an own lead would
+// still fit, and never doubles an own lead the asked one lands on.
+func askedOnly(c classify.Classification) classify.Classification {
+	if k := *c.Kind; k == classify.KindEvent || k == classify.KindRecurringReminder {
+		c.DueAt, c.EventAt = c.EventAt, c.DueAt
+		c.DueAtDayOnly, c.EventAtDayOnly = c.EventAtDayOnly, c.DueAtDayOnly
+	}
+	task := classify.KindTask
+	c.Kind = &task
 	return c
 }
 

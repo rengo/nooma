@@ -756,8 +756,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        (ADR-0031), on the unit as it stands. No unit is stored and nothing else on it is
        rewritten. Only the asked reminder is armed, so an event's own leads are never armed twice,
        and one already armed at the same instant is not armed again. The answer is the asked
-       reminder's ("Te aviso ese día a las 09:00."); an item with no date is still marked asked,
-       and the answer says no reminder was set and why, with a `capture.arm.refused` row.
+       reminder's ("Te aviso ese día a las 09:00."); an item with no date, or one too close for
+       the asked reminder while an own lead would still fit, is still marked asked, and the
+       answer says no reminder was set and why, with a `capture.arm.refused` row.
      - **A done closes the task it names** (I42,
        [ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md); the client's ruling of
        2026-10-19). "ya lo hice" after the digest named a task binds that task as above, and

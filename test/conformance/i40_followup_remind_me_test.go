@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,16 +11,30 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/goldenset"
+	"github.com/rengo/nooma/test/support/memrepo"
 )
 
-// recordamelo is the recorded reading of "recordámelo" right after a task
-// (testdata/llm/reminders/classify-request-recordamelo.json): the task it
-// follows, and a request to be reminded of it.
-const recordamelo = `{"type":"correction","normalized_content":"Comprar el regalo de Ana el 2026-10-17.","weight":0.8,` +
-	`"decay_rate":0.03,"language":"es","title":"Regalo de Ana","remind_request":true,"reminder_intent":"none",` +
-	`"question_answer":"none","referent":"A"}`
+// recordamelo is the real model's recorded reading of "recordámelo" right
+// after a task (testdata/llm/reminders/classify-request-recordamelo.json):
+// the task it follows, and a request to be reminded of it. It is read from
+// the recording rather than copied, so a re-recording that reads it
+// otherwise is replayed here too.
+func recordamelo(t *testing.T) string {
+	t.Helper()
+	var ex goldenset.LLMExample
+	path := filepath.Join(repoRootFromCaller(t), "testdata", "llm", "reminders", "classify-request-recordamelo.json")
+	if err := goldenset.Load(path, &ex); err != nil {
+		t.Fatal(err)
+	}
+	if ex.Response == "" {
+		t.Fatalf("%s holds no recorded response", path)
+	}
+	return ex.Response
+}
 
 const remindChat ports.ConversationID = "9"
 
@@ -51,7 +66,7 @@ func (f i40Fixture) say(t *testing.T, text string) brain.CaptureResult {
 // unit it is: no unit is stored, its text is not rewritten, and the answer is
 // the asked reminder's.
 func TestI40_ARemindMeFollowUpRemindsTheItemItFollows(t *testing.T) {
-	f := newI40(t, recordamelo)
+	f := newI40(t, recordamelo(t))
 	due := time.Date(2026, 10, 17, 0, 0, 0, 0, i40Now.Location())
 	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
 		Content: "Comprar el regalo de Ana mañana.", Title: "Regalo de Ana", DueAt: &due, CreatedAt: i40Now, UpdatedAt: i40Now})
@@ -96,7 +111,7 @@ func TestI40_ARemindMeFollowUpRemindsTheItemItFollows(t *testing.T) {
 // cannot be reminded of. It is still marked asked, nothing is armed or stored,
 // and the answer says why, as an asked capture's does.
 func TestI40_ARemindMeOfAnUndatedItemSaysNoReminderWasSet(t *testing.T) {
-	f := newI40(t, recordamelo)
+	f := newI40(t, recordamelo(t))
 	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
 		Content: "Comprar el regalo de Ana.", Title: "Regalo de Ana", CreatedAt: i40Now, UpdatedAt: i40Now})
 
@@ -140,6 +155,9 @@ func TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder(t *testing.T) {
 	for _, a := range armed {
 		if a.Payload.Asked {
 			asked++
+			if want := i40Meeting.Add(-15 * time.Minute); !a.FireAt.Equal(want) {
+				t.Errorf("asked reminder fires at %v, want %v, the default remind_me_lead before it", a.FireAt, want)
+			}
 		}
 	}
 	if len(armed) != 2 || asked != 1 {
@@ -147,5 +165,35 @@ func TestI40_ARemindMeOfAnEventAddsOnlyTheAskedReminder(t *testing.T) {
 	}
 	if res.Outcome != brain.OutcomeArmed || f.units.Count() != 1 {
 		t.Errorf("result = %+v, units = %d: want the meeting armed and no unit stored", res, f.units.Count())
+	}
+	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso 15 minutos antes.") {
+		t.Errorf("reply = %q, want the asked reminder's answer", got)
+	}
+}
+
+// TestI40_ARemindMeTooLateForItsLeadSaysWhy: the asked reminder of an event a
+// few minutes away is too late to send, while one of the event's own leads
+// is still ahead. That lead is no asked reminder, so the answer is the
+// refusal, named for what it is ("queda muy poco tiempo"), never a blank one.
+func TestI40_ARemindMeTooLateForItsLeadSaysWhy(t *testing.T) {
+	soon := i40Now.Add(5 * time.Minute)
+	f := newI40With(t, `{"type":"correction","normalized_content":"Tengo reunión con Juan el 2026-10-14 a las 18:05.",`+
+		`"weight":0.7,"decay_rate":0.05,"language":"es","remind_request":true,"referent":"A"}`,
+		func(u *unit.Unit) { u.EventAt = &soon })
+	cfg := memrepo.NewConfig()
+	leads := `[2]`
+	cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: &leads})
+	f.svc = f.svc.WithReminderPrefs(cfg)
+
+	res := f.capture(t, "recordámelo")
+
+	if res.ArmRefused == nil || res.ArmRefused.Why != prospection.RefusalTooLate {
+		t.Fatalf("result = %+v, want the asked reminder refused as too late", res)
+	}
+	if got := channels.RenderReply(res); !strings.Contains(got, "queda muy poco tiempo") {
+		t.Errorf("reply = %q, want that too little time is left", got)
+	}
+	if armed, _ := f.triggers.ArmedForUnit(context.Background(), "meeting"); len(armed) != 0 {
+		t.Errorf("armed = %+v, want none: only an asked reminder is armed by a remind-me", armed)
 	}
 }
