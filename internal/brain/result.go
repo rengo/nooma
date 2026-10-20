@@ -240,6 +240,12 @@ type Correction struct {
 	Reminders []time.Time
 	// About is the event instant Reminders are before, in the user's zone.
 	About time.Time
+	// Closed is the name (title, else content) of the task a chat follow-up
+	// said was done and that this capture closed (ADR-0040); empty otherwise.
+	// NothingClosed is a done that closed nothing: the reply says so rather
+	// than confirm it.
+	Closed        string
+	NothingClosed bool
 	// Unchanged is true for a correction that found the unit already
 	// holding everything it said: nothing was written or recorded as a
 	// change, Fields is empty, and the answer says so.

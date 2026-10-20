@@ -98,6 +98,11 @@ type Set struct {
 	// NotedForDigest takes one %s: the due day of a task that arms nothing,
 	// which that morning's digest names (doc 02 §7).
 	NotedForDigest string
+	// Closed takes one %s: the name of the task a done follow-up closed.
+	// NothingClosed answers a done that closed nothing (ADR-0040): never a
+	// confirmation of something Nooma did not do.
+	Closed        string
+	NothingClosed string
 
 	// Reminder frames a pushed reminder (ADR-0032 point 4): one %s, the
 	// sentence. AtWhen joins a unit's words to its instant: two %s, in that order.
@@ -215,6 +220,8 @@ var sets = map[classify.Language]Set{
 		NotedFor:   "Noted for %s. I will remind you %s.",
 
 		NotedForDigest: "Noted for %s. I will mention it in that morning's digest.",
+		Closed:         "Done, I closed \"%s\".",
+		NothingClosed:  "I found nothing open to close.",
 
 		Reminder: "Reminder: %s",
 		AtWhen:   "%s \u2014 %s",
@@ -290,6 +297,8 @@ var sets = map[classify.Language]Set{
 		NotedFor:   "Anotado para el %s. Te aviso %s.",
 
 		NotedForDigest: "Anotado para el %s. Te lo recuerdo en el resumen de esa mañana.",
+		Closed:         "Listo, saqué «%s».",
+		NothingClosed:  "No encontré nada pendiente para cerrar.",
 
 		Reminder: "Recordatorio: %s",
 		AtWhen:   "%s \u2014 %s",

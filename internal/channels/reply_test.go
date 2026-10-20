@@ -206,3 +206,25 @@ func TestRenderReply_ADatedTaskNamesItsDayAndTheDigest(t *testing.T) {
 		t.Errorf("an undated stored unit answered %q, want \"Anotado.\"", got)
 	}
 }
+
+// TestRenderReply_AClosedTaskIsNamed: a done that closed a task names it, in
+// the message's language, and a done that closed nothing says so rather than
+// confirm it (ADR-0040). Mutation: answer say.Corrected for either and this
+// fails.
+func TestRenderReply_AClosedTaskIsNamed(t *testing.T) {
+	for _, tc := range []struct {
+		lang classify.Language
+		c    brain.Correction
+		want string
+	}{
+		{"es", brain.Correction{UnitID: "u", Closed: "Renovar el pasaporte"}, "Listo, saqué «Renovar el pasaporte»."},
+		{"en", brain.Correction{UnitID: "u", Closed: "Renew the passport"}, `Done, I closed "Renew the passport".`},
+		{"es", brain.Correction{NothingClosed: true}, "No encontré nada pendiente para cerrar."},
+		{"en", brain.Correction{NothingClosed: true}, "I found nothing open to close."},
+	} {
+		c := tc.c
+		if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: tc.lang, Correction: &c}); got != tc.want {
+			t.Errorf("%s %+v: reply = %q, want %q", tc.lang, tc.c, got, tc.want)
+		}
+	}
+}

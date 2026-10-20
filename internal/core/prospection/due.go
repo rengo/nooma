@@ -13,10 +13,9 @@ import (
 // client's ruling of 2026-10-19, "el resumen alcanza").
 //
 // Chosen inside a band. More than 1, or a task missed on its day is never
-// named again. Fewer than a week, because a task nobody asked to be reminded
-// of has no check-in, so nothing lets the user tell the digest it is done:
-// each morning past its day is a line they cannot answer, and the bound is
-// what stops it.
+// named again. Fewer than a week, because each morning past its day is a line
+// the user must answer to stop: a done in reply closes the task (ADR-0040),
+// and the bound is what stops the line of one nobody answers.
 const DueTaskDigestDays = 3
 
 // DueTaskWindow is the span of due instants whose tasks the digest at now can
@@ -71,4 +70,12 @@ func TasksDue(units []unit.Unit, now time.Time) []string {
 		ids[i] = u.ID
 	}
 	return ids
+}
+
+// DoneCloses reports whether a done the user said of a listed item closes it
+// (doc 02 §5 step 4, ADR-0040): a task still in the pool whose reminders
+// recur on no rule. A series is not ended by a done of one occurrence, and no
+// other kind is a thing to get done.
+func DoneCloses(t unit.Type, s unit.Status, recurring bool) bool {
+	return t == unit.TypeTask && s == unit.StatusPool && !recurring
 }

@@ -44,6 +44,7 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionCaptureCheckInResolved:    "Check-in answered",
 	ports.ActionCaptureCheckInUnmatched:   "Reply matched no check-in",
 	ports.ActionCaptureCheckInSnoozed:     "Check-in put off",
+	ports.ActionCaptureTaskClosed:         "Task done",
 	ports.ActionCaptureDedupJudged:        "Checked for a duplicate",
 	ports.ActionRelationPersisted:         "Linked to a related entry",
 	ports.ActionRelationDiscarded:         "Possible link dropped",
