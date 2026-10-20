@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no me recuerdes más lo del curso de inglés",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero que me recuerdes más lo del curso de inglés.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"title\":\"Curso de inglés\",\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero que me recuerdes más lo del curso de inglés.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -18,5 +17,5 @@
     "reminder_intent": "stop",
     "reminder_target": "unclear"
   },
-  "prompt_sha256": "8a7308d74ab12474f04f02fe1ccef3b33a4a88ca08e8fa4cd5ba461e6a6f6973"
+  "prompt_sha256": "e969c39bb94aaacde431a99150cd4ac691985d4565d23f76de49618faf568648"
 }

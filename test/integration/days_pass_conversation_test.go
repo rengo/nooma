@@ -445,7 +445,7 @@ func dpScenarios() []dpScenario {
 				// A done naming an asked task closes it (ADR-0040).
 				{at: dpAt(10, 17, 10, 0), id: "hand-capture-listo-after-coffee-push", text: "listo",
 					reading: `{"type":"chitchat","normalized_content":"Listo.","weight":0.1,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done","referent":"H"}`,
-					shows:   `H) text (quoted): "Comprar café el 2026-10-17 a las 10:00."`},
+					shows:   `H) text (quoted): "Recordarme comprar café el 2026-10-17 a las 10:00."`},
 				{at: dpAt(10, 22, 21, 40), id: "hand-capture-ya-lo-hice-after-gas-push", text: "ya lo hice",
 					reading: `{"type":"chitchat","normalized_content":"Ya lo hice.","weight":0.1,"decay_rate":0.3,"language":"es","task_checkin_outcome":"done","referent":"G"}`,
 					shows:   `G) text (quoted): "Recordarme pagar el gas el 2026-10-22."`},

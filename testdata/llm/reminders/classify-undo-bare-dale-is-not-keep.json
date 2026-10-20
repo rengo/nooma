@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "dale",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
@@ -14,5 +13,5 @@
   "expect": {
     "type": "chitchat"
   },
-  "prompt_sha256": "5acf2f5ca99fd5305cf6b8134fdfe69742f798e4061ff58d2d7e901bbac1c9fe"
+  "prompt_sha256": "9695ff7b7bc4266395c1076612fc07d75c0de3b1c5f3ed208a5b86b4c38d3d27"
 }

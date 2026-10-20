@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, todavía no",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no he renovado el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no he renovado el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -30,6 +29,5 @@
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "known_misread": "referent is A beside the snooze: the model names the task the digest named, though the prompt gives referent only beside a check-in answer other than snooze. Harmless as read: a snooze with a referent is not a follow-up (TestReadFollowUp, \"a snooze with a referent is not one\"), it closes nothing, and the task it names has no check-in to put off (TestI43_ASnoozeNamingAnItemWithNoCheckInPutsOffNone)",
-  "prompt_sha256": "9281a3ad9b399f9f0e2e6d15741df08ccda993c46a99940f72f837f4478dc364"
+  "prompt_sha256": "ba4072d561ed6c01c55797bcb43b6af472659a6f667f1608c1266c48bfce316f"
 }

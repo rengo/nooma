@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame 2 horas antes",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"title\":\"Reunión con Ana\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false,\"referent\":\"A\"}",
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,6 +41,6 @@
     ],
     "reminder_leads_add": false
   },
-  "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: leads win (ADR-0043), so a bound reading carrying reminder_leads_minutes takes the correction path and its remind_request is ignored; the leads still come back as reminder_leads_minutes",
-  "prompt_sha256": "c8cc24d4cc4932b294a852c9f9ec0ca9a9bb5a9b2ba584bb819a2538fac1c1ac"
+  "known_misread": "remind_request is true beside the leads: the model reads \"avisame 2 horas antes\" as a request to be reminded. Harmless as read: leads win (ADR-0043), so the bound reading takes the correction path and the stray request is ignored (TestI40_LeadsWinOverAStrayRemindRequest); the user gets the item reminded 2 hours before",
+  "prompt_sha256": "2c2e592423a17b2c520bc0ad0965455fa597bf1a20c88941ff118577ab4f0ba7"
 }

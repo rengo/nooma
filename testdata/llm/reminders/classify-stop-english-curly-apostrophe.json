@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "don’t remind me anymore",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Stop reminding me about buying coffee.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"en\",\"title\":\"Buy coffee\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Don’t remind me anymore.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -18,5 +17,6 @@
     "reminder_intent": "stop",
     "reminder_target": "1"
   },
-  "prompt_sha256": "156097f1d013b9cdc575e5ffd4c04826a5b7b71e05a56238a576cf491c9b67bf"
+  "known_misread": "reminder_target is unclear where the one listed candidate is expected: the model will not bind the stop to the only reminder listed. No effect in production today: a reminder list is never sent to classify (noProductionInput); if it were, Nooma would ask which reminder instead of stopping the only one",
+  "prompt_sha256": "e83d207ad6754717600c2c3e6083791b683f2e597d0cfe0afaf42f03dcae0ed6"
 }
