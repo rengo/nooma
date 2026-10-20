@@ -503,7 +503,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      (`Tue 2026-10-20 07:00`, [ADR-0042](adr/0042-a-turn-shows-when-it-was-said.md)), so the model
      judges how stale a turn is, each clipped to `max_turn_runes` and tagged with the letter of every item
      it concerns, then the items as they stand now (text, `event_at`, `due_at`, title), lettered
-     from `A` in the order they first appear. Four optional fields
+     from `A` in the order they first appear. Three optional fields
      come back, each degrading alone (I14): `referent`, the letter of the listed item the message
      is about, or `unclear`: the item a `correction` changes, the item a `remind_request: true`
      asks to be reminded of, and, beside a check-in answer other than `snooze` of any type, the
@@ -511,12 +511,14 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      pushed item whose check-in it answers
      ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)); `clarifying_question`, beside `unclear`, the question
      the model writes in the message's language to ask which item the user means (one line, at
-     most `max_turn_runes`); `reminder_leads_minutes`, every lead the message asks to be
-     reminded at, in whole positive minutes before the item: beside a referent the listed item's
-     (step 4, ADR-0038), and with none the event the message tells (§7,
-     [ADR-0045](adr/0045-a-message-names-its-own-leads.md)); and `reminder_leads_add`, beside a
-     referent and leads, true when the message adds them to the item's reminders rather than
-     naming them all (step 4, ADR-0045). Letters, not numbers, so a bare "2" never reads as an item. The
+     most `max_turn_runes`); and `reminder_leads_add`, beside a referent and
+     `reminder_leads_minutes`, true when the message adds those leads to the item's reminders
+     rather than naming them all (step 4, [ADR-0045](adr/0045-a-message-names-its-own-leads.md)).
+     `reminder_leads_minutes` itself is a reminder field of every prompt, chat or none: every lead
+     the message asks to be reminded at, in whole positive minutes before what it tells (§7,
+     ADR-0045), and beside a referent before that listed item (step 4, ADR-0038). A done that
+     could be about more than one listed item and does not say which answers `unclear` with the
+     question, so Nooma asks (ADR-0045). Letters, not numbers, so a bare "2" never reads as an item. The
      prompt says by meaning what is not a correction: a message that tells something new, asks,
      or only answers something Nooma said other than its question about which item is meant,
      even about the same subject as a listed item, and a short reply to a reminder, check-in or
@@ -897,12 +899,15 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      preference; otherwise **nothing is written** and the answer says the reminders were not
      changed (`OutcomeAsked`, reason `leads_not_set`, one `correction.ambiguous` row). The
      armed set is then re-planned at those leads, as a moved date re-plans it (below). The field
-     is offered only beside a chat; with none, there is no follow-up to set it on. **A lead can
+     is in every prompt, so a correction that names its unit (a unit page, `POST /capture`'s
+     `unit_id`) sets them the same way. **A lead can
      be added** (I44, [ADR-0045](adr/0045-a-message-names-its-own-leads.md)): with
      `reminder_leads_add` true ("también 1 hora antes"), the leads read are joined to the item's
      current ones (its own, else every lead its armed one-shot reminders serve), each once, the
      furthest first (`prospection.AddEventLeads`), before the plan is made, and the result is the
-     edit above. The model decides add or replace; the code holds no word for either. Absent or
+     edit above. An asked ring is not one of them: a unit the user asked to be reminded of
+     keeps its asked ring, asked and exempt from the night, beside its leads, through every
+     correction that re-plans it (`prospection.FollowAsked`). The model decides add or replace; the code holds no word for either. Absent or
      degraded, the leads replace.
      **The title follows the body** (spec R12). Beside the edits above the plan may carry a
      `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in
@@ -1575,8 +1580,8 @@ have N nudges; a pattern watcher does not hang off any unit):
   hora antes" is `[60]`; an `event` with a time of day and leads valid as a preference, else the
   capture ignores them; a `remind_request` beside them is ignored, so the unit is not asked, and
   the answer names the rings as said, "Te aviso 1 hora antes.", and a ring serving none of them
-  by when it rings, "Te aviso ese día a las 09:00."; read only beside a chat, so a capture with
-  none, and a task, keep their reminders as before): every plan of that event — the
+  by when it rings, "Te aviso ese día a las 09:00."; read with a chat or none, and a task keeps its
+  reminders as before): every plan of that event — the
   capture, the correction, a later date correction, a preference change and the due scan — uses
   them in place of the user's (`ReminderPrefs.WithEventLeads`), and the told-day rule leaves
   them, since the user named them, but none is sent at once on the told day: a behind one, or

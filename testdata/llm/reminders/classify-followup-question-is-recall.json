@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "¿a qué hora era la reunión?",
   "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\"}",
+  "record": true,
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [

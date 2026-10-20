@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "ya está",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\"}",
+  "record": true,
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -35,6 +36,5 @@
     "task_checkin_outcome": "done",
     "referent": "unclear"
   },
-  "known_misread": "referent is absent where unclear and a question are expected: after a digest of two tasks the model names no item. Safe as read: beside a chat a done that names no item closes nothing, is recorded capture.checkin.unmatched (TestI43_ACheckInAnswerNamingNoItemClosesNoCheckIn), and the reply says nothing was closed (TestI42_ADoneThatClosesNothingSaysSo); the user is not asked which",
   "prompt_sha256": "f5e27c1832bfea1bb00b0b3f5435283d06678ce7882d6379d14ed251e13d365e"
 }

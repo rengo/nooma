@@ -72,7 +72,13 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 		return fmt.Errorf("correction: read reminders of unit %q: %w", target.ID, err)
 	}
 	live, byID := liveSet(armed)
-	f := prospection.Follow(eventAt, live, reminderPrefs(ctx, r.config).WithEventLeads(changed.ReminderLeads), interruptLevel, now)
+	prefs := reminderPrefs(ctx, r.config).WithEventLeads(changed.ReminderLeads)
+	f := prospection.Follow(eventAt, live, prefs, interruptLevel, now)
+	// An event the user asked to be reminded of keeps its asked ring, asked
+	// and exempt from the night, beside its leads (ADR-0031, ADR-0045).
+	if target.RemindMe {
+		f = prospection.FollowAsked(eventAt, true, !prospection.TimedEvent(eventAt, now.Location()), live, nil, prefs, interruptLevel, now, now)
+	}
 	w := reminderSet{triggers: r.triggers, log: r.log, ids: r.ids, cause: correctionCause()}
 	// A moved reminder says what the unit says now, whatever it said before: a
 	// retry after a failed step finds the unit already holding the new text.

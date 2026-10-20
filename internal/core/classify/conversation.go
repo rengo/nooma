@@ -209,18 +209,11 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("                       you think most likely, named as the user would (\"¿Te referís\n")
 	b.WriteString("                       a la reunión con Juan?\"). Nooma sends it as it is and stores\n")
 	b.WriteString("                       nothing; the answer comes back with this exchange shown\n")
-	// **How long before, as a value** (I40, ADR-0038). "avisame solo 1 hora
-	// antes" was read as a rewrite of the item's text and answered "Corregido."
-	// while nothing about its reminders changed. **For the event a message
-	// tells too** (I44, ADR-0045): "dentista mañana a las 10, avisame 1 hora
-	// antes" armed the preferences' leads and an asked one.
-	b.WriteString("  reminder_leads_minutes  when the message says how long before an item the user\n")
-	b.WriteString("                       wants to be reminded: every lead it asks for, in whole\n")
-	b.WriteString("                       minutes before the item: [60] for one hour before, [1440, 120]\n")
-	b.WriteString("                       for the day before and two hours before. Beside a referent it\n")
-	b.WriteString("                       is about that listed item; with none, about the event this\n")
-	b.WriteString("                       message tells. Leave it out when the message says nothing\n")
-	b.WriteString("                       about when to be reminded\n")
+	// **A listed item's leads** (I40, ADR-0038): "avisame solo 1 hora antes"
+	// was read as a rewrite of the item's text and answered "Corregido." while
+	// nothing about its reminders changed. The field itself is in Reminders.
+	b.WriteString("  Beside a referent, reminder_leads_minutes says when to be reminded of that listed\n")
+	b.WriteString("  item.\n")
 	// **Add or replace, read by the model** (ADR-0045, ADR-0033): "también 1
 	// hora antes" replaced the item's reminders with that one.
 	b.WriteString("  reminder_leads_add   only beside a referent and reminder_leads_minutes: true when\n")
@@ -261,6 +254,10 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  follows: remind_request true and that item's referent, never a chitchat.\n")
 	b.WriteString("  A message that says a listed item is done answers task_checkin_outcome done and\n")
 	b.WriteString("  that item's referent: Nooma closes it.\n")
+	// **Asked, not guessed** (review on #383): "ya está" after a digest of two
+	// tasks named none, and Nooma answered there was nothing to close.
+	b.WriteString("  When the message could be about more than one listed item and does not say\n")
+	b.WriteString("  which, referent \"" + ReferentUnclear + "\" and the clarifying_question: Nooma asks.\n")
 	b.WriteString("  When referent names an item, the correction is a PATCH of that item: change\n")
 	b.WriteString("  only what the user speaks about and keep everything else.\n")
 	b.WriteString("  normalized_content is the item's WHOLE corrected text — its current text with\n")

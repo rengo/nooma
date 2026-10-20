@@ -331,6 +331,15 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		", of the numbered reminder it is\n")
 	b.WriteString("                     about, or \"" + ReminderTargetUnclear + "\" when the one the user describes is not\n")
 	b.WriteString("                     in the list or you cannot tell. Never invent a position\n")
+	// **How long before, as a value, in every prompt** (I44, ADR-0045):
+	// "dentista mañana a las 10, avisame 1 hora antes" as a chat's first
+	// message, read with no chat shown, armed the preferences' leads and an
+	// asked one.
+	b.WriteString("  reminder_leads_minutes  when the message says how long before what it tells the\n")
+	b.WriteString("                     user wants to be reminded: every lead it asks for, in whole\n")
+	b.WriteString("                     minutes before it: [60] for one hour before, [1440, 120] for the\n")
+	b.WriteString("                     day before and two hours before. Leave it out when the message\n")
+	b.WriteString("                     says nothing about when to be reminded\n")
 	if chatShown(rc) {
 		b.WriteString(whichItemPointer)
 	}

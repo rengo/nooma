@@ -200,7 +200,8 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 }
 
 // currentLeads is the leads target is reminded at now: its own, else every
-// lead its armed one-shot reminders serve.
+// lead its armed one-shot reminders serve, the asked one apart: an asked ring
+// stays the asked reminder (ADR-0031), which the re-plan keeps on its own.
 func (r correctionRunner) currentLeads(ctx context.Context, target unit.Unit) ([]int, error) {
 	if target.ReminderLeads != nil {
 		return target.ReminderLeads, nil
@@ -211,7 +212,7 @@ func (r correctionRunner) currentLeads(ctx context.Context, target unit.Unit) ([
 	}
 	var out []int
 	for _, t := range armed {
-		if t.RecurrenceRule == nil {
+		if t.RecurrenceRule == nil && !t.Payload.Asked {
 			out = append(out, t.Payload.UserLeadsMinutes...)
 		}
 	}

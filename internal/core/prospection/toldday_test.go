@@ -252,3 +252,14 @@ func TestArm_AnEventsOwnLeadsNeverRingAtOnceOnTheToldDay(t *testing.T) {
 		}
 	})
 }
+
+// TestFollow_OwnLeadsAllBehindWithNothingLiveRingOnTheEventsDay (ADR-0045 point
+// 3): a correction that sets own leads, every one behind, on the told day, with
+// no ring live, arms the one ring on the event's own day, as the preferences'
+// leads do (ADR-0039), not nothing.
+func TestFollow_OwnLeadsAllBehindWithNothingLiveRingOnTheEventsDay(t *testing.T) {
+	got := Follow(toldAt(20, 10, 0), nil, DefaultReminderPrefs().WithEventLeads([]int{1440}), nil, toldAt(19, 14, 0))
+	if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) || got.Plans[0].Immediate {
+		t.Errorf("Follow = %+v, want one ring on the event's day at 09:00", got)
+	}
+}
