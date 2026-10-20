@@ -1,0 +1,46 @@
+{
+  "id": "classify-followup-y-ademas-el-dia-antes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "y además el día antes",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Cena con Ana el 2026-10-23 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[1440],\"reminder_leads_add\":true,\"referent\":\"A\"}",
+  "now": "2026-10-20T18:05:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T18:00:00-03:00",
+        "speaker": "user",
+        "text": "el viernes cena con Ana a las 21",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T18:00:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el vie 23 oct, 21:00. Te aviso unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Cena con Ana el 2026-10-23 a las 21:00.",
+        "title": "Cena con Ana",
+        "event_at": "2026-10-23T21:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "A",
+    "reminder_leads_minutes": [
+      1440
+    ],
+    "reminder_leads_add": true
+  },
+  "known_misread": "remind_request is true beside the leads: the model reads \"y además el día antes\" as a request to be reminded. Harmless as read: leads win (ADR-0043), so the bound reading takes the correction path and the stray request is ignored (TestI40_LeadsWinOverAStrayRemindRequest); the user gets the day-before ring added to the item's rings",
+  "prompt_sha256": "5e58cb1728581610ec5eb28d7a91deccc68dfe64798f883e971813e140eef6bb"
+}

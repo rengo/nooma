@@ -166,6 +166,11 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 	has("a follow-up that asks which", conv(func(c llm.Case) bool { return c.Expect.Referent == classify.ReferentUnclear }))
 	// I40: the client's "avisame solo 1 hora antes", after the time moved.
 	has("a follow-up that sets an event's leads", conv(func(c llm.Case) bool { return len(c.Expect.ReminderLeadsMinutes) > 0 }))
+	// I44: the leads a capture names, and a lead a follow-up adds (ADR-0045).
+	has("a capture that names its event's leads", conv(func(c llm.Case) bool {
+		return c.Expect.Type == "event" && c.Expect.Referent == "" && len(c.Expect.ReminderLeadsMinutes) > 0
+	}))
+	has("a follow-up that adds a lead", conv(func(c llm.Case) bool { return c.Expect.ReminderLeadsAdd }))
 	has("an answer whose referent is past A", conv(func(c llm.Case) bool {
 		return c.Expect.Referent != "" && c.Expect.Referent != "A" && c.Expect.Referent != classify.ReferentUnclear
 	}))

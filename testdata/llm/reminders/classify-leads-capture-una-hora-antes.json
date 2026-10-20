@@ -1,0 +1,44 @@
+{
+  "id": "classify-leads-capture-una-hora-antes",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "dentista mañana a las 10, avisame 1 hora antes",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Tengo una cita con el dentista el 2026-10-21 a las 10:00.\",\"weight\":0.85,\"decay_rate\":0.01,\"language\":\"es\",\"event_at\":\"2026-10-21T10:00:00-03:00\",\"title\":\"Cita con el dentista\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"reminder_leads_minutes\":[60]}",
+  "now": "2026-10-20T18:00:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T17:50:00-03:00",
+        "speaker": "user",
+        "text": "comprar pan",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T17:50:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Comprar pan.",
+        "title": "Comprar pan"
+      }
+    ]
+  },
+  "expect": {
+    "remind_request": true,
+    "type": "event",
+    "event_at": "2026-10-21T10:00:00-03:00",
+    "reminder_leads_minutes": [
+      60
+    ]
+  },
+  "prompt_sha256": "3c2e6e032632415597a85efb3322b44f1ebc65efdaddc4858e4133c009e0fc05"
+}

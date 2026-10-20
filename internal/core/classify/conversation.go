@@ -170,6 +170,17 @@ func assignReminderLeads(raw json.RawMessage, c *Classification, _ time.Time) Re
 	return ""
 }
 
+// assignReminderLeadsAdd reads reminder_leads_add: a boolean, wrong_type
+// otherwise.
+func assignReminderLeadsAdd(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return ReasonWrongType
+	}
+	c.ReminderLeadsAdd = b
+	return ""
+}
+
 // writeFollowUps renders the two follow-up fields, the patch rule, the
 // transcript and the items it tags (ADR-0036). It is written only beside a
 // chat: without one there is nothing to follow up on. The model reads what
@@ -198,15 +209,21 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("                       you think most likely, named as the user would (\"¿Te referís\n")
 	b.WriteString("                       a la reunión con Juan?\"). Nooma sends it as it is and stores\n")
 	b.WriteString("                       nothing; the answer comes back with this exchange shown\n")
-	// **How long before, as a value** (I40, ADR-0038). "avisame solo 1 hora
-	// antes" was read as a rewrite of the item's text and answered "Corregido."
-	// while nothing about its reminders changed.
-	b.WriteString("  reminder_leads_minutes  only beside a referent: when the message changes how long\n")
-	b.WriteString("                       before the item the user wants to be reminded, every lead it\n")
-	b.WriteString("                       asks for, in whole minutes before the item: [60] for one hour\n")
-	b.WriteString("                       before, [1440, 120] for the day before and two hours before.\n")
-	b.WriteString("                       It replaces the item's reminders. Leave it out when the\n")
-	b.WriteString("                       message says nothing about when to be reminded\n")
+	// **A listed item's leads** (I40, ADR-0038): "avisame solo 1 hora antes"
+	// was read as a rewrite of the item's text and answered "Corregido." while
+	// nothing about its reminders changed. The field itself is in Reminders.
+	b.WriteString("  Beside a referent, reminder_leads_minutes says when to be reminded of that listed\n")
+	b.WriteString("  item.\n")
+	// **Add or replace, read by the model** (ADR-0045, ADR-0033): "también 1
+	// hora antes" replaced the item's reminders with that one.
+	b.WriteString("  reminder_leads_add   only beside a referent and reminder_leads_minutes: true when\n")
+	b.WriteString("                       the message adds those leads to the reminders the item\n")
+	b.WriteString("                       already has; false or left out when they are all the\n")
+	b.WriteString("                       reminders the user wants for it, which replace the ones it has.\n")
+	// Review on #383: "avisame 2 horas antes" came back adding.
+	b.WriteString("                       A message that only names leads, with nothing saying they\n")
+	b.WriteString("                       come in addition, names them all: false (\"avisame 2 horas\n")
+	b.WriteString("                       antes\")\n")
 	b.WriteString("  A follow-up that changes a listed item (a new time, a new day, a different\n")
 	b.WriteString("  detail, even with no subject named in it) is a correction of that item, not a\n")
 	b.WriteString("  new memory.\n")
@@ -241,6 +258,11 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("  follows: remind_request true and that item's referent, never a chitchat.\n")
 	b.WriteString("  A message that says a listed item is done answers task_checkin_outcome done and\n")
 	b.WriteString("  that item's referent: Nooma closes it.\n")
+	// **Asked, not guessed** (review on #383): "ya está" after a digest of two
+	// tasks named none, and Nooma answered there was nothing to close.
+	b.WriteString("  When the message could be about more than one listed item and does not say\n")
+	b.WriteString("  which, referent \"" + ReferentUnclear + "\" and the clarifying_question, still with\n")
+	b.WriteString("  task_checkin_outcome done: Nooma asks.\n")
 	b.WriteString("  When referent names an item, the correction is a PATCH of that item: change\n")
 	b.WriteString("  only what the user speaks about and keep everything else.\n")
 	b.WriteString("  normalized_content is the item's WHOLE corrected text — its current text with\n")

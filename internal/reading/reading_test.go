@@ -95,7 +95,7 @@ func TestReplayFailsWhenTheReadingIsNotTheExpectedOne(t *testing.T) {
 
 func TestKnownMisreadStaysMarked(t *testing.T) {
 	c := recorded(t, baseCase())
-	c.KnownMisread = "the model reads a recall as a request"
+	c.KnownMisread = "remind_request is absent: the model reads a recall as a request"
 
 	err := Replay(c, readsAsRequest) // it reads as expected: the mark is stale
 	if err == nil || !strings.Contains(err.Error(), "known_misread") {
@@ -103,6 +103,23 @@ func TestKnownMisreadStaysMarked(t *testing.T) {
 	}
 	if err := Replay(c, `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1}`); err != nil {
 		t.Fatalf("a known_misread that still misreads = %v, want nil", err)
+	}
+}
+
+// TestKnownMisreadCoversOnlyTheFieldsItNames (review on #383): a mark set for
+// a stray remind_request hid "avisame 2 horas antes" coming back with
+// reminder_leads_add true, the field the case exists to test. A mark covers a
+// missed field only when it names it.
+func TestKnownMisreadCoversOnlyTheFieldsItNames(t *testing.T) {
+	c := recorded(t, baseCase())
+	c.KnownMisread = "title is absent: harmless"
+	err := Replay(c, `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1}`)
+	if err == nil || !strings.Contains(err.Error(), "remind_request") {
+		t.Fatalf("a mark naming another field = %v, want the remind_request miss reported", err)
+	}
+	c.KnownMisread = "remind_request_extra is not the field"
+	if err := Replay(c, `{"type":"task","normalized_content":"x","weight":0.6,"decay_rate":0.1}`); err == nil {
+		t.Fatalf("a mark naming a longer word covered remind_request")
 	}
 }
 
@@ -524,6 +541,28 @@ func TestCheckReminderLeadsAreStrict(t *testing.T) {
 		got := Check(llm.Case{Expect: &llm.Expect{Referent: "A", ReminderLeadsMinutes: tc.expect}}, decode(t, head+tc.extra+`}`))
 		if missed := slices.Contains(got, FieldReminderLeads); missed != tc.miss || len(got) > 1 {
 			t.Errorf("%s: Check = %v, want a %s miss only: %v", name, got, FieldReminderLeads, tc.miss)
+		}
+	}
+}
+
+// TestCheckReminderLeadsAddIsStrict: an added lead keeps the item's reminders
+// in production and a replacing one drops them (ADR-0045), so either one
+// nobody expected is a miss.
+func TestCheckReminderLeadsAddIsStrict(t *testing.T) {
+	const head = `{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A","reminder_leads_minutes":[60]`
+	for name, tc := range map[string]struct {
+		expect bool
+		extra  string
+		miss   bool
+	}{
+		"unexpected add":  {false, `,"reminder_leads_add":true`, true},
+		"expected add":    {true, `,"reminder_leads_add":true`, false},
+		"expected absent": {true, ``, true},
+		"replace":         {false, `,"reminder_leads_add":false`, false},
+	} {
+		got := Check(llm.Case{Expect: &llm.Expect{Referent: "A", ReminderLeadsMinutes: []int{60}, ReminderLeadsAdd: tc.expect}}, decode(t, head+tc.extra+`}`))
+		if missed := slices.Contains(got, FieldReminderLeadsAdd); missed != tc.miss || len(got) > 1 {
+			t.Errorf("%s: Check = %v, want a %s miss only: %v", name, got, FieldReminderLeadsAdd, tc.miss)
 		}
 	}
 }

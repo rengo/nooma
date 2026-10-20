@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "que no se me olvide regar las plantas mañana",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"No debo olvidar regar las plantas el 2026-10-17.\",\"weight\":0.7,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regar las plantas\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Regar las plantas el 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regar las plantas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
   },
-  "prompt_sha256": "c7da54940fecd0ccf67cb14c464c6466327c91f85b3b1beae2dc89e66447eacf"
+  "prompt_sha256": "6a0e23b520ad8c09e31d177642b9e0faa82f5c9debc1faf5464d02a772b40128"
 }

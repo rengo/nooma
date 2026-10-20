@@ -200,6 +200,12 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("  event_at, due_at     absolute; either \"YYYY-MM-DD\" or an RFC3339 timestamp\n")
 	b.WriteString("                       carrying its offset, e.g. " + now.Format(exampleLayout) + ".\n")
 	b.WriteString("                       A timestamp without an offset is not accepted.\n")
+	// **A named time is never a bare date** (review on #383): "haceme acordar
+	// de llamar al médico mañana a las 9" came back as "2026-10-17" and rang at
+	// 09:00, not before it.
+	b.WriteString("                       When the message names a time of day for it, the field is a\n")
+	b.WriteString("                       full timestamp at that time, never a bare date: \"mañana a\n")
+	b.WriteString("                       las 9\" is tomorrow at 09:00 with its offset.\n")
 	b.WriteString("                       event_at is when a thing happens in the world; due_at is\n")
 	b.WriteString("                       when something is owed. A timer has no world event, so its\n")
 	b.WriteString("                       instant belongs in due_at and never in event_at\n")
@@ -213,6 +219,14 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
 		" — only for a recurring reminder\n")
+	// **The first occurrence, never the rule alone** (review on #383): "todos
+	// los días a las 9pm" came back with its rule and no instant, and nothing
+	// was armed.
+	b.WriteString("                       A recurring reminder MUST also carry its first occurrence, in\n")
+	b.WriteString("                       due_at, or in event_at for a thing that happens in the world,\n")
+	b.WriteString("                       as a birthday; when the message names a time of day, as a\n")
+	b.WriteString("                       full timestamp at that time: \"todos los días a las 9pm\" said\n")
+	b.WriteString("                       in the morning is today at 21:00, never the rule alone\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
 	}
@@ -331,6 +345,16 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 		", of the numbered reminder it is\n")
 	b.WriteString("                     about, or \"" + ReminderTargetUnclear + "\" when the one the user describes is not\n")
 	b.WriteString("                     in the list or you cannot tell. Never invent a position\n")
+	// **How long before, as a value, in every prompt** (I44, ADR-0045):
+	// "dentista mañana a las 10, avisame 1 hora antes" as a chat's first
+	// message, read with no chat shown, armed the preferences' leads and an
+	// asked one.
+	b.WriteString("  reminder_leads_minutes  when the message says how long before what it tells the\n")
+	b.WriteString("                     user wants to be reminded: every lead it asks for, in whole\n")
+	b.WriteString("                     minutes before it: [60] for one hour before, [1440, 120] for the\n")
+	b.WriteString("                     day before and two hours before. Leave it out unless the\n")
+	b.WriteString("                     message names how long before. A time of day is not a lead:\n")
+	b.WriteString("                     \"a las 9pm\" goes in due_at or event_at\n")
 	if chatShown(rc) {
 		b.WriteString(whichItemPointer)
 	}

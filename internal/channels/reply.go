@@ -193,6 +193,10 @@ func askedLeads(say phrase.Set, result brain.CaptureResult) string {
 	if dayOnly(a) {
 		return say.DayLeads(a.Immediate, result.At, a.About, fires...)
 	}
+	// Leads the message named are said as it named them (I44, ADR-0045).
+	if a.OwnLeads != nil && !a.Immediate {
+		return say.NamedLeads(a.About, a.OwnLeads, fires...)
+	}
 	return say.Leads(a.Immediate, result.At, a.About, fires...)
 }
 

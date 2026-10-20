@@ -91,6 +91,10 @@ type Expect struct {
 	// ReminderLeadsMinutes are the leads a follow-up sets on its item, in
 	// order. Strict: unset means none, since leads change reminders (I40).
 	ReminderLeadsMinutes []int `json:"reminder_leads_minutes,omitempty"`
+	// ReminderLeadsAdd says the follow-up adds its leads to the item's
+	// reminders rather than replacing them (ADR-0045). Strict: unset means it
+	// must not add.
+	ReminderLeadsAdd bool `json:"reminder_leads_add,omitempty"`
 }
 
 // FileFields are the keys of a recorded example in the order they are written

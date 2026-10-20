@@ -214,3 +214,52 @@ func TestRingOnTheDay(t *testing.T) {
 		}
 	})
 }
+
+// TestArm_AnEventsOwnLeadsNeverRingAtOnceOnTheToldDay (I44, ADR-0045): leads
+// the user named are kept on the told day, but none rings at the moment the
+// event is told: a lead already behind is not sent at once. With nothing else
+// left, the one reminder rings on the event's own day (ADR-0039 point 1).
+func TestArm_AnEventsOwnLeadsNeverRingAtOnceOnTheToldDay(t *testing.T) {
+	event := classify.KindEvent
+	at, now := toldAt(20, 10, 0), toldAt(19, 14, 0)
+	c := classify.Classification{Kind: &event, EventAt: &at}
+	for _, tc := range []struct {
+		name  string
+		leads []int
+		want  []time.Time
+	}{
+		{"the day before, behind: one ring on its day", []int{1440}, []time.Time{toldAt(20, 9, 0)}},
+		{"the day before, behind, and an hour before", []int{1440, 60}, []time.Time{toldAt(20, 9, 0)}},
+		{"the day before, still ahead, rings today", []int{1440 - 60*6}, []time.Time{toldAt(19, 16, 0)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plans, ok := Arm(c, false, DefaultReminderPrefs().WithEventLeads(tc.leads), now)
+			if fires := toldFires(plans); !ok || !slices.EqualFunc(fires, tc.want, time.Time.Equal) {
+				t.Errorf("Arm fires at %v, want %v", fires, tc.want)
+			}
+			for _, p := range plans {
+				if p.Immediate {
+					t.Errorf("Arm = %+v, want no ring at once", plans)
+				}
+			}
+		})
+	}
+	t.Run("a correction carries no live ring to now", func(t *testing.T) {
+		live := []Live{{ID: "r", FireAt: toldAt(20, 8, 0)}}
+		got := Follow(at, live, DefaultReminderPrefs().WithEventLeads([]int{1440}), nil, now)
+		if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) || got.Plans[0].Immediate {
+			t.Errorf("Follow = %+v, want the live ring moved to 09:00 on the event's day", got)
+		}
+	})
+}
+
+// TestFollow_OwnLeadsAllBehindWithNothingLiveRingOnTheEventsDay (ADR-0045 point
+// 3): a correction that sets own leads, every one behind, on the told day, with
+// no ring live, arms the one ring on the event's own day, as the preferences'
+// leads do (ADR-0039), not nothing.
+func TestFollow_OwnLeadsAllBehindWithNothingLiveRingOnTheEventsDay(t *testing.T) {
+	got := Follow(toldAt(20, 10, 0), nil, DefaultReminderPrefs().WithEventLeads([]int{1440}), nil, toldAt(19, 14, 0))
+	if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) || got.Plans[0].Immediate {
+		t.Errorf("Follow = %+v, want one ring on the event's day at 09:00", got)
+	}
+}

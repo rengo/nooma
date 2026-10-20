@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "Remind me to call Ana at 5pm",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Remind me to call Ana at 17:00 on 2026-10-16.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"en\",\"due_at\":\"2026-10-16T17:00:00-03:00\",\"title\":\"Call Ana\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\n  \"type\": \"task\",\n  \"normalized_content\": \"I need to call Ana at 2026-10-16 17:00.\",\n  \"weight\": 0.8,\n  \"decay_rate\": 0.05,\n  \"language\": \"en\",\n  \"due_at\": \"2026-10-16T17:00:00-03:00\",\n  \"title\": \"Call Ana\",\n  \"interrupt_level\": 0.5,\n  \"remind_request\": true,\n  \"reminder_intent\": \"none\"\n}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
   },
-  "prompt_sha256": "f3b338456701e01ba45000407cdd581af40c5b21829af4526647c57231744b19"
+  "prompt_sha256": "f55c9e815f17f789fed96e78e8319face1b46a12b6c3292b373aa50b9175a101"
 }

@@ -7,5 +7,5 @@
   "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que comprar café.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
-  "prompt_sha256": "bbb6672c61fa6cc04c3f15fcfeece8c0a2c386ec2f0e75d59ea1f35c64a3b2bb"
+  "prompt_sha256": "f3551bb7f03074f88841482aaadd798fe297d8586d6688f3993b9301be9ffe00"
 }

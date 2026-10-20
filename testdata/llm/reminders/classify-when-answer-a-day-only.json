@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "el viernes",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Avisame el 2026-10-16.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-16\",\"question_answer\":\"when\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Quiero que me avises el 2026-10-16.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-16\",\"title\":\"Aviso\",\"question_answer\":\"when\",\"reminder_intent\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -15,5 +15,5 @@
     "question_answer": "when",
     "day_only": true
   },
-  "prompt_sha256": "116fa3fabd468bd2ebf4a986f2709434bd3a7463be96b5b2b1a63054850347ff"
+  "prompt_sha256": "a0ee7f037b6ed8aab80ce47e2f27c3b2bf2efc136c0f2a555f55715e19d1b9c7"
 }

@@ -503,12 +503,38 @@ func (s Set) Leads(immediate bool, told, about time.Time, fires ...time.Time) st
 func (s Set) ExactLeads(about time.Time, fires ...time.Time) string {
 	var said []string
 	for _, fire := range fires {
-		gap := about.Sub(fire)
+		said = append(said, s.exactLead(about, fire))
+	}
+	return s.join(said)
+}
+
+// exactLead is one ring of ExactLeads.
+func (s Set) exactLead(about, fire time.Time) string {
+	gap := about.Sub(fire)
+	switch {
+	case gap == time.Hour:
+		return s.LeadHour
+	case gap > time.Hour && gap < 24*time.Hour && gap%time.Hour == 0:
+		return fmt.Sprintf(s.LeadHoursExact, int(gap/time.Hour))
+	}
+	return s.Lead(false, fire, about)
+}
+
+// NamedLeads is ExactLeads for the rings of an event whose message named its
+// leads, in minutes (I44, ADR-0045): a ring that serves none of them, the one
+// kept on the event's own day when every named lead is behind (ADR-0039), is
+// said as when it rings ("ese día a las 09:00"), never as a lead nobody named.
+func (s Set) NamedLeads(about time.Time, named []int, fires ...time.Time) string {
+	var said []string
+	for _, fire := range fires {
+		local := fire.In(about.Location())
+		y, m, d := local.Date()
+		ay, am, ad := about.Date()
 		switch {
-		case gap == time.Hour:
-			said = append(said, s.LeadHour)
-		case gap > time.Hour && gap < 24*time.Hour && gap%time.Hour == 0:
-			said = append(said, fmt.Sprintf(s.LeadHoursExact, int(gap/time.Hour)))
+		case slices.Contains(named, int(about.Sub(fire)/time.Minute)):
+			said = append(said, s.exactLead(about, fire))
+		case y == ay && m == am && d == ad:
+			said = append(said, s.ThatDayAt(local))
 		default:
 			said = append(said, s.Lead(false, fire, about))
 		}

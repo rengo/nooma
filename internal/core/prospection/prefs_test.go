@@ -164,3 +164,21 @@ func TestTimedEvent(t *testing.T) {
 		t.Error("TimedEvent misreads midnight or a time of day")
 	}
 }
+
+// TestAddEventLeads (ADR-0045): leads a follow-up adds join the item's own,
+// each once, the furthest first, as a preference lists them.
+func TestAddEventLeads(t *testing.T) {
+	for _, tc := range []struct {
+		current, added, want []int
+	}{
+		{[]int{180}, []int{60}, []int{180, 60}},
+		{[]int{60}, []int{60}, []int{60}},
+		{nil, []int{1440, 30}, []int{1440, 30}},
+		{[]int{30}, []int{1440}, []int{1440, 30}},
+		{[]int{180, 15}, []int{60, 180}, []int{180, 60, 15}},
+	} {
+		if got := AddEventLeads(tc.current, tc.added); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("AddEventLeads(%v, %v) = %v, want %v", tc.current, tc.added, got, tc.want)
+		}
+	}
+}

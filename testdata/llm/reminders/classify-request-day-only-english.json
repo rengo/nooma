@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "remind me to renew the passport tomorrow",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Renew the passport on 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"en\",\"due_at\":\"2026-10-17\",\"title\":\"Renew the passport\",\"remind_request\":true,\"reminder_intent\":\"none\",\"interrupt_level\":0.5}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Remind me to renew my passport on 2026-10-17.\",\"weight\":0.85,\"decay_rate\":0.05,\"language\":\"en\",\"due_at\":\"2026-10-17\",\"title\":\"Renew passport\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
   },
-  "prompt_sha256": "2c8e775cb1c4f9bc598b935fc17a47416c61e90095900181ef115dc29c487ec8"
+  "prompt_sha256": "44ae52da8b60009fa7a6008bd6ce08832bd6ec6883d021ea8407bacf7b876e16"
 }

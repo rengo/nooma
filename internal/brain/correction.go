@@ -96,6 +96,15 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 		return &Correction{UnitID: target.ID, Ambiguous: true, Why: AskNotAnEdit}, nil
 	}
 
+	// **An added lead keeps the item's reminders** (I44, ADR-0045): "también
+	// 1 hora antes" joins the leads the item has instead of replacing them.
+	if c.ReminderLeadsAdd && c.ReminderLeadsMinutes != nil {
+		current, err := r.currentLeads(ctx, *target)
+		if err != nil {
+			return nil, err
+		}
+		c.ReminderLeadsMinutes = prospection.AddEventLeads(current, c.ReminderLeadsMinutes)
+	}
 	plan, ok := correction.PlanEdit(c, *target, now.Location())
 	if !ok {
 		if err := r.recordAmbiguousDecision(ctx, now, struct {
@@ -185,6 +194,26 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 			if out.Reminders, err = r.reminderTimes(ctx, target.ID, now); err != nil {
 				return nil, err
 			}
+		}
+	}
+	return out, nil
+}
+
+// currentLeads is the leads target is reminded at now: its own, else every
+// lead its armed one-shot reminders serve, the asked one apart: an asked ring
+// stays the asked reminder (ADR-0031), which the re-plan keeps on its own.
+func (r correctionRunner) currentLeads(ctx context.Context, target unit.Unit) ([]int, error) {
+	if target.ReminderLeads != nil {
+		return target.ReminderLeads, nil
+	}
+	armed, err := r.triggers.ArmedForUnit(ctx, target.ID)
+	if err != nil {
+		return nil, fmt.Errorf("correction: read reminders of unit %q: %w", target.ID, err)
+	}
+	var out []int
+	for _, t := range armed {
+		if t.RecurrenceRule == nil && !t.Payload.Asked {
+			out = append(out, t.Payload.UserLeadsMinutes...)
 		}
 	}
 	return out, nil

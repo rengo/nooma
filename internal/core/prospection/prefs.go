@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -63,6 +64,20 @@ func (p ReminderPrefs) WithEventLeads(minutes []int) ReminderPrefs {
 		p.TimedLeads, p.ownLeads = leads, true
 	}
 	return p
+}
+
+// AddEventLeads is current with added joined to it (ADR-0045): each lead once,
+// the furthest first, the order a preference lists them in. A follow-up that
+// adds a lead ("también 1 hora antes") keeps every reminder the item had.
+func AddEventLeads(current, added []int) []int {
+	out := slices.Clone(current)
+	for _, m := range added {
+		if !slices.Contains(out, m) {
+			out = append(out, m)
+		}
+	}
+	slices.SortFunc(out, func(a, b int) int { return b - a })
+	return out
 }
 
 func eventLeads(minutes []int) ([]time.Duration, error) {
