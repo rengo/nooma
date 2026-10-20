@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame solo 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"title\":\"Dentista\",\"referent\":\"A\",\"reminder_leads_minutes\":[60]}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"title\":\"Dentista\",\"remind_request\":true,\"reminder_intent\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[60]}",
   "now": "2026-10-19T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -57,5 +56,6 @@
       60
     ]
   },
-  "prompt_sha256": "7146828fa107b5a9788b27e7cb7d5b66388a3ffa546929c10b7d1ddbdcca14dc"
+  "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded, as in classify-followup-dos-horas-antes. Harmless as read: leads win (ADR-0043), so a bound reading carrying reminder_leads_minutes takes the correction path and its remind_request is ignored (TestI40_LeadsWinOverAStrayRemindRequest)",
+  "prompt_sha256": "73eb664059085e53ebca0258f7afd3611acd0cec22a0cef08a341e06d5ae02ea"
 }

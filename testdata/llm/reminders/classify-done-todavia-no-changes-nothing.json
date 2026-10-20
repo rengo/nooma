@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, todavía no",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no he renovado el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"task_checkin_outcome\":\"snooze\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no renové el pasaporte.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"snooze\",\"question_answer\":\"none\",\"reminder_intent\":\"none\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -30,5 +29,6 @@
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "prompt_sha256": "88120eea94ddb74ccdf3844a28118749139421c15250639b6d970df7691b1781"
+  "known_misread": "referent is A beside the snooze: the model names the task the digest named, though the prompt gives referent only beside a check-in answer other than snooze. Harmless as read: a snooze with a referent is not a follow-up (TestReadFollowUp, \"a snooze with a referent is not one\"), and a snooze closes nothing",
+  "prompt_sha256": "f7561f620098b5899e8f00bcd3fd31a1e5071c6fe04af3a1b7e5cba540774998"
 }

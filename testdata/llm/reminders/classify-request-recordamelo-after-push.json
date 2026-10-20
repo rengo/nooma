@@ -1,8 +1,10 @@
 {
   "id": "classify-request-recordamelo-after-push",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordámelo",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Llevar el auto al service el 2026-10-23.\",\"weight\":0.75,\"decay_rate\":0.02,\"language\":\"es\",\"title\":\"Llevar el auto al service\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"B\"}",
   "now": "2026-10-20T10:16:00-03:00",
   "conversation": {
     "turns": [
@@ -47,5 +49,6 @@
   "expect": {
     "remind_request": true,
     "referent": "B"
-  }
+  },
+  "prompt_sha256": "4002516d5c03f0a97dce9f75b3d19e5bba47e674533398fd15a90cf379257d49"
 }

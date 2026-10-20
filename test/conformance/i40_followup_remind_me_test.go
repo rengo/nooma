@@ -43,6 +43,13 @@ func recordamelo(t *testing.T) string {
 	return recordedReading(t, "classify-request-recordamelo")
 }
 
+// remindMeNamingNoInstant is "recordámelo" read with no instant of its own:
+// the recording restates its item's day (2026-10-17), which is an echo for
+// that item and a move for any other, so a fixture whose item is undated or
+// at another time replays this instead.
+const remindMeNamingNoInstant = `{"type":"task","normalized_content":"Comprar el regalo de Ana.","weight":0.8,"decay_rate":0.05,` +
+	`"language":"es","title":"Regalo de Ana","remind_request":true,"referent":"A"}`
+
 const remindChat ports.ConversationID = "9"
 
 // seedFollowed stores u and the exchange that told it, so the next message in
@@ -118,7 +125,7 @@ func TestI40_ARemindMeFollowUpRemindsTheItemItFollows(t *testing.T) {
 // cannot be reminded of. It is still marked asked, nothing is armed or stored,
 // and the answer says why, as an asked capture's does.
 func TestI40_ARemindMeOfAnUndatedItemSaysNoReminderWasSet(t *testing.T) {
-	f := newI40(t, recordamelo(t))
+	f := newI40(t, remindMeNamingNoInstant)
 	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
 		Content: "Comprar el regalo de Ana.", Title: "Regalo de Ana", CreatedAt: i40Now, UpdatedAt: i40Now})
 
@@ -306,7 +313,7 @@ func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
 // are at -03. "recordámelo" of a task due at 10:00 local is answered with
 // 10:00, never the UTC hour, and the reminder rings at 09:45 local.
 func TestI40_ARemindMeNamesTheItemInTheUsersZone(t *testing.T) {
-	f := newI40(t, recordamelo(t))
+	f := newI40(t, remindMeNamingNoInstant)
 	due := time.Date(2026, 10, 15, 13, 0, 0, 0, time.UTC) // 10:00 at -03, as the store returns it
 	seedFollowed(t, f, unit.Unit{ID: "gift", Type: unit.TypeTask, Status: unit.StatusPool, Source: "telegram",
 		Content: "Comprar el regalo de Ana el 2026-10-15 a las 10:00.", Title: "Regalo de Ana", DueAt: &due,

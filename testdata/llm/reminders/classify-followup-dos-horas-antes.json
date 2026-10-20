@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame 2 horas antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120]}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120]}",
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,5 @@
     ]
   },
   "known_misread": "remind_request is true: the model reads the leads change as a request to be reminded. Harmless as read: leads win (ADR-0043), so a bound reading carrying reminder_leads_minutes takes the correction path and its remind_request is ignored; the leads still come back as reminder_leads_minutes",
-  "prompt_sha256": "93f0f135f9b4b39ae2fc38cdf6d27b484c6d2d1b2f53602190c07bc311fc7ad5"
+  "prompt_sha256": "4978a907d9b7327ef68bffc8a21f373bf53caddbc01489413037d1695dfdde1f"
 }

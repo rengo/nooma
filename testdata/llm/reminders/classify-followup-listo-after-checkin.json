@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya llamé al banco.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"A\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya llamé al banco.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-14T10:05:00-03:00",
   "conversation": {
     "turns": [
@@ -31,5 +30,5 @@
     "task_checkin_outcome": "done",
     "referent": "A"
   },
-  "prompt_sha256": "0356f2f69416af0e4c0f48d210b34bd32e194d2c20cb785ea5a137dbf609f8f1"
+  "prompt_sha256": "c33d3f4e533ef6639081887204fe81c028c65a822f84e242124d140b41c061f7"
 }
