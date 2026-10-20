@@ -69,6 +69,12 @@ minutos antes.", while the day-before and hours-before rings stayed armed and un
 5. **A remind-me's answer names every ring the item has** once the asked one is armed, as a
    capture's answer names all it armed: "Te aviso unas horas antes y 15 minutos antes.", never
    the asked one alone while the others ring unnamed.
+6. **A bare date on the item's own local day is no move** for a remind-me
+   (`correction.MovesDate`). The real model restates the item's day beside "recordámelo"
+   (`due_at: "2026-10-17"` for a task due that day at 10:00); read as a move, it put the task at
+   midnight, rewrote its text to "a las 00:00" and answered "Movido al sáb 17 oct.". A timed
+   instant still moves unless it is the same instant (I30), and a correction's own plan keeps
+   the exact echo.
 
 ## Consequences
 

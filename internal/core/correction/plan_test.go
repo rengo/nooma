@@ -292,6 +292,11 @@ func TestMovesDate(t *testing.T) {
 	same := at.UTC()
 	later := at.Add(time.Hour)
 	event := unit.Unit{EventAt: &at}
+	due := time.Date(2026, 10, 17, 13, 0, 0, 0, time.UTC) // 10:00 at -03, as the store returns it
+	timedTask := unit.Unit{DueAt: &due}
+	dayOf := time.Date(2026, 10, 17, 0, 0, 0, 0, zone)
+	dayAfter := dayOf.AddDate(0, 0, 1)
+	eventDay := time.Date(2026, 10, 14, 0, 0, 0, 0, zone)
 	for name, tc := range map[string]struct {
 		c    classify.Classification
 		u    unit.Unit
@@ -302,6 +307,14 @@ func TestMovesDate(t *testing.T) {
 		"a new event instant":       {classify.Classification{EventAt: &later}, event, true},
 		"a due instant it lacks":    {classify.Classification{DueAt: &later}, event, true},
 		"a date for an undated one": {classify.Classification{EventAt: &later}, unit.Unit{}, true},
+		// A bare date restating the item's own local day is an echo (review
+		// B1 on #382): "recordámelo" restated a task due 17 Oct 10:00 as
+		// "2026-10-17", and the task moved to midnight.
+		"a bare date on its own day":     {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, timedTask, false},
+		"a bare date on another day":     {classify.Classification{DueAt: &dayAfter, DueAtDayOnly: true}, timedTask, true},
+		"a timed midnight on its day":    {classify.Classification{DueAt: &dayOf}, timedTask, true},
+		"a bare event date on its day":   {classify.Classification{EventAt: &eventDay, EventAtDayOnly: true}, event, false},
+		"a bare date for an undated one": {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, unit.Unit{}, true},
 	} {
 		if got := MovesDate(tc.c, tc.u); got != tc.want {
 			t.Errorf("%s: MovesDate = %v, want %v", name, got, tc.want)

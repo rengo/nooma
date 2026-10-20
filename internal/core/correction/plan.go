@@ -58,7 +58,7 @@ import (
 // repeating a correction repairs a reminder a failed step left behind
 // (I29).
 func PlanEdit(c classify.Classification, target unit.Unit, zone *time.Location) ([]Edit, bool) {
-	eventEcho, dueEcho := echoes(c.EventAt, target.EventAt), echoes(c.DueAt, target.DueAt)
+	eventEcho, dueEcho := echoes(c.EventAt, false, target.EventAt), echoes(c.DueAt, false, target.DueAt)
 	newDate := MovesDate(c, target)
 	// Leads say when to be reminded, not what the unit says (I40): beside a new
 	// date they travel with it, and alone they are the whole plan, the model's
@@ -124,11 +124,22 @@ func withText(date Edit, next time.Time, previous *time.Time, text *string, targ
 // follow-up asking to be reminded moves its item first only when it does
 // (ADR-0043); the text the model restates beside it is never read as one.
 func MovesDate(c classify.Classification, target unit.Unit) bool {
-	return c.EventAt != nil && !echoes(c.EventAt, target.EventAt) || c.DueAt != nil && !echoes(c.DueAt, target.DueAt)
+	return c.EventAt != nil && !echoes(c.EventAt, c.EventAtDayOnly, target.EventAt) ||
+		c.DueAt != nil && !echoes(c.DueAt, c.DueAtDayOnly, target.DueAt)
 }
 
 // echoes reports whether a classified date repeats the unit's current one:
-// the same instant, whatever frame either is written in.
-func echoes(classified, current *time.Time) bool {
-	return classified != nil && current != nil && classified.Equal(*current)
+// the same instant, whatever frame either is written in, or a bare date on
+// the current instant's own local day. "recordámelo" restating a task due at
+// 10:00 as its bare day moved it to midnight (review B1 on #382).
+func echoes(classified *time.Time, dayOnly bool, current *time.Time) bool {
+	if classified == nil || current == nil {
+		return false
+	}
+	if classified.Equal(*current) {
+		return true
+	}
+	y, m, d := classified.Date()
+	cy, cm, cd := current.In(classified.Location()).Date()
+	return dayOnly && y == cy && m == cm && d == cd
 }

@@ -777,7 +777,8 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        asked, and the
        answer says no reminder was set and why, with a `capture.arm.refused` row. A remind-me
        whose reading names a new instant for the item ("es a las 11, recordámelo";
-       `correction.MovesDate`, an echoed instant is none) moves it first, through the correction
+       `correction.MovesDate`: an echoed instant is none, and so is a bare date on the item's own
+       local day, the day the model restates beside "recordámelo", ADR-0044) moves it first, through the correction
        path above, and then arms the asked reminder on the moved unit; the answer names the move
        and every ring ("Movido al mar 20 oct, 11:00. Te aviso unas horas antes y 15 minutos
        antes."). A correction that asks
