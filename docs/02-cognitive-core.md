@@ -1574,7 +1574,9 @@ have N nudges; a pattern watcher does not hang off any unit):
   [ADR-0045](adr/0045-a-message-names-its-own-leads.md): "dentista mañana a las 10, avisame 1
   hora antes" is `[60]`; an `event` with a time of day and leads valid as a preference, else the
   capture ignores them; a `remind_request` beside them is ignored, so the unit is not asked, and
-  the answer names the rings as said, "Te aviso 1 hora antes."): every plan of that event — the
+  the answer names the rings as said, "Te aviso 1 hora antes.", and a ring serving none of them
+  by when it rings, "Te aviso ese día a las 09:00."; read only beside a chat, so a capture with
+  none, and a task, keep their reminders as before): every plan of that event — the
   capture, the correction, a later date correction, a preference change and the due scan — uses
   them in place of the user's (`ReminderPrefs.WithEventLeads`), and the told-day rule leaves
   them, since the user named them, but none is sent at once on the told day: a behind one, or

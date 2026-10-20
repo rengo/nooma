@@ -243,6 +243,31 @@ func TestSet_ExactLeads(t *testing.T) {
 	}
 }
 
+// TestSet_NamedLeads (I44, ADR-0045): the rings of an event whose message named
+// its leads are said as named, and a ring that serves none of them, the one
+// ADR-0039 keeps on the event's own day when every named lead is behind, is said
+// as when it rings: "ese día a las 09:00", never "1 hora antes".
+func TestSet_NamedLeads(t *testing.T) {
+	es := For(classify.LanguageES)
+	dentist := time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC)
+	dinner := time.Date(2026, 10, 22, 21, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		about time.Time
+		named []int
+		fires []time.Time
+		want  string
+	}{
+		{dentist, []int{60}, []time.Time{dentist.Add(-time.Hour)}, "1 hora antes"},
+		{dentist, []int{1440}, []time.Time{time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)}, "ese día a las 09:00"},
+		{dinner, []int{1440, 30}, []time.Time{dinner.Add(-24 * time.Hour), dinner.Add(-30 * time.Minute)}, "el día anterior y 30 minutos antes"},
+		{dinner, []int{1440, 30}, []time.Time{time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC), dinner.Add(-30 * time.Minute)}, "ese día a las 09:00 y 30 minutos antes"},
+	} {
+		if got := es.NamedLeads(tc.about, tc.named, tc.fires...); got != tc.want {
+			t.Errorf("NamedLeads(%v, %v) = %q, want %q", tc.named, tc.fires, got, tc.want)
+		}
+	}
+}
+
 // TestSet_List_PutsEveryResultUnderItsHeader covers the assembled message,
 // which is what a person actually receives — the header alone is not the
 // answer.

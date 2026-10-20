@@ -543,7 +543,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			return CaptureResult{}, err
 		}
 		armed.UnitID = u.ID
-		armed.Armed.OwnLeads = own != nil
+		armed.Armed.OwnLeads = own
 		armed.Embedded = embedded
 		armed.Candidates = candidates
 		return armed, nil

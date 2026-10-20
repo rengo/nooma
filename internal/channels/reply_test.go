@@ -202,10 +202,13 @@ func TestRenderReply_ACaptureNamesTheLeadsItWasGiven(t *testing.T) {
 		armed brain.Armed
 		want  string
 	}{
-		{"one hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dentist.Add(-time.Hour), About: dentist, OwnLeads: true},
+		{"one hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dentist.Add(-time.Hour), About: dentist, OwnLeads: []int{60}},
 			"Anotado para el mié 21 oct, 10:00. Te aviso 1 hora antes."},
+		{"the day before, already behind, rings on the day", brain.Armed{What: prospection.ArmTrigger,
+			FireAt: time.Date(2026, 10, 21, 9, 0, 0, 0, zone), About: dentist, OwnLeads: []int{1440}},
+			"Anotado para el mié 21 oct, 10:00. Te aviso ese día a las 09:00."},
 		{"the day before and half an hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dinner.Add(-24 * time.Hour), About: dinner,
-			Later: []time.Time{dinner.Add(-30 * time.Minute)}, OwnLeads: true},
+			Later: []time.Time{dinner.Add(-30 * time.Minute)}, OwnLeads: []int{1440, 30}},
 			"Anotado para el jue 22 oct, 21:00. Te aviso el día anterior y 30 minutos antes."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

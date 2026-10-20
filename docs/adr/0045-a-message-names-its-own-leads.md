@@ -54,9 +54,12 @@ as its reversal criteria.
 3. **An own lead never rings at the moment the event is told**, on the told day of an event on a
    later day: one already behind, or pulled to now by the night, is dropped, and with nothing
    left the one reminder rings on the event's own day (ADR-0039 point 1). The told-day rule
-   still leaves own leads that are ahead (ADR-0038 point 4).
-4. **The prompt with no chat is unchanged.** A capture from the CLI, the API or the UI, or the
-   first chat message ever, does not read leads.
+   still leaves own leads that are ahead (ADR-0038 point 4). The answer names what will
+   ring: "dentista mañana a las 10, avisame el día antes", told after 10:00, is answered "Te
+   aviso ese día a las 09:00." (the client's ruling, 2026-10-20).
+4. **Leads are read only beside a chat, and the prompt with no chat is unchanged.** A capture
+   from the CLI, the API or the UI, or the first chat message ever, does not read leads (the
+   client's ruling, 2026-10-20: the client captures on Telegram).
 
 ## Consequences
 
@@ -69,6 +72,11 @@ as its reversal criteria.
 
 - **Every chat-shown phrasing is recorded again**, since the Follow-ups section changed.
 - The asked reminder 15 minutes before is not armed beside named leads; the user named when.
+- **Known limit: a task's named leads are not read.** "llamar a Ana mañana a las 10, avisame 1
+  hora antes" is a task, so its leads cannot apply (ADR-0038 point 3) and it keeps its asked
+  reminder 15 minutes before, as before (out of scope, the client's ruling, 2026-10-20).
+- **Known limit: no chat, no leads.** The CLI, the API, the UI and a chat's very first message
+  read the capture as before.
 - A ring on the event's own day that serves no lead (ADR-0039 point 1) is not kept by an add:
   it serves no lead to join.
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/correction"
 )
 
@@ -52,7 +53,7 @@ func TestI44_ACaptureArmsTheLeadsItsMessageNames(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newI40(t, tc.response)
 			res := f.capture(t, "x, avisame antes")
-			if res.Outcome != brain.OutcomeArmed || res.Armed == nil || !res.Armed.OwnLeads || res.UnitID == "" {
+			if res.Outcome != brain.OutcomeArmed || res.Armed == nil || !slices.Equal(res.Armed.OwnLeads, tc.leads) || res.UnitID == "" {
 				t.Fatalf("result = %+v, want armed at the event's own leads", res)
 			}
 			u, err := f.units.ByID(context.Background(), res.UnitID)
@@ -69,6 +70,26 @@ func TestI44_ACaptureArmsTheLeadsItsMessageNames(t *testing.T) {
 	}
 }
 
+// TestI44_ANamedLeadAlreadyBehindRingsOnTheEventsDay (ADR-0045 point 3, the
+// client's ruling of 2026-10-20): "dentista mañana a las 10, avisame el día
+// antes", told after the day before's 10:00 has passed, never rings at once.
+// The one reminder rings on the event's own day at 09:00, and the answer names
+// that ring, not a lead it does not serve.
+func TestI44_ANamedLeadAlreadyBehindRingsOnTheEventsDay(t *testing.T) {
+	f := newI40(t, `{"type":"event","normalized_content":"Dentista el 2026-10-15 a las 10:00.","event_at":"2026-10-15T10:00:00-03:00",`+
+		`"weight":0.7,"decay_rate":0.05,"language":"es","title":"Dentista","remind_request":true,"reminder_leads_minutes":[1440]}`)
+	res := f.capture(t, "dentista mañana a las 10, avisame el día antes")
+	if res.Outcome != brain.OutcomeArmed || res.Armed == nil || res.Armed.Immediate {
+		t.Fatalf("result = %+v, want a ring armed, not at once", res)
+	}
+	if got := f.i44Fires(t, res.UnitID); !slices.EqualFunc(got, []time.Time{i44At(15, 9, 0)}, time.Time.Equal) {
+		t.Errorf("armed at %v, want one ring on the event's day at 09:00", got)
+	}
+	if got, want := channels.RenderReply(res), "Anotado para el jue 15 oct, 10:00. Te aviso ese día a las 09:00."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
 // TestI44_LeadsACaptureCannotApplyChangeNothing: leads beside a task have no
 // time of day an event lead counts back from (ADR-0038 point 3), so the
 // capture is what it was: the asked task, its asked reminder, no own leads.
@@ -76,7 +97,7 @@ func TestI44_LeadsACaptureCannotApplyChangeNothing(t *testing.T) {
 	f := newI40(t, `{"type":"task","normalized_content":"Llamar a Ana el 2026-10-15 a las 10:00.","due_at":"2026-10-15T10:00:00-03:00",`+
 		`"weight":0.7,"decay_rate":0.05,"language":"es","title":"Llamar a Ana","remind_request":true,"reminder_leads_minutes":[60]}`)
 	res := f.capture(t, "llamar a Ana mañana a las 10, avisame 1 hora antes")
-	if res.Outcome != brain.OutcomeArmed || res.Armed == nil || res.Armed.OwnLeads {
+	if res.Outcome != brain.OutcomeArmed || res.Armed == nil || res.Armed.OwnLeads != nil {
 		t.Fatalf("result = %+v, want the asked reminder armed as before", res)
 	}
 	u, err := f.units.ByID(context.Background(), res.UnitID)

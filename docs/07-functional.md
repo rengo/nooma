@@ -94,7 +94,10 @@ is on the 15th.
    of day, Nooma says it did not change the reminders (ADR-0038). "también 1 hora antes" adds
    that reminder to the ones the event has, and a chat message that tells an event and names
    its leads ("dentista mañana a las 10, avisame 1 hora antes") is reminded at those alone
-   (ADR-0045). A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
+   (ADR-0045); one already behind never rings at once, but on the event's day at 09:00 ("Te
+   aviso ese día a las 09:00."). Leads are read only in a chat (Telegram): the CLI, the API, the
+   UI and a chat's first message keep the usual reminders, and a task keeps its reminder 15
+   minutes before whatever leads it names. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 
 **When the capture itself cannot proceed**, Nooma says why in plain words and saves nothing
 ([doc 02 §5.1](02-cognitive-core.md#51-what-degrades-to-null-means-field-by-field), I31). The CLI
