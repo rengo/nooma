@@ -160,6 +160,25 @@ CREATE INDEX idx_pending_questions_unasked ON pending_questions(created_at)
 -- The disambiguation pool and the expiry sweep: asked, unanswered.
 CREATE INDEX idx_pending_questions_open ON pending_questions(asked_at)
   WHERE asked_at IS NOT NULL AND resolved_at IS NULL;
+
+-- The chat a message is read in (ADR-0041): what the user wrote, what Nooma
+-- answered, and what it pushed, each with the units it concerned. Append-only:
+-- a turn is never changed or removed, and the read takes a chat's last
+-- `conversation_context_turns` rather than pruning the older ones. seq is the
+-- chat's order, two turns at one instant included. unit_ids carries no foreign
+-- key: a turn outlives what it was about, and a unit no longer live is left
+-- out when the prompt is built.
+CREATE TABLE conversation_turns (
+  seq          INTEGER PRIMARY KEY,         -- append order
+  conversation TEXT NOT NULL,               -- the channel's chat id
+  said_at      TEXT NOT NULL,
+  speaker      TEXT NOT NULL,               -- user|nooma|push
+  text         TEXT NOT NULL,
+  unit_ids     TEXT NOT NULL DEFAULT '[]'   -- JSON array of units(id); deliberately NOT a foreign key
+);
+
+-- The read: a chat's last turns.
+CREATE INDEX idx_conversation_turns_chat ON conversation_turns(conversation, seq);
 ```
 
 ## Learning

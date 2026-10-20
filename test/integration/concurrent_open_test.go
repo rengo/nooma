@@ -75,7 +75,7 @@ func TestConcurrentOpenOnFreshVault(t *testing.T) {
 	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	const wantVersion = 11 // 0001_core_tables.sql through 0011_unit_reminder_leads.sql are all published
+	const wantVersion = 12 // 0001_core_tables.sql through 0012_conversation_turns.sql are all published
 	if userVersion != wantVersion {
 		t.Errorf("PRAGMA user_version after %d concurrent first opens = %d, want %d (migration applied exactly once, not skipped and not reapplied)", goroutines, userVersion, wantVersion)
 	}

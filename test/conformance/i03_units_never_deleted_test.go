@@ -137,15 +137,16 @@ func TestI03_UnitsAreNeverDeleted(t *testing.T) {
 }
 
 // i03DeleteScannedTables is every table whose removal the tree scan
-// forbids: units (I03 proper) and self_beliefs (m4e: a belief is retired,
-// never removed).
-var i03DeleteScannedTables = []string{"units", "self_beliefs"}
+// forbids: units (I03 proper), self_beliefs (m4e: a belief is retired,
+// never removed) and conversation_turns (ADR-0041: the chat's read takes the
+// last turns, it never prunes the older ones).
+var i03DeleteScannedTables = []string{"units", "self_beliefs", "conversation_turns"}
 
 // TestI03_ScansUnitsAndSelfBeliefs keeps the scan from quietly shrinking:
 // dropping a table from i03DeleteScannedTables would leave every other I03
 // test green, because they pass on a tree with no matching statement.
 func TestI03_ScansUnitsAndSelfBeliefs(t *testing.T) {
-	for _, want := range []string{"units", "self_beliefs"} {
+	for _, want := range []string{"units", "self_beliefs", "conversation_turns"} {
 		found := false
 		for _, got := range i03DeleteScannedTables {
 			found = found || got == want
@@ -246,6 +247,8 @@ var sweptPortsRepoTypes = []reflect.Type{
 	// (RelationRepo.Delete, 2026-08-24 owner ruling), and a pending
 	// question is a state machine, never a removal.
 	reflect.TypeOf((*ports.PendingQuestionRepo)(nil)).Elem(),
+	// ConversationRepo only appends (ADR-0041).
+	reflect.TypeOf((*ports.ConversationRepo)(nil)).Elem(),
 }
 
 // containsDeleteStatementFrom reports whether line contains the exact

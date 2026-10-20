@@ -11,6 +11,8 @@ internal/store/sqlite: func (*ConfigRepo) SetHysteresisMargin(ctx context.Contex
 internal/store/sqlite: func (*ConfigRepo) SetMentalLoadThreshold(ctx context.Context, v int, at time.Time) error
 internal/store/sqlite: func (*ConfigRepo) SetReminderPrefs(ctx context.Context, u ports.ReminderPrefsUpdate, at time.Time) error
 internal/store/sqlite: func (*ConfigRepo) SetWeightThreshold(ctx context.Context, v float64, at time.Time) error
+internal/store/sqlite: func (*ConversationRepo) Append(ctx context.Context, t ports.ConversationTurn) error
+internal/store/sqlite: func (*ConversationRepo) Last(ctx context.Context, id ports.ConversationID, n int) ([]ports.ConversationTurn, error)
 internal/store/sqlite: func (*DecisionLog) Before(ctx context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error)
 internal/store/sqlite: func (*DecisionLog) Record(ctx context.Context, d ports.Decision) error
 internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Time, limit int) ([]ports.Decision, error)
@@ -92,6 +94,7 @@ internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, er
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func NewConfigRepo(v *Vault) *ConfigRepo
+internal/store/sqlite: func NewConversationRepo(v *Vault) *ConversationRepo
 internal/store/sqlite: func NewDecisionLog(v *Vault) *DecisionLog
 internal/store/sqlite: func NewEmbeddingRepo(v *Vault) *EmbeddingRepo
 internal/store/sqlite: func NewPendingQuestionRepo(v *Vault) *PendingQuestionRepo
@@ -105,6 +108,7 @@ internal/store/sqlite: func NewTriggerRepo(v *Vault) *TriggerRepo
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
 internal/store/sqlite: type ConfigRepo
+internal/store/sqlite: type ConversationRepo
 internal/store/sqlite: type DecisionLog
 internal/store/sqlite: type EmbeddingRepo
 internal/store/sqlite: type PendingQuestionRepo

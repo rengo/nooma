@@ -15,6 +15,15 @@ CREATE TABLE config (
   updated_at                TEXT NOT NULL
 , event_reminder_leads TEXT, date_only_reminder_at TEXT, quiet_hours_end TEXT, evening_reminder_at TEXT, remind_me_lead_minutes INTEGER);
 
+CREATE TABLE conversation_turns (
+  seq          INTEGER PRIMARY KEY,         -- append order
+  conversation TEXT NOT NULL,               -- the channel's chat id
+  said_at      TEXT NOT NULL,
+  speaker      TEXT NOT NULL,               -- user|nooma|push
+  text         TEXT NOT NULL,
+  unit_ids     TEXT NOT NULL DEFAULT '[]'   -- JSON array of units(id); deliberately NOT a foreign key
+);
+
 CREATE TABLE current_state (
   id          TEXT PRIMARY KEY,
   energy      REAL,                              -- 0–1
@@ -169,6 +178,8 @@ CREATE TABLE units (
 CREATE VIRTUAL TABLE units_fts USING fts5(
   content, content='units', content_rowid='rowid'
 );
+
+CREATE INDEX idx_conversation_turns_chat ON conversation_turns(conversation, seq);
 
 CREATE INDEX idx_decision_log_occurred ON decision_log(occurred_at);
 
