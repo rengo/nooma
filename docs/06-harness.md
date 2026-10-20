@@ -371,7 +371,13 @@ model, the `now` it told the model and the SHA-256 of the prompt, clears `record
 touches `expect`. It skips a case that already has a response unless `--force`. Replay
 (`TestReminderPhrasingSetReadsAsExpected`) rebuilds each prompt and fails on a hash mismatch,
 so a prompt change names the cases to record again; a case still awaiting its recording is
-skipped and counted.
+skipped and counted. A recording only validates a prompt production can send:
+`TestReminderPrompts_AreTheProductionPrompt` runs each case's message, instant, chat turns and
+the units they name through brain's capture, as serve wires it, and fails unless the prompt sent
+is byte for byte the one the case is recorded against. A case carrying an input production never
+renders (an open reminder question or a numbered reminder list: capture passes neither) is
+listed in `noProductionInput`, which `TestReminderPrompts_TheUnreachableListOnlyShrinks` keeps
+exact, so the list can only shrink.
 
 `nooma doctor --reading` (opt-in, about 50 live calls; a plain `doctor` makes none) sends the
 same set to the vault's provider and reports "reminder reading: k of n", ADR-0033's reversal
