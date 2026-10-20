@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "no, todavía no",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no renové el pasaporte.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"snooze\",\"question_answer\":\"none\",\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [

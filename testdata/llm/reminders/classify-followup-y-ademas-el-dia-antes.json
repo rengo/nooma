@@ -1,0 +1,42 @@
+{
+  "id": "classify-followup-y-ademas-el-dia-antes",
+  "task": "classify",
+  "message": "y además el día antes",
+  "record": true,
+  "now": "2026-10-20T18:05:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-20T18:00:00-03:00",
+        "speaker": "user",
+        "text": "el viernes cena con Ana a las 21",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-20T18:00:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el vie 23 oct, 21:00. Te aviso unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Cena con Ana el 2026-10-23 a las 21:00.",
+        "title": "Cena con Ana",
+        "event_at": "2026-10-23T21:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "A",
+    "reminder_leads_minutes": [
+      1440
+    ],
+    "reminder_leads_add": true
+  }
+}

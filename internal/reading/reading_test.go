@@ -527,3 +527,25 @@ func TestCheckReminderLeadsAreStrict(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckReminderLeadsAddIsStrict: an added lead keeps the item's reminders
+// in production and a replacing one drops them (ADR-0045), so either one
+// nobody expected is a miss.
+func TestCheckReminderLeadsAddIsStrict(t *testing.T) {
+	const head = `{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A","reminder_leads_minutes":[60]`
+	for name, tc := range map[string]struct {
+		expect bool
+		extra  string
+		miss   bool
+	}{
+		"unexpected add":  {false, `,"reminder_leads_add":true`, true},
+		"expected add":    {true, `,"reminder_leads_add":true`, false},
+		"expected absent": {true, ``, true},
+		"replace":         {false, `,"reminder_leads_add":false`, false},
+	} {
+		got := Check(llm.Case{Expect: &llm.Expect{Referent: "A", ReminderLeadsMinutes: []int{60}, ReminderLeadsAdd: tc.expect}}, decode(t, head+tc.extra+`}`))
+		if missed := slices.Contains(got, FieldReminderLeadsAdd); missed != tc.miss || len(got) > 1 {
+			t.Errorf("%s: Check = %v, want a %s miss only: %v", name, got, FieldReminderLeadsAdd, tc.miss)
+		}
+	}
+}

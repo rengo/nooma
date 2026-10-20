@@ -113,6 +113,11 @@ type Classification struct {
 	// ADR-0038): whole positive minutes, nil when the message says nothing
 	// about when to be reminded. The code bounds it before acting.
 	ReminderLeadsMinutes []int
+	// ReminderLeadsAdd says a follow-up's leads are added to the reminders
+	// its item already has ("también 1 hora antes") rather than replacing
+	// them (ADR-0045). The model reads it; false when absent or degraded,
+	// which replaces, as before.
+	ReminderLeadsAdd bool
 
 	// Title is the short, date-free name a reminder says for the unit
 	// (ADR-0033's sibling decision, spec R12), already checked by

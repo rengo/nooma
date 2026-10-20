@@ -76,6 +76,7 @@ func fieldSpecs() []fieldSpec {
 		{"referent", false, nullIsAbsent(assignReferent)},
 		{"clarifying_question", false, nullIsAbsent(assignClarifyingQuestion)},
 		{"reminder_leads_minutes", false, nullIsAbsent(assignReminderLeads)},
+		{"reminder_leads_add", false, nullIsAbsent(assignReminderLeadsAdd)},
 	}
 }
 

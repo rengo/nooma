@@ -362,8 +362,16 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// and captureRunner holds no clock to make one with.
 	// asked is the model's reading of the user's own words (ADR-0033): only
 	// a remind_request of true asks; an absent or degraded one does not.
-	asked := c.RemindRequest != nil && *c.RemindRequest
-	plans, armable := prospection.Arm(c, asked, reminderPrefs(ctx, r.config), now)
+	//
+	// **A message's own leads are its event's** (I44, ADR-0045): "dentista
+	// mañana a las 10, avisame 1 hora antes" is reminded an hour before, and
+	// only then. Leads win over a remind_request beside them (ADR-0043), so
+	// the unit is not asked. Leads that cannot apply leave the capture as it
+	// was.
+	own := ownLeads(c, now.Location())
+	asked := c.RemindRequest != nil && *c.RemindRequest && own == nil
+	prefs := reminderPrefs(ctx, r.config).WithEventLeads(own)
+	plans, armable := prospection.Arm(c, asked, prefs, now)
 	plan := plans[0] // the refusal, when nothing is armed
 
 	// **A kind that persists NO unit arms and returns here.** That is the
@@ -482,6 +490,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// Kept on the unit even when nothing could be armed, so a correction or
 	// a re-plan still knows the user asked (ADR-0031).
 	u.RemindMe = asked
+	u.ReminderLeads = own
 
 	if err := r.units.Create(ctx, u); err != nil {
 		return CaptureResult{}, fmt.Errorf("capture: persist unit %q: %w", u.ID, err)
@@ -534,6 +543,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 			return CaptureResult{}, err
 		}
 		armed.UnitID = u.ID
+		armed.Armed.OwnLeads = own != nil
 		armed.Embedded = embedded
 		armed.Candidates = candidates
 		return armed, nil
@@ -564,6 +574,18 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		stored.DueInDigest = &day
 	}
 	return stored, nil
+}
+
+// ownLeads is the leads c's message named for the event it tells (I44,
+// ADR-0045), or nil when it named none or they cannot apply: an event with a
+// time of day to count back from, and leads a preference may hold (ADR-0038
+// point 3).
+func ownLeads(c classify.Classification, zone *time.Location) []int {
+	if c.ReminderLeadsMinutes == nil || c.Kind == nil || *c.Kind != classify.KindEvent || c.EventAt == nil ||
+		!prospection.TimedEvent(*c.EventAt, zone) || !prospection.ValidEventLeads(c.ReminderLeadsMinutes) {
+		return nil
+	}
+	return c.ReminderLeadsMinutes
 }
 
 // embedAndStore is design D8's step past persistence (spec R4.3): embed u's

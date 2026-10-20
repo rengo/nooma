@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "listo, ya renové el pasaporte",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya renové el pasaporte.\",\"weight\":0.6,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [

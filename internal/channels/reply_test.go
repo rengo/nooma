@@ -189,6 +189,34 @@ func TestRenderReply_ALeadsCorrectionNamesTheReminders(t *testing.T) {
 	}
 }
 
+// TestRenderReply_ACaptureNamesTheLeadsItWasGiven (I44, ADR-0045): a capture
+// whose message named its leads is answered with them as the user said them,
+// "1 hora antes", never the preferences' "unas horas antes".
+func TestRenderReply_ACaptureNamesTheLeadsItWasGiven(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	told := time.Date(2026, 10, 20, 18, 0, 0, 0, zone)
+	dentist := time.Date(2026, 10, 21, 10, 0, 0, 0, zone)
+	dinner := time.Date(2026, 10, 22, 21, 0, 0, 0, zone)
+	for _, tc := range []struct {
+		name  string
+		armed brain.Armed
+		want  string
+	}{
+		{"one hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dentist.Add(-time.Hour), About: dentist, OwnLeads: true},
+			"Anotado para el mié 21 oct, 10:00. Te aviso 1 hora antes."},
+		{"the day before and half an hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dinner.Add(-24 * time.Hour), About: dinner,
+			Later: []time.Time{dinner.Add(-30 * time.Minute)}, OwnLeads: true},
+			"Anotado para el jue 22 oct, 21:00. Te aviso el día anterior y 30 minutos antes."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Language: classify.LanguageES, Armed: &tc.armed, At: told})
+			if got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestRenderReply_ADatedTaskNamesItsDayAndTheDigest: a task arms no reminder,
 // so the reply names its due day and says that morning's digest will mention
 // it (doc 02 §7); a stored unit with no such day stays "Noted.".

@@ -161,16 +161,19 @@ func leadSet(kind classify.Kind, asked bool, at time.Time, dayOnly bool, prefs R
 // or a correction.
 func eventReminders(eventAt time.Time, prefs ReminderPrefs, told, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	leads := leadSet(classify.KindEvent, false, eventAt, false, prefs, now.Location())
-	if prefs.ownLeads {
-		return reminders(eventAt, false, leads, prefs, now, interrupt, sent)
+	// An event's own leads were named by the user, so the told-day rule leaves
+	// them (ADR-0038); none still rings at the moment it is told (ADR-0045).
+	if !prefs.ownLeads {
+		leads = skipToldDay(leads, eventAt, told, now)
 	}
-	plans, ok := reminders(eventAt, false, skipToldDay(leads, eventAt, told, now), prefs, now, interrupt, sent)
+	plans, ok := reminders(eventAt, false, leads, prefs, now, interrupt, sent)
 	if !ok || !toldToday(eventAt, told, now) {
 		return plans, ok
 	}
 	// ADR-0039: on the told day, no ring of an event on a later day goes out
 	// at the moment it is told — the at-once one, or a lead the night pulled
-	// to now. With nothing else left, the one reminder rings on its own day.
+	// to now, an own lead's included (ADR-0045). With nothing else left, the
+	// one reminder rings on its own day.
 	if plans = slices.DeleteFunc(plans, func(p Plan) bool { return p.Immediate }); len(plans) > 0 {
 		return plans, true
 	}

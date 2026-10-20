@@ -121,6 +121,37 @@ func TestDecode_ReminderLeadsMinutes(t *testing.T) {
 	}
 }
 
+// TestDecode_ReminderLeadsAdd: a boolean decodes; anything else degrades the
+// field alone (I14), and an absent or degraded one replaces, as before
+// (ADR-0045).
+func TestDecode_ReminderLeadsAdd(t *testing.T) {
+	for _, tc := range []struct {
+		raw      string
+		want     bool
+		degraded bool
+	}{
+		{`true`, true, false},
+		{`false`, false, false},
+		{`null`, false, false},
+		{`"true"`, false, true},
+		{`1`, false, true},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			c, err := Decode(correctionWith(`,"reminder_leads_minutes":[60],"reminder_leads_add":`+tc.raw), testNow)
+			if err != nil || !slices.Equal(c.ReminderLeadsMinutes, []int{60}) {
+				t.Fatalf("Decode = %+v, %v: the rest did not survive", c, err)
+			}
+			if c.ReminderLeadsAdd != tc.want {
+				t.Errorf("ReminderLeadsAdd = %v, want %v", c.ReminderLeadsAdd, tc.want)
+			}
+			if tc.degraded != (len(c.Degradations) == 1 && c.Degradations[0] == Degradation{Field: "reminder_leads_add", Reason: ReasonWrongType}) ||
+				!tc.degraded && len(c.Degradations) != 0 {
+				t.Errorf("Degradations = %v, want degraded %v", c.Degradations, tc.degraded)
+			}
+		})
+	}
+}
+
 // TestReadFollowUp: only a correction or a done with a letter that was shown
 // binds, and only one that is unclear and asks is asked; everything else is
 // not a follow-up (ADR-0036, ADR-0040: the model reads, the code binds what it
@@ -194,11 +225,34 @@ func TestBuildPrompt_DescribesFollowUps(t *testing.T) {
 		"keep the item's date when only the time changes",
 		// I40: how long before the item to remind is a structured field.
 		"reminder_leads_minutes",
-		"replaces the item's reminders",
+		"which replace the ones it has",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt never says %q:\n%s", want, p)
 		}
+	}
+}
+
+// TestBuildPrompt_AMessageAsksForItsOwnLeads (I44, ADR-0045): beside a chat,
+// the leads a message asks for are read for the event it tells as well as for
+// a listed item, and the model says whether a follow-up adds them to the
+// item's reminders or replaces them. "dentista mañana a las 10, avisame 1 hora
+// antes" armed the preferences' leads and an asked one, and "también 1 hora
+// antes" replaced what the item had.
+func TestBuildPrompt_AMessageAsksForItsOwnLeads(t *testing.T) {
+	p := flat(section(promptWith(ReminderContext{Conversation: oneTurn}), followUpsHeading))
+	for _, want := range []string{
+		"reminder_leads_minutes when the message says how long before an item the user wants to be reminded",
+		"Beside a referent it is about that listed item; with none, about the event this message tells",
+		"reminder_leads_add only beside a referent and reminder_leads_minutes: true when the message adds those leads to the reminders the item already has",
+		"false or left out when they are all the reminders the user wants for it, which replace the ones it has",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("Follow-ups never says %q:\n%s", want, p)
+		}
+	}
+	if strings.Contains(p, "only beside a referent: when the message changes how long") {
+		t.Errorf("leads are still read beside a referent only:\n%s", p)
 	}
 }
 
@@ -262,7 +316,7 @@ func TestBuildPrompt_NoChatCarriesNoFollowUpMachinery(t *testing.T) {
 	for _, rc := range []ReminderContext{{}, {Candidates: stopCandidates}, {Open: &OpenQuestion{Kind: QuestionUndo, Text: "Listo."}}} {
 		p := promptWith(rc)
 		for _, gone := range []string{
-			followUpsHeading, conversationHeading, "referent", "clarifying_question", "which-item", "reminder_leads_minutes",
+			followUpsHeading, conversationHeading, "referent", "clarifying_question", "which-item", "reminder_leads_minutes", "reminder_leads_add",
 			"No recent conversation", "Nooma pushed", strings.TrimSpace(whichItemPointer),
 		} {
 			if strings.Contains(p, gone) {

@@ -170,6 +170,17 @@ func assignReminderLeads(raw json.RawMessage, c *Classification, _ time.Time) Re
 	return ""
 }
 
+// assignReminderLeadsAdd reads reminder_leads_add: a boolean, wrong_type
+// otherwise.
+func assignReminderLeadsAdd(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return ReasonWrongType
+	}
+	c.ReminderLeadsAdd = b
+	return ""
+}
+
 // writeFollowUps renders the two follow-up fields, the patch rule, the
 // transcript and the items it tags (ADR-0036). It is written only beside a
 // chat: without one there is nothing to follow up on. The model reads what
@@ -200,13 +211,22 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("                       nothing; the answer comes back with this exchange shown\n")
 	// **How long before, as a value** (I40, ADR-0038). "avisame solo 1 hora
 	// antes" was read as a rewrite of the item's text and answered "Corregido."
-	// while nothing about its reminders changed.
-	b.WriteString("  reminder_leads_minutes  only beside a referent: when the message changes how long\n")
-	b.WriteString("                       before the item the user wants to be reminded, every lead it\n")
-	b.WriteString("                       asks for, in whole minutes before the item: [60] for one hour\n")
-	b.WriteString("                       before, [1440, 120] for the day before and two hours before.\n")
-	b.WriteString("                       It replaces the item's reminders. Leave it out when the\n")
-	b.WriteString("                       message says nothing about when to be reminded\n")
+	// while nothing about its reminders changed. **For the event a message
+	// tells too** (I44, ADR-0045): "dentista mañana a las 10, avisame 1 hora
+	// antes" armed the preferences' leads and an asked one.
+	b.WriteString("  reminder_leads_minutes  when the message says how long before an item the user\n")
+	b.WriteString("                       wants to be reminded: every lead it asks for, in whole\n")
+	b.WriteString("                       minutes before the item: [60] for one hour before, [1440, 120]\n")
+	b.WriteString("                       for the day before and two hours before. Beside a referent it\n")
+	b.WriteString("                       is about that listed item; with none, about the event this\n")
+	b.WriteString("                       message tells. Leave it out when the message says nothing\n")
+	b.WriteString("                       about when to be reminded\n")
+	// **Add or replace, read by the model** (ADR-0045, ADR-0033): "también 1
+	// hora antes" replaced the item's reminders with that one.
+	b.WriteString("  reminder_leads_add   only beside a referent and reminder_leads_minutes: true when\n")
+	b.WriteString("                       the message adds those leads to the reminders the item\n")
+	b.WriteString("                       already has; false or left out when they are all the\n")
+	b.WriteString("                       reminders the user wants for it, which replace the ones it has\n")
 	b.WriteString("  A follow-up that changes a listed item (a new time, a new day, a different\n")
 	b.WriteString("  detail, even with no subject named in it) is a correction of that item, not a\n")
 	b.WriteString("  new memory.\n")

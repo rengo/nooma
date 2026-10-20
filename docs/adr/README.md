@@ -96,6 +96,7 @@ order, with no correspondence to anything.
 | [0042](0042-a-turn-shows-when-it-was-said.md) | Each turn of the chat shows the local time it was said, and a recorded prompt must be the one production sends (supersedes ADR-0041 in part) | Accepted | M4 |
 | [0043](0043-a-remind-me-follow-up-reminds-of-the-item.md) | A chat follow-up that asks to be reminded makes the item it names an asked reminder, storing nothing; one naming a new instant moves the item first, and leads win over a stray remind request (supersedes ADR-0036 in part) | Accepted | M4 |
 | [0044](0044-a-chat-answer-names-the-item-it-is-about.md) | Beside a chat, an answer names the item it is about: a remind-me binds whatever its type, a check-in answer closes only the named item's check-in, and a remind-me's answer names every ring (supersedes ADR-0043 in part) | Accepted | M4 |
+| [0045](0045-a-message-names-its-own-leads.md) | Beside a chat, a capture names its event's own leads and a follow-up can add a lead to its item's instead of replacing them; an own lead never rings at once on the told day (supersedes ADR-0038 and ADR-0039 in part) | Proposed | M4 |
 
 ## Template
 

@@ -193,6 +193,10 @@ type Armed struct {
 	// DayOnly says About is a day alone, not a moment: the reply names the
 	// day and the hour it rings on it, never a lead (ADR-0031 point 7).
 	DayOnly bool
+	// OwnLeads says the rings are the event's own leads, the ones its
+	// message named (I44, ADR-0045): the reply names them as the user said
+	// them ("1 hora antes"), not as the preferences' are named.
+	OwnLeads bool
 	// Rule and Anchor are a recurring reminder's, so the reply says when it
 	// rings every time (ADR-0031 point 7); zero for any other arming.
 	Rule   prospection.Rule
