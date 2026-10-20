@@ -323,7 +323,8 @@ func (r reminderSet) armReminder(ctx context.Context, unitID, body string, plan 
 }
 
 // cancelReminder expires t: its date is past, no instant before it is
-// outside quiet hours, or another trigger carries the unit's reminder. Expired is I15's status for a trigger that will not
+// outside quiet hours, every lead is behind on the told day (ADR-0047), or
+// another trigger carries the unit's reminder. Expired is I15's status for a trigger that will not
 // fire; nothing is deleted.
 func (r reminderSet) cancelReminder(ctx context.Context, unitID string, t ports.DueTrigger, plan prospection.Plan, now time.Time) error {
 	if r.tally != nil {
@@ -338,6 +339,8 @@ func (r reminderSet) cancelReminder(ctx context.Context, unitID string, t ports.
 		why = r.cause.quiet
 	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalCovered:
 		why = r.cause.covered
+	case plan.What == prospection.ArmNothing && plan.Why == prospection.RefusalLeadsBehind:
+		why = "every lead left is behind on the day the event was told, and nothing rings at that moment"
 	case plan.What == prospection.ArmNothing:
 		why = r.cause.passed
 	}

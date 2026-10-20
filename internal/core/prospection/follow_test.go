@@ -51,11 +51,18 @@ func TestFollow(t *testing.T) {
 			t.Errorf("Follow = %+v, want a and b carried, c expired", got)
 		}
 	})
-	t.Run("every lead behind: one live trigger is pulled to now, the rest expire", func(t *testing.T) {
+	t.Run("every lead behind on the told day: nothing is pulled to now, every live trigger expires (ADR-0047)", func(t *testing.T) {
 		got := Follow(soon, []Live{one, two}, prefs, nil, now)
+		if len(got.Plans) != 1 || got.Plans[0].What != ArmNothing || got.Plans[0].Why != RefusalLeadsBehind ||
+			got.Carry[0] != "" || !slices.Equal(got.Expire, []string{"a", "b"}) {
+			t.Errorf("Follow = %+v, want nothing armed (leads_behind), a and b expired", got)
+		}
+	})
+	t.Run("every lead behind a day after it was told: one live trigger is pulled to now, the rest expire", func(t *testing.T) {
+		got := FollowSent(soon, []Live{one, two}, nil, prefs, nil, now.AddDate(0, 0, -1), now)
 		if len(got.Plans) != 1 || !got.Plans[0].Immediate || !got.Plans[0].FireAt.Equal(now) ||
 			!slices.Equal(got.Carry, []string{"a"}) || !slices.Equal(got.Expire, []string{"b"}) {
-			t.Errorf("Follow = %+v, want a firing now, b expired", got)
+			t.Errorf("FollowSent = %+v, want a firing now, b expired", got)
 		}
 	})
 	t.Run("a correction never creates an at-once reminder", func(t *testing.T) {

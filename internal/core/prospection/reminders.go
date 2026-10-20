@@ -166,22 +166,25 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, told, now time.Time,
 	if !prefs.ownLeads {
 		leads = skipToldDay(leads, eventAt, told, now)
 	}
-	plans, ok := reminders(eventAt, false, leads, prefs, now, interrupt, sent)
-	if !ok || !toldToday(eventAt, told, now) {
+	plans, ok := reminders(eventAt, false, leads, prefs, told, now, interrupt, sent)
+	// ADR-0039: on the told day, with nothing left once no ring of an event on a
+	// later day goes out at the moment it is told, the one reminder rings on its
+	// own day. An event on the told day itself is left with none (ADR-0047).
+	if ok || plans[0].Why != RefusalLeadsBehind || !toldToday(eventAt, told, now) {
 		return plans, ok
-	}
-	// ADR-0039: on the told day, no ring of an event on a later day goes out
-	// at the moment it is told — the at-once one, or a lead the night pulled
-	// to now, an own lead's included (ADR-0045). With nothing else left, the
-	// one reminder rings on its own day.
-	if plans = slices.DeleteFunc(plans, func(p Plan) bool { return p.Immediate }); len(plans) > 0 {
-		return plans, true
 	}
 	ring, found := ringOnTheDay(eventAt, prefs, now.Location())
 	if !found {
 		return []Plan{{What: ArmNothing, Why: RefusalQuietHours, Interrupt: interrupt}}, false
 	}
-	return reminders(eventAt, false, []lead{{at: ring, own: true}}, prefs, now, interrupt, sent)
+	return reminders(eventAt, false, []lead{{at: ring, own: true}}, prefs, told, now, interrupt, sent)
+}
+
+// toldOn reports whether now is on the local day told, the day the user told
+// Nooma about a unit (ADR-0047). A zero told never is.
+func toldOn(told, now time.Time) bool {
+	zone := now.Location()
+	return !told.IsZero() && TimeOfDay{}.on(told.In(zone), 0, zone).Equal(TimeOfDay{}.on(now.In(zone), 0, zone))
 }
 
 // toldToday is whether now is on the local day told, when the user told Nooma
@@ -189,7 +192,7 @@ func eventReminders(eventAt time.Time, prefs ReminderPrefs, told, now time.Time,
 func toldToday(at, told, now time.Time) bool {
 	zone := now.Location()
 	day := func(t time.Time) time.Time { return TimeOfDay{}.on(t.In(zone), 0, zone) }
-	return !told.IsZero() && day(told).Equal(day(now)) && day(at).After(day(told))
+	return toldOn(told, now) && day(at).After(day(told))
 }
 
 // ringOnTheDay is ADR-0039's one reminder of an event on its own day: at
@@ -246,7 +249,11 @@ func skipToldDay(leads []lead, at, told, now time.Time) []lead {
 
 // reminders arms the one-shot reminders a dated unit owns: one per lead still
 // ahead of now, in firing order, or one at once when every lead is behind and
-// the unit's instant is not. An instant at or before now arms nothing — doc 02
+// the unit's instant is not — except on the local day told (toldOn), when no
+// reminder nobody asked for goes out at the moment it is armed: neither that
+// at-once one nor a lead the night pulled to now (ADR-0039, ADR-0047). With
+// nothing else left, and no lead asked, the refusal is RefusalLeadsBehind.
+// An instant at or before now arms nothing — doc 02
 // §5.1 refuses to arm on a date it cannot trust, and a nudge for something
 // already over is the same refusal pointing the other way. A day-only unit's
 // instant is its whole local day: it is over at the next local midnight.
@@ -255,7 +262,7 @@ func skipToldDay(leads []lead, at, told, now time.Time) []lead {
 // it is neither moved nor dropped by quiet hours, and a behind one becomes an
 // at-once reminder whatever the hour, refused too_late only when less than
 // AtOnceMarginMinutes remain (the instant, or the day's end).
-func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
+func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, told, now time.Time, interrupt Interrupt, sent []Sent) ([]Plan, bool) {
 	zone := now.Location()
 	end := at
 	if dayOnly {
@@ -286,7 +293,8 @@ func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, no
 		items = append(items, item{lead: lead{at: now}, once: true}) // ADR-0029 point 3's at-once reminder
 	}
 	var plans []Plan
-	covered, tooLate := false, false
+	covered, tooLate, behind := false, false, false
+	toldNow := toldOn(told, now)
 	for _, it := range items {
 		if it.asked && it.once && end.Sub(now) < AtOnceMarginMinutes*time.Minute {
 			tooLate = true
@@ -322,6 +330,10 @@ func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, no
 		// reminder, or one deliverAt pulled to now. A lead that is exactly
 		// now is still that lead.
 		immediate := fireAt.Equal(now) && (it.once || !it.at.Equal(now))
+		if immediate && !it.asked && toldNow {
+			behind = true
+			continue
+		}
 		plan := Plan{What: ArmTrigger, FireAt: fireAt, About: at, Immediate: immediate, Interrupt: interrupt,
 			Asked: it.asked, DayOnly: dayOnly, NightExempt: exempt}
 		if servesLead {
@@ -335,6 +347,9 @@ func reminders(at time.Time, dayOnly bool, leads []lead, prefs ReminderPrefs, no
 	if len(plans) == 0 {
 		why := RefusalQuietHours
 		switch {
+		// behind needs no lead asked and tooLate an asked one: they never meet.
+		case behind && !slices.ContainsFunc(leads, func(l lead) bool { return l.asked }):
+			why = RefusalLeadsBehind
 		case covered:
 			why = RefusalCovered
 		case tooLate:
@@ -391,7 +406,8 @@ func leadsAhead(eventAt time.Time, prefs ReminderPrefs, now time.Time) []time.Ti
 }
 
 // everyLeadBehind reports ADR-0029 point 3's case: no lead of eventAt is
-// left, so a capture arms its one reminder at once.
+// left. A capture no longer arms a reminder at once for it (ADR-0047); a
+// re-plan owes the catch-up.
 func everyLeadBehind(eventAt time.Time, prefs ReminderPrefs, now time.Time) bool {
 	return len(leadsAhead(eventAt, prefs, now)) == 0
 }

@@ -523,6 +523,23 @@ func TestI29_CorrectedDateMovesTheReminder(t *testing.T) {
 		}
 	})
 
+	t.Run("a correction to today with every lead behind cancels the armed reminder, ringing nothing at once (ADR-0047)", func(t *testing.T) {
+		// Before ADR-0047 t1 was pulled to 08:30 and rang at the moment the
+		// user told Nooma the new date.
+		now := time.Date(2026, 10, 9, 8, 30, 0, 0, time.UTC)
+		f := newI29(t, now, dentist(now), toToday)
+		f.arm(t, "t1", "dentist", oldFire, before, nil, nil)
+		f.capture(t, "dentist")
+		if got := f.armed(t, "dentist"); len(got) != 0 {
+			t.Fatalf("armed = %+v, want none", got)
+		}
+		rows := reminderRows(t, f)
+		if len(rows) != 1 || rows[0].Action != ports.ActionCorrectionReminderCancelled ||
+			!strings.Contains(rows[0].Rationale, "nothing rings at that moment") {
+			t.Fatalf("reminder rows = %v, want t1 cancelled because nothing rings at the moment it is told", rows)
+		}
+	})
+
 	t.Run("a recurring reminder stays recurring, re-anchored", func(t *testing.T) {
 		now := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 		yearly := prospection.RuleYearly

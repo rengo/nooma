@@ -52,7 +52,9 @@ is on the 15th.
    passed is skipped ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe), ADR-0029),
    and so is one that would ring the same day you said it, for an event on a later day, unless it
    is the only one left (ADR-0037). Told after every reminder time has passed, an event on a
-   later day is reminded on its own day at 09:00, never at once (ADR-0039).
+   later day is reminded on its own day at 09:00, never at once (ADR-0039); one today gets only
+   the reminders still ahead, and none at all when every one has passed: "hoy a las 21", told at
+   17:14, is never answered "Te aviso ahora mismo." (ADR-0047).
    Nothing is set for the night: a reminder that would fall before 07:00 is moved to 07:00, or
    to 22:00 the evening before when the event itself is that early (the leads, the 09:00 and
    both hours are your preferences, changed on `/ui/preferences`), so a 05:00 flight is

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
@@ -19,8 +20,8 @@ import (
 // TestI33_EventRemindersAtTheLeads is doc 02 §7's "Lead time" (ADR-0029): a
 // captured event arms one trigger per lead still ahead — 24 hours and 2
 // hours before a timed event, the day before at 09:00 local for a date-only
-// one — and one at once only when every lead is behind and the event is
-// not. Each trigger writes its own capture.armed.trigger row.
+// one — and none at once when every lead is behind (ADR-0047). Each trigger
+// writes its own capture.armed.trigger row.
 func TestI33_EventRemindersAtTheLeads(t *testing.T) {
 	zone := time.FixedZone("ART", -3*60*60)
 	at := func(day, hour int) time.Time { return time.Date(2026, 10, day, hour, 0, 0, 0, zone) }
@@ -38,8 +39,8 @@ func TestI33_EventRemindersAtTheLeads(t *testing.T) {
 			[]time.Time{at(15, 10), at(16, 8)}, []int{1440, 120}},
 		{"a timed event 20 hours ahead: only the 2-hour lead is ahead", timed, at(15, 14),
 			[]time.Time{at(16, 8)}, []int{120}},
-		{"a timed event 1 hour ahead: one reminder at once", timed, at(16, 9),
-			[]time.Time{at(16, 9)}, []int{0}},
+		// Not at once about what was just said: no reminder (ADR-0047).
+		{"a timed event 1 hour ahead: no reminder", timed, at(16, 9), nil, nil},
 		{"a date-only event: the day before at 09:00 local", dateOnly, at(13, 10),
 			[]time.Time{at(15, 9)}, []int{15 * 60}},
 		// Not at once about what was just said: on its own day (ADR-0039).
@@ -78,6 +79,12 @@ func TestI33_EventRemindersAtTheLeads(t *testing.T) {
 			}
 			if armedRows != len(tc.want) {
 				t.Errorf("capture.armed.trigger rows = %d, want one per trigger (%d)", armedRows, len(tc.want))
+			}
+			if len(tc.want) == 0 {
+				if result.Armed != nil {
+					t.Errorf("Armed = %+v, want nothing armed", result.Armed)
+				}
+				return
 			}
 			if result.Armed == nil || !result.Armed.FireAt.Equal(tc.want[0]) || len(result.Armed.Later) != len(tc.want)-1 {
 				t.Errorf("Armed = %+v, want the earliest firing and the rest in Later", result.Armed)
@@ -254,4 +261,64 @@ func i33CaptureWith(t *testing.T, now time.Time, response string, cfg ports.Conf
 		t.Fatalf("Capture: %v", err)
 	}
 	return triggers, log, result
+}
+
+// TestI33_NothingUnaskedRingsAtOnceOnTheToldDay is doc 02 §7's "Lead time"
+// (ADR-0047): an event today, told when a lead nobody asked for is already
+// behind, never rings at the moment it is told. The lead behind is dropped, a
+// lead still ahead stays, and with none left there is no reminder: the unit is
+// stored, capture.arm.refused (leads_behind) says why, and the reply promises
+// no ring. The client's case, 2026-10-20 at 17:14: "hoy a las 21 tengo turno
+// con el kinesiólogo" with a 4-hour lead was answered "Te aviso ahora mismo.".
+func TestI33_NothingUnaskedRingsAtOnceOnTheToldDay(t *testing.T) {
+	zone := time.FixedZone("ART", -3*60*60)
+	now := time.Date(2026, 10, 20, 17, 14, 0, 0, zone)
+	const event = `{"type":"event","normalized_content":"turno con el kinesiólogo el 2026-10-20 a las 21:00",` +
+		`"weight":0.7,"decay_rate":0.05,"language":"es","event_at":"2026-10-20T21:00:00-03:00"`
+	str := func(s string) *string { return &s }
+
+	cases := []struct {
+		name, response string
+		leads          *string
+		want           []time.Time
+		reply          string
+	}{
+		{"a 4-hour lead already behind: no ring", event + `}`, str(`[240]`), nil, "Anotado."},
+		{"its own 4-hour lead already behind: no ring", event + `,"reminder_leads_minutes":[240]}`, nil, nil, "Anotado."},
+		{"the 2-hour lead still ahead stays, the 24-hour one is dropped", event + `}`, nil,
+			[]time.Time{time.Date(2026, 10, 20, 19, 0, 0, 0, zone)}, "Anotado para el mar 20 oct, 21:00. Te aviso unas horas antes."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := memrepo.NewConfig()
+			cfg.SeedConfig(t, ports.VaultConfig{EventReminderLeads: tc.leads})
+			triggers, log, result := i33CaptureWith(t, now, tc.response, cfg)
+			var got []time.Time
+			for _, r := range triggers.All() {
+				got = append(got, *r.FireAt)
+			}
+			if !slices.EqualFunc(got, tc.want, time.Time.Equal) {
+				t.Errorf("fires at %v, want %v", got, tc.want)
+			}
+			if result.Armed != nil && result.Armed.Immediate {
+				t.Errorf("Armed = %+v, want no ring at once", result.Armed)
+			}
+			if got := channels.RenderReply(result); got != tc.reply {
+				t.Errorf("reply = %q, want %q", got, tc.reply)
+			}
+			if len(tc.want) > 0 {
+				return
+			}
+			rows, err := log.Since(context.Background(), time.Time{}, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			refused := slices.ContainsFunc(rows, func(d ports.Decision) bool {
+				return d.Action == ports.ActionCaptureArmRefused && strings.Contains(string(d.Context), string(prospection.RefusalLeadsBehind))
+			})
+			if result.Outcome != brain.OutcomeStored || !refused {
+				t.Errorf("outcome %q, refused row %v; want the unit stored and a leads_behind refusal row", result.Outcome, refused)
+			}
+		})
+	}
 }

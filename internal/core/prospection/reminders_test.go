@@ -25,8 +25,8 @@ func TestDefaultReminderPrefs(t *testing.T) {
 }
 
 // TestArm_EventReminders is doc 02 §7's "Lead time" (ADR-0029 points 1-3):
-// one plan per lead still ahead, in firing order; one at once only when
-// every lead is behind and the event is not.
+// one plan per lead still ahead, in firing order; none at once when every
+// lead is behind (ADR-0047).
 func TestArm_EventReminders(t *testing.T) {
 	zone := time.FixedZone("ART", -3*60*60)
 	at := func(day, hour, minute int) time.Time { return time.Date(2026, 10, day, hour, minute, 0, 0, zone) }
@@ -72,10 +72,12 @@ func TestArm_EventReminders(t *testing.T) {
 		e := at(16, 10, 0)
 		check(t, arm(e, at(16, 8, 0), defaults), e, want{at(16, 8, 0), 120, false})
 	})
-	t.Run("every lead behind and the event ahead: one at once, no lead", func(t *testing.T) {
+	t.Run("every lead behind and the event ahead: none, not one at once (ADR-0047)", func(t *testing.T) {
 		e := at(16, 10, 0)
-		now := at(16, 9, 30)
-		check(t, arm(e, now, defaults), e, want{now, 0, true})
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &e}, false, defaults, at(16, 9, 30))
+		if ok || plans[0].What != ArmNothing || plans[0].Why != RefusalLeadsBehind {
+			t.Errorf("Arm = %+v, want nothing armed, leads_behind", plans)
+		}
 	})
 	t.Run("leads are absolute: 24 hours across a DST change is 24 hours", func(t *testing.T) {
 		ny, err := time.LoadLocation("America/New_York")
