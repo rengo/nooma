@@ -1,6 +1,7 @@
 # ADR-0044 — Beside a chat, an answer names the item it is about
 
-- **Status**: Proposed (awaiting the client through the PM)
+- **Status**: Accepted (by the client through the PM, 2026-10-20: a chat message is read "en el
+  momento por el hilo de la conversación", ADR-0036)
 - **Date**: 2026-10-20
 - **Supersedes**: [ADR-0043](0043-a-remind-me-follow-up-reminds-of-the-item.md) points 3 and 4
   in part (the answer names every ring the item has, not the asked one alone), and, beside a
