@@ -445,7 +445,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
    `structured_data` + initial weight/λ + fields resolving pending answers +
    prospection's two capture fields, `interrupt_level` (0-1, §7's push/digest split) and
    `recurrence_rule` (`yearly | monthly | daily | weekly`, §7's recurrence, decoded rather than left inside
-   `structured_data`), plus `language` (§5's own bullet below). Classification
+   `structured_data`; the prompt requires a recurring reminder to carry its first occurrence
+   beside the rule, at the time of day named: "todos los días a las 9pm" with the rule alone
+   armed nothing), plus `language` (§5's own bullet below). Classification
    taxonomy: `task | mental_load | event | knowledge | procedural | emotional | chitchat |
    out_of_scope | recall | correction | timer | recurring_reminder | list`.
    - `recall`, `knowledge` and `correction` are separated by **what the message does, not

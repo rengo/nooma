@@ -213,6 +213,14 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
 		" — only for a recurring reminder\n")
+	// **The first occurrence, never the rule alone** (review on #383): "todos
+	// los días a las 9pm" came back with its rule and no instant, and nothing
+	// was armed.
+	b.WriteString("                       A recurring reminder MUST also carry its first occurrence, in\n")
+	b.WriteString("                       due_at, or in event_at for a thing that happens in the world,\n")
+	b.WriteString("                       as a birthday; when the message names a time of day, as a\n")
+	b.WriteString("                       full timestamp at that time: \"todos los días a las 9pm\" said\n")
+	b.WriteString("                       in the morning is today at 21:00, never the rule alone\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
 	}
@@ -338,8 +346,9 @@ func writeReminders(b *strings.Builder, rc ReminderContext) {
 	b.WriteString("  reminder_leads_minutes  when the message says how long before what it tells the\n")
 	b.WriteString("                     user wants to be reminded: every lead it asks for, in whole\n")
 	b.WriteString("                     minutes before it: [60] for one hour before, [1440, 120] for the\n")
-	b.WriteString("                     day before and two hours before. Leave it out when the message\n")
-	b.WriteString("                     says nothing about when to be reminded\n")
+	b.WriteString("                     day before and two hours before. Leave it out unless the\n")
+	b.WriteString("                     message names how long before. A time of day is not a lead:\n")
+	b.WriteString("                     \"a las 9pm\" goes in due_at or event_at\n")
 	if chatShown(rc) {
 		b.WriteString(whichItemPointer)
 	}

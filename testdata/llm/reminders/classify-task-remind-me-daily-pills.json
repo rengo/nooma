@@ -10,7 +10,8 @@
   "expect": {
     "remind_request": true,
     "day_only": false,
-    "title": true
+    "title": true,
+    "due_at": "2026-10-16T21:00:00-03:00"
   },
   "prompt_sha256": "9918bc282927a7174fdebf80cf06b5093082108419d1fc1fbdba1b82a23a453a"
 }

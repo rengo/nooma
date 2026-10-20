@@ -186,6 +186,25 @@ func TestBuildPrompt_RendersProspectionFields(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_ARecurringReminderCarriesItsFirstOccurrence (review on
+// #383): "recordame tomar las pastillas todos los días a las 9pm" came back
+// with its rule and no instant, half the time, and nothing was armed. The
+// prompt says a recurring reminder always carries its first occurrence at the
+// time named, and that a time of day is not a reminder lead.
+func TestBuildPrompt_ARecurringReminderCarriesItsFirstOccurrence(t *testing.T) {
+	for _, rc := range []ReminderContext{{}, {Conversation: oneTurn}} {
+		p := flat(promptWith(rc))
+		for _, want := range []string{
+			"A recurring reminder MUST also carry its first occurrence, in due_at, or in event_at for a thing that happens in the world, as a birthday; when the message names a time of day, as a full timestamp at that time: \"todos los días a las 9pm\" said in the morning is today at 21:00, never the rule alone",
+			"Leave it out unless the message names how long before. A time of day is not a lead: \"a las 9pm\" goes in due_at or event_at",
+		} {
+			if !strings.Contains(p, want) {
+				t.Errorf("the prompt (chat %v) never says %q", chatShown(rc), want)
+			}
+		}
+	}
+}
+
 func asStrings[T ~string](vs []T) []string {
 	out := make([]string, 0, len(vs))
 	for _, v := range vs {

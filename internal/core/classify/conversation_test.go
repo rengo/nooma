@@ -245,7 +245,7 @@ func TestBuildPrompt_AMessageAsksForItsOwnLeads(t *testing.T) {
 		p := flat(section(promptWith(rc), "Reminders"))
 		for _, want := range []string{
 			"reminder_leads_minutes when the message says how long before what it tells the user wants to be reminded: every lead it asks for, in whole minutes before it: [60] for one hour before, [1440, 120] for the day before and two hours before.",
-			"Leave it out when the message says nothing about when to be reminded",
+			"Leave it out unless the message names how long before.",
 		} {
 			if !strings.Contains(p, want) {
 				t.Errorf("Reminders (chat %v) never says %q:\n%s", chatShown(rc), want, p)
