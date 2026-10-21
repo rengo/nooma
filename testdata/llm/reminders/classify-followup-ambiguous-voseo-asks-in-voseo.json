@@ -1,0 +1,37 @@
+{
+  "id": "classify-followup-ambiguous-voseo-asks-in-voseo",
+  "task": "classify",
+  "message": "¿Me lo podés pasar a las 08:00?",
+  "record": true,
+  "now": "2026-10-14T07:20:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-14T07:00:00-03:00",
+        "speaker": "push",
+        "text": "Hoy hay 2 cosas: • Dentista — mié 14 oct, 10:00 • Reunión con Juan — mié 14 oct, 22:30",
+        "about": [
+          "A",
+          "B"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Dentista el 2026-10-14 a las 10:00.",
+        "title": "Dentista",
+        "event_at": "2026-10-14T10:00:00-03:00"
+      },
+      {
+        "content": "Tengo reunión con Juan el 2026-10-14 a las 22:30.",
+        "title": "Reunión con Juan",
+        "event_at": "2026-10-14T22:30:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "unclear",
+    "voice": "voseo"
+  }
+}

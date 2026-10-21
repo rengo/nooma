@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/consolidation"
@@ -39,6 +40,7 @@ const (
 	FieldType               = "type"
 	FieldReferent           = "referent"
 	FieldClarifyingQuestion = "clarifying_question"
+	FieldVoice              = "voice"
 	FieldEventAt            = "event_at"
 	FieldDueAt              = "due_at"
 	FieldReminderLeads      = "reminder_leads_minutes"
@@ -251,6 +253,9 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	miss(FieldType, e.Type != "" && ptrString(cls.Kind) != e.Type)
 	miss(FieldReferent, referentOf(cls.Referent) != e.Referent)
 	miss(FieldClarifyingQuestion, (cls.ClarifyingQuestion != nil) != (e.Referent == classify.ReferentUnclear))
+	if e.Voice != "" {
+		miss(FieldVoice, cls.ClarifyingQuestion != nil && speaksOther(*cls.ClarifyingQuestion, e.Voice))
+	}
 	if e.EventAt != "" {
 		want, err := time.Parse(time.RFC3339, e.EventAt)
 		miss(FieldEventAt, err != nil || cls.EventAt == nil || !cls.EventAt.Equal(want))
@@ -357,6 +362,10 @@ func ValidateCase(c llm.Case) error {
 	oneOf(FieldNudgeOutcome, e.NudgeOutcome, strs(classify.AllNudgeOutcomes()))
 	oneOf(FieldRelationOutcome, e.RelationOutcome, strs(classify.AllRelationOutcomes()))
 	oneOf(FieldType, e.Type, strs(classify.AllKinds()))
+	oneOf(FieldVoice, e.Voice, []string{llm.VoiceVoseo, llm.VoiceTuteo})
+	if e.Voice != "" && e.Referent != classify.ReferentUnclear {
+		errs = append(errs, fmt.Errorf("voice %q judges a clarifying question, asked only beside referent %q", e.Voice, classify.ReferentUnclear))
+	}
 	if n := e.ChoiceNumber; n != nil && (*n < 1 || *n > classify.MaxReminderChoices) {
 		errs = append(errs, fmt.Errorf("choice_number %d is outside 1-%d", *n, classify.MaxReminderChoices))
 	}
@@ -445,4 +454,32 @@ func strs[T ~string](vs []T) []string {
 		out[i] = string(v)
 	}
 	return out
+}
+
+// tuteoForms and voseoForms are second-person words only one variety uses,
+// as the clarifying question would say them: the honest check of a voice the
+// set can make. A question with none of either, "¿El dentista o la reunión?",
+// is in no voice and passes both; a word both varieties share ("estás", "te")
+// is in neither list.
+var (
+	tuteoForms = []string{"tú", "eres", "quieres", "refieres", "tienes", "puedes", "prefieres", "necesitas",
+		"deseas", "dices", "sabes", "recuerdas", "dime", "avísame", "recuérdame", "confírmame", "cuéntame"}
+	voseoForms = []string{"vos", "sos", "querés", "referís", "tenés", "podés", "preferís", "necesitás",
+		"decís", "sabés", "recordás", "decime", "contame"}
+)
+
+// speaksOther reports whether question uses a form of the variety voice does
+// not name.
+func speaksOther(question, voice string) bool {
+	other := tuteoForms
+	if voice == llm.VoiceTuteo {
+		other = voseoForms
+	}
+	words := strings.FieldsFunc(strings.ToLower(question), func(r rune) bool { return !unicode.IsLetter(r) })
+	for _, w := range words {
+		if slices.Contains(other, w) {
+			return true
+		}
+	}
+	return false
 }

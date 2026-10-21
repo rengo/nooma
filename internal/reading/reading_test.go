@@ -342,6 +342,10 @@ func TestValidateCaseRejectsWhatReplayCouldNotMean(t *testing.T) {
 		"empty text":  func(c *llm.Case) { c.OpenQuestion = &llm.Question{Kind: "undo"} },
 		"six entries": func(c *llm.Case) { c.CandidatesList = make([]llm.Entry, 6) },
 		"no expect":   func(c *llm.Case) { c.Expect = nil },
+		// A voice judges the clarifying question, which only an unclear
+		// referent asks.
+		"voice":              func(c *llm.Case) { c.Expect = &llm.Expect{Voice: "rioplatense"} },
+		"voice, no question": func(c *llm.Case) { c.Expect = &llm.Expect{Voice: llm.VoiceVoseo} },
 	}
 	for name, mutate := range bad {
 		t.Run(name, func(t *testing.T) {
@@ -441,6 +445,34 @@ func TestCheckReferentIsStrict(t *testing.T) {
 				if got := slices.Contains(misses, f); got != (f == tc.miss) {
 					t.Errorf("misses = %v, want only %q", misses, tc.miss)
 				}
+			}
+		})
+	}
+}
+
+// TestCheckVoiceOnlyWhenSet: a question Nooma sends as it is keeps the user's
+// variety. An expected voseo misses on a tú form and an expected tuteo on a
+// voseo one; a question with no second-person form passes either, and with no
+// voice expected the question's words are not judged.
+func TestCheckVoiceOnlyWhenSet(t *testing.T) {
+	for _, tc := range []struct {
+		name, voice, question string
+		miss                  bool
+	}{
+		{"voseo asked in voseo", llm.VoiceVoseo, "¿Te referís al dentista o a la reunión con Juan?", false},
+		{"voseo asked in tú", llm.VoiceVoseo, "¿Te refieres al dentista o a la reunión?", true},
+		{"voseo asked with tú", llm.VoiceVoseo, "¿Qué quieres que haga, tú?", true},
+		{"voseo asked with no second person", llm.VoiceVoseo, "¿El dentista o la reunión con Juan?", false},
+		{"tuteo asked in tú", llm.VoiceTuteo, "¿Te refieres al dentista?", false},
+		{"tuteo asked in voseo", llm.VoiceTuteo, "¿Querés que lo mueva al jueves?", true},
+		{"no voice expected", "", "¿Te refieres al dentista?", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := tc.question
+			cls := classify.Classification{Referent: &classify.Referent{Unclear: true}, ClarifyingQuestion: &q}
+			misses := Check(llm.Case{Expect: &llm.Expect{Referent: classify.ReferentUnclear, Voice: tc.voice}}, cls)
+			if got := slices.Contains(misses, FieldVoice); got != tc.miss {
+				t.Errorf("misses = %v, want voice missed: %v", misses, tc.miss)
 			}
 		})
 	}

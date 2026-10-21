@@ -52,6 +52,12 @@ type ConversationEntry struct {
 	DueAt   string `json:"due_at,omitempty"`
 }
 
+// The varieties Expect.Voice names.
+const (
+	VoiceVoseo = "voseo"
+	VoiceTuteo = "tuteo"
+)
+
 // Expect is the reading a phrasing should get, written by hand and never by
 // the recording command. The reminder fields and the outcomes are strict: an
 // unset one means the model must read none, false or absent. DayOnly, Title
@@ -82,6 +88,10 @@ type Expect struct {
 	// referent corrects a unit in production (ADR-0036). A clarifying question
 	// must come back exactly when it is unclear.
 	Referent string `json:"referent,omitempty"`
+	// Voice is the variety the clarifying question must be in, VoiceVoseo or
+	// VoiceTuteo, checked only when set: the question names no form of the
+	// other one.
+	Voice string `json:"voice,omitempty"`
 	// EventAt is the instant a follow-up moves its item to, RFC 3339, checked
 	// only when set.
 	EventAt string `json:"event_at,omitempty"`
