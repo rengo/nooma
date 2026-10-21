@@ -75,7 +75,8 @@ is on the 15th.
    [relations](02-cognitive-core.md#4-relations) with a confidence.
 6. **Answers a question instead of filing it.** When you ask "what did I say about Laura?", the
    message is classified as a `recall`: nothing is stored, and the units that clear the
-   admission floor come back, ranked. Over HTTP this is `POST /recall`; in `/ui/units` it is the
+   admission floor come back, ranked. In a chat each one is named by its title and when it is
+   ("Turno con el oculista — mar 20 oct, 10:00"). Over HTTP this is `POST /recall`; in `/ui/units` it is the
    `?q=` search ([doc 02 §5 step 2](02-cognitive-core.md#5-capture), ADR-0010, ADR-0020).
 7. **Corrects in place.** "Actually the dentist is on the 15th" is a `correction`. Where the
    caller holds a unit id (the UI and the API do), that id wins. In chat there is none, so a

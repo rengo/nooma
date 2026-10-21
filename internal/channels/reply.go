@@ -10,6 +10,7 @@ import (
 	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 )
 
 // RenderReply turns what a capture did into what the person is told.
@@ -56,7 +57,7 @@ func RenderReply(result brain.CaptureResult) string {
 		// night left before it, names what was read and promises no ring
 		// (ADR-0047). A day alone is named by its date, not "00:00".
 		if at := result.NotArmedFor; at != nil {
-			if at.Hour() == 0 && at.Minute() == 0 && at.Second() == 0 && at.Nanosecond() == 0 {
+			if atMidnight(*at) {
 				return fmt.Sprintf(say.NotedOn, say.Date(*at))
 			}
 			return fmt.Sprintf(say.NotedOn, say.Time(*at))
@@ -118,11 +119,11 @@ func RenderReply(result brain.CaptureResult) string {
 		if len(result.Recalled) == 0 {
 			return say.NothingFound
 		}
-		contents := make([]string, len(result.Recalled))
+		lines := make([]string, len(result.Recalled))
 		for i, u := range result.Recalled {
-			contents[i] = u.Content
+			lines[i] = recalledLine(say, u, result.At.Location())
 		}
-		return say.List(contents)
+		return say.List(lines)
 
 	case brain.OutcomeCorrected:
 		c := result.Correction
@@ -188,8 +189,39 @@ func RenderReply(result brain.CaptureResult) string {
 // or an unasked one at local midnight, how a bare date is stored (ADR-0029
 // point 2), whose date alone is named, not "00:00".
 func dayOnly(armed *brain.Armed) bool {
-	a := armed.About
-	return armed.DayOnly || (a.Hour() == 0 && a.Minute() == 0 && a.Second() == 0 && a.Nanosecond() == 0)
+	return armed.DayOnly || atMidnight(armed.About)
+}
+
+// atMidnight reports whether t, in its own zone, is a day alone: how a bare
+// date is stored (ADR-0029 point 2), named by its date, not "00:00".
+func atMidnight(t time.Time) bool {
+	return t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0
+}
+
+// recalledLine is how a recall's answer names u, the way the digest names a
+// unit: its title, else its content, and when it is — its event, else its
+// due day — in zone, the capture's own, with no hour for a day alone.
+//
+// Not the content alone: the classification writes a resolved date into it
+// as YYYY-MM-DD, the one form a correction can find (doc 02 §5), which is
+// what the vault needs and not what a reader in a chat does.
+func recalledLine(say phrase.Set, u unit.Unit, zone *time.Location) string {
+	text := u.Title
+	if text == "" {
+		text = u.Content
+	}
+	at := u.EventAt
+	if at == nil {
+		at = u.DueAt
+	}
+	if at == nil {
+		return text
+	}
+	local := at.In(zone)
+	if atMidnight(local) {
+		return say.Line(text, say.Date(local))
+	}
+	return say.Line(text, say.Time(local))
 }
 
 // askedLeads names when an armed one-shot reminder rings, every ring of it.
