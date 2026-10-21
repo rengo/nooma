@@ -3,7 +3,9 @@ package brain
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
@@ -226,6 +228,66 @@ func (s *RecallService) ForText(ctx context.Context, text string) ([]unit.Unit, 
 		units[i] = su.Unit
 	}
 	return units, ok, nil
+}
+
+// Answer is the chat's recall: ForText, narrowed by the scope its reading
+// carries (ADR-0048). With no scope it is ForText exactly, which is what keeps
+// the chat, /recall and /ui/units one mechanism (I22); only the chat has a
+// reading to narrow by.
+//
+//   - A window and no terms lists the live units whose instant falls in it,
+//     by that instant, up to recall.RecallWindowLimit: "¿qué tengo esta
+//     semana?" is a list of what is ahead, not a search for the sentence.
+//   - Terms narrow the answering ranking to what a term names
+//     (recall.Precise), and a window then keeps what falls in it.
+//
+// The vector leg still embeds the raw text: a term only narrows what it
+// admitted, and terms nothing names leave ForText's own answer.
+func (s *RecallService) Answer(ctx context.Context, text string, scope *classify.RecallScope) ([]unit.Unit, error) {
+	if scope == nil || (len(scope.Terms) == 0 && scope.Window == nil) {
+		units, _, err := s.ForText(ctx, text)
+		return units, err
+	}
+	var window *recall.Window
+	if w := scope.Window; w != nil {
+		window = &recall.Window{On: windowOn(w.On), From: w.From, To: w.To}
+	}
+	if len(scope.Terms) == 0 {
+		units, err := s.units.LiveInWindow(ctx, *window, recall.RecallWindowLimit)
+		if err != nil {
+			return nil, fmt.Errorf("recall: window: %w", err)
+		}
+		return units, nil
+	}
+
+	ranked, _, err := s.scoredFor(ctx, text, true)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(ranked))
+	byID := make(map[string]unit.Unit, len(ranked))
+	for i, su := range ranked {
+		ids[i], byID[su.Unit.ID] = su.Unit.ID, su.Unit
+	}
+	matched, err := s.lex.SearchLexical(ctx, recall.Tokenize(strings.Join(scope.Terms, " ")), recall.RecallTopK)
+	if err != nil {
+		return nil, fmt.Errorf("recall: terms: %w", err)
+	}
+	var units []unit.Unit
+	for _, id := range recall.Precise(ids, matched) {
+		if u := byID[id]; window == nil || window.Holds(u) {
+			units = append(units, u)
+		}
+	}
+	return units, nil
+}
+
+// windowOn is the instant a read window bounds, named in recall's terms.
+func windowOn(on classify.RecallWindowOn) recall.WindowOn {
+	if on == classify.RecallOnTold {
+		return recall.WindowTold
+	}
+	return recall.WindowWhen
 }
 
 // intersect keeps the members of keep that appear in admitted, in keep's

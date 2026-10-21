@@ -754,6 +754,16 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      style, with no hour for a day alone ("Turno con el oculista — mar 20 oct, 10:00"). Not
      the content alone: the content carries a resolved date as `YYYY-MM-DD`, the form a
      correction needs to find it (step 1), not the form a person reads.
+   - **The chat's answer is narrowed by its reading's scope** (step 1, ADR-0048, I45). A
+     window and no terms is a list, not a search: the live units whose instant (`told`:
+     `created_at`; `when`: `event_at`, else `due_at`) falls in it, in order of that instant, up
+     to `recall_window_limit`. Terms narrow the answering ranking — the vector leg still embeds
+     the raw message — to the units a term matches lexically (**the lexical leg admits beside
+     terms**: a term the model wrote carries no function words, the reason it may not admit on
+     a raw message, below), and a window then keeps what falls in it. Terms nothing in the
+     ranking holds leave the ranking as it was: a word the model chose is not a reason to answer
+     with nothing. With no scope, and on `POST /recall` and `/ui/units`, which have no reading,
+     the answer is the one below unchanged (I22).
    - **On the answering path the vector admits and the lexical leg ranks.** Nearest is not the
      same as near enough: with one unit in a vault, every question is answered with that unit,
      and the shape of the failure changes rather than improving as the vault grows — five
@@ -2255,6 +2265,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | RRF `k` | 60 |
 | `recall_top_k` | 20 |
 | `recall_min_similarity` (`internal/core/recall.RecallMinSimilarity`) | 0.35 |
+| `recall_window_limit` (`internal/core/recall.RecallWindowLimit`) | 20 — how many units a recall's window lists, by their instant (ADR-0048): one chat message a person reads, the same bound each recall leg has |
 | RRF vector-leg weight (`weight_vector`) | 1.0 |
 | RRF lexical-leg weight (`weight_lexical`) | 1.0 |
 | `dedup_candidate_k` | 5 |
