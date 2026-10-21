@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo, no me lo recuerdes más",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"No quiero que me recuerdes más ese recordatorio.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero que me lo recuerdes más.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -23,5 +23,5 @@
     "reminder_intent": "stop",
     "reminder_target": "unclear"
   },
-  "prompt_sha256": "0e96428f968f7c6ced320b7ecb6969588db4df8f6df20feffa0498296a379261"
+  "prompt_sha256": "4ad387c37b003a2a7714f2c6ff616f22a772d125f0806303ea05bf7d932c7c89"
 }

@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame el dentista el viernes a las 10",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Recordarme la cita con el dentista el 2026-10-23 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-23T10:00:00-03:00\",\"title\":\"Cita con el dentista\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Recordarme la cita con el dentista el 2026-10-23 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-23T10:00:00-03:00\",\"title\":\"Cita con el dentista\",\"interrupt_level\":0.7,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
   },
-  "prompt_sha256": "22c78668971212cfe779b128e826b51aaefb7f991121cbc4ec1c4fbc585efa83"
+  "prompt_sha256": "497bab431b8f45ac5c9b47a8c819cf31bfe0956f0f77491bbc916f81f483ddb6"
 }

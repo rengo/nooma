@@ -1,0 +1,14 @@
+{
+  "id": "classify-recall-lo-del-oculista",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "¿cuándo era lo del oculista?",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"Pregunta cuándo era lo del oculista.\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"about\":\"oculista\"}}",
+  "now": "2026-10-21T18:30:00-03:00",
+  "expect": {
+    "type": "recall",
+    "recall_about": "oculista"
+  },
+  "prompt_sha256": "4b2eb7f0cbdadb748b03e7bae53ef3acee9080bcc90ef75018e8c51b3d36e10e"
+}

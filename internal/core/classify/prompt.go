@@ -227,6 +227,27 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("                       as a birthday; when the message names a time of day, as a\n")
 	b.WriteString("                       full timestamp at that time: \"todos los días a las 9pm\" said\n")
 	b.WriteString("                       in the morning is today at 21:00, never the rule alone\n")
+	// **The model reads the question's scope; the code filters on it**
+	// (ADR-0048). Searched as text, "¿y anteayer?" and "¿qué tengo esta
+	// semana?" carried no time at all, and "lo del oculista" matched every
+	// appointment, because the question words were part of the search.
+	b.WriteString("  recall_scope         only for a recall: what the question asks about and when, as\n")
+	b.WriteString("                       {\"about\": ..., \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}.\n")
+	b.WriteString("                       Leave out a part the question does not name.\n")
+	b.WriteString("                       about: the topic asked about, in the message's own language,\n")
+	b.WriteString("                       with no question words and no time words: \"lo del oculista\"\n")
+	b.WriteString("                       is \"oculista\"; \"¿qué tengo esta semana?\" names none.\n")
+	b.WriteString("                       window: the span of time asked about, from inclusive and to\n")
+	b.WriteString("                       exclusive, each written as event_at is. on is one of: " +
+		joinVocabulary(AllRecallWindowOns()) + ";\n")
+	b.WriteString("                       \"told\" when it asks what the user SAID then (\"¿qué te conté\n")
+	b.WriteString("                       ayer?\": from yesterday's first instant to today's), \"when\"\n")
+	b.WriteString("                       when it asks what HAPPENS or is DUE then (\"¿qué tengo el\n")
+	b.WriteString("                       viernes?\"). What the user HAS starts at the current local\n")
+	b.WriteString("                       time, never earlier: \"¿qué tengo esta semana?\" is from now\n")
+	b.WriteString("                       to the Monday that starts next week, as the calendar above\n")
+	b.WriteString("                       states the weeks. A follow-up question (\"¿y anteayer?\")\n")
+	b.WriteString("                       keeps the question it follows and changes only what it names\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
 	}
@@ -547,6 +568,18 @@ func writeCalendar(b *strings.Builder, now time.Time) {
 			b.WriteString(" (today)")
 		}
 		b.WriteString("\n")
+	}
+	// **The week as data, not as a count** (ADR-0048). Asked what it had
+	// "esta semana" on a Wednesday, the model ended the week on the Monday
+	// after next in two runs of three. A week runs Monday to Sunday.
+	monday := time.Date(now.Year(), now.Month(), now.Day()-(int(now.Weekday())+6)%7, calendarRowHour, 0, 0, 0, now.Location())
+	for _, w := range []struct {
+		name  string
+		start time.Time
+	}{{"This week", monday}, {"Next week", monday.AddDate(0, 0, 7)}} {
+		sunday := w.start.AddDate(0, 0, 6)
+		b.WriteString("  " + w.name + ": Monday " + w.start.Format(localDateLayout) +
+			" to Sunday " + sunday.Format(localDateLayout) + "\n")
 	}
 }
 

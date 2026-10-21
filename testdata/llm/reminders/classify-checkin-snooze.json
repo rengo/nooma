@@ -4,11 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "después lo veo",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Lo veré después.\",\"weight\":0,\"decay_rate\":0,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Lo veré después.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "prompt_sha256": "cb3ca2c37a03d172a56398591e419362beec480dfab394b8e18a9097135bc313"
+  "prompt_sha256": "69a914262915d569571437291a43d8dc640c1177d3fb8169cbfc62956b083943"
 }

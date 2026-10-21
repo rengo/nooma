@@ -278,13 +278,27 @@ func TestI40_ARemindMeThatMovesTheItemTooLateSaysWhy(t *testing.T) {
 	}
 }
 
-// TestI40_LeadsWinOverAStrayRemindRequest: "avisame 2 horas antes", as
-// recorded (classify-followup-dos-horas-antes), carries the event's new leads
-// and a stray remind_request. Leads win: the reading takes the correction
-// path, the event's own leads become [120], and no asked reminder is added,
-// nor the item marked asked, nor a 15-minute reminder named.
+// TestI40_LeadsWinOverAStrayRemindRequest: "avisame 2 horas antes", recorded
+// (classify-followup-dos-horas-antes), carries the event's new leads, and a
+// stray remind_request beside them. Leads win: the reading takes the
+// correction path, the event's own leads become [120], and no asked reminder
+// is added, nor the item marked asked, nor a 15-minute reminder named.
+//
+// The stray request is set here, not borrowed: the recording on the prompt
+// of ADR-0048 no longer reads one, and borrowing it left this test replaying
+// a reading with nothing to win over.
 func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
-	f := newI40(t, recordedReading(t, "classify-followup-dos-horas-antes"))
+	var reading map[string]any
+	if err := json.Unmarshal([]byte(recordedReading(t, "classify-followup-dos-horas-antes")), &reading); err != nil {
+		t.Fatal(err)
+	}
+	reading["remind_request"] = true
+	reading["reminder_intent"] = "none"
+	raw, err := json.Marshal(reading)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newI40(t, string(raw))
 
 	res := f.capture(t, "avisame 2 horas antes")
 

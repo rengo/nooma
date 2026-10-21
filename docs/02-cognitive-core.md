@@ -459,6 +459,18 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      answer. Symmetrically, an imperative that moves an existing thing ("move the renewal to
      the 20th") is a `correction`, not a new `task`. The prompt states all three, because a
      bare vocabulary list lets a model match the topic word instead of the act.
+   - **A `recall` carries its scope as typed fields** (`recall_scope`,
+     [ADR-0048](adr/0048-recall-reads-a-scope.md), Proposed): `about`, the topic asked about in
+     the message's own language with no question or time words ("lo del oculista" is
+     "oculista"), and `window`, a span `from` inclusive `to` exclusive, `on` either `told` (the
+     unit's `created_at`: "¿qué te conté ayer?") or `when` (its `event_at`, else its `due_at`:
+     "¿qué tengo el viernes?"). Either part is left out when the question does not name it.
+     What the user *has* starts now: "¿qué tengo esta semana?" is from the current instant to
+     the Monday that starts next week. A follow-up ("¿y anteayer?") keeps the question it follows. The model
+     reads the scope and the code filters on it (ADR-0033); there is no Go list of words for
+     "ayer" or "esta semana". Searched as raw text, "¿y anteayer?" carried no time and found
+     nothing, and "lo del oculista" matched every appointment. **Until step 2 acts on it, the
+     scope is decoded and read by nothing**: a recall answers as before.
    - `event` and `task` are separated by **how the message is dated**: something that happens
      at a set day or time (an appointment, a meeting, the dentist) is an `event` with its instant
      in `event_at`; something to get done, by a deadline if one is named, is a `task` with that
@@ -562,7 +574,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
-     "on Friday"), and for a chat message its recent conversation (above). No list of open check-ins: the model reads what an answer says, and
+     "on Friday"), the spans of this week and next, Monday to Sunday, computed from the clock
+     (so "esta semana" is read off, not counted: asked on a Wednesday, the model ended the week
+     on the Monday after next in two runs of three, ADR-0048), and for a chat message its recent conversation (above). No list of open check-ins: the model reads what an answer says, and
      the store decides what it answers (below); beside a chat, a push is one of its turns.
    - **A bare weekday is its next occurrence after today**; named on that same weekday it is
      next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
@@ -1223,6 +1237,7 @@ belonging to *some* vocabulary is not the test; belonging to *this field's* voca
 | the six orthogonal fields | absent | The resolution that field carried is ignored — the pending check-in, relation or state question stays open. The capture still becomes a unit |
 | `interrupt_level` | no value | Absent or out-of-range degrades like any other field (owner ruling 1's Option A); `internal/core/prospection.ResolveInterrupt` (§7) then supplies `default_interrupt_level`, never this decoder — a degraded reading is never coerced into a claimed number here, only at that later layer, and it stays marked degraded there too |
 | `recurrence_rule` | no value | A value outside `yearly \| monthly \| daily \| weekly` degrades like any closed vocabulary; `internal/core/prospection.Arm` (§7) still arms the dated occurrence as a one-shot trigger — the capture is honoured, the recurrence itself is not invented |
+| `recall_scope` | no scope | One field, degraded whole: a topic that is not text, a window whose `on` is outside `told \| when`, an instant that does not read, or a `from` not before its `to` leaves no scope at all rather than half of one, and the recall answers as one that named none (ADR-0048). An empty object, or a blank topic with no window, is no scope and no loss |
 | `language` | no language | Absent or outside `en \| es` degrades like any closed vocabulary, and the answer renders in `classify.Fallback()` (ADR-0022). This is the one field whose loss is fully absorbed: no unit is worse off, no decision is deferred, and the only visible consequence is a sentence in English. That is why it is optional on the wire where `weight` is required — a missing weight is a unit that cannot be ranked, a missing language is a reply someone can still read |
 
 **A date is degraded in two distinguishable ways**, and they are recorded separately: a value

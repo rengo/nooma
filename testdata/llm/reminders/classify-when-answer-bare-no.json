@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"no\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"no\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -14,5 +14,5 @@
     "type": "chitchat",
     "question_answer": "no"
   },
-  "prompt_sha256": "97e9792bc5788708d40cfceef023c9d2176f290df6b189f61e98e999c3580ca7"
+  "prompt_sha256": "b35b067ba208f9cb9f6ff35a602dcf125869e769544ed2422b59d987936f3549"
 }

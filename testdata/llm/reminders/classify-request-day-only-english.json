@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "remind me to renew the passport tomorrow",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Remind me to renew my passport on 2026-10-17.\",\"weight\":0.85,\"decay_rate\":0.05,\"language\":\"en\",\"due_at\":\"2026-10-17\",\"title\":\"Renew passport\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Renew the passport on 2026-10-17.\",\"weight\":0.9,\"decay_rate\":0.05,\"language\":\"en\",\"due_at\":\"2026-10-17\",\"title\":\"Renew passport\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
   },
-  "prompt_sha256": "44ae52da8b60009fa7a6008bd6ce08832bd6ec6883d021ea8407bacf7b876e16"
+  "prompt_sha256": "05b5cfccc32ff4748353e48fb90e5df62eebda8f9fffc9aa95649da06f2c1c6b"
 }

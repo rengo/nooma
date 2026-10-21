@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"La tarea está lista.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Listo, ya lo hice.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -17,5 +17,5 @@
     "type": "chitchat",
     "task_checkin_outcome": "done"
   },
-  "prompt_sha256": "8a1117093ab1555ab950c2518798c9b17cce1dfcc901ea94fbdecfec2d812251"
+  "prompt_sha256": "062144e6b70be570d88a6af99e4f7c5029ca4ea2ba495a7fb136b637019f7fb6"
 }

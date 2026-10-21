@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "don't remind me anymore about the dentist",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Don't remind me about the dentist anymore.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":1,\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Don't remind me about the dentist anymore.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"question_answer\":\"none\",\"reminder_target\":1}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -22,5 +22,5 @@
     "reminder_intent": "stop",
     "reminder_target": "1"
   },
-  "prompt_sha256": "e6acae78e2142900c65736dea7c8d13e829eb611e51407ea47962d1c36f6c93b"
+  "prompt_sha256": "f8bc9fcd16386702d8b86b5a5b10cb2ba289ed9f1371b3ff13716688fb52cf2d"
 }

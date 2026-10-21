@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya la hice, la adelantamos",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya hice la reunión con el contador; la adelantamos.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya hice la reunión con el contador; la adelantamos.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-20T16:05:00-03:00",
   "conversation": {
     "turns": [
@@ -38,5 +38,5 @@
     "task_checkin_outcome": "done",
     "referent": "A"
   },
-  "prompt_sha256": "9383a70f13d7db9d78e848054479d0033871b25569a4223be0b0be4f6a0f9310"
+  "prompt_sha256": "e0b33df3cea3834902c4a90bc8a0d7e78ba319931c63c66a212c86c84103c55a"
 }

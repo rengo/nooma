@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿a qué hora era la reunión?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"La reunión con Juan era el 2026-10-14 a las 22:30.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"title\":\"Reunión con Juan\"}",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"about\":\"reunión\"}}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -34,7 +34,8 @@
     ]
   },
   "expect": {
-    "type": "recall"
+    "type": "recall",
+    "recall_about": "reunión"
   },
-  "prompt_sha256": "2b1f690ea500cbb64ad5bbf5be2405f3d90e9b9867ea32afe84159575b870270"
+  "prompt_sha256": "06ffd6ef32220608fc19645e5c4f043612e8f064534668483e92323d34c2ecd4"
 }

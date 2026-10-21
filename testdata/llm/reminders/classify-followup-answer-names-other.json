@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, al dentista",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-14 a las 08:00.\",\"weight\":0.85,\"decay_rate\":0.1,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-14 a las 08:00.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"event_at\":\"2026-10-14T08:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -46,5 +46,5 @@
     "referent": "A",
     "event_at": "2026-10-14T08:00:00-03:00"
   },
-  "prompt_sha256": "ce78981824b79f8c9d138e4b77c0f482ddfa9ac9ea0e99d46e67e44075e57b3d"
+  "prompt_sha256": "5121601fd97c34c6cd28101f47f593b581286108db6df25d0cee267550808940"
 }

@@ -1,0 +1,32 @@
+{
+  "id": "classify-recall-y-anteayer-follows-ayer",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "¿y anteayer?",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué te conté el 2026-10-19?\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"title\":\"Lo que conté\",\"recall_scope\":{\"window\":{\"on\":\"told\",\"from\":\"2026-10-19T00:00:00-03:00\",\"to\":\"2026-10-20T00:00:00-03:00\"}}}",
+  "now": "2026-10-21T18:30:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-21T18:29:00-03:00",
+        "speaker": "user",
+        "text": "¿qué te conté ayer?"
+      },
+      {
+        "at": "2026-10-21T18:29:00-03:00",
+        "speaker": "nooma",
+        "text": "No encontré nada sobre eso."
+      }
+    ]
+  },
+  "expect": {
+    "type": "recall",
+    "recall_window": {
+      "on": "told",
+      "from": "2026-10-19T00:00:00-03:00",
+      "to": "2026-10-20T00:00:00-03:00"
+    }
+  },
+  "prompt_sha256": "4492d59ac659e7bb46d0fb611ad21d26c26937bb58a9337b952c81b4e4302ca2"
+}

@@ -45,6 +45,8 @@ const (
 	FieldDueAt              = "due_at"
 	FieldReminderLeads      = "reminder_leads_minutes"
 	FieldReminderLeadsAdd   = "reminder_leads_add"
+	FieldRecallAbout        = "recall_about"
+	FieldRecallWindow       = "recall_window"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
@@ -266,7 +268,40 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	}
 	miss(FieldReminderLeads, !slices.Equal(cls.ReminderLeadsMinutes, e.ReminderLeadsMinutes))
 	miss(FieldReminderLeadsAdd, cls.ReminderLeadsAdd != e.ReminderLeadsAdd)
+	if e.Type == string(classify.KindRecall) {
+		miss(FieldRecallAbout, !aboutMatches(cls.RecallScope, e.RecallAbout))
+		miss(FieldRecallWindow, !windowMatches(cls.RecallScope, e.RecallWindow))
+	}
 	return misses
+}
+
+// aboutMatches says whether a scope's topic is what a case expects: none for
+// none, else a topic containing the expected word, case folded — "Turno con el
+// oculista" is about "oculista".
+func aboutMatches(s *classify.RecallScope, want string) bool {
+	var got *string
+	if s != nil {
+		got = s.About
+	}
+	if want == "" || got == nil {
+		return want == "" && got == nil
+	}
+	return strings.Contains(strings.ToLower(*got), strings.ToLower(want))
+}
+
+// windowMatches says whether a scope's window is the one a case expects: none
+// for none, else the same on and the same two instants.
+func windowMatches(s *classify.RecallScope, want *llm.Window) bool {
+	var got *classify.RecallWindow
+	if s != nil {
+		got = s.Window
+	}
+	if want == nil || got == nil {
+		return want == nil && got == nil
+	}
+	from, errFrom := time.Parse(time.RFC3339, want.From)
+	to, errTo := time.Parse(time.RFC3339, want.To)
+	return errFrom == nil && errTo == nil && string(got.On) == want.On && got.From.Equal(from) && got.To.Equal(to)
 }
 
 // checkinEffect says whether cls does to an open check-in what the expected
@@ -385,6 +420,7 @@ func ValidateCase(c llm.Case) error {
 		errs = append(errs, fmt.Errorf("candidates_list holds %d entries, at most %d", len(c.CandidatesList), classify.MaxReminderChoices))
 	}
 	errs = append(errs, validateConversation(c)...)
+	errs = append(errs, validateRecallScope(*e)...)
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("case %s: %w", c.ID, err)
 	}
@@ -444,6 +480,35 @@ func validateConversation(c llm.Case) []error {
 		if _, err := time.Parse(time.RFC3339, e); err != nil {
 			errs = append(errs, fmt.Errorf("expect.due_at %q is not RFC 3339", e))
 		}
+	}
+	return errs
+}
+
+// validateRecallScope checks an expected recall scope: judged only beside an
+// expected recall, so one beside anything else would never be checked, and a
+// window whose on, instants or order the replay could not mean.
+func validateRecallScope(e llm.Expect) []error {
+	if e.RecallAbout == "" && e.RecallWindow == nil {
+		return nil
+	}
+	if e.Type != string(classify.KindRecall) {
+		return []error{fmt.Errorf("recall_about and recall_window are judged only beside type %q", classify.KindRecall)}
+	}
+	w := e.RecallWindow
+	if w == nil {
+		return nil
+	}
+	var errs []error
+	if !slices.Contains(strs(classify.AllRecallWindowOns()), w.On) {
+		errs = append(errs, fmt.Errorf("recall_window.on %q is not one of %v", w.On, classify.AllRecallWindowOns()))
+	}
+	from, errFrom := time.Parse(time.RFC3339, w.From)
+	to, errTo := time.Parse(time.RFC3339, w.To)
+	switch {
+	case errFrom != nil || errTo != nil:
+		errs = append(errs, fmt.Errorf("recall_window from %q and to %q must both be RFC 3339", w.From, w.To))
+	case !from.Before(to):
+		errs = append(errs, fmt.Errorf("recall_window from %q is not before to %q", w.From, w.To))
 	}
 	return errs
 }

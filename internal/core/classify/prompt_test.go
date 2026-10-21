@@ -726,3 +726,58 @@ func TestBuildCorrectionPrompt_ShowsTheUnitItPatches(t *testing.T) {
 		t.Error("BuildCorrectionPrompt does not carry BuildPrompt's own instructions")
 	}
 }
+
+// TestBuildPrompt_AsksARecallForItsScope: a recall states what it asks about
+// and when as recall_scope (ADR-0048), so the code can filter on it. Each line
+// is what one live misreading lacked: "¿y anteayer?" and "¿qué tengo esta
+// semana?" were searched as text, with no time read, and "lo del oculista"
+// matched every appointment.
+func TestBuildPrompt_AsksARecallForItsScope(t *testing.T) {
+	for _, rc := range []ReminderContext{{}, {Conversation: oneTurn}} {
+		p := flat(promptWith(rc))
+		for _, want := range []string{
+			"recall_scope only for a recall: what the question asks about and when, as {\"about\": ..., \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}",
+			"\"lo del oculista\" is \"oculista\"; \"¿qué tengo esta semana?\" names none",
+			"on is one of: " + joinVocabulary(AllRecallWindowOns()),
+			"\"told\" when it asks what the user SAID then (\"¿qué te conté ayer?\": from yesterday's first instant to today's)",
+			"\"when\" when it asks what HAPPENS or is DUE then",
+			"What the user HAS starts at the current local time, never earlier: \"¿qué tengo esta semana?\" is from now to the Monday that starts next week, as the calendar above states the weeks",
+			"A follow-up question (\"¿y anteayer?\") keeps the question it follows and changes only what it names",
+		} {
+			if !strings.Contains(p, want) {
+				t.Errorf("the prompt (chat %v) never says %q", chatShown(rc), want)
+			}
+		}
+	}
+}
+
+// TestBuildPrompt_StatesThisWeeksAndNextWeeksSpan: the calendar states the
+// week's span as data, Monday to Sunday, computed from the instant (ADR-0048).
+// Measured live on 2026-10-21, "¿qué tengo esta semana?" came back ending on
+// 2026-11-02 in two runs of three: the model counted the week itself. Sunday
+// and Monday are the edges a week computed from the weekday gets wrong.
+func TestBuildPrompt_StatesThisWeeksAndNextWeeksSpan(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		day       int
+		this, nxt string
+	}{
+		{"a Wednesday", 21, "This week: Monday 2026-10-19 to Sunday 2026-10-25", "Next week: Monday 2026-10-26 to Sunday 2026-11-01"},
+		{"a Sunday", 25, "This week: Monday 2026-10-19 to Sunday 2026-10-25", "Next week: Monday 2026-10-26 to Sunday 2026-11-01"},
+		{"a Monday", 26, "This week: Monday 2026-10-26 to Sunday 2026-11-01", "Next week: Monday 2026-11-02 to Sunday 2026-11-08"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, 10, tc.day, 23, 30, 0, 0, buenosAires)
+			ctx := flat(contextBlock(t, BuildPrompt("¿qué tengo esta semana?", nil, now, 0.5, ReminderContext{})))
+			for _, want := range []string{tc.this, tc.nxt} {
+				if !strings.Contains(ctx, want) {
+					t.Errorf("the context never says %q:\n%s", want, ctx)
+				}
+			}
+		})
+	}
+	p := flat(promptWith(ReminderContext{}))
+	if want := "\"¿qué tengo esta semana?\" is from now to the Monday that starts next week"; !strings.Contains(p, want) {
+		t.Errorf("the recall scope never says %q", want)
+	}
+}
