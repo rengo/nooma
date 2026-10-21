@@ -732,6 +732,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      wants a floor, because there is no judge after it: whatever comes back is presented to a
      person as a fact. So the answering entrance keeps only what clears
      `recall_min_similarity`, and candidate search keeps everything both legs found.
+   - **An answer names each unit the way the digest does**: its title, else its content, and
+     when it is — its `event_at`, else its `due_at` — in the user's zone and the reply's own
+     style, with no hour for a day alone ("Turno con el oculista — mar 20 oct, 10:00"). Not
+     the content alone: the content carries a resolved date as `YYYY-MM-DD`, the form a
+     correction needs to find it (step 1), not the form a person reads.
    - **On the answering path the vector admits and the lexical leg ranks.** Nearest is not the
      same as near enough: with one unit in a vault, every question is answered with that unit,
      and the shape of the failure changes rather than improving as the vault grows — five

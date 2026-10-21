@@ -9,6 +9,7 @@ import (
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/core/unit"
 )
 
 // TestRenderReply_NamesTheAppointmentNotTheNudge is the defect a reader hit
@@ -263,5 +264,40 @@ func TestRenderReply_AClosedTaskIsNamed(t *testing.T) {
 		if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: tc.lang, Correction: &c}); got != tc.want {
 			t.Errorf("%s %+v: reply = %q, want %q", tc.lang, tc.c, got, tc.want)
 		}
+	}
+}
+
+// TestRenderReply_ARecallNamesEachItemByTitleAndDay: a recall's answer lists
+// each unit as the digest does — its title, or its content when it has none,
+// and when it is, in the capture's zone and the reply's style — never the
+// stored content with the ISO date the classification wrote into it.
+//
+//	Pablo:  ¿cuándo era lo del oculista?
+//	Nooma:  Encontré 1 cosa:
+//	        • Tengo turno con el oculista el 2026-10-20 a las 10:00.
+//
+// Mutation: render u.Content again and the first line fails; drop the zone
+// conversion and the oculista reads 13:00; drop the midnight rule and the
+// passport reads "00:00".
+func TestRenderReply_ARecallNamesEachItemByTitleAndDay(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	oculist := time.Date(2026, 10, 20, 13, 0, 0, 0, time.UTC) // 10:00 in zone, as the vault returns it
+	passport := time.Date(2026, 10, 23, 3, 0, 0, 0, time.UTC) // a bare day: local midnight
+	result := brain.CaptureResult{
+		Outcome:  brain.OutcomeRecalled,
+		Language: classify.LanguageES,
+		At:       time.Date(2026, 10, 21, 18, 30, 0, 0, zone),
+		Recalled: []unit.Unit{
+			{Title: "Turno con el oculista", Content: "Tengo turno con el oculista el 2026-10-20 a las 10:00.", EventAt: &oculist},
+			{Title: "Renovar el pasaporte", Content: "Renovar el pasaporte antes del 2026-10-23.", DueAt: &passport},
+			{Content: "Me gusta el café sin azúcar."},
+		},
+	}
+	want := "Encontré 3 cosas:\n" +
+		"• Turno con el oculista — mar 20 oct, 10:00\n" +
+		"• Renovar el pasaporte — vie 23 oct\n" +
+		"• Me gusta el café sin azúcar."
+	if got := RenderReply(result); got != want {
+		t.Errorf("recall answered\n%q\nwant\n%q", got, want)
 	}
 }
