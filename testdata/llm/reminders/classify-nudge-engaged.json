@@ -4,12 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "dale, contame",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale, contame.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\",\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale, contame.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "nudge_outcome": "engaged"
   },
-  "prompt_sha256": "d80cce89027dd15d79accd143f1026e191e9da590112b39daeb2e48820ada226"
+  "prompt_sha256": "e6732fcdda2d866af0196e136f0648cc9912614bb1e101dc02ca089876b0f164"
 }

@@ -4,12 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame la reunión con Juan mañana a las 22:30",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Recordarme la reunión con Juan el 2026-10-17 a las 22:30.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"event_at\":\"2026-10-17T22:30:00-03:00\",\"title\":\"Reunión con Juan\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Recordarme la reunión con Juan el 2026-10-17 a las 22:30.\",\"weight\":0.85,\"decay_rate\":0.01,\"language\":\"es\",\"event_at\":\"2026-10-17T22:30:00-03:00\",\"title\":\"Reunión con Juan\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "title": true
   },
-  "prompt_sha256": "5f4cbdde29a061d46aa869e7b715349525af743036ae041aec53f4b957b2bdba"
+  "prompt_sha256": "967721fc2e0efbd534213e6ce6b020ba1a8afc0b0839c3cdaa4d3f7acaf1cde2"
 }

@@ -4,11 +4,10 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "comprar café mañana a las 10",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que comprar café el 2026-10-17 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17T10:00:00-03:00\",\"title\":\"Comprar café\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Tengo que comprar café el 2026-10-17 a las 10:00.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17T10:00:00-03:00\",\"title\":\"Comprar café\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "title": true
   },
-  "prompt_sha256": "c41713c506b600aa73469bf134f0dcb8ea038f6cff5051f599283d0b0f510246"
+  "prompt_sha256": "53af31d50aef8067f485472a33a4c325484be7f3895a130d758a7ef5dcdfeea5"
 }

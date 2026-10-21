@@ -1,8 +1,10 @@
 {
   "id": "classify-recall-cuando-tengo-el-odontologo",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿cuándo tengo el odontólogo?",
-  "record": true,
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Cuándo tengo cita con el odontólogo?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"odontólogo\",\"odontólogos\",\"odontóloga\",\"odontólogas\",\"dentista\",\"dentistas\"]}}",
   "now": "2026-10-21T18:30:00-03:00",
   "expect": {
     "type": "recall",
@@ -10,5 +12,6 @@
       "odontólogo",
       "dentista"
     ]
-  }
+  },
+  "prompt_sha256": "6c90f3715d8609812345a7c9188614594e0b39bc77e03d67346b61dc06a5dfc9"
 }

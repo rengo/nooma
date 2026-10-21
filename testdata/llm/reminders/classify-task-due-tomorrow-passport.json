@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "mañana renuevo el pasaporte",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Renuevo el pasaporte el 2026-10-20.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-20\",\"title\":\"Renovar el pasaporte\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Renuevo el pasaporte el 2026-10-20.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-20\",\"title\":\"Renovar el pasaporte\"}",
   "now": "2026-10-19T16:34:00-03:00",
   "expect": {
     "day_only": true,
@@ -13,5 +12,5 @@
     "type": "task",
     "due_at": "2026-10-20T00:00:00-03:00"
   },
-  "prompt_sha256": "28bf903527cfecef8164ef4045868e2ddc96d47c633a6a17cea2a232d2858b63"
+  "prompt_sha256": "725c2e92e22ff296651c376ec9668c0bb15559aa16d744dc0bf11d8419629751"
 }

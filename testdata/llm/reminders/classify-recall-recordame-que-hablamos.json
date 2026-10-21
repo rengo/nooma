@@ -4,9 +4,8 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame qué hablamos con Juan",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué hablamos con Juan?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"about\":\"conversación con Juan\"},\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué hablamos con Juan?\",\"weight\":0.5,\"decay_rate\":0.01,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"Juan\",\"conversación\",\"conversaciones\",\"charla\",\"charlas\",\"hablar\",\"plática\",\"pláticas\"]},\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
-  "prompt_sha256": "02db6079c4e2ef7e9a58afbf189da9a5b03e3364b6f8e106272ac21ff3b656a3"
+  "prompt_sha256": "fe3671364c03c0c0f8735413ad2027fab4428ca21d63fafdd78a0182d5764fde"
 }
