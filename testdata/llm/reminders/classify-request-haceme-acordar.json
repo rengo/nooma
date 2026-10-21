@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "haceme acordar de llamar al médico mañana a las 9",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Llamar al médico el 2026-10-17 a las 09:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17T09:00:00-03:00\",\"title\":\"Llamar al médico\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Llamar al médico el 2026-10-17 a las 09:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17T09:00:00-03:00\",\"title\":\"Llamar al médico\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
@@ -13,5 +12,5 @@
     "day_only": false,
     "due_at": "2026-10-17T09:00:00-03:00"
   },
-  "prompt_sha256": "80ac808e1788fb480e6f1c5e3197c45d1f0a39162cd8fadea0cee14de0800e84"
+  "prompt_sha256": "6de37f466591ccaf440b8d32b4e24928ef8d501e85629082413cd093baf1bb2b"
 }

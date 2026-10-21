@@ -4,12 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, no quiero hablar de eso",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero hablar de eso.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"declined\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No quiero hablar de eso.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"declined\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "nudge_outcome": "declined"
   },
-  "prompt_sha256": "664d8197dfb95ccae1c7eba011426bf53e4d09f688c827a4628b642cc9705724"
+  "prompt_sha256": "eca2ab8b43735f8803cf2efae0c0b4b9427c8f953795e3de295df0d7fd90281f"
 }

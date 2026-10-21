@@ -4,12 +4,10 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "si no puedo, avisame",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Si no puedo, avísame.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisame si no puedo.\",\"weight\":0.65,\"decay_rate\":0.08,\"language\":\"es\",\"title\":\"Avisarme si no puedo\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true
   },
-  "known_misread": "remind_request is false: \"si no puedo, avisame\", with nothing before it, is read as a chitchat. The user gets a conversational reply and nothing is stored, where an asked reading would store an undated task and answer that no reminder was set because it has no date",
-  "prompt_sha256": "b5c0bbea116cb406593dfab5ba892fbd923b9e682ad14361fb3be8e3fa519c0b"
+  "prompt_sha256": "a2f7ab0edd84e63a4e0c0ff7833c1c5a4b3d93517f1ddc943fe4d4eeb14a9287"
 }

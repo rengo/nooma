@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "listo, ya fui",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya fui al turno con el kinesiólogo.\",\"weight\":0.5,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya fui al turno con el kinesiólogo.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
   "now": "2026-10-20T16:00:00-03:00",
   "conversation": {
     "turns": [
@@ -39,5 +38,5 @@
     "task_checkin_outcome": "done",
     "referent": "A"
   },
-  "prompt_sha256": "791c5c5556122c4f3c49be3b5887809531ffc69c34d1d8aca10cb06d5e713050"
+  "prompt_sha256": "a7c61bbf6b3c37623cf5b6a59f1ad4193a71fc7f4fb5c1744ca6ae5db04601c4"
 }

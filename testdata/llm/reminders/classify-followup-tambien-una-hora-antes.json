@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "también 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-21 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":true}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-21 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"referent\":\"A\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":true}",
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,6 @@
     ],
     "reminder_leads_add": true
   },
-  "prompt_sha256": "f1bba12d661833618df2be30162f5ba0bb3ab6b06cb6ea661c557f334331b534"
+  "known_misread": "remind_request is true beside the leads it adds: the model reads \"también 1 hora antes\" as a request to be reminded of the item it follows. Harmless as read: leads win over a stray request (ADR-0043; TestI40_LeadsWinOverAStrayRemindRequest sets one beside recorded leads), so the bound reading takes the correction path and the request is ignored; the user gets the 1-hour ring added to the item's rings, and nothing else",
+  "prompt_sha256": "8e2c1d5397d3d393d09aa37dfa22924a848102bf98a2f7c7a76064bb4cca89ff"
 }

@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "el jueves cena con Ana a las 21, avisame el día antes y media hora antes",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Cenar con Ana el 2026-10-22 a las 21:00.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-22T21:00:00-03:00\",\"title\":\"Cena con Ana\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"reminder_leads_minutes\":[1440,30]}",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Cena con Ana el 2026-10-22 a las 21:00.\",\"weight\":0.85,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-22T21:00:00-03:00\",\"title\":\"Cena con Ana\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[1440,30]}",
   "now": "2026-10-20T18:00:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,5 @@
       30
     ]
   },
-  "prompt_sha256": "34be71aa9ab07c3db27ac8620f97d2da34de58390daf89ae7365812ed04bbb46"
+  "prompt_sha256": "6367270142abb78561c6c6ba35e59c18cca88375f3f892b5542c572575de8073"
 }

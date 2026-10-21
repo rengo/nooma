@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, todavía no",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no he renovado el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no he renovado el pasaporte.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -30,5 +29,5 @@
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "prompt_sha256": "ce9d76737885df15c740a6acbad13b6e3d1a3e6a80a5592bcc07c4aaf35bcdc8"
+  "prompt_sha256": "f780dc0459f4662abe3a41c27377df92cc05f6de3b0586c72c36783ff93e4e04"
 }

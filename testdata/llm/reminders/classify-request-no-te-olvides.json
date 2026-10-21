@@ -4,12 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no te olvides de recordarme pagar el gas el jueves",
-  "response": "{\n  \"type\": \"task\",\n  \"normalized_content\": \"Recordarme pagar el gas el 2026-10-22.\",\n  \"weight\": 0.85,\n  \"decay_rate\": 0.02,\n  \"language\": \"es\",\n  \"due_at\": \"2026-10-22\",\n  \"title\": \"Pagar el gas\",\n  \"interrupt_level\": 0.5,\n  \"remind_request\": true,\n  \"reminder_intent\": \"none\"\n}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "title": true
   },
-  "prompt_sha256": "a5f1c15a987afcdb0873fbd47a8dd3637d8e175425af4e2d24a8b8b6fa378d61"
+  "prompt_sha256": "f8bb3942d644615497463f62ace01c5537c4d4e8d1e89b7881666e7103aa5555"
 }
