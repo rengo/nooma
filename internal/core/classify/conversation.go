@@ -208,8 +208,12 @@ func writeFollowUps(b *strings.Builder, conv Conversation, now time.Time) {
 	b.WriteString("                       Leave it out for everything else, and for a correction of\n")
 	b.WriteString("                       something not listed. An answer to Nooma's which-item\n")
 	b.WriteString("                       question names its referent as said below\n")
+	// The one text of the reading Nooma sends as it is, so it keeps the user's
+	// voice too: voseo for voseo (ADR-0033: no code picks the variety).
 	b.WriteString("  clarifying_question  only beside referent \"" + ReferentUnclear + "\": one short question, in the\n")
-	b.WriteString("                       message's language, asking whether the user means the item\n")
+	b.WriteString("                       message's language, and in the user's own variety of that language and the\n")
+	b.WriteString("                       same register: voseo when the message uses voseo, tú when it uses tú;\n")
+	b.WriteString("                       asking whether the user means the item\n")
 	b.WriteString("                       you think most likely, named as the user would (\"¿Te referís\n")
 	b.WriteString("                       a la reunión con Juan?\"). Nooma sends it as it is and stores\n")
 	b.WriteString("                       nothing; the answer comes back with this exchange shown\n")

@@ -221,8 +221,9 @@ func TestRenderReply_ACaptureNamesTheLeadsItWasGiven(t *testing.T) {
 }
 
 // TestRenderReply_ADatedTaskNamesItsDayAndTheDigest: a task arms no reminder,
-// so the reply names its due day and says that morning's digest will mention
-// it (doc 02 §7); a stored unit with no such day stays "Noted.".
+// so the reply names its due day, and its hour when it has one, and says that
+// morning's digest will mention it (doc 02 §7); a stored unit with no such
+// day stays "Noted.".
 func TestRenderReply_ADatedTaskNamesItsDayAndTheDigest(t *testing.T) {
 	due := time.Date(2026, 10, 20, 0, 0, 0, 0, time.FixedZone("UTC-3", -3*60*60))
 	got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, DueInDigest: &due})
@@ -232,6 +233,11 @@ func TestRenderReply_ADatedTaskNamesItsDayAndTheDigest(t *testing.T) {
 	got = RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageEN, DueInDigest: &due})
 	if want := "Noted for Tue 20 Oct. I will mention it in that morning's digest."; got != want {
 		t.Errorf("English reply %q, want %q", got, want)
+	}
+	at := time.Date(2026, 10, 20, 10, 0, 0, 0, due.Location())
+	got = RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, DueInDigest: &at, DueInDigestTimed: true})
+	if want := "Anotado para el mar 20 oct, 10:00. Te lo recuerdo en el resumen de esa mañana."; got != want {
+		t.Errorf("a timed task answered %q, want %q", got, want)
 	}
 	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES}); got != "Anotado." {
 		t.Errorf("an undated stored unit answered %q, want \"Anotado.\"", got)

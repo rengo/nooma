@@ -1,0 +1,40 @@
+{
+  "id": "classify-followup-ambiguous-tuteo-asks-in-tuteo",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "¿Me lo puedes pasar a las 08:00?",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"¿Puedes cambiar a las 08:00 la hora de uno de mis eventos del 2026-10-14?\",\"weight\":0.7,\"decay_rate\":0.03,\"language\":\"es\",\"interrupt_level\":0.4,\"referent\":\"unclear\",\"clarifying_question\":\"¿Te refieres al dentista?\"}",
+  "now": "2026-10-14T07:20:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-14T07:00:00-03:00",
+        "speaker": "push",
+        "text": "Hoy hay 2 cosas: • Dentista — mié 14 oct, 10:00 • Reunión con Juan — mié 14 oct, 22:30",
+        "about": [
+          "A",
+          "B"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Dentista el 2026-10-14 a las 10:00.",
+        "title": "Dentista",
+        "event_at": "2026-10-14T10:00:00-03:00"
+      },
+      {
+        "content": "Tengo reunión con Juan el 2026-10-14 a las 22:30.",
+        "title": "Reunión con Juan",
+        "event_at": "2026-10-14T22:30:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "correction",
+    "referent": "unclear",
+    "voice": "tuteo"
+  },
+  "prompt_sha256": "e37736de152656b89e14e0609a588be865fcfe64567a6b6be9f5d5ae74b3e364"
+}

@@ -309,19 +309,18 @@ func TestI40_LeadsWinOverAStrayRemindRequest(t *testing.T) {
 	}
 }
 
-// TestI40_LeadsBindWhateverTheType (ADR-0046, review on #385): the recorded
-// "avisame 2 horas antes" comes back typed event, and it bound its item only
-// through a stray remind_request. The same reading without it must still set
-// the meeting's own leads, store no second unit and never answer "Anotado.":
-// leads beside a shown referent bind, as a remind-me does.
+// TestI40_LeadsBindWhateverTheType (ADR-0046, review on #385): a recording of
+// "avisame 2 horas antes" came back typed event, and it bound its item only
+// through a stray remind_request. The same reading typed event and without
+// it must still set the meeting's own leads, store no second unit and never
+// answer "Anotado.": leads beside a shown referent bind, as a remind-me does.
+// The type is set here, not borrowed: a re-recording read it as a correction.
 func TestI40_LeadsBindWhateverTheType(t *testing.T) {
 	var reading map[string]any
 	if err := json.Unmarshal([]byte(recordedReading(t, "classify-followup-dos-horas-antes")), &reading); err != nil {
 		t.Fatal(err)
 	}
-	if reading["type"] == "correction" {
-		t.Fatalf("the recorded reading is typed correction: this case needs one that is not")
-	}
+	reading["type"] = "event"
 	delete(reading, "remind_request")
 	raw, err := json.Marshal(reading)
 	if err != nil {

@@ -44,9 +44,13 @@ func RenderReply(result brain.CaptureResult) string {
 		if result.ArmRefused != nil {
 			return fmt.Sprintf(say.NotedNotSet, refusalReason(say, result.ArmRefused))
 		}
-		// A dated task arms nothing: the digest of its day names it (doc 02 §7).
-		if result.DueInDigest != nil {
-			return fmt.Sprintf(say.NotedForDigest, say.Date(*result.DueInDigest))
+		// A dated task arms nothing: the digest of its day names it (doc 02 §7),
+		// and the reply names its hour too when it was told one.
+		if due := result.DueInDigest; due != nil {
+			if result.DueInDigestTimed {
+				return fmt.Sprintf(say.NotedForDigest, say.Time(*due))
+			}
+			return fmt.Sprintf(say.NotedForDigest, say.Date(*due))
 		}
 		// An event that got no reminder, its leads behind when told or only
 		// night left before it, names what was read and promises no ring

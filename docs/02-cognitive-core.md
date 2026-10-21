@@ -513,8 +513,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      item said to be done ([ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md)) or the
      pushed item whose check-in it answers
      ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)); `clarifying_question`, beside `unclear`, the question
-     the model writes in the message's language to ask which item the user means (one line, at
-     most `max_turn_runes`); and `reminder_leads_add`, beside a referent and
+     the model writes in the message's language, and in the user's own variety and register of
+     it (voseo for voseo: the prompt asks it, no code picks it,
+     [ADR-0033](adr/0033-the-model-understands-the-code-acts.md)), to ask which item the user means
+     (one line, at most `max_turn_runes`); and `reminder_leads_add`, beside a referent and
      `reminder_leads_minutes`, true when the message adds those leads to the item's reminders
      rather than naming them all (step 4, [ADR-0045](adr/0045-a-message-names-its-own-leads.md)).
      `reminder_leads_minutes` itself is a reminder field of every prompt, chat or none: every lead
@@ -708,7 +710,10 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        to be written in *some* language — which is how a message written in Spanish came to be
        answered "Nothing to keep there.". A model answering the message it was handed answers
        in the language it was handed, and no locale setting has to exist anywhere for that to
-       be true.
+       be true. The prompt also asks for the user's own variety of that language and the same
+       register: "recordámelo" answered "¿Qué quieres que te recuerde?" was the right language
+       in the wrong voice ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)'s
+       context), and voseo is answered with voseo.
      - An **`out_of_scope` is refused**, in a fixed sentence, with no model call. The asymmetry
        is the entire reason the two are separated. The person asked for something Nooma does
        not do; a model handed that message writes a plausible sentence, and a plausible
@@ -1892,7 +1897,9 @@ box can audit it):
     units (ADR-0036). **The capture reply says so**: such a task due on a later local day than
     the capture's (`prospection.DueDayAhead`) is answered with its day and that morning's digest
     (`Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.`; `Noted for Tue 20
-    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), never a
+    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), and with its
+    hour beside the day when `due_at` was told one (`Anotado para el jue 22 oct, 10:00. …`, as an
+    event's reply names its time; the shape of the wire value decides, not a midnight), never a
     reminder it does not have; one due today or earlier, whose morning may be past, or with no
     date, is `Anotado.`
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render

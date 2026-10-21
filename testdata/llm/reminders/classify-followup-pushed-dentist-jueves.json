@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, el jueves",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-15 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-15T10:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-15 a las 10:00.\",\"weight\":0.9,\"decay_rate\":0.01,\"language\":\"es\",\"event_at\":\"2026-10-15T10:00:00-03:00\",\"title\":\"Dentista\",\"referent\":\"A\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T10:05:00-03:00",
   "conversation": {
     "turns": [
@@ -30,5 +30,5 @@
     "referent": "A",
     "event_at": "2026-10-15T10:00:00-03:00"
   },
-  "prompt_sha256": "2c49c48aaf3dd3bef7d9938cbc6ddc26302741099a5aa9d31b34051d747352ce"
+  "prompt_sha256": "ca3f5cb2ed44a853db6891e25d98031786e0df430e725a29b8e1839dcd079084"
 }
