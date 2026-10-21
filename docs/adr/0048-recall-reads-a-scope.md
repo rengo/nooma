@@ -43,8 +43,15 @@ and the code acts (ADR-0033): no Go list of words for "ayer" or "esta semana".
      is `told` (the unit's `created_at`: "¿qué te conté ayer?") or `when` (its `event_at`, else
      its `due_at`: "¿qué tengo el viernes?").
    - **What the user has starts now.** "¿qué tengo esta semana?" is from the current instant
-     to the end of Sunday: something earlier today that already happened is not in it (the
-     client's ruling through the PM, 2026-10-21). The prompt says so; the code does not clip.
+     to the Monday that starts next week: something earlier today that already happened is not
+     in it (the client's ruling through the PM, 2026-10-21). The prompt says so; the code does
+     not clip.
+   - **The week is data, not a count.** The prompt's calendar states this week's and next
+     week's spans, Monday to Sunday, computed from the clock ("This week: Monday 2026-10-19 to
+     Sunday 2026-10-25"). Measured on the first prompt of this decision, with the real model,
+     "¿qué tengo esta semana?" said on Wednesday 2026-10-21 ended on 2026-11-02 in two runs of
+     three. Computing the span is arithmetic on the clock's instant, not a reading of words, so
+     point 1's division holds.
    - A follow-up question ("¿y anteayer?") keeps the question it follows (ADR-0036) and changes
      only what it names.
 2. **The scope degrades whole** (I14): a malformed part leaves no scope, and the recall answers

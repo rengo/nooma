@@ -245,7 +245,8 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("                       when it asks what HAPPENS or is DUE then (\"¿qué tengo el\n")
 	b.WriteString("                       viernes?\"). What the user HAS starts at the current local\n")
 	b.WriteString("                       time, never earlier: \"¿qué tengo esta semana?\" is from now\n")
-	b.WriteString("                       to the end of Sunday. A follow-up question (\"¿y anteayer?\")\n")
+	b.WriteString("                       to the Monday that starts next week, as the calendar above\n")
+	b.WriteString("                       states the weeks. A follow-up question (\"¿y anteayer?\")\n")
 	b.WriteString("                       keeps the question it follows and changes only what it names\n")
 	for _, f := range orthogonalFields() {
 		b.WriteString("  " + pad(f.name, 20) + " one of: " + f.members + "\n")
@@ -567,6 +568,18 @@ func writeCalendar(b *strings.Builder, now time.Time) {
 			b.WriteString(" (today)")
 		}
 		b.WriteString("\n")
+	}
+	// **The week as data, not as a count** (ADR-0048). Asked what it had
+	// "esta semana" on a Wednesday, the model ended the week on the Monday
+	// after next in two runs of three. A week runs Monday to Sunday.
+	monday := time.Date(now.Year(), now.Month(), now.Day()-(int(now.Weekday())+6)%7, calendarRowHour, 0, 0, 0, now.Location())
+	for _, w := range []struct {
+		name  string
+		start time.Time
+	}{{"This week", monday}, {"Next week", monday.AddDate(0, 0, 7)}} {
+		sunday := w.start.AddDate(0, 0, 6)
+		b.WriteString("  " + w.name + ": Monday " + w.start.Format(localDateLayout) +
+			" to Sunday " + sunday.Format(localDateLayout) + "\n")
 	}
 }
 

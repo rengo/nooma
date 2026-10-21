@@ -466,7 +466,7 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      unit's `created_at`: "¿qué te conté ayer?") or `when` (its `event_at`, else its `due_at`:
      "¿qué tengo el viernes?"). Either part is left out when the question does not name it.
      What the user *has* starts now: "¿qué tengo esta semana?" is from the current instant to
-     the end of Sunday. A follow-up ("¿y anteayer?") keeps the question it follows. The model
+     the Monday that starts next week. A follow-up ("¿y anteayer?") keeps the question it follows. The model
      reads the scope and the code filters on it (ADR-0033); there is no Go list of words for
      "ayer" or "esta semana". Searched as raw text, "¿y anteayer?" carried no time and found
      nothing, and "lo del oculista" matched every appointment. **Until step 2 acts on it, the
@@ -574,7 +574,9 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
-     "on Friday"), and for a chat message its recent conversation (above). No list of open check-ins: the model reads what an answer says, and
+     "on Friday"), the spans of this week and next, Monday to Sunday, computed from the clock
+     (so "esta semana" is read off, not counted: asked on a Wednesday, the model ended the week
+     on the Monday after next in two runs of three, ADR-0048), and for a chat message its recent conversation (above). No list of open check-ins: the model reads what an answer says, and
      the store decides what it answers (below); beside a chat, a push is one of its turns.
    - **A bare weekday is its next occurrence after today**; named on that same weekday it is
      next week's, seven days later ("el viernes" said on a Friday is the following Friday), and
