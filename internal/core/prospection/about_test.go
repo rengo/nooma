@@ -54,10 +54,9 @@ func TestPlan_CarriesWhatItArmedFor(t *testing.T) {
 	})
 
 	t.Run("a dated event arms for the event, not the nudge", func(t *testing.T) {
-		// One hour out, so every lead is already behind and the firing is
-		// pulled to now — the exact shape that made the reply look like a
-		// misparse.
-		event := now.Add(time.Hour)
+		// Three hours out: the 24-hour lead is behind and the 2-hour one fires
+		// an hour from now, so the nudge and the event differ by its lead.
+		event := now.Add(3 * time.Hour)
 		plan, ok := armFirst(classify.Classification{
 			Kind: kind(classify.KindEvent), EventAt: ptr(event),
 		}, now)
@@ -72,9 +71,8 @@ func TestPlan_CarriesWhatItArmedFor(t *testing.T) {
 			t.Error("FireAt equals About, so this fixture no longer exercises the case where " +
 				"they differ — which is the whole reason About exists")
 		}
-		if !plan.FireAt.Equal(now) {
-			t.Errorf("FireAt = %v, want the capture instant: every lead an hour out is already "+
-				"behind, and the system is not late for what it just learned", plan.FireAt)
+		if want := event.Add(-2 * time.Hour); !plan.FireAt.Equal(want) {
+			t.Errorf("FireAt = %v, want the 2-hour lead %v", plan.FireAt, want)
 		}
 	})
 

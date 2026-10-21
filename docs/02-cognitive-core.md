@@ -998,15 +998,15 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
        Armed triggers are carried onto the new reminders in firing order and moved (their
        `fire_at`, their payload as a fresh arming writes it, their text (what the unit says now: its
        title, else its body with the date moved as above), and a recurring one's anchor, so it stays recurring); a reminder with no armed trigger left to carry is
-       created; any further armed trigger expires. **A correction never creates an at-once
-       reminder**: when every lead of the new instant is behind and nothing is armed, nothing is
-       armed — the at-once reminder is a capture's, sent once (the one other at-once reminder
-       is §7's catch-up); an armed one is still pulled to
-       now, and one already due keeps its instant. A reminder whose lead was ahead but that the
-       night rule pulls to now (§7 "Lead time", ADR-0030) is not that at-once reminder: a
-       correction arms it with the rest of the set, exactly as a capture does — except for an
-       event on a later day, where a correction, like a capture, arms nothing that rings at
-       once and arms the one reminder on the event's own day instead (§7 "Lead time", ADR-0039). When the
+       created; any further armed trigger expires. **A correction never rings at once**: a
+       correction is the user telling Nooma about the event, so its own day is the told day and,
+       as at capture, no reminder nobody asked for goes out at that moment (§7 "Lead time",
+       ADR-0039, [ADR-0047](adr/0047-nothing-unasked-rings-at-once-on-the-told-day.md)). When
+       every lead of the new instant is behind, an armed reminder is not pulled to now: an event
+       on a later day gets the one reminder on its own day, and one today gets none, its armed
+       reminders expiring with the reason that nothing rings at that moment. One already due
+       keeps its instant, so the same correction again changes nothing. A lead the night rule
+       pulls to now (ADR-0030) is dropped the same way. When the
        new one-shot date is already past, every armed trigger expires and none is created —
        `expired` is §7's status for a trigger that will not fire, so cancelling deletes nothing
        and needs no new status. A trigger that already fired is history and is left alone. A
@@ -1575,8 +1575,17 @@ have N nudges; a pattern watcher does not hang off any unit):
   day), quiet hours applying as to any reminder, and serves no lead; a correction arms it as a
   capture does. With neither before the event, none is set and `capture.arm.refused`
   (`quiet_hours`) says why. "Mañana renuevo el pasaporte", said at
-  13:32, is reminded tomorrow at 09:00 ("Te aviso ese día a las 09:00."). An event today keeps
-  the at-once reminder, and a re-plan on a later day keeps ADR-0032's catch-up.
+  13:32, is reminded tomorrow at 09:00 ("Te aviso ese día a las 09:00."). **An event on the told
+  day itself** ([ADR-0047](adr/0047-nothing-unasked-rings-at-once-on-the-told-day.md)) is held to
+  the same principle: a lead still ahead is kept, one behind or pulled to now is dropped, and
+  with none left there is no reminder. The unit is stored, `capture.arm.refused`
+  (`leads_behind`) says why, and the reply names what was read and promises no ring ("Anotado
+  para el mar 20 oct, 21:00."): "hoy a las 21", told at
+  17:14 with a 4-hour lead, rings nothing; with the default leads it rings at 19:00 alone. A live
+  reminder already due keeps its instant, and a correction expires the rest with that reason. An
+  asked event's leads nobody asked for follow it too. A re-plan on a later day keeps ADR-0032's
+  catch-up, and a lapse on the capture day still owes it. A preference re-arm on a later day can
+  still pull an armed reminder to now, a known limit of ADR-0047.
   **The leads and the reminder time are the user's preferences**, not calibration: two
   `config` columns, `event_reminder_leads` (a JSON array of minutes) and
   `date_only_reminder_at` (`HH:MM`), read at arm time by capture and by a correction alike,
@@ -1632,10 +1641,9 @@ have N nudges; a pattern watcher does not hang off any unit):
   midnight is read as date-only: the classification does not say whether a time was stated.
   **A lead already behind is skipped**, never offset into the past: arming there would hand
   §7's own staleness gate a trigger born expired. When every lead is behind and the event is
-  not, a capture arms **one reminder at once**: the system is not late for an event it only
-  just learned about. That holds for an event today; one on a later day is reminded on its own
-  day instead (ADR-0039, below). A correction follows §5 step 4 and never creates that at-once reminder; the one other
-  is the catch-up below.
+  not, a capture arms **no reminder at once** (ADR-0047): an event on a later day is reminded on
+  its own day (ADR-0039), and one today gets none. A correction follows §5 step 4 and never
+  creates an at-once reminder either; the one unasked at-once reminder is the catch-up below.
   **The night is respected at arm time** ([ADR-0030](adr/0030-event-reminders-are-pushed-and-respect-the-night.md)):
   every instant above, the at-once one included, is adjusted before it is stored, by
   `internal/core/prospection.eventReminders`, so the reply, the trail and a correction (§5
@@ -1648,10 +1656,11 @@ have N nudges; a pattern watcher does not hang off any unit):
   `default_evening_reminder_hour`; valid from the resolved quiet end to `23:59`, so the evening
   is never itself quiet), resolved by the same `ResolveReminderPrefs` and read at arm time by
   capture and correction; the due scan reads the same quiet end (below). One whose adjusted instant is behind the arming instant is armed at once when that
-  instant is outside quiet hours (except, for an event on a later day, on the day it is told:
-  ADR-0039); when it is not, no allowed instant is left before the
+  instant is outside quiet hours (except on the day the event is told, when it is dropped:
+  ADR-0039, ADR-0047); when it is not, no allowed instant is left before the
   event and the reminder is not armed — a capture records why, `capture.arm.refused` with
-  reason `quiet_hours`, and the unit stays stored. Two reminders the adjustment lands on one
+  reason `quiet_hours`, the unit stays stored, and an unasked event's reply names what was read
+  with no ring ("Anotado para el vie 16 oct, 00:30.", ADR-0047). Two reminders the adjustment lands on one
   instant are armed once. `payload.lead_minutes` is the adjusted instant's distance to the
   event, so `fire_at + lead_minutes` still names it; a reminder armed at once — the at-once one,
   or a lead pulled to now — carries no lead. A 05:00 flight is reminded at 07:00 and at 22:00

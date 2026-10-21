@@ -52,6 +52,11 @@ const (
 	// AtOnceMarginMinutes remain before its instant or its local day ends
 	// (ADR-0031 point 2).
 	RefusalTooLate Refusal = "too_late"
+	// RefusalLeadsBehind: on the day the user tells Nooma about the unit,
+	// every reminder nobody asked for would go out at that very moment — its
+	// lead already behind, or pulled to now by the night — and none does
+	// (ADR-0047).
+	RefusalLeadsBehind Refusal = "leads_behind"
 )
 
 // Plan is one row of Arm's decision: what to arm and with what. A dated
@@ -142,7 +147,7 @@ func Arm(c classify.Classification, asked bool, prefs ReminderPrefs, now time.Ti
 			return []Plan{recurringTrigger(at, recurrenceRule(*c.RecurrenceRule), prefs, now, interrupt)}, true
 		}
 		leads := leadSet(*c.Kind, true, at, dayOnly, prefs, now.Location())
-		return reminders(at, dayOnly, skipToldDay(leads, at, now, now), prefs, now, interrupt, nil)
+		return reminders(at, dayOnly, skipToldDay(leads, at, now, now), prefs, now, now, interrupt, nil)
 	}
 
 	switch *c.Kind {

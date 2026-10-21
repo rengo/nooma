@@ -384,13 +384,13 @@ func TestArmAsked_ABehindAskedLeadRingsAtOnceEvenWhenOthersAreAhead(t *testing.T
 	}
 }
 
-func TestArm_AnUnaskedEventMinutesAwayStillRingsAtOnce(t *testing.T) {
+func TestArm_AnUnaskedEventMinutesAwayDoesNotRing(t *testing.T) {
 	f := newAsked()
 	at := f.now.Add(3 * time.Minute) // every lead behind and less than the asked margin left
 	k := classify.KindEvent
 	plans, ok := Arm(classify.Classification{Kind: &k, EventAt: &at}, false, DefaultReminderPrefs(), f.now)
-	if !ok || len(plans) != 1 || !plans[0].Immediate || plans[0].Asked || plans[0].NightExempt {
-		t.Errorf("plans = %+v, %v, want ADR-0029 point 3's unasked at-once reminder, margin not applied", plans, ok)
+	if ok || len(plans) != 1 || plans[0].Why != RefusalLeadsBehind {
+		t.Errorf("plans = %+v, %v, want nothing at once, leads_behind rather than too_late (ADR-0047)", plans, ok)
 	}
 }
 

@@ -171,11 +171,11 @@ func TestRingOnTheDay(t *testing.T) {
 			t.Errorf("Arm fires at %v, want 22:00 today", fires)
 		}
 	})
-	t.Run("an event later today keeps ADR-0029's at-once reminder", func(t *testing.T) {
+	t.Run("an event later today has no ring at once and none on its day (ADR-0047)", func(t *testing.T) {
 		later := toldAt(19, 15, 0)
-		plans, _ := Arm(classify.Classification{Kind: &event, EventAt: &later}, false, prefs, toldAt(19, 14, 0))
-		if len(plans) != 1 || !plans[0].Immediate {
-			t.Errorf("Arm = %+v, want one at once", plans)
+		plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &later}, false, prefs, toldAt(19, 14, 0))
+		if ok || len(plans) != 1 || plans[0].Why != RefusalLeadsBehind {
+			t.Errorf("Arm = %+v, want nothing armed, leads_behind", plans)
 		}
 	})
 	t.Run("a correction the day it is told carries the ring", func(t *testing.T) {
@@ -261,5 +261,62 @@ func TestFollow_OwnLeadsAllBehindWithNothingLiveRingOnTheEventsDay(t *testing.T)
 	got := Follow(toldAt(20, 10, 0), nil, DefaultReminderPrefs().WithEventLeads([]int{1440}), nil, toldAt(19, 14, 0))
 	if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{toldAt(20, 9, 0)}, time.Time.Equal) || got.Plans[0].Immediate {
 		t.Errorf("Follow = %+v, want one ring on the event's day at 09:00", got)
+	}
+}
+
+// TestArm_NothingUnaskedRingsAtOnceOnTheToldDay is ADR-0047: an event today,
+// told when a lead nobody asked for is behind, drops that lead and keeps one
+// still ahead; with none left it arms nothing, leads_behind, the user's own
+// leads included. The client's case: "hoy a las 21" told at 17:14 with a
+// 4-hour lead.
+func TestArm_NothingUnaskedRingsAtOnceOnTheToldDay(t *testing.T) {
+	event := classify.KindEvent
+	nine := toldAt(20, 21, 0)
+	now := toldAt(20, 17, 14)
+	four := DefaultReminderPrefs()
+	four.TimedLeads = []time.Duration{4 * time.Hour}
+	for _, tc := range []struct {
+		name  string
+		prefs ReminderPrefs
+		want  []time.Time
+	}{
+		{"a 4-hour lead behind: nothing", four, nil},
+		{"its own 4-hour lead behind: nothing", DefaultReminderPrefs().WithEventLeads([]int{240}), nil},
+		{"the default leads: the 2-hour one still ahead, alone", DefaultReminderPrefs(), []time.Time{toldAt(20, 19, 0)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &nine}, false, tc.prefs, now)
+			if fires := toldFires(plans); !slices.EqualFunc(fires, tc.want, time.Time.Equal) || ok != (tc.want != nil) {
+				t.Errorf("Arm = %+v, %v, want fires %v", plans, ok, tc.want)
+			}
+			if tc.want == nil && plans[0].Why != RefusalLeadsBehind {
+				t.Errorf("Why = %q, want leads_behind", plans[0].Why)
+			}
+		})
+	}
+}
+
+// TestFollow_ARingAlreadyDueKeepsItsInstantOnTheToldDay: a correction told
+// when every lead is behind pulls nothing to now (ADR-0047), but a live ring
+// already due is going out anyway and keeps its instant.
+func TestFollow_ARingAlreadyDueKeepsItsInstantOnTheToldDay(t *testing.T) {
+	due := Live{ID: "a", FireAt: toldAt(20, 16, 0)}
+	got := Follow(toldAt(20, 18, 0), []Live{due, {ID: "b", FireAt: toldAt(21, 9, 0)}}, DefaultReminderPrefs(), nil, toldAt(20, 17, 0))
+	if fires := toldFires(got.Plans); !slices.EqualFunc(fires, []time.Time{due.FireAt}, time.Time.Equal) ||
+		got.Carry[0] != "a" || !slices.Equal(got.Expire, []string{"b"}) {
+		t.Errorf("Follow = %+v, want a kept at %v, b expired", got, due.FireAt)
+	}
+}
+
+// TestArmAsked_AnUnaskedLeadIsNotPulledToNowOnTheToldDay is ADR-0047 for an
+// asked event: "recordame, mañana a las 5 tengo vuelo" said at 22:30 keeps its
+// asked ring at 04:45, and its unasked 2-hour lead, pulled to now by the night,
+// does not ring at once.
+func TestArmAsked_AnUnaskedLeadIsNotPulledToNowOnTheToldDay(t *testing.T) {
+	event := classify.KindEvent
+	flight := toldAt(20, 5, 0)
+	plans, ok := Arm(classify.Classification{Kind: &event, EventAt: &flight}, true, DefaultReminderPrefs(), toldAt(19, 22, 30))
+	if fires := toldFires(plans); !ok || !slices.EqualFunc(fires, []time.Time{toldAt(20, 4, 45)}, time.Time.Equal) || !plans[0].Asked {
+		t.Errorf("Arm = %+v, want the asked ring at 04:45 alone", plans)
 	}
 }

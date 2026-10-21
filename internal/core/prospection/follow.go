@@ -37,17 +37,12 @@ type Following struct {
 // correction's own reading, used only by a trigger created here: a carried
 // one keeps the level it was armed with.
 //
-// **A correction never creates an at-once reminder.** When every lead of
-// the new instant is behind and nothing is live, it arms nothing: the
-// at-once reminder is a capture's, sent once (ADR-0029 point 4). A live
-// one is still carried to now, and one already due keeps its instant, so
-// the same correction again moves nothing. A lead that ADR-0030 pulled to
-// now is not that reminder — its lead was ahead — and is armed with the
-// rest of the set.
-//
-// A correction is the user telling Nooma about the event again, so its own
-// day is the told day (ADR-0037): a lead nobody asked for that lands on it is
-// not armed.
+// **A correction never rings at once.** It is the user telling Nooma about
+// the event again, so its own day is the told day (ADR-0037): a lead nobody
+// asked for that lands on it is not armed, and nothing goes out at that
+// moment (ADR-0039, ADR-0047) — no at-once reminder, no live one carried to
+// now, no lead ADR-0030 pulled to now. A live one already due keeps its
+// instant, so the same correction again moves nothing.
 func Follow(eventAt time.Time, live []Live, prefs ReminderPrefs, interruptLevel *float64, now time.Time) Following {
 	return FollowSent(eventAt, live, nil, prefs, interruptLevel, now, now)
 }
@@ -65,6 +60,12 @@ func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs
 		}
 	}
 	plans, arms := eventReminders(eventAt, prefs, told, now, interrupt, sent)
+	// On the told day nothing is pulled to now (ADR-0047), but a live reminder
+	// already due is going out anyway, not rung by this telling: it keeps its
+	// instant, so the same correction again changes nothing.
+	if !arms && plans[0].Why == RefusalLeadsBehind && len(live) > 0 && !live[0].FireAt.After(now) {
+		return carryOnto([]Plan{{What: ArmTrigger, FireAt: now, About: eventAt, Immediate: true, Interrupt: interrupt}}, live, now)
+	}
 	if !arms || (len(live) == 0 && everyLeadBehind(eventAt, prefs, now) && !toldToday(eventAt, told, now)) {
 		return settle([]Plan{{What: ArmNothing, Why: plans[0].Why, Interrupt: interrupt}}, live, []int{-1})
 	}
@@ -131,7 +132,7 @@ func askedReminders(at time.Time, event, dayOnly bool, prefs ReminderPrefs, told
 		kind = classify.KindEvent
 	}
 	leads := skipToldDay(leadSet(kind, true, at, dayOnly, prefs, now.Location()), at, told, now)
-	return reminders(at, dayOnly, leads, prefs, now, interrupt, sent)
+	return reminders(at, dayOnly, leads, prefs, told, now, interrupt, sent)
 }
 
 // atOnce is the asked reminder sent at once because its lead is behind: no

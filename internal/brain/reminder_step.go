@@ -181,14 +181,15 @@ func (r checkRunner) replanUnit(ctx context.Context, unitID string, group []stal
 	}
 	// Nothing live and nothing planned is the unit's whole trail unless it says
 	// why. Quiet hours with no instant left is a refusal; every lead behind (or a
-	// date-only event on its day, which FollowSent reads as past) is a catch-up,
+	// date-only event on its day, which FollowSent reads as past; or, on the
+	// told day, leads_behind, ADR-0047: a lapse is not a telling) is a catch-up,
 	// unless something about the event already reached the user or is on its way,
 	// when the late rows simply lapse. Covered and past events lapse as they are.
 	if p := f.Plans[0]; p.What == prospection.ArmNothing && len(live) == 0 {
 		switch p.Why {
 		case prospection.RefusalQuietHours:
 			return false, r.refuse(ctx, u, at, tally, now, commit)
-		case prospection.RefusalNone, prospection.RefusalAlreadyPast:
+		case prospection.RefusalNone, prospection.RefusalAlreadyPast, prospection.RefusalLeadsBehind:
 			plan, owed := prospection.CatchUp(at, live, sent, prefs, prospection.ResolveInterrupt(interrupt), now)
 			if asked {
 				plan, owed = prospection.CatchUpAsked(at, event, dayOnly, live, sent, prefs, prospection.ResolveInterrupt(interrupt), now)

@@ -551,11 +551,13 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 
 	// The refusals a kept unit records: an event still ahead that gets no
 	// reminder because every instant left before it is in quiet hours
-	// (ADR-0030 point 4), where nothing on the unit says why; and any
+	// (ADR-0030 point 4), or because every lead was behind when it was told
+	// and nothing rings at that moment (ADR-0047), where nothing on the unit
+	// says why; and any
 	// reminder the user asked for and did not get (ADR-0031 point 7), whose
 	// reply then says why instead of a bare "noted".
 	stored := CaptureResult{Outcome: OutcomeStored, UnitID: u.ID, Embedded: embedded, Candidates: candidates}
-	if plan.Why == prospection.RefusalQuietHours || asked {
+	if plan.Why == prospection.RefusalQuietHours || plan.Why == prospection.RefusalLeadsBehind || asked {
 		if err := r.recordOrphanDecision(ctx, ports.ActionCaptureArmRefused, refusalMessage(plan.Why), now, struct {
 			Why    string `json:"why"`
 			UnitID string `json:"unit_id"`
@@ -566,6 +568,10 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	}
 	if asked {
 		stored.ArmRefused = &ArmRefused{Why: plan.Why, Message: refusalMessage(plan.Why)}
+	}
+	if !asked && (plan.Why == prospection.RefusalLeadsBehind || plan.Why == prospection.RefusalQuietHours) && u.EventAt != nil {
+		at := u.EventAt.In(now.Location())
+		stored.NotArmedFor = &at
 	}
 	// The digest names a task nobody asked a reminder for (TasksDue), so the
 	// reply can promise its morning while that morning is ahead.
@@ -1135,6 +1141,8 @@ func refusalMessage(why prospection.Refusal) string {
 		return "no reminder was scheduled: every moment left before the event is in quiet hours, when nothing is sent"
 	case prospection.RefusalTooLate:
 		return "no reminder was scheduled: too little time is left before the time given"
+	case prospection.RefusalLeadsBehind:
+		return "no reminder was scheduled: every reminder time before the event had passed when it was told, and nothing rings at that moment"
 	default:
 		return fmt.Sprintf("nothing was scheduled: %s", why)
 	}

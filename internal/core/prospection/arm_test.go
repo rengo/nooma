@@ -56,24 +56,16 @@ func TestArm(t *testing.T) {
 		}
 	})
 
-	t.Run("an event closer than the horizon arms at now, not in the past", func(t *testing.T) {
+	t.Run("an event closer than every lead arms nothing: not in the past, not at once", func(t *testing.T) {
 		// An hour out: every lead is behind us. Arming there would be
-		// expired by the staleness gate on the very next pass, and the
-		// system is not late for an event it only just learned about.
+		// expired by the staleness gate on the very next pass, and ringing at
+		// once would ring about what the user just said (ADR-0047).
 		event := now.Add(time.Hour)
 		c := classify.Classification{Kind: kind(classify.KindEvent), EventAt: armPtr(event)}
 
 		plan, ok := armFirst(c, now)
-		if !ok || plan.What != ArmTrigger {
-			t.Fatalf("Arm = (%+v, %v), want an ArmTrigger plan", plan, ok)
-		}
-		if plan.FireAt.Before(now) {
-			t.Errorf("FireAt = %v, which is before now (%v) — the lead time is a horizon, and "+
-				"arming behind it hands the staleness gate something born expired",
-				plan.FireAt, now)
-		}
-		if !plan.FireAt.Equal(now) {
-			t.Errorf("FireAt = %v, want exactly now (%v) — clamped, not offset", plan.FireAt, now)
+		if ok || plan.What != ArmNothing || plan.Why != RefusalLeadsBehind {
+			t.Fatalf("Arm = (%+v, %v), want nothing armed, leads_behind", plan, ok)
 		}
 	})
 
