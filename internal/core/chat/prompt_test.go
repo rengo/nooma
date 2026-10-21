@@ -49,6 +49,19 @@ func TestBuildPrompt_StatesTheLanguageRule(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_AnswersInTheUsersVariety: the same language is not enough.
+// "recordámelo" was answered "¿Qué quieres que te recuerde y cuándo?" (ADR-0044's
+// context), neutral Spanish to a Rioplatense user. Nothing in Go picks the
+// variety (ADR-0033); the prompt says to keep the user's own, voseo for voseo.
+func TestBuildPrompt_AnswersInTheUsersVariety(t *testing.T) {
+	got := BuildPrompt("recordámelo")
+	for _, want := range []string{"the user's own variety of that language and the same register", "voseo when the message uses voseo"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("BuildPrompt never says %q:\n%s", want, got)
+		}
+	}
+}
+
 // TestBuildPrompt_RefusesToPromiseWhatNoomaCannotDo guards the other half.
 // The classifier decides what reaches this prompt and will sometimes be
 // wrong: an out_of_scope request read as small talk lands here, where a

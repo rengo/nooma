@@ -48,6 +48,12 @@ func BuildPrompt(message string) string {
 	// have to be: the model is holding a message written in some language
 	// and can simply answer in it.
 	b.WriteString("  Answer in the same language the message is written in.\n")
+	// **And in the user's own variety of it.** "recordámelo" was answered
+	// "¿Qué quieres que te recuerde y cuándo?" (ADR-0044's context): the right
+	// language, the wrong voice for a Rioplatense user. Nothing in Go picks it
+	// (ADR-0033); the model hears it in the message.
+	b.WriteString("  Write in the user's own variety of that language and the same register: voseo when the message uses voseo\n")
+	b.WriteString("  (\"¿Qué querés que te recuerde?\"), tú when it uses tú.\n")
 	// **Do not let it invent a capability.** The classifier decides which
 	// messages reach this prompt, and it will be wrong sometimes — an
 	// out_of_scope request read as small talk arrives here, where a model

@@ -237,6 +237,18 @@ func TestBuildPrompt_DescribesFollowUps(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_TheQuestionSpeaksTheUsersVariety: the clarifying question
+// is the one text of the reading the user is sent as it is, so it keeps the
+// user's own variety and register, voseo for voseo, beside the language it is
+// already asked in. Nothing in Go picks the variety (ADR-0033).
+func TestBuildPrompt_TheQuestionSpeaksTheUsersVariety(t *testing.T) {
+	p := flat(promptWith(ReminderContext{Conversation: oneTurn}))
+	want := "in the message's language, and in the user's own variety of that language and the same register: voseo when the message uses voseo"
+	if !strings.Contains(p, want) {
+		t.Errorf("the prompt never says %q:\n%s", want, p)
+	}
+}
+
 // TestBuildPrompt_AMessageAsksForItsOwnLeads (I44, ADR-0045): every prompt,
 // with a chat or none, reads the leads a message asks for, so a capture that
 // names them is reminded at them; beside a chat they may be a listed item's,
