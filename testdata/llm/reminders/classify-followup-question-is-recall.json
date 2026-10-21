@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "¿a qué hora era la reunión?",
   "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"about\":\"reunión\"}}",
+  "record": true,
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -35,7 +36,9 @@
   },
   "expect": {
     "type": "recall",
-    "recall_about": "reunión"
+    "recall_terms": [
+      "reunión"
+    ]
   },
   "prompt_sha256": "06ffd6ef32220608fc19645e5c4f043612e8f064534668483e92323d34c2ecd4"
 }

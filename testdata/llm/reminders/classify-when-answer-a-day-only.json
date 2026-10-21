@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "el viernes",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Que me avises el 2026-10-16.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-16\",\"question_answer\":\"when\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",

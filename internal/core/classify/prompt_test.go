@@ -736,8 +736,11 @@ func TestBuildPrompt_AsksARecallForItsScope(t *testing.T) {
 	for _, rc := range []ReminderContext{{}, {Conversation: oneTurn}} {
 		p := flat(promptWith(rc))
 		for _, want := range []string{
-			"recall_scope only for a recall: what the question asks about and when, as {\"about\": ..., \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}",
-			"\"lo del oculista\" is \"oculista\"; \"¿qué tengo esta semana?\" names none",
+			"recall_scope only for a recall: what the question asks about and when, as {\"terms\": [...], \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}",
+			// The client: "si digo dentista, que sepa que es odontólogo también".
+			"terms: the topic asked about as single words a note about it may use, in the message's own language: the word, its synonyms, and each in singular and plural",
+			"\"lo del dentista\" is [\"dentista\", \"dentistas\", \"odontólogo\", \"odontóloga\"]",
+			"No question words and no time words: \"¿qué tengo esta semana?\" names no terms",
 			"on is one of: " + joinVocabulary(AllRecallWindowOns()),
 			"\"told\" when it asks what the user SAID then (\"¿qué te conté ayer?\": from yesterday's first instant to today's)",
 			"\"when\" when it asks what HAPPENS or is DUE then",

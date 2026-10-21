@@ -106,12 +106,12 @@ type Expect struct {
 	// must not add.
 	ReminderLeadsAdd bool `json:"reminder_leads_add,omitempty"`
 
-	// RecallAbout is a word the topic of a recall's scope must contain, case
-	// folded (ADR-0048). RecallWindow is the window it must name. Both are
-	// strict beside Type recall, and only there: unset means the reading names
-	// none, since what it names narrows the answer.
-	RecallAbout  string  `json:"recall_about,omitempty"`
-	RecallWindow *Window `json:"recall_window,omitempty"`
+	// RecallTerms are words a recall's scope must hold among its terms, case
+	// folded (ADR-0048); more are free. RecallWindow is the window it must
+	// name. Both are strict beside Type recall, and only there: unset means
+	// the reading names none, since what it names narrows the answer.
+	RecallTerms  []string `json:"recall_terms,omitempty"`
+	RecallWindow *Window  `json:"recall_window,omitempty"`
 }
 
 // Window is a recall window as a case expects it: on is told or when, and from
