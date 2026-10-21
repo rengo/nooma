@@ -138,6 +138,10 @@ type CaptureResult struct {
 	// (prospection.DueDayAhead): the reply names it and that morning's
 	// digest (doc 02 §7). Nil for anything else.
 	DueInDigest *time.Time
+	// DueInDigestTimed reports that the task was told with a time of day,
+	// read off the classification's own shape (DueAtDayOnly) rather than
+	// guessed from midnight: the reply names that hour beside the day.
+	DueInDigestTimed bool
 
 	// NotArmedFor is the instant of a stored event nobody asked about that
 	// arms nothing because every lead was behind when it was told

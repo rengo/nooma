@@ -98,12 +98,16 @@ func TestI41_ADryRunNamesNothing(t *testing.T) {
 
 // TestI41_ADatedTaskIsAnsweredWithItsDayAndTheDigest: told on Friday, a task
 // due Saturday arms nothing and its reply names the day and the digest that
-// will mention it; a task due today, or with no date, is "Anotado.", since no
-// later morning is promised.
+// will mention it, and its hour when it was told one; a task due today, or
+// with no date, is "Anotado.", since no later morning is promised.
 func TestI41_ADatedTaskIsAnsweredWithItsDayAndTheDigest(t *testing.T) {
 	for _, c := range []struct{ name, reading, want string }{
 		{"due tomorrow", i36Reading("task", "2026-10-17", false, "es"),
 			"Anotado para el sáb 17 oct. Te lo recuerdo en el resumen de esa mañana."},
+		{"due tomorrow at an hour", i36Reading("task", "2026-10-17T10:00:00-03:00", false, "es"),
+			"Anotado para el sáb 17 oct, 10:00. Te lo recuerdo en el resumen de esa mañana."},
+		{"due tomorrow at midnight", i36Reading("task", "2026-10-17T00:00:00-03:00", false, "es"),
+			"Anotado para el sáb 17 oct, 00:00. Te lo recuerdo en el resumen de esa mañana."},
 		{"due today", i36Reading("task", "2026-10-16", false, "es"), "Anotado."},
 		{"no date", `{"type":"task","normalized_content":"Comprar café","weight":0.7,"decay_rate":0.03,"language":"es"}`, "Anotado."},
 	} {

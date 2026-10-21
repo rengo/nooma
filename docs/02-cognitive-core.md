@@ -1892,7 +1892,9 @@ box can audit it):
     units (ADR-0036). **The capture reply says so**: such a task due on a later local day than
     the capture's (`prospection.DueDayAhead`) is answered with its day and that morning's digest
     (`Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.`; `Noted for Tue 20
-    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), never a
+    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), and with its
+    hour beside the day when `due_at` was told one (`Anotado para el jue 22 oct, 10:00. …`, as an
+    event's reply names its time; the shape of the wire value decides, not a midnight), never a
     reminder it does not have; one due today or earlier, whose morning may be past, or with no
     date, is `Anotado.`
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render

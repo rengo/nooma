@@ -577,7 +577,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// reply can promise its morning while that morning is ahead.
 	if u.Type == unit.TypeTask && !u.RemindMe && u.DueAt != nil && prospection.DueDayAhead(*u.DueAt, now) {
 		day := u.DueAt.In(now.Location())
-		stored.DueInDigest = &day
+		stored.DueInDigest, stored.DueInDigestTimed = &day, !c.DueAtDayOnly
 	}
 	return stored, nil
 }
