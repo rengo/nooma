@@ -77,6 +77,8 @@ func fieldSpecs() []fieldSpec {
 		{"clarifying_question", false, nullIsAbsent(assignClarifyingQuestion)},
 		{"reminder_leads_minutes", false, nullIsAbsent(assignReminderLeads)},
 		{"reminder_leads_add", false, nullIsAbsent(assignReminderLeadsAdd)},
+		// ADR-0048's recall scope, optional for the same reason.
+		{"recall_scope", false, nullIsAbsent(assignRecallScope)},
 	}
 }
 

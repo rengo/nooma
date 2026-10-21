@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "ya no me avises del gimnasio",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Ya no quiero recibir avisos del gimnasio.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"reminder_intent\":\"stop\",\"reminder_target\":2}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {

@@ -534,6 +534,7 @@ func TestDecode_FieldSpecsCoverEveryWireField(t *testing.T) {
 		"recurrence_rule", "language", "title", "remind_request", "reminder_intent",
 		"question_answer", "choice_number", "reminder_target", "referent",
 		"clarifying_question", "reminder_leads_minutes", "reminder_leads_add",
+		"recall_scope",
 	}
 
 	specs := fieldSpecs()

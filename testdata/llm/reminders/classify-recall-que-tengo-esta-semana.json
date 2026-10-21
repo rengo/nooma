@@ -1,0 +1,15 @@
+{
+  "id": "classify-recall-que-tengo-esta-semana",
+  "task": "classify",
+  "message": "¿qué tengo esta semana?",
+  "record": true,
+  "now": "2026-10-21T18:30:00-03:00",
+  "expect": {
+    "type": "recall",
+    "recall_window": {
+      "on": "when",
+      "from": "2026-10-21T18:30:00-03:00",
+      "to": "2026-10-26T00:00:00-03:00"
+    }
+  }
+}

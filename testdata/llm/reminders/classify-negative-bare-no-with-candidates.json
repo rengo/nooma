@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "no",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"en\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {

@@ -726,3 +726,27 @@ func TestBuildCorrectionPrompt_ShowsTheUnitItPatches(t *testing.T) {
 		t.Error("BuildCorrectionPrompt does not carry BuildPrompt's own instructions")
 	}
 }
+
+// TestBuildPrompt_AsksARecallForItsScope: a recall states what it asks about
+// and when as recall_scope (ADR-0048), so the code can filter on it. Each line
+// is what one live misreading lacked: "¿y anteayer?" and "¿qué tengo esta
+// semana?" were searched as text, with no time read, and "lo del oculista"
+// matched every appointment.
+func TestBuildPrompt_AsksARecallForItsScope(t *testing.T) {
+	for _, rc := range []ReminderContext{{}, {Conversation: oneTurn}} {
+		p := flat(promptWith(rc))
+		for _, want := range []string{
+			"recall_scope only for a recall: what the question asks about and when, as {\"about\": ..., \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}",
+			"\"lo del oculista\" is \"oculista\"; \"¿qué tengo esta semana?\" names none",
+			"on is one of: " + joinVocabulary(AllRecallWindowOns()),
+			"\"told\" when it asks what the user SAID then (\"¿qué te conté ayer?\": from yesterday's first instant to today's)",
+			"\"when\" when it asks what HAPPENS or is DUE then",
+			"What the user HAS starts at the current local time, never earlier: \"¿qué tengo esta semana?\" is from now to the end of Sunday",
+			"A follow-up question (\"¿y anteayer?\") keeps the question it follows and changes only what it names",
+		} {
+			if !strings.Contains(p, want) {
+				t.Errorf("the prompt (chat %v) never says %q", chatShown(rc), want)
+			}
+		}
+	}
+}

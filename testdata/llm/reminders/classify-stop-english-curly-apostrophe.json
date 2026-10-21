@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "don’t remind me anymore",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Don’t remind me anymore.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {

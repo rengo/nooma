@@ -124,6 +124,10 @@ type Classification struct {
 	// ResolveTitle: nil when the model gave none or gave one the check drops.
 	Title *string
 
+	// RecallScope is what a recall asks about and when, as the model read it
+	// (ADR-0048): nil when it named neither, or when the scope degraded.
+	RecallScope *RecallScope
+
 	// Degradations records what was lost and why, in fieldSpecs' order. It
 	// exists because I12 requires internal/brain to write a rationale into
 	// decision_log: a decoder that discarded *why* a field vanished would

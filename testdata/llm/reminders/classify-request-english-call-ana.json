@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "Remind me to call Ana at 5pm",
   "response": "{\n  \"type\": \"task\",\n  \"normalized_content\": \"I need to call Ana at 2026-10-16 17:00.\",\n  \"weight\": 0.8,\n  \"decay_rate\": 0.05,\n  \"language\": \"en\",\n  \"due_at\": \"2026-10-16T17:00:00-03:00\",\n  \"title\": \"Call Ana\",\n  \"interrupt_level\": 0.5,\n  \"remind_request\": true,\n  \"reminder_intent\": \"none\"\n}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
