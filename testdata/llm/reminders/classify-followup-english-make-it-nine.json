@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "make it 9am",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Call with Ana on 2026-10-15 at 09:00.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"en\",\"event_at\":\"2026-10-15T09:00:00-03:00\",\"title\":\"Call with Ana\",\"referent\":\"A\"}",
-  "record": true,
   "now": "2026-10-14T18:00:00-03:00",
   "conversation": {
     "turns": [
@@ -39,5 +38,5 @@
     "referent": "A",
     "event_at": "2026-10-15T09:00:00-03:00"
   },
-  "prompt_sha256": "b3ad2209374ed281e74505539cd754905f6e24e08d403f77e106929a13c7f7ea"
+  "prompt_sha256": "99d3dea1e1f4d658b1a5032f55074fed68db68f1a57c8a97a10babe3baa23786"
 }

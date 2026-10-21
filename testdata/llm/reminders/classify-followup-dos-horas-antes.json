@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame 2 horas antes",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.85,\"decay_rate\":0.03,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false,\"referent\":\"A\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false}",
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,6 +41,6 @@
     ],
     "reminder_leads_add": false
   },
-  "known_misread": "remind_request is true beside the leads, and type is event rather than correction: the model reads \"avisame 2 horas antes\" as a request to be reminded of the event it names. Harmless as read, and either misread alone is too: leads beside a shown referent bind whatever the type (ADR-0046; TestI40_LeadsBindWhateverTheType replays this reading without its remind_request), and leads win over a stray request (ADR-0043; TestI40_LeadsWinOverAStrayRemindRequest replays it as recorded). No unit is stored and the user gets the item reminded 2 hours before",
-  "prompt_sha256": "86d0964fdf28f893fa5971848f9e75d62dede6f8c91c6132b8ae634a3f84afd8"
+  "known_misread": "remind_request is true beside the leads: the model reads \"avisame 2 horas antes\" as a request to be reminded of the item it follows. Harmless as read: leads win over a stray request (ADR-0043; TestI40_LeadsWinOverAStrayRemindRequest replays it as recorded), and leads beside a shown referent bind whatever the type (ADR-0046; TestI40_LeadsBindWhateverTheType replays this reading typed event, as an earlier recording read it, without its remind_request). No unit is stored and the user gets the item reminded 2 hours before",
+  "prompt_sha256": "91ce5da91752f4c7931341bbfc0f2bcf7ed3c9e25dfa81eea6857aaa967b18e8"
 }

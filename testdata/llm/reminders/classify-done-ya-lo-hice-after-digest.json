@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya lo hice",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya renové el pasaporte.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya renové el pasaporte.\",\"weight\":0.1,\"decay_rate\":0.1,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\",\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -31,5 +30,5 @@
     "task_checkin_outcome": "done",
     "referent": "A"
   },
-  "prompt_sha256": "2b262ad1ac715c058745ac724643ae651988e9121daff250f5b49d89fd52b10f"
+  "prompt_sha256": "25f8de7c6f5f08a3c7545a8e3dc57af16f484acee79ac9e7196f90c175938e5f"
 }

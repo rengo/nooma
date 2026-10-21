@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya está",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya terminé.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte?\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte o a pagar la tarjeta?\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -36,5 +35,5 @@
     "task_checkin_outcome": "done",
     "referent": "unclear"
   },
-  "prompt_sha256": "89a2a3a205383a51cfa655b0872eba1c0ac02acbf2807d7ba649bcec1c765aac"
+  "prompt_sha256": "e24847eaf2bdb7f29fa79c7114a1ab05cf6682ea24c9d4862561cfea2ec410e9"
 }
