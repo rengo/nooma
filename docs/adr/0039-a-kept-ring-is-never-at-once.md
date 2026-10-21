@@ -7,7 +7,9 @@
   part: the reminder kept so an event is never left without one is never one sent at once; and,
   on that day only, ADR-0029 point 3's at-once reminder and ADR-0030's lead pulled to now.
 - **Superseded by**: [ADR-0045](0045-a-message-names-its-own-leads.md), point 3 in part (an
-  event's own leads are never sent at once on the told day either)
+  event's own leads are never sent at once on the told day either);
+  [ADR-0047](0047-nothing-unasked-rings-at-once-on-the-told-day.md), point 0 in part (the
+  principle now covers an event on the told day itself)
 - **Enables**: M4
 
 ## Context
