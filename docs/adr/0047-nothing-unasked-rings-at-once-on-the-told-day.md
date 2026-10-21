@@ -1,6 +1,7 @@
 # ADR-0047 — On the day an event is told, nothing it did not ask for rings at once, an event that same day included
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-20: nothing should ring
+  immediately unless the user asked for it)
 - **Date**: 2026-10-20
 - **Supersedes**: [ADR-0029](0029-event-reminders-follow-the-users-leads.md) point 3, in part
   (a capture no longer arms the at-once reminder when every lead is behind), and point 4, in

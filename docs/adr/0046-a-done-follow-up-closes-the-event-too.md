@@ -1,6 +1,7 @@
 # ADR-0046 — A chat follow-up that says a shown event already happened closes it, and leads name their item
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-20: "ya lo hice" closes what it
+  names, an event that already happened included)
 - **Date**: 2026-10-20
 - **Supersedes**: [ADR-0040](0040-a-done-follow-up-closes-the-task.md) points 2 and 3, in part:
   a bound `event` still `pool` with no recurring reminder is closed as a task is, rather than

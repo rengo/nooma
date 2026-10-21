@@ -5,7 +5,9 @@
 - **Supersedes**: —
 - **Superseded by**: [ADR-0034](0034-a-recurring-reminder-rings-on-its-day.md), point 7 only (a recurring reminder now rings on its occurrence, not seven days before);
   [ADR-0037](0037-no-default-ring-on-the-day-an-event-is-told.md), points 1, 2, 4 and 6 in part (a
-  lead nobody asked for that lands on the day the event was told is not armed); [ADR-0038](0038-an-event-can-carry-its-own-reminder-leads.md), points 1 and 6 in part (an event's own leads, set by a correction, replace the user's for that event)
+  lead nobody asked for that lands on the day the event was told is not armed); [ADR-0038](0038-an-event-can-carry-its-own-reminder-leads.md), points 1 and 6 in part (an event's own leads, set by a correction, replace the user's for that event);
+  [ADR-0047](0047-nothing-unasked-rings-at-once-on-the-told-day.md), points 3 and 4 in part (no
+  unasked at-once reminder at capture, and a correction on its own day does not pull one to now)
 - **Enables**: M4 (the settings page and the chat intent that edit these preferences)
 
 ## Context
