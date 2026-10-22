@@ -14,6 +14,7 @@ package sqlitetest
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -73,4 +74,11 @@ func exec(t testing.TB, v *sqlite.Vault, who, query string, args ...any) {
 	if _, err := raw.ExecContext(context.Background(), query, args...); err != nil {
 		t.Fatalf("sqlitetest.%s: %v", who, err)
 	}
+}
+
+// SetUserVersion sets v's PRAGMA user_version without migrating, so a test
+// can stand a vault at an older schema version than this binary carries.
+func SetUserVersion(t testing.TB, v *sqlite.Vault, version int) {
+	t.Helper()
+	exec(t, v, "SetUserVersion", fmt.Sprintf("PRAGMA user_version = %d", version))
 }

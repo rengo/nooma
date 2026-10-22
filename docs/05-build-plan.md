@@ -224,7 +224,9 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 Prior decisions: **[ADR-0004](adr/0004-license.md)** (license).
 
 - `nooma export` / `import` (.noomabundle), complete `doctor` (providers, hardware, channels),
-  embedding `reindex`.
+  embedding `reindex`. The hot backup is not here: `nooma backup` shipped ahead of M6 for the
+  server deployment ([ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md)), and the bundle
+  stays M6's.
 - Goreleaser / multi-platform binary CI, public README, license.
 - **Demo**: installable release used by a stranger without help.
 

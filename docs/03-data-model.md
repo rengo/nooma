@@ -375,8 +375,11 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
 
 - **Single writer**: the binary takes a lockfile in the vault on startup (`nooma.lock` with
   PID). A second `nooma serve` over the same vault fails clearly, it does not corrupt.
-- **Hot backup**: `nooma export` uses `VACUUM INTO` (or SQLite's backup API) — never copy
-  `nooma.db` while the process is writing with WAL open.
+- **Hot backup**: `nooma backup` uses `VACUUM INTO` — never copy `nooma.db` while the process
+  is writing with WAL open. It reads through a read-only connection, so it never migrates or
+  writes the vault and runs beside `nooma serve` without the lock; it verifies the copy with
+  `PRAGMA integrity_check`, and copies `nooma.yml` beside it ([ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md)).
+  M6's `nooma export` packages a portable bundle instead.
 - **Integrity**: `nooma doctor` runs `PRAGMA integrity_check` plus the units↔embeddings half of
   consistency — a count of live units holding no embedding (`nooma doctor`'s vault coverage row).
   The units↔fts half is not yet checked; it is M6's.
