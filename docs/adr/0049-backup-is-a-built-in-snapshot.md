@@ -32,7 +32,9 @@ The client already backs up another app with rclone to Google Drive.
 
 1. `nooma backup <vault> <dest-dir> [--keep N]` writes `nooma-YYYYMMDD-HHMMSS.db`, a `VACUUM
    INTO` snapshot, and `nooma-YYYYMMDD-HHMMSS.yml`, the vault's configuration, stamped in UTC.
-   It takes no vault lock: it is a reader, and WAL lets it run beside serve.
+   It takes no vault lock: it reads through a read-only connection, so it can neither migrate nor
+   write the vault, whatever its version, and WAL lets it run beside serve. The destination may not
+   be inside the vault.
 2. The snapshot is opened read-only and must pass `PRAGMA integrity_check` before it gets its
    final name; on any failure the command exits non-zero and leaves no partial file.
 3. It does not copy `.env` (secrets stay with the deployment), `derived/` (recomputable),

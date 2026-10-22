@@ -24,10 +24,8 @@ func init() {
 	}
 }
 
-// backupName is the only shape of file `nooma backup` writes, and therefore
-// the only shape --keep may delete (ADR-0049). Anything else in the
-// destination — including a file that merely resembles a backup — is not this
-// command's to remove.
+// backupName is the only shape `nooma backup` writes, so the only one --keep
+// may delete (ADR-0049); anything else in dest is not this command's.
 var backupName = regexp.MustCompile(`^nooma-\d{8}-\d{6}\.(db|yml)$`)
 
 // backupStamp names a backup by the UTC instant it was taken. UTC, so the
@@ -36,8 +34,8 @@ const backupStamp = "20060102-150405"
 
 // runBackup is `nooma backup <vault> <dest-dir> [--keep N]` (ADR-0049).
 //
-// It takes no vault lock: serve holds it, and a backup is a reader. SQLite's
-// WAL lets VACUUM INTO read one committed state while serve keeps writing.
+// It takes no vault lock: a backup reads on a read-only connection
+// (sqlite.Snapshot), so it never migrates or writes the vault.
 func runBackup(args []string, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
 	fs.SetOutput(errOut)
@@ -47,9 +45,8 @@ func runBackup(args []string, out, errOut io.Writer) error {
 		fs.PrintDefaults()
 	}
 
-	// The flag package stops at the first positional argument, and the
-	// documented form puts --keep last, so parse the remainder again after
-	// taking each positional.
+	// flag stops at the first positional and the documented form puts --keep
+	// last, so parse the remainder again after taking each positional.
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -80,17 +77,14 @@ func runBackup(args []string, out, errOut io.Writer) error {
 // backupVault writes nooma-<stamp>.db (a VACUUM INTO snapshot, verified) and
 // nooma-<stamp>.yml (the vault's configuration) into dest, then prunes.
 //
-// What a restore needs and what it does not, from docs/01-architecture.md
-// §"Vault structure": the database and nooma.yml are needed; .env is not
-// copied, because secrets do not belong in a backup and the deployment
-// supplies them from its own env file; derived/ is recomputable; logs/ and
-// nooma.lock are not state. attachments/ is needed, and nothing writes it yet,
-// so a non-empty attachments/ is refused rather than silently left out.
+// A restore needs the database and nooma.yml (docs/01-architecture.md
+// §"Vault structure"). .env is secrets, derived/ is recomputable, logs/ and
+// the lock are not state. attachments/ is needed and nothing writes it yet, so
+// a non-empty one is refused rather than silently left out.
 //
-// Both files are written under a .partial name and renamed only after the
-// snapshot verifies, the database last: a nooma-*.db in dest is always a
-// complete, checked backup, and a failure leaves nothing for an upload to
-// carry. Pruning runs only after success.
+// Both files are written as .partial and renamed only after verification,
+// the database last: a nooma-*.db in dest is always a complete, checked
+// backup. Pruning runs only after success.
 func backupVault(ctx context.Context, vaultArg, dest string, keep int, now time.Time,
 	verify func(context.Context, string) (int, error)) (string, error) {
 	vault, err := config.ResolveVault(vaultArg)
@@ -109,11 +103,16 @@ func backupVault(ctx context.Context, vaultArg, dest string, keep int, now time.
 		return "", err
 	}
 
-	if err := os.MkdirAll(dest, 0o700); err != nil {
-		return "", fmt.Errorf("creating the backup directory %s: %w", dest, err)
-	}
 	if dest, err = filepath.Abs(dest); err != nil {
 		return "", err
+	}
+	// Backups, and the --keep that deletes them, stay out of the vault
+	// folder: nothing this command removes may ever sit inside a vault.
+	if rel, err := filepath.Rel(vault, dest); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s is inside the vault %s; write backups somewhere else", dest, vault)
+	}
+	if err := os.MkdirAll(dest, 0o700); err != nil {
+		return "", fmt.Errorf("creating the backup directory %s: %w", dest, err)
 	}
 
 	base := filepath.Join(dest, "nooma-"+now.UTC().Format(backupStamp))
@@ -171,13 +170,7 @@ func refuseAttachments(vault string) error {
 }
 
 func snapshot(ctx context.Context, dbPath, dest string) error {
-	db, err := sqlite.Open(ctx, dbPath)
-	if err != nil {
-		return err
-	}
-	snapErr := db.SnapshotTo(ctx, dest)
-	closeErr := db.Close()
-	if err := errors.Join(snapErr, closeErr); err != nil {
+	if err := sqlite.Snapshot(ctx, dbPath, dest); err != nil {
 		return err
 	}
 	// The vault holds personal data; its copies are owner-only.

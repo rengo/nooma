@@ -16,6 +16,7 @@ import (
 	"github.com/rengo/nooma/internal/config"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/store/sqlite"
+	"github.com/rengo/nooma/internal/store/sqlite/sqlitetest"
 	"github.com/rengo/nooma/internal/store/vaultlock"
 )
 
@@ -270,6 +271,86 @@ func TestBackup_RefusesToReplaceABackupWithTheSameName(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "nooma-20261022-033000.db")); string(b) != "earlier" {
 		t.Errorf("the earlier backup was replaced: %q", b)
+	}
+}
+
+// TestBackup_LeavesAnOlderVaultAtItsSchemaVersion: a backup binary newer
+// than the vault reads it and never migrates it; the live vault, not holding
+// the lock for this command, keeps the version its serve expects.
+func TestBackup_LeavesAnOlderVaultAtItsSchemaVersion(t *testing.T) {
+	ctx := context.Background()
+	vault := writeVault(t, "")
+	dbPath := filepath.Join(vault, "nooma.db")
+	db, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := db.SchemaVersion(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	older := current - 1
+	sqlitetest.SetUserVersion(t, db, older)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if err := run([]string{"backup", vault, t.TempDir()}, &out, &errOut); err != nil {
+		t.Fatalf("nooma backup: %v", err)
+	}
+	got, err := sqlite.VerifySnapshot(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != older {
+		t.Errorf("the vault is at user_version %d after a backup, want its own %d: the backup migrated it", got, older)
+	}
+}
+
+// TestBackup_RefusesADestinationInsideTheVault: backups, and the pruning that
+// deletes them, never live in the vault folder.
+func TestBackup_RefusesADestinationInsideTheVault(t *testing.T) {
+	vault, _ := heldVault(t)
+	for _, dest := range []string{vault, filepath.Join(vault, "backups"), filepath.Join(vault, ".")} {
+		var out, errOut bytes.Buffer
+		err := run([]string{"backup", vault, dest}, &out, &errOut)
+		if err == nil || !strings.Contains(err.Error(), "inside the vault") {
+			t.Errorf("backup into %s = %v, want a refusal naming the vault", dest, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(vault, "backups")); err == nil {
+		t.Error("the refused destination was created inside the vault")
+	}
+	if names := backupNames(t, vault, ""); len(names) != 0 {
+		t.Errorf("the vault holds backups after a refusal: %v", names)
+	}
+}
+
+// TestBackup_KeepRemovesOnlyRegularFiles: a directory or symlink that happens
+// to carry a backup's name is neither counted nor removed.
+func TestBackup_KeepRemovesOnlyRegularFiles(t *testing.T) {
+	vault, _ := heldVault(t)
+	dest := t.TempDir()
+	dirNamed := filepath.Join(dest, "nooma-20200101-000000.db")
+	if err := os.Mkdir(dirNamed, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "elsewhere")
+	writeFile(t, target, "not a backup")
+	linkNamed := filepath.Join(dest, "nooma-20200102-000000.db")
+	if err := os.Symlink(target, linkNamed); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	now := time.Date(2026, 10, 22, 3, 30, 0, 0, time.UTC)
+	if _, err := backupVault(context.Background(), vault, dest, 1, now, sqlite.VerifySnapshot); err != nil {
+		t.Fatalf("backupVault: %v", err)
+	}
+	for _, p := range []string{dirNamed, linkNamed} {
+		if _, err := os.Lstat(p); err != nil {
+			t.Errorf("--keep removed %s, which is not a regular file: %v", filepath.Base(p), err)
+		}
 	}
 }
 

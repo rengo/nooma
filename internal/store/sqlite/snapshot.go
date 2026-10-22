@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/url"
@@ -10,24 +11,23 @@ import (
 	"github.com/ncruces/go-sqlite3/driver"
 )
 
-// SnapshotTo writes a transactionally consistent copy of the vault to dest
-// with SQLite's own VACUUM INTO (docs/03-data-model.md §"Operational
-// properties of the vault", ADR-0049).
+// Snapshot writes a transactionally consistent copy of the database at
+// dbPath to dest with SQLite's own VACUUM INTO (docs/03-data-model.md
+// §"Operational properties of the vault", ADR-0049).
 //
-// It is a read transaction on the source, so it runs while `nooma serve`
-// holds the vault: WAL lets a reader and the writer proceed together, and the
-// copy sees one committed state, never half of a write. Copying nooma.db with
-// the filesystem would not — the latest commits may still live only in
-// nooma.db-wal.
-//
-// dest must not exist: VACUUM INTO refuses to overwrite, and that refusal is
-// kept rather than worked around, so a snapshot can never replace another.
-//
-// Like IntegrityCheck it reads no domain row through this surface: it asks
-// SQLite to copy the FILE.
-func (v *Vault) SnapshotTo(ctx context.Context, dest string) error {
-	if _, err := v.db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
-		return fmt.Errorf("snapshotting %s into %s: %w", v.path, dest, err)
+// The connection is read-only, never Open's: Open migrates, and a newer
+// binary would change the live schema without the vault lock. Read-only, it
+// cannot write the vault at all, so it runs beside serve without the lock;
+// VACUUM INTO is one read transaction over one committed state. dest must not
+// exist: VACUUM INTO refuses to overwrite, so no snapshot replaces another.
+func Snapshot(ctx context.Context, dbPath, dest string) error {
+	db, err := openReadOnly(dbPath)
+	if err != nil {
+		return fmt.Errorf("snapshotting %s: %w", dbPath, err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
+		return fmt.Errorf("snapshotting %s into %s: %w", dbPath, dest, err)
 	}
 	return nil
 }
@@ -35,11 +35,8 @@ func (v *Vault) SnapshotTo(ctx context.Context, dest string) error {
 // VerifySnapshot opens the database file at path read-only, runs PRAGMA
 // integrity_check, and returns its schema version (PRAGMA user_version).
 //
-// It is deliberately not Open: Open migrates and switches the file to WAL,
-// and verifying a backup must neither change it nor leave a -wal or -shm
-// beside it. VACUUM INTO writes a rollback-journal file, and a read-only open
-// of one creates no side file
-// (TestSnapshotTo_WritesAVerifiableCopyAtTheSameSchema).
+// Not Open, which migrates and switches the file to WAL: verifying a backup
+// must neither change it nor leave a -wal or -shm beside it.
 func VerifySnapshot(ctx context.Context, path string) (int, error) {
 	// A read-only open of a missing file fails anyway; checking first gives
 	// the error a sentence instead of SQLite's "unable to open".
@@ -47,11 +44,7 @@ func VerifySnapshot(ctx context.Context, path string) (int, error) {
 		return 0, fmt.Errorf("verifying snapshot %s: %w", path, err)
 	}
 
-	dsn, err := snapshotDSN(path)
-	if err != nil {
-		return 0, fmt.Errorf("verifying snapshot %s: %w", path, err)
-	}
-	db, err := driver.Open(dsn, initConn)
+	db, err := openReadOnly(path)
 	if err != nil {
 		return 0, fmt.Errorf("verifying snapshot %s: %w", path, err)
 	}
@@ -70,6 +63,16 @@ func VerifySnapshot(ctx context.Context, path string) (int, error) {
 		return 0, fmt.Errorf("verifying snapshot %s: reading user_version: %w", path, err)
 	}
 	return version, nil
+}
+
+// openReadOnly opens the database file at path with snapshotDSN, FTS5
+// registered as on every connection.
+func openReadOnly(path string) (*sql.DB, error) {
+	dsn, err := snapshotDSN(path)
+	if err != nil {
+		return nil, err
+	}
+	return driver.Open(dsn, initConn)
 }
 
 // snapshotDSN is buildDSN's read-only sibling: the same absolute-path rule
