@@ -99,7 +99,7 @@ order, with no correspondence to anything.
 | [0045](0045-a-message-names-its-own-leads.md) | A capture names its event's own leads and a follow-up can add a lead to its item's instead of replacing them; an own lead never rings at once on the told day (supersedes ADR-0038 and ADR-0039 in part) | Accepted | M4 |
 | [0046](0046-a-done-follow-up-closes-the-event-too.md) | A chat follow-up that says a shown event already happened closes it as a task is closed: archived, its rings expired; leads beside a listed letter bind whatever the type (supersedes ADR-0040 and ADR-0044 in part) | Accepted | M4 |
 | [0047](0047-nothing-unasked-rings-at-once-on-the-told-day.md) | On the day an event is told, nothing it did not ask for rings at once, an event that same day included: a lead behind is dropped, and with none left there is no reminder (supersedes ADR-0029, ADR-0032 and ADR-0039 in part) | Accepted | M4 |
-| [0048](0048-recall-reads-a-scope.md) | A recall reads a scope: the model names the topic and the time window asked about, and the code filters on them; beside the terms the model wrote, synonyms included, the lexical leg admits (supersedes ADR-0020 and ADR-0024 in part) | Proposed | M4 |
+| [0048](0048-recall-reads-a-scope.md) | A recall reads a scope: the model names the topic and the time window asked about, and the code filters on them; beside the terms the model wrote, synonyms included, the lexical leg admits (supersedes ADR-0020 and ADR-0024 in part) | Accepted | M4 |
 
 ## Template
 

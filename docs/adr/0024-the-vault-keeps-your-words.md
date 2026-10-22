@@ -3,7 +3,8 @@
 - **Status**: Accepted
 - **Date**: 2026-08-30
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0048](0048-recall-reads-a-scope.md), point 3's "I22 stands" in part
+  (the chat entrance may narrow by the scope its reading carries)
 - **Enables**: M3e
 
 ## Context
