@@ -122,12 +122,15 @@ Then schedule it in root's crontab (`sudo crontab -e`):
 
 A backup is `nooma-YYYYMMDD-HHMMSS.db` (UTC) and the matching `.yml`. Pass the one to restore
 as the argument and paste the block whole: `-e` stops it at the first failing step, before the
-live files are replaced.
+live files are replaced. A name that matches no backup copies nothing, so the block checks both
+files arrived before it stops Nooma.
 
 ```sh
 sudo bash -e -s nooma-20261022-073000 <<'RESTORE'
 b=$1
 rclone copy nooma-crypt: /tmp/restore --include "$b.*"   # or cp from /srv/nooma/backups
+test -f "/tmp/restore/$b.db"    # a wrong name stops here, before Nooma stops;
+test -f "/tmp/restore/$b.yml"   # one line each: -e ignores a failure inside an && list
 cd /opt/nooma && docker compose -f deploy/docker/compose.yml stop nooma
 cd /srv/nooma/data/vault
 mkdir before-restore
