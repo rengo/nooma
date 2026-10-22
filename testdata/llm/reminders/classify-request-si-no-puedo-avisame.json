@@ -4,10 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "si no puedo, avisame",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisame si no puedo.\",\"weight\":0.65,\"decay_rate\":0.08,\"language\":\"es\",\"title\":\"Avisarme si no puedo\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"out_of_scope\",\"normalized_content\":\"Si no puedo, avísame.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true
   },
-  "prompt_sha256": "a2f7ab0edd84e63a4e0c0ff7833c1c5a4b3d93517f1ddc943fe4d4eeb14a9287"
+  "known_misread": "type and remind_request: \"si no puedo, avisame\", with nothing before it, is read as out_of_scope with remind_request false. With this recording the user gets \"Eso no es algo que pueda hacer.\" and nothing is stored, where an asked reading would store an undated task and answer that no reminder was set because it has no date. The reading is unstable and predates ADR-0048: measured with the real model on main and on the PR of ADR-0048 (2026-10-21), 2 of 4 runs read a task and 2 of 4 a chitchat. Tracked as a follow-up",
+  "prompt_sha256": "dd7d49a195d4582ae5f70feb48b7614175a2025ff528d89c3749a4deb8709630"
 }

@@ -45,7 +45,7 @@ const (
 	FieldDueAt              = "due_at"
 	FieldReminderLeads      = "reminder_leads_minutes"
 	FieldReminderLeadsAdd   = "reminder_leads_add"
-	FieldRecallAbout        = "recall_about"
+	FieldRecallTerms        = "recall_terms"
 	FieldRecallWindow       = "recall_window"
 )
 
@@ -269,24 +269,29 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	miss(FieldReminderLeads, !slices.Equal(cls.ReminderLeadsMinutes, e.ReminderLeadsMinutes))
 	miss(FieldReminderLeadsAdd, cls.ReminderLeadsAdd != e.ReminderLeadsAdd)
 	if e.Type == string(classify.KindRecall) {
-		miss(FieldRecallAbout, !aboutMatches(cls.RecallScope, e.RecallAbout))
+		miss(FieldRecallTerms, !termsMatch(cls.RecallScope, e.RecallTerms))
 		miss(FieldRecallWindow, !windowMatches(cls.RecallScope, e.RecallWindow))
 	}
 	return misses
 }
 
-// aboutMatches says whether a scope's topic is what a case expects: none for
-// none, else a topic containing the expected word, case folded — "Turno con el
-// oculista" is about "oculista".
-func aboutMatches(s *classify.RecallScope, want string) bool {
-	var got *string
+// termsMatch says whether a scope's terms are what a case expects: none for
+// none, else every expected word among them, case folded. A term is a word the
+// code searches for, so "turno con el oculista" does not hold "oculista".
+func termsMatch(s *classify.RecallScope, want []string) bool {
+	var got []string
 	if s != nil {
-		got = s.About
+		got = s.Terms
 	}
-	if want == "" || got == nil {
-		return want == "" && got == nil
+	if len(want) == 0 || len(got) == 0 {
+		return len(want) == 0 && len(got) == 0
 	}
-	return strings.Contains(strings.ToLower(*got), strings.ToLower(want))
+	for _, w := range want {
+		if !slices.ContainsFunc(got, func(g string) bool { return strings.EqualFold(g, w) }) {
+			return false
+		}
+	}
+	return true
 }
 
 // windowMatches says whether a scope's window is the one a case expects: none
@@ -488,11 +493,11 @@ func validateConversation(c llm.Case) []error {
 // expected recall, so one beside anything else would never be checked, and a
 // window whose on, instants or order the replay could not mean.
 func validateRecallScope(e llm.Expect) []error {
-	if e.RecallAbout == "" && e.RecallWindow == nil {
+	if e.RecallTerms == nil && e.RecallWindow == nil {
 		return nil
 	}
 	if e.Type != string(classify.KindRecall) {
-		return []error{fmt.Errorf("recall_about and recall_window are judged only beside type %q", classify.KindRecall)}
+		return []error{fmt.Errorf("recall_terms and recall_window are judged only beside type %q", classify.KindRecall)}
 	}
 	w := e.RecallWindow
 	if w == nil {

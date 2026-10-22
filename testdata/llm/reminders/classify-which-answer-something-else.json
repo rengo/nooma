@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "gracias, nos vemos",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"El usuario agradece y se despide.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Gracias, nos vemos.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -31,5 +31,5 @@
   "expect": {
     "type": "chitchat"
   },
-  "prompt_sha256": "44bf04238ccf322cc94925be10910afdb2992df54e995d4382e4fba4aa0788c2"
+  "prompt_sha256": "d84ac41aba56b662453fd0e40fdec66a82fd5cfb8de8f1231c5db0013f188234"
 }

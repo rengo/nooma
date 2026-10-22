@@ -4,11 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no te olvides de recordarme pagar el gas el jueves",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Pagar el gas el 2026-10-22.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"keep\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "title": true
   },
-  "prompt_sha256": "f8bb3942d644615497463f62ace01c5537c4d4e8d1e89b7881666e7103aa5555"
+  "known_misread": "reminder_intent is keep where none is expected: the model reads \"no te olvides\" as keeping a reminder. No effect in production: nothing but the doctor reads reminder_intent, and no undo question is open; the user gets the task stored with the reminder asked for, as expected",
+  "prompt_sha256": "0d0e2c35573c4cd75f0667205f7561c1b12bba5731f00b1d7cb2210f355612db"
 }

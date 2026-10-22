@@ -601,9 +601,10 @@ func TestCheckReminderLeadsAddIsStrict(t *testing.T) {
 
 // TestCheckRecallScopeIsStrictBesideARecall: beside an expected recall, the
 // scope is strict (ADR-0048) — unset means the reading names no topic and no
-// window, since link 3's code filters on whatever it names. The topic matches
-// when it contains the expected word, case folded; a window matches on its
-// on and its two instants. Beside any other type it is not judged.
+// window, since the code filters on whatever it names. Every expected term
+// must be one the model wrote, case folded; more terms are free, since a
+// synonym only widens what names the topic. A window matches on its on and
+// its two instants. Beside any other type it is not judged.
 func TestCheckRecallScopeIsStrictBesideARecall(t *testing.T) {
 	const head = `{"type":"recall","normalized_content":"¿cuándo era lo del oculista?","weight":0.2,"decay_rate":0.3`
 	anteayer := &llm.Window{On: "told", From: "2026-10-19T00:00:00-03:00", To: "2026-10-20T00:00:00-03:00"}
@@ -616,11 +617,16 @@ func TestCheckRecallScopeIsStrictBesideARecall(t *testing.T) {
 		extra  string
 		want   []string
 	}{
-		{"the topic, as written", llm.Expect{Type: "recall", RecallAbout: "oculista"}, `,"recall_scope":{"about":"oculista"}`, nil},
-		{"the topic, inside a longer one and capitalised", llm.Expect{Type: "recall", RecallAbout: "oculista"}, `,"recall_scope":{"about":"Turno con el Oculista"}`, nil},
-		{"another topic", llm.Expect{Type: "recall", RecallAbout: "oculista"}, `,"recall_scope":{"about":"dentista"}`, []string{FieldRecallAbout}},
-		{"no topic where one is expected", llm.Expect{Type: "recall", RecallAbout: "oculista"}, ``, []string{FieldRecallAbout}},
-		{"a topic where none is expected", llm.Expect{Type: "recall"}, `,"recall_scope":{"about":"semana"}`, []string{FieldRecallAbout}},
+		{"the expected term among synonyms", llm.Expect{Type: "recall", RecallTerms: []string{"oculista"}},
+			`,"recall_scope":{"terms":["Oculista","oculistas","oftalmólogo"]}`, nil},
+		{"every expected term, in another order", llm.Expect{Type: "recall", RecallTerms: []string{"odontólogo", "dentista"}},
+			`,"recall_scope":{"terms":["dentista","odontólogo","odontóloga"]}`, nil},
+		{"one expected term missing", llm.Expect{Type: "recall", RecallTerms: []string{"odontólogo", "dentista"}},
+			`,"recall_scope":{"terms":["odontólogo","odontóloga"]}`, []string{FieldRecallTerms}},
+		{"a term that only contains the expected one", llm.Expect{Type: "recall", RecallTerms: []string{"oculista"}},
+			`,"recall_scope":{"terms":["turno con el oculista"]}`, []string{FieldRecallTerms}},
+		{"no terms where some are expected", llm.Expect{Type: "recall", RecallTerms: []string{"oculista"}}, ``, []string{FieldRecallTerms}},
+		{"terms where none are expected", llm.Expect{Type: "recall"}, `,"recall_scope":{"terms":["semana"]}`, []string{FieldRecallTerms}},
 		{"the window, in another zone", llm.Expect{Type: "recall", RecallWindow: anteayer},
 			`,"recall_scope":{"window":{"on":"told","from":"2026-10-19T03:00:00Z","to":"2026-10-20"}}`, nil},
 		{"the window on the other instant", llm.Expect{Type: "recall", RecallWindow: anteayer},
@@ -630,10 +636,10 @@ func TestCheckRecallScopeIsStrictBesideARecall(t *testing.T) {
 		{"a window that starts elsewhere", llm.Expect{Type: "recall", RecallWindow: anteayer},
 			`,"recall_scope":{"window":{"on":"told","from":"2026-10-18","to":"2026-10-20"}}`, []string{FieldRecallWindow}},
 		{"no window where one is expected", llm.Expect{Type: "recall", RecallWindow: anteayer}, ``, []string{FieldRecallWindow}},
-		{"a window where none is expected", llm.Expect{Type: "recall", RecallAbout: "oculista"},
-			`,"recall_scope":{"about":"oculista","window":{"on":"when","from":"2026-10-19","to":"2026-10-20"}}`, []string{FieldRecallWindow}},
+		{"a window where none is expected", llm.Expect{Type: "recall", RecallTerms: []string{"oculista"}},
+			`,"recall_scope":{"terms":["oculista"],"window":{"on":"when","from":"2026-10-19","to":"2026-10-20"}}`, []string{FieldRecallWindow}},
 		{"any scope beside another type", llm.Expect{Type: "knowledge"},
-			`,"recall_scope":{"about":"x","window":{"on":"when","from":"2026-10-19","to":"2026-10-20"}}`, []string{FieldType}},
+			`,"recall_scope":{"terms":["x"],"window":{"on":"when","from":"2026-10-19","to":"2026-10-20"}}`, []string{FieldType}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := missed(tc.expect, tc.extra); !slices.Equal(got, tc.want) {
@@ -653,7 +659,7 @@ func TestValidateCaseChecksTheRecallScope(t *testing.T) {
 		"an unreadable from":     {Type: "recall", RecallWindow: window("told", "anteayer", "2026-10-20T00:00:00-03:00")},
 		"a bare to":              {Type: "recall", RecallWindow: window("told", "2026-10-19T00:00:00-03:00", "2026-10-20")},
 		"an empty window":        {Type: "recall", RecallWindow: window("told", "2026-10-19T00:00:00-03:00", "2026-10-19T00:00:00-03:00")},
-		"a topic beside no type": {RecallAbout: "oculista"},
+		"terms beside no type":   {RecallTerms: []string{"oculista"}},
 		"a window beside a task": {Type: "task", RecallWindow: window("when", "2026-10-19T00:00:00-03:00", "2026-10-20T00:00:00-03:00")},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -665,7 +671,7 @@ func TestValidateCaseChecksTheRecallScope(t *testing.T) {
 		})
 	}
 	c := baseCase()
-	c.Expect = &llm.Expect{Type: "recall", RecallAbout: "oculista",
+	c.Expect = &llm.Expect{Type: "recall", RecallTerms: []string{"oculista"},
 		RecallWindow: window("when", "2026-10-21T18:30:00-03:00", "2026-10-26T00:00:00-03:00")}
 	if err := ValidateCase(c); err != nil {
 		t.Fatalf("ValidateCase of a good recall case = %v", err)

@@ -20,6 +20,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -112,6 +113,30 @@ func (r *Units) LiveTasksDue(_ context.Context, from, to time.Time) ([]unit.Unit
 		due = append(due, deepCopy(u))
 	}
 	return due, nil
+}
+
+// LiveInWindow implements ports.UnitRepo.
+func (r *Units) LiveInWindow(_ context.Context, w recall.Window, limit int) ([]unit.Unit, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var in []unit.Unit
+	for _, u := range r.units {
+		if u.Status.IsLive() && w.Holds(u) {
+			in = append(in, deepCopy(u))
+		}
+	}
+	sort.Slice(in, func(i, j int) bool {
+		a, b := w.Instant(in[i]), w.Instant(in[j])
+		if !a.Equal(*b) {
+			return a.Before(*b)
+		}
+		return in[i].ID < in[j].ID
+	})
+	if limit > 0 && len(in) > limit {
+		in = in[:limit]
+	}
+	return in, nil
 }
 
 // UpdateContent implements ports.UnitRepo.

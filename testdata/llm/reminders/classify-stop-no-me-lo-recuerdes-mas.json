@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no me lo recuerdes más",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"No quiero que me recuerdes más comprar café.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"reminder_intent\":\"stop\",\"reminder_target\":1,\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"No me recuerdes más que compre café.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"reminder_intent\":\"stop\",\"reminder_target\":1,\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -17,5 +17,5 @@
     "reminder_intent": "stop",
     "reminder_target": "1"
   },
-  "prompt_sha256": "fca230276babf930b7fa1d1c259855c300267284de5506db44caf6524d0c2420"
+  "prompt_sha256": "029b9a6688375f3e782ab84030ab18b8433dbda5a58a3fc955639b893ae48346"
 }

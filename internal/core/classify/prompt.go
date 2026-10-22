@@ -232,11 +232,17 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	// semana?" carried no time at all, and "lo del oculista" matched every
 	// appointment, because the question words were part of the search.
 	b.WriteString("  recall_scope         only for a recall: what the question asks about and when, as\n")
-	b.WriteString("                       {\"about\": ..., \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}.\n")
+	b.WriteString("                       {\"terms\": [...], \"window\": {\"on\": ..., \"from\": ..., \"to\": ...}}.\n")
 	b.WriteString("                       Leave out a part the question does not name.\n")
-	b.WriteString("                       about: the topic asked about, in the message's own language,\n")
-	b.WriteString("                       with no question words and no time words: \"lo del oculista\"\n")
-	b.WriteString("                       is \"oculista\"; \"¿qué tengo esta semana?\" names none.\n")
+	// **The model writes the synonyms; the code expands no word** (the
+	// client: "si digo dentista, que sepa que es odontólogo también"). Single
+	// words, because a phrase brings its function words into the search.
+	b.WriteString("                       terms: the topic asked about as single words a note about it\n")
+	b.WriteString("                       may use, in the message's own language: the word, its\n")
+	b.WriteString("                       synonyms, and each in singular and plural. \"lo del dentista\"\n")
+	b.WriteString("                       is [\"dentista\", \"dentistas\", \"odontólogo\", \"odontóloga\"].\n")
+	b.WriteString("                       No question words and no time words: \"¿qué tengo esta\n")
+	b.WriteString("                       semana?\" names no terms.\n")
 	b.WriteString("                       window: the span of time asked about, from inclusive and to\n")
 	b.WriteString("                       exclusive, each written as event_at is. on is one of: " +
 		joinVocabulary(AllRecallWindowOns()) + ";\n")

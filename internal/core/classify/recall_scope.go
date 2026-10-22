@@ -3,6 +3,7 @@ package classify
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 )
@@ -12,9 +13,12 @@ import (
 // typed fields alone — no Go word list for "ayer" or "esta semana" (ADR-0033).
 // Either part may be nil; a scope with neither is no scope at all.
 type RecallScope struct {
-	// About is the topic asked about, in the message's own language and
-	// without question or time words: "lo del oculista" is "oculista".
-	About *string
+	// Terms are the words the topic asked about may be written with, in the
+	// message's own language: the word, its synonyms, its singular and its
+	// plural, as the model wrote them ("lo del dentista" is "dentista",
+	// "dentistas", "odontólogo", "odontóloga"). The code never adds one: a
+	// synonym is understanding, which is the model's (ADR-0033, ADR-0048).
+	Terms []string
 	// Window is the span of time the question names.
 	Window *RecallWindow
 }
@@ -45,19 +49,20 @@ func AllRecallWindowOns() []RecallWindowOn { return []RecallWindowOn{RecallOnTol
 // assignRecallScope reads recall_scope. It is one field and degrades whole: a
 // window the decoder cannot read leaves no half-scope behind, so a recall with
 // a malformed part answers as one that named none, as before ADR-0048. An
-// empty object, or a blank topic with no window, is no scope and no loss.
+// empty object, or no term that is not blank and no window, is no scope and
+// no loss.
 func assignRecallScope(raw json.RawMessage, c *Classification, now time.Time) Reason {
 	var wire struct {
-		About  *string         `json:"about"`
+		Terms  []string        `json:"terms"`
 		Window json.RawMessage `json:"window"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return ReasonWrongType
 	}
 	var scope RecallScope
-	if wire.About != nil {
-		if about := strings.TrimSpace(*wire.About); about != "" {
-			scope.About = &about
+	for _, term := range wire.Terms {
+		if term = strings.TrimSpace(term); term != "" && !slices.Contains(scope.Terms, term) {
+			scope.Terms = append(scope.Terms, term)
 		}
 	}
 	if w := bytes.TrimSpace(wire.Window); len(w) > 0 && string(w) != "null" {
@@ -67,7 +72,7 @@ func assignRecallScope(raw json.RawMessage, c *Classification, now time.Time) Re
 		}
 		scope.Window = &window
 	}
-	if scope.About == nil && scope.Window == nil {
+	if scope.Terms == nil && scope.Window == nil {
 		return ""
 	}
 	c.RecallScope = &scope

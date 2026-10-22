@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, seguí",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No, seguí recordándome comprar café.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"keep\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Quiero que sigas recordándome comprar café.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"keep\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
@@ -14,5 +14,5 @@
     "type": "chitchat",
     "reminder_intent": "keep"
   },
-  "prompt_sha256": "08257fa92236e4c5b1d4d498dc2fdb3f4105a108a1c34036caa9a140eed59461"
+  "prompt_sha256": "5f77a8c524696a0058514abc43a200a7124988adcd757498ad914c1c2602210a"
 }

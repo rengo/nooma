@@ -14,6 +14,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -167,6 +168,37 @@ func (r *UnitRepo) LiveTasksDue(ctx context.Context, from, to time.Time) ([]unit
 		return nil, fmt.Errorf("select live tasks due: %w", err)
 	}
 	return due, nil
+}
+
+// LiveInWindow implements ports.UnitRepo. Every instant column is stored as
+// fixed-width UTC RFC 3339 (formatUnitTime), so comparing and ordering the text
+// compares and orders the instants, as LiveTasksDue relies on.
+func (r *UnitRepo) LiveInWindow(ctx context.Context, w recall.Window, limit int) ([]unit.Unit, error) {
+	instant := `COALESCE(event_at, due_at)`
+	if w.On == recall.WindowTold {
+		instant = `created_at`
+	}
+	rows, err := r.db.QueryContext(ctx,
+		unitSelectColumns+` FROM units WHERE status = ? AND `+instant+` >= ? AND `+instant+` < ?
+		ORDER BY `+instant+`, id LIMIT ?`,
+		string(unit.StatusPool), formatUnitTime(w.From), formatUnitTime(w.To), limitOrAll(limit))
+	if err != nil {
+		return nil, fmt.Errorf("select live units in a window: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	var in []unit.Unit
+	for rows.Next() {
+		u, err := scanUnit(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan live unit in a window: %w", err)
+		}
+		in = append(in, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select live units in a window: %w", err)
+	}
+	return in, nil
 }
 
 // UpdateContent implements ports.UnitRepo.

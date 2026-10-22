@@ -428,7 +428,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// (I22), searching in.Text — never c.NormalizedContent, D9's forced
 	// argument — and never persists a unit (R2.3's own MUST NOT).
 	if c.Kind != nil && *c.Kind == classify.KindRecall {
-		units, _, err := r.recall.ForText(ctx, in.Text)
+		// The scope the reading carries narrows the answer (ADR-0048); with
+		// none, Answer is ForText exactly.
+		units, err := r.recall.Answer(ctx, in.Text, c.RecallScope)
 		if err != nil {
 			return CaptureResult{}, fmt.Errorf("capture: recall: %w", err)
 		}

@@ -1,6 +1,7 @@
 package classify
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -20,15 +21,17 @@ func TestAllRecallWindowOnsSwept(t *testing.T) {
 // when decodes as typed fields (ADR-0048), and a scope with any malformed part
 // degrades whole, alone (I14) — a recall then answers as if it named none.
 func TestDecode_RecallScope(t *testing.T) {
-	t.Run("a topic and a window decode", func(t *testing.T) {
-		c, err := Decode(recallPayload(`,"recall_scope":{"about":" oculista ","window":{"on":"when",`+
+	t.Run("terms and a window decode", func(t *testing.T) {
+		c, err := Decode(recallPayload(`,"recall_scope":{"terms":[" dentista ","odontólogo","","dentista","Dentistas"],"window":{"on":"when",`+
 			`"from":"2026-08-01T12:00:00-05:00","to":"2026-08-03T00:00:00-05:00"}}`), testNow)
 		if err != nil || len(c.Degradations) != 0 {
 			t.Fatalf("Decode = %v, degraded %v; want clean", err, c.Degradations)
 		}
 		s := c.RecallScope
-		if s == nil || s.About == nil || *s.About != "oculista" {
-			t.Fatalf("RecallScope = %+v, want about \"oculista\", trimmed", s)
+		// Trimmed, blanks and repeats dropped, in the model's order: the
+		// code keeps what the model wrote and adds no word of its own.
+		if want := []string{"dentista", "odontólogo", "Dentistas"}; s == nil || !slices.Equal(s.Terms, want) {
+			t.Fatalf("RecallScope = %+v, want terms %q", s, want)
 		}
 		w := s.Window
 		from := time.Date(2026, 8, 1, 12, 0, 0, 0, testZone)
@@ -39,7 +42,7 @@ func TestDecode_RecallScope(t *testing.T) {
 	})
 	t.Run("a window of bare days is their midnights in the user's zone", func(t *testing.T) {
 		c, _ := Decode(recallPayload(`,"recall_scope":{"window":{"on":"told","from":"2026-07-30","to":"2026-07-31"}}`), testNow)
-		if len(c.Degradations) != 0 || c.RecallScope == nil || c.RecallScope.About != nil || c.RecallScope.Window == nil {
+		if len(c.Degradations) != 0 || c.RecallScope == nil || c.RecallScope.Terms != nil || c.RecallScope.Window == nil {
 			t.Fatalf("got %+v degraded %v, want a window alone", c.RecallScope, c.Degradations)
 		}
 		w := c.RecallScope.Window
@@ -52,7 +55,8 @@ func TestDecode_RecallScope(t *testing.T) {
 		{"absent", ``},
 		{"null", `,"recall_scope":null`},
 		{"empty", `,"recall_scope":{}`},
-		{"a blank topic and no window", `,"recall_scope":{"about":"  ","window":null}`},
+		{"blank terms and no window", `,"recall_scope":{"terms":["  ",""],"window":null}`},
+		{"no terms and no window", `,"recall_scope":{"terms":[]}`},
 	} {
 		t.Run(tc.name+" is no scope and no loss", func(t *testing.T) {
 			c, _ := Decode(recallPayload(tc.extra), testNow)
@@ -66,9 +70,10 @@ func TestDecode_RecallScope(t *testing.T) {
 		reason      Reason
 	}{
 		{"a scope that is not an object", `,"recall_scope":"oculista"`, ReasonWrongType},
-		{"a topic that is not text", `,"recall_scope":{"about":3}`, ReasonWrongType},
-		{"a window that is not an object", `,"recall_scope":{"about":"x","window":"ayer"}`, ReasonWrongType},
-		{"an unknown on", `,"recall_scope":{"about":"x","window":{"on":"said","from":"2026-07-30","to":"2026-07-31"}}`, ReasonUnknownEnum},
+		{"terms that are not a list", `,"recall_scope":{"terms":"dentista"}`, ReasonWrongType},
+		{"a term that is not text", `,"recall_scope":{"terms":["dentista",3]}`, ReasonWrongType},
+		{"a window that is not an object", `,"recall_scope":{"terms":["x"],"window":"ayer"}`, ReasonWrongType},
+		{"an unknown on", `,"recall_scope":{"terms":["x"],"window":{"on":"said","from":"2026-07-30","to":"2026-07-31"}}`, ReasonUnknownEnum},
 		{"no on", `,"recall_scope":{"window":{"from":"2026-07-30","to":"2026-07-31"}}`, ReasonUnknownEnum},
 		{"an unreadable from", `,"recall_scope":{"window":{"on":"told","from":"ayer","to":"2026-07-31"}}`, ReasonBadFormat},
 		{"no to", `,"recall_scope":{"window":{"on":"told","from":"2026-07-30"}}`, ReasonBadFormat},

@@ -27,6 +27,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 	"github.com/rengo/nooma/internal/ports"
@@ -164,6 +165,55 @@ func RunUnitRepo(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 			if u.DueAt == nil {
 				t.Fatalf("LiveTasksDue returned %s without its due_at", u.ID)
 			}
+		}
+	})
+
+	t.Run("LiveInWindow lists live units by the window's instant, up to limit", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		zone := time.FixedZone("UTC-3", -3*60*60)
+		from := time.Date(2026, 10, 21, 18, 30, 0, 0, zone)
+		to := time.Date(2026, 10, 26, 0, 0, 0, 0, zone)
+		at := func(t time.Time) *time.Time { return &t }
+
+		seed := func(id string, status unit.Status, told time.Time, event, due *time.Time) {
+			u := fixtureUnit(id, status)
+			u.CreatedAt, u.UpdatedAt, u.EventAt, u.DueAt = told, told, event, due
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatalf("Create %s: %v", id, err)
+			}
+		}
+		early := from.Add(-72 * time.Hour)
+		seed("event-late", unit.StatusPool, from, at(to.Add(-time.Second)), nil)
+		seed("due-first", unit.StatusPool, early, nil, at(from))
+		seed("event-wins", unit.StatusPool, early, at(from.Add(time.Hour)), at(to.Add(time.Hour)))
+		seed("event-at-to", unit.StatusPool, early, at(to), nil)
+		seed("event-past", unit.StatusPool, from.Add(time.Hour), at(from.Add(-time.Second)), nil)
+		seed("undated", unit.StatusPool, from.Add(2*time.Hour), nil, nil)
+		seed("archived", unit.StatusArchived, from, at(from.Add(time.Hour)), nil)
+
+		when, err := repo.LiveInWindow(ctx, recall.Window{On: recall.WindowWhen, From: from, To: to}, 10)
+		if err != nil {
+			t.Fatalf("LiveInWindow when: %v", err)
+		}
+		if got, want := idsOf(when), []string{"due-first", "event-wins", "event-late"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("LiveInWindow when: got %v, want %v, by event_at else due_at", got, want)
+		}
+
+		told, err := repo.LiveInWindow(ctx, recall.Window{On: recall.WindowTold, From: from, To: to}, 10)
+		if err != nil {
+			t.Fatalf("LiveInWindow told: %v", err)
+		}
+		if got, want := idsOf(told), []string{"event-late", "event-past", "undated"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("LiveInWindow told: got %v, want %v, by created_at", got, want)
+		}
+
+		limited, err := repo.LiveInWindow(ctx, recall.Window{On: recall.WindowWhen, From: from, To: to}, 2)
+		if err != nil {
+			t.Fatalf("LiveInWindow limited: %v", err)
+		}
+		if got, want := idsOf(limited), []string{"due-first", "event-wins"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("LiveInWindow limit 2: got %v, want the first two by instant %v", got, want)
 		}
 	})
 

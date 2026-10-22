@@ -7,6 +7,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/focus"
+	"github.com/rengo/nooma/internal/core/recall"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
 )
@@ -64,6 +65,13 @@ type UnitRepo interface {
 	// (doc 02 §7, the digest names a task on its due day). A bound, not the
 	// decision, as IncompleteOlderThan's cutoff is.
 	LiveTasksDue(ctx context.Context, from, to time.Time) ([]unit.Unit, error)
+
+	// LiveInWindow returns at most limit units whose status is pool and whose
+	// instant w reads (created_at for a told window, event_at else due_at for
+	// a when window) is at or after w.From and before w.To, ordered by that
+	// instant, then by id: a recall's window, listed (ADR-0048). A unit with
+	// no such instant is in no when window.
+	LiveInWindow(ctx context.Context, w recall.Window, limit int) ([]unit.Unit, error)
 
 	// UpdateContent rewrites id's Content and UpdatedAt to at, leaving
 	// every other column unchanged. It returns ErrUnitNotFound if no unit
