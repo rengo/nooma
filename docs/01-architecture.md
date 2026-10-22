@@ -160,6 +160,7 @@ messages through an interface. **Adding a channel = one new adapter, zero core c
 | `nooma capture <text> [vault]` | Sends text to a running `nooma serve` instance's `POST /capture` over HTTP and prints the result — an HTTP client, never a second direct-vault writer; fails if no server answers |
 | `nooma consolidate [vault]` | Runs consolidation once and exits (a pure subcommand, also used by the scheduler) |
 | `nooma check [vault]` | Scans once for due triggers and timers and exits: expires what is past its window, fires what is due, records each in `decision_log`. `--dry-run` reports the same decisions and writes nothing. Calls no model |
+| `nooma backup <vault> <dest-dir> [--keep N]` | Writes `nooma-YYYYMMDD-HHMMSS.db` (a `VACUUM INTO` snapshot, checked with `integrity_check`) and the matching `.yml` into dest-dir while serve runs; `--keep N` deletes all but the newest N of its own backups. Exits non-zero on any failure ([ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md)) |
 | `nooma try-chat <vault-copy> <message>...` | Development tool: feeds each message to the chat's own capture handler, in one conversation, over the vault's real provider, and prints each reply as the chat would show it, then the reminders the run armed. Writes to the vault, so point it at a copy; refuses a vault serve holds. See [06 §5](06-harness.md) |
 
 The **Telegram channel** (`internal/channels/telegram`, ADR-0006, ADR-0014) is an adapter behind

@@ -93,6 +93,7 @@ internal/store/sqlite: func (*Vault) Close() error
 internal/store/sqlite: func (*Vault) IntegrityCheck(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Path() string
 internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
+internal/store/sqlite: func (*Vault) SnapshotTo(ctx context.Context, dest string) error
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func NewConfigRepo(v *Vault) *ConfigRepo
@@ -109,6 +110,7 @@ internal/store/sqlite: func NewTimerRepo(v *Vault) *TimerRepo
 internal/store/sqlite: func NewTriggerRepo(v *Vault) *TriggerRepo
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
+internal/store/sqlite: func VerifySnapshot(ctx context.Context, path string) (int, error)
 internal/store/sqlite: type ConfigRepo
 internal/store/sqlite: type ConversationRepo
 internal/store/sqlite: type DecisionLog

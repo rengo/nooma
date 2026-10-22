@@ -363,6 +363,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
 | Timer list and cancel from chat and UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Planned: M5 | doc 02 §9; 05 §M5 |
+| `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep` | Shipped ahead of M6 | ADR-0049 |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |
 | Tracking UI, multi-format perception, voice, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
 
