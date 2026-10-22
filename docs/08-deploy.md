@@ -131,7 +131,8 @@ b=$1
 rclone copy nooma-crypt: /tmp/restore --include "$b.*"   # or cp from /srv/nooma/backups
 test -f "/tmp/restore/$b.db"    # a wrong name stops here, before Nooma stops;
 test -f "/tmp/restore/$b.yml"   # one line each: -e ignores a failure inside an && list
-cd /opt/nooma && docker compose -f deploy/docker/compose.yml stop nooma
+cd /opt/nooma
+docker compose -f deploy/docker/compose.yml stop nooma
 cd /srv/nooma/data/vault
 mkdir before-restore
 for f in nooma.db nooma.db-wal nooma.db-shm nooma.yml; do
@@ -139,7 +140,8 @@ for f in nooma.db nooma.db-wal nooma.db-shm nooma.yml; do
 done
 install -o 65532 -g 65532 -m 600 "/tmp/restore/$b.db" nooma.db
 install -o 65532 -g 65532 -m 644 "/tmp/restore/$b.yml" nooma.yml
-cd /opt/nooma && docker compose -f deploy/docker/compose.yml start nooma
+cd /opt/nooma
+docker compose -f deploy/docker/compose.yml start nooma
 RESTORE
 ```
 
