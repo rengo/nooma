@@ -1,0 +1,30 @@
+# Nooma on a server (docs/08-deploy.md). From the repository root:
+#
+#   docker compose -f deploy/docker/compose.yml up -d --build
+#
+# Nooma is never public: no VIRTUAL_HOST, no shared proxy network, and its
+# port is published on the host's loopback only. Reach it over Tailscale.
+name: nooma
+
+services:
+  nooma:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: nooma:local
+    restart: unless-stopped
+    # Secrets: the provider key, the Telegram token and the server token.
+    env_file: .env
+    environment:
+      # The binary's clock reads the process zone.
+      TZ: America/Argentina/Buenos_Aires
+    ports:
+      - "127.0.0.1:7777:7777"
+    volumes:
+      - /srv/nooma/data:/data
+      - /srv/nooma/backups:/backups
+    networks:
+      - nooma
+
+networks:
+  nooma: {}

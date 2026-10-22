@@ -4,7 +4,7 @@
 - **Date**: 2026-10-22
 - **Supersedes**: —
 - **Superseded by**: —
-- **Enables**: running Nooma unattended on a server, ahead of M6
+- **Enables**: running Nooma unattended on a server ([08-deploy.md](../08-deploy.md)), ahead of M6
 
 ## Context
 
