@@ -2,6 +2,7 @@
 # .git stays in the context: the version stamp is `git describe`. Only
 # untracked files are excluded, so the stamp never reads as -dirty.
 deploy/docker/.env
+**/.env
 **/*.nooma
 **/*.db
 **/*.db-wal

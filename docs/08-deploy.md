@@ -120,24 +120,37 @@ Then schedule it in root's crontab (`sudo crontab -e`):
 
 ## 4. Restore
 
-A backup is `nooma-YYYYMMDD-HHMMSS.db` (UTC) and the matching `.yml`.
+A backup is `nooma-YYYYMMDD-HHMMSS.db` (UTC) and the matching `.yml`. Pass the one to restore
+as the argument and paste the block whole: `-e` stops it at the first failing step, before the
+live files are replaced.
 
 ```sh
-cd /opt/nooma
-sudo rclone copy nooma-crypt: /tmp/restore --include 'nooma-20261022-073000.*'   # or use /srv/nooma/backups
-docker compose -f deploy/docker/compose.yml stop nooma
+sudo bash -e -s nooma-20261022-073000 <<'RESTORE'
+b=$1
+rclone copy nooma-crypt: /tmp/restore --include "$b.*"   # or cp from /srv/nooma/backups
+cd /opt/nooma && docker compose -f deploy/docker/compose.yml stop nooma
 cd /srv/nooma/data/vault
-sudo mkdir before-restore && sudo mv nooma.db nooma.db-wal nooma.db-shm nooma.yml before-restore/ 2>/dev/null; ls before-restore
-sudo install -o 65532 -g 65532 -m 600 /tmp/restore/nooma-20261022-073000.db nooma.db
-sudo install -o 65532 -g 65532 -m 644 /tmp/restore/nooma-20261022-073000.yml nooma.yml
+mkdir before-restore
+for f in nooma.db nooma.db-wal nooma.db-shm nooma.yml; do
+  if [ -e "$f" ]; then mv "$f" before-restore/; fi
+done
+install -o 65532 -g 65532 -m 600 "/tmp/restore/$b.db" nooma.db
+install -o 65532 -g 65532 -m 644 "/tmp/restore/$b.yml" nooma.yml
 cd /opt/nooma && docker compose -f deploy/docker/compose.yml start nooma
+RESTORE
 ```
 
 The old database and config move aside, the database with its `-wal` and `-shm` if any: they
 belong to it, and left beside the snapshot they would be replayed into it. Nothing is deleted.
-An older snapshot is migrated forward when serve opens it. On a new host, do step 1 without
-`nooma init`, create the vault directory with
-`sudo install -d -o 65532 -g 65532 /srv/nooma/data/vault`, and put the two files in it.
+An older snapshot is migrated forward when serve opens it.
+
+**A second restore stops at `mkdir before-restore`**: the first one's folder is still there.
+Nothing in the vault has moved, but Nooma is already stopped. Rename the old folder
+(`sudo mv /srv/nooma/data/vault/before-restore /srv/nooma/data/vault/before-restore-1`), or
+delete it once you no longer need it, and run the block again.
+
+On a new host, do step 1 without `nooma init`, create the vault directory with
+`sudo install -d -o 65532 -g 65532 /srv/nooma/data/vault`, and run the block.
 
 ## 5. Upgrade
 
