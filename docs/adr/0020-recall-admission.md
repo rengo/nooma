@@ -3,7 +3,8 @@
 - **Status**: Accepted
 - **Date**: 2026-08-26
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0048](0048-recall-reads-a-scope.md), in part (beside the terms the
+  model wrote, the lexical leg admits)
 - **Enables**: M3e
 
 ## Context

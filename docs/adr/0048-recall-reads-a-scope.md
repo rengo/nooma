@@ -1,9 +1,10 @@
 # ADR-0048 — A recall reads a scope: the model names the topic's words and the window, the code filters
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-22, after the live run: "si digo
+  dentista, que sepa que es odontólogo también")
 - **Date**: 2026-10-21
-- **Supersedes**: [ADR-0020](0020-recall-admission.md) in part (beside a topic the model read,
-  the lexical leg admits beside the terms the model wrote), and [ADR-0024](0024-the-vault-keeps-your-words.md) point 3's "I22
+- **Supersedes**: [ADR-0020](0020-recall-admission.md) in part (beside the terms the model
+  wrote, the lexical leg admits), and [ADR-0024](0024-the-vault-keeps-your-words.md) point 3's "I22
   stands", in part (the chat entrance may narrow by the scope its reading carries)
 - **Superseded by**: —
 - **Enables**: M4
