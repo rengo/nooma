@@ -1,0 +1,11 @@
+# The image is built from the repository root (deploy/docker/Dockerfile).
+# .git stays in the context: the version stamp is `git describe`. Only
+# untracked files are excluded, so the stamp never reads as -dirty.
+deploy/docker/.env
+**/*.nooma
+**/*.db
+**/*.db-wal
+**/*.db-shm
+/nooma
+/dist
+.claude/worktrees

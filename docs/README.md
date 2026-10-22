@@ -18,6 +18,7 @@ read [07-functional.md](07-functional.md) right after 00:
 | [04-decisions.md](04-decisions.md) | Status board for decisions D1–D10 |
 | [05-build-plan.md](05-build-plan.md) | Milestone order for v1 |
 | [06-harness.md](06-harness.md) | How it gets built: layout, tests, CI gates |
+| [08-deploy.md](08-deploy.md) | Running it on a server: Docker, Tailscale access, daily encrypted backup, restore |
 | [adr/](adr/README.md) | Architecture Decision Records — the reasoning behind each decision |
 
 ## Reading rule
