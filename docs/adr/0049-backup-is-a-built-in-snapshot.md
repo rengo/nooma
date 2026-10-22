@@ -1,6 +1,7 @@
 # ADR-0049 — Backup is a built-in snapshot; the upload stays outside the binary
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-22: Nooma takes the snapshot,
+  rclone uploads it encrypted from outside, and no Google credentials enter Nooma)
 - **Date**: 2026-10-22
 - **Supersedes**: —
 - **Superseded by**: —
