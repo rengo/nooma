@@ -29,6 +29,7 @@ nooma/
 │   │   ├── focus/          # priority, the two focuses, hysteresis
 │   │   ├── recall/         # RRF fusion
 │   │   ├── relation/       # persist/surface thresholds, uncertain band
+│   │   ├── graph/          # the graph view's bounded neighbourhood and its ring layout
 │   │   ├── correction/     # referent gate, edit plan (doc 02 §5 step 4)
 │   │   ├── consolidation/  # the decision logic of each of the 8 phases
 │   │   ├── prospection/    # staleness, quiet hours, digest vs push, recurrence

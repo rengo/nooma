@@ -437,6 +437,16 @@ worth seeing. The row carries both halves — what was offered and what came bac
 neither is evidence alone (`relation.target_unknown`, and `consolidate.connect.target_unknown`
 for the nightly pass).
 
+**The graph view shows one neighbourhood, never the whole graph**
+([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)). `/ui/graph` draws one live unit, its
+related live units and every relation among them; a relation to a unit that is not live is not
+drawn, and its unit neither takes a place nor counts as left out (I02). The neighbours rank by the
+highest `strength` among the relations each shares with the centre, then the highest
+`confidence`, then id, and at most `graph_max_neighbours` are drawn; how many more there were is
+shown as a count. They sit clockwise from the top in that order on one ring
+(`internal/core/graph.Neighbours`, `Within`, `Ring`). The view reads; it writes nothing, and
+confirming or deleting a relation from it is the confirm and reject above, unchanged.
+
 ## 5. Capture
 
 Synchronous pipeline on receiving a message (from any channel or the UI):
@@ -2219,6 +2229,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `age_weight` (`internal/core/focus.AgeWeight`) | 0.20 |
 | `age_horizon_days` (`internal/core/focus.AgeHorizonDays`) | 15 — owner ruling 10; was 30 under ruling 9 |
 | `focus_adjacency_weight` (`internal/core/focus.AdjacencyWeight`) | 0.25 |
+| `graph_max_neighbours` (`internal/core/graph.MaxNeighbours`) | 12 — the most related units the graph view draws around its centre (§4, ADR-0050), ADR-0019's render budget given a value; chosen: twelve labels on one ring stay apart at phone width |
 | `focus_size` (`internal/core/focus.DefaultSize`) | 7 — a human attention bound, 7±2; coincides with `mental_load_threshold` below by coincidence, not by relation — no test ties them |
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
 | Base weight when classify does not supply one | 1.0 |
