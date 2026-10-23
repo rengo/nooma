@@ -70,7 +70,7 @@ order, with no correspondence to anything.
 | [0016](0016-correction-pre-image.md) | A correction records what it overwrote, before overwriting it | Accepted | M1 Phase C |
 | [0017](0017-http-request-auth.md) | Per-request bearer-token auth for the HTTP API | Accepted | M1 Phase C |
 | [0018](0018-css-approach.md) | CSS: hand-written, embedded, no framework | Accepted | M4 |
-| [0019](0019-graph-library.md) | Graph rendering: Cytoscape.js over a server-bounded neighbourhood | Proposed | M4 |
+| [0019](0019-graph-library.md) | Graph rendering: Cytoscape.js over a server-bounded neighbourhood | Superseded by 0050 | M4 |
 | [0020](0020-recall-admission.md) | Recall admission: the vector admits, the lexical leg ranks | Accepted | M3e |
 | [0021](0021-conversation-boundary.md) | Conversation and its boundary: chitchat answers, out of scope refuses | Accepted | M3e |
 | [0022](0022-reply-language.md) | The reply language follows the message, not a setting | Accepted | M3e |
@@ -101,6 +101,7 @@ order, with no correspondence to anything.
 | [0047](0047-nothing-unasked-rings-at-once-on-the-told-day.md) | On the day an event is told, nothing it did not ask for rings at once, an event that same day included: a lead behind is dropped, and with none left there is no reminder (supersedes ADR-0029, ADR-0032 and ADR-0039 in part) | Accepted | M4 |
 | [0048](0048-recall-reads-a-scope.md) | A recall reads a scope: the model names the topic and the time window asked about, and the code filters on them; beside the terms the model wrote, synonyms included, the lexical leg admits (supersedes ADR-0020 and ADR-0024 in part) | Accepted | M4 |
 | [0049](0049-backup-is-a-built-in-snapshot.md) | Backup is a built-in snapshot: `nooma backup` writes a verified `VACUUM INTO` copy and the vault's config while serve runs; the encrypted upload stays outside the binary, via rclone crypt | Accepted | Deploy |
+| [0050](0050-the-graph-is-drawn-on-the-server.md) | The graph is drawn on the server: one live unit's bounded neighbourhood, laid out in `internal/core/graph` and rendered as SVG, every node a link, no JavaScript (supersedes ADR-0019) | Proposed | M4 |
 
 ## Template
 

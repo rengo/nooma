@@ -184,43 +184,15 @@ being read is worse than no golden: it reports "reviewed" for something nobody l
 [ADR-0007](adr/0007-http-auth.md) once a token is configured. It proves the UI boots and
 authenticates, nothing more — the behavior itself is already proven at L1, cheaper.
 
-### The one surface with no automated test
+### The graph is L1 too
 
-**The graph island — the vendored Cytoscape.js bundle and the hand-written JavaScript that
-drives it — carries no automated test, deliberately.** Verifying a WebGL render needs a real
-headless browser, and installing one contradicts the promise ADR-0008 paid for twice: `go build`
-works on a clean machine with no extra toolchain. It is the same objection that ruled out a CSS
-build step in [ADR-0018](adr/0018-css-approach.md), and it does not get a pass here because the
-subject is JavaScript.
-
-What makes an untested surface acceptable is that it is **small and dumb**, and neither of those
-survives on good intentions. So the constraint is structural, in the shape §4 already uses for
-I01, I03 and I23 — a test that fails when the tree stops looking the way the decision said it
-would:
-
-- The hand-written UI JavaScript contains **no `fetch`, no `XMLHttpRequest`, no `WebSocket`, no
-  `eval`**. It renders what the server handed it and reports interactions back through htmx. The
-  same scan run against the vendored bundle during ADR-0019's spike found zero of all four; it
-  becomes a permanent gate rather than a one-time measurement.
-- The hand-written island stays under a **stated line budget**, restated in the PR that raises
-  it. Growth is allowed; growing quietly is not.
-
-Neither gate exists yet, because neither has a file to scan: `internal/ui/` holds server-rendered
-templates and vendored assets, and not one line of hand-written JavaScript — `m4a` filled the
-package without writing any, and htmx arrives vendored under `static/`, which the island budget
-does not count. **They ship in the same PR as the first line of island JavaScript**, and §6 gains
-their row then — a gate listed as blocking before it can run would be the one kind of entry this
-table must never contain.
-
-Everything the island would otherwise be trusted with lives on the Go side and is tested there:
-the bounded subgraph is computed, capped and serialized by `internal/core` and its handler
-([ADR-0019](adr/0019-graph-library.md)), so what reaches the browser is data with a contract, not
-a decision.
-
-**This gap is named here so it is never mistaken for coverage.** If the island ever grows logic
-worth testing — a layout the server does not determine, an interaction htmx cannot express — that
-is the evidence that the constraint failed, and the answer is to move that logic back to Go
-before it is to add a browser.
+The graph view draws SVG on the server and adds no JavaScript
+([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md), superseding ADR-0019's Cytoscape.js
+island, which would have been the one surface no test could reach without a browser). Which units
+and relations it shows and where each is drawn are pure functions in `internal/core/graph`, tested
+at L1; the SVG it renders is a golden of that fragment alone, never of the page around it. If a
+JavaScript renderer is ever added over the same neighbourhood, the gates it needs are that
+decision's to write.
 
 No level calls an LLM or an external API. Ever. Providers are served from fixtures (§5). A test
 that depends on the network is a test that will fail on a Tuesday with nobody having touched
