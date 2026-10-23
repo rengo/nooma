@@ -1,5 +1,10 @@
 # Proposal — M4: the mirror (complete UI)
 
+> **Superseded for the graph (2026-10-23).** `m4d` shipped as an SVG drawn by the server, with no
+> JavaScript ([ADR-0050](../../../docs/adr/0050-the-graph-is-drawn-on-the-server.md), superseding
+> ADR-0019). Every mention below of Cytoscape.js, the vendored bundle, the graph island and its two
+> gates is historical; the rest of this proposal stands as written.
+
 Deliver M4 as laid out in [`docs/05-build-plan.md`](../../../docs/05-build-plan.md) §M4
 (lines 201-212): every view [`docs/01-architecture.md`](../../../docs/01-architecture.md) Layer 2
 names except `/ui/tracking`, over the stack [ADR-0008](../../../docs/adr/0008-ui-stack.md) and
