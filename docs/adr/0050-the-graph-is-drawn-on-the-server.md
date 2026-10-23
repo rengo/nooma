@@ -1,6 +1,7 @@
 # ADR-0050 — The graph is drawn on the server: one neighbourhood, as SVG, no JavaScript
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-23: the graph is an SVG the server
+  draws, no JS library)
 - **Date**: 2026-10-23
 - **Supersedes**: [ADR-0019](0019-graph-library.md) (which was never accepted)
 - **Superseded by**: —
