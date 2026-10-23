@@ -118,8 +118,8 @@ queues nudges that remain visible in the UI.
 |---|---|
 | `/ui` | Today: task focus + load focus, pending digest, system status (last consolidation, the latest energy reading and its source, the undelivered-trigger count, the open-question count, the effective bind, and whether `/ui` sits behind a cookie) |
 | `/ui/capture` | Written capture + file attachment (perception, once it exists) |
-| `/ui/units` | Browse every live unit in the vault: search, filters, pagination. The way in — the graph is entered *from* here ([ADR-0019](adr/0019-graph-library.md)) |
-| `/ui/graph` | Graph of units and relations; edge-level curation (split/confirm connections), over a server-bounded neighbourhood ([ADR-0019](adr/0019-graph-library.md)) |
+| `/ui/units` | Browse every live unit in the vault: search, filters, pagination. The way in — the graph is entered *from* here ([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)) |
+| `/ui/graph` | Graph of units and relations; edge-level curation (delete/confirm connections), over one unit's bounded neighbourhood drawn as SVG on the server ([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)) |
 | `/ui/beliefs` | Self-model: beliefs by facet, edit/delete (each action emits a learning signal) |
 | `/ui/activity` | Glass box: chronological decision_log, "why did you do that" |
 | `/ui/tracking` | Measurement series + derived insights (once perception exists) |
@@ -127,10 +127,9 @@ queues nudges that remain visible in the UI.
 
 UI principles: a mirror, not an advisor (insight-led, the chart as evidence); server-side
 rendered with targeted interactivity (htmx); dense, sober self-hosted-tool aesthetics; no
-heavy build tooling. The graph is the only view that may require a dedicated JS component
-(see [ADR-0008](adr/0008-ui-stack.md) for the stack, [ADR-0019](adr/0019-graph-library.md) for
-the library); every other view, `/ui/units` included, is htmx over server-rendered HTML with no
-JavaScript of its own. Styling is hand-written CSS, embedded, no framework
+heavy build tooling. Every view, the graph included, is htmx over server-rendered HTML with no
+JavaScript of its own (see [ADR-0008](adr/0008-ui-stack.md) for the stack,
+[ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md) for the graph, which Go draws as SVG). Styling is hand-written CSS, embedded, no framework
 ([ADR-0018](adr/0018-css-approach.md)). Turned off with `--no-ui` or `server.ui: false`.
 
 ### Layer 3 — Channel adapters (enabled by config)

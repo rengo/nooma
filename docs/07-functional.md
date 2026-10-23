@@ -357,7 +357,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |
-| Graph view with edge curation | Blocked: `m4d` waits on ADR-0019 (still `Proposed`) | ADR-0019; 05 §M4 |
+| Graph view with edge curation | In progress: `m4d` (the neighbourhood and its layout are built; the view and curation are not) | ADR-0050; doc 02 §4; 05 §M4 |
 | Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |

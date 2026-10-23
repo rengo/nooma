@@ -1,9 +1,9 @@
 # ADR-0019 — Graph rendering: Cytoscape.js over a server-bounded neighbourhood
 
-- **Status**: Proposed
+- **Status**: Superseded by [ADR-0050](0050-the-graph-is-drawn-on-the-server.md)
 - **Date**: 2026-08-11
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0050](0050-the-graph-is-drawn-on-the-server.md)
 - **Enables**: M4
 
 ## Context

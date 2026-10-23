@@ -203,7 +203,7 @@ a deleted relation. That change also gave **I09** its first real conformance tes
 Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 **[ADR-0008](adr/0008-ui-stack.md)** (UI stack),
 **[ADR-0018](adr/0018-css-approach.md)** (CSS),
-**[ADR-0019](adr/0019-graph-library.md)** (graph library).
+**[ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)** (the graph, drawn on the server; supersedes ADR-0019).
 
 - All the views from [`01-architecture.md`](01-architecture.md) Layer 2: today/focus, capture,
   units (browse/search/filter), graph (with edge curation over a bounded neighbourhood),
