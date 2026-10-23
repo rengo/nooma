@@ -154,17 +154,19 @@ func TestUnitView_LinksToItsGraphWhenItHasRelations(t *testing.T) {
 	}
 }
 
-func TestUnitsView_EveryRowLinksToItsGraph(t *testing.T) {
+// TestUnitsView_RowsDoNotLinkToTheGraph: a row does not know whether its
+// unit has relations, and a link that lands on the empty line is noise
+// (client ruling 2026-10-23). The graph is entered from a unit page that
+// has relations.
+func TestUnitsView_RowsDoNotLinkToTheGraph(t *testing.T) {
 	t.Parallel()
 	h := ui.New(ui.Deps{Units: stubUnitsReader{page: fixedBrowsePage()}})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, unitsRequest(""))
-	for _, want := range []string{
-		`<a href="/ui/graph?unit=unit-1" aria-label="Graph of Call the dentist">`,
-		`<a href="/ui/graph?unit=unit-2" aria-label="Graph of Recipe for bread">`,
-	} {
-		if !strings.Contains(rec.Body.String(), want) {
-			t.Errorf("rows do not contain %q:\n%s", want, rec.Body.String())
-		}
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `data-unit-id="unit-1"`) {
+		t.Fatalf("GET /ui/units = %d, rows not rendered:\n%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "/ui/graph") {
+		t.Errorf("a Units row links to the graph:\n%s", rec.Body.String())
 	}
 }

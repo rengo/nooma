@@ -321,7 +321,7 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
     relation thresholds learned so far, and the latest effects of the nightly pass, labelled as
     effects: a night that decides nothing leaves none.
 12. **Draws a unit's connections** (`/ui/graph?unit=<id>`, reached from a unit page that has
-    relations and from each row of Units). The unit sits in the middle and up to 12 of its live
+    relations). The unit sits in the middle and up to 12 of its live
     related units on a ring around it, strongest first from the top, with every relation among
     them as a line (a curve between two neighbours, so it never passes through the middle). Each
     label is the unit's title, or its text, shortened; the full text is its name for a screen
