@@ -39,6 +39,7 @@ templ unitsRows(units []unit.Unit, next *ports.BrowseCursor, types []string) {
 			<li data-unit-id={ u.ID }>
 				<a href={ templ.URL("/ui/units/" + u.ID) }>{ u.Content }</a>
 				<span>{ string(u.Type) }</span>
+				<a href={ templ.URL(graphURL(u.ID)) } aria-label={ "Graph of " + u.Content }>graph</a>
 				if u.EventAt != nil {
 					<small>Event: { formatTime(ctx, *u.EventAt) }</small>
 				} else if u.DueAt != nil {

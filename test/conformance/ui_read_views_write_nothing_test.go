@@ -189,6 +189,56 @@ func TestUIReadViewsWriteNothing_AdminGet(t *testing.T) {
 	}
 }
 
+// TestUIReadViewsWriteNothing_GraphGet is G7 for /ui/graph (ADR-0050): the
+// drawing reads units and relations, reaches no UnitRepo write and neither
+// RelationRepo write, and draws only live units (I02) through the real mux.
+func TestUIReadViewsWriteNothing_GraphGet(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+
+	innerUnits := memrepo.NewUnits()
+	for _, u := range []unit.Unit{
+		{ID: "u-centre", Status: unit.StatusPool, Content: "the centre"},
+		{ID: "u-near", Status: unit.StatusPool, Content: "a live neighbour"},
+		{ID: "u-gone", Status: unit.StatusArchived, Content: "an archived neighbour"},
+	} {
+		u.Type, u.CreatedAt, u.UpdatedAt, u.LastTouchedAt = unit.TypeKnowledge, at, at, at
+		if err := innerUnits.Create(ctx, u); err != nil {
+			t.Fatalf("seed unit %s: %v", u.ID, err)
+		}
+	}
+	innerRels := memrepo.NewRelations()
+	for _, r := range []ports.Relation{
+		{ID: "r-near", FromUnitID: "u-centre", ToUnitID: "u-near", Type: "same_topic", Strength: 0.5, Confidence: 0.6, CreatedBy: "test", CreatedAt: at},
+		{ID: "r-gone", FromUnitID: "u-gone", ToUnitID: "u-centre", Type: "same_topic", Strength: 0.9, Confidence: 0.9, CreatedBy: "test", CreatedAt: at},
+	} {
+		if err := innerRels.Upsert(ctx, r); err != nil {
+			t.Fatalf("seed relation %s: %v", r.ID, err)
+		}
+	}
+	units := &rvwUnits{Units: innerUnits, t: t}
+	svc := brain.NewGraphService(units, &i27Relations{Relations: innerRels, t: t})
+	h := httpapi.Handler(httpapi.Deps{Version: "test", UI: ui.New(ui.Deps{Graph: svc})})
+
+	for i := 0; i < 3; i++ {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ui/graph?unit=u-centre", nil))
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /ui/graph request %d = %d, want 200: %s", i+1, rec.Code, body)
+		}
+		if !strings.Contains(body, `href="/ui/graph?unit=u-near"`) {
+			t.Fatalf("GET /ui/graph request %d does not draw the live neighbour — the view must actually run for this gate to mean anything:\n%s", i+1, body)
+		}
+		if strings.Contains(body, "u-gone") {
+			t.Errorf("GET /ui/graph request %d draws an archived unit (I02)", i+1)
+		}
+	}
+	if units.liveReads == 0 {
+		t.Error("LiveByIDs was never read — the view did not go through the decorated unit repo")
+	}
+}
+
 // rvwT is the slice of *testing.T the decorators use, so the classification
 // check below can hand them a recorder and watch which methods fail.
 type rvwT interface {

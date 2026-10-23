@@ -1,0 +1,57 @@
+package ui
+
+import (
+	"strconv"
+
+	"github.com/rengo/nooma/internal/brain"
+)
+
+// GraphPage is GET /ui/graph's full page (ADR-0050): one live unit's
+// neighbourhood drawn as SVG, or one line saying it is connected to
+// nothing, and how many neighbours the budget left out.
+templ GraphPage(n brain.Neighbourhood) {
+	@Page("nooma — graph", graphBody(n))
+}
+
+templ graphBody(n brain.Neighbourhood) {
+	<section data-view="graph">
+		<h2>GRAPH</h2>
+		<p><a href={ templ.URL("/ui/units/" + n.Centre.Unit.ID) }>{ graphLabel(n.Centre.Unit) }</a></p>
+		if len(n.Neighbours) == 0 {
+			<p data-empty>Not connected to anything yet. Related entries are linked as you capture and overnight.</p>
+		} else {
+			@GraphSVG(n)
+		}
+		if n.Omitted > 0 {
+			<p data-omitted>{ "+" + strconv.Itoa(n.Omitted) + " more related units not shown." }</p>
+		}
+	</section>
+}
+
+// GraphSVG is the drawing alone, the fragment testdata/ui/graph.svg.golden pins. Relations
+// are drawn first so the nodes sit over them. The centre comes first among
+// the nodes, so it is the first stop for the keyboard; it opens its own
+// unit page, and every neighbour redraws the graph around itself.
+templ GraphSVG(n brain.Neighbourhood) {
+	<svg data-graph viewBox={ graphViewBox() } role="group" aria-label={ "Units related to " + graphLabel(n.Centre.Unit) }>
+		for _, l := range graphLines(n) {
+			if l.d != "" {
+				<path data-relation-id={ l.edge.ID } d={ l.d }><title>{ graphEdgeTitle(l.edge) }</title></path>
+			} else {
+				<line data-relation-id={ l.edge.ID } x1={ l.x1 } y1={ l.y1 } x2={ l.x2 } y2={ l.y2 }><title>{ graphEdgeTitle(l.edge) }</title></line>
+			}
+		}
+		<a href={ templ.URL("/ui/units/" + n.Centre.Unit.ID) } aria-label={ graphLabel(n.Centre.Unit) } data-centre>
+			<title>{ graphLabel(n.Centre.Unit) }</title>
+			<circle cx={ itoa(n.Centre.At.X) } cy={ itoa(n.Centre.At.Y) } r={ itoa(graphCentreRadius) }></circle>
+			<text x={ itoa(n.Centre.At.X) } y={ itoa(n.Centre.At.Y + graphLabelGap + graphCentreRadius - graphNodeRadius) }>{ graphShortLabel(n.Centre.Unit) }</text>
+		</a>
+		for _, nb := range n.Neighbours {
+			<a href={ templ.URL(graphURL(nb.Unit.ID)) } aria-label={ graphLabel(nb.Unit) } data-unit-id={ nb.Unit.ID }>
+				<title>{ graphLabel(nb.Unit) }</title>
+				<circle cx={ itoa(nb.At.X) } cy={ itoa(nb.At.Y) } r={ itoa(graphNodeRadius) }></circle>
+				<text x={ itoa(nb.At.X) } y={ itoa(nb.At.Y + graphLabelGap) }>{ graphShortLabel(nb.Unit) }</text>
+			</a>
+		}
+	</svg>
+}

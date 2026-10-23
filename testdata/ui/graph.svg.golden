@@ -1,0 +1,38 @@
+<svg data-graph viewBox="0 0 480 480" role="group" aria-label="Units related to Lisbon trip">
+<line data-relation-id="r1" x1="240" y1="240" x2="240" y2="70">
+<title>same_topic, confidence 0.90</title>
+</line> <path data-relation-id="r2" d="M240 70 Q410 70 410 240">
+<title>derived_from, confidence 0.35</title>
+</path> <line data-relation-id="r3" x1="410" y1="240" x2="240" y2="240">
+<title>same_topic, confidence 0.60</title>
+</line> <line data-relation-id="r4" x1="240" y1="240" x2="240" y2="410">
+<title>same_topic, confidence 0.55</title>
+</line> <line data-relation-id="r5" x1="70" y1="240" x2="240" y2="240">
+<title>same_topic, confidence 0.50</title>
+</line> <path data-relation-id="r6" d="M240 70 Q360 240 240 410">
+<title>same_topic, confidence 0.40</title>
+</path> <a href="/ui/units/c" aria-label="Lisbon trip" data-centre>
+<title>Lisbon trip</title>
+<circle cx="240" cy="240" r="14">
+</circle> <text x="240" y="274">Lisbon trip</text>
+</a> <a href="/ui/graph?unit=n1" aria-label="Book flights for the whole family in March" data-unit-id="n1">
+<title>Book flights for the whole family in March</title>
+<circle cx="240" cy="70" r="10">
+</circle> <text x="240" y="100">Book flights…</text>
+</a>
+<a href="/ui/graph?unit=n2" aria-label="Hotel" data-unit-id="n2">
+<title>Hotel</title>
+<circle cx="410" cy="240" r="10">
+</circle> <text x="410" y="270">Hotel</text>
+</a>
+<a href="/ui/graph?unit=n3" aria-label="Passport &lt;renewal&gt; &amp; photos" data-unit-id="n3">
+<title>Passport &lt;renewal&gt; &amp; photos</title>
+<circle cx="240" cy="410" r="10">
+</circle> <text x="240" y="440">Passport &lt;ren…</text>
+</a>
+<a href="/ui/graph?unit=n4" aria-label="Pack" data-unit-id="n4">
+<title>Pack</title>
+<circle cx="70" cy="240" r="10">
+</circle> <text x="70" y="270">Pack</text>
+</a>
+</svg>

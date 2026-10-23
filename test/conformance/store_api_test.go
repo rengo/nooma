@@ -20,7 +20,7 @@ import (
 // update regenerates testdata/schema/store_api.golden from the real,
 // current exported surface of internal/store/**. Run via `make
 // store-api-golden`, never by hand-editing the golden file.
-var update = flag.Bool("update", false, "update the store API golden file")
+var update = flag.Bool("update", false, "update the store API golden file and testdata/ui/graph.svg.golden")
 
 const storeAPIGoldenPath = "testdata/schema/store_api.golden"
 

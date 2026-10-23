@@ -320,14 +320,23 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
     It also shows, read-only, when the last full consolidation ran (or that none has), the
     relation thresholds learned so far, and the latest effects of the nightly pass, labelled as
     effects: a night that decides nothing leaves none.
+12. **Draws a unit's connections** (`/ui/graph?unit=<id>`, reached from a unit page that has
+    relations and from each row of Units). The unit sits in the middle and up to 12 of its live
+    related units on a ring around it, strongest first from the top, with every relation among
+    them as a line (a curve between two neighbours, so it never passes through the middle). Each
+    label is the unit's title, or its text, shortened; the full text is its name for a screen
+    reader and its tooltip. Clicking a neighbour, or reaching it with Tab and pressing Enter,
+    redraws the graph around it; the middle one opens its unit page. When more are related than
+    fit, a line says how many were left out. It is drawn on the server: no dragging, no zoom
+    ([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)).
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
 Activity does, rather than rendering nothing; so does a unit page's relations section when the
-unit is connected to nothing. A digest with nothing to carry but items held back says how many
+unit is connected to nothing, and the graph of such a unit. A digest with nothing to carry but items held back says how many
 it holds. Beliefs says it once when every facet is empty, and under each empty facet otherwise.
 
 **You end up with** a product you can use without a terminal, for what exists today. The graph
-screen is not built (see below).
+shows connections but cannot yet confirm or delete one (see below).
 
 ---
 
@@ -357,7 +366,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |
-| Graph view with edge curation | In progress: `m4d` (the neighbourhood and its layout are built; the view and curation are not) | ADR-0050; doc 02 §4; 05 §M4 |
+| Graph view with edge curation | In progress: `m4d` (the view is built; confirming or deleting a relation from it is not) | ADR-0050; doc 02 §4; 05 §M4 |
 | Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |

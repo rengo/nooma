@@ -188,7 +188,7 @@ func (n navItem) current(title string) bool {
 
 var navItems = []navItem{
 	{href: "/ui", label: "Today", titles: []string{"nooma"}},
-	{href: "/ui/units", label: "Units", titles: []string{"nooma — units", "nooma — unit"}},
+	{href: "/ui/units", label: "Units", titles: []string{"nooma — units", "nooma — unit", "nooma — graph"}},
 	{href: "/ui/capture", label: "Capture", titles: []string{"nooma — capture"}},
 	{href: "/ui/beliefs", label: "Beliefs", titles: []string{"nooma — beliefs"}},
 	{href: "/ui/activity", label: "Activity", titles: []string{"nooma — activity"}},

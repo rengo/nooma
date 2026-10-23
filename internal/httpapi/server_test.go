@@ -84,6 +84,14 @@ func (s stubUnitsReader) Detail(context.Context, string) (brain.UnitDetail, bool
 	return s.detail, s.detailFound, nil
 }
 
+// stubGraph answers every unit with a centre alone: enough for the leaf to
+// reach its own view.
+type stubGraph struct{}
+
+func (stubGraph) Neighbourhood(_ context.Context, id string) (brain.Neighbourhood, bool, error) {
+	return brain.Neighbourhood{Centre: brain.GraphNode{Unit: unit.Unit{ID: id, Content: id}}}, true, nil
+}
+
 // stubCapturer answers Capture with a fixed, harmless brain.CaptureResult
 // and counts every call — this package's own tests exist to check cookie
 // and cross-origin posture around the capture/correction routes, not their
@@ -153,7 +161,7 @@ var stubUnitDetail = brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.T
 func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 	t.Parallel()
 
-	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}, Preferences: stubPreferences{}, Admin: stubAdmin{}})})
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}, Preferences: stubPreferences{}, Admin: stubAdmin{}, Graph: stubGraph{}})})
 
 	// wantMarker names, per leaf, a string only that leaf's own view
 	// renders from these stubs — Today's "SYSTEM" section, units'
@@ -174,6 +182,7 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 		"/ui":              "<h2>SYSTEM</h2>",
 		"/ui/units":        "<h2>UNITS</h2>",
 		"/ui/units/unit-1": "<h2>UNIT</h2>",
+		"/ui/graph?unit=c": "<h2>GRAPH</h2>",
 		"/ui/capture":      "<h2>CAPTURE</h2>",
 		"/ui/beliefs":      "<h2>BELIEFS</h2>",
 		"/ui/activity":     "<h2>ACTIVITY</h2>",
@@ -181,7 +190,7 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 		"/ui/admin":        "<h2>ADMIN</h2>",
 	}
 
-	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/capture", "/ui/beliefs", "/ui/activity", "/ui/preferences", "/ui/admin"} {
+	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/graph?unit=c", "/ui/capture", "/ui/beliefs", "/ui/activity", "/ui/preferences", "/ui/admin"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()
@@ -487,7 +496,7 @@ func TestOpenRoutesAndUIRoutesUnderAToken(t *testing.T) {
 // separately by TestUIMutationsWithoutCookieNeverReachCapture, since a
 // missing cookie answers 303 identically for GET and POST but this list's
 // own "the right cookie reaches the view" case only makes sense for GET.
-var guardedUILeafRequestPaths = []string{"/ui", "/ui/", "/ui/units", "/ui/units/unit-1", "/ui/capture"}
+var guardedUILeafRequestPaths = []string{"/ui", "/ui/", "/ui/units", "/ui/units/unit-1", "/ui/graph?unit=c", "/ui/capture"}
 
 // TestUIViewsRequireCookie is design m4a §3.3's own MUST NOT: a missing
 // cookie, a wrong cookie and a cookie whose value fails
@@ -502,7 +511,7 @@ func TestUIViewsRequireCookie(t *testing.T) {
 	t.Parallel()
 
 	const token = "the-real-token"
-	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}})})
+	h := Handler(Deps{Version: "test", Token: token, UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Graph: stubGraph{}})})
 
 	// wantMarker names, per leaf, a string only that leaf's own view
 	// renders — the same split TestUIGuardedLeavesEachReachAView's own
@@ -515,6 +524,7 @@ func TestUIViewsRequireCookie(t *testing.T) {
 		"/ui/":             "<h2>SYSTEM</h2>",
 		"/ui/units":        "<h2>UNITS</h2>",
 		"/ui/units/unit-1": "<h2>UNIT</h2>",
+		"/ui/graph?unit=c": "<h2>GRAPH</h2>",
 		"/ui/capture":      "<h2>CAPTURE</h2>",
 	}
 

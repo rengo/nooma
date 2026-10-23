@@ -159,9 +159,10 @@ func runServe(args []string, out, errOut io.Writer) error {
 	activity := wireActivity(db)
 	preferences := wirePreferences(db)
 	admin := wireAdmin(db)
+	graph := wireGraph(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
-		uiHandler = ui.New(uiDeps(today, units, recall, capture, beliefs, activity, preferences, admin, ui.Serving{Bind: addr, CookieAuth: token != ""}))
+		uiHandler = ui.New(uiDeps(today, units, recall, capture, beliefs, activity, preferences, admin, graph, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Token: token, UI: uiHandler}),
@@ -324,7 +325,7 @@ func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 // and capture do, on a vault with no providers configured (wireBrain's own
 // degrade, cmd/nooma/wiring.go) — this function guards all five alike
 // rather than only the ones that need it today.
-func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, activity *brain.ActivityService, preferences *brain.PreferencesService, admin *brain.AdminService, serving ui.Serving) ui.Deps {
+func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, activity *brain.ActivityService, preferences *brain.PreferencesService, admin *brain.AdminService, graph *brain.GraphService, serving ui.Serving) ui.Deps {
 	deps := ui.Deps{Serving: serving, Now: systemClock{}.Now}
 	if today != nil {
 		deps.Today = today
@@ -349,6 +350,9 @@ func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.
 	}
 	if admin != nil {
 		deps.Admin = admin
+	}
+	if graph != nil {
+		deps.Graph = graph
 	}
 	return deps
 }

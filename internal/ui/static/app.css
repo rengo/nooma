@@ -101,6 +101,14 @@
 		--transition: 120ms ease-out;
 		--spinner-size: 0.875rem;
 		--spinner-duration: 700ms;
+		/* The graph (ADR-0050). Lengths inside the SVG are viewBox units,
+		 * which scale with it: 480 across, drawn no wider than this. */
+		--graph-max-width: 30rem;
+		--graph-edge-width: 1.5px;
+		--graph-node-stroke: 2px;
+		--graph-focus-stroke: 5px;
+		--graph-label-halo: 4px;
+		--graph-label-size: 18px;
 		--spinner-turn: 1turn;
 
 		/* Colour roles. light-dark() keeps theming one declaration per role
@@ -624,6 +632,66 @@
 		[data-view="unit"] > dl {
 			grid-template-columns: repeat(2, max-content 1fr);
 		}
+	}
+
+	/* A row's link to its graph: a small aside, not a second title. */
+	#units-rows li[data-unit-id] > a[href^="/ui/graph"] {
+		flex: none;
+		color: var(--color-accent);
+		font-size: var(--text-sm);
+		font-weight: var(--weight-normal);
+	}
+
+	/* The graph: an SVG that scales to the card, coloured from the tokens
+	 * so both themes follow. Labels carry a halo in the card's colour so a
+	 * relation passing behind one does not cut through it. */
+	[data-graph] {
+		display: block;
+		width: 100%;
+		max-width: var(--graph-max-width);
+		height: auto;
+		margin-inline: auto;
+		overflow: visible;
+	}
+
+	[data-graph] line,
+	[data-graph] path {
+		fill: none;
+		stroke: var(--color-border-strong);
+		stroke-width: var(--graph-edge-width);
+	}
+
+	[data-graph] circle {
+		fill: var(--color-surface);
+		stroke: var(--color-accent);
+		stroke-width: var(--graph-node-stroke);
+	}
+
+	[data-graph] [data-centre] circle,
+	[data-graph] a:hover circle {
+		fill: var(--color-accent);
+	}
+
+	/* The base outline stays; the ring thickens too, in the text colour, so
+	 * focus shows on the accent-filled centre as well. */
+	[data-graph] a:focus-visible circle {
+		stroke: var(--color-fg);
+		stroke-width: var(--graph-focus-stroke);
+	}
+
+	[data-graph] text {
+		fill: var(--color-fg);
+		font-size: var(--graph-label-size);
+		text-anchor: middle;
+		paint-order: stroke;
+		stroke: var(--color-surface);
+		stroke-width: var(--graph-label-halo);
+		stroke-linejoin: round;
+	}
+
+	[data-omitted] {
+		color: var(--color-muted);
+		font-size: var(--text-sm);
 	}
 
 	/* Relations: one chip per related unit, direction and type before it. */
