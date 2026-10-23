@@ -446,8 +446,15 @@ highest `strength` among the relations each shares with the centre, then the hig
 shown as a count. They sit clockwise from the top in that order on one ring
 (`internal/core/graph.Neighbours`, `Within`, `Ring`). A relation between two neighbours is drawn
 as a curve bent away from the centre (`ChordControl`), so one joining opposite neighbours never
-reads as two through the centre; a relation from a unit to itself is not drawn. The view reads; it writes nothing, and
-confirming or deleting a relation from it is the confirm and reject above, unchanged.
+reads as two through the centre; a relation from a unit to itself is not drawn. Viewing writes nothing.
+
+**Confirming or deleting a relation from the graph is the confirm and reject above, unchanged**:
+the same code the chat answer to a relation question runs, so the raise, the
+`relation_confirm`/`relation_reject` signal and I10's signal-before-delete cannot differ between
+the two surfaces. Only a relation the graph draws can be curated: one with an end that is not live
+is refused and nothing is written (I02). A question still queued or asked about that relation is
+closed with the user's answer, so the digest never asks what was already settled. Its
+`decision_log` row is in §11.
 
 ## 5. Capture
 
@@ -2157,7 +2164,11 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   never set. Submitting the values already in force writes nothing, and on a vault with no config
   row submitting a default creates neither the row nor a log entry; a stored value outside what
   the runtime accepts is not in force, so submitting the value the runtime fell back to repairs
-  it and is logged. When the write lands and its row or its learning signal cannot be
+  it and is logged. A relation confirmed from the graph writes `relation.confirmed` after the
+  raise, with the confidence before and after; one deleted from the graph writes
+  `relation.rejected` *before* anything else, carrying the row as it was (type, strength,
+  confidence, who created it) with the next values null, because once the relation is deleted
+  nothing else remembers it, and a row that cannot be written stops the delete. When the write lands and its row or its learning signal cannot be
   written, the act stands and is not reported as a failure: the mirror says which part is
   missing.
 - **Pull**: everything is recorded and explorable in the activity UI.

@@ -215,6 +215,16 @@ const (
 	ActionCaptureRelationCheckInResolved  DecisionAction = "capture.relation_checkin.resolved"
 	ActionCaptureRelationCheckInUnmatched DecisionAction = "capture.relation_checkin.unmatched"
 
+	// ActionRelationConfirmed records a relation the user confirmed from
+	// the graph (ADR-0050), written after the raise with the confidence
+	// before and after, as config.updated is.
+	ActionRelationConfirmed DecisionAction = "relation.confirmed"
+	// ActionRelationRejected is the pre-image row of a relation the user
+	// deletes from the graph, written before the delete (ADR-0016's order):
+	// the whole row as it was, and next as nulls, because the delete leaves
+	// nothing else that remembers it.
+	ActionRelationRejected DecisionAction = "relation.rejected"
+
 	// ActionBeliefEdited is m4e's pre-image row for a user's belief edit
 	// (design §3.4, ADR-0016's order): written before the content changes,
 	// with the previous and next values keyed by column name.
@@ -285,6 +295,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionPatternEvalLoadHypothesisOpened,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
+		ActionRelationConfirmed, ActionRelationRejected,
 		ActionBeliefEdited, ActionBeliefRetired,
 		ActionConfigUpdated, ActionConfigReminderMoved, ActionConfigReminderArmed, ActionConfigReminderCancelled,
 		ActionConfigRemindersFollowed,

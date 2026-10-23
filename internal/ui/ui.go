@@ -80,9 +80,10 @@ type Deps struct {
 	Preferences Preferences
 	// Admin is the settings and job status page's.
 	Admin Admin
-	// Graph is /ui/graph's.
-	Graph   GraphReader
-	Serving Serving
+	// Graph is /ui/graph's; Curation, its relation confirm and delete.
+	Graph    GraphReader
+	Curation Curator
+	Serving  Serving
 	// Now reads the injected clock (ports.Clock.Now); the UI takes its zone from
 	// the instant it returns and nothing else. A func, not ports.Clock, so Deps
 	// stays free of interfaces that are not a brain entrance (I22's gate).
@@ -130,6 +131,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveUnit(w, r)
 	case "GET /ui/graph":
 		h.serveGraph(w, r)
+	case "POST /ui/graph/relations/{id}/confirm":
+		h.serveCuration(w, r, curationConfirm)
+	case "POST /ui/graph/relations/{id}/reject":
+		h.serveCuration(w, r, curationReject)
 	case "GET /ui/capture":
 		h.serveCaptureForm(w, r)
 	case "POST /ui/capture":

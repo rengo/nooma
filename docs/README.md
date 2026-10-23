@@ -36,7 +36,7 @@ against a real migrated vault, on Linux and Windows.
 
 **M4, the mirror (the complete UI), is in progress.** `m4a` (Today), `m4b` (units, capture and
 correction), `m4c` (focus held by hysteresis), `m4e` (beliefs), `m4e-activity` (activity) and `m4e2` (admin) have shipped and
-are archived. `m4d` (graph, drawn on the server as SVG, ADR-0050) is in progress. `m4f`
+are archived. `m4d` (graph, drawn on the server as SVG, with relation curation, ADR-0050) has shipped. `m4f`
 (timer list and cancel) is not built yet. M5 is the learner.
 
 [`07-functional.md`](07-functional.md) carries the per-capability status table, and

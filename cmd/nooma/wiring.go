@@ -433,6 +433,14 @@ func wireGraph(db *sqlite.Vault) *brain.GraphService {
 	return brain.NewGraphService(sqlite.NewUnitRepo(db), sqlite.NewRelationRepo(db))
 }
 
+// wireCuration builds a *brain.CurationService over db: confirming and
+// deleting a relation from /ui/graph. It resolves no provider, wireUnits'
+// reason, and is wired unconditionally at vault open.
+func wireCuration(db *sqlite.Vault) *brain.CurationService {
+	return brain.NewCurationService(systemClock{}, uuidGen{}, sqlite.NewUnitRepo(db), sqlite.NewRelationRepo(db),
+		sqlite.NewSignalRepo(db), sqlite.NewDecisionLog(db), sqlite.NewPendingQuestionRepo(db))
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {
