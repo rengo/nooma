@@ -55,3 +55,45 @@ func TestCentrePoint_IsTheMiddleOfTheView(t *testing.T) {
 		t.Fatalf("CentrePoint() = %v", got)
 	}
 }
+
+// distance2 is the squared distance between two points.
+func distance2(a, b Point) int { dx, dy := a.X-b.X, a.Y-b.Y; return dx*dx + dy*dy }
+
+// curveApex is where a quadratic curve from a to b through control c
+// peaks: its point at t = 1/2.
+func curveApex(a, c, b Point) Point { return Point{(a.X + 2*c.X + b.X) / 4, (a.Y + 2*c.Y + b.Y) / 4} }
+
+func TestChordControl_ACurveBetweenOppositeNeighboursMissesTheCentre(t *testing.T) {
+	c := CentrePoint()
+	top, bottom := Point{c.X, c.Y - RingRadius}, Point{c.X, c.Y + RingRadius}
+
+	ctrl := ChordControl(top, bottom)
+	apex := curveApex(top, ctrl, bottom)
+
+	if d2 := distance2(apex, c); d2 < (ChordBend-1)*(ChordBend-1) {
+		t.Fatalf("apex %v is %d^2 from the centre, want at least ChordBend (%d)", apex, d2, ChordBend)
+	}
+	if apex.Y != c.Y {
+		t.Fatalf("apex %v is not level with the centre: the bend must be perpendicular to the chord", apex)
+	}
+}
+
+func TestChordControl_ACurveBetweenNeighboursBendsAwayFromTheCentre(t *testing.T) {
+	c := CentrePoint()
+	for n := 3; n <= MaxNeighbours; n++ {
+		ring := Ring(n)
+		a, b := ring[0], ring[1]
+		mid := Point{(a.X + b.X) / 2, (a.Y + b.Y) / 2}
+		apex := curveApex(a, ChordControl(a, b), b)
+		if distance2(apex, c) <= distance2(mid, c) {
+			t.Fatalf("Ring(%d): apex %v is no further from the centre than the straight chord's midpoint %v", n, apex, mid)
+		}
+	}
+}
+
+func TestChordControl_ASegmentOfNoLengthHasNoBend(t *testing.T) {
+	c := CentrePoint()
+	if got := ChordControl(c, c); got != c {
+		t.Fatalf("ChordControl(c, c) = %v, want %v", got, c)
+	}
+}

@@ -444,7 +444,9 @@ drawn, and its unit neither takes a place nor counts as left out (I02). The neig
 highest `strength` among the relations each shares with the centre, then the highest
 `confidence`, then id, and at most `graph_max_neighbours` are drawn; how many more there were is
 shown as a count. They sit clockwise from the top in that order on one ring
-(`internal/core/graph.Neighbours`, `Within`, `Ring`). The view reads; it writes nothing, and
+(`internal/core/graph.Neighbours`, `Within`, `Ring`). A relation between two neighbours is drawn
+as a curve bent away from the centre (`ChordControl`), so one joining opposite neighbours never
+reads as two through the centre; a relation from a unit to itself is not drawn. The view reads; it writes nothing, and
 confirming or deleting a relation from it is the confirm and reject above, unchanged.
 
 ## 5. Capture

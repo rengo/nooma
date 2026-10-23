@@ -79,7 +79,9 @@ type Deps struct {
 	// Preferences is the reminder and quiet-hours preferences page's.
 	Preferences Preferences
 	// Admin is the settings and job status page's.
-	Admin   Admin
+	Admin Admin
+	// Graph is /ui/graph's.
+	Graph   GraphReader
 	Serving Serving
 	// Now reads the injected clock (ports.Clock.Now); the UI takes its zone from
 	// the instant it returns and nothing else. A func, not ports.Clock, so Deps
@@ -126,6 +128,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveUnits(w, r)
 	case "GET /ui/units/{id}":
 		h.serveUnit(w, r)
+	case "GET /ui/graph":
+		h.serveGraph(w, r)
 	case "GET /ui/capture":
 		h.serveCaptureForm(w, r)
 	case "POST /ui/capture":

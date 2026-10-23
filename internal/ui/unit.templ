@@ -55,6 +55,8 @@ templ unitBody(detail brain.UnitDetail, res *brain.CaptureResult) {
 		<h2>RELATIONS</h2>
 		if len(detail.Relations) == 0 {
 			<p data-empty>Not connected to anything yet. Related entries are linked as you capture and overnight.</p>
+		} else {
+			<p><a href={ templ.URL(graphURL(detail.Unit.ID)) }>See them as a graph</a></p>
 		}
 		<ul>
 			for _, rel := range detail.Relations {
