@@ -18,6 +18,7 @@ import (
 	"github.com/rengo/nooma/internal/httpapi"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/ui"
+	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -32,8 +33,25 @@ type curationVault struct {
 	rels      *curationRelations
 	signals   *memrepo.Signals
 	log       *memrepo.DecisionLog
-	questions *memrepo.PendingQuestions
+	questions *curationQuestions
 	h         http.Handler
+}
+
+// curationQuestions records how each question was closed, through the port:
+// Confirm and Reject are the only two ways a curation resolves one.
+type curationQuestions struct {
+	*memrepo.PendingQuestions
+	closed map[string]ports.QuestionResolution
+}
+
+func (q *curationQuestions) Confirm(ctx context.Context, id string, at time.Time) error {
+	q.closed[id] = ports.QuestionConfirmed
+	return q.PendingQuestions.Confirm(ctx, id, at)
+}
+
+func (q *curationQuestions) Reject(ctx context.Context, id string, at time.Time) error {
+	q.closed[id] = ports.QuestionRejected
+	return q.PendingQuestions.Reject(ctx, id, at)
 }
 
 // curationRelations records, at the moment Delete is called, what the log
@@ -58,12 +76,14 @@ func (r *curationRelations) Delete(ctx context.Context, id string) error {
 	return r.Relations.Delete(ctx, id)
 }
 
-func newCurationVault(t *testing.T) *curationVault {
+// newCurationVault seeds q-near about r-near: queued, or already asked by a
+// digest when asked is true.
+func newCurationVault(t *testing.T, asked ...bool) *curationVault {
 	t.Helper()
 	ctx := context.Background()
 	v := &curationVault{
-		units: memrepo.NewUnits(), signals: memrepo.NewSignals(),
-		log: memrepo.NewDecisionLog(), questions: memrepo.NewPendingQuestions(),
+		units: memrepo.NewUnits(), signals: memrepo.NewSignals(), log: memrepo.NewDecisionLog(),
+		questions: &curationQuestions{PendingQuestions: memrepo.NewPendingQuestions(), closed: map[string]ports.QuestionResolution{}},
 	}
 	v.rels = &curationRelations{Relations: memrepo.NewRelations(), log: v.log, signals: v.signals}
 	for _, u := range []unit.Unit{
@@ -87,6 +107,11 @@ func newCurationVault(t *testing.T) *curationVault {
 	v.questions.EnsureRelation(t, "r-near", "same_topic", "centre", "near", "the centre", "a live neighbour")
 	if err := v.questions.Create(ctx, ports.PendingQuestion{ID: "q-near", Kind: ports.QuestionKindRelation, RelationID: "r-near", CreatedAt: curationAt}); err != nil {
 		t.Fatalf("seed question: %v", err)
+	}
+	if len(asked) > 0 && asked[0] {
+		if err := v.questions.MarkAsked(ctx, "q-near", curationAt.Add(-time.Hour)); err != nil {
+			t.Fatalf("mark question asked: %v", err)
+		}
 	}
 
 	clock := fixedClock{now: curationAt}
@@ -260,6 +285,81 @@ func TestI02_GraphCurationRefusesARelationToAUnitThatIsNotLive(t *testing.T) {
 		}
 		if n := len(v.rows(t)) + len(v.signalsOf(t)); n != 0 {
 			t.Errorf("%s of a relation to an archived unit wrote %d row(s) or signal(s)", action, n)
+		}
+	}
+}
+
+// TestGraphCuration_ClosesAQuestionTheDigestAlreadyAskedWithTheUsersAnswer:
+// a question the digest asked is open, waiting for a chat reply. Curating
+// its relation from the graph is that reply: confirm closes it confirmed,
+// delete closes it rejected, and none stays open.
+func TestGraphCuration_ClosesAQuestionTheDigestAlreadyAskedWithTheUsersAnswer(t *testing.T) {
+	for action, want := range map[string]ports.QuestionResolution{"confirm": ports.QuestionConfirmed, "reject": ports.QuestionRejected} {
+		v := newCurationVault(t, true)
+		if open, _ := v.questions.Open(context.Background()); len(open) != 1 {
+			t.Fatalf("fixture: %d open question(s), want the asked one", len(open))
+		}
+
+		if rec := v.post(t, "/ui/graph/relations/r-near/"+action); rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", action, rec.Code, rec.Body.String())
+		}
+
+		if got := v.questions.closed["q-near"]; got != want {
+			t.Errorf("%s closed q-near as %q, want %q", action, got, want)
+		}
+		// After a delete the store hides the question with its relation, so
+		// this alone would pass by accident; the outcome above is what binds.
+		if open, _ := v.questions.Open(context.Background()); len(open) != 0 {
+			t.Errorf("%s left %d open question(s) about r-near: %+v", action, len(open), open)
+		}
+	}
+}
+
+// TestGraphConfirm_ALaterNoInChatDeletesNothing: once the user confirmed a
+// link from the graph, the digest's question about it is closed, so a "no"
+// arriving in chat afterwards matches no open question and deletes nothing
+// (owner ruling Q5: never guess which relation to delete).
+func TestGraphConfirm_ALaterNoInChatDeletesNothing(t *testing.T) {
+	ctx := context.Background()
+	v := newCurationVault(t, true)
+	if rec := v.post(t, "/ui/graph/relations/r-near/confirm"); rec.Code != http.StatusOK {
+		t.Fatalf("confirm = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	embeddings := memrepo.NewEmbeddings()
+	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-relation-answer-rejected", "chat-relation-answer-acknowledged")
+	capture := brain.NewCaptureService(fixedClock{now: curationAt.Add(time.Hour)}, &counterIDs{n: 100},
+		memrepo.NewUnits(), embeddings, memrepo.NewLexical(), v.rels, v.log,
+		llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
+		v.signals, memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, v.questions)
+	if _, err := capture.Capture(ctx, brain.CaptureInput{Text: "no, they are not related", Channel: "chat"}); err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+
+	rel, err := v.rels.ByID(ctx, "r-near")
+	if err != nil {
+		t.Fatalf("the chat's later no deleted the confirmed link: %v", err)
+	}
+	if rel.Confidence != 0.5 {
+		t.Errorf("confidence = %v, want the confirmed 0.5", rel.Confidence)
+	}
+	if got := v.questions.closed["q-near"]; got != ports.QuestionConfirmed {
+		t.Errorf("q-near closed as %q, want it to stay confirmed", got)
+	}
+	var unmatched bool
+	for _, d := range v.rows(t) {
+		unmatched = unmatched || d.Action == ports.ActionCaptureRelationCheckInUnmatched
+	}
+	if !unmatched {
+		t.Error("the chat's no did not record that it matched no open question")
+	}
+	for _, s := range v.signalsOf(t) {
+		if s.Type == ports.SignalRelationReject {
+			t.Errorf("the chat's no emitted %s after the link was confirmed", s.Type)
 		}
 	}
 }

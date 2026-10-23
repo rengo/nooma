@@ -68,8 +68,8 @@ func (c countingPreferences) Save(context.Context, brain.Preferences) (brain.Sav
 	return brain.SaveResult{}, nil
 }
 
-// countingAdmin is this file's own ui.Admin stub on the same counter: Update,
-// the one write, counts; View is a read and counts nothing.
+// countingCuration is this file's own ui.Curator stub on the same counter:
+// Confirm and Reject are both writes, and each counts.
 type countingCuration struct {
 	calls *int
 }
@@ -92,6 +92,8 @@ func (centreOnlyGraph) Neighbourhood(_ context.Context, id string) (brain.Neighb
 	return brain.Neighbourhood{Centre: brain.GraphNode{Unit: unit.Unit{ID: id, Content: id}}}, true, nil
 }
 
+// countingAdmin is this file's own ui.Admin stub on the same counter: Update,
+// the one write, counts; View is a read and counts nothing.
 type countingAdmin struct {
 	calls *int
 }
