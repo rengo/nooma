@@ -108,6 +108,8 @@ func TestWithin_KeepsEdgesBetweenNodesOnceOrderedByID(t *testing.T) {
 		// The same edge read twice, once from each endpoint's relations.
 		{ID: "e3", From: "a", To: "b"},
 		{ID: "e4", From: "b", To: "c"},
+		// A relation from a unit to itself joins nothing to draw.
+		{ID: "e0", From: "a", To: "a"},
 	}
 
 	got := Within([]string{"c", "a", "b"}, edges)

@@ -92,7 +92,8 @@ func greater(a, b float64) bool {
 }
 
 // Within returns the edges whose two endpoints are both in nodes, each edge
-// once, ordered by id. internal/brain reads each node's relations
+// once, ordered by id. A relation from a unit to itself is left out, as
+// Neighbours leaves it out: it joins nothing to draw. internal/brain reads each node's relations
 // separately, so an edge between two nodes arrives twice.
 func Within(nodes []string, edges []Edge) []Edge {
 	in := make(map[string]bool, len(nodes))
@@ -102,7 +103,7 @@ func Within(nodes []string, edges []Edge) []Edge {
 	seen := map[string]bool{}
 	var out []Edge
 	for _, e := range edges {
-		if !in[e.From] || !in[e.To] || seen[e.ID] {
+		if !in[e.From] || !in[e.To] || e.From == e.To || seen[e.ID] {
 			continue
 		}
 		seen[e.ID] = true
