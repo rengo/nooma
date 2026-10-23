@@ -183,14 +183,14 @@ func (r captureRunner) resolveRelationCheckIn(ctx context.Context, c classify.Cl
 	target := open[0]
 	switch outcome {
 	case classify.RelationOutcomeConfirmed:
-		if err := r.ConfirmRelation(ctx, target, now); err != nil {
+		if _, err := r.curator().ConfirmRelation(ctx, target.RelationID, now); err != nil {
 			return err
 		}
 		if err := r.questions.Confirm(ctx, target.ID, now); err != nil {
 			return fmt.Errorf("capture: closing confirmed relation question %q: %w", target.ID, err)
 		}
 	case classify.RelationOutcomeRejected:
-		if err := r.RejectRelation(ctx, target.RelationID, now); err != nil {
+		if err := r.curator().RejectRelation(ctx, target.RelationID, now); err != nil {
 			return err
 		}
 		// Only after the delete returned. Reversed, a reject that failed
@@ -230,17 +230,33 @@ func (r captureRunner) openRelationQuestions(ctx context.Context) ([]ports.Relat
 	return open, nil
 }
 
+// relationCurator is the one implementation of confirming and rejecting a
+// relation (doc 02 §4). The chat answer to a relation question
+// (resolveRelationCheckIn) and the graph view (CurationService) both reach
+// it, so the two surfaces cannot drift: same effect, same signal, same
+// order. Each surface writes its own decision_log row, because each one's
+// context differs (a question answered; a relation curated by hand).
+type relationCurator struct {
+	rels    ports.RelationRepo
+	signals ports.SignalRepo
+	ids     ports.IDGen
+}
+
+// curator is captureRunner's view of the shared curator.
+func (r captureRunner) curator() relationCurator {
+	return relationCurator{rels: r.rels, signals: r.signals, ids: r.ids}
+}
+
 // RejectRelation deletes one relation, emitting its signal first — I10.
 //
-// Exported on captureRunner's behalf rather than inlined above because the
-// ordering is the invariant, and a caller that gets it wrong should have
-// to get it wrong HERE, in one reviewable place, rather than at whichever
-// call site M4 adds next.
+// The ordering is the invariant, and a caller that gets it wrong should
+// have to get it wrong HERE, in one reviewable place, rather than at each
+// surface that rejects a relation.
 //
 // It takes the id and not the whole ports.Relation: it read only rel.ID
 // before it had a caller, and a parameter with no reader is what
 // UpdateEventAt's own doc comment refuses (unitrepo.go:57-65).
-func (r captureRunner) RejectRelation(ctx context.Context, relationID string, now time.Time) error {
+func (r relationCurator) RejectRelation(ctx context.Context, relationID string, now time.Time) error {
 	targetKind := ports.TargetKindRelation
 	if err := r.signals.Record(ctx, ports.Signal{
 		ID:         r.ids.New(),
@@ -279,15 +295,18 @@ func (r captureRunner) RejectRelation(ctx context.Context, relationID string, no
 // The floor is the relation type's OWN min_confidence_to_surface, read
 // through ThresholdsFor — doc 02 §4's confirmed_floor is an alias for it,
 // not a constant of its own (ADR-0027's Related decision).
-func (r captureRunner) ConfirmRelation(ctx context.Context, q ports.RelationQuestion, now time.Time) error {
-	rel, err := r.rels.ByID(ctx, q.RelationID)
+//
+// It returns the relation as written, so a caller can record the
+// confidence it reached.
+func (r relationCurator) ConfirmRelation(ctx context.Context, relationID string, now time.Time) (ports.Relation, error) {
+	rel, err := r.rels.ByID(ctx, relationID)
 	if err != nil {
-		return fmt.Errorf("capture: reading relation %q to confirm: %w", q.RelationID, err)
+		return ports.Relation{}, fmt.Errorf("capture: reading relation %q to confirm: %w", relationID, err)
 	}
 
 	row, err := r.rels.ThresholdsFor(ctx, rel.Type)
 	if err != nil {
-		return fmt.Errorf("capture: thresholds for relation type %q: %w", rel.Type, err)
+		return ports.Relation{}, fmt.Errorf("capture: thresholds for relation type %q: %w", rel.Type, err)
 	}
 
 	// Only Confidence is replaced. Strength, CreatedBy and CreatedAt
@@ -296,7 +315,7 @@ func (r captureRunner) ConfirmRelation(ctx context.Context, q ports.RelationQues
 	// I07's "revised in place" rather than re-created.
 	rel.Confidence = relation.ConfirmedConfidence(rel.Confidence, relation.Resolve(row))
 	if err := r.rels.Upsert(ctx, rel); err != nil {
-		return fmt.Errorf("capture: raising confirmed relation %q: %w", rel.ID, err)
+		return ports.Relation{}, fmt.Errorf("capture: raising confirmed relation %q: %w", rel.ID, err)
 	}
 
 	// Only now. See this function's own doc comment — and note the signal
@@ -311,9 +330,9 @@ func (r captureRunner) ConfirmRelation(ctx context.Context, q ports.RelationQues
 		TargetID:   &rel.ID,
 		OccurredAt: now,
 	}); err != nil {
-		return fmt.Errorf("capture: recording the relation confirmation: %w", err)
+		return ports.Relation{}, fmt.Errorf("capture: recording the relation confirmation: %w", err)
 	}
-	return nil
+	return rel, nil
 }
 
 // recordCheckIn writes one check-in row.
