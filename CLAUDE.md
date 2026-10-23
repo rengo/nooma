@@ -21,11 +21,12 @@ list by facet, edit, claim on save, retire, and a nightly derive that never brin
 user retired or overwrites what they edited), `m4e-activity` (`/ui/activity`: the
 `decision_log` newest first, an edit's pre-image shown, read-only), `m4e2` (`/ui/admin`: five
 settings changed and logged, the learned thresholds and the nightly job's status read-only) and
-`m4d` (`/ui/graph`: one unit's bounded neighbourhood as an SVG the server draws, no JS, each
-relation confirmed or deleted in place; ADR-0050). Pending: `m4f`.
+`m4d` (`/ui/graph`: one unit's bounded neighbourhood as an SVG the server draws, with no
+JavaScript of its own, each relation confirmed or deleted in place; ADR-0050). Pending: `m4f`.
 
-Ahead of plan: recall reads a time window and the topic's words (ADR-0048), and Nooma runs
-unattended on a server in Docker with a daily encrypted `nooma backup` (ADR-0049,
+Outside the plan: recall reads a time window and the topic's words (ADR-0048). Ahead of M6:
+Nooma runs unattended on a server in Docker; `nooma backup` writes a verified snapshot daily, and
+rclone crypt, outside the binary, uploads it encrypted (ADR-0049,
 [`docs/08-deploy.md`](docs/08-deploy.md)).
 
 **One** M3 list item is still deliberately open rather than left to be noticed — a timer's list
