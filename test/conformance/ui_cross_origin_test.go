@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/httpapi"
 	"github.com/rengo/nooma/internal/ui"
 )
@@ -67,6 +68,30 @@ func (c countingPreferences) Save(context.Context, brain.Preferences) (brain.Sav
 	return brain.SaveResult{}, nil
 }
 
+// countingCuration is this file's own ui.Curator stub on the same counter:
+// Confirm and Reject are both writes, and each counts.
+type countingCuration struct {
+	calls *int
+}
+
+func (c countingCuration) Confirm(context.Context, string) error {
+	*c.calls++
+	return nil
+}
+
+func (c countingCuration) Reject(context.Context, string) error {
+	*c.calls++
+	return nil
+}
+
+// centreOnlyGraph redraws any unit as a centre alone: what a curation POST
+// needs to answer.
+type centreOnlyGraph struct{}
+
+func (centreOnlyGraph) Neighbourhood(_ context.Context, id string) (brain.Neighbourhood, bool, error) {
+	return brain.Neighbourhood{Centre: brain.GraphNode{Unit: unit.Unit{ID: id, Content: id}}}, true, nil
+}
+
 // countingAdmin is this file's own ui.Admin stub on the same counter: Update,
 // the one write, counts; View is a read and counts nothing.
 type countingAdmin struct {
@@ -87,12 +112,14 @@ func (c countingAdmin) Update(context.Context, brain.ConfigField, string) (brain
 // correction forms' field, "content=new+text" the belief edit's, and the
 // belief retire reads no body at all.
 var uiCrossOriginBodies = map[string]string{
-	"POST /ui/capture":             "text=hello",
-	"POST /ui/units/{id}/correct":  "text=hello",
-	"POST /ui/beliefs/{id}/edit":   "content=new+text",
-	"POST /ui/beliefs/{id}/retire": "",
-	"POST /ui/preferences":         "lead_amount=2&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00",
-	"POST /ui/admin":               "field=weight_threshold&value=0.6",
+	"POST /ui/capture":                      "text=hello",
+	"POST /ui/units/{id}/correct":           "text=hello",
+	"POST /ui/beliefs/{id}/edit":            "content=new+text",
+	"POST /ui/beliefs/{id}/retire":          "",
+	"POST /ui/preferences":                  "lead_amount=2&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00",
+	"POST /ui/admin":                        "field=weight_threshold&value=0.6",
+	"POST /ui/graph/relations/{id}/confirm": "unit=unit-1",
+	"POST /ui/graph/relations/{id}/reject":  "unit=unit-1",
 }
 
 // uiCrossOriginBodyExempt lists the rows that have no valid-body entry, each
@@ -277,7 +304,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 				return httpapi.Handler(httpapi.Deps{
 					Version: "test",
 					Token:   token,
-					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}}),
+					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}}),
 				})
 			}
 

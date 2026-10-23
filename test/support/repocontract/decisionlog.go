@@ -353,6 +353,8 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCheckQuestionExpired:            true,
 			ports.ActionCaptureRelationCheckInResolved:  true,
 			ports.ActionCaptureRelationCheckInUnmatched: true,
+			ports.ActionRelationConfirmed:               true,
+			ports.ActionRelationRejected:                true,
 			ports.ActionBeliefEdited:                    true,
 			ports.ActionBeliefRetired:                   true,
 			ports.ActionConfigUpdated:                   true,

@@ -8,14 +8,19 @@ import (
 
 // GraphPage is GET /ui/graph's full page (ADR-0050): one live unit's
 // neighbourhood drawn as SVG, or one line saying it is connected to
-// nothing, and how many neighbours the budget left out.
-templ GraphPage(n brain.Neighbourhood) {
-	@Page("nooma — graph", graphBody(n))
+// nothing, how many neighbours the budget left out, and every drawn
+// relation listed with its own confirm and delete. notice is a curation's
+// outcome, the zero value on a plain GET.
+templ GraphPage(n brain.Neighbourhood, notice graphNotice) {
+	@Page("nooma — graph", graphBody(n, notice))
 }
 
-templ graphBody(n brain.Neighbourhood) {
+templ graphBody(n brain.Neighbourhood, notice graphNotice) {
 	<section data-view="graph">
 		<h2>GRAPH</h2>
+		if notice.Message != "" {
+			<p data-outcome={ notice.Outcome } role="status">{ notice.Message }</p>
+		}
 		<p><a href={ templ.URL("/ui/units/" + n.Centre.Unit.ID) }>{ graphLabel(n.Centre.Unit) }</a></p>
 		if len(n.Neighbours) == 0 {
 			<p data-empty>Not connected to anything yet. Related entries are linked as you capture and overnight.</p>
@@ -25,7 +30,37 @@ templ graphBody(n brain.Neighbourhood) {
 		if n.Omitted > 0 {
 			<p data-omitted>{ "+" + strconv.Itoa(n.Omitted) + " more related units not shown." }</p>
 		}
+		if len(n.Edges) > 0 {
+			@graphRelations(n)
+		}
 	</section>
+}
+
+// graphRelations lists every drawn relation on its own line, so each one is
+// reachable by itself, two of different types between the same pair
+// included. Confirm is one press; delete sits behind a confirm step, as a
+// belief's retire does. Each form carries the centre to redraw around.
+templ graphRelations(n brain.Neighbourhood) {
+	<ul data-curation>
+		for _, e := range n.Edges {
+			<li data-relation-id={ e.ID }>
+				<span>{ graphShortLabel(graphUnits(n)[e.From]) }</span> → <span>{ graphShortLabel(graphUnits(n)[e.To]) }</span>
+				<span data-relation-type>{ e.Type }</span>
+				<span data-confidence title="confidence">{ formatConfidence(e.Confidence) }</span>
+				<form method="post" action={ templ.URL("/ui/graph/relations/" + e.ID + "/confirm") } hx-boost="true">
+					<input type="hidden" name="unit" value={ n.Centre.Unit.ID }/>
+					<button type="submit">Confirm</button>
+				</form>
+				<details>
+					<summary>Delete</summary>
+					<form method="post" action={ templ.URL("/ui/graph/relations/" + e.ID + "/reject") } hx-boost="true">
+						<input type="hidden" name="unit" value={ n.Centre.Unit.ID }/>
+						<button type="submit">Confirm delete</button>
+					</form>
+				</details>
+			</li>
+		}
+	</ul>
 }
 
 // GraphSVG is the drawing alone, the fragment testdata/ui/graph.svg.golden pins. Relations

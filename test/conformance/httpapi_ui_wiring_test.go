@@ -169,6 +169,8 @@ var wantUIMuxWiring = []struct {
 	{pattern: "GET /ui/units", guarded: true},
 	{pattern: "GET /ui/units/{id}", guarded: true},
 	{pattern: "GET /ui/graph", guarded: true},
+	{pattern: "POST /ui/graph/relations/{id}/confirm", guarded: true},
+	{pattern: "POST /ui/graph/relations/{id}/reject", guarded: true},
 	{pattern: "GET /ui/capture", guarded: true},
 	{pattern: "POST /ui/capture", guarded: true},
 	{pattern: "POST /ui/units/{id}/correct", guarded: true},

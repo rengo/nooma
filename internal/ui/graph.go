@@ -58,7 +58,7 @@ func (h *Handler) serveGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = GraphPage(n).Render(r.Context(), w)
+	_ = GraphPage(n, graphNotice{}).Render(r.Context(), w)
 }
 
 // graphLabel is how a unit is named in the graph: its title when it has

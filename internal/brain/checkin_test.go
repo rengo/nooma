@@ -302,7 +302,7 @@ func TestRejectRelation_EmitsTheSignalBeforeDeleting(t *testing.T) {
 		rels:    rels,
 	}
 
-	err := r.RejectRelation(context.Background(), "rel-1", checkInNow)
+	err := r.curator().RejectRelation(context.Background(), "rel-1", checkInNow)
 	if err != nil {
 		t.Fatalf("RejectRelation: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestRejectRelation_AFailedDeleteStillLeftItsSignal(t *testing.T) {
 		rels:    rels,
 	}
 
-	if err := r.RejectRelation(context.Background(), "rel-1", checkInNow); err == nil {
+	if err := r.curator().RejectRelation(context.Background(), "rel-1", checkInNow); err == nil {
 		t.Fatal("RejectRelation returned nil for a failed delete")
 	}
 	if len(events) != 1 || !strings.HasPrefix(events[0], "signal:") {
@@ -647,7 +647,7 @@ func TestConfirmRelation_RaisesConfidenceThenEmitsTheSignal(t *testing.T) {
 	}
 	r := relationCheckInRunner(&events, &openQuestions{events: &events}, rels, &recordingLog{})
 
-	if err := r.ConfirmRelation(context.Background(), relationQuestion("q-1", "rel-1"), checkInNow); err != nil {
+	if _, err := r.curator().ConfirmRelation(context.Background(), "rel-1", checkInNow); err != nil {
 		t.Fatalf("ConfirmRelation: %v", err)
 	}
 
@@ -692,7 +692,7 @@ func TestConfirmRelation_ARelationAlreadyAboveTheFloorStillEmitsItsSignal(t *tes
 	}
 	r := relationCheckInRunner(&events, &openQuestions{events: &events}, rels, &recordingLog{})
 
-	if err := r.ConfirmRelation(context.Background(), relationQuestion("q-1", "rel-1"), checkInNow); err != nil {
+	if _, err := r.curator().ConfirmRelation(context.Background(), "rel-1", checkInNow); err != nil {
 		t.Fatalf("ConfirmRelation: %v", err)
 	}
 
@@ -716,7 +716,7 @@ func TestConfirmRelation_ReadsThisRelationTypesOwnThresholds(t *testing.T) {
 	}
 	r := relationCheckInRunner(&events, &openQuestions{events: &events}, rels, &recordingLog{})
 
-	if err := r.ConfirmRelation(context.Background(), relationQuestion("q-1", "rel-1"), checkInNow); err != nil {
+	if _, err := r.curator().ConfirmRelation(context.Background(), "rel-1", checkInNow); err != nil {
 		t.Fatalf("ConfirmRelation: %v", err)
 	}
 	if len(rels.upserted) != 1 || rels.upserted[0].Confidence != 0.9 {
@@ -736,7 +736,7 @@ func TestConfirmRelation_AFailedRaiseEmitsNoSignal(t *testing.T) {
 	}
 	r := relationCheckInRunner(&events, &openQuestions{events: &events}, rels, &recordingLog{})
 
-	if err := r.ConfirmRelation(context.Background(), relationQuestion("q-1", "rel-1"), checkInNow); err == nil {
+	if _, err := r.curator().ConfirmRelation(context.Background(), "rel-1", checkInNow); err == nil {
 		t.Fatal("ConfirmRelation returned nil for a failed raise")
 	}
 	if len(events) != 0 {

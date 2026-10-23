@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/graph"
 	"github.com/rengo/nooma/internal/core/unit"
+	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/ui"
 )
 
@@ -168,5 +170,121 @@ func TestUnitsView_RowsDoNotLinkToTheGraph(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "/ui/graph") {
 		t.Errorf("a Units row links to the graph:\n%s", rec.Body.String())
+	}
+}
+
+type stubCuration struct {
+	err error
+	got *[]string
+}
+
+func (s stubCuration) Confirm(_ context.Context, id string) error {
+	*s.got = append(*s.got, "confirm "+id)
+	return s.err
+}
+
+func (s stubCuration) Reject(_ context.Context, id string) error {
+	*s.got = append(*s.got, "reject "+id)
+	return s.err
+}
+
+func curationPost(t *testing.T, deps ui.Deps, action, id, form string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/ui/graph/relations/"+id+"/"+action, strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Pattern = "POST /ui/graph/relations/{id}/" + action
+	req.SetPathValue("id", id)
+	rec := httptest.NewRecorder()
+	ui.New(deps).ServeHTTP(rec, req)
+	return rec
+}
+
+// TestGraphView_ListsEveryRelationWithItsOwnConfirmAndDelete: each relation
+// is reachable on its own, two of different types between the same pair
+// included, and delete sits behind a confirm step as a belief's retire does.
+func TestGraphView_ListsEveryRelationWithItsOwnConfirmAndDelete(t *testing.T) {
+	t.Parallel()
+	n := threeNeighbours()
+	n.Edges = append(n.Edges, graph.Edge{ID: "r3", From: "c", To: "n1", Type: "derived_from", Strength: 0.3, Confidence: 0.4})
+	page := graphGet(t, ui.Deps{Graph: stubGraph{n: n, found: true}}, "/ui/graph?unit=c").Body.String()
+
+	for _, id := range []string{"r1", "r2", "r3"} {
+		for _, want := range []string{
+			`<form method="post" action="/ui/graph/relations/` + id + `/confirm"`,
+			`<form method="post" action="/ui/graph/relations/` + id + `/reject"`,
+			`<li data-relation-id="` + id + `"`,
+		} {
+			if !strings.Contains(page, want) {
+				t.Errorf("page does not contain %q:\n%s", want, page)
+			}
+		}
+	}
+	if strings.Count(page, `<input type="hidden" name="unit" value="c">`) != 6 {
+		t.Errorf("every form must carry the centre to redraw around:\n%s", page)
+	}
+	if !strings.Contains(page, "<summary>Delete</summary>") {
+		t.Errorf("delete is not behind a confirm step:\n%s", page)
+	}
+	if !strings.Contains(page, "Lisbon trip</span> → <span>Book flights</span>") {
+		t.Errorf("a listed relation does not name its two ends in its direction:\n%s", page)
+	}
+}
+
+func TestGraphCuration_RedrawsAroundTheCentreWithANotice(t *testing.T) {
+	t.Parallel()
+	for action, notice := range map[string]string{"confirm": "Link confirmed.", "reject": "Link deleted."} {
+		var got []string
+		var centre string
+		deps := ui.Deps{Graph: stubGraph{n: threeNeighbours(), found: true, got: &centre}, Curation: stubCuration{got: &got}}
+		rec := curationPost(t, deps, action, "r1", "unit=c")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", action, rec.Code, rec.Body.String())
+		}
+		if !reflect.DeepEqual(got, []string{action + " r1"}) || centre != "c" {
+			t.Errorf("%s called %v and redrew around %q, want [%s r1] around c", action, got, centre, action)
+		}
+		if !strings.Contains(rec.Body.String(), `<p data-outcome="saved" role="status">`+notice+`</p>`) || !strings.Contains(rec.Body.String(), "<svg") {
+			t.Errorf("%s answer is not the graph with %q:\n%s", action, notice, rec.Body.String())
+		}
+	}
+}
+
+func TestGraphCuration_RefusesWhatItCannotDo(t *testing.T) {
+	t.Parallel()
+	var got []string
+	found := stubGraph{n: threeNeighbours(), found: true}
+	cases := []struct {
+		name string
+		deps ui.Deps
+		form string
+		want int
+	}{
+		{"not wired", ui.Deps{Graph: found}, "unit=c", http.StatusServiceUnavailable},
+		{"no centre", ui.Deps{Graph: found, Curation: stubCuration{got: &got}}, "", http.StatusBadRequest},
+		{"not curatable", ui.Deps{Graph: found, Curation: stubCuration{got: &got, err: ports.ErrRelationNotFound}}, "unit=c", http.StatusNotFound},
+		{"fails", ui.Deps{Graph: found, Curation: stubCuration{got: &got, err: errors.New("disk on fire")}}, "unit=c", http.StatusInternalServerError},
+	}
+	for _, c := range cases {
+		rec := curationPost(t, c.deps, "reject", "r1", c.form)
+		if rec.Code != c.want {
+			t.Errorf("%s: %d, want %d", c.name, rec.Code, c.want)
+		}
+		if strings.Contains(rec.Body.String(), "disk on fire") {
+			t.Errorf("%s: the error reached the browser", c.name)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("the curation was reached %d time(s), want only the two cases that get past validation", len(got))
+	}
+}
+
+func TestGraphCuration_ALandedWriteWithAMissingRecordSaysSo(t *testing.T) {
+	t.Parallel()
+	var got []string
+	landed := &brain.WriteLandedError{Record: true, Err: errors.New("log down")}
+	deps := ui.Deps{Graph: stubGraph{n: threeNeighbours(), found: true}, Curation: stubCuration{got: &got, err: landed}}
+	rec := curationPost(t, deps, "confirm", "r1", "unit=c")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Link confirmed, but the activity record of it could not be written.") {
+		t.Errorf("landed write = %d:\n%s", rec.Code, rec.Body.String())
 	}
 }

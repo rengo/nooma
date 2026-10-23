@@ -77,6 +77,8 @@ var activityTitles = map[ports.DecisionAction]string{
 
 	ports.ActionCaptureRelationCheckInResolved:  "Link question answered",
 	ports.ActionCaptureRelationCheckInUnmatched: "Reply matched no link question",
+	ports.ActionRelationConfirmed:               "Link confirmed",
+	ports.ActionRelationRejected:                "Link deleted",
 	ports.ActionBeliefEdited:                    "Belief edited",
 	ports.ActionBeliefRetired:                   "Belief retired",
 	ports.ActionConfigUpdated:                   "Preferences changed",

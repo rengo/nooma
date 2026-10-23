@@ -328,15 +328,21 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
     reader and its tooltip. Clicking a neighbour, or reaching it with Tab and pressing Enter,
     redraws the graph around it; the middle one opens its unit page. When more are related than
     fit, a line says how many were left out. It is drawn on the server: no dragging, no zoom
-    ([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)).
+    ([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)). Under the drawing each relation
+    is listed on its own line, two of different types between the same pair included, with
+    Confirm and, behind a confirm step, Delete. Confirming is what answering "yes" to the
+    digest's question does: the link stops being uncertain and the learner hears it. Deleting is
+    what "no" does: the link is gone and the learner hears that too. Either one closes a question
+    still waiting about that link, shows up in Activity with what the link was, and redraws the
+    graph with a line saying what was done.
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
 Activity does, rather than rendering nothing; so does a unit page's relations section when the
 unit is connected to nothing, and the graph of such a unit. A digest with nothing to carry but items held back says how many
 it holds. Beliefs says it once when every facet is empty, and under each empty facet otherwise.
 
-**You end up with** a product you can use without a terminal, for what exists today. The graph
-shows connections but cannot yet confirm or delete one (see below).
+**You end up with** a product you can use without a terminal, for what exists today, the
+links between your entries included.
 
 ---
 
@@ -366,7 +372,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |
 | Focus held by hysteresis across Today and the digest | Shipped in `m4c` | doc 02 §3 |
-| Graph view with edge curation | In progress: `m4d` (the view is built; confirming or deleting a relation from it is not) | ADR-0050; doc 02 §4; 05 §M4 |
+| Graph view with edge curation | Shipped in `m4d` | ADR-0050; doc 02 §4; 05 §M4 |
 | Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
