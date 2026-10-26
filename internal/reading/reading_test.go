@@ -577,6 +577,34 @@ func TestCheckReminderLeadsAreStrict(t *testing.T) {
 	}
 }
 
+// TestCheckRemindRequestBesideAFollowUpsLeadsIsJudgedByEffect: a follow-up
+// that names its item and reads leads acts on the leads, and a remind_request
+// beside them is ignored (ADR-0043, brain.Capture's follow-up fork), so one
+// nobody expected there has no effect and is no miss. Everywhere else it
+// stays strict: with no item named, a remind_request beside leads that cannot
+// apply arms an asked reminder.
+func TestCheckRemindRequestBesideAFollowUpsLeadsIsJudgedByEffect(t *testing.T) {
+	for name, tc := range map[string]struct {
+		expect   llm.Expect
+		response string
+		miss     bool
+	}{
+		"beside a follow-up's leads": {llm.Expect{Referent: "A", ReminderLeadsMinutes: []int{60}},
+			`{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A","reminder_leads_minutes":[60],"remind_request":true}`, false},
+		"beside leads with no item named": {llm.Expect{ReminderLeadsMinutes: []int{60}},
+			`{"type":"event","normalized_content":"x","weight":0.6,"decay_rate":0.1,"reminder_leads_minutes":[60],"remind_request":true}`, true},
+		"beside a follow-up with no leads read": {llm.Expect{Referent: "A", ReminderLeadsMinutes: []int{60}},
+			`{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A","remind_request":true}`, true},
+		"a follow-up with no leads expected": {llm.Expect{Referent: "A", Type: "correction"},
+			`{"type":"correction","normalized_content":"x","weight":0.6,"decay_rate":0.1,"referent":"A","remind_request":true}`, true},
+	} {
+		got := Check(llm.Case{Expect: &tc.expect}, decode(t, tc.response))
+		if missed := slices.Contains(got, FieldRemindRequest); missed != tc.miss {
+			t.Errorf("%s: Check = %v, want a %s miss: %v", name, got, FieldRemindRequest, tc.miss)
+		}
+	}
+}
+
 // TestCheckReminderLeadsAddIsStrict: an added lead keeps the item's reminders
 // in production and a replacing one drops them (ADR-0045), so either one
 // nobody expected is a miss.
