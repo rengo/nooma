@@ -2053,11 +2053,13 @@ state; `m3b` implements the store-layer round trip.
 
 "Remind me in 15 minutes to turn off the stove" is born from the `timer` outcome of classify
 and goes into its own table. **A timer is NEVER a unit**: no weight, no decay, no graph, no
-belief derivation. `pending | fired | cancelled`. `action_text` is nullable ("remind me in
-15 min" with no object → a generic nudge, and a capture whose text could not be salvaged writes
-that same `NULL` rather than an empty string). On firing, the LLM rephrases the text
-(`rendered_text`) — the request is stored verbatim and only worded at delivery time. Listable
-and cancellable from chat and from the UI.
+belief derivation. `pending | fired | cancelled`. `action_text` is the reading's `title`, as a
+trigger rings with its unit's, or its content when the model gave no title: the content carries
+ISO dates, and a chat listed "Recordatorio para sacar la pizza del horno a las 12:20 del
+2026-10-26." (ADR-0051). It is nullable ("remind me in 15 min" with no object → a generic
+nudge, and a capture whose text could not be salvaged writes that same `NULL` rather than an
+empty string). On firing, the LLM rephrases the text (`rendered_text`): it is stored as read
+and only worded at delivery time. Listable and cancellable from chat and from the UI.
 
 **What a timer is, as read**: a reminder asked for once, after a span of time counted from now
 in minutes or hours ("avisame en 20 minutos que saque la pizza", "remind me in an hour"). Its
@@ -2073,8 +2075,8 @@ trigger took the preference leads, and it rang fifteen minutes before the moment
 A timer keeps §7's quiet-hours exemption: its instant was set by the user, so one that falls in
 the night rings in the night.
 
-The verbatim half is what capture does today: the row is written with `action_text` holding the
-request as classified and `rendered_text` left `NULL`, untouched rather than defaulted, because
+The stored half is what capture does today: the row is written with `action_text` holding the
+request as read and `rendered_text` left `NULL`, untouched rather than defaulted, because
 `NULL` there means "not yet worded" and an empty string would destroy that distinction. A timer
 that has fired but not been surfaced is a real state this table can hold, and `surfaced_at` is
 what tells the two apart.

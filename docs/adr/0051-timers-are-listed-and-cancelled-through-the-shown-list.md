@@ -54,7 +54,12 @@ acts on (ADR-0033). Timers need the same two things, and there is no unit for th
    - A timer that rang or was cancelled between the list and the cancel is answered as no
      longer set, and nothing is logged as cancelled.
    - With no live timer, the reply says none is set.
-6. **The fixed sentences take no side in voseo or tuteo** ("Hay 2 temporizadores puestos:",
+6. **A timer is named by its reading's `title`**: `action_text` stores the title, or the
+   content when the model gave none. A trigger already rings with its unit's title. The content
+   carries ISO dates, and the first live list read "12:20 — Recordatorio para sacar la pizza
+   del horno a las 12:20 del 2026-10-26.". A sentence that closes on the timer's text does not
+   add a second period.
+7. **The fixed sentences take no side in voseo or tuteo** ("Hay 2 temporizadores puestos:",
    "¿Cuál cancelo?"), because they are not the model's words.
 
 ## Alternatives considered

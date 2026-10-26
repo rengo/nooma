@@ -1002,20 +1002,21 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 
 	switch plan.What {
 	case prospection.ArmTimer:
-		// action_text is the request VERBATIM — doc 02 §8: "the request is
-		// stored verbatim and only worded at delivery time". Wording it
-		// here would spend an LLM call at capture on text that may never
-		// be shown, and would lose the user's own words for good.
-		//
-		// c.NormalizedContent is a *string because classify degrades a
-		// missing field to nil, and that nil is passed through rather than
-		// flattened to "": timers.action_text's own NULL already means
-		// "generic nudge" (migration 0001:65), which is exactly what a
-		// timer with no salvaged text is.
+		// action_text is the reading's title, as a trigger rings with its
+		// unit's (doc 02 §8, ADR-0051): the normalized content carries ISO
+		// dates, and a chat listed "Recordatorio para sacar la pizza del
+		// horno a las 12:20 del 2026-10-26.". It is worded at delivery,
+		// never here. With no title it is the content, and with neither
+		// it stays nil rather than "": timers.action_text's own NULL
+		// already means "generic nudge" (migration 0001:65).
+		text := c.Title
+		if text == nil {
+			text = c.NormalizedContent
+		}
 		if err := r.timers.Create(ctx, ports.Timer{
 			ID:         id,
 			FireAt:     plan.FireAt,
-			ActionText: c.NormalizedContent,
+			ActionText: text,
 			CreatedAt:  now,
 		}); err != nil {
 			return CaptureResult{}, fmt.Errorf("capture: arm timer: %w", err)

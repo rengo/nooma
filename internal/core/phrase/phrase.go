@@ -420,6 +420,13 @@ func (s Set) TimerLine(fire, now time.Time, text *string) string {
 	return s.Line(when, *text)
 }
 
+// TimerCancelledLine says which timer a cancel cancelled, as TimerLine names it,
+// in a sentence of its own: a text that already ends in a period is not
+// given a second one.
+func (s Set) TimerCancelledLine(fire, now time.Time, text *string) string {
+	return fmt.Sprintf(s.TimerCancelled, strings.TrimRight(s.TimerLine(fire, now, text), "."))
+}
+
 // sameDay says whether fire falls on now's day, read in fire's own zone.
 func sameDay(fire, now time.Time) bool {
 	now = now.In(fire.Location())

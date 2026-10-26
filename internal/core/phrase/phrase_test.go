@@ -203,6 +203,22 @@ func TestSet_TimerLine(t *testing.T) {
 	}
 }
 
+// TestSet_TimerCancelledLine closes the sentence once: a timer's text that
+// already ends in a period does not read "..".
+func TestSet_TimerCancelledLine(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	now := time.Date(2026, 10, 26, 10, 10, 0, 0, art)
+	fire := time.Date(2026, 10, 26, 10, 28, 0, 0, art)
+	for _, text := range []string{"Sacar la pizza del horno", "Sacar la pizza del horno."} {
+		if got, want := For(classify.LanguageES).TimerCancelledLine(fire, now, &text), "Cancelado: 10:28 \u2014 Sacar la pizza del horno."; got != want {
+			t.Errorf("TimerCancelledLine(%q) = %q, want %q", text, got, want)
+		}
+	}
+	if got, want := For(classify.LanguageEN).TimerCancelledLine(fire, now, nil), "Cancelled: 10:28."; got != want {
+		t.Errorf("a generic nudge = %q, want %q", got, want)
+	}
+}
+
 // TestSet_Lead_ReadsImmediateRatherThanDerivingIt pins the distinction a
 // real defect produced: subtracting the two instants gives a true duration
 // and a false promise — 41 hours reads as "the day before" for a reminder

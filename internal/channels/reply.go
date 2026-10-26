@@ -198,7 +198,7 @@ func RenderReply(result brain.CaptureResult) string {
 func timersReply(say phrase.Set, a brain.TimersAnswer, now time.Time) string {
 	switch {
 	case a.Cancelled != nil:
-		return fmt.Sprintf(say.TimerCancelled, say.TimerLine(a.Cancelled.FireAt, now, a.Cancelled.Text))
+		return say.TimerCancelledLine(a.Cancelled.FireAt, now, a.Cancelled.Text)
 	case a.Gone:
 		return say.TimerGone
 	case len(a.Listed) == 0:

@@ -261,3 +261,36 @@ func TestI46_ACancelOfATimerNoLongerPendingSaysSo(t *testing.T) {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
+
+// TestI46_ATimerIsNamedByItsTitle: a timer stored the reading's
+// normalized_content, which carries ISO dates, and was listed and cancelled
+// as "12:20 — Recordatorio para sacar la pizza del horno a las 12:20 del
+// 2026-10-26.". It stores the reading's title, as a trigger rings with its
+// unit's, and the content only when the model gave no title.
+func TestI46_ATimerIsNamedByItsTitle(t *testing.T) {
+	const head = `{"type":"timer","normalized_content":"Recordarme sacar la pizza del horno a las 10:28 del 2026-10-26.","weight":0.3,"decay_rate":0.3,"language":"es","due_at":"2026-10-26T10:28:00-03:00","remind_request":true`
+	for name, tc := range map[string]struct {
+		extra, want string
+	}{
+		"with a title":    {`,"title":"Sacar la pizza del horno"`, "Sacar la pizza del horno"},
+		"with none given": {``, "Recordarme sacar la pizza del horno a las 10:28 del 2026-10-26."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newI46(t, head+tc.extra+`}`, nil, nil)
+			f.capture(t, "avisame en 18 minutos que saque la pizza del horno")
+			rows := f.timers.All()
+			if len(rows) != 1 || rows[0].ActionText == nil || *rows[0].ActionText != tc.want {
+				t.Fatalf("timers = %+v, want one saying %q", rows, tc.want)
+			}
+		})
+	}
+}
+
+// TestI46_ACancelledTimerEndingInAPeriodGetsNoSecondOne: the cancel reply
+// closes its sentence, and a text that already closed it must not read "..".
+func TestI46_ACancelledTimerEndingInAPeriodGetsNoSecondOne(t *testing.T) {
+	f := newI46(t, i46Reading("chitchat", "cancel", "1"), []i46Timer{{"tmr-pizza", i46Pizza, "Sacar la pizza del horno."}}, nil)
+	if got, want := channels.RenderReply(f.capture(t, "cancelá el del horno")), "Cancelado: 10:28 — Sacar la pizza del horno."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
