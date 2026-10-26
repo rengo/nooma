@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame pagar el gas el jueves",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-23.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-23\",\"title\":\"Pagar el gas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,

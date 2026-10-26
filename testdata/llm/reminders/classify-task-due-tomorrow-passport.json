@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "mañana renuevo el pasaporte",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Mañana, 2026-10-20, renuevo el pasaporte.\",\"weight\":0.65,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-20\",\"title\":\"Renovar el pasaporte\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"timer_request\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Mañana, 2026-10-20, renuevo el pasaporte.\",\"weight\":0.75,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-20\",\"title\":\"Renovar el pasaporte\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
   "now": "2026-10-19T16:34:00-03:00",
   "expect": {
     "day_only": true,
