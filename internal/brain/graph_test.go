@@ -140,3 +140,37 @@ func TestGraphService_NeighbourhoodOfAnUnconnectedUnitIsJustTheCentre(t *testing
 		t.Fatalf("Neighbourhood(alone) = %+v, want the centre alone", n)
 	}
 }
+
+// TestGraphService_MarksOnlyRelationsBelowTheirTypesSurfaceAsConfirmable:
+// each drawn relation is judged against its own type's resolved surface
+// threshold, the one the confirm itself raises to: a learned row for
+// derived_from, the default for same_topic.
+func TestGraphService_MarksOnlyRelationsBelowTheirTypesSurfaceAsConfirmable(t *testing.T) {
+	ctx := context.Background()
+	units := memrepo.NewUnits()
+	for _, id := range []string{"centre", "a", "b", "c"} {
+		seedUnitsUnit(t, units, id, unit.StatusPool)
+	}
+	rels := memrepo.NewRelations()
+	rels.SeedThreshold(t, "derived_from", 0.55, 0.75)
+	for _, r := range []ports.Relation{
+		// 0.70 is above the default surface but below derived_from's own.
+		{ID: "r-learned", FromUnitID: "centre", ToUnitID: "a", Type: "derived_from", Strength: 0.5, Confidence: 0.70},
+		{ID: "r-asserted", FromUnitID: "centre", ToUnitID: "b", Type: "same_topic", Strength: 0.5, Confidence: 0.99},
+		{ID: "r-uncertain", FromUnitID: "c", ToUnitID: "centre", Type: "same_topic", Strength: 0.5, Confidence: 0.40},
+	} {
+		r.CreatedBy, r.CreatedAt = "test", unitsNow
+		if err := rels.Upsert(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, _, err := brain.NewGraphService(units, rels).Neighbourhood(ctx, "centre")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"r-learned": true, "r-uncertain": true}
+	if !reflect.DeepEqual(n.Confirmable, want) {
+		t.Fatalf("Confirmable = %v, want %v", n.Confirmable, want)
+	}
+}

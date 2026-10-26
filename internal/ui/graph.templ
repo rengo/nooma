@@ -38,19 +38,25 @@ templ graphBody(n brain.Neighbourhood, notice graphNotice) {
 
 // graphRelations lists every drawn relation on its own line, so each one is
 // reachable by itself, two of different types between the same pair
-// included. Confirm is one press; delete sits behind a confirm step, as a
-// belief's retire does. Each form carries the centre to redraw around.
+// included. Delete, behind a confirm step as a belief's retire is, is on
+// every one: it is the correction path. Confirm is only on a relation below
+// its type's surface threshold (n.Confirmable); one already in force offers
+// none, so the list does not read as a to-do. Each form carries the centre
+// to redraw around.
 templ graphRelations(n brain.Neighbourhood) {
+	<p data-hint>Links above their threshold are already in force; only an uncertain one offers Confirm. Delete is there to correct a wrong one.</p>
 	<ul data-curation>
 		for _, e := range n.Edges {
 			<li data-relation-id={ e.ID }>
 				<span>{ graphShortLabel(graphUnits(n)[e.From]) }</span> → <span>{ graphShortLabel(graphUnits(n)[e.To]) }</span>
 				<span data-relation-type>{ e.Type }</span>
 				<span data-confidence title="confidence">{ formatConfidence(e.Confidence) }</span>
-				<form method="post" action={ templ.URL("/ui/graph/relations/" + e.ID + "/confirm") } hx-boost="true">
-					<input type="hidden" name="unit" value={ n.Centre.Unit.ID }/>
-					<button type="submit">Confirm</button>
-				</form>
+				if n.Confirmable[e.ID] {
+					<form method="post" action={ templ.URL("/ui/graph/relations/" + e.ID + "/confirm") } hx-boost="true">
+						<input type="hidden" name="unit" value={ n.Centre.Unit.ID }/>
+						<button type="submit">Confirm</button>
+					</form>
+				}
 				<details>
 					<summary>Delete</summary>
 					<form method="post" action={ templ.URL("/ui/graph/relations/" + e.ID + "/reject") } hx-boost="true">

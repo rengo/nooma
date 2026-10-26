@@ -451,7 +451,10 @@ reads as two through the centre; a relation from a unit to itself is not drawn. 
 **Confirming or deleting a relation from the graph is the confirm and reject above, unchanged**:
 the same code the chat answer to a relation question runs, so the raise, the
 `relation_confirm`/`relation_reject` signal and I10's signal-before-delete cannot differ between
-the two surfaces. Only a relation the graph draws can be curated: one with an end that is not live
+the two surfaces. Confirm is offered only on a relation in the band a confirm raises it out of,
+below its type's resolved `min_confidence_to_surface` (`internal/core/relation.Confirmable`;
+one stored before its type's thresholds rose counts too, and so does a `NaN`); one at or above
+it is already asserted and offers only the delete. Only a relation the graph draws can be curated: one with an end that is not live
 is refused and nothing is written (I02). A question still queued or asked about that relation is
 closed with the user's answer, so the digest never asks what was already settled. Its
 `decision_log` row is in §11.

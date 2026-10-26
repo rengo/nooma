@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/rengo/nooma/internal/core/graph"
+	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -35,6 +36,9 @@ type Neighbourhood struct {
 	Neighbours []GraphNode
 	Edges      []graph.Edge
 	Omitted    int
+	// Confirmable holds the ids of the drawn relations a confirm would
+	// raise (relation.Confirmable); every other one is already in force.
+	Confirmable map[string]bool
 }
 
 // Neighbourhood returns id's neighbourhood, or found=false when id is not
@@ -97,7 +101,33 @@ func (s *GraphService) Neighbourhood(ctx context.Context, id string) (Neighbourh
 	for i, n := range kept {
 		out.Neighbours[i] = GraphNode{Unit: byID[n], At: ring[i]}
 	}
+	if out.Confirmable, err = s.confirmable(ctx, out.Edges); err != nil {
+		return Neighbourhood{}, false, err
+	}
 	return out, true, nil
+}
+
+// confirmable marks each edge below its type's resolved surface threshold,
+// read through the same ThresholdsFor -> relation.Resolve pair the confirm
+// itself raises by, once per type.
+func (s *GraphService) confirmable(ctx context.Context, edges []graph.Edge) (map[string]bool, error) {
+	byType := map[string]relation.Thresholds{}
+	out := map[string]bool{}
+	for _, e := range edges {
+		t, ok := byType[e.Type]
+		if !ok {
+			row, err := s.rels.ThresholdsFor(ctx, e.Type)
+			if err != nil {
+				return nil, err
+			}
+			t = relation.Resolve(row)
+			byType[e.Type] = t
+		}
+		if relation.Confirmable(e.Confidence, t) {
+			out[e.ID] = true
+		}
+	}
+	return out, nil
 }
 
 // graphEdge copies a relation into the shape core/graph reads.

@@ -329,8 +329,10 @@ doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [statu
     redraws the graph around it; the middle one opens its unit page. When more are related than
     fit, a line says how many were left out. It is drawn on the server: no dragging, no zoom
     ([ADR-0050](adr/0050-the-graph-is-drawn-on-the-server.md)). Under the drawing each relation
-    is listed on its own line, two of different types between the same pair included, with
-    Confirm and, behind a confirm step, Delete. Confirming is what answering "yes" to the
+    is listed on its own line, two of different types between the same pair included, each with
+    Delete behind a confirm step. Only a link Nooma is still unsure of (below its type's
+    threshold) also offers Confirm; one above it is already in force and needs nothing, as a
+    line above the list says. Confirming is what answering "yes" to the
     digest's question does: the link stops being uncertain and the learner hears it. Deleting is
     what "no" does: the link is gone and the learner hears that too. Either one closes a question
     still waiting about that link, shows up in Activity with what the link was, and redraws the
