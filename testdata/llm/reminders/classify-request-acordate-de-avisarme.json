@@ -4,12 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "acordate de avisarme que vence el seguro el viernes",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"El seguro vence el 2026-10-23; avisarme de su vencimiento.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-23\",\"title\":\"Vencimiento del seguro\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Acordate de avisarme que el seguro vence el 2026-10-23.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-23\",\"title\":\"Vencimiento del seguro\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "title": true
   },
-  "prompt_sha256": "a5b859f228fc6dec0d87fca59391fbe85d043c3e116a524ee7541f3bb7b72d4d"
+  "prompt_sha256": "1249e79b033d49f5c997696651f7b984c57aff32c6317f8fe5b316ab125c6d51"
 }

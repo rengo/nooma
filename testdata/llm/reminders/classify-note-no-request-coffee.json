@@ -5,10 +5,9 @@
   "task": "classify",
   "message": "comprar café mañana a las 10",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar café el 2026-10-17 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"due_at\":\"2026-10-17T10:00:00-03:00\",\"title\":\"Comprar café\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
-  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "title": true
   },
-  "prompt_sha256": "09dd5fa01f8aac1dd47d43e9bd77b992a3c5d0604ebf1e8b9b8ae5f723647cda"
+  "prompt_sha256": "bd50675db7c17a65a636cd10c92810f56fc029ea282ad5f43a9ce410ad3d04f7"
 }

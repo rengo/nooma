@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame mañana a las 9 que llame al plomero",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisarme que llame al plomero el 2026-10-27 a las 09:00.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-27T09:00:00-03:00\",\"title\":\"Llamar al plomero\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme llamar al plomero el 2026-10-27 a las 09:00.\",\"weight\":0.85,\"decay_rate\":0.05,\"language\":\"es\",\"due_at\":\"2026-10-27T09:00:00-03:00\",\"title\":\"Llamar al plomero\",\"interrupt_level\":0.7,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-26T10:08:00-03:00",
   "expect": {
     "type": "task",
@@ -13,5 +12,5 @@
     "day_only": false,
     "due_at": "2026-10-27T09:00:00-03:00"
   },
-  "prompt_sha256": "daf91ed1c221ebabd289cf1ef06e44998d1189166d06c60740aa70046e4dca7b"
+  "prompt_sha256": "eb247cd254c3551f499f068b77e8fb5a6f794496cb1b34186ea6403d32159ed8"
 }

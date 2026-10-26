@@ -1,8 +1,10 @@
 {
   "id": "classify-timers-cancel-answer-after-which",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "el 2",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Cancelar la alarma para llamar a mamá.\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"es\",\"timer_request\":\"cancel\",\"timer_target\":2}",
   "now": "2026-10-26T10:10:00-03:00",
   "conversation": {
     "turns": [
@@ -31,5 +33,6 @@
   "expect": {
     "timer_request": "cancel",
     "timer_target": "2"
-  }
+  },
+  "prompt_sha256": "ca3edff6f09d43cd07b5130f03134256f0d5dc678139c390bf17a97196163d8a"
 }

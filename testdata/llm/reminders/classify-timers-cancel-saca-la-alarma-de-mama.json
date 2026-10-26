@@ -1,8 +1,10 @@
 {
   "id": "classify-timers-cancel-saca-la-alarma-de-mama",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "sacá la alarma de mamá",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Cancelar la alarma para llamar a mamá.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"timer_request\":\"cancel\",\"timer_target\":2}",
   "now": "2026-10-26T10:10:00-03:00",
   "timers_list": [
     {
@@ -17,5 +19,6 @@
   "expect": {
     "timer_request": "cancel",
     "timer_target": "2"
-  }
+  },
+  "prompt_sha256": "413a583247dcc1c012c96f1441a6297e02f44c51d33f58fb25505d62ab4b1af8"
 }

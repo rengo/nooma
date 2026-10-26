@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "no, seguí",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No, seguí recordándome comprar café.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"keep\"}",
-  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
@@ -15,5 +14,5 @@
     "type": "chitchat",
     "reminder_intent": "keep"
   },
-  "prompt_sha256": "3d31f9c0c43e038473c0bd0a84366eba72528234537daf2b69e15d1cdcecdf62"
+  "prompt_sha256": "cca568596aab23c09b7256fd983f9a770c685df30d00d74ab9b8e3234b4e45e2"
 }

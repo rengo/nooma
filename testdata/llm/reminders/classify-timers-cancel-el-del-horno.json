@@ -1,8 +1,10 @@
 {
   "id": "classify-timers-cancel-el-del-horno",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "cancelá el del horno",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Cancelar el temporizador para sacar la pizza del horno.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"timer_request\":\"cancel\",\"timer_target\":1}",
   "now": "2026-10-26T10:10:00-03:00",
   "timers_list": [
     {
@@ -17,5 +19,6 @@
   "expect": {
     "timer_request": "cancel",
     "timer_target": "1"
-  }
+  },
+  "prompt_sha256": "3f52c21aae06da444d5c3814af5be9a9ceb3248725ce448157bcfa893f4fa522"
 }

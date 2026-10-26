@@ -4,12 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no te olvides de recordarme pagar el gas el jueves",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme pagar el gas el 2026-10-22.\",\"weight\":0.85,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-22\",\"title\":\"Pagar el gas\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "title": true
   },
-  "prompt_sha256": "b35ec55edb25c700caa84e0540692337a6c60b2695f2fc88b51cfcf378257751"
+  "prompt_sha256": "adda16bf7da113262354701cd8d472be9c038de38ac2d4f4b52d607135422fbb"
 }

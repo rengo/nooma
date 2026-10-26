@@ -4,13 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "que no se me olvide regar las plantas mañana",
-  "response": "{\n  \"type\": \"task\",\n  \"normalized_content\": \"Regar las plantas el 2026-10-17.\",\n  \"weight\": 0.8,\n  \"decay_rate\": 0.02,\n  \"language\": \"es\",\n  \"due_at\": \"2026-10-17\",\n  \"title\": \"Regar las plantas\",\n  \"interrupt_level\": 0.5,\n  \"remind_request\": true,\n  \"reminder_intent\": \"none\"\n}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Regar las plantas el 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regar las plantas\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": true,
     "title": true
   },
-  "prompt_sha256": "59316453df37128e503f87e6acdb2dbb852812d03a5e98af311011c96668ea7d"
+  "prompt_sha256": "2395fe2489a2cb8845abe11b6744a63f16c8b9e63d22493b6f2aa30fef5d3157"
 }

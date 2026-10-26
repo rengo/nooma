@@ -4,9 +4,8 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "my dentist sent a reminder to confirm",
-  "response": "{\"type\":\"knowledge\",\"normalized_content\":\"My dentist sent a reminder to confirm.\",\"weight\":0.6,\"decay_rate\":0.04,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"My dentist sent me a reminder to confirm.\",\"weight\":0.65,\"decay_rate\":0.03,\"language\":\"en\",\"remind_request\":false}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
-  "prompt_sha256": "6bfd9931cce2253371ce659b20e1e6476979743030ef98fd464213033aeacdbc"
+  "prompt_sha256": "65752149f28d7df560fb204df298eb5db702b3b4484b6fb75466af36dbe23a4f"
 }

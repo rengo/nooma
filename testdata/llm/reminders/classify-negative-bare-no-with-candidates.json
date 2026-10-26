@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0,\"decay_rate\":0,\"language\":\"en\",\"task_checkin_outcome\":\"snooze\",\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"en\",\"task_checkin_outcome\":\"snooze\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"timer_request\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -18,5 +17,5 @@
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "prompt_sha256": "662d763a65064fc7291adecb879400cb0e0fce3153f78b738c49dd6c6cbf3595"
+  "prompt_sha256": "470bd3418bf99973c4e86428201e454cf70af439952edb63795774080ab69822"
 }

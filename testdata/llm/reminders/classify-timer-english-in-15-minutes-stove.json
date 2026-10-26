@@ -4,13 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "remind me in 15 minutes to turn off the stove",
-  "response": "{\"type\":\"timer\",\"normalized_content\":\"Remind me to turn off the stove at 2026-10-26 10:23.\",\"weight\":0.9,\"decay_rate\":0.3,\"language\":\"en\",\"due_at\":\"2026-10-26T10:23:00-03:00\",\"title\":\"Turn off the stove\",\"interrupt_level\":0.9,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Remind me to turn off the stove at 2026-10-26 10:23.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"en\",\"due_at\":\"2026-10-26T10:23:00-03:00\",\"title\":\"Turn off the stove\",\"interrupt_level\":0.8,\"remind_request\":true,\"reminder_intent\":\"none\",\"timer_request\":\"none\"}",
   "now": "2026-10-26T10:08:00-03:00",
   "expect": {
     "type": "timer",
     "remind_request": true,
     "due_at": "2026-10-26T10:23:00-03:00"
   },
-  "prompt_sha256": "7758784be79e063c5fcbeefbfa24c0816b4340974d9814047d1223bc69ff959b"
+  "prompt_sha256": "5cd5ea8f20b4d7c58e727d741289d7e3d0f56f5a78c3f4a4b9a401656d651220"
 }

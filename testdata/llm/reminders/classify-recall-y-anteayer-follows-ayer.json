@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿y anteayer?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué te conté el 2026-10-19?\",\"weight\":0.5,\"decay_rate\":0.3,\"language\":\"es\",\"recall_scope\":{\"window\":{\"on\":\"told\",\"from\":\"2026-10-19\",\"to\":\"2026-10-20\"}}}",
-  "record": true,
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué te conté anteayer, el 2026-10-19?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"window\":{\"on\":\"told\",\"from\":\"2026-10-19\",\"to\":\"2026-10-20\"}}}",
   "now": "2026-10-21T18:30:00-03:00",
   "conversation": {
     "turns": [
@@ -29,5 +28,5 @@
       "to": "2026-10-20T00:00:00-03:00"
     }
   },
-  "prompt_sha256": "c8531f09aaf581f71182acadec54b72d1a68bf3be9e3306544a4094510719d5d"
+  "prompt_sha256": "64b26f8c9ae1e7eb5c7b26cabc9bbb72efe2ef7c3b91e329835f1e72d6cdfd76"
 }

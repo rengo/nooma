@@ -4,13 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame en media hora que saque la ropa del lavarropas",
-  "response": "{\"type\":\"timer\",\"normalized_content\":\"Recordarme sacar la ropa del lavarropas el 2026-10-27 a las 00:20.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-27T00:20:00-03:00\",\"title\":\"Sacar la ropa del lavarropas\",\"interrupt_level\":0.7,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Recordarme que saque la ropa del lavarropas el 2026-10-27 a las 00:20.\",\"weight\":0.85,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-27T00:20:00-03:00\",\"title\":\"Sacar la ropa del lavarropas\",\"remind_request\":true,\"reminder_intent\":\"none\",\"timer_request\":\"none\"}",
   "now": "2026-10-26T23:50:00-03:00",
   "expect": {
     "type": "timer",
     "remind_request": true,
     "due_at": "2026-10-27T00:20:00-03:00"
   },
-  "prompt_sha256": "a0ab639aa1f571e2f2a3391150d43f3ba01aac263f764710d9c9410f586dde53"
+  "prompt_sha256": "0a61a6cfa39fe6a8f491fd6d98aaeb410668b6346854a3965b7862089ba55a33"
 }

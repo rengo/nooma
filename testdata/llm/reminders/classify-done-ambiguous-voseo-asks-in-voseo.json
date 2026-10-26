@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya lo hice, tachalo",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya hice una de las dos cosas mencionadas; tachala.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís a renovar el pasaporte?\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya hice una de las dos cosas pendientes; falta identificar cuál para tacharla.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Cuál tachamos: renovar el pasaporte o pagar la tarjeta?\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -37,5 +36,5 @@
     "referent": "unclear",
     "voice": "voseo"
   },
-  "prompt_sha256": "ed6f930dd3236f844fa24b8936826b463c2de3e1779206db25386939cccb035c"
+  "prompt_sha256": "295a9fc63a38b11c35dfd6190b11904f9a4d404a064033c661dbaa7586d96140"
 }

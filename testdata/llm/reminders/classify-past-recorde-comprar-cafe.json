@@ -4,9 +4,8 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordé que tenía que comprar café",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordé que tenía que comprar café.\",\"weight\":0.6,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Recordé que tenía que comprar café.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
-  "prompt_sha256": "2ce59caf1626c052241b213c111cc5ac038cceab17ca7469c8f829f9bd47bbd0"
+  "prompt_sha256": "795d5872bb1c60db887e47cb10a7ada9eac03467f18aafd4e3d1e5664e942204"
 }

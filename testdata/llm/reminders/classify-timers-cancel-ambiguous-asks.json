@@ -1,8 +1,10 @@
 {
   "id": "classify-timers-cancel-ambiguous-asks",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "cancelá la alarma",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Cancelá la alarma.\",\"weight\":0.6,\"decay_rate\":0.3,\"language\":\"es\",\"timer_request\":\"cancel\",\"timer_target\":\"unclear\"}",
   "now": "2026-10-26T10:10:00-03:00",
   "timers_list": [
     {
@@ -17,5 +19,6 @@
   "expect": {
     "timer_request": "cancel",
     "timer_target": "unclear"
-  }
+  },
+  "prompt_sha256": "8bbb46bd8d25f29474913318c6ee26878a7147dd06e25baf834a3ae17927a172"
 }

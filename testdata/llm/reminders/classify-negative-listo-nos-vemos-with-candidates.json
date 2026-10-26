@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "listo, nos vemos mañana",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Listo, nos vemos el 2026-10-15.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\"}",
-  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -17,5 +16,5 @@
   "expect": {
     "type": "chitchat"
   },
-  "prompt_sha256": "e31c4068f69e2b77710c0552875d86bbf13cae85b079569661868798d765ed25"
+  "prompt_sha256": "1c76827a992692dd18c008e5ca8471ee9243f304ad166a87df2f22e5341b3c20"
 }

@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "el jueves cena con Ana a las 21",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Tengo una cena con Ana el 2026-10-22 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-22T21:00:00-03:00\",\"title\":\"Cena con Ana\"}",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Tengo una cena con Ana el 2026-10-22 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"event_at\":\"2026-10-22T21:00:00-03:00\",\"title\":\"Cena con Ana\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"timer_request\":\"none\"}",
   "now": "2026-10-20T10:17:00-03:00",
   "conversation": {
     "turns": [
@@ -68,5 +67,5 @@
     "remind_request": false,
     "event_at": "2026-10-22T21:00:00-03:00"
   },
-  "prompt_sha256": "f8326d55cdbeab00c029a5f26d98eb90f0be057026fa5b7b375d602400cdbd61"
+  "prompt_sha256": "1e006251b2074dcc07461cbb9c6990f23722b10c9c46ca100ae75d25d1f1a4f2"
 }
