@@ -705,3 +705,66 @@ func TestValidateCaseChecksTheRecallScope(t *testing.T) {
 		t.Fatalf("ValidateCase of a good recall case = %v", err)
 	}
 }
+
+// TestCheckTimerFieldsAreStrict: a list answers with the timers and a cancel
+// cancels one (ADR-0051), so either one nobody expected is a miss, and a
+// cancel's target must be the position expected.
+func TestCheckTimerFieldsAreStrict(t *testing.T) {
+	const head = `{"type":"chitchat","normalized_content":"x","weight":0.1,"decay_rate":0.3`
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		extra  string
+		miss   []string
+	}{
+		"an unexpected list":         {llm.Expect{}, `,"timer_request":"list"`, []string{FieldTimerRequest}},
+		"an expected list":           {llm.Expect{TimerRequest: "list"}, `,"timer_request":"list"`, nil},
+		"none for none":              {llm.Expect{}, `,"timer_request":"none"`, nil},
+		"an expected cancel":         {llm.Expect{TimerRequest: "cancel", TimerTarget: "2"}, `,"timer_request":"cancel","timer_target":2`, nil},
+		"another timer":              {llm.Expect{TimerRequest: "cancel", TimerTarget: "2"}, `,"timer_request":"cancel","timer_target":1`, []string{FieldTimerTarget}},
+		"unclear expected, one read": {llm.Expect{TimerRequest: "cancel", TimerTarget: "unclear"}, `,"timer_request":"cancel","timer_target":1`, []string{FieldTimerTarget}},
+		"a stray target":             {llm.Expect{TimerRequest: "list"}, `,"timer_request":"list","timer_target":1`, []string{FieldTimerTarget}},
+	} {
+		got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.extra+`}`))
+		if !slices.Equal(got, tc.miss) {
+			t.Errorf("%s: Check = %v, want %v", name, got, tc.miss)
+		}
+	}
+	if !ReminderMissed([]string{FieldTimerTarget}) || !ReminderMissed([]string{FieldTimerRequest}) {
+		t.Error("a timer field misread is not counted as a reminder misread, though it lists or cancels")
+	}
+}
+
+// TestPromptCarriesTheLiveTimers: a case's timers_list is the list the prompt
+// shows, so a recorded cancel is read against the timers it names.
+func TestPromptCarriesTheLiveTimers(t *testing.T) {
+	c := llm.Case{ID: "x", Message: "cancelá el del horno", Now: "2026-10-26T10:10:00-03:00",
+		TimersList: []llm.TimerEntry{{Text: "Sacar la pizza del horno", At: "2026-10-26T10:28:00-03:00"}, {At: "2026-10-26T11:07:00-03:00"}}}
+	p, err := Prompt(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1) 2026-10-26 10:28 (Monday) — Sacar la pizza del horno\n2) 2026-10-26 11:07 (Monday)\n"; !strings.Contains(p, want) {
+		t.Errorf("the prompt does not list the case's timers as\n%s\nprompt:\n%s", want, p)
+	}
+}
+
+// TestValidateCaseChecksTheTimerFields rejects what a replay could not mean.
+func TestValidateCaseChecksTheTimerFields(t *testing.T) {
+	ok := llm.TimerEntry{At: "2026-10-26T10:28:00-03:00"}
+	for name, c := range map[string]llm.Case{
+		"an unknown request": {Expect: &llm.Expect{TimerRequest: "snooze"}},
+		"a target past five": {Expect: &llm.Expect{TimerRequest: "cancel", TimerTarget: "6"}},
+		"a target word":      {Expect: &llm.Expect{TimerRequest: "cancel", TimerTarget: "first"}},
+		"a bad instant":      {Expect: &llm.Expect{}, TimersList: []llm.TimerEntry{{At: "10:28"}}},
+		"out of order":       {Expect: &llm.Expect{}, TimersList: []llm.TimerEntry{{At: "2026-10-26T11:07:00-03:00"}, ok}},
+		"six timers":         {Expect: &llm.Expect{}, TimersList: []llm.TimerEntry{ok, ok, ok, ok, ok, ok}},
+	} {
+		c.ID = "x"
+		if err := ValidateCase(c); err == nil {
+			t.Errorf("%s: ValidateCase accepted it", name)
+		}
+	}
+	if err := ValidateCase(llm.Case{ID: "x", Expect: &llm.Expect{TimerRequest: "cancel", TimerTarget: "unclear"}, TimersList: []llm.TimerEntry{ok, ok}}); err != nil {
+		t.Errorf("a valid timer case was rejected: %v", err)
+	}
+}

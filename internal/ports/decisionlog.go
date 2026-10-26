@@ -67,20 +67,23 @@ const (
 	ActionCaptureArmedTrigger       DecisionAction = "capture.armed.trigger"
 	ActionCaptureArmedRecurring     DecisionAction = "capture.armed.recurring_trigger"
 	ActionCaptureArmRefused         DecisionAction = "capture.arm.refused"
-	ActionCheckTriggerExpired       DecisionAction = "check.trigger.expired"
-	ActionCheckTriggerLapsed        DecisionAction = "check.trigger.lapsed"
-	ActionCheckReminderArmed        DecisionAction = "check.reminder.armed"
-	ActionCheckReminderMoved        DecisionAction = "check.reminder.moved"
-	ActionCheckReminderCancelled    DecisionAction = "check.reminder.cancelled"
-	ActionCheckReminderRefused      DecisionAction = "check.reminder.refused"
-	ActionCheckTimerFired           DecisionAction = "check.timer.fired"
-	ActionCheckTimerCancelled       DecisionAction = "check.timer.cancelled"
-	ActionCheckConflictSkipped      DecisionAction = "check.conflict_skipped"
-	ActionCheckTriggerFired         DecisionAction = "check.trigger.fired"
-	ActionCheckTriggerDelivered     DecisionAction = "check.trigger.delivered"
-	ActionCheckDeliveryFailed       DecisionAction = "check.delivery_failed"
-	ActionCheckDigestSent           DecisionAction = "check.digest.sent"
-	ActionCheckDigestHeld           DecisionAction = "check.digest.held"
+	// ActionCaptureTimerCancelled: a chat cancel moved a listed timer
+	// pending -> cancelled (ADR-0051).
+	ActionCaptureTimerCancelled  DecisionAction = "capture.timer.cancelled"
+	ActionCheckTriggerExpired    DecisionAction = "check.trigger.expired"
+	ActionCheckTriggerLapsed     DecisionAction = "check.trigger.lapsed"
+	ActionCheckReminderArmed     DecisionAction = "check.reminder.armed"
+	ActionCheckReminderMoved     DecisionAction = "check.reminder.moved"
+	ActionCheckReminderCancelled DecisionAction = "check.reminder.cancelled"
+	ActionCheckReminderRefused   DecisionAction = "check.reminder.refused"
+	ActionCheckTimerFired        DecisionAction = "check.timer.fired"
+	ActionCheckTimerCancelled    DecisionAction = "check.timer.cancelled"
+	ActionCheckConflictSkipped   DecisionAction = "check.conflict_skipped"
+	ActionCheckTriggerFired      DecisionAction = "check.trigger.fired"
+	ActionCheckTriggerDelivered  DecisionAction = "check.trigger.delivered"
+	ActionCheckDeliveryFailed    DecisionAction = "check.delivery_failed"
+	ActionCheckDigestSent        DecisionAction = "check.digest.sent"
+	ActionCheckDigestHeld        DecisionAction = "check.digest.held"
 	// ActionCheckCheckinReasked and ActionCheckCheckinExpired record the
 	// morning digest asking an open check-in again and closing one nobody
 	// answered (doc 02 §7). They are audit rows: the re-ask count lives on the
@@ -275,7 +278,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureEmbeddingFailed, ActionCaptureDedupFailed, ActionCaptureChatFailed,
 		ActionCapturePersonRefAmbiguous,
 		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
-		ActionCaptureArmRefused,
+		ActionCaptureArmRefused, ActionCaptureTimerCancelled,
 		ActionCheckTriggerExpired, ActionCheckTriggerLapsed, ActionCheckReminderArmed, ActionCheckReminderMoved,
 		ActionCheckReminderCancelled, ActionCheckReminderRefused, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,

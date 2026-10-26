@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "¿qué tengo esta semana?",
   "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué tengo esta semana, desde 2026-10-21 18:30 hasta 2026-10-26?\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"recall_scope\":{\"window\":{\"on\":\"when\",\"from\":\"2026-10-21T18:30:00-03:00\",\"to\":\"2026-10-26T00:00:00-03:00\"}}}",
+  "record": true,
   "now": "2026-10-21T18:30:00-03:00",
   "expect": {
     "type": "recall",

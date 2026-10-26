@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "ya está",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya está.\",\"weight\":0,\"decay_rate\":0,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Cuál de las dos cosas ya está: renovar el pasaporte o pagar la tarjeta?\"}",
+  "record": true,
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [

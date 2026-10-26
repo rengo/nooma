@@ -68,6 +68,9 @@ const (
 	OutcomeRecalled   CaptureOutcome = "recalled"  // a recall, answered
 	OutcomeCorrected  CaptureOutcome = "corrected" // a correction, applied
 	OutcomeAsked      CaptureOutcome = "asked"     // a correction whose referent or plan was ambiguous
+	// OutcomeTimers: a list or a cancel of the live timers, answered
+	// (ADR-0051). Nothing is stored; a cancel moves one timer to cancelled.
+	OutcomeTimers CaptureOutcome = "timers"
 )
 
 // AllCaptureOutcomes returns a fresh slice holding every CaptureOutcome, in
@@ -77,7 +80,7 @@ func AllCaptureOutcomes() []CaptureOutcome {
 	return []CaptureOutcome{
 		OutcomeStored, OutcomeArmed, OutcomeArmRefused,
 		OutcomeConversed, OutcomeOutOfScope,
-		OutcomeRecalled, OutcomeCorrected, OutcomeAsked,
+		OutcomeRecalled, OutcomeCorrected, OutcomeAsked, OutcomeTimers,
 	}
 }
 
@@ -167,6 +170,10 @@ type CaptureResult struct {
 	// Correction names how a correction resolved, or why it could not. Set
 	// only for Outcome == OutcomeCorrected or Outcome == OutcomeAsked.
 	Correction *Correction
+
+	// Timers is what a list or a cancel of the live timers answered. Set only
+	// for Outcome == OutcomeTimers.
+	Timers *TimersAnswer
 }
 
 // Armed is what CaptureResult carries when a capture armed something
@@ -312,3 +319,26 @@ const (
 	// preference may hold; nothing was changed (I40).
 	AskLeadsNotSet AskReason = "leads_not_set"
 )
+
+// TimersAnswer is what a list or a cancel of the live timers answered
+// (Outcome == OutcomeTimers, ADR-0051). Listed is the numbered list the prompt
+// showed, soonest first, for a list or a which question; More counts the live
+// timers past it. Cancelled is the one a cancel moved to cancelled. Which is a
+// cancel that named no listed timer, and Gone one whose timer was no longer
+// pending when the cancel reached it. With nothing set and nothing cancelled,
+// none is set.
+type TimersAnswer struct {
+	Listed    []ListedTimer
+	More      int
+	Cancelled *ListedTimer
+	Which     bool
+	Gone      bool
+}
+
+// ListedTimer is one live timer as a chat answer names it.
+type ListedTimer struct {
+	ID     string
+	FireAt time.Time
+	// Text is what it says when it rings, nil for a generic nudge.
+	Text *string
+}

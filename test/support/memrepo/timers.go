@@ -45,12 +45,22 @@ func (r *Timers) Create(_ context.Context, t ports.Timer) error {
 
 // Due implements ports.TimerRepo.
 func (r *Timers) Due(_ context.Context, at time.Time) ([]ports.DueTimer, error) {
+	return r.pending(&at), nil
+}
+
+// Pending implements ports.TimerRepo.
+func (r *Timers) Pending(_ context.Context) ([]ports.DueTimer, error) {
+	return r.pending(nil), nil
+}
+
+// pending lists the pending timers, those due by at when at is not nil.
+func (r *Timers) pending(at *time.Time) []ports.DueTimer {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	due := make([]ports.DueTimer, 0, len(r.timers))
 	for _, stored := range r.timers {
-		if stored.status != ports.TimerStatusPending || stored.timer.FireAt.After(at) {
+		if stored.status != ports.TimerStatusPending || (at != nil && stored.timer.FireAt.After(*at)) {
 			continue
 		}
 		due = append(due, ports.DueTimer{
@@ -66,7 +76,7 @@ func (r *Timers) Due(_ context.Context, at time.Time) ([]ports.DueTimer, error) 
 		}
 		return due[i].ID < due[j].ID
 	})
-	return due, nil
+	return due
 }
 
 // Fire implements ports.TimerRepo.

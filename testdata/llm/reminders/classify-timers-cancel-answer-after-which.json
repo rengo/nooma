@@ -1,0 +1,35 @@
+{
+  "id": "classify-timers-cancel-answer-after-which",
+  "task": "classify",
+  "message": "el 2",
+  "record": true,
+  "now": "2026-10-26T10:10:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-26T10:09:00-03:00",
+        "speaker": "user",
+        "text": "cancelá la alarma"
+      },
+      {
+        "at": "2026-10-26T10:09:00-03:00",
+        "speaker": "nooma",
+        "text": "¿Cuál cancelo?\n1) 10:28 — Sacar la pizza del horno\n2) 11:07 — Llamar a mamá"
+      }
+    ]
+  },
+  "timers_list": [
+    {
+      "text": "Sacar la pizza del horno",
+      "at": "2026-10-26T10:28:00-03:00"
+    },
+    {
+      "text": "Llamar a mamá",
+      "at": "2026-10-26T11:07:00-03:00"
+    }
+  ],
+  "expect": {
+    "timer_request": "cancel",
+    "timer_target": "2"
+  }
+}

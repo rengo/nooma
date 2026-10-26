@@ -54,7 +54,7 @@ type DueTimer struct {
 
 // TimerRepo is the repository port over timers. It mirrors TriggerRepo's
 // shape and every reason behind it — one method per transition, no target
-// status, no removal verb, no parameterized read, no clock.
+// status, no removal verb, no clock.
 type TimerRepo interface {
 	// Create persists t. It returns ErrTimerExists if a timer with t.ID
 	// already exists. The row is created pending.
@@ -64,6 +64,12 @@ type TimerRepo interface {
 	// ordered by (fire_at, id). timers carries no index, so this is a
 	// full scan — accepted for v1 and named rather than mitigated.
 	Due(ctx context.Context, at time.Time) ([]DueTimer, error)
+
+	// Pending returns every pending timer, whatever its fire_at, ordered
+	// by (fire_at, id): the live timers a chat lists and cancels from
+	// (doc 02 §8). A pending timer already past its fire_at is still
+	// live until the due scan fires or cancels it.
+	Pending(ctx context.Context) ([]DueTimer, error)
 
 	// Fire moves id from pending to fired and writes surfaced_at = at and
 	// rendered_text = rendered, all in one statement.

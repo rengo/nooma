@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "recordame qué hablamos con Juan",
   "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué hablamos con Juan?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"structured_data\":{\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"},\"recall_scope\":{\"terms\":[\"Juan\",\"conversación\",\"conversaciones\",\"charla\",\"charlas\"]}}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
   "prompt_sha256": "1182cf1545701d451c2ad547973b0d6936809521e18fcef1b92033795da62d79"

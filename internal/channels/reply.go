@@ -182,8 +182,43 @@ func RenderReply(result brain.CaptureResult) string {
 			return result.Reply
 		}
 		return say.AskWhichOne
+
+	case brain.OutcomeTimers:
+		if result.Timers == nil {
+			return ""
+		}
+		return timersReply(say, *result.Timers, result.At)
 	}
 	return ""
+}
+
+// timersReply answers a chat's list or cancel of the live timers (ADR-0051).
+// A list and a which question number the timers as the prompt did, so a
+// later "el 2" names the timer the user saw second.
+func timersReply(say phrase.Set, a brain.TimersAnswer, now time.Time) string {
+	switch {
+	case a.Cancelled != nil:
+		return fmt.Sprintf(say.TimerCancelled, say.TimerLine(a.Cancelled.FireAt, now, a.Cancelled.Text))
+	case a.Gone:
+		return say.TimerGone
+	case len(a.Listed) == 0:
+		return say.TimersNone
+	}
+	head := say.TimerWhich
+	if !a.Which {
+		head = say.TimersOne
+		if n := len(a.Listed) + a.More; n > 1 {
+			head = fmt.Sprintf(say.TimersMany, n)
+		}
+	}
+	lines := []string{head}
+	for i, t := range a.Listed {
+		lines = append(lines, fmt.Sprintf("%d) %s", i+1, say.TimerLine(t.FireAt, now, t.Text)))
+	}
+	if a.More > 0 {
+		lines = append(lines, fmt.Sprintf(say.TimersMore, a.More))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // dayOnly reports whether an armed reminder is about a day alone: asked so,

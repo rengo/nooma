@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "¿Me lo podés pasar a las 08:00?",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Quiero cambiar uno de los eventos del 2026-10-14 a las 08:00.\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís al dentista o a la reunión con Juan?\"}",
+  "record": true,
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [

@@ -28,8 +28,8 @@ import (
 // CLI.
 func TestChannelReplyIsTotalOverEveryCaptureOutcome(t *testing.T) {
 	outcomes := brain.AllCaptureOutcomes()
-	if len(outcomes) != 8 {
-		t.Fatalf("brain.AllCaptureOutcomes() has %d members, want 8 — this test's own claim to be exhaustive is what changed", len(outcomes))
+	if len(outcomes) != 9 {
+		t.Fatalf("brain.AllCaptureOutcomes() has %d members, want 9 — this test's own claim to be exhaustive is what changed", len(outcomes))
 	}
 
 	seen := map[string]brain.CaptureOutcome{}
@@ -46,6 +46,8 @@ func TestChannelReplyIsTotalOverEveryCaptureOutcome(t *testing.T) {
 			result.ArmRefused = &brain.ArmRefused{Why: prospection.RefusalNoDate, Message: "no time was given"}
 		case brain.OutcomeCorrected, brain.OutcomeAsked:
 			result.Correction = &brain.Correction{UnitID: "u-1"}
+		case brain.OutcomeTimers:
+			result.Timers = &brain.TimersAnswer{}
 		case brain.OutcomeStored:
 			result.UnitID = "u-1"
 		case brain.OutcomeConversed:

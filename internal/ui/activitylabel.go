@@ -22,6 +22,7 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionCaptureArmedTrigger:       "Reminder set",
 	ports.ActionCaptureArmedRecurring:     "Recurring reminder set",
 	ports.ActionCaptureArmRefused:         "Reminder not set",
+	ports.ActionCaptureTimerCancelled:     "Timer cancelled",
 	ports.ActionCheckTriggerExpired:       "Reminder expired unsent",
 	ports.ActionCheckTriggerLapsed:        "Reminder dropped, not sent",
 	ports.ActionCheckReminderArmed:        "Reminder re-planned",

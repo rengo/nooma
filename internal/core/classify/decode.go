@@ -72,6 +72,10 @@ func fieldSpecs() []fieldSpec {
 			func(c *Classification, v *QuestionAnswer) { c.QuestionAnswer = v }))},
 		{"choice_number", false, nullIsAbsent(assignChoiceNumber)},
 		{"reminder_target", false, nullIsAbsent(assignReminderTarget)},
+		// ADR-0051's timer fields, optional for the same reason.
+		{"timer_request", false, nullIsAbsent(assignEnum(AllTimerRequests,
+			func(c *Classification, v *TimerRequest) { c.TimerRequest = v }))},
+		{"timer_target", false, nullIsAbsent(assignTimerTarget)},
 		// ADR-0036's follow-up fields, optional for the same reason.
 		{"referent", false, nullIsAbsent(assignReferent)},
 		{"clarifying_question", false, nullIsAbsent(assignClarifyingQuestion)},
@@ -356,23 +360,29 @@ func assignChoiceNumber(raw json.RawMessage, c *Classification, _ time.Time) Rea
 // assignReminderTarget reads reminder_target: a position or the word
 // "unclear". Any other string is outside the vocabulary.
 func assignReminderTarget(raw json.RawMessage, c *Classification, _ time.Time) Reason {
+	t, r := readTarget(raw)
+	c.ReminderTarget = t
+	return r
+}
+
+// readTarget reads a position in a numbered list the prompt carried, or the
+// word unclear: reminder_target's and timer_target's one wire form.
+func readTarget(raw json.RawMessage) (*ReminderTarget, Reason) {
 	var s *string
 	if err := json.Unmarshal(raw, &s); err == nil {
 		if s == nil {
-			return ReasonWrongType
+			return nil, ReasonWrongType
 		}
 		if *s != ReminderTargetUnclear {
-			return ReasonUnknownEnum
+			return nil, ReasonUnknownEnum
 		}
-		c.ReminderTarget = &ReminderTarget{Unclear: true}
-		return ""
+		return &ReminderTarget{Unclear: true}, ""
 	}
 	n, r := readPosition(raw)
 	if r != "" {
-		return r
+		return nil, r
 	}
-	c.ReminderTarget = &ReminderTarget{Position: n}
-	return ""
+	return &ReminderTarget{Position: n}, ""
 }
 
 // assignTitle reads title and keeps what ResolveTitle keeps. A title the check

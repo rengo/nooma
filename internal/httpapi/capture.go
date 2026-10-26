@@ -47,6 +47,29 @@ type captureResponse struct {
 
 	// OutcomeCorrected | OutcomeAsked.
 	Correction *correctionResponse `json:"correction,omitempty"`
+
+	// OutcomeTimers.
+	Timers *timersResponse `json:"timers,omitempty"`
+}
+
+// timersResponse renders brain.TimersAnswer (ADR-0051): the listed timers in
+// the order a cancel's position counts them, and what a cancel did.
+type timersResponse struct {
+	Listed    []timerResponse `json:"listed"`
+	More      int             `json:"more,omitempty"`
+	Cancelled *timerResponse  `json:"cancelled,omitempty"`
+	Which     bool            `json:"which,omitempty"`
+	Gone      bool            `json:"gone,omitempty"`
+}
+
+type timerResponse struct {
+	ID     string  `json:"id"`
+	FireAt string  `json:"fire_at"`
+	Text   *string `json:"text"`
+}
+
+func renderTimer(t brain.ListedTimer) timerResponse {
+	return timerResponse{ID: t.ID, FireAt: t.FireAt.UTC().Format(time.RFC3339), Text: t.Text}
 }
 
 // correctionResponse renders brain.Correction — the fields captureRunner's
@@ -210,6 +233,18 @@ func renderCaptureResult(result brain.CaptureResult) (int, captureResponse) {
 			units[i] = renderUnit(u)
 		}
 		return http.StatusOK, captureResponse{Outcome: string(result.Outcome), Units: units}
+
+	case brain.OutcomeTimers:
+		a := result.Timers
+		out := &timersResponse{Listed: make([]timerResponse, len(a.Listed)), More: a.More, Which: a.Which, Gone: a.Gone}
+		for i, t := range a.Listed {
+			out.Listed[i] = renderTimer(t)
+		}
+		if a.Cancelled != nil {
+			c := renderTimer(*a.Cancelled)
+			out.Cancelled = &c
+		}
+		return http.StatusOK, captureResponse{Outcome: string(result.Outcome), Timers: out}
 
 	case brain.OutcomeCorrected, brain.OutcomeAsked:
 		fields := make([]string, len(result.Correction.Fields))

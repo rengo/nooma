@@ -90,6 +90,9 @@ type ReminderContext struct {
 	Open         *OpenQuestion
 	Candidates   []ReminderEntry
 	Conversation Conversation
+	// Timers are the live timers, in the order a cancel's position counts
+	// them (ADR-0051).
+	Timers []TimerEntry
 }
 
 // RenderReminderList is the one numbered list a prompt or a question carries:

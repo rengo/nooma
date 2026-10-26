@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "avisame mañana a las 9 que llame al plomero",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Avisarme que llame al plomero el 2026-10-27 a las 09:00.\",\"weight\":0.75,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-27T09:00:00-03:00\",\"title\":\"Llamar al plomero\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-26T10:08:00-03:00",
   "expect": {
     "type": "task",

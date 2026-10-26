@@ -251,8 +251,15 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
 5. **Says so when it is late.** If the process was down when the timer came due, the message
    carries a note that it is later than intended ([ADR-0009](adr/0009-scheduler-downtime.md)).
 
-**Not yet:** listing pending timers and cancelling one, from chat or from the UI, is promised by
-doc 02 §8 and is not built. It is owned by the last slice of M4 (see the [status table](#status)).
+6. **Lists and cancels from chat.** "¿qué temporizadores tengo?" answers with the live timers,
+   numbered ("Hay 2 temporizadores puestos:\n1) 10:28 — Sacar la pizza del horno …"), or "No hay
+   temporizadores puestos.". "cancelá el del horno" cancels the timer it names in that list:
+   a state change logged to the activity page, never a delete. When it cannot tell which,
+   Nooma asks "¿Cuál cancelo?" with the list, and "el 2" answers it
+   ([ADR-0051](adr/0051-timers-are-listed-and-cancelled-through-the-shown-list.md)).
+
+**Not yet:** listing and cancelling from the UI is owned by the last slice of M4 (see the
+[status table](#status)).
 
 ---
 
@@ -383,7 +390,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Beliefs view: list by facet, edit, claim on save, retire; the nightly derive respects both | Shipped in `m4e` | 05 §M4; doc 02 §6, §10 |
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
-| Timer list and cancel from chat and UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
+| Timer list and cancel from chat: "¿qué temporizadores tengo?" lists the live timers, "cancelá el del horno" cancels the one it names through that list, asks which when it cannot tell | Shipped | doc 02 §8; ADR-0051 |
+| Timer list and cancel from the UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Planned: M5 | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |

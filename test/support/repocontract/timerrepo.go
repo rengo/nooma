@@ -166,6 +166,46 @@ func RunTimerRepo(t *testing.T, newRepo func(t *testing.T) ports.TimerRepo) {
 		assertDueTimerIDs(t, dueTimers(t, repo, contractNow), "tmr-c", "tmr-a", "tmr-b")
 	})
 
+	t.Run("Pending lists every pending timer, whatever its fire_at, by fire_at then id", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+
+		for _, tmr := range []ports.Timer{
+			fixtureTimer("tmr-later", contractNow.Add(2*time.Hour)),
+			fixtureTimer("tmr-b", contractNow.Add(time.Hour)),
+			fixtureTimer("tmr-a", contractNow.Add(time.Hour)),
+			fixtureTimer("tmr-past", contractNow.Add(-time.Minute)),
+			fixtureTimer("tmr-fired", contractNow.Add(3*time.Hour)),
+			fixtureTimer("tmr-cancelled", contractNow.Add(3*time.Hour)),
+		} {
+			if err := repo.Create(ctx, tmr); err != nil {
+				t.Fatalf("Create %s: %v", tmr.ID, err)
+			}
+		}
+		if err := repo.Fire(ctx, "tmr-fired", contractNow, nil); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+		if err := repo.Cancel(ctx, "tmr-cancelled"); err != nil {
+			t.Fatalf("Cancel: %v", err)
+		}
+
+		got, err := repo.Pending(ctx)
+		if err != nil {
+			t.Fatalf("Pending: %v", err)
+		}
+		assertDueTimerIDs(t, got, "tmr-past", "tmr-a", "tmr-b", "tmr-later")
+		if got[0].ActionText == nil || *got[0].ActionText != "stir the risotto" {
+			t.Errorf("Pending ActionText: got %v, want the stored text", got[0].ActionText)
+		}
+	})
+
+	t.Run("Pending on an empty repository returns an empty slice, not an error", func(t *testing.T) {
+		got, err := newRepo(t).Pending(context.Background())
+		if err != nil || got == nil || len(got) != 0 {
+			t.Fatalf("Pending on empty: got %v, %v; want an empty non-nil slice", got, err)
+		}
+	})
+
 	t.Run("Due on an empty repository returns an empty slice, not an error", func(t *testing.T) {
 		repo := newRepo(t)
 

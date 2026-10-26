@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 	"testing"
@@ -150,7 +151,7 @@ func productionPrompt(t *testing.T, c llm.Case) string {
 	}
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(),
 		memrepo.NewRelations(), memrepo.NewDecisionLog(), model, model, model, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(),
+		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), seedTimers(t, c, now),
 		consolidation.DefaultWeightThreshold, memrepo.NewPendingQuestions()).WithConversation(conv)
 	if _, err := svc.Capture(ctx, in); err != nil {
 		t.Fatal(err)
@@ -176,4 +177,22 @@ func caseInstant(t *testing.T, s string, now time.Time) *time.Time {
 		t.Fatalf("instant %q: %v", s, err)
 	}
 	return &day
+}
+
+// seedTimers stores a case's timers_list as pending timers, as capture reads
+// them (ADR-0051), with ids that keep the case's order where two ring at once.
+func seedTimers(t *testing.T, c llm.Case, now time.Time) *memrepo.Timers {
+	t.Helper()
+	timers := memrepo.NewTimers()
+	for i, e := range c.TimersList {
+		var text *string
+		if e.Text != "" {
+			text = &e.Text
+		}
+		at := caseInstant(t, e.At, now)
+		if err := timers.Create(context.Background(), ports.Timer{ID: fmt.Sprintf("tmr-%02d", i), FireAt: *at, ActionText: text, CreatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return timers
 }

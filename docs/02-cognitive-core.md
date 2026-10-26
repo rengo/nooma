@@ -2075,10 +2075,29 @@ the night rings in the night.
 
 The verbatim half is what capture does today: the row is written with `action_text` holding the
 request as classified and `rendered_text` left `NULL`, untouched rather than defaulted, because
-`NULL` there means "not yet worded" and an empty string would destroy that distinction. The
-rephrasing, the delivery, and the listing and cancelling from chat and UI are all `m3d`'s and
-M4's — a timer that has fired but not been surfaced is a real state this table can hold, and
-`surfaced_at` is what tells the two apart.
+`NULL` there means "not yet worded" and an empty string would destroy that distinction. A timer
+that has fired but not been surfaced is a real state this table can hold, and `surfaced_at` is
+what tells the two apart.
+
+**Listed and cancelled from chat through the list the code shows**
+([ADR-0051](adr/0051-timers-are-listed-and-cancelled-through-the-shown-list.md)):
+- **The prompt.** Every classify prompt shows the live timers: every `pending` one, by `fire_at`
+  then id, the first `max_reminder_choices` numbered with their instant and text. When none is
+  set, it says so. It also says that a recall never finds a timer.
+- **The reading.** The model reads `timer_request` (`none | list | cancel`) and, for a cancel,
+  `timer_target` (a listed position, or `unclear`).
+- **Answered first.** A request about the timers is answered before every other fork, whatever
+  the reading's type. It stores nothing: "¿qué temporizadores tengo?" read as a `recall`
+  searched the notes.
+- **A list** answers with the numbered timers, each by its hour on the day it was set and by
+  its day and hour otherwise. It counts those past the list, and says when none is set.
+- **A cancel** binds only a shown position. That timer moves `pending → cancelled`, never a
+  delete, and writes one `capture.timer.cancelled` row. Anything else asks "¿Cuál cancelo?" with
+  the same list and cancels nothing; the answer is read with that question in the chat (§5
+  step 1's follow-ups) and the list shown again. A timer that rang in between is said to be no
+  longer set.
+
+Listing and cancelling from the UI is still `m4f`'s.
 
 ## 9. Learning — the prediction-error loop
 
@@ -2242,7 +2261,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 
 | Knob | Default |
 |---|---|
-| `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position (§5 step 1, ADR-0033); chosen, a list a person can read in one message |
+| `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position; the same bound numbers the live timers and so the highest `timer_target` (§8, ADR-0051) (§5 step 1, ADR-0033); chosen, a list a person can read in one message |
 | `conversation_context_turns` (`internal/core/classify.ConversationTurns`) | 20 — the last turns of a chat a chat message is read in, at any age (§5 step 1, ADR-0041), and so the most items its prompt letters (`A` to `T`), the ones the newest turns name; chosen by the client (2026-10-19: "que recuerde por almacenamiento, los últimos N chats", N = 20): a morning digest and its reminders, several exchanges, and a follow-up and its question. Each turn adds at most about 330 characters to the prompt (`max_turn_runes` and its label). Too small drops the digest before the reply that answers it; too large lets old, unrelated turns sit beside a new message and grows every chat prompt |
 | `max_turn_runes` (`internal/core/classify.MaxTurnRunes`) | 280 — a turn is shown clipped to it, and a clarifying question longer than it degrades (§5 step 1); chosen: a digest can be long, a question is one line on a phone |
 | `max_title_runes` (`internal/core/classify.MaxTitleRunes`) | 60 — the longest title a unit keeps (§5 step 1); one line beside a date, chosen |
