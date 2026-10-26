@@ -653,6 +653,35 @@ func TestBuildPrompt_SeparatesAnEventFromATask(t *testing.T) {
 	}
 }
 
+// TestBuildPrompt_DefinesATimerAsASpanFromNow pins the type a relative
+// reminder is read as (doc 02 §8). "avisame en 20 minutos que saque la pizza"
+// came back as a task with remind_request, because the prompt listed timer as
+// a type and never said what one is: the task's trigger took the preference
+// leads and rang fifteen minutes before the moment asked for.
+func TestBuildPrompt_DefinesATimerAsASpanFromNow(t *testing.T) {
+	p := BuildPrompt("avisame en 20 minutos que saque la pizza del horno", nil, time.Date(2026, 10, 26, 13, 8, 0, 0, time.UTC), 0.5, ReminderContext{})
+	_, choosing, found := strings.Cut(p, "Choosing the type\n")
+	if !found {
+		t.Fatalf("the prompt has no Choosing the type section:\n%s", p)
+	}
+	choosing, _, _ = strings.Cut(choosing, "Corrections\n")
+	choosing = strings.Join(strings.Fields(choosing), " ")
+
+	for _, want := range []string{
+		"timer the user asks to be reminded once, after a span of time counted from now",
+		"minutes or hours",
+		"Its instant is the local time above plus that span, in due_at",
+		"It rings at that instant and never before it",
+		"remind_request is true",
+		"A span from now filed as a task rings before the moment asked for",
+		"A day or a time of day named for a reminder is not a span",
+	} {
+		if !strings.Contains(choosing, want) {
+			t.Errorf("Choosing the type does not state %q:\n%s", want, choosing)
+		}
+	}
+}
+
 // TestBuildPrompt_CalendarSurvivesAMidnightDSTChange: Chile starts DST at
 // midnight, so in America/Santiago 00:30 on Sunday 2026-09-06 does not
 // exist. A calendar that stepped now itself a day at a time carried 00:30

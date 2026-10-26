@@ -2055,6 +2055,18 @@ that same `NULL` rather than an empty string). On firing, the LLM rephrases the 
 (`rendered_text`) — the request is stored verbatim and only worded at delivery time. Listable
 and cancellable from chat and from the UI.
 
+**What a timer is, as read**: a reminder asked for once, after a span of time counted from now
+in minutes or hours ("avisame en 20 minutos que saque la pizza", "remind me in an hour"). Its
+`due_at` is the local time the prompt states plus that span, and it rings AT that instant: a
+timer has no lead, so nothing rings before it, and the capture reply names that one instant.
+The classify prompt defines the type in those terms (ADR-0033: the model reads, the code
+arms); a day or a time of day named for a reminder ("mañana a las 9") is not a span, and stays
+a `task` or an `event` with `remind_request`. The prompt listed `timer` as a type and never
+said what one is, so "avisame en 20 minutos" came back a `task` with `remind_request`, its
+trigger took the preference leads, and it rang fifteen minutes before the moment asked for.
+A timer keeps §7's quiet-hours exemption: its instant was set by the user, so one that falls in
+the night rings in the night.
+
 The verbatim half is what capture does today: the row is written with `action_text` holding the
 request as classified and `rendered_text` left `NULL`, untouched rather than defaulted, because
 `NULL` there means "not yet worded" and an empty string would destroy that distinction. The

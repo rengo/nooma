@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "mañana a las 8",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Quiero que me avises el 2026-10-15 a las 08:00.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-15T08:00:00-03:00\",\"question_answer\":\"when\"}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",

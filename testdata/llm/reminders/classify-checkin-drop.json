@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "dejalo, ya no hace falta",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya no hace falta hacerlo.\",\"weight\":0.3,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"drop\"}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",

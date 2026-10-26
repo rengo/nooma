@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "no, no tienen nada que ver",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No, no tienen nada que ver entre sí.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"relation_outcome\":\"rejected\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
