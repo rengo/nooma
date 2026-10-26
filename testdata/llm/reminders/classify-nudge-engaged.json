@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "dale, contame",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale, contame.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dale, contame.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",

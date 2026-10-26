@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame 2 horas antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false,\"referent\":\"A\"}",
-  "record": true,
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false}",
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,6 @@
     ],
     "reminder_leads_add": false
   },
-  "prompt_sha256": "5b2a62cd1eab574a7f5926f2aaff4f80939d9306914793cd9102a86137f747c3"
+  "known_misread": "type is event where correction is expected: the model types \"avisame 2 horas antes\" as the event it follows. Harmless as read: leads beside a shown referent bind whatever the type (ADR-0046, TestI40_LeadsBindWhateverTheType), so no unit is stored and the user gets the item reminded 2 hours before",
+  "prompt_sha256": "7c848aa71c6ad86f65b169b434fd9f0addd37a38e9e94215e0506fb604470be5"
 }

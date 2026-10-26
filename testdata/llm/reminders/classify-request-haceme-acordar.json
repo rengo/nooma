@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "haceme acordar de llamar al médico mañana a las 9",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Hacerme acordar de llamar al médico el 2026-10-17 a las 09:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"due_at\":\"2026-10-17T09:00:00-03:00\",\"title\":\"Llamar al médico\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme llamar al médico el 2026-10-17 a las 09:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"due_at\":\"2026-10-17T09:00:00-03:00\",\"title\":\"Llamar al médico\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,

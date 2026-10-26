@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "y además el día antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Cena con Ana el 2026-10-23 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"reminder_leads_minutes\":[1440],\"reminder_leads_add\":true,\"referent\":\"A\",\"remind_request\":true}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Cena con Ana el 2026-10-23 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"remind_request\":true,\"referent\":\"A\",\"reminder_leads_minutes\":[1440],\"reminder_leads_add\":true}",
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,5 @@
     ],
     "reminder_leads_add": true
   },
-  "prompt_sha256": "db0b92fb91f5d292889b88db1ec7dd1dcad019173f01d5e330f276c489570b38"
+  "prompt_sha256": "634facbfefd56f9e4614c575c4de91f651bbb04465f8cdbd186e4fb7dbf0a43e"
 }

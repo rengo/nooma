@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, seguí",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No, seguí recordándome comprar café.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"keep\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No, seguí recordándome comprar café.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"reminder_intent\":\"keep\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "undo",
