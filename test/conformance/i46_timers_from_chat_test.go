@@ -10,6 +10,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
@@ -292,5 +293,38 @@ func TestI46_ACancelledTimerEndingInAPeriodGetsNoSecondOne(t *testing.T) {
 	f := newI46(t, i46Reading("chitchat", "cancel", "1"), []i46Timer{{"tmr-pizza", i46Pizza, "Sacar la pizza del horno."}}, nil)
 	if got, want := channels.RenderReply(f.capture(t, "cancelá el del horno")), "Cancelado: 10:28 — Sacar la pizza del horno."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
+// TestI46_ACorrectionNamingItsUnitIsNoTimerRequest: a correction from a unit's
+// page names its unit, and that names what the message does (I28). A reading
+// that also carries a timer request still corrects the unit, and lists or
+// cancels no timer.
+func TestI46_ACorrectionNamingItsUnitIsNoTimerRequest(t *testing.T) {
+	ctx := context.Background()
+	f := newI46(t, `{"type":"correction","normalized_content":"Dentista el 2026-10-27 a las 11:00.","weight":0.8,"decay_rate":0.05,"language":"es","event_at":"2026-10-27T11:00:00-03:00","timer_request":"cancel","timer_target":1}`, i46Two, nil)
+	was := time.Date(2026, 10, 27, 10, 0, 0, 0, i46Zone)
+	if err := f.units.Create(ctx, unit.Unit{ID: "dentist", Type: unit.TypeEvent, Status: unit.StatusPool, Source: "ui",
+		Content: "Dentista el 2026-10-27 a las 10:00.", Title: "Dentista", EventAt: &was, CreatedAt: i46Now, UpdatedAt: i46Now}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := f.svc.Capture(ctx, brain.CaptureInput{Text: "es a las 11", Channel: "ui", ReferentID: "dentist"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.Outcome != brain.OutcomeCorrected || res.Timers != nil {
+		t.Fatalf("Outcome = %q, Timers = %+v; want the unit corrected and no timer answer", res.Outcome, res.Timers)
+	}
+	u, err := f.units.ByID(ctx, "dentist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 10, 27, 11, 0, 0, 0, i46Zone); u.EventAt == nil || !u.EventAt.Equal(want) {
+		t.Errorf("dentist event_at = %v, want %v", u.EventAt, want)
+	}
+	if got := f.pending(t); len(got) != 2 {
+		t.Errorf("pending = %v, want both timers still set", got)
 	}
 }

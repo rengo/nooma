@@ -38,8 +38,8 @@ acts on (ADR-0033). Timers need the same two things, and there is no unit for th
    says or when it rings) or `unclear`. Both are optional on the wire, and an unknown value
    degrades to absent (I14).
 3. **A request about the timers is answered first, whatever the reading's type.** This happens
-   before any follow-up, check-in or recall fork, and never on a correction that names its unit.
-   It stores nothing.
+   before any follow-up, check-in or recall fork, except on a correction that names its unit,
+   which corrects that unit and lists or cancels nothing. It stores nothing.
 4. **A list** answers with the shown timers, numbered as the prompt numbered them. Each is named
    by its hour on the day it was set, and by its day and hour otherwise (`phrase.TimerLine`). The
    reply counts every live timer and says how many are past the shown ones. When none is set,
@@ -80,6 +80,9 @@ acts on (ADR-0033). Timers need the same two things, and there is no unit for th
   channel, the API (`timers.listed`, `timers.cancelled`) and the UI capture form.
 - Listing and cancelling from the UI is still open, and so is `m4f`'s answer to a pending
   question from the UI.
+- **Known limit, accepted:** a message that both sets a timer and asks about the timers ("poné
+  uno en 10 minutos y decime cuáles tengo") is answered as the request alone. Nothing is armed,
+  and the reply does not say so. The user sets the timer again in a message of its own.
 - **Known limit, accepted:** with more than `max_reminder_choices` live timers, the ones past the
   list are counted in the reply but cannot be cancelled until earlier ones ring or are
   cancelled. A cancel that names one of them asks which, with the shown list.
