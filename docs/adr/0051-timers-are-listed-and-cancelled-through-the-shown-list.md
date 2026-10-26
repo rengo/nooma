@@ -75,5 +75,6 @@ acts on (ADR-0033). Timers need the same two things, and there is no unit for th
   channel, the API (`timers.listed`, `timers.cancelled`) and the UI capture form.
 - Listing and cancelling from the UI is still open, and so is `m4f`'s answer to a pending
   question from the UI.
-- More than `max_reminder_choices` live timers: the ones past the list are counted, and they can
-  only be cancelled once the earlier ones ring or are cancelled.
+- **Known limit, accepted:** with more than `max_reminder_choices` live timers, the ones past the
+  list are counted in the reply but cannot be cancelled until earlier ones ring or are
+  cancelled. A cancel that names one of them asks which, with the shown list.
