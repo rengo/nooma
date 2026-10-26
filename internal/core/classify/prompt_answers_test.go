@@ -239,3 +239,21 @@ func TestBuildPromptClosingTheConversationAnswersNoCheckin(t *testing.T) {
 		t.Errorf("the check-in section never says %q:\n%s", rule, s)
 	}
 }
+
+// TestBuildPromptANotYetNamesNoItemBesideAChat: beside a chat, the check-in
+// section says an answer names the pushed turn's item, and with the timer
+// definition beside it "no, todavía no" after a digest came back snooze with
+// referent A in 2 of 4 runs (4 of 4 none before). ADR-0044 point 1: a snooze
+// names no item, so the rule is said beside the not-yet guidance, and only
+// beside a chat, where referent exists.
+func TestBuildPromptANotYetNamesNoItemBesideAChat(t *testing.T) {
+	const rule = `A not-yet answer ("todavía no", "no, todavía no", "not yet") never names an item: leave referent out, even when the conversation shows the item it puts off.`
+	chat := section(promptWith(ReminderContext{Conversation: oneTurn}), checkinHeading)
+	if flat := strings.Join(strings.Fields(chat), " "); !strings.Contains(flat, "task_checkin_outcome snooze, and no nudge_outcome. "+rule) {
+		t.Errorf("beside a chat, the not-yet guidance never says %q:\n%s", rule, chat)
+	}
+	alone := section(promptWith(ReminderContext{}), checkinHeading)
+	if flat := strings.Join(strings.Fields(alone), " "); strings.Contains(flat, "referent") {
+		t.Errorf("with no chat shown, the check-in section names referent, which only exists beside one:\n%s", alone)
+	}
+}

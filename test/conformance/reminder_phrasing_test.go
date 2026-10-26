@@ -193,6 +193,17 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 		return digest(c) && c.Expect.TaskCheckinOutcome == "snooze" && c.Expect.Referent == ""
 	}))
 
+	// doc 02 §8: a span from now is a timer at that instant, alone and beside
+	// a chat, and a named time for a reminder is not one.
+	timer := func(c llm.Case) bool { return c.Expect != nil && c.Expect.Type == "timer" && c.Expect.DueAt != "" }
+	if n := has("a span from now read as a timer at its instant", timer); n < 3 {
+		t.Errorf("the set has %d timer phrasings at an instant, want 3 or more", n)
+	}
+	has("a timer with a conversation shown", conv(func(c llm.Case) bool { return timer(c) && c.Expect.Referent == "" }))
+	has("a named time for a reminder that is not a timer", expect(func(e *llm.Expect) bool {
+		return e.RemindRequest != nil && *e.RemindRequest && e.DueAt != "" && (e.Type == "task" || e.Type == "event")
+	}))
+
 	// Links 2 and 7 replay these two.
 	for _, id := range []string{"classify-task-remind-me-coffee", "classify-task-remind-me-daily-pills"} {
 		has(id, func(c llm.Case) bool { return c.ID == id })

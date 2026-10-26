@@ -286,6 +286,19 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("  task         something the user has to GET DONE, by a deadline if one is named.\n")
 	b.WriteString("               The deadline goes in due_at.\n")
 	b.WriteString("  An appointment filed as a task gets no reminder.\n")
+	// **A span from now is a timer** (doc 02 §8). The type was listed and never
+	// defined, so "avisame en 20 minutos que saque la pizza" came back a task
+	// with remind_request: its trigger took the preference leads and rang
+	// fifteen minutes before the moment asked for.
+	b.WriteString("  timer        the user asks to be reminded once, after a span of time counted\n")
+	b.WriteString("               from now, minutes or hours: \"avisame en 20 minutos que saque la\n")
+	b.WriteString("               pizza\", \"remind me in an hour to call mom\". Its instant is the\n")
+	b.WriteString("               local time above plus that span, in due_at, as a full timestamp.\n")
+	b.WriteString("               It rings at that instant and never before it. It asks to be\n")
+	b.WriteString("               reminded, so remind_request is true.\n")
+	b.WriteString("  A span from now filed as a task rings before the moment asked for. A day or a\n")
+	b.WriteString("  time of day named for a reminder is not a span: \"recordame mañana a las 10\" is\n")
+	b.WriteString("  a task or an event.\n")
 	// **A reply is not a memory.** A bare "listo" came back as a task, and
 	// capture stored "La tarea está hecha" as a unit of its own.
 	b.WriteString("  chitchat     a message that only answers Nooma (a check-in, a nudge, a question it\n")
@@ -446,7 +459,17 @@ func writeCheckins(b *strings.Builder, chat bool) {
 	b.WriteString("  With no reminder question open, a message that is only a short reply\n")
 	b.WriteString("  (agreeing, declining, or saying it is done) answers the check-in: give the\n")
 	b.WriteString("  outcome it means. A short decline alone means not yet: task_checkin_outcome\n")
-	b.WriteString("  snooze, and no nudge_outcome. Only an explicit refusal, to do the task or to be\n")
+	b.WriteString("  snooze, and no nudge_outcome.")
+	// **A not-yet names no item** (ADR-0044 point 1). Beside a chat the line
+	// above says an answer names the pushed turn's item, and with the timer
+	// definition in the prompt "no, todavía no" after a digest named its task
+	// in 2 of 4 runs (none in 4 of 4 before).
+	if chat {
+		b.WriteString(" A not-yet answer (\"todavía no\", \"no, todavía no\", \"not yet\") never\n")
+		b.WriteString("  names an item: leave referent out, even when the conversation shows the item it\n")
+		b.WriteString("  puts off.")
+	}
+	b.WriteString(" Only an explicit refusal, to do the task or to be\n")
 	b.WriteString("  asked about it, is drop or declined.\n")
 	// **The other half of the bare-word rule.** An answer to an undo or a
 	// remind_when, or to a relation question (never a reminder question), was

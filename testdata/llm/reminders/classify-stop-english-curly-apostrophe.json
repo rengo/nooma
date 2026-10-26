@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "don’t remind me anymore",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Don’t remind me anymore.\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Don't remind me anymore.\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"en\",\"reminder_intent\":\"stop\",\"reminder_target\":\"unclear\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -18,5 +18,5 @@
     "reminder_target": "1"
   },
   "known_misread": "reminder_target is unclear where the one listed candidate is expected: the model will not bind the stop to the only reminder listed. No effect in production today: a reminder list is never sent to classify (noProductionInput); if it were, Nooma would ask which reminder instead of stopping the only one",
-  "prompt_sha256": "cea0efc679c1c8dc6fec7e8b951ef3b38c89a04815cf1203fed2004e49204aeb"
+  "prompt_sha256": "969c836736b684af80540805c365ccbc8dff513af258f4e3e24744223e9a5d18"
 }

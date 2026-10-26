@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame comprar café mañana a las 10",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme comprar café el 2026-10-17 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-17T10:00:00-03:00\",\"title\":\"Comprar café\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordarme comprar café el 2026-10-17 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.04,\"language\":\"es\",\"due_at\":\"2026-10-17T10:00:00-03:00\",\"title\":\"Comprar café\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
   },
-  "prompt_sha256": "92b5696fa00707ac20d9be7a5b929d84deae3aa4a3b1b4e85f7fcc1a5c854218"
+  "prompt_sha256": "6fc16db7e85939439cf8fe9e4575ba48a6b9b13e48274da65d519afc7aa958b6"
 }

@@ -205,7 +205,8 @@ func namesField(mark, field string) bool {
 
 // Check names the fields of cls that are not what c.Expect says, in a fixed
 // order. The reminder fields and the outcomes are strict: with nothing
-// expected, anything but none, false or absent is a miss. Day only, title and
+// expected, anything but none, false or absent is a miss, save a
+// remind_request beside a follow-up's leads, which has no effect. Day only, title and
 // type are checked only when expected.
 func Check(c llm.Case, cls classify.Classification) []string {
 	e := llm.Expect{}
@@ -218,7 +219,13 @@ func Check(c llm.Case, cls classify.Classification) []string {
 			misses = append(misses, field)
 		}
 	}
-	miss(FieldRemindRequest, (cls.RemindRequest != nil && *cls.RemindRequest) != (e.RemindRequest != nil && *e.RemindRequest))
+	// A follow-up that names its item and reads leads acts on the leads, and
+	// brain.Capture ignores a remind_request beside them (ADR-0043): there it
+	// has no effect, so it is free. Leads read with no item named are not this:
+	// a remind_request beside leads that cannot apply arms an asked reminder.
+	followUpLeads := cls.Referent != nil && !cls.Referent.Unclear && cls.ReminderLeadsMinutes != nil &&
+		e.Referent != "" && len(e.ReminderLeadsMinutes) > 0
+	miss(FieldRemindRequest, !followUpLeads && (cls.RemindRequest != nil && *cls.RemindRequest) != (e.RemindRequest != nil && *e.RemindRequest))
 	miss(FieldReminderIntent, orNone(cls.ReminderIntent) != orDefault(e.ReminderIntent, "none"))
 	miss(FieldQuestionAnswer, orNone(cls.QuestionAnswer) != orDefault(e.QuestionAnswer, "none"))
 	miss(FieldChoiceNumber, !equalInt(cls.ChoiceNumber, e.ChoiceNumber))

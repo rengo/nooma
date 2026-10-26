@@ -4,6 +4,7 @@ package conformance
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels"
@@ -77,9 +78,12 @@ func TestChannelReplyCarriesWhatTheOutcomeNames(t *testing.T) {
 		wants  []string
 	}{
 		{
-			name:   "an armed timer names when it will fire",
-			result: brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &brain.Armed{What: prospection.ArmTimer, ID: "t-1"}},
-			wants:  []string{"timer"},
+			// The instant, not the word "timer": a span from now is told the
+			// moment it rings (doc 02 §8), on another day with its day too.
+			name: "an armed timer names when it will fire",
+			result: brain.CaptureResult{Outcome: brain.OutcomeArmed, At: time.Date(2026, 10, 26, 23, 50, 0, 0, time.UTC),
+				Armed: &brain.Armed{What: prospection.ArmTimer, ID: "t-1", FireAt: time.Date(2026, 10, 27, 0, 20, 0, 0, time.UTC)}},
+			wants: []string{"tue 27 oct", "00:20"},
 		},
 		{
 			name: "a refused arming says which thing was missing",

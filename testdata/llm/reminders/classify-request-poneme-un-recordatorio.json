@@ -4,12 +4,12 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "poneme un recordatorio para sacar la basura a las 9pm",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Sacar la basura a las 21:00 del 2026-10-16.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-16T21:00:00-03:00\",\"title\":\"Sacar la basura\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Recordatorio para sacar la basura el 2026-10-16 a las 21:00.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-16T21:00:00-03:00\",\"title\":\"Sacar la basura\",\"interrupt_level\":0.5,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
     "day_only": false,
     "title": true
   },
-  "prompt_sha256": "6360b949b4fda8835178c3d7923048bd1ae4b810273be700fdf90186edc8439f"
+  "prompt_sha256": "95be8324298f17f8f1b0c7f8f2c583e24b6ee0f0e61f3c8e28d53e1f37cdb4ab"
 }

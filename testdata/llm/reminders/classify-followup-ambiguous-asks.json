@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "Es a las 08:00.",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Es a las 08:00.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te referís al dentista?\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Es a las 08:00.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te refieres al dentista o a la reunión con Juan?\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -35,5 +35,5 @@
     "type": "correction",
     "referent": "unclear"
   },
-  "prompt_sha256": "b54edb73c1110619b6c9bc4b9e374a8157c3754e8698ceeb318944efdf1851bc"
+  "prompt_sha256": "dea3b94271ec3c689967eeebda807969584d0961b0cc9fc95eeb4e4132b091cb"
 }

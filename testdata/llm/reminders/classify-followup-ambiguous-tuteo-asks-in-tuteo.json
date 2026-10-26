@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿Me lo puedes pasar a las 08:00?",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Quiero cambiar la hora de uno de los eventos del 2026-10-14 a las 08:00.\",\"weight\":0.7,\"decay_rate\":0.01,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te refieres al dentista o a la reunión con Juan?\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"¿Me lo puedes pasar a las 08:00?\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te refieres al dentista o a la reunión con Juan?\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -36,5 +36,5 @@
     "referent": "unclear",
     "voice": "tuteo"
   },
-  "prompt_sha256": "3f71d5919ac3e9bca55b834be4b9335e4d2ff8cf945e1e60e032580e9d3ef187"
+  "prompt_sha256": "8b50c3fe632745a8e5236f2f329cda7815521cbb08eceb320b1926ecaa6f6eed"
 }

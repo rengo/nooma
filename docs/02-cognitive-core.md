@@ -549,7 +549,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      asks to be reminded of, and, beside a check-in answer other than `snooze` of any type, the
      item said to be done ([ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md)) or the
      pushed item whose check-in it answers
-     ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)); `clarifying_question`, beside `unclear`, the question
+     ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)). Beside the not-yet
+     guidance the check-in section says so outright, since it also says an answer names the
+     pushed turn's item: a not-yet ("todavía no") never names an item, even when the
+     conversation shows the one it puts off — with the timer definition in the prompt, "no,
+     todavía no" after a digest named its task in 2 of 4 runs; `clarifying_question`, beside `unclear`, the question
      the model writes in the message's language, and in the user's own variety and register of
      it (voseo for voseo: the prompt asks it, no code picks it,
      [ADR-0033](adr/0033-the-model-understands-the-code-acts.md)), to ask which item the user means
@@ -2054,6 +2058,20 @@ belief derivation. `pending | fired | cancelled`. `action_text` is nullable ("re
 that same `NULL` rather than an empty string). On firing, the LLM rephrases the text
 (`rendered_text`) — the request is stored verbatim and only worded at delivery time. Listable
 and cancellable from chat and from the UI.
+
+**What a timer is, as read**: a reminder asked for once, after a span of time counted from now
+in minutes or hours ("avisame en 20 minutos que saque la pizza", "remind me in an hour"). Its
+`due_at` is the local time the prompt states plus that span, and it rings AT that instant: a
+timer has no lead, so nothing rings before it, and the capture reply names that one instant,
+by its hour on the day it was set and by its day and hour on another ("Te aviso a las 10:28.",
+"Te aviso el mar 27 oct a las 00:20."; `phrase.TimerAt`).
+The classify prompt defines the type in those terms (ADR-0033: the model reads, the code
+arms); a day or a time of day named for a reminder ("mañana a las 9") is not a span, and stays
+a `task` or an `event` with `remind_request`. The prompt listed `timer` as a type and never
+said what one is, so "avisame en 20 minutos" came back a `task` with `remind_request`, its
+trigger took the preference leads, and it rang fifteen minutes before the moment asked for.
+A timer keeps §7's quiet-hours exemption: its instant was set by the user, so one that falls in
+the night rings in the night.
 
 The verbatim half is what capture does today: the row is written with `action_text` holding the
 request as classified and `rendered_text` left `NULL`, untouched rather than defaulted, because

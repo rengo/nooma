@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿cuándo tengo el odontólogo?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Cuándo tengo cita con el odontólogo?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"odontólogo\",\"odontólogos\",\"odontóloga\",\"odontólogas\",\"dentista\",\"dentistas\"]}}",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Cuándo tengo el odontólogo?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"odontólogo\",\"odontóloga\",\"odontólogos\",\"odontólogas\",\"dentista\",\"dentistas\"]}}",
   "now": "2026-10-21T18:30:00-03:00",
   "expect": {
     "type": "recall",
@@ -13,5 +13,5 @@
       "dentista"
     ]
   },
-  "prompt_sha256": "6c90f3715d8609812345a7c9188614594e0b39bc77e03d67346b61dc06a5dfc9"
+  "prompt_sha256": "8270beef18e586407c2b1ceb093709ba2d30c7f16936609483d7b7c1d31ee2a7"
 }

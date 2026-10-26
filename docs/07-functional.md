@@ -237,7 +237,12 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
 1. **Recognizes a timer, not a memory.** Classification yields type `timer`. A timer is
    infrastructure and is **never stored as a unit**: it lives in its own table and does not
    decay, connect or appear in recall ([doc 02 §8](02-cognitive-core.md#8-ephemeral-timers--infrastructure-not-memory)).
-2. **Arms it at capture** with the instant you named, resolved against your clock.
+   What makes it a timer is a span counted from now, in minutes or hours ("en 20 minutos",
+   "in an hour"); a day or a time of day ("mañana a las 9") is a task or an event with a
+   reminder instead.
+2. **Arms it at capture** at now plus that span, resolved against your clock, and names that
+   moment in the reply ("Te aviso a las 10:28."). It rings once, at that moment: a timer has no
+   lead before it.
 3. **Fires it when due.** A background check scans every few minutes. At fire time the provider
    rewords the reminder, with a generic nudge as the fallback if it cannot.
 4. **Honors an explicit instruction over quiet hours.** You asked for that instant, so a timer

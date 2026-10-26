@@ -1,0 +1,42 @@
+{
+  "id": "classify-timer-en-1-hora-mama-beside-a-chat",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "avisame en 1 hora que llame a mamá",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Recordarme llamar a mamá el 2026-10-26 a las 11:07.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-26T11:07:00-03:00\",\"title\":\"Llamar a mamá\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "now": "2026-10-26T10:07:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-26T10:05:00-03:00",
+        "speaker": "user",
+        "text": "Tengo dentista el jueves a las 10",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-26T10:05:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado para el jue 29 oct, 10:00. Te aviso el día anterior y unas horas antes.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Tengo cita con el dentista el 2026-10-29 a las 10:00.",
+        "title": "Cita con el dentista",
+        "event_at": "2026-10-29T10:00:00-03:00"
+      }
+    ]
+  },
+  "expect": {
+    "type": "timer",
+    "remind_request": true,
+    "due_at": "2026-10-26T11:07:00-03:00"
+  },
+  "prompt_sha256": "d5deeae734f9864c2289663b3fd4124d56e536407606407a5b3fab60d5156596"
+}

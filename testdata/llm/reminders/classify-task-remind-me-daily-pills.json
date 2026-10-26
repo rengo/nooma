@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordame tomar las pastillas todos los días a las 9pm",
-  "response": "{\"type\":\"recurring_reminder\",\"normalized_content\":\"Recordarme tomar las pastillas todos los días a las 21:00, empezando el 2026-10-16.\",\"weight\":0.9,\"decay_rate\":0.01,\"language\":\"es\",\"due_at\":\"2026-10-16T21:00:00-03:00\",\"title\":\"Tomar las pastillas\",\"recurrence_rule\":\"daily\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"recurring_reminder\",\"normalized_content\":\"Recordarme tomar las pastillas todos los días a las 21:00, comenzando el 2026-10-16.\",\"weight\":0.9,\"decay_rate\":0.005,\"language\":\"es\",\"due_at\":\"2026-10-16T21:00:00-03:00\",\"title\":\"Tomar las pastillas\",\"recurrence_rule\":\"daily\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,
@@ -12,5 +12,5 @@
     "title": true,
     "due_at": "2026-10-16T21:00:00-03:00"
   },
-  "prompt_sha256": "02ba096143d5b9544ac847d669b35cf8791034a6db80ee52628847a7f85bb92c"
+  "prompt_sha256": "08b3156fe62fccb09e7ac9920ec864b6b73f29f8849f526be2fa895d461926c1"
 }
