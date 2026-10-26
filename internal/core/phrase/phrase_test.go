@@ -169,9 +169,9 @@ func TestSet_TimerAt(t *testing.T) {
 		{classify.LanguageES, late, tomorrow, "Te aviso el mar 27 oct a las 00:20."},
 		{classify.LanguageEN, set, today, "I will remind you at 10:28."},
 		{classify.LanguageEN, late, tomorrow, "I will remind you on Tue 27 Oct at 00:20."},
-		// The day is the fire's own: the same instant read in UTC is
-		// already the 27th, and must not be called tomorrow.
-		{classify.LanguageES, set.UTC(), today, "Te aviso a las 10:28."},
+		// The day is the fire's own: 23:50 at -03:00 is already the 27th in
+		// UTC, and read there a ring at 00:20 on the 27th would be "today".
+		{classify.LanguageES, late.UTC(), tomorrow, "Te aviso el mar 27 oct a las 00:20."},
 	} {
 		if got := For(tc.l).TimerAt(tc.fire, tc.now); got != tc.want {
 			t.Errorf("%s: TimerAt(%v, %v) = %q, want %q", tc.l, tc.fire, tc.now, got, tc.want)
