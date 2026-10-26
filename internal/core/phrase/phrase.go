@@ -82,9 +82,10 @@ type Set struct {
 	RefusalPast    string
 	RefusalTooLate string
 
-	// TimerSet takes one %s: the instant the timer fires, which for a
-	// timer is also what it is about.
-	TimerSet string
+	// TimerToday and TimerOn fill RemindYou with the one instant a timer
+	// rings at, which for a timer is also what it is about: TimerToday its
+	// hour, on the day it was set; TimerOn its day, then its hour.
+	TimerToday, TimerOn string
 	// EveryDay, EveryWeek, EveryMonth and EveryYear say when a recurring
 	// reminder rings, every time it does (ADR-0031 point 7), rather than its
 	// next occurrence alone. EveryDay takes the time; EveryWeek the weekday's
@@ -216,7 +217,8 @@ var sets = map[classify.Language]Set{
 		RefusalPast:    "the time given has already passed",
 		RefusalTooLate: "too little time is left before it",
 
-		TimerSet:   "Timer set for %s.",
+		TimerToday: "at %s",
+		TimerOn:    "on %s at %s",
 		EveryDay:   "I will remind you every day at %s.",
 		EveryWeek:  "I will remind you every %s at %s.",
 		EveryMonth: "I will remind you on day %s of every month at %s.",
@@ -294,7 +296,8 @@ var sets = map[classify.Language]Set{
 		RefusalPast:    "la hora indicada ya pasó",
 		RefusalTooLate: "queda muy poco tiempo para esa hora",
 
-		TimerSet:   "Temporizador puesto para el %s.",
+		TimerToday: "a las %s",
+		TimerOn:    "el %s a las %s",
 		EveryDay:   "Te aviso todos los días a las %s.",
 		EveryWeek:  "Te aviso todos los %s a las %s.",
 		EveryMonth: "Te aviso el día %s de cada mes a las %s.",
@@ -371,6 +374,17 @@ func For(l classify.Language) Set {
 // tell someone in Buenos Aires about a reminder at a time nobody set.
 func (s Set) Time(t time.Time) string {
 	return s.Date(t) + fmt.Sprintf(", %02d:%02d", t.Hour(), t.Minute())
+}
+
+// TimerAt says when a timer set at now rings: its hour alone on the day it
+// was set, else its day and hour, the day read in fire's own zone.
+func (s Set) TimerAt(fire, now time.Time) string {
+	clock := fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute())
+	now = now.In(fire.Location())
+	if fire.Year() == now.Year() && fire.YearDay() == now.YearDay() {
+		return fmt.Sprintf(s.RemindYou, fmt.Sprintf(s.TimerToday, clock))
+	}
+	return fmt.Sprintf(s.RemindYou, fmt.Sprintf(s.TimerOn, s.Date(fire), clock))
 }
 
 // ThatDayAt names the hour on its own day a day alone is reminded at.

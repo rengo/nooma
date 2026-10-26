@@ -241,7 +241,8 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
    "in an hour"); a day or a time of day ("mañana a las 9") is a task or an event with a
    reminder instead.
 2. **Arms it at capture** at now plus that span, resolved against your clock, and names that
-   moment in the reply. It rings once, at that moment: a timer has no lead before it.
+   moment in the reply ("Te aviso a las 10:28."). It rings once, at that moment: a timer has no
+   lead before it.
 3. **Fires it when due.** A background check scans every few minutes. At fire time the provider
    rewords the reminder, with a generic nudge as the fallback if it cannot.
 4. **Honors an explicit instruction over quiet hours.** You asked for that instant, so a timer

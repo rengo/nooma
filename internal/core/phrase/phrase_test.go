@@ -52,7 +52,7 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
+		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerToday": 1, "TimerOn": 2, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "FoundOne": 1, "FoundMany": 1,
 		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1, "Closed": 1,
 	}
@@ -147,6 +147,34 @@ func TestSet_ThatDayAt(t *testing.T) {
 	} {
 		if got := For(l).ThatDayAt(fire); got != want {
 			t.Errorf("%s: ThatDayAt = %q, want %q", l, got, want)
+		}
+	}
+}
+
+// TestSet_TimerAt names the one instant a timer rings at, as the other
+// reminder replies name a ring: its hour alone on the day it was set, and its
+// day and hour on another day (a span from 23:50 rings tomorrow).
+func TestSet_TimerAt(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	set := time.Date(2026, 10, 26, 10, 8, 0, 0, art)
+	late := time.Date(2026, 10, 26, 23, 50, 0, 0, art)
+	today := time.Date(2026, 10, 26, 10, 28, 0, 0, art)
+	tomorrow := time.Date(2026, 10, 27, 0, 20, 0, 0, art)
+	for _, tc := range []struct {
+		l         classify.Language
+		now, fire time.Time
+		want      string
+	}{
+		{classify.LanguageES, set, today, "Te aviso a las 10:28."},
+		{classify.LanguageES, late, tomorrow, "Te aviso el mar 27 oct a las 00:20."},
+		{classify.LanguageEN, set, today, "I will remind you at 10:28."},
+		{classify.LanguageEN, late, tomorrow, "I will remind you on Tue 27 Oct at 00:20."},
+		// The day is the fire's own: the same instant read in UTC is
+		// already the 27th, and must not be called tomorrow.
+		{classify.LanguageES, set.UTC(), today, "Te aviso a las 10:28."},
+	} {
+		if got := For(tc.l).TimerAt(tc.fire, tc.now); got != tc.want {
+			t.Errorf("%s: TimerAt(%v, %v) = %q, want %q", tc.l, tc.fire, tc.now, got, tc.want)
 		}
 	}
 }

@@ -75,8 +75,9 @@ func RenderReply(result brain.CaptureResult) string {
 		// like — twice read as a misparse by the person who wrote it.
 		switch result.Armed.What {
 		case prospection.ArmTimer:
-			// A timer fires AT its subject: one instant, said once.
-			return fmt.Sprintf(say.TimerSet, say.Time(result.Armed.FireAt))
+			// A timer fires AT its subject: one instant, said once, by its
+			// hour alone on the day it was set.
+			return say.TimerAt(result.Armed.FireAt, result.At)
 		case prospection.ArmRecurring:
 			// When it rings every time, not its next ring alone (ADR-0031 point 7).
 			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)

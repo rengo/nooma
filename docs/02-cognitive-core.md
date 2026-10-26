@@ -2058,7 +2058,9 @@ and cancellable from chat and from the UI.
 **What a timer is, as read**: a reminder asked for once, after a span of time counted from now
 in minutes or hours ("avisame en 20 minutos que saque la pizza", "remind me in an hour"). Its
 `due_at` is the local time the prompt states plus that span, and it rings AT that instant: a
-timer has no lead, so nothing rings before it, and the capture reply names that one instant.
+timer has no lead, so nothing rings before it, and the capture reply names that one instant,
+by its hour on the day it was set and by its day and hour on another ("Te aviso a las 10:28.",
+"Te aviso el mar 27 oct a las 00:20."; `phrase.TimerAt`).
 The classify prompt defines the type in those terms (ADR-0033: the model reads, the code
 arms); a day or a time of day named for a reminder ("mañana a las 9") is not a span, and stays
 a `task` or an `event` with `remind_request`. The prompt listed `timer` as a type and never

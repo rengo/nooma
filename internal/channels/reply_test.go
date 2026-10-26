@@ -301,3 +301,16 @@ func TestRenderReply_ARecallNamesEachItemByTitleAndDay(t *testing.T) {
 		t.Errorf("recall answered\n%q\nwant\n%q", got, want)
 	}
 }
+
+// TestRenderReply_ATimerNamesTheMomentItRings: "avisame en 20 minutos" at
+// 10:08 is told the one moment it rings, and nothing before it.
+func TestRenderReply_ATimerNamesTheMomentItRings(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	armed := brain.Armed{What: prospection.ArmTimer, FireAt: time.Date(2026, 10, 26, 10, 28, 0, 0, art)}
+	armed.About = armed.FireAt
+	got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, Language: classify.LanguageES,
+		At: time.Date(2026, 10, 26, 10, 8, 0, 0, art)})
+	if got != "Te aviso a las 10:28." {
+		t.Errorf("timer reply = %q, want %q", got, "Te aviso a las 10:28.")
+	}
+}
