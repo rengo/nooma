@@ -234,6 +234,11 @@ func TestGraphConfirm_RaisesConfidenceEmitsTheSignalAndLogsBeforeAndAfter(t *tes
 	if body := rec.Body.String(); !strings.Contains(body, `data-relation-id="r-near"`) || !strings.Contains(body, "0.50") {
 		t.Errorf("the answer is not the graph redrawn with r-near at 0.50:\n%s", body)
 	}
+	// At its type's surface threshold the link is in force: the redrawn
+	// graph offers Delete on it and no second Confirm.
+	if body := rec.Body.String(); strings.Contains(body, "/ui/graph/relations/r-near/confirm") || !strings.Contains(body, "/ui/graph/relations/r-near/reject") {
+		t.Errorf("after the confirm, r-near should offer Delete only:\n%s", body)
+	}
 
 	rel, err := v.rels.ByID(context.Background(), "r-near")
 	if err != nil {

@@ -199,31 +199,41 @@ func curationPost(t *testing.T, deps ui.Deps, action, id, form string) *httptest
 	return rec
 }
 
-// TestGraphView_ListsEveryRelationWithItsOwnConfirmAndDelete: each relation
-// is reachable on its own, two of different types between the same pair
-// included, and delete sits behind a confirm step as a belief's retire does.
-func TestGraphView_ListsEveryRelationWithItsOwnConfirmAndDelete(t *testing.T) {
+// TestGraphView_ListsEveryRelationWithDeleteAndConfirmOnlyTheUncertain: each
+// relation is reachable on its own, two of different types between the same
+// pair included. Delete, behind a confirm step as a belief's retire is, is
+// on every one: it is the correction path. Confirm is only on a relation
+// below its type's surface threshold; one already in force offers none, so
+// the list does not read as a to-do, and a line above it says why.
+func TestGraphView_ListsEveryRelationWithDeleteAndConfirmOnlyTheUncertain(t *testing.T) {
 	t.Parallel()
 	n := threeNeighbours()
 	n.Edges = append(n.Edges, graph.Edge{ID: "r3", From: "c", To: "n1", Type: "derived_from", Strength: 0.3, Confidence: 0.4})
+	n.Confirmable = map[string]bool{"r2": true, "r3": true}
 	page := graphGet(t, ui.Deps{Graph: stubGraph{n: n, found: true}}, "/ui/graph?unit=c").Body.String()
 
 	for _, id := range []string{"r1", "r2", "r3"} {
 		for _, want := range []string{
-			`<form method="post" action="/ui/graph/relations/` + id + `/confirm"`,
-			`<form method="post" action="/ui/graph/relations/` + id + `/reject"`,
 			`<li data-relation-id="` + id + `"`,
+			`<form method="post" action="/ui/graph/relations/` + id + `/reject"`,
 		} {
 			if !strings.Contains(page, want) {
 				t.Errorf("page does not contain %q:\n%s", want, page)
 			}
 		}
+		confirm := `action="/ui/graph/relations/` + id + `/confirm"`
+		if got, want := strings.Contains(page, confirm), n.Confirmable[id]; got != want {
+			t.Errorf("%s offers Confirm = %v, want %v (confirmable: %v)", id, got, want, want)
+		}
 	}
-	if strings.Count(page, `<input type="hidden" name="unit" value="c">`) != 6 {
-		t.Errorf("every form must carry the centre to redraw around:\n%s", page)
+	if got := strings.Count(page, `<input type="hidden" name="unit" value="c">`); got != 5 {
+		t.Errorf("%d forms carry the centre, want 5 (three deletes, two confirms):\n%s", got, page)
 	}
-	if !strings.Contains(page, "<summary>Delete</summary>") {
-		t.Errorf("delete is not behind a confirm step:\n%s", page)
+	if strings.Count(page, "<summary>Delete</summary>") != 3 {
+		t.Errorf("delete is not behind a confirm step on every relation:\n%s", page)
+	}
+	if !strings.Contains(page, "<p data-hint>Links above their threshold are already in force; only an uncertain one offers Confirm. Delete is there to correct a wrong one.</p>") {
+		t.Errorf("no line above the list saying what the buttons are for:\n%s", page)
 	}
 	if !strings.Contains(page, "Lisbon trip</span> → <span>Book flights</span>") {
 		t.Errorf("a listed relation does not name its two ends in its direction:\n%s", page)
