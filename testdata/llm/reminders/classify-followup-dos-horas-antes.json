@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "avisame 2 horas antes",
   "response": "{\"type\":\"correction\",\"normalized_content\":\"Reunión con Ana el 2026-10-22 a las 15:00.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[120],\"reminder_leads_add\":false,\"referent\":\"A\"}",
+  "record": true,
   "now": "2026-10-19T09:05:00-03:00",
   "conversation": {
     "turns": [

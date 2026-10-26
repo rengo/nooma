@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "el de Ana",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Se refiere al recordatorio de llamar a Ana.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
+  "record": true,
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",

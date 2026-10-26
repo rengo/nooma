@@ -549,7 +549,11 @@ Synchronous pipeline on receiving a message (from any channel or the UI):
      asks to be reminded of, and, beside a check-in answer other than `snooze` of any type, the
      item said to be done ([ADR-0040](adr/0040-a-done-follow-up-closes-the-task.md)) or the
      pushed item whose check-in it answers
-     ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)); `clarifying_question`, beside `unclear`, the question
+     ([ADR-0044](adr/0044-a-chat-answer-names-the-item-it-is-about.md)). Beside the not-yet
+     guidance the check-in section says so outright, since it also says an answer names the
+     pushed turn's item: a not-yet ("todavía no") never names an item, even when the
+     conversation shows the one it puts off — with the timer definition in the prompt, "no,
+     todavía no" after a digest named its task in 2 of 4 runs; `clarifying_question`, beside `unclear`, the question
      the model writes in the message's language, and in the user's own variety and register of
      it (voseo for voseo: the prompt asks it, no code picks it,
      [ADR-0033](adr/0033-the-model-understands-the-code-acts.md)), to ask which item the user means

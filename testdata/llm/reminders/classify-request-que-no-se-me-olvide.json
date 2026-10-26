@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "que no se me olvide regar las plantas mañana",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Que no se me olvide regar las plantas el 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-17\",\"title\":\"Regar las plantas\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true,

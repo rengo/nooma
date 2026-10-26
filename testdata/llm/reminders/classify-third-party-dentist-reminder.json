@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "my dentist sent a reminder to confirm",
   "response": "{\"type\":\"task\",\"normalized_content\":\"Mi dentista me envió un recordatorio para confirmar.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"en\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
   "prompt_sha256": "6bfd9931cce2253371ce659b20e1e6476979743030ef98fd464213033aeacdbc"

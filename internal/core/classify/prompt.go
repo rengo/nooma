@@ -459,7 +459,17 @@ func writeCheckins(b *strings.Builder, chat bool) {
 	b.WriteString("  With no reminder question open, a message that is only a short reply\n")
 	b.WriteString("  (agreeing, declining, or saying it is done) answers the check-in: give the\n")
 	b.WriteString("  outcome it means. A short decline alone means not yet: task_checkin_outcome\n")
-	b.WriteString("  snooze, and no nudge_outcome. Only an explicit refusal, to do the task or to be\n")
+	b.WriteString("  snooze, and no nudge_outcome.")
+	// **A not-yet names no item** (ADR-0044 point 1). Beside a chat the line
+	// above says an answer names the pushed turn's item, and with the timer
+	// definition in the prompt "no, todavía no" after a digest named its task
+	// in 2 of 4 runs (none in 4 of 4 before).
+	if chat {
+		b.WriteString(" A not-yet answer (\"todavía no\", \"no, todavía no\", \"not yet\") never\n")
+		b.WriteString("  names an item: leave referent out, even when the conversation shows the item it\n")
+		b.WriteString("  puts off.")
+	}
+	b.WriteString(" Only an explicit refusal, to do the task or to be\n")
 	b.WriteString("  asked about it, is drop or declined.\n")
 	// **The other half of the bare-word rule.** An answer to an undo or a
 	// remind_when, or to a relation question (never a reminder question), was

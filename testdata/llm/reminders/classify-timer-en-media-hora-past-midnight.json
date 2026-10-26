@@ -5,6 +5,7 @@
   "task": "classify",
   "message": "recordame en media hora que saque la ropa del lavarropas",
   "response": "{\"type\":\"timer\",\"normalized_content\":\"Recordarme sacar la ropa del lavarropas el 2026-10-27 a las 00:20.\",\"weight\":0.9,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-27T00:20:00-03:00\",\"title\":\"Sacar la ropa del lavarropas\",\"interrupt_level\":0.8,\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
+  "record": true,
   "now": "2026-10-26T23:50:00-03:00",
   "expect": {
     "type": "timer",
