@@ -1,12 +1,15 @@
 {
   "id": "classify-timer-en-20-minutos-pizza",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame en 20 minutos que saque la pizza del horno",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Avisame el 2026-10-26 a las 10:28 que saque la pizza del horno.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-26T10:28:00-03:00\",\"title\":\"Sacar la pizza del horno\",\"interrupt_level\":0.8,\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-26T10:08:00-03:00",
   "expect": {
     "type": "timer",
     "remind_request": true,
     "due_at": "2026-10-26T10:28:00-03:00"
-  }
+  },
+  "prompt_sha256": "234827c42b096620d47a043a5fb3ea5d6c8907f2dc1f3f27aed6a8e4755babe3"
 }

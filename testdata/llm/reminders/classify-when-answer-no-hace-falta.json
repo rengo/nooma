@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no hace falta",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No hace falta que me avises.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"no\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No hace falta que me avises.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"no\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "remind_when",
@@ -15,5 +14,5 @@
     "type": "chitchat",
     "question_answer": "no"
   },
-  "prompt_sha256": "33359fb8cc3c37188ce42fec119b1fc08c4429428adad60d400e894d3d40cee6"
+  "prompt_sha256": "d5fb1cf8cc67aa6f5aa125bc4e203150bf6fd8e0f56dc6e56536274beb7a19ba"
 }

@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "el 2",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Elijo la opción 2: llamar a Ana.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Elijo la opción 2.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -34,5 +33,5 @@
     "question_answer": "choice",
     "choice_number": 2
   },
-  "prompt_sha256": "1b2158fa418324e2f41822766e0a3f347e8baac5db91f60ca3d6518ae707fcad"
+  "prompt_sha256": "54601cc547a45003c7a3fb2f15eb7888f4c418778dc86cbadf4139e2f108c013"
 }

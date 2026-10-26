@@ -5,7 +5,6 @@
   "task": "classify",
   "message": "listo, ya fui",
   "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya fui al turno con el kinesiólogo.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"referent\":\"A\",\"task_checkin_outcome\":\"done\"}",
-  "record": true,
   "now": "2026-10-20T16:00:00-03:00",
   "conversation": {
     "turns": [
@@ -39,5 +38,5 @@
     "task_checkin_outcome": "done",
     "referent": "A"
   },
-  "prompt_sha256": "80c60010250535e5090dd693322cbebc135d985e036f83a720dd987cc130a05e"
+  "prompt_sha256": "02d104e457ffe191329e23c07126cd8c6ae266256e3b57314ec175f630d3e25e"
 }

@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿cuándo era lo del oculista?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Cuándo era lo del oculista?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"oculista\",\"oculistas\",\"oftalmólogo\",\"oftalmólogos\",\"oftalmóloga\",\"oftalmólogas\"]}}",
-  "record": true,
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Cuándo era la cita con el oculista?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"oculista\",\"oculistas\",\"oftalmólogo\",\"oftalmóloga\",\"oftalmólogos\",\"oftalmólogas\"]}}",
   "now": "2026-10-21T18:30:00-03:00",
   "expect": {
     "type": "recall",
@@ -13,5 +12,5 @@
       "oculista"
     ]
   },
-  "prompt_sha256": "05ee706337f22260817e807d43b4c1acbd660b6a511c1402f5962741743caf68"
+  "prompt_sha256": "90b8f0fa75d1dfa2cab33595a302a4af2cbd58b92c00b935a691c940464bfd56"
 }

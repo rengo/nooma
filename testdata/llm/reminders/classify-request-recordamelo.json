@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "recordámelo",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar el regalo de Ana el 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"title\":\"Regalo de Ana\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\"}",
-  "record": true,
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Comprar el regalo de Ana el 2026-10-17.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"title\":\"Regalo de Ana\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"referent\":\"A\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "conversation": {
     "turns": [
@@ -30,5 +29,5 @@
     "remind_request": true,
     "referent": "A"
   },
-  "prompt_sha256": "980b47b84887c0fb758e913586fcc3f28cf2dd60e4445d42a7afbca5e90679f5"
+  "prompt_sha256": "a152b8808f01a1e0abfdabd1b8eee457909d9c0738e79e5c9d0be93ea431a7fc"
 }

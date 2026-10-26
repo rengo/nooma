@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿qué tengo esta semana?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué tengo entre 2026-10-21 18:30 y 2026-10-26?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"window\":{\"on\":\"when\",\"from\":\"2026-10-21T18:30:00-03:00\",\"to\":\"2026-10-26T00:00:00-03:00\"}}}",
-  "record": true,
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿Qué tengo desde el 2026-10-21 hasta el 2026-10-26?\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"recall_scope\":{\"terms\":[],\"window\":{\"on\":\"when\",\"from\":\"2026-10-21T18:30:00-03:00\",\"to\":\"2026-10-26T00:00:00-03:00\"}}}",
   "now": "2026-10-21T18:30:00-03:00",
   "expect": {
     "type": "recall",
@@ -15,5 +14,5 @@
       "to": "2026-10-26T00:00:00-03:00"
     }
   },
-  "prompt_sha256": "7f8cbb4ff722deff801254d7e37e37cc787f02e57266d57ba838f6a6bc2fdef2"
+  "prompt_sha256": "cfec91b969c0e3a346cf04e87d57eb944ced68382c980d128260fb9d5c191f53"
 }

@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "también 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-21 a las 10:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
-  "record": true,
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-21 a las 10:00.\",\"weight\":0.7,\"decay_rate\":0.03,\"language\":\"es\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-20T18:05:00-03:00",
   "conversation": {
     "turns": [
@@ -42,5 +41,5 @@
     ],
     "reminder_leads_add": true
   },
-  "prompt_sha256": "607d8f1712c81faec90c45a86c43dc3e221d68c715034e357da18d40f734a3a5"
+  "prompt_sha256": "21b74747582c61302ce59e0f8df8debdff7382fd4fce38581f3e9353009eca3c"
 }

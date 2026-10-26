@@ -4,8 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\"}",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"nudge_outcome\":\"engaged\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -18,5 +17,5 @@
     "type": "chitchat",
     "nudge_outcome": "engaged"
   },
-  "prompt_sha256": "7e82825427eb7bb718bec57ef3fcedf9d2a40454ccfa31121a7e1a6be4eb0cda"
+  "prompt_sha256": "2f37033bda2c25280c60b26f9839508275f21df43581f07b636372db3cd5ab65"
 }

@@ -1,13 +1,16 @@
 {
   "id": "classify-request-manana-a-las-9-is-not-a-timer",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame mañana a las 9 que llame al plomero",
-  "record": true,
+  "response": "{\n  \"type\": \"task\",\n  \"normalized_content\": \"Recordarme llamar al plomero el 2026-10-27 a las 09:00.\",\n  \"weight\": 0.8,\n  \"decay_rate\": 0.1,\n  \"language\": \"es\",\n  \"due_at\": \"2026-10-27T09:00:00-03:00\",\n  \"title\": \"Llamar al plomero\",\n  \"interrupt_level\": 0.5,\n  \"remind_request\": true,\n  \"reminder_intent\": \"none\"\n}",
   "now": "2026-10-26T10:08:00-03:00",
   "expect": {
     "type": "task",
     "remind_request": true,
     "day_only": false,
     "due_at": "2026-10-27T09:00:00-03:00"
-  }
+  },
+  "prompt_sha256": "daf91ed1c221ebabd289cf1ef06e44998d1189166d06c60740aa70046e4dca7b"
 }

@@ -1,8 +1,10 @@
 {
   "id": "classify-timer-en-1-hora-mama-beside-a-chat",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame en 1 hora que llame a mamá",
-  "record": true,
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Avisame que llame a mamá el 2026-10-26 a las 11:07.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-26T11:07:00-03:00\",\"title\":\"Llamar a mamá\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
   "now": "2026-10-26T10:07:00-03:00",
   "conversation": {
     "turns": [
@@ -35,5 +37,6 @@
     "type": "timer",
     "remind_request": true,
     "due_at": "2026-10-26T11:07:00-03:00"
-  }
+  },
+  "prompt_sha256": "54652e06ccec7a697fc34da4198e72072f2f00a7b6c6c7abc0387e3d64d13da4"
 }
