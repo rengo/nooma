@@ -461,10 +461,10 @@ func (r consolidateRunner) judgeAndPersistPairs(ctx context.Context, pairs []con
 // The persist decision is consolidation.ProposeRelation, unchanged
 // (design §7.1) — this function only supplies the resolved
 // relation.Thresholds it needs. A judgment missing Type cannot even be
-// looked up (ThresholdsFor needs a type name), so that check happens here,
-// before the repo round trip; every other missing-field, discard and
-// outcome-"new" case is ProposeRelation's own contract, already proven at
-// the core level (connect_test.go).
+// looked up (ThresholdsFor needs a type name), so relation.Propose reads the
+// judgment first, the rule capture applies too; every decided-nothing and
+// target-unknown case is its contract, and discard is ProposeRelation's,
+// both proven at the core level.
 //
 // A judgment ProposeRelation refuses (ok == false) writes no
 // decision_log row — deliberately unlike capture's own
@@ -482,27 +482,26 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 		return fmt.Errorf("consolidate: connect: judge relation for unit %q: %w", source.ID, err)
 	}
 
+	// relation.Propose is the rule capture applies too. ADR-0026's refusal
+	// comes before the threshold read: exactly one candidate went into the
+	// prompt, so any other ID is wrong by construction and does not deserve a
+	// repo round trip. The row is recorded here because core cannot.
 	j, _ := relation.DecodeJudgment(resp.Text)
-	if j.Type == nil {
-		return nil
-	}
-
-	// ADR-0026, before the threshold read rather than after it: exactly one
-	// candidate went into the prompt, so any other ID is wrong by
-	// construction, and a wrong ID does not deserve a repo round trip. The
-	// row is recorded here because ProposeRelation cannot — it is pure, and
-	// refusing is all it can do.
 	offered := []string{target.ID}
-	if j.TargetUnitID != nil && !relation.TargetOffered(*j.TargetUnitID, offered) {
+	p, reading := relation.Propose(j, offered)
+	switch reading {
+	case relation.DecidedNothing:
+		return nil
+	case relation.TargetUnknown:
 		return r.recordConnectTargetUnknownDecision(ctx, source, *j.TargetUnitID, offered, now)
 	}
 
-	row, err := r.rels.ThresholdsFor(ctx, *j.Type)
+	row, err := r.rels.ThresholdsFor(ctx, p.Type)
 	if err != nil {
-		return fmt.Errorf("consolidate: connect: resolve relation thresholds for %q: %w", *j.Type, err)
+		return fmt.Errorf("consolidate: connect: resolve relation thresholds for %q: %w", p.Type, err)
 	}
 
-	proposed, ok := consolidation.ProposeRelation(source.ID, j, relation.Resolve(row), offered)
+	proposed, ok := consolidation.ProposeRelation(source.ID, p, relation.Resolve(row))
 	if !ok {
 		return nil
 	}

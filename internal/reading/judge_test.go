@@ -48,18 +48,23 @@ func TestReplayJudgeReadsAJudgmentByWhatItWouldStore(t *testing.T) {
 		expect, response string
 		ok               bool
 	}{
-		"new is new":                     {"new", `{"outcome":"new"}`, true},
-		"related is not new":             {"new", `{"outcome":"related","target_unit_id":"c1","type":"same_day","strength":0.4,"confidence":0.8}`, false},
-		"related below persist is new":   {"new", `{"outcome":"related","target_unit_id":"c1","type":"same_day","strength":0.1,"confidence":0.2}`, true},
-		"related to an unoffered is new": {"new", `{"outcome":"related","target_unit_id":"zz","type":"same_day","strength":0.4,"confidence":0.8}`, true},
-		"related with no type is new":    {"new", `{"outcome":"related","target_unit_id":"c1","strength":0.4,"confidence":0.8}`, true},
-		"related is related":             {"related", `{"outcome":"related","target_unit_id":"c1","type":"same_topic","strength":0.6,"confidence":0.7}`, true},
-		"related at persist is related":  {"related", `{"outcome":"related","target_unit_id":"c1","type":"same_topic","strength":0.6,"confidence":0.3}`, true},
-		"related below persist misses":   {"related", `{"outcome":"related","target_unit_id":"c1","type":"same_topic","strength":0.6,"confidence":0.29}`, false},
-		"new is not related":             {"related", `{"outcome":"new"}`, false},
-		"duplicate is not related":       {"related", `{"outcome":"duplicate","target_unit_id":"c1","strength":0.9,"confidence":0.9}`, false},
-		"duplicate is duplicate":         {"duplicate", `{"outcome":"duplicate","target_unit_id":"c1","strength":0.9,"confidence":0.9}`, true},
-		"prose is no reading":            {"new", `I think they are unrelated.`, false},
+		"new is new":                          {"new", `{"outcome":"new"}`, true},
+		"related is not new":                  {"new", `{"outcome":"related","target_unit_id":"c1","type":"same_day","strength":0.4,"confidence":0.8}`, false},
+		"related below persist is new":        {"new", `{"outcome":"related","target_unit_id":"c1","type":"same_day","strength":0.1,"confidence":0.2}`, true},
+		"related to an unoffered is new":      {"new", `{"outcome":"related","target_unit_id":"zz","type":"same_day","strength":0.4,"confidence":0.8}`, true},
+		"related with no type is new":         {"new", `{"outcome":"related","target_unit_id":"c1","strength":0.4,"confidence":0.8}`, true},
+		"related is related":                  {"related", `{"outcome":"related","target_unit_id":"c1","type":"same_topic","strength":0.6,"confidence":0.7}`, true},
+		"related at persist is related":       {"related", `{"outcome":"related","target_unit_id":"c1","type":"same_topic","strength":0.6,"confidence":0.3}`, true},
+		"related below persist misses":        {"related", `{"outcome":"related","target_unit_id":"c1","type":"same_topic","strength":0.6,"confidence":0.29}`, false},
+		"new is not related":                  {"related", `{"outcome":"new"}`, false},
+		"duplicate is not related":            {"related", `{"outcome":"duplicate","target_unit_id":"c1","strength":0.9,"confidence":0.9}`, false},
+		"duplicate is duplicate":              {"duplicate", `{"outcome":"duplicate","target_unit_id":"c1","strength":0.9,"confidence":0.9}`, true},
+		"prose is no reading":                 {"new", `I think they are unrelated.`, false},
+		"no outcome is no reading":            {"new", `{"target_unit_id":"c1","confidence":0.8}`, false},
+		"duplicate below persist is new":      {"new", `{"outcome":"duplicate","target_unit_id":"c1","confidence":0.2}`, true},
+		"related with no confidence is new":   {"new", `{"outcome":"related","target_unit_id":"c1","type":"same_day"}`, true},
+		"duplicate with no type is duplicate": {"duplicate", `{"outcome":"duplicate","target_unit_id":"c1","confidence":0.9}`, true},
+		"duplicate to an unoffered is new":    {"new", `{"outcome":"duplicate","target_unit_id":"zz","confidence":0.9}`, true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

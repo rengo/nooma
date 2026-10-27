@@ -255,80 +255,25 @@ func TestConnectPairs_PreservesFusedOrder(t *testing.T) {
 	}
 }
 
-func ptrOutcome(o relation.Outcome) *relation.Outcome { return &o }
-func ptrString(s string) *string                      { return &s }
-func ptrFloat(f float64) *float64                     { return &f }
-
-// completeJudgment returns a relation.Judgment with every pointer field
-// present, so a test can nil out exactly one at a time.
-func completeJudgment(outcome relation.Outcome, confidence float64) relation.Judgment {
-	return relation.Judgment{
-		Outcome:      ptrOutcome(outcome),
-		TargetUnitID: ptrString("target-unit"),
-		Type:         ptrString("same_topic"),
-		Strength:     ptrFloat(0.5),
-		Confidence:   ptrFloat(confidence),
-	}
+// completeProposal is a relation.Proposal the judge decided in full; reading
+// a judgment into one is relation.Propose's, tested there.
+func completeProposal(outcome relation.Outcome, confidence float64) relation.Proposal {
+	return relation.Proposal{Outcome: outcome, TargetUnitID: "target-unit", Type: "same_topic", Strength: 0.5, Confidence: confidence}
 }
 
 func connectPairsThresholds() relation.Thresholds {
 	return relation.Thresholds{Persist: 0.30, Surface: 0.50}
 }
 
-// offeredTarget is the candidate list that makes completeJudgment's own
-// TargetUnitID a legitimate answer. Every test that is not about ADR-0026's
-// guard passes it, so those tests keep testing what they were written to test.
-func offeredTarget() []string {
-	return []string{"target-unit"}
-}
-
-// TestProposeRelation_OutcomeNewWritesNothing proves R4.3: outcome "new"
-// returns (_, false) regardless of every other field being present.
-func TestProposeRelation_OutcomeNewWritesNothing(t *testing.T) {
-	j := completeJudgment(relation.OutcomeNew, 0.90)
-
-	_, ok := ProposeRelation("source-unit", j, connectPairsThresholds(), offeredTarget())
-	if ok {
-		t.Fatal("ProposeRelation() returned true for outcome \"new\" — a judgment with this outcome decided nothing")
-	}
-}
-
 // TestProposeRelation_DiscardWritesNothing proves R4.3 (I08): a
 // relation.Discard verdict returns (_, false), even with every field
 // present.
 func TestProposeRelation_DiscardWritesNothing(t *testing.T) {
-	j := completeJudgment(relation.OutcomeDuplicate, 0.10) // below Persist (0.30) -> Discard
+	j := completeProposal(relation.OutcomeDuplicate, 0.10) // below Persist (0.30) -> Discard
 
-	_, ok := ProposeRelation("source-unit", j, connectPairsThresholds(), offeredTarget())
+	_, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
 	if ok {
 		t.Fatal("ProposeRelation() returned true for a relation.Discard verdict — I08 requires it store nothing")
-	}
-}
-
-// TestProposeRelation_EachMissingFieldWritesNothing proves R4.3: any of
-// the four pointer fields being nil after tolerant decode returns
-// (_, false), tested individually.
-func TestProposeRelation_EachMissingFieldWritesNothing(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*relation.Judgment)
-	}{
-		{"TargetUnitID", func(j *relation.Judgment) { j.TargetUnitID = nil }},
-		{"Type", func(j *relation.Judgment) { j.Type = nil }},
-		{"Strength", func(j *relation.Judgment) { j.Strength = nil }},
-		{"Confidence", func(j *relation.Judgment) { j.Confidence = nil }},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			j := completeJudgment(relation.OutcomeDuplicate, 0.90)
-			tc.mutate(&j)
-
-			_, ok := ProposeRelation("source-unit", j, connectPairsThresholds(), offeredTarget())
-			if ok {
-				t.Fatalf("ProposeRelation() returned true with %s nil — a judgment missing a field decided nothing", tc.name)
-			}
-		})
 	}
 }
 
@@ -347,9 +292,9 @@ func TestProposeRelation_UncertainAndAssertedWriteAPlan(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			j := completeJudgment(relation.OutcomeDuplicate, tc.confidence)
+			j := completeProposal(relation.OutcomeDuplicate, tc.confidence)
 
-			got, ok := ProposeRelation("source-unit", j, connectPairsThresholds(), offeredTarget())
+			got, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
 			if !ok {
 				t.Fatalf("ProposeRelation() returned false for confidence %v, want true", tc.confidence)
 			}
@@ -397,9 +342,9 @@ func TestProposeRelation_BandMatchesRelationDecide(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			j := completeJudgment(relation.OutcomeDuplicate, tc.confidence)
+			j := completeProposal(relation.OutcomeDuplicate, tc.confidence)
 
-			got, ok := ProposeRelation("source-unit", j, thresholds, offeredTarget())
+			got, ok := ProposeRelation("source-unit", j, thresholds)
 			if !ok {
 				t.Fatalf("ProposeRelation() returned false for confidence %v, want true", tc.confidence)
 			}
@@ -420,9 +365,9 @@ func TestProposeRelation_BandMatchesRelationDecide(t *testing.T) {
 // returned ProposedRelation.CreatedBy is always
 // relation.CreatedByConsolidation, never CreatedBySystem or CreatedByUser.
 func TestProposeRelation_CreatedByIsAlwaysConsolidation(t *testing.T) {
-	j := completeJudgment(relation.OutcomeRelated, 0.90)
+	j := completeProposal(relation.OutcomeRelated, 0.90)
 
-	got, ok := ProposeRelation("source-unit", j, connectPairsThresholds(), offeredTarget())
+	got, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
 	if !ok {
 		t.Fatal("ProposeRelation() returned false, want true")
 	}
@@ -466,115 +411,5 @@ func TestConnectBudgetConstants_ArePinnedToTheirCalibratedValues(t *testing.T) {
 	}
 	if got := ConnectSourceLimit * ConnectCandidateK; got != wantBudget {
 		t.Errorf("ConnectSourceLimit*ConnectCandidateK = %d, want %d — doc 02 §6.4 states the per-night provider cost as this one product", got, wantBudget)
-	}
-}
-
-// TestProposeRelation_NilOutcomeWritesNothing pins the branch both blind
-// judges found unpinned in Judgment Day round 1: TestProposeRelation_
-// EachMissingFieldWritesNothing varies TargetUnitID, Type, Strength and
-// Confidence but never Outcome, so mutating the guard back to a bare
-// dereference — design.md §6.7's own literal stub shape — left the whole
-// package green at 100% statement coverage.
-//
-// The shape is reachable in ordinary use, not adversarial: relation.
-// DecodeJudgment documents an absent "outcome" as a degraded-but-expected
-// response (its own TestDecodeJudgment_Degrades/outcome_absent proves the
-// decoder produces it), and internal/brain/capture.go's shipped judge path
-// already treats nil Outcome as "decided nothing". Without this test, a
-// later edit simplifying the guard toward the documented stub panics on a
-// nil dereference with nothing to catch it.
-func TestProposeRelation_NilOutcomeWritesNothing(t *testing.T) {
-	// Built the same way TestProposeRelation_EachMissingFieldWritesNothing
-	// builds its cases — every field present, then exactly one nilled — and
-	// the field it nils is the one that test never varies. The confidence is
-	// well above Surface, so this would persist if the guard let it through.
-	j := completeJudgment(relation.OutcomeRelated, 0.95)
-	j.Outcome = nil
-
-	got, ok := ProposeRelation("unit-a", j, connectPairsThresholds(), offeredTarget())
-	if ok {
-		t.Fatalf("ProposeRelation(nil Outcome) = (%+v, true), want (_, false) — a judgment that decided nothing writes nothing (doc 02 §4)", got)
-	}
-	if got != (ProposedRelation{}) {
-		t.Errorf("ProposeRelation(nil Outcome) returned %+v, want the zero value alongside false", got)
-	}
-}
-
-// TestProposeRelation_UnofferedTargetWritesNothing covers ADR-0026.
-//
-// Every other refusal in this file is about a judgment that said too little.
-// This one is about a judgment that said something impossible: a target the
-// judge was never shown. It is a separate guard because the two are separately
-// reachable — every field here is present and the confidence is well above
-// Surface, so this judgment persists today.
-//
-// The cases are the three shapes the live pipeline can actually produce. Only
-// the first is stopped by the database: `relations.to_unit_id` REFERENCES
-// `units(id)` with `foreign_keys=on`, so an invented ID is refused on write —
-// loudly, and on the capture path that failure surfaces as a failed capture for
-// a message that was already stored. The other two satisfy the foreign key.
-func TestProposeRelation_UnofferedTargetWritesNothing(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		target  string
-		offered []string
-	}{
-		{
-			name:    "an ID no unit has",
-			target:  "unit-hallucinated",
-			offered: []string{"target-unit"},
-		},
-		{
-			name:    "a real unit that was never a candidate",
-			target:  "unit-real-but-unoffered",
-			offered: []string{"target-unit"},
-		},
-		{
-			name:    "the source itself",
-			target:  "unit-a",
-			offered: []string{"target-unit"},
-		},
-		{
-			name:    "no candidate was offered at all",
-			target:  "target-unit",
-			offered: nil,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			j := completeJudgment(relation.OutcomeRelated, 0.95)
-			j.TargetUnitID = ptrString(tc.target)
-
-			got, ok := ProposeRelation("unit-a", j, connectPairsThresholds(), tc.offered)
-			if ok {
-				t.Fatalf("ProposeRelation(target %q, offered %v) = (%+v, true), want (_, false) — the judge answers about what it was shown (ADR-0026)", tc.target, tc.offered, got)
-			}
-			if got != (ProposedRelation{}) {
-				t.Errorf("ProposeRelation returned %+v, want the zero value alongside false", got)
-			}
-		})
-	}
-}
-
-// TestProposeRelation_OfferedTargetStillWrites is the control for the test
-// above. Without it, a ProposeRelation that refused every judgment would make
-// the whole unoffered-target table pass — docs/06-harness.md §4's vacuous
-// green.
-func TestProposeRelation_OfferedTargetStillWrites(t *testing.T) {
-	t.Parallel()
-
-	j := completeJudgment(relation.OutcomeRelated, 0.95)
-
-	got, ok := ProposeRelation("unit-a", j, connectPairsThresholds(), []string{"unit-x", "target-unit"})
-	if !ok {
-		t.Fatal("ProposeRelation refused a judgment naming a candidate it was shown")
-	}
-	if got.To != "target-unit" {
-		t.Errorf("To = %q, want %q", got.To, "target-unit")
 	}
 }

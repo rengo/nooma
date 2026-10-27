@@ -138,63 +138,34 @@ type ProposedRelation struct {
 	Band relation.Verdict
 }
 
-// ProposeRelation applies doc 02 §4's persist decision — unchanged, through
-// relation.Decide — to one judged pair (spec R4.3, design.md §4.4).
+// ProposeRelation applies doc 02 §4's persist decision, through
+// relation.Decide, to one pair the judge proposed (spec R4.3, design.md §4.4).
+// p is relation.Propose's reading of the judgment, the rule capture applies
+// too, so a judgment cannot be stored by one judge call site and dropped by
+// the other: a duplicate is stored typed relation.TypeDuplicate, and a
+// judgment that decided nothing, or named a unit it was not shown
+// (ADR-0026), never reaches here.
+//
 // relation.Resolve is NOT called here and must not be: this function takes
 // already-resolved relation.Thresholds, because resolving them means reading
-// the nullable relation_thresholds row, which belongs to whichever caller
-// owns that read (m2c's brain wiring), not to core. An earlier revision of
-// this comment claimed both were called — Judgment Day round 1, both judges.
-// It returns (_, false) — no plan — for outcome "new", for
-// relation.Discard (I08), and for a judgment missing any of TargetUnitID,
-// Type, Strength or Confidence after tolerant decode ("a judgment that
-// decided nothing writes nothing", doc 02 §4).
+// the nullable relation_thresholds row for p.Type, which belongs to the
+// caller (m2c's brain wiring), not to core.
 //
-// It also returns (_, false) for a TargetUnitID that is not in offered —
-// the IDs the judge was actually shown (doc 02 §4, ADR-0026). This one is
-// different in kind from the refusals above: they are judgments that said
-// too little, and this is a judgment that said something impossible. The
-// caller records it, because a model naming a unit it was never given is
-// worth seeing in the vault; this function still refuses it structurally,
-// so a future third caller that forgets to check cannot persist one.
-// relation.Uncertain and relation.Asserted return (_, true): the Uncertain
-// band is stored AND asked about (I09) — the asking is
-// m3e-pending-question's, built in internal/brain off the returned Band
-// field below, which is what lets that caller decide whether to queue a
-// question without recomputing relation.Decide a second time.
-// The returned ProposedRelation.CreatedBy is always
+// It returns (_, false) for relation.Discard (I08). relation.Uncertain and
+// relation.Asserted return a plan whose Band lets the caller queue a question
+// (I09) without recomputing relation.Decide. CreatedBy is always
 // relation.CreatedByConsolidation.
-//
-// A nil j.Outcome is treated the same as outcome "new" (a judgment that
-// decided nothing writes nothing) rather than dereferenced. doc 02 §4
-// covers exactly this shape — "if it degrades so far that the outcome, its
-// confidence or its target is missing, no relation is stored" — and
-// internal/brain/capture.go's own judge path already applies the identical
-// convention, shipped in M1. relation.DecodeJudgment documents an absent
-// outcome as an ordinary degraded response, not a caller error, so this
-// branch is reachable in normal use and is pinned by
-// TestProposeRelation_NilOutcomeWritesNothing.
-func ProposeRelation(from string, j relation.Judgment, t relation.Thresholds, offered []string) (ProposedRelation, bool) {
-	if j.Outcome == nil || *j.Outcome == relation.OutcomeNew {
-		return ProposedRelation{}, false
-	}
-	if j.TargetUnitID == nil || j.Type == nil || j.Strength == nil || j.Confidence == nil {
-		return ProposedRelation{}, false
-	}
-	if !relation.TargetOffered(*j.TargetUnitID, offered) {
-		return ProposedRelation{}, false
-	}
-	band := relation.Decide(*j.Confidence, t)
+func ProposeRelation(from string, p relation.Proposal, t relation.Thresholds) (ProposedRelation, bool) {
+	band := relation.Decide(p.Confidence, t)
 	if band == relation.Discard {
 		return ProposedRelation{}, false
 	}
-
 	return ProposedRelation{
 		From:       from,
-		To:         *j.TargetUnitID,
-		Type:       *j.Type,
-		Strength:   *j.Strength,
-		Confidence: *j.Confidence,
+		To:         p.TargetUnitID,
+		Type:       p.Type,
+		Strength:   p.Strength,
+		Confidence: p.Confidence,
 		CreatedBy:  relation.CreatedByConsolidation,
 		Band:       band,
 	}, true

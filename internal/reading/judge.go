@@ -61,28 +61,22 @@ func ReplayJudge(c llm.Case, prompt, response string) error {
 }
 
 // storedOutcome is what production would store from response, at the default
-// thresholds: related or duplicate when capture's own steps would persist the
-// relation, and new when they would store nothing — a judgment below the
-// persist bar, naming a unit it was not shown, or a related one with no type
-// all store nothing, whatever outcome the model wrote. A response with no
-// outcome at all is no reading.
+// thresholds: relation.Propose's reading, the rule capture and the nightly
+// connect both apply, then relation.Decide. A judgment that decided nothing,
+// named a unit it was not shown, or falls below the persist bar stores
+// nothing and reads as new. A response with no outcome at all is no reading.
 func storedOutcome(c llm.Case, response string) (string, bool) {
 	j, err := relation.DecodeJudgment(response)
 	if err != nil || j.Outcome == nil {
 		return "", false
 	}
-	if *j.Outcome == relation.OutcomeNew || j.Confidence == nil || j.TargetUnitID == nil {
-		return string(relation.OutcomeNew), true
-	}
 	offered := make([]string, len(c.Candidates))
 	for i, cand := range c.Candidates {
 		offered[i] = cand.ID
 	}
-	switch {
-	case !relation.TargetOffered(*j.TargetUnitID, offered),
-		*j.Outcome == relation.OutcomeRelated && j.Type == nil,
-		relation.Decide(*j.Confidence, relation.Resolve(nil)) == relation.Discard:
+	p, reading := relation.Propose(j, offered)
+	if reading != relation.Proposed || relation.Decide(p.Confidence, relation.Resolve(nil)) == relation.Discard {
 		return string(relation.OutcomeNew), true
 	}
-	return string(*j.Outcome), true
+	return string(p.Outcome), true
 }
