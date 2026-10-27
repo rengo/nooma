@@ -68,7 +68,7 @@ templ captureOutcome(result brain.CaptureResult) {
 			<p data-outcome="corrected">Corrected <a href={ templ.URL("/ui/units/" + result.Correction.UnitID) }>{ result.Correction.UnitID }</a>.</p>
 		}
 	case brain.OutcomeTimers:
-		<p data-outcome="timers">{ timersSummary(*result.Timers) }</p>
+		<p data-outcome="timers">{ timersSummary(result) }</p>
 	case brain.OutcomeAsked:
 		switch result.Correction.Why {
 			case brain.AskNotAnEdit:
