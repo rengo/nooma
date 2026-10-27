@@ -269,6 +269,10 @@ func (g *i27Config) SetHysteresisMargin(context.Context, float64, time.Time) err
 	i27Fail(g.t, "ConfigRepo", "SetHysteresisMargin")
 	return nil
 }
+func (g *i27Config) LearnGoalStagnationDays(context.Context, int, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "LearnGoalStagnationDays")
+	return nil
+}
 func (g *i27Config) SetGoalStagnationDays(context.Context, int, time.Time) error {
 	i27Fail(g.t, "ConfigRepo", "SetGoalStagnationDays")
 	return nil

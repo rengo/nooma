@@ -106,7 +106,19 @@ func (c *Config) SetHysteresisMargin(_ context.Context, v float64, at time.Time)
 	return c.set(at, func(r *ports.VaultConfig) { r.HysteresisMargin = &v })
 }
 func (c *Config) SetGoalStagnationDays(_ context.Context, v int, at time.Time) error {
-	return c.set(at, func(r *ports.VaultConfig) { r.GoalStagnationDays = &v })
+	return c.set(at, func(r *ports.VaultConfig) { r.GoalStagnationDays = &v; r.GoalStagnationPinned = true })
+}
+
+// LearnGoalStagnationDays implements ports.ConfigRepo, refusing a pin as the
+// store's WHERE does.
+func (c *Config) LearnGoalStagnationDays(_ context.Context, v int, at time.Time) error {
+	c.mu.Lock()
+	pinned := c.row != nil && c.row.GoalStagnationPinned
+	c.mu.Unlock()
+	if pinned {
+		return ports.ErrGoalStagnationPinned
+	}
+	return c.set(at, func(r *ports.VaultConfig) { r.GoalStagnationDays = &v; r.GoalCalibratedAt = &at })
 }
 func (c *Config) SetMentalLoadThreshold(_ context.Context, v int, at time.Time) error {
 	return c.set(at, func(r *ports.VaultConfig) { r.MentalLoadThreshold = &v })

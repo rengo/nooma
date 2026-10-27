@@ -342,6 +342,7 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
     goal counts as stagnant, the mental-load threshold and whether the nightly consolidation runs.
     A value outside what the brain accepts is refused with a message and saves nothing; a saved
     one takes effect on the next request and shows up in Activity with the value it replaced.
+    Saving the goal days pins them: the nightly learner never changes a value you set.
     It also shows, read-only, when the last full consolidation ran (or that none has), the
     relation thresholds learned so far, and the latest effects of the nightly pass, labelled as
     effects: a night that decides nothing leaves none.
@@ -444,10 +445,11 @@ forget to configure.
 
 ## The learner (M5, in progress)
 
-> **In progress.** Steps 1 and 2 run today: each verdict is recorded as a typed learning signal,
+> **In progress.** Steps 1 to 3 run today: each verdict is recorded as a typed learning signal,
 > from the graph, the chat and the morning digest alike ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md)),
-> and the nightly `learn` phase moves a kind of link's bar from them ([ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md)).
-> Steps 3 and 4 are planned. The story below
+> and the nightly `learn` phase moves a kind of link's bar from them ([ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md))
+> and how often a goal is asked about ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md)).
+> Step 4 is planned. The story below
 > is the design target in [doc 02 §9](02-cognitive-core.md#9-learning--the-prediction-error-loop).
 > Every threshold, window and interval M5 uses is **decided by M5**; none is fixed here.
 
@@ -463,7 +465,9 @@ two items just because they share a date.
 3. **She sets a goal and drifts from it.** Nooma checks in. She ignores the check-ins. It
    judges by whether she *responded*, not by whether the message was delivered, and it lengthens
    the interval so it bothers her less. Had she engaged, it would shorten it. After adjusting,
-   it waits long enough to see the effect before judging again.
+   it waits long enough to see the effect before judging again: five check-ins in a row with no
+   answer add a week, three answered of the last five take a week off, between one and eight
+   weeks. If she sets the days herself in Admin, that is her number, and Nooma stops changing it.
 4. **She can read what it learned.** A plain-language summary, in the UI and the API, says what
    changed and why ("I raised the `same_topic` bar because you rejected most of the last
    links"), and she can correct it.

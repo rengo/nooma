@@ -107,6 +107,40 @@ func RunSignalRepo(t *testing.T, newRepo func(t *testing.T) ports.SignalRepo) {
 		}
 	})
 
+	// M5 link 5: goal cadence reads how goal check-ins closed.
+	t.Run("GoalVerdicts returns the closed goal check-ins, oldest first", func(t *testing.T) {
+		ctx := context.Background()
+		repo := newRepo(t)
+		base := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+		for i, s := range []struct {
+			id, ctx string
+			typ     ports.SignalType
+		}{
+			{"b-ignored", `{"belief_id":"b-run"}`, ports.SignalNudgeIgnored},
+			{"a-engaged", `{"belief_id":"b-run"}`, ports.SignalNudgeEngaged},
+			{"declined", `{"belief_id":"b-german"}`, ports.SignalNudgeDeclined},
+			{"acked", `{"belief_id":"b-run"}`, ports.SignalNudgeAck},
+			{"task", `{"unit_id":"u"}`, ports.SignalNudgeEngaged},
+			{"empty", `{"belief_id":""}`, ports.SignalNudgeIgnored},
+		} {
+			if err := repo.Record(ctx, ports.Signal{ID: s.id, Type: s.typ, Valence: ports.ValenceNegative,
+				Context: json.RawMessage(s.ctx), OccurredAt: base.Add(time.Duration(i) * time.Minute)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := repo.GoalVerdicts(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, s := range got {
+			ids = append(ids, s.ID)
+		}
+		if !reflect.DeepEqual(ids, []string{"b-ignored", "a-engaged", "declined"}) {
+			t.Errorf("GoalVerdicts = %v, want the three closed goal check-ins in order", ids)
+		}
+	})
+
 	t.Run("Record then Since returns the signal", func(t *testing.T) {
 		repo := newRepo(t)
 		ctx := context.Background()

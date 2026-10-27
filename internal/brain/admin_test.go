@@ -249,7 +249,8 @@ func TestAdmin_EachFieldMovesExactlyItsOwnColumnAndLogsItsKey(t *testing.T) {
 	}{
 		{ConfigWeightThreshold, "0.9", 0.7, 0.9, func(c *ports.VaultConfig) { v := 0.9; c.WeightThreshold = &v }},
 		{ConfigHysteresisMargin, "0.1", 0.3, 0.1, func(c *ports.VaultConfig) { v := 0.1; c.HysteresisMargin = &v }},
-		{ConfigGoalStagnationDays, "14", float64(40), float64(14), func(c *ports.VaultConfig) { v := 14; c.GoalStagnationDays = &v }},
+		// The Admin save pins it (client answer 6, ADR-0055).
+		{ConfigGoalStagnationDays, "14", float64(40), float64(14), func(c *ports.VaultConfig) { v := 14; c.GoalStagnationDays = &v; c.GoalStagnationPinned = true }},
 		{ConfigMentalLoadThreshold, "3", float64(9), float64(3), func(c *ports.VaultConfig) { v := 3; c.MentalLoadThreshold = &v }},
 		{ConfigConsolidationEnabled, "true", false, true, func(c *ports.VaultConfig) { v := true; c.ConsolidationEnabled = &v }},
 	} {

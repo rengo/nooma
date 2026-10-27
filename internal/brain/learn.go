@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/learning"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
@@ -123,4 +124,62 @@ func learnDetailOf(relType string, c learning.Change) learnDetail {
 		Next:     learnThresholds{Persist: c.Next.Persist, Surface: c.Next.Surface},
 		Rejected: c.Rejected, Confirmed: c.Confirmed, SignalIDs: c.SignalIDs,
 	}
+}
+
+// learnGoalCadence is the learn slot's goal cadence step (doc 02 §9,
+// ADR-0055): learning.StepGoalCadence over how goal check-ins closed, against
+// goal_stagnation_days as the pass loaded it. A change is written stamped with
+// now, so the next night counts only what came after; a value the user pinned
+// from Admin is refused by the store as well as skipped here.
+func (r consolidateRunner) learnGoalCadence(ctx context.Context, cfg ports.VaultConfig, now time.Time) error {
+	if r.signals == nil || r.cfg == nil {
+		return nil
+	}
+	signals, err := r.signals.GoalVerdicts(ctx)
+	if err != nil {
+		return fmt.Errorf("consolidate: learn: read goal verdicts: %w", err)
+	}
+	verdicts := make([]learning.GoalVerdict, 0, len(signals))
+	for _, s := range signals {
+		kind := learning.GoalIgnored
+		switch s.Type {
+		case ports.SignalNudgeEngaged:
+			kind = learning.GoalEngaged
+		case ports.SignalNudgeDeclined:
+			kind = learning.GoalDeclined
+		}
+		verdicts = append(verdicts, learning.GoalVerdict{SignalID: s.ID, Kind: kind, At: s.OccurredAt})
+	}
+	state := learning.GoalCadenceState{Days: consolidation.ResolveGoalStagnationDays(cfg.GoalStagnationDays),
+		Pinned: cfg.GoalStagnationPinned, CalibratedAt: cfg.GoalCalibratedAt}
+	c, ok := learning.StepGoalCadence(state, verdicts, now)
+	if !ok {
+		return nil
+	}
+	if err := r.cfg.LearnGoalStagnationDays(ctx, c.Next, now); err != nil {
+		if errors.Is(err, ports.ErrGoalStagnationPinned) {
+			return nil // pinned meanwhile: the user's word, and no change to record
+		}
+		return fmt.Errorf("consolidate: learn: write goal_stagnation_days: %w", err)
+	}
+	verb, n := "ignored", c.Ignored
+	if c.Direction == learning.Lowered {
+		verb, n = "answered", c.Engaged
+	}
+	rationale := fmt.Sprintf("learn: %s the goal check-in interval %d → %d days: you %s %d of the last %d goal check-ins",
+		c.Direction, c.Previous, c.Next, verb, n, len(c.SignalIDs))
+	return r.record(ctx, now, ports.ActionLearnGoalCadence, rationale, goalCadenceDetail{
+		Direction: string(c.Direction), Previous: c.Previous, Next: c.Next,
+		Engaged: c.Engaged, Declined: c.Declined, Ignored: c.Ignored, SignalIDs: c.SignalIDs})
+}
+
+// goalCadenceDetail is the consolidate.learn.goal_cadence row's context.
+type goalCadenceDetail struct {
+	Direction string   `json:"direction"`
+	Previous  int      `json:"previous"`
+	Next      int      `json:"next"`
+	Engaged   int      `json:"engaged"`
+	Declined  int      `json:"declined"`
+	Ignored   int      `json:"ignored"`
+	SignalIDs []string `json:"signal_ids"`
 }

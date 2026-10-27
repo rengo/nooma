@@ -206,6 +206,9 @@ const (
 	// link 2c): a relation type's thresholds moved one step, with the
 	// evidence it was decided on.
 	ActionLearnRelationThreshold DecisionAction = "consolidate.learn.relation_threshold"
+	// ActionLearnGoalCadence is the learn slot's goal cadence change (M5
+	// link 5): goal_stagnation_days moved one step, with its evidence.
+	ActionLearnGoalCadence DecisionAction = "consolidate.learn.goal_cadence"
 
 	// ActionConnectQuestionCreated is m3e's own addition (I09's storing
 	// half): an Uncertain-band relation was stored and a pending_questions
@@ -307,7 +310,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
 		ActionDeriveBeliefReinforced, ActionDeriveBeliefSkipped, ActionDeriveRetiredEmbedFailed,
 		ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
-		ActionPatternEvalLoadHypothesisOpened, ActionPatternEvalGoalCheckInArmed, ActionCheckDigestGoalAsked, ActionLearnRelationThreshold,
+		ActionPatternEvalLoadHypothesisOpened, ActionPatternEvalGoalCheckInArmed, ActionCheckDigestGoalAsked, ActionLearnRelationThreshold, ActionLearnGoalCadence,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionRelationConfirmed, ActionRelationRejected,

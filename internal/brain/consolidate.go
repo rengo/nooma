@@ -1470,6 +1470,9 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		if err := r.learn(ctx, pass.now); err != nil {
 			return err
 		}
+		if err := r.learnGoalCadence(ctx, pass.cfg, pass.now); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("consolidate: %w: %s", consolidation.ErrUnknownPhase, p)
 	}

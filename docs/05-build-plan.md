@@ -236,7 +236,7 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 | 3 | A relation below its type's persist bar is dormant at read time: hidden from the graph, the unit page, focus adjacency, curation and the question queue, never deleted (I49) | Shipped |
 | 4a | A goal check-in is answered by naming it (ADR-0054, I50) | Shipped |
 | 4b | Goal check-ins delivered: `pattern_eval` arms one per stagnant goal at most once per `goal_stagnation_days`, twice that after a decline, and the morning digest asks it (I51) | Shipped |
-| 5 | Goal cadence learned, pinned by an Admin edit | Planned |
+| 5 | Goal cadence learned from how goal check-ins closed, pinned by an Admin save ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md), I52) | Shipped |
 | 6 | The correctable summary of what was learned (UI and API) | Planned |
 
 ## M6 — Release polish

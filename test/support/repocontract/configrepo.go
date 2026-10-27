@@ -2,6 +2,7 @@ package repocontract
 
 import (
 	"context"
+	"errors"
 	"math"
 	"reflect"
 	"testing"
@@ -346,6 +347,39 @@ func RunConfigSetters(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
 		}
 	}
 
+	// M5 link 5 (doc 02 §9, ADR-0055): the goal cadence's one write.
+	t.Run("LearnGoalStagnationDays writes the value and its stamp, unpinned", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.SeedConfig(t, seeded())
+		if err := repo.LearnGoalStagnationDays(ctx, 28, at); err != nil {
+			t.Fatalf("LearnGoalStagnationDays: %v", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.GoalStagnationDays == nil || *got.GoalStagnationDays != 28 || got.GoalStagnationPinned ||
+			got.GoalCalibratedAt == nil || !got.GoalCalibratedAt.Equal(at) {
+			t.Errorf("Load() = days %v, pinned %v, calibrated %v; want 28, unpinned, at %v", got.GoalStagnationDays, got.GoalStagnationPinned, got.GoalCalibratedAt, at)
+		}
+	})
+	t.Run("LearnGoalStagnationDays refuses a pinned value and changes nothing", func(t *testing.T) {
+		repo := newRepo(t)
+		if err := repo.SetGoalStagnationDays(ctx, 45, at); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.LearnGoalStagnationDays(ctx, 52, at.Add(time.Hour)); !errors.Is(err, ports.ErrGoalStagnationPinned) {
+			t.Fatalf("LearnGoalStagnationDays over a pin = %v, want ErrGoalStagnationPinned", err)
+		}
+		got, err := repo.Load(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *got.GoalStagnationDays != 45 || !got.GoalStagnationPinned || got.GoalCalibratedAt != nil {
+			t.Errorf("Load() = days %v, pinned %v, calibrated %v; want the user's 45, pinned, never calibrated", *got.GoalStagnationDays, got.GoalStagnationPinned, got.GoalCalibratedAt)
+		}
+	})
+
 	for _, c := range []struct {
 		name  string
 		set   func(r ConfigHarness) error
@@ -355,8 +389,10 @@ func RunConfigSetters(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
 			func(c *ports.VaultConfig) { c.WeightThreshold = f64(0.9) }},
 		{"SetHysteresisMargin", func(r ConfigHarness) error { return r.SetHysteresisMargin(ctx, 0.25, at) },
 			func(c *ports.VaultConfig) { c.HysteresisMargin = f64(0.25) }},
+		// An Admin save is the user's word: it pins the value (client
+		// answer 6 of 2026-10-27), so the learn pass never writes it.
 		{"SetGoalStagnationDays", func(r ConfigHarness) error { return r.SetGoalStagnationDays(ctx, 45, at) },
-			func(c *ports.VaultConfig) { c.GoalStagnationDays = num(45) }},
+			func(c *ports.VaultConfig) { c.GoalStagnationDays = num(45); c.GoalStagnationPinned = true }},
 		{"SetMentalLoadThreshold", func(r ConfigHarness) error { return r.SetMentalLoadThreshold(ctx, 12, at) },
 			func(c *ports.VaultConfig) { c.MentalLoadThreshold = num(12) }},
 		{"SetConsolidationEnabled", func(r ConfigHarness) error { return r.SetConsolidationEnabled(ctx, true, at) },

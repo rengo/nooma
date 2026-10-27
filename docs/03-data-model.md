@@ -269,7 +269,8 @@ CREATE TABLE config (
   date_only_reminder_at     TEXT,                -- HH:MM local; NULL = default
   quiet_hours_end           TEXT,                -- HH:MM local, 00:01 to 12:00; NULL = default (07:00)
   evening_reminder_at       TEXT,                -- HH:MM local, quiet end to 23:59; NULL = default (22:00)
-  remind_me_lead_minutes    INTEGER              -- whole minutes, 1 to 43200 (30 days); how long before a named time an asked reminder fires; NULL = default (15)
+  remind_me_lead_minutes    INTEGER,             -- whole minutes, 1 to 43200 (30 days); how long before a named time an asked reminder fires; NULL = default (15)
+  goal_stagnation_pinned    INTEGER NOT NULL DEFAULT 0  -- 1 once goal_stagnation_days is saved from Admin: a pin the learn pass never overwrites (migration 0015)
 );
 ```
 

@@ -799,3 +799,7 @@ func TestRelationCheckIn_AFailedRejectLeavesItsQuestionOpen(t *testing.T) {
 func (*openCheckIns) GoalCheckIns(context.Context) ([]consolidation.GoalCheckIn, error) {
 	return nil, nil
 }
+
+func (s *recordingSignals) GoalVerdicts(context.Context) ([]ports.Signal, error) {
+	return nil, nil
+}
