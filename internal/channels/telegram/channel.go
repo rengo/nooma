@@ -40,6 +40,12 @@ type Channel struct {
 	// first. It is what keeps the cursor from advancing past work that is
 	// not durable yet.
 	unconfirmed []int64
+	// answered holds the command updates already answered and not yet
+	// behind the cursor. Behind an unconfirmed message the cursor stays put
+	// and Telegram delivers the command again on every poll; this is what
+	// answers it once. Pruned as the cursor passes each id, so it is
+	// bounded by what one unconfirmed message can hold back.
+	answered map[int64]bool
 }
 
 var _ ports.Channel = (*Channel)(nil)
@@ -104,7 +110,9 @@ func (c *Channel) Name() string { return Name }
 // from outside the allow-list never becomes one, so nothing above this
 // line can accidentally act on it.
 func (c *Channel) Receive(ctx context.Context) ([]ports.ChannelMessage, error) {
-	updates, err := c.client.getUpdates(ctx, c.nextOffset())
+	offset := c.nextOffset()
+	c.forgetAnsweredBelow(offset)
+	updates, err := c.client.getUpdates(ctx, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -127,14 +135,19 @@ func (c *Channel) Receive(ctx context.Context) ([]ports.ChannelMessage, error) {
 		// **A command is answered here, never read** (doc 02 §5): /start
 		// went to classify, which had no message to take a language from,
 		// and the bot's first words were "That is not something I can do.".
-		// It is not held, so the cursor moves past it once answered.
+		// It is never held, so it does not pin the cursor; but behind an
+		// admitted message still unconfirmed, the cursor stays there and
+		// the command comes back on every poll, so it is answered once and
+		// then skipped until the cursor passes it.
 		lang := ""
 		if u.Message.From != nil {
 			lang = u.Message.From.LanguageCode
 		}
 		if reply, ok := commandReply(u.Message.Text, u.Message.Entities, lang); ok {
-			if err := c.client.sendMessage(ctx, u.Message.Chat.ID, reply); err != nil {
-				_, _ = fmt.Fprintf(c.log, "telegram: a command from chat %d was not answered: %v\n", u.Message.Chat.ID, err)
+			if c.answer(u.UpdateID) {
+				if err := c.client.sendMessage(ctx, u.Message.Chat.ID, reply); err != nil {
+					c.logf("telegram: a command from chat %d was not answered: %v\n", u.Message.Chat.ID, err)
+				}
 			}
 			continue
 		}
@@ -217,6 +230,40 @@ func (c *Channel) observe(id int64) {
 	if id > c.seen {
 		c.seen = id
 	}
+}
+
+// answer reports whether the command update id is answered now: true the
+// first time it is seen, false on every redelivery the cursor causes.
+func (c *Channel) answer(id int64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.answered[id] {
+		return false
+	}
+	if c.answered == nil {
+		c.answered = make(map[int64]bool)
+	}
+	c.answered[id] = true
+	return true
+}
+
+// forgetAnsweredBelow drops the answered commands the cursor has passed:
+// Telegram never delivers an update below the offset again.
+func (c *Channel) forgetAnsweredBelow(offset int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for id := range c.answered {
+		if id < offset {
+			delete(c.answered, id)
+		}
+	}
+}
+
+// logf writes one line to the log under logMu.
+func (c *Channel) logf(format string, args ...any) {
+	c.logMu.Lock()
+	defer c.logMu.Unlock()
+	_, _ = fmt.Fprintf(c.log, format, args...)
 }
 
 func (c *Channel) hold(id int64) {

@@ -468,6 +468,11 @@ it itself, without the model: `/start` with a short greeting, any other command 
 not one Nooma knows. Both are in the sender's Telegram `language_code` when it is one Nooma
 speaks, and in Spanish otherwise. Read by classify, a bare `/start` came back `out_of_scope`
 with no language, and the bot's first words were "That is not something I can do.".
+A command is answered once. Behind an earlier message that capture has not confirmed, the
+cursor stays put and Telegram delivers the command again on every poll, so the channel
+remembers the commands it answered until the cursor passes them. The cursor and that memory
+live in the process, as the cursor always has: after a restart, Telegram delivers again every
+update the cursor had not passed, so such a command is greeted once more.
 
 1. **classify** (LLM, a single call): returns `type` + `normalized_content` +
    `structured_data` + initial weight/λ + fields resolving pending answers +
