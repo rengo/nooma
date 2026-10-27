@@ -138,6 +138,21 @@ func (v *i51Vault) armed(t *testing.T) int {
 	return n
 }
 
+func (v *i51Vault) rows(t *testing.T, action ports.DecisionAction) int {
+	t.Helper()
+	all, err := v.log.Since(context.Background(), time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, d := range all {
+		if d.Action == action {
+			n++
+		}
+	}
+	return n
+}
+
 func (v *i51Vault) openIDs(t *testing.T) []string {
 	t.Helper()
 	open, err := v.triggers.Delivered(context.Background())
@@ -266,11 +281,21 @@ func TestI51_TheGoalIsAskedInTheDigestNeverAlone(t *testing.T) {
 	if err != nil || today.Digest.Goal != i51Asked {
 		t.Fatalf("Today previews goal %q (%v), want %q", today.Digest.Goal, err, i51Asked)
 	}
+	// #413 QA: the digest preview shows it; it is no upcoming reminder.
+	for _, u := range today.Upcoming {
+		if strings.Contains(u.Text, i51Goal) {
+			t.Errorf("Today lists the goal check-in under upcoming reminders: %+v", u)
+		}
+	}
 	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Asked {
 		t.Fatalf("the digest sent %q, want exactly %q", sent, i51Asked)
 	}
 	if sent := v.check(t, 0, 7, 30); len(sent) != 0 {
 		t.Errorf("a pass after the digest sent %q", sent)
+	}
+	// #413 review N1: asking it is one "Goal asked" row.
+	if n := v.rows(t, ports.ActionCheckDigestGoalAsked); n != 1 {
+		t.Errorf("%d %s rows, want 1", n, ports.ActionCheckDigestGoalAsked)
 	}
 
 	// Armed after the day's digest went out (a manual pass in the
@@ -333,5 +358,23 @@ func TestI51_AnIgnoredGoalIsAskedAgainAtItsInterval(t *testing.T) {
 	v.night(t, 21)
 	if n := v.armed(t); n != 2 {
 		t.Errorf("%d armed by night 21, want 2: an ignored check-in waits the plain interval", n)
+	}
+}
+
+// TestI51_TheGoalIsWordedInTheDigestsLanguage (#413 review N2): the question
+// is worded when the digest is built, in the digest's language, not frozen in
+// the language of the night it was armed.
+func TestI51_TheGoalIsWordedInTheDigestsLanguage(t *testing.T) {
+	v := newI51Vault(t)
+	v.night(t, 0)
+	for i, id := range []string{"en-1", "en-2", "en-3"} {
+		at := i51At(0, 4, i)
+		if err := v.units.Create(context.Background(), unit.Unit{ID: id, Type: unit.TypeKnowledge, Status: unit.StatusPool, Source: "telegram",
+			Content: "It rained.", Language: "en", Weight: 1, LastTouchedAt: at, CreatedAt: at, UpdatedAt: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sent, want := v.morning(t, 0), `Still on "`+i51Goal+`"?`; len(sent) != 1 || sent[0] != want {
+		t.Errorf("the digest sent %q, want exactly %q", sent, want)
 	}
 }

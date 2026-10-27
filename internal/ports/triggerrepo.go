@@ -131,6 +131,10 @@ type TriggerPayload struct {
 	// BeliefID is the goal a goal check-in asks about (doc 02 §7, ADR-0054):
 	// set on a pattern_based check-in only, and what marks one as a goal's.
 	BeliefID string
+	// GoalText is the goal itself, which a goal check-in is worded around
+	// wherever it is shown, in that view's language (doc 02 §7). Empty on a
+	// row armed before it, whose ActionText holds its wording.
+	GoalText string
 }
 
 // FiredTrigger is a one-shot trigger that fired: when it was to fire, when
