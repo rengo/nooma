@@ -183,7 +183,8 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 		return Today{}, fmt.Errorf("today: upcoming reminders: %w", err)
 	}
 	for _, t := range soon {
-		if t.RecurrenceRule != nil {
+		// A goal check-in is the digest's, previewed there, not a reminder.
+		if t.RecurrenceRule != nil || isGoalAsk(t) {
 			continue
 		}
 		verdict, reason, err := g.judge(ctx, t, false, now)
@@ -229,7 +230,7 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 		if err != nil {
 			return Today{}, fmt.Errorf("today: %w", err)
 		}
-		out.Digest.Goal = goalAsked(goal)
+		out.Digest.Goal = goalAsked(proactiveSet(ctx, r.units, ""), goal)
 	}
 
 	open, err := r.questions.Open(ctx)

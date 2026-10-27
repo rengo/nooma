@@ -337,7 +337,7 @@ func digestSentRationale(sent, held, dropped, asked, waiting, tasks int) string 
 // speaks the newest capture's language (ADR-0032 point 5).
 func (r checkRunner) digestText(ctx context.Context, now time.Time, tasks []unit.Unit, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion, goal *ports.DueTrigger) (string, []prospection.DigestItem, []string, []string) {
 	set := r.setFor(ctx, "")
-	return digestMessageGoal(set, dueLines(tasks, now, set), carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question, goalAsked(goal))
+	return digestMessageGoal(set, dueLines(tasks, now, set), carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question, goalAsked(set, goal))
 }
 
 // tasksDue reads the span prospection.DueTaskWindow names and lets
@@ -571,11 +571,14 @@ func digestMessageWith(set phrase.Set, tasks []dueLine, carry []prospection.Dige
 	return digestMessageGoal(set, tasks, carry, pending, reasks, question, "")
 }
 
-// goalAsked is what the digest asks of a goal check-in: the words it was
-// armed with, in the language of the night it was armed.
-func goalAsked(goal *ports.DueTrigger) string {
-	if goal == nil {
+// goalAsked is what a view asks of a goal check-in, worded now in set's
+// language (#413 review); a row armed before GoalText keeps its own words.
+func goalAsked(set phrase.Set, goal *ports.DueTrigger) string {
+	switch {
+	case goal == nil:
 		return ""
+	case goal.Payload.GoalText != "":
+		return set.Goal(goal.Payload.GoalText)
 	}
 	return goal.Payload.ActionText
 }

@@ -256,7 +256,7 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 		}
 	}
 	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold,
-		classify.ReminderContext{Conversation: conv, Timers: timerEntries(live), Goals: goalEntries(goals)})
+		classify.ReminderContext{Conversation: conv, Timers: timerEntries(live), Goals: goalEntries(proactiveSet(ctx, r.units, ""), goals)})
 
 	// **A correction that names its unit is classified against it** (doc 02
 	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the

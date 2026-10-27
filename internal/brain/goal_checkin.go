@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/ports"
 )
 
@@ -52,11 +53,12 @@ func (r captureRunner) openGoalCheckIns(ctx context.Context) ([]ports.OpenCheckI
 	return goals, nil
 }
 
-// goalEntries is what the prompt lists of each: what Nooma asked.
-func goalEntries(goals []ports.OpenCheckIn) []classify.GoalEntry {
+// goalEntries is what the prompt lists of each: what Nooma asked, worded as
+// the digest words it.
+func goalEntries(set phrase.Set, goals []ports.OpenCheckIn) []classify.GoalEntry {
 	out := make([]classify.GoalEntry, len(goals))
-	for i, g := range goals {
-		out[i] = classify.GoalEntry{Text: g.Payload.ActionText}
+	for i := range goals {
+		out[i] = classify.GoalEntry{Text: goalAsked(set, &goals[i].DueTrigger)}
 	}
 	return out
 }

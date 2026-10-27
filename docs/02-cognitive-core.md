@@ -2096,7 +2096,10 @@ state; `m3b` implements the store-layer round trip.
   - It is never asked on a low-energy morning, and waits armed for one that is not.
   - Only once the digest is sent is it fired and surfaced (`check.digest.goal_asked`), so an
     answer can reach it. Unanswered, it closes at the third morning, as ignored.
-  - Today previews it.
+  - Today previews it, and does not list it among the upcoming reminders.
+  - It is worded where it is shown, in that view's language, from the goal's own text
+    (`payload.goal`). A check-in armed in Spanish is asked in English when the digest speaks
+    English.
 
   A goal is asked at most once per
   `goal_stagnation_days`, counted from when its last check-in was armed, and after a declined

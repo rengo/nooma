@@ -43,7 +43,7 @@ func (r consolidateRunner) armGoalCheckIns(ctx context.Context, findings []conso
 	for _, f := range consolidation.GoalCheckInsDue(findings, last, days, now) {
 		at := now
 		trg := ports.Trigger{ID: r.ids.New(), Kind: ports.TriggerKindPatternBased, FireAt: &at, CreatedAt: now,
-			Payload: ports.TriggerPayload{ActionText: set.Goal(clip(content[f.BeliefID])), BeliefID: f.BeliefID,
+			Payload: ports.TriggerPayload{ActionText: set.Goal(clip(content[f.BeliefID])), GoalText: clip(content[f.BeliefID]), BeliefID: f.BeliefID,
 				Rationale: fmt.Sprintf("goal %q has had no related activity for %.0f days", f.TopicKey, f.StagnantDays)}}
 		if err := r.triggers.Create(ctx, trg); err != nil {
 			return fmt.Errorf("consolidate: pattern_eval: arm the check-in of goal %q: %w", f.BeliefID, err)
