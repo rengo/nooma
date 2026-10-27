@@ -356,6 +356,17 @@ renders (an open reminder question or a numbered reminder list: capture passes n
 listed in `noProductionInput`, which `TestReminderPrompts_TheUnreachableListOnlyShrinks` keeps
 exact, so the list can only shrink.
 
+**The judge phrasing set** (`testdata/llm/judge/`, doc 02 §4) applies the same discipline to the
+relation judge. A case is a new unit's `message`, its `candidates` and the outcome a person wrote
+down (`expect.judge_outcome`: `new`, `related` or `duplicate`). `nooma doctor --record
+testdata/llm/judge [vault]` sends each one through `brain.JudgePrompt`, the prompt capture and
+the nightly connect both build, to the vault's `relation_evaluation` provider, and writes no
+`now`, since that prompt reads no clock. Replay (`TestJudgePhrasingSetReadsAsExpected`,
+`reading.ReplayJudge`) fails on a hash mismatch and reads a response by its effect at the default
+thresholds: a `related` below the persist bar, naming a unit it was not shown, or with no type
+stores nothing, so it reads as `new`. `TestJudgePhrasingSetPinsTheSharedDayRule` keeps the
+cases the shared-day rule was written for. `nooma doctor --reading` does not send this set.
+
 `nooma doctor --reading` (opt-in, about 50 live calls; a plain `doctor` makes none) sends the
 same set to the vault's provider and reports "reminder reading: k of n", ADR-0033's reversal
 criterion (90%), which counts only the reminder fields (`remind_request`, `reminder_intent`,
@@ -436,8 +447,8 @@ All of the following runs on every PR and blocks the merge:
 | docs↔code sync | See below |
 
 **The recordings gate** (`scripts/recordings-complete.sh`) is a step of the `lint` job, so the
-`protect-main` ruleset already requires it. It fails while any phrasing of
-`testdata/llm/reminders/` still reads `"record": true`, and rejects a vault path, a ULID-shaped
+`protect-main` ruleset already requires it. It runs once per set, on `testdata/llm/reminders/`
+and on `testdata/llm/judge/`, and fails while any of their phrasings still reads `"record": true`, and rejects a vault path, a ULID-shaped
 id or an e-mail address in any of them. **It is the one gate `make check-all` does not run, on
 purpose:** `check-all` runs before every push and has to pass while cases still await their
 recording; the script is tested directly (`test/harness/recordings_complete_test.go`), like

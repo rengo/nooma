@@ -36,6 +36,9 @@ jobs:
       # fails while a phrasing awaits its recording. Not in `make check-all`.
       - name: reminder phrasings are recorded
         run: sh scripts/recordings-complete.sh
+      # The relation judge's set (doc 02 §4), gated the same way.
+      - name: judge phrasings are recorded
+        run: sh scripts/recordings-complete.sh testdata/llm/judge
 
   # L1 (pure) and L2 (conformance) from docs/06-harness.md §3. Both are untagged,
   # so a plain `go test ./...` runs exactly these two and nothing else.

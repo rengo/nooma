@@ -164,6 +164,19 @@ func Replay(c llm.Case, response string) error {
 	if err != nil {
 		return err
 	}
+	if err := recordedAgainst(c, prompt); err != nil {
+		return err
+	}
+	now, _ := time.Parse(time.RFC3339, c.Now)
+	misses := []string{"(response)"}
+	if cls, err := classify.Decode(response, now); err == nil {
+		misses = Check(c, cls)
+	}
+	return verdictOf(c, misses)
+}
+
+// recordedAgainst reports whether c was recorded against prompt.
+func recordedAgainst(c llm.Case, prompt string) error {
 	if c.PromptSHA256 == "" {
 		return fmt.Errorf("case %s: no prompt_sha256: it was never recorded", c.ID)
 	}
@@ -171,11 +184,12 @@ func Replay(c llm.Case, response string) error {
 		return fmt.Errorf("case %s: prompt hash mismatch: it was recorded against another prompt; "+
 			"set record to true and run nooma doctor --record --force on it", c.ID)
 	}
-	now, _ := time.Parse(time.RFC3339, c.Now)
-	misses := []string{"(response)"}
-	if cls, err := classify.Decode(response, now); err == nil {
-		misses = Check(c, cls)
-	}
+	return nil
+}
+
+// verdictOf turns a reading's misses into a replay's verdict, honouring a
+// known_misread mark for the fields it names and no others.
+func verdictOf(c llm.Case, misses []string) error {
 	switch {
 	case c.KnownMisread != "" && len(misses) == 0:
 		return fmt.Errorf("case %s: known_misread (%q) but it reads as expected: remove the mark", c.ID, c.KnownMisread)

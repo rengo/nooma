@@ -10,6 +10,9 @@
 # section and docs/06-harness.md §6 state the exception. The script is tested
 # directly (test/harness/recordings_complete_test.go), like docs-sync.sh.
 #
+# ci.yml runs it once per set: the reminders (the default) and the relation
+# judge's set, testdata/llm/judge (doc 02 §4).
+#
 # Usage: scripts/recordings-complete.sh [dir]   (default testdata/llm/reminders)
 set -u
 

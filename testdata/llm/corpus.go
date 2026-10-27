@@ -45,6 +45,13 @@ var casesFS embed.FS
 //go:embed reminders/*.json
 var remindersFS embed.FS
 
+// judgeFS is the relation judge's phrasing set (doc 02 §4): pairs whose
+// outcome a person wrote down, recorded once against the real judge prompt.
+// Kept apart from cases/ for remindersFS's reason.
+//
+//go:embed judge/*.json
+var judgeFS embed.FS
+
 // Case is the one slice of a testdata/llm/ recorded example the quality
 // gate needs at runtime: which pipeline call it feeds, and the raw
 // message (plus, for relation_evaluation, the candidates) its real prompt
@@ -93,6 +100,9 @@ func Cases() ([]Case, error) { return load(casesFS, "cases") }
 
 // ReminderCases is Cases for testdata/llm/reminders/, the phrasing set.
 func ReminderCases() ([]Case, error) { return load(remindersFS, "reminders") }
+
+// JudgeCases is Cases for testdata/llm/judge/, the judge's phrasing set.
+func JudgeCases() ([]Case, error) { return load(judgeFS, "judge") }
 
 func load(fsys embed.FS, dir string) ([]Case, error) {
 	entries, err := fsys.ReadDir(dir)

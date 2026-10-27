@@ -1,0 +1,18 @@
+{
+  "id": "judge-same-day-meeting-and-bill-is-new",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "relation_evaluation",
+  "message": "Team meeting on Monday at 10",
+  "candidates": [
+    {
+      "id": "c7d2e9f1-4a3b-4c5d-8e6f-7a8b9c0d1e23",
+      "content": "Pay the electricity bill on Monday"
+    }
+  ],
+  "response": "{\"outcome\":\"new\"}",
+  "expect": {
+    "judge_outcome": "new"
+  },
+  "prompt_sha256": "148a1ada5ca8a6609e50f552254a94aa95ed03a931ddc56dd1b8fdcb191206dd"
+}

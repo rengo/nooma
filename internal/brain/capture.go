@@ -829,6 +829,13 @@ func JudgePrompt(u unit.Unit, candidates []unit.Unit) string {
 	}
 	b.WriteString("\n")
 
+	// The client's ruling of 2026-10-27 (doc 02 §4): a link is about meaning.
+	// Sharing a day says nothing a calendar does not already show, and a
+	// link made from it pulls one item into the focus of the other.
+	b.WriteString("Rules\n")
+	b.WriteString("  Two units are related only by what they are about: the same person, place, thing, plan or subject.\n")
+	b.WriteString("  Falling on the same date or day, or both being on the schedule, is not a relation by itself: answer new.\n\n")
+
 	b.WriteString("Required fields\n")
 	b.WriteString("  outcome              one of: new | duplicate | related\n\n")
 
