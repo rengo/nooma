@@ -39,6 +39,8 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 	if err != nil {
 		return false, fmt.Errorf("capture: reading open check-ins: %w", err)
 	}
+	// A goal check-in is answered only by naming it (ADR-0054).
+	open = withoutGoalCheckIns(open)
 	if snoozed {
 		// A not-yet that names a shown item puts off that item's check-in, or
 		// none when it has none (ADR-0044); one naming no item, the newest.

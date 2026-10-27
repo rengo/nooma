@@ -93,6 +93,9 @@ type ReminderContext struct {
 	// Timers are the live timers, in the order a cancel's position counts
 	// them (ADR-0051).
 	Timers []TimerEntry
+	// Goals are the open goal check-ins, in the order a goal answer's
+	// position counts them (ADR-0054). Shown only beside a chat.
+	Goals []GoalEntry
 }
 
 // RenderReminderList is the one numbered list a prompt or a question carries:

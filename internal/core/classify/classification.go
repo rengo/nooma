@@ -105,6 +105,11 @@ type Classification struct {
 	TimerRequest *TimerRequest
 	TimerTarget  *ReminderTarget
 
+	// GoalTarget and GoalOutcome answer an open goal check-in the prompt
+	// listed (ADR-0054): its position, and how. Nothing else names a goal.
+	GoalTarget  *ReminderTarget
+	GoalOutcome *GoalOutcome
+
 	// Referent is which item of the recent conversation a correction patches
 	// (ADR-0036): a letter of the list the prompt carried, or unclear. The
 	// code binds only on a position inside that list.

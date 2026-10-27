@@ -768,3 +768,62 @@ func TestValidateCaseChecksTheTimerFields(t *testing.T) {
 		t.Errorf("a valid timer case was rejected: %v", err)
 	}
 }
+
+// TestCheckGoalFieldsAreStrict (ADR-0054): a goal answer closes a check-in,
+// so an unexpected one is a miss, and so is the wrong check-in or outcome.
+func TestCheckGoalFieldsAreStrict(t *testing.T) {
+	const head = `{"type":"chitchat","normalized_content":"x","weight":0.1,"decay_rate":0.3`
+	for name, tc := range map[string]struct {
+		expect llm.Expect
+		extra  string
+		miss   []string
+	}{
+		"an unexpected goal answer": {llm.Expect{}, `,"goal_target":1,"goal_outcome":"engaged"`, []string{FieldGoalTarget, FieldGoalOutcome}},
+		"the expected answer":       {llm.Expect{GoalTarget: "1", GoalOutcome: "declined"}, `,"goal_target":1,"goal_outcome":"declined"`, nil},
+		"another outcome":           {llm.Expect{GoalTarget: "1", GoalOutcome: "declined"}, `,"goal_target":1,"goal_outcome":"snooze"`, []string{FieldGoalOutcome}},
+		"another check-in":          {llm.Expect{GoalTarget: "2", GoalOutcome: "engaged"}, `,"goal_target":1,"goal_outcome":"engaged"`, []string{FieldGoalTarget}},
+		"none read":                 {llm.Expect{GoalTarget: "1", GoalOutcome: "engaged"}, ``, []string{FieldGoalTarget, FieldGoalOutcome}},
+	} {
+		got := Check(llm.Case{Expect: &tc.expect}, decode(t, head+tc.extra+`}`))
+		if !slices.Equal(got, tc.miss) {
+			t.Errorf("%s: Check = %v, want %v", name, got, tc.miss)
+		}
+	}
+}
+
+// TestPromptCarriesTheOpenGoalCheckIns: a case's goals_list is the list the
+// prompt shows beside its chat, so a recorded answer is read against it.
+func TestPromptCarriesTheOpenGoalCheckIns(t *testing.T) {
+	c := llm.Case{ID: "x", Message: "sí", Now: "2026-10-28T20:00:00-03:00",
+		Conversation: &llm.Conversation{Turns: []llm.ConversationTurn{{At: "2026-10-28T17:00:00-03:00", Speaker: "push", Text: "¿Seguís con correr?"}}},
+		GoalsList:    []llm.GoalEntry{{Text: "¿Seguís con correr?"}, {Text: "¿Seguís con alemán?"}}}
+	p, err := Prompt(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1) ¿Seguís con correr?\n2) ¿Seguís con alemán?\n"; !strings.Contains(p, want) {
+		t.Errorf("the prompt does not list the case's goal check-ins as\n%s\nprompt:\n%s", want, p)
+	}
+}
+
+// TestValidateCaseChecksTheGoalFields rejects what a replay could not mean.
+func TestValidateCaseChecksTheGoalFields(t *testing.T) {
+	chat := &llm.Conversation{Turns: []llm.ConversationTurn{{At: testNow, Speaker: "push", Text: "¿Seguís con correr?"}}}
+	goals := []llm.GoalEntry{{Text: "¿Seguís con correr?"}}
+	for name, tc := range map[string]llm.Case{
+		"an outcome outside the vocabulary": {Conversation: chat, GoalsList: goals, Expect: &llm.Expect{GoalTarget: "1", GoalOutcome: "retired"}},
+		"a target past the list":            {Conversation: chat, GoalsList: goals, Expect: &llm.Expect{GoalTarget: "2", GoalOutcome: "engaged"}},
+		"a target with no outcome":          {Conversation: chat, GoalsList: goals, Expect: &llm.Expect{GoalTarget: "1"}},
+		"goals with no chat to show them":   {GoalsList: goals, Expect: &llm.Expect{}},
+		"an empty goal":                     {Conversation: chat, GoalsList: []llm.GoalEntry{{}}, Expect: &llm.Expect{}},
+	} {
+		tc.ID, tc.Message, tc.Now = "x", "sí", testNow
+		if err := ValidateCase(tc); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	ok := llm.Case{ID: "x", Message: "sí", Now: testNow, Conversation: chat, GoalsList: goals, Expect: &llm.Expect{GoalTarget: "1", GoalOutcome: "engaged"}}
+	if err := ValidateCase(ok); err != nil {
+		t.Errorf("a well-formed goal case: %v", err)
+	}
+}

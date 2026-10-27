@@ -1,0 +1,50 @@
+{
+  "id": "classify-goal-correction-names-no-goal",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "las zapatillas para correr que sean Asics",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Comprar zapatillas para correr de la marca Asics.\",\"weight\":0.75,\"decay_rate\":0.04,\"language\":\"es\",\"referent\":\"A\"}",
+  "now": "2026-10-28T20:00:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-28T09:00:00-03:00",
+        "speaker": "push",
+        "text": "¿Seguís con correr una media maratón?"
+      },
+      {
+        "at": "2026-10-28T19:55:00-03:00",
+        "speaker": "user",
+        "text": "tengo que comprar zapatillas para correr",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-28T19:55:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Comprar zapatillas para correr.",
+        "title": "Comprar zapatillas para correr"
+      }
+    ]
+  },
+  "goals_list": [
+    {
+      "text": "¿Seguís con correr una media maratón?"
+    }
+  ],
+  "expect": {
+    "type": "correction",
+    "referent": "A"
+  },
+  "prompt_sha256": "69dbdee4b937b646203c8ca09a5251faf3cc2400606e27e61f6f911930956346"
+}

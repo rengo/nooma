@@ -830,6 +830,27 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		return id
 	}
 
+	// ADR-0054: a goal check-in hangs off no unit and carries its goal.
+	t.Run("a goal check-in comes back delivered with its belief and no unit", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		at := contractNow
+		if err := repo.Create(ctx, ports.Trigger{ID: "goal-1", Kind: ports.TriggerKindPatternBased, FireAt: &at, CreatedAt: at,
+			Payload: ports.TriggerPayload{ActionText: "¿Seguís con correr?", BeliefID: "b-run"}}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := repo.Fire(ctx, "goal-1", at); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.Surface(ctx, "goal-1", at); err != nil {
+			t.Fatal(err)
+		}
+		got, err := repo.Delivered(ctx)
+		if err != nil || len(got) != 1 || got[0].UnitID != nil || got[0].Payload.BeliefID != "b-run" || got[0].Payload.ActionText != "¿Seguís con correr?" {
+			t.Errorf("Delivered = %+v, %v; want goal-1 with no unit, carrying b-run", got, err)
+		}
+	})
+
 	t.Run("a fired trigger is undelivered until it is surfaced", func(t *testing.T) {
 		repo := newRepo(t)
 		ctx := context.Background()
