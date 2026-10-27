@@ -924,7 +924,7 @@ func TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant(t *testing.T) {
 		Payload: ports.TriggerPayload{ActionText: "armed text"}}
 	r := digestRunner(t, &emptyTriggers{}, units, memrepo.NewState(), &recordingLog{}, nil)
 
-	text, sent, asked, _ := r.digestText(ctx, digestNow, nil, nil, nil, []ports.DueTrigger{reask}, nil)
+	text, sent, asked, _ := r.digestText(ctx, digestNow, nil, nil, nil, []ports.DueTrigger{reask}, nil, nil)
 	if want := "Asking again:\n\u2022 Is \"buy coffee\" done?"; text != want {
 		t.Errorf("digest %q, want %q", text, want)
 	}

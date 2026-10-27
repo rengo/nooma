@@ -2088,9 +2088,17 @@ state; `m3b` implements the store-layer round trip.
   `goal_stagnation_days` (default 21, recalibratable per user, §9) → a check-in, "¿Seguís con
   «<goal>»?" / "Still on "<goal>"?" in the user's usual language (`phrase.Goal`, I51).
   `pattern_eval` arms it as a `pattern_based` trigger that hangs off no unit, carries the
-  goal's `belief_id`, and is due at the pass's instant (`fire_at` is never NULL). The morning
-  digest asks it under its own gates, quiet hours and the low-energy care gate included,
-  because a check-in with no unit is an ordinary digest item. A goal is asked at most once per
+  goal's `belief_id`, and is due at the pass's instant (`fire_at` is never NULL). **The due
+  scan never fires it**: it would go out alone, as a late reminder. **The morning digest asks
+  it as its own item, as it asks the relation question.**
+  - It is appended after the ranked items and the check-ins asked again: at most one a
+    morning, the longest waiting first. It is the whole message when nothing else is due.
+  - It is never asked on a low-energy morning, and waits armed for one that is not.
+  - Only once the digest is sent is it fired and surfaced (`check.digest.goal_asked`), so an
+    answer can reach it. Unanswered, it closes at the third morning, as ignored.
+  - Today previews it.
+
+  A goal is asked at most once per
   `goal_stagnation_days`, counted from when its last check-in was armed, and after a declined
   answer only after `goal_checkin_decline_factor` (2) times that. One still open is never
   asked again on top of itself (`consolidation.GoalCheckInsDue`). Each arming is one

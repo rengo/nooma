@@ -161,9 +161,12 @@ did and why.
 5. **Derives beliefs.** `derive` proposes statements about *you* (a value, a goal, a
    preference), merges them with existing beliefs instead of duplicating them, and reinforces
    the ones that keep recurring ([doc 02 §10](02-cognitive-core.md#10-the-self-model)).
-6. **Looks for patterns.** `pattern_eval` watches for a goal that has gone quiet, and asks
-   about it in the next morning digest at most once per `goal_stagnation_days`, and for an
-   accumulation of open mental-load items ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
+6. **Looks for patterns.** `pattern_eval` watches for an accumulation of open mental-load
+   items, and for a goal that has gone quiet. For a quiet goal it sets one question for the
+   next morning digest, at most once per `goal_stagnation_days` (twice that after "dejala
+   descansar"). The digest asks it as its own line after the day's items, never on a
+   low-energy morning, and never as a separate message
+   ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
 7. **Learns.** `learn` moves a kind of link's bar one step when you rejected, or confirmed, 6 of
    the last 8 links of that kind Nooma made, at most once a week per kind. A link of that kind
    now below the bar goes quiet: it is not drawn, listed, asked about or used to rank focus, and

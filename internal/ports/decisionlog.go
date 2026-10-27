@@ -199,6 +199,9 @@ const (
 	// It replaces ActionPatternEvalStagnationFound, which only ever logged a
 	// finding, every night; that action is kept for the rows already written.
 	ActionPatternEvalGoalCheckInArmed DecisionAction = "consolidate.pattern_eval.goal_checkin_armed"
+	// ActionCheckDigestGoalAsked is the morning digest asking a goal check-in
+	// (doc 02 §7): fired and surfaced only once the digest was sent.
+	ActionCheckDigestGoalAsked DecisionAction = "check.digest.goal_asked"
 	// ActionLearnRelationThreshold is the learn slot's one effect kind (M5
 	// link 2c): a relation type's thresholds moved one step, with the
 	// evidence it was decided on.
@@ -304,7 +307,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
 		ActionDeriveBeliefReinforced, ActionDeriveBeliefSkipped, ActionDeriveRetiredEmbedFailed,
 		ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
-		ActionPatternEvalLoadHypothesisOpened, ActionPatternEvalGoalCheckInArmed, ActionLearnRelationThreshold,
+		ActionPatternEvalLoadHypothesisOpened, ActionPatternEvalGoalCheckInArmed, ActionCheckDigestGoalAsked, ActionLearnRelationThreshold,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionRelationConfirmed, ActionRelationRejected,

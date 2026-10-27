@@ -9,6 +9,7 @@ import (
 
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/consolidation"
+	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
@@ -24,6 +25,9 @@ import (
 const i51Chat ports.ConversationID = "12449194"
 
 const i51Goal = "correr una media maratón"
+
+// i51Asked is the whole morning digest that asks the goal alone.
+const i51Asked = "¿Seguís con «" + i51Goal + "»?"
 
 var i51Day0 = time.Date(2026, 11, 2, 0, 0, 0, 0, time.FixedZone("ART", -3*3600))
 
@@ -41,6 +45,7 @@ type i51Vault struct {
 	channel   *fakechannel.Fake
 	conv      *brain.Conversation
 	ids       *counterIDs
+	state     *memrepo.State
 }
 
 func newI51Vault(t *testing.T) *i51Vault {
@@ -48,7 +53,7 @@ func newI51Vault(t *testing.T) *i51Vault {
 	ctx := context.Background()
 	v := &i51Vault{units: memrepo.NewUnits(), selfModel: memrepo.NewSelfModel(), triggers: memrepo.NewTriggers(),
 		log: memrepo.NewDecisionLog(), signals: memrepo.NewSignals(), cfg: memrepo.NewConfig(), channel: fakechannel.New(),
-		conv: brain.NewConversation(memrepo.NewConversations()), ids: &counterIDs{}}
+		conv: brain.NewConversation(memrepo.NewConversations()), ids: &counterIDs{}, state: memrepo.NewState()}
 	long := i51Day0.AddDate(0, 0, -30)
 	// One unit in Spanish, so Nooma speaks the user's language (ADR-0035).
 	if err := v.units.Create(ctx, unit.Unit{ID: "note", Type: unit.TypeKnowledge, Status: unit.StatusPool, Source: "telegram",
@@ -77,9 +82,15 @@ func (v *i51Vault) night(t *testing.T, day int) {
 // what it sent.
 func (v *i51Vault) morning(t *testing.T, day int) []string {
 	t.Helper()
+	return v.check(t, day, 7, 5)
+}
+
+// check runs one check pass at hour:minute of day and returns what it sent.
+func (v *i51Vault) check(t *testing.T, day, hour, minute int) []string {
+	t.Helper()
 	before := len(v.channel.Sent(t))
-	svc := brain.NewCheckService(fixedClock{now: i51At(day, 7, 5)}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
-		v.units, memrepo.NewState(), nil, i51Chat, nil, nil, v.signals, nil).WithConversation(v.conv)
+	svc := brain.NewCheckService(fixedClock{now: i51At(day, hour, minute)}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
+		v.units, v.state, nil, i51Chat, nil, nil, v.signals, nil).WithConversation(v.conv)
 	if _, err := svc.Check(context.Background(), brain.CheckRequest{}); err != nil {
 		t.Fatalf("check on day %d: %v", day, err)
 	}
@@ -148,10 +159,10 @@ func TestI51_AStagnantGoalIsAskedAndAnsweredAtItsCadence(t *testing.T) {
 	if n := v.armed(t); n != 1 {
 		t.Fatalf("%d goal check-ins armed on night 0, want 1", n)
 	}
-	// The morning digest asks it, in the user's language.
-	sent := v.morning(t, 0)
-	if !mentions(sent, "¿Seguís con «"+i51Goal+"»?") {
-		t.Fatalf("the morning digest sent %q, want it to ask about the goal", sent)
+	// The morning digest asks it, in the user's language, as its own item:
+	// nothing else is due, so the digest is that question alone.
+	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Asked {
+		t.Fatalf("the morning digest sent %q, want exactly %q", sent, i51Asked)
 	}
 	if open := v.openIDs(t); len(open) != 1 {
 		t.Fatalf("open check-ins after the digest = %v, want the goal's", open)
@@ -237,4 +248,90 @@ func assertGoalSignal(t *testing.T, signals *memrepo.Signals, typ ports.SignalTy
 		return
 	}
 	t.Errorf("no %s signal", typ)
+}
+
+// TestI51_TheGoalIsAskedInTheDigestNeverAlone (#413 review B1): the check-in
+// is a digest item. No pass sends it on its own: not in quiet hours, not after
+// the digest has gone out, and never with a lateness note, because Nooma chose
+// its moment and nothing was late.
+func TestI51_TheGoalIsAskedInTheDigestNeverAlone(t *testing.T) {
+	v := newI51Vault(t)
+	v.night(t, 0)
+	if sent := v.check(t, 0, 3, 5); len(sent) != 0 {
+		t.Fatalf("a pass in quiet hours sent %q", sent)
+	}
+	// Today previews the digest, the goal it will ask included.
+	today, err := brain.NewTodayService(fixedClock{now: i51At(0, 6, 0)}, v.units, v.cfg, v.state, v.triggers,
+		memrepo.NewPendingQuestions(), v.log, brain.NewFocusKeeper(v.units, v.cfg, memrepo.NewRelations()), nil).Today(context.Background())
+	if err != nil || today.Digest.Goal != i51Asked {
+		t.Fatalf("Today previews goal %q (%v), want %q", today.Digest.Goal, err, i51Asked)
+	}
+	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Asked {
+		t.Fatalf("the digest sent %q, want exactly %q", sent, i51Asked)
+	}
+	if sent := v.check(t, 0, 7, 30); len(sent) != 0 {
+		t.Errorf("a pass after the digest sent %q", sent)
+	}
+
+	// Armed after the day's digest went out (a manual pass in the
+	// afternoon), it waits for tomorrow's digest instead of being pushed.
+	w := newI51Vault(t)
+	if err := w.log.Record(context.Background(), ports.Decision{ID: "digest-0", Action: ports.ActionCheckDigestSent,
+		Rationale: "the daily digest carried 0 item(s)", OccurredAt: i51At(0, 7, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	phase := consolidation.PhasePatternEval
+	svc := brain.NewConsolidateService(fixedClock{now: i51At(0, 15, 0)}, w.cfg, w.units, memrepo.NewRelations(), w.ids, w.log, nil, nil,
+		w.selfModel, memrepo.NewState(), memrepo.NewPendingQuestions(), w.signals, w.triggers)
+	if _, err := svc.Consolidate(context.Background(), brain.ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatal(err)
+	}
+	if sent := w.check(t, 0, 15, 5); len(sent) != 0 {
+		t.Errorf("a goal armed after the digest was pushed on its own: %q", sent)
+	}
+	if sent := w.morning(t, 1); len(sent) != 1 || sent[0] != i51Asked {
+		t.Errorf("the next digest sent %q, want exactly %q", sent, i51Asked)
+	}
+}
+
+// TestI51_ALowEnergyMorningHoldsTheGoal (#413 review B1): the care gate holds
+// a goal check-in as it holds the relation question; it waits, armed, for a
+// morning that is not low.
+func TestI51_ALowEnergyMorningHoldsTheGoal(t *testing.T) {
+	v := newI51Vault(t)
+	v.night(t, 0)
+	v.state.RecordEnergy(prospection.EnergyReading{Level: 0.1, RecordedAt: i51At(0, 6, 0), Source: "user"})
+	if sent := v.morning(t, 0); len(sent) != 0 {
+		t.Fatalf("a low-energy morning asked the goal: %q", sent)
+	}
+	if open := v.openIDs(t); len(open) != 0 {
+		t.Fatalf("a held goal check-in reads as delivered: %v", open)
+	}
+	if sent := v.morning(t, 1); len(sent) != 1 || sent[0] != i51Asked {
+		t.Errorf("the next morning sent %q, want exactly %q", sent, i51Asked)
+	}
+}
+
+// TestI51_AnIgnoredGoalIsAskedAgainAtItsInterval (#413 review B2): unanswered,
+// the check-in closes at the third digest after it was asked, as ignored, and
+// the goal is asked again after the plain interval, not the declined one.
+func TestI51_AnIgnoredGoalIsAskedAgainAtItsInterval(t *testing.T) {
+	v := newI51Vault(t)
+	v.night(t, 0)
+	v.morning(t, 0)
+	for day := 1; day <= 3; day++ {
+		v.morning(t, day)
+	}
+	if open := v.openIDs(t); len(open) != 0 {
+		t.Fatalf("open check-ins after three digests = %v, want it closed unanswered", open)
+	}
+	assertGoalSignal(t, v.signals, ports.SignalNudgeIgnored)
+	v.night(t, 20)
+	if n := v.armed(t); n != 1 {
+		t.Fatalf("%d armed by night 20, want 1", n)
+	}
+	v.night(t, 21)
+	if n := v.armed(t); n != 2 {
+		t.Errorf("%d armed by night 21, want 2: an ignored check-in waits the plain interval", n)
+	}
 }

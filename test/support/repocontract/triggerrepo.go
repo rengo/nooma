@@ -863,6 +863,12 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 			t.Fatal(err)
 		}
 		arm("german-1", "b-german", contractNow.Add(day))
+		// #413 review B2: one closed unanswered is neither open nor declined.
+		arm("read-1", "b-read", contractNow.Add(2*day))
+		deliver("read-1", contractNow.Add(2*day))
+		if err := repo.ExpireUnanswered(ctx, "read-1"); err != nil {
+			t.Fatal(err)
+		}
 		at := contractNow
 		createTrigger(t, repo, fixtureTrigger("a-reminder", &at))
 
@@ -874,8 +880,11 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		for _, g := range got {
 			byBelief[g.BeliefID] = g
 		}
-		if len(got) != 2 {
-			t.Fatalf("GoalCheckIns = %+v, want one per goal, two", got)
+		if len(got) != 3 {
+			t.Fatalf("GoalCheckIns = %+v, want one per goal, three", got)
+		}
+		if read := byBelief["b-read"]; read.Open || read.Declined {
+			t.Errorf("b-read = %+v, want an expired check-in neither open nor declined", read)
 		}
 		if run := byBelief["b-run"]; !run.ArmedAt.Equal(contractNow.Add(21*day)) || run.Open || !run.Declined {
 			t.Errorf("b-run = %+v, want its latest, armed day 21, closed, declined", run)

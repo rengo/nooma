@@ -47,7 +47,7 @@ templ todayBody(today brain.Today, serving Serving) {
 		}
 		<section data-view="digest">
 			<h2>PENDING DIGEST</h2>
-			if len(today.Digest.Items) == 0 && today.Digest.Question == nil {
+			if len(today.Digest.Items) == 0 && today.Digest.Question == nil && today.Digest.Goal == "" {
 				if today.Digest.Held > 0 {
 					<p data-empty>{ fmt.Sprintf("Nothing for the next digest yet; %d held for later.", today.Digest.Held) }</p>
 				} else {
@@ -61,6 +61,9 @@ templ todayBody(today brain.Today, serving Serving) {
 			</ul>
 			if today.Digest.Question != nil {
 				<p data-question>{ "Question: " + today.Digest.Question.FromContent + " — " + today.Digest.Question.ToContent }</p>
+			}
+			if today.Digest.Goal != "" {
+				<p data-goal>{ today.Digest.Goal }</p>
 			}
 			<p data-held>{ fmt.Sprintf("Held: %d", today.Digest.Held) }</p>
 		</section>

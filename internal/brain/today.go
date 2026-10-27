@@ -91,6 +91,8 @@ type PendingDigest struct {
 	Items     []DigestLine // Carry's carry slice, in its order, joined to pending by ID
 	Held      int          // len(held): counted, never listed
 	Question  *ports.RelationQuestion
+	// Goal is the goal check-in the digest would ask (doc 02 §7), "" for none.
+	Goal string
 }
 
 // DigestLine is one carried item, joined back to the pending trigger it
@@ -223,6 +225,11 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 		if out.Digest.Question, err = firstAwakeQuestion(ctx, r.rels, unasked); err != nil {
 			return Today{}, fmt.Errorf("today: %w", err)
 		}
+		goal, err := nextGoalAsk(ctx, r.triggers, now)
+		if err != nil {
+			return Today{}, fmt.Errorf("today: %w", err)
+		}
+		out.Digest.Goal = goalAsked(goal)
 	}
 
 	open, err := r.questions.Open(ctx)

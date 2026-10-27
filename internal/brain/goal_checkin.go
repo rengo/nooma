@@ -15,6 +15,26 @@ import (
 // only by naming it, never by the generic check-in answer.
 func isGoalCheckIn(o ports.OpenCheckIn) bool { return o.Payload.BeliefID != "" }
 
+// isGoalAsk reports whether an armed trigger is a goal check-in waiting for
+// the morning digest to ask it.
+func isGoalAsk(t ports.DueTrigger) bool { return t.Payload.BeliefID != "" }
+
+// nextGoalAsk is the one goal check-in this digest may ask, the longest
+// waiting, or nil: armed and due, never yet asked. Like the relation question
+// it competes with no ranked item and is asked one a morning.
+func nextGoalAsk(ctx context.Context, triggers ports.TriggerRepo, now time.Time) (*ports.DueTrigger, error) {
+	due, err := triggers.Due(ctx, now)
+	if err != nil {
+		return nil, fmt.Errorf("goal check-ins to ask: %w", err)
+	}
+	for i := range due {
+		if isGoalAsk(due[i]) {
+			return &due[i], nil
+		}
+	}
+	return nil, nil
+}
+
 // openGoalCheckIns is the open goal check-ins a chat message may answer, in
 // Delivered's order (most recently asked first), at most the positions the
 // prompt can list.
