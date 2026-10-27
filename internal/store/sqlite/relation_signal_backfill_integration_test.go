@@ -135,3 +135,78 @@ func TestBackfillKeepsATypedSignal(t *testing.T) {
 		t.Errorf("a typed signal was rewritten to %+v %v", got.relationType, got.context)
 	}
 }
+
+// TestBackfillLeavesARowWithNoPreviousTypeUntyped: a relation.rejected row
+// that does not carry the relation's type (no previous, or a previous with no
+// type) gives the signal nothing to take, so it stays untyped rather than
+// typed NULL-as-known.
+func TestBackfillLeavesARowWithNoPreviousTypeUntyped(t *testing.T) {
+	db := backfilledBefore(t, backfillMigration, func(exec func(string, ...any)) {
+		exec(`INSERT INTO decision_log (id, action, rationale, context, occurred_at)
+		      VALUES ('d-none', 'relation.rejected', 'r', json_object('relation_id', 'rel-none'), '2026-10-25T09:00:00Z')`)
+		seedUntypedSignal(exec, "s-none", "relation_reject", "rel-none")
+		exec(`INSERT INTO decision_log (id, action, rationale, context, occurred_at)
+		      VALUES ('d-notype', 'relation.rejected', 'r', json_object('relation_id', 'rel-notype',
+		        'previous', json_object('created_by', 'consolidation', 'confidence', 0.5)), '2026-10-25T09:00:00Z')`)
+		seedUntypedSignal(exec, "s-notype", "relation_reject", "rel-notype")
+	})
+	for _, id := range []string{"s-none", "s-notype"} {
+		got := signalByID(t, db, id)
+		if got.relationType.Valid || len(got.context) != 0 {
+			t.Errorf("%s: typed %+v with context %v from a row that names no type", id, got.relationType, got.context)
+		}
+	}
+}
+
+// TestBackfillTakesTheFirstRowOfARetriedDelete: a delete that failed after its
+// row and was retried left two relation.rejected rows for one relation; the
+// earliest by rowid is the one the user's first act wrote. The ids sort the
+// other way, so neither the smallest nor the largest id stands in for it.
+func TestBackfillTakesTheFirstRowOfARetriedDelete(t *testing.T) {
+	db := backfilledBefore(t, backfillMigration, func(exec func(string, ...any)) {
+		seedGraphReject(exec, "z-first", "s-1", "rel-1", "same_date", "consolidation", 0.82)
+		exec(`INSERT INTO decision_log (id, action, rationale, context, occurred_at)
+		      VALUES ('a-second', 'relation.rejected', 'r', json_object('relation_id', 'rel-1',
+		        'previous', json_object('type', 'same_topic', 'confidence', 0.3, 'created_by', 'system')), '2026-10-25T09:05:00Z')`)
+	})
+	got := signalByID(t, db, "s-1")
+	if got.relationType.String != "same_date" || got.context["backfilled_from"] != "z-first" {
+		t.Errorf("signal typed %+v from %v, want same_date from the first row, z-first", got.relationType, got.context["backfilled_from"])
+	}
+}
+
+// TestBackfillKeepsATypedConfirm: a confirm signal that already carries its
+// type is left as it is, like a typed reject.
+func TestBackfillKeepsATypedConfirm(t *testing.T) {
+	db := backfilledBefore(t, backfillMigration, func(exec func(string, ...any)) {
+		seedLegacyUnit(exec, "a")
+		seedLegacyUnit(exec, "b")
+		exec(`INSERT INTO relations (id, from_unit_id, to_unit_id, type, strength, confidence, created_by, created_at)
+		      VALUES ('rel-ok', 'a', 'b', 'same_topic', 0.5, 0.5, 'consolidation', '2026-10-20T09:00:00Z')`)
+		exec(`INSERT INTO learning_signals (id, signal_type, valence, target_kind, target_id, relation_type, context, occurred_at)
+		      VALUES ('s-ok', 'relation_confirm', 'positive', 'relation', 'rel-ok', 'kept', '{"created_by":"system"}', '2026-10-25T09:00:00Z')`)
+	})
+	got := signalByID(t, db, "s-ok")
+	if got.relationType.String != "kept" || got.context["created_by"] != "system" {
+		t.Errorf("a typed confirm was rewritten to %+v %v", got.relationType, got.context)
+	}
+}
+
+// TestBackfillTypesNoConfirmFromARejectedRow: the graph-delete backfill types
+// only rejects. A confirm signal about a relation that also has a
+// relation.rejected row (confirmed, later deleted) takes nothing from that
+// row: the row describes the delete, not the confirm, and its relation being
+// gone, the confirm stays untyped.
+func TestBackfillTypesNoConfirmFromARejectedRow(t *testing.T) {
+	db := backfilledBefore(t, backfillMigration, func(exec func(string, ...any)) {
+		seedGraphReject(exec, "d-1", "s-reject", "rel-1", "same_date", "consolidation", 0.82)
+		exec(`INSERT INTO learning_signals (id, signal_type, valence, target_kind, target_id, context, occurred_at)
+		      VALUES ('s-confirm', 'relation_confirm', 'positive', 'relation', 'rel-1', '{}', '2026-10-24T09:00:00Z')`)
+	})
+	if got := signalByID(t, db, "s-confirm"); got.relationType.Valid || len(got.context) != 0 {
+		t.Errorf("a confirm was typed %+v %v from a relation.rejected row", got.relationType, got.context)
+	}
+	if got := signalByID(t, db, "s-reject"); got.relationType.String != "same_date" {
+		t.Errorf("the reject beside it was typed %+v, want same_date", got.relationType)
+	}
+}
