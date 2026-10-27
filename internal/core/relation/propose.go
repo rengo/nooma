@@ -8,17 +8,33 @@ const TypeDuplicate = "duplicate"
 // Proposal is the relation a judgment proposes, before its type's thresholds
 // decide whether it is stored: what capture, the nightly connect and the
 // recorded judge set (internal/reading) all read a judgment as.
+//
+// Its fields are unexported so Propose is the only way to build one outside
+// this package: a proposal therefore never names a target the judge was not
+// shown (ADR-0026).
 type Proposal struct {
-	Outcome      Outcome
-	TargetUnitID string
-	// Type is the judge's type for a related one, TypeDuplicate for a
-	// duplicate.
-	Type string
-	// Strength is 0 when the judge gave none: doc 02 §4 does not count it
-	// among the fields whose absence means nothing was decided.
-	Strength   float64
-	Confidence float64
+	outcome      Outcome
+	targetUnitID string
+	typ          string
+	strength     float64
+	confidence   float64
 }
+
+// Outcome is the judge's outcome: related or duplicate.
+func (p Proposal) Outcome() Outcome { return p.outcome }
+
+// TargetUnitID is the candidate the judge named, one it was shown.
+func (p Proposal) TargetUnitID() string { return p.targetUnitID }
+
+// Type is the judge's type for a related one, TypeDuplicate for a duplicate.
+func (p Proposal) Type() string { return p.typ }
+
+// Strength is the judge's strength, 0 when it gave none: doc 02 §4 does not
+// count it among the fields whose absence means nothing was decided.
+func (p Proposal) Strength() float64 { return p.strength }
+
+// Confidence is the judge's confidence, for Decide.
+func (p Proposal) Confidence() float64 { return p.confidence }
 
 // Reading is what Propose made of a judgment.
 type Reading int
@@ -47,15 +63,15 @@ func Propose(j Judgment, offered []string) (Proposal, Reading) {
 	if !TargetOffered(*j.TargetUnitID, offered) {
 		return Proposal{}, TargetUnknown
 	}
-	p := Proposal{Outcome: *j.Outcome, TargetUnitID: *j.TargetUnitID, Type: TypeDuplicate, Confidence: *j.Confidence}
-	if p.Outcome == OutcomeRelated {
+	p := Proposal{outcome: *j.Outcome, targetUnitID: *j.TargetUnitID, typ: TypeDuplicate, confidence: *j.Confidence}
+	if p.outcome == OutcomeRelated {
 		if j.Type == nil || *j.Type == "" {
 			return Proposal{}, DecidedNothing
 		}
-		p.Type = *j.Type
+		p.typ = *j.Type
 	}
 	if j.Strength != nil {
-		p.Strength = *j.Strength
+		p.strength = *j.Strength
 	}
 	return p, Proposed
 }

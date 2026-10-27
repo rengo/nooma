@@ -227,7 +227,9 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 |---|---|---|
 | 0 | The judge prompt: a shared day is not a relation, measured by a recorded judge set | Shipped |
 | 1 | Signals from every surface: typed relation signals, `nudge_*` on every check-in verdict, the pre-M5 graph deletions typed by migration 0013 ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md), I47) | Shipped |
-| 2 | The `learn` pass for per-type relation thresholds and the demo. Also takes two folds from link 0's review: the pure "would this judgment be stored" function moves into `core/relation` and serves capture, connect and `reading.ReplayJudge`, and `storedOutcome` gains its missing test row | Planned |
+| 2a | One rule reads a judgment (`relation.Propose`) for capture, connect and the judge set, link 0's review folds; connect now records a duplicate as capture does | Shipped |
+| 2b | The relation rule, pure (`learning.StepRelation`, [ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md)) | Shipped |
+| 2c | The `learn` slot runs the rule: the type's origin and last change stored (migration 0014), one `decision_log` row per change with its evidence, I48 and the demo | Planned |
 | 3 | A relation below its type's persist bar is dormant at read time: hidden, never deleted | Planned |
 | 4 | Goal check-ins delivered (doc 02 §7's stagnation check-in, never armed until now) | Planned |
 | 5 | Goal cadence learned, pinned by an Admin edit | Planned |

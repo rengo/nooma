@@ -760,21 +760,21 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 		return r.recordRelationTargetUnknownDecision(ctx, u, *j.TargetUnitID, offered, now)
 	}
 
-	row, err := r.rels.ThresholdsFor(ctx, p.Type)
+	row, err := r.rels.ThresholdsFor(ctx, p.Type())
 	if err != nil {
-		return fmt.Errorf("capture: resolve relation thresholds for %q: %w", p.Type, err)
+		return fmt.Errorf("capture: resolve relation thresholds for %q: %w", p.Type(), err)
 	}
-	if relation.Decide(p.Confidence, relation.Resolve(row)) == relation.Discard {
-		return r.recordRelationDiscardedDecision(ctx, u, p.TargetUnitID, p.Type, p.Confidence, now)
+	if relation.Decide(p.Confidence(), relation.Resolve(row)) == relation.Discard {
+		return r.recordRelationDiscardedDecision(ctx, u, p.TargetUnitID(), p.Type(), p.Confidence(), now)
 	}
 
 	rel := ports.Relation{
 		ID:         r.ids.New(),
 		FromUnitID: u.ID,
-		ToUnitID:   p.TargetUnitID,
-		Type:       p.Type,
-		Strength:   p.Strength,
-		Confidence: p.Confidence,
+		ToUnitID:   p.TargetUnitID(),
+		Type:       p.Type(),
+		Strength:   p.Strength(),
+		Confidence: p.Confidence(),
 		CreatedBy:  string(relation.CreatedBySystem),
 		CreatedAt:  now,
 	}
@@ -782,7 +782,7 @@ func (r captureRunner) judgeRelation(ctx context.Context, u unit.Unit, candidate
 		return fmt.Errorf("capture: persist relation %s->%s: %w", rel.FromUnitID, rel.ToUnitID, err)
 	}
 
-	if p.Outcome == relation.OutcomeDuplicate {
+	if p.Outcome() == relation.OutcomeDuplicate {
 		return r.recordRelationDuplicateDecision(ctx, u, rel, now)
 	}
 	return r.recordRelationPersistedDecision(ctx, u, rel, now)

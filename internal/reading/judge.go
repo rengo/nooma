@@ -75,8 +75,8 @@ func storedOutcome(c llm.Case, response string) (string, bool) {
 		offered[i] = cand.ID
 	}
 	p, reading := relation.Propose(j, offered)
-	if reading != relation.Proposed || relation.Decide(p.Confidence, relation.Resolve(nil)) == relation.Discard {
+	if reading != relation.Proposed || relation.Decide(p.Confidence(), relation.Resolve(nil)) == relation.Discard {
 		return string(relation.OutcomeNew), true
 	}
-	return string(p.Outcome), true
+	return string(p.Outcome()), true
 }
