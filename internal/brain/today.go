@@ -35,10 +35,13 @@ type TodayService struct {
 // needs. The keeper must be non-nil: Today computes through it on every
 // request and panics without one. This differs from NewCheckService, where a
 // nil keeper is legal (the digest then has no incumbent and publishes nothing).
-func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog, keeper *FocusKeeper) *TodayService {
+//
+// rels is the relation store the question pick reads relations and their bars
+// from, as the digest's does (I49); nil treats every question as awake.
+func NewTodayService(clock ports.Clock, units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog, keeper *FocusKeeper, rels ports.RelationRepo) *TodayService {
 	return &TodayService{
 		clock: clock,
-		run:   todayRunner{units: units, cfg: cfg, state: state, triggers: triggers, questions: questions, log: log, focus: keeper},
+		run:   todayRunner{units: units, cfg: cfg, state: state, triggers: triggers, questions: questions, log: log, focus: keeper, rels: rels},
 	}
 }
 
@@ -122,6 +125,8 @@ type todayRunner struct {
 	questions ports.PendingQuestionRepo
 	log       ports.DecisionLog
 	focus     *FocusKeeper
+	// rels: the question pick's dormancy read, the digest's (I49).
+	rels ports.RelationRepo
 }
 
 // at builds Today at the instant Today already read — design §3.6's own
@@ -214,8 +219,9 @@ func (r todayRunner) at(ctx context.Context, now time.Time) (Today, error) {
 		if err != nil {
 			return Today{}, fmt.Errorf("today: unasked questions: %w", err)
 		}
-		if len(unasked) > 0 {
-			out.Digest.Question = &unasked[0]
+		// The digest's own pick, dormant relations skipped (I49).
+		if out.Digest.Question, err = firstAwakeQuestion(ctx, r.rels, unasked); err != nil {
+			return Today{}, fmt.Errorf("today: %w", err)
 		}
 	}
 

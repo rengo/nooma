@@ -149,7 +149,7 @@ func (v *i37Vault) tryCheckAt(now time.Time, dry bool) (brain.CheckReport, error
 		}
 		v.clock = &i37Clock{}
 		v.svc = brain.NewCheckService(v.clock, repo, v.timers, &v.ids, v.log, channel,
-			v.units, memrepo.NewState(), nil, conversation, nil, nil, nil)
+			v.units, memrepo.NewState(), nil, conversation, nil, nil, nil, nil)
 	}
 	if v.cfg != nil {
 		v.svc.WithQuietHours(v.cfg)
@@ -338,7 +338,7 @@ func TestTodayCountsAfterTheGate(t *testing.T) {
 
 	triggers := &i37ReadOnlyTriggers{Triggers: v.triggers, t: t}
 	cfg, rels := memrepo.NewConfig(), memrepo.NewRelations()
-	svc := brain.NewTodayService(fixedClock{now: i37Now}, v.units, cfg, memrepo.NewState(), triggers, memrepo.NewPendingQuestions(), v.log, brain.NewFocusKeeper(v.units, cfg, rels))
+	svc := brain.NewTodayService(fixedClock{now: i37Now}, v.units, cfg, memrepo.NewState(), triggers, memrepo.NewPendingQuestions(), v.log, brain.NewFocusKeeper(v.units, cfg, rels), nil)
 
 	today, err := svc.Today(ctx)
 	if err != nil {
@@ -574,7 +574,7 @@ func TestI37_ACorruptUnitDoesNotStallAModernRow(t *testing.T) {
 func newI37Today(v *i37Vault) *brain.TodayService {
 	cfg := memrepo.NewConfig()
 	return brain.NewTodayService(fixedClock{now: i37Now}, v.units, cfg, memrepo.NewState(), v.triggers, memrepo.NewPendingQuestions(), v.log,
-		brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()))
+		brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()), nil)
 }
 
 func newI37State() ports.StateRepo { return memrepo.NewState() }

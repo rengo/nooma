@@ -465,6 +465,26 @@ shown as a count. They sit clockwise from the top in that order on one ring
 as a curve bent away from the centre (`ChordControl`), so one joining opposite neighbours never
 reads as two through the centre; a relation from a unit to itself is not drawn. Viewing writes nothing.
 
+**A relation below its type's current persist bar is dormant** (I49,
+`internal/core/relation.Dormant`, the client's answer of 2026-10-27). It happens when the learn
+pass (§9) raises a type's bar above a relation stored under the old one. Dormancy is decided at
+read time from the stored confidence and the type's resolved bar, the same `ThresholdsFor` →
+`relation.Resolve` pair every other confidence decision reads, and nothing is written or deleted.
+A dormant relation:
+- is not drawn on the graph, so it takes no place on the ring and does not count as left out;
+- is not listed on its unit's page;
+- feeds no focus adjacency (§3);
+- cannot be curated;
+- is not asked about: the digest, and Today's preview of it, take the first queued question
+  whose relation is awake and leave a dormant one queued, unasked.
+
+When the bar falls back, it wakes unchanged. The boundary is `Decide`'s: a relation exactly at the
+bar would be stored today, so it is awake. Spreading activation needs no filter: it travels only
+the edges the same night's `connect` stored (§6 item 6), each at or above its type's bar, and the
+learn pass that can raise a bar runs last. `strengthen` and `connect`'s exclusion of
+already-related pairs still read dormant relations. Strength is not what makes a relation
+dormant, and a pair once judged is not judged again.
+
 **Confirming or deleting a relation from the graph is the confirm and reject above, unchanged**:
 the same code the chat answer to a relation question runs, so the raise, the
 `relation_confirm`/`relation_reject` signal and I10's signal-before-delete cannot differ between
@@ -2211,6 +2231,8 @@ the learner does not count it.
     bar one step. Run twice on the same vault, the rule changes nothing.
   - A type the user pinned is never written, and a bar that is not a finite number is left
     alone.
+  - A relation stored under a lower bar is not deleted when its type's bar rises: it is dormant
+    (§4), and it wakes if the bar falls back.
 
   - A bar outside [0.20, 0.90], which only a person can have set, is pulled to the nearer bound
     in a single change when the evidence points toward it, and never moved away from the range.

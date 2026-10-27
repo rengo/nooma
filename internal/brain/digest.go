@@ -699,10 +699,13 @@ func (r checkRunner) nextQuestion(ctx context.Context) (*ports.RelationQuestion,
 	if err != nil {
 		return nil, fmt.Errorf("check: unasked questions: %w", err)
 	}
-	if len(queued) == 0 {
-		return nil, nil
+	// The head of the queue whose relation is awake: a dormant one is not
+	// asked, and stays queued for a bar that falls (I49).
+	q, err := firstAwakeQuestion(ctx, r.rels, queued)
+	if err != nil {
+		return nil, fmt.Errorf("check: %w", err)
 	}
-	return &queued[0], nil
+	return q, nil
 }
 
 // expireStaleQuestions closes every open question that MaxDigestDeferrals

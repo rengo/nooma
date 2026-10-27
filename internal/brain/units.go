@@ -69,6 +69,10 @@ func (s *UnitsService) Detail(ctx context.Context, id string) (UnitDetail, bool,
 	if err != nil {
 		return UnitDetail{}, false, err
 	}
+	// A dormant relation is not listed, as it is not drawn (I49).
+	if rels, err = newBars(s.rels).awake(ctx, rels); err != nil {
+		return UnitDetail{}, false, err
+	}
 
 	otherIDs := make([]string, len(rels))
 	for i, r := range rels {

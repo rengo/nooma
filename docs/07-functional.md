@@ -164,8 +164,9 @@ did and why.
 6. **Looks for patterns.** `pattern_eval` watches for a goal that has gone quiet and for an
    accumulation of open mental-load items ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
 7. **Learns.** `learn` moves a kind of link's bar one step when you rejected, or confirmed, 6 of
-   the last 8 links of that kind Nooma made, at most once a week per kind (see
-   [M5](#the-learner-m5-in-progress)).
+   the last 8 links of that kind Nooma made, at most once a week per kind. A link of that kind
+   now below the bar goes quiet: it is not drawn, listed, asked about or used to rank focus, and
+   it is kept, so it comes back if the bar falls (see [M5](#the-learner-m5-in-progress)).
 8. **Tells the story.** Every decision with an effect writes a row to the `decision_log` with a
    rationale naming the specific unit, relation or belief ([doc 02 §11](02-cognitive-core.md#11-the-glass-box)).
    `/ui/activity` tells it newest first, and `sqlite3 <vault>` can read it too (see the

@@ -75,12 +75,13 @@ func (l *idSet) clear() {
 // last: it is m3e's own addition to a signature every other caller in this
 // tree already spells out, and appending it keeps that diff mechanical.
 // signals is last for the same reason (M5): a parameter rather than a With
-// option, so no wiring can leave the learner deaf without writing nil.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo, keeper *FocusKeeper, signals ports.SignalRepo) *CheckService {
+// option, so no wiring can leave the learner deaf without writing nil. rels,
+// after it, is the digest's dormancy read (I49), by the same reasoning.
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo, keeper *FocusKeeper, signals ports.SignalRepo, rels ports.RelationRepo) *CheckService {
 	return &CheckService{
 		clock: clock,
 		run: checkRunner{
-			triggers: triggers, timers: timers, ids: ids, log: log, signals: signals,
+			triggers: triggers, timers: timers, ids: ids, log: log, signals: signals, rels: rels,
 			channel: channel, units: units, state: state, llm: llm,
 			conversation: conversation, questions: questions, focus: keeper,
 			loud: newIDSet(), outage: newIDSet(), unmarked: newIDSet(), unreadableCheckins: newIDSet(),
@@ -357,9 +358,12 @@ type checkRunner struct {
 	// signals receives nudge_ignored when a check-in closes unanswered
 	// (I47). Nil records none: a test without a learner to teach.
 	signals ports.SignalRepo
-	timers  ports.TimerRepo
-	ids     ports.IDGen
-	log     ports.DecisionLog
+	// rels is where the digest reads a queued question's relation and its
+	// type's bar, to skip a dormant one (I49). Nil asks every question.
+	rels   ports.RelationRepo
+	timers ports.TimerRepo
+	ids    ports.IDGen
+	log    ports.DecisionLog
 	// channel is where a delivery goes. Nil is legal and means this vault
 	// has no channel configured: the pass leaves its one-shot reminders as it
 	// found them (a recurring one still fires and expires), which is what

@@ -65,7 +65,7 @@ func (v *hysteresisVault) keeper() *brain.FocusKeeper {
 // and returns the task focus's member ids.
 func (v *hysteresisVault) taskFocus(t *testing.T, keeper *brain.FocusKeeper) []string {
 	t.Helper()
-	svc := brain.NewTodayService(fixedClock{now: v.now}, v.units, v.cfg, memrepo.NewState(), memrepo.NewTriggers(), memrepo.NewPendingQuestions(), memrepo.NewDecisionLog(), keeper)
+	svc := brain.NewTodayService(fixedClock{now: v.now}, v.units, v.cfg, memrepo.NewState(), memrepo.NewTriggers(), memrepo.NewPendingQuestions(), memrepo.NewDecisionLog(), keeper, nil)
 	today, err := svc.Today(context.Background())
 	if err != nil {
 		t.Fatalf("Today: %v", err)

@@ -140,7 +140,7 @@ func (v *i39Vault) answerErr(t *testing.T, text, response string, at time.Time, 
 // checkErr runs one check pass at at and returns its error.
 func (v *i39Vault) checkErr(at time.Time, req brain.CheckRequest) error {
 	_, err := brain.NewCheckService(fixedClock{now: at}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
-		v.units, memrepo.NewState(), nil, "12449194", nil, nil, v.store()).Check(context.Background(), req)
+		v.units, memrepo.NewState(), nil, "12449194", nil, nil, v.store(), nil).Check(context.Background(), req)
 	return err
 }
 

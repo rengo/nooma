@@ -141,7 +141,7 @@ func TestI37_TodayListsArmedRemindersWithoutAChannel(t *testing.T) {
 	})
 	cfg := memrepo.NewConfig()
 	svc := brain.NewTodayService(fixedClock{now: i37Now}, v.units, cfg, memrepo.NewState(),
-		&i27Triggers{Triggers: v.triggers, t: t}, memrepo.NewPendingQuestions(), v.log, brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()))
+		&i27Triggers{Triggers: v.triggers, t: t}, memrepo.NewPendingQuestions(), v.log, brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()), nil)
 
 	today, err := svc.Today(context.Background())
 	if err != nil {
