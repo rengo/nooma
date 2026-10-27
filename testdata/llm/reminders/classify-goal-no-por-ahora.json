@@ -1,8 +1,10 @@
 {
   "id": "classify-goal-no-por-ahora",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "no por ahora",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"No por ahora.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"goal_target\":1,\"goal_outcome\":\"snooze\"}",
   "now": "2026-10-28T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -22,5 +24,6 @@
     "type": "chitchat",
     "goal_target": "1",
     "goal_outcome": "snooze"
-  }
+  },
+  "prompt_sha256": "a60054f180ac6ba6dd5cd654544936fe96c430654ae887cdd1b4351c22eb19c4"
 }

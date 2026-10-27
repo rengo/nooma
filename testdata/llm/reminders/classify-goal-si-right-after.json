@@ -1,8 +1,10 @@
 {
   "id": "classify-goal-si-right-after",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí, sigo con correr una media maratón.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"goal_target\":1,\"goal_outcome\":\"engaged\"}",
   "now": "2026-10-28T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -22,5 +24,6 @@
     "type": "chitchat",
     "goal_target": "1",
     "goal_outcome": "engaged"
-  }
+  },
+  "prompt_sha256": "2c8baefa417027559d8e1881f15c76a3c6531be0453e62a4e3161e9a9335b6e8"
 }

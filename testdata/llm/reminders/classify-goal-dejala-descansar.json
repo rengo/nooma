@@ -1,8 +1,10 @@
 {
   "id": "classify-goal-dejala-descansar",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "dejala descansar",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Dejala descansar.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"goal_target\":1,\"goal_outcome\":\"declined\"}",
   "now": "2026-10-28T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -22,5 +24,6 @@
     "type": "chitchat",
     "goal_target": "1",
     "goal_outcome": "declined"
-  }
+  },
+  "prompt_sha256": "cb41f82ee7affeea827b3552849f5991360d531bff92185537e33894e5434702"
 }

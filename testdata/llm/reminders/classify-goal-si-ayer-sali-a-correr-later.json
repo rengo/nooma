@@ -1,8 +1,10 @@
 {
   "id": "classify-goal-si-ayer-sali-a-correr-later",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "classify",
   "message": "sí, ayer salí a correr",
-  "record": true,
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Sí, ayer salí a correr.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"goal_target\":1,\"goal_outcome\":\"engaged\"}",
   "now": "2026-10-28T20:00:00-03:00",
   "conversation": {
     "turns": [
@@ -51,5 +53,6 @@
   "expect": {
     "goal_target": "1",
     "goal_outcome": "engaged"
-  }
+  },
+  "prompt_sha256": "3e4ee54f5d62e5fd602d1a6e03617705e1ce505ef3c3e2d9d674ecde5b44d40c"
 }
