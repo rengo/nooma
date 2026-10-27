@@ -40,6 +40,12 @@ type i42Fixture struct {
 // and the digest that named them.
 func newI42(t *testing.T, response string, titles ...string) i42Fixture {
 	t.Helper()
+	return newI42With(t, nil, response, titles...)
+}
+
+// newI42With is newI42 writing its signals to store, or to f.signals when nil.
+func newI42With(t *testing.T, store ports.SignalRepo, response string, titles ...string) i42Fixture {
+	t.Helper()
 	ctx := context.Background()
 	f := i42Fixture{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: memrepo.NewDecisionLog(), signals: memrepo.NewSignals()}
 	conv := brain.NewConversation(memrepo.NewConversations())
@@ -63,7 +69,7 @@ func newI42(t *testing.T, response string, titles ...string) i42Fixture {
 	llm := &scriptedLLM{response: response}
 	f.svc = brain.NewCaptureService(fixedClock{now: i42Now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(),
 		memrepo.NewRelations(), f.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), f.signals, f.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions()).WithConversation(conv)
+		brain.NewIndex(idx), signalStoreOr(store, f.signals), f.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions()).WithConversation(conv)
 	return f
 }
 

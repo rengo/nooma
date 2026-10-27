@@ -3,10 +3,13 @@ package conformance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/memrepo"
@@ -195,5 +198,79 @@ func TestI47_ATimerCancelSignalsNothing(t *testing.T) {
 	}
 	if got := signalsOf(t, f.signals); len(got) != 0 {
 		t.Errorf("a timer cancel emitted %+v", got)
+	}
+}
+
+// signalStoreOr is store, or fallback when store is nil.
+func signalStoreOr(store ports.SignalRepo, fallback *memrepo.Signals) ports.SignalRepo {
+	if store == nil {
+		return fallback
+	}
+	return store
+}
+
+// failingNudges is a signal store whose nudge_* writes fail: the check-in's
+// effect has landed by then, and its decision_log row must already be there
+// (I12). A signal written before the row would, failing, leave a check-in
+// closed with no row, and a retry could not write it since nothing is open.
+type failingNudges struct{ *memrepo.Signals }
+
+var errSignalsDown = errors.New("signals down")
+
+func (f failingNudges) Record(ctx context.Context, s ports.Signal) error {
+	if strings.HasPrefix(string(s.Type), "nudge_") {
+		return errSignalsDown
+	}
+	return f.Signals.Record(ctx, s)
+}
+
+func TestI47_ACheckInAnswerIsLoggedBeforeItsSignal(t *testing.T) {
+	v := newI39Vault()
+	v.signalStore = failingNudges{memrepo.NewSignals()}
+	v.deliver(t, "t-coffee", "buy coffee", i39Delivered)
+	if err := v.answerErr(t, "done", i39Done, i39Delivered.Add(30*time.Minute), false); !errors.Is(err, errSignalsDown) {
+		t.Fatalf("answer = %v, want the signal's failure reported", err)
+	}
+	if n := v.rows(t, ports.ActionCaptureCheckInResolved); n != 1 {
+		t.Errorf("%d capture.checkin.resolved rows, want 1: the check-in closed, and its row comes before its signal", n)
+	}
+}
+
+func TestI47_AnUnansweredCloseIsLoggedBeforeItsSignal(t *testing.T) {
+	v := newI39Vault()
+	v.signalStore = failingNudges{memrepo.NewSignals()}
+	v.deliver(t, "t-coffee", "buy coffee", i39Delivered)
+	for n := 1; n <= prospection.MaxCheckinReasks; n++ {
+		v.check(t, i39Morning(n))
+	}
+	if err := v.checkErr(i39Morning(prospection.MaxCheckinReasks+1), brain.CheckRequest{}); !errors.Is(err, errSignalsDown) {
+		t.Fatalf("check = %v, want the signal's failure reported", err)
+	}
+	if n := v.rows(t, ports.ActionCheckCheckinExpired); n != 1 {
+		t.Errorf("%d check.checkin.expired rows, want 1: the check-in closed, and its row comes before its signal", n)
+	}
+}
+
+func TestI47_ADoneFollowUpIsLoggedBeforeItsSignal(t *testing.T) {
+	f := newI42With(t, failingNudges{memrepo.NewSignals()}, i42Done("A"), "Pagar la tarjeta")
+	ctx := context.Background()
+	unitID := "t1"
+	at := i42Digest.Add(-time.Hour)
+	if err := f.triggers.Create(ctx, ports.Trigger{ID: "pushed", UnitID: &unitID, Kind: ports.TriggerKindTimeBased, FireAt: &at,
+		CreatedAt: i42Created, Payload: ports.TriggerPayload{ActionText: "Pagar la tarjeta"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.triggers.Fire(ctx, "pushed", at); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.triggers.Surface(ctx, "pushed", at); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.svc.Capture(ctx, brain.CaptureInput{Text: "listo, pagué la tarjeta", Channel: "telegram", Conversation: i40Chat})
+	if !errors.Is(err, errSignalsDown) {
+		t.Fatalf("capture = %v, want the signal's failure reported", err)
+	}
+	if n := len(f.rows(t, ports.ActionCaptureTaskClosed)); n != 1 {
+		t.Errorf("%d capture.task.closed rows, want 1: the task closed, and its row comes before its signal", n)
 	}
 }

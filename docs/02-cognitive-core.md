@@ -2161,7 +2161,10 @@ landed nor that it missed. A check-in put off and then left to close emits `nudg
 `nudge_ignored`. A check-in that lapsed before reaching the user emits nothing, because nothing
 was asked. A **timer cancel emits nothing**: a timer is infrastructure, not memory (§8), and
 cancelling one judges nothing the brain decided. A signal is emitted only once its verdict's
-effect has landed, except `relation_reject`, which I10 emits just before the delete. A dry run
+effect has landed and its `decision_log` row is written (I12): a signal that fails then leaves a
+logged verdict the learner missed, never a closed check-in with no row, which no retry could
+write since nothing is open any more. `relation_reject` is the exception, emitted just before
+the delete (I10). A dry run
 emits nothing.
 
 **A relation signal is typed.** It carries the relation's `relation_type`, and its context names

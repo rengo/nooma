@@ -74,10 +74,6 @@ func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) 
 			return CaptureResult{}, false, fmt.Errorf("capture: done: answer check-in %q: %w", o.ID, err)
 		} else if err == nil {
 			change.CheckInsAnswered = append(change.CheckInsAnswered, o.ID)
-			// Answering it done is engaging with it, whichever way it was said.
-			if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeEngaged, o.ID, o.UnitID, now); err != nil {
-				return CaptureResult{}, false, fmt.Errorf("capture: done: %w", err)
-			}
 		}
 	}
 
@@ -90,6 +86,13 @@ func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) 
 			kind, id, len(change.RemindersExpired), len(change.CheckInsAnswered)),
 		Context: contextJSON, OccurredAt: now}); err != nil {
 		return CaptureResult{}, false, fmt.Errorf("capture: done: record %s: %w", action, err)
+	}
+	// Answering a check-in done is engaging with it, whichever way it was
+	// said. After the row (I12): a failed signal leaves a logged close.
+	for _, checkInID := range change.CheckInsAnswered {
+		if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeEngaged, checkInID, &id, now); err != nil {
+			return CaptureResult{}, false, fmt.Errorf("capture: done: %w", err)
+		}
 	}
 	return CaptureResult{Outcome: OutcomeCorrected, Correction: &Correction{UnitID: id, Closed: clip(shownText(u))}}, true, nil
 }

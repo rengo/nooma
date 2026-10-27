@@ -31,9 +31,11 @@ type nudgeSignalContext struct {
 }
 
 // recordNudgeSignal emits the learning signal of one check-in verdict (I47):
-// typ about the trigger triggerID. It runs after the verdict's effect landed,
-// never before: a signal for an answer that did not close anything would be
-// evidence the learner tunes on for an event that did not happen.
+// typ about the trigger triggerID. It runs after the verdict's effect landed
+// and after its decision_log row: a signal for an answer that did not close
+// anything would be evidence for an event that did not happen, and one that
+// fails before the row would leave a closed check-in with no row (I12) that
+// no retry can write, since nothing is open any more.
 //
 // A nil signals repo records nothing: a test that wires none has no learner to
 // teach. Production wiring always passes one (cmd/nooma).

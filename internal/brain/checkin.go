@@ -89,15 +89,17 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 			fmt.Sprintf("an answer resolving to %q arrived as check-in %q closed unanswered", resolution, target.ID), target.ID, resolution, len(open))
 	}
 
+	// The row before the signal (I12): a signal that fails after the close
+	// leaves a logged close the learner missed, never an unlogged one.
+	if err := r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInResolved,
+		fmt.Sprintf("check-in %q resolved as %q", target.ID, resolution), target.ID, resolution, len(open)); err != nil {
+		return false, err
+	}
 	verdict := ports.SignalNudgeEngaged
 	if resolution == ports.ResolutionDeclined {
 		verdict = ports.SignalNudgeDeclined
 	}
-	if err := recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, target.UnitID, now); err != nil {
-		return false, err
-	}
-	return true, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInResolved,
-		fmt.Sprintf("check-in %q resolved as %q", target.ID, resolution), target.ID, resolution, len(open))
+	return true, recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, target.UnitID, now)
 }
 
 // namedItem is the unit c's referent names among shown, or "" when it names
