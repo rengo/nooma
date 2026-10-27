@@ -1,5 +1,7 @@
 {
   "id": "judge-same-day-lunch-and-gift-for-ana-relates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "relation_evaluation",
   "message": "Lunch with Ana on Friday at 1pm",
   "candidates": [
@@ -8,8 +10,9 @@
       "content": "Buy Ana's birthday present on Friday"
     }
   ],
-  "record": true,
+  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"e9f0a1b2-3c4d-4e5f-a6b7-c8d9e0f1a234\",\"type\":\"same_person\",\"strength\":0.9,\"confidence\":0.99}",
   "expect": {
     "judge_outcome": "related"
-  }
+  },
+  "prompt_sha256": "23bdf19461a0a2f1a75bda695e0d6d0650ae244dd89d64b4c31afda86a12630c"
 }

@@ -1,5 +1,7 @@
 {
   "id": "judge-same-day-dentist-and-mouthwash-relates",
+  "provider": "openai",
+  "model": "gpt-6-luna",
   "task": "relation_evaluation",
   "message": "Turno con el dentista el jueves 10 a las 15",
   "candidates": [
@@ -8,8 +10,9 @@
       "content": "Comprar el enjuague que me dijo el dentista, el jueves 10"
     }
   ],
-  "record": true,
+  "response": "{\"outcome\":\"related\",\"target_unit_id\":\"a41c7d93-2e5b-4f86-8b1a-0c9d8e7f6a52\",\"type\":\"same_topic\",\"strength\":0.65,\"confidence\":0.87}",
   "expect": {
     "judge_outcome": "related"
-  }
+  },
+  "prompt_sha256": "20691016338277ef009f5b9be6215779180e969fce3b045c0a574e65c475248a"
 }
