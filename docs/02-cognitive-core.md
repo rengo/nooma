@@ -2093,6 +2093,26 @@ state; `m3b` implements the store-layer round trip.
   re-derives; `pattern_eval` then reads the value THIS SAME PASS already refreshed. Reversing
   the order would make every reinforced belief look stagnant one more night — this is a data
   dependency, not an arbitrary sequence.
+
+  **A goal check-in is answered by naming it** (I50,
+  [ADR-0054](adr/0054-a-goal-check-in-is-answered-by-naming-it.md), the client's ruling of
+  2026-10-28). It is a `pattern_based` check-in that hangs off no unit and carries its goal's
+  belief (`payload.belief_id`).
+  - Beside a chat, every open goal check-in is listed in the classify prompt by position, as
+    what Nooma asked and nothing else (`classify.RenderGoalList`); with none, or read alone,
+    the prompt is unchanged.
+  - The model answers with `goal_target`, the listed position (or `unclear`), and
+    `goal_outcome`: `engaged` (still on it, or tells of doing it), `declined` ("dejala
+    descansar") or `snooze` ("no por ahora"). It does so even several messages after the
+    question, and the code binds only a position it listed (`classify.ReadGoalAnswer`).
+  - `engaged` and `declined` close the check-in (`capture.checkin.resolved`, `nudge_engaged`
+    or `nudge_declined`). `snooze` leaves it open (`capture.checkin.snoozed`, `nudge_ack`).
+    Unanswered, it closes at the third morning like any unit-less check-in (`nudge_ignored`).
+    The goal itself stays: declining never retires it.
+  - Only its answer names a goal. The generic check-in answer (`nudge_outcome`,
+    `task_checkin_outcome`) never closes a goal check-in, and a goal answer that binds is the
+    message's only check-in answer. A goal is never a `referent`, so a correction, a done, a
+    remind-me or leads cannot land on one.
 - **Load accumulation**: open `mental_load` units ≥ `mental_load_threshold` (default 7) →
   writes a tentative hypothesis into `current_state` ("feeling loaded lately?"), the user
   confirms/denies in the next conversation; a cooldown of `load_cooldown_days` (7,
@@ -2394,7 +2414,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 
 | Knob | Default |
 |---|---|
-| `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position; the same bound numbers the live timers and so the highest `timer_target` (§5 step 1, §8; ADR-0033, ADR-0051); chosen, a list a person can read in one message |
+| `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position; the same bound numbers the live timers and so the highest `timer_target`, and the open goal check-ins and so the highest `goal_target` (§5 step 1, §7, §8; ADR-0033, ADR-0051, ADR-0054); chosen, a list a person can read in one message |
 | `conversation_context_turns` (`internal/core/classify.ConversationTurns`) | 20 — the last turns of a chat a chat message is read in, at any age (§5 step 1, ADR-0041), and so the most items its prompt letters (`A` to `T`), the ones the newest turns name; chosen by the client (2026-10-19: "que recuerde por almacenamiento, los últimos N chats", N = 20): a morning digest and its reminders, several exchanges, and a follow-up and its question. Each turn adds at most about 330 characters to the prompt (`max_turn_runes` and its label). Too small drops the digest before the reply that answers it; too large lets old, unrelated turns sit beside a new message and grows every chat prompt |
 | `max_turn_runes` (`internal/core/classify.MaxTurnRunes`) | 280 — a turn is shown clipped to it, and a clarifying question longer than it degrades (§5 step 1); chosen: a digest can be long, a question is one line on a phone |
 | `max_title_runes` (`internal/core/classify.MaxTitleRunes`) | 60 — the longest title a unit keeps (§5 step 1); one line beside a date, chosen |

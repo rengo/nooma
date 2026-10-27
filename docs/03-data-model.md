@@ -74,7 +74,7 @@ CREATE TABLE triggers (
   status            TEXT NOT NULL DEFAULT 'armed', -- armed|fired|dismissed|expired (expired + fired_at = a fired reminder that lapsed, never delivered; expired + surfaced_at = a check-in that closed unanswered, doc 02 §7)
   condition         TEXT,                        -- JSON (event/pattern)
   interrupt_level   REAL,                        -- 0–1, persisted (auditable)
-  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days, lead_minutes, event_at, user_leads_minutes, and for a reminder the user asked for: asked, day_only, night_exempt)
+  payload           TEXT NOT NULL DEFAULT '{}',  -- JSON (action, rationale, lead_days, lead_minutes, event_at, user_leads_minutes, and for a reminder the user asked for: asked, day_only, night_exempt; for a goal check-in: belief_id)
   fire_at           TEXT,
   fired_at          TEXT,
   surfaced_at       TEXT,                        -- NULL = pending delivery

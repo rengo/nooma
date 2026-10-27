@@ -328,6 +328,11 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	if chatShown(rc) {
 		writeFollowUps(&b, rc.Conversation, now)
 	}
+	// A goal check-in is answered by naming it (ADR-0054), beside a chat
+	// only, and only while one is open: every other prompt is unchanged.
+	if chatShown(rc) && len(rc.Goals) > 0 {
+		writeGoals(&b, rc.Goals)
+	}
 
 	if target != nil {
 		writeTarget(&b, *target, now)

@@ -8,7 +8,9 @@
   chat only, doc 02 §5 step 1's "a check-in outcome closes the most recently delivered open
   check-in"
 - **Superseded by**: [ADR-0046](0046-a-done-follow-up-closes-the-event-too.md), point 3 in part
-  (reminder leads beside a listed letter bind whatever the type, as a remind-me does)
+  (reminder leads beside a listed letter bind whatever the type, as a remind-me does);
+  [ADR-0054](0054-a-goal-check-in-is-answered-by-naming-it.md), in part, on the kinds a chat
+  answer can name (a goal check-in is named by its own listed position, never by `referent`)
 - **Enables**: M4
 
 ## Context

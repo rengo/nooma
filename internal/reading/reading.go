@@ -49,6 +49,8 @@ const (
 	FieldRecallWindow       = "recall_window"
 	FieldTimerRequest       = "timer_request"
 	FieldTimerTarget        = "timer_target"
+	FieldGoalTarget         = "goal_target"
+	FieldGoalOutcome        = "goal_outcome"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
@@ -111,6 +113,9 @@ func PromptAt(c llm.Case, now time.Time) string {
 			entry.Text = &e.Text
 		}
 		rc.Timers = append(rc.Timers, entry)
+	}
+	for _, g := range c.GoalsList {
+		rc.Goals = append(rc.Goals, classify.GoalEntry{Text: g.Text})
 	}
 	return classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, rc)
 }
@@ -259,6 +264,8 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	miss(FieldReminderTarget, targetOf(cls.ReminderTarget) != e.ReminderTarget)
 	miss(FieldTimerRequest, orNone(cls.TimerRequest) != orDefault(e.TimerRequest, "none"))
 	miss(FieldTimerTarget, targetOf(cls.TimerTarget) != e.TimerTarget)
+	miss(FieldGoalTarget, targetOf(cls.GoalTarget) != e.GoalTarget)
+	miss(FieldGoalOutcome, ptrString(cls.GoalOutcome) != e.GoalOutcome)
 	if e.DayOnly != nil {
 		miss(FieldDayOnly, (cls.DueAtDayOnly || cls.EventAtDayOnly) != *e.DayOnly)
 	}
@@ -454,6 +461,7 @@ func ValidateCase(c llm.Case) error {
 	}
 	oneOf(FieldTimerRequest, e.TimerRequest, strs(classify.AllTimerRequests()))
 	errs = append(errs, validateTimers(c.TimersList)...)
+	errs = append(errs, validateGoals(c)...)
 	if q := c.OpenQuestion; q != nil {
 		oneOf("open_question.kind", q.Kind, []string{
 			string(classify.QuestionRemindWhen), string(classify.QuestionWhichReminder), string(classify.QuestionUndo)})
@@ -592,6 +600,40 @@ func speaksOther(question, voice string) bool {
 		}
 	}
 	return false
+}
+
+// validateGoals checks a case's goals_list and its expected goal answer as
+// production shows and binds one (ADR-0054): beside a chat only, each check-in
+// with its text, and an answer naming a listed position with an outcome.
+func validateGoals(c llm.Case) []error {
+	var errs []error
+	if len(c.GoalsList) > classify.MaxReminderChoices {
+		errs = append(errs, fmt.Errorf("goals_list holds %d entries, at most %d", len(c.GoalsList), classify.MaxReminderChoices))
+	}
+	if len(c.GoalsList) > 0 && (c.Conversation == nil || len(c.Conversation.Turns) == 0) {
+		errs = append(errs, errors.New("goals_list is shown only beside a chat: give the case its conversation"))
+	}
+	for i, g := range c.GoalsList {
+		if g.Text == "" {
+			errs = append(errs, fmt.Errorf("goals_list[%d] has no text", i))
+		}
+	}
+	e := c.Expect
+	if e == nil {
+		return errs
+	}
+	if e.GoalOutcome != "" && !slices.Contains(strs(classify.AllGoalOutcomes()), e.GoalOutcome) {
+		errs = append(errs, fmt.Errorf("goal_outcome %q is not one of %v", e.GoalOutcome, classify.AllGoalOutcomes()))
+	}
+	if e.GoalTarget != "" && e.GoalTarget != classify.ReminderTargetUnclear {
+		if n, err := strconv.Atoi(e.GoalTarget); err != nil || n < 1 || n > len(c.GoalsList) {
+			errs = append(errs, fmt.Errorf("goal_target %q names no listed goal check-in (1-%d)", e.GoalTarget, len(c.GoalsList)))
+		}
+	}
+	if (e.GoalTarget == "") != (e.GoalOutcome == "") {
+		errs = append(errs, errors.New("goal_target and goal_outcome are expected together: one answers nothing without the other"))
+	}
+	return errs
 }
 
 // validateTimers checks a case's timers_list as production builds one: at

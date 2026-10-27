@@ -1,0 +1,55 @@
+{
+  "id": "classify-goal-si-ayer-sali-a-correr-later",
+  "task": "classify",
+  "message": "sí, ayer salí a correr",
+  "record": true,
+  "now": "2026-10-28T20:00:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-28T09:00:00-03:00",
+        "speaker": "push",
+        "text": "¿Seguís con correr una media maratón?"
+      },
+      {
+        "at": "2026-10-28T10:00:00-03:00",
+        "speaker": "push",
+        "text": "Recordatorio: Comprar café",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-28T19:58:00-03:00",
+        "speaker": "user",
+        "text": "el café lo compro mañana",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-28T19:58:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Comprar café.",
+        "title": "Comprar café"
+      }
+    ]
+  },
+  "goals_list": [
+    {
+      "text": "¿Seguís con correr una media maratón?"
+    }
+  ],
+  "expect": {
+    "goal_target": "1",
+    "goal_outcome": "engaged"
+  }
+}

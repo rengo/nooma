@@ -78,10 +78,13 @@ type Case struct {
 	// newest first (ADR-0036).
 	Conversation *Conversation `json:"conversation,omitempty"`
 	// TimersList is the live timers the prompt shows (ADR-0051).
-	TimersList   []TimerEntry `json:"timers_list,omitempty"`
-	Expect       *Expect      `json:"expect,omitempty"`
-	KnownMisread string       `json:"known_misread,omitempty"`
-	PromptSHA256 string       `json:"prompt_sha256,omitempty"`
+	TimersList []TimerEntry `json:"timers_list,omitempty"`
+	// GoalsList is the open goal check-ins the prompt lists beside the
+	// case's chat (ADR-0054).
+	GoalsList    []GoalEntry `json:"goals_list,omitempty"`
+	Expect       *Expect     `json:"expect,omitempty"`
+	KnownMisread string      `json:"known_misread,omitempty"`
+	PromptSHA256 string      `json:"prompt_sha256,omitempty"`
 }
 
 // Candidate is one relation_evaluation candidate a Case carries — the same

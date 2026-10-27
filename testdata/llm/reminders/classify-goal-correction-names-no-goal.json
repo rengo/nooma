@@ -1,0 +1,47 @@
+{
+  "id": "classify-goal-correction-names-no-goal",
+  "task": "classify",
+  "message": "las zapatillas para correr que sean Asics",
+  "record": true,
+  "now": "2026-10-28T20:00:00-03:00",
+  "conversation": {
+    "turns": [
+      {
+        "at": "2026-10-28T09:00:00-03:00",
+        "speaker": "push",
+        "text": "¿Seguís con correr una media maratón?"
+      },
+      {
+        "at": "2026-10-28T19:55:00-03:00",
+        "speaker": "user",
+        "text": "tengo que comprar zapatillas para correr",
+        "about": [
+          "A"
+        ]
+      },
+      {
+        "at": "2026-10-28T19:55:00-03:00",
+        "speaker": "nooma",
+        "text": "Anotado.",
+        "about": [
+          "A"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "content": "Comprar zapatillas para correr.",
+        "title": "Comprar zapatillas para correr"
+      }
+    ]
+  },
+  "goals_list": [
+    {
+      "text": "¿Seguís con correr una media maratón?"
+    }
+  ],
+  "expect": {
+    "type": "correction",
+    "referent": "A"
+  }
+}

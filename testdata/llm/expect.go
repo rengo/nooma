@@ -120,6 +120,13 @@ type Expect struct {
 	TimerRequest string `json:"timer_request,omitempty"`
 	TimerTarget  string `json:"timer_target,omitempty"`
 
+	// GoalTarget is the position, "1" to "5" or "unclear", of the open goal
+	// check-in the message answers, and GoalOutcome how: engaged, declined or
+	// snooze (ADR-0054). Both strict: unset means none, since an answer
+	// closes or puts off a check-in.
+	GoalTarget  string `json:"goal_target,omitempty"`
+	GoalOutcome string `json:"goal_outcome,omitempty"`
+
 	// JudgeOutcome is what a relation_evaluation case should store: new,
 	// related or duplicate, read by its effect at the default thresholds
 	// (internal/reading.ReplayJudge). It is the judge set's only field.
@@ -131,6 +138,12 @@ type Expect struct {
 type TimerEntry struct {
 	Text string `json:"text,omitempty"`
 	At   string `json:"at"`
+}
+
+// GoalEntry is one open goal check-in a case's prompt lists, most recently
+// asked first: what Nooma asked (ADR-0054).
+type GoalEntry struct {
+	Text string `json:"text"`
 }
 
 // Window is a recall window as a case expects it: on is told or when, and from
@@ -147,5 +160,5 @@ type Window struct {
 // for byte; a key outside this list makes it refuse the file.
 var FileFields = []string{
 	"id", "provider", "model", "task", "message", "candidates", "response", "error",
-	"record", "now", "open_question", "candidates_list", "conversation", "timers_list", "expect", "known_misread", "prompt_sha256",
+	"record", "now", "open_question", "candidates_list", "conversation", "timers_list", "goals_list", "expect", "known_misread", "prompt_sha256",
 }

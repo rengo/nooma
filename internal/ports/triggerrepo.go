@@ -127,6 +127,9 @@ type TriggerPayload struct {
 	// Reasks is how many morning digests asked this check-in again; Reask
 	// counts it in the same write as its restamp (doc 02 §7).
 	Reasks int
+	// BeliefID is the goal a goal check-in asks about (doc 02 §7, ADR-0054):
+	// set on a pattern_based check-in only, and what marks one as a goal's.
+	BeliefID string
 }
 
 // FiredTrigger is a one-shot trigger that fired: when it was to fire, when

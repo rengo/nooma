@@ -247,7 +247,16 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	if err != nil {
 		return CaptureResult{}, err
 	}
-	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{Conversation: conv, Timers: timerEntries(live)})
+	// **Beside a chat, the open goal check-ins** (ADR-0054): an answer names
+	// one by its listed position, so the code binds only what it showed.
+	var goals []ports.OpenCheckIn
+	if len(conv.Turns) > 0 {
+		if goals, err = r.openGoalCheckIns(ctx); err != nil {
+			return CaptureResult{}, err
+		}
+	}
+	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold,
+		classify.ReminderContext{Conversation: conv, Timers: timerEntries(live), Goals: goalEntries(goals)})
 
 	// **A correction that names its unit is classified against it** (doc 02
 	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the
@@ -358,9 +367,16 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// answer carries an outcome, not a Kind, and "yes, done — and remind
 	// me to call the dentist tomorrow" is one message that both resolves
 	// a nudge and arms a timer.
-	answered, err := r.resolveCheckIn(ctx, c, shown, now)
+	// A goal answer is its own: when one binds, the generic answer is not
+	// also applied to the same message.
+	answered, err := r.resolveGoalCheckIn(ctx, c, goals, now)
 	if err != nil {
 		return CaptureResult{}, err
+	}
+	if !answered {
+		if answered, err = r.resolveCheckIn(ctx, c, shown, now); err != nil {
+			return CaptureResult{}, err
+		}
 	}
 	if err := r.resolveStateCheckIn(ctx, c, now); err != nil {
 		return CaptureResult{}, err

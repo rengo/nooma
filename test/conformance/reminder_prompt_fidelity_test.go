@@ -151,7 +151,7 @@ func productionPrompt(t *testing.T, c llm.Case) string {
 	}
 	svc := brain.NewCaptureService(fixedClock{now: now}, &counterIDs{}, units, embeddings, memrepo.NewLexical(),
 		memrepo.NewRelations(), memrepo.NewDecisionLog(), model, model, model, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), seedTimers(t, c, now),
+		brain.NewIndex(idx), memrepo.NewSignals(), seedGoals(t, c, now), seedTimers(t, c, now),
 		consolidation.DefaultWeightThreshold, memrepo.NewPendingQuestions()).WithConversation(conv)
 	if _, err := svc.Capture(ctx, in); err != nil {
 		t.Fatal(err)
@@ -177,6 +177,29 @@ func caseInstant(t *testing.T, s string, now time.Time) *time.Time {
 		t.Fatalf("instant %q: %v", s, err)
 	}
 	return &day
+}
+
+// seedGoals stores a case's goals_list as open goal check-ins (ADR-0054),
+// each a fired and surfaced pattern_based trigger carrying a belief, asked a
+// minute apart so Delivered returns them in the listed order.
+func seedGoals(t *testing.T, c llm.Case, now time.Time) *memrepo.Triggers {
+	t.Helper()
+	ctx := context.Background()
+	triggers := memrepo.NewTriggers()
+	for i, g := range c.GoalsList {
+		id, at := fmt.Sprintf("goal-%02d", i), now.Add(-time.Duration(i+1)*time.Minute)
+		if err := triggers.Create(ctx, ports.Trigger{ID: id, Kind: ports.TriggerKindPatternBased, FireAt: &at, CreatedAt: at,
+			Payload: ports.TriggerPayload{ActionText: g.Text, BeliefID: "belief-" + id}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := triggers.Fire(ctx, id, at); err != nil {
+			t.Fatal(err)
+		}
+		if err := triggers.Surface(ctx, id, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return triggers
 }
 
 // seedTimers stores a case's timers_list as pending timers, as capture reads

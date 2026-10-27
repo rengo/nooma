@@ -76,6 +76,9 @@ func fieldSpecs() []fieldSpec {
 		{"timer_request", false, nullIsAbsent(assignEnum(AllTimerRequests,
 			func(c *Classification, v *TimerRequest) { c.TimerRequest = v }))},
 		{"timer_target", false, nullIsAbsent(assignTimerTarget)},
+		{"goal_target", false, nullIsAbsent(assignGoalTarget)},
+		{"goal_outcome", false, nullIsAbsent(assignEnum(AllGoalOutcomes,
+			func(c *Classification, v *GoalOutcome) { c.GoalOutcome = v }))},
 		// ADR-0036's follow-up fields, optional for the same reason.
 		{"referent", false, nullIsAbsent(assignReferent)},
 		{"clarifying_question", false, nullIsAbsent(assignClarifyingQuestion)},
