@@ -124,6 +124,21 @@ func (c *Channel) Receive(ctx context.Context) ([]ports.ChannelMessage, error) {
 			continue
 		}
 
+		// **A command is answered here, never read** (doc 02 §5): /start
+		// went to classify, which had no message to take a language from,
+		// and the bot's first words were "That is not something I can do.".
+		// It is not held, so the cursor moves past it once answered.
+		lang := ""
+		if u.Message.From != nil {
+			lang = u.Message.From.LanguageCode
+		}
+		if reply, ok := commandReply(u.Message.Text, u.Message.Entities, lang); ok {
+			if err := c.client.sendMessage(ctx, u.Message.Chat.ID, reply); err != nil {
+				_, _ = fmt.Fprintf(c.log, "telegram: a command from chat %d was not answered: %v\n", u.Message.Chat.ID, err)
+			}
+			continue
+		}
+
 		c.hold(u.UpdateID)
 		admitted = append(admitted, ports.ChannelMessage{
 			ID:           strconv.FormatInt(u.UpdateID, 10),

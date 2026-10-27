@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/rengo/nooma/internal/config"
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/phrase"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/repocontract"
 )
@@ -192,5 +194,42 @@ func TestChannel_RefusedMessageDoesNotHoldTheCursor(t *testing.T) {
 
 	if state.offsets[1] != "11" {
 		t.Fatalf("offsets asked for were %v, want the second to be 11 — a refused message pinning the cursor would stall the channel on one stranger", state.offsets)
+	}
+}
+
+// TestChannel_AnswersACommandItself: /start never reaches classify. The
+// channel answers it in the sender's language, admits nothing, and does not
+// hold the cursor on it; a stranger's /start is refused like any message.
+func TestChannel_AnswersACommandItself(t *testing.T) {
+	command := func(updateID, chatID int64, text, lang string) string {
+		return `{"update_id":` + strconv.FormatInt(updateID, 10) +
+			`,"message":{"message_id":1,"text":"` + text + `","entities":[{"type":"bot_command","offset":0,"length":` +
+			strconv.Itoa(len(text)) + `}],"from":{"language_code":"` + lang + `"},"chat":{"id":` + strconv.FormatInt(chatID, 10) + `}}}`
+	}
+	srv, state := newUpdatesServer(t,
+		[]string{command(20, 7, "/start", "en"), command(21, 999, "/start", "es"), updateJSON(22, 7, "hola")},
+		[]string{},
+	)
+	ch := newTestChannel(t, srv.URL, []int64{7}, &bytes.Buffer{})
+	ctx := context.Background()
+
+	msgs, err := ch.Receive(ctx)
+	if err != nil {
+		t.Fatalf("Receive: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].Text != "hola" {
+		t.Fatalf("Receive admitted %+v, want only the plain message", msgs)
+	}
+	if len(state.sent) != 1 || string(state.sent[0].Conversation) != "7" || state.sent[0].Text != phrase.For(classify.LanguageEN).Greeting {
+		t.Fatalf("sent %+v, want one English greeting to chat 7 and nothing to the stranger", state.sent)
+	}
+	if err := ch.Confirm(ctx, msgs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ch.Receive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if state.offsets[1] != "23" {
+		t.Errorf("offsets asked for were %v, want the second to be 23: an answered command must not be delivered again", state.offsets)
 	}
 }
