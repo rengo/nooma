@@ -19,6 +19,7 @@ type relationStub struct {
 	toUnitID    string
 	fromContent string
 	toContent   string
+	confidence  float64
 }
 
 // storedQuestion is one pending_questions row plus the bookkeeping
@@ -60,8 +61,19 @@ func (r *PendingQuestions) EnsureRelation(_ *testing.T, relationID, relType, fro
 	defer r.mu.Unlock()
 	r.relations[relationID] = relationStub{
 		relType: relType, fromUnitID: fromUnitID, toUnitID: toUnitID,
-		fromContent: fromContent, toContent: toContent,
+		fromContent: fromContent, toContent: toContent, confidence: 0.4,
 	}
+}
+
+// SetRelationConfidence implements repocontract.PendingQuestionHarness: the
+// confidence the joined reads report, 0.4 as EnsureRelation seeds it, as the
+// store's own harness does.
+func (r *PendingQuestions) SetRelationConfidence(_ *testing.T, relationID string, confidence float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stub := r.relations[relationID]
+	stub.confidence = confidence
+	r.relations[relationID] = stub
 }
 
 // ForgetRelation implements repocontract.PendingQuestionHarness. It removes
@@ -134,7 +146,7 @@ func (r *PendingQuestions) filtered(keep func(storedQuestion) bool, less func(a,
 		rq := ports.RelationQuestion{
 			ID: s.q.ID, RelationID: s.q.RelationID, RelationType: rel.relType,
 			FromUnitID: rel.fromUnitID, ToUnitID: rel.toUnitID,
-			FromContent: rel.fromContent, ToContent: rel.toContent,
+			FromContent: rel.fromContent, ToContent: rel.toContent, Confidence: rel.confidence,
 			CreatedAt: s.q.CreatedAt,
 		}
 		if s.askedAt != nil {

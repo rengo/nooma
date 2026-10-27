@@ -35,6 +35,10 @@ type PendingQuestionHarness interface {
 	// can be exercised without depending on RejectRelation's own delete
 	// path.
 	ForgetRelation(t *testing.T, relationID string)
+
+	// SetRelationConfidence sets relationID's confidence, which EnsureRelation
+	// seeds at 0.4 (the uncertain band, where a question comes from).
+	SetRelationConfidence(t *testing.T, relationID string, confidence float64)
 }
 
 // pendingQuestionNow is a fixed instant fixtures in this suite share —
@@ -47,6 +51,32 @@ var pendingQuestionNow = time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 // return one holding no pending question and no relation.
 func RunPendingQuestionRepo(t *testing.T, newRepo func(t *testing.T) PendingQuestionHarness) {
 	t.Helper()
+
+	// #409 review N2: the digest's question pick reads a relation's
+	// confidence in the same read as its question, not one read per question.
+	t.Run("Unasked and Open carry the relation's confidence", func(t *testing.T) {
+		ctx := context.Background()
+		repo := newRepo(t)
+		repo.EnsureRelation(t, "rel-a", "same_topic", "u-a", "u-b", "a", "b")
+		repo.EnsureRelation(t, "rel-c", "same_topic", "u-c", "u-d", "c", "d")
+		repo.SetRelationConfidence(t, "rel-c", 0.33)
+		for i, rel := range []string{"rel-a", "rel-c"} {
+			if err := repo.Create(ctx, ports.PendingQuestion{ID: "q-" + rel, Kind: ports.QuestionKindRelation, RelationID: rel,
+				CreatedAt: pendingQuestionNow.Add(time.Duration(i) * time.Minute)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		unasked, err := repo.Unasked(ctx)
+		if err != nil || len(unasked) != 2 || unasked[0].Confidence != 0.4 || unasked[1].Confidence != 0.33 {
+			t.Fatalf("Unasked = %+v, %v; want rel-a at 0.4 then rel-c at 0.33", unasked, err)
+		}
+		if err := repo.MarkAsked(ctx, "q-rel-c", pendingQuestionNow.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		if open, err := repo.Open(ctx); err != nil || len(open) != 1 || open[0].Confidence != 0.33 {
+			t.Errorf("Open = %+v, %v; want rel-c at 0.33", open, err)
+		}
+	})
 
 	t.Run("Create then Unasked round trip", func(t *testing.T) {
 		repo := newRepo(t)
@@ -68,7 +98,7 @@ func RunPendingQuestionRepo(t *testing.T, newRepo func(t *testing.T) PendingQues
 		want := ports.RelationQuestion{
 			ID: "q-1", RelationID: "rel-1", RelationType: "same_topic",
 			FromUnitID: "unit-a", ToUnitID: "unit-b",
-			FromContent: "content a", ToContent: "content b",
+			FromContent: "content a", ToContent: "content b", Confidence: 0.4,
 			CreatedAt: pendingQuestionNow,
 		}
 		if got[0] != want {

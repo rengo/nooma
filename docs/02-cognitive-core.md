@@ -476,7 +476,12 @@ A dormant relation:
 - feeds no focus adjacency (§3);
 - cannot be curated;
 - is not asked about: the digest, and Today's preview of it, take the first queued question
-  whose relation is awake and leave a dormant one queued, unasked.
+  whose relation is awake and leave a dormant one queued, unasked. The queue's own read carries
+  each relation's confidence, so the pick reads nothing more than the bars.
+
+One exception is deliberate: a question the digest asked **before** its relation went dormant
+can still be answered in the chat, and its "no" deletes the relation as any answer does.
+Dormancy hides what is not yet asked, and does not take back a question already put to the user.
 
 When the bar falls back, it wakes unchanged. The boundary is `Decide`'s: a relation exactly at the
 bar would be stored today, so it is awake. Spreading activation needs no filter: it travels only

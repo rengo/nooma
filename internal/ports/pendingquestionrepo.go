@@ -78,7 +78,11 @@ type RelationQuestion struct {
 	ToUnitID     string
 	FromContent  string
 	ToContent    string
-	CreatedAt    time.Time
+	// Confidence is the relation's confidence as it stands, read in the same
+	// join, so the digest can skip a dormant relation (I49) without a second
+	// read per question.
+	Confidence float64
+	CreatedAt  time.Time
 	// AskedAt is nil on every row Unasked returns, by construction — Unasked
 	// only ever returns a queued (not-yet-asked) row.
 	AskedAt *time.Time

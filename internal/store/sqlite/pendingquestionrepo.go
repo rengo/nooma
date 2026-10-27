@@ -76,7 +76,7 @@ func (r *PendingQuestionRepo) Open(ctx context.Context) ([]ports.RelationQuestio
 // Go (RelationRepo.Evidence's own stated reason, design §3.2).
 func (r *PendingQuestionRepo) relationQuestions(ctx context.Context, where, order string) ([]ports.RelationQuestion, error) {
 	query := `
-SELECT pq.id, pq.relation_id, r.type, r.from_unit_id, r.to_unit_id, uf.content, ut.content, pq.created_at, pq.asked_at
+SELECT pq.id, pq.relation_id, r.type, r.from_unit_id, r.to_unit_id, uf.content, ut.content, r.confidence, pq.created_at, pq.asked_at
 FROM pending_questions pq
 JOIN relations r ON r.id = pq.relation_id
 JOIN units uf ON uf.id = r.from_unit_id
@@ -98,7 +98,7 @@ ORDER BY ` + order
 			askedAtTx   sql.NullString
 		)
 		if err := rows.Scan(&rq.ID, &rq.RelationID, &rq.RelationType, &rq.FromUnitID, &rq.ToUnitID,
-			&rq.FromContent, &rq.ToContent, &createdAtTx, &askedAtTx); err != nil {
+			&rq.FromContent, &rq.ToContent, &rq.Confidence, &createdAtTx, &askedAtTx); err != nil {
 			return nil, fmt.Errorf("scanning a pending question row: %w", err)
 		}
 		at, err := time.Parse(unitTimeLayout, createdAtTx)
