@@ -544,3 +544,16 @@ func TestSet_Leads_ARingOnTheToldDayIsToday(t *testing.T) {
 		}
 	}
 }
+
+// TestGoalSentences: a goal check-in asks in the client's words of 2026-10-28,
+// "¿Seguís con <goal>?", and its English.
+func TestGoalSentences(t *testing.T) {
+	for l, want := range map[classify.Language]string{
+		classify.LanguageES: "¿Seguís con «correr una media maratón»?",
+		classify.LanguageEN: "Still on \"correr una media maratón\"?",
+	} {
+		if got := For(l).Goal("correr una media maratón"); got != want {
+			t.Errorf("%s: Goal = %q, want %q", l, got, want)
+		}
+	}
+}

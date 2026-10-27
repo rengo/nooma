@@ -126,14 +126,20 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// thing this system produces — expressed as a rule rather than a rank,
 	// which is the same trade Q2 already took.
 	var question *ports.RelationQuestion
+	// The FOURTH source, the goal check-in (doc 02 §7, ADR-0054), is asked
+	// the same way: appended, one a morning, and held on a low-energy one.
+	var goal *ports.DueTrigger
 	if !low {
 		question, err = r.nextQuestion(ctx)
 		if err != nil {
 			return 0, lapsed, err
 		}
+		if goal, err = nextGoalAsk(ctx, r.triggers, now); err != nil {
+			return 0, lapsed, fmt.Errorf("check: %w", err)
+		}
 	}
 
-	if len(pending) == 0 && len(reasks) == 0 && question == nil && len(tasks) == 0 {
+	if len(pending) == 0 && len(reasks) == 0 && question == nil && goal == nil && len(tasks) == 0 {
 		// **An empty digest is not sent**, and m3a left this to m3d
 		// explicitly ("Carry takes no position on whether an empty result
 		// is delivered"). A message every morning saying nothing happened
@@ -162,14 +168,14 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	// focus is computed, after every return that does not send.
 	carry, held := prospection.Carry(items, map[string]float64{}, low, now)
 
-	if len(carry) == 0 && len(reasks) == 0 && question == nil && len(tasks) == 0 {
+	if len(carry) == 0 && len(reasks) == 0 && question == nil && goal == nil && len(tasks) == 0 {
 		return 0, lapsed, nil
 	}
 	if !commit {
 		// The count of the lines the message bound keeps. Adjacency can reorder
 		// the real pass's carry, which a dry run does not compute (it reads no
 		// focus), so under a bound that cuts the two may keep different lines.
-		_, sent, _, _ := r.digestText(ctx, now, tasks, carry, pending, reasks, question)
+		_, sent, _, _ := r.digestText(ctx, now, tasks, carry, pending, reasks, question, goal)
 		return len(sent), lapsed, nil
 	}
 
@@ -199,7 +205,7 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 
 	// What fits one message is sent; the rest stays undelivered for tomorrow.
-	text, sent, asked, named := r.digestText(ctx, now, tasks, carry, pending, reasks, question)
+	text, sent, asked, named := r.digestText(ctx, now, tasks, carry, pending, reasks, question, goal)
 	if err := r.channel.Send(ctx, r.conversation, text); err != nil {
 		return 0, lapsed, r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 			fmt.Sprintf("the digest could not be delivered; its %d item(s) stay undelivered and tomorrow's digest carries them: %v", len(sent), err),
@@ -253,6 +259,21 @@ func (r checkRunner) assembleDigest(ctx context.Context, now time.Time, commit b
 	}
 	for _, id := range asked {
 		if err := r.markReasked(ctx, reasked[id], r.stamp(now), now); err != nil {
+			return 0, lapsed, err
+		}
+	}
+	if goal != nil {
+		// Only now, after the send, does it become an open check-in: fired
+		// and surfaced at the digest's own instant, so an answer reaches it
+		// and the three-morning sweep closes it if nobody does.
+		if err := r.triggers.Fire(ctx, goal.ID, now); err != nil {
+			return 0, lapsed, fmt.Errorf("check: digest was sent but goal check-in %q was not fired: %w", goal.ID, err)
+		}
+		if err := r.triggers.Surface(ctx, goal.ID, r.stamp(now)); err != nil {
+			return 0, lapsed, fmt.Errorf("check: digest was sent but goal check-in %q was not marked delivered: %w", goal.ID, err)
+		}
+		if err := r.record(ctx, now, ports.ActionCheckDigestGoalAsked,
+			fmt.Sprintf("the daily digest asked goal check-in %q", goal.ID), checkDetail{ID: goal.ID}); err != nil {
 			return 0, lapsed, err
 		}
 	}
@@ -314,9 +335,9 @@ func digestSentRationale(sent, held, dropped, asked, waiting, tasks int) string 
 // digestText is the digest's message and what it holds: the tasks due, the
 // carried items, then the check-ins it asks again (doc 02 §7). The digest
 // speaks the newest capture's language (ADR-0032 point 5).
-func (r checkRunner) digestText(ctx context.Context, now time.Time, tasks []unit.Unit, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem, []string, []string) {
+func (r checkRunner) digestText(ctx context.Context, now time.Time, tasks []unit.Unit, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion, goal *ports.DueTrigger) (string, []prospection.DigestItem, []string, []string) {
 	set := r.setFor(ctx, "")
-	return digestMessageWith(set, dueLines(tasks, now, set), carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question)
+	return digestMessageGoal(set, dueLines(tasks, now, set), carry, r.saidNow(ctx, pending, now, set), reaskSaid(ctx, r.units, reasks, now, set), question, goalAsked(goal))
 }
 
 // tasksDue reads the span prospection.DueTaskWindow names and lets
@@ -547,6 +568,21 @@ func digestMessage(set phrase.Set, carry []prospection.DigestItem, pending, reas
 // bound drops lines from the end, so a task due is the last line given up. It
 // also returns the units of the tasks kept.
 func digestMessageWith(set phrase.Set, tasks []dueLine, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion) (string, []prospection.DigestItem, []string, []string) {
+	return digestMessageGoal(set, tasks, carry, pending, reasks, question, "")
+}
+
+// goalAsked is what the digest asks of a goal check-in: the words it was
+// armed with, in the language of the night it was armed.
+func goalAsked(goal *ports.DueTrigger) string {
+	if goal == nil {
+		return ""
+	}
+	return goal.Payload.ActionText
+}
+
+// digestMessageGoal is digestMessageWith with the goal check-in it asks, ""
+// for none, counted inside the message bound like every other line.
+func digestMessageGoal(set phrase.Set, tasks []dueLine, carry []prospection.DigestItem, pending, reasks []ports.DueTrigger, question *ports.RelationQuestion, goal string) (string, []prospection.DigestItem, []string, []string) {
 	byID := make(map[string]ports.DueTrigger, len(pending))
 	for _, t := range pending {
 		byID[t.ID] = t
@@ -583,14 +619,14 @@ func digestMessageWith(set phrase.Set, tasks []dueLine, carry []prospection.Dige
 	}
 
 	keep, ask := len(lines), len(asks)
-	text := composeDigest(set, lines, keep, asks[:ask], question)
+	text := composeDigest(set, lines, keep, asks[:ask], question, goal)
 	for utf16Len(text) > digestMessageUnits && (ask > 0 || keep > 1) {
 		if ask > 0 {
 			ask--
 		} else {
 			keep--
 		}
-		text = composeDigest(set, lines, keep, asks[:ask], question)
+		text = composeDigest(set, lines, keep, asks[:ask], question, goal)
 	}
 	var sent []prospection.DigestItem
 	for _, l := range lines[:keep] {
@@ -609,7 +645,7 @@ func digestMessageWith(set phrase.Set, tasks []dueLine, carry []prospection.Dige
 
 // composeDigest is the message with the first keep lines, and the note of the
 // lines left out when there are any.
-func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, question *ports.RelationQuestion) string {
+func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, question *ports.RelationQuestion, goal string) string {
 	var b strings.Builder
 	if keep > 0 {
 		b.WriteString(set.DigestHeader(keep))
@@ -625,6 +661,14 @@ func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, 
 			b.WriteString("\n\n")
 		}
 		b.WriteString(set.AskAgain + "\n" + strings.Join(asks, "\n"))
+	}
+	// The goal check-in, its own paragraph after everything ranked, and the
+	// whole message when it is all the morning has to say.
+	if goal != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(goal)
 	}
 
 	if question != nil {

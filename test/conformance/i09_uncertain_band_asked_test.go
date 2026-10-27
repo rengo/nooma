@@ -92,7 +92,7 @@ func i09QueueUncertainRelation(t *testing.T) (units *memrepo.Units, rels *memrep
 	questions = memrepo.NewPendingQuestions()
 	questions.EnsureRelation(t, "id-1", "same_topic", "u-source", i09CandidateID, i09SourceContent, i09CandidateContent)
 
-	svc := brain.NewConsolidateService(fixedClock{now: now}, cfg, units, rels, ids, memrepo.NewDecisionLog(), rec, judge, memrepo.NewSelfModel(), memrepo.NewState(), questions, nil)
+	svc := brain.NewConsolidateService(fixedClock{now: now}, cfg, units, rels, ids, memrepo.NewDecisionLog(), rec, judge, memrepo.NewSelfModel(), memrepo.NewState(), questions, nil, nil)
 	phase := consolidation.PhaseConnect
 	if _, err := svc.Consolidate(ctx, brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhaseConnect): %v", err)

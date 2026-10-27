@@ -161,8 +161,12 @@ did and why.
 5. **Derives beliefs.** `derive` proposes statements about *you* (a value, a goal, a
    preference), merges them with existing beliefs instead of duplicating them, and reinforces
    the ones that keep recurring ([doc 02 §10](02-cognitive-core.md#10-the-self-model)).
-6. **Looks for patterns.** `pattern_eval` watches for a goal that has gone quiet and for an
-   accumulation of open mental-load items ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
+6. **Looks for patterns.** `pattern_eval` watches for an accumulation of open mental-load
+   items, and for a goal that has gone quiet. For a quiet goal it sets one question for the
+   next morning digest, at most once per `goal_stagnation_days` (twice that after "dejala
+   descansar"). The digest asks it as its own line after the day's items, never on a
+   low-energy morning, and never as a separate message
+   ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
 7. **Learns.** `learn` moves a kind of link's bar one step when you rejected, or confirmed, 6 of
    the last 8 links of that kind Nooma made, at most once a week per kind. A link of that kind
    now below the bar goes quiet: it is not drawn, listed, asked about or used to rank focus, and
@@ -220,9 +224,13 @@ of a black box.
    nothing open to answer changes nothing and is logged.
 6. **Lets a question lapse.** One that goes unanswered through enough digests is marked
    expired, never deleted, and is not asked again.
-7. **Asks its own check-ins.** Goal and task nudges are answered the same way: *engaged* or
-   *declined* resolves the most recent open one, or, in a chat, the one of the pushed item the
-   answer is about (a message about something told since answers none); for a task check-in, *done* and *drop* resolve
+7. **Asks its own check-ins.** A task nudge's *engaged* or *declined* resolves the most recent
+   open one, or, in a chat, the one of the pushed item the answer is about (a message about
+   something told since answers none). A goal check-in ("¿Seguís con «correr una media
+   maratón»?") is answered by naming it, even messages later: "sí" keeps the goal, "dejala
+   descansar" asks it half as often, "no por ahora" leaves it open, and nothing else, a
+   correction included, can close it (ADR-0054). Until M5 the goal nudge was never sent at
+   all. For a task check-in, *done* and *drop* resolve
    it and *snooze* ("not yet", a bare "no" included) leaves it open. A check-in about something still
    to do (a task or an open loop) that you put off is asked again from the next day's morning digest ("Te pregunto de nuevo: • ¿Ya está «Comprar café»?"), at most twice, and then closes by itself; one never
    answered, or about an event, is not asked again and closes after the same three mornings, so an old check-in

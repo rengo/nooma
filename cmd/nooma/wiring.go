@@ -269,7 +269,7 @@ func wireConsolidate(ctx context.Context, db *sqlite.Vault, cfg *config.Config, 
 	index := brain.NewIndex(loaded)
 	recall := brain.NewRecallService(index, lex, units, embed)
 
-	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state, questions, sqlite.NewSignalRepo(db)), nil
+	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state, questions, sqlite.NewSignalRepo(db), sqlite.NewTriggerRepo(db)), nil
 }
 
 // wireChannel builds the configured channel, or nothing.

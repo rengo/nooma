@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -505,4 +506,37 @@ func (r *Triggers) Reschedule(_ context.Context, id string, m ports.TriggerMove)
 	}
 	r.triggers[id] = stored
 	return nil
+}
+
+// GoalCheckIns implements ports.TriggerRepo, as the store folds it.
+func (r *Triggers) GoalCheckIns(_ context.Context) ([]consolidation.GoalCheckIn, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var all []storedTrigger
+	for _, s := range r.triggers {
+		if s.trigger.Kind == ports.TriggerKindPatternBased && s.trigger.Payload.BeliefID != "" {
+			all = append(all, s)
+		}
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].trigger.CreatedAt.Equal(all[j].trigger.CreatedAt) {
+			return all[i].trigger.CreatedAt.Before(all[j].trigger.CreatedAt)
+		}
+		return all[i].trigger.ID < all[j].trigger.ID
+	})
+	latest := map[string]consolidation.GoalCheckIn{}
+	var order []string
+	for _, s := range all {
+		b := s.trigger.Payload.BeliefID
+		if _, seen := latest[b]; !seen {
+			order = append(order, b)
+		}
+		open := s.resolution == "" && (s.status == ports.TriggerStatusArmed || s.status == ports.TriggerStatusFired)
+		latest[b] = consolidation.GoalCheckIn{BeliefID: b, ArmedAt: s.trigger.CreatedAt, Open: open, Declined: s.resolution == ports.ResolutionDeclined}
+	}
+	out := make([]consolidation.GoalCheckIn, 0, len(order))
+	for _, b := range order {
+		out = append(out, latest[b])
+	}
+	return out, nil
 }

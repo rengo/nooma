@@ -2085,8 +2085,26 @@ state; `m3b` implements the store-layer round trip.
 **Pattern watchers buildable from day one**:
 
 - **Goal stagnation**: a `goal`-facet belief with no related activity for
-  `goal_stagnation_days` (default 21, recalibratable per user, §9) → check-in "Still on this,
-  or shall we let it rest?". "Related activity" is read off `self_beliefs.last_reinforced_at`
+  `goal_stagnation_days` (default 21, recalibratable per user, §9) → a check-in, "¿Seguís con
+  «<goal>»?" / "Still on "<goal>"?" in the user's usual language (`phrase.Goal`, I51).
+  `pattern_eval` arms it as a `pattern_based` trigger that hangs off no unit, carries the
+  goal's `belief_id`, and is due at the pass's instant (`fire_at` is never NULL). **The due
+  scan never fires it**: it would go out alone, as a late reminder. **The morning digest asks
+  it as its own item, as it asks the relation question.**
+  - It is appended after the ranked items and the check-ins asked again: at most one a
+    morning, the longest waiting first. It is the whole message when nothing else is due.
+  - It is never asked on a low-energy morning, and waits armed for one that is not.
+  - Only once the digest is sent is it fired and surfaced (`check.digest.goal_asked`), so an
+    answer can reach it. Unanswered, it closes at the third morning, as ignored.
+  - Today previews it.
+
+  A goal is asked at most once per
+  `goal_stagnation_days`, counted from when its last check-in was armed, and after a declined
+  answer only after `goal_checkin_decline_factor` (2) times that. One still open is never
+  asked again on top of itself (`consolidation.GoalCheckInsDue`). Each arming is one
+  `consolidate.pattern_eval.goal_checkin_armed` row. A night when a stagnant goal is not due
+  writes nothing. Through M4 this watcher only logged `stagnation_found`, every night, and
+  never asked. "Related activity" is read off `self_beliefs.last_reinforced_at`
   — the only column that records it — and that reading is sound only because of the phase
   order (`internal/core/consolidation.EvaluateStagnation`, §6): `derive` runs before
   `pattern_eval` in every nightly pass and refreshes `last_reinforced_at` for every belief it
@@ -2448,6 +2466,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `relation_cooldown_days` (`internal/core/learning.RelationCooldownDays`) | 7 — how long a changed type waits before it is judged again; chosen: a week of nights for the new bar to show its effect. Coincides with `load_cooldown_days` by coincidence, not by relation |
 | `min_confidence_to_surface` | 0.50 |
 | `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — `config.goal_stagnation_days` is this knob's one schema home for the whole of M2; `ports.ConfigRepo` reads it, never `calibration`'s own generic key/value row (`m2c` spec R2.5, discharging `m2b design.md` §9 Q3). `calibration` stays unused through `m2c`, verified by a source-tree scan (`test/conformance`); it remains reserved for M5's learning module to write arbitrary future per-user knobs that have no dedicated `config` column |
+| `goal_checkin_decline_factor` (`internal/core/consolidation.GoalCheckInDeclinedFactor`) | 2 — how many `goal_stagnation_days` a goal waits for its next check-in after a declined answer (§7); the client's ruling of 2026-10-28 on "ask less often" |
 | `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
 | Push threshold (`internal/core/prospection.PushThreshold`) | 0.70 — `interrupt_level >= this value` routes to push (R3.2), inclusive; gains a constant here, value unchanged |

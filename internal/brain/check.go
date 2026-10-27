@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -166,6 +167,9 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (report
 	if err != nil {
 		return CheckReport{}, fmt.Errorf("check: due triggers: %w", err)
 	}
+	// A goal check-in is the digest's to ask, never the scan's to fire: fired
+	// here it went out alone, as a late reminder (doc 02 §7, ADR-0054).
+	due = slices.DeleteFunc(due, isGoalAsk)
 	report.TriggersDue = len(due)
 
 	g, canDeliver := r.gate(), r.canDeliver()

@@ -24,10 +24,12 @@ func nudgeValence(typ ports.SignalType) (ports.Valence, bool) {
 	return "", false
 }
 
-// nudgeSignalContext names the check-in's unit, when it has one, so a reader
-// need not join the trigger to know what it was about.
+// nudgeSignalContext names what the check-in was about, its unit or, for a
+// goal check-in, its goal's belief (ADR-0054), so a reader such as goal
+// cadence learning need not join the trigger to know.
 type nudgeSignalContext struct {
-	UnitID *string `json:"unit_id,omitempty"`
+	UnitID   *string `json:"unit_id,omitempty"`
+	BeliefID string  `json:"belief_id,omitempty"`
 }
 
 // recordNudgeSignal emits the learning signal of one check-in verdict (I47):
@@ -39,7 +41,7 @@ type nudgeSignalContext struct {
 //
 // A nil signals repo records nothing: a test that wires none has no learner to
 // teach. Production wiring always passes one (cmd/nooma).
-func recordNudgeSignal(ctx context.Context, signals ports.SignalRepo, ids ports.IDGen, typ ports.SignalType, triggerID string, unitID *string, now time.Time) error {
+func recordNudgeSignal(ctx context.Context, signals ports.SignalRepo, ids ports.IDGen, typ ports.SignalType, triggerID string, unitID *string, beliefID string, now time.Time) error {
 	if signals == nil {
 		return nil
 	}
@@ -47,7 +49,7 @@ func recordNudgeSignal(ctx context.Context, signals ports.SignalRepo, ids ports.
 	if !ok {
 		return fmt.Errorf("signal: %q is not a check-in verdict", typ)
 	}
-	contextJSON, err := json.Marshal(nudgeSignalContext{UnitID: unitID})
+	contextJSON, err := json.Marshal(nudgeSignalContext{UnitID: unitID, BeliefID: beliefID})
 	if err != nil {
 		return fmt.Errorf("signal: encode the %s context: %w", typ, err)
 	}

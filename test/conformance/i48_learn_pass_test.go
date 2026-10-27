@@ -134,7 +134,7 @@ func (v *i48Vault) learn(t *testing.T, now time.Time) {
 	t.Helper()
 	phase := consolidation.PhaseLearn
 	svc := brain.NewConsolidateService(fixedClock{now: now}, v.cfg, v.units, v.rels, v.ids, v.log, nil, nil,
-		memrepo.NewSelfModel(), memrepo.NewState(), v.questions, v.signals)
+		memrepo.NewSelfModel(), memrepo.NewState(), v.questions, v.signals, nil)
 	if _, err := svc.Consolidate(context.Background(), brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("learn at %s: %v", now, err)
 	}
@@ -259,7 +259,7 @@ func (v *i48Vault) connectAt033(t *testing.T) bool {
 	rec := brain.NewRecallService(brain.NewIndex(recall.VectorIndex{Model: "test-model"}), lex, v.units, fakeprovider.NewEmbeddingFake("test-model"))
 	phase := consolidation.PhaseConnect
 	svc := brain.NewConsolidateService(fixedClock{now: night}, v.cfg, v.units, v.rels, v.ids, v.log, rec, judge,
-		memrepo.NewSelfModel(), memrepo.NewState(), v.questions, v.signals)
+		memrepo.NewSelfModel(), memrepo.NewState(), v.questions, v.signals, nil)
 	if _, err := svc.Consolidate(ctx, brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("connect: %v", err)
 	}

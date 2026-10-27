@@ -90,7 +90,7 @@ func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) 
 	// Answering a check-in done is engaging with it, whichever way it was
 	// said. After the row (I12): a failed signal leaves a logged close.
 	for _, checkInID := range change.CheckInsAnswered {
-		if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeEngaged, checkInID, &id, now); err != nil {
+		if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeEngaged, checkInID, &id, "", now); err != nil {
 			return CaptureResult{}, false, fmt.Errorf("capture: done: %w", err)
 		}
 	}

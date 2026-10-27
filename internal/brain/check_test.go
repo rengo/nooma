@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -519,4 +520,14 @@ func (emptyTriggers) Reask(context.Context, string, time.Time) error          { 
 func (emptyTriggers) ExpireUnanswered(context.Context, string) error          { return nil }
 func (emptyTriggers) Resolve(context.Context, string, ports.TriggerResolution, time.Time) error {
 	return nil
+}
+
+func (*conflictingTriggers) GoalCheckIns(context.Context) ([]consolidation.GoalCheckIn, error) {
+	return nil, nil
+}
+func (*emptyTriggers) GoalCheckIns(context.Context) ([]consolidation.GoalCheckIn, error) {
+	return nil, nil
+}
+func (*failingTriggers) GoalCheckIns(context.Context) ([]consolidation.GoalCheckIn, error) {
+	return nil, nil
 }

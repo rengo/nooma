@@ -638,7 +638,7 @@ func newSingleCorruptedUnitConsolidator(t *testing.T) *brain.ConsolidateService 
 		judge,
 		memrepo.NewSelfModel(),
 		memrepo.NewState(),
-		memrepo.NewPendingQuestions(), nil,
+		memrepo.NewPendingQuestions(), nil, nil,
 	)
 }
 
@@ -768,7 +768,7 @@ func TestRunPass_AbortSurfacesRefusedUnits(t *testing.T) {
 		judge,
 		memrepo.NewSelfModel(),
 		memrepo.NewState(),
-		memrepo.NewPendingQuestions(), nil,
+		memrepo.NewPendingQuestions(), nil, nil,
 	)
 
 	var logBuf bytes.Buffer

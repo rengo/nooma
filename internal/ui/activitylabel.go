@@ -72,6 +72,8 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionReweightBoostApplied:            "Weight raised",
 	ports.ActionPatternEvalStagnationFound:      "Stalled goal noticed",
 	ports.ActionPatternEvalLoadHypothesisOpened: "Recurring load noticed",
+	ports.ActionPatternEvalGoalCheckInArmed:     "Goal check-in set",
+	ports.ActionCheckDigestGoalAsked:            "Goal asked",
 	ports.ActionLearnRelationThreshold:          "Link bar learned",
 	ports.ActionConnectQuestionCreated:          "Question queued",
 	ports.ActionCheckDigestQuestionAsked:        "Question asked",

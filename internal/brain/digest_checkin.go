@@ -97,7 +97,7 @@ func (r checkRunner) expireCheckin(ctx context.Context, c ports.OpenCheckIn, now
 	}
 	// It reached the user and nobody answered: ignored (doc 02 §9 learns from
 	// the response, not the delivery). After the row (I12).
-	if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeIgnored, c.ID, c.UnitID, now); err != nil {
+	if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeIgnored, c.ID, c.UnitID, c.Payload.BeliefID, now); err != nil {
 		return fmt.Errorf("check: %w", err)
 	}
 	return nil
