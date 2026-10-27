@@ -83,6 +83,19 @@ VALUES (?, ?, ?, ?)`,
 	}
 }
 
+// SeedPinnedThreshold inserts a relation_thresholds row the user set.
+func (h relationHarness) SeedPinnedThreshold(t *testing.T, relType string, persist, surface float64) {
+	t.Helper()
+
+	_, err := h.v.db.ExecContext(context.Background(), `
+INSERT INTO relation_thresholds (id, relation_type, min_confidence_to_persist, min_confidence_to_surface, origin)
+VALUES (?, ?, ?, ?, 'user')`,
+		"threshold-"+relType, relType, persist, surface)
+	if err != nil {
+		t.Fatalf("seeding a pinned relation_thresholds row for %s: %v", relType, err)
+	}
+}
+
 // TestRelationRepo_Contract runs the same repocontract.RunRelationRepo suite
 // the in-memory fake answers at L2, now against a real temporary SQLite
 // vault at L3 — design D6's "answered twice" standing rule.

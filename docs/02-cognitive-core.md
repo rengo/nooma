@@ -1550,9 +1550,10 @@ boot catch-up — the two are one body of work behind two triggers.
    earlier in the same pass, would then see the consolidation pass itself as a user
    (`internal/core/consolidation.Reweight`).
 7. **pattern_eval**: runs the pattern watchers (§7): goal stagnation, mental load accumulation.
-8. **learn**: the learning module consumes new signals (§9). ALWAYS last. In M2 this slot
-   performs no work and writes no `decision_log` row — the phase exists as a no-op placeholder
-   occupying the slot; M5 fills it.
+8. **learn**: the learning module consumes new signals (§9). ALWAYS last. Through M4 this slot
+   performed no work. Since M5 it runs the relation rule for every type with typed verdicts
+   (§9), writes each change stamped with the pass's own instant, and records it as one
+   `consolidate.learn.relation_threshold` row. A night that changes nothing writes nothing.
 
 Every decision with an effect (archive, connect, derive, adjust) writes to the
 `decision_log` (§11).
@@ -2211,8 +2212,17 @@ the learner does not count it.
   - A type the user pinned is never written, and a bar that is not a finite number is left
     alone.
 
-  The rule ships ahead of its wiring: the nightly `learn` slot does not run it yet (M5 link 2c,
-  [`05-build-plan.md`](05-build-plan.md)).
+  - A bar outside [0.20, 0.90], which only a person can have set, is pulled to the nearer bound
+    in a single change when the evidence points toward it, and never moved away from the range.
+
+  The nightly `learn` slot (§6 item 8) runs the rule for every type with typed verdicts, from
+  `SignalRepo.RelationVerdicts` and the type's `relation_thresholds` row. A change is written
+  stamped `adjusted_at` with the pass's own instant, so the next night counts only what came
+  after, and a row the user pinned (`origin = 'user'`) is refused by the store itself as well.
+  Each change is one `consolidate.learn.relation_threshold` row. Its rationale says what moved
+  and why ("raised the same_topic bar 0.30 → 0.35: you rejected 6 of the last 8 same_topic links
+  Nooma made"). Its context carries the previous and next pair, the counts and the sample's
+  signal ids, newest first.
 - **Goal check-in cadence**: learns from whether the user RESPONDED (`responded_at`), not from
   whether it was delivered (`surfaced_at`) — 5 nudges with no response are 5 ignored ones.
   Systematically ignoring lengthens the interval (21 → 28 days); engaging shortens it.

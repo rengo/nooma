@@ -83,6 +83,36 @@ LIMIT ?`
 	if err != nil {
 		return nil, fmt.Errorf("reading signals since %s: %w", t, err)
 	}
+	out, err := scanSignals(rows)
+	if err != nil {
+		return nil, fmt.Errorf("reading signals since %s: %w", t, err)
+	}
+	return out, nil
+}
+
+// RelationVerdicts implements ports.SignalRepo: the typed relation verdicts,
+// ORDER BY occurred_at, id — the learn pass's evidence (M5 link 2c).
+func (r *SignalRepo) RelationVerdicts(ctx context.Context) ([]ports.Signal, error) {
+	const q = `
+SELECT id, signal_type, valence, target_kind, target_id, decision_action, relation_type, magnitude, context, occurred_at
+FROM learning_signals
+WHERE signal_type IN ('relation_reject', 'relation_confirm') AND relation_type IS NOT NULL
+ORDER BY occurred_at, id`
+
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("reading relation verdicts: %w", err)
+	}
+	out, err := scanSignals(rows)
+	if err != nil {
+		return nil, fmt.Errorf("reading relation verdicts: %w", err)
+	}
+	return out, nil
+}
+
+// scanSignals reads every learning_signals row of rows, in the column order
+// Since and RelationVerdicts both select, and closes rows.
+func scanSignals(rows *sql.Rows) ([]ports.Signal, error) {
 	defer func() { _ = rows.Close() }()
 
 	var out []ports.Signal
@@ -114,10 +144,7 @@ LIMIT ?`
 			OccurredAt:     at,
 		})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("reading signals since %s: %w", t, err)
-	}
-	return out, nil
+	return out, rows.Err()
 }
 
 // targetKindToNull converts a possibly-nil *ports.TargetKind into the SQL

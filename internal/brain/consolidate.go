@@ -58,10 +58,14 @@ type ConsolidateService struct {
 // connect's persist step queues a pending question when ProposeRelation's
 // Band is Uncertain — the same widen-at-the-end-of-the-parameter-list
 // convention state (above) already established.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo, questions ports.PendingQuestionRepo) *ConsolidateService {
+//
+// signals is last for the same reason questions is: an addition to a
+// signature every caller spells out (M5 link 2c). It is the learn slot's
+// evidence; nil learns nothing.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo, questions ports.PendingQuestionRepo, signals ports.SignalRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state, questions: questions},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state, questions: questions, signals: signals},
 	}
 }
 
@@ -196,6 +200,9 @@ type consolidateRunner struct {
 	// questions is connect's own m3e widening: a pending question is
 	// queued when ProposeRelation's Band is Uncertain (design §3.4).
 	questions ports.PendingQuestionRepo
+	// signals is the learn slot's evidence (M5 link 2c); nil learns
+	// nothing.
+	signals ports.SignalRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -1374,9 +1381,8 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 // one). report accumulates every corrupted id a phase's own read refuses
 // (design §3.3(e)) — the one place a refusal is surfaced, never in
 // decision_log (spec R4.2's MUST NOT). PR 11 is the last phase-IO PR:
-// every arm but learn's now wires real I/O (design §6.3 slots 1-8);
-// learn's own arm performs no work, ever (owner ruling 3), by design
-// rather than by omission. default names the unhandled phase rather than
+// every arm wires real I/O (design §6.3 slots 1-8); learn's arm, a no-op
+// by owner ruling 3 through M4, runs the relation rule since M5. default names the unhandled phase rather than
 // silently doing nothing, so a ninth phase added to Order() without a
 // matching case fails loudly here instead of being skipped.
 func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, pass passContext, report *ConsolidateReport) error {
@@ -1468,8 +1474,11 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			}
 		}
 	case consolidation.PhaseLearn:
-		// No work, ever (owner ruling 3) — this arm exists so Order()'s
-		// last slot is reached and reported, and performs nothing.
+		// M5 overturns owner ruling 3 ("no work, ever"): the learn slot
+		// runs the relation rule (doc 02 §9, ADR-0053).
+		if err := r.learn(ctx, pass.now); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("consolidate: %w: %s", consolidation.ErrUnknownPhase, p)
 	}

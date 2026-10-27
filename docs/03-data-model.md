@@ -210,7 +210,9 @@ CREATE TABLE relation_thresholds (
   id                         TEXT PRIMARY KEY,
   relation_type              TEXT NOT NULL UNIQUE,
   min_confidence_to_persist  REAL NOT NULL DEFAULT 0.3,
-  min_confidence_to_surface  REAL NOT NULL DEFAULT 0.5
+  min_confidence_to_surface  REAL NOT NULL DEFAULT 0.5,
+  origin                     TEXT NOT NULL DEFAULT 'learned' CHECK (origin IN ('learned', 'user')),  -- user = a pin the learn pass never overwrites
+  adjusted_at                TEXT                          -- the learn pass's last change; NULL = never
 );
 
 CREATE TABLE calibration (                       -- generic auto-tuned knobs

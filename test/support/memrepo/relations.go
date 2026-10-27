@@ -2,6 +2,7 @@ package memrepo
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -25,7 +26,7 @@ type Relations struct {
 	byKey map[relationKey]ports.Relation
 	// thresholds holds relation_thresholds rows, keyed by relation_type —
 	// the column's own UNIQUE constraint (migration 0002:32).
-	thresholds map[string]relation.Thresholds
+	thresholds map[string]ports.LearnedThreshold
 	// lastTouchedAt holds each unit id's last_touched_at, set via
 	// SetLastTouchedAt — Evidence's join reads this per endpoint. This fake
 	// tracks no other unit column: it exists only to answer this one join,
@@ -46,7 +47,7 @@ var _ ports.RelationRepo = (*Relations)(nil)
 func NewRelations() *Relations {
 	return &Relations{
 		byKey:         make(map[relationKey]ports.Relation),
-		thresholds:    make(map[string]relation.Thresholds),
+		thresholds:    make(map[string]ports.LearnedThreshold),
 		lastTouchedAt: make(map[string]time.Time),
 	}
 }
@@ -65,7 +66,29 @@ func (r *Relations) EnsureUnit(_ *testing.T, _ string) {}
 func (r *Relations) SeedThreshold(_ *testing.T, relType string, persist, surface float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.thresholds[relType] = relation.Thresholds{Persist: persist, Surface: surface}
+	r.thresholds[relType] = ports.LearnedThreshold{RelationType: relType,
+		Thresholds: relation.Thresholds{Persist: persist, Surface: surface}, Origin: ports.ThresholdOriginLearned}
+}
+
+// SeedPinnedThreshold implements repocontract.RelationHarness: a row the user
+// set, origin user.
+func (r *Relations) SeedPinnedThreshold(_ *testing.T, relType string, persist, surface float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.thresholds[relType] = ports.LearnedThreshold{RelationType: relType,
+		Thresholds: relation.Thresholds{Persist: persist, Surface: surface}, Origin: ports.ThresholdOriginUser}
+}
+
+// LearnThresholds implements ports.RelationRepo, refusing a pinned row as
+// the store's WHERE does.
+func (r *Relations) LearnThresholds(_ context.Context, relType string, t relation.Thresholds, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.thresholds[relType].Origin == ports.ThresholdOriginUser {
+		return fmt.Errorf("relation type %s: %w", relType, ports.ErrThresholdsPinned)
+	}
+	r.thresholds[relType] = ports.LearnedThreshold{RelationType: relType, Thresholds: t, Origin: ports.ThresholdOriginLearned, AdjustedAt: &at}
+	return nil
 }
 
 // SetLastTouchedAt implements repocontract.RelationHarness. Records id's
@@ -130,10 +153,11 @@ func (r *Relations) ThresholdsFor(_ context.Context, relType string) (*relation.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	t, ok := r.thresholds[relType]
+	lt, ok := r.thresholds[relType]
 	if !ok {
 		return nil, nil
 	}
+	t := lt.Thresholds
 	return &t, nil
 }
 
@@ -144,8 +168,8 @@ func (r *Relations) LearnedThresholds(context.Context) ([]ports.LearnedThreshold
 	defer r.mu.Unlock()
 
 	var out []ports.LearnedThreshold
-	for relType, t := range r.thresholds {
-		out = append(out, ports.LearnedThreshold{RelationType: relType, Thresholds: t})
+	for _, lt := range r.thresholds {
+		out = append(out, lt)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].RelationType < out[j].RelationType })
 	return out, nil

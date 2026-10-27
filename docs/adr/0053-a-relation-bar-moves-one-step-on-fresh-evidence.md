@@ -29,7 +29,9 @@ relation.
    sample can move the bar one way only.
 3. **Bounds.** Learning keeps persist on a hundredth within [0.20, 0.90]. A step that would leave
    it unchanged, or move it the wrong way at a bound, is no change. Surface rises to persist when
-   persist would pass it, and learning never lowers surface.
+   persist would pass it, and learning never lowers surface. A bar outside the range, which only
+   a person can have set, is pulled to the nearer bound in a single change when the evidence
+   points toward it, even if that is more than one step, and is never moved further away.
 4. **Hysteresis and cooldown.** After a change, the verdicts it counted never count again, and the
    type is not judged for 7 days. A night of twelve deletions moves the bar one step, and a second
    step needs a week and six fresh verdicts.

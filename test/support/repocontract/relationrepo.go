@@ -2,6 +2,7 @@ package repocontract
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -44,6 +45,11 @@ type RelationHarness interface {
 	// caller would be this suite is exactly the shape m1a-substrate D7
 	// rejected for TranscriptionProvider).
 	SeedThreshold(t *testing.T, relType string, persist, surface float64)
+
+	// SeedPinnedThreshold inserts a relation_thresholds row the user set
+	// (origin user, a pin). No port writes one yet: the summary's undo and
+	// pin (M5 link 6) will. The learn pass must refuse to overwrite it.
+	SeedPinnedThreshold(t *testing.T, relType string, persist, surface float64)
 
 	// SetLastTouchedAt sets id's last_touched_at to at — Evidence's join
 	// reads this column from both a relation's endpoints (design §4.2), and
@@ -438,11 +444,63 @@ func RunLearnedThresholds(t *testing.T, newRepo func(t *testing.T) RelationHarne
 			t.Fatalf("LearnedThresholds: %v", err)
 		}
 		want := []ports.LearnedThreshold{
-			{RelationType: "duplicate", Thresholds: relation.Thresholds{Persist: 0.2, Surface: 0.8}},
-			{RelationType: "same_topic", Thresholds: relation.Thresholds{Persist: 0.4, Surface: 0.6}},
+			{RelationType: "duplicate", Thresholds: relation.Thresholds{Persist: 0.2, Surface: 0.8}, Origin: ports.ThresholdOriginLearned},
+			{RelationType: "same_topic", Thresholds: relation.Thresholds{Persist: 0.4, Surface: 0.6}, Origin: ports.ThresholdOriginLearned},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("LearnedThresholds() = %+v, want %+v", got, want)
+		}
+	})
+
+	at := time.Date(2026, 10, 28, 3, 0, 0, 0, time.UTC)
+	readOne := func(t *testing.T, repo RelationHarness) ports.LearnedThreshold {
+		t.Helper()
+		got, err := repo.LearnedThresholds(ctx)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("LearnedThresholds() = %+v, %v; want one row", got, err)
+		}
+		return got[0]
+	}
+
+	// M5 link 2c (doc 02 §9, ADR-0053): the learn pass's one write.
+	t.Run("LearnThresholds writes a learned row stamped with its instant", func(t *testing.T) {
+		repo := newRepo(t)
+		next := relation.Thresholds{Persist: 0.35, Surface: 0.5}
+		if err := repo.LearnThresholds(ctx, "same_topic", next, at); err != nil {
+			t.Fatalf("LearnThresholds: %v", err)
+		}
+		got := readOne(t, repo)
+		if got.RelationType != "same_topic" || got.Thresholds != next || got.Origin != ports.ThresholdOriginLearned ||
+			got.AdjustedAt == nil || !got.AdjustedAt.Equal(at) {
+			t.Errorf("row = %+v, want same_topic at %v, learned, adjusted at %v", got, next, at)
+		}
+		if row, err := repo.ThresholdsFor(ctx, "same_topic"); err != nil || row == nil || *row != next {
+			t.Errorf("ThresholdsFor = %v, %v; want %v", row, err, next)
+		}
+	})
+
+	t.Run("LearnThresholds revises a learned row in place", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.SeedThreshold(t, "same_topic", 0.35, 0.5)
+		next := relation.Thresholds{Persist: 0.4, Surface: 0.5}
+		if err := repo.LearnThresholds(ctx, "same_topic", next, at); err != nil {
+			t.Fatalf("LearnThresholds: %v", err)
+		}
+		if got := readOne(t, repo); got.Thresholds != next || got.AdjustedAt == nil || !got.AdjustedAt.Equal(at) {
+			t.Errorf("row = %+v, want %v adjusted at %v", got, next, at)
+		}
+	})
+
+	t.Run("LearnThresholds refuses a row the user pinned and changes nothing", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.SeedPinnedThreshold(t, "same_date", 0.9, 0.95)
+		err := repo.LearnThresholds(ctx, "same_date", relation.Thresholds{Persist: 0.85, Surface: 0.95}, at)
+		if !errors.Is(err, ports.ErrThresholdsPinned) {
+			t.Fatalf("LearnThresholds over a pin = %v, want ErrThresholdsPinned", err)
+		}
+		got := readOne(t, repo)
+		if got.Thresholds != (relation.Thresholds{Persist: 0.9, Surface: 0.95}) || got.Origin != ports.ThresholdOriginUser || got.AdjustedAt != nil {
+			t.Errorf("row = %+v, want the user's 0.9/0.95, origin user, untouched", got)
 		}
 	})
 }

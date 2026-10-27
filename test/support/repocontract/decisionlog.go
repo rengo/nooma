@@ -349,6 +349,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionReweightBoostApplied:            true,
 			ports.ActionPatternEvalStagnationFound:      true,
 			ports.ActionPatternEvalLoadHypothesisOpened: true,
+			ports.ActionLearnRelationThreshold:          true,
 			ports.ActionConnectQuestionCreated:          true,
 			ports.ActionCheckDigestQuestionAsked:        true,
 			ports.ActionCheckQuestionExpired:            true,

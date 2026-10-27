@@ -163,8 +163,9 @@ did and why.
    the ones that keep recurring ([doc 02 §10](02-cognitive-core.md#10-the-self-model)).
 6. **Looks for patterns.** `pattern_eval` watches for a goal that has gone quiet and for an
    accumulation of open mental-load items ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
-7. **Leaves `learn` empty.** The slot exists and does nothing yet; it belongs to the learner
-   (see [M5](#the-learner-m5-in-progress)).
+7. **Learns.** `learn` moves a kind of link's bar one step when you rejected, or confirmed, 6 of
+   the last 8 links of that kind Nooma made, at most once a week per kind (see
+   [M5](#the-learner-m5-in-progress)).
 8. **Tells the story.** Every decision with an effect writes a row to the `decision_log` with a
    rationale naming the specific unit, relation or belief ([doc 02 §11](02-cognitive-core.md#11-the-glass-box)).
    `/ui/activity` tells it newest first, and `sqlite3 <vault>` can read it too (see the
@@ -372,7 +373,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Vault, `init`, `serve`, `status`, `doctor`, `version` | Shipped in M0 | [05 §M0](05-build-plan.md#m0--skeleton-binary--vault) |
 | Capture, classification, hybrid recall, correction; HTTP API and `nooma capture`; provider wizard and `doctor` quality gate | Shipped in M1 | [05 §M1](05-build-plan.md#m1--capture-and-recall), doc 02 §5 |
 | Weight, decay, the two focuses (as pure functions) | Shipped in M2 | doc 02 §2, §3 |
-| Nightly consolidation at 03:00, boot catch-up, `nooma consolidate`, `decision_log` | Shipped in M2 (`learn` is an empty slot) | [05 §M2](05-build-plan.md#m2--sleep-and-weight), doc 02 §6, §11 |
+| Nightly consolidation at 03:00, boot catch-up, `nooma consolidate`, `decision_log` | Shipped in M2; `learn` runs since M5 | [05 §M2](05-build-plan.md#m2--sleep-and-weight), doc 02 §6, §11 |
 | `/start` greets in the sender's Telegram language, Spanish as the fallback, and an unknown `/command` says so, both without the model | Shipped | doc 02 §5 |
 | Telegram channel, triggers, push, morning digest, check-ins, ephemeral timers | Shipped in M3 | [05 §M3](05-build-plan.md#m3--the-mouth-telegram--prospection), doc 02 §7, §8 |
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
@@ -396,7 +397,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
 | Timer list and cancel from chat: "¿qué temporizadores tengo?" lists the live timers, "cancelá el del horno" cancels the one it names through that list, asks which when it cannot tell | Shipped | doc 02 §8; ADR-0051 |
 | Timer list and cancel from the UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
-| The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | In progress: M5. Signals from every surface shipped (ADR-0052); the `learn` pass and the summary planned | doc 02 §9; 05 §M5 |
+| The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | In progress: M5. Signals from every surface (ADR-0052) and the relation `learn` pass (ADR-0053) shipped; goal cadence and the summary planned | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |
 | Tracking UI, multi-format perception, voice, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
@@ -434,9 +435,10 @@ forget to configure.
 
 ## The learner (M5, in progress)
 
-> **In progress.** Only step 1 runs today: each verdict is recorded as a typed learning signal,
-> from the graph, the chat and the morning digest alike ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md)).
-> The `learn` phase is still an empty slot ([doc 02 §6 item 8](02-cognitive-core.md#6-nightly-consolidation-sleep)). The story below
+> **In progress.** Steps 1 and 2 run today: each verdict is recorded as a typed learning signal,
+> from the graph, the chat and the morning digest alike ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md)),
+> and the nightly `learn` phase moves a kind of link's bar from them ([ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md)).
+> Steps 3 and 4 are planned. The story below
 > is the design target in [doc 02 §9](02-cognitive-core.md#9-learning--the-prediction-error-loop).
 > Every threshold, window and interval M5 uses is **decided by M5**; none is fixed here.
 

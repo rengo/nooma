@@ -194,6 +194,10 @@ const (
 	// separately, since they carry different Context shapes.
 	ActionPatternEvalStagnationFound      DecisionAction = "consolidate.pattern_eval.stagnation_found"
 	ActionPatternEvalLoadHypothesisOpened DecisionAction = "consolidate.pattern_eval.load_hypothesis_opened"
+	// ActionLearnRelationThreshold is the learn slot's one effect kind (M5
+	// link 2c): a relation type's thresholds moved one step, with the
+	// evidence it was decided on.
+	ActionLearnRelationThreshold DecisionAction = "consolidate.learn.relation_threshold"
 
 	// ActionConnectQuestionCreated is m3e's own addition (I09's storing
 	// half): an Uncertain-band relation was stored and a pending_questions
@@ -295,7 +299,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
 		ActionDeriveBeliefReinforced, ActionDeriveBeliefSkipped, ActionDeriveRetiredEmbedFailed,
 		ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
-		ActionPatternEvalLoadHypothesisOpened,
+		ActionPatternEvalLoadHypothesisOpened, ActionLearnRelationThreshold,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionRelationConfirmed, ActionRelationRejected,

@@ -162,7 +162,7 @@ func (w *shieldWorld) runCtx(ctx context.Context) (ConsolidateReport, error) {
 		judge = w.judge
 	}
 	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), memrepo.NewLexical(), w.units, w.provider)
-	svc := NewConsolidateService(fixedClock{w.now}, cfg, w.units, memrepo.NewRelations(), &seqIDs{}, w.log, rec, judge, w.selfModel, memrepo.NewState(), memrepo.NewPendingQuestions())
+	svc := NewConsolidateService(fixedClock{w.now}, cfg, w.units, memrepo.NewRelations(), &seqIDs{}, w.log, rec, judge, w.selfModel, memrepo.NewState(), memrepo.NewPendingQuestions(), nil)
 	phase := consolidation.PhaseDerive
 	return svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase})
 }

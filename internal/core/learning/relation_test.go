@@ -271,3 +271,19 @@ func TestRelationLearningConstants_ArePinned(t *testing.T) {
 		t.Error("both directions could move on one sample: the threshold to move must be a majority")
 	}
 }
+
+// TestStepRelation_OnlyAKnownMakerOfNoomasCounts (#407 review): "Nooma made
+// it" is an allowlist, system or consolidation. The maker is read back from a
+// signal's stored context, so an empty or unknown one is a relation nobody can
+// vouch Nooma made, and it is not evidence.
+func TestStepRelation_OnlyAKnownMakerOfNoomasCounts(t *testing.T) {
+	for _, maker := range []relation.CreatedBy{"", "robot", "System"} {
+		vs := verdicts(6, 0)
+		for i := range vs {
+			vs[i].CreatedBy = maker
+		}
+		if c, ok := step(t, TypeState{Current: defaults}, vs); ok {
+			t.Errorf("moved on relations made by %q: %+v", maker, c)
+		}
+	}
+}

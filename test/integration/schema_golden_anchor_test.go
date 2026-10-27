@@ -129,7 +129,8 @@ func TestSchemaGoldenAnchorsExpectedObjects(t *testing.T) {
 		// 0012_conversation_turns.sql
 		"table conversation_turns",
 		"index idx_conversation_turns_chat",
-		// 0013_relation_signal_types.sql types existing rows and creates nothing.
+		// 0013_relation_signal_types.sql types existing rows and creates nothing;
+		// 0014_relation_threshold_origin.sql adds columns to relation_thresholds.
 	}
 
 	requiredSet := make(map[string]bool, len(required))

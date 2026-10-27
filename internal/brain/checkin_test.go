@@ -267,6 +267,10 @@ func (s *recordingSignals) Since(context.Context, time.Time, int) ([]ports.Signa
 	return nil, nil
 }
 
+func (s *recordingSignals) RelationVerdicts(context.Context) ([]ports.Signal, error) {
+	return nil, nil
+}
+
 // deletingRelations records deletions into the same event log.
 type deletingRelations struct {
 	ports.RelationRepo

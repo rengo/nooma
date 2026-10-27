@@ -126,7 +126,7 @@ WHERE relation_type = ?`
 // row, ORDER BY relation_type (UNIQUE, so the order is total).
 func (r *RelationRepo) LearnedThresholds(ctx context.Context) ([]ports.LearnedThreshold, error) {
 	const q = `
-SELECT relation_type, min_confidence_to_persist, min_confidence_to_surface
+SELECT relation_type, min_confidence_to_persist, min_confidence_to_surface, origin, adjusted_at
 FROM relation_thresholds
 ORDER BY relation_type`
 
@@ -139,8 +139,18 @@ ORDER BY relation_type`
 	var out []ports.LearnedThreshold
 	for rows.Next() {
 		var lt ports.LearnedThreshold
-		if err := rows.Scan(&lt.RelationType, &lt.Persist, &lt.Surface); err != nil {
+		var origin string
+		var adjusted sql.NullString
+		if err := rows.Scan(&lt.RelationType, &lt.Persist, &lt.Surface, &origin, &adjusted); err != nil {
 			return nil, fmt.Errorf("scanning a learned threshold: %w", err)
+		}
+		lt.Origin = ports.ThresholdOrigin(origin)
+		if adjusted.Valid {
+			at, err := time.Parse(unitTimeLayout, adjusted.String)
+			if err != nil {
+				return nil, fmt.Errorf("relation type %q: adjusted_at: %w", lt.RelationType, err)
+			}
+			lt.AdjustedAt = &at
 		}
 		out = append(out, lt)
 	}
@@ -148,6 +158,35 @@ ORDER BY relation_type`
 		return nil, fmt.Errorf("reading learned thresholds: %w", err)
 	}
 	return out, nil
+}
+
+// LearnThresholds implements ports.RelationRepo: one statement that creates
+// the type's row or revises it in place, and whose WHERE refuses a pinned
+// row, so a pin set between the learn pass's read and this write still wins.
+// A row with a new id on insert: relation_thresholds.id is an opaque key
+// nothing reads, and the type is the identity.
+func (r *RelationRepo) LearnThresholds(ctx context.Context, relType string, t relation.Thresholds, at time.Time) error {
+	const q = `
+INSERT INTO relation_thresholds (id, relation_type, min_confidence_to_persist, min_confidence_to_surface, origin, adjusted_at)
+VALUES (lower(hex(randomblob(16))), ?, ?, ?, 'learned', ?)
+ON CONFLICT (relation_type) DO UPDATE SET
+  min_confidence_to_persist = excluded.min_confidence_to_persist,
+  min_confidence_to_surface = excluded.min_confidence_to_surface,
+  adjusted_at = excluded.adjusted_at
+WHERE relation_thresholds.origin = 'learned'`
+
+	res, err := r.db.ExecContext(ctx, q, relType, t.Persist, t.Surface, at.UTC().Format(unitTimeLayout))
+	if err != nil {
+		return fmt.Errorf("learning thresholds for relation type %s: %w", relType, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("learning thresholds for relation type %s: %w", relType, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("relation type %s: %w", relType, ports.ErrThresholdsPinned)
+	}
+	return nil
 }
 
 // Evidence implements ports.RelationRepo — the join design §4.2 fixed:

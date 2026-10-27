@@ -31,12 +31,30 @@ type Relation struct {
 	CreatedAt  time.Time
 }
 
-// LearnedThreshold is one relation_thresholds row: a relation type and the
-// persist/surface pair the learning pass stored for it.
+// LearnedThreshold is one relation_thresholds row: a relation type, the
+// persist/surface pair stored for it, who set it and when the learn pass last
+// changed it.
 type LearnedThreshold struct {
 	RelationType string
 	relation.Thresholds
+	// Origin is learned, or user: a pin the learn pass never overwrites.
+	Origin ThresholdOrigin
+	// AdjustedAt is the learn pass's last change of the row, nil when it
+	// never changed it (migration 0014).
+	AdjustedAt *time.Time
 }
+
+// ThresholdOrigin is who set a relation_thresholds row (migration 0014).
+type ThresholdOrigin string
+
+const (
+	ThresholdOriginLearned ThresholdOrigin = "learned"
+	ThresholdOriginUser    ThresholdOrigin = "user"
+)
+
+// ErrThresholdsPinned is LearnThresholds refusing a row the user set: the
+// user's word wins (doc 02 §9, ADR-0053).
+var ErrThresholdsPinned = errors.New("relation thresholds are pinned by the user")
 
 // RelationRepo is the repository port over relations — design D8, spec R5.3.
 //
@@ -94,6 +112,12 @@ type RelationRepo interface {
 	// relation_type, for the admin page to show read-only (m4e2-admin design
 	// §3.2). An empty table returns a nil slice and a nil error, as both stores do.
 	LearnedThresholds(ctx context.Context) ([]LearnedThreshold, error)
+
+	// LearnThresholds writes relType's thresholds as the learn pass decided
+	// them at at: origin learned, adjusted_at at, creating the row when the
+	// type has none. It refuses a row the user pinned with
+	// ErrThresholdsPinned and changes nothing (doc 02 §9, M5 link 2c).
+	LearnThresholds(ctx context.Context, relType string, t relation.Thresholds, at time.Time) error
 
 	// Evidence returns every relation joined to both endpoints'
 	// last_touched_at, in one read — strengthen's own input (design §4.2,

@@ -78,6 +78,35 @@ func RunSignalRepo(t *testing.T, newRepo func(t *testing.T) ports.SignalRepo) {
 		}
 	})
 
+	// M5 link 2c: the learn pass reads every typed relation verdict.
+	t.Run("RelationVerdicts returns the typed relation verdicts, oldest first", func(t *testing.T) {
+		ctx := context.Background()
+		repo := newRepo(t)
+		base := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+		typ := "same_topic"
+		for i, s := range []ports.Signal{
+			{ID: "b-confirm", Type: ports.SignalRelationConfirm, Valence: ports.ValencePositive, RelationType: &typ},
+			{ID: "a-reject", Type: ports.SignalRelationReject, Valence: ports.ValenceNegative, RelationType: &typ},
+			{ID: "untyped", Type: ports.SignalRelationReject, Valence: ports.ValenceNegative},
+			{ID: "nudge", Type: ports.SignalNudgeIgnored, Valence: ports.ValenceNegative},
+		} {
+			s.Context, s.OccurredAt = json.RawMessage(`{"created_by":"consolidation"}`), base.Add(time.Duration(i)*time.Minute)
+			if err := repo.Record(ctx, s); err != nil {
+				t.Fatalf("Record %s: %v", s.ID, err)
+			}
+		}
+		got, err := repo.RelationVerdicts(ctx)
+		if err != nil {
+			t.Fatalf("RelationVerdicts: %v", err)
+		}
+		if len(got) != 2 || got[0].ID != "b-confirm" || got[1].ID != "a-reject" {
+			t.Fatalf("RelationVerdicts = %+v, want b-confirm then a-reject", got)
+		}
+		if got[1].RelationType == nil || *got[1].RelationType != typ || string(got[1].Context) != `{"created_by":"consolidation"}` {
+			t.Errorf("a verdict came back as %+v", got[1])
+		}
+	})
+
 	t.Run("Record then Since returns the signal", func(t *testing.T) {
 		repo := newRepo(t)
 		ctx := context.Background()
