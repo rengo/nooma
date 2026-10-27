@@ -1,0 +1,15 @@
+{
+  "id": "judge-same-day-meeting-and-bill-is-new",
+  "task": "relation_evaluation",
+  "message": "Team meeting on Monday at 10",
+  "candidates": [
+    {
+      "id": "c7d2e9f1-4a3b-4c5d-8e6f-7a8b9c0d1e23",
+      "content": "Pay the electricity bill on Monday"
+    }
+  ],
+  "record": true,
+  "expect": {
+    "judge_outcome": "new"
+  }
+}

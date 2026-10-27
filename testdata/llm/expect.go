@@ -119,6 +119,11 @@ type Expect struct {
 	// cancel cancels.
 	TimerRequest string `json:"timer_request,omitempty"`
 	TimerTarget  string `json:"timer_target,omitempty"`
+
+	// JudgeOutcome is what a relation_evaluation case should store: new,
+	// related or duplicate, read by its effect at the default thresholds
+	// (internal/reading.ReplayJudge). It is the judge set's only field.
+	JudgeOutcome string `json:"judge_outcome,omitempty"`
 }
 
 // TimerEntry is one live timer a case's prompt lists, soonest first: what it

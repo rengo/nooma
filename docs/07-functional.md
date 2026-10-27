@@ -155,8 +155,9 @@ did and why.
    ([§1](02-cognitive-core.md#1-the-unit--the-atom)).
 4. **Connects what belongs together.** `connect` picks the units you touched recently and runs
    the same hybrid recall as capture to propose relations, each judged by the provider and kept
-   or dropped by its confidence ([§4](02-cognitive-core.md#4-relations)). A relation the judge
-   is only moderately sure of is stored **and** queued as a question (see flow C).
+   or dropped by its confidence ([§4](02-cognitive-core.md#4-relations)). Two things are
+   connected by what they are about, never only because they fall on the same day. A relation
+   the judge is only moderately sure of is stored **and** queued as a question (see flow C).
 5. **Derives beliefs.** `derive` proposes statements about *you* (a value, a goal, a
    preference), merges them with existing beliefs instead of duplicating them, and reinforces
    the ones that keep recurring ([doc 02 §10](02-cognitive-core.md#10-the-self-model)).

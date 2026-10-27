@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/classify"
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/selfmodel"
@@ -428,5 +429,85 @@ func TestRecordNeverSendsAnythingFromTheVault(t *testing.T) {
 	}
 	if _, recorded := readFields(t, path)["response"]; !recorded {
 		t.Error("the phrasing was not recorded through the real provider path")
+	}
+}
+
+// TestRecordSendsAJudgeCaseToTheJudge: a relation_evaluation case of the judge
+// set is recorded through the vault's relation_evaluation provider, with the
+// prompt production builds (brain.JudgePrompt), and what it wrote replays.
+func TestRecordSendsAJudgeCaseToTheJudge(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "judge-a.json")
+	body := `{
+  "id": "judge-a",
+  "task": "relation_evaluation",
+  "message": "Turno con el dentista el jueves 10 a las 15",
+  "candidates": [
+    {
+      "id": "6f0c9a52-8a7e-4d1e-9b0f-2c3d4e5f6a7b",
+      "content": "Comprar café el jueves 10"
+    }
+  ],
+  "record": true,
+  "expect": {
+    "judge_outcome": "new"
+  }
+}
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const reply = `{"outcome":"new"}`
+	classifier := &scriptedLLM{reply: recordReply}
+	judge := &scriptedLLM{reply: reply}
+	opts := recordOpts(dir, classifier)
+	opts.judge = &recordProvider{provider: judge, name: "fake-judge", model: "judge-model"}
+	if err := recordPhrasings(context.Background(), opts, &bytes.Buffer{}); err != nil {
+		t.Fatalf("recordPhrasings = %v", err)
+	}
+	if len(classifier.prompts) != 0 {
+		t.Errorf("the classify provider was sent %d judge prompts", len(classifier.prompts))
+	}
+	if len(judge.reqs) != 1 || judge.reqs[0].Task != "relation_evaluation" || !judge.reqs[0].JSONOnly {
+		t.Fatalf("judge requests = %+v, want one production relation_evaluation JSON request", judge.reqs)
+	}
+	want := brain.JudgePrompt(unit.Unit{Content: "Turno con el dentista el jueves 10 a las 15"},
+		[]unit.Unit{{ID: "6f0c9a52-8a7e-4d1e-9b0f-2c3d4e5f6a7b", Content: "Comprar café el jueves 10"}})
+	if judge.prompts[0] != want {
+		t.Errorf("sent %q, want brain.JudgePrompt's own output %q", judge.prompts[0], want)
+	}
+	got := readFields(t, path)
+	if string(got["provider"]) != `"fake-judge"` {
+		t.Errorf("provider = %s, want the judge's binding", got["provider"])
+	}
+	if _, has := got["now"]; has {
+		t.Error("a judge case was given a now: its prompt reads no clock")
+	}
+
+	data, _ := os.ReadFile(path)
+	var c llm.Case
+	if err := json.Unmarshal(data, &c); err != nil {
+		t.Fatal(err)
+	}
+	if err := reading.ReplayJudge(c, want, reply); err != nil {
+		t.Errorf("the recorded judge case does not replay: %v", err)
+	}
+}
+
+// TestRecordRefusesAJudgeCaseWithNoJudge: a vault with nothing bound to
+// relation_evaluation cannot record a judge case, and says so before a call.
+func TestRecordRefusesAJudgeCaseWithNoJudge(t *testing.T) {
+	dir := t.TempDir()
+	body := `{"id":"judge-b","task":"relation_evaluation","message":"x","candidates":[{"id":"c","content":"y"}],"record":true,"expect":{"judge_outcome":"new"}}`
+	if err := os.WriteFile(filepath.Join(dir, "judge-b.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	classifier := &scriptedLLM{reply: recordReply}
+	err := recordPhrasings(context.Background(), recordOpts(dir, classifier), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "relation_evaluation") {
+		t.Errorf("recordPhrasings = %v, want a refusal naming relation_evaluation", err)
+	}
+	if len(classifier.prompts) != 0 {
+		t.Error("a call was spent")
 	}
 }

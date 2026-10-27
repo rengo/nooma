@@ -117,6 +117,16 @@ func TestRecordingsCompleteScript(t *testing.T) {
 	if !found {
 		t.Error("ci.yml's lint job (a required check) has no step running scripts/recordings-complete.sh")
 	}
+	// The judge set (doc 02 §4) is gated the same way, on its own directory:
+	// the script's default is the reminder set, so a step without the
+	// argument checks the reminders twice and the judge set never.
+	judged := false
+	for _, step := range wf.Jobs["lint"].Steps {
+		judged = judged || strings.Contains(step.Run, "scripts/recordings-complete.sh testdata/llm/judge")
+	}
+	if !judged {
+		t.Error("ci.yml's lint job has no step running scripts/recordings-complete.sh on testdata/llm/judge")
+	}
 
 	if strings.Contains(read("Makefile"), "recordings-complete") {
 		t.Error("check-all runs recordings-complete.sh: it must pass while phrasings still await their recording")

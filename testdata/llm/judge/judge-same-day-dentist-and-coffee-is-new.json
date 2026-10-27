@@ -1,0 +1,15 @@
+{
+  "id": "judge-same-day-dentist-and-coffee-is-new",
+  "task": "relation_evaluation",
+  "message": "Turno con el dentista el jueves 10 a las 15",
+  "candidates": [
+    {
+      "id": "3b8e2f4a-6c1d-4e7f-9a2b-5d6c7e8f9a01",
+      "content": "Comprar café el jueves 10"
+    }
+  ],
+  "record": true,
+  "expect": {
+    "judge_outcome": "new"
+  }
+}

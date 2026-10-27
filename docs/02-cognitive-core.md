@@ -423,6 +423,17 @@ degrades so far that the outcome, its confidence or its target is missing, no re
 and no decision is recorded. There is no effect to record — the same reason a read writes no row
 (§11).
 
+**A shared day is not a relation.** Two units are related by what they are about: the same
+person, place, thing, plan or subject. Falling on the same date or day, or both being on the
+schedule, is not a relation by itself, and the judge is told to answer `new` for it (the client's
+ruling of 2026-10-27). A calendar already shows what shares a day, and a link made from it is not
+harmless: it feeds focus adjacency (§3) and spreading activation (§2), so a dentist appointment
+linked to a coffee errand pulls one into the other's place. The rule is in the prompt both judge
+call sites build (`internal/brain.JudgePrompt`), and whether a model keeps it is measured by the
+judge's recorded phrasing set (`testdata/llm/judge/`, `docs/06-harness.md` §5): a dentist
+appointment and a coffee errand on one day must come back `new`, and the same appointment and the
+mouthwash that dentist prescribed, on that day, must still relate.
+
 **The judge answers about what it was shown.** A judgment whose target is not one of the
 candidates rendered into its own prompt stores no relation
 ([ADR-0026](adr/0026-the-judge-answers-about-what-it-was-shown.md)). Both judge call sites hand

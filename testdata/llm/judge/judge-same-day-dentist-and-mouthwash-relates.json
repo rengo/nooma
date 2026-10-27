@@ -1,0 +1,15 @@
+{
+  "id": "judge-same-day-dentist-and-mouthwash-relates",
+  "task": "relation_evaluation",
+  "message": "Turno con el dentista el jueves 10 a las 15",
+  "candidates": [
+    {
+      "id": "a41c7d93-2e5b-4f86-8b1a-0c9d8e7f6a52",
+      "content": "Comprar el enjuague que me dijo el dentista, el jueves 10"
+    }
+  ],
+  "record": true,
+  "expect": {
+    "judge_outcome": "related"
+  }
+}

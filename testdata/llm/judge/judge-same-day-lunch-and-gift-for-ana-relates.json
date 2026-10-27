@@ -1,0 +1,15 @@
+{
+  "id": "judge-same-day-lunch-and-gift-for-ana-relates",
+  "task": "relation_evaluation",
+  "message": "Lunch with Ana on Friday at 1pm",
+  "candidates": [
+    {
+      "id": "e9f0a1b2-3c4d-4e5f-a6b7-c8d9e0f1a234",
+      "content": "Buy Ana's birthday present on Friday"
+    }
+  ],
+  "record": true,
+  "expect": {
+    "judge_outcome": "related"
+  }
+}
