@@ -90,9 +90,17 @@ func (r checkRunner) expireCheckin(ctx context.Context, c ports.OpenCheckIn, now
 		}
 		return fmt.Errorf("check: close check-in %q: %w", c.ID, err)
 	}
-	return r.record(ctx, now, ports.ActionCheckCheckinExpired,
+	if err := r.record(ctx, now, ports.ActionCheckCheckinExpired,
 		fmt.Sprintf("check-in %q went unanswered and closed after %d re-ask(s); an answer no longer reaches it", c.ID, c.Payload.Reasks),
-		checkDetail{ID: c.ID})
+		checkDetail{ID: c.ID}); err != nil {
+		return err
+	}
+	// It reached the user and nobody answered: ignored (doc 02 §9 learns from
+	// the response, not the delivery). After the row (I12).
+	if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeIgnored, c.ID, c.UnitID, now); err != nil {
+		return fmt.Errorf("check: %w", err)
+	}
+	return nil
 }
 
 // checkinUnit is t's unit now, the zero unit when it has none or it is gone,

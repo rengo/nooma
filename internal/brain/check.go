@@ -74,11 +74,13 @@ func (l *idSet) clear() {
 // questions is last for the same reason NewConsolidateService puts it
 // last: it is m3e's own addition to a signature every other caller in this
 // tree already spells out, and appending it keeps that diff mechanical.
-func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo, keeper *FocusKeeper) *CheckService {
+// signals is last for the same reason (M5): a parameter rather than a With
+// option, so no wiring can leave the learner deaf without writing nil.
+func NewCheckService(clock ports.Clock, triggers ports.TriggerRepo, timers ports.TimerRepo, ids ports.IDGen, log ports.DecisionLog, channel ports.Channel, units ports.UnitRepo, state ports.StateRepo, llm ports.LLMProvider, conversation ports.ConversationID, questions ports.PendingQuestionRepo, keeper *FocusKeeper, signals ports.SignalRepo) *CheckService {
 	return &CheckService{
 		clock: clock,
 		run: checkRunner{
-			triggers: triggers, timers: timers, ids: ids, log: log,
+			triggers: triggers, timers: timers, ids: ids, log: log, signals: signals,
 			channel: channel, units: units, state: state, llm: llm,
 			conversation: conversation, questions: questions, focus: keeper,
 			loud: newIDSet(), outage: newIDSet(), unmarked: newIDSet(), unreadableCheckins: newIDSet(),
@@ -352,9 +354,12 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (report
 // the clock.
 type checkRunner struct {
 	triggers ports.TriggerRepo
-	timers   ports.TimerRepo
-	ids      ports.IDGen
-	log      ports.DecisionLog
+	// signals receives nudge_ignored when a check-in closes unanswered
+	// (I47). Nil records none: a test without a learner to teach.
+	signals ports.SignalRepo
+	timers  ports.TimerRepo
+	ids     ports.IDGen
+	log     ports.DecisionLog
 	// channel is where a delivery goes. Nil is legal and means this vault
 	// has no channel configured: the pass leaves its one-shot reminders as it
 	// found them (a recurring one still fires and expires), which is what

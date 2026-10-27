@@ -149,7 +149,7 @@ func (v *i37Vault) tryCheckAt(now time.Time, dry bool) (brain.CheckReport, error
 		}
 		v.clock = &i37Clock{}
 		v.svc = brain.NewCheckService(v.clock, repo, v.timers, &v.ids, v.log, channel,
-			v.units, memrepo.NewState(), nil, conversation, nil, nil)
+			v.units, memrepo.NewState(), nil, conversation, nil, nil, nil)
 	}
 	if v.cfg != nil {
 		v.svc.WithQuietHours(v.cfg)

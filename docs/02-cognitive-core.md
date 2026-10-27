@@ -2138,6 +2138,44 @@ tables: `learning_signals` (the raw record) and the tuned knobs (`relation_thres
 `relation_reject` is emitted right before the relation dies).
 **The signal layer is channel-agnostic**: the same signal arrives from chat or from the UI.
 
+**Every verdict the user gives emits its signal, on every surface it can be given from** (I47,
+[ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md)). The learner reads only the signals, so a
+verdict that emits none teaches it nothing:
+
+| The user… | Signal | Valence | Target | Surfaces |
+|---|---|---|---|---|
+| corrects a unit | `correction` | negative | unit | any capture (chat, UI, API) |
+| edits a belief's text | `belief_edit` | negative | belief | UI |
+| saves a belief Nooma wrote unchanged (a claim, §10) | `belief_edit` | positive | belief | UI |
+| retires a belief | `belief_delete` | negative | belief | UI |
+| deletes a relation, or answers "no" to its question | `relation_reject` | negative | relation | graph, chat |
+| confirms a relation, or answers "yes" to its question | `relation_confirm` | positive | relation | graph, chat |
+| answers a check-in done or engaged, or says a listed item is done (I42) | `nudge_engaged` | positive | trigger | any capture |
+| answers a check-in drop or declined | `nudge_declined` | negative | trigger | any capture |
+| puts a check-in off ("not yet", a bare "no") | `nudge_ack` | neutral | trigger | any capture |
+| lets a check-in that reached them close unanswered | `nudge_ignored` | negative | trigger | the morning digest's close |
+| confirms or denies the load hypothesis | `state_confirmed` / `state_denied` | positive / negative | — | chat |
+
+`nudge_ack` is **neutral**: the user saw the check-in and put it off, which says neither that it
+landed nor that it missed. A check-in put off and then left to close emits `nudge_ack` and then
+`nudge_ignored`. A check-in that lapsed before reaching the user emits nothing, because nothing
+was asked. A **timer cancel emits nothing**: a timer is infrastructure, not memory (§8), and
+cancelling one judges nothing the brain decided. A signal is emitted only once its verdict's
+effect has landed and its `decision_log` row is written (I12): a signal that fails then leaves a
+logged verdict the learner missed, never a closed check-in with no row, which no retry could
+write since nothing is open any more. `relation_reject` is the exception, emitted just before
+the delete (I10). A dry run
+emits nothing.
+
+**A relation signal is typed.** It carries the relation's `relation_type`, and its context names
+the relation's `created_by`, the `confidence` the user judged (before a confirm raised it) and its
+`created_at`: the learner counts only Nooma's own relations, per type, and a deleted relation
+leaves nothing else to read these from. Signals from before M5 carried none of it. Migration 0013
+recovered each graph deletion's type, maker and confidence from its `relation.rejected` row, and
+each confirm's type and maker from its still-live relation. A deletion answered in chat before M5
+**cannot be recovered**: its relation is gone and its row names no type. It stays untyped, and
+the learner does not count it.
+
 **Nightly pass** (phase `learn`, incremental and idempotent via the `last_run_at` checkpoint):
 
 - **Relation thresholds**: repeated rejections of a type (e.g. 6 of the last 8 `same_topic`)

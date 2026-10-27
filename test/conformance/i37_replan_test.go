@@ -95,7 +95,7 @@ func TestI37_AbortMidPassThenCleanPassCreatesNothingTwice(t *testing.T) {
 	v.repo = &lapseFailsOnce{TriggerRepo: v.triggers}
 	ctx := context.Background()
 
-	_, err := brain.NewCheckService(fixedClock{now: i37Now}, v.repo, v.timers, &counterIDs{}, v.log, v.ch, v.units, newI37State(), nil, "12449194", nil, nil).Check(ctx, brain.CheckRequest{})
+	_, err := brain.NewCheckService(fixedClock{now: i37Now}, v.repo, v.timers, &counterIDs{}, v.log, v.ch, v.units, newI37State(), nil, "12449194", nil, nil, nil).Check(ctx, brain.CheckRequest{})
 	if err == nil {
 		t.Fatal("the first pass did not fail on Lapse")
 	}

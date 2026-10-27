@@ -220,6 +220,15 @@ CREATE TABLE calibration (                       -- generic auto-tuned knobs
 );
 ```
 
+A relation signal (`relation_reject`, `relation_confirm`) sets `relation_type` and its `context`
+holds `{created_by, confidence, created_at}`: who made the relation, the confidence the user judged
+and when it was made (doc 02 §9, ADR-0052). A check-in signal (`nudge_*`) targets the trigger
+(`target_kind = 'trigger'`) and its `context` holds `{unit_id}` when the check-in has a unit.
+Migration 0013 changes no schema: it types the relation signals written before M5. A graph
+deletion's signal takes its type from its `relation.rejected` row, and a confirm's signal from its
+live relation, each marked `backfilled_from`. A deletion answered in chat cannot be typed and
+stays untyped.
+
 ## Measurements (perception phase)
 
 ```sql

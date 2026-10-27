@@ -41,11 +41,23 @@ type i39Vault struct {
 	log      *memrepo.DecisionLog
 	ids      *counterIDs
 	channel  *fakechannel.Fake
+	signals  *memrepo.Signals
+	// signalStore, when set, stands in for signals in every pass: a test of
+	// what happens when the signal write fails.
+	signalStore ports.SignalRepo
+}
+
+// store is the signal store the passes write to.
+func (v *i39Vault) store() ports.SignalRepo {
+	if v.signalStore != nil {
+		return v.signalStore
+	}
+	return v.signals
 }
 
 func newI39Vault() *i39Vault {
 	return &i39Vault{triggers: memrepo.NewTriggers(), units: memrepo.NewUnits(), log: memrepo.NewDecisionLog(),
-		ids: &counterIDs{}, channel: fakechannel.New()}
+		ids: &counterIDs{}, channel: fakechannel.New(), signals: memrepo.NewSignals()}
 }
 
 // deliver stores a one-shot check-in about a task with content (a nudge with
@@ -83,6 +95,16 @@ func (v *i39Vault) deliverKind(t *testing.T, id string, kind unit.Type, content 
 // answer captures text through the real pipeline, the model reading response.
 func (v *i39Vault) answer(t *testing.T, text, response string, at time.Time) {
 	t.Helper()
+	if err := v.answerErr(t, text, response, at, true); err != nil {
+		t.Fatalf("Capture(%q): %v", text, err)
+	}
+}
+
+// answerErr is answer, returning the capture's error instead of failing. reply
+// says whether the capture is scripted to reach its chat reply; one expected
+// to fail before it is not.
+func (v *i39Vault) answerErr(t *testing.T, text, response string, at time.Time, reply bool) error {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	for id, c := range map[string]map[string]string{
@@ -103,21 +125,41 @@ func (v *i39Vault) answer(t *testing.T, text, response string, at time.Time) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	llm := fakeprovider.New(t, dir, "classify-answer", "chat-answer")
+	scripted := []string{"classify-answer"}
+	if reply {
+		scripted = append(scripted, "chat-answer")
+	}
+	llm := fakeprovider.New(t, dir, scripted...)
 	svc := brain.NewCaptureService(fixedClock{now: at}, v.ids, v.units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(),
 		v.log, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
-		memrepo.NewSignals(), v.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions())
-	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "chat"}); err != nil {
-		t.Fatalf("Capture(%q): %v", text, err)
-	}
+		v.store(), v.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions())
+	_, err = svc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "chat"})
+	return err
+}
+
+// checkErr runs one check pass at at and returns its error.
+func (v *i39Vault) checkErr(at time.Time, req brain.CheckRequest) error {
+	_, err := brain.NewCheckService(fixedClock{now: at}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
+		v.units, memrepo.NewState(), nil, "12449194", nil, nil, v.store()).Check(context.Background(), req)
+	return err
 }
 
 // check runs one check pass at at and returns what it sent.
 func (v *i39Vault) check(t *testing.T, at time.Time) []string {
 	t.Helper()
+	return v.checkWith(t, at, brain.CheckRequest{})
+}
+
+// checkDry is check as a dry run, which writes nothing.
+func (v *i39Vault) checkDry(t *testing.T, at time.Time) []string {
+	t.Helper()
+	return v.checkWith(t, at, brain.CheckRequest{DryRun: true})
+}
+
+func (v *i39Vault) checkWith(t *testing.T, at time.Time, req brain.CheckRequest) []string {
+	t.Helper()
 	before := len(v.channel.Sent(t))
-	if _, err := brain.NewCheckService(fixedClock{now: at}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
-		v.units, memrepo.NewState(), nil, "12449194", nil, nil).Check(context.Background(), brain.CheckRequest{}); err != nil {
+	if err := v.checkErr(at, req); err != nil {
 		t.Fatalf("Check at %s: %v", at, err)
 	}
 	var texts []string

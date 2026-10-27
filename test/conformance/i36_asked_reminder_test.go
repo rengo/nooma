@@ -91,7 +91,7 @@ func (v *i36Vault) pass(t *testing.T, at time.Time) []string {
 	t.Helper()
 	before := len(v.channel.Sent(t))
 	if _, err := brain.NewCheckService(fixedClock{now: at}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
-		v.units, v.state, nil, "12449194", nil, nil).Check(context.Background(), brain.CheckRequest{}); err != nil {
+		v.units, v.state, nil, "12449194", nil, nil, nil).Check(context.Background(), brain.CheckRequest{}); err != nil {
 		t.Fatalf("Check at %s: %v", at, err)
 	}
 	var texts []string

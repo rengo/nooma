@@ -138,7 +138,7 @@ func TestI34_EventRemindersArePushedAndNeverLate(t *testing.T) {
 				t.Fatal(err)
 			}
 			report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), &counterIDs{}, log, ch,
-				nil, nil, nil, "12449194", nil, nil).Check(ctx, brain.CheckRequest{})
+				nil, nil, nil, "12449194", nil, nil, nil).Check(ctx, brain.CheckRequest{})
 			if err != nil {
 				t.Fatalf("Check: %v", err)
 			}
@@ -234,7 +234,7 @@ func TestI34_TheScanWaitsForTheStoredQuietEnd(t *testing.T) {
 	check := func(now time.Time) brain.CheckReport {
 		t.Helper()
 		report, err := brain.NewCheckService(fixedClock{now: now}, triggers, memrepo.NewTimers(), ids, log, ch,
-			memrepo.NewUnits(), memrepo.NewState(), nil, "12449194", nil, nil).WithQuietHours(cfg).Check(ctx, brain.CheckRequest{})
+			memrepo.NewUnits(), memrepo.NewState(), nil, "12449194", nil, nil, nil).WithQuietHours(cfg).Check(ctx, brain.CheckRequest{})
 		if err != nil {
 			t.Fatalf("Check at %v: %v", now, err)
 		}

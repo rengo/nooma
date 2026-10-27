@@ -275,6 +275,12 @@ type deletingRelations struct {
 	err     error
 }
 
+// ByID answers the read RejectRelation makes before the delete, to type its
+// signal (I47).
+func (r *deletingRelations) ByID(_ context.Context, id string) (ports.Relation, error) {
+	return ports.Relation{ID: id, Type: "same_topic", Confidence: 0.4, CreatedBy: "consolidation"}, nil
+}
+
 func (r *deletingRelations) Delete(_ context.Context, id string) error {
 	if r.err != nil {
 		return r.err
@@ -310,6 +316,22 @@ func TestRejectRelation_EmitsTheSignalBeforeDeleting(t *testing.T) {
 	want := []string{"signal:" + string(ports.SignalRelationReject), "delete:rel-1"}
 	if len(events) != 2 || events[0] != want[0] || events[1] != want[1] {
 		t.Fatalf("events = %v, want %v — I10 names the ordering, and a signal written after a half-failed delete is evidence for a rejection that did not happen", events, want)
+	}
+}
+
+// TestRejectRelation_ARelationAlreadyGoneEmitsNothing: the reject reads the
+// relation to type its signal (I47), so one that is already gone fails before
+// any signal: there is no rejection to teach the learner.
+func TestRejectRelation_ARelationAlreadyGoneEmitsNothing(t *testing.T) {
+	var events []string
+	rels := &confirmingRelations{deletingRelations: deletingRelations{events: &events}}
+	r := captureRunner{ids: &countingIDs{}, log: &recordingLog{}, signals: &recordingSignals{events: &events}, rels: rels}
+
+	if err := r.curator().RejectRelation(context.Background(), "rel-gone", checkInNow); !errors.Is(err, ports.ErrRelationNotFound) {
+		t.Fatalf("RejectRelation = %v, want ErrRelationNotFound", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("events = %v, want no signal and no delete", events)
 	}
 }
 
@@ -558,7 +580,8 @@ func TestRelationCheckIn_TheMostRecentlyAskedIsChosenAndTheCountIsRecorded(t *te
 		relationQuestion("q-older", "rel-older"),
 		relationQuestion("q-oldest", "rel-oldest"),
 	}}
-	rels := &confirmingRelations{deletingRelations: deletingRelations{events: &events}}
+	rels := &confirmingRelations{deletingRelations: deletingRelations{events: &events},
+		byID: map[string]ports.Relation{"rel-most-recent": {ID: "rel-most-recent", Type: "same_topic"}}}
 	log := &recordingLog{}
 
 	if err := relationCheckInRunner(&events, questions, rels, log).

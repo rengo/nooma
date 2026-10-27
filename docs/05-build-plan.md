@@ -221,6 +221,18 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 - **Demo**: reject 6 `same_topic` connections → the threshold rises and the decision_log
   explains it.
 
+**In progress**, as a stacked-to-main chain:
+
+| Link | What | State |
+|---|---|---|
+| 0 | The judge prompt: a shared day is not a relation, measured by a recorded judge set | Shipped |
+| 1 | Signals from every surface: typed relation signals, `nudge_*` on every check-in verdict, the pre-M5 graph deletions typed by migration 0013 ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md), I47) | Shipped |
+| 2 | The `learn` pass for per-type relation thresholds and the demo. Also takes two folds from link 0's review: the pure "would this judgment be stored" function moves into `core/relation` and serves capture, connect and `reading.ReplayJudge`, and `storedOutcome` gains its missing test row | Planned |
+| 3 | A relation below its type's persist bar is dormant at read time: hidden, never deleted | Planned |
+| 4 | Goal check-ins delivered (doc 02 §7's stagnation check-in, never armed until now) | Planned |
+| 5 | Goal cadence learned, pinned by an Admin edit | Planned |
+| 6 | The correctable summary of what was learned (UI and API) | Planned |
+
 ## M6 — Release polish
 
 Prior decisions: **[ADR-0004](adr/0004-license.md)** (license).

@@ -333,6 +333,9 @@ func wireCheck(clock ports.Clock, db *sqlite.Vault) *brain.CheckService {
 		// a focus, and a second keeper beside serve's would be one nothing
 		// reads.
 		nil,
+		// The learner's store: a manual scan closes unanswered check-ins
+		// as serve's does, and each one is a nudge_ignored (I47).
+		sqlite.NewSignalRepo(db),
 	// The user's night, as serve's pass reads it: a manual scan that
 	// fired what serve would still hold would disagree with it.
 	).WithQuietHours(sqlite.NewConfigRepo(db))
@@ -553,6 +556,9 @@ func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, look
 		// The keeper serve built once and hands to Today too: the digest
 		// reads and writes the same previous focus.
 		keeper,
+		// The learner's store: an unanswered check-in it closes is a
+		// nudge_ignored (I47).
+		sqlite.NewSignalRepo(db),
 	).WithQuietHours(sqlite.NewConfigRepo(db)).WithConversation(conv), nil
 }
 

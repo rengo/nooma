@@ -168,7 +168,7 @@ func (s dpScenario) live(t *testing.T) string {
 	conv := brain.NewConversation(sqlite.NewConversationRepo(v))
 	capture.WithConversation(conv)
 	check := brain.NewCheckService(clock, triggers, timers, ids, decisions, ch, units, sqlite.NewStateRepo(v),
-		llm, dpConversation, questions, keeper).WithQuietHours(config).WithConversation(conv)
+		llm, dpConversation, questions, keeper, nil).WithQuietHours(config).WithConversation(conv)
 	handle := channels.CaptureHandler(capture, ch, conv, nil)
 
 	header := []string{"# " + s.about,

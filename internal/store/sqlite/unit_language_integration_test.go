@@ -16,6 +16,14 @@ import (
 // result: the only way to prove the backfill, which runs once.
 func backfilled(t *testing.T, seed func(exec func(query string, args ...any))) *sql.DB {
 	t.Helper()
+	return backfilledBefore(t, "0008_unit_language.sql", seed)
+}
+
+// backfilledBefore is backfilled for the migration named name: the vault stops
+// just before it, seed writes what a vault of that age holds, and the rest
+// runs.
+func backfilledBefore(t *testing.T, name string, seed func(exec func(query string, args ...any))) *sql.DB {
+	t.Helper()
 	ctx := context.Background()
 	dsn, err := buildDSN(filepath.Join(t.TempDir(), "vault.db"), pathStyleForGOOS())
 	if err != nil {
@@ -30,17 +38,19 @@ func backfilled(t *testing.T, seed func(exec func(query string, args ...any))) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Everything before 0008, whatever came after it: this test is about that
+	// Everything before name, whatever came after it: the test is about that
 	// migration's backfill, and a later one must not change what it measures.
 	var before []migration
+	found := false
 	for _, m := range all {
-		if m.Name == "0008_unit_language.sql" {
+		if m.Name == name {
+			found = true
 			break
 		}
 		before = append(before, m)
 	}
-	if len(before) != 7 {
-		t.Fatalf("found %d migrations before 0008_unit_language.sql, want 7", len(before))
+	if !found {
+		t.Fatalf("no migration named %s", name)
 	}
 	if err := migrateMigrations(ctx, db, before); err != nil {
 		t.Fatal(err)
