@@ -425,7 +425,8 @@ and no decision is recorded. There is no effect to record — the same reason a 
 under. A missing strength is not among these: it reads as 0. A duplicate is stored typed
 `duplicate`, whatever type the judge added. **Both judge call sites read a judgment by this one
 rule** (`internal/core/relation.Propose`): capture, the nightly `connect` and the recorded judge
-set (`internal/reading`). Before they shared it, `connect` also required a type and a strength,
+set (`internal/reading`). A `relation.Proposal` has no exported field, so outside its package one
+can only come from `Propose`, and so never names a unit the judge was not shown. Before they shared it, `connect` also required a type and a strength,
 so it dropped every duplicate it found, because the judge is told to omit the type for one.
 
 **A shared day is not a relation.** Two units are related by what they are about: the same

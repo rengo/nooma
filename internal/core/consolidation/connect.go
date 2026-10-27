@@ -148,7 +148,7 @@ type ProposedRelation struct {
 //
 // relation.Resolve is NOT called here and must not be: this function takes
 // already-resolved relation.Thresholds, because resolving them means reading
-// the nullable relation_thresholds row for p.Type, which belongs to the
+// the nullable relation_thresholds row for p.Type(), which belongs to the
 // caller (m2c's brain wiring), not to core.
 //
 // It returns (_, false) for relation.Discard (I08). relation.Uncertain and
@@ -156,16 +156,16 @@ type ProposedRelation struct {
 // (I09) without recomputing relation.Decide. CreatedBy is always
 // relation.CreatedByConsolidation.
 func ProposeRelation(from string, p relation.Proposal, t relation.Thresholds) (ProposedRelation, bool) {
-	band := relation.Decide(p.Confidence, t)
+	band := relation.Decide(p.Confidence(), t)
 	if band == relation.Discard {
 		return ProposedRelation{}, false
 	}
 	return ProposedRelation{
 		From:       from,
-		To:         p.TargetUnitID,
-		Type:       p.Type,
-		Strength:   p.Strength,
-		Confidence: p.Confidence,
+		To:         p.TargetUnitID(),
+		Type:       p.Type(),
+		Strength:   p.Strength(),
+		Confidence: p.Confidence(),
 		CreatedBy:  relation.CreatedByConsolidation,
 		Band:       band,
 	}, true

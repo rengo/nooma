@@ -255,10 +255,17 @@ func TestConnectPairs_PreservesFusedOrder(t *testing.T) {
 	}
 }
 
-// completeProposal is a relation.Proposal the judge decided in full; reading
-// a judgment into one is relation.Propose's, tested there.
+// completeProposal is a relation.Proposal the judge decided in full, built
+// the only way one can be: relation.Propose over a judgment naming the one
+// candidate offered. Reading a judgment is Propose's, tested there.
 func completeProposal(outcome relation.Outcome, confidence float64) relation.Proposal {
-	return relation.Proposal{Outcome: outcome, TargetUnitID: "target-unit", Type: "same_topic", Strength: 0.5, Confidence: confidence}
+	o, target, typ, strength := outcome, "target-unit", "same_topic", 0.5
+	p, reading := relation.Propose(relation.Judgment{Outcome: &o, TargetUnitID: &target, Type: &typ, Strength: &strength, Confidence: &confidence},
+		[]string{target})
+	if reading != relation.Proposed {
+		panic("completeProposal: relation.Propose refused a complete judgment")
+	}
+	return p
 }
 
 func connectPairsThresholds() relation.Thresholds {
@@ -292,7 +299,7 @@ func TestProposeRelation_UncertainAndAssertedWriteAPlan(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			j := completeProposal(relation.OutcomeDuplicate, tc.confidence)
+			j := completeProposal(relation.OutcomeRelated, tc.confidence)
 
 			got, ok := ProposeRelation("source-unit", j, connectPairsThresholds())
 			if !ok {

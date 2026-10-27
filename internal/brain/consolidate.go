@@ -496,9 +496,9 @@ func (r consolidateRunner) judgeAndPersistPair(ctx context.Context, source, targ
 		return r.recordConnectTargetUnknownDecision(ctx, source, *j.TargetUnitID, offered, now)
 	}
 
-	row, err := r.rels.ThresholdsFor(ctx, p.Type)
+	row, err := r.rels.ThresholdsFor(ctx, p.Type())
 	if err != nil {
-		return fmt.Errorf("consolidate: connect: resolve relation thresholds for %q: %w", p.Type, err)
+		return fmt.Errorf("consolidate: connect: resolve relation thresholds for %q: %w", p.Type(), err)
 	}
 
 	proposed, ok := consolidation.ProposeRelation(source.ID, p, relation.Resolve(row))

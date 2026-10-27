@@ -1,6 +1,9 @@
 package relation
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func judgment(outcome Outcome) Judgment {
 	o, target, typ, strength, confidence := outcome, "u-1", "same_topic", 0.6, 0.7
@@ -16,7 +19,7 @@ func TestPropose_ADecidedJudgmentProposesItsRelation(t *testing.T) {
 	if r != Proposed {
 		t.Fatalf("reading = %v, want Proposed", r)
 	}
-	want := Proposal{Outcome: OutcomeRelated, TargetUnitID: "u-1", Type: "same_topic", Strength: 0.6, Confidence: 0.7}
+	want := Proposal{outcome: OutcomeRelated, targetUnitID: "u-1", typ: "same_topic", strength: 0.6, confidence: 0.7}
 	if p != want {
 		t.Errorf("proposal = %+v, want %+v", p, want)
 	}
@@ -31,7 +34,7 @@ func TestPropose_ADuplicateIsTypedDuplicate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			j.Type = typ
 			p, r := Propose(j, offeredOne)
-			if r != Proposed || p.Type != TypeDuplicate {
+			if r != Proposed || p.Type() != TypeDuplicate {
 				t.Errorf("Propose = %+v, %v; want a proposal typed %q", p, r, TypeDuplicate)
 			}
 		})
@@ -43,7 +46,7 @@ func TestPropose_ADuplicateIsTypedDuplicate(t *testing.T) {
 func TestPropose_AMissingStrengthIsZero(t *testing.T) {
 	j := judgment(OutcomeRelated)
 	j.Strength = nil
-	if p, r := Propose(j, offeredOne); r != Proposed || p.Strength != 0 {
+	if p, r := Propose(j, offeredOne); r != Proposed || p.Strength() != 0 {
 		t.Errorf("Propose = %+v, %v; want a proposal with strength 0", p, r)
 	}
 }
@@ -98,5 +101,22 @@ func TestReading_TheThreeAreDistinct(t *testing.T) {
 	}
 	if DecidedNothing != Reading(0) {
 		t.Error("the zero Reading must be DecidedNothing, so an unset one stores nothing")
+	}
+}
+
+// TestProposal_IsBuiltOnlyByPropose (#406 review): a Proposal outside this
+// package can only come from Propose, which refuses a target the judge was
+// not shown (ADR-0026). An exported field would let a caller build one
+// naming any unit, and store an edge the judge never compared.
+func TestProposal_IsBuiltOnlyByPropose(t *testing.T) {
+	typ := reflect.TypeOf(Proposal{})
+	for i := range typ.NumField() {
+		if f := typ.Field(i); f.IsExported() {
+			t.Errorf("Proposal.%s is exported: a caller could build a proposal Propose never read", f.Name)
+		}
+	}
+	p, _ := Propose(judgment(OutcomeRelated), offeredOne)
+	if p.Outcome() != OutcomeRelated || p.TargetUnitID() != "u-1" || p.Type() != "same_topic" || p.Strength() != 0.6 || p.Confidence() != 0.7 {
+		t.Errorf("accessors read %v %q %q %v %v, want what the judgment said", p.Outcome(), p.TargetUnitID(), p.Type(), p.Strength(), p.Confidence())
 	}
 }
