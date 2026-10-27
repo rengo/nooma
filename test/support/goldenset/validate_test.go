@@ -242,6 +242,13 @@ func TestValidateAllowsAwaitingRecording(t *testing.T) {
 			wantErr: "now is required beside prompt_sha256",
 		},
 		{
+			// The judge prompt reads no clock (brain.JudgePrompt), so its
+			// recording carries no now; requiring one rejected every judge
+			// case the first time one was recorded.
+			name: "a judge recording's hash needs no now",
+			data: `{"id":"x","provider":"p","model":"m","task":"relation_evaluation","message":"m","candidates":[{"id":"c","content":"d"}],"response":"r","prompt_sha256":"abc"}`,
+		},
+		{
 			name:    "a now that is not RFC 3339 is rejected",
 			data:    `{"id":"x","provider":"p","model":"m","task":"classify","message":"m","response":"r","now":"yesterday"}`,
 			wantErr: "now must be RFC 3339",

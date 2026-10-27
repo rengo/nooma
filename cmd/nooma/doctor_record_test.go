@@ -23,6 +23,7 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/reading"
 	"github.com/rengo/nooma/internal/store/sqlite"
+	"github.com/rengo/nooma/test/support/goldenset"
 	"github.com/rengo/nooma/testdata/llm"
 )
 
@@ -491,6 +492,12 @@ func TestRecordSendsAJudgeCaseToTheJudge(t *testing.T) {
 	}
 	if err := reading.ReplayJudge(c, want, reply); err != nil {
 		t.Errorf("the recorded judge case does not replay: %v", err)
+	}
+	// And it loads as the replay test loads it: the golden-set validation
+	// once refused every recorded judge case for the now it does not need.
+	var ex goldenset.LLMExample
+	if err := goldenset.Load(path, &ex); err != nil {
+		t.Errorf("the recorded judge case does not load: %v", err)
 	}
 }
 

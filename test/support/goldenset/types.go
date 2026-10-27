@@ -402,7 +402,9 @@ func (e *LLMExample) Validate() error {
 			return fmt.Errorf("now must be RFC 3339: %w", err)
 		}
 	}
-	if e.PromptSHA256 != "" && e.Now == "" {
+	// A judge prompt (task relation_evaluation) reads no clock, so its hash
+	// needs no instant; only a classify prompt is built at one.
+	if e.PromptSHA256 != "" && e.Now == "" && e.Task != "relation_evaluation" {
 		return fmt.Errorf("now is required beside prompt_sha256: the hash is of the prompt built at that instant")
 	}
 	return nil
