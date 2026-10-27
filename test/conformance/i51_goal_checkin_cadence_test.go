@@ -103,7 +103,7 @@ func (v *i51Vault) check(t *testing.T, day, hour, minute int) []string {
 
 // answer captures the user's reply in the chat at 09:00 of day, read as the
 // goal answer outcome.
-func (v *i51Vault) answer(t *testing.T, day int, text, outcome string) {
+func (v *i51Vault) answer(t *testing.T, day int, text, outcome string) string {
 	t.Helper()
 	ctx := context.Background()
 	embeddings := memrepo.NewEmbeddings()
@@ -118,9 +118,10 @@ func (v *i51Vault) answer(t *testing.T, day int, text, outcome string) {
 	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "telegram", Conversation: i51Chat}); err != nil {
 		t.Fatalf("answer on day %d: %v", day, err)
 	}
-	if len(llm.prompts) == 0 || !strings.Contains(llm.prompts[0], "Seguís con") {
+	if len(llm.prompts) == 0 || !strings.Contains(llm.prompts[0], i51Goal) {
 		t.Fatalf("the answer on day %d was not read beside the goal check-in", day)
 	}
+	return llm.prompts[0]
 }
 
 func (v *i51Vault) armed(t *testing.T) int {
@@ -374,7 +375,19 @@ func TestI51_TheGoalIsWordedInTheDigestsLanguage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if sent, want := v.morning(t, 0), `Still on "`+i51Goal+`"?`; len(sent) != 1 || sent[0] != want {
+	want := `Still on "` + i51Goal + `"?`
+	// #414 review: Today previews it in the same language the digest will use.
+	today, err := brain.NewTodayService(fixedClock{now: i51At(0, 6, 0)}, v.units, v.cfg, v.state, v.triggers,
+		memrepo.NewPendingQuestions(), v.log, brain.NewFocusKeeper(v.units, v.cfg, memrepo.NewRelations()), nil).Today(context.Background())
+	if err != nil || today.Digest.Goal != want {
+		t.Errorf("Today previews %q (%v), want %q", today.Digest.Goal, err, want)
+	}
+	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != want {
 		t.Errorf("the digest sent %q, want exactly %q", sent, want)
+	}
+	// And the chat prompt lists it as it was asked.
+	prompt := v.answer(t, 0, "yes", "engaged")
+	if !strings.Contains(prompt, "1) "+want) {
+		t.Errorf("the chat prompt's goal list does not show %q:\n%s", want, prompt)
 	}
 }
