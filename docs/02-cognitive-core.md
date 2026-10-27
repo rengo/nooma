@@ -2186,7 +2186,32 @@ the learner does not count it.
 
 - **Relation thresholds**: repeated rejections of a type (e.g. 6 of the last 8 `same_topic`)
   → raises `min_confidence_to_persist` for THAT user and THAT type (0.30 → 0.35): more
-  conservative for whoever rejects, bolder for whoever accepts. Same brain, personalized.
+  conservative for whoever rejects, bolder for whoever accepts. Same brain, personalized. The
+  rule ([ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md),
+  `internal/core/learning.StepRelation`) is pure:
+  - **Evidence** is the newest `relation_sample_size` (8) typed verdicts on the type's relations
+    that **Nooma** made (`created_by` system or consolidation: a verdict on the user's own
+    relation says nothing about how Nooma judges), made **strictly after the type's last
+    change** and no later than now. Rejections and confirmations from the graph and the chat
+    count alike. A relation that survived is **not** counted as approved: nothing records
+    whether the user ever saw it, and viewing writes nothing.
+  - `relation_verdicts_to_move` (6) rejections raise the persist bar by
+    `relation_threshold_step` (0.05); as many confirmations lower it by the same step; 3 to 5
+    hold. A user who only deletes, as the client does, moves it on deletions alone, and only
+    up.
+  - The bar stays on a hundredth within [`min_learned_persist`, `max_learned_persist`]
+    ([0.20, 0.90]). A step that would leave it where it is, or move it the wrong way at a
+    bound, is no change. `min_confidence_to_surface` rises to the new persist when persist
+    would pass it, so the uncertain band empties rather than inverts, and learning never
+    lowers it.
+  - After a change the type waits `relation_cooldown_days` (7) before it is judged again, and
+    the verdicts already counted are not counted again: a night of twelve deletions moves the
+    bar one step. Run twice on the same vault, the rule changes nothing.
+  - A type the user pinned is never written, and a bar that is not a finite number is left
+    alone.
+
+  The rule ships ahead of its wiring: the nightly `learn` slot does not run it yet (M5 link 2c,
+  [`05-build-plan.md`](05-build-plan.md)).
 - **Goal check-in cadence**: learns from whether the user RESPONDED (`responded_at`), not from
   whether it was delivered (`surfaced_at`) — 5 nudges with no response are 5 ignored ones.
   Systematically ignoring lengthens the interval (21 → 28 days); engaging shortens it.
@@ -2357,6 +2382,12 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | λ per type (`weight_decay_rate`) | prior per type, base 0.01/day |
 | Base weight when classify does not supply one | 1.0 |
 | `min_confidence_to_persist` ⚙ | 0.30 |
+| `relation_sample_size` (`internal/core/learning.RelationSampleSize`) | 8 — how many of a relation type's newest verdicts the learn rule reads (§9, ADR-0053); doc 02's own "6 of the last 8" |
+| `relation_verdicts_to_move` (`internal/core/learning.RelationVerdictsToMove`) | 6 — how many of the sample must agree to move the type's persist bar; a majority, so one sample moves it one way only |
+| `relation_threshold_step` (`internal/core/learning.RelationThresholdStep`) | 0.05 — how far one change moves the persist bar; doc 02's own 0.30 → 0.35 |
+| `min_learned_persist` (`internal/core/learning.MinLearnedPersist`) | 0.20 — the lowest persist bar learning sets; chosen: below it the graph fills with what the judge barely believed |
+| `max_learned_persist` (`internal/core/learning.MaxLearnedPersist`) | 0.90 — the highest persist bar learning sets; chosen: above it a type is all but switched off, which is the user's decision, not a count's |
+| `relation_cooldown_days` (`internal/core/learning.RelationCooldownDays`) | 7 — how long a changed type waits before it is judged again; chosen: a week of nights for the new bar to show its effect. Coincides with `load_cooldown_days` by coincidence, not by relation |
 | `min_confidence_to_surface` | 0.50 |
 | `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — `config.goal_stagnation_days` is this knob's one schema home for the whole of M2; `ports.ConfigRepo` reads it, never `calibration`'s own generic key/value row (`m2c` spec R2.5, discharging `m2b design.md` §9 Q3). `calibration` stays unused through `m2c`, verified by a source-tree scan (`test/conformance`); it remains reserved for M5's learning module to write arbitrary future per-user knobs that have no dedicated `config` column |
 | `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |

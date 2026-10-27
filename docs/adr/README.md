@@ -104,6 +104,7 @@ order, with no correspondence to anything.
 | [0050](0050-the-graph-is-drawn-on-the-server.md) | The graph is drawn on the server: one live unit's bounded neighbourhood, laid out in `internal/core/graph` and rendered as SVG, every node a link, no JavaScript (supersedes ADR-0019) | Accepted | M4 |
 | [0051](0051-timers-are-listed-and-cancelled-through-the-shown-list.md) | Timers are listed and cancelled from chat through the list the code shows: every prompt carries the live timers, `timer_request` and `timer_target` carry the reading, a cancel binds only a shown position and is a logged state transition | Accepted | M4 |
 | [0052](0052-every-verdict-is-a-typed-signal.md) | Every verdict is a typed signal, from every surface: check-in answers, snoozes and unanswered closes emit `nudge_*`, a relation signal carries its type, maker and judged confidence, a timer cancel emits nothing, and migration 0013 types the past graph deletions | Proposed | M5 |
+| [0053](0053-a-relation-bar-moves-one-step-on-fresh-evidence.md) | A relation bar moves one step on fresh evidence: 6 of the newest 8 verdicts on Nooma's relations of a type move its persist bar 0.05, within [0.20, 0.90], surface following up; the evidence resets and a 7-day cooldown follows each change; a pinned type is never written | Proposed | M5 |
 
 ## Template
 
