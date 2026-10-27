@@ -1,6 +1,7 @@
 # ADR-0052 — Every verdict is a typed signal, from every surface
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-28: a not-yet and a timer cancel
+  teach nothing; chat deletions made before this cannot be learned from, graph ones can)
 - **Date**: 2026-10-27
 - **Supersedes**: —
 - **Superseded by**: —
