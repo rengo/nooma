@@ -90,6 +90,12 @@ func (s *CurationService) curate(ctx context.Context, relationID string, act fun
 	if err != nil {
 		return fmt.Errorf("curation: read relation %q: %w", relationID, err)
 	}
+	// A dormant relation is not drawn, so it is not curated either (I49).
+	if dormant, err := newBars(s.rels).dormant(ctx, rel); err != nil {
+		return fmt.Errorf("curation: %w", err)
+	} else if dormant {
+		return fmt.Errorf("curation: relation %q is dormant: %w", relationID, ports.ErrRelationNotFound)
+	}
 	live, err := s.units.LiveByIDs(ctx, []string{rel.FromUnitID, rel.ToUnitID})
 	if err != nil {
 		return fmt.Errorf("curation: read the ends of relation %q: %w", relationID, err)

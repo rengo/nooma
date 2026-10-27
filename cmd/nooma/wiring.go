@@ -336,6 +336,8 @@ func wireCheck(clock ports.Clock, db *sqlite.Vault) *brain.CheckService {
 		// The learner's store: a manual scan closes unanswered check-ins
 		// as serve's does, and each one is a nudge_ignored (I47).
 		sqlite.NewSignalRepo(db),
+		// The relations a queued question names, to skip a dormant one (I49).
+		sqlite.NewRelationRepo(db),
 	// The user's night, as serve's pass reads it: a manual scan that
 	// fired what serve would still hold would disagree with it.
 	).WithQuietHours(sqlite.NewConfigRepo(db))
@@ -372,6 +374,8 @@ func wireToday(db *sqlite.Vault, keeper *brain.FocusKeeper) *brain.TodayService 
 		sqlite.NewPendingQuestionRepo(db),
 		sqlite.NewDecisionLog(db),
 		keeper,
+		// The digest's dormancy read, so Today previews the question it asks (I49).
+		sqlite.NewRelationRepo(db),
 	)
 }
 
@@ -559,6 +563,8 @@ func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, look
 		// The learner's store: an unanswered check-in it closes is a
 		// nudge_ignored (I47).
 		sqlite.NewSignalRepo(db),
+		// The relations a queued question names, to skip a dormant one (I49).
+		sqlite.NewRelationRepo(db),
 	).WithQuietHours(sqlite.NewConfigRepo(db)).WithConversation(conv), nil
 }
 

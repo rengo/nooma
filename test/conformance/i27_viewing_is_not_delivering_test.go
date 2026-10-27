@@ -79,7 +79,7 @@ func TestI27_ViewingIsNotDelivering(t *testing.T) {
 		t.Fatalf("seed question: %v", err)
 	}
 
-	svc := brain.NewTodayService(fixedClock{now: now}, units, cfg, state, triggers, questions, log, brain.NewFocusKeeper(units, cfg, rels))
+	svc := brain.NewTodayService(fixedClock{now: now}, units, cfg, state, triggers, questions, log, brain.NewFocusKeeper(units, cfg, rels), nil)
 
 	beforeUndelivered, err := triggers.Undelivered(ctx)
 	if err != nil {

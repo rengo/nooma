@@ -22,7 +22,7 @@ import (
 var todayNow = time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 
 func newTodayService(units ports.UnitRepo, cfg ports.ConfigRepo, state ports.StateRepo, triggers ports.TriggerRepo, questions ports.PendingQuestionRepo, log ports.DecisionLog) *TodayService {
-	return NewTodayService(fixedClock{now: todayNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()))
+	return NewTodayService(fixedClock{now: todayNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()), nil)
 }
 
 func seedTodayUnit(t *testing.T, units *memrepo.Units, id string, typ unit.Type, weight float64) {
@@ -372,7 +372,7 @@ func TestToday_RepeatedRequestsLeaveDeliveryBookkeepingUnchanged(t *testing.T) {
 	// Five Today requests, with no morning digest run in between, over an
 	// identically seeded fixture.
 	triggers, units, questions, log, state, cfg := newDigestParityFixture(t)
-	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()))
+	svc := NewTodayService(fixedClock{now: digestNow}, units, cfg, state, triggers, questions, log, NewFocusKeeper(units, cfg, memrepo.NewRelations()), nil)
 	for i := 0; i < 5; i++ {
 		if _, err := svc.Today(ctx); err != nil {
 			t.Fatalf("Today request %d: %v", i+1, err)
@@ -546,10 +546,12 @@ func TestToday_AdjacentCandidateOutranksEqualUnrelatedOne(t *testing.T) {
 }
 
 // TestToday_AdjacencyUsesStrengthNotConfidence: doc 02 §4 defines strength as
-// relevance and confidence as certainty. 0.9/0.1 lifts B; 0.1/0.9 does not.
+// relevance and confidence as certainty. 0.9/0.35 lifts B; 0.1/0.9 does not.
+// "Unsure" is the uncertain band, at or above the persist bar: a relation
+// below it is dormant and feeds no adjacency at all (I49).
 func TestToday_AdjacencyUsesStrengthNotConfidence(t *testing.T) {
 	t.Run("strong and unsure lifts", func(t *testing.T) {
-		f := r8Fixture(t, func(f *fxH) { f.relate(t, "A", "B", 0.9, 0.1) })
+		f := r8Fixture(t, func(f *fxH) { f.relate(t, "A", "B", 0.9, 0.35) })
 		got, _ := focusIDs(f.request(t))
 		assertIDs(t, "task focus", got, append(ids("F", 6), "B"))
 	})
@@ -558,6 +560,14 @@ func TestToday_AdjacencyUsesStrengthNotConfidence(t *testing.T) {
 		got, _ := focusIDs(f.request(t))
 		assertIDs(t, "task focus", got, append(ids("F", 6), "A"))
 	})
+}
+
+// TestToday_ADormantRelationLiftsNothing: the same strong relation, below its
+// type's bar, is dormant and feeds no adjacency (I49).
+func TestToday_ADormantRelationLiftsNothing(t *testing.T) {
+	f := r8Fixture(t, func(f *fxH) { f.relate(t, "A", "B", 0.9, 0.29) })
+	got, _ := focusIDs(f.request(t))
+	assertIDs(t, "task focus", got, append(ids("F", 6), "A"))
 }
 
 // TestToday_AdjacencyIsUndirected: a relation stored B -> A lifts B exactly as

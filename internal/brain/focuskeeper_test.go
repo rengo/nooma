@@ -116,7 +116,7 @@ func newFxH(t *testing.T) *fxH {
 	f.flaky = &flakyUnits{Units: f.units}
 	f.cfgPort = &flakyConfig{Config: f.cfg}
 	f.keeper = NewFocusKeeper(f.flaky, f.cfgPort, f.rels)
-	f.svc = NewTodayService(fixedClock{now: todayNow}, f.flaky, f.cfgPort, f.state, f.triggers, f.questions, f.log, f.keeper)
+	f.svc = NewTodayService(fixedClock{now: todayNow}, f.flaky, f.cfgPort, f.state, f.triggers, f.questions, f.log, f.keeper, nil)
 	return f
 }
 

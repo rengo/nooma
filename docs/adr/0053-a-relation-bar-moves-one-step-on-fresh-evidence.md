@@ -37,7 +37,10 @@ relation.
    step needs a week and six fresh verdicts.
 5. **The user's word wins.** A type the user pinned is never written. The pin itself, and undoing
    a learned value, belong to the summary (M5 link 6). The rule only honours a pin.
-6. **Pure and idempotent.** `internal/core/learning.StepRelation` decides from its inputs. The
+6. **A relation below a raised bar is dormant, not deleted** (M5 link 3, I49). It is decided at
+   read time by `relation.Dormant` against the type's current bar. It is not drawn, listed,
+   curated, asked about or used for focus adjacency, and it wakes when the bar falls back.
+7. **Pure and idempotent.** `internal/core/learning.StepRelation` decides from its inputs. The
    nightly `learn` slot (link 2c) reads the signals and the type's state, applies a change, records
    it at the pass's instant with one `decision_log` row carrying the counts and the signal ids, and
    so cannot apply it twice.

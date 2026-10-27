@@ -127,6 +127,8 @@ func (k *FocusKeeper) compute(ctx context.Context, now time.Time) (focusRound, e
 type edgeCache struct {
 	rels   ports.RelationRepo
 	byUnit map[string][]weight.Edge
+	// bars resolves each type's bar once per round, for the dormancy filter.
+	bars *bars
 }
 
 // edges is the sweep over every member of p, both Kinds, as undirected weight
@@ -141,6 +143,13 @@ func (c *edgeCache) edges(ctx context.Context, p *incumbent) ([]weight.Edge, err
 				rels, err := c.rels.ByUnit(ctx, id)
 				if err != nil {
 					return nil, fmt.Errorf("focus: relations of %q: %w", id, err)
+				}
+				// A dormant relation feeds no adjacency (I49).
+				if c.bars == nil {
+					c.bars = newBars(c.rels)
+				}
+				if rels, err = c.bars.awake(ctx, rels); err != nil {
+					return nil, fmt.Errorf("focus: %w", err)
 				}
 				for _, r := range rels {
 					memberEdges = append(memberEdges, weight.Edge{From: r.FromUnitID, To: r.ToUnitID, Strength: r.Strength})

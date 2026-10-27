@@ -55,8 +55,14 @@ func (s *GraphService) Neighbourhood(ctx context.Context, id string) (Neighbourh
 		return Neighbourhood{}, false, err
 	}
 
+	// A dormant relation is not drawn (I49): filtered here, before ranking,
+	// so it neither takes a place on the ring nor counts as left out.
+	b := newBars(s.rels)
 	rels, err := s.rels.ByUnit(ctx, id)
 	if err != nil {
+		return Neighbourhood{}, false, err
+	}
+	if rels, err = b.awake(ctx, rels); err != nil {
 		return Neighbourhood{}, false, err
 	}
 	others := make([]string, len(rels))
@@ -86,6 +92,9 @@ func (s *GraphService) Neighbourhood(ctx context.Context, id string) (Neighbourh
 		if err != nil {
 			return Neighbourhood{}, false, err
 		}
+		if nrels, err = b.awake(ctx, nrels); err != nil {
+			return Neighbourhood{}, false, err
+		}
 		for _, r := range nrels {
 			all = append(all, graphEdge(r))
 		}
@@ -101,27 +110,20 @@ func (s *GraphService) Neighbourhood(ctx context.Context, id string) (Neighbourh
 	for i, n := range kept {
 		out.Neighbours[i] = GraphNode{Unit: byID[n], At: ring[i]}
 	}
-	if out.Confirmable, err = s.confirmable(ctx, out.Edges); err != nil {
+	if out.Confirmable, err = confirmable(ctx, b, out.Edges); err != nil {
 		return Neighbourhood{}, false, err
 	}
 	return out, true, nil
 }
 
 // confirmable marks each edge below its type's resolved surface threshold,
-// read through the same ThresholdsFor -> relation.Resolve pair the confirm
-// itself raises by, once per type.
-func (s *GraphService) confirmable(ctx context.Context, edges []graph.Edge) (map[string]bool, error) {
-	byType := map[string]relation.Thresholds{}
+// read through the same bars the dormancy filter used, so the two agree.
+func confirmable(ctx context.Context, b *bars, edges []graph.Edge) (map[string]bool, error) {
 	out := map[string]bool{}
 	for _, e := range edges {
-		t, ok := byType[e.Type]
-		if !ok {
-			row, err := s.rels.ThresholdsFor(ctx, e.Type)
-			if err != nil {
-				return nil, err
-			}
-			t = relation.Resolve(row)
-			byType[e.Type] = t
+		t, err := b.of(ctx, e.Type)
+		if err != nil {
+			return nil, err
 		}
 		if relation.Confirmable(e.Confidence, t) {
 			out[e.ID] = true
