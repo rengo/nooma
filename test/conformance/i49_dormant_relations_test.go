@@ -13,6 +13,7 @@ import (
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/test/support/fakechannel"
+	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
@@ -58,6 +59,7 @@ func newI49Vault(t *testing.T) *i49Vault {
 		}
 	}
 	v.questions.EnsureRelation(t, "r-low", "same_topic", "centre", "low", "buy coffee", i49LowContent)
+	v.questions.SetRelationConfidence(t, "r-low", 0.33)
 	if err := v.questions.Create(ctx, ports.PendingQuestion{ID: "q-low", Kind: ports.QuestionKindRelation, RelationID: "r-low", CreatedAt: made}); err != nil {
 		t.Fatal(err)
 	}
@@ -157,5 +159,35 @@ func TestI49_ADormantRelationIsNotCurated(t *testing.T) {
 	}
 	if _, err := v.rels.ByID(context.Background(), "r-low"); err != nil {
 		t.Errorf("r-low was touched: %v", err)
+	}
+}
+
+// TestI49_AQuestionAskedBeforeItsRelationWentDormantIsStillAnswered (#409
+// review): the digest asked about r-low, then the bar rose. The question was
+// put to the user, so their "no" in the chat still answers it, and deletes
+// the relation as any answer does. Dormancy hides what is not asked; it does
+// not take back what was.
+func TestI49_AQuestionAskedBeforeItsRelationWentDormantIsStillAnswered(t *testing.T) {
+	v := newI49Vault(t)
+	ctx := context.Background()
+	if err := v.questions.MarkAsked(ctx, "q-low", i49Now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	v.setBar(t, 0.35)
+
+	embeddings := memrepo.NewEmbeddings()
+	idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	llm := fakeprovider.New(t, testdataLLMCasesDir(t), "classify-relation-answer-rejected", "chat-relation-answer-acknowledged")
+	svc := brain.NewCaptureService(fixedClock{now: i49Now}, &counterIDs{}, v.units, embeddings, memrepo.NewLexical(), v.rels,
+		memrepo.NewDecisionLog(), llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
+		memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, v.questions)
+	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: "no", Channel: "chat"}); err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+	if _, err := v.rels.ByID(ctx, "r-low"); !errors.Is(err, ports.ErrRelationNotFound) {
+		t.Errorf("r-low after the answer: %v, want it deleted by the user's no", err)
 	}
 }

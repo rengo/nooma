@@ -2,7 +2,6 @@ package brain
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/rengo/nooma/internal/core/relation"
@@ -63,29 +62,23 @@ func (b *bars) awake(ctx context.Context, rs []ports.Relation) ([]ports.Relation
 
 // firstAwakeQuestion is the first of queued whose relation is awake: the one
 // question the digest, and Today's preview of it, may ask. A dormant one stays
-// queued, unasked, for a bar that falls. With no relation store wired (a
-// test) every question is awake.
+// queued, unasked, for a bar that falls. Each question carries its relation's
+// confidence from the queue's own read, so this reads only the bars, once per
+// type. With no relation store wired (a test) every question is awake.
 func firstAwakeQuestion(ctx context.Context, rels ports.RelationRepo, queued []ports.RelationQuestion) (*ports.RelationQuestion, error) {
+	if len(queued) == 0 {
+		return nil, nil
+	}
 	if rels == nil {
-		if len(queued) == 0 {
-			return nil, nil
-		}
 		return &queued[0], nil
 	}
 	b := newBars(rels)
 	for i := range queued {
-		rel, err := rels.ByID(ctx, queued[i].RelationID)
-		if errors.Is(err, ports.ErrRelationNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("relation %q of question %q: %w", queued[i].RelationID, queued[i].ID, err)
-		}
-		d, err := b.dormant(ctx, rel)
+		t, err := b.of(ctx, queued[i].RelationType)
 		if err != nil {
 			return nil, err
 		}
-		if !d {
+		if !relation.Dormant(queued[i].Confidence, t) {
 			return &queued[i], nil
 		}
 	}

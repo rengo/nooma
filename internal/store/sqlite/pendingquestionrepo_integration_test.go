@@ -27,6 +27,14 @@ type pendingQuestionHarness struct {
 	v *Vault
 }
 
+// SetRelationConfidence implements repocontract.PendingQuestionHarness.
+func (h pendingQuestionHarness) SetRelationConfidence(t *testing.T, relationID string, confidence float64) {
+	t.Helper()
+	if _, err := h.v.db.ExecContext(context.Background(), `UPDATE relations SET confidence = ? WHERE id = ?`, confidence, relationID); err != nil {
+		t.Fatalf("setting confidence of %s: %v", relationID, err)
+	}
+}
+
 func (h pendingQuestionHarness) EnsureRelation(t *testing.T, relationID, relType, fromUnitID, toUnitID, fromContent, toContent string) {
 	t.Helper()
 	ctx := context.Background()
