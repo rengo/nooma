@@ -1,6 +1,7 @@
 # ADR-0053 — A relation bar moves one step on fresh evidence, never on a pinned type
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-28: deleting 6 of the last 8 links
+  of a kind raises that kind's bar a little, at most once a week, never on a pinned kind)
 - **Date**: 2026-10-28
 - **Supersedes**: —
 - **Superseded by**: —
