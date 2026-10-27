@@ -465,9 +465,8 @@ two items just because they share a date.
 3. **She sets a goal and drifts from it.** Nooma checks in. She ignores the check-ins. It
    judges by whether she *responded*, not by whether the message was delivered, and it lengthens
    the interval so it bothers her less. Had she engaged, it would shorten it. After adjusting,
-   it waits long enough to see the effect before judging again: five check-ins in a row with no
-   answer add a week, three answered of the last five take a week off, between one and eight
-   weeks. If she sets the days herself in Admin, that is her number, and Nooma stops changing it.
+   it waits long enough to see the effect before judging again: five unanswered add a week, three
+   answered of five take one off, within one to eight weeks. Days she saves in Admin stay hers.
 4. **She can read what it learned.** A plain-language summary, in the UI and the API, says what
    changed and why ("I raised the `same_topic` bar because you rejected most of the last
    links"), and she can correct it.

@@ -119,7 +119,14 @@ func (s *AdminService) Update(ctx context.Context, field ConfigField, raw string
 	case ConfigHysteresisMargin:
 		return updateField(ctx, field, raw, stored.HysteresisMargin, parseFloatField, focus.ResolveMargin, s.applyHysteresisMargin)
 	case ConfigGoalStagnationDays:
-		return updateField(ctx, field, raw, stored.GoalStagnationDays, parseIntField, consolidation.ResolveGoalStagnationDays, s.applyGoalStagnationDays)
+		res, err := updateField(ctx, field, raw, stored.GoalStagnationDays, parseIntField, consolidation.ResolveGoalStagnationDays, s.applyGoalStagnationDays)
+		if err != nil || res.Changed || stored.GoalStagnationPinned {
+			return res, err
+		}
+		// Saved unchanged to keep it: still the user's word, so it pins (ADR-0055).
+		v, _ := parseIntField(field, raw) // updateField already accepted it
+		err = s.applyGoalStagnationDays(ctx, v, v, " (saved unchanged to keep it, so it is now pinned and the learner leaves it alone)")
+		return UpdateResult{Field: field, Changed: err == nil || errors.Is(err, ErrWriteLanded)}, err
 	case ConfigMentalLoadThreshold:
 		return updateField(ctx, field, raw, stored.MentalLoadThreshold, parseIntField, consolidation.ResolveMentalLoadThreshold, s.applyMentalLoadThreshold)
 	}

@@ -51,6 +51,10 @@ func TestStepGoalCadence_AnythingElseHolds(t *testing.T) {
 		"two engaged":                {GoalEngaged, GoalIgnored, GoalEngaged, GoalIgnored, GoalIgnored},
 		"four ignored only":          repeat(GoalIgnored, 4),
 		"five declined":              repeat(GoalDeclined, 5),
+		// #415 review B1: fewer than a full sample is not yet evidence,
+		// even when it already holds enough engaged to shorten.
+		"three engaged and nothing else": repeat(GoalEngaged, 3),
+		"four engaged and nothing else":  repeat(GoalEngaged, 4),
 	} {
 		if c, ok := StepGoalCadence(GoalCadenceState{Days: 21}, goalVerdicts(kinds...), cadenceNow); ok {
 			t.Errorf("%s moved the interval: %+v", name, c)

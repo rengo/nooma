@@ -15,8 +15,8 @@ names no other number.
 
 Since M5 links 4a and 4b, goal check-ins are delivered and answered (ADR-0054), and every one
 that closes emits `nudge_engaged`, `nudge_declined` or `nudge_ignored` naming the goal's belief.
-The interval is `config.goal_stagnation_days`, which the user can also set from /ui/admin. On
-2026-10-27 the client said an Admin save should pin it (answer 6).
+The interval is `config.goal_stagnation_days`, also set from /ui/admin, and on 2026-10-27 the
+client said an Admin save, even of the value already in force, pins it (answer 6).
 
 ## Decision
 
@@ -29,17 +29,17 @@ The interval is `config.goal_stagnation_days`, which the user can also set from 
 3. **Bounds and cooldown.** The interval stays within [7, 56] days. After a change the rule
    waits the new interval itself, from `learning_state.goal_calibrated_at`. The change and its
    stamp are written in one transaction at the pass's instant, so the rule is idempotent.
-4. **The user's number wins.** An Admin save sets `config.goal_stagnation_pinned`, and the
-   learner never writes a pinned value. The store refuses it too, so a save that lands between
-   the learn pass's read and its write still wins. Unpinning belongs to the summary (link 6).
-5. **The learned value lives in `config.goal_stagnation_days`.** That is the column every
-   reader already reads, the decline factor included. `calibration` stays reserved for knobs
-   with no column of their own.
+4. **The user's number wins.** An Admin save, unchanged or not, sets
+   `config.goal_stagnation_pinned`, and the learner never writes a pinned value. The store
+   refuses it too, so a save between the learn pass's read and its write still wins.
+   Unpinning belongs to the summary (link 6).
+5. **The learned value lives in `config.goal_stagnation_days`**, the column every reader, the
+   decline factor included, already reads. `calibration` stays for knobs with no column.
 
 ## Options considered
 
-- **Counting a decline as ignoring.** Rejected: the user answered, and the client asked that
-  "dejala descansar" mean "ask less often" for that goal (ADR-0054), not "ask every goal less".
+- **Counting a decline as ignoring.** Rejected: the user answered, and "dejala descansar"
+  means that goal less often (ADR-0054), not every goal.
 - **Storing the learned value in `calibration`**, with `config` as the user's only. Rejected:
   every reader would need a precedence rule between two homes; a pin flag separates them.
 
@@ -52,10 +52,9 @@ the days herself keeps them, each change a `consolidate.learn.goal_cadence` row.
 
 ### What it costs
 
-Learning is slow: one change needs five closed check-ins and then a whole interval. A migration
-adds the pin column, and `ports.ConfigRepo` gains one write outside the Admin's five.
+Learning is slow: one change needs five closed check-ins, then a whole interval. A migration adds
+the pin, and `ports.ConfigRepo` one write beside the Admin's five.
 
 ### Reversal criteria
 
 - Real use where five closed check-ins take so long that nothing ever moves.
-- A user who wants the learner back after pinning, before the summary offers to release it.

@@ -2298,25 +2298,18 @@ the learner does not count it.
   show its effect. The rule
   ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md),
   `internal/core/learning.StepGoalCadence`):
-  - **Evidence** is the newest `goal_cadence_sample` (5) goal check-ins closed strictly after
-    the last change: the `nudge_engaged`, `nudge_declined` and `nudge_ignored` signals whose
-    context names a goal's `belief_id`. A snooze (`nudge_ack`) closes nothing and does not
-    count.
-  - **Lengthen or shorten.** All five ignored lengthens `goal_stagnation_days` by
-    `goal_cadence_step_days` (7). At least `goal_cadence_engaged_to_shorten` (3) engaged
-    shortens it by as much. A decline is an answer, so it does neither. Anything else, or fewer
-    than five, holds.
-  - **Bounds and cooldown.** It stays within [`min_goal_stagnation_days`,
-    `max_goal_stagnation_days`] ([7, 56]). After a change it waits the new interval itself,
-    measured from `learning_state.goal_calibrated_at`, the stamp the change writes at the
-    pass's instant. Run twice, it changes nothing.
-  - **Pin.** An Admin save pins it (`config.goal_stagnation_pinned`, client answer 6), and the
-    learn slot never writes a pinned value; the store refuses it as well.
-  - **The decline factor follows the interval in force.** After "dejala descansar", a goal
-    waits twice the learned or pinned value (§7).
-  - Each change is one `consolidate.learn.goal_cadence` row, "raised the goal check-in interval
-    21 → 28 days: you ignored 5 of the last 5 goal check-ins", with the counts and the
-    signal ids.
+  - **Evidence** is the newest five goal check-ins closed strictly after the last change: the
+    `nudge_engaged`/`declined`/`ignored` signals naming a goal's `belief_id`. A snooze does not.
+  - **Step.** All five ignored add 7 days to `goal_stagnation_days`; three or more engaged take
+    7 off. A decline is an answer and does neither; anything else, or fewer than five, holds.
+  - **Bounds and cooldown.** Within [7, 56] days; after a change it waits the new interval,
+    from `learning_state.goal_calibrated_at`, stamped at the pass's instant. It is idempotent.
+  - **Pin.** An Admin save pins it (`config.goal_stagnation_pinned`, client answer 6), even of
+    the value in force; the learn slot never writes a pinned value, and the store refuses it too.
+  - **The decline factor follows it**: after "dejala descansar" a goal waits twice the value in
+    force, learned or pinned (§7).
+  - Each change is one `consolidate.learn.goal_cadence` row ("raised the goal check-in
+    interval 21 → 28 days: you ignored 5 of the last 5 goal check-ins") with its evidence.
 - **Transparency**: a natural-language summary of what it learned and why ("I raised the
   same_topic threshold 0.30→0.35 — you rejected 6 of 8"), queryable and correctable (UI +
   API). What it learns is never a black box.

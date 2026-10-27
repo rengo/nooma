@@ -8,6 +8,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -162,8 +163,11 @@ func TestAdmin_DefaultOnAbsentRowWritesNothing(t *testing.T) {
 		raw   string
 	}{
 		{ConfigWeightThreshold, fmt.Sprint(consolidation.DefaultWeightThreshold)}, {ConfigHysteresisMargin, fmt.Sprint(focus.DefaultHysteresisMargin)},
-		{ConfigGoalStagnationDays, fmt.Sprint(consolidation.DefaultGoalStagnationDays)}, {ConfigMentalLoadThreshold, fmt.Sprint(consolidation.DefaultMentalLoadThreshold)},
+		{ConfigMentalLoadThreshold, fmt.Sprint(consolidation.DefaultMentalLoadThreshold)},
 		{ConfigConsolidationEnabled, "true"},
+		// Not goal_stagnation_days: saving it, even at the default, pins it
+		// (#415 review, ADR-0055), so it writes; see
+		// TestAdmin_SavingTheGoalDaysUnchangedPinsThem.
 	} {
 		if res, err := w.svc.Update(context.Background(), tc.field, tc.raw); err != nil || res.Changed {
 			t.Fatalf("%s=%s: Update = %+v, %v, want unchanged", tc.field, tc.raw, res, err)
@@ -435,5 +439,41 @@ func TestAdminServiceExportsOnlyViewAndUpdate(t *testing.T) {
 	}
 	if want := []string{"Update", "View"}; !slices.Equal(got, want) {
 		t.Errorf("exported methods = %v, want %v", got, want)
+	}
+}
+
+// TestAdmin_SavingTheGoalDaysUnchangedPinsThem (#415 review): a user who sees
+// 21 and saves 21 to keep it means it. The save pins the value though it does
+// not change it, writing one row that says so; saving it again, already
+// pinned, writes nothing.
+func TestAdmin_SavingTheGoalDaysUnchangedPinsThem(t *testing.T) {
+	w := newAdminWorld(t, true)
+	inForce := *adminSeed().GoalStagnationDays
+	res, err := w.svc.Update(context.Background(), ConfigGoalStagnationDays, strconv.Itoa(inForce))
+	if err != nil || !res.Changed {
+		t.Fatalf("Update = %+v, %v; want the pin recorded as a change", res, err)
+	}
+	if got := w.load(t); !got.GoalStagnationPinned || *got.GoalStagnationDays != inForce {
+		t.Fatalf("config = pinned %v, days %v; want %d, pinned", got.GoalStagnationPinned, *got.GoalStagnationDays, inForce)
+	}
+	rows := w.rows(t)
+	if len(rows) != 1 || rows[0].Action != ports.ActionConfigUpdated || !strings.Contains(rows[0].Rationale, "pinned") {
+		t.Fatalf("rows = %+v, want one config.updated row saying it is pinned", rows)
+	}
+	if res, err := w.svc.Update(context.Background(), ConfigGoalStagnationDays, strconv.Itoa(inForce)); err != nil || res.Changed {
+		t.Errorf("a second unchanged save = %+v, %v; want nothing, it is pinned already", res, err)
+	}
+	if n := len(w.rows(t)); n != 1 {
+		t.Errorf("%d rows after the second save, want still 1", n)
+	}
+
+	// On a vault with no config row, saving the default pins it as well.
+	fresh := newAdminWorld(t, false)
+	def := strconv.Itoa(consolidation.DefaultGoalStagnationDays)
+	if res, err := fresh.svc.Update(context.Background(), ConfigGoalStagnationDays, def); err != nil || !res.Changed {
+		t.Fatalf("Update on an absent row = %+v, %v; want the pin written", res, err)
+	}
+	if got := fresh.load(t); !got.GoalStagnationPinned || got.GoalStagnationDays == nil || *got.GoalStagnationDays != consolidation.DefaultGoalStagnationDays {
+		t.Errorf("config = pinned %v, days %v; want the default, pinned", got.GoalStagnationPinned, got.GoalStagnationDays)
 	}
 }
