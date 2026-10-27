@@ -36,7 +36,8 @@ type Verdict struct {
 	SignalID string
 	Rejected bool
 	// CreatedBy is who made the relation the verdict is about. Only Nooma's
-	// own (system, consolidation) are evidence about how Nooma judges.
+	// own (system, consolidation, an allowlist) are evidence about how Nooma
+	// judges.
 	CreatedBy relation.CreatedBy
 	At        time.Time
 }
@@ -95,7 +96,7 @@ func StepRelation(s TypeState, verdicts []Verdict, now time.Time) (Change, bool)
 
 	sample := make([]Verdict, 0, len(verdicts))
 	for _, v := range verdicts {
-		if v.CreatedBy == relation.CreatedByUser || v.At.After(now) || s.AdjustedAt != nil && !v.At.After(*s.AdjustedAt) {
+		if !madeByNooma(v.CreatedBy) || v.At.After(now) || s.AdjustedAt != nil && !v.At.After(*s.AdjustedAt) {
 			continue
 		}
 		sample = append(sample, v)
@@ -140,6 +141,13 @@ func StepRelation(s TypeState, verdicts []Verdict, now time.Time) (Change, bool)
 // learnedPersist is p on a hundredth, within the learned bounds.
 func learnedPersist(p float64) float64 {
 	return min(max(math.Round(p*100)/100, MinLearnedPersist), MaxLearnedPersist)
+}
+
+// madeByNooma is the allowlist of makers whose relations are evidence: capture
+// (system) and the nightly pass (consolidation). The user's own, an empty
+// maker and any unknown one are not.
+func madeByNooma(by relation.CreatedBy) bool {
+	return by == relation.CreatedBySystem || by == relation.CreatedByConsolidation
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
